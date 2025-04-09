@@ -1,0 +1,3 @@
+[workspace]
+members = ["src-tauri"]
+resolver = "2"
