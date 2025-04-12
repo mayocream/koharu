@@ -33,13 +33,13 @@ def process_annotation(ann, class_id, img_width, img_height, out_file):
     )
 
 
-def manga109_to_yolo(manga109_root_dir, output_dir, books=None):
+def manga109_to_yolo(manga109_root_dir, output_dir):
     """Convert Manga109 annotations to YOLO format with 80/20 train/val split."""
     # Initialize parser
     parser = manga109api.Parser(root_dir=manga109_root_dir)
 
     # Define class mapping
-    class_map = {"text": 0, "face": 1, "body": 2, "frame": 3}
+    class_map = {"frame": 0, "text": 1}
 
     # Create directory structure
     os.makedirs(os.path.join(output_dir, "images", "train"), exist_ok=True)
@@ -49,14 +49,10 @@ def manga109_to_yolo(manga109_root_dir, output_dir, books=None):
 
     # Write class names file
     with open(os.path.join(output_dir, "classes.txt"), "w") as f:
-        for class_name in ["text", "face", "body", "frame"]:
+        for class_name in ["frame", "text"]:
             f.write(f"{class_name}\n")
 
-    # Get the list of books to process
-    if books:
-        book_list = books
-    else:
-        book_list = parser.books
+    book_list = parser.books
 
     # Shuffle books to ensure random distribution
     random.shuffle(book_list)
@@ -76,14 +72,14 @@ def manga109_to_yolo(manga109_root_dir, output_dir, books=None):
     process_books(parser, val_books, output_dir, class_map, "val")
 
     # Create YAML configuration file for YOLO
-    yaml_path = os.path.join(output_dir, "manga109.yaml")
+    yaml_path = os.path.join(output_dir, "data.yaml")
     with open(yaml_path, "w") as f:
         f.write(f"path: {os.path.abspath(output_dir)}\n")
         f.write("train: images/train\n")
         f.write("val: images/val\n\n")
 
         f.write("names:\n")
-        for i, name in enumerate(["text", "face", "body", "frame"]):
+        for i, name in enumerate(["frame", "text"]):
             f.write(f"  {i}: {name}\n")
 
 
@@ -120,7 +116,7 @@ def process_books(parser, book_list, output_dir, class_map, split_type):
 
             with open(label_path, "w") as f:
                 # Process each annotation type
-                for ann_type in ["text", "face", "body", "frame"]:
+                for ann_type in ["frame", "text"]:
                     if ann_type in page:
                         # Handle both single annotation and list of annotations
                         annotations = page[ann_type]
@@ -146,9 +142,6 @@ def main():
         help="Output directory for YOLO-formatted dataset",
     )
     parser.add_argument(
-        "--books", nargs="*", help="Specific books to convert (default: all books)"
-    )
-    parser.add_argument(
         "--seed", type=int, default=42, help="Random seed for dataset splitting"
     )
 
@@ -157,7 +150,7 @@ def main():
     # Set random seed for reproducibility
     random.seed(args.seed)
 
-    manga109_to_yolo(args.manga109_dir, args.output_dir, args.books)
+    manga109_to_yolo(args.manga109_dir, args.output_dir)
 
     print(f"Conversion complete! Output saved to {args.output_dir}")
     print(f"Dataset split: 80% training, 20% validation")
