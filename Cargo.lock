@@ -674,25 +674,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "candle-yolo-v8"
-version = "0.1.0"
-dependencies = [
- "ab_glyph",
- "anyhow",
- "candle-core",
- "candle-examples",
- "candle-nn",
- "candle-transformers",
- "clap",
- "hf-hub",
- "image",
- "imageproc",
- "tracing",
- "tracing-chrome",
- "tracing-subscriber",
-]
-
-[[package]]
 name = "cargo-platform"
 version = "0.1.9"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -7202,6 +7183,25 @@ dependencies = [
  "quote",
  "syn 2.0.100",
  "synstructure",
+]
+
+[[package]]
+name = "yolo-v8"
+version = "0.1.0"
+dependencies = [
+ "ab_glyph",
+ "anyhow",
+ "candle-core",
+ "candle-examples",
+ "candle-nn",
+ "candle-transformers",
+ "clap",
+ "hf-hub",
+ "image",
+ "imageproc",
+ "tracing",
+ "tracing-chrome",
+ "tracing-subscriber",
 ]
 
 [[package]]

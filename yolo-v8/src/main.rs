@@ -1,5 +1,5 @@
-use candle_yolo_v8::model;
 use model::{Multiples, YoloV8, YoloV8Pose};
+use yolo_v8::model;
 
 use candle_core::{DType, Device, IndexOp, Result, Tensor};
 use candle_nn::{Module, VarBuilder};
