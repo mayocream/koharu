@@ -27,3 +27,6 @@ dist-ssr
 # Added by cargo
 
 /target
+
+# Datasets
+data/
