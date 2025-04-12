@@ -30,3 +30,6 @@ dist-ssr
 
 # Datasets
 data/
+
+# model results
+runs/
