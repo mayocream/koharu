@@ -33,3 +33,6 @@ data/
 
 # model results
 runs/
+
+# model checkpoints
+models/
