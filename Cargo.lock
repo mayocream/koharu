@@ -836,8 +836,10 @@ name = "comic-text-detector"
 version = "0.1.0"
 dependencies = [
  "anyhow",
+ "candle-transformers",
  "clap",
  "image",
+ "imageproc",
  "ndarray",
  "ort",
 ]
