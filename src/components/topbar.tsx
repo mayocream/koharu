@@ -23,12 +23,17 @@ function Topbar() {
     Konva.Image.fromURL(
       convertFileSrc(selected),
       (img) => {
+        let width = img.width()
+        let height = img.height()
+
         stageRef.current.destroyChildren()
+        stageRef.current.width(width)
+        stageRef.current.height(height)
         img.setAttrs({
           x: 0,
           y: 0,
-          width: stageRef.current.width(),
-          height: stageRef.current.height(),
+          width,
+          height,
         })
 
         const layer = new Konva.Layer()
