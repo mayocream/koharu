@@ -1,10 +1,27 @@
-import { Stage } from 'react-konva'
-import { useStage } from './stage-provider'
+import Konva from 'konva'
+import { useEffect, useRef } from 'react'
+import { useStageStore } from '@/lib/state'
 
 function Canvas() {
-  const stageRef = useStage()
+  const ref = useRef(null)
+  const { setStage } = useStageStore()
 
-  return <Stage className='bg-white' ref={stageRef} />
+  useEffect(() => {
+    const stage = new Konva.Stage({
+      container: ref.current,
+      width: 200,
+      height: 200,
+    })
+
+    setStage(stage)
+
+    return () => {
+      setStage(null)
+      stage.destroy()
+    }
+  }, [])
+
+  return <div className='bg-white' ref={ref} />
 }
 
 export default Canvas

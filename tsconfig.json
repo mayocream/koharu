@@ -19,9 +19,11 @@
     /* Linting */
     "noImplicitAny": false,
     "strict": false,
-    "noUnusedLocals": true,
-    "noUnusedParameters": true,
-    "noFallthroughCasesInSwitch": true
+    "paths": {
+      "@/*": [
+        "./src/*"
+      ]
+    },
   },
   "include": [
     "src"

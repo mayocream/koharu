@@ -1,12 +1,12 @@
 import { open } from '@tauri-apps/plugin-dialog'
 import { Save, Image } from 'lucide-react'
-import { useStage } from './stage-provider'
 import { debug } from '@tauri-apps/plugin-log'
 import Konva from 'konva'
 import { convertFileSrc } from '@tauri-apps/api/core'
+import { useStageStore } from '@/lib/state'
 
 function Topbar() {
-  const stageRef = useStage()
+  const { stage } = useStageStore()
   const handleOpenFile = async () => {
     const selected = await open({
       multiple: false,
@@ -26,9 +26,9 @@ function Topbar() {
         let width = img.width()
         let height = img.height()
 
-        stageRef.current.destroyChildren()
-        stageRef.current.width(width)
-        stageRef.current.height(height)
+        stage.destroyChildren()
+        stage.width(width)
+        stage.height(height)
         img.setAttrs({
           x: 0,
           y: 0,
@@ -38,7 +38,7 @@ function Topbar() {
 
         const layer = new Konva.Layer()
         layer.add(img)
-        stageRef.current.add(layer)
+        stage.add(layer)
       },
       (err) => {
         alert(`Error loading image: ${err}`)
