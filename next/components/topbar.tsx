@@ -1,3 +1,5 @@
+'use client'
+
 import { open } from '@tauri-apps/plugin-dialog'
 import { Save, Image, Download } from 'lucide-react'
 import { debug } from '@tauri-apps/plugin-log'

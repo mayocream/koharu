@@ -1,3 +1,5 @@
+'use client'
+
 import Konva from 'konva'
 import { useEffect, useRef } from 'react'
 import { useStageStore } from '@/lib/state'
