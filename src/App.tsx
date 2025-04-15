@@ -1,4 +1,4 @@
-import LayerPanel from './components/layer-panel'
+import DetectionPanel from './components/detection-panel'
 import Tools from './components/tools'
 import Topbar from './components/topbar'
 import Canvas from './components/canvas'
@@ -17,7 +17,7 @@ function App() {
         </div>
 
         <div className='h-full overflow-y-auto'>
-          <LayerPanel />
+          <DetectionPanel />
         </div>
       </div>
     </main>

@@ -1,9 +1,10 @@
 import { open } from '@tauri-apps/plugin-dialog'
-import { Save, Image } from 'lucide-react'
+import { Save, Image, Download } from 'lucide-react'
 import { debug } from '@tauri-apps/plugin-log'
-import Konva from 'konva'
 import { convertFileSrc } from '@tauri-apps/api/core'
 import { useStageStore } from '@/lib/state'
+import { storage } from '@/lib/storage'
+import { loadImage } from '@/lib/stage'
 
 function Topbar() {
   const { stage } = useStageStore()
@@ -20,46 +21,41 @@ function Topbar() {
 
     debug(`Opened file: ${selected}`)
 
-    Konva.Image.fromURL(
-      convertFileSrc(selected),
-      (img) => {
-        let width = img.width()
-        let height = img.height()
+    const imageUrl = convertFileSrc(selected)
 
-        stage.destroyChildren()
-        stage.width(width)
-        stage.height(height)
-        img.setAttrs({
-          x: 0,
-          y: 0,
-          width,
-          height,
-        })
+    debug(`Converted file URL: ${imageUrl}`)
 
-        const layer = new Konva.Layer()
-        layer.add(img)
-        stage.add(layer)
-      },
-      (err) => {
-        alert(`Error loading image: ${err}`)
-      }
-    )
+    loadImage(imageUrl)
+  }
+
+  const handleSave = async () => {
+    const serialized = stage.toJSON()
+    await storage.set('stage', serialized)
+    debug(`Saved stage to storage, size: ${serialized}`)
   }
 
   return (
     <div className='flex items-center p-2 bg-white border-b border-gray-200 shadow-sm'>
       <div className='flex items-center'>
         <button
-          className='flex items-center p-2 mx-1 text-gray-700 hover:bg-gray-100 rounded'
+          className='flex items-center p-2 mx-1 text-gray-600 hover:bg-gray-100 rounded'
           onClick={handleOpenFile}
         >
           <Image size={18} />
-          <span className='ml-1'>ファイルを開く</span>
         </button>
 
-        <button className='flex items-center p-2 mx-1 text-gray-700 hover:bg-gray-100 rounded'>
+        <button
+          className='flex items-center p-2 mx-1 text-gray-600 hover:bg-gray-100 rounded'
+          onClick={handleSave}
+        >
           <Save size={18} />
-          <span className='ml-1'>保存</span>
+        </button>
+      </div>
+
+      <div className='flex-grow' />
+      <div className='flex items-center'>
+        <button className='flex items-center p-2 mx-1 text-gray-600 hover:bg-gray-100 rounded'>
+          <Download size={18} />
         </button>
       </div>
     </div>
