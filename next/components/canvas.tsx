@@ -16,7 +16,7 @@ function Canvas() {
     let stage: Konva.Stage
     if (serialized) {
       stage = Konva.Node.create(serialized, ref.current)
-      loadImage(stage.getAttr('image'))
+      loadImage(stage, stage.getAttr('image'))
       debug('Restored stage from storage')
     } else {
       stage = new Konva.Stage({
@@ -27,14 +27,11 @@ function Canvas() {
     }
 
     setStage(stage)
+    debug(`Stage initialized`)
   }
 
   useEffect(() => {
     initializeStage()
-
-    return () => {
-      setStage(null)
-    }
   }, [ref])
 
   return <div className='bg-white' ref={ref} />

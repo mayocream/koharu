@@ -24,10 +24,7 @@ function Topbar() {
     debug(`Opened file: ${selected}`)
 
     const imageUrl = convertFileSrc(selected)
-
-    debug(`Converted file URL: ${imageUrl}`)
-
-    loadImage(imageUrl)
+    loadImage(stage, imageUrl)
   }
 
   const handleSave = async () => {

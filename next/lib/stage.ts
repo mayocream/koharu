@@ -1,12 +1,6 @@
 import Konva from 'konva'
-import { useStageStore } from './state'
-import { debug } from '@tauri-apps/plugin-log'
 
-export const loadImage = (url: string) => {
-  const { stage } = useStageStore()
-
-  debug(`Loading image: ${url}`)
-
+export const loadImage = (stage: Konva.Stage, url: string) => {
   Konva.Image.fromURL(
     url,
     (img) => {
