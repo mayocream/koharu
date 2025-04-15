@@ -20,10 +20,10 @@ function Topbar() {
 
     debug(`Opened file: ${selected}`)
 
-    stageRef.current.destroyChildren()
     Konva.Image.fromURL(
       convertFileSrc(selected),
       (img) => {
+        stageRef.current.destroyChildren()
         img.setAttrs({
           x: 0,
           y: 0,
