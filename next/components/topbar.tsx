@@ -23,6 +23,11 @@ function Topbar() {
 
     debug(`Opened file: ${selected}`)
 
+    if (!selected) {
+      debug('No file selected')
+      return
+    }
+
     const imageUrl = convertFileSrc(selected)
     loadImage(stage, imageUrl)
   }
