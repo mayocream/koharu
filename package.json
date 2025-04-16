@@ -1,6 +1,7 @@
 {
   "scripts": {
     "dev": "cd next && bun run dev",
+    "build: "cd next && bun run build",
     "tauri": "tauri"
   },
   "workspaces": [
