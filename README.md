@@ -10,7 +10,7 @@ Koharu is built with Rust, ensuring high performance and reliability. The bundle
 
 ## Technology
 
-Koharu is built using Tauri, a framework for building lightweight, secure, and fast desktop applications. The interface is built with React and Konva, written in TypeScript. The machine learning models are re-implemented in Rust, using the Ort OONX runtime for inference. The models are optimized for performance and can run on any machine without the need for a GPU.
+Koharu is built using Tauri, a framework for building lightweight, secure, and fast desktop applications. The interface is built with React and Konva, written in TypeScript. The machine learning models are re-implemented in Rust, using the Ort ONNX runtime for inference. The models are optimized for performance and can run on any machine without the need for a GPU.
 
 ## Workflow
 
