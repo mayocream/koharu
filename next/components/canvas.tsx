@@ -6,6 +6,7 @@ import { useStageStore } from '@/lib/state'
 import { storage } from '@/lib/storage'
 import { debug } from '@tauri-apps/plugin-log'
 import { loadImage } from '@/lib/stage'
+import ScaleControl from './scale-control'
 
 function Canvas() {
   const ref = useRef(null)
@@ -34,7 +35,14 @@ function Canvas() {
     initializeStage()
   }, [ref])
 
-  return <div className='bg-white' ref={ref} />
+  return (
+    <div className='relative'>
+      <div className='absolute min-w-full min-h-full flex items-center justify-center'>
+        <div className='bg-white' ref={ref} />
+      </div>
+      <ScaleControl />
+    </div>
+  )
 }
 
 export default Canvas

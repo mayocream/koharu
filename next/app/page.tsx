@@ -12,10 +12,8 @@ function App() {
       <div className='flex flex-1 my-2'>
         <Tools />
 
-        <div className='flex-1 relative overflow-auto'>
-          <div className='absolute min-w-full min-h-full flex items-center justify-center'>
-            <Canvas />
-          </div>
+        <div className='flex-1 flex-col overflow-auto'>
+          <Canvas />
         </div>
 
         <div className='h-full overflow-y-auto'>
