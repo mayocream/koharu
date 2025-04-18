@@ -1,9 +1,8 @@
 'use client'
 
 import { useStageStore } from '@/lib/state'
-import { debug } from '@tauri-apps/plugin-log'
 import { Minus, Plus } from 'lucide-react'
-import { useEffect, useState } from 'react'
+import { useState } from 'react'
 
 function ScaleControl() {
   const [scale, setScale] = useState(100)
@@ -11,6 +10,11 @@ function ScaleControl() {
 
   const handleScaleChange = (newScale: number) => {
     setScale(newScale)
+
+    const scaleFactor = newScale / 100
+    stage.scale({ x: scaleFactor, y: scaleFactor })
+    stage.width(stage.findOne('#image')!.width() * scaleFactor)
+    stage.height(stage.findOne('#image')!.height() * scaleFactor)
   }
 
   return (
@@ -19,6 +23,7 @@ function ScaleControl() {
         <button
           className='w-8 h-8 flex items-center justify-center rounded-lg cursor-pointer text-gray-700 hover:bg-gray-200'
           onClick={() => handleScaleChange(scale - 10)}
+          disabled={scale <= 10}
         >
           <Minus size={18} className='text-gray-700' />
         </button>
@@ -26,6 +31,7 @@ function ScaleControl() {
         <button
           className='w-8 h-8 flex items-center justify-center rounded-lg cursor-pointer text-gray-700 hover:bg-gray-200'
           onClick={() => handleScaleChange(scale + 10)}
+          disabled={scale >= 200}
         >
           <Plus size={18} className='text-gray-700' />
         </button>

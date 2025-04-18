@@ -1,6 +1,6 @@
 import Konva from 'konva'
 
-export const loadImage = (stage: Konva.Stage, url: string) => {
+export const initializeStageWithImage = (stage: Konva.Stage, url: string) => {
   Konva.Image.fromURL(
     url,
     (img) => {
@@ -8,9 +8,8 @@ export const loadImage = (stage: Konva.Stage, url: string) => {
       let height = img.height()
 
       stage.destroyChildren()
-      stage.width(width)
-      stage.height(height)
       img.setAttrs({
+        id: 'image',
         x: 0,
         y: 0,
         width,

@@ -5,25 +5,26 @@ import { useEffect, useRef } from 'react'
 import { useStageStore } from '@/lib/state'
 import { storage } from '@/lib/storage'
 import { debug } from '@tauri-apps/plugin-log'
-import { loadImage } from '@/lib/stage'
+import { initializeStageWithImage } from '@/lib/stage'
 import ScaleControl from './scale-control'
 
 function Canvas() {
-  const ref = useRef(null)
+  const containerRef = useRef<HTMLDivElement>(null)
+  const stageRef = useRef(null)
   const { setStage } = useStageStore()
 
   const initializeStage = async () => {
     const serialized = await storage.get<string | null>('stage')
     let stage: Konva.Stage
     if (serialized) {
-      stage = Konva.Node.create(serialized, ref.current)
-      loadImage(stage, stage.getAttr('image'))
+      stage = Konva.Node.create(serialized, stageRef.current)
+      initializeStageWithImage(stage, stage.getAttr('image'))
       debug('Restored stage from storage')
     } else {
       stage = new Konva.Stage({
-        container: ref.current,
-        width: 200,
-        height: 200,
+        container: stageRef.current,
+        width: containerRef.current?.offsetWidth,
+        height: containerRef.current?.offsetHeight,
       })
     }
 
@@ -33,12 +34,12 @@ function Canvas() {
 
   useEffect(() => {
     initializeStage()
-  }, [ref])
+  }, [stageRef])
 
   return (
-    <div className='relative'>
+    <div className='relative' ref={containerRef}>
       <div className='absolute min-w-full min-h-full flex items-center justify-center'>
-        <div className='bg-white' ref={ref} />
+        <div className='bg-white' ref={stageRef} />
       </div>
       <ScaleControl />
     </div>

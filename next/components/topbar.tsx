@@ -6,7 +6,7 @@ import { debug } from '@tauri-apps/plugin-log'
 import { convertFileSrc } from '@tauri-apps/api/core'
 import { useStageStore } from '@/lib/state'
 import { storage } from '@/lib/storage'
-import { loadImage } from '@/lib/stage'
+import { initializeStageWithImage } from '@/lib/stage'
 
 function Topbar() {
   const { stage } = useStageStore()
@@ -29,7 +29,7 @@ function Topbar() {
     }
 
     const imageUrl = convertFileSrc(selected)
-    loadImage(stage, imageUrl)
+    initializeStageWithImage(stage, imageUrl)
   }
 
   const handleSave = async () => {
