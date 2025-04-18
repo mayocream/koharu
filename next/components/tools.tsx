@@ -1,23 +1,22 @@
 'use client'
 
 import { useState } from 'react'
-import { Move, Type } from 'lucide-react'
+import { Languages, MessageCircle } from 'lucide-react'
 
 function Tools() {
-  const [selectedTool, setSelectedTool] = useState('move')
+  const [selectedTool, setSelectedTool] = useState('detection')
 
   const tools = [
     {
-      id: 'move',
-      name: '移動ツール',
-      icon: Move,
-      description: 'サイズ変更や移動ができます',
+      id: 'detection',
+      name: '検出ツール',
+      icon: MessageCircle,
+      description: '画像内のオブジェクトを検出します',
     },
     {
-      id: 'text',
-      name: 'テキストツール',
-      icon: Type,
-      description: 'テキストを追加できます',
+      id: 'translation',
+      name: '翻訳ツール',
+      icon: Languages,
     },
   ]
 
@@ -28,7 +27,7 @@ function Tools() {
           key={tool.id}
           className={`w-10 h-10 mb-4 flex items-center justify-center rounded-lg cursor-pointer ${
             selectedTool === tool.id
-              ? 'bg-blue-500 text-white'
+              ? 'bg-blue-400 text-white'
               : 'text-gray-700 hover:bg-gray-200'
           }`}
           onClick={() => setSelectedTool(tool.id)}
