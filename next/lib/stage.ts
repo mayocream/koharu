@@ -16,6 +16,10 @@ export const initializeStageWithImage = (stage: Konva.Stage, url: string) => {
         height,
       })
 
+      // Set the stage size to the image size
+      stage.width(width)
+      stage.height(height)
+
       const layer = new Konva.Layer()
       layer.add(img)
       stage.add(layer)
