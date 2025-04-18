@@ -8,4 +8,4 @@ anyhow = "1.0.98"
 clap = { version = "4.5.36", features = ["derive"] }
 image = "0.25.6"
 ndarray = "0.16.1"
-ort = { version = "=2.0.0-rc.9", features = ["ndarray"] }
+ort = "=2.0.0-rc.9"
