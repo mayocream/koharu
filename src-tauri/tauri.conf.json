@@ -12,9 +12,13 @@
   "app": {
     "windows": [
       {
-        "title": "koharu",
-        "width": 800,
-        "height": 600
+        "label": "main",
+        "title": "Koharu",
+        "visible": false
+      },
+      {
+        "url": "/splashscreen",
+        "label": "splashscreen"
       }
     ],
     "security": {

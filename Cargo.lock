@@ -961,6 +961,7 @@ dependencies = [
  "anyhow",
  "candle-transformers",
  "clap",
+ "hf-hub",
  "image",
  "imageproc",
  "ndarray",
@@ -3108,6 +3109,7 @@ dependencies = [
  "tauri-plugin-opener",
  "tauri-plugin-persisted-scope",
  "tauri-plugin-store",
+ "tokio",
 ]
 
 [[package]]
@@ -6332,6 +6334,7 @@ dependencies = [
  "bytes",
  "libc",
  "mio",
+ "parking_lot",
  "pin-project-lite",
  "signal-hook-registry",
  "socket2",

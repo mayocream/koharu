@@ -7,6 +7,7 @@ edition = "2024"
 anyhow = "1.0.97"
 candle-transformers = "0.8.4"
 clap = { version = "4.5.36", features = ["derive"] }
+hf-hub = "0.4.2"
 image = "0.25.6"
 imageproc = "0.25.0"
 ndarray = "0.16.1"
