@@ -3101,7 +3101,10 @@ name = "koharu"
 version = "0.1.0"
 dependencies = [
  "anyhow",
+ "candle-transformers",
  "hf-hub",
+ "image",
+ "ndarray",
  "ort",
  "serde",
  "serde_json",

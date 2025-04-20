@@ -14,23 +14,32 @@ async fn initialize(app: AppHandle) -> anyhow::Result<()> {
     let mut state = state.lock().await;
     state.ctd = Some(comic_text_detector::ComicTextDetector::new()?);
 
-    // hide the splash screen
-    if let Some(splashscreen) = app.get_webview_window("splashscreen") {
-        splashscreen.close()?;
-    }
-
-    // show the main window
-    if let Some(window) = app.get_webview_window("main") {
-        window.show()?;
-    }
+    app.get_webview_window("splashscreen").unwrap().close()?;
+    app.get_webview_window("main").unwrap().show()?;
 
     Ok(())
+}
+
+#[tauri::command]
+async fn detect(
+    state: tauri::State<'_, AppState>,
+    image: Vec<u8>,
+) -> Result<comic_text_detector::Output, String> {
+    let ctd = state
+        .ctd
+        .as_ref()
+        .ok_or_else(|| "ComicTextDetector not initialized".to_string())?;
+
+    let img = image::load_from_memory(&image).map_err(|e| e.to_string())?;
+    let result = ctd.inference(&img, 0.5, 0.5).map_err(|e| e.to_string())?;
+
+    Ok(result)
 }
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     tauri::Builder::default()
-        .manage(Mutex::new(AppState::default()))
+        .manage(AppState::default())
         .plugin(tauri_plugin_store::Builder::new().build())
         .plugin(tauri_plugin_persisted_scope::init())
         .plugin(tauri_plugin_log::Builder::new().build())
@@ -41,6 +50,7 @@ pub fn run() {
 
             Ok(())
         })
+        .invoke_handler(tauri::generate_handler![detect])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");
 }
