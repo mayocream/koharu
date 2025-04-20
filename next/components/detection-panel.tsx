@@ -1,21 +1,14 @@
-import { useStageStore } from '@/lib/state'
+import { useCanvasStore } from '@/lib/state'
 import { Play } from 'lucide-react'
 import { invoke } from '@tauri-apps/api/core'
 
 function DetectionPanel() {
-  const { stage } = useStageStore()
-
+  const { imageSrc } = useCanvasStore()
   const inference = async () => {
-    const image = stage?.findOne('#image')
-    if (!image) return
-
-    const buffer = (await stage.toBlob()) as Blob
-
-    const result = await invoke('detect', {
-      image: await buffer.arrayBuffer(),
+    const buffer = await fetch(imageSrc).then((res) => res.bytes())
+    const result = await invoke<any>('detect', {
+      image: buffer,
     })
-
-    console.log('Detection result:', result)
   }
 
   return (
@@ -25,7 +18,7 @@ function DetectionPanel() {
         <h2 className='text-lg font-medium'>吹き出し</h2>
         <div className='flex-grow'></div>
         <button
-          className='text-gray-500 hover:text-gray-700 hover:bg-gray-100 rounded-full p-2'
+          className='text-gray-500 hover:text-gray-700 hover:bg-gray-100 rounded-full p-2 cursor-pointer'
           onClick={inference}
         >
           <Play className='w-4 h-4' />

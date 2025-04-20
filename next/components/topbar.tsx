@@ -4,11 +4,10 @@ import { open } from '@tauri-apps/plugin-dialog'
 import { Image, Download } from 'lucide-react'
 import { debug } from '@tauri-apps/plugin-log'
 import { convertFileSrc } from '@tauri-apps/api/core'
-import { useStageStore } from '@/lib/state'
-import { initializeStageWithImage } from '@/lib/stage'
+import { useCanvasStore } from '@/lib/state'
 
 function Topbar() {
-  const { stage } = useStageStore()
+  const { setImageSrc } = useCanvasStore()
   const handleOpenFile = async () => {
     const selected = await open({
       multiple: false,
@@ -28,7 +27,7 @@ function Topbar() {
     }
 
     const imageUrl = convertFileSrc(selected)
-    initializeStageWithImage(stage, imageUrl)
+    setImageSrc(imageUrl)
   }
 
   return (

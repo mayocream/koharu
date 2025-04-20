@@ -1,35 +1,41 @@
 'use client'
 
-import Konva from 'konva'
-import { useEffect, useRef } from 'react'
-import { useStageStore } from '@/lib/state'
-import { debug } from '@tauri-apps/plugin-log'
+import { useEffect, useRef, useState } from 'react'
 import ScaleControl from './scale-control'
+import { Image, Layer, Stage } from 'react-konva'
+import { useCanvasStore } from '@/lib/state'
 
 function Canvas() {
   const containerRef = useRef<HTMLDivElement>(null)
-  const stageRef = useRef(null)
-  const { setStage } = useStageStore()
+  const { imageSrc, scale } = useCanvasStore()
+  const [imageData, setImageData] = useState<ImageBitmap | null>(null)
 
-  const initializeStage = async () => {
-    const stage = new Konva.Stage({
-      container: stageRef.current,
-      width: containerRef.current?.offsetWidth,
-      height: containerRef.current?.offsetHeight,
-    })
+  const loadImage = async (src: string) => {
+    if (!src) return
 
-    setStage(stage)
-    debug(`Stage initialized`)
+    const blob = await fetch(src).then((res) => res.blob())
+    const bitmap = await createImageBitmap(blob)
+    setImageData(bitmap)
   }
 
   useEffect(() => {
-    initializeStage()
-  }, [stageRef])
+    loadImage(imageSrc)
+  }, [imageSrc])
 
   return (
     <div className='relative' ref={containerRef}>
       <div className='absolute min-w-full min-h-full flex items-center justify-center'>
-        <div className='bg-white' ref={stageRef} />
+        <Stage
+          scaleX={scale}
+          scaleY={scale}
+          width={imageData?.width * scale}
+          height={imageData?.height * scale}
+          className='bg-white'
+        >
+          <Layer>
+            <Image image={imageData ?? null} />
+          </Layer>
+        </Stage>
       </div>
       <ScaleControl />
     </div>

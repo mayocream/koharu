@@ -9,25 +9,26 @@
     "lint": "next lint"
   },
   "dependencies": {
-    "@tauri-apps/api": "^2.4.1",
-    "@tauri-apps/plugin-dialog": "~2",
-    "@tauri-apps/plugin-log": "~2",
+    "@tauri-apps/api": "^2.5.0",
+    "@tauri-apps/plugin-dialog": "~2.2.1",
+    "@tauri-apps/plugin-log": "~2.4.0",
     "@tauri-apps/plugin-opener": "^2.2.6",
-    "@tauri-apps/plugin-store": "~2",
+    "@tauri-apps/plugin-store": "~2.2.0",
     "konva": "^9.3.20",
-    "lucide-react": "^0.488.0",
-    "next": "15.3.0",
-    "react": "^19.0.0",
-    "react-dom": "^19.0.0",
+    "lucide-react": "^0.501.0",
+    "next": "15.3.1",
+    "react": "^19.1.0",
+    "react-dom": "^19.1.0",
+    "react-konva": "^19.0.3",
     "zustand": "^5.0.3"
   },
   "devDependencies": {
-    "@tailwindcss/postcss": "^4",
-    "@types/node": "^20",
-    "@types/react": "^19",
-    "@types/react-dom": "^19",
-    "canvas": "^3.0.0-rc3",
-    "tailwindcss": "^4",
-    "typescript": "^5"
+    "@tailwindcss/postcss": "^4.1.4",
+    "@types/node": "^22.14.1",
+    "@types/react": "^19.1.2",
+    "@types/react-dom": "^19.1.2",
+    "canvas": "^3.1.0",
+    "tailwindcss": "^4.1.4",
+    "typescript": "^5.8.3"
   }
 }
