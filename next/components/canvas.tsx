@@ -7,7 +7,7 @@ import { useCanvasStore } from '@/lib/state'
 
 function Canvas() {
   const containerRef = useRef<HTMLDivElement>(null)
-  const { imageSrc, scale, blocks } = useCanvasStore()
+  const { imageSrc, scale, blocks, setBlocks } = useCanvasStore()
   const [imageData, setImageData] = useState<ImageBitmap | null>(null)
 
   const loadImage = async (src: string) => {
@@ -20,6 +20,7 @@ function Canvas() {
 
   useEffect(() => {
     loadImage(imageSrc)
+    setBlocks([]) // Reset blocks when image changes
   }, [imageSrc])
 
   return (
