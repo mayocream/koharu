@@ -22,9 +22,10 @@ async fn initialize(app: AppHandle) -> anyhow::Result<()> {
 
 #[tauri::command]
 async fn detect(
-    state: tauri::State<'_, AppState>,
+    state: tauri::State<'_, Mutex<AppState>>,
     image: Vec<u8>,
 ) -> Result<comic_text_detector::Output, String> {
+    let state = state.lock().await;
     let ctd = state
         .ctd
         .as_ref()
@@ -39,7 +40,7 @@ async fn detect(
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     tauri::Builder::default()
-        .manage(AppState::default())
+        .manage(Mutex::new(AppState::default()))
         .plugin(tauri_plugin_store::Builder::new().build())
         .plugin(tauri_plugin_persisted_scope::init())
         .plugin(tauri_plugin_log::Builder::new().build())
