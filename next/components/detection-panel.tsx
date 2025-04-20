@@ -3,12 +3,14 @@ import { Play } from 'lucide-react'
 import { invoke } from '@tauri-apps/api/core'
 
 function DetectionPanel() {
-  const { imageSrc } = useCanvasStore()
+  const { imageSrc, blocks, setBlocks } = useCanvasStore()
   const inference = async () => {
     const buffer = await fetch(imageSrc).then((res) => res.bytes())
     const result = await invoke<any>('detect', {
       image: buffer,
     })
+
+    setBlocks(result.bboxes)
   }
 
   return (

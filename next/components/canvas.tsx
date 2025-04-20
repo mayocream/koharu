@@ -2,12 +2,12 @@
 
 import { useEffect, useRef, useState } from 'react'
 import ScaleControl from './scale-control'
-import { Image, Layer, Stage } from 'react-konva'
+import { Image, Layer, Rect, Stage } from 'react-konva'
 import { useCanvasStore } from '@/lib/state'
 
 function Canvas() {
   const containerRef = useRef<HTMLDivElement>(null)
-  const { imageSrc, scale } = useCanvasStore()
+  const { imageSrc, scale, blocks } = useCanvasStore()
   const [imageData, setImageData] = useState<ImageBitmap | null>(null)
 
   const loadImage = async (src: string) => {
@@ -34,6 +34,25 @@ function Canvas() {
         >
           <Layer>
             <Image image={imageData ?? null} />
+          </Layer>
+          <Layer>
+            {blocks.map((block, index) => {
+              const { xmin, ymin, xmax, ymax } = block
+              const width = xmax - xmin
+              const height = ymax - ymin
+
+              return (
+                <Rect
+                  key={index}
+                  x={xmin}
+                  y={ymin}
+                  width={width}
+                  height={height}
+                  stroke='red'
+                  strokeWidth={2}
+                />
+              )
+            })}
           </Layer>
         </Stage>
       </div>

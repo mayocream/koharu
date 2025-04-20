@@ -24,6 +24,8 @@ type CanvasState = {
   setImageSrc: (src: string | null) => void
   scale: number
   setScale: (scale: number) => void
+  blocks: any[]
+  setBlocks: (blocks: any[]) => void
 }
 
 export const useCanvasStore = create<CanvasState>()(
@@ -33,6 +35,8 @@ export const useCanvasStore = create<CanvasState>()(
       setImageSrc: (src) => set({ imageSrc: src }),
       scale: 1,
       setScale: (scale) => set({ scale }),
+      blocks: [],
+      setBlocks: (blocks) => set({ blocks }),
     }),
     {
       name: 'canvas-storage',
