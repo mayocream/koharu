@@ -3100,6 +3100,9 @@ dependencies = [
 name = "koharu"
 version = "0.1.0"
 dependencies = [
+ "anyhow",
+ "hf-hub",
+ "ort",
  "serde",
  "serde_json",
  "tauri",
