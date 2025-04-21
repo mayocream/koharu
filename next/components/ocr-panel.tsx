@@ -63,7 +63,7 @@ function OCRPanel() {
   }, [imageSrc])
 
   return (
-    <div className='flex flex-col bg-white rounded-lg shadow-md w-72 border border-gray-200'>
+    <div className='flex flex-col bg-white rounded-lg shadow-md w-72 max-h-128 overflow-auto border border-gray-200'>
       {/* Header */}
       <div className='flex items-center p-3'>
         <h2 className='font-medium'>OCR</h2>
