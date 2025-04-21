@@ -2,13 +2,14 @@
 
 import { useEffect, useRef, useState } from 'react'
 import ScaleControl from './scale-control'
-import { Image, Layer, Rect, Stage } from 'react-konva'
+import { Image, Layer, Rect, Stage, Transformer } from 'react-konva'
 import { useCanvasStore } from '@/lib/state'
 
 function Canvas() {
   const containerRef = useRef<HTMLDivElement>(null)
   const { imageSrc, scale, blocks, setBlocks } = useCanvasStore()
   const [imageData, setImageData] = useState<ImageBitmap | null>(null)
+  const [selected, setSelected] = useState<any>(null)
 
   const loadImage = async (src: string) => {
     if (!src) return
@@ -32,12 +33,15 @@ function Canvas() {
           width={imageData?.width * scale}
           height={imageData?.height * scale}
           className='bg-white'
+          onClick={() => {
+            setSelected(null)
+          }}
         >
           <Layer>
             <Image image={imageData ?? null} />
           </Layer>
           <Layer>
-            {blocks.map((block, index) => {
+            {blocks?.map((block, index) => {
               const { xmin, ymin, xmax, ymax } = block
               const width = xmax - xmin
               const height = ymax - ymin
@@ -51,9 +55,15 @@ function Canvas() {
                   height={height}
                   stroke='red'
                   strokeWidth={2}
+                  draggable
+                  onClick={(e) => {
+                    e.cancelBubble = true
+                    setSelected(e.target)
+                  }}
                 />
               )
             })}
+            {selected && <Transformer nodes={[selected]} />}
           </Layer>
         </Stage>
       </div>
