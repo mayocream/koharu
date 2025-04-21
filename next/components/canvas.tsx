@@ -14,9 +14,13 @@ function Canvas() {
   const loadImage = async (src: string) => {
     if (!src) return
 
-    const blob = await fetch(src).then((res) => res.blob())
-    const bitmap = await createImageBitmap(blob)
-    setImageData(bitmap)
+    try {
+      const blob = await fetch(src).then((res) => res.blob())
+      const bitmap = await createImageBitmap(blob)
+      setImageData(bitmap)
+    } catch (error) {
+      alert(`Error loading image: ${error}`)
+    }
   }
 
   useEffect(() => {
