@@ -4,6 +4,7 @@ import DetectionPanel from '@/components/detection-panel'
 import Tools from '@/components/tools'
 import Topbar from '@/components/topbar'
 import Canvas from '@/components/canvas'
+import OCRPanel from '@/components/ocr-panel'
 
 function App() {
   return (
@@ -16,8 +17,9 @@ function App() {
           <Canvas />
         </div>
 
-        <div className='h-full overflow-y-auto'>
+        <div className='flex flex-col h-full overflow-y-auto gap-2'>
           <DetectionPanel />
+          <OCRPanel />
         </div>
       </div>
     </main>
