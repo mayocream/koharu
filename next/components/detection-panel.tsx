@@ -13,6 +13,12 @@ function DetectionPanel() {
       image: buffer,
     })
 
+    result.bboxes.sort((a: any, b: any) => {
+      const aCenter = (a.ymin + a.ymax) / 2
+      const bCenter = (b.ymin + b.ymax) / 2
+      return aCenter - bCenter
+    })
+
     setTexts(result.bboxes)
     setLoading(false)
   }
