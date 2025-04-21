@@ -7,7 +7,7 @@ import { convertFileSrc } from '@tauri-apps/api/core'
 import { useCanvasStore } from '@/lib/state'
 
 function Topbar() {
-  const { setImageSrc } = useCanvasStore()
+  const { setImageSrc, setBlocks } = useCanvasStore()
   const handleOpenFile = async () => {
     const selected = await open({
       multiple: false,
@@ -28,6 +28,7 @@ function Topbar() {
 
     const imageUrl = convertFileSrc(selected)
     setImageSrc(imageUrl)
+    setBlocks([]) // Clear blocks when a new image is loaded
   }
 
   return (
