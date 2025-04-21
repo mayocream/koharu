@@ -81,7 +81,7 @@ function OCRPanel() {
         </button>
       </div>
       {/* Body */}
-      <div className='flex flex-col justify-center max-h-60 overflow-y-auto'>
+      <div className='flex flex-col justify-center'>
         {texts.map((block, index) => (
           <div
             key={index}
