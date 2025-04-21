@@ -4,7 +4,7 @@ import { invoke } from '@tauri-apps/api/core'
 import { useState } from 'react'
 
 function DetectionPanel() {
-  const { imageSrc, setTexts } = useCanvasStore()
+  const { imageSrc, texts, setTexts } = useCanvasStore()
   const [loading, setLoading] = useState(false)
   const inference = async () => {
     setLoading(true)
@@ -18,7 +18,7 @@ function DetectionPanel() {
   }
 
   return (
-    <div className='bg-white rounded-lg shadow-md w-72 border border-gray-200'>
+    <div className='flex flex-col bg-white rounded-lg shadow-md w-72 border border-gray-200'>
       {/* Header */}
       <div className='flex items-center p-3'>
         <h2 className='font-medium'>吹き出し検出</h2>
@@ -34,6 +34,12 @@ function DetectionPanel() {
             <Play className='w-4 h-4' />
           )}
         </button>
+      </div>
+      {/* Body */}
+      <div className='flex flex-col justify-center'>
+        <div className='border-b border-gray-200 py-2 px-4 text-sm'>
+          {texts.length} 個セリフを検出しました
+        </div>
       </div>
     </div>
   )

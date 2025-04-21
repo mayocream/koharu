@@ -2,7 +2,6 @@ import { useCanvasStore } from '@/lib/state'
 import { Loader, Play } from 'lucide-react'
 import { invoke } from '@tauri-apps/api/core'
 import { useEffect, useState } from 'react'
-import { load } from '@tauri-apps/plugin-store'
 import { debug } from '@tauri-apps/plugin-log'
 
 function OCRPanel() {
@@ -64,7 +63,7 @@ function OCRPanel() {
   }, [imageSrc])
 
   return (
-    <div className='bg-white rounded-lg shadow-md w-72 border border-gray-200'>
+    <div className='flex flex-col bg-white rounded-lg shadow-md w-72 border border-gray-200'>
       {/* Header */}
       <div className='flex items-center p-3'>
         <h2 className='font-medium'>OCR</h2>
@@ -80,6 +79,17 @@ function OCRPanel() {
             <Play className='w-4 h-4' />
           )}
         </button>
+      </div>
+      {/* Body */}
+      <div className='flex flex-col justify-center max-h-60 overflow-y-auto'>
+        {texts.map((block, index) => (
+          <div
+            key={index}
+            className='border-b border-gray-200 py-2 px-4 text-sm'
+          >
+            {block.text || '検出されていません'}
+          </div>
+        ))}
       </div>
     </div>
   )
