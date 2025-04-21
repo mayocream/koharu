@@ -1,12 +1,14 @@
 'use client'
 
 import { open } from '@tauri-apps/plugin-dialog'
-import { Image, Download } from 'lucide-react'
+import { Image, Download, Settings } from 'lucide-react'
 import { debug } from '@tauri-apps/plugin-log'
 import { convertFileSrc } from '@tauri-apps/api/core'
 import { useCanvasStore } from '@/lib/state'
+import { useRouter } from 'next/navigation'
 
 function Topbar() {
+  const router = useRouter()
   const { setImageSrc, setTexts } = useCanvasStore()
   const handleOpenFile = async () => {
     const selected = await open({
@@ -44,6 +46,15 @@ function Topbar() {
 
       <div className='flex-grow' />
       <div className='flex items-center'>
+        <button
+          className='flex items-center p-2 mx-1 text-gray-600 hover:bg-gray-100 rounded'
+          onClick={() => {
+            router.push('/settings')
+          }}
+        >
+          <Settings size={18} />
+        </button>
+
         <button className='flex items-center p-2 mx-1 text-gray-600 hover:bg-gray-100 rounded'>
           <Download size={18} />
         </button>

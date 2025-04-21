@@ -1,10 +1,10 @@
 'use client'
 
-import { useState } from 'react'
 import { Languages, MessageCircle } from 'lucide-react'
+import { useWorkflowStore } from '@/lib/state'
 
 function Tools() {
-  const [selectedTool, setSelectedTool] = useState('detection')
+  const { selectedTool, setSelectedTool } = useWorkflowStore()
 
   const tools = [
     {

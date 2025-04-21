@@ -44,3 +44,43 @@ export const useCanvasStore = create<CanvasState>()(
     }
   )
 )
+
+type WorkflowState = {
+  selectedTool: string
+  setSelectedTool: (tool: string) => void
+  prompt: string
+  setPrompt: (prompt: string) => void
+}
+
+export const useWorkflowStore = create<WorkflowState>((set) => ({
+  selectedTool: 'detection',
+  setSelectedTool: (tool) => set({ selectedTool: tool }),
+  prompt: '',
+  setPrompt: (prompt) => set({ prompt }),
+}))
+
+type SettingsState = {
+  openAIServer: string | null
+  setOpenAIServer: (url: string) => void
+  openAIToken: string | null
+  setOpenAIToken: (token: string) => void
+  openAIModel: string | null
+  setOpenAIModel: (model: string) => void
+}
+
+export const useSettingsStore = create<SettingsState>()(
+  persist(
+    (set) => ({
+      openAIServer: null,
+      setOpenAIServer: (url) => set({ openAIServer: url }),
+      openAIToken: null,
+      setOpenAIToken: (token) => set({ openAIToken: token }),
+      openAIModel: null,
+      setOpenAIModel: (model) => set({ openAIModel: model }),
+    }),
+    {
+      name: 'settings-storage',
+      storage: createJSONStorage(() => createStorage('settings-storage')),
+    }
+  )
+)
