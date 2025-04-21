@@ -23,10 +23,10 @@ Koharu is built using Tauri, a framework for building lightweight, secure, and f
 
 The workflow of translation consists of the following steps:
 
-1. Detect the text in the manga using a text detection model.
-2. Extract the detected text using an OCR model.
-3. Translate the extracted text using an LLM.
-4. Inpaint the translated text back into the manga using an inpainting model.
+- [x] Detect the text in the manga using a text detection model.
+- [x] Extract the detected text using an OCR model.
+- [x] Translate the extracted text using an LLM.
+- [] Inpaint the translated text back into the manga using an inpainting model.
 
 ## Models
 
