@@ -23,7 +23,7 @@
     ],
     "security": {
       "dangerousDisableAssetCspModification": true,
-      "csp": "default-src *",
+      "csp": "default-src * 'unsafe-inline' 'unsafe-eval' data: blob:",
       "assetProtocol": {
         "enable": true,
         "scope": [
