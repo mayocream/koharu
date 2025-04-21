@@ -4,7 +4,7 @@ import { invoke } from '@tauri-apps/api/core'
 import { useState } from 'react'
 
 function DetectionPanel() {
-  const { imageSrc, setBlocks } = useCanvasStore()
+  const { imageSrc, setTexts: setBlocks } = useCanvasStore()
   const [loading, setLoading] = useState(false)
   const inference = async () => {
     setLoading(true)

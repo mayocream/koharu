@@ -7,7 +7,7 @@ import { useCanvasStore } from '@/lib/state'
 
 function Canvas() {
   const containerRef = useRef<HTMLDivElement>(null)
-  const { imageSrc, scale, blocks } = useCanvasStore()
+  const { imageSrc, scale, texts } = useCanvasStore()
   const [imageData, setImageData] = useState<ImageBitmap | null>(null)
   const [selected, setSelected] = useState<any>(null)
 
@@ -40,7 +40,7 @@ function Canvas() {
             <Image image={imageData ?? null} />
           </Layer>
           <Layer>
-            {blocks?.map((block, index) => {
+            {texts?.map((block, index) => {
               const { xmin, ymin, xmax, ymax } = block
               const width = xmax - xmin
               const height = ymax - ymin
