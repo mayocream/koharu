@@ -14,7 +14,10 @@
       {
         "label": "main",
         "title": "Koharu",
-        "visible": false
+        "visible": false,
+        "width": 1400,
+        "height": 1200,
+        "center": true
       },
       {
         "url": "/splashscreen",
