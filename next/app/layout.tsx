@@ -1,10 +1,9 @@
 import type { Metadata } from 'next'
-import { Noto_Sans_JP } from 'next/font/google'
+import { Noto_Sans_JP, Noto_Sans_SC } from 'next/font/google'
 import './globals.css'
 
-const notoSansJP = Noto_Sans_JP({
-  subsets: ['latin'],
-})
+const notoSansJP = Noto_Sans_JP({ subsets: ['latin'] })
+const notoSansSC = Noto_Sans_SC({ subsets: ['latin'] })
 
 export const metadata: Metadata = {
   title: 'Koharu',
@@ -16,8 +15,12 @@ export default function RootLayout({
   children: React.ReactNode
 }>) {
   return (
-    <html lang='en' suppressHydrationWarning>
-      <body className={`${notoSansJP.className} antialiased`}>{children}</body>
+    <html lang='ja' suppressHydrationWarning>
+      <body
+        className={`${notoSansJP.className} ${notoSansSC.className} antialiased`}
+      >
+        {children}
+      </body>
     </html>
   )
 }
