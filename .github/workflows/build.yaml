@@ -1,11 +1,10 @@
-name: 'publish'
+name: 'build'
 
 on:
   push:
     branches:
       - main
-
-# This workflow will trigger on each push to the `release` branch to create or update a GitHub release, build your app, and upload the artifacts to the release.
+  pull_request:
 
 jobs:
   publish-tauri:
@@ -67,6 +66,7 @@ jobs:
           echo "EOF" >> $GITHUB_OUTPUT
 
       - name: Upload artifacts
+        if: ${{ github.event_name == 'push' }}
         uses: softprops/action-gh-release@v2
         with:
           tag_name: v${{ steps.tauri.outputs.appVersion }}
