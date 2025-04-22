@@ -6,5 +6,8 @@
   },
   "workspaces": [
     "next"
-  ]
+  ],
+  "devDependencies": {
+    "@tauri-apps/cli": "v2"
+  }
 }

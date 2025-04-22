@@ -40,6 +40,19 @@ The workflow of translation consists of the following steps:
 - Rust 1.85
 - Bun
 
+#### Windows
+
+Please install [Visual Studio C++ Build tools](https://visualstudio.microsoft.com/visual-cpp-build-tools/) first.
+
+Then, install the dependencies using the following commands in PowerShell:
+
+```powershell
+winget install --id=Oven-sh.Bun
+winget install rustlang.rustup
+
+rustup
+```
+
 ### Build
 
 ```bash
