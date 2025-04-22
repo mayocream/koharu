@@ -59,7 +59,9 @@ function Canvas() {
                   height={height}
                   stroke='red'
                   strokeWidth={2}
-                  fill={selectedTextIndex == index ? 'rgba(255, 0, 0, 0.3)' : null}
+                  fill={
+                    selectedTextIndex == index ? 'rgba(255, 0, 0, 0.3)' : null
+                  }
                   draggable
                   onClick={(e) => {
                     e.cancelBubble = true

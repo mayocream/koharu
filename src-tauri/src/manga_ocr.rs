@@ -2,7 +2,13 @@ use std::thread;
 
 use hf_hub::api::sync::Api;
 use ndarray::s;
-use ort::{inputs, execution_providers::{CoreMLExecutionProvider, CUDAExecutionProvider, DirectMLExecutionProvider}, session::Session};
+use ort::{
+    execution_providers::{
+        CUDAExecutionProvider, CoreMLExecutionProvider, DirectMLExecutionProvider,
+    },
+    inputs,
+    session::Session,
+};
 
 #[derive(Debug)]
 pub struct MangaOCR {
@@ -17,8 +23,6 @@ impl MangaOCR {
         let model_path = repo.get("manga-ocr.onnx")?;
         let vocab_path = repo.get("vocab.txt")?;
 
-        let num_threads = thread::available_parallelism()?.get();
-
         let model = Session::builder()?
             .with_optimization_level(ort::session::builder::GraphOptimizationLevel::Level3)?
             .with_execution_providers([
@@ -26,7 +30,7 @@ impl MangaOCR {
                 // Use DirectML on Windows if NVIDIA EPs are not available
                 DirectMLExecutionProvider::default().build(),
                 // Or use ANE on Apple platforms
-                CoreMLExecutionProvider::default().build()
+                CoreMLExecutionProvider::default().build(),
             ])?
             .with_intra_threads(thread::available_parallelism()?.get())?
             .commit_from_file(model_path)?;

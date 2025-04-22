@@ -87,7 +87,10 @@ function OCRPanel() {
           <div
             key={index}
             className='border-b cursor-pointer border-gray-200 py-2 px-4 text-sm'
-            style={{ 'backgroundColor': selectedTextIndex == index ? 'rgba(147, 140, 140, 0.3)' : '' }}
+            style={{
+              backgroundColor:
+                selectedTextIndex == index ? 'rgba(147, 140, 140, 0.3)' : '',
+            }}
             onMouseEnter={() => setSelectedTextIndex(index)}
             onMouseLeave={() => setSelectedTextIndex(null)}
           >
