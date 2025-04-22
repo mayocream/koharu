@@ -1,7 +1,7 @@
 import { useCanvasStore } from '@/lib/state'
 import { Loader, Play } from 'lucide-react'
 import { invoke } from '@tauri-apps/api/core'
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 
 function DetectionPanel() {
   const { imageSrc, texts, setTexts } = useCanvasStore()
@@ -22,6 +22,13 @@ function DetectionPanel() {
     setTexts(result.bboxes)
     setLoading(false)
   }
+
+  // auto trigger inference when imageSrc changes
+  useEffect(() => {
+    if (imageSrc) {
+      inference()
+    }
+  }, [imageSrc])
 
   return (
     <div className='flex flex-col bg-white rounded-lg shadow-md w-72 border border-gray-200'>
