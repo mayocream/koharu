@@ -30,17 +30,27 @@ function TranslationPanel() {
           content: texts.map((block) => block.text).join('\n'),
         },
       ],
+      stream: true,
     })
 
-    const translatedTexts = response.choices[0].message.content.split('\n')
-    const newTexts = texts.map((block, index) => ({
-      ...block,
-      translatedText: translatedTexts[index],
-    }))
+    // consume stream
+    let line = ""
+    let index = 0
+    for await (const chunk of response) {
+      line += chunk.choices[0].delta.content
+      const splitted = line.split('\n')
+      if (splitted.length < 2) {
+        continue
+      }
+      texts[index++].translatedText = splitted[0]
+  
+      setTexts(texts)
+      line = splitted[1]
+    }
 
-    setTexts(newTexts)
     setLoading(false)
   }
+
 
   return (
     <div className='flex flex-col bg-white rounded-lg shadow-md w-72 max-h-160 overflow-auto border border-gray-200'>
@@ -62,10 +72,10 @@ function TranslationPanel() {
       </div>
       {/* Body */}
       <div className='flex items-center p-3 border-b border-gray-200'>
-        <input
-          type='text'
+        <textarea
           className='w-full px-2 py-1 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 text-sm'
-          placeholder='プロンプを入力'
+          
+          placeholder='システムプロンプトを入力'
           value={prompt}
           onChange={(e) => setPrompt(e.target.value)}
         />
