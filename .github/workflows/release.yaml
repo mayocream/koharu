@@ -55,6 +55,7 @@ jobs:
           args: ${{ matrix.args }}
 
       - id: artifacts
+        shell: bash
         run: |
           echo "files<<EOF" >> $GITHUB_OUTPUT
           for path in $(echo '${{ steps.tauri.outputs.artifactPaths }}' | jq -r '.[]'); do
