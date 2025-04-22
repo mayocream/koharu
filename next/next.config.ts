@@ -9,7 +9,7 @@ const nextConfig: NextConfig = {
     unoptimized: true,
   },
   distDir: './dist',
-  assetPrefix: isProd ? undefined : `http://${internalHost}:3000`,
+  assetPrefix: isProd ? undefined : `http://${internalHost}:9000`,
 }
 
 export default nextConfig

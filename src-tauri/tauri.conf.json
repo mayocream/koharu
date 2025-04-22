@@ -5,7 +5,7 @@
   "identifier": "koharu",
   "build": {
     "beforeDevCommand": "bun run dev",
-    "devUrl": "http://localhost:3000",
+    "devUrl": "http://localhost:9000",
     "beforeBuildCommand": "bun run build",
     "frontendDist": "../next/dist"
   },
