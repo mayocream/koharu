@@ -58,7 +58,7 @@ jobs:
         uses: softprops/action-gh-release@v2
         with:
           tag_name: v${{ steps.tauri.outputs.appVersion }}
-          files: ${{ steps.tauri.outputs.artifactPaths }}
+          files: ${{ fromJson(steps.tauri.outputs.artifactPaths) }}
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
