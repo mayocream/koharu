@@ -27,7 +27,7 @@ tauri-plugin-persisted-scope = "2"
 tauri-plugin-store = "2"
 tokio = { version = "1.44.2", features = ["full"] }
 anyhow = "1.0.98"
-ort = "=2.0.0-rc.9"
+ort = { version = "=2.0.0-rc.9", features = [ "cuda" ] }
 hf-hub = "0.4.2"
 image = "0.25.6"
 ndarray = "0.16.1"
