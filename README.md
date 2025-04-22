@@ -26,7 +26,7 @@ The workflow of translation consists of the following steps:
 - [x] Detect the text in the manga using a text detection model.
 - [x] Extract the detected text using an OCR model.
 - [x] Translate the extracted text using an LLM.
-- [] Inpaint the translated text back into the manga using an inpainting model.
+- [ ] Inpaint the translated text back into the manga using an inpainting model.
 
 ## Models
 
@@ -39,3 +39,10 @@ The workflow of translation consists of the following steps:
 
 - Rust 1.85
 - Bun
+
+### Build
+
+```bash
+bun install
+bun tauri dev
+```
