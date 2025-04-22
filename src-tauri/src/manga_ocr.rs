@@ -1,3 +1,5 @@
+use std::thread;
+
 use hf_hub::api::sync::Api;
 use ndarray::s;
 use ort::{inputs, session::Session};
@@ -17,7 +19,7 @@ impl MangaOCR {
 
         let model = Session::builder()?
             .with_optimization_level(ort::session::builder::GraphOptimizationLevel::Level3)?
-            .with_intra_threads(4)?
+            .with_intra_threads(thread::available_parallelism()?.get())?
             .commit_from_file(model_path)?;
 
         let vocab = std::fs::read_to_string(vocab_path)
