@@ -27,7 +27,7 @@ function TranslationPanel() {
         },
         {
           role: 'user',
-          content: texts.map((block) => block.text).join('\n'),
+          content: texts.map((block) => block.text).join('\n') + '\n',
         },
       ],
       stream: true,
