@@ -47,13 +47,27 @@ jobs:
 
       - uses: Swatinem/rust-cache@v2
 
-      - uses: tauri-apps/tauri-action@v0
+      - id: tauri
+        uses: tauri-apps/tauri-action@v0
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         with:
-          tagName: v__VERSION__ # the action automatically replaces \_\_VERSION\_\_ with the app version.
-          releaseName: 'App v__VERSION__'
-          releaseBody: 'See the assets to download this version and install.'
-          releaseDraft: true
-          prerelease: false
           args: ${{ matrix.args }}
+
+      - name: Upload artifacts
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: v${{ steps.tauri.outputs.appVersion }}
+          files: ${{ steps.tauri.outputs.artifactPaths }}
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Upload portable executable
+        if: matrix.platform == 'windows-latest'
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: v${{ steps.tauri.outputs.appVersion }}
+          files: |
+            target/release/koharu.exe
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
