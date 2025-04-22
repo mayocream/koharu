@@ -1,5 +1,5 @@
 import { useCanvasStore, useWorkflowStore } from '@/lib/state'
-import { Loader, Play } from 'lucide-react'
+import { Check, Loader, Pencil, Play, X } from 'lucide-react'
 import { invoke } from '@tauri-apps/api/core'
 import { useEffect, useState } from 'react'
 import { debug } from '@tauri-apps/plugin-log'
@@ -9,6 +9,8 @@ function OCRPanel() {
   const { selectedTextIndex, setSelectedTextIndex } = useWorkflowStore()
   const [loading, setLoading] = useState(false)
   const [imageData, setImageData] = useState<ImageBitmap | null>(null)
+  const [isTextEditMode, setIsTextEditMode] = useState(false)
+  const [editedText, setEditedText] = useState([])
 
   const cropImage = async (
     xmin: number,
@@ -59,6 +61,30 @@ function OCRPanel() {
     setImageData(bitmap)
   }
 
+  const handleEditModeChange = () => {
+    setEditedText(texts.map((block) => block.text))
+    setIsTextEditMode(true)
+  }
+
+  const handleTextEdit = (index: number, value: string) => {
+    const newTexts = [...editedText]
+    newTexts[index] = value
+    setEditedText(newTexts)
+  }
+  const handleTextSave = () => {
+    const newTexts = texts.map((block, index) => ({
+      ...block,
+      text: editedText[index],
+    }))
+    setTexts(newTexts)
+    setIsTextEditMode(false)
+  }
+
+  const handleTextUnsave = () => {
+    setEditedText(texts.map((block) => block.text))
+    setIsTextEditMode(false)
+  }
+
   useEffect(() => {
     loadImage(imageSrc)
   }, [imageSrc])
@@ -69,6 +95,32 @@ function OCRPanel() {
       <div className='flex items-center p-3'>
         <h2 className='font-medium'>OCR</h2>
         <div className='flex-grow'></div>
+        {isTextEditMode ? (
+          <>
+            <button
+              className='text-gray-500 hover:text-gray-700 hover:bg-gray-100 rounded-full p-2 cursor-pointer'
+              onClick={handleTextUnsave}
+              disabled={loading}
+            >
+              <X className='w-4 h-4' />
+            </button>
+            <button
+              className='text-gray-500 hover:text-gray-700 hover:bg-gray-100 rounded-full p-2 cursor-pointer'
+              onClick={handleTextSave}
+              disabled={loading}
+            >
+              <Check className='w-4 h-4' />
+            </button>
+          </>
+        ) : (
+          <button
+            className='text-gray-500 hover:text-gray-700 hover:bg-gray-100 rounded-full p-2 cursor-pointer'
+            onClick={handleEditModeChange}
+            disabled={loading}
+          >
+            <Pencil className='w-4 h-4' />
+          </button>
+        )}
         <button
           className='text-gray-500 hover:text-gray-700 hover:bg-gray-100 rounded-full p-2 cursor-pointer'
           onClick={inference}
@@ -81,7 +133,6 @@ function OCRPanel() {
           )}
         </button>
       </div>
-      {/* Body */}
       <div className='flex flex-col justify-center'>
         {texts.map((block, index) => (
           <div
@@ -89,12 +140,21 @@ function OCRPanel() {
             className='border-b cursor-pointer border-gray-200 py-2 px-4 text-sm'
             style={{
               backgroundColor:
-                selectedTextIndex == index ? 'rgba(147, 140, 140, 0.3)' : '',
+                selectedTextIndex === index ? 'rgba(147, 140, 140, 0.3)' : '',
             }}
             onMouseEnter={() => setSelectedTextIndex(index)}
             onMouseLeave={() => setSelectedTextIndex(null)}
           >
-            {block.text || '検出されていません'}
+            {isTextEditMode ? (
+              <input
+                type='text'
+                value={editedText[index]}
+                onChange={(e) => handleTextEdit(index, e.target.value)}
+                className='w-full bg-transparent outline-none'
+              />
+            ) : (
+              block.text || '検出されていません'
+            )}
           </div>
         ))}
       </div>
