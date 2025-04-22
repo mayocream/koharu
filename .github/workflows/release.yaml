@@ -45,6 +45,8 @@ jobs:
       - name: install frontend dependencies
         run: bun install
 
+      - uses: Swatinem/rust-cache@v2
+
       - uses: tauri-apps/tauri-action@v0
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
