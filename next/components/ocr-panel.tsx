@@ -1,4 +1,4 @@
-import { useCanvasStore } from '@/lib/state'
+import { useCanvasStore, useWorkflowStore } from '@/lib/state'
 import { Loader, Play } from 'lucide-react'
 import { invoke } from '@tauri-apps/api/core'
 import { useEffect, useState } from 'react'
@@ -6,6 +6,7 @@ import { debug } from '@tauri-apps/plugin-log'
 
 function OCRPanel() {
   const { imageSrc, texts, setTexts } = useCanvasStore()
+  const { selectedTextIndex, setSelectedTextIndex } = useWorkflowStore()
   const [loading, setLoading] = useState(false)
   const [imageData, setImageData] = useState<ImageBitmap | null>(null)
 
@@ -85,7 +86,10 @@ function OCRPanel() {
         {texts.map((block, index) => (
           <div
             key={index}
-            className='border-b border-gray-200 py-2 px-4 text-sm'
+            className='border-b cursor-pointer border-gray-200 py-2 px-4 text-sm'
+            style={{ 'backgroundColor': selectedTextIndex == index ? 'rgba(147, 140, 140, 0.3)' : '' }}
+            onMouseEnter={() => setSelectedTextIndex(index)}
+            onMouseLeave={() => setSelectedTextIndex(null)}
           >
             {block.text || '検出されていません'}
           </div>

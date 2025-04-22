@@ -7,7 +7,7 @@ function TranslationPanel() {
   const { texts, setTexts } = useCanvasStore()
   const { openAIServer, openAIToken, openAIModel } = useSettingsStore()
   const [loading, setLoading] = useState(false)
-  const { prompt, setPrompt } = useWorkflowStore()
+  const { prompt, setPrompt, selectedTextIndex, setSelectedTextIndex } = useWorkflowStore()
 
   const translate = async () => {
     setLoading(true)
@@ -73,7 +73,10 @@ function TranslationPanel() {
         {texts.map((block, index) => (
           <div
             key={index}
-            className='border-b border-gray-200 py-2 px-4 text-sm'
+            style={{ 'backgroundColor': selectedTextIndex == index ? 'rgba(147, 140, 140, 0.3)' : '' }}
+            className='border-b cursor-pointer border-gray-200 py-2 px-4 text-sm'
+            onMouseEnter={() => setSelectedTextIndex(index)}
+            onMouseLeave={() => setSelectedTextIndex(null)}
           >
             {block.translatedText || 'まだ翻訳されていません'}
           </div>

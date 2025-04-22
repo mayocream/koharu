@@ -3,11 +3,12 @@
 import { useEffect, useRef, useState } from 'react'
 import ScaleControl from './scale-control'
 import { Image, Layer, Rect, Stage, Transformer } from 'react-konva'
-import { useCanvasStore } from '@/lib/state'
+import { useCanvasStore, useWorkflowStore } from '@/lib/state'
 
 function Canvas() {
   const containerRef = useRef<HTMLDivElement>(null)
   const { imageSrc, scale, texts } = useCanvasStore()
+  const { selectedTextIndex, setSelectedTextIndex } = useWorkflowStore()
   const [imageData, setImageData] = useState<ImageBitmap | null>(null)
   const [selected, setSelected] = useState<any>(null)
 
@@ -58,11 +59,14 @@ function Canvas() {
                   height={height}
                   stroke='red'
                   strokeWidth={2}
+                  fill={selectedTextIndex == index ? 'rgba(255, 0, 0, 0.3)' : null}
                   draggable
                   onClick={(e) => {
                     e.cancelBubble = true
                     setSelected(e.target)
                   }}
+                  onMouseEnter={() => setSelectedTextIndex(index)}
+                  onMouseLeave={() => setSelectedTextIndex(null)}
                 />
               )
             })}
