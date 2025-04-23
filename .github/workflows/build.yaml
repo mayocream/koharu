@@ -14,13 +14,13 @@ jobs:
       fail-fast: false
       matrix:
         include:
-          - platform: 'macos-latest' # for Arm based macs (M1 and above).
+          - platform: 'macos-15' # for Arm based macs (M1 and above).
             args: '--target aarch64-apple-darwin'
-          - platform: 'macos-latest' # for Intel based macs.
+          - platform: 'macos-15' # for Intel based macs.
             args: '--target x86_64-apple-darwin'
           - platform: 'ubuntu-22.04' # for Tauri v1 you could replace this with ubuntu-20.04.
             args: ''
-          - platform: 'windows-latest'
+          - platform: 'windows-2025'
             args: '--features cuda'
 
     runs-on: ${{ matrix.platform }}
@@ -33,7 +33,7 @@ jobs:
         uses: dtolnay/rust-toolchain@stable
         with:
           # Those targets are only used on macos runners so it's in an `if` to slightly speed up windows and linux builds.
-          targets: ${{ matrix.platform == 'macos-latest' && 'aarch64-apple-darwin,x86_64-apple-darwin' || '' }}
+          targets: ${{ matrix.platform == 'macos-15' && 'aarch64-apple-darwin,x86_64-apple-darwin' || '' }}
 
       - name: install dependencies (ubuntu only)
         if: matrix.platform == 'ubuntu-22.04' # This must match the platform value defined above.
@@ -60,7 +60,7 @@ jobs:
           for path in $(echo '${{ steps.tauri.outputs.artifactPaths }}' | jq -r '.[]'); do
             echo "$path" >> $GITHUB_OUTPUT
           done
-          if [[ "${{ matrix.platform }}" == "windows-latest" ]]; then
+          if [[ "${{ matrix.platform }}" == "windows-2025" ]]; then
             echo "target/release/koharu.exe" >> $GITHUB_OUTPUT
           fi
           echo "EOF" >> $GITHUB_OUTPUT
