@@ -8,6 +8,9 @@ Koharu introduces a new workflow for manga translation, utilizing the power of L
 
 Koharu is built with Rust, ensuring high performance and reliability. The bundle is extremely lightweight (less than 10MB) and can be run on any machine without any dependencies.
 
+> [!NOTE]
+> For help and support, please join our [Discord server](https://discord.gg/mHvHkxGnUY).
+
 ## Preview
 
 ![detection](./docs/images/koharu-demo-1.png)
@@ -16,7 +19,7 @@ Koharu is built with Rust, ensuring high performance and reliability. The bundle
 The build is available for Windows, MacOS, and Linux. You can download the latest release from the [releases page](https://github.com/mayocream/koharu/releases/latest).
 
 > [!NOTE]
-> Koharu is still in development and may not work perfectly. Please report any issues you encounter on the [issues page](https://github.com/mayocream/koharu/issues)
+> Koharu is still in development and may not work perfectly. Please report any issues you encounter on the [issues page](https://github.com/mayocream/koharu/issues).
 
 ## Technology
 
