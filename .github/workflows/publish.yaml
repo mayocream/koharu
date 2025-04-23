@@ -2,8 +2,8 @@ name: Publish
 
 on:
   push:
-    branches:
-      - main
+    tags:
+      - 'v*.*.*'  # Matches version tags like v1.0.0
 
 jobs:
   publish:
