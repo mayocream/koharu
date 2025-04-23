@@ -91,7 +91,7 @@ function OCRPanel() {
   }, [imageSrc])
 
   return (
-    <div className='flex flex-col bg-white rounded-lg shadow-md w-72 overflow-auto border border-gray-200'>
+    <div className='flex w-72 flex-col overflow-auto rounded-lg border border-gray-200 bg-white shadow-md'>
       {/* Header */}
       <div className='flex items-center p-3'>
         <h2 className='font-medium'>OCR</h2>
@@ -101,38 +101,38 @@ function OCRPanel() {
           (isTextEditMode ? (
             <>
               <button
-                className='text-gray-500 hover:text-gray-700 hover:bg-gray-100 rounded-full p-2 cursor-pointer'
+                className='cursor-pointer rounded-full p-2 text-gray-500 hover:bg-gray-100 hover:text-gray-700'
                 onClick={handleTextUnsave}
                 disabled={loading}
               >
-                <X className='w-4 h-4' />
+                <X className='h-4 w-4' />
               </button>
               <button
-                className='text-gray-500 hover:text-gray-700 hover:bg-gray-100 rounded-full p-2 cursor-pointer'
+                className='cursor-pointer rounded-full p-2 text-gray-500 hover:bg-gray-100 hover:text-gray-700'
                 onClick={handleTextSave}
                 disabled={loading}
               >
-                <Check className='w-4 h-4' />
+                <Check className='h-4 w-4' />
               </button>
             </>
           ) : (
             <button
-              className='text-gray-500 hover:text-gray-700 hover:bg-gray-100 rounded-full p-2 cursor-pointer'
+              className='cursor-pointer rounded-full p-2 text-gray-500 hover:bg-gray-100 hover:text-gray-700'
               onClick={handleEditModeChange}
               disabled={loading}
             >
-              <Pencil className='w-4 h-4' />
+              <Pencil className='h-4 w-4' />
             </button>
           ))}
         <button
-          className='text-gray-500 hover:text-gray-700 hover:bg-gray-100 rounded-full p-2 cursor-pointer'
+          className='cursor-pointer rounded-full p-2 text-gray-500 hover:bg-gray-100 hover:text-gray-700'
           onClick={inference}
           disabled={loading}
         >
           {loading ? (
-            <Loader className='w-4 h-4' />
+            <Loader className='h-4 w-4' />
           ) : (
-            <Play className='w-4 h-4' />
+            <Play className='h-4 w-4' />
           )}
         </button>
       </div>
@@ -140,7 +140,7 @@ function OCRPanel() {
         {texts.map((block, index) => (
           <div
             key={index}
-            className='border-b cursor-pointer border-gray-200 py-2 px-4 text-sm'
+            className='cursor-pointer border-b border-gray-200 px-4 py-2 text-sm'
             style={{
               backgroundColor:
                 selectedTextIndex === index ? 'rgba(147, 140, 140, 0.3)' : '',
@@ -152,7 +152,7 @@ function OCRPanel() {
               <textarea
                 value={editedText[index]}
                 onChange={(e) => handleTextEdit(index, e.target.value)}
-                className='w-full bg-transparent  border border-gray-200 rounded focus:outline-none focus:border-gray-400 resize-none leading-snug'
+                className='w-full resize-none rounded border border-gray-200 bg-transparent leading-snug focus:border-gray-400 focus:outline-none'
               />
             ) : (
               block.text || '検出されていません'

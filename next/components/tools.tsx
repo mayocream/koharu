@@ -21,11 +21,11 @@ function Tools() {
   ]
 
   return (
-    <div className='w-14 bg-gray-50 border border-gray-200 rounded-xl shadow-sm py-2 flex flex-col items-center'>
+    <div className='flex w-14 flex-col items-center rounded-xl border border-gray-200 bg-gray-50 py-2 shadow-sm'>
       {tools.map((tool) => (
         <div
           key={tool.id}
-          className={`w-10 h-10 mb-4 flex items-center justify-center rounded-lg cursor-pointer ${
+          className={`mb-4 flex h-10 w-10 cursor-pointer items-center justify-center rounded-lg ${
             selectedTool === tool.id
               ? 'bg-blue-400 text-white'
               : 'text-gray-700 hover:bg-gray-200'

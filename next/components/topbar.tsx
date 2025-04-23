@@ -34,10 +34,10 @@ function Topbar() {
   }
 
   return (
-    <div className='fixed w-full flex items-center p-2 bg-white border-b border-gray-200 shadow-sm'>
+    <div className='fixed flex w-full items-center border-b border-gray-200 bg-white p-2 shadow-sm'>
       <div className='flex items-center'>
         <button
-          className='flex items-center p-2 mx-1 text-gray-600 hover:bg-gray-100 rounded'
+          className='mx-1 flex items-center rounded p-2 text-gray-600 hover:bg-gray-100'
           onClick={handleOpenFile}
         >
           <Image size={18} />
@@ -47,7 +47,7 @@ function Topbar() {
       <div className='flex-grow' />
       <div className='flex items-center'>
         <button
-          className='flex items-center p-2 mx-1 text-gray-600 hover:bg-gray-100 rounded'
+          className='mx-1 flex items-center rounded p-2 text-gray-600 hover:bg-gray-100'
           onClick={() => {
             router.push('/settings')
           }}
@@ -55,7 +55,7 @@ function Topbar() {
           <Settings size={18} />
         </button>
 
-        <button className='flex items-center p-2 mx-1 text-gray-600 hover:bg-gray-100 rounded'>
+        <button className='mx-1 flex items-center rounded p-2 text-gray-600 hover:bg-gray-100'>
           <Download size={18} />
         </button>
       </div>

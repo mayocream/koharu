@@ -17,12 +17,12 @@ export default function Settings() {
   } = useSettingsStore()
 
   return (
-    <div className='flex flex-col min-h-screen w-full bg-gray-100'>
+    <div className='flex min-h-screen w-full flex-col bg-gray-100'>
       {/* Header with back button */}
-      <div className='bg-white shadow-sm p-4'>
-        <div className='max-w-7xl mx-auto flex items-center'>
+      <div className='bg-white p-4 shadow-sm'>
+        <div className='mx-auto flex max-w-7xl items-center'>
           <button
-            className='mr-4 p-2 rounded-full hover:bg-gray-100 transition-colors cursor-pointer'
+            className='mr-4 cursor-pointer rounded-full p-2 transition-colors hover:bg-gray-100'
             onClick={() => router.replace('/')}
           >
             <ArrowLeft size={18} />
@@ -33,12 +33,12 @@ export default function Settings() {
 
       {/* Main content */}
       <div className='flex-grow p-6'>
-        <div className='max-w-7xl mx-auto'>
-          <div className='bg-white rounded-lg shadow-md p-6'>
-            <h2 className='text-xl font-semibold mb-6'>API 設定</h2>
+        <div className='mx-auto max-w-7xl'>
+          <div className='rounded-lg bg-white p-6 shadow-md'>
+            <h2 className='mb-6 text-xl font-semibold'>API 設定</h2>
 
             {/* Form inputs */}
-            <div className='space-y-6 max-w-2xl'>
+            <div className='max-w-2xl space-y-6'>
               <div className='space-y-2'>
                 <label
                   htmlFor='server-url'
@@ -51,7 +51,7 @@ export default function Settings() {
                   type='text'
                   defaultValue={openAIServer}
                   onChange={(e) => setOpenAIServer(e.target.value)}
-                  className='w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-2 focus:ring-blue-500'
+                  className='w-full rounded-md border border-gray-300 px-3 py-2 shadow-sm focus:ring-2 focus:ring-blue-500 focus:outline-none'
                   placeholder='https://api.openai.com'
                 />
               </div>
@@ -68,7 +68,7 @@ export default function Settings() {
                   type='password'
                   defaultValue={openAIToken}
                   onChange={(e) => setOpenAIToken(e.target.value)}
-                  className='w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-2 focus:ring-blue-500'
+                  className='w-full rounded-md border border-gray-300 px-3 py-2 shadow-sm focus:ring-2 focus:ring-blue-500 focus:outline-none'
                   placeholder='sk-...'
                 />
               </div>
@@ -84,7 +84,7 @@ export default function Settings() {
                   id='model'
                   defaultValue={openAIModel}
                   onChange={(e) => setOpenAIModel(e.target.value)}
-                  className='w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-2 focus:ring-blue-500'
+                  className='w-full rounded-md border border-gray-300 px-3 py-2 shadow-sm focus:ring-2 focus:ring-blue-500 focus:outline-none'
                   placeholder='sakura-galtransl-7b-v3'
                 />
               </div>

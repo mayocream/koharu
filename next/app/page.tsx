@@ -12,10 +12,10 @@ function App() {
   const { selectedTool } = useWorkflowStore()
 
   return (
-    <main className='flex flex-col h-screen w-screen max-h-screen max-w-screen bg-gray-100'>
+    <main className='flex h-screen max-h-screen w-screen max-w-screen flex-col bg-gray-100'>
       <Topbar />
-      <div className='flex flex-1 my-2 mt-13'>
-        <div className='mt-4 mx-3'>
+      <div className='my-2 mt-13 flex flex-1'>
+        <div className='mx-3 mt-4'>
           <Tools />
         </div>
 
@@ -23,7 +23,7 @@ function App() {
           <Canvas />
         </div>
 
-        <div className='flex flex-col h-full overflow-y-auto gap-2 mt-4 mx-3'>
+        <div className='mx-3 mt-4 flex h-full flex-col gap-2 overflow-y-auto'>
           {selectedTool === 'detection' && (
             <>
               <DetectionPanel />

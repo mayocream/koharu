@@ -30,7 +30,7 @@ function Canvas() {
 
   return (
     <div className='relative' ref={containerRef}>
-      <div className='absolute min-w-full min-h-full flex items-center justify-center'>
+      <div className='absolute flex min-h-full min-w-full items-center justify-center'>
         <Stage
           scaleX={scale}
           scaleY={scale}

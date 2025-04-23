@@ -7,10 +7,10 @@ function ScaleControl() {
   const { scale, setScale } = useCanvasStore()
 
   return (
-    <div className='fixed left-20 bottom-10'>
-      <div className='flex items-center bg-gray-50 border border-gray-200 rounded-xl shadow-sm p-1'>
+    <div className='fixed bottom-10 left-20'>
+      <div className='flex items-center rounded-xl border border-gray-200 bg-gray-50 p-1 shadow-sm'>
         <button
-          className='w-8 h-8 flex items-center justify-center rounded-lg cursor-pointer text-gray-700 hover:bg-gray-200'
+          className='flex h-8 w-8 cursor-pointer items-center justify-center rounded-lg text-gray-700 hover:bg-gray-200'
           onClick={() => setScale(scale - 0.1)}
           disabled={scale <= 0.1}
         >
@@ -20,7 +20,7 @@ function ScaleControl() {
           {(scale * 100).toFixed(0)}%
         </span>
         <button
-          className='w-8 h-8 flex items-center justify-center rounded-lg cursor-pointer text-gray-700 hover:bg-gray-200'
+          className='flex h-8 w-8 cursor-pointer items-center justify-center rounded-lg text-gray-700 hover:bg-gray-200'
           onClick={() => setScale(scale + 0.1)}
           disabled={scale >= 2.0}
         >
