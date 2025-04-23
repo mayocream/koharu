@@ -63,7 +63,7 @@ function TranslationPanel() {
           onClick={translate}
         >
           {loading ? (
-            <Loader className='h-4 w-4' />
+            <Loader className='h-4 w-4 animate-spin' />
           ) : (
             <Play className='h-4 w-4' />
           )}
@@ -84,7 +84,7 @@ function TranslationPanel() {
             key={index}
             style={{
               backgroundColor:
-                selectedTextIndex == index ? 'rgba(147, 140, 140, 0.3)' : '',
+                selectedTextIndex === index ? 'rgba(147, 140, 140, 0.3)' : '',
             }}
             className='cursor-pointer border-b border-gray-200 px-4 py-2 text-sm'
             onMouseEnter={() => setSelectedTextIndex(index)}

@@ -130,17 +130,19 @@ function OCRPanel() {
               <Pencil className='h-4 w-4' />
             </button>
           ))}
-        <button
-          className='cursor-pointer rounded-full p-2 text-gray-500 hover:bg-gray-100 hover:text-gray-700'
-          onClick={inference}
-          disabled={loading}
-        >
-          {loading ? (
-            <Loader className='h-4 w-4' />
-          ) : (
-            <Play className='h-4 w-4' />
-          )}
-        </button>
+        {!isTextEditMode && (
+          <button
+            className='cursor-pointer rounded-full p-2 text-gray-500 hover:bg-gray-100 hover:text-gray-700'
+            onClick={inference}
+            disabled={loading}
+          >
+            {loading ? (
+              <Loader className='h-4 w-4 animate-spin' />
+            ) : (
+              <Play className='h-4 w-4' />
+            )}
+          </button>
+        )}
       </div>
       <div className='flex flex-col justify-center'>
         {texts.map((block, index) => (

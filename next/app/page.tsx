@@ -14,16 +14,16 @@ function App() {
   return (
     <main className='flex h-screen max-h-screen w-screen max-w-screen flex-col bg-gray-100'>
       <Topbar />
-      <div className='my-2 mt-13 flex flex-1'>
-        <div className='mx-3 mt-4'>
+      <div className='my-2 mt-17 flex flex-1'>
+        <div className='mx-3'>
           <Tools />
         </div>
 
-        <div className='h-screen flex-1 flex-col overflow-auto pt-4 pb-18'>
+        <div className='h-screen flex-1 flex-col overflow-auto pb-18'>
           <Canvas />
         </div>
 
-        <div className='mx-3 flex h-screen flex-col gap-2 overflow-y-auto pt-4'>
+        <div className='ml-3 flex h-screen flex-col gap-2 overflow-y-auto pr-3'>
           {selectedTool === 'detection' && (
             <>
               <DetectionPanel />

@@ -42,7 +42,7 @@ function DetectionPanel() {
           disabled={loading}
         >
           {loading ? (
-            <Loader className='h-4 w-4' />
+            <Loader className='h-4 w-4 animate-spin' />
           ) : (
             <Play className='h-4 w-4' />
           )}
