@@ -23,7 +23,7 @@ function App() {
           <Canvas />
         </div>
 
-        <div className='mx-3 mt-4 flex h-full flex-col gap-2 overflow-y-auto'>
+        <div className='mx-3 flex h-screen flex-col gap-2 overflow-y-auto pt-4'>
           {selectedTool === 'detection' && (
             <>
               <DetectionPanel />
