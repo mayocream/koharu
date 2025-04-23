@@ -25,7 +25,7 @@ function DetectionPanel() {
 
   // auto trigger inference when imageSrc changes
   useEffect(() => {
-    if (imageSrc) {
+    if (imageSrc && texts.length === 0) {
       inference()
     }
   }, [imageSrc])
