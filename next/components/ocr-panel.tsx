@@ -90,6 +90,12 @@ function OCRPanel() {
     loadImage(imageSrc)
   }, [imageSrc])
 
+  useEffect(() => {
+    if (texts.length && texts.every((block) => !block.text)) {
+      inference()
+    }
+  }, [texts])
+
   return (
     <div className='flex w-72 flex-col overflow-auto rounded-lg border border-gray-200 bg-white shadow-md'>
       {/* Header */}
