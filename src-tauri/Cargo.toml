@@ -1,8 +1,10 @@
 [package]
 name = "koharu"
 version = "0.1.0"
-description = "A Tauri App"
+description = "Manga translator"
 edition = "2024"
+license-file = "../LICENSE"
+readme = "../README.md"
 
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 

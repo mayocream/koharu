@@ -1,0 +1,18 @@
+name: Publish
+
+on:
+  push:
+    branches:
+      - main
+
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Publish to crates.io
+        working-directory: ./src-tauri
+        run: |
+          cargo publish --token ${{ secrets.CARGO_TOKEN }} --all-features
