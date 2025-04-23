@@ -34,6 +34,7 @@ function OCRPanel() {
     debug(`Starting OCR inference...`)
 
     setLoading(true)
+    setIsTextEditMode(false)
     const newTexts = await Promise.all(
       texts.map(async (block) => {
         const { xmin, ymin, xmax, ymax } = block
@@ -90,37 +91,39 @@ function OCRPanel() {
   }, [imageSrc])
 
   return (
-    <div className='flex flex-col bg-white rounded-lg shadow-md w-72 max-h-128 overflow-auto border border-gray-200'>
+    <div className='flex flex-col bg-white rounded-lg shadow-md w-72 overflow-auto border border-gray-200'>
       {/* Header */}
       <div className='flex items-center p-3'>
         <h2 className='font-medium'>OCR</h2>
         <div className='flex-grow'></div>
-        {isTextEditMode ? (
-          <>
+        {texts.length > 0 &&
+          !loading &&
+          (isTextEditMode ? (
+            <>
+              <button
+                className='text-gray-500 hover:text-gray-700 hover:bg-gray-100 rounded-full p-2 cursor-pointer'
+                onClick={handleTextUnsave}
+                disabled={loading}
+              >
+                <X className='w-4 h-4' />
+              </button>
+              <button
+                className='text-gray-500 hover:text-gray-700 hover:bg-gray-100 rounded-full p-2 cursor-pointer'
+                onClick={handleTextSave}
+                disabled={loading}
+              >
+                <Check className='w-4 h-4' />
+              </button>
+            </>
+          ) : (
             <button
               className='text-gray-500 hover:text-gray-700 hover:bg-gray-100 rounded-full p-2 cursor-pointer'
-              onClick={handleTextUnsave}
+              onClick={handleEditModeChange}
               disabled={loading}
             >
-              <X className='w-4 h-4' />
+              <Pencil className='w-4 h-4' />
             </button>
-            <button
-              className='text-gray-500 hover:text-gray-700 hover:bg-gray-100 rounded-full p-2 cursor-pointer'
-              onClick={handleTextSave}
-              disabled={loading}
-            >
-              <Check className='w-4 h-4' />
-            </button>
-          </>
-        ) : (
-          <button
-            className='text-gray-500 hover:text-gray-700 hover:bg-gray-100 rounded-full p-2 cursor-pointer'
-            onClick={handleEditModeChange}
-            disabled={loading}
-          >
-            <Pencil className='w-4 h-4' />
-          </button>
-        )}
+          ))}
         <button
           className='text-gray-500 hover:text-gray-700 hover:bg-gray-100 rounded-full p-2 cursor-pointer'
           onClick={inference}
@@ -146,11 +149,10 @@ function OCRPanel() {
             onMouseLeave={() => setSelectedTextIndex(null)}
           >
             {isTextEditMode ? (
-              <input
-                type='text'
+              <textarea
                 value={editedText[index]}
                 onChange={(e) => handleTextEdit(index, e.target.value)}
-                className='w-full bg-transparent outline-none'
+                className='w-full bg-transparent  border border-gray-200 rounded focus:outline-none focus:border-gray-400 resize-none leading-snug'
               />
             ) : (
               block.text || '検出されていません'
