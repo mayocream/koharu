@@ -1,9 +1,9 @@
 use candle_transformers::object_detection::{Bbox, non_maximum_suppression};
 use clap::Parser;
-use image::{GenericImageView, Rgba};
+use image::{GenericImageView, GrayImage, Rgba};
 use imageproc::drawing::draw_hollow_rect_mut;
 use imageproc::rect::Rect;
-use ndarray::Array;
+use ndarray::{Array, Ix4};
 use ort::{
     inputs,
     session::{Session, builder::GraphOptimizationLevel},
@@ -25,6 +25,12 @@ struct Args {
 
     #[arg(long, default_value = "output.png")]
     output: String,
+
+    #[arg(long, default_value = "mask_output.png")]
+    mask_output: String,
+
+    #[arg(long, default_value_t = 0.3)]
+    mask_threshold: f32,
 }
 
 fn main() -> anyhow::Result<()> {
@@ -87,6 +93,44 @@ fn main() -> anyhow::Result<()> {
     }
 
     non_maximum_suppression(&mut boxes, args.nms_threshold);
+
+    // Process mask output - now with shape [1, 1, 1024, 1024]
+    let mask = outputs["seg"].try_extract_tensor::<f32>()?;
+    let mask = mask.view().to_owned().into_dimensionality::<Ix4>()?;
+
+    // Fixed dimensions for mask
+    let mask_height = 1024;
+    let mask_width = 1024;
+
+    // Apply threshold and convert to u8
+    let mut mask_data = Vec::with_capacity((mask_height * mask_width) as usize);
+    for i in 0..mask_height {
+        for j in 0..mask_width {
+            // Extract value from the correct indices (batch, channel, height, width)
+            let val = if mask[[0, 0, i, j]] > args.mask_threshold {
+                255
+            } else {
+                0
+            };
+            mask_data.push(val as u8);
+        }
+    }
+
+    // Create grayscale image from mask data
+    let mask_image = GrayImage::from_raw(mask_width as u32, mask_height as u32, mask_data)
+        .ok_or_else(|| anyhow::anyhow!("Failed to create mask image"))?;
+
+    // Resize mask to original image dimensions
+    let resized_mask = image::imageops::resize(
+        &mask_image,
+        orig_width,
+        orig_height,
+        image::imageops::FilterType::Nearest,
+    );
+
+    // Save the mask as a grayscale image
+    resized_mask.save(&args.mask_output)?;
+    println!("Mask image saved to {}", args.mask_output);
 
     // Convert the original image to RGBA for drawing
     let mut output_image = orig_image.to_rgba8();
