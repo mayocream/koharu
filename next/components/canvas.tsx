@@ -6,7 +6,6 @@ import { Image, Layer, Rect, Stage, Transformer } from 'react-konva'
 import { useCanvasStore, useWorkflowStore } from '@/lib/state'
 
 function Canvas() {
-  const containerRef = useRef<HTMLDivElement>(null)
   const { imageSrc, scale, texts } = useCanvasStore()
   const { selectedTextIndex, setSelectedTextIndex } = useWorkflowStore()
   const [imageData, setImageData] = useState<ImageBitmap | null>(null)
@@ -29,8 +28,8 @@ function Canvas() {
   }, [imageSrc])
 
   return (
-    <div className='relative' ref={containerRef}>
-      <div className='absolute flex min-h-full min-w-full items-center justify-center'>
+    <>
+      <div className='flex justify-center'>
         <Stage
           scaleX={scale}
           scaleY={scale}
@@ -77,7 +76,7 @@ function Canvas() {
         </Stage>
       </div>
       <ScaleControl />
-    </div>
+    </>
   )
 }
 
