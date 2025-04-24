@@ -59,8 +59,7 @@ fn main() -> anyhow::Result<()> {
             let pixel = mask.get_pixel(x, y);
             // For LaMa, mask value of 1 indicates area to be inpainted
             // Assuming black pixels (value 0) in the mask are the areas to inpaint
-            mask_data[[0, 0, y as usize, x as usize]] =
-                if pixel[0] < 128 { 1.0f32 } else { 0.0f32 };
+            mask_data[[0, 0, y as usize, x as usize]] = if pixel[0] > 0 { 1.0f32 } else { 0.0f32 };
         }
     }
 
