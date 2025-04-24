@@ -3142,6 +3142,18 @@ dependencies = [
 ]
 
 [[package]]
+name = "lama"
+version = "0.1.0"
+dependencies = [
+ "anyhow",
+ "clap",
+ "hf-hub",
+ "image",
+ "ndarray",
+ "ort",
+]
+
+[[package]]
 name = "lazy_static"
 version = "1.5.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
