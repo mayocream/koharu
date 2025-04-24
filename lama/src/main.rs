@@ -8,13 +8,13 @@ use ort::{inputs, session::Session};
 
 #[derive(Parser)]
 struct Cli {
-    #[arg(long, default_value = "test.png")]
+    #[arg(long, default_value = "test_2.jpg")]
     image: String,
 
-    #[arg(long, default_value = "mask.png")]
+    #[arg(long, default_value = "mask_2.png")]
     mask: String,
 
-    #[arg(long, default_value = "output.png")]
+    #[arg(long, default_value = "output_2.png")]
     output: String,
 }
 
@@ -77,10 +77,16 @@ fn main() -> anyhow::Result<()> {
     let mut output_image = image::RgbImage::new(orig_width, orig_height);
     for y in 0..orig_height {
         for x in 0..orig_width {
-            // Make sure the channel mapping is correct: RGB
-            let r = (output[[0, 0, y as usize, x as usize]].clamp(0.0, 1.0) * 255.0) as u8;
-            let g = (output[[0, 1, y as usize, x as usize]].clamp(0.0, 1.0) * 255.0) as u8;
-            let b = (output[[0, 2, y as usize, x as usize]].clamp(0.0, 1.0) * 255.0) as u8;
+            // divide by 255.0 to convert back to 0-255 range
+            let r = (output[[0, 0, y as usize, x as usize]])
+                .clamp(0.0, 255.0)
+                .round() as u8;
+            let g = (output[[0, 1, y as usize, x as usize]])
+                .clamp(0.0, 255.0)
+                .round() as u8;
+            let b = (output[[0, 2, y as usize, x as usize]])
+                .clamp(0.0, 255.0)
+                .round() as u8;
             output_image.put_pixel(x, y, image::Rgb([r, g, b]));
         }
     }
