@@ -7,7 +7,8 @@ import { useCanvasStore, useWorkflowStore } from '@/lib/state'
 
 function Canvas() {
   const { imageSrc, scale, texts, segment } = useCanvasStore()
-  const { selectedTextIndex, setSelectedTextIndex, selectedTool } = useWorkflowStore()
+  const { selectedTextIndex, setSelectedTextIndex, selectedTool } =
+    useWorkflowStore()
   const [imageData, setImageData] = useState<ImageBitmap | null>(null)
   const [segmentData, setSegmentData] = useState<any>(null)
   const [selected, setSelected] = useState<any>(null)
@@ -27,22 +28,52 @@ function Canvas() {
   const loadSegment = async () => {
     if (!segment || !imageData) return
 
-    const seg = new OffscreenCanvas(1024, 1024)
+    const segWidth = 1024
+    const segHeight = 1024
+
+    const seg = new OffscreenCanvas(segWidth, segHeight)
     let ctx = seg.getContext('2d')!
-    const imgData = ctx.createImageData(1024, 1024)
+    const imgData = ctx.createImageData(segWidth, segHeight)
+
+    const highlightColor = { r: 255, g: 51, b: 204 }
+    const dimColor = { r: 0, g: 0, b: 0 }
+    const highlightOpacity = 0.85
+    const dimOpacity = 0.15
+
+    const highlightAlpha = Math.round(255 * highlightOpacity)
+    const dimAlpha = Math.round(255 * dimOpacity)
+
     for (let i = 0; i < segment.length; i++) {
       const value = segment[i]
-      imgData.data[i * 4] = value // R
-      imgData.data[i * 4 + 1] = value // G
-      imgData.data[i * 4 + 2] = value // B
-      imgData.data[i * 4 + 3] = 255 // A
+      const baseIndex = i * 4
+      const isHighlight = value > 0
+
+      const color = isHighlight ? highlightColor : dimColor
+      const alpha = isHighlight ? highlightAlpha : dimAlpha
+
+      imgData.data[baseIndex] = color.r
+      imgData.data[baseIndex + 1] = color.g
+      imgData.data[baseIndex + 2] = color.b
+      imgData.data[baseIndex + 3] = alpha
     }
 
     ctx.putImageData(imgData, 0, 0)
 
     const mask = new OffscreenCanvas(imageData.width, imageData.height)
     ctx = mask.getContext('2d')!
-    ctx.drawImage(seg, 0, 0, 1024, 1024, 0, 0, imageData.width, imageData.height)
+    ctx.imageSmoothingEnabled = true
+
+    ctx.drawImage(
+      seg,
+      0,
+      0,
+      segWidth,
+      segHeight,
+      0,
+      0,
+      imageData.width,
+      imageData.height
+    )
 
     setSegmentData(mask)
   }
@@ -87,7 +118,7 @@ function Canvas() {
                   stroke='red'
                   strokeWidth={2}
                   fill={
-                    selectedTextIndex == index ? 'rgba(255, 0, 0, 0.3)' : null
+                    selectedTextIndex === index ? 'rgba(255, 0, 0, 0.3)' : null
                   }
                   draggable
                   onClick={(e) => {
@@ -105,7 +136,7 @@ function Canvas() {
             {selectedTool === 'segmentation' && (
               <Image
                 image={segmentData ?? null}
-                opacity={0.7}
+                // opacity={0.7}
               />
             )}
           </Layer>
