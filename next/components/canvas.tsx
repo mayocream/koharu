@@ -104,7 +104,7 @@ function Canvas() {
           <Layer>
             {selectedTool === 'segmentation' && (
               <Image
-                image={segmentData}
+                image={segmentData ?? null}
                 opacity={0.7}
               />
             )}
