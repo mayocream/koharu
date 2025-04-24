@@ -19,6 +19,7 @@ pub struct ComicTextDetector {
 #[derive(Debug, Serialize)]
 pub struct Output {
     pub bboxes: Vec<ClassifiedBbox>,
+    pub segment: Vec<u8>,
 }
 
 #[derive(Debug, Serialize)]
@@ -57,6 +58,7 @@ impl ComicTextDetector {
         image: &image::DynamicImage,
         confidence_threshold: f32,
         nms_threshold: f32,
+        mask_threshold: f32,
     ) -> anyhow::Result<Output> {
         let (orig_width, orig_height) = image.dimensions();
         let w_ratio = orig_width as f32 / 1024.0;
@@ -76,6 +78,7 @@ impl ComicTextDetector {
         let inputs = ort::inputs!["images" => input.view()]?;
         let outputs = self.model.run(inputs)?;
 
+        // handle blocks
         let blk = outputs["blk"].try_extract_tensor::<f32>()?;
         let blk = blk.view();
 
@@ -123,6 +126,24 @@ impl ComicTextDetector {
             }
         }
 
-        Ok(Output { bboxes })
+        // handle masks
+        let mask = outputs["seg"].try_extract_tensor::<f32>()?;
+        let mask = mask
+            .view()
+            .to_owned()
+            .into_dimensionality::<ndarray::Ix4>()?;
+        let mut segment = Vec::with_capacity(1024 * 1024);
+        for i in 0..1024 {
+            for j in 0..1024 {
+                let val = if mask[[0, 0, i, j]] > mask_threshold {
+                    255
+                } else {
+                    0
+                };
+                segment.push(val as u8);
+            }
+        }
+
+        Ok(Output { bboxes, segment })
     }
 }
