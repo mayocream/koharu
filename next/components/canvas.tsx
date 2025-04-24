@@ -1,6 +1,6 @@
 'use client'
 
-import { useEffect, useRef, useState } from 'react'
+import { useEffect, useState } from 'react'
 import ScaleControl from './scale-control'
 import { Image, Layer, Rect, Stage, Transformer } from 'react-konva'
 import { useCanvasStore, useWorkflowStore } from '@/lib/state'
