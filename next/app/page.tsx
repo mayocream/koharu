@@ -19,7 +19,7 @@ function App() {
           <Tools />
         </div>
 
-        <div className='h-screen flex-1 flex-col overflow-auto pb-18'>
+        <div className='flex h-screen flex-1 flex-col items-center justify-center overflow-auto pb-18'>
           <Canvas />
         </div>
 
