@@ -26,6 +26,8 @@ type CanvasState = {
   setScale: (scale: number) => void
   texts: any[]
   setTexts: (blocks: any[]) => void
+  segment: Uint8Array | null
+  setSegment: (segment: Uint8Array) => void
 }
 
 export const useCanvasStore = create<CanvasState>()(
@@ -37,6 +39,8 @@ export const useCanvasStore = create<CanvasState>()(
       setScale: (scale) => set({ scale }),
       texts: [],
       setTexts: (blocks) => set({ texts: blocks }),
+      segment: null,
+      setSegment: (segment) => set({ segment }),
     }),
     {
       name: 'canvas-storage',

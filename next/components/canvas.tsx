@@ -6,9 +6,10 @@ import { Image, Layer, Rect, Stage, Transformer } from 'react-konva'
 import { useCanvasStore, useWorkflowStore } from '@/lib/state'
 
 function Canvas() {
-  const { imageSrc, scale, texts } = useCanvasStore()
-  const { selectedTextIndex, setSelectedTextIndex } = useWorkflowStore()
+  const { imageSrc, scale, texts, segment } = useCanvasStore()
+  const { selectedTextIndex, setSelectedTextIndex, selectedTool } = useWorkflowStore()
   const [imageData, setImageData] = useState<ImageBitmap | null>(null)
+  const [segmentData, setSegmentData] = useState<any>(null)
   const [selected, setSelected] = useState<any>(null)
 
   const loadImage = async (src: string) => {
@@ -23,9 +24,36 @@ function Canvas() {
     }
   }
 
+  const loadSegment = async () => {
+    if (!segment || !imageData) return
+
+    const seg = new OffscreenCanvas(1024, 1024)
+    let ctx = seg.getContext('2d')!
+    const imgData = ctx.createImageData(1024, 1024)
+    for (let i = 0; i < segment.length; i++) {
+      const value = segment[i]
+      imgData.data[i * 4] = value // R
+      imgData.data[i * 4 + 1] = value // G
+      imgData.data[i * 4 + 2] = value // B
+      imgData.data[i * 4 + 3] = 255 // A
+    }
+
+    ctx.putImageData(imgData, 0, 0)
+
+    const mask = new OffscreenCanvas(imageData.width, imageData.height)
+    ctx = mask.getContext('2d')!
+    ctx.drawImage(seg, 0, 0, 1024, 1024, 0, 0, imageData.width, imageData.height)
+
+    setSegmentData(mask)
+  }
+
   useEffect(() => {
     loadImage(imageSrc)
   }, [imageSrc])
+
+  useEffect(() => {
+    loadSegment()
+  }, [segment, imageData])
 
   return (
     <>
@@ -72,6 +100,14 @@ function Canvas() {
               )
             })}
             {selected && <Transformer nodes={[selected]} />}
+          </Layer>
+          <Layer>
+            {selectedTool === 'segmentation' && (
+              <Image
+                image={segmentData}
+                opacity={0.7}
+              />
+            )}
           </Layer>
         </Stage>
       </div>

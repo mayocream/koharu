@@ -4,7 +4,7 @@ import { invoke } from '@tauri-apps/api/core'
 import { useEffect, useState } from 'react'
 
 function DetectionPanel() {
-  const { imageSrc, texts, setTexts } = useCanvasStore()
+  const { imageSrc, texts, setTexts, setSegment } = useCanvasStore()
   const [loading, setLoading] = useState(false)
   const inference = async () => {
     setLoading(true)
@@ -12,6 +12,8 @@ function DetectionPanel() {
     const result = await invoke<any>('detect', {
       image: buffer,
     })
+
+    setSegment(result.segment)
 
     result.bboxes.sort((a: any, b: any) => {
       const aCenter = (a.ymin + a.ymax) / 2
