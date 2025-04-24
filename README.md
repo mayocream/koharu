@@ -42,6 +42,7 @@ The workflow of translation consists of the following steps:
 
 - [comic-text-detector](https://github.com/dmMaze/comic-text-detector) - Detects text in manga images.
 - [manga-ocr](https://github.com/kha-white/manga-ocr) - Extracts text from manga images.
+- [LaMa](https://github.com/advimman/lama) - Inpainting model.
 
 ## Development
 
