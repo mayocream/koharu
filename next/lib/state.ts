@@ -28,6 +28,8 @@ type CanvasState = {
   setTexts: (blocks: any[]) => void
   segment: Uint8Array | null
   setSegment: (segment: Uint8Array) => void
+  imageSrcHistory: string[]
+  setImageSrcHistory: (src: string) => void
 }
 
 export const useCanvasStore = create<CanvasState>()(
@@ -41,6 +43,16 @@ export const useCanvasStore = create<CanvasState>()(
       setTexts: (blocks) => set({ texts: blocks }),
       segment: null,
       setSegment: (segment) => set({ segment }),
+      imageSrcHistory: [],
+      setImageSrcHistory: (src) => {
+        const history = get().imageSrcHistory
+        if (history[history.length - 1] !== src) {
+          if (history.length >= 5) {
+            history.shift()
+          }
+          history.push(src)
+        }
+      },
     }),
     {
       name: 'canvas-storage',

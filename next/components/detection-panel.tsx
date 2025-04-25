@@ -4,15 +4,17 @@ import { invoke } from '@tauri-apps/api/core'
 import { useEffect, useState } from 'react'
 
 function DetectionPanel() {
-  const { imageSrc, texts, setTexts, setSegment } = useCanvasStore()
+  const { imageSrc, imageSrcHistory, texts, setTexts, setSegment } =
+    useCanvasStore()
   const [loading, setLoading] = useState(false)
-  const inference = async () => {
+  const inference = async (src: string) => {
     setLoading(true)
-    const buffer = await fetch(imageSrc).then((res) => res.bytes())
+    const buffer = await fetch(src).then((res) => res.bytes())
     const result = await invoke<any>('detect', {
       image: buffer,
     })
 
+    if (imageSrcHistory[imageSrcHistory.length - 1] !== src) return
     setSegment(result.segment)
 
     result.bboxes.sort((a: any, b: any) => {
@@ -28,7 +30,7 @@ function DetectionPanel() {
   // auto trigger inference when imageSrc changes
   useEffect(() => {
     if (imageSrc && texts.length === 0) {
-      inference()
+      inference(imageSrc)
     }
   }, [imageSrc])
 
@@ -40,7 +42,7 @@ function DetectionPanel() {
         <div className='flex-grow'></div>
         <button
           className='cursor-pointer rounded-full p-2 text-gray-500 hover:bg-gray-100 hover:text-gray-700'
-          onClick={inference}
+          onClick={() => inference(imageSrc)}
           disabled={loading}
         >
           {loading ? (

@@ -9,7 +9,8 @@ import { useRouter } from 'next/navigation'
 
 function Topbar() {
   const router = useRouter()
-  const { setImageSrc, setTexts, setSegment } = useCanvasStore()
+  const { setImageSrc, setTexts, setSegment, setImageSrcHistory } =
+    useCanvasStore()
   const handleOpenFile = async () => {
     const selected = await open({
       multiple: false,
@@ -29,6 +30,7 @@ function Topbar() {
     }
 
     const imageUrl = convertFileSrc(selected)
+    setImageSrcHistory(imageUrl)
     setImageSrc(imageUrl)
     setTexts([]) // Clear blocks when a new image is loaded
     setSegment(null) // Clear segment when a new image is loaded

@@ -5,7 +5,7 @@ import { useEffect, useState } from 'react'
 import { debug } from '@tauri-apps/plugin-log'
 
 function OCRPanel() {
-  const { imageSrc, texts, setTexts } = useCanvasStore()
+  const { imageSrc, imageSrcHistory, texts, setTexts } = useCanvasStore()
   const { selectedTextIndex, setSelectedTextIndex } = useWorkflowStore()
   const [loading, setLoading] = useState(false)
   const [imageData, setImageData] = useState<ImageBitmap | null>(null)
@@ -28,7 +28,7 @@ function OCRPanel() {
     return await croppedImage.arrayBuffer()
   }
 
-  const inference = async () => {
+  const inference = async (src: string) => {
     if (!imageData || texts.length === 0) return
 
     debug(`Starting OCR inference...`)
@@ -48,6 +48,8 @@ function OCRPanel() {
         }
       })
     )
+    if (imageSrcHistory[imageSrcHistory.length - 1] !== src) return
+
     setTexts(newTexts)
     setLoading(false)
 
@@ -56,6 +58,8 @@ function OCRPanel() {
 
   const loadImage = async (src: string) => {
     if (!src) return
+
+    setLoading(false)
 
     const blob = await fetch(src).then((res) => res.blob())
     const bitmap = await createImageBitmap(blob)
@@ -92,7 +96,7 @@ function OCRPanel() {
 
   useEffect(() => {
     if (texts.length && texts.every((block) => !block.text)) {
-      inference()
+      inference(imageSrc)
     }
   }, [texts])
 
@@ -133,7 +137,7 @@ function OCRPanel() {
         {!isTextEditMode && (
           <button
             className='cursor-pointer rounded-full p-2 text-gray-500 hover:bg-gray-100 hover:text-gray-700'
-            onClick={inference}
+            onClick={() => inference(imageSrc)}
             disabled={loading}
           >
             {loading ? (

@@ -8,7 +8,8 @@ import { useCanvasStore, useWorkflowStore } from '@/lib/state'
 import { invoke } from '@tauri-apps/api/core'
 
 function Canvas() {
-  const { imageSrc, scale, texts, segment, setScale } = useCanvasStore()
+  const { imageSrc, imageSrcHistory, scale, texts, segment, setScale } =
+    useCanvasStore()
   const { selectedTextIndex, setSelectedTextIndex, selectedTool } =
     useWorkflowStore()
   const [imageData, setImageData] = useState<ImageBitmap | null>(null)
@@ -110,6 +111,8 @@ function Canvas() {
 
   useEffect(() => {
     loadImage(imageSrc)
+    setSegmentCanvas(null)
+    setInpaintCanvas(null)
   }, [imageSrc])
 
   useEffect(() => {
@@ -132,7 +135,7 @@ function Canvas() {
     return await croppedImage.arrayBuffer()
   }
 
-  const loadInapint = async () => {
+  const loadInapint = async (src: string) => {
     if (!imageData || !segmentCanvas || texts.length === 0) return
 
     const canvas = new OffscreenCanvas(imageData.width, imageData.height)
@@ -155,6 +158,8 @@ function Canvas() {
         mask: await mask.arrayBuffer(),
       })) as Uint8Array
 
+      if (imageSrcHistory[imageSrcHistory.length - 1] !== src) return
+
       // handle inpaint result
       ctx = canvas.getContext('2d')!
       const imgData = ctx.createImageData(xmax - xmin, ymax - ymin)
@@ -172,7 +177,7 @@ function Canvas() {
   }
 
   useEffect(() => {
-    loadInapint()
+    loadInapint(imageSrc)
   }, [segmentCanvas, imageData, texts])
 
   return (
