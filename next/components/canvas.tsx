@@ -137,7 +137,7 @@ function Canvas() {
 
     const canvas = new OffscreenCanvas(imageData.width, imageData.height)
 
-    for (const block of texts) {
+    for await (const block of texts) {
       const { xmin, ymin, xmax, ymax } = block
       const croppedImageBuffer = await cropImage(xmin, ymin, xmax, ymax)
 
@@ -154,8 +154,6 @@ function Canvas() {
         image: croppedImageBuffer,
         mask: await mask.arrayBuffer(),
       })) as Uint8Array
-
-      console.log('inpaintImageBuffer', inpaintImageBuffer)
 
       // handle inpaint result
       ctx = canvas.getContext('2d')!
