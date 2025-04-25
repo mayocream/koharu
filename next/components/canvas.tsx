@@ -5,13 +5,20 @@ import { useEffect, useState, useRef } from 'react'
 import ScaleControl from './scale-control'
 import { Image, Layer, Rect, Stage, Transformer } from 'react-konva'
 import { useCanvasStore, useWorkflowStore } from '@/lib/state'
+import { invoke } from '@tauri-apps/api/core'
 
 function Canvas() {
   const { imageSrc, scale, texts, segment, setScale } = useCanvasStore()
   const { selectedTextIndex, setSelectedTextIndex, selectedTool } =
     useWorkflowStore()
   const [imageData, setImageData] = useState<ImageBitmap | null>(null)
-  const [segmentData, setSegmentData] = useState<any>(null)
+  const [segmentCanvas, setSegmentCanvas] = useState<OffscreenCanvas | null>(
+    null
+  )
+  const [inpaintCanvas, setInpaintCanvas] = useState<OffscreenCanvas | null>(
+    null
+  )
+
   const [selected, setSelected] = useState<any>(null)
 
   const stageRef = useRef<Konva.Stage>(null)
@@ -38,26 +45,12 @@ function Canvas() {
     let ctx = seg.getContext('2d')!
     const imgData = ctx.createImageData(segWidth, segHeight)
 
-    const highlightColor = { r: 255, g: 51, b: 204 }
-    const dimColor = { r: 0, g: 0, b: 0 }
-    const highlightOpacity = 0.85
-    const dimOpacity = 0.15
-
-    const highlightAlpha = Math.round(255 * highlightOpacity)
-    const dimAlpha = Math.round(255 * dimOpacity)
-
     for (let i = 0; i < segment.length; i++) {
       const value = segment[i]
-      const baseIndex = i * 4
-      const isHighlight = value > 0
-
-      const color = isHighlight ? highlightColor : dimColor
-      const alpha = isHighlight ? highlightAlpha : dimAlpha
-
-      imgData.data[baseIndex] = color.r
-      imgData.data[baseIndex + 1] = color.g
-      imgData.data[baseIndex + 2] = color.b
-      imgData.data[baseIndex + 3] = alpha
+      imgData.data[i * 4] = value // R
+      imgData.data[i * 4 + 1] = value // G
+      imgData.data[i * 4 + 2] = value // B
+      imgData.data[i * 4 + 3] = 255 // A
     }
 
     ctx.putImageData(imgData, 0, 0)
@@ -78,7 +71,7 @@ function Canvas() {
       imageData.height
     )
 
-    setSegmentData(mask)
+    setSegmentCanvas(mask)
   }
 
   const handleWheel = (e: Konva.KonvaEventObject<WheelEvent>) => {
@@ -122,6 +115,67 @@ function Canvas() {
   useEffect(() => {
     loadSegment()
   }, [segment, imageData])
+
+  const cropImage = async (
+    xmin: number,
+    ymin: number,
+    xmax: number,
+    ymax: number
+  ) => {
+    const width = xmax - xmin
+    const height = ymax - ymin
+    const canvas = new OffscreenCanvas(width, height)
+    const ctx = canvas.getContext('2d')!
+
+    ctx.drawImage(imageData, xmin, ymin, width, height, 0, 0, width, height)
+    const croppedImage = await canvas.convertToBlob()
+    return await croppedImage.arrayBuffer()
+  }
+
+  const loadInapint = async () => {
+    if (!imageData || !segmentCanvas || texts.length === 0) return
+
+    const canvas = new OffscreenCanvas(imageData.width, imageData.height)
+
+    for (const block of texts) {
+      const { xmin, ymin, xmax, ymax } = block
+      const croppedImageBuffer = await cropImage(xmin, ymin, xmax, ymax)
+
+      // get mask bytes buffer
+      let ctx = segmentCanvas.getContext('2d')!
+      const maskData = ctx.getImageData(xmin, ymin, xmax - xmin, ymax - ymin)
+      const maskCanvas = new OffscreenCanvas(xmax - xmin, ymax - ymin)
+      ctx = maskCanvas.getContext('2d')!
+      ctx.putImageData(maskData, 0, 0)
+      const mask = await maskCanvas.convertToBlob()
+
+      // @refresh reset
+      const inpaintImageBuffer = (await invoke('inpaint', {
+        image: croppedImageBuffer,
+        mask: await mask.arrayBuffer(),
+      })) as Uint8Array
+
+      console.log('inpaintImageBuffer', inpaintImageBuffer)
+
+      // handle inpaint result
+      ctx = canvas.getContext('2d')!
+      const imgData = ctx.createImageData(xmax - xmin, ymax - ymin)
+      for (let i = 0; i < inpaintImageBuffer.length; i++) {
+        imgData.data[i * 4] = inpaintImageBuffer[i] // R
+        imgData.data[i * 4 + 1] = inpaintImageBuffer[i] // G
+        imgData.data[i * 4 + 2] = inpaintImageBuffer[i] // B
+        imgData.data[i * 4 + 3] = 255 // A
+      }
+
+      ctx.putImageData(imgData, xmin, ymin)
+    }
+
+    setInpaintCanvas(canvas)
+  }
+
+  useEffect(() => {
+    loadInapint()
+  }, [segmentCanvas, imageData, texts])
 
   return (
     <>
@@ -173,8 +227,11 @@ function Canvas() {
           </Layer>
           <Layer>
             {selectedTool === 'segmentation' && (
-              <Image image={segmentData ?? null} />
+              <Image image={segmentCanvas ?? null} opacity={0.79} />
             )}
+          </Layer>
+          <Layer>
+            <Image image={inpaintCanvas ?? null} />
           </Layer>
         </Stage>
       </div>
