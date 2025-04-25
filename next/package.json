@@ -29,8 +29,6 @@
     "@types/react": "^19.1.2",
     "@types/react-dom": "^19.1.2",
     "canvas": "^3.1.0",
-    "prettier": "^3.5.3",
-    "prettier-plugin-tailwindcss": "^0.6.11",
     "tailwindcss": "^4.1.4",
     "typescript": "^5.8.3"
   }

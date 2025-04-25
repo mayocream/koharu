@@ -8,6 +8,8 @@
     "next"
   ],
   "devDependencies": {
-    "@tauri-apps/cli": "v2"
+    "@tauri-apps/cli": "v2",
+    "prettier": "^3.5.3",
+    "prettier-plugin-tailwindcss": "^0.6.11"
   }
 }

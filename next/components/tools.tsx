@@ -1,6 +1,10 @@
 'use client'
 
-import { Languages, MessageCircle, SquareDashedMousePointer } from 'lucide-react'
+import {
+  Languages,
+  MessageCircle,
+  SquareDashedMousePointer,
+} from 'lucide-react'
 import { useWorkflowStore } from '@/lib/state'
 
 function Tools() {
@@ -24,7 +28,7 @@ function Tools() {
       name: 'セグメンテーションツール',
       icon: SquareDashedMousePointer,
       description: '画像をセグメント化します',
-    }
+    },
   ]
 
   return (
