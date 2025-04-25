@@ -12,6 +12,8 @@ function Canvas() {
     useCanvasStore()
   const { selectedTextIndex, setSelectedTextIndex, selectedTool } =
     useWorkflowStore()
+  const [stageWidth, setStageWidth] = useState(0)
+  const [stageHeight, setStageHeight] = useState(0)
   const [imageData, setImageData] = useState<ImageBitmap | null>(null)
   const [segmentCanvas, setSegmentCanvas] = useState<OffscreenCanvas | null>(
     null
@@ -23,6 +25,21 @@ function Canvas() {
   const [selected, setSelected] = useState<any>(null)
 
   const stageRef = useRef<Konva.Stage>(null)
+
+  useEffect(() => {
+    if (typeof window !== 'undefined') {
+      const updateStageSize = () => {
+        setStageWidth(window.innerWidth)
+        setStageHeight(window.innerHeight)
+      }
+      updateStageSize()
+      window.addEventListener('resize', updateStageSize)
+
+      return () => {
+        window.removeEventListener('resize', updateStageSize)
+      }
+    }
+  }, [])
 
   const loadImage = async (src: string) => {
     if (!src) return
@@ -187,13 +204,13 @@ function Canvas() {
           ref={stageRef}
           scaleX={scale}
           scaleY={scale}
-          width={imageData?.width * scale}
-          height={imageData?.height * scale}
-          className='bg-white'
+          width={stageWidth}
+          height={stageHeight}
           onWheel={handleWheel}
           onClick={() => {
             setSelected(null)
           }}
+          draggable
         >
           <Layer>
             <Image image={imageData ?? null} />
