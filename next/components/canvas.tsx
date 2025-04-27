@@ -156,6 +156,7 @@ function Canvas() {
     if (!imageData || !segmentCanvas || texts.length === 0) return
 
     const canvas = new OffscreenCanvas(imageData.width, imageData.height)
+    setInpaintCanvas(canvas)
 
     for await (const block of texts) {
       const { xmin, ymin, xmax, ymax } = block
@@ -175,22 +176,18 @@ function Canvas() {
         mask: await mask.arrayBuffer(),
       })) as Uint8Array
 
-      if (imageSrcHistory[imageSrcHistory.length - 1] !== src) return
-
       // handle inpaint result
       ctx = canvas.getContext('2d')!
       const imgData = ctx.createImageData(xmax - xmin, ymax - ymin)
-      for (let i = 0; i < inpaintImageBuffer.length; i++) {
-        imgData.data[i * 4] = inpaintImageBuffer[i] // R
-        imgData.data[i * 4 + 1] = inpaintImageBuffer[i] // G
-        imgData.data[i * 4 + 2] = inpaintImageBuffer[i] // B
+      for (let i = 0; i < inpaintImageBuffer.length / 3; i++) {
+        imgData.data[i * 4] = inpaintImageBuffer[i * 3] // R
+        imgData.data[i * 4 + 1] = inpaintImageBuffer[i * 3 + 1] // G
+        imgData.data[i * 4 + 2] = inpaintImageBuffer[i * 3 + 2] // B
         imgData.data[i * 4 + 3] = 255 // A
       }
 
       ctx.putImageData(imgData, xmin, ymin)
     }
-
-    setInpaintCanvas(canvas)
   }
 
   useEffect(() => {
@@ -247,7 +244,7 @@ function Canvas() {
           </Layer>
           <Layer>
             {selectedTool === 'segmentation' && (
-              <Image image={segmentCanvas ?? null} opacity={0.79} />
+              <Image image={segmentCanvas ?? null} />
             )}
           </Layer>
           <Layer>

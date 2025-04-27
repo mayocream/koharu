@@ -135,12 +135,8 @@ impl ComicTextDetector {
         let mut segment = Vec::with_capacity(1024 * 1024);
         for i in 0..1024 {
             for j in 0..1024 {
-                let val = if mask[[0, 0, i, j]] > mask_threshold {
-                    255
-                } else {
-                    0
-                };
-                segment.push(val as u8);
+                let val = (255.0 * mask[[0, 0, i, j]]).round() as u8;
+                segment.push(val);
             }
         }
 
