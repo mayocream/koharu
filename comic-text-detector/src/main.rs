@@ -14,7 +14,7 @@ struct Args {
     #[arg(long)]
     image: String,
 
-    #[arg(long, default_value = "comictextdetector.pt.onnx")]
+    #[arg(long, default_value = "../models/comictextdetector.onnx")]
     model: String,
 
     #[arg(long, default_value_t = 0.25)]
@@ -107,11 +107,7 @@ fn main() -> anyhow::Result<()> {
     for i in 0..mask_height {
         for j in 0..mask_width {
             // Extract value from the correct indices (batch, channel, height, width)
-            let val = if mask[[0, 0, i, j]] > args.mask_threshold {
-                255
-            } else {
-                0
-            };
+            let val = (255.0 * mask[[0, 0, i, j]]).round() as u8;
             mask_data.push(val as u8);
         }
     }
