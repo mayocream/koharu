@@ -36,3 +36,4 @@ runs/
 
 # model checkpoints
 models/
+.env
