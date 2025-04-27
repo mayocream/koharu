@@ -1,17 +1,20 @@
 use std::thread;
 
 use clap::Parser;
-use hf_hub::api::sync::Api;
 use image::GenericImageView;
 use ndarray::Array;
 use ort::{inputs, session::Session};
 
 #[derive(Parser)]
 struct Cli {
-    #[arg(long, default_value = "test_2.jpg")]
+    #[arg(long, default_value = "../models/lama-manga.onnx")]
+    model_path: String,
+
+    //#[arg(long, default_value = r"C:\Users\Mayo\Downloads\photo_2025-04-27_00-10-29.jpg")]
+    #[arg(long, default_value = r"C:\Users\Mayo\Downloads\testtest.png")]
     image: String,
 
-    #[arg(long, default_value = "mask_2.png")]
+    #[arg(long, default_value = r"C:\Users\Mayo\Workspaces\koharu\comic-text-detector\mask_output.png")]
     mask: String,
 
     #[arg(long, default_value = "output_2.png")]
@@ -20,15 +23,10 @@ struct Cli {
 
 fn main() -> anyhow::Result<()> {
     let args = Cli::parse();
-
-    let api = Api::new()?;
-    let repo = api.model("Carve/LaMa-ONNX".to_string());
-    let model_path = repo.get("lama_fp32.onnx")?;
-
     let model = Session::builder()?
         .with_optimization_level(ort::session::builder::GraphOptimizationLevel::Level3)?
         .with_intra_threads(thread::available_parallelism()?.get())?
-        .commit_from_file(model_path)?;
+        .commit_from_file(args.model_path)?;
 
     let image =
         image::open(&args.image).map_err(|e| anyhow::anyhow!("Failed to open image: {e}"))?;
@@ -78,13 +76,13 @@ fn main() -> anyhow::Result<()> {
     for y in 0..orig_height {
         for x in 0..orig_width {
             // divide by 255.0 to convert back to 0-255 range
-            let r = (output[[0, 0, y as usize, x as usize]])
+            let r = (output[[0, 0, y as usize, x as usize]] * 255.0)
                 .clamp(0.0, 255.0)
                 .round() as u8;
-            let g = (output[[0, 1, y as usize, x as usize]])
+            let g = (output[[0, 1, y as usize, x as usize]] * 255.0)
                 .clamp(0.0, 255.0)
                 .round() as u8;
-            let b = (output[[0, 2, y as usize, x as usize]])
+            let b = (output[[0, 2, y as usize, x as usize]] * 255.0)
                 .clamp(0.0, 255.0)
                 .round() as u8;
             output_image.put_pixel(x, y, image::Rgb([r, g, b]));
