@@ -23,6 +23,7 @@ function Canvas() {
   )
 
   const [selected, setSelected] = useState<any>(null)
+  const inpaintLayerRef = useRef<Konva.Layer>(null)
 
   const stageRef = useRef<Konva.Stage>(null)
 
@@ -187,6 +188,8 @@ function Canvas() {
       }
 
       ctx.putImageData(imgData, xmin, ymin)
+
+      inpaintLayerRef.current?.batchDraw()
     }
   }
 
@@ -247,7 +250,7 @@ function Canvas() {
               <Image image={segmentCanvas ?? null} />
             )}
           </Layer>
-          <Layer>
+          <Layer ref={inpaintLayerRef}>
             <Image image={inpaintCanvas ?? null} />
           </Layer>
         </Stage>
