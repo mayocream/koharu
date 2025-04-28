@@ -50,6 +50,8 @@ You can find the ONNX exported models [here](https://huggingface.co/mayocream/ko
 
 ### Prerequisites
 
+Please follow the instructions on the [Tauri documentation](https://tauri.app/start/prerequisites/) to install the required dependencies of Tauri.
+
 - Rust 1.85
 - Bun
 
