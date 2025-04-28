@@ -36,13 +36,15 @@ The workflow of translation consists of the following steps:
 - [x] Detect the text in the manga using a text detection model.
 - [x] Extract the detected text using an OCR model.
 - [x] Translate the extracted text using an LLM.
-- [ ] Inpaint the translated text back into the manga using an inpainting model.
+- [x] Inpaint the translated text back into the manga using an inpainting model.
 
 ## Models
 
 - [comic-text-detector](https://github.com/dmMaze/comic-text-detector) - Detects text in manga images.
 - [manga-ocr](https://github.com/kha-white/manga-ocr) - Extracts text from manga images.
-- [LaMa](https://github.com/advimman/lama) - Inpainting model.
+- [AnimeMangaInpainting](https://huggingface.co/dreMaz/AnimeMangaInpainting) - Finetuned LaMa model for inpainting manga images.
+
+You can find the ONNX exported models [here](https://huggingface.co/mayocream/koharu).
 
 ## Development
 
