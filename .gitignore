@@ -37,3 +37,6 @@ runs/
 # model checkpoints
 models/
 .env
+.devenv
+/.pre-commit-config.yaml
+/bun.lockb
