@@ -74,3 +74,9 @@ rustup
 bun install
 bun tauri dev
 ```
+
+To create a debug build, run:
+
+```bash
+bun tauri build --debug
+```
