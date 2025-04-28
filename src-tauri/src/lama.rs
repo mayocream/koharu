@@ -15,15 +15,12 @@ pub struct Lama {
     model: Session,
 }
 
-// Function 1: Resize image while preserving aspect ratio and add padding
 fn resize_with_padding(
     img: &DynamicImage,
     target_size: u32,
     filter: image::imageops::FilterType,
 ) -> (DynamicImage, (u32, u32, u32, u32)) {
     let (orig_width, orig_height) = img.dimensions();
-
-    //let target_size = cmp::min(target_size, cmp::max(orig_width, orig_height));
 
     // Calculate new dimensions while preserving aspect ratio
     let (new_width, new_height) = if orig_width > orig_height {
@@ -99,11 +96,6 @@ fn revert_resize_padding(
     cropped.resize(orig_width, orig_height, filter)
 }
 
-// Example usage:
-// let (orig_width, orig_height) = image.dimensions();
-// let (padded_image, resize_info) = resize_with_padding(&image, 512, image::imageops::FilterType::CatmullRom);
-// let reverted_image = revert_resize_padding(&padded_image, (orig_width, orig_height), resize_info, image::imageops::FilterType::CatmullRom);
-
 impl Lama {
     pub fn new() -> anyhow::Result<Self> {
         let api = Api::new()?;
@@ -131,19 +123,9 @@ impl Lama {
         mask: &DynamicImage,
     ) -> anyhow::Result<DynamicImage> {
         let (orig_width, orig_height) = image.dimensions();
-        println!("Original dimensions: {}x{}", orig_width, orig_height);
-        println!("mask dimensions: {}x{}", mask.width(), mask.height());
-        println!("fisrt pixel: {:?}", mask.get_pixel(0, 0));
-        mask.save("mask.png")?;
-        // let image = image.resize_exact(512, 512, image::imageops::FilterType::CatmullRom);
-        // let mask = mask.resize_exact(512, 512, image::imageops::FilterType::CatmullRom);
         let (image, resize_info) =
             resize_with_padding(&image, 512, image::imageops::FilterType::CatmullRom);
         let (mask, _) = resize_with_padding(&mask, 512, image::imageops::FilterType::CatmullRom);
-
-        image.save("padded_image.png")?;
-        mask.save("padded_mask.png")?;
-        println!("Resized dimensions: {}x{}", image.width(), image.height());
 
         let mut image_data = ndarray::Array::zeros((1, 3, 512, 512));
         for pixel in image.pixels() {
@@ -188,18 +170,11 @@ impl Lama {
         }
 
         let mut output_image = DynamicImage::ImageRgb8(output_image);
-        output_image.save("output_padded.png")?;
         output_image = revert_resize_padding(
             &output_image,
             (orig_width, orig_height),
             resize_info,
             image::imageops::FilterType::CatmullRom,
-        ); // let (padded_image, resize_info) = resize_with_padding(&image, 512, image::imageops::FilterType::CatmullRom);
-
-        println!(
-            "Reverted dimensions: {}x{}",
-            output_image.width(),
-            output_image.height()
         );
 
         Ok(output_image)

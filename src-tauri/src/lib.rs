@@ -38,9 +38,7 @@ async fn detect(
         .ok_or_else(|| "ComicTextDetector not initialized".to_string())?;
 
     let img = image::load_from_memory(&image).map_err(|e| e.to_string())?;
-    let result = ctd
-        .inference(&img, 0.5, 0.5, 0.3)
-        .map_err(|e| e.to_string())?;
+    let result = ctd.inference(&img, 0.5, 0.5).map_err(|e| e.to_string())?;
 
     Ok(result)
 }

@@ -58,7 +58,6 @@ impl ComicTextDetector {
         image: &image::DynamicImage,
         confidence_threshold: f32,
         nms_threshold: f32,
-        mask_threshold: f32,
     ) -> anyhow::Result<Output> {
         let (orig_width, orig_height) = image.dimensions();
         let w_ratio = orig_width as f32 / 1024.0;
