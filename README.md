@@ -65,8 +65,38 @@ rustup
 ```
 
 ### Build
-
 ```bash
 bun install
 bun tauri dev
 ```
+
+### Nix and NixOS
+If you have the [Nix package manager](https://nixos.org) installed on
+your computer, you can enter a development shell that will provide you
+with all the necessary dependencies while you are in this shell. The
+[Flakes feature](https://nixos.wiki/wiki/flakes) is required.
+
+To enter the shell, you can execute the following command:
+
+```sh
+nix develop --no-pure-eval
+```
+
+If you have [direnv](https://direnv.net/) installed on your machine
+too, you can instead run the following command once:
+```sh
+direnv allow .
+```
+
+This environment offers the following commands to help you with
+koharu:
+- `dev` : launches koharu in development mode
+- `build` : builds a release version of koharu
+- `devenv test` : launches all tests of the project, including git
+  hooks
+
+The git hooks will perform the following tasks:
+- verify `cargo clippy` does not fail
+- verify `eslint` does not fail
+- verify with [`ripsecrets`](https://github.com/sirwart/ripsecrets) no
+  secret value is leaked
