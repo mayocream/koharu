@@ -8,8 +8,7 @@ import { useCanvasStore, useWorkflowStore } from '@/lib/state'
 import { invoke } from '@tauri-apps/api/core'
 
 function Canvas() {
-  const { imageSrc, imageSrcHistory, scale, texts, segment, setScale } =
-    useCanvasStore()
+  const { imageSrc, scale, texts, segment, setScale } = useCanvasStore()
   const { selectedTextIndex, setSelectedTextIndex, selectedTool } =
     useWorkflowStore()
   const [stageWidth, setStageWidth] = useState(0)
@@ -51,6 +50,24 @@ function Canvas() {
       setImageData(bitmap)
     } catch (error) {
       alert(`Error loading image: ${error}`)
+    }
+  }
+
+  const setImageCenter = () => {
+    if (imageData) {
+      if (stageWidth > 0 && stageHeight > 0 && stageRef.current) {
+        const stage = stageRef.current
+        const imageW = imageData.width
+        const imageH = imageData.height
+
+        const currentScale = scale
+
+        const targetX = stageWidth / 2 - (imageW / 2) * currentScale
+        const targetY = stageHeight / 2 - (imageH / 2) * currentScale
+
+        stage.position({ x: targetX, y: targetY })
+        stage.batchDraw()
+      }
     }
   }
 
@@ -132,6 +149,10 @@ function Canvas() {
     setSegmentCanvas(null)
     setInpaintCanvas(null)
   }, [imageSrc])
+
+  useEffect(() => {
+    setImageCenter()
+  }, [imageData])
 
   useEffect(() => {
     loadSegment()
