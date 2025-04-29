@@ -34,6 +34,8 @@ hf-hub = "0.4.2"
 image = "0.25.6"
 ndarray = "0.16.1"
 candle-transformers = "0.8.4"
+tracing = { version = "0.1.41", features = ["log"] }
+log = "0.4.27"
 
 [features]
 cuda = ["ort/cuda"]
