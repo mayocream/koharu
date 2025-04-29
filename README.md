@@ -80,3 +80,11 @@ To create a debug build, run:
 ```bash
 bun tauri build --debug
 ```
+
+### Features
+
+To enable `cuda` acceleration, run `bun` with the `--features cuda` flag:
+
+```bash
+bun tauri dev --features cuda
+```
