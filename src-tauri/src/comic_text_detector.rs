@@ -3,12 +3,7 @@ use std::thread;
 use candle_transformers::object_detection::{Bbox, non_maximum_suppression};
 use hf_hub::api::sync::Api;
 use image::GenericImageView;
-use ort::{
-    execution_providers::{
-        CUDAExecutionProvider, CoreMLExecutionProvider, DirectMLExecutionProvider,
-    },
-    session::Session,
-};
+use ort::session::Session;
 use serde::Serialize;
 
 #[derive(Debug)]
@@ -40,13 +35,6 @@ impl ComicTextDetector {
 
         let model = Session::builder()?
             .with_optimization_level(ort::session::builder::GraphOptimizationLevel::Level3)?
-            .with_execution_providers([
-                CUDAExecutionProvider::default().build(),
-                // Use DirectML on Windows if NVIDIA EPs are not available
-                DirectMLExecutionProvider::default().build(),
-                // Or use ANE on Apple platforms
-                CoreMLExecutionProvider::default().build(),
-            ])?
             .with_intra_threads(thread::available_parallelism()?.get())?
             .commit_from_file(model_path)?;
 

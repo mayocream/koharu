@@ -2,13 +2,7 @@ use std::thread;
 
 use hf_hub::api::sync::Api;
 use image::{DynamicImage, GenericImageView};
-use ort::{
-    execution_providers::{
-        CUDAExecutionProvider, CoreMLExecutionProvider, DirectMLExecutionProvider,
-    },
-    inputs,
-    session::Session,
-};
+use ort::{inputs, session::Session};
 
 #[derive(Debug)]
 pub struct Lama {
@@ -104,13 +98,6 @@ impl Lama {
 
         let model = Session::builder()?
             .with_optimization_level(ort::session::builder::GraphOptimizationLevel::Level3)?
-            .with_execution_providers([
-                CUDAExecutionProvider::default().build(),
-                // Use DirectML on Windows if NVIDIA EPs are not available
-                DirectMLExecutionProvider::default().build(),
-                // Or use ANE on Apple platforms
-                CoreMLExecutionProvider::default().build(),
-            ])?
             .with_intra_threads(thread::available_parallelism()?.get())?
             .commit_from_file(model_path)?;
 

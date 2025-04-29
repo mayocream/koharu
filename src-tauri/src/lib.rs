@@ -93,6 +93,15 @@ pub fn run() -> anyhow::Result<()> {
         .plugin(tauri_plugin_dialog::init())
         .plugin(tauri_plugin_opener::init())
         .setup(|app| {
+            // set global defaults
+            ort::init()
+                .with_execution_providers([
+                    #[cfg(feature = "cuda")]
+                    ort::execution_providers::CUDAExecutionProvider::default().build(),
+                ])
+                .commit()?;
+
+            // initialize the app state
             spawn(initialize(app.handle().clone()));
 
             Ok(())
