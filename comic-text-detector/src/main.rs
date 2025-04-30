@@ -28,9 +28,6 @@ struct Args {
 
     #[arg(long, default_value = "mask_output.png")]
     mask_output: String,
-
-    #[arg(long, default_value_t = 0.3)]
-    mask_threshold: f32,
 }
 
 fn main() -> anyhow::Result<()> {

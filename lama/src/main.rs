@@ -8,7 +8,7 @@ use ort::{inputs, session::Session};
 #[derive(Parser)]
 struct Cli {
     #[arg(long, default_value = "../models/lama-manga.onnx")]
-    model_path: String,
+    model: String,
 
     //#[arg(long, default_value = r"C:\Users\Mayo\Downloads\photo_2025-04-27_00-10-29.jpg")]
     #[arg(long, default_value = r"C:\Users\Mayo\Downloads\testtest.png")]
@@ -26,7 +26,7 @@ fn main() -> anyhow::Result<()> {
     let model = Session::builder()?
         .with_optimization_level(ort::session::builder::GraphOptimizationLevel::Level3)?
         .with_intra_threads(thread::available_parallelism()?.get())?
-        .commit_from_file(args.model_path)?;
+        .commit_from_file(args.model)?;
 
     let image =
         image::open(&args.image).map_err(|e| anyhow::anyhow!("Failed to open image: {e}"))?;
