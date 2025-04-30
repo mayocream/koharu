@@ -79,7 +79,26 @@ function Canvas() {
       return
     }
 
+    const mousePointTo = {
+      x: (pointer.x - stage.x()) / oldScale,
+      y: (pointer.y - stage.y()) / oldScale,
+    }
+    const newPos = {
+      x: pointer.x - mousePointTo.x * newScale,
+      y: pointer.y - mousePointTo.y * newScale,
+    }
+
+    stage.position(newPos)
+
     setScale(newScale)
+  }
+
+  const handleDragChange = (isDragging: boolean) => {
+    if (stageRef.current) {
+      stageRef.current.container().style.cursor = isDragging
+        ? 'grabbing'
+        : 'grab'
+    }
   }
 
   useEffect(() => {
@@ -100,6 +119,8 @@ function Canvas() {
             setSelected(null)
           }}
           draggable
+          onDragStart={() => handleDragChange(true)}
+          onDragEnd={() => handleDragChange(false)}
         >
           <Layer>
             <Image image={imageData ?? null} />
