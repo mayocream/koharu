@@ -38,5 +38,4 @@ tracing = { version = "0.1.41", features = ["log"] }
 log = "0.4.27"
 
 [features]
-default = ["cuda"]
 cuda = ["ort/cuda"]
