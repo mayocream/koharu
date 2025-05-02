@@ -3114,6 +3114,7 @@ dependencies = [
  "candle-transformers",
  "hf-hub",
  "image",
+ "imageproc",
  "log",
  "ndarray",
  "ort",
