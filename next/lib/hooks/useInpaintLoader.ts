@@ -29,48 +29,87 @@ export function useInpaintLoader(
       const canvas = new OffscreenCanvas(imageData.width, imageData.height)
       setInpaintCanvas(canvas)
 
+      const TILE_SIZE = 512
+      const OVERLAP = 6
+      const BLACK_THRESHOLD = 30
+
+      const segmentCtx = segmentCanvas.getContext('2d')!
+      const resultCtx = canvas.getContext('2d')!
+
       try {
-        for await (const block of texts) {
-          const { xmin, ymin, xmax, ymax } = block
-          const croppedImageBuffer = await cropImage(
-            imageData,
-            xmin,
-            ymin,
-            xmax,
-            ymax
-          )
+        for (let y = 0; y < imageData.height; y += TILE_SIZE - 2 * OVERLAP) {
+          for (let x = 0; x < imageData.width; x += TILE_SIZE - 2 * OVERLAP) {
+            // Calculate tile boundaries
+            const xmin = Math.max(0, x - OVERLAP)
+            const ymin = Math.max(0, y - OVERLAP)
+            const xmax = Math.min(x + TILE_SIZE - OVERLAP, imageData.width)
+            const ymax = Math.min(y + TILE_SIZE - OVERLAP, imageData.height)
+            const width = xmax - xmin
+            const height = ymax - ymin
 
-          // get mask bytes buffer
-          let ctx = segmentCanvas.getContext('2d')!
-          const maskData = ctx.getImageData(
-            xmin,
-            ymin,
-            xmax - xmin,
-            ymax - ymin
-          )
-          const maskCanvas = new OffscreenCanvas(xmax - xmin, ymax - ymin)
-          ctx = maskCanvas.getContext('2d')!
-          ctx.putImageData(maskData, 0, 0)
-          const mask = await maskCanvas.convertToBlob()
+            // Get and check mask
+            const maskData = segmentCtx.getImageData(xmin, ymin, width, height)
 
-          // @refresh reset
-          const inpaintImageBuffer = (await invoke('inpaint', {
-            image: croppedImageBuffer,
-            mask: await mask.arrayBuffer(),
-          })) as Uint8Array
+            // Skip if mask is empty (all black)
+            if ([...maskData.data].every((pixel) => pixel <= BLACK_THRESHOLD))
+              continue
 
-          // handle inpaint result
-          ctx = canvas.getContext('2d')!
-          const imgData = ctx.createImageData(xmax - xmin, ymax - ymin)
-          for (let i = 0; i < inpaintImageBuffer.length / 3; i++) {
-            imgData.data[i * 4] = inpaintImageBuffer[i * 3] // R
-            imgData.data[i * 4 + 1] = inpaintImageBuffer[i * 3 + 1] // G
-            imgData.data[i * 4 + 2] = inpaintImageBuffer[i * 3 + 2] // B
-            imgData.data[i * 4 + 3] = 255 // A
+            // Prepare mask
+            const maskCanvas = new OffscreenCanvas(width, height)
+            maskCanvas.getContext('2d').putImageData(maskData, 0, 0)
+            const maskBuffer = await (
+              await maskCanvas.convertToBlob()
+            ).arrayBuffer()
+
+            // Get image data and inpaint
+            const croppedImage = await cropImage(
+              imageData,
+              xmin,
+              ymin,
+              xmax,
+              ymax
+            )
+            const inpaintBuffer = await invoke<Uint8Array>('inpaint', {
+              image: croppedImage,
+              mask: maskBuffer,
+            })
+
+            // Convert result to image data
+            const resultImage = resultCtx.createImageData(width, height)
+            for (let i = 0; i < inpaintBuffer.length / 3; i++) {
+              resultImage.data[i * 4] = inpaintBuffer[i * 3] // R
+              resultImage.data[i * 4 + 1] = inpaintBuffer[i * 3 + 1] // G
+              resultImage.data[i * 4 + 2] = inpaintBuffer[i * 3 + 2] // B
+              resultImage.data[i * 4 + 3] = 255 // A
+            }
+
+            // Calculate effective area (non-overlapping part)
+            const offsetX = x === 0 ? 0 : OVERLAP
+            const offsetY = y === 0 ? 0 : OVERLAP
+            const rightEdge =
+              x + TILE_SIZE - OVERLAP > imageData.width
+                ? 0
+                : xmax - (x + TILE_SIZE - 2 * OVERLAP)
+            const bottomEdge =
+              y + TILE_SIZE - OVERLAP > imageData.height
+                ? 0
+                : ymax - (y + TILE_SIZE - 2 * OVERLAP)
+            const effectiveWidth = width - offsetX - rightEdge
+            const effectiveHeight = height - offsetY - bottomEdge
+
+            // Merge result
+            resultCtx.putImageData(
+              resultImage,
+              xmin,
+              ymin,
+              offsetX,
+              offsetY,
+              effectiveWidth,
+              effectiveHeight
+            )
+
+            onPutImageDataComplete()
           }
-
-          ctx.putImageData(imgData, xmin, ymin)
-          onPutImageDataComplete()
         }
       } catch (err) {
         console.error('Error inpainting:', err)

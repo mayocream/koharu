@@ -73,7 +73,6 @@ fn resize_with_padding(
     (padded, (new_width, new_height, pad_right, pad_bottom))
 }
 
-// Function 2: Revert the resizing and padding to original dimensions
 fn revert_resize_padding(
     padded: &DynamicImage,
     original_dimensions: (u32, u32),
