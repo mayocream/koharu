@@ -37,8 +37,15 @@ export function useInpaintLoader(
       const resultCtx = canvas.getContext('2d')!
 
       try {
+        const tiles = []
         for (let y = 0; y < imageData.height; y += TILE_SIZE - 2 * OVERLAP) {
           for (let x = 0; x < imageData.width; x += TILE_SIZE - 2 * OVERLAP) {
+            tiles.push({ x, y })
+          }
+        }
+
+        await Promise.all(
+          tiles.map(async ({ x, y }) => {
             // Calculate tile boundaries
             const xmin = Math.max(0, x - OVERLAP)
             const ymin = Math.max(0, y - OVERLAP)
@@ -52,7 +59,7 @@ export function useInpaintLoader(
 
             // Skip if mask is empty (all black)
             if ([...maskData.data].every((pixel) => pixel <= BLACK_THRESHOLD))
-              continue
+              return
 
             // Prepare mask
             const maskCanvas = new OffscreenCanvas(width, height)
@@ -109,8 +116,8 @@ export function useInpaintLoader(
             )
 
             onPutImageDataComplete()
-          }
-        }
+          })
+        )
       } catch (err) {
         console.error('Error inpainting:', err)
       }
