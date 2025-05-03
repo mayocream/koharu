@@ -1,4 +1,4 @@
-use tokio::sync::Mutex;
+use tokio::sync::RwLock;
 
 use tauri::{AppHandle, Manager, async_runtime::spawn};
 
@@ -14,8 +14,8 @@ struct AppState {
 }
 
 async fn initialize(app: AppHandle) -> anyhow::Result<()> {
-    let state = app.state::<Mutex<AppState>>();
-    let mut state = state.lock().await;
+    let state = app.state::<RwLock<AppState>>();
+    let mut state = state.write().await;
     state.ctd = Some(comic_text_detector::ComicTextDetector::new()?);
     state.ocr = Some(manga_ocr::MangaOCR::new()?);
     state.lama = Some(lama::Lama::new()?);
@@ -28,10 +28,10 @@ async fn initialize(app: AppHandle) -> anyhow::Result<()> {
 
 #[tauri::command]
 async fn detect(
-    state: tauri::State<'_, Mutex<AppState>>,
+    state: tauri::State<'_, RwLock<AppState>>,
     image: Vec<u8>,
 ) -> Result<comic_text_detector::Output, String> {
-    let state = state.lock().await;
+    let state = state.read().await;
     let ctd = state
         .ctd
         .as_ref()
@@ -44,8 +44,8 @@ async fn detect(
 }
 
 #[tauri::command]
-async fn ocr(state: tauri::State<'_, Mutex<AppState>>, image: Vec<u8>) -> Result<String, String> {
-    let state = state.lock().await;
+async fn ocr(state: tauri::State<'_, RwLock<AppState>>, image: Vec<u8>) -> Result<String, String> {
+    let state = state.read().await;
     let ocr = state
         .ocr
         .as_ref()
@@ -59,11 +59,11 @@ async fn ocr(state: tauri::State<'_, Mutex<AppState>>, image: Vec<u8>) -> Result
 
 #[tauri::command]
 async fn inpaint(
-    state: tauri::State<'_, Mutex<AppState>>,
+    state: tauri::State<'_, RwLock<AppState>>,
     image: Vec<u8>,
     mask: Vec<u8>,
 ) -> Result<Vec<u8>, String> {
-    let state = state.lock().await;
+    let state = state.read().await;
     let lama = state
         .lama
         .as_ref()
@@ -82,7 +82,7 @@ async fn inpaint(
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() -> anyhow::Result<()> {
     tauri::Builder::default()
-        .manage(Mutex::new(AppState::default()))
+        .manage(RwLock::new(AppState::default()))
         .plugin(tauri_plugin_store::Builder::new().build())
         .plugin(
             tauri_plugin_log::Builder::new()
