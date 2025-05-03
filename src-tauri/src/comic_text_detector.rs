@@ -27,6 +27,8 @@ pub struct ClassifiedBbox {
     pub class: usize,
 }
 
+const MASK_THRESHOLD: u8 = 30;
+
 impl ComicTextDetector {
     pub fn new() -> anyhow::Result<Self> {
         let api = Api::new()?;
@@ -119,13 +121,17 @@ impl ComicTextDetector {
             .view()
             .to_owned()
             .into_dimensionality::<ndarray::Ix4>()?;
-        let mut segment = Vec::with_capacity(1024 * 1024);
-        for i in 0..1024 {
-            for j in 0..1024 {
-                let val = (255.0 * mask[[0, 0, i, j]]).round() as u8;
-                segment.push(val);
-            }
-        }
+        // Extract the relevant 2D slice from the 4D array
+        let mask_slice = mask.slice(ndarray::s![0, 0, .., ..]);
+
+        // Create a new 2D array for the thresholded values
+        let thresholded = mask_slice.mapv(|x| {
+            let val = (255.0 * x).round() as u8;
+            if val < MASK_THRESHOLD { 0 } else { val }
+        });
+
+        // Convert to Vec
+        let (segment, _) = thresholded.into_raw_vec_and_offset();
         // dilate the mask
         let segment = image::GrayImage::from_vec(1024, 1024, segment)
             .ok_or_else(|| anyhow::anyhow!("Failed to create GrayImage"))?;
