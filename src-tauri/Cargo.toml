@@ -37,6 +37,7 @@ candle-transformers = "0.8.4"
 tracing = { version = "0.1.41", features = ["log"] }
 log = "0.4.27"
 imageproc = "0.25.0"
+tauri-plugin-notification = "2"
 
 [features]
 cuda = ["ort/cuda"]

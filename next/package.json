@@ -14,6 +14,7 @@
     "@tauri-apps/plugin-log": "~2.4.0",
     "@tauri-apps/plugin-opener": "^2.2.6",
     "@tauri-apps/plugin-store": "~2.2.0",
+    "@tauri-apps/plugin-notification": "~2",
     "konva": "^9.3.20",
     "lucide-react": "^0.507.0",
     "next": "15.3.1",
