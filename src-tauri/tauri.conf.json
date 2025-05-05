@@ -21,7 +21,13 @@
       },
       {
         "url": "/splashscreen",
-        "label": "splashscreen"
+        "label": "splashscreen",
+        "center": true,
+        "skipTaskbar": true,
+        "closable": false,
+        "decorations": false,
+        "width": 600,
+        "height": 400
       }
     ],
     "security": {
@@ -29,7 +35,9 @@
       "csp": "default-src * 'unsafe-inline' 'unsafe-eval' data: blob:",
       "assetProtocol": {
         "enable": true,
-        "scope": ["**/*"]
+        "scope": [
+          "**/*"
+        ]
       }
     }
   },
