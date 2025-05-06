@@ -56,7 +56,7 @@ function TranslationPanel() {
     <div className='flex max-h-160 w-72 flex-col overflow-auto rounded-lg border border-gray-200 bg-white shadow-md'>
       {/* Header */}
       <div className='flex items-center p-3'>
-        <h2 className='font-medium'>翻訳</h2>
+        <h2 className='font-medium'>Translation</h2>
         <div className='flex-grow'></div>
         <Button
           className='cursor-pointer rounded-full p-2 text-gray-500 hover:bg-gray-100 hover:text-gray-700'
@@ -74,7 +74,7 @@ function TranslationPanel() {
       <div className='flex items-center border-b border-gray-200 p-3'>
         <textarea
           className='w-full rounded-md border border-gray-300 px-2 py-1 text-sm focus:ring-2 focus:ring-blue-500 focus:outline-none'
-          placeholder='システムプロンプトを入力'
+          placeholder='Enter your system prompt here...'
           value={prompt}
           onChange={(e) => setPrompt(e.target.value)}
         />
@@ -91,7 +91,7 @@ function TranslationPanel() {
             onMouseEnter={() => setSelectedTextIndex(index)}
             onMouseLeave={() => setSelectedTextIndex(null)}
           >
-            {block.translatedText || 'まだ翻訳されていません'}
+            {block.translatedText || 'No translation available'}
           </div>
         ))}
       </div>

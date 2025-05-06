@@ -15,7 +15,7 @@ export default function RootLayout({
   children: React.ReactNode
 }>) {
   return (
-    <html lang='ja' suppressHydrationWarning>
+    <html lang='en' suppressHydrationWarning>
       <body
         className={`${notoSansJP.className} ${notoSansSC.className} antialiased`}
       >

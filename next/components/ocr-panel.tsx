@@ -168,7 +168,7 @@ function OCRPanel() {
                 className='w-full resize-none rounded border border-gray-200 bg-transparent leading-snug focus:border-gray-400 focus:outline-none'
               />
             ) : (
-              block.text || '検出されていません'
+              block.text || 'No text detected'
             )}
           </div>
         ))}

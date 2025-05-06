@@ -28,7 +28,7 @@ export default function Settings() {
           >
             <ArrowLeft size={18} />
           </Button>
-          <h1 className='text-xl'>設定</h1>
+          <h1 className='text-xl'>Settings</h1>
         </div>
       </div>
 
@@ -36,7 +36,7 @@ export default function Settings() {
       <div className='flex-grow p-6'>
         <div className='mx-auto max-w-7xl'>
           <div className='rounded-lg bg-white p-6 shadow-md'>
-            <h2 className='mb-6 text-xl font-semibold'>API 設定</h2>
+            <h2 className='mb-6 text-xl font-semibold'>API Settings</h2>
 
             {/* Form inputs */}
             <div className='max-w-2xl space-y-6'>
@@ -45,7 +45,7 @@ export default function Settings() {
                   htmlFor='server-url'
                   className='block text-sm font-medium text-gray-700'
                 >
-                  OpenAI サーバーURL
+                  OpenAI Server URL
                 </label>
                 <input
                   id='server-url'
@@ -62,7 +62,7 @@ export default function Settings() {
                   htmlFor='api-token'
                   className='block text-sm font-medium text-gray-700'
                 >
-                  APIトークン
+                  API Token
                 </label>
                 <input
                   id='api-token'
@@ -79,7 +79,7 @@ export default function Settings() {
                   htmlFor='model'
                   className='block text-sm font-medium text-gray-700'
                 >
-                  モデル
+                  Model
                 </label>
                 <input
                   id='model'
