@@ -5,10 +5,10 @@ import { useEffect, useState, useRef } from 'react'
 import { Image, Layer, Rect, Stage, Transformer } from 'react-konva'
 import { useCanvasStore, useWorkflowStore } from '@/lib/state'
 import ScaleControl from './scale-control'
-import { useWindowSize } from '@/lib/hooks/useWindowSize'
-import { useImageLoader } from '@/lib/hooks/useImageLoader'
-import { useSegmentLoader } from '@/lib/hooks/useSegmentLoader'
-import { useInpaintLoader } from '@/lib/hooks/useInpaintLoader'
+import { useWindowSize } from '@/hooks/window-size'
+import { useImageLoader } from '@/hooks/image-loader'
+import { useSegmentLoader } from '@/hooks/segment-loader'
+import { useInpaintLoader } from '@/hooks/inpaint-loader'
 
 function Canvas() {
   const { imageSrc, scale, texts, segment, setScale } = useCanvasStore()
@@ -93,14 +93,6 @@ function Canvas() {
     setScale(newScale)
   }
 
-  const handleDragChange = (isDragging: boolean) => {
-    if (stageRef.current) {
-      stageRef.current.container().style.cursor = isDragging
-        ? 'grabbing'
-        : 'grab'
-    }
-  }
-
   useEffect(() => {
     setImageCenter()
   }, [imageData])
@@ -119,8 +111,6 @@ function Canvas() {
             setSelected(null)
           }}
           draggable
-          onDragStart={() => handleDragChange(true)}
-          onDragEnd={() => handleDragChange(false)}
         >
           <Layer>
             <Image image={imageData ?? null} />

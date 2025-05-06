@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react'
 import { invoke } from '@tauri-apps/api/core'
-import { cropImage } from '../utils/imageUtils'
+import { cropImage } from '@/utils/image-crop'
 
 interface TextBlock {
   xmin: number

@@ -1,7 +1,7 @@
 'use client'
 
 import { useSettingsStore } from '@/lib/state'
-import { ArrowLeft, Save } from 'lucide-react'
+import { ArrowLeft } from 'lucide-react'
 import { useRouter } from 'next/navigation'
 
 export default function Settings() {
