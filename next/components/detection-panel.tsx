@@ -2,6 +2,7 @@ import { useCanvasStore } from '@/lib/state'
 import { Loader, Play } from 'lucide-react'
 import { invoke } from '@tauri-apps/api/core'
 import { useEffect, useState } from 'react'
+import { Button } from 'react-aria-components'
 
 function DetectionPanel() {
   const { imageSrc, imageSrcHistory, texts, setTexts, setSegment } =
@@ -40,17 +41,17 @@ function DetectionPanel() {
       <div className='flex items-center p-3'>
         <h2 className='font-medium'>吹き出し検出</h2>
         <div className='flex-grow'></div>
-        <button
+        <Button
           className='cursor-pointer rounded-full p-2 text-gray-500 hover:bg-gray-100 hover:text-gray-700'
           onClick={() => inference(imageSrc)}
-          disabled={loading}
+          isPending={loading}
         >
           {loading ? (
             <Loader className='h-4 w-4 animate-spin' />
           ) : (
             <Play className='h-4 w-4' />
           )}
-        </button>
+        </Button>
       </div>
       {/* Body */}
       <div className='flex flex-col justify-center'>

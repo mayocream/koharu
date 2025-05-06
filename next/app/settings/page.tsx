@@ -3,6 +3,7 @@
 import { useSettingsStore } from '@/lib/state'
 import { ArrowLeft } from 'lucide-react'
 import { useRouter } from 'next/navigation'
+import { Button } from 'react-aria-components'
 
 export default function Settings() {
   const router = useRouter()
@@ -21,12 +22,12 @@ export default function Settings() {
       {/* Header with back button */}
       <div className='bg-white p-4 shadow-sm'>
         <div className='mx-auto flex max-w-7xl items-center'>
-          <button
+          <Button
             className='mr-4 cursor-pointer rounded-full p-2 transition-colors hover:bg-gray-100'
             onClick={() => router.replace('/')}
           >
             <ArrowLeft size={18} />
-          </button>
+          </Button>
           <h1 className='text-xl'>設定</h1>
         </div>
       </div>

@@ -2,6 +2,7 @@ import { useCanvasStore, useSettingsStore, useWorkflowStore } from '@/lib/state'
 import { Loader, Play } from 'lucide-react'
 import OpenAI from 'openai'
 import { useState } from 'react'
+import { Button } from 'react-aria-components'
 
 function TranslationPanel() {
   const { texts, setTexts } = useCanvasStore()
@@ -57,9 +58,9 @@ function TranslationPanel() {
       <div className='flex items-center p-3'>
         <h2 className='font-medium'>翻訳</h2>
         <div className='flex-grow'></div>
-        <button
+        <Button
           className='cursor-pointer rounded-full p-2 text-gray-500 hover:bg-gray-100 hover:text-gray-700'
-          disabled={loading}
+          isPending={loading}
           onClick={translate}
         >
           {loading ? (
@@ -67,7 +68,7 @@ function TranslationPanel() {
           ) : (
             <Play className='h-4 w-4' />
           )}
-        </button>
+        </Button>
       </div>
       {/* Body */}
       <div className='flex items-center border-b border-gray-200 p-3'>

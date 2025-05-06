@@ -3,6 +3,7 @@ import { Check, Loader, Pencil, Play, X } from 'lucide-react'
 import { invoke } from '@tauri-apps/api/core'
 import { useEffect, useState } from 'react'
 import { debug } from '@tauri-apps/plugin-log'
+import { Button } from 'react-aria-components'
 
 function OCRPanel() {
   const { imageSrc, imageSrcHistory, texts, setTexts } = useCanvasStore()
@@ -110,42 +111,42 @@ function OCRPanel() {
           !loading &&
           (isTextEditMode ? (
             <>
-              <button
+              <Button
                 className='cursor-pointer rounded-full p-2 text-gray-500 hover:bg-gray-100 hover:text-gray-700'
                 onClick={handleTextUnsave}
-                disabled={loading}
+                isPending={loading}
               >
                 <X className='h-4 w-4' />
-              </button>
-              <button
+              </Button>
+              <Button
                 className='cursor-pointer rounded-full p-2 text-gray-500 hover:bg-gray-100 hover:text-gray-700'
                 onClick={handleTextSave}
-                disabled={loading}
+                isPending={loading}
               >
                 <Check className='h-4 w-4' />
-              </button>
+              </Button>
             </>
           ) : (
-            <button
+            <Button
               className='cursor-pointer rounded-full p-2 text-gray-500 hover:bg-gray-100 hover:text-gray-700'
               onClick={handleEditModeChange}
-              disabled={loading}
+              isPending={loading}
             >
               <Pencil className='h-4 w-4' />
-            </button>
+            </Button>
           ))}
         {!isTextEditMode && (
-          <button
+          <Button
             className='cursor-pointer rounded-full p-2 text-gray-500 hover:bg-gray-100 hover:text-gray-700'
             onClick={() => inference(imageSrc)}
-            disabled={loading}
+            isPending={loading}
           >
             {loading ? (
               <Loader className='h-4 w-4 animate-spin' />
             ) : (
               <Play className='h-4 w-4' />
             )}
-          </button>
+          </Button>
         )}
       </div>
       <div className='flex flex-col justify-center'>
