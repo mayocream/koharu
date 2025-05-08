@@ -46,7 +46,7 @@ You can find the ONNX models we actually use below:
 - [manga-ocr-onnx](https://huggingface.co/mayocream/manga-ocr-onnx)
 - [lama-manga-onnx](https://huggingface.co/mayocream/lama-manga-onnx)
 
-### Features
+## Features
 
 To enable `cuda` acceleration, run `bun` with the `--features cuda` flag:
 
