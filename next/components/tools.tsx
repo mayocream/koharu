@@ -3,6 +3,7 @@
 import {
   Languages,
   MessageCircle,
+  PaintbrushVertical,
   SquareDashedMousePointer,
 } from 'lucide-react'
 import { useWorkflowStore } from '@/lib/state'
@@ -18,14 +19,19 @@ function Tools() {
       description: 'Detect text blocks in the image',
     },
     {
-      id: 'translation',
-      icon: Languages,
-      description: 'Translate text blocks',
-    },
-    {
       id: 'segmentation',
       icon: SquareDashedMousePointer,
       description: 'Segment text blocks',
+    },
+    {
+      id: 'inpaint',
+      icon: PaintbrushVertical,
+      description: 'Inpaint text blocks',
+    },
+    {
+      id: 'translation',
+      icon: Languages,
+      description: 'Translate text blocks',
     },
   ]
 

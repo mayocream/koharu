@@ -31,6 +31,8 @@ async fn initialize(app: AppHandle) -> anyhow::Result<()> {
 async fn detect(
     state: tauri::State<'_, RwLock<AppState>>,
     image: Vec<u8>,
+    confidence_threshold: f32,
+    nms_threshold: f32,
 ) -> Result<comic_text_detector::Output, String> {
     let state = state.read().await;
     let ctd = state
@@ -39,7 +41,9 @@ async fn detect(
         .ok_or_else(|| "ComicTextDetector not initialized".to_string())?;
 
     let img = image::load_from_memory(&image).map_err(|e| e.to_string())?;
-    let result = ctd.inference(&img, 0.5, 0.5).map_err(|e| e.to_string())?;
+    let result = ctd
+        .inference(&img, confidence_threshold, nms_threshold)
+        .map_err(|e| e.to_string())?;
 
     Ok(result)
 }

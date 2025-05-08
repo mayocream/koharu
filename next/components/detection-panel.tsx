@@ -2,16 +2,21 @@ import { useCanvasStore } from '@/lib/state'
 import { Play } from 'lucide-react'
 import { invoke } from '@tauri-apps/api/core'
 import { useEffect, useState } from 'react'
-import { Button } from '@radix-ui/themes'
+import { Button, Slider, Text } from '@radix-ui/themes'
 
 function DetectionPanel() {
   const { imageSrc, texts, setTexts, setSegment } = useCanvasStore()
   const [loading, setLoading] = useState(false)
+  const [confidenceThreshold, setConfidenceThreshold] = useState(0.5)
+  const [nmsThreshold, setNmsThreshold] = useState(0.5)
+
   const inference = async (src: string) => {
     setLoading(true)
     const buffer = await fetch(src).then((res) => res.bytes())
     const result = await invoke<any>('detect', {
       image: buffer,
+      confidenceThreshold,
+      nmsThreshold,
     })
 
     setSegment(result.segment)
@@ -49,8 +54,42 @@ function DetectionPanel() {
       </div>
       {/* Body */}
       <div className='flex flex-col justify-center'>
-        <div className='border-b border-gray-200 px-4 py-2 text-sm'>
-          {texts.length} text blocks detected
+        <div className='flex flex-col gap-2 border-b border-gray-200 px-4 py-2 text-sm'>
+          <div className='flex flex-col gap-1'>
+            <div className='flex items-center justify-between'>
+              <span>Confidence threshold</span>
+              <span>{confidenceThreshold}</span>
+            </div>
+            <Slider
+              size='1'
+              min={0}
+              max={1}
+              step={0.01}
+              value={[confidenceThreshold]}
+              onValueChange={(value) => {
+                setConfidenceThreshold(value[0])
+              }}
+            />
+          </div>
+          <div className='flex flex-col gap-1'>
+            <div className='flex items-center justify-between'>
+              <span>NMS threshold</span>
+              <span>{nmsThreshold}</span>
+            </div>
+            <Slider
+              size='1'
+              min={0}
+              max={1}
+              step={0.01}
+              value={[nmsThreshold]}
+              onValueChange={(value) => {
+                setNmsThreshold(value[0])
+              }}
+            />
+          </div>
+          <Text>
+            <strong>{texts.length}</strong> text blocks detected
+          </Text>
         </div>
       </div>
     </div>
