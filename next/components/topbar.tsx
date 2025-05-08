@@ -55,10 +55,6 @@ function Topbar() {
         >
           <Settings size={20} />
         </Button>
-
-        <Button variant='soft'>
-          <Download size={20} />
-        </Button>
       </div>
     </div>
   )
