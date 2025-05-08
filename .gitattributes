@@ -1,0 +1,3 @@
+*.tsx linguist-language=Rust
+*.ts linguist-language=Rust
+*.py -linguist-detectable
