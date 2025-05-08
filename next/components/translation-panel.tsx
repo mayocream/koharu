@@ -1,5 +1,5 @@
 import { useCanvasStore, useSettingsStore, useWorkflowStore } from '@/lib/state'
-import { Badge, Button, Text } from '@radix-ui/themes'
+import { Badge, Button, Text, TextArea } from '@radix-ui/themes'
 import { Play } from 'lucide-react'
 import OpenAI from 'openai'
 import { useState } from 'react'
@@ -69,7 +69,7 @@ function TranslationPanel() {
       </div>
       {/* Body */}
       <div className='flex items-center border-b border-gray-200 p-3'>
-        <textarea
+        <TextArea
           className='w-full rounded-md border border-gray-300 px-2 py-1 text-sm focus:ring-2 focus:ring-blue-500 focus:outline-none'
           placeholder='Enter your system prompt here...'
           value={prompt}
