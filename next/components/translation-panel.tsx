@@ -28,26 +28,31 @@ function TranslationPanel() {
         },
         {
           role: 'user',
-          content: texts.map((block) => block.text).join('\n') + '\n',
+          content: JSON.stringify(texts.map((block) => block.text)),
         },
       ],
-      stream: true,
+      response_format: {
+        type: 'json_schema',
+        json_schema: {
+          name: 'translation',
+          description: 'Translated text',
+          schema: {
+            type: 'array',
+            items: {
+              type: 'string',
+              description: 'Translated text for each block',
+            },
+          },
+        },
+      },
     })
 
-    // consume stream
-    let line = ''
-    let index = 0
-    for await (const chunk of response) {
-      line += chunk.choices[0].delta.content
-      const splitted = line.split('\n')
-      if (splitted.length < 2) {
-        continue
-      }
-      texts[index++].translatedText = splitted[0]
-
-      setTexts(texts)
-      line = splitted[1]
-    }
+    const translatedTexts = JSON.parse(response.choices[0].message.content)
+    const newTexts = texts.map((block, index) => ({
+      ...block,
+      translatedText: translatedTexts[index] || '',
+    }))
+    setTexts(newTexts)
 
     setLoading(false)
   }
@@ -71,7 +76,7 @@ function TranslationPanel() {
       <div className='flex items-center border-b border-gray-200 p-3'>
         <TextArea
           className='w-full rounded-md border border-gray-300 px-2 py-1 text-sm focus:ring-2 focus:ring-blue-500 focus:outline-none'
-          placeholder='Enter your system prompt here...'
+          placeholder='You are a manga translator, translate Japanese to English while preserve order of the text.'
           value={prompt}
           onChange={(e) => setPrompt(e.target.value)}
         />
