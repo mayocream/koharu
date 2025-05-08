@@ -32,8 +32,8 @@ const MASK_THRESHOLD: u8 = 30;
 impl ComicTextDetector {
     pub fn new() -> anyhow::Result<Self> {
         let api = Api::new()?;
-        let repo = api.model("mayocream/koharu".to_string());
-        let model_path = repo.get("comictextdetector.onnx")?;
+        let repo = api.model("mayocream/comic-text-detector-onnx".to_string());
+        let model_path = repo.get("comic-text-detector.onnx")?;
 
         let model = Session::builder()?
             .with_optimization_level(ort::session::builder::GraphOptimizationLevel::Level3)?

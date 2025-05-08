@@ -92,7 +92,7 @@ fn revert_resize_padding(
 impl Lama {
     pub fn new() -> anyhow::Result<Self> {
         let api = Api::new()?;
-        let repo = api.model("mayocream/koharu".to_string());
+        let repo = api.model("mayocream/lama-manga-onnx".to_string());
         let model_path = repo.get("lama-manga.onnx")?;
 
         let model = Session::builder()?
