@@ -6,21 +6,28 @@ use ort::{inputs, session::Session};
 
 #[derive(Debug)]
 pub struct MangaOCR {
-    model: Session,
+    encoder_model: Session,
+    decoder_model: Session,
     vocab: Vec<String>,
 }
 
 impl MangaOCR {
     pub fn new() -> anyhow::Result<Self> {
         let api = Api::new()?;
-        let repo = api.model("mayocream/koharu".to_string());
-        let model_path = repo.get("manga-ocr.onnx")?;
+        let repo = api.model("mayocream/manga-ocr-onnx".to_string());
+        let encoder_model_path = repo.get("encoder_model.onnx")?;
+        let decoder_model_path = repo.get("decoder_model.onnx")?;
         let vocab_path = repo.get("vocab.txt")?;
 
-        let model = Session::builder()?
+        let encoder_model = Session::builder()?
             .with_optimization_level(ort::session::builder::GraphOptimizationLevel::Level3)?
             .with_intra_threads(thread::available_parallelism()?.get())?
-            .commit_from_file(model_path)?;
+            .commit_from_file(encoder_model_path)?;
+
+        let decoder_model = Session::builder()?
+            .with_optimization_level(ort::session::builder::GraphOptimizationLevel::Level3)?
+            .with_intra_threads(thread::available_parallelism()?.get())?
+            .commit_from_file(decoder_model_path)?;
 
         let vocab = std::fs::read_to_string(vocab_path)
             .map_err(|e| anyhow::anyhow!("Failed to read vocab file: {e}"))?
@@ -28,7 +35,11 @@ impl MangaOCR {
             .map(|s| s.to_string())
             .collect::<Vec<_>>();
 
-        Ok(Self { model, vocab })
+        Ok(Self {
+            encoder_model,
+            decoder_model,
+            vocab,
+        })
     }
 
     pub fn inference(&self, image: &image::DynamicImage) -> anyhow::Result<String> {
@@ -48,6 +59,13 @@ impl MangaOCR {
             tensor[[0, 2, y, x]] = (pixel[2] as f32 / 255.0 - 0.5) / 0.5;
         }
 
+        // save encoder hidden state
+        let inputs = inputs! {
+            "pixel_values" => tensor.view(),
+        }?;
+        let outputs = self.encoder_model.run(inputs)?;
+        let encoder_hidden_state = outputs[0].try_extract_tensor::<f32>()?;
+
         // generate
         let mut token_ids: Vec<i64> = vec![2i64]; // Start token
 
@@ -55,12 +73,12 @@ impl MangaOCR {
             // Create input tensors
             let input = ndarray::Array::from_shape_vec((1, token_ids.len()), token_ids.clone())?;
             let inputs = inputs! {
-                "image" => tensor.view(),
-                "token_ids" => input,
+                "encoder_hidden_states" => encoder_hidden_state.view(),
+                "input_ids" => input,
             }?;
 
             // Run inference
-            let outputs = self.model.run(inputs)?;
+            let outputs = self.decoder_model.run(inputs)?;
 
             // Extract logits from output
             let logits = outputs["logits"].try_extract_tensor::<f32>()?;

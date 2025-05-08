@@ -1,19 +1,27 @@
 import re
 import jaconv
 import numpy as np
+import time
 
 from onnxruntime import InferenceSession
 from PIL import Image
 
 
 class MangaOCR:
-    def __init__(self, model_path: str, vocab_path: str):
-        self.session = InferenceSession(model_path)
+    def __init__(self, encoder_model_path: str, decoder_model_path: str, vocab_path: str):
+        self.encoder_session = InferenceSession(encoder_model_path)
+        self.decoder_session = InferenceSession(decoder_model_path)
         self.vocab = self._load_vocab(vocab_path)
 
     def __call__(self, image: Image.Image) -> str:
         image = self._preprocess(image)
+
+        # count time
+        start = time.time()
         token_ids = self._generate(image)
+        end = time.time()
+        print(f"Time taken: {end - start:.2f} seconds")
+
         text = self._decode(token_ids)
         text = self._postprocess(text)
 
@@ -43,14 +51,18 @@ class MangaOCR:
         return image
 
     def _generate(self, image: np.ndarray) -> np.ndarray:
+        encoder_hidden_states = self.encoder_session.run(None, {
+            "pixel_values": image,
+        })[0]
+
         token_ids = [2]
 
         for _ in range(300):
-            [logits] = self.session.run(
-                output_names=["logits"],
-                input_feed={
-                    "image": image,
-                    "token_ids": np.array([token_ids]),
+            [logits] = self.decoder_session.run(
+                None,
+                {
+                    "encoder_hidden_states": encoder_hidden_states,
+                    "input_ids": np.array([token_ids], dtype=np.int64),
                 },
             )
 
@@ -87,11 +99,12 @@ if __name__ == "__main__":
 
     parser = argparse.ArgumentParser(description="Manga OCR with ONNX Runtime")
     parser.add_argument("--image", type=str, help="Path to the input image")
-    parser.add_argument("--model", type=str, help="Path to the ONNX model file")
+    parser.add_argument("--encoder-model", type=str, help="Path to the ONNX model file")
+    parser.add_argument("--decoder-model", type=str, help="Path to the ONNX model file")
     parser.add_argument("--vocab", type=str, help="Path to the vocabulary file")
     args = parser.parse_args()
 
-    ocr = MangaOCR(args.model, args.vocab)
+    ocr = MangaOCR(args.encoder_model, args.decoder_model, args.vocab)
     image = Image.open(args.image)
     text = ocr(image)
     print(text)

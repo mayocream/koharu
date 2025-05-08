@@ -13,7 +13,10 @@ struct Args {
     image: String,
 
     #[arg(long)]
-    model: String,
+    encoder_model: String,
+
+    #[arg(long)]
+    decoder_model: String,
 
     #[arg(long)]
     vocab: String,
@@ -22,10 +25,15 @@ struct Args {
 fn main() -> anyhow::Result<()> {
     let args = Args::parse();
 
-    let model = Session::builder()?
+    let encoder_model = Session::builder()?
         .with_optimization_level(GraphOptimizationLevel::Level3)?
         .with_intra_threads(4)?
-        .commit_from_file(args.model)?;
+        .commit_from_file(args.encoder_model)?;
+
+    let decoder_model = Session::builder()?
+        .with_optimization_level(GraphOptimizationLevel::Level3)?
+        .with_intra_threads(4)?
+        .commit_from_file(args.decoder_model)?;
 
     let vocab = fs::read_to_string(args.vocab)
         .map_err(|e| anyhow::anyhow!("Failed to read vocab file: {e}"))?
@@ -51,6 +59,12 @@ fn main() -> anyhow::Result<()> {
         tensor[[0, 2, y, x]] = (pixel[2] as f32 / 255.0 - 0.5) / 0.5;
     }
 
+    let inputs = inputs! {
+        "pixel_values" => tensor.view(),
+    }?;
+    let outputs = encoder_model.run(inputs)?;
+    let encoder_hidden_states = outputs[0].try_extract_tensor::<f32>()?;
+
     // generate
     let mut token_ids: Vec<i64> = vec![2i64]; // Start token
 
@@ -58,12 +72,12 @@ fn main() -> anyhow::Result<()> {
         // Create input tensors
         let input = Array::from_shape_vec((1, token_ids.len()), token_ids.clone())?;
         let inputs = inputs! {
-            "image" => tensor.view(),
-            "token_ids" => input,
+            "encoder_hidden_states" => encoder_hidden_states.view(),
+            "input_ids" => input,
         }?;
 
         // Run inference
-        let outputs = model.run(inputs)?;
+        let outputs = decoder_model.run(inputs)?;
 
         // Extract logits from output
         let logits = outputs["logits"].try_extract_tensor::<f32>()?;
