@@ -1,5 +1,5 @@
 import { useCanvasStore, useSettingsStore, useWorkflowStore } from '@/lib/state'
-import { Button } from '@radix-ui/themes'
+import { Badge, Button, Text } from '@radix-ui/themes'
 import { Play } from 'lucide-react'
 import OpenAI from 'openai'
 import { useState } from 'react'
@@ -88,7 +88,10 @@ function TranslationPanel() {
             onMouseEnter={() => setSelectedTextIndex(index)}
             onMouseLeave={() => setSelectedTextIndex(null)}
           >
-            {block.translatedText || 'No translation available'}
+            <Text className='flex gap-2'>
+              <Badge>{index + 1}</Badge>
+              {block.translatedText || 'No translation available'}
+            </Text>
           </div>
         ))}
       </div>

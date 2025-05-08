@@ -3,7 +3,7 @@ import { Play } from 'lucide-react'
 import { invoke } from '@tauri-apps/api/core'
 import { useEffect, useState } from 'react'
 import { debug } from '@tauri-apps/plugin-log'
-import { Button } from '@radix-ui/themes'
+import { Badge, Button, Text } from '@radix-ui/themes'
 
 function OCRPanel() {
   const { imageSrc, texts, setTexts } = useCanvasStore()
@@ -99,7 +99,10 @@ function OCRPanel() {
             onMouseEnter={() => setSelectedTextIndex(index)}
             onMouseLeave={() => setSelectedTextIndex(null)}
           >
-            {block.text || 'No text detected'}
+            <Text className='flex gap-2'>
+              <Badge>{index + 1}</Badge>
+              {block.text || 'No text detected'}
+            </Text>
           </div>
         ))}
       </div>

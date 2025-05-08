@@ -20,7 +20,7 @@ export default function RootLayout({
       <body
         className={`${notoSansJP.className} ${notoSansSC.className} antialiased`}
       >
-        <Theme>{children}</Theme>
+        <Theme accentColor='ruby'>{children}</Theme>
       </body>
     </html>
   )
