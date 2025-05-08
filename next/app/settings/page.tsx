@@ -35,6 +35,14 @@ export default function Settings() {
           <div className='rounded-lg bg-white p-6 shadow-md'>
             <h2 className='mb-6 text-xl font-semibold'>API Settings</h2>
 
+            <p className='mb-4 text-sm text-gray-500'>
+              Configure OpenAI API settings for the translation model. You can
+              use LM Studio or any other OpenAI-compatible API. If you are using
+              LM Studio, please set the server URL to
+              <code className='mx-1'>http://localhost:1234/v1</code>, and enable
+              the CORS option in the LM Studio settings.
+            </p>
+
             {/* Form inputs */}
             <div className='max-w-2xl space-y-6'>
               <div className='space-y-2'>
@@ -69,7 +77,7 @@ export default function Settings() {
                   defaultValue={openAIToken}
                   onChange={(e) => setOpenAIToken(e.target.value)}
                   className='w-full rounded-md border border-gray-300 px-3 py-2 shadow-sm focus:ring-2 focus:ring-blue-500 focus:outline-none'
-                  placeholder='sk-...'
+                  placeholder='Leave empty for local server'
                 />
               </div>
 
@@ -86,7 +94,7 @@ export default function Settings() {
                   defaultValue={openAIModel}
                   onChange={(e) => setOpenAIModel(e.target.value)}
                   className='w-full rounded-md border border-gray-300 px-3 py-2 shadow-sm focus:ring-2 focus:ring-blue-500 focus:outline-none'
-                  placeholder='sakura-galtransl-7b-v3'
+                  placeholder='qwen3-32b@q4_k_m'
                 />
               </div>
             </div>
