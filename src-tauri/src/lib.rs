@@ -90,6 +90,10 @@ pub fn run() -> anyhow::Result<()> {
             tauri_plugin_log::Builder::new()
                 .level(log::LevelFilter::Debug)
                 .level_for("ort::environment", log::LevelFilter::Info)
+                .level_for(
+                    "tao::platform_impl::platform::event_loop::runner",
+                    log::LevelFilter::Error,
+                )
                 .build(),
         )
         .plugin(tauri_plugin_dialog::init())
