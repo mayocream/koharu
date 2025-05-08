@@ -151,7 +151,9 @@ function Canvas() {
             )}
           </Layer>
           <Layer ref={inpaintLayerRef}>
-            <Image image={inpaintCanvas ?? null} />
+            {selectedTool === 'inpaint' && (
+              <Image image={inpaintCanvas ?? null} />
+            )}
           </Layer>
         </Stage>
       </div>
