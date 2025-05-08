@@ -1,7 +1,7 @@
 'use client'
 
 import { open } from '@tauri-apps/plugin-dialog'
-import { Image, Download, Settings } from 'lucide-react'
+import { Image, Settings } from 'lucide-react'
 import { debug } from '@tauri-apps/plugin-log'
 import { convertFileSrc } from '@tauri-apps/api/core'
 import { useCanvasStore } from '@/lib/state'
@@ -10,8 +10,7 @@ import { Button } from '@radix-ui/themes'
 
 function Topbar() {
   const router = useRouter()
-  const { setImageSrc, setTexts, setSegment, setImageSrcHistory } =
-    useCanvasStore()
+  const { setImageSrc, setTexts, setSegment } = useCanvasStore()
   const handleOpenFile = async () => {
     const selected = await open({
       multiple: false,
@@ -31,7 +30,6 @@ function Topbar() {
     }
 
     const imageUrl = convertFileSrc(selected)
-    setImageSrcHistory(imageUrl)
     setImageSrc(imageUrl)
     setTexts([]) // Clear blocks when a new image is loaded
     setSegment(null) // Clear segment when a new image is loaded

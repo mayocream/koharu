@@ -1,12 +1,12 @@
 import { useCanvasStore, useWorkflowStore } from '@/lib/state'
-import { Check, Loader, Pencil, Play, X } from 'lucide-react'
+import { Play } from 'lucide-react'
 import { invoke } from '@tauri-apps/api/core'
 import { useEffect, useState } from 'react'
 import { debug } from '@tauri-apps/plugin-log'
 import { Button } from '@radix-ui/themes'
 
 function OCRPanel() {
-  const { imageSrc, imageSrcHistory, texts, setTexts } = useCanvasStore()
+  const { imageSrc, texts, setTexts } = useCanvasStore()
   const { selectedTextIndex, setSelectedTextIndex } = useWorkflowStore()
   const [loading, setLoading] = useState(false)
   const [imageData, setImageData] = useState<ImageBitmap | null>(null)
@@ -46,7 +46,6 @@ function OCRPanel() {
         }
       })
     )
-    if (imageSrcHistory[imageSrcHistory.length - 1] !== src) return
 
     setTexts(newTexts)
     setLoading(false)

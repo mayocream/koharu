@@ -5,8 +5,7 @@ import { useEffect, useState } from 'react'
 import { Button } from '@radix-ui/themes'
 
 function DetectionPanel() {
-  const { imageSrc, imageSrcHistory, texts, setTexts, setSegment } =
-    useCanvasStore()
+  const { imageSrc, texts, setTexts, setSegment } = useCanvasStore()
   const [loading, setLoading] = useState(false)
   const inference = async (src: string) => {
     setLoading(true)
@@ -15,7 +14,6 @@ function DetectionPanel() {
       image: buffer,
     })
 
-    if (imageSrcHistory[imageSrcHistory.length - 1] !== src) return
     setSegment(result.segment)
 
     result.bboxes.sort((a: any, b: any) => {
