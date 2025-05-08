@@ -73,7 +73,8 @@ function TranslationPanel() {
         </Button>
       </div>
       {/* Body */}
-      <div className='flex items-center border-b border-gray-200 p-3'>
+      <div className='flex flex-col border-b border-gray-200 p-3'>
+        <Text className='text-sm'>System Prompt</Text>
         <TextArea
           className='w-full rounded-md border border-gray-300 px-2 py-1 text-sm focus:ring-2 focus:ring-blue-500 focus:outline-none'
           placeholder='You are a manga translator, translate Japanese to English while preserve order of the text.'
