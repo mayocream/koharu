@@ -1,6 +1,6 @@
 import { useCanvasStore, useSettingsStore, useWorkflowStore } from '@/lib/state'
 import { Button } from '@radix-ui/themes'
-import { Loader, Play } from 'lucide-react'
+import { Play } from 'lucide-react'
 import OpenAI from 'openai'
 import { useState } from 'react'
 

@@ -30,9 +30,10 @@ function Topbar() {
     }
 
     const imageUrl = convertFileSrc(selected)
-    setImageSrc(imageUrl)
+
     setTexts([]) // Clear blocks when a new image is loaded
     setSegment(null) // Clear segment when a new image is loaded
+    setImageSrc(imageUrl)
   }
 
   return (

@@ -1,5 +1,5 @@
 import { useCanvasStore } from '@/lib/state'
-import { Loader, Play } from 'lucide-react'
+import { Play } from 'lucide-react'
 import { invoke } from '@tauri-apps/api/core'
 import { useEffect, useState } from 'react'
 import { Button } from '@radix-ui/themes'
@@ -31,7 +31,7 @@ function DetectionPanel() {
     if (imageSrc && texts.length === 0) {
       inference(imageSrc)
     }
-  }, [imageSrc])
+  }, [imageSrc, texts])
 
   return (
     <div className='flex w-72 flex-col rounded-lg border border-gray-200 bg-white shadow-md'>

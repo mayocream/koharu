@@ -71,7 +71,7 @@ function OCRPanel() {
     if (texts.length && texts.every((block) => !block.text)) {
       inference(imageSrc)
     }
-  }, [texts])
+  }, [imageSrc, texts])
 
   return (
     <div className='flex w-72 flex-col rounded-lg border border-gray-200 bg-white shadow-md'>

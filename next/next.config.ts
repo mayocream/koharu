@@ -10,6 +10,7 @@ const nextConfig: NextConfig = {
   },
   distDir: './dist',
   assetPrefix: isProd ? undefined : `http://${internalHost}:9000`,
+  reactStrictMode: false,
 }
 
 export default nextConfig
