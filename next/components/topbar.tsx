@@ -6,7 +6,7 @@ import { debug } from '@tauri-apps/plugin-log'
 import { convertFileSrc } from '@tauri-apps/api/core'
 import { useCanvasStore } from '@/lib/state'
 import { useRouter } from 'next/navigation'
-import { Button } from 'react-aria-components'
+import { Button } from '@radix-ui/themes'
 
 function Topbar() {
   const router = useRouter()
@@ -39,28 +39,25 @@ function Topbar() {
 
   return (
     <div className='fixed z-50 flex w-full items-center border-b border-gray-200 bg-white p-2 shadow-sm'>
-      <div className='flex items-center'>
-        <Button
-          className='mx-1 flex items-center rounded p-2 text-gray-600 hover:bg-gray-100'
-          onClick={handleOpenFile}
-        >
-          <Image size={18} />
+      <div className='mx-1 flex items-center'>
+        <Button onClick={handleOpenFile} variant='soft'>
+          <Image size={20} />
         </Button>
       </div>
 
       <div className='flex-grow' />
-      <div className='flex items-center'>
+      <div className='mx-1 flex items-center gap-1'>
         <Button
-          className='mx-1 flex items-center rounded p-2 text-gray-600 hover:bg-gray-100'
+          variant='soft'
           onClick={() => {
             router.push('/settings')
           }}
         >
-          <Settings size={18} />
+          <Settings size={20} />
         </Button>
 
-        <Button className='mx-1 flex items-center rounded p-2 text-gray-600 hover:bg-gray-100'>
-          <Download size={18} />
+        <Button variant='soft'>
+          <Download size={20} />
         </Button>
       </div>
     </div>

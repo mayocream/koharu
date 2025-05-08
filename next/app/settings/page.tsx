@@ -1,9 +1,9 @@
 'use client'
 
 import { useSettingsStore } from '@/lib/state'
+import { Button, TextField } from '@radix-ui/themes'
 import { ArrowLeft } from 'lucide-react'
 import { useRouter } from 'next/navigation'
-import { Button } from 'react-aria-components'
 
 export default function Settings() {
   const router = useRouter()
@@ -21,11 +21,8 @@ export default function Settings() {
     <div className='flex min-h-screen w-full flex-col bg-gray-100'>
       {/* Header with back button */}
       <div className='bg-white p-4 shadow-sm'>
-        <div className='mx-auto flex max-w-7xl items-center'>
-          <Button
-            className='mr-4 cursor-pointer rounded-full p-2 transition-colors hover:bg-gray-100'
-            onClick={() => router.replace('/')}
-          >
+        <div className='mx-auto flex max-w-7xl items-center gap-4'>
+          <Button onClick={() => router.replace('/')} variant='ghost'>
             <ArrowLeft size={18} />
           </Button>
           <h1 className='text-xl'>Settings</h1>
@@ -47,7 +44,8 @@ export default function Settings() {
                 >
                   OpenAI Server URL
                 </label>
-                <input
+                <TextField.Root
+                  size='3'
                   id='server-url'
                   type='text'
                   defaultValue={openAIServer}
@@ -64,7 +62,8 @@ export default function Settings() {
                 >
                   API Token
                 </label>
-                <input
+                <TextField.Root
+                  size='3'
                   id='api-token'
                   type='password'
                   defaultValue={openAIToken}
@@ -81,7 +80,8 @@ export default function Settings() {
                 >
                   Model
                 </label>
-                <input
+                <TextField.Root
+                  size='3'
                   id='model'
                   defaultValue={openAIModel}
                   onChange={(e) => setOpenAIModel(e.target.value)}

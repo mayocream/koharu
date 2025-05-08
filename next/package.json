@@ -9,6 +9,7 @@
     "lint": "next lint"
   },
   "dependencies": {
+    "@radix-ui/themes": "^3.2.1",
     "@tauri-apps/api": "^2.5.0",
     "@tauri-apps/plugin-dialog": "~2.2.1",
     "@tauri-apps/plugin-log": "~2.4.0",
@@ -20,7 +21,6 @@
     "next": "15.3.1",
     "openai": "^4.97.0",
     "react": "^19.1.0",
-    "react-aria-components": "^1.8.0",
     "react-dom": "^19.1.0",
     "react-konva": "^19.0.3",
     "zustand": "^5.0.4"

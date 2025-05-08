@@ -1,8 +1,8 @@
 import { useCanvasStore, useSettingsStore, useWorkflowStore } from '@/lib/state'
+import { Button } from '@radix-ui/themes'
 import { Loader, Play } from 'lucide-react'
 import OpenAI from 'openai'
 import { useState } from 'react'
-import { Button } from 'react-aria-components'
 
 function TranslationPanel() {
   const { texts, setTexts } = useCanvasStore()
@@ -59,15 +59,12 @@ function TranslationPanel() {
         <h2 className='font-medium'>Translation</h2>
         <div className='flex-grow'></div>
         <Button
-          className='cursor-pointer rounded-full p-2 text-gray-500 hover:bg-gray-100 hover:text-gray-700'
-          isPending={loading}
+          disabled={loading}
           onClick={translate}
+          loading={loading}
+          variant='soft'
         >
-          {loading ? (
-            <Loader className='h-4 w-4 animate-spin' />
-          ) : (
-            <Play className='h-4 w-4' />
-          )}
+          <Play className='h-4 w-4' />
         </Button>
       </div>
       {/* Body */}

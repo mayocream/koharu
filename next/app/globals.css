@@ -1,4 +1,5 @@
 @import 'tailwindcss';
+@import '@radix-ui/themes/styles.css';
 
 ::-webkit-scrollbar {
   width: 8px;

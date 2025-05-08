@@ -3,15 +3,13 @@ import { Check, Loader, Pencil, Play, X } from 'lucide-react'
 import { invoke } from '@tauri-apps/api/core'
 import { useEffect, useState } from 'react'
 import { debug } from '@tauri-apps/plugin-log'
-import { Button } from 'react-aria-components'
+import { Button } from '@radix-ui/themes'
 
 function OCRPanel() {
   const { imageSrc, imageSrcHistory, texts, setTexts } = useCanvasStore()
   const { selectedTextIndex, setSelectedTextIndex } = useWorkflowStore()
   const [loading, setLoading] = useState(false)
   const [imageData, setImageData] = useState<ImageBitmap | null>(null)
-  const [isTextEditMode, setIsTextEditMode] = useState(false)
-  const [editedText, setEditedText] = useState([])
 
   const cropImage = async (
     xmin: number,
@@ -35,7 +33,6 @@ function OCRPanel() {
     debug(`Starting OCR inference...`)
 
     setLoading(true)
-    setIsTextEditMode(false)
     const newTexts = await Promise.all(
       texts.map(async (block) => {
         const { xmin, ymin, xmax, ymax } = block
@@ -67,30 +64,6 @@ function OCRPanel() {
     setImageData(bitmap)
   }
 
-  const handleEditModeChange = () => {
-    setEditedText(texts.map((block) => block.text))
-    setIsTextEditMode(true)
-  }
-
-  const handleTextEdit = (index: number, value: string) => {
-    const newTexts = [...editedText]
-    newTexts[index] = value
-    setEditedText(newTexts)
-  }
-  const handleTextSave = () => {
-    const newTexts = texts.map((block, index) => ({
-      ...block,
-      text: editedText[index],
-    }))
-    setTexts(newTexts)
-    setIsTextEditMode(false)
-  }
-
-  const handleTextUnsave = () => {
-    setEditedText(texts.map((block) => block.text))
-    setIsTextEditMode(false)
-  }
-
   useEffect(() => {
     loadImage(imageSrc)
   }, [imageSrc])
@@ -107,47 +80,13 @@ function OCRPanel() {
       <div className='flex items-center p-3'>
         <h2 className='font-medium'>OCR</h2>
         <div className='flex-grow'></div>
-        {texts.length > 0 &&
-          !loading &&
-          (isTextEditMode ? (
-            <>
-              <Button
-                className='cursor-pointer rounded-full p-2 text-gray-500 hover:bg-gray-100 hover:text-gray-700'
-                onClick={handleTextUnsave}
-                isPending={loading}
-              >
-                <X className='h-4 w-4' />
-              </Button>
-              <Button
-                className='cursor-pointer rounded-full p-2 text-gray-500 hover:bg-gray-100 hover:text-gray-700'
-                onClick={handleTextSave}
-                isPending={loading}
-              >
-                <Check className='h-4 w-4' />
-              </Button>
-            </>
-          ) : (
-            <Button
-              className='cursor-pointer rounded-full p-2 text-gray-500 hover:bg-gray-100 hover:text-gray-700'
-              onClick={handleEditModeChange}
-              isPending={loading}
-            >
-              <Pencil className='h-4 w-4' />
-            </Button>
-          ))}
-        {!isTextEditMode && (
-          <Button
-            className='cursor-pointer rounded-full p-2 text-gray-500 hover:bg-gray-100 hover:text-gray-700'
-            onClick={() => inference(imageSrc)}
-            isPending={loading}
-          >
-            {loading ? (
-              <Loader className='h-4 w-4 animate-spin' />
-            ) : (
-              <Play className='h-4 w-4' />
-            )}
-          </Button>
-        )}
+        <Button
+          onClick={() => inference(imageSrc)}
+          loading={loading}
+          variant='soft'
+        >
+          <Play className='h-4 w-4' />
+        </Button>
       </div>
       <div className='flex flex-col justify-center'>
         {texts.map((block, index) => (
@@ -161,15 +100,7 @@ function OCRPanel() {
             onMouseEnter={() => setSelectedTextIndex(index)}
             onMouseLeave={() => setSelectedTextIndex(null)}
           >
-            {isTextEditMode ? (
-              <textarea
-                value={editedText[index]}
-                onChange={(e) => handleTextEdit(index, e.target.value)}
-                className='w-full resize-none rounded border border-gray-200 bg-transparent leading-snug focus:border-gray-400 focus:outline-none'
-              />
-            ) : (
-              block.text || 'No text detected'
-            )}
+            {block.text || 'No text detected'}
           </div>
         ))}
       </div>

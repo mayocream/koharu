@@ -1,8 +1,8 @@
 'use client'
 
 import { useCanvasStore } from '@/lib/state'
+import { Button } from '@radix-ui/themes'
 import { Minus, Plus } from 'lucide-react'
-import { Button } from 'react-aria-components'
 
 function ScaleControl() {
   const { scale, setScale } = useCanvasStore()
@@ -11,9 +11,9 @@ function ScaleControl() {
     <div className='fixed bottom-10 left-20'>
       <div className='flex items-center rounded-xl border border-gray-200 bg-gray-50 p-1 shadow-sm'>
         <Button
-          className='flex h-8 w-8 cursor-pointer items-center justify-center rounded-lg text-gray-700 hover:bg-gray-200'
           onClick={() => setScale(scale - 0.1)}
-          isDisabled={scale <= 0.1}
+          disabled={scale <= 0.1}
+          variant='soft'
         >
           <Minus size={18} className='text-gray-700' />
         </Button>
@@ -21,9 +21,9 @@ function ScaleControl() {
           {(scale * 100).toFixed(0)}%
         </span>
         <Button
-          className='flex h-8 w-8 cursor-pointer items-center justify-center rounded-lg text-gray-700 hover:bg-gray-200'
           onClick={() => setScale(scale + 0.1)}
-          isDisabled={scale >= 2.0}
+          disabled={scale >= 2.0}
+          variant='soft'
         >
           <Plus size={18} className='text-gray-700' />
         </Button>
