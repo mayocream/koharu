@@ -25,10 +25,6 @@ The build is available for Windows, MacOS, and Linux. You can download the lates
 
 Koharu is built using Tauri, a framework for building lightweight, secure, and fast desktop applications. The interface is built with React and Konva, written in TypeScript. The machine learning models are re-implemented in Rust, using the Ort ONNX runtime for inference. The models are optimized for performance and can run on any machine without the need for a GPU.
 
-## Guidance
-
-To use CUDA acceleration, you need to install the [CUDA toolkit 12.6](https://developer.nvidia.com/cuda-12-6-0-download-archive) and the [cuDNN 9.8.0 for CUDA 12](https://developer.nvidia.com/cudnn-downloads) library.
-
 ## Workflow
 
 The workflow of translation consists of the following steps:
@@ -49,6 +45,16 @@ You can find the ONNX models we actually use below:
 - [comic-text-detector-onnx](https://huggingface.co/mayocream/comic-text-detector-onnx)
 - [manga-ocr-onnx](https://huggingface.co/mayocream/manga-ocr-onnx)
 - [lama-manga-onnx](https://huggingface.co/mayocream/lama-manga-onnx)
+
+### Features
+
+To enable `cuda` acceleration, run `bun` with the `--features cuda` flag:
+
+```bash
+bun tauri dev --features cuda
+```
+
+To use CUDA acceleration, you need to install the [CUDA toolkit](https://developer.nvidia.com/cuda-downloads) and the [cuDNN](https://developer.nvidia.com/cudnn-downloads) library.
 
 ## Development
 
@@ -83,12 +89,4 @@ To create a debug build, run:
 
 ```bash
 bun tauri build --debug
-```
-
-### Features
-
-To enable `cuda` acceleration, run `bun` with the `--features cuda` flag:
-
-```bash
-bun tauri dev --features cuda
 ```
