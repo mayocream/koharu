@@ -1,14 +1,14 @@
 import { useState, useEffect } from 'react'
 
-export function useImageLoader(src: string | null) {
+export function useImageLoader(image: Uint8Array | null) {
   const [imageData, setImageData] = useState<ImageBitmap | null>(null)
 
   useEffect(() => {
-    if (!src) return
+    if (!image) return
 
     const loadImage = async () => {
       try {
-        const blob = await fetch(src).then((res) => res.blob())
+        const blob = new Blob([image], { type: 'image/png' })
         const bitmap = await createImageBitmap(blob)
         setImageData(bitmap)
       } catch (err) {
@@ -16,7 +16,7 @@ export function useImageLoader(src: string | null) {
       }
     }
     loadImage()
-  }, [src])
+  }, [image])
 
   return imageData
 }

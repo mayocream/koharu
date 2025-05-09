@@ -13,7 +13,6 @@ export function useInpaintLoader(
   imageData: ImageBitmap | null,
   segmentCanvas: OffscreenCanvas | null,
   texts: TextBlock[],
-  imageSrc: string | null,
   onPutImageDataComplete: () => void
 ) {
   const [inpaintCanvas, setInpaintCanvas] = useState<OffscreenCanvas | null>(
@@ -125,10 +124,6 @@ export function useInpaintLoader(
 
     loadInapint()
   }, [imageData, segmentCanvas, texts])
-
-  useEffect(() => {
-    setInpaintCanvas(null)
-  }, [imageSrc])
 
   return inpaintCanvas
 }

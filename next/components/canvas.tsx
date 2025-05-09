@@ -10,11 +10,11 @@ import { useSegmentLoader } from '@/hooks/segment-loader'
 import { useInpaintLoader } from '@/hooks/inpaint-loader'
 
 function Canvas() {
-  const { imageSrc, scale, texts, segment } = useCanvasStore()
+  const { image, scale, texts, segment } = useCanvasStore()
   const { selectedTextIndex, setSelectedTextIndex, selectedTool } =
     useWorkflowStore()
-  const imageData = useImageLoader(imageSrc)
-  const segmentCanvas = useSegmentLoader(segment, imageData, imageSrc)
+  const imageData = useImageLoader(image)
+  const segmentCanvas = useSegmentLoader(segment, imageData)
   const containerRef = useRef<HTMLDivElement>(null)
 
   const triggerInpaintLayerDraw = () => inpaintLayerRef.current?.batchDraw()
@@ -23,7 +23,6 @@ function Canvas() {
     imageData,
     segmentCanvas,
     texts,
-    imageSrc,
     triggerInpaintLayerDraw
   )
   const [selected, setSelected] = useState<any>(null)

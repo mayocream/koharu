@@ -2,44 +2,42 @@
 
 import { open } from '@tauri-apps/plugin-dialog'
 import { Image, Settings } from 'lucide-react'
-import { debug } from '@tauri-apps/plugin-log'
-import { convertFileSrc } from '@tauri-apps/api/core'
 import { useCanvasStore } from '@/lib/state'
 import { useRouter } from 'next/navigation'
 import { Button } from '@radix-ui/themes'
+import { readFile } from '@tauri-apps/plugin-fs'
 
 function Topbar() {
   const router = useRouter()
-  const { setImageSrc, setTexts, setSegment } = useCanvasStore()
-  const handleOpenFile = async () => {
-    const selected = await open({
-      multiple: false,
-      filters: [
-        {
-          name: 'Image',
-          extensions: ['png', 'jpeg', 'jpg'],
-        },
-      ],
-    })
+  const { setImage, setTexts, setSegment } = useCanvasStore()
 
-    debug(`Opened file: ${selected}`)
+  const handleOpenImage = async () => {
+    try {
+      const selected = await open({
+        multiple: false,
+        filters: [
+          {
+            name: 'Images',
+            extensions: ['png', 'jpg', 'jpeg'],
+          },
+        ],
+      })
 
-    if (!selected) {
-      debug('No file selected')
-      return
+      if (!selected) return
+
+      const imageData = await readFile(selected)
+      setTexts([])
+      setSegment(null)
+      setImage(imageData)
+    } catch (err) {
+      console.error('Error opening image:', err)
     }
-
-    const imageUrl = convertFileSrc(selected)
-
-    setTexts([]) // Clear blocks when a new image is loaded
-    setSegment(null) // Clear segment when a new image is loaded
-    setImageSrc(imageUrl)
   }
 
   return (
     <div className='flex w-full items-center border-b border-gray-200 bg-white p-2 shadow-sm'>
       <div className='mx-1 flex items-center'>
-        <Button onClick={handleOpenFile} variant='soft'>
+        <Button onClick={handleOpenImage} variant='soft'>
           <Image size={20} />
         </Button>
       </div>

@@ -2,41 +2,28 @@ import { useCanvasStore, useWorkflowStore } from '@/lib/state'
 import { Play } from 'lucide-react'
 import { invoke } from '@tauri-apps/api/core'
 import { useEffect, useState } from 'react'
-import { debug } from '@tauri-apps/plugin-log'
 import { Badge, Button, Text } from '@radix-ui/themes'
+import { cropImage } from '@/utils/image-crop'
+import { useImageLoader } from '@/hooks/image-loader'
 
-function OCRPanel() {
-  const { imageSrc, texts, setTexts } = useCanvasStore()
+export default function OCRPanel() {
+  const { image, texts, setTexts } = useCanvasStore()
   const { selectedTextIndex, setSelectedTextIndex } = useWorkflowStore()
   const [loading, setLoading] = useState(false)
-  const [imageData, setImageData] = useState<ImageBitmap | null>(null)
+  const imageData = useImageLoader(image)
 
-  const cropImage = async (
-    xmin: number,
-    ymin: number,
-    xmax: number,
-    ymax: number
-  ) => {
-    const width = xmax - xmin
-    const height = ymax - ymin
-    const canvas = new OffscreenCanvas(width, height)
-    const ctx = canvas.getContext('2d')!
-
-    ctx.drawImage(imageData, xmin, ymin, width, height, 0, 0, width, height)
-    const croppedImage = await canvas.convertToBlob()
-    return await croppedImage.arrayBuffer()
-  }
-
-  const inference = async (src: string) => {
-    if (!imageData || texts.length === 0) return
-
-    debug(`Starting OCR inference...`)
-
+  const inference = async () => {
     setLoading(true)
     const newTexts = await Promise.all(
       texts.map(async (block) => {
         const { xmin, ymin, xmax, ymax } = block
-        const croppedImageBuffer = await cropImage(xmin, ymin, xmax, ymax)
+        const croppedImageBuffer = await cropImage(
+          imageData,
+          xmin,
+          ymin,
+          xmax,
+          ymax
+        )
         const result = await invoke('ocr', {
           image: croppedImageBuffer,
         })
@@ -49,29 +36,13 @@ function OCRPanel() {
 
     setTexts(newTexts)
     setLoading(false)
-
-    debug(`OCR result: ${JSON.stringify(newTexts)}`)
   }
-
-  const loadImage = async (src: string) => {
-    if (!src) return
-
-    setLoading(false)
-
-    const blob = await fetch(src).then((res) => res.blob())
-    const bitmap = await createImageBitmap(blob)
-    setImageData(bitmap)
-  }
-
-  useEffect(() => {
-    loadImage(imageSrc)
-  }, [imageSrc])
 
   useEffect(() => {
     if (texts.length && texts.every((block) => !block.text)) {
-      inference(imageSrc)
+      inference()
     }
-  }, [imageSrc, texts])
+  }, [image, texts])
 
   return (
     <div className='flex h-[600px] w-full flex-col rounded-lg border border-gray-200 bg-white shadow-md'>
@@ -79,16 +50,12 @@ function OCRPanel() {
       <div className='flex flex-shrink-0 items-center-safe p-3'>
         <h2 className='font-medium'>OCR</h2>
         <div className='flex-grow'></div>
-        <Button
-          onClick={() => inference(imageSrc)}
-          loading={loading}
-          variant='soft'
-        >
+        <Button onClick={inference} loading={loading} variant='soft'>
           <Play className='h-4 w-4' />
         </Button>
       </div>
       <div className='flex flex-col overflow-y-auto'>
-        {texts.map((block, index) => (
+        {texts?.map((block, index) => (
           <div
             key={index}
             className='cursor-pointer border-b border-gray-200 px-4 py-2 text-sm last:border-b-0'
@@ -109,5 +76,3 @@ function OCRPanel() {
     </div>
   )
 }
-
-export default OCRPanel

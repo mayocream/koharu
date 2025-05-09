@@ -1,9 +1,8 @@
 import { useState, useEffect } from 'react'
 
 export function useSegmentLoader(
-  segment: Uint8Array<ArrayBufferLike> | null,
-  imageData: ImageBitmap | null,
-  imageSrc: string | null
+  segment: Uint8Array | null,
+  imageData: ImageBitmap | null
 ) {
   const [segmentCanvas, setSegmentCanvas] = useState<OffscreenCanvas | null>(
     null
@@ -47,10 +46,6 @@ export function useSegmentLoader(
 
     setSegmentCanvas(mask)
   }, [segment, imageData])
-
-  useEffect(() => {
-    setSegmentCanvas(null)
-  }, [imageSrc])
 
   return segmentCanvas
 }

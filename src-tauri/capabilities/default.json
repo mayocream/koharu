@@ -11,6 +11,7 @@
     "dialog:default",
     "log:default",
     "store:default",
-    "notification:default"
+    "notification:default",
+    "fs:default"
   ]
 }

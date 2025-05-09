@@ -20,8 +20,8 @@ const createStorage = (name: string) => {
 }
 
 type CanvasState = {
-  imageSrc: string | null
-  setImageSrc: (src: string | null) => void
+  image: Uint8Array | null
+  setImage: (image: Uint8Array | null) => void
   scale: number
   setScale: (scale: number) => void
   texts: any[]
@@ -33,8 +33,8 @@ type CanvasState = {
 export const useCanvasStore = create<CanvasState>()(
   persist(
     (set, get) => ({
-      imageSrc: null,
-      setImageSrc: (src) => set({ imageSrc: src }),
+      image: null,
+      setImage: (image) => set({ image }),
       scale: 1,
       setScale: (scale) => set({ scale }),
       texts: [],
