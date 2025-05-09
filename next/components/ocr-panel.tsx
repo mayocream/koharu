@@ -74,9 +74,9 @@ function OCRPanel() {
   }, [imageSrc, texts])
 
   return (
-    <div className='flex w-full flex-col rounded-lg border border-gray-200 bg-white shadow-md'>
+    <div className='flex h-[600px] w-full flex-col rounded-lg border border-gray-200 bg-white shadow-md'>
       {/* Header */}
-      <div className='flex items-center p-3'>
+      <div className='flex flex-shrink-0 items-center-safe p-3'>
         <h2 className='font-medium'>OCR</h2>
         <div className='flex-grow'></div>
         <Button
@@ -87,11 +87,11 @@ function OCRPanel() {
           <Play className='h-4 w-4' />
         </Button>
       </div>
-      <div className='flex flex-col justify-center'>
+      <div className='flex flex-col overflow-y-auto'>
         {texts.map((block, index) => (
           <div
             key={index}
-            className='cursor-pointer border-b border-gray-200 px-4 py-2 text-sm'
+            className='cursor-pointer border-b border-gray-200 px-4 py-2 text-sm last:border-b-0'
             style={{
               backgroundColor:
                 selectedTextIndex === index ? 'rgba(147, 140, 140, 0.3)' : '',

@@ -58,7 +58,7 @@ function TranslationPanel() {
   }
 
   return (
-    <div className='flex w-full flex-col rounded-lg border border-gray-200 bg-white shadow-md'>
+    <div className='flex h-[800px] w-full flex-col rounded-lg border border-gray-200 bg-white shadow-md'>
       {/* Header */}
       <div className='flex items-center p-3'>
         <h2 className='font-medium'>Translation</h2>
@@ -82,7 +82,7 @@ function TranslationPanel() {
           onChange={(e) => setPrompt(e.target.value)}
         />
       </div>
-      <div className='flex flex-col justify-center'>
+      <div className='flex flex-col overflow-y-auto'>
         {texts.map((block, index) => (
           <div
             key={index}
