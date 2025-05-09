@@ -8,7 +8,7 @@ function ScaleControl() {
   const { scale, setScale } = useCanvasStore()
 
   return (
-    <div className='fixed bottom-5 left-5'>
+    <div className='absolute bottom-5 left-5 z-10'>
       <div className='flex items-center rounded-xl border border-gray-200 bg-gray-50 p-1 shadow-sm'>
         <Button
           onClick={() => setScale(scale - 0.1)}

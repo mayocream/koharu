@@ -37,7 +37,7 @@ function Topbar() {
   }
 
   return (
-    <div className='fixed z-50 flex w-full items-center border-b border-gray-200 bg-white p-2 shadow-sm'>
+    <div className='flex w-full items-center border-b border-gray-200 bg-white p-2 shadow-sm'>
       <div className='mx-1 flex items-center'>
         <Button onClick={handleOpenFile} variant='soft'>
           <Image size={20} />

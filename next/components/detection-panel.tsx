@@ -39,7 +39,7 @@ function DetectionPanel() {
   }, [imageSrc, texts])
 
   return (
-    <div className='flex w-72 flex-col rounded-lg border border-gray-200 bg-white shadow-md'>
+    <div className='flex w-full flex-col rounded-lg border border-gray-200 bg-white shadow-md'>
       {/* Header */}
       <div className='flex items-center p-3'>
         <h2 className='font-medium'>Detection</h2>
