@@ -78,8 +78,8 @@ function Canvas() {
   return (
     <>
       <div ref={containerRef} className='relative h-full w-full flex-1'>
-        <div className='absolute inset-0 overflow-auto'>
-          <div className='absolute flex items-center justify-center'>
+        <div className='absolute inset-0 flex items-center-safe justify-center-safe overflow-auto'>
+          <div className='p-2'>
             <Stage
               ref={stageRef}
               scaleX={scale}
