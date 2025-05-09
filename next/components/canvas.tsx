@@ -16,6 +16,7 @@ function Canvas() {
   const imageData = useImageLoader(image)
   const segmentCanvas = useSegmentLoader(segment, imageData)
   const containerRef = useRef<HTMLDivElement>(null)
+  const inpaintLayerRef = useRef<Konva.Layer>(null)
 
   const triggerInpaintLayerDraw = () => inpaintLayerRef.current?.batchDraw()
 
@@ -27,16 +28,12 @@ function Canvas() {
   )
   const [selected, setSelected] = useState<any>(null)
 
-  const inpaintLayerRef = useRef<Konva.Layer>(null)
-  const stageRef = useRef<Konva.Stage>(null)
-
   return (
     <>
       <div ref={containerRef} className='relative h-full w-full flex-1'>
         <div className='absolute inset-0 flex items-center-safe justify-center-safe overflow-auto'>
           <div className='p-2'>
             <Stage
-              ref={stageRef}
               scaleX={scale}
               scaleY={scale}
               width={imageData?.width * scale}
