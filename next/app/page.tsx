@@ -15,7 +15,7 @@ function App() {
     <main className='flex h-screen max-h-screen w-screen max-w-screen flex-col bg-gray-100'>
       <Topbar />
       <div className='flex flex-1 overflow-hidden'>
-        <div className='flex h-full w-14 items-start p-3'>
+        <div className='flex h-full w-20 items-start p-3'>
           <Tools />
         </div>
 

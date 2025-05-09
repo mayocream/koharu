@@ -36,7 +36,7 @@ function Tools() {
   ]
 
   return (
-    <div className='flex w-14 flex-col items-center rounded-xl border border-gray-200 bg-gray-50 py-2 shadow-sm'>
+    <div className='flex w-20 flex-col items-center rounded-xl border border-gray-200 bg-gray-50 px-3 py-2 shadow-sm'>
       {tools.map((tool) => (
         <div className='my-2' key={tool.id}>
           <IconButton
