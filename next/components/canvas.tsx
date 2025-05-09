@@ -1,7 +1,7 @@
 'use client'
 
 import type Konva from 'konva'
-import { useState, useRef, useEffect } from 'react'
+import { useState, useRef } from 'react'
 import { Image, Layer, Rect, Stage, Transformer } from 'react-konva'
 import { useCanvasStore, useWorkflowStore } from '@/lib/state'
 import ScaleControl from './scale-control'
@@ -10,7 +10,7 @@ import { useSegmentLoader } from '@/hooks/segment-loader'
 import { useInpaintLoader } from '@/hooks/inpaint-loader'
 
 function Canvas() {
-  const { imageSrc, scale, texts, segment, setScale } = useCanvasStore()
+  const { imageSrc, scale, texts, segment } = useCanvasStore()
   const { selectedTextIndex, setSelectedTextIndex, selectedTool } =
     useWorkflowStore()
   const imageData = useImageLoader(imageSrc)
@@ -31,50 +31,6 @@ function Canvas() {
   const inpaintLayerRef = useRef<Konva.Layer>(null)
   const stageRef = useRef<Konva.Stage>(null)
 
-  const handleWheel = (e: Konva.KonvaEventObject<WheelEvent>) => {
-    if (!e.evt.ctrlKey) {
-      return
-    }
-    e.evt.preventDefault()
-
-    const stage = stageRef.current
-    if (!stage) {
-      return
-    }
-    const pointer = stage.getPointerPosition()
-    if (!pointer) {
-      return
-    }
-
-    const MIN_SCALE = 0.1
-    const MAX_SCALE = 2.0
-    const ZOOM_STEP = 0.1
-
-    const oldScale = scale
-    const direction = e.evt.deltaY < 0 ? 1 : -1
-
-    let newScale = oldScale + direction * ZOOM_STEP
-    newScale = Math.round(newScale * 100) / 100
-    newScale = Math.max(MIN_SCALE, Math.min(MAX_SCALE, newScale))
-
-    if (Math.abs(newScale - oldScale) < 0.001) {
-      return
-    }
-
-    const mousePointTo = {
-      x: (pointer.x - stage.x()) / oldScale,
-      y: (pointer.y - stage.y()) / oldScale,
-    }
-    const newPos = {
-      x: pointer.x - mousePointTo.x * newScale,
-      y: pointer.y - mousePointTo.y * newScale,
-    }
-
-    stage.position(newPos)
-
-    setScale(newScale)
-  }
-
   return (
     <>
       <div ref={containerRef} className='relative h-full w-full flex-1'>
@@ -86,7 +42,6 @@ function Canvas() {
               scaleY={scale}
               width={imageData?.width * scale}
               height={imageData?.height * scale}
-              onWheel={handleWheel}
               onClick={() => {
                 setSelected(null)
               }}
