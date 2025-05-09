@@ -11,7 +11,7 @@ function ScaleControl() {
     <div className='absolute bottom-5 left-5 z-10'>
       <div className='flex items-center rounded-xl border border-gray-200 bg-gray-50 p-1 shadow-sm'>
         <Button
-          onClick={() => setScale(scale - 0.1)}
+          onClick={() => setScale(scale - 0.05)}
           disabled={scale <= 0.1}
           variant='soft'
         >
@@ -21,7 +21,7 @@ function ScaleControl() {
           {(scale * 100).toFixed(0)}%
         </span>
         <Button
-          onClick={() => setScale(scale + 0.1)}
+          onClick={() => setScale(scale + 0.05)}
           disabled={scale >= 2.0}
           variant='soft'
         >
