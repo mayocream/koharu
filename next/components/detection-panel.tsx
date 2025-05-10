@@ -3,15 +3,18 @@ import { useCanvasStore } from '@/lib/state'
 import { Play } from 'lucide-react'
 import { invoke } from '@tauri-apps/api/core'
 import { Button, Slider, Text } from '@radix-ui/themes'
+import { readFile } from '@tauri-apps/plugin-fs'
 
 export default function DetectionPanel() {
-  const { image, texts, setTexts, setSegment } = useCanvasStore()
+  const { imagePath, texts, setTexts, setSegment } = useCanvasStore()
   const [loading, setLoading] = useState(false)
   const [confidenceThreshold, setConfidenceThreshold] = useState(0.5)
   const [nmsThreshold, setNmsThreshold] = useState(0.5)
 
   const inference = async () => {
+    if (!imagePath) return
     setLoading(true)
+    const image = await readFile(imagePath)
     const result = await invoke<any>('detect', {
       image,
       confidenceThreshold,
@@ -32,10 +35,10 @@ export default function DetectionPanel() {
 
   // auto trigger inference when image changes
   useEffect(() => {
-    if (image && texts.length === 0) {
+    if (imagePath && texts.length === 0) {
       inference()
     }
-  }, [image, texts])
+  }, [imagePath, texts])
 
   return (
     <div className='flex w-full flex-col rounded-lg border border-gray-200 bg-white shadow-md'>

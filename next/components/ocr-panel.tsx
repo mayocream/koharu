@@ -7,10 +7,10 @@ import { cropImage } from '@/utils/image-crop'
 import { useImageLoader } from '@/hooks/image-loader'
 
 export default function OCRPanel() {
-  const { image, texts, setTexts } = useCanvasStore()
+  const { imagePath, texts, setTexts } = useCanvasStore()
   const { selectedTextIndex, setSelectedTextIndex } = useWorkflowStore()
   const [loading, setLoading] = useState(false)
-  const imageData = useImageLoader(image)
+  const imageData = useImageLoader(imagePath)
 
   const inference = async () => {
     setLoading(true)
@@ -42,7 +42,7 @@ export default function OCRPanel() {
     if (texts.length && texts.every((block) => !block.text)) {
       inference()
     }
-  }, [image, texts])
+  }, [imagePath, texts])
 
   return (
     <div className='flex max-h-[600px] w-full flex-col rounded-lg border border-gray-200 bg-white shadow-md'>

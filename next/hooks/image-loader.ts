@@ -1,14 +1,16 @@
 import { useState, useEffect } from 'react'
+import { readFile } from '@tauri-apps/plugin-fs'
 
-export function useImageLoader(image: Uint8Array | null) {
+export function useImageLoader(imagePath: string | null) {
   const [imageData, setImageData] = useState<ImageBitmap | null>(null)
 
   useEffect(() => {
-    if (!image) return
+    if (!imagePath) return
 
     const loadImage = async () => {
       try {
-        const blob = new Blob([image], { type: 'image/png' })
+        const imageBuffer = await readFile(imagePath)
+        const blob = new Blob([imageBuffer], { type: 'image/png' })
         const bitmap = await createImageBitmap(blob)
         setImageData(bitmap)
       } catch (err) {
@@ -16,7 +18,7 @@ export function useImageLoader(image: Uint8Array | null) {
       }
     }
     loadImage()
-  }, [image])
+  }, [imagePath])
 
   return imageData
 }
