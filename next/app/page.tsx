@@ -7,9 +7,26 @@ import Canvas from '@/components/canvas'
 import OCRPanel from '@/components/ocr-panel'
 import { useWorkflowStore } from '@/lib/state'
 import TranslationPanel from '@/components/translation-panel'
+import SplashScreen from '@/components/splashscreen'
+import { useEffect, useState } from 'react'
+import * as detection from '@/lib/detection'
 
 function App() {
+  const [loading, setLoading] = useState(true)
   const { selectedTool } = useWorkflowStore()
+
+  useEffect(() => {
+    const initialize = async () => {
+      await detection.initialize()
+    }
+    initialize().then(() => {
+      setLoading(false)
+    })
+  }, [])
+
+  if (loading) {
+    return <SplashScreen />
+  }
 
   return (
     <main className='flex h-screen max-h-screen w-screen max-w-screen flex-col bg-gray-100'>

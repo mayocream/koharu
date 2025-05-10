@@ -1,11 +1,9 @@
 'use client'
 
-import { open } from '@tauri-apps/plugin-dialog'
 import { Image, Settings } from 'lucide-react'
 import { useCanvasStore } from '@/lib/state'
 import { useRouter } from 'next/navigation'
 import { Button } from '@radix-ui/themes'
-import { readFile } from '@tauri-apps/plugin-fs'
 
 function Topbar() {
   const router = useRouter()
@@ -13,22 +11,26 @@ function Topbar() {
 
   const handleOpenImage = async () => {
     try {
-      const selected = await open({
+      const [fileHandle] = await showOpenFilePicker({
         multiple: false,
-        filters: [
+        types: [
           {
-            name: 'Images',
-            extensions: ['png', 'jpg', 'jpeg'],
+            description: 'Images',
+            accept: {
+              'image/*': ['.png', '.jpg', '.jpeg', '.webp'],
+            },
           },
         ],
       })
 
-      if (!selected) return
+      if (!fileHandle) return
 
-      const imageData = await readFile(selected)
+      const file = await fileHandle.getFile()
+      const imageData = await file.arrayBuffer()
+
       setTexts([])
       setSegment(null)
-      setImage(imageData)
+      setImage(new Uint8Array(imageData))
     } catch (err) {
       console.error('Error opening image:', err)
     }

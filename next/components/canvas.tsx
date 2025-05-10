@@ -18,14 +18,6 @@ function Canvas() {
   const containerRef = useRef<HTMLDivElement>(null)
   const inpaintLayerRef = useRef<Konva.Layer>(null)
 
-  const triggerInpaintLayerDraw = () => inpaintLayerRef.current?.batchDraw()
-
-  const inpaintCanvas = useInpaintLoader(
-    imageData,
-    segmentCanvas,
-    texts,
-    triggerInpaintLayerDraw
-  )
   const [selected, setSelected] = useState<any>(null)
 
   return (
@@ -83,7 +75,7 @@ function Canvas() {
               </Layer>
               <Layer ref={inpaintLayerRef}>
                 {selectedTool === 'inpaint' && (
-                  <Image image={inpaintCanvas ?? null} />
+                  <Image image={null} />
                 )}
               </Layer>
             </Stage>

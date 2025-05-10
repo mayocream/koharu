@@ -1,22 +1,28 @@
+'use client'
+
 import { useEffect, useState } from 'react'
 import { useCanvasStore } from '@/lib/state'
 import { Play } from 'lucide-react'
-import { invoke } from '@tauri-apps/api/core'
 import { Button, Slider, Text } from '@radix-ui/themes'
+import { inference } from '@/lib/detection'
+import { useImageLoader } from '@/hooks/image-loader'
+import { convertBitmapToImageData } from '@/utils/image'
 
 export default function DetectionPanel() {
   const { image, texts, setTexts, setSegment } = useCanvasStore()
+  const imageBitmap = useImageLoader(image)
   const [loading, setLoading] = useState(false)
   const [confidenceThreshold, setConfidenceThreshold] = useState(0.5)
   const [nmsThreshold, setNmsThreshold] = useState(0.5)
 
-  const inference = async () => {
+  const run = async () => {
     setLoading(true)
-    const result = await invoke<any>('detect', {
-      image,
+    const imageData = await convertBitmapToImageData(imageBitmap)
+    const result = await inference(
+      imageData,
       confidenceThreshold,
-      nmsThreshold,
-    })
+      nmsThreshold
+    )
 
     setSegment(result.segment)
 
@@ -30,20 +36,13 @@ export default function DetectionPanel() {
     setLoading(false)
   }
 
-  // auto trigger inference when image changes
-  useEffect(() => {
-    if (image && texts.length === 0) {
-      inference()
-    }
-  }, [image, texts])
-
   return (
     <div className='flex w-full flex-col rounded-lg border border-gray-200 bg-white shadow-md'>
       {/* Header */}
       <div className='flex items-center p-3'>
         <h2 className='font-medium'>Detection</h2>
         <div className='flex-grow'></div>
-        <Button onClick={inference} loading={loading} variant='soft'>
+        <Button onClick={run} loading={loading} variant='soft'>
           <Play className='h-4 w-4' />
         </Button>
       </div>

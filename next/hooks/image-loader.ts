@@ -1,3 +1,5 @@
+'use client'
+
 import { useState, useEffect } from 'react'
 
 export function useImageLoader(image: Uint8Array | null) {

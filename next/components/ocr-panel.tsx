@@ -1,9 +1,11 @@
+'use client'
+
 import { useCanvasStore, useWorkflowStore } from '@/lib/state'
 import { Play } from 'lucide-react'
 import { invoke } from '@tauri-apps/api/core'
 import { useEffect, useState } from 'react'
 import { Badge, Button, Text } from '@radix-ui/themes'
-import { cropImage } from '@/utils/image-crop'
+import { cropImage } from '@/utils/image'
 import { useImageLoader } from '@/hooks/image-loader'
 
 export default function OCRPanel() {
@@ -37,12 +39,6 @@ export default function OCRPanel() {
     setTexts(newTexts)
     setLoading(false)
   }
-
-  useEffect(() => {
-    if (texts.length && texts.every((block) => !block.text)) {
-      inference()
-    }
-  }, [image, texts])
 
   return (
     <div className='flex max-h-[600px] w-full flex-col rounded-lg border border-gray-200 bg-white shadow-md'>

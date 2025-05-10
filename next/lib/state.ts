@@ -1,23 +1,5 @@
-import { LazyStore } from '@tauri-apps/plugin-store'
 import { create } from 'zustand'
-import { createJSONStorage, persist, StateStorage } from 'zustand/middleware'
-
-// refer: https://github.com/mrousavy/react-native-mmkv/blob/main/docs/WRAPPER_ZUSTAND_PERSIST_MIDDLEWARE.md
-const createStorage = (name: string) => {
-  const store = new LazyStore(name)
-  return {
-    getItem: async (name: string) => {
-      const value = await store.get<string>(name)
-      return value
-    },
-    setItem: async (name: string, value: string) => {
-      await store.set(name, value)
-    },
-    removeItem: async (name: string) => {
-      await store.delete(name)
-    },
-  } as StateStorage
-}
+import { createJSONStorage, persist } from 'zustand/middleware'
 
 type CanvasState = {
   image: Uint8Array | null
@@ -30,24 +12,16 @@ type CanvasState = {
   setSegment: (segment: Uint8Array) => void
 }
 
-export const useCanvasStore = create<CanvasState>()(
-  persist(
-    (set, get) => ({
-      image: null,
-      setImage: (image) => set({ image }),
-      scale: 1,
-      setScale: (scale) => set({ scale }),
-      texts: [],
-      setTexts: (blocks) => set({ texts: blocks }),
-      segment: null,
-      setSegment: (segment) => set({ segment }),
-    }),
-    {
-      name: 'canvas-storage',
-      storage: createJSONStorage(() => createStorage('canvas-storage')),
-    }
-  )
-)
+export const useCanvasStore = create<CanvasState>((set) => ({
+  image: null,
+  setImage: (image) => set({ image }),
+  scale: 1,
+  setScale: (scale) => set({ scale }),
+  texts: [],
+  setTexts: (blocks) => set({ texts: blocks }),
+  segment: null,
+  setSegment: (segment) => set({ segment }),
+}))
 
 type WorkflowState = {
   selectedTool: string
@@ -88,7 +62,7 @@ export const useSettingsStore = create<SettingsState>()(
     }),
     {
       name: 'settings-storage',
-      storage: createJSONStorage(() => createStorage('settings-storage')),
+      storage: createJSONStorage(() => localStorage),
     }
   )
 )
