@@ -63,12 +63,7 @@ function TranslationPanel() {
       <div className='flex items-center p-3'>
         <h2 className='font-medium'>Translation</h2>
         <div className='flex-grow'></div>
-        <Button
-          disabled={loading}
-          onClick={translate}
-          loading={loading}
-          variant='soft'
-        >
+        <Button onClick={translate} loading={loading} variant='soft'>
           <Play className='h-4 w-4' />
         </Button>
       </div>
