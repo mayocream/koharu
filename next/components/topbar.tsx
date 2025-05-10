@@ -5,10 +5,11 @@ import { Image, Settings } from 'lucide-react'
 import { useCanvasStore } from '@/lib/state'
 import { useRouter } from 'next/navigation'
 import { Button } from '@radix-ui/themes'
+import { readFile } from '@tauri-apps/plugin-fs'
 
 function Topbar() {
   const router = useRouter()
-  const { setImagePath, setTexts, setSegment } = useCanvasStore()
+  const { setImage, setTexts, setSegment } = useCanvasStore()
 
   const handleOpenImage = async () => {
     try {
@@ -24,9 +25,10 @@ function Topbar() {
 
       if (!selected) return
 
+      const imageData = await readFile(selected)
       setTexts([])
       setSegment(null)
-      setImagePath(selected)
+      setImage(imageData)
     } catch (err) {
       console.error('Error opening image:', err)
     }

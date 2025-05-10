@@ -10,10 +10,10 @@ import { useSegmentLoader } from '@/hooks/segment-loader'
 import { useInpaintLoader } from '@/hooks/inpaint-loader'
 
 function Canvas() {
-  const { imagePath, scale, texts, segment } = useCanvasStore()
+  const { image, scale, texts, segment } = useCanvasStore()
   const { selectedTextIndex, setSelectedTextIndex, selectedTool } =
     useWorkflowStore()
-  const imageData = useImageLoader(imagePath)
+  const imageData = useImageLoader(image)
   const segmentCanvas = useSegmentLoader(segment, imageData)
   const containerRef = useRef<HTMLDivElement>(null)
   const inpaintLayerRef = useRef<Konva.Layer>(null)
