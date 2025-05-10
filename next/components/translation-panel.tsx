@@ -58,7 +58,7 @@ function TranslationPanel() {
   }
 
   return (
-    <div className='flex h-[800px] w-full flex-col rounded-lg border border-gray-200 bg-white shadow-md'>
+    <div className='flex max-h-[800px] w-full flex-col rounded-lg border border-gray-200 bg-white shadow-md'>
       {/* Header */}
       <div className='flex items-center p-3'>
         <h2 className='font-medium'>Translation</h2>

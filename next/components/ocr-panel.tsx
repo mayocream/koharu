@@ -45,7 +45,7 @@ export default function OCRPanel() {
   }, [image, texts])
 
   return (
-    <div className='flex h-[600px] w-full flex-col rounded-lg border border-gray-200 bg-white shadow-md'>
+    <div className='flex max-h-[600px] w-full flex-col rounded-lg border border-gray-200 bg-white shadow-md'>
       {/* Header */}
       <div className='flex flex-shrink-0 items-center-safe p-3'>
         <h2 className='font-medium'>OCR</h2>
