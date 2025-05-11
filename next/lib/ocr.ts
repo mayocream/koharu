@@ -72,9 +72,9 @@ export const inference = async (image: ArrayBuffer): Promise<string> => {
     const logits = decoderOutputs.logits.data as Float32Array
 
     // Get last token logits and find argmax
-    const lastTokenLogits = logits.slice(-vocab.length)
+    const lastTokenLogits = logits.slice(-6144)
     const maxLogit = Math.max(...lastTokenLogits)
-    const tokenId = lastTokenLogits.indexOf(maxLogit) - 1
+    const tokenId = lastTokenLogits.indexOf(maxLogit)
     tokenIds.push(tokenId)
 
     // Break if end token
