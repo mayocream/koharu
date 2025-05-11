@@ -1,5 +1,5 @@
 import { resizeImage } from '@/utils/image'
-import * as ort from 'onnxruntime-web/webgpu'
+import * as ort from 'onnxruntime-web'
 
 let session: ort.InferenceSession
 export const initialize = async () => {

@@ -1,5 +1,5 @@
 import { resizeImage, convertBitmapToImageData } from '@/utils/image'
-import * as ort from 'onnxruntime-web/webgpu'
+import * as ort from 'onnxruntime-web'
 
 let encoderSession: ort.InferenceSession
 let decoderSession: ort.InferenceSession
