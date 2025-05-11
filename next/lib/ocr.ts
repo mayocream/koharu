@@ -74,7 +74,7 @@ export const inference = async (image: ArrayBuffer): Promise<string> => {
     // Get last token logits and find argmax
     const lastTokenLogits = logits.slice(-vocab.length)
     const maxLogit = Math.max(...lastTokenLogits)
-    const tokenId = lastTokenLogits.indexOf(maxLogit)
+    const tokenId = lastTokenLogits.indexOf(maxLogit) - 1
     tokenIds.push(tokenId)
 
     // Break if end token
@@ -86,8 +86,9 @@ export const inference = async (image: ArrayBuffer): Promise<string> => {
   // Decode tokens (filter out special tokens < 5)
   const text = tokenIds
     .filter((id) => id >= 5)
-    .map((id) => vocab[id] || '')
+    .map((id) => vocab[id])
     .join('')
+    .replaceAll(/[\s]/g, '')
 
   return text
 }

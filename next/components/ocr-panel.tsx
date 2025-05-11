@@ -2,7 +2,7 @@
 
 import { useCanvasStore, useWorkflowStore } from '@/lib/state'
 import { Play } from 'lucide-react'
-import { useEffect, useState } from 'react'
+import { useState } from 'react'
 import { Badge, Button, Text } from '@radix-ui/themes'
 import { cropImage } from '@/utils/image'
 import { useImageLoader } from '@/hooks/image-loader'
@@ -16,20 +16,20 @@ export default function OCRPanel() {
 
   const run = async () => {
     setLoading(true)
-    //const newTexts = await Promise.all(
-    const { xmin, ymin, xmax, ymax } = texts[0]
-    const croppedImageBuffer = await cropImage(
-      imageData,
-      xmin,
-      ymin,
-      xmax,
-      ymax
-    )
-    const result = await inference(croppedImageBuffer)
-    console.log(result)
-    //)
-
-    //setTexts(newTexts)
+    const newTexts = []
+    for (const text of texts) {
+      const { xmin, ymin, xmax, ymax } = text
+      const croppedImageBuffer = await cropImage(
+        imageData,
+        xmin,
+        ymin,
+        xmax,
+        ymax
+      )
+      const result = await inference(croppedImageBuffer)
+      newTexts.push({ ...text, text: result })
+    }
+    setTexts(newTexts)
     setLoading(false)
   }
 
