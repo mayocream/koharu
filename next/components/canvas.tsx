@@ -28,8 +28,8 @@ function Canvas() {
             <Stage
               scaleX={scale}
               scaleY={scale}
-              width={imageData?.width * scale}
-              height={imageData?.height * scale}
+              width={imageData?.width * scale || 0}
+              height={imageData?.height * scale || 0}
               onClick={() => {
                 setSelected(null)
               }}
@@ -74,9 +74,7 @@ function Canvas() {
                 )}
               </Layer>
               <Layer ref={inpaintLayerRef}>
-                {selectedTool === 'inpaint' && (
-                  <Image image={null} />
-                )}
+                {selectedTool === 'inpaint' && <Image image={null} />}
               </Layer>
             </Stage>
           </div>
