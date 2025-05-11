@@ -21,9 +21,6 @@ async fn initialize(app: AppHandle) -> anyhow::Result<()> {
     state.ocr = Some(manga_ocr::MangaOCR::new()?);
     state.lama = Some(lama::Lama::new()?);
 
-    app.get_webview_window("splashscreen").unwrap().close()?;
-    app.get_webview_window("main").unwrap().show()?;
-
     Ok(())
 }
 
