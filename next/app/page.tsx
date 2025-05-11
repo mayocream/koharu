@@ -10,6 +10,7 @@ import TranslationPanel from '@/components/translation-panel'
 import SplashScreen from '@/components/splashscreen'
 import { useEffect, useState } from 'react'
 import * as detection from '@/lib/detection'
+import * as ocr from '@/lib/ocr'
 
 function App() {
   const [loading, setLoading] = useState(true)
@@ -18,6 +19,7 @@ function App() {
   useEffect(() => {
     const initialize = async () => {
       await detection.initialize()
+      await ocr.initialize()
     }
     initialize().then(() => {
       setLoading(false)

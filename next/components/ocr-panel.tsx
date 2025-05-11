@@ -2,11 +2,11 @@
 
 import { useCanvasStore, useWorkflowStore } from '@/lib/state'
 import { Play } from 'lucide-react'
-import { invoke } from '@tauri-apps/api/core'
 import { useEffect, useState } from 'react'
 import { Badge, Button, Text } from '@radix-ui/themes'
 import { cropImage } from '@/utils/image'
 import { useImageLoader } from '@/hooks/image-loader'
+import { inference } from '@/lib/ocr'
 
 export default function OCRPanel() {
   const { image, texts, setTexts } = useCanvasStore()
@@ -14,29 +14,22 @@ export default function OCRPanel() {
   const [loading, setLoading] = useState(false)
   const imageData = useImageLoader(image)
 
-  const inference = async () => {
+  const run = async () => {
     setLoading(true)
-    const newTexts = await Promise.all(
-      texts.map(async (block) => {
-        const { xmin, ymin, xmax, ymax } = block
-        const croppedImageBuffer = await cropImage(
-          imageData,
-          xmin,
-          ymin,
-          xmax,
-          ymax
-        )
-        const result = await invoke('ocr', {
-          image: croppedImageBuffer,
-        })
-        return {
-          ...block,
-          text: result,
-        }
-      })
+    //const newTexts = await Promise.all(
+    const { xmin, ymin, xmax, ymax } = texts[0]
+    const croppedImageBuffer = await cropImage(
+      imageData,
+      xmin,
+      ymin,
+      xmax,
+      ymax
     )
+    const result = await inference(croppedImageBuffer)
+    console.log(result)
+    //)
 
-    setTexts(newTexts)
+    //setTexts(newTexts)
     setLoading(false)
   }
 
@@ -46,7 +39,7 @@ export default function OCRPanel() {
       <div className='flex flex-shrink-0 items-center-safe p-3'>
         <h2 className='font-medium'>OCR</h2>
         <div className='flex-grow'></div>
-        <Button onClick={inference} loading={loading} variant='soft'>
+        <Button onClick={run} loading={loading} variant='soft'>
           <Play className='h-4 w-4' />
         </Button>
       </div>
