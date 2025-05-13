@@ -1,15 +1,16 @@
 import { resizeImage } from '@/utils/image'
+import { download } from '@/utils/model'
 import * as ort from 'onnxruntime-web'
 
 let session: ort.InferenceSession
 export const initialize = async () => {
-  session = await ort.InferenceSession.create(
-    'https://huggingface.co/mayocream/comic-text-detector-onnx/resolve/main/comic-text-detector.onnx',
-    {
-      executionProviders: ['webgpu'],
-      graphOptimizationLevel: 'all',
-    }
+  const model = await download(
+    'https://huggingface.co/mayocream/comic-text-detector-onnx/resolve/main/comic-text-detector.onnx'
   )
+  session = await ort.InferenceSession.create(model, {
+    executionProviders: ['webgpu'],
+    graphOptimizationLevel: 'all',
+  })
 }
 
 export type Bbox = {

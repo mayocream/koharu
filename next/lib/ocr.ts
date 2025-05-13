@@ -1,4 +1,5 @@
 import { resizeImage, convertBitmapToImageData } from '@/utils/image'
+import { download } from '@/utils/model'
 import * as ort from 'onnxruntime-web'
 
 let encoderSession: ort.InferenceSession
@@ -7,28 +8,28 @@ let vocab: string[] = []
 
 export const initialize = async () => {
   // Load encoder model
-  encoderSession = await ort.InferenceSession.create(
-    'https://huggingface.co/mayocream/manga-ocr-onnx/resolve/main/encoder_model.onnx',
-    {
-      executionProviders: ['webgpu'],
-      graphOptimizationLevel: 'all',
-    }
+  const encoderModel = await download(
+    'https://huggingface.co/mayocream/manga-ocr-onnx/resolve/main/encoder_model.onnx'
   )
+  encoderSession = await ort.InferenceSession.create(encoderModel, {
+    executionProviders: ['webgpu'],
+    graphOptimizationLevel: 'all',
+  })
 
-  // Load decoder model
-  decoderSession = await ort.InferenceSession.create(
-    'https://huggingface.co/mayocream/manga-ocr-onnx/resolve/main/decoder_model.onnx',
-    {
-      executionProviders: ['webgpu'],
-      graphOptimizationLevel: 'all',
-    }
+  const decoderModel = await download(
+    'https://huggingface.co/mayocream/manga-ocr-onnx/resolve/main/decoder_model.onnx'
   )
+  // Load decoder model
+  decoderSession = await ort.InferenceSession.create(decoderModel, {
+    executionProviders: ['webgpu'],
+    graphOptimizationLevel: 'all',
+  })
 
   // Load vocabulary
-  const response = await fetch(
+  const response = await download(
     'https://huggingface.co/mayocream/manga-ocr-onnx/resolve/main/vocab.txt'
   )
-  const text = await response.text()
+  const text = new TextDecoder().decode(response)
   vocab = text.split('\n')
 }
 
