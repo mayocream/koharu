@@ -13,13 +13,14 @@ import * as detection from '@/lib/detection'
 import * as ocr from '@/lib/ocr'
 
 function App() {
+  const [progress, setProgress] = useState(0)
   const [loading, setLoading] = useState(true)
   const { selectedTool } = useWorkflowStore()
 
   useEffect(() => {
     const initialize = async () => {
-      await detection.initialize()
-      await ocr.initialize()
+      await detection.initialize().then(() => setProgress(50))
+      await ocr.initialize().then(() => setProgress(100))
     }
     initialize().then(() => {
       setLoading(false)
@@ -27,7 +28,7 @@ function App() {
   }, [])
 
   if (loading) {
-    return <SplashScreen />
+    return <SplashScreen progress={progress} />
   }
 
   return (
