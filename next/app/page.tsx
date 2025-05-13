@@ -11,6 +11,7 @@ import SplashScreen from '@/components/splashscreen'
 import { useEffect, useState } from 'react'
 import * as detection from '@/lib/detection'
 import * as ocr from '@/lib/ocr'
+import * as inpaint from '@/lib/inpaint'
 
 function App() {
   const [progress, setProgress] = useState(0)
@@ -19,8 +20,9 @@ function App() {
 
   useEffect(() => {
     const initialize = async () => {
-      await detection.initialize().then(() => setProgress(50))
-      await ocr.initialize().then(() => setProgress(100))
+      await detection.initialize().then(() => setProgress(30))
+      await ocr.initialize().then(() => setProgress(70))
+      await inpaint.initialize().then(() => setProgress(100))
     }
     initialize().then(() => {
       setLoading(false)

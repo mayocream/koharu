@@ -3,6 +3,7 @@
 import { useState, useEffect } from 'react'
 import { invoke } from '@tauri-apps/api/core'
 import { cropImage } from '@/utils/image'
+import { inference } from '@/lib/inpaint'
 
 interface TextBlock {
   xmin: number
@@ -77,10 +78,7 @@ export function useInpaintLoader(
               xmax,
               ymax
             )
-            const inpaintBuffer = await invoke<Uint8Array>('inpaint', {
-              image: croppedImage,
-              mask: maskBuffer,
-            })
+            const inpaintBuffer = await inference(croppedImage, maskBuffer)
 
             // Convert result to image data
             const resultImage = resultCtx.createImageData(width, height)
