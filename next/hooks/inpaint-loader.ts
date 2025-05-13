@@ -2,8 +2,9 @@
 
 import { useState, useEffect } from 'react'
 import { invoke } from '@tauri-apps/api/core'
-import { cropImage } from '@/utils/image'
+import { cropImage, resizeImage } from '@/utils/image'
 import { inference } from '@/lib/inpaint'
+
 
 interface TextBlock {
   xmin: number
@@ -49,6 +50,7 @@ export function useInpaintLoader(
         await Promise.all(
           tiles.map(async ({ x, y }) => {
             // Calculate tile boundaries
+            // TODO: implment overlap while maintaining aspect
             const xmin = Math.max(0, x - OVERLAP)
             const ymin = Math.max(0, y - OVERLAP)
             const xmax = Math.min(x + TILE_SIZE - OVERLAP, imageData.width)
@@ -81,13 +83,14 @@ export function useInpaintLoader(
             const inpaintBuffer = await inference(croppedImage, maskBuffer)
 
             // Convert result to image data
-            const resultImage = resultCtx.createImageData(width, height)
-            for (let i = 0; i < inpaintBuffer.length / 3; i++) {
+            let resultImage = resultCtx.createImageData(TILE_SIZE, TILE_SIZE)
+            for (let i = 0; i < TILE_SIZE * TILE_SIZE; i++) {
               resultImage.data[i * 4] = inpaintBuffer[i * 3] // R
               resultImage.data[i * 4 + 1] = inpaintBuffer[i * 3 + 1] // G
               resultImage.data[i * 4 + 2] = inpaintBuffer[i * 3 + 2] // B
               resultImage.data[i * 4 + 3] = 255 // A
             }
+            resultImage = await resizeImage(resultImage, width, height)
 
             // Calculate effective area (non-overlapping part)
             const offsetX = x === 0 ? 0 : OVERLAP

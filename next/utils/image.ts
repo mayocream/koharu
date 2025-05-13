@@ -40,32 +40,47 @@ export async function convertBitmapToImageData(
 }
 
 export async function resizeImage(
-  imageData: ImageData | null,
+  image: ImageBitmap | ImageData,
   targetWidth: number,
   targetHeight: number
 ): Promise<ImageData | null> {
-  if (!imageData) return null
+  if (!image) return null;
 
   try {
-    const canvas = new OffscreenCanvas(targetWidth, targetHeight)
-    const ctx = canvas.getContext('2d')
+    // Create a canvas with the target dimensions
+    const canvas = new OffscreenCanvas(targetWidth, targetHeight);
+    const ctx = canvas.getContext('2d');
 
-    // Use high-quality image scaling
-    ctx.imageSmoothingEnabled = true
-    ctx.imageSmoothingQuality = 'high'
+    if (!ctx) {
+      throw new Error('Could not get 2D context from canvas');
+    }
 
-    // Create a temporary canvas to hold the original image
-    const tempCanvas = new OffscreenCanvas(imageData.width, imageData.height)
-    const tempCtx = tempCanvas.getContext('2d')!
-    tempCtx.putImageData(imageData, 0, 0)
+    // Configure image quality settings
+    ctx.imageSmoothingEnabled = true;
+    ctx.imageSmoothingQuality = 'high';
 
-    // Draw the image with scaling
-    ctx.drawImage(tempCanvas, 0, 0, imageData.width, imageData.height, 0, 0, targetWidth, targetHeight)
+    if (image instanceof ImageData) {
+      // For ImageData, we need a temporary canvas
+      const tempCanvas = new OffscreenCanvas(image.width, image.height);
+      const tempCtx = tempCanvas.getContext('2d');
 
-    // Get the resized ImageData
-    return ctx.getImageData(0, 0, targetWidth, targetHeight)
+      if (!tempCtx) {
+        throw new Error('Could not get 2D context from temporary canvas');
+      }
+
+      tempCtx.putImageData(image, 0, 0);
+      ctx.drawImage(tempCanvas, 0, 0, image.width, image.height, 0, 0, targetWidth, targetHeight);
+    } else if (image instanceof ImageBitmap) {
+      // For ImageBitmap, we can draw directly
+      ctx.drawImage(image, 0, 0, image.width, image.height, 0, 0, targetWidth, targetHeight);
+    } else {
+      throw new Error('Input must be either ImageData or ImageBitmap');
+    }
+
+    // Get the resized image data
+    return ctx.getImageData(0, 0, targetWidth, targetHeight);
   } catch (error) {
-    console.error('resizeImage:', error)
-    return null
+    console.error('resizeImageBitmap:', error);
+    return null;
   }
 }
