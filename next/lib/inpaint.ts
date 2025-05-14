@@ -1,3 +1,5 @@
+'use client'
+
 import { resizeImage } from '@/utils/image'
 import { download } from '@/utils/model'
 import * as ort from 'onnxruntime-web'
