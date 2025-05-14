@@ -4,8 +4,10 @@ import { resizeImage } from '@/utils/image'
 import { download } from '@/utils/model'
 import * as ort from 'onnxruntime-web'
 
-// refer: https://onnxruntime.ai/docs/tutorials/web/env-flags-and-session-options.html#envwasmnumthreads
-ort.env.wasm.numThreads = navigator.hardwareConcurrency
+if (typeof navigator !== 'undefined') {
+  // refer: https://onnxruntime.ai/docs/tutorials/web/env-flags-and-session-options.html#envwasmnumthreads
+  ort.env.wasm.numThreads = navigator.hardwareConcurrency
+}
 
 let session: ort.InferenceSession
 export const initialize = async () => {
