@@ -1,6 +1,9 @@
-import { resizeImage, convertBitmapToImageData } from '@/utils/image'
+import { resizeImage } from '@/utils/image'
 import { download } from '@/utils/model'
 import * as ort from 'onnxruntime-web'
+
+// refer: https://onnxruntime.ai/docs/tutorials/web/env-flags-and-session-options.html#envwasmnumthreads
+ort.env.wasm.numThreads = navigator.hardwareConcurrency
 
 let session: ort.InferenceSession
 export const initialize = async () => {
@@ -8,7 +11,7 @@ export const initialize = async () => {
     'https://huggingface.co/mayocream/lama-manga-onnx/resolve/main/lama-manga.onnx'
   )
   session = await ort.InferenceSession.create(model, {
-    executionProviders: ['webgpu'],
+    executionProviders: ['wasm'],
     graphOptimizationLevel: 'all',
   })
 }
@@ -21,7 +24,6 @@ export const inference = async (image: ArrayBuffer, mask: ArrayBuffer) => {
   const imageBitmap = await createImageBitmap(imageBlob)
   const maskBitmap = await createImageBitmap(maskBlob)
 
-
   if (!imageBitmap || !maskBitmap) {
     throw new Error('Failed to process image data')
   }
@@ -29,7 +31,6 @@ export const inference = async (image: ArrayBuffer, mask: ArrayBuffer) => {
   // Resize to model input size
   const resizedImage = await resizeImage(imageBitmap, 512, 512)
   const resizedMask = await resizeImage(maskBitmap, 512, 512)
-
 
   if (!resizedImage || !resizedMask) {
     throw new Error('Failed to resize image data')
@@ -45,7 +46,7 @@ export const inference = async (image: ArrayBuffer, mask: ArrayBuffer) => {
     imageTensor[i + 2 * 512 * 512] = resizedImage.data[i * 4 + 2] / 255.0 // B
 
     // For mask, we only use the red channel
-    maskTensor[i] = (resizedMask.data[i * 4] / 255.0) > 0 ? 1: 0
+    maskTensor[i] = resizedMask.data[i * 4] / 255.0 > 0 ? 1 : 0
   }
 
   const output = await session.run({
