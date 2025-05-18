@@ -18,11 +18,7 @@ export default function DetectionPanel() {
   const run = async () => {
     setLoading(true)
     const imageData = await convertBitmapToImageData(imageBitmap)
-    const result = await inference(
-      imageData,
-      confidenceThreshold,
-      nmsThreshold
-    )
+    const result = await inference(imageData, confidenceThreshold, nmsThreshold)
 
     setSegment(result.segment)
 
@@ -60,9 +56,7 @@ export default function DetectionPanel() {
               max={1}
               step={0.01}
               value={[confidenceThreshold]}
-              onValueChange={(value) => {
-                setConfidenceThreshold(value[0])
-              }}
+              onValueChange={(value) => setConfidenceThreshold(value[0])}
             />
           </div>
           <div className='flex flex-col gap-1'>
@@ -76,9 +70,7 @@ export default function DetectionPanel() {
               max={1}
               step={0.01}
               value={[nmsThreshold]}
-              onValueChange={(value) => {
-                setNmsThreshold(value[0])
-              }}
+              onValueChange={(value) => setNmsThreshold(value[0])}
             />
           </div>
           <Text>

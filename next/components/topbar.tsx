@@ -46,12 +46,7 @@ function Topbar() {
 
       <div className='flex-grow' />
       <div className='mx-1 flex items-center gap-1'>
-        <Button
-          variant='soft'
-          onClick={() => {
-            router.push('/settings')
-          }}
-        >
+        <Button variant='soft' onClick={() => router.push('/settings')}>
           <Settings size={20} />
         </Button>
       </div>

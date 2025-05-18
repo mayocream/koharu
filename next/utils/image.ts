@@ -12,18 +12,13 @@ export async function cropImage(
 
   if (width <= 0 || height <= 0) return null
 
-  try {
-    const canvas = new OffscreenCanvas(width, height)
-    const ctx = canvas.getContext('2d')
+  const canvas = new OffscreenCanvas(width, height)
+  const ctx = canvas.getContext('2d')
 
-    ctx.drawImage(imageData, xmin, ymin, width, height, 0, 0, width, height)
+  ctx.drawImage(imageData, xmin, ymin, width, height, 0, 0, width, height)
 
-    const croppedBlob = await canvas.convertToBlob()
-    return await croppedBlob.arrayBuffer()
-  } catch (error) {
-    console.error('cropImage:', error)
-    return null
-  }
+  const croppedBlob = await canvas.convertToBlob()
+  return await croppedBlob.arrayBuffer()
 }
 
 export async function convertBitmapToImageData(
@@ -44,43 +39,50 @@ export async function resizeImage(
   targetWidth: number,
   targetHeight: number
 ): Promise<ImageData | null> {
-  if (!image) return null;
+  if (!image) return null
 
-  try {
-    // Create a canvas with the target dimensions
-    const canvas = new OffscreenCanvas(targetWidth, targetHeight);
-    const ctx = canvas.getContext('2d');
+  // Create a canvas with the target dimensions
+  const canvas = new OffscreenCanvas(targetWidth, targetHeight)
+  const ctx = canvas.getContext('2d')!
 
-    if (!ctx) {
-      throw new Error('Could not get 2D context from canvas');
-    }
+  // Configure image quality settings
+  ctx.imageSmoothingEnabled = true
+  ctx.imageSmoothingQuality = 'high'
 
-    // Configure image quality settings
-    ctx.imageSmoothingEnabled = true;
-    ctx.imageSmoothingQuality = 'high';
+  if (image instanceof ImageData) {
+    // For ImageData, we need a temporary canvas
+    const tempCanvas = new OffscreenCanvas(image.width, image.height)
+    const tempCtx = tempCanvas.getContext('2d')!
 
-    if (image instanceof ImageData) {
-      // For ImageData, we need a temporary canvas
-      const tempCanvas = new OffscreenCanvas(image.width, image.height);
-      const tempCtx = tempCanvas.getContext('2d');
-
-      if (!tempCtx) {
-        throw new Error('Could not get 2D context from temporary canvas');
-      }
-
-      tempCtx.putImageData(image, 0, 0);
-      ctx.drawImage(tempCanvas, 0, 0, image.width, image.height, 0, 0, targetWidth, targetHeight);
-    } else if (image instanceof ImageBitmap) {
-      // For ImageBitmap, we can draw directly
-      ctx.drawImage(image, 0, 0, image.width, image.height, 0, 0, targetWidth, targetHeight);
-    } else {
-      throw new Error('Input must be either ImageData or ImageBitmap');
-    }
-
-    // Get the resized image data
-    return ctx.getImageData(0, 0, targetWidth, targetHeight);
-  } catch (error) {
-    console.error('resizeImageBitmap:', error);
-    return null;
+    tempCtx.putImageData(image, 0, 0)
+    ctx.drawImage(
+      tempCanvas,
+      0,
+      0,
+      image.width,
+      image.height,
+      0,
+      0,
+      targetWidth,
+      targetHeight
+    )
+  } else if (image instanceof ImageBitmap) {
+    // For ImageBitmap, we can draw directly
+    ctx.drawImage(
+      image,
+      0,
+      0,
+      image.width,
+      image.height,
+      0,
+      0,
+      targetWidth,
+      targetHeight
+    )
+  } else {
+    throw new Error('Input must be either ImageData or ImageBitmap')
   }
+
+  // Get the resized image data
+  return ctx.getImageData(0, 0, targetWidth, targetHeight)
 }
