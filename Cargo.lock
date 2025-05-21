@@ -3045,6 +3045,7 @@ name = "lama"
 version = "0.1.0"
 dependencies = [
  "anyhow",
+ "clap",
  "hf-hub",
  "image",
  "ndarray",
