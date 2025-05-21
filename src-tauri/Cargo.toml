@@ -30,15 +30,14 @@ tauri-plugin-store = "2"
 tokio = { version = "1.44.2", features = ["full"] }
 anyhow = "1.0.98"
 ort = "=2.0.0-rc.9"
-hf-hub = "0.4.2"
 image = "0.25.6"
-ndarray = "0.16.1"
-candle-transformers = "0.8.4"
 tracing = { version = "0.1.41", features = ["log"] }
 log = "0.4.27"
-imageproc = "0.25.0"
 tauri-plugin-notification = "2"
 tauri-plugin-fs = "2"
+comic-text-detector = { path = "../comic-text-detector" }
+manga-ocr = { path = "../manga-ocr" }
+lama = { path = "../lama" }
 
 [features]
 cuda = ["ort/cuda"]

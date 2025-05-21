@@ -712,28 +712,6 @@ dependencies = [
 
 [[package]]
 name = "candle-core"
-version = "0.8.4"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "06ccf5ee3532e66868516d9b315f73aec9f34ea1a37ae98514534d458915dbf1"
-dependencies = [
- "byteorder",
- "gemm 0.17.1",
- "half",
- "memmap2",
- "num-traits",
- "num_cpus",
- "rand 0.9.1",
- "rand_distr 0.5.1",
- "rayon",
- "safetensors",
- "thiserror 1.0.69",
- "ug 0.1.0",
- "yoke",
- "zip",
-]
-
-[[package]]
-name = "candle-core"
 version = "0.9.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "a9f51e2ecf6efe9737af8f993433c839f956d2b6ed4fd2dd4a7c6d8b0fa667ff"
@@ -749,24 +727,9 @@ dependencies = [
  "rayon",
  "safetensors",
  "thiserror 1.0.69",
- "ug 0.4.0",
+ "ug",
  "yoke",
  "zip",
-]
-
-[[package]]
-name = "candle-nn"
-version = "0.8.4"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "be1160c3b63f47d40d91110a3e1e1e566ae38edddbbf492a60b40ffc3bc1ff38"
-dependencies = [
- "candle-core 0.8.4",
- "half",
- "num-traits",
- "rayon",
- "safetensors",
- "serde",
- "thiserror 1.0.69",
 ]
 
 [[package]]
@@ -775,32 +738,13 @@ version = "0.9.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "c1980d53280c8f9e2c6cbe1785855d7ff8010208b46e21252b978badf13ad69d"
 dependencies = [
- "candle-core 0.9.1",
+ "candle-core",
  "half",
  "num-traits",
  "rayon",
  "safetensors",
  "serde",
  "thiserror 1.0.69",
-]
-
-[[package]]
-name = "candle-transformers"
-version = "0.8.4"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "94a0900d49f8605e0e7e6693a1f560e6271279de98e5fa369e7abf3aac245020"
-dependencies = [
- "byteorder",
- "candle-core 0.8.4",
- "candle-nn 0.8.4",
- "fancy-regex",
- "num-traits",
- "rand 0.9.1",
- "rayon",
- "serde",
- "serde_json",
- "serde_plain",
- "tracing",
 ]
 
 [[package]]
@@ -810,8 +754,8 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "186cb80045dbe47e0b387ea6d3e906f02fb3056297080d9922984c90e90a72b0"
 dependencies = [
  "byteorder",
- "candle-core 0.9.1",
- "candle-nn 0.9.1",
+ "candle-core",
+ "candle-nn",
  "fancy-regex",
  "num-traits",
  "rand 0.9.1",
@@ -985,7 +929,7 @@ name = "comic-text-detector"
 version = "0.1.0"
 dependencies = [
  "anyhow",
- "candle-transformers 0.9.1",
+ "candle-transformers",
  "clap",
  "hf-hub",
  "image",
@@ -3062,12 +3006,11 @@ name = "koharu"
 version = "0.1.0"
 dependencies = [
  "anyhow",
- "candle-transformers 0.8.4",
- "hf-hub",
+ "comic-text-detector",
  "image",
- "imageproc",
+ "lama",
  "log",
- "ndarray",
+ "manga-ocr",
  "ort",
  "serde",
  "serde_json",
@@ -6462,27 +6405,6 @@ dependencies = [
  "memoffset",
  "tempfile",
  "winapi",
-]
-
-[[package]]
-name = "ug"
-version = "0.1.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "03719c61a91b51541f076dfdba45caacf750b230cefaa4b32d6f5411c3f7f437"
-dependencies = [
- "gemm 0.18.2",
- "half",
- "libloading 0.8.6",
- "memmap2",
- "num",
- "num-traits",
- "num_cpus",
- "rayon",
- "safetensors",
- "serde",
- "thiserror 1.0.69",
- "tracing",
- "yoke",
 ]
 
 [[package]]

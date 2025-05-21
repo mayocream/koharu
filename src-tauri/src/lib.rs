@@ -3,10 +3,6 @@ use tokio::sync::RwLock;
 
 use tauri::{AppHandle, Manager, async_runtime::spawn};
 
-mod comic_text_detector;
-mod lama;
-mod manga_ocr;
-
 #[derive(Default)]
 struct AppState {
     ctd: Option<comic_text_detector::ComicTextDetector>,
