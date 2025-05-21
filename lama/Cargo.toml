@@ -1,0 +1,11 @@
+[package]
+name = "lama"
+version = "0.1.0"
+edition = "2024"
+
+[dependencies]
+hf-hub = "0.4.2"
+image = "0.25.6"
+ort = "=2.0.0-rc.9"
+anyhow = "1.0.98"
+ndarray = "0.16.1"
