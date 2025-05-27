@@ -1,0 +1,15 @@
+[package]
+name = "comic-text-detector"
+version = "0.1.0"
+edition = "2024"
+
+[dependencies]
+candle-transformers = "0.9.1"
+hf-hub = "0.4.2"
+image = "0.25.6"
+ort = "=2.0.0-rc.9"
+anyhow = "1.0.98"
+ndarray = "0.16.1"
+imageproc = "0.25.0"
+serde = "1.0.219"
+clap = { version = "4.5.38", features = ["derive"] }
