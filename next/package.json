@@ -13,23 +13,23 @@
     "@tauri-apps/api": "^2.5.0",
     "idb-keyval": "^6.2.2",
     "konva": "^9.3.20",
-    "lucide-react": "^0.510.0",
+    "lucide-react": "^0.511.0",
     "next": "15.3.2",
     "onnxruntime-web": "^1.22.0",
-    "openai": "^4.98.0",
+    "openai": "^4.103.0",
     "react": "^19.1.0",
     "react-dom": "^19.1.0",
-    "react-konva": "^19.0.3",
-    "zustand": "^5.0.4"
+    "react-konva": "^19.0.4",
+    "zustand": "^5.0.5"
   },
   "devDependencies": {
-    "@tailwindcss/postcss": "^4.1.6",
-    "@types/node": "^22.15.18",
-    "@types/react": "^19.1.4",
+    "@tailwindcss/postcss": "^4.1.7",
+    "@types/node": "^22.15.21",
+    "@types/react": "^19.1.5",
     "@types/react-dom": "^19.1.5",
     "@types/wicg-file-system-access": "^2023.10.6",
     "canvas": "^3.1.0",
-    "tailwindcss": "^4.1.6",
+    "tailwindcss": "^4.1.7",
     "typescript": "^5.8.3"
   }
 }
