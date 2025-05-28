@@ -16,25 +16,25 @@ name = "koharu_lib"
 crate-type = ["staticlib", "cdylib", "rlib"]
 
 [build-dependencies]
-tauri-build = { version = "2", features = [] }
+tauri-build = { workspace = true }
 
 [dependencies]
-tauri = { version = "2", features = ["protocol-asset"] }
-tauri-plugin-opener = "2"
-serde = { version = "1", features = ["derive"] }
-serde_json = "1"
-tauri-plugin-dialog = "2"
-tauri-plugin-log = "2"
-tauri-plugin-persisted-scope = "2"
-tauri-plugin-store = "2"
-tokio = { version = "1.44.2", features = ["full"] }
-anyhow = "1.0.98"
-ort = "=2.0.0-rc.9"
-image = "0.25.6"
-tracing = { version = "0.1.41", features = ["log"] }
-log = "0.4.27"
-tauri-plugin-notification = "2"
-tauri-plugin-fs = "2"
+tauri = { workspace = true }
+tauri-plugin-opener = { workspace = true }
+serde = { workspace = true }
+serde_json = { workspace = true }
+tauri-plugin-dialog = { workspace = true }
+tauri-plugin-log = { workspace = true }
+tauri-plugin-persisted-scope = { workspace = true }
+tauri-plugin-store = { workspace = true }
+tokio = { workspace = true }
+anyhow = { workspace = true }
+ort = { workspace = true }
+image = { workspace = true }
+tracing = { workspace = true }
+log = { workspace = true }
+tauri-plugin-notification = { workspace = true }
+tauri-plugin-fs = { workspace = true }
 comic-text-detector = { path = "../comic-text-detector" }
 manga-ocr = { path = "../manga-ocr" }
 lama = { path = "../lama" }
