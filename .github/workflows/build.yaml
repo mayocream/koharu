@@ -55,6 +55,11 @@ jobs:
         with:
           args: ${{ matrix.args }}
 
+      - name: Get version
+        id: version
+        shell: bash
+        run: echo "version=$(jq -r '.version' src-tauri/tauri.conf.json)" >> $GITHUB_OUTPUT
+
       - id: artifacts
         shell: bash
         run: |
@@ -63,21 +68,16 @@ jobs:
             echo "$path" >> $GITHUB_OUTPUT
           done
           if [[ "${{ matrix.platform }}" == "windows-2025" ]]; then
-            7z a koharu-windows.zip target/release/koharu.exe target/release/*.dll
-            echo "koharu-windows.zip" >> $GITHUB_OUTPUT
+            7z a -j koharu-${{ steps.version.outputs.version }}-windows.zip target/release/koharu.exe target/release/*.dll
+            echo "koharu-${{ steps.version.outputs.version }}-windows.zip" >> $GITHUB_OUTPUT
           fi
           echo "EOF" >> $GITHUB_OUTPUT
-
-      - name: Get version
-        id: version
-        shell: bash
-        run: echo "version=$(jq -r '.version' src-tauri/tauri.conf.json)" >> $GITHUB_OUTPUT
 
       - name: Upload artifacts
         if: ${{ github.event_name == 'push' }}
         uses: softprops/action-gh-release@v2
         with:
-          tag_name: v${{ steps.version.outputs.version }}
+          tag_name: ${{ steps.version.outputs.version }}
           files: ${{ steps.artifacts.outputs.files }}
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
