@@ -2,6 +2,12 @@
 members = ["comic-text-detector", "lama", "manga-ocr", "src-tauri"]
 resolver = "2"
 
+[workspace.package]
+version = "0.1.1"
+edition = "2024"
+description = "Manga translator"
+license-file = "LICENSE"
+
 [workspace.dependencies]
 candle-transformers = "0.9.1"
 hf-hub = "0.4.2"
