@@ -1,6 +1,8 @@
 import type { NextConfig } from 'next'
 
 const nextConfig: NextConfig = {
+  distDir: 'dist',
+  output: 'export',
   reactStrictMode: false,
   // refer: https://web.dev/articles/cross-origin-isolation-guide
   async headers() {
