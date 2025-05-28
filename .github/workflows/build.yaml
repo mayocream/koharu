@@ -68,7 +68,8 @@ jobs:
             echo "$path" >> $GITHUB_OUTPUT
           done
           if [[ "${{ matrix.platform }}" == "windows-2025" ]]; then
-            7z a -j koharu-${{ steps.version.outputs.version }}-windows.zip target/release/koharu.exe target/release/*.dll
+            cd target/release
+            7z a ../../koharu-${{ steps.version.outputs.version }}-windows.zip koharu.exe *.dll
             echo "koharu-${{ steps.version.outputs.version }}-windows.zip" >> $GITHUB_OUTPUT
           fi
           echo "EOF" >> $GITHUB_OUTPUT
