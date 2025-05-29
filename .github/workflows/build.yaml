@@ -61,7 +61,7 @@ jobs:
         run: echo "version=$(cargo metadata --format-version=1 --no-deps | jq -r '.packages[0].version')" >> $GITHUB_OUTPUT
 
       - name: Bundle Tauri app
-        if: ${{ matrix.platform != 'windows-2025' }} # Windows builds are handled separately.
+        if: ${{ matrix.platform == 'windows-2025' }}
         run: |
           bun tauri bundle
 
