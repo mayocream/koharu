@@ -1,7 +1,6 @@
 {
   "$schema": "https://schema.tauri.app/config/2",
   "productName": "koharu",
-  "version": "0.1.1",
   "identifier": "koharu",
   "build": {
     "beforeDevCommand": "bun run dev",
