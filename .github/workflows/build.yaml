@@ -23,7 +23,7 @@ jobs:
           - platform: 'ubuntu-22.04' # for Tauri v1 you could replace this with ubuntu-20.04.
             args: ''
           - platform: 'windows-2025'
-            args: '--no-bundle'
+            args: ''
 
     runs-on: ${{ matrix.platform }}
     steps:
@@ -46,22 +46,20 @@ jobs:
       - name: install frontend dependencies
         run: bun install
 
+      - uses: Swatinem/rust-cache@v2
+
       - id: tauri
         uses: tauri-apps/tauri-action@v0
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         with:
           args: ${{ matrix.args }}
+          retryAttempts: 3
 
       - name: Get version
         id: version
         shell: bash
         run: echo "version=$(cargo metadata --format-version=1 --no-deps | jq -r '.packages[0].version')" >> $GITHUB_OUTPUT
-
-      - name: Bundle app
-        if: matrix.platform == 'windows-2025'
-        run: |
-          cargo tauri bundle
 
       - id: artifacts
         name: Get artifact paths
@@ -75,7 +73,6 @@ jobs:
             cd target/release
             7z a ../../koharu_${{ steps.version.outputs.version }}_x64-portable.zip koharu.exe *.dll
             echo "koharu_${{ steps.version.outputs.version }}_x64-portable.zip" >> $GITHUB_OUTPUT
-            echo "target/release/bundle/nsis/koharu_${{ steps.version.outputs.version }}_x64-setup.exe" >> $GITHUB_OUTPUT
           fi
           echo "EOF" >> $GITHUB_OUTPUT
 
