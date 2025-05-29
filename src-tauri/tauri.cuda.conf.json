@@ -1,17 +1,12 @@
 {
   "$schema": "https://schema.tauri.app/config/2",
   "identifier": "koharu",
-  "build": {
-    "features": [
-      "cuda"
-    ]
-  },
   "bundle": {
     "targets": [
       "nsis"
     ],
     "resources": {
-      "../target/release/onnxruntime.dll": "."
+      "../target/release/*.dll": "."
     }
   }
 }

@@ -4,8 +4,6 @@ on:
   push:
     branches:
       - main
-    tags:
-      - 'v*.*.*'  # Matches version tags like v1.0.0
   pull_request:
 
 jobs:
@@ -55,6 +53,7 @@ jobs:
         with:
           args: ${{ matrix.args }}
 
+      # workaround to avoid DLLs being used by another process
       - name: Bundle
         if: matrix.platform == 'windows-2025'
         run: |
@@ -77,7 +76,7 @@ jobs:
             cd target/release
             7z a ../../koharu_${{ steps.version.outputs.version }}_x64-portable.zip koharu.exe *.dll
             echo "koharu_${{ steps.version.outputs.version }}_x64-portable.zip" >> $GITHUB_OUTPUT
-            echo "target\release\bundle\nsis\koharu_${{ steps.version.outputs.version }}_x64-setup.exe" >> $GITHUB_OUTPUT
+            echo "target/release/bundle/nsis/koharu_${{ steps.version.outputs.version }}_x64-setup.exe" >> $GITHUB_OUTPUT
           fi
           echo "EOF" >> $GITHUB_OUTPUT
 
