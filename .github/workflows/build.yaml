@@ -58,7 +58,7 @@ jobs:
       - name: Get version
         id: version
         shell: bash
-        run: echo "version=$(jq -r '.version' src-tauri/tauri.conf.json)" >> $GITHUB_OUTPUT
+        run: echo "version=$(cargo metadata --format-version=1 --no-deps | jq '.packages[0].version')" >> $GITHUB_OUTPUT
 
       - id: artifacts
         shell: bash
