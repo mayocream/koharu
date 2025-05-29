@@ -3,7 +3,7 @@ members = ["comic-text-detector", "lama", "manga-ocr", "src-tauri"]
 resolver = "2"
 
 [workspace.package]
-version = "0.1.1"
+version = "0.1.2"
 edition = "2024"
 description = "Manga translator"
 license-file = "LICENSE"
