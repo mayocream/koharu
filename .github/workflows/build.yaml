@@ -32,21 +32,19 @@ jobs:
       - uses: oven-sh/setup-bun@v2
 
       - name: install Rust stable
+        if: matrix.platform == 'macos-15'
         uses: dtolnay/rust-toolchain@stable
         with:
-          # Those targets are only used on macos runners so it's in an `if` to slightly speed up windows and linux builds.
-          targets: ${{ matrix.platform == 'macos-15' && 'aarch64-apple-darwin,x86_64-apple-darwin' || '' }}
+          targets: 'aarch64-apple-darwin,x86_64-apple-darwin'
 
       - name: install dependencies (ubuntu only)
-        if: matrix.platform == 'ubuntu-22.04' # This must match the platform value defined above.
+        if: matrix.platform == 'ubuntu-22.04'
         run: |
           sudo apt-get update
           sudo apt-get install -y libwebkit2gtk-4.0-dev libwebkit2gtk-4.1-dev libappindicator3-dev librsvg2-dev patchelf
 
       - name: install frontend dependencies
         run: bun install
-
-      - uses: Swatinem/rust-cache@v2
 
       - id: tauri
         uses: tauri-apps/tauri-action@v0
