@@ -23,7 +23,7 @@ jobs:
           - platform: 'ubuntu-22.04' # for Tauri v1 you could replace this with ubuntu-20.04.
             args: ''
           - platform: 'windows-2025'
-            args: '--features cuda --no-bundle'
+            args: '--features cuda'
 
     runs-on: ${{ matrix.platform }}
     steps:
@@ -69,8 +69,8 @@ jobs:
           done
           if [[ "${{ matrix.platform }}" == "windows-2025" ]]; then
             cd target/release
-            7z a ../../koharu_${{ steps.version.outputs.version }}_windows.zip koharu.exe *.dll
-            echo "koharu_${{ steps.version.outputs.version }}_windows.zip" >> $GITHUB_OUTPUT
+            7z a ../../koharu_${{ steps.version.outputs.version }}_x64-portable.zip koharu.exe *.dll
+            echo "koharu_${{ steps.version.outputs.version }}_x64-portable.zip" >> $GITHUB_OUTPUT
           fi
           echo "EOF" >> $GITHUB_OUTPUT
 
