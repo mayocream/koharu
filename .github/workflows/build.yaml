@@ -23,7 +23,7 @@ jobs:
           - platform: 'ubuntu-22.04' # for Tauri v1 you could replace this with ubuntu-20.04.
             args: ''
           - platform: 'windows-2025'
-            args: ''
+            args: '--no-bundle'
 
     runs-on: ${{ matrix.platform }}
     steps:
@@ -54,7 +54,11 @@ jobs:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         with:
           args: ${{ matrix.args }}
-          retryAttempts: 3
+
+      - name: Bundle
+        if: matrix.platform == 'windows-2025'
+        run: |
+          bun tauri bundle --config src-tauri/tauri.cuda.conf.json
 
       - name: Get version
         id: version

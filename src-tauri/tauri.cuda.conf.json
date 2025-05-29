@@ -11,7 +11,7 @@
       "nsis"
     ],
     "resources": {
-      "../target/release/*.dll": "."
+      "../target/release/onnxruntime.dll": "."
     }
   }
 }
