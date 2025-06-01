@@ -6,7 +6,7 @@ Automated manga translation tool with LLM, written in **Rust**.
 
 Koharu introduces a new workflow for manga translation, utilizing the power of LLMs to automate the process. It combines the capabilities of object detection, OCR, inpainting, and LLMs to create a seamless translation experience.
 
-Koharu is built with Rust, ensuring high performance and reliability. The bundle is extremely lightweight (less than 20MB) and can be run on any machine without any dependencies, or you can try it out [in the browser](https://koharu.rs).
+Koharu is built with Rust, ensuring high performance and reliability. The bundle is extremely lightweight and can be run on any machine without any dependencies.
 
 > [!NOTE]
 > For help and support, please join our [Discord server](https://discord.gg/mHvHkxGnUY).
