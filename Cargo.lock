@@ -926,7 +926,7 @@ dependencies = [
 
 [[package]]
 name = "comic-text-detector"
-version = "0.1.1"
+version = "0.1.2"
 dependencies = [
  "anyhow",
  "candle-transformers",
@@ -3003,7 +3003,7 @@ dependencies = [
 
 [[package]]
 name = "koharu"
-version = "0.1.1"
+version = "0.1.2"
 dependencies = [
  "anyhow",
  "comic-text-detector",
@@ -3042,7 +3042,7 @@ dependencies = [
 
 [[package]]
 name = "lama"
-version = "0.1.1"
+version = "0.1.2"
 dependencies = [
  "anyhow",
  "clap",
@@ -3207,7 +3207,7 @@ dependencies = [
 
 [[package]]
 name = "manga-ocr"
-version = "0.1.1"
+version = "0.1.2"
 dependencies = [
  "anyhow",
  "clap",
