@@ -4,33 +4,14 @@ import { useEffect, useState } from 'react'
 import { useCanvasStore } from '@/lib/state'
 import { Play } from 'lucide-react'
 import { Button, Slider, Text } from '@radix-ui/themes'
-import { inference } from '@/lib/detection'
-import { useImageLoader } from '@/hooks/image-loader'
-import { convertBitmapToImageData } from '@/utils/image'
 
 export default function DetectionPanel() {
   const { image, texts, setTexts, setSegment } = useCanvasStore()
-  const imageBitmap = useImageLoader(image)
   const [loading, setLoading] = useState(false)
   const [confidenceThreshold, setConfidenceThreshold] = useState(0.5)
   const [nmsThreshold, setNmsThreshold] = useState(0.5)
 
-  const run = async () => {
-    setLoading(true)
-    const imageData = await convertBitmapToImageData(imageBitmap)
-    const result = await inference(imageData, confidenceThreshold, nmsThreshold)
-
-    setSegment(result.segment)
-
-    result.bboxes.sort((a: any, b: any) => {
-      const aCenter = (a.ymin + a.ymax) / 2
-      const bCenter = (b.ymin + b.ymax) / 2
-      return aCenter - bCenter
-    })
-
-    setTexts(result.bboxes)
-    setLoading(false)
-  }
+  const run = async () => {}
 
   return (
     <div className='flex w-full flex-col rounded-lg border border-gray-200 bg-white shadow-md'>

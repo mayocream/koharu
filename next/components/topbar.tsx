@@ -1,36 +1,33 @@
 'use client'
 
-import { Image, Settings } from 'lucide-react'
+import { Image } from 'lucide-react'
 import { useCanvasStore } from '@/lib/state'
-import { useRouter } from 'next/navigation'
 import { Button } from '@radix-ui/themes'
+import { open } from '@tauri-apps/plugin-dialog'
+import { readFile } from '@tauri-apps/plugin-fs'
 
 function Topbar() {
-  const router = useRouter()
   const { setImage, setTexts, setSegment } = useCanvasStore()
 
   const handleOpenImage = async () => {
     try {
-      const [fileHandle] = await showOpenFilePicker({
+      const path = await open({
         multiple: false,
-        types: [
+        filters: [
           {
-            description: 'Images',
-            accept: {
-              'image/*': ['.png', '.jpg', '.jpeg', '.webp'],
-            },
+            name: 'Images',
+            extensions: ['.png', '.jpg', '.jpeg', '.webp'],
           },
         ],
       })
 
-      if (!fileHandle) return
+      if (!path) return
 
-      const file = await fileHandle.getFile()
-      const imageData = await file.arrayBuffer()
+      const file = await readFile(path)
 
       setTexts([])
       setSegment(null)
-      setImage(new Uint8Array(imageData))
+      setImage(file)
     } catch (err) {
       console.error('Error opening image:', err)
     }
@@ -45,11 +42,6 @@ function Topbar() {
       </div>
 
       <div className='flex-grow' />
-      <div className='mx-1 flex items-center gap-1'>
-        <Button variant='soft' onClick={() => router.push('/settings')}>
-          <Settings size={20} />
-        </Button>
-      </div>
     </div>
   )
 }

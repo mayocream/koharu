@@ -6,32 +6,13 @@ import { useState } from 'react'
 import { Badge, Button, Text } from '@radix-ui/themes'
 import { cropImage } from '@/utils/image'
 import { useImageLoader } from '@/hooks/image-loader'
-import { inference } from '@/lib/ocr'
 
 export default function OCRPanel() {
   const { image, texts, setTexts } = useCanvasStore()
   const { selectedTextIndex, setSelectedTextIndex } = useWorkflowStore()
   const [loading, setLoading] = useState(false)
-  const imageData = useImageLoader(image)
 
-  const run = async () => {
-    setLoading(true)
-    const newTexts = []
-    for (const text of texts) {
-      const { xmin, ymin, xmax, ymax } = text
-      const croppedImageBuffer = await cropImage(
-        imageData,
-        xmin,
-        ymin,
-        xmax,
-        ymax
-      )
-      const result = await inference(croppedImageBuffer)
-      newTexts.push({ ...text, text: result })
-    }
-    setTexts(newTexts)
-    setLoading(false)
-  }
+  const run = async () => {}
 
   return (
     <div className='flex max-h-[600px] w-full flex-col rounded-lg border border-gray-200 bg-white shadow-md'>
