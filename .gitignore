@@ -37,7 +37,3 @@ runs/
 # model checkpoints
 models/
 .env
-
-# experiments
-BallonsTranslator/
-carve-lama/
