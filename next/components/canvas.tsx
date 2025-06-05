@@ -5,12 +5,27 @@ import { useState, useRef } from 'react'
 import { Image, Layer, Rect, Stage, Transformer } from 'react-konva'
 import { useCanvasStore, useWorkflowStore } from '@/lib/state'
 import ScaleControl from './scale-control'
+import { useImageLoader } from '@/hooks/image-loader'
+import { useSegmentLoader } from '@/hooks/segment-loader'
+import { useInpaintLoader } from '@/hooks/inpaint-loader'
 
 function Canvas() {
+  const { image, scale, texts, segment } = useCanvasStore()
+  const { selectedTextIndex, setSelectedTextIndex, selectedTool } =
+    useWorkflowStore()
+  const imageData = useImageLoader(image)
+  const segmentCanvas = useSegmentLoader(segment, imageData)
+  const containerRef = useRef<HTMLDivElement>(null)
+  const inpaintLayerRef = useRef<Konva.Layer>(null)
+
+  const [selected, setSelected] = useState<any>(null)
+  const inpaintCanvas = useInpaintLoader(imageData, segmentCanvas, texts, () =>
+    inpaintLayerRef.current?.batchDraw()
+  )
 
   return (
     <>
-      <div className='relative h-full w-full flex-1'>
+      <div ref={containerRef} className='relative h-full w-full flex-1'>
         <div className='absolute inset-0 flex items-center-safe justify-center-safe overflow-auto'>
           <div className='p-2'>
             <Stage

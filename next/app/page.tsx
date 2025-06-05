@@ -7,9 +7,31 @@ import Canvas from '@/components/canvas'
 import OCRPanel from '@/components/ocr-panel'
 import { useWorkflowStore } from '@/lib/state'
 import TranslationPanel from '@/components/translation-panel'
+import SplashScreen from '@/components/splashscreen'
+import { useEffect, useState } from 'react'
+import * as detection from '@/lib/detection'
+import * as ocr from '@/lib/ocr'
+import * as inpaint from '@/lib/inpaint'
 
 function App() {
+  const [progress, setProgress] = useState(0)
+  const [loading, setLoading] = useState(true)
   const { selectedTool } = useWorkflowStore()
+
+  useEffect(() => {
+    const initialize = async () => {
+      await detection.initialize().then(() => setProgress(30))
+      await ocr.initialize().then(() => setProgress(70))
+      await inpaint.initialize().then(() => setProgress(100))
+    }
+    initialize().then(() => {
+      setLoading(false)
+    })
+  }, [])
+
+  if (loading) {
+    return <SplashScreen progress={progress} />
+  }
 
   return (
     <main className='flex h-screen max-h-screen w-screen max-w-screen flex-col bg-gray-100'>
