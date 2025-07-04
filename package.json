@@ -1,15 +1,13 @@
 {
   "scripts": {
     "dev": "cd next && bun run dev",
-    "build": "cd next && bun run build",
-    "tauri": "tauri"
+    "build": "cd next && bun run build"
   },
   "workspaces": [
     "next"
   ],
   "devDependencies": {
-    "@tauri-apps/cli": "^2.5.0",
     "prettier": "^3.6.2",
-    "prettier-plugin-tailwindcss": "^0.6.12"
+    "prettier-plugin-tailwindcss": "^0.6.13"
   }
 }

@@ -10,26 +10,24 @@
   },
   "dependencies": {
     "@radix-ui/themes": "^3.2.1",
-    "@tauri-apps/api": "^2.5.0",
-    "idb-keyval": "^6.2.2",
     "konva": "^9.3.20",
-    "lucide-react": "^0.513.0",
-    "next": "15.3.3",
+    "lucide-react": "^0.525.0",
+    "next": "15.3.5",
     "onnxruntime-web": "^1.22.0",
-    "openai": "^5.1.0",
+    "openai": "^5.8.2",
     "react": "^19.1.0",
     "react-dom": "^19.1.0",
-    "react-konva": "^19.0.4",
-    "zustand": "^5.0.5"
+    "react-konva": "^19.0.7",
+    "zustand": "^5.0.6"
   },
   "devDependencies": {
-    "@tailwindcss/postcss": "^4.1.8",
-    "@types/node": "^22.15.29",
-    "@types/react": "^19.1.6",
+    "@tailwindcss/postcss": "^4.1.11",
+    "@types/node": "^24.0.10",
+    "@types/react": "^19.1.8",
     "@types/react-dom": "^19.1.6",
     "@types/wicg-file-system-access": "^2023.10.6",
-    "canvas": "^3.1.0",
-    "tailwindcss": "^4.1.8",
+    "canvas": "^3.1.2",
+    "tailwindcss": "^4.1.11",
     "typescript": "^5.8.3"
   }
 }
