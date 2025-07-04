@@ -3006,12 +3006,7 @@ name = "koharu"
 version = "0.1.2"
 dependencies = [
  "anyhow",
- "comic-text-detector",
- "image",
- "lama",
  "log",
- "manga-ocr",
- "ort",
  "serde",
  "serde_json",
  "tauri",

@@ -15,16 +15,7 @@
         "title": "Koharu",
         "width": 1200,
         "height": 900,
-        "center": true,
-        "visible": false
-      },
-      {
-        "label": "splashscreen",
-        "url": "/splashscreen",
-        "width": 400,
-        "height": 300,
-        "center": true,
-        "decorations": false
+        "center": true
       }
     ],
     "security": {
