@@ -1,10 +1,8 @@
 'use client'
 
 import { useState, useEffect } from 'react'
-import { invoke } from '@tauri-apps/api/core'
 import { cropImage, resizeImage } from '@/utils/image'
 import { inference } from '@/lib/inpaint'
-
 
 interface TextBlock {
   xmin: number
