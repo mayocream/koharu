@@ -6,7 +6,7 @@ Automated manga translation tool with LLM, written in **Rust**.
 
 Koharu introduces a new workflow for manga translation, utilizing the power of LLMs to automate the process. It combines the capabilities of object detection, OCR, inpainting, and LLMs to create a seamless translation experience.
 
-Koharu is built with Rust, ensuring high performance and reliability. The bundle is extremely lightweight and can be run on any machine without any dependencies.
+Koharu is built with Rust, WebAssembly, and WebGPU, making it fast and efficient.
 
 > [!NOTE]
 > For help and support, please join our [Discord server](https://discord.gg/mHvHkxGnUY).
@@ -16,14 +16,12 @@ Koharu is built with Rust, ensuring high performance and reliability. The bundle
 ![detection](./docs/images/koharu-demo-1.png)
 ![translation](./docs/images/koharu-demo-2.png)
 
-The build is available for Windows, MacOS, and Linux. You can download the latest release from the [releases page](https://github.com/mayocream/koharu/releases/latest).
+The application is hosted on [koharu.rs](https://koharu.rs), where you can try it out on your browser. We recommend using the latest version of Chrome or Edge for the best experience.
 
 > [!NOTE]
 > Koharu is still in development and may not work perfectly. Please report any issues you encounter on the [issues page](https://github.com/mayocream/koharu/issues).
 
 ## Technology
-
-Koharu is built using Tauri, a framework for building lightweight, secure, and fast desktop applications. The interface is built with React and Konva, written in TypeScript. The machine learning models are re-implemented in Rust, using the Ort ONNX runtime for inference. The models are optimized for performance and can run on any machine without the need for a GPU.
 
 ## Workflow
 
@@ -46,47 +44,8 @@ You can find the ONNX models we actually use below:
 - [manga-ocr-onnx](https://huggingface.co/mayocream/manga-ocr-onnx)
 - [lama-manga-onnx](https://huggingface.co/mayocream/lama-manga-onnx)
 
-## Features
-
-To enable `cuda` acceleration, run `bun` with the `--features cuda` flag:
-
-```bash
-bun tauri dev --features cuda
-```
-
-To use CUDA acceleration, you need to install the [CUDA toolkit](https://developer.nvidia.com/cuda-downloads) and the [cuDNN](https://developer.nvidia.com/cudnn-downloads) library.
-
 ## Development
 
 ### Prerequisites
 
-Please follow the instructions on the [Tauri documentation](https://tauri.app/start/prerequisites/) to install the required dependencies of Tauri.
-
-- Rust 1.85
 - Bun
-
-#### Windows
-
-Please install [Visual Studio C++ Build tools](https://visualstudio.microsoft.com/visual-cpp-build-tools/) first.
-
-Then, install the dependencies using the following commands in PowerShell:
-
-```powershell
-winget install --id=Oven-sh.Bun
-winget install rustlang.rustup
-
-rustup
-```
-
-### Build
-
-```bash
-bun install
-bun tauri dev
-```
-
-To create a debug build, run:
-
-```bash
-bun tauri build --debug
-```
