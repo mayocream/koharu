@@ -16,7 +16,6 @@
         "lucide-react": "^0.525.0",
         "next": "15.3.5",
         "onnxruntime-web": "^1.22.0",
-        "openai": "^5.8.2",
         "react": "^19.1.0",
         "react-dom": "^19.1.0",
         "react-konva": "^19.0.7",
@@ -434,8 +433,6 @@
     "onnxruntime-common": ["onnxruntime-common@1.22.0", "", {}, "sha512-vcuaNWgtF2dGQu/EP5P8UI5rEPEYqXG2sPPe5j9lg2TY/biJF8eWklTMwlDO08iuXq48xJo0awqIpK5mPG+IxA=="],
 
     "onnxruntime-web": ["onnxruntime-web@1.22.0", "", { "dependencies": { "flatbuffers": "^25.1.24", "guid-typescript": "^1.0.9", "long": "^5.2.3", "onnxruntime-common": "1.22.0", "platform": "^1.3.6", "protobufjs": "^7.2.4" } }, "sha512-Ud/+EBo6mhuaQWt/OjaOk0iNWjXqJoeeMFr6xQEERZdIZH2OWpGzuujz7lfuOBjUa6TEE/sc4nb7Da5dNL34fg=="],
-
-    "openai": ["openai@5.8.2", "", { "peerDependencies": { "ws": "^8.18.0", "zod": "^3.23.8" }, "optionalPeers": ["ws", "zod"], "bin": { "openai": "bin/cli" } }, "sha512-8C+nzoHYgyYOXhHGN6r0fcb4SznuEn1R7YZMvlqDbnCuE0FM2mm3T1HiYW6WIcMS/F1Of2up/cSPjLPaWt0X9Q=="],
 
     "picocolors": ["picocolors@1.1.1", "", {}, "sha512-xceH2snhtb5M9liqDsmEw56le376mTZkEX/jEb/RxNFyegNul7eNslCXP9FDj/Lcu0X8KEyMceP2ntpaHrDEVA=="],
 

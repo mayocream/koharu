@@ -4,7 +4,7 @@ import { useCanvasStore, useWorkflowStore } from '@/lib/state'
 import { Play } from 'lucide-react'
 import { useState } from 'react'
 import { Badge, Button, Text } from '@radix-ui/themes'
-import { cropImage } from '@/utils/image'
+import { cropImage } from '@/util/image'
 import { useImageLoader } from '@/hooks/image-loader'
 import { inference } from '@/lib/ocr'
 

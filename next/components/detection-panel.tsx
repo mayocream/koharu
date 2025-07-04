@@ -6,7 +6,7 @@ import { Play } from 'lucide-react'
 import { Button, Slider, Text } from '@radix-ui/themes'
 import { inference } from '@/lib/detection'
 import { useImageLoader } from '@/hooks/image-loader'
-import { convertBitmapToImageData } from '@/utils/image'
+import { convertBitmapToImageData } from '@/util/image'
 
 export default function DetectionPanel() {
   const { image, texts, setTexts, setSegment } = useCanvasStore()

@@ -1,5 +1,5 @@
-import { resizeImage } from '@/utils/image'
-import { download } from '@/utils/model'
+import { resizeImage } from '@/util/image'
+import { download } from '@/util/model'
 import * as ort from 'onnxruntime-web'
 
 let session: ort.InferenceSession

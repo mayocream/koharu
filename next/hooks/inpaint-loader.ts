@@ -1,7 +1,7 @@
 'use client'
 
 import { useState, useEffect } from 'react'
-import { cropImage, resizeImage } from '@/utils/image'
+import { cropImage, resizeImage } from '@/util/image'
 import { inference } from '@/lib/inpaint'
 
 interface TextBlock {
