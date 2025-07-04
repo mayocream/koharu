@@ -1,5 +1,5 @@
 [workspace]
-members = ["comic-text-detector", "lama", "manga-ocr", "src-tauri"]
+members = ["comic-text-detector", "lama", "manga-ocr"]
 resolver = "2"
 
 [workspace.package]
@@ -17,17 +17,8 @@ anyhow = "1.0.98"
 ndarray = "0.16.1"
 imageproc = "0.25.0"
 clap = { version = "4.5.38", features = ["derive"] }
-tauri = { version = "2", features = ["protocol-asset"] }
-tauri-plugin-opener = "2"
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"
-tauri-plugin-dialog = "2"
-tauri-plugin-log = "2"
-tauri-plugin-persisted-scope = "2"
-tauri-plugin-store = "2"
 tokio = { version = "1.44.2", features = ["full"] }
 tracing = { version = "0.1.41", features = ["log"] }
 log = "0.4.27"
-tauri-plugin-notification = "2"
-tauri-plugin-fs = "2"
-tauri-build = { version = "2", features = [] }
