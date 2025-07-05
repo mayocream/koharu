@@ -38,12 +38,6 @@ The workflow of translation consists of the following steps:
 - [manga-ocr](https://github.com/kha-white/manga-ocr) - Extracts text from manga images.
 - [AnimeMangaInpainting](https://huggingface.co/dreMaz/AnimeMangaInpainting) - Finetuned LaMa model for inpainting manga images.
 
-You can find the ONNX models we actually use below:
-
-- [comic-text-detector-onnx](https://huggingface.co/mayocream/comic-text-detector-onnx)
-- [manga-ocr-onnx](https://huggingface.co/mayocream/manga-ocr-onnx)
-- [lama-manga-onnx](https://huggingface.co/mayocream/lama-manga-onnx)
-
 ## Development
 
 ### Prerequisites
