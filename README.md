@@ -43,3 +43,4 @@ The workflow of translation consists of the following steps:
 ### Prerequisites
 
 - Bun
+- Rust (1.85.0 or later)
