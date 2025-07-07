@@ -19,9 +19,6 @@ function Canvas() {
   const inpaintLayerRef = useRef<Konva.Layer>(null)
 
   const [selected, setSelected] = useState<any>(null)
-  const inpaintCanvas = useInpaintLoader(imageData, segmentCanvas, texts, () =>
-    inpaintLayerRef.current?.batchDraw()
-  )
 
   return (
     <>
@@ -77,9 +74,7 @@ function Canvas() {
                 )}
               </Layer>
               <Layer ref={inpaintLayerRef}>
-                {selectedTool === 'inpaint' && (
-                  <Image image={inpaintCanvas ?? null} />
-                )}
+                {selectedTool === 'inpaint' && <Image image={null} />}
               </Layer>
             </Stage>
           </div>

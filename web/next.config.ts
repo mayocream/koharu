@@ -19,6 +19,7 @@ const nextConfig: NextConfig = {
       },
     ]
   },
+  serverExternalPackages: ['onnxruntime-web', 'onnxruntime-web/webgpu'],
 }
 
 export default nextConfig

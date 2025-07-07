@@ -1,6 +1,6 @@
 import { resizeImage, convertBitmapToImageData } from '@/util/image'
 import { download } from '@/util/model'
-import * as ort from 'onnxruntime-web'
+import * as ort from 'onnxruntime-web/webgpu'
 
 let encoderSession: ort.InferenceSession
 let decoderSession: ort.InferenceSession
