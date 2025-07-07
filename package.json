@@ -1,10 +1,10 @@
 {
   "scripts": {
-    "dev": "cd next && bun run dev",
-    "build": "cd next && bun run build"
+    "dev": "cd web && bun run dev",
+    "build": "cd web && bun run build"
   },
   "workspaces": [
-    "next"
+    "web"
   ],
   "devDependencies": {
     "prettier": "^3.6.2",

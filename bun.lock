@@ -7,7 +7,7 @@
         "prettier-plugin-tailwindcss": "^0.6.13",
       },
     },
-    "next": {
+    "web": {
       "name": "koharu",
       "version": "0.1.0",
       "dependencies": {
@@ -374,7 +374,7 @@
 
     "jiti": ["jiti@2.4.2", "", { "bin": { "jiti": "lib/jiti-cli.mjs" } }, "sha512-rg9zJN+G4n2nfJl5MW3BMygZX56zKPNVEYYqq7adpmMh4Jn2QNEwhvQlFy6jPVdcod7txZtKHWnyZiA3a0zP7A=="],
 
-    "koharu": ["koharu@workspace:next"],
+    "koharu": ["koharu@workspace:web"],
 
     "konva": ["konva@9.3.20", "", {}, "sha512-7XPD/YtgfzC8b1c7z0hhY5TF1IO/pBYNa29zMTA2PeBaqI0n5YplUeo4JRuRcljeAF8lWtW65jePZZF7064c8w=="],
 
