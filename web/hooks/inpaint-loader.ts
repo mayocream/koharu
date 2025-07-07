@@ -46,7 +46,7 @@ export function useInpaintLoader(
         }
 
         await Promise.all(
-          tiles.map(async ({ x, y }) => {
+          tiles.slice(0, 1).map(async ({ x, y }) => {
             // Calculate tile boundaries
             // TODO: implment overlap while maintaining aspect
             const xmin = Math.max(0, x - OVERLAP)
