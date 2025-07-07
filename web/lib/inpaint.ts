@@ -1,13 +1,6 @@
-'use client'
-
 import { resizeImage } from '@/util/image'
 import { download } from '@/util/model'
 import * as ort from 'onnxruntime-web'
-
-if (typeof navigator !== 'undefined') {
-  // refer: https://onnxruntime.ai/docs/tutorials/web/env-flags-and-session-options.html#envwasmnumthreads
-  ort.env.wasm.numThreads = navigator.hardwareConcurrency
-}
 
 let session: ort.InferenceSession
 export const initialize = async () => {
@@ -15,7 +8,7 @@ export const initialize = async () => {
     'https://huggingface.co/mayocream/lama-manga-onnx/resolve/main/lama-manga.onnx'
   )
   session = await ort.InferenceSession.create(model, {
-    executionProviders: ['wasm'],
+    executionProviders: ['webgpu'],
     graphOptimizationLevel: 'all',
   })
 }
