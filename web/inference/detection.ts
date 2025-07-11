@@ -24,7 +24,7 @@ export type Bbox = {
 
 export type Output = {
   bboxes: Bbox[]
-  segment: Uint8Array
+  segment: ImageBitmap
 }
 
 export const inference = async (
@@ -86,12 +86,22 @@ export const inference = async (
 
   // Handle masks
   const mask = output['seg'].data as Float32Array
-  const segment = new Uint8Array(1024 * 1024)
+  const maskBuffer = new Uint8ClampedArray(1024 * 1024 * 4)
 
   for (let i = 0; i < mask.length; i++) {
-    const val = Math.round(mask[i] * 255)
-    segment[i] = val < maskThreshold ? 0 : val
+    const val = mask[i] * 255
+    const pixel = val < maskThreshold ? 0 : val
+    const index = i * 4
+
+    maskBuffer[index] = pixel // R
+    maskBuffer[index + 1] = pixel // G
+    maskBuffer[index + 2] = pixel // B
+    maskBuffer[index + 3] = 255 // A (Fully opaque)
   }
+
+  const maskImageData = new ImageData(maskBuffer, 1024, 1024)
+  const maskBitmap = await createImageBitmap(maskImageData)
+  const segment = await resize(maskBitmap, origWidth, origHeight)
 
   return { bboxes, segment }
 }

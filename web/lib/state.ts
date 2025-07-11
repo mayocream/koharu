@@ -2,14 +2,14 @@ import { create } from 'zustand'
 import { createJSONStorage, persist } from 'zustand/middleware'
 
 type CanvasState = {
-  image: Uint8Array | null
-  setImage: (image: Uint8Array | null) => void
+  image: ImageBitmap | null
+  setImage: (image: ImageBitmap | null) => void
   scale: number
   setScale: (scale: number) => void
   texts: any[]
   setTexts: (blocks: any[]) => void
-  segment: Uint8Array | null
-  setSegment: (segment: Uint8Array) => void
+  segment: ImageBitmap | null
+  setSegment: (segment: ImageBitmap) => void
 }
 
 export const useCanvasStore = create<CanvasState>((set) => ({

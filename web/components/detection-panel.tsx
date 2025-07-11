@@ -1,32 +1,20 @@
 'use client'
 
-import { useEffect, useState } from 'react'
+import { useState } from 'react'
 import { useCanvasStore } from '@/lib/state'
 import { Play } from 'lucide-react'
 import { Button, Slider, Text } from '@radix-ui/themes'
 import { inference } from '@/inference/detection'
-import { loadImageFromBuffer } from '@/lib/image-loader'
 
 export default function DetectionPanel() {
   const { image, texts, setTexts, setSegment } = useCanvasStore()
-  const [imageBitmap, setImageBitmap] = useState<ImageBitmap | null>(null)
   const [loading, setLoading] = useState(false)
   const [confidenceThreshold, setConfidenceThreshold] = useState(0.5)
   const [nmsThreshold, setNmsThreshold] = useState(0.5)
 
-  useEffect(() => {
-    if (image) {
-      loadImageFromBuffer(image).then(setImageBitmap)
-    }
-  }, [image])
-
   const run = async () => {
     setLoading(true)
-    const result = await inference(
-      imageBitmap,
-      confidenceThreshold,
-      nmsThreshold
-    )
+    const result = await inference(image, confidenceThreshold, nmsThreshold)
 
     setSegment(result.segment)
 

@@ -26,11 +26,12 @@ function Topbar() {
       if (!fileHandle) return
 
       const file = await fileHandle.getFile()
-      const imageData = await file.arrayBuffer()
+      const buffer = await file.arrayBuffer()
+      const imageBitmap = await createImageBitmap(new Blob([buffer]))
 
       setTexts([])
       setSegment(null)
-      setImage(new Uint8Array(imageData))
+      setImage(imageBitmap)
     } catch (err) {
       console.error('Error opening image:', err)
     }

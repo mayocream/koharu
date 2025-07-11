@@ -1,12 +1,10 @@
 'use client'
 
 import type Konva from 'konva'
-import { useState, useRef, useEffect } from 'react'
+import { useState, useRef } from 'react'
 import { Image, Layer, Rect, Stage, Transformer } from 'react-konva'
 import { useCanvasStore, useWorkflowStore } from '@/lib/state'
 import ScaleControl from './scale-control'
-import { loadImageFromBuffer } from '@/lib/image-loader'
-import { createSegmentCanvas } from '@/lib/segment-loader'
 
 function Canvas() {
   const { image, scale, texts, segment } = useCanvasStore()
@@ -16,26 +14,6 @@ function Canvas() {
   const inpaintLayerRef = useRef<Konva.Layer>(null)
 
   const [selected, setSelected] = useState<any>(null)
-  const [imageData, setImageData] = useState<ImageBitmap | null>(null)
-  const [segmentCanvas, setSegmentCanvas] = useState<OffscreenCanvas | null>(
-    null
-  )
-  const [inpaintCanvas, setInpaintCanvas] = useState<OffscreenCanvas | null>(
-    null
-  )
-
-  useEffect(() => {
-    if (image) {
-      loadImageFromBuffer(image).then(setImageData)
-    }
-  }, [image])
-
-  useEffect(() => {
-    if (segment && imageData) {
-      const canvas = createSegmentCanvas(segment, imageData)
-      setSegmentCanvas(canvas)
-    }
-  }, [segment, imageData])
 
   return (
     <>
@@ -45,14 +23,14 @@ function Canvas() {
             <Stage
               scaleX={scale}
               scaleY={scale}
-              width={imageData?.width * scale || 0}
-              height={imageData?.height * scale || 0}
+              width={image?.width * scale || 0}
+              height={image?.height * scale || 0}
               onClick={() => {
                 setSelected(null)
               }}
             >
               <Layer>
-                <Image image={imageData ?? null} />
+                <Image image={image ?? null} />
               </Layer>
               <Layer>
                 {texts?.map((block, index) => {
@@ -87,13 +65,11 @@ function Canvas() {
               </Layer>
               <Layer>
                 {selectedTool === 'segmentation' && (
-                  <Image image={segmentCanvas ?? null} />
+                  <Image image={segment ?? null} />
                 )}
               </Layer>
               <Layer ref={inpaintLayerRef}>
-                {selectedTool === 'inpaint' && (
-                  <Image image={inpaintCanvas ?? null} />
-                )}
+                {selectedTool === 'inpaint' && <Image image={null} />}
               </Layer>
             </Stage>
           </div>

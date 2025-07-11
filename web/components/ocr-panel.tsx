@@ -2,23 +2,15 @@
 
 import { useCanvasStore, useWorkflowStore } from '@/lib/state'
 import { Play } from 'lucide-react'
-import { useState, useEffect } from 'react'
+import { useState } from 'react'
 import { Badge, Button, Text } from '@radix-ui/themes'
 import { crop } from '@/utils/image'
-import { loadImageFromBuffer } from '@/lib/image-loader'
 import { inference } from '@/inference/ocr'
 
 export default function OCRPanel() {
   const { image, texts, setTexts } = useCanvasStore()
   const { selectedTextIndex, setSelectedTextIndex } = useWorkflowStore()
   const [loading, setLoading] = useState(false)
-  const [imageData, setImageData] = useState<ImageBitmap | null>(null)
-
-  useEffect(() => {
-    if (image) {
-      loadImageFromBuffer(image).then(setImageData)
-    }
-  }, [image])
 
   const run = async () => {
     setLoading(true)
@@ -26,7 +18,7 @@ export default function OCRPanel() {
     for (const text of texts) {
       const { xmin, ymin, xmax, ymax } = text
       const croppedImage = await crop(
-        imageData,
+        image,
         xmin,
         ymin,
         xmax - xmin,
