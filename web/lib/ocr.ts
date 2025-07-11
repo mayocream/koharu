@@ -1,5 +1,5 @@
-import { resizeImage, convertBitmapToImageData } from '@/util/image'
-import { download } from '@/util/model'
+import { resizeImage, convertBitmapToImageData } from '@/utils/image'
+import { download } from '@/utils/model'
 import * as ort from 'onnxruntime-web/webgpu'
 
 let encoderSession: ort.InferenceSession

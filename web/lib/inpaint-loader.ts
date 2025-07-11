@@ -1,4 +1,4 @@
-import { cropImage, resizeImage } from '@/util/image'
+import { cropImage, resizeImage } from '@/utils/image'
 import { inference } from '@/lib/inpaint'
 
 
@@ -9,7 +9,7 @@ export async function createInpaintCanvas(
 ): Promise<OffscreenCanvas> {
   const canvas = new OffscreenCanvas(imageData.width, imageData.height)
   const resultCtx = canvas.getContext('2d')!
-  
+
   const TILE_SIZE = 512
   const OVERLAP = 6
   const BLACK_THRESHOLD = 30
