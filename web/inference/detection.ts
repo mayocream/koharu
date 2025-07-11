@@ -27,51 +27,11 @@ export type Output = {
   segment: Uint8Array
 }
 
-const MASK_THRESHOLD = 30
-
-// Non-maximum suppression implementation
-const nonMaximumSuppression = (boxes: Bbox[][], threshold: number) => {
-  for (let classIndex = 0; classIndex < boxes.length; classIndex++) {
-    const classBoxes = boxes[classIndex]
-    classBoxes.sort((a, b) => b.confidence - a.confidence)
-
-    for (let i = 0; i < classBoxes.length; i++) {
-      if (classBoxes[i].confidence === 0) continue
-
-      for (let j = i + 1; j < classBoxes.length; j++) {
-        if (classBoxes[j].confidence === 0) continue
-
-        const box1 = classBoxes[i]
-        const box2 = classBoxes[j]
-
-        const intersectionX = Math.max(
-          0,
-          Math.min(box1.xmax, box2.xmax) - Math.max(box1.xmin, box2.xmin)
-        )
-        const intersectionY = Math.max(
-          0,
-          Math.min(box1.ymax, box2.ymax) - Math.max(box1.ymin, box2.ymin)
-        )
-        const intersectionArea = intersectionX * intersectionY
-
-        const box1Area = (box1.xmax - box1.xmin) * (box1.ymax - box1.ymin)
-        const box2Area = (box2.xmax - box2.xmin) * (box2.ymax - box2.ymin)
-        const unionArea = box1Area + box2Area - intersectionArea
-
-        const iou = intersectionArea / unionArea
-
-        if (iou > threshold) {
-          classBoxes[j].confidence = 0
-        }
-      }
-    }
-  }
-}
-
 export const inference = async (
   image: ImageBitmap,
   confidenceThreshold: number,
-  nmsThreshold: number
+  nmsThreshold: number,
+  maskThreshold: number = 30
 ): Promise<Output> => {
   const origWidth = image.width
   const origHeight = image.height
@@ -130,8 +90,47 @@ export const inference = async (
 
   for (let i = 0; i < mask.length; i++) {
     const val = Math.round(mask[i] * 255)
-    segment[i] = val < MASK_THRESHOLD ? 0 : val
+    segment[i] = val < maskThreshold ? 0 : val
   }
 
   return { bboxes, segment }
+}
+
+// Non-maximum suppression implementation
+const nonMaximumSuppression = (boxes: Bbox[][], threshold: number) => {
+  for (let classIndex = 0; classIndex < boxes.length; classIndex++) {
+    const classBoxes = boxes[classIndex]
+    classBoxes.sort((a, b) => b.confidence - a.confidence)
+
+    for (let i = 0; i < classBoxes.length; i++) {
+      if (classBoxes[i].confidence === 0) continue
+
+      for (let j = i + 1; j < classBoxes.length; j++) {
+        if (classBoxes[j].confidence === 0) continue
+
+        const box1 = classBoxes[i]
+        const box2 = classBoxes[j]
+
+        const intersectionX = Math.max(
+          0,
+          Math.min(box1.xmax, box2.xmax) - Math.max(box1.xmin, box2.xmin)
+        )
+        const intersectionY = Math.max(
+          0,
+          Math.min(box1.ymax, box2.ymax) - Math.max(box1.ymin, box2.ymin)
+        )
+        const intersectionArea = intersectionX * intersectionY
+
+        const box1Area = (box1.xmax - box1.xmin) * (box1.ymax - box1.ymin)
+        const box2Area = (box2.xmax - box2.xmin) * (box2.ymax - box2.ymin)
+        const unionArea = box1Area + box2Area - intersectionArea
+
+        const iou = intersectionArea / unionArea
+
+        if (iou > threshold) {
+          classBoxes[j].confidence = 0
+        }
+      }
+    }
+  }
 }
