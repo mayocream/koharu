@@ -1,27 +1,46 @@
 'use client'
 
 import type Konva from 'konva'
-import { useState, useRef } from 'react'
+import { useState, useRef, useEffect } from 'react'
 import { Image, Layer, Rect, Stage, Transformer } from 'react-konva'
 import { useCanvasStore, useWorkflowStore } from '@/lib/state'
 import ScaleControl from './scale-control'
-import { useImageLoader } from '@/hooks/image-loader'
-import { useSegmentLoader } from '@/hooks/segment-loader'
-import { useInpaintLoader } from '@/hooks/inpaint-loader'
+import { loadImageFromBuffer } from '@/lib/image-loader'
+import { createSegmentCanvas } from '@/lib/segment-loader'
+import { createInpaintCanvas } from '@/lib/inpaint-loader'
 
 function Canvas() {
   const { image, scale, texts, segment } = useCanvasStore()
   const { selectedTextIndex, setSelectedTextIndex, selectedTool } =
     useWorkflowStore()
-  const imageData = useImageLoader(image)
-  const segmentCanvas = useSegmentLoader(segment, imageData)
   const containerRef = useRef<HTMLDivElement>(null)
   const inpaintLayerRef = useRef<Konva.Layer>(null)
 
   const [selected, setSelected] = useState<any>(null)
-  const inpaintCanvas = useInpaintLoader(imageData, segmentCanvas, texts, () =>
-    inpaintLayerRef.current?.batchDraw()
-  )
+  const [imageData, setImageData] = useState<ImageBitmap | null>(null)
+  const [segmentCanvas, setSegmentCanvas] = useState<OffscreenCanvas | null>(null)
+  const [inpaintCanvas, setInpaintCanvas] = useState<OffscreenCanvas | null>(null)
+
+  useEffect(() => {
+    if (image) {
+      loadImageFromBuffer(image).then(setImageData)
+    }
+  }, [image])
+
+  useEffect(() => {
+    if (segment && imageData) {
+      const canvas = createSegmentCanvas(segment, imageData)
+      setSegmentCanvas(canvas)
+    }
+  }, [segment, imageData])
+
+  useEffect(() => {
+    if (imageData && segmentCanvas && texts.length > 0) {
+      createInpaintCanvas(imageData, segmentCanvas, () =>
+        inpaintLayerRef.current?.batchDraw()
+      ).then(setInpaintCanvas)
+    }
+  }, [imageData, segmentCanvas, texts])
 
   return (
     <>
