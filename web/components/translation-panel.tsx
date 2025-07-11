@@ -1,6 +1,6 @@
 'use client'
 
-import { useCanvasStore, useSettingsStore, useWorkflowStore } from '@/lib/state'
+import { useCanvasStore, useWorkflowStore } from '@/lib/state'
 import { Badge, Button, Text, TextArea } from '@radix-ui/themes'
 import { Play } from 'lucide-react'
 import { useState } from 'react'

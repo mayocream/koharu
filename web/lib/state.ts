@@ -1,5 +1,4 @@
 import { create } from 'zustand'
-import { createJSONStorage, persist } from 'zustand/middleware'
 
 type CanvasState = {
   image: ImageBitmap | null
@@ -40,29 +39,3 @@ export const useWorkflowStore = create<WorkflowState>((set) => ({
   selectedTextIndex: null,
   setSelectedTextIndex: (index) => set({ selectedTextIndex: index }),
 }))
-
-type SettingsState = {
-  openAIServer: string | null
-  setOpenAIServer: (url: string) => void
-  openAIToken: string | null
-  setOpenAIToken: (token: string) => void
-  openAIModel: string | null
-  setOpenAIModel: (model: string) => void
-}
-
-export const useSettingsStore = create<SettingsState>()(
-  persist(
-    (set) => ({
-      openAIServer: null,
-      setOpenAIServer: (url) => set({ openAIServer: url }),
-      openAIToken: null,
-      setOpenAIToken: (token) => set({ openAIToken: token }),
-      openAIModel: null,
-      setOpenAIModel: (model) => set({ openAIModel: model }),
-    }),
-    {
-      name: 'settings-storage',
-      storage: createJSONStorage(() => localStorage),
-    }
-  )
-)
