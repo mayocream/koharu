@@ -7,7 +7,6 @@ import { useCanvasStore, useWorkflowStore } from '@/lib/state'
 import ScaleControl from './scale-control'
 import { loadImageFromBuffer } from '@/lib/image-loader'
 import { createSegmentCanvas } from '@/lib/segment-loader'
-import { createInpaintCanvas } from '@/lib/inpaint-loader'
 
 function Canvas() {
   const { image, scale, texts, segment } = useCanvasStore()
@@ -18,8 +17,12 @@ function Canvas() {
 
   const [selected, setSelected] = useState<any>(null)
   const [imageData, setImageData] = useState<ImageBitmap | null>(null)
-  const [segmentCanvas, setSegmentCanvas] = useState<OffscreenCanvas | null>(null)
-  const [inpaintCanvas, setInpaintCanvas] = useState<OffscreenCanvas | null>(null)
+  const [segmentCanvas, setSegmentCanvas] = useState<OffscreenCanvas | null>(
+    null
+  )
+  const [inpaintCanvas, setInpaintCanvas] = useState<OffscreenCanvas | null>(
+    null
+  )
 
   useEffect(() => {
     if (image) {
@@ -33,14 +36,6 @@ function Canvas() {
       setSegmentCanvas(canvas)
     }
   }, [segment, imageData])
-
-  useEffect(() => {
-    if (imageData && segmentCanvas && texts.length > 0) {
-      createInpaintCanvas(imageData, segmentCanvas, () =>
-        inpaintLayerRef.current?.batchDraw()
-      ).then(setInpaintCanvas)
-    }
-  }, [imageData, segmentCanvas, texts])
 
   return (
     <>

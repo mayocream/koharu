@@ -1,9 +1,9 @@
 'use client'
 
 import { useEffect, useState } from 'react'
-import * as detection from '@/lib/detection'
-import * as ocr from '@/lib/ocr'
-import * as inpaint from '@/lib/inpaint'
+import * as detection from '@/inference/detection'
+import * as ocr from '@/inference/ocr'
+import * as inpaint from '@/inference/inpaint'
 import SplashScreen from '@/components/splashscreen'
 
 export default function Layout({

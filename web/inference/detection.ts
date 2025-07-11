@@ -1,5 +1,5 @@
-import { resizeImage } from '@/utils/image'
-import { download } from '@/utils/model'
+import { resize } from '@/utils/image'
+import { download } from '@/utils/cache'
 import * as ort from 'onnxruntime-web/webgpu'
 
 let session: ort.InferenceSession
@@ -69,7 +69,7 @@ const nonMaximumSuppression = (boxes: Bbox[][], threshold: number) => {
 }
 
 export const inference = async (
-  image: ImageData,
+  image: ImageBitmap,
   confidenceThreshold: number,
   nmsThreshold: number
 ): Promise<Output> => {
@@ -78,8 +78,8 @@ export const inference = async (
   const wRatio = origWidth / 1024
   const hRatio = origHeight / 1024
 
-  const resizedImageData = await resizeImage(image, 1024, 1024)
-  const input = await ort.Tensor.fromImage(resizedImageData)
+  const resizedImageData = await resize(image, 1024, 1024)
+  const input = await ort.Tensor.fromImage(resizedImageData, {})
 
   const feeds = {
     images: input,

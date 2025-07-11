@@ -4,9 +4,9 @@ import { useCanvasStore, useWorkflowStore } from '@/lib/state'
 import { Play } from 'lucide-react'
 import { useState, useEffect } from 'react'
 import { Badge, Button, Text } from '@radix-ui/themes'
-import { cropImage } from '@/utils/image'
+import { crop } from '@/utils/image'
 import { loadImageFromBuffer } from '@/lib/image-loader'
-import { inference } from '@/lib/ocr'
+import { inference } from '@/inference/ocr'
 
 export default function OCRPanel() {
   const { image, texts, setTexts } = useCanvasStore()
@@ -25,14 +25,14 @@ export default function OCRPanel() {
     const newTexts = []
     for (const text of texts) {
       const { xmin, ymin, xmax, ymax } = text
-      const croppedImageBuffer = await cropImage(
+      const croppedImage = await crop(
         imageData,
         xmin,
         ymin,
-        xmax,
-        ymax
+        xmax - xmin,
+        ymax - ymin
       )
-      const result = await inference(croppedImageBuffer)
+      const result = await inference(croppedImage)
       newTexts.push({ ...text, text: result })
     }
     setTexts(newTexts)

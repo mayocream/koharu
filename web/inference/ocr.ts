@@ -1,5 +1,5 @@
-import { resizeImage, convertBitmapToImageData } from '@/utils/image'
-import { download } from '@/utils/model'
+import { resize } from '@/utils/image'
+import { download } from '@/utils/cache'
 import * as ort from 'onnxruntime-web/webgpu'
 
 let encoderSession: ort.InferenceSession
@@ -33,13 +33,8 @@ export const initialize = async () => {
   vocab = text.split('\n')
 }
 
-export const inference = async (image: ArrayBuffer): Promise<string> => {
-  // Convert ArrayBuffer to ImageData
-  const blob = new Blob([image])
-  const bitmap = await createImageBitmap(blob)
-
-  const imageData = await convertBitmapToImageData(bitmap)
-  const resizedImage = await resizeImage(imageData, 224, 224)
+export const inference = async (image: ImageBitmap): Promise<string> => {
+  const resizedImage = await resize(image, 224, 224)
 
   // Run encoder
   const encoderFeeds = {
