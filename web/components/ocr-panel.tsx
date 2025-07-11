@@ -4,6 +4,8 @@ import { useCanvasStore, useWorkflowStore } from '@/lib/state'
 import { Play } from 'lucide-react'
 import { useState, useEffect } from 'react'
 import { Badge, Button, Text } from '@radix-ui/themes'
+import { cropImage } from '@/utils/image'
+import { loadImageFromBuffer } from '@/lib/image-loader'
 import { inference } from '@/lib/ocr'
 
 export default function OCRPanel() {

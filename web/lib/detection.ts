@@ -1,7 +1,6 @@
-import { download } from '@/lib/model'
-import { JimpInstance } from 'jimp'
+import { resizeImage } from '@/utils/image'
+import { download } from '@/utils/model'
 import * as ort from 'onnxruntime-web/webgpu'
-import { JimpToImageData } from '@/lib/image'
 
 let session: ort.InferenceSession
 export const initialize = async () => {
@@ -70,7 +69,7 @@ const nonMaximumSuppression = (boxes: Bbox[][], threshold: number) => {
 }
 
 export const inference = async (
-  image: JimpInstance,
+  image: ImageData,
   confidenceThreshold: number,
   nmsThreshold: number
 ): Promise<Output> => {
@@ -79,11 +78,11 @@ export const inference = async (
   const wRatio = origWidth / 1024
   const hRatio = origHeight / 1024
 
-  // Resize image to 1024x1024
-  image.resize({ w: 1024, h: 1024 })
+  const resizedImageData = await resizeImage(image, 1024, 1024)
+  const input = await ort.Tensor.fromImage(resizedImageData)
 
   const feeds = {
-    images: await ort.Tensor.fromImage(JimpToImageData(image), {}),
+    images: input,
   }
   const output = await session.run(feeds)
 

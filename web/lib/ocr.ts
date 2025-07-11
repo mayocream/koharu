@@ -1,7 +1,6 @@
-import { download } from '@/lib/model'
-import { JimpInstance } from 'jimp'
+import { resizeImage, convertBitmapToImageData } from '@/utils/image'
+import { download } from '@/utils/model'
 import * as ort from 'onnxruntime-web/webgpu'
-import { JimpToImageData } from './image'
 
 let encoderSession: ort.InferenceSession
 let decoderSession: ort.InferenceSession
@@ -34,12 +33,17 @@ export const initialize = async () => {
   vocab = text.split('\n')
 }
 
-export const inference = async (image: JimpInstance): Promise<string> => {
-  image.resize({ w: 224, h: 224 }) // Resize to 224x224
+export const inference = async (image: ArrayBuffer): Promise<string> => {
+  // Convert ArrayBuffer to ImageData
+  const blob = new Blob([image])
+  const bitmap = await createImageBitmap(blob)
+
+  const imageData = await convertBitmapToImageData(bitmap)
+  const resizedImage = await resizeImage(imageData, 224, 224)
 
   // Run encoder
   const encoderFeeds = {
-    pixel_values: await ort.Tensor.fromImage(JimpToImageData(image), {
+    pixel_values: await ort.Tensor.fromImage(resizedImage, {
       norm: {
         mean: 255,
         bias: -0.5,
