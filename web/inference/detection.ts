@@ -38,11 +38,9 @@ export const inference = async (
   const wRatio = origWidth / 1024
   const hRatio = origHeight / 1024
 
-  const resizedImageData = await resize(image, 1024, 1024)
-  const input = await ort.Tensor.fromImage(resizedImageData, {})
-
+  const resizedImage = await resize(image, 1024, 1024)
   const feeds = {
-    images: input,
+    images: await ort.Tensor.fromImage(resizedImage, {}),
   }
   const output = await session.run(feeds)
 
