@@ -1,12 +1,10 @@
 'use client'
 
-import { Image, Settings } from 'lucide-react'
+import { Image } from 'lucide-react'
 import { useCanvasStore } from '@/lib/state'
-import { useRouter } from 'next/navigation'
 import { Button } from '@radix-ui/themes'
 
 function Topbar() {
-  const router = useRouter()
   const { setImage, setTexts, setSegment } = useCanvasStore()
 
   const handleOpenImage = async () => {
@@ -46,11 +44,7 @@ function Topbar() {
       </div>
 
       <div className='flex-grow' />
-      <div className='mx-1 flex items-center gap-1'>
-        <Button variant='soft' onClick={() => router.push('/settings')}>
-          <Settings size={20} />
-        </Button>
-      </div>
+      <div className='mx-1 flex items-center gap-1'></div>
     </div>
   )
 }
