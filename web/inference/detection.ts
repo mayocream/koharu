@@ -1,6 +1,7 @@
 import { resize } from '@/utils/image'
 import { download } from '@/utils/cache'
 import * as ort from 'onnxruntime-web/webgpu'
+import { limit } from '@/lib/limit'
 
 let session: ort.InferenceSession
 export const initialize = async () => {
@@ -42,7 +43,7 @@ export const inference = async (
   const feeds = {
     images: await ort.Tensor.fromImage(resizedImage, {}),
   }
-  const output = await session.run(feeds)
+  const output = await limit(() => session.run(feeds))
 
   // Handle blocks
   const blk = output['blk'].data as Float32Array

@@ -1,6 +1,7 @@
 import { resize } from '@/utils/image'
 import { download } from '@/utils/cache'
 import * as ort from 'onnxruntime-web/webgpu'
+import { limit } from '@/lib/limit'
 
 let encoderSession: ort.InferenceSession
 let decoderSession: ort.InferenceSession
@@ -45,7 +46,7 @@ export const inference = async (image: ImageBitmap): Promise<string> => {
       },
     }),
   }
-  const encoderOutputs = await encoderSession.run(encoderFeeds)
+  const encoderOutputs = await limit(() => encoderSession.run(encoderFeeds))
   const encoderHiddenState = encoderOutputs.last_hidden_state
 
   // Generate text
@@ -64,7 +65,7 @@ export const inference = async (image: ImageBitmap): Promise<string> => {
     }
 
     // Run decoder
-    const decoderOutputs = await decoderSession.run(decoderFeeds)
+    const decoderOutputs = await limit(() => decoderSession.run(decoderFeeds))
     const logits = decoderOutputs.logits.data as Float32Array
 
     // Get last token logits and find argmax

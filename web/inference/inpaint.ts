@@ -1,6 +1,7 @@
 import { bitmapToImageData, resize } from '@/utils/image'
 import { download } from '@/utils/cache'
 import * as ort from 'onnxruntime-web/webgpu'
+import { limit } from '@/lib/limit'
 
 let session: ort.InferenceSession
 export const initialize = async () => {
@@ -26,10 +27,11 @@ export const inference = async (image: ImageBitmap, mask: ImageBitmap) => {
     maskTensor[i] = maskImageData.data[i * 4] / 255.0 > 0 ? 1 : 0
   }
 
-  const output = await session.run({
+  const feeds = {
     image: await ort.Tensor.fromImage(resizedImage, {}),
     mask: new ort.Tensor('float32', maskTensor, [1, 1, 512, 512]),
-  })
+  }
+  const output = await limit(() => session.run(feeds))
 
   const outputData = output.output.data as Float32Array
 
