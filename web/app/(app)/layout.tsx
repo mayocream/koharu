@@ -24,7 +24,7 @@ export default function Layout({
       } catch (error) {
         // TODO: Handle error more gracefully
         alert(
-          `Failed to initialize the model. Please check your internet connection or try again later.\n\nError: ${error}`
+          `Failed to initialize the model. Please check your internet connection or try again later.\n\n${error}`
         )
       } finally {
         setLoading(false)
