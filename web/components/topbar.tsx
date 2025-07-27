@@ -3,29 +3,21 @@
 import { Image } from 'lucide-react'
 import { useCanvasStore } from '@/lib/state'
 import { Button } from '@radix-ui/themes'
+import { fileOpen } from 'browser-fs-access'
 
 function Topbar() {
   const { setImage, setTexts, setSegment } = useCanvasStore()
 
   const handleOpenImage = async () => {
     try {
-      const [fileHandle] = await showOpenFilePicker({
+      const blob = await fileOpen({
         multiple: false,
-        types: [
-          {
-            description: 'Images',
-            accept: {
-              'image/*': ['.png', '.jpg', '.jpeg', '.webp'],
-            },
-          },
-        ],
+        mimeTypes: ['image/*'],
       })
 
-      if (!fileHandle) return
+      if (!blob) return
 
-      const file = await fileHandle.getFile()
-      const buffer = await file.arrayBuffer()
-      const imageBitmap = await createImageBitmap(new Blob([buffer]))
+      const imageBitmap = await createImageBitmap(blob)
 
       setTexts([])
       setSegment(null)
