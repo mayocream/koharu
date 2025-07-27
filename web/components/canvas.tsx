@@ -2,7 +2,15 @@
 
 import type Konva from 'konva'
 import { useState, useRef } from 'react'
-import { Image, Layer, Rect, Stage, Transformer } from 'react-konva'
+import {
+  Circle,
+  Image,
+  Layer,
+  Rect,
+  Stage,
+  Text,
+  Transformer,
+} from 'react-konva'
 import { useCanvasStore, useWorkflowStore } from '@/lib/state'
 import ScaleControl from './scale-control'
 
@@ -39,26 +47,44 @@ function Canvas() {
                   const height = ymax - ymin
 
                   return (
-                    <Rect
-                      key={index}
-                      x={xmin}
-                      y={ymin}
-                      width={width}
-                      height={height}
-                      stroke='red'
-                      strokeWidth={2}
-                      fill={
-                        selectedTextIndex === index
-                          ? 'rgba(255, 0, 0, 0.3)'
-                          : null
-                      }
-                      onClick={(e) => {
-                        e.cancelBubble = true
-                        setSelected(e.target)
-                      }}
-                      onMouseEnter={() => setSelectedTextIndex(index)}
-                      onMouseLeave={() => setSelectedTextIndex(null)}
-                    />
+                    <>
+                      <Rect
+                        key={`rect-${index}`}
+                        x={xmin}
+                        y={ymin}
+                        width={width}
+                        height={height}
+                        stroke='red'
+                        strokeWidth={2}
+                        fill={
+                          selectedTextIndex === index
+                            ? 'rgba(255, 0, 0, 0.3)'
+                            : null
+                        }
+                        onClick={(e) => {
+                          e.cancelBubble = true
+                          setSelected(e.target)
+                        }}
+                        onMouseEnter={() => setSelectedTextIndex(index)}
+                        onMouseLeave={() => setSelectedTextIndex(null)}
+                      />
+                      <Circle
+                        key={`circle-${index}`}
+                        x={xmin}
+                        y={ymin}
+                        radius={20}
+                        fill='rgba(255, 0, 0, 0.7)'
+                      />
+                      <Text
+                        key={`text-${index}`}
+                        x={xmin - 10}
+                        y={ymin - 15}
+                        text={(index + 1).toString()}
+                        fontSize={30}
+                        fill='white'
+                        fontFamily='sans-serif'
+                      />
+                    </>
                   )
                 })}
                 {selected && <Transformer nodes={[selected]} />}
