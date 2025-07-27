@@ -25,17 +25,9 @@ export const useCanvasStore = create<CanvasState>((set) => ({
 type WorkflowState = {
   selectedTool: string
   setSelectedTool: (tool: string) => void
-  prompt: string
-  setPrompt: (prompt: string) => void
-  selectedTextIndex: number | null
-  setSelectedTextIndex: (index: number | null) => void
 }
 
 export const useWorkflowStore = create<WorkflowState>((set) => ({
   selectedTool: 'detection',
   setSelectedTool: (tool) => set({ selectedTool: tool }),
-  prompt: '',
-  setPrompt: (prompt) => set({ prompt }),
-  selectedTextIndex: null,
-  setSelectedTextIndex: (index) => set({ selectedTextIndex: index }),
 }))

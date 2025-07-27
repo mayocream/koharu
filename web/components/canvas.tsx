@@ -16,8 +16,7 @@ import ScaleControl from './scale-control'
 
 function Canvas() {
   const { image, scale, texts, segment } = useCanvasStore()
-  const { selectedTextIndex, setSelectedTextIndex, selectedTool } =
-    useWorkflowStore()
+  const { selectedTool } = useWorkflowStore()
   const containerRef = useRef<HTMLDivElement>(null)
   const inpaintLayerRef = useRef<Konva.Layer>(null)
 
@@ -56,17 +55,11 @@ function Canvas() {
                         height={height}
                         stroke='red'
                         strokeWidth={2}
-                        fill={
-                          selectedTextIndex === index
-                            ? 'rgba(255, 0, 0, 0.3)'
-                            : null
-                        }
+                        fill='rgba(255, 0, 0, 0.3)'
                         onClick={(e) => {
                           e.cancelBubble = true
                           setSelected(e.target)
                         }}
-                        onMouseEnter={() => setSelectedTextIndex(index)}
-                        onMouseLeave={() => setSelectedTextIndex(null)}
                       />
                       <Circle
                         key={`circle-${index}`}

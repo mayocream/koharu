@@ -1,6 +1,6 @@
 'use client'
 
-import { useCanvasStore, useWorkflowStore } from '@/lib/state'
+import { useCanvasStore } from '@/lib/state'
 import { Badge, Button, Text, TextArea } from '@radix-ui/themes'
 import { Play } from 'lucide-react'
 import { useState } from 'react'
@@ -8,8 +8,6 @@ import { useState } from 'react'
 function TranslationPanel() {
   const { texts, setTexts } = useCanvasStore()
   const [loading, setLoading] = useState(false)
-  const { prompt, setPrompt, selectedTextIndex, setSelectedTextIndex } =
-    useWorkflowStore()
 
   const translate = async () => {
     // TODO: Implement translation logic
@@ -31,21 +29,13 @@ function TranslationPanel() {
         <TextArea
           className='w-full rounded-md border border-gray-300 px-2 py-1 text-sm focus:ring-2 focus:ring-blue-500 focus:outline-none'
           placeholder='You are a manga translator, translate Japanese to English while preserve order of the text.'
-          value={prompt}
-          onChange={(e) => setPrompt(e.target.value)}
         />
       </div>
       <div className='flex flex-col overflow-y-auto'>
         {texts.map((block, index) => (
           <div
             key={index}
-            style={{
-              backgroundColor:
-                selectedTextIndex === index ? 'rgba(147, 140, 140, 0.3)' : '',
-            }}
             className='cursor-pointer border-b border-gray-200 px-4 py-2 text-sm'
-            onMouseEnter={() => setSelectedTextIndex(index)}
-            onMouseLeave={() => setSelectedTextIndex(null)}
           >
             <Text className='flex gap-2'>
               <Badge>{index + 1}</Badge>

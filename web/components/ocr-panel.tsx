@@ -1,6 +1,6 @@
 'use client'
 
-import { useCanvasStore, useWorkflowStore } from '@/lib/state'
+import { useCanvasStore } from '@/lib/state'
 import { Play } from 'lucide-react'
 import { useState } from 'react'
 import { Badge, Button, Text } from '@radix-ui/themes'
@@ -9,7 +9,6 @@ import { inference } from '@/inference/ocr'
 
 export default function OCRPanel() {
   const { image, texts, setTexts } = useCanvasStore()
-  const { selectedTextIndex, setSelectedTextIndex } = useWorkflowStore()
   const [loading, setLoading] = useState(false)
 
   const run = async () => {
@@ -46,12 +45,6 @@ export default function OCRPanel() {
           <div
             key={index}
             className='cursor-pointer border-b border-gray-200 px-4 py-2 text-sm last:border-b-0'
-            style={{
-              backgroundColor:
-                selectedTextIndex === index ? 'rgba(147, 140, 140, 0.3)' : '',
-            }}
-            onMouseEnter={() => setSelectedTextIndex(index)}
-            onMouseLeave={() => setSelectedTextIndex(null)}
           >
             <Text className='flex gap-2'>
               <Badge>{index + 1}</Badge>
