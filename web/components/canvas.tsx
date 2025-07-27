@@ -55,7 +55,6 @@ function Canvas() {
                         height={height}
                         stroke='red'
                         strokeWidth={2}
-                        fill='rgba(255, 0, 0, 0.3)'
                         onClick={(e) => {
                           e.cancelBubble = true
                           setSelected(e.target)
