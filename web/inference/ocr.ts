@@ -15,6 +15,7 @@ export const initialize = async () => {
   encoderSession = await ort.InferenceSession.create(encoderModel, {
     executionProviders: ['webgpu'],
     graphOptimizationLevel: 'all',
+    logSeverityLevel: 3,
   })
 
   const decoderModel = await download(
@@ -24,6 +25,7 @@ export const initialize = async () => {
   decoderSession = await ort.InferenceSession.create(decoderModel, {
     executionProviders: ['webgpu'],
     graphOptimizationLevel: 'all',
+    logSeverityLevel: 3,
   })
 
   // Load vocabulary

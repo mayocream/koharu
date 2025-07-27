@@ -11,6 +11,7 @@ export const initialize = async () => {
   session = await ort.InferenceSession.create(model, {
     executionProviders: ['webgpu'],
     graphOptimizationLevel: 'all',
+    logSeverityLevel: 3,
   })
 }
 
