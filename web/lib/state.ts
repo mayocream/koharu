@@ -23,11 +23,11 @@ export const useCanvasStore = create<CanvasState>((set) => ({
 }))
 
 type WorkflowState = {
-  selectedTool: string
-  setSelectedTool: (tool: string) => void
+  tool: string
+  setTool: (tool: string) => void
 }
 
 export const useWorkflowStore = create<WorkflowState>((set) => ({
-  selectedTool: 'detection',
-  setSelectedTool: (tool) => set({ selectedTool: tool }),
+  tool: 'detection',
+  setTool: (tool) => set({ tool: tool }),
 }))

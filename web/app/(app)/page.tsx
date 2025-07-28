@@ -9,7 +9,7 @@ import { useWorkflowStore } from '@/lib/state'
 import TranslationPanel from '@/components/translation-panel'
 
 function App() {
-  const { selectedTool } = useWorkflowStore()
+  const { tool: selectedTool } = useWorkflowStore()
 
   return (
     <main className='flex h-screen max-h-screen w-screen max-w-screen flex-col bg-gray-100'>

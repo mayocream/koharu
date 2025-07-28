@@ -16,7 +16,7 @@ import ScaleControl from './scale-control'
 
 function Canvas() {
   const { image, scale, texts, segment } = useCanvasStore()
-  const { selectedTool } = useWorkflowStore()
+  const { tool: selectedTool } = useWorkflowStore()
   const containerRef = useRef<HTMLDivElement>(null)
   const inpaintLayerRef = useRef<Konva.Layer>(null)
 

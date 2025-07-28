@@ -10,7 +10,7 @@ import { useWorkflowStore } from '@/lib/state'
 import { IconButton } from '@radix-ui/themes'
 
 function Tools() {
-  const { selectedTool, setSelectedTool } = useWorkflowStore()
+  const { tool: selectedTool, setTool: setSelectedTool } = useWorkflowStore()
 
   const tools = [
     {
