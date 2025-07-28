@@ -16,7 +16,7 @@ import ScaleControl from './scale-control'
 
 function Canvas() {
   const { image, scale, texts, segment } = useCanvasStore()
-  const { tool: selectedTool } = useWorkflowStore()
+  const { tool } = useWorkflowStore()
   const containerRef = useRef<HTMLDivElement>(null)
   const inpaintLayerRef = useRef<Konva.Layer>(null)
 
@@ -82,12 +82,10 @@ function Canvas() {
                 {selected && <Transformer nodes={[selected]} />}
               </Layer>
               <Layer>
-                {selectedTool === 'segmentation' && (
-                  <Image image={segment ?? null} />
-                )}
+                {tool === 'segmentation' && <Image image={segment ?? null} />}
               </Layer>
               <Layer ref={inpaintLayerRef}>
-                {selectedTool === 'inpaint' && <Image image={null} />}
+                {tool === 'inpaint' && <Image image={null} />}
               </Layer>
             </Stage>
           </div>
