@@ -4,10 +4,10 @@
     "prettier-plugin-tailwindcss": "^0.6.13"
   },
   "scripts": {
-    "dev": "cd web && bun run dev",
-    "build": "cd web && bun run build"
+    "dev": "cd next && bun run dev",
+    "build": "cd next && bun run build"
   },
   "workspaces": [
-    "web"
+    "next"
   ]
 }
