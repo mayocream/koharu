@@ -30,3 +30,7 @@ tracing = { workspace = true }
 log = { workspace = true }
 tauri-plugin-notification = { workspace = true }
 tauri-plugin-fs = { workspace = true }
+ort = { workspace = true }
+
+[features]
+cuda = ["ort/cuda"]
