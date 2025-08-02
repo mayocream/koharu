@@ -1,4 +1,5 @@
 use clap::Parser;
+use lama::Lama;
 
 #[derive(Parser)]
 struct Cli {
@@ -15,7 +16,7 @@ struct Cli {
 fn main() -> anyhow::Result<()> {
     let cli = Cli::parse();
 
-    let model = lama::Lama::new()?;
+    let mut model = Lama::new()?;
     let image = image::open(&cli.input)?;
     let mask = image::open(&cli.mask)?;
 

@@ -1,4 +1,5 @@
 use clap::Parser;
+use manga_ocr::MangaOCR;
 
 #[derive(Parser)]
 struct Cli {
@@ -9,7 +10,7 @@ struct Cli {
 fn main() -> anyhow::Result<()> {
     let cli = Cli::parse();
 
-    let model = manga_ocr::MangaOCR::new()?;
+    let mut model = MangaOCR::new()?;
     let image = image::open(&cli.input)?;
 
     let output = model.inference(&image)?;

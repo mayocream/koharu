@@ -2,7 +2,7 @@ use std::thread;
 
 use hf_hub::api::sync::Api;
 use ndarray::s;
-use ort::{inputs, session::Session};
+use ort::{inputs, session::Session, value::TensorRef};
 
 #[derive(Debug)]
 pub struct MangaOCR {
@@ -42,7 +42,7 @@ impl MangaOCR {
         })
     }
 
-    pub fn inference(&self, image: &image::DynamicImage) -> anyhow::Result<String> {
+    pub fn inference(&mut self, image: &image::DynamicImage) -> anyhow::Result<String> {
         let image = image.grayscale().to_rgb8();
         let image =
             image::imageops::resize(&image, 224, 224, image::imageops::FilterType::Lanczos3);
@@ -61,10 +61,10 @@ impl MangaOCR {
 
         // save encoder hidden state
         let inputs = inputs! {
-            "pixel_values" => tensor.view(),
-        }?;
+            "pixel_values" => TensorRef::from_array_view(tensor.view())?,
+        };
         let outputs = self.encoder_model.run(inputs)?;
-        let encoder_hidden_state = outputs[0].try_extract_tensor::<f32>()?;
+        let encoder_hidden_state = outputs[0].try_extract_array::<f32>()?;
 
         // generate
         let mut token_ids: Vec<i64> = vec![2i64]; // Start token
@@ -73,15 +73,15 @@ impl MangaOCR {
             // Create input tensors
             let input = ndarray::Array::from_shape_vec((1, token_ids.len()), token_ids.clone())?;
             let inputs = inputs! {
-                "encoder_hidden_states" => encoder_hidden_state.view(),
-                "input_ids" => input,
-            }?;
+                "encoder_hidden_states" => TensorRef::from_array_view(encoder_hidden_state.view())?,
+                "input_ids" => TensorRef::from_array_view(input.view())?,
+            };
 
             // Run inference
             let outputs = self.decoder_model.run(inputs)?;
 
             // Extract logits from output
-            let logits = outputs["logits"].try_extract_tensor::<f32>()?;
+            let logits = outputs["logits"].try_extract_array::<f32>()?;
 
             // Get last token logits and find argmax
             let logits_view = logits.view();

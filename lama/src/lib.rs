@@ -2,7 +2,7 @@ use std::thread;
 
 use hf_hub::api::sync::Api;
 use image::{DynamicImage, GenericImageView};
-use ort::{inputs, session::Session};
+use ort::{inputs, session::Session, value::TensorRef};
 
 #[derive(Debug)]
 pub struct Lama {
@@ -104,7 +104,7 @@ impl Lama {
     }
 
     pub fn inference(
-        &self,
+        &mut self,
         image: &DynamicImage,
         mask: &DynamicImage,
     ) -> anyhow::Result<DynamicImage> {
@@ -138,11 +138,11 @@ impl Lama {
         }
 
         let inputs = inputs![
-            "image" => image_data.view(),
-            "mask" => mask_data.view(),
-        ]?;
+            "image" => TensorRef::from_array_view(image_data.view())?,
+            "mask" => TensorRef::from_array_view(mask_data.view())?,
+        ];
         let outputs = self.model.run(inputs)?;
-        let output = outputs["output"].try_extract_tensor::<f32>()?;
+        let output = outputs["output"].try_extract_array::<f32>()?;
         let output = output.view();
 
         let mut output_image = image::RgbImage::new(512, 512);

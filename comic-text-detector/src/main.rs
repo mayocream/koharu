@@ -20,7 +20,7 @@ struct Cli {
 fn main() -> anyhow::Result<()> {
     let cli = Cli::parse();
 
-    let model = ComicTextDetector::new()?;
+    let mut model = ComicTextDetector::new()?;
     let image = image::open(&cli.input)?;
     let (orig_width, orig_height) = image.dimensions();
 

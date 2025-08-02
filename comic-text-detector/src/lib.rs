@@ -3,7 +3,7 @@ use std::thread;
 use candle_transformers::object_detection::{Bbox, non_maximum_suppression};
 use hf_hub::api::sync::Api;
 use image::GenericImageView;
-use ort::session::Session;
+use ort::{inputs, session::Session, value::TensorRef};
 use serde::Serialize;
 
 #[derive(Debug)]
@@ -44,7 +44,7 @@ impl ComicTextDetector {
     }
 
     pub fn inference(
-        &self,
+        &mut self,
         image: &image::DynamicImage,
         confidence_threshold: f32,
         nms_threshold: f32,
@@ -64,11 +64,11 @@ impl ComicTextDetector {
             input[[0, 2, y, x]] = (b as f32) / 255.0;
         }
 
-        let inputs = ort::inputs!["images" => input.view()]?;
+        let inputs = inputs!["images" => TensorRef::from_array_view(input.view())?];
         let outputs = self.model.run(inputs)?;
 
         // handle blocks
-        let blk = outputs["blk"].try_extract_tensor::<f32>()?;
+        let blk = outputs["blk"].try_extract_array::<f32>()?;
         let blk = blk.view();
 
         let mut boxes: Vec<Vec<Bbox<_>>> = (0..=1).map(|_| vec![]).collect();
@@ -116,7 +116,7 @@ impl ComicTextDetector {
         }
 
         // handle masks
-        let mask = outputs["seg"].try_extract_tensor::<f32>()?;
+        let mask = outputs["seg"].try_extract_array::<f32>()?;
         let mask = mask
             .view()
             .to_owned()
