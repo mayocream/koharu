@@ -2853,6 +2853,7 @@ version = "0.1.11"
 dependencies = [
  "anyhow",
  "comic-text-detector",
+ "image",
  "lama",
  "log",
  "manga-ocr",
