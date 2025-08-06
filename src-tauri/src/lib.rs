@@ -1,12 +1,15 @@
 use tauri_plugin_notification::NotificationExt;
 use tokio::sync::RwLock;
 
-use tauri::{AppHandle, async_runtime::spawn};
+use tauri::{AppHandle, Manager, async_runtime::spawn};
 
 #[derive(Default)]
 struct AppState {}
 
-async fn initialize(_app: AppHandle) -> anyhow::Result<()> {
+async fn initialize(app: AppHandle) -> anyhow::Result<()> {
+    app.get_webview_window("splashscreen").unwrap().close()?;
+    app.get_webview_window("main").unwrap().show()?;
+
     Ok(())
 }
 
