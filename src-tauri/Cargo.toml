@@ -36,3 +36,4 @@ lama = { path = "../lama" }
 
 [features]
 cuda = ["ort/cuda"]
+default = ["cuda"]
