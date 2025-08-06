@@ -3,15 +3,12 @@
   "identifier": "default",
   "description": "Capability for the main window",
   "windows": [
-    "main"
+    "main",
+    "splashscreen"
   ],
   "permissions": [
     "core:default",
-    "opener:default",
     "dialog:default",
-    "log:default",
-    "store:default",
-    "notification:default",
     "fs:default"
   ]
 }

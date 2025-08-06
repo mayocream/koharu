@@ -17,20 +17,19 @@ tauri-build = { workspace = true }
 
 [dependencies]
 tauri = { workspace = true }
-tauri-plugin-opener = { workspace = true }
 serde = { workspace = true }
 serde_json = { workspace = true }
-tauri-plugin-dialog = { workspace = true }
-tauri-plugin-log = { workspace = true }
 tauri-plugin-persisted-scope = { workspace = true }
-tauri-plugin-store = { workspace = true }
 tokio = { workspace = true }
 anyhow = { workspace = true }
 tracing = { workspace = true }
 log = { workspace = true }
-tauri-plugin-notification = { workspace = true }
 tauri-plugin-fs = { workspace = true }
 ort = { workspace = true }
+tracing-subscriber = { workspace = true }
+tauri-plugin-dialog = { workspace = true }
+
+# internal dependencies
 comic-text-detector = { path = "../comic-text-detector" }
 manga-ocr = { path = "../manga-ocr" }
 lama = { path = "../lama" }

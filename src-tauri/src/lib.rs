@@ -1,10 +1,9 @@
 use comic_text_detector::ComicTextDetector;
 use lama::Lama;
 use manga_ocr::MangaOCR;
-use tauri_plugin_notification::NotificationExt;
-use tokio::sync::RwLock;
-
 use tauri::{AppHandle, Manager, async_runtime::spawn};
+use tauri_plugin_dialog::{DialogExt, MessageDialogKind};
+use tokio::sync::RwLock;
 
 #[derive(Debug)]
 struct AppState {
@@ -15,6 +14,18 @@ struct AppState {
 
 // Initialize models
 async fn initialize(app: AppHandle) -> anyhow::Result<()> {
+    // refer: https://ort.pyke.io/perf/execution-providers#global-defaults
+    ort::init()
+        .with_execution_providers([
+            #[cfg(feature = "cuda")]
+            ort::execution_providers::CUDAExecutionProvider::default()
+                .build()
+                .error_on_failure(),
+            #[cfg(not(feature = "cuda"))]
+            ort::execution_providers::CPUExecutionProvider::default().build(),
+        ])
+        .commit()?;
+
     let comic_text_detector = ComicTextDetector::new()?;
     let manga_ocr = MangaOCR::new()?;
     let lama = Lama::new()?;
@@ -35,10 +46,7 @@ async fn initialize(app: AppHandle) -> anyhow::Result<()> {
 pub fn run() -> anyhow::Result<()> {
     tauri::Builder::default()
         .plugin(tauri_plugin_fs::init())
-        .plugin(tauri_plugin_notification::init())
-        .plugin(tauri_plugin_store::Builder::new().build())
         .plugin(tauri_plugin_dialog::init())
-        .plugin(tauri_plugin_opener::init())
         .setup(|app| {
             // initialize the app state
             let app_handle = app.handle().clone();
@@ -46,13 +54,12 @@ pub fn run() -> anyhow::Result<()> {
                 async move {
                     if let Err(e) = initialize(app_handle.clone()).await {
                         app_handle
-                            .notification()
-                            .builder()
+                            .dialog()
+                            .message(format!("Failed to initialize: {}", e))
                             .title("Error")
-                            .body(format!("Failed to initialize: {}", e))
-                            .show()
-                            .unwrap();
-                        app_handle.exit(1);
+                            .kind(MessageDialogKind::Error)
+                            .blocking_show();
+                        std::process::exit(1);
                     }
                 }
             });
