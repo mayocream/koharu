@@ -39,9 +39,7 @@ Builds are available for Windows only at the moment. Please refer to the [build 
 > [!NOTE]
 > Koharu is still in development and may not work perfectly. Please report any issues you encounter on the [issues page](https://github.com/mayocream/koharu/issues).
 
-## Technology
-
-## Workflow
+## Features
 
 The workflow of translation consists of the following steps:
 
