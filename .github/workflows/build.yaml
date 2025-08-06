@@ -16,12 +16,14 @@ jobs:
       fail-fast: false
       matrix:
         include:
-          - platform: 'macos-15' # for Arm based macs (M1 and above).
-            args: '--target aarch64-apple-darwin'
-          - platform: 'macos-15' # for Intel based macs.
-            args: '--target x86_64-apple-darwin'
-          - platform: 'ubuntu-22.04' # for Tauri v1 you could replace this with ubuntu-20.04.
-            args: ''
+          # TODO: support macOS and Linux builds.
+          #
+          # - platform: 'macos-15' # for Arm based macs (M1 and above).
+          #   args: '--target aarch64-apple-darwin'
+          # - platform: 'macos-15' # for Intel based macs.
+          #   args: '--target x86_64-apple-darwin'
+          # - platform: 'ubuntu-22.04' # for Tauri v1 you could replace this with ubuntu-20.04.
+          #   args: ''
           - platform: 'windows-2025'
             args: '--no-bundle --features=cuda'
 
