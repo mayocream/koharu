@@ -21,8 +21,9 @@ To enable CUDA support, please ensure you have the following prerequisites met:
 1. `PATH` environment variable set to include the paths to the DLLs of the CUDA toolkit and cuDNN library.
 
     Typically, these paths are:
-        - `C:\Program Files\NVIDIA GPU Computing Toolkit\CUDA\v12.9\bin`
-        - `C:\Program Files\NVIDIA\CUDNN\v9.11\bin\12.9`
+
+    - `C:\Program Files\NVIDIA GPU Computing Toolkit\CUDA\v12.9\bin`
+    - `C:\Program Files\NVIDIA\CUDNN\v9.11\bin\12.9`
 
 > [!NOTE]
 > CUDA 12.9 and cuDNN 9.11 are tested to work with Koharu. Other versions may work, but are not guaranteed.
