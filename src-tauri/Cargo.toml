@@ -31,6 +31,9 @@ log = { workspace = true }
 tauri-plugin-notification = { workspace = true }
 tauri-plugin-fs = { workspace = true }
 ort = { workspace = true }
+comic-text-detector = { path = "../comic-text-detector" }
+manga-ocr = { path = "../manga-ocr" }
+lama = { path = "../lama" }
 
 [features]
 cuda = ["ort/cuda"]
