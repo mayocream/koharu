@@ -13,21 +13,21 @@
     "browser-fs-access": "^0.38.0",
     "konva": "^9.3.22",
     "lucide-react": "^0.525.0",
-    "next": "^15.4.4",
+    "next": "^15.4.6",
     "onnxruntime-web": "1.23.0-dev.20250703-7fc6235861",
     "p-limit": "^6.2.0",
-    "react": "^19.1.0",
-    "react-dom": "^19.1.0",
+    "react": "^19.1.1",
+    "react-dom": "^19.1.1",
     "react-konva": "^19.0.7",
-    "zustand": "^5.0.6"
+    "zustand": "^5.0.7"
   },
   "devDependencies": {
     "@tailwindcss/postcss": "^4.1.11",
-    "@types/node": "^24.1.0",
-    "@types/react": "^19.1.8",
-    "@types/react-dom": "^19.1.6",
+    "@types/node": "^24.2.0",
+    "@types/react": "^19.1.9",
+    "@types/react-dom": "^19.1.7",
     "canvas": "^3.1.2",
     "tailwindcss": "^4.1.11",
-    "typescript": "^5.8.3"
+    "typescript": "^5.9.2"
   }
 }
