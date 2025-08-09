@@ -1,13 +1,13 @@
 'use client'
 
-import { useCanvasStore } from '@/lib/state'
 import { Badge, Button, Text, TextArea } from '@radix-ui/themes'
 import { Play } from 'lucide-react'
 import { useState } from 'react'
 
 function TranslationPanel() {
-  const { texts, setTexts } = useCanvasStore()
   const [loading, setLoading] = useState(false)
+
+  const texts = []
 
   const translate = async () => {
     // TODO: Implement translation logic

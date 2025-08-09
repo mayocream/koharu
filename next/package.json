@@ -10,12 +10,11 @@
   },
   "dependencies": {
     "@radix-ui/themes": "^3.2.1",
+    "@tauri-apps/api": "^2.7.0",
     "browser-fs-access": "^0.38.0",
     "konva": "^9.3.22",
     "lucide-react": "^0.525.0",
     "next": "^15.4.6",
-    "onnxruntime-web": "1.23.0-dev.20250703-7fc6235861",
-    "p-limit": "^6.2.0",
     "react": "^19.1.1",
     "react-dom": "^19.1.1",
     "react-konva": "^19.0.7",

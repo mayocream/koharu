@@ -6,11 +6,11 @@ import {
   PaintbrushVertical,
   SquareDashedMousePointer,
 } from 'lucide-react'
-import { useWorkflowStore } from '@/lib/state'
 import { IconButton } from '@radix-ui/themes'
+import { useEditorStore } from '@/lib/state'
 
 function Tools() {
-  const { tool: selectedTool, setTool: setSelectedTool } = useWorkflowStore()
+  const { tool: selectedTool, setTool: setSelectedTool } = useEditorStore()
 
   const tools = [
     {

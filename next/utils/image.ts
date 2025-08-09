@@ -1,14 +1,3 @@
-export async function bitmapToImageData(
-  image: ImageBitmap
-): Promise<ImageData> {
-  const canvas = new OffscreenCanvas(image.width, image.height)
-  const ctx = canvas.getContext('2d')!
-
-  ctx.drawImage(image, 0, 0)
-
-  return ctx.getImageData(0, 0, image.width, image.height)
-}
-
 export async function crop(
   image: ImageBitmap,
   x: number,

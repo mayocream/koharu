@@ -1,11 +1,11 @@
 'use client'
 
-import { useCanvasStore } from '@/lib/state'
+import { useEditorStore } from '@/lib/state'
 import { Button } from '@radix-ui/themes'
 import { Minus, Plus } from 'lucide-react'
 
 function ScaleControl() {
-  const { scale, setScale } = useCanvasStore()
+  const { scale, setScale } = useEditorStore()
 
   return (
     <div className='absolute bottom-5 left-5 z-10'>

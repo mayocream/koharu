@@ -1,12 +1,13 @@
 'use client'
 
 import { Image } from 'lucide-react'
-import { useCanvasStore } from '@/lib/state'
 import { Button } from '@radix-ui/themes'
 import { fileOpen } from 'browser-fs-access'
+import { useEditorStore } from '@/lib/state'
+import { createImageFromBlob } from '@/lib/image'
 
 function Topbar() {
-  const { setImage, setTexts, setSegment } = useCanvasStore()
+  const { setImage } = useEditorStore()
 
   const handleOpenImage = async () => {
     try {
@@ -17,11 +18,8 @@ function Topbar() {
 
       if (!blob) return
 
-      const imageBitmap = await createImageBitmap(blob)
-
-      setTexts([])
-      setSegment(null)
-      setImage(imageBitmap)
+      const image = await createImageFromBlob(blob)
+      setImage(image)
     } catch (err) {
       console.error('Error opening image:', err)
     }

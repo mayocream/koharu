@@ -1,22 +1,26 @@
 'use client'
 
 import { useState } from 'react'
-import { useCanvasStore } from '@/lib/state'
 import { Play } from 'lucide-react'
 import { Button, Slider, Text } from '@radix-ui/themes'
-import { inference } from '@/inference/detection'
+import { invoke } from '@tauri-apps/api/core'
+import { useEditorStore } from '@/lib/state'
 
 export default function DetectionPanel() {
-  const { image, texts, setTexts, setSegment } = useCanvasStore()
+  const { image } = useEditorStore()
   const [loading, setLoading] = useState(false)
   const [confidenceThreshold, setConfidenceThreshold] = useState(0.5)
   const [nmsThreshold, setNmsThreshold] = useState(0.5)
 
+  const texts = []
+
   const run = async () => {
     setLoading(true)
-    const result = await inference(image, confidenceThreshold, nmsThreshold)
-
-    setSegment(result.segment)
+    const result = await invoke<any>('detection', {
+      image: image,
+      confidenceThreshold: confidenceThreshold,
+      nmsThreshold: nmsThreshold,
+    })
 
     result.bboxes.sort((a: any, b: any) => {
       const aCenter = (a.ymin + a.ymax) / 2
@@ -24,7 +28,6 @@ export default function DetectionPanel() {
       return aCenter - bCenter
     })
 
-    setTexts(result.bboxes)
     setLoading(false)
   }
 

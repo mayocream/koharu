@@ -11,16 +11,18 @@ import {
   Text,
   Transformer,
 } from 'react-konva'
-import { useCanvasStore, useWorkflowStore } from '@/lib/state'
 import ScaleControl from './scale-control'
+import { useEditorStore } from '@/lib/state'
 
 function Canvas() {
-  const { image, scale, texts, segment } = useCanvasStore()
-  const { tool } = useWorkflowStore()
+  const { tool, scale, image } = useEditorStore()
   const containerRef = useRef<HTMLDivElement>(null)
   const inpaintLayerRef = useRef<Konva.Layer>(null)
 
   const [selected, setSelected] = useState<any>(null)
+
+  // TODO
+  const texts = []
 
   return (
     <>
@@ -30,14 +32,14 @@ function Canvas() {
             <Stage
               scaleX={scale}
               scaleY={scale}
-              width={image?.width * scale || 0}
-              height={image?.height * scale || 0}
+              width={image?.bitmap.width * scale || 0}
+              height={image?.bitmap.height * scale || 0}
               onClick={() => {
                 setSelected(null)
               }}
             >
               <Layer>
-                <Image image={image ?? null} />
+                <Image image={image?.bitmap ?? null} />
               </Layer>
               <Layer>
                 {texts?.map((block, index) => {
@@ -81,9 +83,7 @@ function Canvas() {
                 })}
                 {selected && <Transformer nodes={[selected]} />}
               </Layer>
-              <Layer>
-                {tool === 'segmentation' && <Image image={segment ?? null} />}
-              </Layer>
+              <Layer>{tool === 'segmentation' && <Image image={null} />}</Layer>
               <Layer ref={inpaintLayerRef}>
                 {tool === 'inpaint' && <Image image={null} />}
               </Layer>

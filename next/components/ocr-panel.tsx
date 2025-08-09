@@ -1,15 +1,17 @@
 'use client'
 
-import { useCanvasStore } from '@/lib/state'
 import { Play } from 'lucide-react'
 import { useState } from 'react'
 import { Badge, Button, Text } from '@radix-ui/themes'
 import { crop } from '@/utils/image'
-import { inference } from '@/inference/ocr'
+import { useEditorStore } from '@/lib/state'
+import { invoke } from '@tauri-apps/api/core'
 
 export default function OCRPanel() {
-  const { image, texts, setTexts } = useCanvasStore()
+  const { image } = useEditorStore()
   const [loading, setLoading] = useState(false)
+
+  const texts = []
 
   const run = async () => {
     setLoading(true)
@@ -17,16 +19,15 @@ export default function OCRPanel() {
     for (const text of texts) {
       const { xmin, ymin, xmax, ymax } = text
       const croppedImage = await crop(
-        image,
+        image.bitmap,
         xmin,
         ymin,
         xmax - xmin,
         ymax - ymin
       )
-      const result = await inference(croppedImage)
+      const result = await invoke<any>('ocr', { image: croppedImage })
       newTexts.push({ ...text, text: result })
     }
-    setTexts(newTexts)
     setLoading(false)
   }
 
