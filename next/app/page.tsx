@@ -5,11 +5,11 @@ import Tools from '@/components/tools'
 import Topbar from '@/components/topbar'
 import Canvas from '@/components/canvas'
 import OCRPanel from '@/components/ocr-panel'
-import { useWorkflowStore } from '@/lib/state'
 import TranslationPanel from '@/components/translation-panel'
+import { useEditorStore } from '@/lib/state'
 
 function App() {
-  const { tool: selectedTool } = useWorkflowStore()
+  const { tool: selectedTool } = useEditorStore()
 
   return (
     <main className='flex h-screen max-h-screen w-screen max-w-screen flex-col bg-gray-100'>
