@@ -16,19 +16,21 @@ export default function DetectionPanel() {
 
   const run = async () => {
     setLoading(true)
-    const result = await invoke<any>('detection', {
-      image: image,
-      confidenceThreshold: confidenceThreshold,
-      nmsThreshold: nmsThreshold,
-    })
 
-    result.bboxes.sort((a: any, b: any) => {
-      const aCenter = (a.ymin + a.ymax) / 2
-      const bCenter = (b.ymin + b.ymax) / 2
-      return aCenter - bCenter
-    })
+    try {
+      const result = await invoke<any>('detection', {
+        image: image.buffer,
+        confidenceThreshold: confidenceThreshold,
+        nmsThreshold: nmsThreshold,
+      })
 
-    setLoading(false)
+      console.log('Detection result:', result)
+
+    } catch (error) {
+      console.error('Error during detection:', error)
+    } finally {
+      setLoading(false)
+    }
   }
 
   return (
