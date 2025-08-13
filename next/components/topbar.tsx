@@ -21,7 +21,7 @@ function Topbar() {
       const image = await createImageFromBlob(blob)
       setImage(image)
     } catch (err) {
-      console.error('Error opening image:', err)
+      alert(`Error opening image: ${err}`)
     }
   }
 
