@@ -1,71 +1,20 @@
+mod commands;
 mod error;
 
-use anyhow::Context;
 use comic_text_detector::ComicTextDetector;
 use lama::Lama;
 use manga_ocr::MangaOCR;
-use tauri::{AppHandle, Manager, async_runtime::spawn, command};
+use tauri::{AppHandle, Manager, async_runtime::spawn};
 use tauri_plugin_dialog::{DialogExt, MessageDialogKind};
 use tokio::sync::RwLock;
 
-use crate::error::Result;
+use crate::commands::{detection, inpaint, ocr};
 
 #[derive(Debug)]
 struct AppState {
     comic_text_detector: ComicTextDetector,
     manga_ocr: MangaOCR,
     lama: Lama,
-}
-
-#[command]
-async fn detection(
-    app: AppHandle,
-    image: Vec<u8>,
-    confidence_threshold: f32,
-    nms_threshold: f32,
-) -> Result<comic_text_detector::Output> {
-    let state = app.state::<RwLock<AppState>>();
-    let mut state = state.write().await;
-
-    let img = image::load_from_memory(&image).context("Failed to load image")?;
-
-    let result = state
-        .comic_text_detector
-        .inference(&img, confidence_threshold, nms_threshold)
-        .context("Failed to perform inference")?;
-
-    Ok(result)
-}
-
-#[command]
-async fn ocr(app: AppHandle, image: Vec<u8>) -> Result<String> {
-    let state = app.state::<RwLock<AppState>>();
-    let mut state = state.write().await;
-
-    let img = image::load_from_memory(&image).context("Failed to load image")?;
-
-    let result = state
-        .manga_ocr
-        .inference(&img)
-        .context("Failed to perform OCR")?;
-
-    Ok(result)
-}
-
-#[command]
-async fn inpaint(app: AppHandle, image: Vec<u8>, mask: Vec<u8>) -> Result<Vec<u8>> {
-    let state = app.state::<RwLock<AppState>>();
-    let mut state = state.write().await;
-
-    let img = image::load_from_memory(&image).context("Failed to load image")?;
-    let mask_img = image::load_from_memory(&mask).context("Failed to load mask")?;
-
-    let result = state
-        .lama
-        .inference(&img, &mask_img)
-        .context("Failed to perform inpainting")?;
-
-    Ok(result.into_bytes().to_vec())
 }
 
 // Initialize models
