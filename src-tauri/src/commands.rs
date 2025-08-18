@@ -2,7 +2,7 @@ use anyhow::Context;
 use tauri::{AppHandle, Manager};
 use tokio::sync::RwLock;
 
-use crate::{AppState, error::Result};
+use crate::{AppState, error::CommandResult};
 
 #[tauri::command]
 pub async fn detection(
@@ -10,7 +10,7 @@ pub async fn detection(
     image: Vec<u8>,
     confidence_threshold: f32,
     nms_threshold: f32,
-) -> Result<comic_text_detector::Output> {
+) -> CommandResult<comic_text_detector::Output> {
     let state = app.state::<RwLock<AppState>>();
     let mut state = state.write().await;
 
@@ -25,7 +25,7 @@ pub async fn detection(
 }
 
 #[tauri::command]
-pub async fn ocr(app: AppHandle, image: Vec<u8>) -> Result<String> {
+pub async fn ocr(app: AppHandle, image: Vec<u8>) -> CommandResult<String> {
     let state = app.state::<RwLock<AppState>>();
     let mut state = state.write().await;
 
@@ -40,7 +40,7 @@ pub async fn ocr(app: AppHandle, image: Vec<u8>) -> Result<String> {
 }
 
 #[tauri::command]
-pub async fn inpaint(app: AppHandle, image: Vec<u8>, mask: Vec<u8>) -> Result<Vec<u8>> {
+pub async fn inpaint(app: AppHandle, image: Vec<u8>, mask: Vec<u8>) -> CommandResult<Vec<u8>> {
     let state = app.state::<RwLock<AppState>>();
     let mut state = state.write().await;
 

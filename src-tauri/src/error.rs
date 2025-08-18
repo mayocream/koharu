@@ -27,4 +27,4 @@ impl From<anyhow::Error> for CommandError {
     }
 }
 
-pub type Result<T> = std::result::Result<T, CommandError>;
+pub type CommandResult<T> = std::result::Result<T, CommandError>;
