@@ -1,21 +1,18 @@
 mod commands;
 mod error;
+mod state;
 
 use comic_text_detector::ComicTextDetector;
 use lama::Lama;
 use manga_ocr::MangaOCR;
 use tauri::{AppHandle, Manager, async_runtime::spawn};
 use tauri_plugin_dialog::{DialogExt, MessageDialogKind};
-use tokio::sync::RwLock;
+use tokio::sync::Mutex;
 
-use crate::commands::{detection, inpaint, ocr};
-
-#[derive(Debug)]
-struct AppState {
-    comic_text_detector: ComicTextDetector,
-    manga_ocr: MangaOCR,
-    lama: Lama,
-}
+use crate::{
+    commands::{detection, inpaint, ocr},
+    state::AppState,
+};
 
 // Initialize models
 async fn initialize(app: AppHandle) -> anyhow::Result<()> {
@@ -35,11 +32,11 @@ async fn initialize(app: AppHandle) -> anyhow::Result<()> {
     let manga_ocr = MangaOCR::new()?;
     let lama = Lama::new()?;
 
-    app.manage(RwLock::new(AppState {
-        comic_text_detector,
-        manga_ocr,
-        lama,
-    }));
+    app.manage(AppState {
+        comic_text_detector: Mutex::new(comic_text_detector),
+        manga_ocr: Mutex::new(manga_ocr),
+        lama: Mutex::new(lama),
+    });
 
     app.get_webview_window("splashscreen").unwrap().close()?;
     app.get_webview_window("main").unwrap().show()?;
