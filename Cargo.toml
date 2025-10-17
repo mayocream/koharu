@@ -9,17 +9,17 @@ description = "Manga translator"
 license-file = "LICENSE"
 
 [workspace.dependencies]
-candle-transformers = "0.9.1"
-hf-hub = "0.4.2"
-image = "0.25.6"
+candle-transformers = "0.9"
+hf-hub = "0.4"
+image = "0.25"
 ort = "=2.0.0-rc.10"
-anyhow = "1.0.98"
-ndarray = "0.16.1"
-imageproc = "0.25.0"
-clap = { version = "4.5.38", features = ["derive"] }
+anyhow = "1.0"
+ndarray = "0.16"
+imageproc = "0.25"
+clap = { version = "4.5", features = ["derive"] }
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"
-tokio = { version = "1.44.2", features = ["full"] }
-tracing = { version = "0.1.41", features = ["log"] }
+tokio = { version = "1.44", features = ["full"] }
+tracing = { version = "0.1", features = ["log"] }
 tracing-subscriber = { version = "0.3", features = ["env-filter", "fmt"] }
-log = "0.4.27"
+log = "0.4"
