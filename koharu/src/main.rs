@@ -1,12 +1,23 @@
 // Prevent console window in addition to Slint window in Windows release builds when, e.g., starting the app via file manager. Ignored on other platforms.
 #![cfg_attr(not(debug_assertions), windows_subsystem = "windows")]
 
+use comic_text_detector::ComicTextDetector;
+use lama::Lama;
+use manga_ocr::MangaOCR;
+use ort::execution_providers::CUDAExecutionProvider;
+
 slint::include_modules!();
 
 fn main() -> anyhow::Result<()> {
-    let ui = AppWindow::new()?;
+    ort::init()
+        .with_execution_providers([CUDAExecutionProvider::default().build().error_on_failure()])
+        .commit()?;
 
-    ui.run()?;
+    let _ctd = ComicTextDetector::new()?;
+    let _manga_ocr = MangaOCR::new()?;
+    let _lama = Lama::new()?;
+
+    AppWindow::new()?.run()?;
 
     Ok(())
 }

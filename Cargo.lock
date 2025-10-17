@@ -3239,6 +3239,10 @@ name = "koharu"
 version = "0.2.0-alpha.0"
 dependencies = [
  "anyhow",
+ "comic-text-detector",
+ "lama",
+ "manga-ocr",
+ "ort",
  "slint",
  "slint-build",
 ]
