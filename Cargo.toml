@@ -13,9 +13,6 @@ homepage = "https://koharu.rs"
 repository = "https://github.com/mayocream/koharu"
 keywords = ["manga", "ocr", "translation", "deep_learning", "computer_vision"]
 
-[workspace.badges]
-maintenance = { status = "actively-developed" }
-
 [workspace.dependencies]
 candle-transformers = "0.9"
 hf-hub = "0.4"
