@@ -2,6 +2,13 @@
 name = "comic-text-detector"
 version.workspace = true
 edition.workspace = true
+description.workspace = true
+license-file.workspace = true
+authors.workspace = true
+readme.workspace = true
+homepage.workspace = true
+repository.workspace = true
+keywords.workspace = true
 
 [dependencies]
 candle-transformers = { workspace = true }

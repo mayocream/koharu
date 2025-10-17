@@ -3,10 +3,18 @@ members = ["comic-text-detector", "lama", "manga-ocr"]
 resolver = "3"
 
 [workspace.package]
-version = "0.2.0"
+version = "0.2.0-alpha.0"
 edition = "2024"
-description = "Manga translator"
+description = "Manga translation tools"
 license-file = "LICENSE"
+authors = ["Mayo Takanashi <mayo@linux.com>"]
+readme = "README.md"
+homepage = "https://koharu.rs"
+repository = "https://github.com/mayocream/koharu"
+keywords = ["manga", "ocr", "translation", "deep_learning", "computer_vision"]
+
+[workspace.badges]
+maintenance = { status = "actively-developed" }
 
 [workspace.dependencies]
 candle-transformers = "0.9"
