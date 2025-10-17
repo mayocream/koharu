@@ -1,0 +1,5 @@
+[alias]
+dev = "run --bin koharu --features slint/live-preview"
+
+[env]
+SLINT_LIVE_PREVIEW = "1"
