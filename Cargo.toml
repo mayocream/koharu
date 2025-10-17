@@ -1,5 +1,5 @@
 [workspace]
-members = ["comic-text-detector", "lama", "manga-ocr"]
+members = ["comic-text-detector", "koharu", "lama", "manga-ocr"]
 resolver = "3"
 
 [workspace.package]
@@ -31,3 +31,5 @@ tokio = { version = "1.44", features = ["full"] }
 tracing = { version = "0.1", features = ["log"] }
 tracing-subscriber = { version = "0.3", features = ["env-filter", "fmt"] }
 log = "0.4"
+slint = "1.13"
+slint-build = "1.13"

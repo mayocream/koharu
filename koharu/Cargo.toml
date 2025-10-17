@@ -1,0 +1,18 @@
+[package]
+name = "koharu"
+version.workspace = true
+edition.workspace = true
+description.workspace = true
+license-file.workspace = true
+authors.workspace = true
+readme.workspace = true
+homepage.workspace = true
+repository.workspace = true
+keywords.workspace = true
+
+[dependencies]
+slint = { workspace = true }
+anyhow = { workspace = true }
+
+[build-dependencies]
+slint-build = { workspace = true }
