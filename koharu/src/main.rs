@@ -17,7 +17,11 @@ fn main() -> anyhow::Result<()> {
     let _manga_ocr = MangaOCR::new()?;
     let _lama = Lama::new()?;
 
-    App::new()?.run()?;
+    let app = App::new()?;
+    let logic = app.global::<Logic>();
+    logic.on_open(|path| open::that(path).expect("Failed to open path"));
+
+    app.run()?;
 
     Ok(())
 }

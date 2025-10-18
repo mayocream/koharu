@@ -1,6 +1,10 @@
 import { Button, VerticalBox } from "std-widgets.slint";
 import { AppMenuBar, AppMenu, AppMenuItem, AppMenuSeparator } from "menubar.slint";
 
+export global Logic {
+    pure callback open(string);
+}
+
 export component App inherits Window {
     max-width: 3840px;
     max-height: 2160px;
@@ -16,6 +20,24 @@ export component App inherits Window {
 
                 AppMenuItem {
                     title: "Open File...";
+                }
+            }
+
+            AppMenu {
+                title: "Help";
+
+                AppMenuItem {
+                    title: "Discord";
+                    clicked => {
+                        Logic.open("https://discord.gg/mHvHkxGnUY");
+                    }
+                }
+
+                AppMenuItem {
+                    title: "GitHub";
+                    clicked => {
+                        Logic.open("https://github.com/mayocream/koharu");
+                    }
                 }
             }
         }

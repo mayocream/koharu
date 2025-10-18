@@ -30,3 +30,5 @@ tracing-subscriber = { version = "0.3", features = ["env-filter", "fmt"] }
 log = "0.4"
 slint = { version = "1.13", features = ["image-default-formats"] }
 slint-build = "1.13"
+open = "5.3"
+rfd = "0.15"
