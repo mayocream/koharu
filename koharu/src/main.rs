@@ -17,7 +17,7 @@ fn main() -> anyhow::Result<()> {
     let _manga_ocr = MangaOCR::new()?;
     let _lama = Lama::new()?;
 
-    AppWindow::new()?.run()?;
+    App::new()?.run()?;
 
     Ok(())
 }

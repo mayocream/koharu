@@ -1,0 +1,23 @@
+import { Button, VerticalBox } from "std-widgets.slint";
+import { AppMenuBar, AppMenu, AppMenuItem, AppMenuSeparator } from "menubar.slint";
+
+export component App inherits Window {
+    preferred-width: 800px;
+    preferred-height: 600px;
+    min-height: 600px;
+    min-width: 800px;
+    title: "Koharu";
+    icon: @image-url("assets/Koharu_Halo.webp");
+
+    VerticalLayout {
+        AppMenuBar {
+            AppMenu {
+                title: "File";
+
+                AppMenuItem {
+                    title: "Open File...";
+                }
+            }
+        }
+    }
+}

@@ -1,3 +1,3 @@
 fn main() {
-    slint_build::compile("../ui/app-window.slint").expect("Failed to compile UI");
+    slint_build::compile("../ui/main.slint").expect("Failed to compile UI");
 }

@@ -1,0 +1,91 @@
+export component AppMenuSeparator inherits VerticalLayout {
+    height: 6px;
+    alignment: space-around;
+    spacing: 3px;
+
+    Rectangle {
+        width: parent.width;
+        height: 1px;
+        background: #F48FB1;
+        opacity: 0.5;
+    }
+}
+
+export component AppMenuItem inherits TouchArea {
+    in property <string> title: "";
+
+    height: 30px;
+    mouse-cursor: MouseCursor.pointer;
+
+    rect := Rectangle {
+        height: parent.height;
+        width: parent.width;
+        border-radius: 9px;
+
+        Text {
+            text: root.title;
+        }
+    }
+
+    states [
+        hover when root.has-hover: {
+            rect.background: #F48FB1;
+        }
+    ]
+}
+
+export component AppMenu inherits Rectangle {
+    in property <string> title: "Menu";
+    height: 30px;
+    width: 60px;
+
+    menu := TouchArea {
+        mouse-cursor: MouseCursor.pointer;
+        height: parent.height;
+        width: root.width;
+
+        Rectangle {
+            width: parent.width;
+            height: parent.height;
+            border-radius: 9px;
+            background: #F8BBD0;
+
+            Text {
+                text: root.title;
+            }
+        }
+
+        clicked => {
+            popup.show()
+        }
+    }
+
+    popup := PopupWindow {
+        x: menu.x;
+        y: menu.y + menu.height + 5px;
+        width: 100px;
+
+        Rectangle {
+            width: parent.width;
+            background: #F8BBD0;
+            border-radius: 9px;
+
+            VerticalLayout {
+                alignment: space-between;
+
+                @children
+            }
+        }
+    }
+}
+
+export component AppMenuBar inherits Rectangle {
+    background: #FCE4EC;
+
+    HorizontalLayout {
+        spacing: 10px;
+        padding: 5px;
+
+        @children
+    }
+}
