@@ -19,7 +19,7 @@ fn main() -> anyhow::Result<()> {
 
     let app = App::new()?;
     let logic = app.global::<Logic>();
-    logic.on_open(|path| open::that(path).expect("Failed to open path"));
+    logic.on_open_external(|path| open::that(path).expect("Failed to open path"));
 
     app.run()?;
 

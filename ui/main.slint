@@ -1,8 +1,14 @@
-import { AppMenuBar, AppMenu, AppMenuItem, AppMenuSeparator } from "menubar.slint";
+import {
+    AppMenuBar,
+    AppMenu,
+    AppMenuItem,
+    AppMenuSeparator,
+} from "menubar.slint";
+import { Logic } from "logic.slint";
 
-export global Logic {
-    pure callback open(string);
-}
+// re-export for the native code
+// refer: https://github.com/slint-ui/slint/blob/24d37751e8245af46722e8e8aa9fb74bf6639489/examples/printerdemo/ui/printerdemo.slint#L11
+export { Logic }
 
 export component App inherits Window {
     max-width: 3840px;
@@ -28,14 +34,14 @@ export component App inherits Window {
                 AppMenuItem {
                     title: "Discord";
                     clicked => {
-                        Logic.open("https://discord.gg/mHvHkxGnUY");
+                        Logic.open_external("https://discord.gg/mHvHkxGnUY");
                     }
                 }
 
                 AppMenuItem {
                     title: "GitHub";
                     clicked => {
-                        Logic.open("https://github.com/mayocream/koharu");
+                        Logic.open_external("https://github.com/mayocream/koharu");
                     }
                 }
             }
