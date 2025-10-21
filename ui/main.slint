@@ -5,6 +5,7 @@ import {
     AppMenuSeparator,
 } from "menubar.slint";
 import { Logic } from "logic.slint";
+import { ThumbnailPanel, ThumbnailItem } from "thumbnail.slint";
 
 // re-export for the native code
 // refer: https://github.com/slint-ui/slint/blob/24d37751e8245af46722e8e8aa9fb74bf6639489/examples/printerdemo/ui/printerdemo.slint#L11
@@ -43,6 +44,16 @@ export component App inherits Window {
                     clicked => {
                         Logic.open_external("https://github.com/mayocream/koharu");
                     }
+                }
+            }
+        }
+
+        HorizontalLayout {
+            ThumbnailPanel {
+                // Test thumbnails
+                for i in ["01", "02", "03", "04", "05", "06", "07", "08", "09", "10"]: ThumbnailItem {
+                    title: i;
+                    source: @image-url("assets/images/Koharu_Portrait.webp");
                 }
             }
         }

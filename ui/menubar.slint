@@ -11,7 +11,7 @@ export component AppMenuSeparator inherits VerticalLayout {
 }
 
 export component AppMenuItem inherits TouchArea {
-    in property <string> title: "";
+    in property <string> title;
 
     height: 32px;
     mouse-cursor: MouseCursor.pointer;
@@ -40,7 +40,7 @@ export component AppMenuItem inherits TouchArea {
 }
 
 export component AppMenu inherits Rectangle {
-    in property <string> title: "Menu";
+    in property <string> title;
     height: 32px;
     width: max(title-text.preferred-width + 20px, 60px);
 
