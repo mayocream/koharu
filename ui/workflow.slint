@@ -1,0 +1,65 @@
+export component WorkflowItem inherits TouchArea {
+    in property <string> title;
+
+    width: 80px;
+    height: 30px;
+    mouse-cursor: MouseCursor.pointer;
+
+    rect := Rectangle {
+        width: parent.width;
+        height: parent.height;
+        background: white;
+        border-radius: 15px;
+        border-width: 1px;
+        border-color: #E0E0E0;
+
+        Text {
+            text: root.title;
+            color: #333333;
+            font-size: 12px;
+            font-weight: 400;
+            horizontal-alignment: center;
+            vertical-alignment: center;
+        }
+    }
+
+    states [
+        hover when root.has-hover: {
+            rect.background: #F5F5F5;
+        }
+    ]
+}
+
+export component WorkflowConnector inherits Rectangle {
+    width: 30px;
+    height: 30px;
+
+    for x in [2px, 8px, 14px, 20px, 26px]: Rectangle {
+        width: 4px;
+        height: 1px;
+        y: (parent.height - self.height) / 2;
+        x: x;
+        background: #C0C0C0;
+    }
+}
+
+export component Workflow inherits Rectangle {
+    background: #FAFAFA;
+    border-width: 1px;
+    border-color: #E0E0E0;
+
+    Rectangle {
+        width: parent.width;
+        height: 1px;
+        y: parent.height - 1px;
+        background: #E0E0E0;
+    }
+
+    HorizontalLayout {
+        spacing: 0px;
+        alignment: center;
+        padding: 8px;
+
+        @children
+    }
+}
