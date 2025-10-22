@@ -7,6 +7,7 @@ import {
 import { Logic } from "logic.slint";
 import { ThumbnailPanel, ThumbnailItem } from "thumbnail.slint";
 import { Workflow, WorkflowItem, WorkflowConnector } from "workflow.slint";
+import { DetectionPanel } from "detection.slint";
 
 // re-export for the native code
 // refer: https://github.com/slint-ui/slint/blob/24d37751e8245af46722e8e8aa9fb74bf6639489/examples/printerdemo/ui/printerdemo.slint#L11
@@ -82,6 +83,10 @@ export component App inherits Window {
                 Rectangle {
                     // Spacer to push workflow to top
                 }
+            }
+
+            VerticalLayout {
+                DetectionPanel { }
             }
         }
     }

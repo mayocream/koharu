@@ -1,0 +1,143 @@
+import { ScrollView } from "std-widgets.slint";
+
+struct TextBlock {
+    index: int,
+    content: string,
+}
+
+export component DetectionItem inherits Rectangle {
+    in property <TextBlock> block;
+
+    background: white;
+    border-radius: 4px;
+    border-width: 1px;
+    border-color: #E0E0E0;
+
+    HorizontalLayout {
+        padding: 4px;
+        spacing: 6px;
+        alignment: start;
+
+        Text {
+            text: root.block.index;
+            color: #666666;
+            font-size: 11px;
+            font-weight: 600;
+            width: 10px;
+            vertical-alignment: top;
+        }
+
+        Text {
+            text: root.block.content;
+            color: #333333;
+            font-size: 11px;
+            vertical-alignment: top;
+            wrap: word-wrap;
+        }
+    }
+}
+
+export component DetectionPanel inherits Rectangle {
+    in-out property <[TextBlock]> detected-blocks: [
+        {
+            index: 1,
+            content: "こんにちは、世界！今日は素晴らしい一日ですね。" },
+
+        {
+            index: 2,
+            content: "Hello World and welcome to this amazing application that demonstrates text detection capabilities."
+        },
+        {
+            index: 3,
+            content: "第一章：序論 - この章では、データ分析の基本的な概念について説明します。" },
+
+        {
+            index: 4,
+            content: "Chapter 1: Introduction to Advanced Machine Learning Algorithms and Their Applications"
+        },
+        {
+            index: 5,
+            content: "データ分析の重要性は現代社会において益々高まっており、様々な分野で活用されています。" },
+
+        {
+            index: 6,
+            content: "Lorem ipsum dolor sit amet, consectetur adipiscing elit, sed do eiusmod tempor incididunt ut labore."
+        },
+        { index: 7, content: "短いテキスト" },
+        {
+            index: 8,
+            content: "This is another example of a longer text block that should wrap nicely within the constrained width of our detection panel component."
+        },
+    ];
+
+    width: 200px;
+    background: #FAFAFA;
+    border-width: 1px;
+    border-color: #E0E0E0;
+
+    VerticalLayout {
+        padding: 8px;
+        spacing: 8px;
+
+        HorizontalLayout {
+            spacing: 8px;
+            alignment: start;
+
+            Rectangle {
+                // Spacer
+            }
+
+            detect-button := TouchArea {
+                width: 80px;
+                height: 30px;
+                mouse-cursor: MouseCursor.pointer;
+
+                button-rect := Rectangle {
+                    width: parent.width;
+                    height: parent.height;
+                    background: white;
+                    border-radius: 15px;
+                    border-width: 1px;
+                    border-color: #E0E0E0;
+
+                    Text {
+                        text: "Detect";
+                        color: #333333;
+                        font-size: 12px;
+                        font-weight: 400;
+                        horizontal-alignment: center;
+                        vertical-alignment: center;
+                    }
+                }
+
+                states [
+                    hover when self.has-hover: {
+                        button-rect.background: #F5F5F5;
+                    }
+                ]
+
+                clicked => {
+                    // TODO: Implement detection logic
+                }
+            }
+        }
+
+        ScrollView {
+            VerticalLayout {
+                spacing: 4px;
+                alignment: start;
+
+                if root.detected-blocks.length == 0: Text {
+                    text: "No text blocks detected yet. Click 'Detect' to start detection.";
+                    color: #666666;
+                    font-size: 12px;
+                    horizontal-alignment: center;
+                }
+
+                for block in root.detected-blocks: DetectionItem {
+                    block: block;
+                }
+            }
+        }
+    }
+}
