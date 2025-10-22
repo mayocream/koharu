@@ -1,0 +1,24 @@
+import {
+    LineEdit,
+    VerticalBox,
+    HorizontalBox,
+    ScrollView,
+} from "std-widgets.slint";
+
+export component Canvas inherits ScrollView {
+    property <image> source: @image-url("assets/images/Koharu_Portrait.webp");
+
+    VerticalLayout {
+        alignment: center;
+
+        HorizontalLayout {
+            alignment: center;
+
+            Image {
+                source: root.source;
+                width: root.source.width * 1px;
+                height: root.source.height * 1px;
+            }
+        }
+    }
+}
