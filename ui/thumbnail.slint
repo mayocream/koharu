@@ -5,15 +5,15 @@ export component ThumbnailItem inherits TouchArea {
     in property <string> title;
     in property <image> source;
 
-    width: 80px;
-    height: 120px;
+    width: 100px;
+    height: 140px;
     mouse-cursor: MouseCursor.pointer;
 
     VerticalLayout {
         spacing: 4px;
 
         rect := Rectangle {
-            height: 96px;
+            height: 116px;
             width: parent.width;
             background: white;
             border-radius: 4px;
@@ -21,13 +21,13 @@ export component ThumbnailItem inherits TouchArea {
             border-color: #E0E0E0;
 
             VerticalLayout {
-                spacing: 4px;
-                padding: 8px;
+                spacing: 2px;
+                padding: 4px;
 
                 Image {
                     source: root.source;
-                    width: parent.width - 16px;
-                    height: 80px;
+                    width: parent.width - 8px;
+                    height: 108px;
                     image-fit: cover;
                 }
             }
@@ -64,21 +64,24 @@ export component ThumbnailPanel inherits Rectangle {
     }
 
     VerticalLayout {
-        spacing: 8px;
-        padding: 8px;
+        spacing: 4px;
+        padding: 4px;
 
         Text {
-            text: "Thumbnails";
+            text: "Pages";
             color: #333333;
             font-size: 14px;
             font-weight: 400;
-            horizontal-alignment: left;
+            horizontal-alignment: center;
         }
 
         ScrollView {
-            VerticalLayout {
-                spacing: 4px;
-                @children
+            HorizontalLayout {
+                alignment: center;
+                VerticalLayout {
+                    spacing: 2px;
+                    @children
+                }
             }
         }
     }

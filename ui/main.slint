@@ -57,10 +57,9 @@ export component App inherits Window {
 
         HorizontalLayout {
             ThumbnailPanel {
-                // Test thumbnails
-                for i in ["01", "02", "03", "04", "05", "06", "07", "08", "09", "10"]: ThumbnailItem {
-                    title: i;
-                    source: @image-url("assets/images/Koharu_Portrait.webp");
+                for image in State.images: ThumbnailItem {
+                    title: image.name;
+                    source: image.source;
                 }
             }
 
