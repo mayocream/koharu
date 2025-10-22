@@ -5,6 +5,7 @@ import {
     AppMenuSeparator,
 } from "menubar.slint";
 import { Logic } from "logic.slint";
+import { State } from "state.slint";
 import { ThumbnailPanel, ThumbnailItem } from "thumbnail.slint";
 import { Workflow, WorkflowItem, WorkflowConnector } from "workflow.slint";
 import { DetectionPanel } from "detection.slint";
@@ -12,7 +13,7 @@ import { Canvas } from "canvas.slint";
 
 // re-export for the native code
 // refer: https://github.com/slint-ui/slint/blob/24d37751e8245af46722e8e8aa9fb74bf6639489/examples/printerdemo/ui/printerdemo.slint#L11
-export { Logic }
+export { Logic, State }
 
 export component App inherits Window {
     max-width: 3840px;
@@ -29,6 +30,9 @@ export component App inherits Window {
 
                 AppMenuItem {
                     title: "Open File...";
+                    clicked => {
+                        Logic.open_file();
+                    }
                 }
             }
 
