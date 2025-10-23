@@ -16,6 +16,8 @@ anyhow = { workspace = true }
 ort = { workspace = true }
 rfd = { workspace = true }
 open = { workspace = true }
+serde = { workspace = true }
+serde_json = { workspace = true }
 
 comic-text-detector = { path = "../comic-text-detector" }
 manga-ocr = { path = "../manga-ocr" }

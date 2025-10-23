@@ -3315,6 +3315,8 @@ dependencies = [
  "open",
  "ort",
  "rfd",
+ "serde",
+ "serde_json",
  "slint",
  "slint-build",
 ]

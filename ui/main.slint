@@ -6,6 +6,7 @@ import {
 } from "menubar.slint";
 import { Logic } from "logic.slint";
 import { State } from "state.slint";
+import { Image } from "types.slint";
 import { ThumbnailPanel, ThumbnailItem } from "thumbnail.slint";
 import { Workflow, WorkflowItem, WorkflowConnector } from "workflow.slint";
 import { DetectionPanel } from "detection.slint";
@@ -17,6 +18,7 @@ export { Logic, State }
 
 export component App inherits Window {
     in-out property <int> scale: 100;
+    in-out property <[Image]> images;
 
     max-width: 3840px;
     max-height: 2160px;
@@ -33,7 +35,7 @@ export component App inherits Window {
                 AppMenuItem {
                     title: "Open File...";
                     clicked => {
-                        Logic.open_file();
+                        images = Logic.open_file();
                     }
                 }
             }
@@ -59,11 +61,11 @@ export component App inherits Window {
 
         HorizontalLayout {
             ThumbnailPanel {
-                for image in State.images: ThumbnailItem {
+                for image in root.images: ThumbnailItem {
                     title: image.name;
                     source: image.source;
                     clicked => {
-                        State.current-image = image;
+                        State.image = image;
                     }
                 }
             }

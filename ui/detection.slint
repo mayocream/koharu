@@ -1,12 +1,8 @@
 import { ScrollView } from "std-widgets.slint";
-
-struct TextBlock {
-    index: int,
-    content: string,
-}
+import { TextBlock } from "types.slint";
 
 export component DetectionItem inherits Rectangle {
-    in property <TextBlock> block;
+    in property <TextBlock> text-block;
 
     background: white;
     border-radius: 4px;
@@ -19,7 +15,7 @@ export component DetectionItem inherits Rectangle {
         alignment: start;
 
         Text {
-            text: root.block.index;
+            text: root.text-block.index;
             color: #666666;
             font-size: 11px;
             font-weight: 600;
@@ -28,7 +24,7 @@ export component DetectionItem inherits Rectangle {
         }
 
         Text {
-            text: root.block.content;
+            text: root.text-block.text;
             color: #333333;
             font-size: 12px;
             vertical-alignment: top;
@@ -38,37 +34,7 @@ export component DetectionItem inherits Rectangle {
 }
 
 export component DetectionPanel inherits Rectangle {
-    in-out property <[TextBlock]> detected-blocks: [
-        {
-            index: 1,
-            content: "こんにちは、世界！今日は素晴らしい一日ですね。" },
-
-        {
-            index: 2,
-            content: "Hello World and welcome to this amazing application that demonstrates text detection capabilities."
-        },
-        {
-            index: 3,
-            content: "第一章：序論 - この章では、データ分析の基本的な概念について説明します。" },
-
-        {
-            index: 4,
-            content: "Chapter 1: Introduction to Advanced Machine Learning Algorithms and Their Applications"
-        },
-        {
-            index: 5,
-            content: "データ分析の重要性は現代社会において益々高まっており、様々な分野で活用されています。" },
-
-        {
-            index: 6,
-            content: "Lorem ipsum dolor sit amet, consectetur adipiscing elit, sed do eiusmod tempor incididunt ut labore."
-        },
-        { index: 7, content: "短いテキスト" },
-        {
-            index: 8,
-            content: "This is another example of a longer text block that should wrap nicely within the constrained width of our detection panel component."
-        },
-    ];
+    in-out property <[TextBlock]> detected-blocks;
 
     width: 200px;
     background: #FAFAFA;
@@ -135,7 +101,7 @@ export component DetectionPanel inherits Rectangle {
                 }
 
                 for block in root.detected-blocks: DetectionItem {
-                    block: block;
+                    text-block: block;
                 }
             }
         }
