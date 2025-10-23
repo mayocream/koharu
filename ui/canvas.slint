@@ -10,14 +10,15 @@ import { TextBlock } from "types.slint";
 export component TextBlockAnnotation inherits Rectangle {
     in property <TextBlock> text-block;
     in property <int> index;
+    in property <int> scale: 100;
 
     border-color: #ff9999;
     border-width: 2px;
 
-    x: text-block.x * 1px;
-    y: text-block.y * 1px;
-    width: text-block.width * 1px;
-    height: text-block.height * 1px;
+    x: text-block.x * 1px * scale / 100;
+    y: text-block.y * 1px * scale / 100;
+    width: text-block.width * 1px * scale / 100;
+    height: text-block.height * 1px * scale / 100;
 
     Rectangle {
         border-color: #ff9999;
@@ -85,23 +86,24 @@ export component Canvas inherits ScrollView {
         HorizontalLayout {
             alignment: center;
 
-            bg := Image {
+            Image {
                 source: root.source;
                 width: root.source.width * 1px * root.scale / 100;
                 height: root.source.height * 1px * root.scale / 100;
+
+                Rectangle {
+                    x: 0;
+                    y: 0;
+                    width: parent.width;
+                    height: parent.height;
+
+                    for text_block[index] in State.text-blocks: TextBlockAnnotation {
+                        text-block: text_block;
+                        index: index + 1;
+                        scale: root.scale;
+                    }
+                }
             }
-        }
-    }
-
-    overlay := Rectangle {
-        x: bg.x;
-        y: bg.y;
-        width: bg.width;
-        height: bg.height;
-
-        for text_block[index] in State.text-blocks: TextBlockAnnotation {
-            text-block: text_block;
-            index: index + 1;
         }
     }
 }
