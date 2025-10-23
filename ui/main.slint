@@ -35,7 +35,7 @@ export component App inherits Window {
                 AppMenuItem {
                     title: "Open File...";
                     clicked => {
-                        images = Logic.open_file();
+                        images = Logic.open-file();
                     }
                 }
             }
@@ -46,14 +46,14 @@ export component App inherits Window {
                 AppMenuItem {
                     title: "Discord";
                     clicked => {
-                        Logic.open_external("https://discord.gg/mHvHkxGnUY");
+                        Logic.open-external("https://discord.gg/mHvHkxGnUY");
                     }
                 }
 
                 AppMenuItem {
                     title: "GitHub";
                     clicked => {
-                        Logic.open_external("https://github.com/mayocream/koharu");
+                        Logic.open-external("https://github.com/mayocream/koharu");
                     }
                 }
             }

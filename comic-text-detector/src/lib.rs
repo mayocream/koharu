@@ -1,5 +1,3 @@
-use std::thread;
-
 use candle_transformers::object_detection::{Bbox, non_maximum_suppression};
 use hf_hub::api::sync::Api;
 use image::GenericImageView;
@@ -37,7 +35,6 @@ impl ComicTextDetector {
 
         let model = Session::builder()?
             .with_optimization_level(ort::session::builder::GraphOptimizationLevel::Level3)?
-            .with_intra_threads(thread::available_parallelism()?.get())?
             .commit_from_file(model_path)?;
 
         Ok(ComicTextDetector { model })

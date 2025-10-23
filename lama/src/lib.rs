@@ -1,5 +1,3 @@
-use std::thread;
-
 use hf_hub::api::sync::Api;
 use image::{DynamicImage, GenericImageView};
 use ort::{inputs, session::Session, value::TensorRef};
@@ -97,7 +95,6 @@ impl Lama {
 
         let model = Session::builder()?
             .with_optimization_level(ort::session::builder::GraphOptimizationLevel::Level3)?
-            .with_intra_threads(thread::available_parallelism()?.get())?
             .commit_from_file(model_path)?;
 
         Ok(Lama { model })

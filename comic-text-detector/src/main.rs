@@ -1,6 +1,7 @@
 use clap::Parser;
 use comic_text_detector::ComicTextDetector;
 use image::GenericImageView;
+use ort::execution_providers::CUDAExecutionProvider;
 
 #[derive(Parser)]
 struct Cli {
@@ -18,6 +19,10 @@ struct Cli {
 }
 
 fn main() -> anyhow::Result<()> {
+    ort::init()
+        .with_execution_providers([CUDAExecutionProvider::default().build().error_on_failure()])
+        .commit()?;
+
     let cli = Cli::parse();
 
     let mut model = ComicTextDetector::new()?;

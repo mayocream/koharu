@@ -1,8 +1,11 @@
 import { ScrollView } from "std-widgets.slint";
 import { TextBlock } from "types.slint";
+import { State } from "state.slint";
+import { Logic } from "logic.slint";
 
 export component DetectionItem inherits Rectangle {
     in property <TextBlock> text-block;
+    in property <int> index;
 
     background: white;
     border-radius: 4px;
@@ -15,7 +18,7 @@ export component DetectionItem inherits Rectangle {
         alignment: start;
 
         Text {
-            text: root.text-block.index;
+            text: root.index;
             color: #666666;
             font-size: 11px;
             font-weight: 600;
@@ -24,7 +27,7 @@ export component DetectionItem inherits Rectangle {
         }
 
         Text {
-            text: root.text-block.text;
+            text: root.text-block.text.is-empty ? "<empty>" : root.text-block.text;
             color: #333333;
             font-size: 12px;
             vertical-alignment: top;
@@ -34,7 +37,7 @@ export component DetectionItem inherits Rectangle {
 }
 
 export component DetectionPanel inherits Rectangle {
-    in-out property <[TextBlock]> detected-blocks;
+    property <[TextBlock]> text-blocks: State.text-blocks;
 
     width: 200px;
     background: #FAFAFA;
@@ -83,7 +86,7 @@ export component DetectionPanel inherits Rectangle {
                 ]
 
                 clicked => {
-                    // TODO: Implement detection logic
+                    Logic.detect(State.image);
                 }
             }
         }
@@ -93,15 +96,16 @@ export component DetectionPanel inherits Rectangle {
                 spacing: 4px;
                 alignment: start;
 
-                if root.detected-blocks.length == 0: Text {
-                    text: "No text blocks detected yet. Click 'Detect' to start detection.";
+                if root.text-blocks.length == 0: Text {
+                    text: "No text blocks detected yet.";
                     color: #666666;
                     font-size: 12px;
                     horizontal-alignment: center;
                 }
 
-                for block in root.detected-blocks: DetectionItem {
+                for block[index] in root.text-blocks: DetectionItem {
                     text-block: block;
+                    index: index + 1;
                 }
             }
         }

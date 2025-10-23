@@ -1,5 +1,3 @@
-use std::thread;
-
 use hf_hub::api::sync::Api;
 use ndarray::s;
 use ort::{inputs, session::Session, value::TensorRef};
@@ -21,12 +19,10 @@ impl MangaOCR {
 
         let encoder_model = Session::builder()?
             .with_optimization_level(ort::session::builder::GraphOptimizationLevel::Level3)?
-            .with_intra_threads(thread::available_parallelism()?.get())?
             .commit_from_file(encoder_model_path)?;
 
         let decoder_model = Session::builder()?
             .with_optimization_level(ort::session::builder::GraphOptimizationLevel::Level3)?
-            .with_intra_threads(thread::available_parallelism()?.get())?
             .commit_from_file(decoder_model_path)?;
 
         let vocab = std::fs::read_to_string(vocab_path)

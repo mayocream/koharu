@@ -1,6 +1,7 @@
-import { Image } from "types.slint";
+import { Image, TextBlock } from "types.slint";
 
 export global Logic {
-    pure callback open_external(string);
-    callback open_file() -> [Image];
+    pure callback open-external(string);
+    callback open-file() -> [Image];
+    callback detect(Image);
 }

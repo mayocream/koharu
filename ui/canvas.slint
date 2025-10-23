@@ -9,9 +9,10 @@ import { TextBlock } from "types.slint";
 
 export component TextBlockAnnotation inherits Rectangle {
     in property <TextBlock> text-block;
+    in property <int> index;
 
     border-color: #ff9999;
-    border-width: 1px;
+    border-width: 2px;
 
     x: text-block.x * 1px;
     y: text-block.y * 1px;
@@ -21,12 +22,22 @@ export component TextBlockAnnotation inherits Rectangle {
     Rectangle {
         border-color: #ff9999;
         border-radius: 999px;
-        border-width: 1px;
+        border-width: 2px;
+        background: #ff9999;
 
-        width: 12px;
-        height: 12px;
-        x: -6px;
-        y: -6px;
+        width: 16px;
+        height: 16px;
+        x: -8px;
+        y: -8px;
+
+        Text {
+            text: root.index;
+            color: white;
+            font-size: 12px;
+            font-weight: 400;
+            horizontal-alignment: center;
+            vertical-alignment: center;
+        }
     }
 }
 
@@ -88,8 +99,9 @@ export component Canvas inherits ScrollView {
         width: bg.width;
         height: bg.height;
 
-        for text_block in State.text-blocks: TextBlockAnnotation {
+        for text_block[index] in State.text-blocks: TextBlockAnnotation {
             text-block: text_block;
+            index: index + 1;
         }
     }
 }
