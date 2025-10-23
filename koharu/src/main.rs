@@ -37,7 +37,7 @@ fn main() -> anyhow::Result<()> {
             .add_filter("images", &["png", "jpg", "jpeg", "webp"])
             .pick_files();
         if let Some(files) = files {
-            let images: Vec<Image> = files
+            let mut images: Vec<Image> = files
                 .into_iter()
                 .filter_map(|path| {
                     slint::Image::load_from_path(&path)
@@ -62,6 +62,10 @@ fn main() -> anyhow::Result<()> {
                         .ok()
                 })
                 .collect();
+
+            // Sort images by name
+            images.sort_by_key(|image| image.name.clone());
+
             weak.upgrade()
                 .expect("Failed to upgrade weak reference")
                 .global::<State>()
