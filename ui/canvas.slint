@@ -1,13 +1,48 @@
 import {
-    LineEdit,
+    SpinBox,
     VerticalBox,
     HorizontalBox,
     ScrollView,
 } from "std-widgets.slint";
 import { State } from "state.slint";
 
+export component CanvasControl inherits Rectangle {
+    in-out property <int> scale: 100;
+
+    height: 20px;
+    horizontal-stretch: 1;
+    border-color: #CCCCCC;
+    border-width: 1px;
+
+    HorizontalLayout {
+        alignment: end;
+        spacing: 10px;
+
+        HorizontalLayout {
+            Text {
+                text: "Scale (%)";
+                vertical-alignment: center;
+            }
+
+            SpinBox {
+                minimum: 10;
+                maximum: 100;
+                step-size: 10;
+                width: 100px;
+                value: root.scale;
+
+                edited(value) => {
+                    root.scale = value;
+                    self.clear-focus();
+                }
+            }
+        }
+    }
+}
+
 export component Canvas inherits ScrollView {
     property <image> source: State.current-image.source;
+    in property <int> scale: 100;
 
     VerticalLayout {
         alignment: center;
@@ -17,8 +52,8 @@ export component Canvas inherits ScrollView {
 
             Image {
                 source: root.source;
-                width: root.source.width * 1px;
-                height: root.source.height * 1px;
+                width: root.source.width * 1px * root.scale / 100;
+                height: root.source.height * 1px * root.scale / 100;
             }
         }
     }
