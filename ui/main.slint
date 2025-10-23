@@ -60,6 +60,9 @@ export component App inherits Window {
                 for image in State.images: ThumbnailItem {
                     title: image.name;
                     source: image.source;
+                    clicked => {
+                        State.current-image = image;
+                    }
                 }
             }
 

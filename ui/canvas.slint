@@ -4,9 +4,10 @@ import {
     HorizontalBox,
     ScrollView,
 } from "std-widgets.slint";
+import { State } from "state.slint";
 
 export component Canvas inherits ScrollView {
-    property <image> source: @image-url("assets/images/Koharu_Portrait.webp");
+    property <image> source: State.current-image.source;
 
     VerticalLayout {
         alignment: center;
