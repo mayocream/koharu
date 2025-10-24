@@ -8,8 +8,7 @@ import { Logic } from "logic.slint";
 import { State } from "state.slint";
 import { Image } from "types.slint";
 import { ThumbnailPanel, ThumbnailItem } from "thumbnail.slint";
-import { Workflow, WorkflowItem, WorkflowConnector } from "workflow.slint";
-import { DetectionPanel } from "detection.slint";
+import { Panels } from "panel.slint";
 import { Canvas, CanvasControl } from "canvas.slint";
 
 // re-export for the native code
@@ -28,7 +27,8 @@ export component App inherits Window {
     icon: @image-url("assets/Koharu_Halo.webp");
 
     VerticalLayout {
-        AppMenuBar {
+
+        menubar :=  AppMenuBar {
             AppMenu {
                 title: "File";
 
@@ -60,7 +60,12 @@ export component App inherits Window {
         }
 
         HorizontalLayout {
+            // Fill remaining height under the menubar
+            vertical-stretch: 1;
+
             ThumbnailPanel {
+                // Fill vertically in the main area
+                vertical-stretch: 1;
                 for image in root.images: ThumbnailItem {
                     title: image.name;
                     source: image.source;
@@ -71,25 +76,14 @@ export component App inherits Window {
             }
 
             VerticalLayout {
-                Workflow {
-                    WorkflowItem {
-                        title: "Detection";
-                    }
-
-                    WorkflowConnector { }
-
-                    WorkflowItem {
-                        title: "Inpainting";
-                    }
-
-                    WorkflowConnector { }
-
-                    WorkflowItem {
-                        title: "Translation";
-                    }
-                }
-
+                // Take remaining horizontal space between left/right panels
+                horizontal-stretch: 1;
+                // Fill vertically in the main area
+                vertical-stretch: 1;
                 Canvas {
+                    // Expand to fill the central area
+                    horizontal-stretch: 1;
+                    vertical-stretch: 1;
                     scale: root.scale;
                 }
 
@@ -99,7 +93,9 @@ export component App inherits Window {
             }
 
             VerticalLayout {
-                DetectionPanel { }
+                // Fill vertically in the main area
+                vertical-stretch: 1;
+                Panels { }
             }
         }
     }

@@ -1,9 +1,46 @@
-import { ScrollView, Slider } from "std-widgets.slint";
+import { ScrollView, Slider, TabWidget } from "std-widgets.slint";
 import { TextBlock } from "types.slint";
 import { State } from "state.slint";
 import { Logic } from "logic.slint";
 
-export component DetectionItem inherits Rectangle {
+export component Panel inherits VerticalLayout {
+    in property <string> title;
+    out property <bool> collapsed: false;
+
+    spacing: 8px;
+
+    TouchArea {
+        mouse-cursor: MouseCursor.pointer;
+
+        HorizontalLayout {
+            spacing: 8px;
+
+            Text {
+                horizontal-alignment: left;
+                text: root.title;
+                font-weight: 600;
+            }
+
+            Image {
+                source: root.collapsed ? @image-url("assets/icons/chevron-down.svg") : @image-url("assets/icons/chevron-up.svg");
+                width: 12px;
+                height: 12px;
+            }
+        }
+
+        clicked => {
+            root.collapsed = !root.collapsed;
+        }
+    }
+
+    Rectangle {
+        height: root.collapsed ? 0px : self.preferred-height;
+        visible: !root.collapsed;
+        @children
+    }
+}
+
+export component TextBlockItem inherits Rectangle {
     in property <TextBlock> text-block;
     in property <int> index;
 
@@ -36,19 +73,13 @@ export component DetectionItem inherits Rectangle {
     }
 }
 
-export component DetectionPanel inherits Rectangle {
-    property <[TextBlock]> text-blocks: State.text-blocks;
+export component DetectionPanel inherits Panel {
     out property <float> confidence-threshold: 0.5;
     out property <float> nms-threshold: 0.4;
 
-    width: 200px;
-    background: #FAFAFA;
-    border-width: 1px;
-    border-color: #E0E0E0;
+    title: "Detection";
 
     VerticalLayout {
-        padding: 8px;
-        spacing: 8px;
 
         VerticalLayout {
             Text {
@@ -148,24 +179,46 @@ export component DetectionPanel inherits Rectangle {
                 }
             }
         }
+    }
+}
 
-        ScrollView {
-            VerticalLayout {
-                spacing: 4px;
-                alignment: start;
+export component TextsPanel inherits Panel {
+    property <[TextBlock]> text-blocks: State.text-blocks;
 
-                if root.text-blocks.length == 0: Text {
-                    text: "No text blocks detected yet.";
-                    color: #666666;
-                    font-size: 12px;
-                    horizontal-alignment: center;
-                }
+    title: "Texts";
 
-                for block[index] in root.text-blocks: DetectionItem {
-                    text-block: block;
-                    index: index + 1;
-                }
+    ScrollView {
+        VerticalLayout {
+            spacing: 4px;
+            alignment: start;
+
+            if root.text-blocks.length == 0: Text {
+                text: "No text blocks detected yet.";
+                color: #666666;
+                font-size: 12px;
+                horizontal-alignment: center;
+            }
+
+            for block[index] in root.text-blocks: TextBlockItem {
+                text-block: block;
+                index: index + 1;
             }
         }
+    }
+}
+
+export component Panels inherits Rectangle {
+    width: 200px;
+    background: #FAFAFA;
+    border-width: 1px;
+    border-color: #E0E0E0;
+
+    VerticalLayout {
+        padding: 8px;
+        spacing: 8px;
+
+        DetectionPanel { }
+
+        TextsPanel { }
     }
 }
