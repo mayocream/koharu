@@ -19,6 +19,17 @@ export component App inherits Window {
     in-out property <int> scale: 100;
     in-out property <[Image]> images;
 
+    function load-image(img: Image) {
+        State.image = img;
+         if (State.auto-scaled) {
+            root.scale = Math.min(
+                100,
+                Math.floor(100/1px * canvas.width / img.source.width),
+                Math.floor(100/1px * canvas.height  / img.source.height)
+            );
+        }
+    }
+
     max-width: 3840px;
     max-height: 2160px;
     preferred-width: 1024px;
@@ -35,6 +46,10 @@ export component App inherits Window {
                     title: "Open File...";
                     clicked => {
                         images = Logic.open-file();
+
+                        if (images.length > 0) {
+                            load-image(images[0]);
+                        }
                     }
                 }
             }
@@ -64,13 +79,13 @@ export component App inherits Window {
                     title: image.name;
                     source: image.source;
                     clicked => {
-                        State.image = image;
+                        load-image(image);
                     }
                 }
             }
 
             VerticalLayout {
-                Canvas {
+                canvas := Canvas {
                     scale: root.scale;
                     vertical-stretch: 1;
                 }
