@@ -1,21 +1,20 @@
 use candle_transformers::object_detection::{Bbox, non_maximum_suppression};
 use hf_hub::api::sync::Api;
-use image::GenericImageView;
+use image::{DynamicImage, GenericImageView};
 use ort::{inputs, session::Session, value::TensorRef};
-use serde::Serialize;
 
 #[derive(Debug)]
 pub struct ComicTextDetector {
     model: Session,
 }
 
-#[derive(Debug, Serialize)]
+#[derive(Debug)]
 pub struct Output {
     pub bboxes: Vec<ClassifiedBbox>,
-    pub segment: Vec<u8>,
+    pub segment: DynamicImage,
 }
 
-#[derive(Debug, Serialize)]
+#[derive(Debug)]
 pub struct ClassifiedBbox {
     pub xmin: f32,
     pub ymin: f32,
@@ -129,16 +128,24 @@ impl ComicTextDetector {
 
         // Convert to Vec
         let (segment, _) = thresholded.into_raw_vec_and_offset();
-        // dilate the mask
         let segment = image::GrayImage::from_vec(1024, 1024, segment)
             .ok_or_else(|| anyhow::anyhow!("Failed to create GrayImage"))?;
+
+        // dilate the mask
         let segment = imageproc::morphology::grayscale_dilate(
             &segment,
             &imageproc::morphology::Mask::square(3),
         );
         let segment =
             imageproc::morphology::erode(&segment, imageproc::distance_transform::Norm::L2, 1);
-        let segment = segment.into_raw();
+
+        // resize back to original size
+        let segment = DynamicImage::ImageLuma8(segment);
+        let segment = segment.resize_exact(
+            orig_width,
+            orig_height,
+            image::imageops::FilterType::CatmullRom,
+        );
 
         Ok(Output { bboxes, segment })
     }

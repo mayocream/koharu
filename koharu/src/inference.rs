@@ -23,7 +23,7 @@ impl Inference {
         })
     }
 
-    pub fn detect(&self, image: &DynamicImage) -> Result<Vec<TextBlock>> {
+    pub fn detect(&self, image: &DynamicImage) -> Result<(Vec<TextBlock>, DynamicImage)> {
         let mut detector = self.detector.lock().unwrap();
         let result = detector.inference(image, 0.5, 0.5)?;
 
@@ -46,7 +46,7 @@ impl Inference {
                 .unwrap_or(std::cmp::Ordering::Equal)
         });
 
-        Ok(text_blocks)
+        Ok((text_blocks, result.segment))
     }
 
     pub fn ocr(&self, image: &DynamicImage, blocks: &[TextBlock]) -> Result<Vec<TextBlock>> {

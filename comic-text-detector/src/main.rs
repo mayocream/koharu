@@ -1,6 +1,5 @@
 use clap::Parser;
 use comic_text_detector::ComicTextDetector;
-use image::GenericImageView;
 use ort::execution_providers::CUDAExecutionProvider;
 
 #[derive(Parser)]
@@ -27,7 +26,6 @@ fn main() -> anyhow::Result<()> {
 
     let mut model = ComicTextDetector::new()?;
     let image = image::open(&cli.input)?;
-    let (orig_width, orig_height) = image.dimensions();
 
     let output = model.inference(&image, cli.confidence_threshold, cli.nms_threshold)?;
 
@@ -47,18 +45,7 @@ fn main() -> anyhow::Result<()> {
     let output_image = image::DynamicImage::ImageRgba8(image);
     output_image.save(&cli.output)?;
 
-    // save the segment
-    let segment = image::DynamicImage::ImageLuma8(
-        image::GrayImage::from_raw(1024, 1024, output.segment)
-            .expect("Failed to create segment image"),
-    );
-
-    let segment_image = segment.resize_exact(
-        orig_width,
-        orig_height,
-        image::imageops::FilterType::CatmullRom,
-    );
-    segment_image.save(format!("{}_segment.png", cli.output))?;
+    output.segment.save(format!("{}_segment.png", cli.output))?;
 
     Ok(())
 }

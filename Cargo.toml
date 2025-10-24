@@ -16,7 +16,7 @@ keywords = ["manga", "ocr", "translation", "deep_learning", "computer_vision"]
 [workspace.dependencies]
 candle-transformers = "0.9"
 hf-hub = "0.4"
-image = "0.25"
+image = { version = "0.25", features = ["serde"] }
 ort = { version = "=2.0.0-rc.10", features = ["cuda"] }
 anyhow = "1.0"
 ndarray = "0.16"

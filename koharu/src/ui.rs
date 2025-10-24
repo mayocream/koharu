@@ -1,6 +1,6 @@
 use image::{DynamicImage, RgbaImage};
 use rfd::FileDialog;
-use slint::{ComponentHandle, Model, VecModel};
+use slint::{ComponentHandle, Model, SharedPixelBuffer, VecModel};
 use std::sync::Arc;
 use std::thread;
 
@@ -67,11 +67,18 @@ pub fn setup(app: &App, inference: Arc<Inference>) {
             let app_weak = app_weak.clone();
 
             thread::spawn(move || {
-                let blocks = inference.detect(&image).unwrap();
+                let (blocks, segment) = inference.detect(&image).unwrap();
                 app_weak
                     .upgrade_in_event_loop(move |app| {
                         app.global::<State>()
                             .set_text_blocks(VecModel::from_slice(&blocks));
+                        app.global::<State>().set_segment(slint::Image::from_rgba8(
+                            SharedPixelBuffer::clone_from_slice(
+                                &segment.to_rgba8().into_raw(),
+                                segment.width(),
+                                segment.height(),
+                            ),
+                        ));
                     })
                     .unwrap();
             });
