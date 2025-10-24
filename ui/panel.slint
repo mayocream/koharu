@@ -141,7 +141,9 @@ export component DetectionPanel inherits Panel {
                 ]
 
                 clicked => {
-                    Logic.detect(State.image);
+                    if (State.image.height > 0){
+                        Logic.detect(State.image);
+                    }
                 }
             }
 
