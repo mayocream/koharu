@@ -50,7 +50,7 @@ export component TextBlockItem inherits Rectangle {
     border-color: #E0E0E0;
 
     HorizontalLayout {
-        padding: 4px;
+        padding: 10px;
         spacing: 6px;
         alignment: start;
 
@@ -59,7 +59,7 @@ export component TextBlockItem inherits Rectangle {
             color: #666666;
             font-size: 11px;
             font-weight: 600;
-            width: 10px;
+            width: 15px;
             vertical-alignment: top;
         }
 
@@ -113,21 +113,21 @@ export component DetectionPanel inherits Panel {
 
             TouchArea {
                 width: 80px;
-                height: 30px;
+                height: 40px;
                 mouse-cursor: MouseCursor.pointer;
 
                 detect-btn := Rectangle {
                     width: parent.width;
                     height: parent.height;
                     background: white;
-                    border-radius: 12px;
+                    border-radius: 6px;
                     border-width: 1px;
                     border-color: #E0E0E0;
 
                     Text {
                         text: "Detect";
                         color: #333333;
-                        font-size: 12px;
+                        font-size: 16px;
                         font-weight: 400;
                         horizontal-alignment: center;
                         vertical-alignment: center;
@@ -147,21 +147,21 @@ export component DetectionPanel inherits Panel {
 
             TouchArea {
                 width: 80px;
-                height: 30px;
+                height: 40px;
                 mouse-cursor: MouseCursor.pointer;
 
                 btn := Rectangle {
                     width: parent.width;
                     height: parent.height;
                     background: white;
-                    border-radius: 12px;
+                    border-radius: 6px;
                     border-width: 1px;
                     border-color: #E0E0E0;
 
                     Text {
                         text: "OCR";
                         color: #333333;
-                        font-size: 12px;
+                        font-size: 16px;
                         font-weight: 400;
                         horizontal-alignment: center;
                         vertical-alignment: center;
@@ -185,7 +185,9 @@ export component DetectionPanel inherits Panel {
 export component Panels inherits Rectangle {
     property <[TextBlock]> text-blocks: State.text-blocks;
 
-    width: 200px;
+    min-width: 250px;
+    width: 20%;
+    max-width: 400px;
     background: #FAFAFA;
     border-width: 1px;
     border-color: #E0E0E0;
