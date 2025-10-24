@@ -4,4 +4,5 @@ export global Logic {
     pure callback open-external(string);
     callback open-file() -> [Image];
     callback detect(Image);
+    callback ocr(Image, [TextBlock]);
 }

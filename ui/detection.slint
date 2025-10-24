@@ -1,4 +1,4 @@
-import { ScrollView } from "std-widgets.slint";
+import { ScrollView, Slider } from "std-widgets.slint";
 import { TextBlock } from "types.slint";
 import { State } from "state.slint";
 import { Logic } from "logic.slint";
@@ -38,6 +38,8 @@ export component DetectionItem inherits Rectangle {
 
 export component DetectionPanel inherits Rectangle {
     property <[TextBlock]> text-blocks: State.text-blocks;
+    out property <float> confidence-threshold: 0.5;
+    out property <float> nms-threshold: 0.4;
 
     width: 200px;
     background: #FAFAFA;
@@ -48,24 +50,46 @@ export component DetectionPanel inherits Rectangle {
         padding: 8px;
         spacing: 8px;
 
-        HorizontalLayout {
-            spacing: 8px;
-            alignment: start;
-
-            Rectangle {
-                // Spacer
+        VerticalLayout {
+            Text {
+                text: "Confidence threshold";
             }
 
-            detect-button := TouchArea {
+            Slider {
+                minimum: 0.1;
+                maximum: 1.0;
+                step: 0.05;
+                value: root.confidence-threshold;
+            }
+        }
+
+        VerticalLayout {
+            Text {
+                text: "NMS threshold";
+            }
+
+            Slider {
+                minimum: 0.1;
+                maximum: 1.0;
+                step: 0.05;
+                value: root.nms-threshold;
+            }
+        }
+
+        HorizontalLayout {
+            spacing: 8px;
+            alignment: center;
+
+            TouchArea {
                 width: 80px;
                 height: 30px;
                 mouse-cursor: MouseCursor.pointer;
 
-                button-rect := Rectangle {
+                detect-btn := Rectangle {
                     width: parent.width;
                     height: parent.height;
                     background: white;
-                    border-radius: 15px;
+                    border-radius: 12px;
                     border-width: 1px;
                     border-color: #E0E0E0;
 
@@ -81,12 +105,46 @@ export component DetectionPanel inherits Rectangle {
 
                 states [
                     hover when self.has-hover: {
-                        button-rect.background: #F5F5F5;
+                        detect-btn.background: #F5F5F5;
                     }
                 ]
 
                 clicked => {
                     Logic.detect(State.image);
+                }
+            }
+
+            TouchArea {
+                width: 80px;
+                height: 30px;
+                mouse-cursor: MouseCursor.pointer;
+
+                btn := Rectangle {
+                    width: parent.width;
+                    height: parent.height;
+                    background: white;
+                    border-radius: 12px;
+                    border-width: 1px;
+                    border-color: #E0E0E0;
+
+                    Text {
+                        text: "OCR";
+                        color: #333333;
+                        font-size: 12px;
+                        font-weight: 400;
+                        horizontal-alignment: center;
+                        vertical-alignment: center;
+                    }
+                }
+
+                states [
+                    hover when self.has-hover: {
+                        btn.background: #F5F5F5;
+                    }
+                ]
+
+                clicked => {
+                    Logic.ocr(State.image, State.text-blocks);
                 }
             }
         }
