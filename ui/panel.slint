@@ -182,32 +182,9 @@ export component DetectionPanel inherits Panel {
     }
 }
 
-export component TextsPanel inherits Panel {
+export component Panels inherits Rectangle {
     property <[TextBlock]> text-blocks: State.text-blocks;
 
-    title: "Texts";
-
-    ScrollView {
-        VerticalLayout {
-            spacing: 4px;
-            alignment: start;
-
-            if root.text-blocks.length == 0: Text {
-                text: "No text blocks detected yet.";
-                color: #666666;
-                font-size: 12px;
-                horizontal-alignment: center;
-            }
-
-            for block[index] in root.text-blocks: TextBlockItem {
-                text-block: block;
-                index: index + 1;
-            }
-        }
-    }
-}
-
-export component Panels inherits Rectangle {
     width: 200px;
     background: #FAFAFA;
     border-width: 1px;
@@ -219,6 +196,23 @@ export component Panels inherits Rectangle {
 
         DetectionPanel { }
 
-        TextsPanel { }
+        ScrollView {
+            VerticalLayout {
+                spacing: 4px;
+                alignment: start;
+
+                if root.text-blocks.length == 0: Text {
+                    text: "No text blocks detected yet.";
+                    color: #666666;
+                    font-size: 12px;
+                    horizontal-alignment: center;
+                }
+
+                for block[index] in root.text-blocks: TextBlockItem {
+                    text-block: block;
+                    index: index + 1;
+                }
+            }
+        }
     }
 }

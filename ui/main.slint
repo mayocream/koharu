@@ -27,8 +27,7 @@ export component App inherits Window {
     icon: @image-url("assets/Koharu_Halo.webp");
 
     VerticalLayout {
-
-        menubar :=  AppMenuBar {
+        AppMenuBar {
             AppMenu {
                 title: "File";
 
@@ -60,12 +59,7 @@ export component App inherits Window {
         }
 
         HorizontalLayout {
-            // Fill remaining height under the menubar
-            vertical-stretch: 1;
-
             ThumbnailPanel {
-                // Fill vertically in the main area
-                vertical-stretch: 1;
                 for image in root.images: ThumbnailItem {
                     title: image.name;
                     source: image.source;
@@ -76,15 +70,9 @@ export component App inherits Window {
             }
 
             VerticalLayout {
-                // Take remaining horizontal space between left/right panels
-                horizontal-stretch: 1;
-                // Fill vertically in the main area
-                vertical-stretch: 1;
                 Canvas {
-                    // Expand to fill the central area
-                    horizontal-stretch: 1;
-                    vertical-stretch: 1;
                     scale: root.scale;
+                    vertical-stretch: 1;
                 }
 
                 CanvasControl {
@@ -92,11 +80,7 @@ export component App inherits Window {
                 }
             }
 
-            VerticalLayout {
-                // Fill vertically in the main area
-                vertical-stretch: 1;
-                Panels { }
-            }
+            Panels { }
         }
     }
 }
