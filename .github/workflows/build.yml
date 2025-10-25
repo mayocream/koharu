@@ -1,0 +1,22 @@
+name: Build
+
+on:
+  push:
+    branches: ['main']
+  pull_request:
+
+env:
+  CARGO_TERM_COLOR: always
+
+jobs:
+  build-windows:
+    name: Windows
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Build
+        shell: bash
+        run: cargo build --verbose
+      - name: Run tests
+        shell: bash
+        run: cargo test --verbose
