@@ -1,10 +1,12 @@
 use std::{sync::Arc, thread};
 
+use image::GenericImageView;
 use rfd::FileDialog;
 use slint::{ComponentHandle, Model, VecModel};
 
 use crate::{
     document,
+    image::SerializableDynamicImage,
     inference::Inference,
     ui::{self, App, Logic},
 };
@@ -22,12 +24,12 @@ pub fn setup(app: &App, inference: Arc<Inference>) {
         let mut images = files
             .into_iter()
             .filter_map(|path| {
-                let img = slint::Image::load_from_path(&path).ok()?;
-                let size = img.size();
+                let img = image::open(&path).ok()?;
+                let (width, height) = img.dimensions();
                 Some(ui::Image {
-                    source: img,
-                    width: size.width as i32,
-                    height: size.height as i32,
+                    source: (&SerializableDynamicImage::from(img)).into(),
+                    width: width as i32,
+                    height: height as i32,
                     path: path.to_string_lossy().to_string().into(),
                     name: path.file_stem()?.to_string_lossy().to_string().into(),
                 })
