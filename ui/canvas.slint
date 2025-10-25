@@ -4,7 +4,7 @@ import {
     HorizontalBox,
     ScrollView,
 } from "std-widgets.slint";
-import { State } from "state.slint";
+import { Document, Viewport } from "state.slint";
 import { TextBlock } from "types.slint";
 
 export component TextBlockAnnotation inherits Rectangle {
@@ -43,8 +43,6 @@ export component TextBlockAnnotation inherits Rectangle {
 }
 
 export component CanvasControl inherits Rectangle {
-    in-out property <int> scale: 100;
-
     height: 20px;
     horizontal-stretch: 1;
     border-color: #CCCCCC;
@@ -65,10 +63,10 @@ export component CanvasControl inherits Rectangle {
                 maximum: 100;
                 step-size: 10;
                 width: 100px;
-                value: root.scale;
+                value: Viewport.scale;
 
                 edited(value) => {
-                    root.scale = value;
+                    Viewport.scale = value;
                     self.clear-focus();
                 }
             }
@@ -77,8 +75,7 @@ export component CanvasControl inherits Rectangle {
 }
 
 export component Canvas inherits ScrollView {
-    property <image> source: State.image.source;
-    in property <int> scale: 100;
+    property <image> source: Document.image.source;
 
     VerticalLayout {
         alignment: center;
@@ -86,21 +83,32 @@ export component Canvas inherits ScrollView {
         HorizontalLayout {
             alignment: center;
 
+            // background
             Image {
                 source: root.source;
-                width: root.source.width * 1px * root.scale / 100;
-                height: root.source.height * 1px * root.scale / 100;
+                width: root.source.width * 1px * Viewport.scale / 100;
+                height: root.source.height * 1px * Viewport.scale / 100;
 
+                // Overlays
                 Rectangle {
                     x: 0;
                     y: 0;
                     width: parent.width;
                     height: parent.height;
 
-                    for text_block[index] in State.text-blocks: TextBlockAnnotation {
+                    if Viewport.show-segmentation: Image {
+                        source: Document.segment;
+                        x: 0;
+                        y: 0;
+                        width: parent.width;
+                        height: parent.height;
+                        opacity: 0.5;
+                    }
+
+                    for text_block[index] in Document.text-blocks: TextBlockAnnotation {
                         text-block: text_block;
                         index: index + 1;
-                        scale: root.scale;
+                        scale: Viewport.scale;
                     }
                 }
             }

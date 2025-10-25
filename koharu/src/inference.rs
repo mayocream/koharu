@@ -1,12 +1,13 @@
-use anyhow::Result;
-use comic_text_detector::ComicTextDetector;
-use image::DynamicImage;
-use lama::Lama;
-use manga_ocr::MangaOCR;
 use std::sync::Arc;
 use std::sync::Mutex;
 
-use crate::ui::TextBlock;
+use anyhow::Result;
+use comic_text_detector::ComicTextDetector;
+use lama::Lama;
+use manga_ocr::MangaOCR;
+
+use crate::document::TextBlock;
+use crate::image::SerializableDynamicImage;
 
 pub struct Inference {
     detector: Arc<Mutex<ComicTextDetector>>,
@@ -23,7 +24,10 @@ impl Inference {
         })
     }
 
-    pub fn detect(&self, image: &DynamicImage) -> Result<(Vec<TextBlock>, DynamicImage)> {
+    pub fn detect(
+        &self,
+        image: &SerializableDynamicImage,
+    ) -> Result<(Vec<TextBlock>, SerializableDynamicImage)> {
         let mut detector = self.detector.lock().unwrap();
         let result = detector.inference(image, 0.5, 0.5)?;
 
@@ -31,10 +35,10 @@ impl Inference {
             .bboxes
             .into_iter()
             .map(|bbox| TextBlock {
-                x: bbox.xmin.round() as i32,
-                y: bbox.ymin.round() as i32,
-                width: (bbox.xmax - bbox.xmin).round() as i32,
-                height: (bbox.ymax - bbox.ymin).round() as i32,
+                x: bbox.xmin.round() as u32,
+                y: bbox.ymin.round() as u32,
+                width: (bbox.xmax - bbox.xmin).round() as u32,
+                height: (bbox.ymax - bbox.ymin).round() as u32,
                 confidence: bbox.confidence,
                 ..Default::default()
             })
@@ -46,10 +50,14 @@ impl Inference {
                 .unwrap_or(std::cmp::Ordering::Equal)
         });
 
-        Ok((text_blocks, result.segment))
+        Ok((text_blocks, result.segment.into()))
     }
 
-    pub fn ocr(&self, image: &DynamicImage, blocks: &[TextBlock]) -> Result<Vec<TextBlock>> {
+    pub fn ocr(
+        &self,
+        image: &SerializableDynamicImage,
+        blocks: &[TextBlock],
+    ) -> Result<Vec<TextBlock>> {
         let mut ocr = self.ocr.lock().unwrap();
 
         blocks

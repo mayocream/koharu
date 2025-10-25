@@ -1,6 +1,6 @@
 import { ScrollView, Slider, TabWidget } from "std-widgets.slint";
 import { TextBlock } from "types.slint";
-import { State } from "state.slint";
+import { Document } from "state.slint";
 import { Logic } from "logic.slint";
 
 export component Panel inherits VerticalLayout {
@@ -141,8 +141,8 @@ export component DetectionPanel inherits Panel {
                 ]
 
                 clicked => {
-                    if (State.image.height > 0) {
-                        Logic.detect(State.image);
+                    if (Document.image.height > 0) {
+                        Logic.detect(Document.image);
                     }
                 }
             }
@@ -177,7 +177,7 @@ export component DetectionPanel inherits Panel {
                 ]
 
                 clicked => {
-                    Logic.ocr(State.image, State.text-blocks);
+                    Logic.ocr(Document.image, Document.text-blocks);
                 }
             }
         }
@@ -185,7 +185,7 @@ export component DetectionPanel inherits Panel {
 }
 
 export component Panels inherits Rectangle {
-    property <[TextBlock]> text-blocks: State.text-blocks;
+    property <[TextBlock]> text-blocks: Document.text-blocks;
 
     min-width: 250px;
     width: 20%;

@@ -1,7 +1,13 @@
 import { Image, TextBlock } from "types.slint";
 
-export global State {
+export global Document {
     in-out property <Image> image;
     in-out property <[TextBlock]> text-blocks;
     in-out property <image> segment;
+}
+
+export global Viewport {
+    in-out property <[Image]> images;
+    in-out property <int> scale: 100;
+    in-out property <bool> show-segmentation: false;
 }

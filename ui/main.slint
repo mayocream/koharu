@@ -5,7 +5,7 @@ import {
     AppMenuSeparator,
 } from "menubar.slint";
 import { Logic } from "logic.slint";
-import { State } from "state.slint";
+import { Document, Viewport } from "state.slint";
 import { Image } from "types.slint";
 import { ThumbnailPanel, ThumbnailItem } from "thumbnail.slint";
 import { Panels } from "panel.slint";
@@ -13,15 +13,12 @@ import { Canvas, CanvasControl } from "canvas.slint";
 
 // re-export for the native code
 // refer: https://github.com/slint-ui/slint/blob/24d37751e8245af46722e8e8aa9fb74bf6639489/examples/printerdemo/ui/printerdemo.slint#L11
-export { Logic, State }
+export { Logic, Document }
 
 export component App inherits Window {
-    in-out property <int> scale: 100;
-    in-out property <[Image]> images;
-
     function load-image(img: Image) {
-        State.image = img;
-        root.scale = Math.min(
+        Document.image = img;
+        Viewport.scale = Math.min(
                 100,
                 Math.floor(100 / 1px * canvas.width / img.source.width),
                 Math.floor(100 / 1px * canvas.height / img.source.height));
@@ -42,10 +39,10 @@ export component App inherits Window {
                 AppMenuItem {
                     title: "Open File...";
                     clicked => {
-                        images = Logic.open-file();
+                        Viewport.images = Logic.open-file();
 
-                        if (images.length > 0) {
-                            load-image(images[0]);
+                        if (Viewport.images.length > 0) {
+                            load-image(Viewport.images[0]);
                         }
                     }
                 }
@@ -72,7 +69,7 @@ export component App inherits Window {
 
         HorizontalLayout {
             ThumbnailPanel {
-                for image in root.images: ThumbnailItem {
+                for image in Viewport.images: ThumbnailItem {
                     title: image.name;
                     source: image.source;
                     clicked => {
@@ -82,13 +79,9 @@ export component App inherits Window {
             }
 
             VerticalLayout {
-                canvas := Canvas {
-                    scale: root.scale;
-                }
+                canvas := Canvas { }
 
-                CanvasControl {
-                    scale <=> root.scale;
-                }
+                CanvasControl { }
             }
 
             Panels { }

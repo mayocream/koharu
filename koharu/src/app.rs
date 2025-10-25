@@ -1,11 +1,13 @@
+use std::sync::Arc;
+
 use anyhow::Result;
 use ort::execution_providers::CUDAExecutionProvider;
 use rfd::MessageDialog;
 use slint::ComponentHandle;
-use std::sync::Arc;
 
+use crate::callback;
 use crate::inference::Inference;
-use crate::ui::{self, App};
+use crate::ui::App;
 
 fn initialize() -> Result<()> {
     tracing_subscriber::fmt().init();
@@ -32,7 +34,7 @@ pub fn run() -> Result<()> {
     let inference = Arc::new(Inference::new()?);
     let app = App::new()?;
 
-    ui::setup(&app, inference);
+    callback::setup(&app, inference);
     app.run()?;
 
     Ok(())

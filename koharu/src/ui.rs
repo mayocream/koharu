@@ -1,109 +1,112 @@
-use image::{DynamicImage, RgbaImage};
-use rfd::FileDialog;
-use slint::{ComponentHandle, Model, SharedPixelBuffer, VecModel};
-use std::sync::Arc;
-use std::thread;
+use std::{ops::Deref, path::PathBuf};
+
+use image::DynamicImage;
+use slint::{Model, SharedString};
+
+use crate::{document, image::SerializableDynamicImage};
 
 slint::include_modules!();
 
-use crate::inference::Inference;
-
-impl From<&Image> for DynamicImage {
-    fn from(image: &Image) -> Self {
-        let width = image.width as u32;
-        let height = image.height as u32;
-
+impl From<&slint::Image> for SerializableDynamicImage {
+    fn from(image: &slint::Image) -> Self {
         let buffer = image
-            .source
             .to_rgba8()
             .expect("Failed to convert Slint image to RGBA8");
 
-        let rgba_image = RgbaImage::from_raw(width, height, buffer.as_bytes().to_vec())
-            .expect("Failed to create RgbaImage from raw buffer");
+        let rgba = image::RgbaImage::from_raw(
+            image.size().width,
+            image.size().height,
+            buffer.as_bytes().to_vec(),
+        )
+        .expect("Failed to create RgbaImage from raw buffer");
 
-        DynamicImage::ImageRgba8(rgba_image)
+        DynamicImage::ImageRgba8(rgba).into()
     }
 }
 
-pub fn setup(app: &App, inference: Arc<Inference>) {
-    let logic = app.global::<Logic>();
-    let app_weak = app.as_weak();
+impl From<&SerializableDynamicImage> for slint::Image {
+    fn from(image: &SerializableDynamicImage) -> Self {
+        let rgba = image.deref().to_rgba8();
+        let width = rgba.width();
+        let height = rgba.height();
 
-    logic.on_open_file(|| {
-        let files = FileDialog::new()
-            .add_filter("images", &["png", "jpg", "jpeg", "webp"])
-            .pick_files()
-            .unwrap_or_default();
+        slint::Image::from_rgba8(slint::SharedPixelBuffer::clone_from_slice(
+            &rgba.into_raw(),
+            width,
+            height,
+        ))
+    }
+}
 
-        let mut images = files
-            .into_iter()
-            .filter_map(|path| {
-                let img = slint::Image::load_from_path(&path).ok()?;
-                let size = img.size();
-                Some(Image {
-                    source: img,
-                    width: size.width as i32,
-                    height: size.height as i32,
-                    path: path.to_string_lossy().to_string().into(),
-                    name: path.file_stem()?.to_string_lossy().to_string().into(),
-                })
-            })
-            .collect::<Vec<_>>();
-        images.sort_unstable_by(|a, b| a.name.cmp(&b.name));
-        VecModel::from_slice(&images).into()
-    });
-
-    logic.on_open_external(|path| {
-        open::that(path.as_str()).ok();
-    });
-
-    logic.on_detect({
-        let inference = inference.clone();
-        let app_weak = app_weak.clone();
-
-        move |image| {
-            let image = DynamicImage::from(&image);
-            let inference = inference.clone();
-            let app_weak = app_weak.clone();
-
-            thread::spawn(move || {
-                let (blocks, segment) = inference.detect(&image).unwrap();
-                app_weak
-                    .upgrade_in_event_loop(move |app| {
-                        app.global::<State>()
-                            .set_text_blocks(VecModel::from_slice(&blocks));
-                        app.global::<State>().set_segment(slint::Image::from_rgba8(
-                            SharedPixelBuffer::clone_from_slice(
-                                &segment.to_rgba8().into_raw(),
-                                segment.width(),
-                                segment.height(),
-                            ),
-                        ));
-                    })
-                    .unwrap();
-            });
+impl From<&TextBlock> for document::TextBlock {
+    fn from(block: &TextBlock) -> Self {
+        document::TextBlock {
+            x: block.x as u32,
+            y: block.y as u32,
+            width: block.width as u32,
+            height: block.height as u32,
+            confidence: block.confidence,
+            text: block.text.to_string().into(),
+            translation: block.translation.to_string().into(),
         }
-    });
+    }
+}
 
-    logic.on_ocr({
-        let inference = inference.clone();
-        let app_weak = app_weak.clone();
-
-        move |image, text_blocks| {
-            let image = DynamicImage::from(&image);
-            let blocks: Vec<_> = text_blocks.iter().collect();
-            let inference = inference.clone();
-            let app_weak = app_weak.clone();
-
-            thread::spawn(move || {
-                let blocks = inference.ocr(&image, &blocks).unwrap();
-                app_weak
-                    .upgrade_in_event_loop(move |app| {
-                        app.global::<State>()
-                            .set_text_blocks(VecModel::from_slice(&blocks));
-                    })
-                    .unwrap();
-            });
+impl From<&document::TextBlock> for TextBlock {
+    fn from(block: &document::TextBlock) -> Self {
+        TextBlock {
+            x: block.x as i32,
+            y: block.y as i32,
+            width: block.width as i32,
+            height: block.height as i32,
+            confidence: block.confidence,
+            text: SharedString::from(block.text.as_deref().unwrap_or_default()),
+            translation: SharedString::from(block.translation.as_deref().unwrap_or_default()),
         }
-    });
+    }
+}
+
+impl From<&Image> for document::Image {
+    fn from(image: &Image) -> Self {
+        document::Image {
+            source: (&image.source).into(),
+            width: image.width as u32,
+            height: image.height as u32,
+            path: PathBuf::from(image.path.as_str()),
+            name: image.name.to_string(),
+        }
+    }
+}
+
+impl From<&document::Image> for Image {
+    fn from(image: &document::Image) -> Self {
+        Image {
+            source: (&image.source).into(),
+            width: image.width as i32,
+            height: image.height as i32,
+            path: image.path.to_string_lossy().to_string().into(),
+            name: image.name.clone().into(),
+        }
+    }
+}
+
+impl From<&Document<'_>> for document::Document {
+    fn from(doc: &Document) -> Self {
+        let segment = doc.get_segment();
+
+        document::Document {
+            image: (&doc.get_image()).into(),
+            text_blocks: doc
+                .get_text_blocks()
+                .iter()
+                .map(|block| (&block).into())
+                .collect(),
+            // segment is optional, Slint doesn't support optional type yet
+            // refer: https://github.com/slint-ui/slint/issues/5164
+            segment: match segment.size().width {
+                0 => None,
+                _ => Some((&segment).into()),
+            },
+        }
+    }
 }
