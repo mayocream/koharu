@@ -10,10 +10,12 @@ env:
 
 jobs:
   build:
-    runs-on: ubuntu-latest
+    runs-on: windows-latest
     steps:
     - uses: actions/checkout@v4
     - name: Build
+      shell: bash
       run: cargo build --verbose
     - name: Run tests
+      shell: bash
       run: cargo test --verbose
