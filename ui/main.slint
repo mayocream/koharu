@@ -21,13 +21,10 @@ export component App inherits Window {
 
     function load-image(img: Image) {
         State.image = img;
-         if (State.auto-scaled) {
-            root.scale = Math.min(
+        root.scale = Math.min(
                 100,
-                Math.floor(100/1px * canvas.width / img.source.width),
-                Math.floor(100/1px * canvas.height  / img.source.height)
-            );
-        }
+                Math.floor(100 / 1px * canvas.width / img.source.width),
+                Math.floor(100 / 1px * canvas.height / img.source.height));
     }
 
     max-width: 3840px;
@@ -87,7 +84,6 @@ export component App inherits Window {
             VerticalLayout {
                 canvas := Canvas {
                     scale: root.scale;
-                    vertical-stretch: 1;
                 }
 
                 CanvasControl {
