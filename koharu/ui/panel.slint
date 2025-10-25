@@ -1,6 +1,6 @@
-import { ScrollView, Slider, TabWidget } from "std-widgets.slint";
+import { ScrollView, Slider, TabWidget, Switch } from "std-widgets.slint";
 import { TextBlock } from "types.slint";
-import { Document } from "state.slint";
+import { Document, Viewport } from "state.slint";
 import { Logic } from "logic.slint";
 
 export component Panel inherits VerticalLayout {
@@ -74,8 +74,8 @@ export component TextBlockItem inherits Rectangle {
 }
 
 export component DetectionPanel inherits Panel {
-    out property <float> confidence-threshold: 0.5;
-    out property <float> nms-threshold: 0.4;
+    in-out property <float> confidence-threshold: 0.5;
+    in-out property <float> nms-threshold: 0.4;
 
     title: "Detection";
 
@@ -90,7 +90,7 @@ export component DetectionPanel inherits Panel {
                 minimum: 0.1;
                 maximum: 1.0;
                 step: 0.05;
-                value: root.confidence-threshold;
+                value <=> root.confidence-threshold;
             }
         }
 
@@ -103,7 +103,7 @@ export component DetectionPanel inherits Panel {
                 minimum: 0.1;
                 maximum: 1.0;
                 step: 0.05;
-                value: root.nms-threshold;
+                value <=> root.nms-threshold;
             }
         }
 
@@ -184,11 +184,21 @@ export component DetectionPanel inherits Panel {
     }
 }
 
+export component InpaintingPanel inherits Panel {
+    title: "Inpainting";
+
+    VerticalLayout {
+        Switch {
+            text: "Show segmentation mask";
+            checked <=> Viewport.show-segmentation;
+        }
+    }
+}
+
 export component Panels inherits Rectangle {
     property <[TextBlock]> text-blocks: Document.text-blocks;
 
     min-width: 250px;
-    width: 20%;
     max-width: 400px;
     background: #FAFAFA;
     border-width: 1px;
@@ -199,6 +209,8 @@ export component Panels inherits Rectangle {
         spacing: 8px;
 
         DetectionPanel { }
+
+        InpaintingPanel { }
 
         ScrollView {
             VerticalLayout {
