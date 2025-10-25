@@ -36,3 +36,6 @@ slint = { version = "1.14", default-features = false, features = [
 slint-build = "1.14"
 open = "5.3"
 rfd = "0.15"
+comic-text-detector = { path = "./comic-text-detector", version = "0.2.0" }
+manga-ocr = { path = "./manga-ocr", version = "0.2.0" }
+lama = { path = "./lama", version = "0.2.0" }
