@@ -911,7 +911,7 @@ dependencies = [
 
 [[package]]
 name = "comic-text-detector"
-version = "0.2.0-alpha.0"
+version = "0.2.0"
 dependencies = [
  "anyhow",
  "candle-transformers",
@@ -3093,7 +3093,7 @@ checksum = "e2db585e1d738fc771bf08a151420d3ed193d9d895a36df7f6f8a9456b911ddc"
 
 [[package]]
 name = "koharu"
-version = "0.2.0-alpha.0"
+version = "0.2.0"
 dependencies = [
  "anyhow",
  "comic-text-detector",
@@ -3135,7 +3135,7 @@ dependencies = [
 
 [[package]]
 name = "lama"
-version = "0.2.0-alpha.0"
+version = "0.2.0"
 dependencies = [
  "anyhow",
  "clap",
@@ -3330,7 +3330,7 @@ dependencies = [
 
 [[package]]
 name = "manga-ocr"
-version = "0.2.0-alpha.0"
+version = "0.2.0"
 dependencies = [
  "anyhow",
  "clap",
