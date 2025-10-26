@@ -7,6 +7,10 @@ Koharu introduces a new workflow for manga translation, utilizing the power of L
 > [!NOTE]
 > For help and support, please join our [Discord server](https://discord.gg/mHvHkxGnUY).
 
+## Installation
+
+You can download the latest release of Koharu from the [releases page](https://github.com/mayocream/koharu/releases/latest).
+
 ## CUDA
 
 Koharu is built with CUDA support, allowing it to leverage the power of NVIDIA GPUs for faster processing.
