@@ -17,42 +17,24 @@ jobs:
     runs-on: windows-latest
     steps:
       - uses: actions/checkout@v4
+      - name: Azure Login
+        uses: azure/login@v2
+        with:
+          client-id: ${{ secrets.AZURE_CLIENT_ID }}
+          tenant-id: ${{ secrets.AZURE_TENANT_ID }}
+          subscription-id: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
       - name: Build
         shell: bash
         run: cargo build -p koharu --release --verbose
-      - name: Sign files with Trusted Signing
-        uses: azure/trusted-signing-action@v0
-        with:
-          azure-tenant-id: ${{ secrets.AZURE_TENANT_ID }}
-          azure-client-id: ${{ secrets.AZURE_CLIENT_ID }}
-          azure-client-secret: ${{ secrets.AZURE_CLIENT_SECRET }}
-          endpoint: https://eus.codesigning.azure.net/
-          trusted-signing-account-name: ${{ secrets.TRUSTED_SIGNING_ACCOUNT_NAME }}
-          certificate-profile-name: ${{ secrets.CERTIFICATE_PROFILE_NAME }}
-          files-folder: ${{ github.workspace }}\target\release
-          files-folder-filter: exe,dll
-          file-digest: SHA256
-          timestamp-rfc3161: http://timestamp.acs.microsoft.com
-          timestamp-digest: SHA256
-          # https://github.com/Azure/trusted-signing-action#authentication-1
-          exclude-environment-credential: false
-          exclude-workload-identity-credential: true
-          exclude-managed-identity-credential: true
-          exclude-shared-token-cache-credential: true
-          exclude-visual-studio-credential: true
-          exclude-visual-studio-code-credential: true
-          exclude-azure-cli-credential: true
-          exclude-azure-powershell-credential: true
-          exclude-azure-developer-cli-credential: true
-          exclude-interactive-browser-credential: true
-      - name: Bundle
+      - name: Prepare distribution folder
         shell: bash
-        working-directory: target/release
         run: |
-          7z a koharu-windows.zip koharu.exe *.dll
-      - name: Release
-        uses: softprops/action-gh-release@v2
-        if: github.ref_type == 'tag'
-        with:
-          files: |
-            target/release/koharu-windows.zip
+          mkdir dist
+          cp target/release/koharu.exe dist/
+          cp target/release/*.dll dist/
+      - name: Pack
+        shell: bash
+        run: |
+          dotnet tool update -g vpk
+          vpk pack -u Koharu -v ${{ github.ref_name }} -p ${{ github.workspace }}/dist -e koharu.exe --azureTrustedSignFile ${{ github.workspace }}/signing/metadata.json
+          vpk upload github --repoUrl https://github.com/${{ github.repository }} --publish --releaseName ${{ github.ref_name }} --tag ${{ github.ref_name }} --token ${{ secrets.GITHUB_TOKEN }} --merge
