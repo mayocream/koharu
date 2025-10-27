@@ -36,6 +36,10 @@ jobs:
           cp target/release/*.dll dist/
       - name: Pack
         shell: bash
+        env:
+          AZURE_CLIENT_ID: ${{ secrets.AZURE_CLIENT_ID }}
+          AZURE_CLIENT_SECRET: ${{ secrets.AZURE_CLIENT_SECRET }}
+          AZURE_TENANT_ID: ${{ secrets.AZURE_TENANT_ID }}
         run: |
           dotnet tool update -g vpk
           vpk pack -u Koharu -v ${{ github.ref_name }} -p dist -e koharu.exe --azureTrustedSignFile signing/metadata.json
