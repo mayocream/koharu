@@ -18,6 +18,7 @@ jobs:
   build-windows:
     name: Windows
     runs-on: windows-latest
+    environment: production
     steps:
       - uses: actions/checkout@v4
       - name: Azure Login
