@@ -10,7 +10,7 @@ pub struct GithubSource {
 }
 
 impl GithubSource {
-    pub fn new<S: AsRef<str>>(owner: S, repo: S, _asset_name: S) -> Self {
+    pub fn new<S: AsRef<str>>(owner: S, repo: S) -> Self {
         Self {
             owner: owner.as_ref().to_string(),
             repo: repo.as_ref().to_string(),
