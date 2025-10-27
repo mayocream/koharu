@@ -3,7 +3,7 @@ use std::{ops::Deref, path::PathBuf};
 use image::DynamicImage;
 use slint::{Model, SharedString};
 
-use crate::{document, image::SerializableDynamicImage};
+use crate::{image::SerializableDynamicImage, state};
 
 slint::include_modules!();
 
@@ -38,9 +38,9 @@ impl From<&SerializableDynamicImage> for slint::Image {
     }
 }
 
-impl From<&TextBlock> for document::TextBlock {
+impl From<&TextBlock> for state::TextBlock {
     fn from(block: &TextBlock) -> Self {
-        document::TextBlock {
+        state::TextBlock {
             x: block.x as u32,
             y: block.y as u32,
             width: block.width as u32,
@@ -52,8 +52,8 @@ impl From<&TextBlock> for document::TextBlock {
     }
 }
 
-impl From<&document::TextBlock> for TextBlock {
-    fn from(block: &document::TextBlock) -> Self {
+impl From<&state::TextBlock> for TextBlock {
+    fn from(block: &state::TextBlock) -> Self {
         TextBlock {
             x: block.x as i32,
             y: block.y as i32,
@@ -66,9 +66,9 @@ impl From<&document::TextBlock> for TextBlock {
     }
 }
 
-impl From<&Image> for document::Image {
+impl From<&Image> for state::Image {
     fn from(image: &Image) -> Self {
-        document::Image {
+        state::Image {
             source: (&image.source).into(),
             width: image.width as u32,
             height: image.height as u32,
@@ -78,8 +78,8 @@ impl From<&Image> for document::Image {
     }
 }
 
-impl From<&document::Image> for Image {
-    fn from(image: &document::Image) -> Self {
+impl From<&state::Image> for Image {
+    fn from(image: &state::Image) -> Self {
         Image {
             source: (&image.source).into(),
             width: image.width as i32,
@@ -90,11 +90,11 @@ impl From<&document::Image> for Image {
     }
 }
 
-impl From<&Document<'_>> for document::Document {
+impl From<&Document<'_>> for state::Document {
     fn from(doc: &Document) -> Self {
         let segment = doc.get_segment();
 
-        document::Document {
+        state::Document {
             image: (&doc.get_image()).into(),
             text_blocks: doc
                 .get_text_blocks()

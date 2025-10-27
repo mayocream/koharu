@@ -27,7 +27,7 @@ ndarray = "0.16"
 imageproc = "0.25"
 clap = { version = "4.5", features = ["derive"] }
 serde = { version = "1", features = ["derive"] }
-serde_json = "1"
+serde_bytes = "0.11"
 tokio = { version = "1.44", features = ["full"] }
 tracing = { version = "0.1", features = ["log"] }
 tracing-subscriber = { version = "0.3", features = ["env-filter", "fmt"] }
@@ -40,3 +40,4 @@ slint = { version = "1.14", default-features = false, features = [
 slint-build = "1.14"
 open = "5.3"
 rfd = "0.15"
+postcard = { version = "1.0", features = ["use-std"] }

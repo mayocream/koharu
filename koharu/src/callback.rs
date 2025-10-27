@@ -5,9 +5,9 @@ use rfd::FileDialog;
 use slint::{ComponentHandle, Model, VecModel};
 
 use crate::{
-    document,
     image::SerializableDynamicImage,
     inference::Inference,
+    state,
     ui::{self, App, Logic},
 };
 
@@ -77,7 +77,7 @@ pub fn setup(app: &App, inference: Arc<Inference>) {
 
         move |image, text_blocks| {
             let image = (&image.source).into();
-            let blocks: Vec<document::TextBlock> =
+            let blocks: Vec<state::TextBlock> =
                 text_blocks.iter().map(|block| (&block).into()).collect();
             let inference = inference.clone();
             let app_weak = app_weak.clone();

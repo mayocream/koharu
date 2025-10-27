@@ -6,8 +6,8 @@ use comic_text_detector::ComicTextDetector;
 use lama::Lama;
 use manga_ocr::MangaOCR;
 
-use crate::document::TextBlock;
 use crate::image::SerializableDynamicImage;
+use crate::state::TextBlock;
 
 pub struct Inference {
     detector: Arc<Mutex<ComicTextDetector>>,

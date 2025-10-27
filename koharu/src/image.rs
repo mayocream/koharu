@@ -10,6 +10,7 @@ pub struct SerializableDynamicImage(pub DynamicImage);
 struct RawImageData {
     width: u32,
     height: u32,
+    #[serde(with = "serde_bytes")]
     data: Vec<u8>,
 }
 
