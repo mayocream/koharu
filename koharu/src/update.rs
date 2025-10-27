@@ -7,15 +7,13 @@ use velopack::{Error, VelopackAsset, VelopackAssetFeed, download, sources::Updat
 pub struct GithubSource {
     owner: String,
     repo: String,
-    asset_name: String,
 }
 
 impl GithubSource {
-    pub fn new<S: AsRef<str>>(owner: S, repo: S, asset_name: S) -> Self {
+    pub fn new<S: AsRef<str>>(owner: S, repo: S, _asset_name: S) -> Self {
         Self {
             owner: owner.as_ref().to_string(),
             repo: repo.as_ref().to_string(),
-            asset_name: asset_name.as_ref().to_string(),
         }
     }
 }
@@ -28,11 +26,9 @@ impl UpdateSource for GithubSource {
         _staged_user_id: &str,
     ) -> Result<VelopackAssetFeed, Error> {
         let url = format!(
-            "https://api.github.com/repos/{owner}/{repo}/releases",
-            owner = self.owner,
-            repo = self.repo
+            "https://api.github.com/repos/{}/{}/releases",
+            self.owner, self.repo
         );
-
         info!("Fetching release feed from {}", url);
 
         let json = download::download_url_as_string(&url)?;
@@ -41,25 +37,29 @@ impl UpdateSource for GithubSource {
         let assets = releases
             .iter()
             .filter(|r| !r["draft"].as_bool().unwrap_or(false))
-            .filter_map(|r| {
-                let version = r["tag_name"].as_str()?.trim_start_matches('v');
-                let version = semver::Version::parse(version).ok()?;
+            .filter_map(|release| {
+                let tag_name = release["tag_name"].as_str()?;
+                let version_str = tag_name.trim_start_matches('v');
+                let version = semver::Version::parse(version_str).ok()?;
 
-                r["assets"]
-                    .as_array()?
-                    .iter()
-                    .find(|a| a["name"].as_str() == Some(&self.asset_name))
-                    .map(|a| VelopackAsset {
-                        PackageId: String::new(),
-                        Version: version.to_string(),
-                        Type: "Full".to_string(),
-                        FileName: self.asset_name.clone(),
-                        SHA1: String::new(),
-                        SHA256: String::new(),
-                        Size: a["size"].as_u64().unwrap_or(0),
-                        NotesMarkdown: r["body"].as_str().unwrap_or("").to_string(),
-                        NotesHtml: String::new(),
-                    })
+                let nupkg_asset = release["assets"].as_array()?.iter().find(|asset| {
+                    asset["name"]
+                        .as_str()
+                        .map(|name| name.ends_with(".nupkg") && name.contains("full"))
+                        .unwrap_or(false)
+                })?;
+
+                Some(VelopackAsset {
+                    PackageId: String::new(),
+                    Version: version.to_string(),
+                    Type: "Full".to_string(),
+                    FileName: nupkg_asset["name"].as_str().unwrap_or("").to_string(),
+                    SHA1: String::new(),
+                    SHA256: String::new(),
+                    Size: nupkg_asset["size"].as_u64().unwrap_or(0),
+                    NotesMarkdown: release["body"].as_str().unwrap_or("").to_string(),
+                    NotesHtml: String::new(),
+                })
             })
             .collect();
 
@@ -73,27 +73,33 @@ impl UpdateSource for GithubSource {
         progress_sender: Option<Sender<i16>>,
     ) -> Result<(), Error> {
         let url = format!(
-            "https://api.github.com/repos/{owner}/{repo}/releases",
-            owner = self.owner,
-            repo = self.repo
+            "https://api.github.com/repos/{}/{}/releases",
+            self.owner, self.repo
         );
-
         let json = download::download_url_as_string(&url)?;
         let releases: Vec<serde_json::Value> = serde_json::from_str(&json)?;
 
         let download_url = releases
             .iter()
-            .find(|r| {
-                r["tag_name"].as_str().map(|t| t.trim_start_matches('v')) == Some(&asset.Version)
+            .find(|release| {
+                release["tag_name"]
+                    .as_str()
+                    .map(|tag| tag.trim_start_matches('v'))
+                    == Some(&asset.Version)
             })
-            .and_then(|r| r["assets"].as_array())
+            .and_then(|release| release["assets"].as_array())
             .and_then(|assets| {
-                assets
-                    .iter()
-                    .find(|a| a["name"].as_str() == Some(&self.asset_name))
+                assets.iter().find(|asset| {
+                    asset["name"]
+                        .as_str()
+                        .map(|name| name.ends_with(".nupkg") && name.contains("full"))
+                        .unwrap_or(false)
+                })
             })
-            .and_then(|a| a["browser_download_url"].as_str())
-            .ok_or_else(|| Error::FileNotFound(format!("{} {}", self.asset_name, asset.Version)))?;
+            .and_then(|asset| asset["browser_download_url"].as_str())
+            .ok_or_else(|| {
+                Error::FileNotFound(format!("nupkg file for version {}", asset.Version))
+            })?;
 
         info!("Downloading from: {}", download_url);
 
