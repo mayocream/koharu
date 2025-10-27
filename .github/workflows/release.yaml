@@ -2,8 +2,6 @@ name: Release
 
 on:
   push:
-    branches:
-      - main
     tags:
       - '*'
 
@@ -40,5 +38,5 @@ jobs:
         shell: bash
         run: |
           dotnet tool update -g vpk
-          vpk pack -u Koharu -v ${{ github.ref_name }} -p ${{ github.workspace }}/dist -e koharu.exe --azureTrustedSignFile ${{ github.workspace }}/signing/metadata.json
+          vpk pack -u Koharu -v ${{ github.ref_name }} -p dist -e koharu.exe --azureTrustedSignFile signing/metadata.json
           vpk upload github --repoUrl https://github.com/${{ github.repository }} --publish --releaseName ${{ github.ref_name }} --tag ${{ github.ref_name }} --token ${{ secrets.GITHUB_TOKEN }} --merge
