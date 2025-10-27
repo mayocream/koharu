@@ -36,4 +36,4 @@ jobs:
         run: |
           dotnet tool update -g vpk
           vpk pack -c windows -u Koharu -v ${{ github.ref_name }} -p dist -e koharu.exe --azureTrustedSignFile signing/metadata.json
-          vpk upload github --repoUrl https://github.com/${{ github.repository }} --publish --releaseName ${{ github.ref_name }} --tag ${{ github.ref_name }} --token ${{ secrets.GITHUB_TOKEN }} --merge
+          vpk upload github -c windows --repoUrl https://github.com/${{ github.repository }} --publish --releaseName ${{ github.ref_name }} --tag ${{ github.ref_name }} --token ${{ secrets.GITHUB_TOKEN }} --merge
