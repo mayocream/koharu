@@ -16,15 +16,8 @@ jobs:
   build-windows:
     name: Windows
     runs-on: windows-latest
-    environment: production
     steps:
       - uses: actions/checkout@v4
-      - name: Azure Login
-        uses: azure/login@v2
-        with:
-          client-id: ${{ secrets.AZURE_CLIENT_ID }}
-          tenant-id: ${{ secrets.AZURE_TENANT_ID }}
-          subscription-id: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
       - name: Build
         shell: bash
         run: cargo build -p koharu --release --verbose
@@ -42,5 +35,5 @@ jobs:
           AZURE_TENANT_ID: ${{ secrets.AZURE_TENANT_ID }}
         run: |
           dotnet tool update -g vpk
-          vpk pack -u Koharu -v ${{ github.ref_name }} -p dist -e koharu.exe --azureTrustedSignFile signing/metadata.json
+          vpk pack -c windows -u Koharu -v ${{ github.ref_name }} -p dist -e koharu.exe --azureTrustedSignFile signing/metadata.json
           vpk upload github --repoUrl https://github.com/${{ github.repository }} --publish --releaseName ${{ github.ref_name }} --tag ${{ github.ref_name }} --token ${{ secrets.GITHUB_TOKEN }} --merge
