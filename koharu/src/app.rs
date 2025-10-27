@@ -4,10 +4,12 @@ use anyhow::Result;
 use ort::execution_providers::CUDAExecutionProvider;
 use rfd::MessageDialog;
 use slint::ComponentHandle;
+use velopack::{UpdateCheck, UpdateManager, VelopackApp};
 
 use crate::callback;
 use crate::inference::Inference;
 use crate::ui::App;
+use crate::update::GithubSource;
 
 fn initialize() -> Result<()> {
     tracing_subscriber::fmt().init();
@@ -21,9 +23,27 @@ fn initialize() -> Result<()> {
             .show();
     }));
 
+    // https://docs.velopack.io/integrating/overview#application-startup
+    VelopackApp::build().run();
+
+    // Check for updates at startup
+    update()?;
+
     ort::init()
         .with_execution_providers([CUDAExecutionProvider::default().build().error_on_failure()])
         .commit()?;
+
+    Ok(())
+}
+
+fn update() -> Result<()> {
+    let source = GithubSource::new("mayocream", "koharu", "koharu-windows.zip");
+    let update_manager = UpdateManager::new(source, None, None)?;
+
+    if let UpdateCheck::UpdateAvailable(updates) = update_manager.check_for_updates()? {
+        update_manager.download_updates(&updates, None)?;
+        update_manager.apply_updates_and_restart(&updates)?;
+    }
 
     Ok(())
 }
