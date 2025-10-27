@@ -1,0 +1,31 @@
+
+import { Spinner } from "std-widgets.slint";
+
+export component InProgressOverlay inherits Rectangle {
+    background: rgba(0, 0, 0, 0.5);
+    width: 100%;
+    height: 100%;
+
+    Rectangle {
+        background: white;
+        border-radius: 8px;
+        width: 200px;
+        height: 100px;
+        x: (parent.width - self.width) / 2;
+        y: (parent.height - self.height) / 2;
+
+        VerticalLayout {
+            alignment: center;
+            spacing: 16px;
+            padding: 20px;
+
+            Spinner { }
+
+            Text {
+                text: "Processing...";
+                font-size: 16px;
+                horizontal-alignment: center;
+            }
+        }
+    }
+}

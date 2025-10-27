@@ -10,10 +10,11 @@ import { Image } from "types.slint";
 import { ThumbnailPanel, ThumbnailItem } from "thumbnail.slint";
 import { Panels } from "panel.slint";
 import { Canvas, CanvasControl } from "canvas.slint";
+import { InProgressOverlay } from "progress.slint";
 
 // re-export for the native code
 // refer: https://github.com/slint-ui/slint/blob/24d37751e8245af46722e8e8aa9fb74bf6639489/examples/printerdemo/ui/printerdemo.slint#L11
-export { Logic, Document }
+export { Logic, Document, Viewport }
 
 export component App inherits Window {
     function load-image(img: Image) {
@@ -87,4 +88,6 @@ export component App inherits Window {
             Panels { }
         }
     }
+
+    if Viewport.in-progress: InProgressOverlay { }
 }

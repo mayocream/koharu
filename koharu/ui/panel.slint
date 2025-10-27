@@ -142,6 +142,7 @@ export component DetectionPanel inherits Panel {
 
                 clicked => {
                     if (Document.image.height > 0) {
+                        Viewport.in-progress = true;
                         Logic.detect(Document.image);
                     }
                 }
@@ -177,6 +178,7 @@ export component DetectionPanel inherits Panel {
                 ]
 
                 clicked => {
+                    Viewport.in-progress = true;
                     Logic.ocr(Document.image, Document.text-blocks);
                 }
             }

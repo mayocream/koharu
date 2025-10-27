@@ -65,6 +65,7 @@ pub fn setup(app: &App, inference: Arc<Inference>) {
                                     .as_slice(),
                             ));
                         app.global::<ui::Document>().set_segment((&segment).into());
+                        app.global::<ui::Viewport>().set_in_progress(false);
                     })
                     .unwrap();
             });
@@ -94,6 +95,7 @@ pub fn setup(app: &App, inference: Arc<Inference>) {
                                     .collect::<Vec<_>>()
                                     .as_slice(),
                             ));
+                        app.global::<ui::Viewport>().set_in_progress(false);
                     })
                     .unwrap();
             });
