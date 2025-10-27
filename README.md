@@ -28,6 +28,18 @@ To enable CUDA support, please ensure you have the following prerequisites met:
 > [!NOTE]
 > CUDA 12.9 and cuDNN 9.11 are tested to work with Koharu. Other versions may work, but are not guaranteed.
 
+## Development
+
+Prerequisites:
+
+- [Rust](https://www.rust-lang.org/tools/install) (1.85 or later)
+
+Build and run Koharu with:
+
+```bash
+cargo run --bin koharu
+```
+
 ## Models
 
 - [comic-text-detector](https://github.com/dmMaze/comic-text-detector) - Detects text in manga images.
