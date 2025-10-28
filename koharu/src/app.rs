@@ -22,7 +22,7 @@ fn initialize() -> Result<()> {
             .show();
     }));
 
-    #[cfg(not(debug_assertions))]
+    #[cfg(feature = "bundle")]
     {
         // https://docs.velopack.io/integrating/overview#application-startup
         velopack::VelopackApp::build().run();

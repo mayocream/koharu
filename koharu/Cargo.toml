@@ -31,6 +31,7 @@ semver = { workspace = true }
 
 [features]
 cuda = ["ort/cuda", "comic-text-detector/cuda", "manga-ocr/cuda", "lama/cuda"]
+bundle = []
 
 [build-dependencies]
 slint-build = { workspace = true }
