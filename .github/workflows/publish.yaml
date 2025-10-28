@@ -1,0 +1,24 @@
+name: Publish
+
+on:
+  push:
+    tags:
+      - '*'
+
+permissions:
+  contents: write
+
+env:
+  CARGO_TERM_COLOR: always
+
+jobs:
+  publish:
+    name: Publish to Crates.io
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Publish
+        shell: bash
+        env:
+          CARGO_REGISTRY_TOKEN: ${{ secrets.CARGO_REGISTRY_TOKEN }}
+        run: cargo publish --verbose
