@@ -1,55 +1,133 @@
+<!-- markdownlint-disable MD034 MD033 -->
+
 # Koharu
 
-Automated manga translation tool with LLM, written in **Rust**.
-
-Koharu introduces a new workflow for manga translation, utilizing the power of LLMs to automate the process. It combines the capabilities of object detection, OCR, inpainting, and LLMs to create a seamless translation experience.
-
-Under the hood, Koharu uses [ort](https://github.com/pykeio/ort) for high-performance inference, and uses [Slint](https://github.com/slint-ui/slint) for the GUI.
+Fast, local manga tooling in Rust — detect text blocks, OCR Japanese, visualize masks, and prep pages for inpainting.
+GUI built with [Slint](https://github.com/slint-ui/slint), inference via [ort](https://github.com/pykeio/ort).
 
 > [!NOTE]
-> For help and support, please join our [Discord server](https://discord.gg/mHvHkxGnUY).
+> Need help? Join the community Discord: https://discord.gg/mHvHkxGnUY
 
-## CUDA
+## Features
 
-Koharu is built with CUDA support, allowing it to leverage the power of NVIDIA GPUs for faster processing.
+- [x] Text block detection with segmentation mask overlay (YOLO-style ONNX)
+- [x] Japanese OCR with manga-tuned encoder/decoder (ONNX)
+- [x] LaMa-based inpainting model integrated as a library
+- [x] Desktop GUI (Slint) and automatic model download from Hugging Face
+- [ ] Assisted translation flow with LLMs (planned)
 
-Koharu bundles CUDA toolkit 12 and cuDNN 9, so you don't need to install them separately. Just make sure you have the appropriate NVIDIA drivers installed on your system.
+## Quick Start
+
+```bash
+# CPU
+cargo run --bin koharu
+
+# GPU (CUDA)
+cargo run --bin koharu --features cuda
+```
+
+> [!TIP]
+> First run downloads models from Hugging Face automatically. Keep internet enabled the first time.
 
 ## Installation
 
-You can download the latest release of Koharu from the [releases page](https://github.com/mayocream/koharu/releases/latest).
+- Windows: download the latest build from the [Releases](https://github.com/mayocream/koharu/releases/latest) page
+  and run the installer. Includes user-level CUDA 12 + cuDNN 9 libraries and automatic updates (Velopack).
+- macOS/Linux: build from source (see [Development](#development)).
+
+## System Requirements
+
+- NVIDIA drivers compatible with CUDA 12 for GPU acceleration (optional).
+- CPU-only runs with ONNX Runtime are supported but slower.
+
+> [!IMPORTANT]
+> CUDA is enabled via the `cuda` feature flag. The build script fetches the required user-space libraries automatically; a full CUDA Toolkit install is not required.
 
 ## Development
 
-### Prerequisites
+Requirements
 
-- [Rust](https://www.rust-lang.org/tools/install) (1.85 or later)
-- [Python](https://www.python.org/downloads/) (3.12 or later) (_optional_)
-
-### Run
+- Rust 1.85+ (edition 2024)
+- Python 3.12+ (only for `--features cuda`, to fetch user-space CUDA libraries)
 
 ```bash
+# Run (CPU)
 cargo run --bin koharu
+
+# Run (CUDA)
+cargo run --bin koharu --features cuda
 ```
 
-### CUDA feature
+<details>
+<summary>How CUDA libraries are provided</summary>
+
+- `koharu/build.rs` calls `scripts/cuda.py` to create a temporary venv and pip-install:
+  `nvidia-cuda-runtime-cu12`, `nvidia-cudnn-cu12`, `nvidia-cublas-cu12`, `nvidia-cufft-cu12`.
+- The relevant DLL/SO files are copied into `target/<profile>/` and linked at build/runtime.
+- This avoids requiring a full CUDA Toolkit installation for users.
+
+</details>
+
+<details>
+<summary>Slint live preview</summary>
+
+```powershell
+scripts/koharu_preview.ps1
+```
+
+</details>
+
+## CLI Tools
 
 ```bash
-cargo run --bin koharu --features cuda
+# 1) Text detection (draw boxes and export segmentation mask)
+cargo run -p comic-text-detector -- \
+  --input page.jpg \
+  --output out.png \
+  --confidence-threshold 0.5 \
+  --nms-threshold 0.4
+# Produces out.png (rectangles) and out.png_segment.png (mask)
+
+# 2) OCR for a cropped region or page
+cargo run -p manga-ocr -- --input crop.png
+
+# 3) Inpainting using a binary mask
+cargo run -p lama -- \
+  --input page.jpg \
+  --mask mask.png \
+  --output result.jpg
 ```
 
 ## Models
 
-Koharu uses several pre-trained models for different tasks:
+Models are converted to ONNX for speed and portability and are auto-downloaded via `hf-hub` on first use:
 
-- [comic-text-detector](https://github.com/dmMaze/comic-text-detector) - Detects text in manga images.
-- [manga-ocr](https://github.com/kha-white/manga-ocr) - Extracts text from manga images.
-- [AnimeMangaInpainting](https://huggingface.co/dreMaz/AnimeMangaInpainting) - Finetuned LaMa model for inpainting manga images.
+- Detector: `mayocream/comic-text-detector-onnx` -> `comic-text-detector.onnx`
+- OCR: `mayocream/manga-ocr-onnx` -> `encoder_model.onnx`, `decoder_model.onnx`, `vocab.txt`
+- Inpainting: `mayocream/lama-manga-onnx` -> `lama-manga.onnx`
 
-The models will be automatically downloaded when you run Koharu for the first time.
+Acknowledgements and prior art:
 
-We convert the original models to ONNX format for better performance and compatibility with Rust. The converted models are hosted on [Hugging Face](https://huggingface.co/mayocream).
+- Comic Text Detector ideas inspired by https://github.com/dmMaze/comic-text-detector
+- OCR derived from https://github.com/kha-white/manga-ocr (adapted to ONNX)
+- Inpainting based on LaMa research and community ports
+
+## Releases & Updates
+
+- Windows builds are packaged and code-signed via GitHub Actions using Velopack (`.github/workflows/release.yaml`).
+- On startup (release builds), the app checks GitHub Releases and applies updates automatically.
+
+## Troubleshooting
+
+> [!WARNING]
+> If CUDA is not being used:
+>
+> - Ensure NVIDIA drivers support CUDA 12
+> - Build/run with `--features cuda`
+> - GPU failures fall back to CPU; expect slower processing
+
+- First run is slow: models download from Hugging Face; subsequent runs are cached by `hf-hub`.
 
 ## License
 
-Koharu is licensed under the [GNU General Public License v3.0](LICENSE).
+GPL-3.0 — see [LICENSE](LICENSE).
