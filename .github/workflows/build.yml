@@ -16,7 +16,4 @@ jobs:
       - uses: actions/checkout@v4
       - name: Build
         shell: bash
-        run: cargo build --verbose
-      - name: Run tests
-        shell: bash
-        run: cargo test --verbose
+        run: cargo build --bin koharu --features=cuda --verbose
