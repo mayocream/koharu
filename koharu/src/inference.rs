@@ -63,12 +63,7 @@ impl Inference {
         blocks
             .iter()
             .map(|block| {
-                let crop = image.crop_imm(
-                    block.x.max(0) as u32,
-                    block.y.max(0) as u32,
-                    block.width.max(0) as u32,
-                    block.height.max(0) as u32,
-                );
+                let crop = image.crop_imm(block.x, block.y, block.width, block.height);
                 let text = ocr.inference(&crop)?;
 
                 Ok(TextBlock {

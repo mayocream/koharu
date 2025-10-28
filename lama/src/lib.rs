@@ -107,8 +107,8 @@ impl Lama {
     ) -> anyhow::Result<DynamicImage> {
         let (orig_width, orig_height) = image.dimensions();
         let (image, resize_info) =
-            resize_with_padding(&image, 512, image::imageops::FilterType::CatmullRom);
-        let (mask, _) = resize_with_padding(&mask, 512, image::imageops::FilterType::CatmullRom);
+            resize_with_padding(image, 512, image::imageops::FilterType::CatmullRom);
+        let (mask, _) = resize_with_padding(mask, 512, image::imageops::FilterType::CatmullRom);
 
         let mut image_data = ndarray::Array::zeros((1, 3, 512, 512));
         for pixel in image.pixels() {

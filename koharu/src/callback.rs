@@ -36,7 +36,7 @@ pub fn setup(app: &App, inference: Arc<Inference>) {
             })
             .collect::<Vec<_>>();
         images.sort_unstable_by(|a, b| a.name.cmp(&b.name));
-        VecModel::from_slice(&images).into()
+        VecModel::from_slice(&images)
     });
 
     logic.on_open_external(|path| {
@@ -58,7 +58,7 @@ pub fn setup(app: &App, inference: Arc<Inference>) {
                     .upgrade_in_event_loop(move |app| {
                         app.global::<ui::Document>()
                             .set_text_blocks(VecModel::from_slice(
-                                &blocks
+                                blocks
                                     .iter()
                                     .map(|block| block.into())
                                     .collect::<Vec<_>>()
@@ -89,7 +89,7 @@ pub fn setup(app: &App, inference: Arc<Inference>) {
                     .upgrade_in_event_loop(move |app| {
                         app.global::<ui::Document>()
                             .set_text_blocks(VecModel::from_slice(
-                                &blocks
+                                blocks
                                     .iter()
                                     .map(|block| block.into())
                                     .collect::<Vec<_>>()
