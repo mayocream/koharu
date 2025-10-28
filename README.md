@@ -16,24 +16,14 @@ GUI built with [Slint](https://github.com/slint-ui/slint), inference via [ort](h
 - [x] Desktop GUI (Slint) and automatic model download from Hugging Face
 - [ ] Assisted translation flow with LLMs (planned)
 
-## Quick Start
-
-```bash
-# CPU
-cargo run --bin koharu
-
-# GPU (CUDA)
-cargo run --bin koharu --features cuda
-```
-
-> [!TIP]
-> First run downloads models from Hugging Face automatically. Keep internet enabled the first time.
-
 ## Installation
 
 - Windows: download the latest build from the [Releases](https://github.com/mayocream/koharu/releases/latest) page
   and run the installer. Includes user-level CUDA 12 + cuDNN 9 libraries and automatic updates (Velopack).
 - macOS/Linux: build from source (see [Development](#development)).
+
+> [!TIP]
+> First run downloads models from Hugging Face automatically. Keep internet enabled the first time.
 
 ## System Requirements
 
@@ -45,10 +35,12 @@ cargo run --bin koharu --features cuda
 
 ## Development
 
-Requirements
+### Requirements
 
 - Rust 1.85+ (edition 2024)
 - Python 3.12+ (only for `--features cuda`, to fetch user-space CUDA libraries)
+
+### Build & Run
 
 ```bash
 # Run (CPU)
@@ -58,24 +50,12 @@ cargo run --bin koharu
 cargo run --bin koharu --features cuda
 ```
 
-<details>
-<summary>How CUDA libraries are provided</summary>
+### How CUDA libraries are provided
 
 - `koharu/build.rs` calls `scripts/cuda.py` to create a temporary venv and pip-install:
   `nvidia-cuda-runtime-cu12`, `nvidia-cudnn-cu12`, `nvidia-cublas-cu12`, `nvidia-cufft-cu12`.
 - The relevant DLL/SO files are copied into `target/<profile>/` and linked at build/runtime.
 - This avoids requiring a full CUDA Toolkit installation for users.
-
-</details>
-
-<details>
-<summary>Slint live preview</summary>
-
-```powershell
-scripts/koharu_preview.ps1
-```
-
-</details>
 
 ## CLI Tools
 
@@ -111,22 +91,6 @@ Acknowledgements and prior art:
 - Comic Text Detector ideas inspired by https://github.com/dmMaze/comic-text-detector
 - OCR derived from https://github.com/kha-white/manga-ocr (adapted to ONNX)
 - Inpainting based on LaMa research and community ports
-
-## Releases & Updates
-
-- Windows builds are packaged and code-signed via GitHub Actions using Velopack (`.github/workflows/release.yaml`).
-- On startup (release builds), the app checks GitHub Releases and applies updates automatically.
-
-## Troubleshooting
-
-> [!WARNING]
-> If CUDA is not being used:
->
-> - Ensure NVIDIA drivers support CUDA 12
-> - Build/run with `--features cuda`
-> - GPU failures fall back to CPU; expect slower processing
-
-- First run is slow: models download from Hugging Face; subsequent runs are cached by `hf-hub`.
 
 ## License
 
