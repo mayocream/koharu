@@ -17,3 +17,4 @@ ort = { workspace = true }
 anyhow = { workspace = true }
 ndarray = { workspace = true }
 clap = { workspace = true }
+imageproc = { workspace = true }
