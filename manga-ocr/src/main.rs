@@ -1,5 +1,6 @@
 use clap::Parser;
 use manga_ocr::MangaOCR;
+use ort::execution_providers::CUDAExecutionProvider;
 
 #[derive(Parser)]
 struct Cli {
@@ -8,6 +9,10 @@ struct Cli {
 }
 
 fn main() -> anyhow::Result<()> {
+    ort::init()
+        .with_execution_providers([CUDAExecutionProvider::default().build().error_on_failure()])
+        .commit()?;
+
     let cli = Cli::parse();
 
     let mut model = MangaOCR::new()?;

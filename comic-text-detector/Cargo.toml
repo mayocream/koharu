@@ -20,3 +20,6 @@ ndarray = { workspace = true }
 imageproc = { workspace = true }
 serde = { workspace = true }
 clap = { workspace = true }
+
+[features]
+cuda = ["ort/cuda"]

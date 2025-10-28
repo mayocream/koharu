@@ -30,7 +30,7 @@ velopack = { workspace = true }
 semver = { workspace = true }
 
 [features]
-cuda = ["ort/cuda"]
+cuda = ["ort/cuda", "comic-text-detector/cuda", "manga-ocr/cuda", "lama/cuda"]
 
 [build-dependencies]
 slint-build = { workspace = true }

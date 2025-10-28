@@ -1,5 +1,6 @@
 use clap::Parser;
 use lama::Lama;
+use ort::execution_providers::CUDAExecutionProvider;
 
 #[derive(Parser)]
 struct Cli {
@@ -14,6 +15,10 @@ struct Cli {
 }
 
 fn main() -> anyhow::Result<()> {
+    ort::init()
+        .with_execution_providers([CUDAExecutionProvider::default().build().error_on_failure()])
+        .commit()?;
+
     let cli = Cli::parse();
 
     let mut model = Lama::new()?;
