@@ -12,7 +12,7 @@ use crate::state::TextBlock;
 pub struct Inference {
     detector: Arc<Mutex<ComicTextDetector>>,
     ocr: Arc<Mutex<MangaOCR>>,
-    _lama: Arc<Mutex<Lama>>,
+    lama: Arc<Mutex<Lama>>,
 }
 
 impl Inference {
@@ -20,7 +20,7 @@ impl Inference {
         Ok(Self {
             detector: Arc::new(Mutex::new(ComicTextDetector::new()?)),
             ocr: Arc::new(Mutex::new(MangaOCR::new()?)),
-            _lama: Arc::new(Mutex::new(Lama::new()?)),
+            lama: Arc::new(Mutex::new(Lama::new()?)),
         })
     }
 
@@ -77,5 +77,16 @@ impl Inference {
                 })
             })
             .collect()
+    }
+
+    pub fn inpaint(
+        &self,
+        image: &SerializableDynamicImage,
+        mask: &SerializableDynamicImage,
+    ) -> Result<SerializableDynamicImage> {
+        let mut lama = self.lama.lock().unwrap();
+        let result = lama.inference(image, mask)?;
+
+        Ok(result.into())
     }
 }

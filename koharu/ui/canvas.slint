@@ -105,6 +105,14 @@ export component Canvas inherits ScrollView {
                         opacity: 0.5;
                     }
 
+                    if Viewport.show-inpainted-image: Image {
+                        source: Document.inpainted-image;
+                        x: 0;
+                        y: 0;
+                        width: parent.width;
+                        height: parent.height;
+                    }
+
                     for text_block[index] in Document.text-blocks: TextBlockAnnotation {
                         text-block: text_block;
                         index: index + 1;

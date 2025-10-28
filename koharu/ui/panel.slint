@@ -194,6 +194,48 @@ export component InpaintingPanel inherits Panel {
             text: "Show segmentation mask";
             checked <=> Viewport.show-segmentation;
         }
+
+        Switch {
+            text: "Show inpainted image";
+            checked <=> Viewport.show-inpainted-image;
+        }
+
+        TouchArea {
+            width: 80px;
+            height: 40px;
+            mouse-cursor: MouseCursor.pointer;
+
+            detect-btn := Rectangle {
+                width: parent.width;
+                height: parent.height;
+                background: white;
+                border-radius: 6px;
+                border-width: 1px;
+                border-color: #E0E0E0;
+
+                Text {
+                    text: "Inpaint";
+                    color: #333333;
+                    font-size: 16px;
+                    font-weight: 400;
+                    horizontal-alignment: center;
+                    vertical-alignment: center;
+                }
+            }
+
+            states [
+                hover when self.has-hover: {
+                    detect-btn.background: #F5F5F5;
+                }
+            ]
+
+            clicked => {
+                if (Document.image.height > 0) {
+                    Viewport.in-progress = true;
+                    Logic.inpaint(Document.image, Document.segment);
+                }
+            }
+        }
     }
 }
 

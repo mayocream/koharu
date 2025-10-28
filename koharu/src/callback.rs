@@ -101,4 +101,27 @@ pub fn setup(app: &App, inference: Arc<Inference>) {
             });
         }
     });
+
+    logic.on_inpaint({
+        let inference = inference.clone();
+        let app_weak = app_weak.clone();
+
+        move |image, mask| {
+            let image = (&image.source).into();
+            let mask = (&mask).into();
+            let inference = inference.clone();
+            let app_weak = app_weak.clone();
+
+            thread::spawn(move || {
+                let result = inference.inpaint(&image, &mask).unwrap();
+                app_weak
+                    .upgrade_in_event_loop(move |app| {
+                        app.global::<ui::Document>()
+                            .set_inpainted_image((&result).into());
+                        app.global::<ui::Viewport>().set_in_progress(false);
+                    })
+                    .unwrap();
+            });
+        }
+    });
 }

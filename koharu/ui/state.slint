@@ -4,11 +4,13 @@ export global Document {
     in-out property <Image> image;
     in-out property <[TextBlock]> text-blocks;
     in-out property <image> segment;
+    in-out property <image> inpainted-image;
 }
 
 export global Viewport {
     in-out property <[Image]> images;
     in-out property <int> scale: 100;
     in-out property <bool> show-segmentation: false;
+    in-out property <bool> show-inpainted-image: false;
     in-out property <bool> in-progress: false;
 }
