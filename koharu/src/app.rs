@@ -1,7 +1,6 @@
 use std::sync::Arc;
 
 use anyhow::Result;
-use ort::execution_providers::CUDAExecutionProvider;
 use rfd::MessageDialog;
 use slint::ComponentHandle;
 use velopack::{UpdateCheck, UpdateManager};
@@ -32,7 +31,12 @@ fn initialize() -> Result<()> {
     }
 
     ort::init()
-        .with_execution_providers([CUDAExecutionProvider::default().build().error_on_failure()])
+        .with_execution_providers([
+            #[cfg(feature = "cuda")]
+            ort::execution_providers::CUDAExecutionProvider::default()
+                .build()
+                .error_on_failure(),
+        ])
         .commit()?;
 
     Ok(())

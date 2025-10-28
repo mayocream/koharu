@@ -29,5 +29,8 @@ postcard = { workspace = true }
 velopack = { workspace = true }
 semver = { workspace = true }
 
+[features]
+cuda = ["ort/cuda"]
+
 [build-dependencies]
 slint-build = { workspace = true }

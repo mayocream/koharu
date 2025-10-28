@@ -21,7 +21,7 @@ lama = { path = "./lama", version = "0.3.1" }
 candle-transformers = "0.9"
 hf-hub = "0.4"
 image = "0.25"
-ort = { version = "=2.0.0-rc.10", features = ["cuda"] }
+ort = "=2.0.0-rc.10"
 anyhow = "1.0"
 ndarray = "0.16"
 imageproc = "0.25"
