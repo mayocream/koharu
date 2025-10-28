@@ -19,7 +19,9 @@ export component InProgressOverlay inherits Rectangle {
             spacing: 16px;
             padding: 20px;
 
-            Spinner { }
+            Spinner {
+                indeterminate: true;
+            }
 
             Text {
                 text: "Processing...";
