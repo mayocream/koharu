@@ -4,6 +4,8 @@ Automated manga translation tool with LLM, written in **Rust**.
 
 Koharu introduces a new workflow for manga translation, utilizing the power of LLMs to automate the process. It combines the capabilities of object detection, OCR, inpainting, and LLMs to create a seamless translation experience.
 
+Under the hood, Koharu uses [ort](https://github.com/pykeio/ort) for high-performance inference, and uses [Slint](https://github.com/slint-ui/slint) for the GUI.
+
 > [!NOTE]
 > For help and support, please join our [Discord server](https://discord.gg/mHvHkxGnUY).
 
@@ -43,6 +45,10 @@ Koharu uses several pre-trained models for different tasks:
 - [comic-text-detector](https://github.com/dmMaze/comic-text-detector) - Detects text in manga images.
 - [manga-ocr](https://github.com/kha-white/manga-ocr) - Extracts text from manga images.
 - [AnimeMangaInpainting](https://huggingface.co/dreMaz/AnimeMangaInpainting) - Finetuned LaMa model for inpainting manga images.
+
+The models will be automatically downloaded when you run Koharu for the first time.
+
+We convert the original models to ONNX format for better performance and compatibility with Rust. The converted models are hosted on [Hugging Face](https://huggingface.co/mayocream).
 
 ## License
 
