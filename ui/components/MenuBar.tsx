@@ -3,6 +3,7 @@
 import { Menubar } from 'radix-ui'
 import { invoke } from '@tauri-apps/api/core'
 import { useApp } from '@/contexts/AppContext'
+import type { FileData } from '@/contexts/AppContext'
 
 export function MenuBar() {
   const { setFiles } = useApp()
@@ -10,11 +11,14 @@ export function MenuBar() {
   const pickFiles = async () => {
     try {
       const filePaths = (await invoke('pick_files')) as string[]
-      const fileBuffers: Uint8Array[] = []
+      const fileBuffers: FileData[] = []
 
       for (const path of filePaths) {
         const data = await invoke('read_file', { path })
-        fileBuffers.push(data as Uint8Array)
+        fileBuffers.push({
+          filename: path.split(/[/\\]/).pop()?.split('.')?.[0] || 'untitled',
+          buffer: data as Uint8Array,
+        })
       }
 
       setFiles(fileBuffers)

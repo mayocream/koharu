@@ -17,12 +17,18 @@ export function ThumbnailPanel() {
                 <AspectRatio.Root ratio={3 / 4}>
                   <img
                     src={URL.createObjectURL(
-                      new Blob([file as BlobPart], { type: 'image/*' })
+                      new Blob([file.buffer as BlobPart], { type: 'image/*' })
                     )}
-                    alt={`Thumbnail ${index + 1}`}
+                    alt={file.filename}
                     className='size-full object-cover'
                   />
                 </AspectRatio.Root>
+                <div
+                  className='mt-1 px-1 text-xs text-neutral-600 truncate text-center'
+                  title={file.filename}
+                >
+                  {file.filename}
+                </div>
               </div>
             ))}
           </div>

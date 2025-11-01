@@ -1,13 +1,18 @@
 'use client'
 import { createContext, useContext, useState, ReactNode } from 'react'
 
+export type FileData = {
+  filename: string
+  buffer: Uint8Array
+}
+
 type AppState = {
-  files: Uint8Array[]
+  files: FileData[]
 }
 
 type AppContextType = {
   state: AppState
-  setFiles: (files: Uint8Array[]) => void
+  setFiles: (files: FileData[]) => void
 }
 
 const AppContext = createContext<AppContextType | undefined>(undefined)
@@ -17,7 +22,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
     files: [],
   })
 
-  const setFiles = (files: Uint8Array[]) => {
+  const setFiles = (files: FileData[]) => {
     setState({ files })
   }
 
