@@ -2,12 +2,9 @@ use std::sync::Arc;
 
 use anyhow::Result;
 use rfd::MessageDialog;
-use slint::ComponentHandle;
 use velopack::{UpdateCheck, UpdateManager};
 
-use crate::callback;
 use crate::inference::Inference;
-use crate::ui::App;
 use crate::update::GithubSource;
 
 fn initialize() -> Result<()> {
@@ -58,11 +55,7 @@ fn update() -> Result<()> {
 pub fn run() -> Result<()> {
     initialize()?;
 
-    let inference = Arc::new(Inference::new()?);
-    let app = App::new()?;
-
-    callback::setup(&app, inference);
-    app.run()?;
+    let _inference = Arc::new(Inference::new()?);
 
     Ok(())
 }

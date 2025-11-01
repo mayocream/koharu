@@ -33,12 +33,6 @@ tokio = { version = "1.44", features = ["full"] }
 tracing = { version = "0.1", features = ["log"] }
 tracing-subscriber = { version = "0.3", features = ["env-filter", "fmt"] }
 log = "0.4"
-slint = { version = "1.14", default-features = false, features = [
-    "compat-1-2",
-    "backend-winit",
-    "renderer-femtovg-wgpu",
-] }
-slint-build = "1.14"
 open = "5.3"
 rfd = "0.15"
 postcard = { version = "1.0", features = ["use-std"] }
