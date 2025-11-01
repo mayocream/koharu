@@ -5,6 +5,7 @@ use rfd::MessageDialog;
 use tauri::Manager;
 use velopack::{UpdateCheck, UpdateManager};
 
+use crate::command;
 use crate::inference::Inference;
 use crate::update::GithubSource;
 
@@ -70,7 +71,7 @@ pub fn run() -> Result<()> {
             tauri::async_runtime::spawn(setup(app.handle().clone()));
             Ok(())
         })
-        .invoke_handler(tauri::generate_handler![])
+        .invoke_handler(tauri::generate_handler![command::open_external])
         .run(tauri::generate_context!())?;
 
     Ok(())

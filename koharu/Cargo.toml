@@ -27,6 +27,7 @@ lama = { workspace = true }
 postcard = { workspace = true }
 velopack = { workspace = true }
 semver = { workspace = true }
+thiserror = { workspace = true }
 tauri = { workspace = true }
 
 [features]

@@ -1,24 +1,29 @@
 'use client'
+
 import { Menubar } from 'radix-ui'
+import { invoke } from '@tauri-apps/api/core'
 
 export function MenuBar() {
-  const openExternal = (url: string) => {
-    if (typeof window !== 'undefined')
-      open(url, '_blank', 'noopener,noreferrer')
-  }
+  const openExternal = (url: string) => invoke('open_external', { url })
+
   return (
-    <div className='border-b border-neutral-200 bg-neutral-50'>
+    <div className='border-b border-black/10 bg-white text-black/95'>
       <div className='mx-auto flex h-10 items-center gap-2 px-2'>
         <Menubar.Root className='flex gap-1'>
           <Menubar.Menu>
-            <Menubar.Trigger className='rounded px-2 py-1 text-sm hover:bg-neutral-100'>
+            <Menubar.Trigger className='flex select-none items-center justify-between gap-1 rounded px-4 py-2 text-sm font-medium outline-none hover:bg-black/5 data-[state=open]:bg-black/5'>
               File
             </Menubar.Trigger>
             <Menubar.Portal>
-              <Menubar.Content className='z-10 rounded-md border border-neutral-200 bg-white p-1 shadow-md'>
+              <Menubar.Content
+                className='min-w-56 rounded-md bg-white p-1 shadow-sm'
+                align='start'
+                sideOffset={5}
+                alignOffset={-3}
+              >
                 <Menubar.Item
+                  className='select-none rounded px-4 py-2 text-sm outline-none hover:bg-black/5 data-[state=open]:bg-black/5 data-highlighted:bg-black/5 data-disabled:pointer-events-none data-disabled:opacity-50'
                   onSelect={() => {}}
-                  className='cursor-pointer rounded px-2 py-1 text-sm hover:bg-neutral-100'
                 >
                   Open File...
                 </Menubar.Item>
@@ -27,22 +32,27 @@ export function MenuBar() {
           </Menubar.Menu>
 
           <Menubar.Menu>
-            <Menubar.Trigger className='rounded px-2 py-1 text-sm hover:bg-neutral-100'>
+            <Menubar.Trigger className='flex select-none items-center justify-between gap-1 rounded px-4 py-2 text-sm font-medium outline-none hover:bg-black/5 data-[state=open]:bg-black/5'>
               Help
             </Menubar.Trigger>
             <Menubar.Portal>
-              <Menubar.Content className='z-10 rounded-md border border-neutral-200 bg-white p-1 shadow-md'>
+              <Menubar.Content
+                className='min-w-56 rounded-md bg-white p-1 shadow-sm'
+                align='start'
+                sideOffset={5}
+                alignOffset={-3}
+              >
                 <Menubar.Item
+                  className='select-none rounded px-4 py-2 text-sm outline-none hover:bg-black/5 data-[state=open]:bg-black/5 data-highlighted:bg-black/5 data-disabled:pointer-events-none data-disabled:opacity-50'
                   onSelect={() => openExternal('https://discord.gg/mHvHkxGnUY')}
-                  className='cursor-pointer rounded px-2 py-1 text-sm hover:bg-neutral-100'
                 >
                   Discord
                 </Menubar.Item>
                 <Menubar.Item
+                  className='select-none rounded px-4 py-2 text-sm outline-none hover:bg-black/5 data-[state=open]:bg-black/5 data-highlighted:bg-black/5 data-disabled:pointer-events-none data-disabled:opacity-50'
                   onSelect={() =>
                     openExternal('https://github.com/mayocream/koharu')
                   }
-                  className='cursor-pointer rounded px-2 py-1 text-sm hover:bg-neutral-100'
                 >
                   GitHub
                 </Menubar.Item>
