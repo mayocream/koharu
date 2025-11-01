@@ -2,9 +2,26 @@
 
 import { Menubar } from 'radix-ui'
 import { invoke } from '@tauri-apps/api/core'
+import { useApp } from '@/contexts/AppContext'
 
 export function MenuBar() {
+  const { setFiles } = useApp()
   const openExternal = (url: string) => invoke('open_external', { url })
+  const pickFiles = async () => {
+    try {
+      const filePaths = (await invoke('pick_files')) as string[]
+      const fileBuffers: Uint8Array[] = []
+
+      for (const path of filePaths) {
+        const data = await invoke('read_file', { path })
+        fileBuffers.push(data as Uint8Array)
+      }
+
+      setFiles(fileBuffers)
+    } catch (error) {
+      console.error('Failed to pick files:', error)
+    }
+  }
 
   return (
     <div className='border-b border-black/10 bg-white text-black/95'>
@@ -23,7 +40,7 @@ export function MenuBar() {
               >
                 <Menubar.Item
                   className='select-none rounded px-4 py-2 text-sm outline-none hover:bg-black/5 data-[state=open]:bg-black/5 data-highlighted:bg-black/5 data-disabled:pointer-events-none data-disabled:opacity-50'
-                  onSelect={() => {}}
+                  onSelect={pickFiles}
                 >
                   Open File...
                 </Menubar.Item>
