@@ -17,7 +17,11 @@ export default function RootLayout({
 }>) {
   return (
     <html lang='en'>
-      <body className={`${notoSansJP.className} antialiased`}>{children}</body>
+      <body
+        className={`${notoSansJP.className} antialiased min-h-svh flex flex-col`}
+      >
+        {children}
+      </body>
     </html>
   )
 }
