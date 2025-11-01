@@ -1,36 +1,38 @@
 use std::ops::Deref;
 
-use image::DynamicImage;
+use image::{ColorType, DynamicImage, codecs::webp::WebPEncoder};
 use serde::{Deserialize, Serialize, Serializer};
 
 #[derive(Debug, Default, Clone)]
 pub struct SerializableDynamicImage(pub DynamicImage);
 
 #[derive(Serialize, Deserialize)]
-struct RawImageData {
-    width: u32,
-    height: u32,
+pub struct Webp {
     #[serde(with = "serde_bytes")]
-    data: Vec<u8>,
+    pub data: Vec<u8>,
 }
 
-impl From<&DynamicImage> for RawImageData {
-    fn from(image: &DynamicImage) -> Self {
+impl TryFrom<&DynamicImage> for Webp {
+    type Error = image::ImageError;
+
+    fn try_from(image: &DynamicImage) -> Result<Self, image::ImageError> {
         let rgba = image.to_rgba8();
-        RawImageData {
-            width: rgba.width(),
-            height: rgba.height(),
-            data: rgba.into_raw(),
-        }
+        let (width, height) = rgba.dimensions();
+        let raw = rgba.into_raw();
+
+        let mut buf = Vec::new();
+        let enc = WebPEncoder::new_lossless(&mut buf);
+        enc.encode(&raw, width, height, ColorType::Rgba8.into())?;
+
+        Ok(Webp { data: buf })
     }
 }
 
-impl From<&RawImageData> for DynamicImage {
-    fn from(raw: &RawImageData) -> Self {
-        DynamicImage::ImageRgba8(
-            image::RgbaImage::from_raw(raw.width, raw.height, raw.data.clone())
-                .expect("Failed to create RgbaImage from raw data"),
-        )
+impl TryFrom<&Webp> for DynamicImage {
+    type Error = image::ImageError;
+
+    fn try_from(raw: &Webp) -> Result<Self, image::ImageError> {
+        image::load_from_memory(&raw.data)
     }
 }
 
@@ -39,7 +41,7 @@ impl Serialize for SerializableDynamicImage {
     where
         S: Serializer,
     {
-        let raw: RawImageData = (&self.0).into();
+        let raw: Webp = (&self.0).try_into().map_err(serde::ser::Error::custom)?;
         raw.serialize(serializer)
     }
 }
@@ -49,8 +51,9 @@ impl<'de> Deserialize<'de> for SerializableDynamicImage {
     where
         D: serde::Deserializer<'de>,
     {
-        let raw = &RawImageData::deserialize(deserializer)?;
-        Ok(SerializableDynamicImage(raw.into()))
+        let raw = &Webp::deserialize(deserializer)?;
+        let img: DynamicImage = raw.try_into().map_err(serde::de::Error::custom)?;
+        Ok(SerializableDynamicImage(img))
     }
 }
 

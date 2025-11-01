@@ -29,6 +29,9 @@ velopack = { workspace = true }
 semver = { workspace = true }
 thiserror = { workspace = true }
 tauri = { workspace = true }
+blake3 = { workspace = true }
+lru = { workspace = true }
+tokio = { workspace = true }
 
 [features]
 cuda = ["ort/cuda", "comic-text-detector/cuda", "manga-ocr/cuda", "lama/cuda"]

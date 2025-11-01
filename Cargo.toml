@@ -41,6 +41,8 @@ semver = "1.0"
 thiserror = "2.0"
 tauri = { version = "2.9", features = ["tracing"] }
 tauri-build = "2.5"
+blake3 = "1.8"
+lru = "0.16"
 
 [profile.release]
 opt-level = "z"
