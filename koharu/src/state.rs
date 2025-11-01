@@ -29,4 +29,5 @@ pub struct Document {
     pub image: Image,
     pub text_blocks: Vec<TextBlock>,
     pub segment: Option<SerializableDynamicImage>,
+    pub inpainted: Option<SerializableDynamicImage>,
 }
