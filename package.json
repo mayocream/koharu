@@ -1,5 +1,8 @@
 {
   "workspaces": [
     "ui/"
-  ]
+  ],
+  "devDependencies": {
+    "@tauri-apps/cli": "^2.9.2"
+  }
 }

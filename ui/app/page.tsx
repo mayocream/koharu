@@ -3,7 +3,7 @@ import { Panels } from '@/components/Panels'
 import { Canvas, CanvasControl } from '@/components/Canvas'
 import { ThumbnailPanel } from '@/components/ThumbnailPanel'
 
-function Main() {
+export default function Page() {
   return (
     <main className='flex min-h-0 flex-1 flex-col'>
       <MenuBar />
@@ -23,8 +23,4 @@ function Main() {
       </div>
     </main>
   )
-}
-
-export default function Page() {
-  return <Main />
 }

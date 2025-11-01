@@ -27,9 +27,11 @@ lama = { workspace = true }
 postcard = { workspace = true }
 velopack = { workspace = true }
 semver = { workspace = true }
+tauri = { workspace = true }
 
 [features]
 cuda = ["ort/cuda", "comic-text-detector/cuda", "manga-ocr/cuda", "lama/cuda"]
 bundle = []
 
 [build-dependencies]
+tauri-build = { workspace = true }

@@ -1,6 +1,8 @@
 fn main() {
     #[cfg(feature = "cuda")]
     setup_cuda();
+
+    tauri_build::build();
 }
 
 #[allow(dead_code)]

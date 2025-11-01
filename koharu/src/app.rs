@@ -2,6 +2,7 @@ use std::sync::Arc;
 
 use anyhow::Result;
 use rfd::MessageDialog;
+use tauri::Manager;
 use velopack::{UpdateCheck, UpdateManager};
 
 use crate::inference::Inference;
@@ -52,10 +53,25 @@ fn update() -> Result<()> {
     Ok(())
 }
 
+async fn setup(app: tauri::AppHandle) -> Result<()> {
+    let _inference = Arc::new(Inference::new()?);
+
+    app.get_webview_window("splashscreen").unwrap().close()?;
+    app.get_webview_window("main").unwrap().show()?;
+
+    Ok(())
+}
+
 pub fn run() -> Result<()> {
     initialize()?;
 
-    let _inference = Arc::new(Inference::new()?);
+    tauri::Builder::default()
+        .setup(|app| {
+            tauri::async_runtime::spawn(setup(app.handle().clone()));
+            Ok(())
+        })
+        .invoke_handler(tauri::generate_handler![])
+        .run(tauri::generate_context!())?;
 
     Ok(())
 }
