@@ -14,6 +14,6 @@ jobs:
     runs-on: windows-latest
     steps:
       - uses: actions/checkout@v4
-      - name: Build
-        shell: bash
-        run: cargo build --bin koharu --features=cuda --verbose
+      - uses: oven-sh/setup-bun@v2
+      - run: bun install
+      - run: bun tauri build
