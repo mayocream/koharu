@@ -55,7 +55,9 @@ fn update() -> Result<()> {
 }
 
 async fn setup(app: tauri::AppHandle) -> Result<()> {
-    let _inference = Arc::new(Inference::new()?);
+    let inference = Arc::new(Inference::new()?);
+
+    app.manage(inference);
 
     app.get_webview_window("splashscreen").unwrap().close()?;
     app.get_webview_window("main").unwrap().show()?;
@@ -71,7 +73,11 @@ pub fn run() -> Result<()> {
             tauri::async_runtime::spawn(setup(app.handle().clone()));
             Ok(())
         })
-        .invoke_handler(tauri::generate_handler![command::open_external])
+        .invoke_handler(tauri::generate_handler![
+            command::open_external,
+            command::pick_files,
+            command::read_file
+        ])
         .run(tauri::generate_context!())?;
 
     Ok(())
