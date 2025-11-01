@@ -27,9 +27,11 @@ impl Inference {
     pub fn detect(
         &self,
         image: &SerializableDynamicImage,
+        conf_threshold: f32,
+        nms_threshold: f32,
     ) -> Result<(Vec<TextBlock>, SerializableDynamicImage)> {
         let mut detector = self.detector.lock().unwrap();
-        let result = detector.inference(image, 0.5, 0.5)?;
+        let result = detector.inference(image, conf_threshold, nms_threshold)?;
 
         let mut text_blocks: Vec<TextBlock> = result
             .bboxes
