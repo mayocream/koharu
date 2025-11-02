@@ -4,7 +4,7 @@ Automated manga translation tool with LLM, written in **Rust**.
 
 Koharu introduces a new workflow for manga translation, utilizing the power of LLMs to automate the process. It combines the capabilities of object detection, OCR, inpainting, and LLMs to create a seamless translation experience.
 
-Under the hood, Koharu uses [ort](https://github.com/pykeio/ort) for high-performance inference, and uses [Slint](https://github.com/slint-ui/slint) for the GUI.
+Under the hood, Koharu uses [ort](https://github.com/pykeio/ort) for high-performance inference, and uses [Tauri](https://github.com/tauri-apps/tauri) for the GUI.
 
 > [!NOTE]
 > For help and support, please join our [Discord server](https://discord.gg/mHvHkxGnUY).
