@@ -1,31 +1,10 @@
 'use client'
 
 import { Menubar } from 'radix-ui'
-import { invoke } from '@tauri-apps/api/core'
-import { useApp } from '@/contexts/AppContext'
-import type { FileData } from '@/contexts/AppContext'
+import { useAppStore } from '@/lib/store'
 
 export function MenuBar() {
-  const { setFiles } = useApp()
-  const openExternal = (url: string) => invoke('open_external', { url })
-  const pickFiles = async () => {
-    try {
-      const filePaths = (await invoke('pick_files')) as string[]
-      const fileBuffers: FileData[] = []
-
-      for (const path of filePaths) {
-        const data = await invoke('read_file', { path })
-        fileBuffers.push({
-          filename: path.split(/[/\\]/).pop()?.split('.')?.[0] || 'untitled',
-          buffer: data as Uint8Array,
-        })
-      }
-
-      setFiles(fileBuffers)
-    } catch (error) {
-      console.error('Failed to pick files:', error)
-    }
-  }
+  const { pickFiles, openExternal } = useAppStore()
 
   return (
     <div className='flex h-10 items-center gap-2 border-b border-black/10 bg-white px-2 text-black/95'>

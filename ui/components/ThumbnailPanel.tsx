@@ -1,10 +1,10 @@
 'use client'
 
-import { useApp } from '@/contexts/AppContext'
+import { useAppStore } from '@/lib/store'
 import { AspectRatio, ScrollArea } from 'radix-ui'
 
 export function ThumbnailPanel() {
-  const { state } = useApp()
+  const documents = useAppStore((state) => state.documents)
 
   return (
     <div className='flex min-h-0 w-40 shrink-0 flex-col gap-1 border-r border-neutral-200 bg-neutral-50 p-1'>
@@ -12,12 +12,12 @@ export function ThumbnailPanel() {
       <ScrollArea.Root className='flex-1 min-h-0'>
         <ScrollArea.Viewport className='size-full'>
           <div className='flex flex-col gap-2'>
-            {state.files.map((file, index) => (
+            {documents.map((file, index) => (
               <div key={index} className='w-full'>
                 <AspectRatio.Root ratio={3 / 4}>
                   <img
                     src={URL.createObjectURL(
-                      new Blob([file.buffer as BlobPart], { type: 'image/*' })
+                      new Blob([file.image as BlobPart], { type: 'image/*' })
                     )}
                     alt={file.filename}
                     className='size-full object-cover'
