@@ -24,18 +24,19 @@ You can download the latest release of Koharu from the [releases page](https://g
 ### Prerequisites
 
 - [Rust](https://www.rust-lang.org/tools/install) (1.85 or later)
+- [Bun](https://bun.sh/) (1.0 or later)
 - [Python](https://www.python.org/downloads/) (3.12 or later) (_optional_)
+
+### Install
+
+```bash
+bun install
+```
 
 ### Run
 
 ```bash
-cargo run --bin koharu
-```
-
-### CUDA feature
-
-```bash
-cargo run --bin koharu --features cuda
+bun tauri dev
 ```
 
 ## Models
