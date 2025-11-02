@@ -4,4 +4,3 @@ pub mod image;
 pub mod inference;
 pub mod result;
 pub mod state;
-pub mod update;

@@ -3,11 +3,9 @@ use std::sync::Arc;
 use anyhow::Result;
 use rfd::MessageDialog;
 use tauri::Manager;
-use velopack::{UpdateCheck, UpdateManager};
 
 use crate::command;
 use crate::inference::Inference;
-use crate::update::GithubSource;
 
 fn initialize() -> Result<()> {
     tracing_subscriber::fmt().init();
@@ -25,8 +23,6 @@ fn initialize() -> Result<()> {
     {
         // https://docs.velopack.io/integrating/overview#application-startup
         velopack::VelopackApp::build().run();
-        // Check for updates at startup
-        update()?;
     }
 
     ort::init()
@@ -37,19 +33,6 @@ fn initialize() -> Result<()> {
                 .error_on_failure(),
         ])
         .commit()?;
-
-    Ok(())
-}
-
-#[allow(dead_code)]
-fn update() -> Result<()> {
-    let source = GithubSource::new("mayocream", "koharu");
-    let update_manager = UpdateManager::new(source, None, None)?;
-
-    if let UpdateCheck::UpdateAvailable(updates) = update_manager.check_for_updates()? {
-        update_manager.download_updates(&updates, None)?;
-        update_manager.apply_updates_and_restart(&updates)?;
-    }
 
     Ok(())
 }
