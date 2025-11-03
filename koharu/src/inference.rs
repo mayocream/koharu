@@ -1,10 +1,10 @@
 use std::sync::Arc;
-use std::sync::Mutex;
 
 use anyhow::Result;
 use comic_text_detector::ComicTextDetector;
 use lama::Lama;
 use manga_ocr::MangaOCR;
+use tokio::sync::Mutex;
 
 use crate::image::SerializableDynamicImage;
 use crate::state::TextBlock;
@@ -24,13 +24,13 @@ impl Inference {
         })
     }
 
-    pub fn detect(
+    pub async fn detect(
         &self,
         image: &SerializableDynamicImage,
         conf_threshold: f32,
         nms_threshold: f32,
     ) -> Result<(Vec<TextBlock>, SerializableDynamicImage)> {
-        let mut detector = self.detector.lock().unwrap();
+        let mut detector = self.detector.lock().await;
         let result = detector.inference(image, conf_threshold, nms_threshold)?;
 
         let mut text_blocks: Vec<TextBlock> = result
@@ -55,12 +55,12 @@ impl Inference {
         Ok((text_blocks, result.segment.into()))
     }
 
-    pub fn ocr(
+    pub async fn ocr(
         &self,
         image: &SerializableDynamicImage,
         blocks: &[TextBlock],
     ) -> Result<Vec<TextBlock>> {
-        let mut ocr = self.ocr.lock().unwrap();
+        let mut ocr = self.ocr.lock().await;
 
         blocks
             .iter()
@@ -81,12 +81,12 @@ impl Inference {
             .collect()
     }
 
-    pub fn inpaint(
+    pub async fn inpaint(
         &self,
         image: &SerializableDynamicImage,
         mask: &SerializableDynamicImage,
     ) -> Result<SerializableDynamicImage> {
-        let mut lama = self.lama.lock().unwrap();
+        let mut lama = self.lama.lock().await;
         let result = lama.inference(image, mask)?;
 
         Ok(result.into())

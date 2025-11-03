@@ -1,4 +1,9 @@
-use crate::{result::Result, state::Document};
+use tauri::State;
+
+use crate::{
+    result::Result,
+    state::{AppState, Document},
+};
 
 #[tauri::command]
 pub fn open_external(url: &str) -> Result<()> {
@@ -8,7 +13,7 @@ pub fn open_external(url: &str) -> Result<()> {
 }
 
 #[tauri::command]
-pub fn open_documents() -> Result<Vec<Document>> {
+pub async fn open_documents(state: State<'_, AppState>) -> Result<Vec<Document>> {
     let paths = rfd::FileDialog::new()
         .add_filter("Image Files", &["png", "jpg", "jpeg", "webp"])
         .add_filter("Koharu Document", &["khr"])
@@ -24,5 +29,10 @@ pub fn open_documents() -> Result<Vec<Document>> {
         }
     }
 
+    // store documents in app state
+    let mut state = state.write().await;
+    state.documents = documents.clone();
+
+    // return opened documents as a copy
     Ok(documents)
 }

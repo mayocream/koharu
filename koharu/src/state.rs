@@ -1,7 +1,8 @@
-use std::path::PathBuf;
+use std::{path::PathBuf, sync::Arc};
 
 use image::GenericImageView;
 use serde::{Deserialize, Serialize};
+use tokio::sync::RwLock;
 
 use crate::image::SerializableDynamicImage;
 
@@ -86,3 +87,5 @@ impl Document {
 pub struct State {
     pub documents: Vec<Document>,
 }
+
+pub type AppState = Arc<RwLock<State>>;
