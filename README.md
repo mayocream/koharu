@@ -19,6 +19,8 @@ Koharu bundles CUDA toolkit 12 and cuDNN 9, so you don't need to install them se
 
 You can download the latest release of Koharu from the [releases page](https://github.com/mayocream/koharu/releases/latest).
 
+We provide pre-built binaries for Windows, for other platforms, you may need to build from source, see the [Development](#development) section below.
+
 ## Development
 
 ### Prerequisites
@@ -27,7 +29,7 @@ You can download the latest release of Koharu from the [releases page](https://g
 - [Bun](https://bun.sh/) (1.0 or later)
 - [Python](https://www.python.org/downloads/) (3.12 or later) (_optional_)
 
-### Install
+### Install dependencies
 
 ```bash
 bun install
@@ -37,6 +39,9 @@ bun install
 
 ```bash
 bun tauri dev
+
+# enable CUDA acceleration
+bun tauri dev --features cuda
 ```
 
 ## Models
