@@ -1,3 +1,4 @@
+use rayon::iter::{IntoParallelIterator, ParallelIterator};
 use tauri::State;
 
 use crate::{
@@ -18,16 +19,13 @@ pub async fn open_documents(state: State<'_, AppState>) -> Result<Vec<Document>>
         .add_filter("Image Files", &["png", "jpg", "jpeg", "webp"])
         .add_filter("Koharu Document", &["khr"])
         .set_title("Pick Files")
-        .pick_files();
+        .pick_files()
+        .unwrap_or_default();
 
-    let mut documents = Vec::new();
-
-    if let Some(paths) = paths {
-        for path in paths {
-            let doc = Document::open(path)?;
-            documents.push(doc);
-        }
-    }
+    let documents = paths
+        .into_par_iter()
+        .filter_map(|path| Document::open(path).ok())
+        .collect::<Vec<_>>();
 
     // store documents in app state
     let mut state = state.write().await;

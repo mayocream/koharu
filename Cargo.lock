@@ -3062,6 +3062,7 @@ dependencies = [
  "open",
  "ort",
  "postcard",
+ "rayon",
  "rfd",
  "semver",
  "serde",

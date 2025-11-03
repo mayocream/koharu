@@ -43,6 +43,7 @@ tauri = { version = "2.9", features = ["tracing"] }
 tauri-build = "2.5"
 blake3 = "1.8"
 lru = "0.16"
+rayon = "1.11"
 
 [profile.release]
 opt-level = "z"
