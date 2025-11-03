@@ -35,5 +35,5 @@ jobs:
           AZURE_TENANT_ID: ${{ secrets.AZURE_TENANT_ID }}
         run: |
           dotnet tool update -g vpk
-          vpk pack -u Koharu -v ${{ github.ref_name }} -p dist -e koharu.exe -i koharu/ui/assets/Koharu_Halo.ico --azureTrustedSignFile signing/metadata.json
+          vpk pack -u Koharu -v ${{ github.ref_name }} -p dist -e koharu.exe -i assets/Koharu_Halo.ico --azureTrustedSignFile signing/metadata.json
           vpk upload github --repoUrl https://github.com/${{ github.repository }} --publish --releaseName ${{ github.ref_name }} --tag ${{ github.ref_name }} --token ${{ secrets.GITHUB_TOKEN }} --merge
