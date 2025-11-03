@@ -2,6 +2,7 @@
 import { Slider, Switch, ScrollArea } from 'radix-ui'
 import { ChevronDown, ChevronUp } from 'lucide-react'
 import { useState } from 'react'
+import { useAppStore } from '@/lib/store'
 
 function Panel({
   title,
@@ -18,6 +19,7 @@ function Panel({
         className='flex cursor-pointer items-center gap-2'
       >
         <div className='text-sm font-semibold text-neutral-900'>{title}</div>
+        <div className='flex-1' />
         {collapsed ? (
           <ChevronDown className='h-3 w-3' />
         ) : (
@@ -32,6 +34,9 @@ function Panel({
 function DetectionPanel() {
   const [conf, setConf] = useState(0.5)
   const [nms, setNms] = useState(0.4)
+
+  const { detect, ocr } = useAppStore()
+
   return (
     <Panel title='Detection'>
       <div className='flex flex-col gap-3'>
@@ -69,13 +74,13 @@ function DetectionPanel() {
         </div>
         <div className='flex items-center justify-center gap-2'>
           <button
-            onClick={() => {}}
+            onClick={() => detect(conf, nms)}
             className='h-10 w-20 rounded border border-neutral-200 bg-white text-base hover:bg-neutral-100'
           >
             Detect
           </button>
           <button
-            onClick={() => {}}
+            onClick={ocr}
             className='h-10 w-20 rounded border border-neutral-200 bg-white text-base hover:bg-neutral-100'
           >
             OCR
@@ -87,15 +92,21 @@ function DetectionPanel() {
 }
 
 function InpaintingPanel() {
-  const [showSeg, setShowSeg] = useState(false)
-  const [showInpaint, setShowInpaint] = useState(false)
+  const {
+    inpaint,
+    showSegmentationMask,
+    showInpaintedImage,
+    setShowSegmentationMask,
+    setShowInpaintedImage,
+  } = useAppStore()
+
   return (
     <Panel title='Inpainting'>
       <div className='flex flex-col gap-3'>
         <label className='flex items-center gap-2 text-sm'>
           <Switch.Root
-            checked={showSeg}
-            onCheckedChange={(c) => setShowSeg(!!c)}
+            checked={showSegmentationMask}
+            onCheckedChange={(c) => setShowSegmentationMask(!!c)}
             className='relative h-5 w-9 cursor-pointer rounded-full bg-neutral-300 data-[state=checked]:bg-neutral-800'
           >
             <Switch.Thumb className='block h-4 w-4 translate-x-0.5 rounded-full bg-white transition-transform data-[state=checked]:translate-x-[18px]' />
@@ -104,8 +115,8 @@ function InpaintingPanel() {
         </label>
         <label className='flex items-center gap-2 text-sm'>
           <Switch.Root
-            checked={showInpaint}
-            onCheckedChange={(c) => setShowInpaint(!!c)}
+            checked={showInpaintedImage}
+            onCheckedChange={(c) => setShowInpaintedImage(!!c)}
             className='relative h-5 w-9 cursor-pointer rounded-full bg-neutral-300 data-[state=checked]:bg-neutral-800'
           >
             <Switch.Thumb className='block h-4 w-4 translate-x-0.5 rounded-full bg-white transition-transform data-[state=checked]:translate-x-[18px]' />
@@ -114,7 +125,7 @@ function InpaintingPanel() {
         </label>
         <div className='flex items-center justify-center'>
           <button
-            onClick={() => {}}
+            onClick={inpaint}
             className='h-10 w-20 rounded border border-neutral-200 bg-white text-base hover:bg-neutral-100'
           >
             Inpaint
@@ -125,37 +136,48 @@ function InpaintingPanel() {
   )
 }
 
-function TextBlockItem({ index, text }: { index: number; text?: string }) {
+function TextBlock({ index, text }: { index: number; text?: string }) {
   return (
     <div className='rounded border border-neutral-200 bg-white p-2'>
       <div className='flex items-start gap-2'>
-        <div className='w-4 text-[11px] font-semibold text-neutral-600'>
+        <div className='w-4 shrink-0 text-[12px] font-semibold text-neutral-600'>
           {index}
         </div>
-        <div className='text-sm text-neutral-900'>{text || '<empty>'}</div>
+        <div className='text-sm text-neutral-900 wrap-break-word min-w-0 flex-1'>
+          {text || '<empty>'}
+        </div>
       </div>
     </div>
   )
 }
 
 export function Panels() {
+  const { currentDocumentIndex, documents } = useAppStore()
+  const currentDocument = documents[currentDocumentIndex]
+
   return (
-    <div className='flex min-h-0 h-full min-w-[250px] max-w-[400px] shrink-0 flex-col gap-3 border-l border-neutral-200 bg-neutral-50 p-2'>
+    <div className='flex min-h-0 h-full w-64 flex-col gap-3 border-l border-neutral-200 bg-neutral-50 p-2'>
       <DetectionPanel />
       <InpaintingPanel />
-      <ScrollArea.Root className='w-full flex-1'>
-        <ScrollArea.Viewport className='w-full'>
-          <div className='flex flex-col gap-2'>
-            <div className='px-1 text-sm text-neutral-600'>
-              No text blocks detected yet.
-            </div>
+      <ScrollArea.Root className='flex-1 overflow-hidden'>
+        <ScrollArea.Viewport className='h-full w-full'>
+          <div className='flex flex-col gap-2 p-1'>
+            {currentDocument?.textBlocks.length ? (
+              currentDocument.textBlocks.map((block, index) => (
+                <TextBlock key={index} index={index + 1} text={block.text} />
+              ))
+            ) : (
+              <div className='text-sm text-neutral-600'>
+                No text blocks detected yet.
+              </div>
+            )}
           </div>
         </ScrollArea.Viewport>
         <ScrollArea.Scrollbar
           orientation='vertical'
           className='flex w-2 select-none touch-none p-px'
         >
-          <ScrollArea.Thumb className='relative flex-1 rounded bg-neutral-300' />
+          <ScrollArea.Thumb className='flex-1 rounded bg-neutral-300' />
         </ScrollArea.Scrollbar>
       </ScrollArea.Root>
     </div>

@@ -5,7 +5,7 @@ import { convertToBlob } from '@/lib/util'
 import { AspectRatio, ScrollArea } from 'radix-ui'
 
 export function ThumbnailPanel() {
-  const documents = useAppStore((state) => state.documents)
+  const { documents, setCurrentDocumentIndex } = useAppStore()
 
   return (
     <div className='flex min-h-0 w-40 shrink-0 flex-col gap-1 border-r border-neutral-200 bg-neutral-50 p-1'>
@@ -13,8 +13,12 @@ export function ThumbnailPanel() {
       <ScrollArea.Root className='flex-1 min-h-0'>
         <ScrollArea.Viewport className='size-full'>
           <div className='flex flex-col gap-2'>
-            {documents.map((file) => (
-              <div key={file.id} className='w-full'>
+            {documents.map((file, index) => (
+              <div
+                key={file.id}
+                className='w-full'
+                onClick={() => setCurrentDocumentIndex?.(index)}
+              >
                 <AspectRatio.Root ratio={3 / 4}>
                   <img
                     src={URL.createObjectURL(convertToBlob(file.image))}

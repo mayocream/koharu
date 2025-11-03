@@ -1,7 +1,10 @@
+use std::sync::Arc;
+
 use rayon::iter::{IntoParallelIterator, ParallelIterator};
 use tauri::State;
 
 use crate::{
+    inference::Inference,
     result::Result,
     state::{AppState, Document},
 };
@@ -33,4 +36,70 @@ pub async fn open_documents(state: State<'_, AppState>) -> Result<Vec<Document>>
 
     // return opened documents as a copy
     Ok(documents)
+}
+
+#[tauri::command]
+pub async fn detect(
+    state: State<'_, AppState>,
+    inference: State<'_, Arc<Inference>>,
+    index: usize,
+    conf_threshold: f32,
+    nms_threshold: f32,
+) -> Result<Document> {
+    let mut state = state.write().await;
+    let document = state
+        .documents
+        .get_mut(index)
+        .ok_or_else(|| anyhow::anyhow!("Document not found"))?;
+
+    let (text_blocks, segment) = inference
+        .detect(&document.image, conf_threshold, nms_threshold)
+        .await?;
+    document.text_blocks = text_blocks;
+    document.segment = Some(segment);
+
+    Ok(document.clone())
+}
+
+#[tauri::command]
+pub async fn ocr(
+    state: State<'_, AppState>,
+    inference: State<'_, Arc<Inference>>,
+    index: usize,
+) -> Result<Document> {
+    let mut state = state.write().await;
+    let document = state
+        .documents
+        .get_mut(index)
+        .ok_or_else(|| anyhow::anyhow!("Document not found"))?;
+
+    let text_blocks = inference
+        .ocr(&document.image, &document.text_blocks)
+        .await?;
+    document.text_blocks = text_blocks;
+
+    Ok(document.clone())
+}
+
+#[tauri::command]
+pub async fn inpaint(
+    state: State<'_, AppState>,
+    inference: State<'_, Arc<Inference>>,
+    index: usize,
+) -> Result<Document> {
+    let mut state = state.write().await;
+    let document = state
+        .documents
+        .get_mut(index)
+        .ok_or_else(|| anyhow::anyhow!("Document not found"))?;
+
+    let segment = document
+        .segment
+        .as_ref()
+        .ok_or_else(|| anyhow::anyhow!("Segment image not found"))?;
+
+    let inpainted = inference.inpaint(&document.image, segment).await?;
+    document.inpainted = Some(inpainted);
+
+    Ok(document.clone())
 }

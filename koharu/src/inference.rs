@@ -70,12 +70,7 @@ impl Inference {
 
                 Ok(TextBlock {
                     text: text.into(),
-                    x: block.x,
-                    y: block.y,
-                    width: block.width,
-                    height: block.height,
-                    confidence: block.confidence,
-                    translation: block.translation.clone(),
+                    ..block.clone()
                 })
             })
             .collect()
