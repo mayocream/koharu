@@ -1,5 +1,5 @@
 [workspace]
-members = ["comic-text-detector", "koharu", "lama", "manga-ocr"]
+members = ["comic-text-detector", "koharu", "lama", "llm", "manga-ocr"]
 resolver = "3"
 
 [workspace.package]
@@ -18,7 +18,8 @@ comic-text-detector = { path = "./comic-text-detector" }
 manga-ocr = { path = "./manga-ocr" }
 lama = { path = "./lama" }
 
-candle-transformers = "0.9"
+candle-transformers = "=0.9.2-alpha.1"
+candle-core = "=0.9.2-alpha.1"
 hf-hub = "0.4"
 image = "0.25"
 ort = "=2.0.0-rc.10"
@@ -44,6 +45,7 @@ tauri-build = "2.5"
 blake3 = "1.8"
 lru = "0.16"
 rayon = "1.11"
+tokenizers = "0.22"
 
 [profile.release]
 opt-level = "z"
