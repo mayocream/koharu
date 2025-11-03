@@ -8,12 +8,19 @@ import { ScrollArea } from 'radix-ui'
 export function Canvas() {
   const docs = useAppStore((state) => state.documents)
   const currentDocIdx = useAppStore((state) => state.currentDocumentIndex)
+  const scale = useAppStore((state) => state.scale)
   const currentDocument = docs[currentDocIdx]
+  const scaleRatio = scale / 100
 
   return (
     <ScrollArea.Root className='flex flex-1 min-w-0 min-h-0 bg-neutral-100'>
       <ScrollArea.Viewport className='size-full grid place-content-center-safe'>
-        <Stage width={currentDocument?.width} height={currentDocument?.height}>
+        <Stage
+          width={currentDocument?.width * scaleRatio}
+          height={currentDocument?.height * scaleRatio}
+          scaleX={scaleRatio}
+          scaleY={scaleRatio}
+        >
           <Layer>
             <Image data={currentDocument?.image} />
           </Layer>
@@ -36,11 +43,23 @@ export function Canvas() {
 }
 
 export function CanvasControl() {
-  // Controls are inert without a backing store; keep UI minimal/no-op.
+  const scale = useAppStore((state) => state.scale)
+  const setScale = useAppStore((state) => state.setScale)
+
   return (
-    <div className='flex items-center justify-end gap-3 border border-neutral-300 px-2 py-1'>
+    <div className='flex items-center justify-end gap-3 border-t border-neutral-300 px-2 py-1'>
       <div className='flex items-center gap-1 text-sm text-neutral-500'>
-        Scale (%)
+        Scale
+        <input
+          type='number'
+          min={10}
+          max={200}
+          value={scale}
+          onChange={(e) => setScale(Number(e.target.value))}
+          step={10}
+          className='w-12 rounded border border-neutral-300 px-1 py-0.5 text-right focus:outline-none'
+        />
+        (%)
       </div>
     </div>
   )
