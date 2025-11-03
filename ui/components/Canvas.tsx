@@ -1,15 +1,20 @@
 'use client'
 
 import { useAppStore } from '@/lib/store'
-import { Stage, Layer } from 'react-konva'
+import { Stage, Layer, Rect, Circle, Text } from 'react-konva'
 import { Image } from '@/components/Image'
 import { ScrollArea } from 'radix-ui'
+import { TextBlock } from '@/types'
 
 export function Canvas() {
-  const docs = useAppStore((state) => state.documents)
-  const currentDocIdx = useAppStore((state) => state.currentDocumentIndex)
-  const scale = useAppStore((state) => state.scale)
-  const currentDocument = docs[currentDocIdx]
+  const {
+    documents,
+    currentDocumentIndex,
+    scale,
+    showSegmentationMask,
+    showInpaintedImage,
+  } = useAppStore()
+  const currentDocument = documents[currentDocumentIndex]
   const scaleRatio = scale / 100
 
   return (
@@ -23,6 +28,18 @@ export function Canvas() {
         >
           <Layer>
             <Image data={currentDocument?.image} />
+            <Image
+              data={currentDocument?.segment}
+              visible={showSegmentationMask}
+              opacity={0.5}
+            />
+            <Image
+              data={currentDocument?.inpainted}
+              visible={showInpaintedImage}
+            />
+          </Layer>
+          <Layer>
+            <TextBlockAnnotations />
           </Layer>
         </Stage>
       </ScrollArea.Viewport>
@@ -62,5 +79,47 @@ export function CanvasControl() {
         (%)
       </div>
     </div>
+  )
+}
+
+function TextBlockAnnotations() {
+  const currentDocument = useAppStore(
+    (state) => state.documents[state.currentDocumentIndex]
+  )
+
+  return (
+    <>
+      {currentDocument?.textBlocks.map((block, index) => (
+        <TextBlockAnnotation key={index} block={block} index={index} />
+      ))}
+    </>
+  )
+}
+
+function TextBlockAnnotation({
+  block,
+  index,
+}: {
+  block: TextBlock
+  index: number
+}) {
+  return (
+    <>
+      <Rect
+        x={block.x}
+        y={block.y}
+        width={block.width}
+        height={block.height}
+        stroke='rgba(255, 0, 0, 0.5)'
+      />
+      <Circle x={block.x} y={block.y} radius={9} fill='rgba(255, 0, 0, 0.7)' />
+      <Text
+        x={block.x - 4}
+        y={block.y - 6}
+        text={(index + 1).toString()}
+        fontSize={12}
+        fill='white'
+      />
+    </>
   )
 }
