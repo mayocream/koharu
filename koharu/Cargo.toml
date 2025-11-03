@@ -33,6 +33,7 @@ blake3 = { workspace = true }
 lru = { workspace = true }
 tokio = { workspace = true }
 rayon = { workspace = true }
+imageproc = { workspace = true }
 
 [features]
 cuda = ["ort/cuda", "comic-text-detector/cuda", "manga-ocr/cuda", "lama/cuda"]

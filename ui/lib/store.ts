@@ -19,7 +19,7 @@ type AppState = {
   setShowInpaintedImage: (show: boolean) => void
   detect: (confThreshold: number, nmsThreshold: number) => Promise<void>
   ocr: () => Promise<void>
-  inpaint: () => Promise<void>
+  inpaint: (dilateKernelSize: number, erodeDistance: number) => Promise<void>
 }
 
 export const useAppStore = create<AppState>((set, get) => ({
@@ -74,9 +74,13 @@ export const useAppStore = create<AppState>((set, get) => ({
       ],
     })
   },
-  inpaint: async () => {
+  inpaint: async (dilateKernelSize: number, erodeDistance: number) => {
     const index = get().currentDocumentIndex
-    const doc: Document = await invoke('inpaint', { index })
+    const doc: Document = await invoke('inpaint', {
+      index,
+      dilateKernelSize,
+      erodeDistance,
+    })
     set({
       documents: [
         ...get().documents.slice(0, index),

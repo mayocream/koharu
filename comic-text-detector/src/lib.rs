@@ -131,14 +131,6 @@ impl ComicTextDetector {
         let segment = image::GrayImage::from_vec(1024, 1024, segment)
             .ok_or_else(|| anyhow::anyhow!("Failed to create GrayImage"))?;
 
-        // dilate the mask
-        let segment = imageproc::morphology::grayscale_dilate(
-            &segment,
-            &imageproc::morphology::Mask::square(3),
-        );
-        let segment =
-            imageproc::morphology::erode(&segment, imageproc::distance_transform::Norm::L2, 1);
-
         // resize back to original size
         let segment = DynamicImage::ImageLuma8(segment);
         let segment = segment.resize_exact(

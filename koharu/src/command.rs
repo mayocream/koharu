@@ -86,6 +86,8 @@ pub async fn inpaint(
     state: State<'_, AppState>,
     inference: State<'_, Arc<Inference>>,
     index: usize,
+    dilate_kernel_size: u8,
+    erode_distance: u8,
 ) -> Result<Document> {
     let mut state = state.write().await;
     let document = state
@@ -98,7 +100,9 @@ pub async fn inpaint(
         .as_ref()
         .ok_or_else(|| anyhow::anyhow!("Segment image not found"))?;
 
-    let inpainted = inference.inpaint(&document.image, segment).await?;
+    let inpainted = inference
+        .inpaint(&document.image, segment, dilate_kernel_size, erode_distance)
+        .await?;
     document.inpainted = Some(inpainted);
 
     Ok(document.clone())

@@ -100,6 +100,9 @@ function InpaintingPanel() {
     setShowInpaintedImage,
   } = useAppStore()
 
+  const [dilateKernelSize, setDilateKernelSize] = useState(9)
+  const [erodeDistance, setErodeDistance] = useState(3)
+
   return (
     <Panel title='Inpainting'>
       <div className='flex flex-col gap-3'>
@@ -123,9 +126,41 @@ function InpaintingPanel() {
           </Switch.Root>
           <span>Show inpainted image</span>
         </label>
+        <div>
+          <div className='mb-1 text-sm'>Dilate kernel size</div>
+          <Slider.Root
+            className='relative flex h-5 w-full touch-none select-none items-center'
+            min={1}
+            max={20}
+            step={1}
+            value={[dilateKernelSize]}
+            onValueChange={(v) => setDilateKernelSize(v[0] ?? dilateKernelSize)}
+          >
+            <Slider.Track className='relative h-1 flex-1 rounded bg-neutral-200'>
+              <Slider.Range className='absolute h-full rounded bg-neutral-800' />
+            </Slider.Track>
+            <Slider.Thumb className='block h-3 w-3 rounded-full bg-neutral-800' />
+          </Slider.Root>
+        </div>
+        <div>
+          <div className='mb-1 text-sm'>Erode distance</div>
+          <Slider.Root
+            className='relative flex h-5 w-full touch-none select-none items-center'
+            min={1}
+            max={10}
+            step={1}
+            value={[erodeDistance]}
+            onValueChange={(v) => setErodeDistance(v[0] ?? erodeDistance)}
+          >
+            <Slider.Track className='relative h-1 flex-1 rounded bg-neutral-200'>
+              <Slider.Range className='absolute h-full rounded bg-neutral-800' />
+            </Slider.Track>
+            <Slider.Thumb className='block h-3 w-3 rounded-full bg-neutral-800' />
+          </Slider.Root>
+        </div>
         <div className='flex items-center justify-center'>
           <button
-            onClick={inpaint}
+            onClick={() => inpaint(dilateKernelSize, erodeDistance)}
             className='h-10 w-20 rounded border border-neutral-200 bg-white text-base hover:bg-neutral-100'
           >
             Inpaint

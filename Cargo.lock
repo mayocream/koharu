@@ -3056,6 +3056,7 @@ dependencies = [
  "blake3",
  "comic-text-detector",
  "image",
+ "imageproc",
  "lama",
  "lru",
  "manga-ocr",

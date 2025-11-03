@@ -80,9 +80,21 @@ impl Inference {
         &self,
         image: &SerializableDynamicImage,
         mask: &SerializableDynamicImage,
+        dilate_kernel_size: u8,
+        erode_distance: u8,
     ) -> Result<SerializableDynamicImage> {
+        let mask = imageproc::morphology::grayscale_dilate(
+            &mask.to_luma8(),
+            &imageproc::morphology::Mask::square(dilate_kernel_size),
+        );
+        let mask = imageproc::morphology::erode(
+            &mask,
+            imageproc::distance_transform::Norm::L2,
+            erode_distance,
+        );
+
         let mut lama = self.lama.lock().await;
-        let result = lama.inference(image, mask)?;
+        let result = lama.inference(image, &image::DynamicImage::ImageLuma8(mask))?;
 
         Ok(result.into())
     }
