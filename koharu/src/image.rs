@@ -6,43 +6,21 @@ use serde::{Deserialize, Serialize, Serializer};
 #[derive(Debug, Default, Clone)]
 pub struct SerializableDynamicImage(pub DynamicImage);
 
-#[derive(Serialize, Deserialize)]
-pub struct Webp {
-    #[serde(with = "serde_bytes")]
-    pub data: Vec<u8>,
-}
-
-impl TryFrom<&DynamicImage> for Webp {
-    type Error = image::ImageError;
-
-    fn try_from(image: &DynamicImage) -> Result<Self, image::ImageError> {
-        let rgba = image.to_rgba8();
-        let (width, height) = rgba.dimensions();
-        let raw = rgba.into_raw();
-
-        let mut buf = Vec::new();
-        let enc = WebPEncoder::new_lossless(&mut buf);
-        enc.encode(&raw, width, height, ColorType::Rgba8.into())?;
-
-        Ok(Webp { data: buf })
-    }
-}
-
-impl TryFrom<&Webp> for DynamicImage {
-    type Error = image::ImageError;
-
-    fn try_from(raw: &Webp) -> Result<Self, image::ImageError> {
-        image::load_from_memory(&raw.data)
-    }
-}
-
 impl Serialize for SerializableDynamicImage {
     fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
     where
         S: Serializer,
     {
-        let raw: Webp = (&self.0).try_into().map_err(serde::ser::Error::custom)?;
-        raw.serialize(serializer)
+        let rgba = self.0.to_rgba8();
+        let (width, height) = rgba.dimensions();
+        let raw = rgba.into_raw();
+
+        let mut buf = Vec::new();
+        let enc = WebPEncoder::new_lossless(&mut buf);
+        enc.encode(&raw, width, height, ColorType::Rgba8.into())
+            .map_err(serde::ser::Error::custom)?;
+
+        serde_bytes::serialize(&buf, serializer)
     }
 }
 
@@ -51,8 +29,8 @@ impl<'de> Deserialize<'de> for SerializableDynamicImage {
     where
         D: serde::Deserializer<'de>,
     {
-        let raw = &Webp::deserialize(deserializer)?;
-        let img: DynamicImage = raw.try_into().map_err(serde::de::Error::custom)?;
+        let bytes: Vec<u8> = serde_bytes::deserialize(deserializer)?;
+        let img = image::load_from_memory(&bytes).map_err(serde::de::Error::custom)?;
         Ok(SerializableDynamicImage(img))
     }
 }
