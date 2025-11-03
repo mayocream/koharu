@@ -11,8 +11,8 @@ export function Canvas() {
   const currentDocument = docs[currentDocIdx]
 
   return (
-    <ScrollArea.Root className='flex flex-1 overflow-hidden bg-neutral-100'>
-      <ScrollArea.Viewport className='size-full flex flex-1 items-center-safe justify-center-safe'>
+    <ScrollArea.Root className='flex flex-1 min-w-0 min-h-0 bg-neutral-100'>
+      <ScrollArea.Viewport className='size-full items-center-safe justify-center-safe'>
         <Stage
           width={currentDocument?.width}
           height={currentDocument?.height}
@@ -33,7 +33,7 @@ export function Canvas() {
         orientation='horizontal'
         className='flex h-2 select-none touch-none p-px'
       >
-        <ScrollArea.Thumb className='flex-1 rounded bg-neutral-300' />
+        <ScrollArea.Thumb className='rounded bg-neutral-300' />
       </ScrollArea.Scrollbar>
     </ScrollArea.Root>
   )
