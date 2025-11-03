@@ -1,12 +1,41 @@
 'use client'
-import { Plus, Minus } from 'lucide-react'
-import React from 'react'
+
+import { useAppStore } from '@/lib/store'
+import { Stage, Layer } from 'react-konva'
+import { Image } from '@/components/Image'
+import { ScrollArea } from 'radix-ui'
 
 export function Canvas() {
-  const [scale] = React.useState<number>(100)
-  // With no global store and no loaded image, this is a neutral canvas.
+  const docs = useAppStore((state) => state.documents)
+  const currentDocIdx = useAppStore((state) => state.currentDocumentIndex)
+  const currentDocument = docs[currentDocIdx]
+
   return (
-    <div className='flex min-h-0 flex-1 items-start justify-center overflow-auto bg-white' />
+    <ScrollArea.Root className='flex flex-1 overflow-hidden bg-neutral-100'>
+      <ScrollArea.Viewport className='size-full flex flex-1 items-center-safe justify-center-safe'>
+        <Stage
+          width={currentDocument?.width}
+          height={currentDocument?.height}
+          className='flex'
+        >
+          <Layer>
+            <Image data={currentDocument?.image} />
+          </Layer>
+        </Stage>
+      </ScrollArea.Viewport>
+      <ScrollArea.Scrollbar
+        orientation='vertical'
+        className='flex w-2 select-none touch-none p-px'
+      >
+        <ScrollArea.Thumb className='flex-1 rounded bg-neutral-300' />
+      </ScrollArea.Scrollbar>
+      <ScrollArea.Scrollbar
+        orientation='horizontal'
+        className='flex h-2 select-none touch-none p-px'
+      >
+        <ScrollArea.Thumb className='flex-1 rounded bg-neutral-300' />
+      </ScrollArea.Scrollbar>
+    </ScrollArea.Root>
   )
 }
 
@@ -19,8 +48,4 @@ export function CanvasControl() {
       </div>
     </div>
   )
-}
-
-function clamp(min: number, max: number, v: number) {
-  return Math.max(min, Math.min(max, v))
 }

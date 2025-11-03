@@ -1,6 +1,7 @@
 'use client'
 
 import { useAppStore } from '@/lib/store'
+import { convertToBlob } from '@/lib/util'
 import { AspectRatio, ScrollArea } from 'radix-ui'
 
 export function ThumbnailPanel() {
@@ -16,11 +17,7 @@ export function ThumbnailPanel() {
               <div key={file.id} className='w-full'>
                 <AspectRatio.Root ratio={3 / 4}>
                   <img
-                    src={URL.createObjectURL(
-                      new Blob([new Uint8Array(file.image)], {
-                        type: 'image/webp',
-                      })
-                    )}
+                    src={URL.createObjectURL(convertToBlob(file.image))}
                     alt={file.name}
                     className='size-full object-cover'
                   />
@@ -39,7 +36,7 @@ export function ThumbnailPanel() {
           orientation='vertical'
           className='flex w-2 select-none touch-none p-px'
         >
-          <ScrollArea.Thumb className='relative flex-1 rounded bg-neutral-300' />
+          <ScrollArea.Thumb className='flex-1 rounded bg-neutral-300' />
         </ScrollArea.Scrollbar>
       </ScrollArea.Root>
     </div>
