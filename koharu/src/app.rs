@@ -58,8 +58,7 @@ pub fn run() -> Result<()> {
         })
         .invoke_handler(tauri::generate_handler![
             command::open_external,
-            command::pick_files,
-            command::read_file
+            command::open_documents,
         ])
         .run(tauri::generate_context!())?;
 

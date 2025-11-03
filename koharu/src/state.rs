@@ -19,6 +19,7 @@ pub struct TextBlock {
 
 /// Represents a document with associated metadata and images.
 #[derive(Default, Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
 pub struct Document {
     pub id: String,
     pub path: PathBuf,

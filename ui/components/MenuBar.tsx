@@ -4,7 +4,7 @@ import { Menubar } from 'radix-ui'
 import { useAppStore } from '@/lib/store'
 
 export function MenuBar() {
-  const { pickFiles, openExternal } = useAppStore()
+  const { openDocuments, openExternal } = useAppStore()
 
   return (
     <div className='flex h-10 items-center gap-2 border-b border-black/10 bg-white px-2 text-black/95'>
@@ -22,7 +22,7 @@ export function MenuBar() {
             >
               <Menubar.Item
                 className='select-none rounded px-4 py-2 text-sm outline-none hover:bg-black/5 data-[state=open]:bg-black/5 data-highlighted:bg-black/5 data-disabled:pointer-events-none data-disabled:opacity-50'
-                onSelect={pickFiles}
+                onSelect={openDocuments}
               >
                 Open File...
               </Menubar.Item>

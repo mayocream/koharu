@@ -12,22 +12,24 @@ export function ThumbnailPanel() {
       <ScrollArea.Root className='flex-1 min-h-0'>
         <ScrollArea.Viewport className='size-full'>
           <div className='flex flex-col gap-2'>
-            {documents.map((file, index) => (
-              <div key={index} className='w-full'>
+            {documents.map((file) => (
+              <div key={file.id} className='w-full'>
                 <AspectRatio.Root ratio={3 / 4}>
                   <img
                     src={URL.createObjectURL(
-                      new Blob([file.image as BlobPart], { type: 'image/*' })
+                      new Blob([new Uint8Array(file.image)], {
+                        type: 'image/webp',
+                      })
                     )}
-                    alt={file.filename}
+                    alt={file.name}
                     className='size-full object-cover'
                   />
                 </AspectRatio.Root>
                 <div
                   className='mt-1 px-1 text-xs text-neutral-600 truncate text-center'
-                  title={file.filename}
+                  title={file.path}
                 >
-                  {file.filename}
+                  {file.name}
                 </div>
               </div>
             ))}

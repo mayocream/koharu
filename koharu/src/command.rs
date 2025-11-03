@@ -1,8 +1,4 @@
-use std::path::PathBuf;
-
-use tauri::ipc;
-
-use crate::result::Result;
+use crate::{result::Result, state::Document};
 
 #[tauri::command]
 pub fn open_external(url: &str) -> Result<()> {
@@ -12,18 +8,21 @@ pub fn open_external(url: &str) -> Result<()> {
 }
 
 #[tauri::command]
-pub fn pick_files() -> Result<Vec<PathBuf>> {
+pub fn open_documents() -> Result<Vec<Document>> {
     let paths = rfd::FileDialog::new()
-        .set_title("Select Files")
-        .add_filter("Images", &["png", "jpg", "jpeg", "webp"])
-        .pick_files()
-        .unwrap_or_default();
+        .add_filter("Image Files", &["png", "jpg", "jpeg", "webp"])
+        .add_filter("Koharu Document", &["khr"])
+        .set_title("Pick Files")
+        .pick_files();
 
-    Ok(paths)
-}
+    let mut documents = Vec::new();
 
-#[tauri::command]
-pub fn read_file(path: &str) -> ipc::Response {
-    let data = std::fs::read(path).unwrap();
-    ipc::Response::new(data)
+    if let Some(paths) = paths {
+        for path in paths {
+            let doc = Document::open(path)?;
+            documents.push(doc);
+        }
+    }
+
+    Ok(documents)
 }
