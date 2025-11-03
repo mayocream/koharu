@@ -12,12 +12,8 @@ export function Canvas() {
 
   return (
     <ScrollArea.Root className='flex flex-1 min-w-0 min-h-0 bg-neutral-100'>
-      <ScrollArea.Viewport className='size-full items-center-safe justify-center-safe'>
-        <Stage
-          width={currentDocument?.width}
-          height={currentDocument?.height}
-          className='flex'
-        >
+      <ScrollArea.Viewport className='size-full grid place-content-center-safe'>
+        <Stage width={currentDocument?.width} height={currentDocument?.height}>
           <Layer>
             <Image data={currentDocument?.image} />
           </Layer>
