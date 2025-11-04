@@ -9,7 +9,7 @@ struct Args {
     prompt: String,
 
     /// Model to use
-    #[arg(long, default_value = "qwen2.5-1.5b-it")]
+    #[arg(long, default_value = "qwen2-1.5b-it")]
     model: ModelId,
 
     /// Max new tokens

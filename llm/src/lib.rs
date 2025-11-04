@@ -16,8 +16,8 @@ use tokenizers::Tokenizer;
 pub enum ModelId {
     #[strum(serialize = "gemma-3-4b-it")]
     Gemma3_4BInstruct,
-    #[strum(serialize = "qwen2.5-1.5b-it")]
-    Qwen2_5_1_5BInstruct,
+    #[strum(serialize = "qwen2-1.5b-it")]
+    Qwen2_1_5BInstruct,
     #[strum(serialize = "sakura-1.5b-qwen2.5-1.0")]
     Sakura1_5BQwen2_5_1_0,
 }
@@ -40,7 +40,7 @@ impl ModelId {
                 filename: "gemma-3-4b-it-q4_0.gguf",
                 tokenizer_repo: "google/gemma-3-4b-it",
             },
-            ModelId::Qwen2_5_1_5BInstruct => ModelConfig {
+            ModelId::Qwen2_1_5BInstruct => ModelConfig {
                 repo: "Qwen/Qwen2-1.5B-Instruct-GGUF",
                 filename: "qwen2-1_5b-instruct-q4_0.gguf",
                 tokenizer_repo: "Qwen/Qwen2-1.5B-Instruct",
