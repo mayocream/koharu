@@ -1,7 +1,5 @@
 # Koharu
 
-![Koharu Logo](./assets/Koharu_Icon.png)
-
 Automated manga translation tool with LLM, written in **Rust**.
 
 Koharu introduces a new workflow for manga translation, utilizing the power of LLMs to automate the process. It combines the capabilities of object detection, OCR, inpainting, and LLMs to create a seamless translation experience.
