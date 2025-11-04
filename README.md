@@ -102,6 +102,11 @@ bun tauri build --features cuda
 
 After building, you can run the Koharu binary located in `target/release/`.
 
+## Related Projects
+
+- [LabelPlus](https://github.com/LabelPlus/LabelPlus) - A manga annotation tool with Photoshop integration.
+- [LunaTranslator](https://github.com/HIllya51/LunaTranslator) - Translation tool for visual novels and games.
+
 ## License
 
 Koharu is licensed under the [GNU General Public License v3.0](LICENSE).
