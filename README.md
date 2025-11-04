@@ -9,6 +9,14 @@ Under the hood, Koharu uses [ort](https://github.com/pykeio/ort) and [candle](ht
 > [!NOTE]
 > For help and support, please join our [Discord server](https://discord.gg/mHvHkxGnUY).
 
+## Features
+
+- **Automated Workflow**: From image input to translated output, Koharu automates the entire manga translation process.
+- **GPU Acceleration**: Leverages NVIDIA GPUs via CUDA for faster processing.
+- **High-Quality Models**: Utilizes state-of-the-art ONNX models for text detection, OCR, and inpainting.
+- **LLM Integration**: Supports various quantized LLM models in GGUF format for translation tasks.
+- **User-Friendly GUI**: Built with Tauri, providing an intuitive interface for users.
+
 ## GPU Acceleration
 
 Currently, Koharu only supports NVIDIA GPUs via CUDA.
@@ -27,9 +35,9 @@ Koharu relies on a mixin of ONNX models and LLM models to perform various tasks.
 
 Koharu uses several pre-trained models for different tasks:
 
-- [comic-text-detector](https://github.com/dmMaze/comic-text-detector) - Detects text in manga images.
-- [manga-ocr](https://github.com/kha-white/manga-ocr) - Extracts text from manga images.
-- [AnimeMangaInpainting](https://huggingface.co/dreMaz/AnimeMangaInpainting) - Finetuned LaMa model for inpainting manga images.
+- [comic-text-detector](https://github.com/dmMaze/comic-text-detector)
+- [manga-ocr](https://github.com/kha-white/manga-ocr)
+- [AnimeMangaInpainting](https://huggingface.co/dreMaz/AnimeMangaInpainting)
 
 The models will be automatically downloaded when you run Koharu for the first time.
 
