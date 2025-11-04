@@ -7,7 +7,7 @@ on:
 
 env:
   CARGO_TERM_COLOR: always
-  CUDA_COMPUTE_CAP: 12.0
+  CUDA_COMPUTE_CAP: 121
 
 jobs:
   build-windows:
