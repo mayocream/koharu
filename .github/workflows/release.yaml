@@ -19,6 +19,11 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       - uses: oven-sh/setup-bun@v2
+      - uses: Swatinem/rust-cache@v2
+      - uses: Jimver/cuda-toolkit@master
+        with:
+          cuda: '12.9.1'
+      - uses: ilammy/msvc-dev-cmd@v1
       - run: bun install
       - run: bun tauri build --features=cuda,bundle
       - name: Prepare distribution folder
