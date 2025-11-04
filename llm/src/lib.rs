@@ -94,6 +94,7 @@ impl Model {
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Display, EnumString)]
+#[strum(serialize_all = "lowercase")]
 pub enum ChatRole {
     System,
     User,
@@ -280,7 +281,10 @@ impl Llm {
                     0.0
                 }
             );
-            return self.decode(&[prompt_tokens.as_slice(), all_tokens.as_slice()].concat());
+            return self
+                .tokenizer
+                .decode(&all_tokens, true)
+                .map_err(anyhow::Error::msg);
         }
 
         // Generate tokens autoregressively
@@ -330,15 +334,9 @@ impl Llm {
             }
         );
 
-        self.decode(&[prompt_tokens.as_slice(), all_tokens.as_slice()].concat())
-    }
-
-    fn decode(&self, tokens: &[u32]) -> Result<String> {
-        let text = self
-            .tokenizer
-            .decode(tokens, true)
-            .map_err(anyhow::Error::msg)?;
-        Ok(text)
+        self.tokenizer
+            .decode(&all_tokens, true)
+            .map_err(anyhow::Error::msg)
     }
 
     fn format_chat_prompt(&self, messages: &[ChatMessage]) -> String {
