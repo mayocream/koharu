@@ -1,6 +1,6 @@
 use anyhow::Result;
 use clap::Parser;
-use llm::{Llm, LlmConfig};
+use llm::Which;
 
 #[derive(Parser, Debug)]
 #[command(author, version, about = "Gemma 3 GGUF runner (GPU only, Candle)")]
@@ -9,21 +9,9 @@ struct Args {
     #[arg(long, default_value = "You are Gemma 3. Briefly introduce yourself.")]
     prompt: String,
 
-    /// Override: HF repo that contains the GGUF
-    #[arg(long)]
-    gguf_repo: Option<String>,
-
-    /// Override: filename of the GGUF in the repo
-    #[arg(long)]
-    gguf_filename: Option<String>,
-
-    /// Override: local path to a GGUF file (skips download)
-    #[arg(long)]
-    gguf_path: Option<String>,
-
-    /// Override: HF repo with tokenizer.json
-    #[arg(long)]
-    tokenizer_repo: Option<String>,
+    /// Model to use
+    #[arg(long, default_value = "gemma-3-4b-it")]
+    model: Which,
 
     /// Max new tokens
     #[arg(long, default_value_t = 256)]
@@ -61,25 +49,8 @@ struct Args {
 fn main() -> Result<()> {
     let args = Args::parse();
 
-    let mut cfg = LlmConfig::default();
-    if let Some(v) = args.gguf_repo {
-        cfg.gguf_repo = v;
-    }
-    if let Some(v) = args.gguf_filename {
-        cfg.gguf_filename = v;
-    }
-    if let Some(v) = args.tokenizer_repo {
-        cfg.tokenizer_repo = v;
-    }
-    if let Some(v) = args.gguf_path {
-        cfg.gguf_path = Some(v.into());
-    }
-    eprintln!(
-        "Using\n  gguf_repo      = {}\n  gguf_filename  = {}\n  tokenizer_repo = {}\n  device         = GPU (CUDA)",
-        cfg.gguf_repo, cfg.gguf_filename, cfg.tokenizer_repo,
-    );
+    let mut llm = args.model.new()?;
 
-    let mut llm = Llm::new(cfg)?;
     let out = llm.generate(
         &args.prompt,
         args.max_tokens,
@@ -91,6 +62,7 @@ fn main() -> Result<()> {
         args.repeat_penalty,
         args.repeat_last_n,
     )?;
+
     println!("{}", out);
     Ok(())
 }

@@ -1,19 +1,76 @@
+use std::path::PathBuf;
+
 use anyhow::{Result, anyhow};
 use candle_core::quantized::gguf_file;
+use candle_core::utils::cuda_is_available;
 use candle_core::{Device, Tensor};
 use candle_transformers::generation::{LogitsProcessor, Sampling};
 use candle_transformers::models::quantized_gemma3;
-use hf_hub::{Repo, RepoType, api::sync::Api};
+use hf_hub::Cache;
+use hf_hub::api::sync::Api;
+use strum::{Display, EnumString};
 use tokenizers::Tokenizer;
 
-/// Minimal quantized LLM wrapper
-pub struct Llm {
-    device: Device,
-    model: Model,
-    tokenizer: Tokenizer,
-    eos_token_id: u32,
+/// Supported models
+#[derive(Debug, Clone, Copy, PartialEq, Eq, EnumString, Display)]
+pub enum Which {
+    #[strum(serialize = "gemma-3-4b-it")]
+    Gemma3_4BInstruct,
 }
 
+#[derive(Debug, Clone)]
+struct ModelConfig {
+    /// HF model repo hosting the `.gguf` file
+    repo: &'static str,
+    /// File name of the GGUF within the repo
+    filename: &'static str,
+    /// HF repo that contains `tokenizer.json`
+    tokenizer_repo: &'static str,
+}
+
+impl Which {
+    const fn config(&self) -> ModelConfig {
+        match self {
+            Which::Gemma3_4BInstruct => ModelConfig {
+                repo: "google/gemma-3-4b-it-qat-q4_0-gguf",
+                filename: "gemma-3-4b-it-q4_0.gguf",
+                tokenizer_repo: "google/gemma-3-4b-it",
+            },
+        }
+    }
+
+    pub fn cached(&self) -> bool {
+        let config = self.config();
+        let cache = Cache::default();
+
+        let model_path = cache.model(config.repo.to_string()).get(&config.filename);
+        let tokenizer_path = cache
+            .model(config.tokenizer_repo.to_string())
+            .get("tokenizer.json");
+
+        model_path.is_some() && tokenizer_path.is_some()
+    }
+
+    pub fn download(&self) -> Result<(PathBuf, PathBuf)> {
+        let config = self.config();
+        let api = Api::new()?;
+
+        // TODO: implement progress bar
+        let path = api.model(config.repo.to_string()).get(&config.filename)?;
+        let tokenizer_path = api
+            .model(config.tokenizer_repo.to_string())
+            .get("tokenizer.json")?;
+        Ok((path, tokenizer_path))
+    }
+
+    /// Load the selected model
+    pub fn new(&self) -> Result<Llm> {
+        let (model_path, tokenizer_path) = self.download()?;
+        Llm::new(model_path, tokenizer_path)
+    }
+}
+
+/// Supported model architectures
 enum Model {
     Gemma3(quantized_gemma3::ModelWeights),
 }
@@ -26,62 +83,22 @@ impl Model {
     }
 }
 
-#[derive(Clone, Debug)]
-pub struct LlmConfig {
-    /// HF model repo hosting the `.gguf` file
-    pub gguf_repo: String,
-    /// File name of the GGUF within the repo
-    pub gguf_filename: String,
-    /// Local GGUF path (skips download when set)
-    pub gguf_path: Option<std::path::PathBuf>,
-    /// HF repo that contains `tokenizer.json`
-    pub tokenizer_repo: String,
-}
-
-impl Default for LlmConfig {
-    fn default() -> Self {
-        // Defaults follow the Candle quantized Gemma 3 example.
-        // Override via env: LLM_GGUF_REPO, LLM_GGUF_FILENAME, LLM_TOKENIZER_REPO.
-        let gguf_repo = std::env::var("LLM_GGUF_REPO")
-            .unwrap_or_else(|_| "google/gemma-3-4b-it-qat-q4_0-gguf".to_string());
-        let gguf_filename = std::env::var("LLM_GGUF_FILENAME")
-            .unwrap_or_else(|_| "gemma-3-4b-it-q4_0.gguf".to_string());
-        let gguf_path = std::env::var("LLM_GGUF_PATH").ok().map(Into::into);
-        let tokenizer_repo = std::env::var("LLM_TOKENIZER_REPO")
-            .unwrap_or_else(|_| "google/gemma-3-4b-it".to_string());
-        Self {
-            gguf_repo,
-            gguf_filename,
-            gguf_path,
-            tokenizer_repo,
-        }
-    }
+/// Minimal quantized LLM wrapper
+pub struct Llm {
+    device: Device,
+    model: Model,
+    tokenizer: Tokenizer,
+    eos_token_id: u32,
 }
 
 impl Llm {
-    pub fn new(config: LlmConfig) -> Result<Self> {
-        // Download model and tokenizer paths
-        let api = Api::new()?;
-        let gguf_path = match &config.gguf_path {
-            Some(local) => local.clone(),
-            None => api
-                .repo(Repo::new(config.gguf_repo.clone(), RepoType::Model))
-                .get(&config.gguf_filename)
-                .map_err(|e| anyhow!(
-                    "Failed to download GGUF {}/{}: {}\n- If the model is gated (e.g., Gemma), accept terms and set HF_TOKEN.\n- Or set LLM_GGUF_PATH to a local .gguf file.\n- Or override with --gguf-repo/--gguf-filename.",
-                    config.gguf_repo, config.gguf_filename, e
-                ))?,
-        };
-        let tokenizer_path = api
-            .model(config.tokenizer_repo.clone())
-            .get("tokenizer.json")?;
-
+    pub fn new(model_path: PathBuf, tokenizer_path: PathBuf) -> Result<Self> {
         // Load tokenizer
         let tokenizer = Tokenizer::from_file(tokenizer_path).map_err(anyhow::Error::msg)?;
 
         // Peek GGUF metadata to choose device/loader
-        let mut file = std::fs::File::open(&gguf_path)?;
-        let ct = gguf_file::Content::read(&mut file).map_err(|e| e.with_path(&gguf_path))?;
+        let mut file = std::fs::File::open(&model_path)?;
+        let ct = gguf_file::Content::read(&mut file).map_err(|e| e.with_path(&model_path))?;
         let arch = ct
             .metadata
             .get("general.architecture")
@@ -96,8 +113,7 @@ impl Llm {
             ));
         }
 
-        // Device: require CUDA (no CPU inference supported here).
-        let device = device_gpu()?;
+        let device = device()?;
 
         // Rewind reader before loading tensors
         use std::io::Seek;
@@ -216,18 +232,12 @@ impl Llm {
     }
 }
 
-fn device_gpu() -> Result<Device> {
-    #[cfg(feature = "cuda")]
-    {
-        Device::new_cuda(0).map_err(|e| anyhow!(
-            "CUDA device unavailable: {}. This crate requires GPU; enable feature 'cuda' and ensure CUDA is accessible.",
-            e
-        ))
-    }
-    #[cfg(not(feature = "cuda"))]
-    {
-        Err(anyhow!(
-            "CUDA feature not enabled. Rebuild with `--features llm/cuda` (or workspace equivalent). CPU inference is disabled."
-        ))
+// refer: https://github.com/huggingface/candle/blob/d4545ebbbfb37d3cf0e228642ffaaa75b5d6bce9/candle-examples/src/lib.rs#L10
+pub fn device() -> Result<Device> {
+    if cuda_is_available() {
+        Ok(Device::new_cuda(0)?)
+    } else {
+        println!("Running on CPU, to run on GPU, build with `--features cuda`");
+        Ok(Device::Cpu)
     }
 }

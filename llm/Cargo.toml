@@ -18,6 +18,7 @@ anyhow = { workspace = true }
 tokenizers = { workspace = true }
 clap = { workspace = true }
 tracing = { workspace = true }
+strum = { workspace = true }
 
 [features]
 cuda = ["candle-core/cuda", "candle-transformers/cuda"]

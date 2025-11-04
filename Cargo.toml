@@ -46,6 +46,7 @@ blake3 = "1.8"
 lru = "0.16"
 rayon = "1.11"
 tokenizers = "0.22"
+strum = { version = "0.27", features = ["derive"] }
 
 [profile.release]
 opt-level = "z"
