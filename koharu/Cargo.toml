@@ -36,7 +36,6 @@ tokio = { workspace = true }
 rayon = { workspace = true }
 imageproc = { workspace = true }
 strum = { workspace = true }
-futures = { workspace = true }
 
 [features]
 cuda = [
