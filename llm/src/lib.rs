@@ -18,6 +18,8 @@ pub enum ModelId {
     Gemma3_4BInstruct,
     #[strum(serialize = "qwen2.5-1.5b-it")]
     Qwen2_5_1_5BInstruct,
+    #[strum(serialize = "sakura-1.5b-qwen2.5-1.0")]
+    Sakura1_5BQwen2_5_1_0,
 }
 
 #[derive(Debug, Clone)]
@@ -42,6 +44,11 @@ impl ModelId {
                 repo: "Qwen/Qwen2-1.5B-Instruct-GGUF",
                 filename: "qwen2-1_5b-instruct-q4_0.gguf",
                 tokenizer_repo: "Qwen/Qwen2-1.5B-Instruct",
+            },
+            ModelId::Sakura1_5BQwen2_5_1_0 => ModelConfig {
+                repo: "SakuraLLM/Sakura-1.5B-Qwen2.5-v1.0-GGUF",
+                filename: "sakura-1.5b-qwen2.5-v1.0-fp16.gguf",
+                tokenizer_repo: "Qwen/Qwen2.5-1.5B-Instruct",
             },
         }
     }
