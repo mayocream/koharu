@@ -1,10 +1,11 @@
 use std::sync::Arc;
 
+use ::llm::ModelId;
 use rayon::iter::{IntoParallelIterator, ParallelIterator};
 use tauri::State;
 
 use crate::{
-    inference::Inference,
+    llm, onnx,
     result::Result,
     state::{AppState, Document},
 };
@@ -41,7 +42,7 @@ pub async fn open_documents(state: State<'_, AppState>) -> Result<Vec<Document>>
 #[tauri::command]
 pub async fn detect(
     state: State<'_, AppState>,
-    inference: State<'_, Arc<Inference>>,
+    model: State<'_, Arc<onnx::Model>>,
     index: usize,
     conf_threshold: f32,
     nms_threshold: f32,
@@ -52,7 +53,7 @@ pub async fn detect(
         .get_mut(index)
         .ok_or_else(|| anyhow::anyhow!("Document not found"))?;
 
-    let (text_blocks, segment) = inference
+    let (text_blocks, segment) = model
         .detect(&document.image, conf_threshold, nms_threshold)
         .await?;
     document.text_blocks = text_blocks;
@@ -64,7 +65,7 @@ pub async fn detect(
 #[tauri::command]
 pub async fn ocr(
     state: State<'_, AppState>,
-    inference: State<'_, Arc<Inference>>,
+    model: State<'_, Arc<onnx::Model>>,
     index: usize,
 ) -> Result<Document> {
     let mut state = state.write().await;
@@ -73,9 +74,7 @@ pub async fn ocr(
         .get_mut(index)
         .ok_or_else(|| anyhow::anyhow!("Document not found"))?;
 
-    let text_blocks = inference
-        .ocr(&document.image, &document.text_blocks)
-        .await?;
+    let text_blocks = model.ocr(&document.image, &document.text_blocks).await?;
     document.text_blocks = text_blocks;
 
     Ok(document.clone())
@@ -84,7 +83,7 @@ pub async fn ocr(
 #[tauri::command]
 pub async fn inpaint(
     state: State<'_, AppState>,
-    inference: State<'_, Arc<Inference>>,
+    model: State<'_, Arc<onnx::Model>>,
     index: usize,
     dilate_kernel_size: u8,
     erode_distance: u8,
@@ -100,10 +99,30 @@ pub async fn inpaint(
         .as_ref()
         .ok_or_else(|| anyhow::anyhow!("Segment image not found"))?;
 
-    let inpainted = inference
+    let inpainted = model
         .inpaint(&document.image, segment, dilate_kernel_size, erode_distance)
         .await?;
     document.inpainted = Some(inpainted);
 
     Ok(document.clone())
+}
+
+#[tauri::command]
+pub async fn llm_list() -> Vec<ModelId> {
+    ModelId::all()
+}
+
+#[tauri::command]
+pub async fn llm_load(model: State<'_, Arc<llm::Model>>, id: ModelId) -> Result<()> {
+    Ok(model.load(id).await)
+}
+
+#[tauri::command]
+pub async fn llm_offload(model: State<'_, Arc<llm::Model>>) -> Result<()> {
+    Ok(model.offload().await)
+}
+
+#[tauri::command]
+pub async fn llm_ready(model: State<'_, Arc<llm::Model>>) -> Result<bool> {
+    Ok(model.ready().await)
 }

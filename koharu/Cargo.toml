@@ -11,6 +11,10 @@ repository.workspace = true
 keywords.workspace = true
 
 [dependencies]
+comic-text-detector = { workspace = true }
+manga-ocr = { workspace = true }
+lama = { workspace = true }
+llm = { workspace = true }
 anyhow = { workspace = true }
 ort = { workspace = true }
 rfd = { workspace = true }
@@ -21,9 +25,6 @@ serde_json = { workspace = true }
 image = { workspace = true }
 tracing = { workspace = true }
 tracing-subscriber = { workspace = true }
-comic-text-detector = { workspace = true }
-manga-ocr = { workspace = true }
-lama = { workspace = true }
 postcard = { workspace = true }
 velopack = { workspace = true }
 semver = { workspace = true }
@@ -34,9 +35,17 @@ lru = { workspace = true }
 tokio = { workspace = true }
 rayon = { workspace = true }
 imageproc = { workspace = true }
+strum = { workspace = true }
+futures = { workspace = true }
 
 [features]
-cuda = ["ort/cuda", "comic-text-detector/cuda", "manga-ocr/cuda", "lama/cuda"]
+cuda = [
+    "ort/cuda",
+    "comic-text-detector/cuda",
+    "manga-ocr/cuda",
+    "lama/cuda",
+    "llm/cuda",
+]
 bundle = []
 
 [build-dependencies]

@@ -5,9 +5,7 @@ use rfd::MessageDialog;
 use tauri::Manager;
 use tokio::sync::RwLock;
 
-use crate::command;
-use crate::inference::Inference;
-use crate::state::State;
+use crate::{command, llm, onnx, state::State};
 
 fn initialize() -> Result<()> {
     tracing_subscriber::fmt().init();
@@ -40,10 +38,12 @@ fn initialize() -> Result<()> {
 }
 
 async fn setup(app: tauri::AppHandle) -> Result<()> {
-    let inference = Arc::new(Inference::new()?);
+    let onnx = Arc::new(onnx::Model::new()?);
+    let llm = Arc::new(llm::Model::new());
     let state = Arc::new(RwLock::new(State::default()));
 
-    app.manage(inference);
+    app.manage(onnx);
+    app.manage(llm);
     app.manage(state);
 
     app.get_webview_window("splashscreen").unwrap().close()?;

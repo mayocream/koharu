@@ -8,11 +8,11 @@ use candle_core::{Device, Tensor};
 use candle_transformers::generation::{LogitsProcessor, Sampling};
 use candle_transformers::models::{quantized_gemma3, quantized_qwen2};
 use hf_hub::api::sync::Api;
-use strum::{Display, EnumString};
+use strum::{Display, EnumIter, EnumString, IntoEnumIterator};
 use tokenizers::Tokenizer;
 
 /// Supported model identifiers
-#[derive(Debug, Clone, Copy, PartialEq, Eq, EnumString, Display)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, EnumString, Display, EnumIter)]
 pub enum ModelId {
     #[strum(serialize = "gemma-3-4b-it")]
     Gemma3_4BInstruct,
@@ -20,6 +20,12 @@ pub enum ModelId {
     Qwen2_1_5BInstruct,
     #[strum(serialize = "sakura-1.5b-qwen2.5-1.0")]
     Sakura1_5BQwen2_5_1_0,
+}
+
+impl ModelId {
+    pub fn all() -> Vec<Self> {
+        Self::iter().collect()
+    }
 }
 
 #[derive(Debug, Clone)]

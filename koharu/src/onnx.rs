@@ -9,13 +9,14 @@ use tokio::sync::Mutex;
 use crate::image::SerializableDynamicImage;
 use crate::state::TextBlock;
 
-pub struct Inference {
+#[derive(Debug, Clone)]
+pub struct Model {
     detector: Arc<Mutex<ComicTextDetector>>,
     ocr: Arc<Mutex<MangaOCR>>,
     lama: Arc<Mutex<Lama>>,
 }
 
-impl Inference {
+impl Model {
     pub fn new() -> Result<Self> {
         Ok(Self {
             detector: Arc::new(Mutex::new(ComicTextDetector::new()?)),
