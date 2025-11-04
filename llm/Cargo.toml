@@ -20,4 +20,4 @@ clap = { workspace = true }
 tracing = { workspace = true }
 
 [features]
-cuda = ["candle-core/cuda"]
+cuda = ["candle-core/cuda", "candle-transformers/cuda"]

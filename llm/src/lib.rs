@@ -1,32 +1,27 @@
-use anyhow::{anyhow, Result};
-use candle_core::{Device, Tensor};
+use anyhow::{Result, anyhow};
 use candle_core::quantized::gguf_file;
+use candle_core::{Device, Tensor};
 use candle_transformers::generation::{LogitsProcessor, Sampling};
-use candle_transformers::models::{
-    quantized_llama as qllama,
-    quantized_gemma3 as qgemma3,
-};
+use candle_transformers::models::quantized_gemma3;
 use hf_hub::{Repo, RepoType, api::sync::Api};
 use tokenizers::Tokenizer;
 
-/// Minimal quantized LLM wrapper able to download a GGUF for Gemma 3 12B and run inference.
+/// Minimal quantized LLM wrapper
 pub struct Llm {
     device: Device,
-    model: QuantModel,
+    model: Model,
     tokenizer: Tokenizer,
     eos_token_id: u32,
 }
 
-enum QuantModel {
-    Llama(qllama::ModelWeights),
-    Gemma3(qgemma3::ModelWeights),
+enum Model {
+    Gemma3(quantized_gemma3::ModelWeights),
 }
 
-impl QuantModel {
+impl Model {
     fn forward(&mut self, input: &Tensor, pos: usize) -> candle_core::Result<Tensor> {
         match self {
-            QuantModel::Llama(m) => m.forward(input, pos),
-            QuantModel::Gemma3(m) => m.forward(input, pos),
+            Model::Gemma3(m) => m.forward(input, pos),
         }
     }
 }
@@ -41,30 +36,24 @@ pub struct LlmConfig {
     pub gguf_path: Option<std::path::PathBuf>,
     /// HF repo that contains `tokenizer.json`
     pub tokenizer_repo: String,
-    /// Use CPU even if GPU is available
-    pub cpu: bool,
 }
 
 impl Default for LlmConfig {
     fn default() -> Self {
-        // Defaults target Gemma 3 12B Instruct GGUF conventions.
+        // Defaults follow the Candle quantized Gemma 3 example.
         // Override via env: LLM_GGUF_REPO, LLM_GGUF_FILENAME, LLM_TOKENIZER_REPO.
         let gguf_repo = std::env::var("LLM_GGUF_REPO")
-            .unwrap_or_else(|_| "lmstudio-community/gemma-3-12b-it-GGUF".to_string());
+            .unwrap_or_else(|_| "google/gemma-3-4b-it-qat-q4_0-gguf".to_string());
         let gguf_filename = std::env::var("LLM_GGUF_FILENAME")
-            .unwrap_or_else(|_| "gemma-3-12b-it-Q3_K_L.gguf".to_string());
+            .unwrap_or_else(|_| "gemma-3-4b-it-q4_0.gguf".to_string());
         let gguf_path = std::env::var("LLM_GGUF_PATH").ok().map(Into::into);
         let tokenizer_repo = std::env::var("LLM_TOKENIZER_REPO")
-            .unwrap_or_else(|_| "google/gemma-3-12b-it".to_string());
-        let cpu = std::env::var("LLM_CPU")
-            .map(|v| v == "1" || v.eq_ignore_ascii_case("true"))
-            .unwrap_or(false);
+            .unwrap_or_else(|_| "google/gemma-3-4b-it".to_string());
         Self {
             gguf_repo,
             gguf_filename,
             gguf_path,
             tokenizer_repo,
-            cpu,
         }
     }
 }
@@ -98,41 +87,44 @@ impl Llm {
             .get("general.architecture")
             .and_then(|v| v.to_string().ok())
             .map(|s| s.to_lowercase())
-            .unwrap_or_else(|| "llama".to_string());
+            .unwrap_or_default();
 
-        // Device: prefer CUDA, but Gemma3 quantized lacks CUDA RMSNorm, use CPU.
-        let mut device = device(config.cpu)?;
-        #[cfg(feature = "cuda")]
-        if arch == "gemma3" && !config.cpu {
-            // Fallback to CPU to avoid: "no cuda implementation for rms-norm"
-            device = Device::Cpu;
-            eprintln!(
-                "[llm] Gemma 3 quantized on CUDA is not fully supported (rms-norm). Falling back to CPU."
-            );
+        // Only support Gemma 3 for now.
+        if arch.as_str() != "gemma3" {
+            return Err(anyhow!(
+                "Unsupported architecture '{arch}'. This crate currently supports only Gemma 3 GGUFs."
+            ));
         }
+
+        // Device: require CUDA (no CPU inference supported here).
+        let device = device_gpu()?;
 
         // Rewind reader before loading tensors
         use std::io::Seek;
         file.rewind()?;
 
         // Load quantized model for the chosen architecture
-        let model = match arch.as_str() {
-            "gemma3" => QuantModel::Gemma3(qgemma3::ModelWeights::from_gguf(ct, &mut file, &device)?),
-            _ => QuantModel::Llama(qllama::ModelWeights::from_gguf(ct, &mut file, &device)?),
-        };
+        let model = Model::Gemma3(quantized_gemma3::ModelWeights::from_gguf(
+            ct, &mut file, &device,
+        )?);
 
-        // Resolve EOS token id depending on tokenizer vocab
-        // Try common candidates, otherwise fallback to 2 (often </s> in LLaMA-like).
+        // For Gemma 3, prefer <end_of_turn> as EOS; fall back to a few common alternatives.
         let vocab = tokenizer.get_vocab(true);
         let eos_token_id = vocab
-            .get("<eos>")
+            .get("<end_of_turn>")
+            .or_else(|| vocab.get("<eos>"))
             .or_else(|| vocab.get("</s>"))
             .or_else(|| vocab.get("<|endoftext|>"))
             .or_else(|| vocab.get("<|end_of_text|>"))
             .cloned()
             .unwrap_or(2);
 
-        Ok(Self { device, model, tokenizer, eos_token_id })
+        Ok(Self {
+            device,
+            model,
+            tokenizer,
+            eos_token_id,
+        })
     }
 
     /// Generate up to `max_tokens` following `prompt` using temperature/top-k/p settings.
@@ -144,13 +136,17 @@ impl Llm {
         top_k: Option<usize>,
         top_p: Option<f64>,
         seed: u64,
+        split_prompt: bool,
+        repeat_penalty: f32,
+        repeat_last_n: usize,
     ) -> Result<String> {
         // Encode prompt
         let enc = self
             .tokenizer
             .encode(prompt, true)
             .map_err(anyhow::Error::msg)?;
-        let mut all_tokens: Vec<u32> = enc.get_ids().to_vec();
+        let prompt_tokens: Vec<u32> = enc.get_ids().to_vec();
+        let mut all_tokens: Vec<u32> = Vec::new();
 
         // Build sampler
         let sampling = if temperature <= 0.0 {
@@ -165,32 +161,50 @@ impl Llm {
         };
         let mut logits_processor = LogitsProcessor::from_sampling(seed, sampling);
 
-        // Run prompt in one pass
-        if !all_tokens.is_empty() {
-            let input = Tensor::new(all_tokens.as_slice(), &self.device)?.unsqueeze(0)?;
+        // Process prompt (all at once or token by token)
+        let mut next_token = if !split_prompt {
+            let input = Tensor::new(prompt_tokens.as_slice(), &self.device)?.unsqueeze(0)?;
             let logits = self.model.forward(&input, 0)?.squeeze(0)?;
-            let next = logits_processor.sample(&logits)?;
-            all_tokens.push(next);
-            if next == self.eos_token_id {
-                return self.decode(&all_tokens);
+            logits_processor.sample(&logits)?
+        } else {
+            let mut next = 0u32;
+            for (pos, token) in prompt_tokens.iter().enumerate() {
+                let input = Tensor::new(&[*token], &self.device)?.unsqueeze(0)?;
+                let logits = self.model.forward(&input, pos)?.squeeze(0)?;
+                next = logits_processor.sample(&logits)?;
             }
+            next
+        };
+        all_tokens.push(next_token);
+        if next_token == self.eos_token_id {
+            return self.decode(&[prompt_tokens.as_slice(), all_tokens.as_slice()].concat());
         }
 
-        // Autoregressive sampling
-        for pos in all_tokens.len()..all_tokens.len() + max_tokens {
-            let last = *all_tokens
-                .last()
-                .ok_or_else(|| anyhow!("empty token state"))?;
-            let input = Tensor::new(&[last], &self.device)?.unsqueeze(0)?;
-            let logits = self.model.forward(&input, pos - 1)?.squeeze(0)?;
-            let next = logits_processor.sample(&logits)?;
-            all_tokens.push(next);
-            if next == self.eos_token_id {
+        // Generate tokens autoregressively
+        for index in 0..max_tokens.saturating_sub(1) {
+            let input = Tensor::new(&[next_token], &self.device)?.unsqueeze(0)?;
+            let logits = self
+                .model
+                .forward(&input, prompt_tokens.len() + index)?
+                .squeeze(0)?;
+            let logits = if (repeat_penalty - 1.0).abs() < f32::EPSILON {
+                logits
+            } else {
+                let start_at = all_tokens.len().saturating_sub(repeat_last_n);
+                candle_transformers::utils::apply_repeat_penalty(
+                    &logits,
+                    repeat_penalty,
+                    &all_tokens[start_at..],
+                )?
+            };
+            next_token = logits_processor.sample(&logits)?;
+            all_tokens.push(next_token);
+            if next_token == self.eos_token_id {
                 break;
             }
         }
 
-        self.decode(&all_tokens)
+        self.decode(&[prompt_tokens.as_slice(), all_tokens.as_slice()].concat())
     }
 
     fn decode(&self, tokens: &[u32]) -> Result<String> {
@@ -202,13 +216,18 @@ impl Llm {
     }
 }
 
-fn device(force_cpu: bool) -> Result<Device> {
-    if force_cpu {
-        return Ok(Device::Cpu);
-    }
+fn device_gpu() -> Result<Device> {
     #[cfg(feature = "cuda")]
-    if let Ok(dev) = Device::new_cuda(0) {
-        return Ok(dev);
+    {
+        Device::new_cuda(0).map_err(|e| anyhow!(
+            "CUDA device unavailable: {}. This crate requires GPU; enable feature 'cuda' and ensure CUDA is accessible.",
+            e
+        ))
     }
-    Ok(Device::Cpu)
+    #[cfg(not(feature = "cuda"))]
+    {
+        Err(anyhow!(
+            "CUDA feature not enabled. Rebuild with `--features llm/cuda` (or workspace equivalent). CPU inference is disabled."
+        ))
+    }
 }
