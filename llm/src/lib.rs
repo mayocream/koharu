@@ -1,12 +1,12 @@
 use std::io::Seek;
 use std::path::Path;
 
-use anyhow::{Result, bail};
+use anyhow::Result;
 use candle_core::quantized::gguf_file;
 use candle_core::utils::cuda_is_available;
 use candle_core::{Device, Tensor};
 use candle_transformers::generation::{LogitsProcessor, Sampling};
-use candle_transformers::models::quantized_gemma3;
+use candle_transformers::models::{quantized_gemma3, quantized_qwen2};
 use hf_hub::api::sync::Api;
 use strum::{Display, EnumString};
 use tokenizers::Tokenizer;
@@ -16,6 +16,8 @@ use tokenizers::Tokenizer;
 pub enum ModelId {
     #[strum(serialize = "gemma-3-4b-it")]
     Gemma3_4BInstruct,
+    #[strum(serialize = "qwen2.5-1.5b-it")]
+    Qwen2_5_1_5BInstruct,
 }
 
 #[derive(Debug, Clone)]
@@ -36,6 +38,11 @@ impl ModelId {
                 filename: "gemma-3-4b-it-q4_0.gguf",
                 tokenizer_repo: "google/gemma-3-4b-it",
             },
+            ModelId::Qwen2_5_1_5BInstruct => ModelConfig {
+                repo: "Qwen/Qwen2-1.5B-Instruct-GGUF",
+                filename: "qwen2-1_5b-instruct-q4_0.gguf",
+                tokenizer_repo: "Qwen/Qwen2-1.5B-Instruct",
+            },
         }
     }
 }
@@ -43,12 +50,14 @@ impl ModelId {
 /// Supported model architectures
 enum Model {
     Gemma3(quantized_gemma3::ModelWeights),
+    Qwen2(quantized_qwen2::ModelWeights),
 }
 
 impl Model {
     fn forward(&mut self, input: &Tensor, pos: usize) -> candle_core::Result<Tensor> {
         match self {
             Model::Gemma3(m) => m.forward(input, pos),
+            Model::Qwen2(m) => m.forward(input, pos),
         }
     }
 }
@@ -107,29 +116,31 @@ impl Llm {
             .map(|s| s.to_lowercase())
             .unwrap_or_default();
 
-        // Only support Gemma 3 for now.
-        if arch.as_str() != "gemma3" {
-            bail!("unsupported architecture '{arch}'. Only Gemma 3 GGUF is supported.");
-        }
-
         let device = device()?;
 
         // Rewind reader before loading tensors
         file.rewind()?;
 
         // Load quantized model for the chosen architecture
-        let model = Model::Gemma3(quantized_gemma3::ModelWeights::from_gguf(
-            ct, &mut file, &device,
-        )?);
+        let model = match arch.as_str() {
+            "gemma3" => Model::Gemma3(quantized_gemma3::ModelWeights::from_gguf(
+                ct, &mut file, &device,
+            )?),
+            "qwen2" => Model::Qwen2(quantized_qwen2::ModelWeights::from_gguf(
+                ct, &mut file, &device,
+            )?),
+            _ => anyhow::bail!("unsupported model architecture: {}", arch),
+        };
 
         // For Gemma 3, prefer <end_of_turn> as EOS; fall back to a few common alternatives.
         let vocab = tokenizer.get_vocab(true);
         let eos_token = vocab
-            .get("<end_of_turn>")
+            .get("<end_of_turn>") // Gemma
             .or_else(|| vocab.get("<eos>"))
             .or_else(|| vocab.get("</s>"))
             .or_else(|| vocab.get("<|endoftext|>"))
             .or_else(|| vocab.get("<|end_of_text|>"))
+            .or_else(|| vocab.get("<|im_end|>")) // Qwen
             .cloned()
             .unwrap_or(2);
 

@@ -2,14 +2,14 @@ use clap::Parser;
 use llm::{GenerateOptions, Llm, ModelId};
 
 #[derive(Parser, Debug)]
-#[command(author, version, about = "Gemma 3 GGUF runner (GPU only, Candle)")]
+#[command(author, version, about)]
 struct Args {
     /// Prompt to generate from
-    #[arg(long, default_value = "You are Gemma 3. Briefly introduce yourself.")]
+    #[arg(long, default_value = "Hello")]
     prompt: String,
 
     /// Model to use
-    #[arg(long, default_value = "gemma-3-4b-it")]
+    #[arg(long, default_value = "qwen2.5-1.5b-it")]
     model: ModelId,
 
     /// Max new tokens
