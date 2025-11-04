@@ -69,6 +69,52 @@ impl Model {
     }
 }
 
+#[derive(Debug, Clone, Copy)]
+struct Markers {
+    start: &'static str,
+    end: &'static str,
+    assistant_start: &'static str,
+}
+
+impl Model {
+    fn markers(&self) -> Markers {
+        match self {
+            Model::Gemma3(_) => Markers {
+                start: "<start_of_turn>",
+                end: "<end_of_turn>",
+                assistant_start: "<start_of_turn>assistant\n",
+            },
+            Model::Qwen2(_) => Markers {
+                start: "<|im_start|>",
+                end: "<|im_end|>",
+                assistant_start: "<|im_start|>assistant\n",
+            },
+        }
+    }
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Display, EnumString)]
+pub enum ChatRole {
+    System,
+    User,
+    Assistant,
+}
+
+#[derive(Debug, Clone)]
+pub struct ChatMessage {
+    role: ChatRole,
+    content: String,
+}
+
+impl ChatMessage {
+    pub fn new(role: ChatRole, content: impl Into<String>) -> Self {
+        Self {
+            role,
+            content: content.into(),
+        }
+    }
+}
+
 /// Minimal quantized LLM wrapper
 pub struct Llm {
     device: Device,
@@ -106,6 +152,18 @@ impl Default for GenerateOptions {
 }
 
 impl Llm {
+    /// Loads a quantized model from Hugging Face based on the given identifier.
+    /// Downloads artifacts if necessary, following Candle examples' pattern.
+    pub fn from_pretrained(which: ModelId) -> Result<Self> {
+        let cfg = which.config();
+        let api = Api::new()?;
+        let model_path = api.model(cfg.repo.to_string()).get(&cfg.filename)?;
+        let tokenizer_path = api
+            .model(cfg.tokenizer_repo.to_string())
+            .get("tokenizer.json")?;
+        Self::new(model_path, tokenizer_path)
+    }
+
     /// Constructs a new LLM instance from a quantized GGUF model and tokenizer.json.
     pub fn new(model_path: impl AsRef<Path>, tokenizer_path: impl AsRef<Path>) -> Result<Self> {
         // Load tokenizer
@@ -139,17 +197,22 @@ impl Llm {
             _ => anyhow::bail!("unsupported model architecture: {}", arch),
         };
 
-        // For Gemma 3, prefer <end_of_turn> as EOS; fall back to a few common alternatives.
-        let vocab = tokenizer.get_vocab(true);
-        let eos_token = vocab
-            .get("<end_of_turn>") // Gemma
-            .or_else(|| vocab.get("<eos>"))
-            .or_else(|| vocab.get("</s>"))
-            .or_else(|| vocab.get("<|endoftext|>"))
-            .or_else(|| vocab.get("<|end_of_text|>"))
-            .or_else(|| vocab.get("<|im_end|>")) // Qwen
-            .cloned()
-            .unwrap_or(2);
+        // Prefer the model's end-turn marker as EOS if it exists as a single special token;
+        // fall back to a few common alternatives.
+        let eos_token = {
+            let markers = model.markers();
+            let try_marker = |tok: &Tokenizer, s: &str| -> Option<u32> {
+                let enc = tok.encode(s, true).ok()?;
+                let ids = enc.get_ids();
+                if ids.len() == 1 { Some(ids[0]) } else { None }
+            };
+            try_marker(&tokenizer, markers.end)
+                .or_else(|| try_marker(&tokenizer, "<end_of_turn>"))
+                .or_else(|| tokenizer.get_vocab(true).get("<eos>").cloned())
+                .or_else(|| tokenizer.get_vocab(true).get("</s>").cloned())
+                .or_else(|| tokenizer.get_vocab(true).get("<|im_end|>").cloned())
+                .unwrap_or(2)
+        };
 
         Ok(Self {
             device,
@@ -161,7 +224,9 @@ impl Llm {
 
     /// Generate up to `max_tokens` following `prompt` using temperature/top-k/p settings.
     /// Logs simple performance metrics via `tracing`.
-    pub fn generate(&mut self, prompt: &str, opts: &GenerateOptions) -> Result<String> {
+    pub fn generate(&mut self, prompt: &[ChatMessage], opts: &GenerateOptions) -> Result<String> {
+        let prompt = self.format_chat_prompt(prompt);
+
         // Encode prompt
         let enc = self
             .tokenizer
@@ -276,16 +341,27 @@ impl Llm {
         Ok(text)
     }
 
-    /// Loads a quantized model from Hugging Face based on the given identifier.
-    /// Downloads artifacts if necessary, following Candle examples' pattern.
-    pub fn from_pretrained(which: ModelId) -> Result<Self> {
-        let cfg = which.config();
-        let api = Api::new()?;
-        let model_path = api.model(cfg.repo.to_string()).get(&cfg.filename)?;
-        let tokenizer_path = api
-            .model(cfg.tokenizer_repo.to_string())
-            .get("tokenizer.json")?;
-        Self::new(model_path, tokenizer_path)
+    fn format_chat_prompt(&self, messages: &[ChatMessage]) -> String {
+        let markers = self.model.markers();
+        let mut out = String::new();
+
+        for msg in messages {
+            out.push_str(markers.start);
+            out.push_str(msg.role.to_string().as_ref());
+            out.push('\n');
+            out.push_str(msg.content.as_str());
+            out.push_str(markers.end);
+            out.push('\n');
+        }
+
+        // If the last message isn't an assistant turn, open one to prompt generation.
+        if !messages
+            .last()
+            .is_some_and(|m| m.role == ChatRole::Assistant)
+        {
+            out.push_str(markers.assistant_start);
+        }
+        out
     }
 }
 
