@@ -35,6 +35,21 @@ We provide pre-built binaries for Windows, for other platforms, you may need to 
 bun install
 ```
 
+### Compile `candle` with CUDA feature
+
+The LLM feature heavily relies on [candle](https://github.com/huggingface/candle). To compile `candle-kernel` with CUDA support, you need:
+
+1. Download and install [CUDA toolkit 12.9](https://developer.nvidia.com/cuda-12-9-1-download-archive), and follow below steps to set up environment variables:
+
+    1. Add the CUDA `bin` directory to your `PATH` environment variable (e.g., `C:\Program Files\NVIDIA GPU Computing Toolkit\CUDA\v12.9\bin`).
+    2. Set the `CUDA_PATH` environment variable to point to your CUDA installation directory (e.g., `C:\Program Files\NVIDIA GPU Computing Toolkit\CUDA\v12.9`).
+    3. Make sure `nvcc` is accessible from the command line by running `nvcc --version`.
+
+2. Download and install [Visual Studio 2022](https://visualstudio.microsoft.com/downloads/), During installation, make sure to select the "Desktop development with C++" workload. Then, follow below steps to set up environment variables:
+
+    1. Open "x64 Native Tools Command Prompt for VS 2022" from the Start menu, and find the path of `cl.exe` by running `where cl`.
+    2. Add the directory containing `cl.exe` to your `PATH` environment variable.
+
 ### Run
 
 ```bash
