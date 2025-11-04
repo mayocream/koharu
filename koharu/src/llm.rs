@@ -1,16 +1,17 @@
-use llm::{Llm, ModelId};
+use llm::{ChatMessage, ChatRole, Llm, ModelId};
+use serde::{Deserialize, Serialize};
 use std::sync::Arc;
 use strum::Display;
 use tokio::sync::RwLock;
 
 /// Load state of the LLM
-#[derive(Clone, Display)]
+#[derive(Display)]
 #[strum(serialize_all = "lowercase")]
 pub enum State {
     Empty,
     Loading,
     #[strum(serialize = "ready")]
-    Ready(Arc<Llm>),
+    Ready(Llm),
     Failed(String),
 }
 
@@ -40,7 +41,7 @@ impl Model {
             match res {
                 Ok(Ok(llm)) => {
                     let mut guard = state_cloned.write().await;
-                    *guard = State::Ready(Arc::new(llm));
+                    *guard = State::Ready(llm);
                 }
                 Ok(Err(e)) => {
                     tracing::error!("LLM load error: {e}");
@@ -62,6 +63,12 @@ impl Model {
         self.state.read().await
     }
 
+    /// Returns a write guard to the internal state.
+    /// Needed for operations that mutate the loaded LLM instance.
+    pub async fn get_mut(&self) -> tokio::sync::RwLockWriteGuard<'_, State> {
+        self.state.write().await
+    }
+
     /// Drop the loaded model from memory.
     pub async fn offload(&self) {
         *self.state.write().await = State::Empty;
@@ -70,5 +77,29 @@ impl Model {
     /// Ready if the model is loaded into memory.
     pub async fn ready(&self) -> bool {
         matches!(*self.state.read().await, State::Ready(_))
+    }
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct Prompt {
+    system: String,
+    user: String,
+}
+
+impl Prompt {
+    pub fn new(system: impl Into<String>, user: impl Into<String>) -> Self {
+        Self {
+            system: system.into(),
+            user: user.into(),
+        }
+    }
+}
+
+impl From<Prompt> for Vec<ChatMessage> {
+    fn from(prompt: Prompt) -> Self {
+        vec![
+            ChatMessage::new(ChatRole::System, prompt.system),
+            ChatMessage::new(ChatRole::User, prompt.user),
+        ]
     }
 }

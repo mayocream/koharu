@@ -66,6 +66,11 @@ pub fn run() -> Result<()> {
             command::detect,
             command::ocr,
             command::inpaint,
+            command::llm_list,
+            command::llm_load,
+            command::llm_offload,
+            command::llm_ready,
+            command::llm_generate,
         ])
         .run(tauri::generate_context!())?;
 

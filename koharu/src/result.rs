@@ -4,6 +4,9 @@ pub enum CommandError {
     File(#[from] std::io::Error),
 
     #[error(transparent)]
+    Parse(#[from] strum::ParseError),
+
+    #[error(transparent)]
     Anyhow(#[from] anyhow::Error),
 }
 

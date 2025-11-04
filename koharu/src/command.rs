@@ -1,6 +1,6 @@
-use std::sync::Arc;
+use std::{str::FromStr, sync::Arc};
 
-use ::llm::ModelId;
+use ::llm::{GenerateOptions, ModelId};
 use rayon::iter::{IntoParallelIterator, ParallelIterator};
 use tauri::State;
 
@@ -108,12 +108,17 @@ pub async fn inpaint(
 }
 
 #[tauri::command]
-pub async fn llm_list() -> Vec<ModelId> {
+pub fn llm_list() -> Vec<String> {
     ModelId::all()
+        .into_iter()
+        .map(|id| id.to_string())
+        .collect()
 }
 
 #[tauri::command]
-pub async fn llm_load(model: State<'_, Arc<llm::Model>>, id: ModelId) -> Result<()> {
+pub async fn llm_load(model: State<'_, Arc<llm::Model>>, id: String) -> Result<()> {
+    let id = ModelId::from_str(&id)?;
+
     Ok(model.load(id).await)
 }
 
@@ -125,4 +130,22 @@ pub async fn llm_offload(model: State<'_, Arc<llm::Model>>) -> Result<()> {
 #[tauri::command]
 pub async fn llm_ready(model: State<'_, Arc<llm::Model>>) -> Result<bool> {
     Ok(model.ready().await)
+}
+
+#[tauri::command]
+pub async fn llm_generate(
+    model: State<'_, Arc<llm::Model>>,
+    prompt: llm::Prompt,
+) -> Result<String> {
+    let mut guard = model.get_mut().await;
+    match &mut *guard {
+        llm::State::Ready(llm) => {
+            let messages: Vec<::llm::ChatMessage> = prompt.into();
+            let response = llm.generate(&messages, &GenerateOptions::default())?;
+            Ok(response)
+        }
+        llm::State::Loading => Err(anyhow::anyhow!("Model is still loading").into()),
+        llm::State::Failed(e) => Err(anyhow::anyhow!("Model failed to load: {}", e).into()),
+        llm::State::Empty => Err(anyhow::anyhow!("No model is loaded").into()),
+    }
 }
