@@ -20,5 +20,6 @@ jobs:
       - uses: Jimver/cuda-toolkit@master
         with:
           cuda: '12.9.1'
+      - uses: ilammy/msvc-dev-cmd@v1
       - run: bun install
       - run: bun tauri build --features=cuda
