@@ -1,6 +1,5 @@
-use anyhow::Result;
 use clap::Parser;
-use llm::Which;
+use llm::{GenerateOptions, Llm, ModelId};
 
 #[derive(Parser, Debug)]
 #[command(author, version, about = "Gemma 3 GGUF runner (GPU only, Candle)")]
@@ -11,14 +10,14 @@ struct Args {
 
     /// Model to use
     #[arg(long, default_value = "gemma-3-4b-it")]
-    model: Which,
+    model: ModelId,
 
     /// Max new tokens
-    #[arg(long, default_value_t = 256)]
+    #[arg(long, default_value_t = 1000)]
     max_tokens: usize,
 
     /// Temperature (0 = greedy)
-    #[arg(long, default_value_t = 0.7)]
+    #[arg(long, default_value_t = 0.8)]
     temperature: f64,
 
     /// Top-k (optional)
@@ -30,7 +29,7 @@ struct Args {
     top_p: Option<f64>,
 
     /// PRNG seed
-    #[arg(long, default_value_t = 42)]
+    #[arg(long, default_value_t = 299792458)]
     seed: u64,
 
     /// Process prompt elements separately (follows example behavior)
@@ -46,22 +45,23 @@ struct Args {
     repeat_last_n: usize,
 }
 
-fn main() -> Result<()> {
+fn main() -> anyhow::Result<()> {
     let args = Args::parse();
 
-    let mut llm = args.model.new()?;
+    let mut llm = Llm::from_pretrained(args.model)?;
 
-    let out = llm.generate(
-        &args.prompt,
-        args.max_tokens,
-        args.temperature,
-        args.top_k,
-        args.top_p,
-        args.seed,
-        args.split_prompt,
-        args.repeat_penalty,
-        args.repeat_last_n,
-    )?;
+    let opts = GenerateOptions {
+        max_tokens: args.max_tokens,
+        temperature: args.temperature,
+        top_k: args.top_k,
+        top_p: args.top_p,
+        seed: args.seed,
+        split_prompt: args.split_prompt,
+        repeat_penalty: args.repeat_penalty,
+        repeat_last_n: args.repeat_last_n,
+    };
+
+    let out = llm.generate(&args.prompt, &opts)?;
 
     println!("{}", out);
     Ok(())
