@@ -15,7 +15,8 @@
       "icons/128x128@2x.png",
       "icons/icon.icns",
       "icons/icon.ico"
-    ]
+    ],
+    "createUpdaterArtifacts": true
   },
   "app": {
     "security": {
@@ -40,5 +41,16 @@
         "center": true
       }
     ]
+  },
+  "plugins": {
+    "updater": {
+      "pubkey": "dW50cnVzdGVkIGNvbW1lbnQ6IG1pbmlzaWduIHB1YmxpYyBrZXk6IDdEMzkyNDMzRTVCOTM4QTIKUldTaU9MbmxNeVE1ZlpDMVNTOEZUL0MwVU9oaGVCdU5SVDFFa055dWpGRjh1dUtjaU5ORUUybUQK",
+      "endpoints": [
+        "https://github.com/mayocream/koharu/releases/latest/download/latest.json"
+      ],
+      "windows": {
+        "installMode": "passive"
+      }
+    }
   }
 }

@@ -51,6 +51,9 @@ pub fn run() -> Result<()> {
 
     tauri::Builder::default()
         .setup(|app| {
+            app.handle()
+                .plugin(tauri_plugin_updater::Builder::new().build())
+                .unwrap();
             tauri::async_runtime::spawn(setup(app.handle().clone()));
             Ok(())
         })
