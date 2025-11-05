@@ -38,5 +38,4 @@ jobs:
         with:
           name: tauri-app
           path: |
-            target/release/bundle/*
-            target/release/*.exe
+            target/release/**/*.exe
