@@ -3119,6 +3119,7 @@ dependencies = [
  "anyhow",
  "blake3",
  "comic-text-detector",
+ "hf-hub",
  "image",
  "imageproc",
  "lama",
