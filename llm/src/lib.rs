@@ -378,3 +378,35 @@ pub fn device() -> Result<Device> {
         Ok(Device::Cpu)
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_device() {
+        let device = device();
+        assert!(device.is_ok());
+    }
+
+    #[test]
+    fn test_translation_task() {
+        let mut llm = Llm::from_pretrained(ModelId::Sakura1_5BQwen2_5_1_0).unwrap();
+        let messages = vec![
+            ChatMessage::new(
+                ChatRole::System,
+                "你是一个轻小说翻译模型，可以流畅通顺地以日本轻小说的风格将日文翻译成简体中文，并联系上下文正确使用人称代词，不擅自添加原文中没有的代词。",
+            ),
+            ChatMessage::new(
+                ChatRole::User,
+                "彼は静かに微笑んだ。「君の言う通りだ。私たちは共に戦うべきだ」",
+            ),
+        ];
+
+        let response = llm
+            .generate(&messages, &GenerateOptions::default())
+            .unwrap();
+
+        println!("Translation: {}", response);
+    }
+}

@@ -1,7 +1,8 @@
 'use client'
+
 import { Slider, Switch, ScrollArea } from 'radix-ui'
 import { ChevronDown, ChevronUp } from 'lucide-react'
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import { useAppStore } from '@/lib/store'
 
 function Panel({
@@ -171,7 +172,15 @@ function InpaintingPanel() {
   )
 }
 
-function TextBlock({ index, text }: { index: number; text?: string }) {
+function TextBlock({
+  index,
+  text,
+  translation,
+}: {
+  index: number
+  text?: string
+  translation?: string
+}) {
   return (
     <div className='rounded border border-neutral-200 bg-white p-2'>
       <div className='flex items-start gap-2'>
@@ -179,7 +188,7 @@ function TextBlock({ index, text }: { index: number; text?: string }) {
           {index}
         </div>
         <div className='text-sm text-neutral-900 wrap-break-word min-w-0 flex-1'>
-          {text || '<empty>'}
+          {translation || text || '<empty>'}
         </div>
       </div>
     </div>
@@ -194,12 +203,19 @@ export function Panels() {
     <div className='flex min-h-0 h-full w-64 flex-col gap-3 border-l border-neutral-200 bg-neutral-50 p-2'>
       <DetectionPanel />
       <InpaintingPanel />
+      <LlmPanel />
+
       <ScrollArea.Root className='flex-1 overflow-hidden'>
         <ScrollArea.Viewport className='h-full w-full'>
           <div className='flex flex-col gap-2 p-1'>
             {currentDocument?.textBlocks.length ? (
               currentDocument.textBlocks.map((block, index) => (
-                <TextBlock key={index} index={index + 1} text={block.text} />
+                <TextBlock
+                  key={index}
+                  index={index + 1}
+                  text={block.text}
+                  translation={block.translation}
+                />
               ))
             ) : (
               <div className='text-sm text-neutral-600'>
@@ -216,5 +232,107 @@ export function Panels() {
         </ScrollArea.Scrollbar>
       </ScrollArea.Root>
     </div>
+  )
+}
+
+function StatusBadge({ ready }: { ready: boolean }) {
+  return (
+    <span className='inline-flex items-center gap-1 rounded px-2 py-0.5 text-xs border border-neutral-200 bg-white'>
+      <span
+        className={
+          'inline-block h-2 w-2 rounded-full ' +
+          (ready ? 'bg-green-500' : 'bg-neutral-300')
+        }
+      />
+      {ready ? 'Ready' : 'Not ready'}
+    </span>
+  )
+}
+
+function LlmPanel() {
+  const {
+    llmModels,
+    llmSelectedModel,
+    llmReady,
+    llmSystemPrompt,
+    llmList,
+    llmSetSelectedModel,
+    llmLoad,
+    llmOffload,
+    llmCheckReady,
+    llmSetSystemPrompt,
+    llmGenerate,
+  } = useAppStore()
+
+  const [generating, setGenerating] = useState(false)
+
+  useEffect(() => {
+    llmList()
+    llmCheckReady()
+    const t = setInterval(() => {
+      llmCheckReady()
+    }, 1000)
+    return () => clearInterval(t)
+  }, [llmList, llmCheckReady])
+
+  return (
+    <Panel title='LLM'>
+      <div className='flex flex-col gap-3'>
+        <div className='flex items-center gap-2'>
+          <label className='text-sm'>Model</label>
+          <div className='flex-1' />
+          <StatusBadge ready={llmReady} />
+        </div>
+        <select
+          className='w-full rounded border border-neutral-200 bg-white p-1 text-sm'
+          value={llmSelectedModel || ''}
+          onChange={(e) => llmSetSelectedModel(e.target.value)}
+        >
+          {llmModels.map((m) => (
+            <option key={m} value={m}>
+              {m}
+            </option>
+          ))}
+        </select>
+        <div className='flex items-center justify-center gap-2'>
+          <button
+            onClick={llmLoad}
+            className='h-8 w-24 rounded border border-neutral-200 bg-white text-sm hover:bg-neutral-100'
+          >
+            Load
+          </button>
+          <button
+            onClick={llmOffload}
+            className='h-8 w-24 rounded border border-neutral-200 bg-white text-sm hover:bg-neutral-100'
+          >
+            Offload
+          </button>
+        </div>
+        <div>
+          <div className='mb-1 text-sm'>System prompt</div>
+          <textarea
+            className='h-20 w-full resize-none rounded border border-neutral-200 bg-white p-2 text-sm'
+            value={llmSystemPrompt}
+            onChange={(e) => llmSetSystemPrompt(e.target.value)}
+          />
+        </div>
+        <div className='flex items-center justify-center'>
+          <button
+            onClick={async () => {
+              try {
+                setGenerating(true)
+                await llmGenerate()
+              } finally {
+                setGenerating(false)
+              }
+            }}
+            disabled={!llmReady || generating}
+            className='h-9 w-28 rounded border border-neutral-200 bg-white text-sm hover:bg-neutral-100 disabled:opacity-50'
+          >
+            {generating ? 'Generating…' : 'Generate'}
+          </button>
+        </div>
+      </div>
+    </Panel>
   )
 }

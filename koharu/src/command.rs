@@ -134,15 +134,40 @@ pub async fn llm_ready(model: State<'_, Arc<llm::Model>>) -> Result<bool> {
 
 #[tauri::command]
 pub async fn llm_generate(
+    state: State<'_, AppState>,
     model: State<'_, Arc<llm::Model>>,
-    prompt: llm::Prompt,
-) -> Result<String> {
+    index: usize,
+    prompt: &str,
+) -> Result<Document> {
     let mut guard = model.get_mut().await;
     match &mut *guard {
         llm::State::Ready(llm) => {
-            let messages: Vec<::llm::ChatMessage> = prompt.into();
+            let mut state = state.write().await;
+            let document = state
+                .documents
+                .get_mut(index)
+                .ok_or_else(|| anyhow::anyhow!("Document not found"))?;
+            let messages: Vec<::llm::ChatMessage> = llm::Prompt::new(
+                prompt,
+                document
+                    .text_blocks
+                    .clone()
+                    .into_iter()
+                    .map(|block| block.text.unwrap_or_else(|| "<empty>".to_string()))
+                    .collect::<Vec<_>>()
+                    .join("\n"),
+            )
+            .into();
+
+            tracing::info!("Generating translation with messages: {:?}", messages);
+
             let response = llm.generate(&messages, &GenerateOptions::default())?;
-            Ok(response)
+            let translations = response.split("\n").collect::<Vec<_>>();
+            for (block, translation) in document.text_blocks.iter_mut().zip(translations) {
+                block.translation = Some(translation.to_string());
+            }
+
+            Ok(document.clone())
         }
         llm::State::Loading => Err(anyhow::anyhow!("Model is still loading").into()),
         llm::State::Failed(e) => Err(anyhow::anyhow!("Model failed to load: {}", e).into()),
