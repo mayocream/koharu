@@ -19,6 +19,12 @@ fn initialize() -> Result<()> {
             .show();
     }));
 
+    #[cfg(feature = "bundle")]
+    {
+        // https://docs.velopack.io/integrating/overview#application-startup
+        velopack::VelopackApp::build().run();
+    }
+
     ort::init()
         .with_execution_providers([
             #[cfg(feature = "cuda")]

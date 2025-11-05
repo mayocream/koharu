@@ -38,6 +38,8 @@ log = "0.4"
 open = "5.3"
 rfd = "0.15"
 postcard = { version = "1.0", features = ["use-std"] }
+velopack = { version = "0.0", features = ["async"] }
+semver = "1.0"
 thiserror = "2.0"
 tauri = { version = "2.9", features = ["tracing"] }
 tauri-build = "2.5"
