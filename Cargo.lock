@@ -3130,7 +3130,6 @@ dependencies = [
  "postcard",
  "rayon",
  "rfd",
- "semver",
  "serde",
  "serde_bytes",
  "serde_json",
