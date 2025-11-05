@@ -28,6 +28,7 @@ jobs:
       - uses: ilammy/msvc-dev-cmd@v1
       - run: bun install
       - run: bun tauri build
+      - run: cargo install trusted-signing-cli
       - run: bun tauri bundle
         env:
           AZURE_CLIENT_ID: ${{ secrets.AZURE_CLIENT_ID }}
