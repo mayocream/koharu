@@ -10,9 +10,9 @@
     "active": false,
     "targets": "nsis",
     "resources": [
-      "../target/release/cu*.dll",
-      "../target/release/nv*.dll",
-      "../target/release/onnxruntime*.dll"
+      "../target/**/cu*.dll",
+      "../target/**/nv*.dll",
+      "../target/**/onnxruntime*.dll"
     ],
     "windows": {
       "signCommand": "trusted-signing-cli -e https://eus.codesigning.azure.net -a Mayo -c Hawaii -d Koharu %1"
