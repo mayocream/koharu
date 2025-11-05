@@ -7,7 +7,7 @@
     ]
   },
   "bundle": {
-    "active": true,
+    "active": false,
     "targets": "nsis",
     "resources": [
       "../target/release/cu*.dll",
