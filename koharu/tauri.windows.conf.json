@@ -1,0 +1,18 @@
+{
+  "$schema": "../node_modules/@tauri-apps/cli/config.schema.json",
+  "identifier": "Koharu",
+  "build": {
+    "features": [
+      "cuda"
+    ]
+  },
+  "bundle": {
+    "active": false,
+    "targets": "nsis",
+    "resources": [
+      "../target/**/cu*.dll",
+      "../target/**/nv*.dll",
+      "../target/**/onnxruntime*.dll"
+    ]
+  }
+}

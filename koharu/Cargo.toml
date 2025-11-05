@@ -26,8 +26,6 @@ image = { workspace = true }
 tracing = { workspace = true }
 tracing-subscriber = { workspace = true }
 postcard = { workspace = true }
-velopack = { workspace = true }
-semver = { workspace = true }
 thiserror = { workspace = true }
 tauri = { workspace = true }
 blake3 = { workspace = true }
@@ -45,7 +43,6 @@ cuda = [
     "lama/cuda",
     "llm/cuda",
 ]
-bundle = []
 
 [build-dependencies]
 tauri-build = { workspace = true }

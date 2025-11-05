@@ -1,0 +1,40 @@
+name: Build and Release
+
+on:
+  push:
+    branches:
+      - main
+    tags:
+      - '*'
+
+permissions:
+  contents: write
+
+env:
+  CARGO_TERM_COLOR: always
+
+jobs:
+  build:
+    name: Build Tauri App
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: oven-sh/setup-bun@v2
+      - uses: Swatinem/rust-cache@v2
+      - uses: Jimver/cuda-toolkit@master
+        with:
+          cuda: '12.9.1'
+      - uses: ilammy/msvc-dev-cmd@v1
+      - run: bun install
+      - run: bun tauri build
+      - run: bun tauri bundle
+        env:
+          AZURE_CLIENT_ID: ${{ secrets.AZURE_CLIENT_ID }}
+          AZURE_CLIENT_SECRET: ${{ secrets.AZURE_CLIENT_SECRET }}
+          AZURE_TENANT_ID: ${{ secrets.AZURE_TENANT_ID }}
+      - uses: actions/upload-artifact@v5
+        with:
+          name: tauri-app
+          path: |
+            target/release/bundle/*
+            target/release/*.exe
