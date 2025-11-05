@@ -40,3 +40,4 @@ jobs:
           releaseName: v__VERSION__
           releaseBody: 'See the assets to download this version and install.'
           updaterJsonPreferNsis: true
+          args: --config koharu/tauri.cuda.conf.json
