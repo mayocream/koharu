@@ -5,7 +5,8 @@ import { convertToBlob } from '@/lib/util'
 import { AspectRatio, ScrollArea } from 'radix-ui'
 
 export function ThumbnailPanel() {
-  const { documents, setCurrentDocumentIndex } = useAppStore()
+  const { documents, setCurrentDocumentIndex, currentDocumentIndex } =
+    useAppStore()
 
   return (
     <div className='flex min-h-0 w-40 shrink-0 flex-col gap-1 border-r border-neutral-200 bg-neutral-50 p-1'>
@@ -16,18 +17,23 @@ export function ThumbnailPanel() {
             {documents.map((file, index) => (
               <div
                 key={file.id}
-                className='w-full'
+                className='w-full cursor-pointer'
                 onClick={() => setCurrentDocumentIndex?.(index)}
               >
-                <AspectRatio.Root ratio={3 / 4}>
-                  <img
-                    src={URL.createObjectURL(convertToBlob(file.image))}
-                    alt={file.name}
-                    className='size-full object-cover'
-                  />
-                </AspectRatio.Root>
                 <div
-                  className='mt-1 px-1 text-xs text-neutral-600 truncate text-center'
+                  data-selected={index === currentDocumentIndex}
+                  className='rounded data-[selected=true]:ring-2 data-[selected=true]:ring-pink-500'
+                >
+                  <AspectRatio.Root ratio={3 / 4}>
+                    <img
+                      src={URL.createObjectURL(convertToBlob(file.image))}
+                      alt={file.name}
+                      className='size-full rounded object-cover'
+                    />
+                  </AspectRatio.Root>
+                </div>
+                <div
+                  className='mt-1 truncate px-1 text-center text-xs text-neutral-600'
                   title={file.path}
                 >
                   {file.name}

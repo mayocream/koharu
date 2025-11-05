@@ -3,8 +3,10 @@
 import { useAppStore } from '@/lib/store'
 import { Stage, Layer, Rect, Circle, Text } from 'react-konva'
 import { Image } from '@/components/Image'
-import { ScrollArea } from 'radix-ui'
+import { ScrollArea, Slider } from 'radix-ui'
 import { TextBlock } from '@/types'
+// Simple module-level ref for the canvas viewport
+const canvasViewportRef: { current: HTMLDivElement | null } = { current: null }
 
 export function Canvas() {
   const {
@@ -19,7 +21,12 @@ export function Canvas() {
 
   return (
     <ScrollArea.Root className='flex flex-1 min-w-0 min-h-0 bg-neutral-100'>
-      <ScrollArea.Viewport className='size-full grid place-content-center-safe'>
+      <ScrollArea.Viewport
+        ref={(el) => {
+          canvasViewportRef.current = el
+        }}
+        className='size-full grid place-content-center-safe'
+      >
         <Stage
           width={currentDocument?.width * scaleRatio}
           height={currentDocument?.height * scaleRatio}
@@ -62,21 +69,59 @@ export function Canvas() {
 export function CanvasControl() {
   const scale = useAppStore((state) => state.scale)
   const setScale = useAppStore((state) => state.setScale)
+  const documents = useAppStore((state) => state.documents)
+  const currentDocumentIndex = useAppStore(
+    (state) => state.currentDocumentIndex
+  )
+
+  function fitToViewport() {
+    const doc = documents[currentDocumentIndex]
+    const viewport = canvasViewportRef.current
+    if (!doc || !viewport) return
+    const rect = viewport.getBoundingClientRect()
+    if (!rect.width || !rect.height || !doc.width || !doc.height) return
+    const scaleW = (rect.width / doc.width) * 100
+    const scaleH = (rect.height / doc.height) * 100
+    const fit = Math.max(
+      10,
+      Math.min(200, Math.floor(Math.min(scaleW, scaleH) / 10) * 10)
+    )
+    setScale(fit)
+  }
 
   return (
     <div className='flex items-center justify-end gap-3 border-t border-neutral-300 px-2 py-1'>
-      <div className='flex items-center gap-1 text-sm text-neutral-500'>
-        Scale
-        <input
-          type='number'
-          min={10}
-          max={200}
-          value={scale}
-          onChange={(e) => setScale(Number(e.target.value))}
-          step={10}
-          className='w-12 rounded border border-neutral-300 px-1 py-0.5 text-right focus:outline-none'
-        />
-        (%)
+      <div className='flex items-center gap-2 text-sm text-neutral-700'>
+        <button
+          onClick={fitToViewport}
+          className='h-7 rounded border border-neutral-300 bg-white px-2 hover:bg-neutral-100'
+        >
+          Fit window
+        </button>
+        <button
+          onClick={() => setScale(100)}
+          className='h-7 rounded border border-neutral-300 bg-white px-2 hover:bg-neutral-100'
+        >
+          Original
+        </button>
+        <span className='mx-1 h-5 w-px bg-neutral-300' />
+        <span className='text-neutral-500'>Scale</span>
+        <div className='w-40'>
+          <Slider.Root
+            className='relative flex h-5 w-full touch-none select-none items-center'
+            min={10}
+            max={200}
+            step={10}
+            value={[scale]}
+            onValueChange={(v) => setScale(v[0] ?? scale)}
+          >
+            <Slider.Track className='relative h-1 flex-1 rounded bg-neutral-200'>
+              <Slider.Range className='absolute h-full rounded bg-neutral-800' />
+            </Slider.Track>
+            <Slider.Thumb className='block h-3 w-3 rounded-full bg-neutral-800' />
+          </Slider.Root>
+        </div>
+        <span className='w-10 text-right tabular-nums'>{scale}%</span>
       </div>
     </div>
   )
