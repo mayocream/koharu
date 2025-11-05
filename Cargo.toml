@@ -46,7 +46,8 @@ tauri-build = "2.5"
 blake3 = "1.8"
 lru = "0.16"
 rayon = "1.11"
-tokenizers = "0.22"
+# disables `esaxx_fast` feature which is conflicting with `ort`
+tokenizers = { version = "0.22", default-features = false, features = ["onig"] }
 strum = { version = "0.27", features = ["derive"] }
 
 [profile.release]
