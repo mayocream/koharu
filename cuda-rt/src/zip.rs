@@ -44,17 +44,17 @@ pub struct RecordEntry {
     pub size: Option<u64>,
 }
 
-pub async fn fetch_record(url: &str) -> Result<Vec<RecordEntry>> {
+pub fn fetch_record(url: &str) -> Result<Vec<RecordEntry>> {
     // Create a default reqwest client for this operation
-    let client = reqwest::Client::new();
+    let client = reqwest::blocking::Client::new();
 
     // 1) Locate EOCD and central directory
-    let (cd_offset, cd_size) = http_zip_eocd_and_cd(&client, url).await?;
-    let cd_bytes = http_get_range(&client, url, cd_offset, cd_offset + cd_size - 1).await?;
+    let (cd_offset, cd_size) = http_zip_eocd_and_cd(&client, url)?;
+    let cd_bytes = http_get_range(&client, url, cd_offset, cd_offset + cd_size - 1)?;
     let (lh_off, comp_size, comp_method) = parse_central_directory_for_record(&cd_bytes)?;
 
     // 2) Read local header to compute exact data offset
-    let lh_fixed = http_get_range(&client, url, lh_off, lh_off + LFH_FIXED_LEN - 1).await?;
+    let lh_fixed = http_get_range(&client, url, lh_off, lh_off + LFH_FIXED_LEN - 1)?;
     if lh_fixed.len() < LFH_FIXED_LEN as usize || &lh_fixed[0..4] != SIG_LFH {
         anyhow::bail!("bad local file header");
     }
@@ -64,7 +64,7 @@ pub async fn fetch_record(url: &str) -> Result<Vec<RecordEntry>> {
     let data_end = data_off + comp_size as u64 - 1;
 
     // 3) Fetch and decode RECORD (deflate only, method 8)
-    let comp = http_get_range(&client, url, data_off, data_end).await?;
+    let comp = http_get_range(&client, url, data_off, data_end)?;
     if comp_method != 8 {
         anyhow::bail!("RECORD compression method unsupported: {comp_method}");
     }
@@ -110,9 +110,9 @@ fn parse_central_directory_for_record(cd: &[u8]) -> Result<(u64, u32, u16)> {
     anyhow::bail!("RECORD not found")
 }
 
-async fn http_zip_eocd_and_cd(client: &reqwest::Client, url: &str) -> Result<(u64, u64)> {
+fn http_zip_eocd_and_cd(client: &reqwest::blocking::Client, url: &str) -> Result<(u64, u64)> {
     // Fetch last ~70KiB to find EOCD (max comment is 64KiB; add slack)
-    let tail = http_get_tail(client, url, 70 * 1024).await?;
+    let tail = http_get_tail(client, url, 70 * 1024)?;
     let mut found = None;
     for i in (0..=tail.len().saturating_sub(EOCD_MIN_LEN)).rev() {
         if &tail[i..i + 4] == SIG_EOCD {
@@ -130,15 +130,15 @@ async fn http_zip_eocd_and_cd(client: &reqwest::Client, url: &str) -> Result<(u6
     Ok((cd_off, cd_size))
 }
 
-async fn http_get_tail(client: &reqwest::Client, url: &str, nbytes: usize) -> Result<Vec<u8>> {
+fn http_get_tail(client: &reqwest::blocking::Client, url: &str, nbytes: usize) -> Result<Vec<u8>> {
     // Use HEAD to get content length, then request [len-n .. len-1]
-    let len = head_content_length(client, url).await?;
+    let len = head_content_length(client, url)?;
     let start = len.saturating_sub(nbytes as u64);
-    http_get_range(client, url, start, len.saturating_sub(1)).await
+    http_get_range(client, url, start, len.saturating_sub(1))
 }
 
-async fn http_get_range(
-    client: &reqwest::Client,
+fn http_get_range(
+    client: &reqwest::blocking::Client,
     url: &str,
     start: u64,
     end_inclusive: u64,
@@ -149,16 +149,15 @@ async fn http_get_range(
             reqwest::header::RANGE,
             format!("bytes={}-{}", start, end_inclusive),
         )
-        .send()
-        .await?;
+        .send()?;
     if resp.status() != reqwest::StatusCode::PARTIAL_CONTENT {
         anyhow::bail!("server did not honor range: {}", resp.status());
     }
-    Ok(resp.bytes().await?.to_vec())
+    Ok(resp.bytes()?.to_vec())
 }
 
-async fn head_content_length(client: &reqwest::Client, url: &str) -> Result<u64> {
-    let resp = client.head(url).send().await?;
+fn head_content_length(client: &reqwest::blocking::Client, url: &str) -> Result<u64> {
+    let resp = client.head(url).send()?;
     if !resp.status().is_success() {
         anyhow::bail!("HEAD failed: {}", resp.status());
     }
@@ -199,8 +198,8 @@ fn parse_record_csv(csv_bytes: &[u8]) -> Result<Vec<RecordEntry>> {
 mod tests {
     use super::*;
 
-    #[tokio::test]
-    async fn test_pip_wheels() -> Result<()> {
+    #[test]
+    fn test_pip_wheels() -> Result<()> {
         fn pick_wheel_url(pkg: &str, tag: &str) -> Result<String> {
             let meta_url = format!("https://pypi.org/pypi/{pkg}/json");
             let mut resp = ureq::get(&meta_url).call()?;
@@ -235,7 +234,7 @@ mod tests {
         for pkg in crate::PACKAGES {
             for tag in ["win_amd64", "manylinux"] {
                 let url = pick_wheel_url(pkg, tag)?;
-                let entries = fetch_record(&url).await?;
+                let entries = fetch_record(&url)?;
                 assert!(
                     !entries.is_empty(),
                     "{} {}: record entries should not be empty",

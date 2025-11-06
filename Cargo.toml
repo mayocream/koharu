@@ -60,7 +60,7 @@ strum = { version = "0.27", features = ["derive"] }
 zip = { version = "6.0", default-features = false, features = ["deflate"] }
 ureq = { version = "3.1", features = ["json"] }
 dirs = "5.0"
-reqwest = { version = "0.12", features = ["stream", "json"] }
+reqwest = { version = "0.12", features = ["blocking", "stream", "json"] }
 flate2 = "1.0"
 csv = "1.3"
 
