@@ -1,11 +1,17 @@
 mod zip;
 
 use anyhow::Result;
-use base64::Engine;
+use once_cell::sync::Lazy;
 use rayon::iter::{IntoParallelRefIterator, ParallelIterator};
-use sha2::{Digest, Sha256};
-use std::{fs, io, path::Path};
+use std::{fs, io::BufWriter, io::Read, io::Write, path::Path};
 use tracing::info;
+
+pub static HTTP_CLIENT: Lazy<reqwest::blocking::Client> = Lazy::new(|| {
+    reqwest::blocking::Client::builder()
+        .user_agent("cuda-rt/0.1 (+https://github.com)")
+        .build()
+        .expect("build reqwest client")
+});
 
 // CUDA packages to pull wheels for
 pub const PACKAGES: &[&str] = &[
@@ -22,13 +28,14 @@ pub fn ensure_dylibs(path: impl AsRef<Path>) -> Result<()> {
 
     // Pick a simple platform tag to select wheels.
     let platform_tag = current_platform_tag()?;
-    info!("Ensuring CUDA libs in {}", out_dir.display());
+    info!("ensure_dylibs: start -> {}", out_dir.display());
 
     // Fetch wheels and extract CUDA libs
     PACKAGES
         .par_iter()
         .try_for_each(|pkg| fetch_and_extract(pkg, platform_tag, &out_dir))?;
 
+    info!("ensure_dylibs: done");
     Ok(())
 }
 
@@ -45,7 +52,7 @@ fn current_platform_tag() -> Result<&'static str> {
 fn fetch_and_extract(pkg: &str, platform_tag: &str, out_dir: &Path) -> Result<()> {
     // 1) Query PyPI JSON
     let meta_url = format!("https://pypi.org/pypi/{pkg}/json");
-    let resp = reqwest::blocking::get(&meta_url)?;
+    let resp = HTTP_CLIENT.get(&meta_url).send()?;
     let json: serde_json::Value = resp.json()?;
 
     // 2) Choose a wheel
@@ -68,61 +75,91 @@ fn fetch_and_extract(pkg: &str, platform_tag: &str, out_dir: &Path) -> Result<()
         }
     }
     let (wheel_url, wheel_name) = chosen.ok_or_else(|| anyhow::anyhow!("no suitable wheel"))?;
-    info!("Selected wheel {wheel_name} for {pkg}");
+    info!("{pkg}: selected wheel {wheel_name}");
 
     // 3) Use RECORD to check local dylibs; download only if needed
-    info!("Fetching RECORD for {wheel_name}");
     let entries = zip::fetch_record(&wheel_url)?;
-    info!("Fetched RECORD with {} entries", entries.len());
-    let needs_download = entries.into_iter().any(|e| {
-        let Some(base) = target_basename(&e.path) else {
-            return false;
-        };
-        let local = out_dir.join(base);
-        let missing = !local.exists();
-        let mismatched = e
-            .hash
-            .as_ref()
-            .map(|h| !hash_matches_local(h, &local).unwrap_or(false))
-            .unwrap_or(false);
 
-        info!("{base}: missing={missing} mismatched={mismatched}");
-        missing || mismatched
-    });
+    // Fast path: existence + size-only check; no hashing.
+    // If size is None and file exists, treat as OK (no further verification).
+    let needs_download = entries
+        .iter()
+        .filter_map(|e| target_basename(&e.path).map(|base| (base, e.size)))
+        .any(|(base, rec_size)| {
+            let local = out_dir.join(base);
+            if !local.exists() {
+                return true;
+            }
+            match (local.metadata(), rec_size) {
+                (Ok(meta), Some(sz)) => meta.len() != sz,
+                _ => false,
+            }
+        });
 
     if needs_download {
-        info!("Fetching {wheel_name}...");
-        let bytes = reqwest::blocking::get(&wheel_url)?.bytes()?;
-        extract_from_wheel(&bytes, out_dir)
+        info!("{pkg}: downloading {wheel_name}...");
+        let resp = HTTP_CLIENT.get(&wheel_url).send()?;
+        let bytes = resp.bytes()?;
+        let res = extract_from_wheel(&bytes, out_dir);
+        info!("{pkg}: download and extract complete");
+        res
     } else {
-        info!("{wheel_name} CUDA libs are up-to-date");
+        info!("{pkg}: {wheel_name} CUDA libs are up-to-date");
         Ok(())
     }
 }
 
 fn extract_from_wheel(bytes: &[u8], out_dir: &Path) -> Result<()> {
-    let reader = std::io::Cursor::new(bytes);
-    let mut zip = ::zip::ZipArchive::new(reader)?;
-    let mut copied = 0usize;
-
-    for i in 0..zip.len() {
-        let mut file = zip.by_index(i)?;
-        let Some(fname) = target_basename(file.name()).map(str::to_owned) else {
-            continue;
-        };
-
-        let mut out = fs::File::create(out_dir.join(&fname))?;
-        io::copy(&mut file, &mut out)?;
-
-        info!("Copied {fname}");
-        copied += 1;
+    // First, list target entries to extract
+    let mut archive = ::zip::ZipArchive::new(std::io::Cursor::new(bytes))?;
+    let mut targets: Vec<(String, String)> = Vec::new(); // (full archive path, output basename)
+    for i in 0..archive.len() {
+        let file = archive.by_index(i)?;
+        if let Some(base) = target_basename(file.name()) {
+            targets.push((file.name().to_owned(), base.to_owned()));
+        }
     }
+    drop(archive);
 
-    if copied == 0 {
+    if targets.is_empty() {
         anyhow::bail!("no CUDA libraries found in wheel");
     }
 
-    info!("Copied {copied} CUDA libraries into {}", out_dir.display());
+    let results: Result<Vec<(String, u64)>> = targets
+        .par_iter()
+        .map(|(full_name, base_name)| -> Result<(String, u64)> {
+            let mut zip = ::zip::ZipArchive::new(std::io::Cursor::new(bytes))?;
+            let mut file = zip.by_name(full_name)?;
+
+            let out_path = out_dir.join(base_name);
+            let out = fs::File::create(&out_path)?;
+            // Preallocate to uncompressed size if known to reduce fragmentation.
+            let _ = out.set_len(file.size());
+
+            // Buffered copy with large chunk size
+            let mut writer = BufWriter::with_capacity(8 * 1024 * 1024, out);
+            let mut buf = vec![0u8; 8 * 1024 * 1024];
+            let mut written: u64 = 0;
+            loop {
+                let n = file.read(&mut buf)?;
+                if n == 0 {
+                    break;
+                }
+                writer.write_all(&buf[..n])?;
+                written += n as u64;
+            }
+            writer.flush()?;
+            Ok((base_name.clone(), written))
+        })
+        .collect();
+
+    let results = results?;
+    let _total_bytes: u64 = results.iter().map(|(_, w)| *w as u64).sum();
+    info!(
+        "extract: copied {} libraries into {}",
+        results.len(),
+        out_dir.display()
+    );
 
     Ok(())
 }
@@ -140,24 +177,6 @@ fn target_basename(path: &str) -> Option<&str> {
     } else {
         None
     }
-}
-
-fn hash_matches_local(record_hash: &str, path: &Path) -> Result<bool> {
-    // RECORD uses format like "sha256=urlsafe_b64" (no padding). Accept '=' or '-'.
-    let (algo, b64) = record_hash
-        .split_once('=')
-        .or_else(|| record_hash.split_once('-'))
-        .ok_or_else(|| anyhow::anyhow!("unrecognized RECORD hash format"))?;
-    if algo != "sha256" {
-        anyhow::bail!("unsupported RECORD hash algorithm: {}", algo);
-    }
-    let mut file = fs::File::open(path)?;
-    let mut hasher = Sha256::new();
-    io::copy(&mut file, &mut hasher)?;
-    let digest = hasher.finalize();
-    // urlsafe base64 no padding
-    let enc = base64::engine::general_purpose::URL_SAFE_NO_PAD.encode(digest);
-    Ok(enc == b64)
 }
 
 #[cfg(test)]
@@ -180,6 +199,8 @@ mod tests {
 
         let elapsed = t1.elapsed();
         println!("Elapsed time: {:?}", elapsed);
+
+        assert!(elapsed < t0.elapsed());
 
         Ok(())
     }

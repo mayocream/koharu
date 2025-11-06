@@ -45,16 +45,13 @@ pub struct RecordEntry {
 }
 
 pub fn fetch_record(url: &str) -> Result<Vec<RecordEntry>> {
-    // Create a default reqwest client for this operation
-    let client = reqwest::blocking::Client::new();
-
     // 1) Locate EOCD and central directory
-    let (cd_offset, cd_size) = http_zip_eocd_and_cd(&client, url)?;
-    let cd_bytes = http_get_range(&client, url, cd_offset, cd_offset + cd_size - 1)?;
+    let (cd_offset, cd_size) = http_zip_eocd_and_cd(url)?;
+    let cd_bytes = http_get_range(url, cd_offset, cd_offset + cd_size - 1)?;
     let (lh_off, comp_size, comp_method) = parse_central_directory_for_record(&cd_bytes)?;
 
     // 2) Read local header to compute exact data offset
-    let lh_fixed = http_get_range(&client, url, lh_off, lh_off + LFH_FIXED_LEN - 1)?;
+    let lh_fixed = http_get_range(url, lh_off, lh_off + LFH_FIXED_LEN - 1)?;
     if lh_fixed.len() < LFH_FIXED_LEN as usize || &lh_fixed[0..4] != SIG_LFH {
         anyhow::bail!("bad local file header");
     }
@@ -64,7 +61,7 @@ pub fn fetch_record(url: &str) -> Result<Vec<RecordEntry>> {
     let data_end = data_off + comp_size as u64 - 1;
 
     // 3) Fetch and decode RECORD (deflate only, method 8)
-    let comp = http_get_range(&client, url, data_off, data_end)?;
+    let comp = http_get_range(url, data_off, data_end)?;
     if comp_method != 8 {
         anyhow::bail!("RECORD compression method unsupported: {comp_method}");
     }
@@ -110,9 +107,9 @@ fn parse_central_directory_for_record(cd: &[u8]) -> Result<(u64, u32, u16)> {
     anyhow::bail!("RECORD not found")
 }
 
-fn http_zip_eocd_and_cd(client: &reqwest::blocking::Client, url: &str) -> Result<(u64, u64)> {
+fn http_zip_eocd_and_cd(url: &str) -> Result<(u64, u64)> {
     // Fetch last ~70KiB to find EOCD (max comment is 64KiB; add slack)
-    let tail = http_get_tail(client, url, 70 * 1024)?;
+    let tail = http_get_tail(url, 70 * 1024)?;
     let mut found = None;
     for i in (0..=tail.len().saturating_sub(EOCD_MIN_LEN)).rev() {
         if &tail[i..i + 4] == SIG_EOCD {
@@ -130,20 +127,15 @@ fn http_zip_eocd_and_cd(client: &reqwest::blocking::Client, url: &str) -> Result
     Ok((cd_off, cd_size))
 }
 
-fn http_get_tail(client: &reqwest::blocking::Client, url: &str, nbytes: usize) -> Result<Vec<u8>> {
+fn http_get_tail(url: &str, nbytes: usize) -> Result<Vec<u8>> {
     // Use HEAD to get content length, then request [len-n .. len-1]
-    let len = head_content_length(client, url)?;
+    let len = head_content_length(url)?;
     let start = len.saturating_sub(nbytes as u64);
-    http_get_range(client, url, start, len.saturating_sub(1))
+    http_get_range(url, start, len.saturating_sub(1))
 }
 
-fn http_get_range(
-    client: &reqwest::blocking::Client,
-    url: &str,
-    start: u64,
-    end_inclusive: u64,
-) -> Result<Vec<u8>> {
-    let resp = client
+fn http_get_range(url: &str, start: u64, end_inclusive: u64) -> Result<Vec<u8>> {
+    let resp = crate::HTTP_CLIENT
         .get(url)
         .header(
             reqwest::header::RANGE,
@@ -156,8 +148,8 @@ fn http_get_range(
     Ok(resp.bytes()?.to_vec())
 }
 
-fn head_content_length(client: &reqwest::blocking::Client, url: &str) -> Result<u64> {
-    let resp = client.head(url).send()?;
+fn head_content_length(url: &str) -> Result<u64> {
+    let resp = crate::HTTP_CLIENT.head(url).send()?;
     if !resp.status().is_success() {
         anyhow::bail!("HEAD failed: {}", resp.status());
     }
