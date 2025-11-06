@@ -7,6 +7,7 @@ members = [
     "llm",
     "manga-ocr",
 ]
+default-members = ["koharu"]
 resolver = "3"
 
 [workspace.package]
