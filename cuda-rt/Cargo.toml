@@ -12,14 +12,11 @@ keywords.workspace = true
 
 [dependencies]
 anyhow = { workspace = true }
-ureq = { workspace = true }
 serde_json = { workspace = true }
 zip = { workspace = true }
 dirs = { workspace = true }
 rayon = { workspace = true }
 tracing = { workspace = true }
-blake3 = { workspace = true }
-tokio = { workspace = true }
 reqwest = { workspace = true }
 flate2 = { workspace = true }
 csv = { workspace = true }

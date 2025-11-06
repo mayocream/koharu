@@ -202,8 +202,7 @@ mod tests {
     fn test_pip_wheels() -> Result<()> {
         fn pick_wheel_url(pkg: &str, tag: &str) -> Result<String> {
             let meta_url = format!("https://pypi.org/pypi/{pkg}/json");
-            let mut resp = ureq::get(&meta_url).call()?;
-            let json: serde_json::Value = resp.body_mut().with_config().read_json()?;
+            let json: serde_json::Value = reqwest::blocking::get(&meta_url)?.json()?;
             let urls = json
                 .get("urls")
                 .and_then(|v| v.as_array())
