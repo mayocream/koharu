@@ -45,8 +45,8 @@ fn current_platform_tag() -> Result<&'static str> {
 fn fetch_and_extract(pkg: &str, platform_tag: &str, out_dir: &Path) -> Result<()> {
     // 1) Query PyPI JSON
     let meta_url = format!("https://pypi.org/pypi/{pkg}/json");
-    let mut resp = ureq::get(&meta_url).call()?;
-    let json: serde_json::Value = resp.body_mut().with_config().read_json()?;
+    let resp = reqwest::blocking::get(&meta_url)?;
+    let json: serde_json::Value = resp.json()?;
 
     // 2) Choose a wheel
     let files = json
@@ -71,12 +71,7 @@ fn fetch_and_extract(pkg: &str, platform_tag: &str, out_dir: &Path) -> Result<()
     info!("Fetching {wheel_name}...");
 
     // 3) Download wheel bytes
-    let mut resp = ureq::get(&wheel_url).call()?;
-    let bytes = resp
-        .body_mut()
-        .with_config()
-        .limit(1 * 1024 * 1024 * 1024)
-        .read_to_vec()?;
+    let bytes = reqwest::blocking::get(&wheel_url)?.bytes()?;
 
     // 4) Extract CUDA libs from wheel
     extract_from_wheel(&bytes, out_dir)
