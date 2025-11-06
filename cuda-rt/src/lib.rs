@@ -15,11 +15,8 @@ pub const PACKAGES: &[&str] = &[
     "nvidia-cufft-cu12",
 ];
 
-pub fn ensure_dylibs() -> Result<()> {
-    let out_dir = dirs::data_local_dir()
-        .ok_or_else(|| anyhow::anyhow!("cannot determine local data dir"))?
-        .join("koharu")
-        .join("cuda");
+pub fn ensure_dylibs(path: impl AsRef<Path>) -> Result<()> {
+    let out_dir = path.as_ref();
 
     fs::create_dir_all(&out_dir)?;
 
@@ -138,7 +135,7 @@ fn target_basename(path: &str) -> Option<&str> {
     } else {
         lname.ends_with(".so") || lname.contains(".so.")
     };
-    if is_dylib && lname.contains("nvidia") {
+    if is_dylib && path.contains("nvidia") {
         Some(base)
     } else {
         None
@@ -161,4 +158,29 @@ fn hash_matches_local(record_hash: &str, path: &Path) -> Result<bool> {
     // urlsafe base64 no padding
     let enc = base64::engine::general_purpose::URL_SAFE_NO_PAD.encode(digest);
     Ok(enc == b64)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_skip_download_if_up_to_date() -> Result<()> {
+        let temp_dir = tempfile::tempdir()?;
+        let out_dir = temp_dir.path();
+
+        let t0 = std::time::Instant::now();
+        ensure_dylibs(out_dir)?;
+
+        let elapsed = t0.elapsed();
+        println!("Elapsed time: {:?}", elapsed);
+
+        let t1 = std::time::Instant::now();
+        ensure_dylibs(out_dir)?;
+
+        let elapsed = t1.elapsed();
+        println!("Elapsed time: {:?}", elapsed);
+
+        Ok(())
+    }
 }
