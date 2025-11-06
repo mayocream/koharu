@@ -36,6 +36,7 @@ fn le_u32(bytes: &[u8], off: usize) -> u32 {
     u32::from_le_bytes([bytes[off], bytes[off + 1], bytes[off + 2], bytes[off + 3]])
 }
 
+#[allow(unused)]
 #[derive(Debug, Clone)]
 pub struct RecordEntry {
     pub path: String,
