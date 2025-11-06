@@ -25,12 +25,20 @@ fn initialize() -> Result<()> {
         velopack::VelopackApp::build().run();
     }
 
+    #[cfg(feature = "cuda")]
+    {
+        let cuda_root = dirs::data_local_dir()
+            .unwrap_or_default()
+            .join("Koharu")
+            .join("cuda");
+        cuda_rt::ensure_dylibs(&cuda_root)?;
+        ort::execution_providers::cuda::preload_dylibs(Some(&cuda_root), Some(&cuda_root))?;
+    }
+
     ort::init()
         .with_execution_providers([
             #[cfg(feature = "cuda")]
-            ort::execution_providers::CUDAExecutionProvider::default()
-                .build()
-                .error_on_failure(),
+            ort::execution_providers::CUDAExecutionProvider::default().build(),
         ])
         .commit()?;
 

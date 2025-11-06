@@ -14,7 +14,6 @@ keywords.workspace = true
 anyhow = { workspace = true }
 serde_json = { workspace = true }
 zip = { workspace = true }
-dirs = { workspace = true }
 rayon = { workspace = true }
 tracing = { workspace = true }
 reqwest = { workspace = true }

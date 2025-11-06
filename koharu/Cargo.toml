@@ -37,6 +37,7 @@ strum = { workspace = true }
 hf-hub = { workspace = true }
 cuda-rt = { workspace = true, optional = true }
 velopack = { workspace = true, optional = true }
+dirs = { workspace = true }
 
 [features]
 cuda = [
