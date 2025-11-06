@@ -1222,12 +1222,14 @@ name = "cuda-rt"
 version = "0.7.2"
 dependencies = [
  "anyhow",
+ "base64 0.22.1",
  "csv",
  "dirs 5.0.1",
  "flate2",
  "rayon",
  "reqwest",
  "serde_json",
+ "sha2",
  "tracing",
  "zip 6.0.0",
 ]

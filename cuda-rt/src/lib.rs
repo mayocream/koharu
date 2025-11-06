@@ -1,7 +1,9 @@
 mod zip;
 
 use anyhow::Result;
+use base64::Engine;
 use rayon::iter::{IntoParallelRefIterator, ParallelIterator};
+use sha2::{Digest, Sha256};
 use std::{fs, io, path::Path};
 use tracing::info;
 
@@ -23,6 +25,7 @@ pub fn ensure_dylibs() -> Result<()> {
 
     // Pick a simple platform tag to select wheels.
     let platform_tag = current_platform_tag()?;
+    info!("Ensuring CUDA libs in {}", out_dir.display());
 
     // Fetch wheels and extract CUDA libs
     PACKAGES
@@ -68,13 +71,36 @@ fn fetch_and_extract(pkg: &str, platform_tag: &str, out_dir: &Path) -> Result<()
         }
     }
     let (wheel_url, wheel_name) = chosen.ok_or_else(|| anyhow::anyhow!("no suitable wheel"))?;
-    info!("Fetching {wheel_name}...");
+    info!("Selected wheel {wheel_name} for {pkg}");
 
-    // 3) Download wheel bytes
-    let bytes = reqwest::blocking::get(&wheel_url)?.bytes()?;
+    // 3) Use RECORD to check local dylibs; download only if needed
+    info!("Fetching RECORD for {wheel_name}");
+    let entries = zip::fetch_record(&wheel_url)?;
+    info!("Fetched RECORD with {} entries", entries.len());
+    let needs_download = entries.into_iter().any(|e| {
+        let Some(base) = target_basename(&e.path) else {
+            return false;
+        };
+        let local = out_dir.join(base);
+        let missing = !local.exists();
+        let mismatched = e
+            .hash
+            .as_ref()
+            .map(|h| !hash_matches_local(h, &local).unwrap_or(false))
+            .unwrap_or(false);
 
-    // 4) Extract CUDA libs from wheel
-    extract_from_wheel(&bytes, out_dir)
+        info!("{base}: missing={missing} mismatched={mismatched}");
+        missing || mismatched
+    });
+
+    if needs_download {
+        info!("Fetching {wheel_name}...");
+        let bytes = reqwest::blocking::get(&wheel_url)?.bytes()?;
+        extract_from_wheel(&bytes, out_dir)
+    } else {
+        info!("{wheel_name} CUDA libs are up-to-date");
+        Ok(())
+    }
 }
 
 fn extract_from_wheel(bytes: &[u8], out_dir: &Path) -> Result<()> {
@@ -84,22 +110,11 @@ fn extract_from_wheel(bytes: &[u8], out_dir: &Path) -> Result<()> {
 
     for i in 0..zip.len() {
         let mut file = zip.by_index(i)?;
-        let name = file.name().to_string();
-        let lname = name.to_ascii_lowercase();
-        let is_target = if cfg!(target_os = "windows") {
-            lname.ends_with(".dll") && lname.contains("nvidia")
-        } else {
-            lname.contains(".so") && lname.contains("nvidia")
-        };
-        if !is_target {
+        let Some(fname) = target_basename(file.name()).map(str::to_owned) else {
             continue;
-        }
-        let fname = std::path::Path::new(&name)
-            .file_name()
-            .and_then(|s| s.to_str())
-            .ok_or_else(|| anyhow::anyhow!("bad filename"))?;
+        };
 
-        let mut out = fs::File::create(out_dir.join(fname))?;
+        let mut out = fs::File::create(out_dir.join(&fname))?;
         io::copy(&mut file, &mut out)?;
 
         info!("Copied {fname}");
@@ -110,5 +125,40 @@ fn extract_from_wheel(bytes: &[u8], out_dir: &Path) -> Result<()> {
         anyhow::bail!("no CUDA libraries found in wheel");
     }
 
+    info!("Copied {copied} CUDA libraries into {}", out_dir.display());
+
     Ok(())
+}
+
+fn target_basename(path: &str) -> Option<&str> {
+    let base = std::path::Path::new(path).file_name()?.to_str()?;
+    let lname = base.to_ascii_lowercase();
+    let is_dylib = if cfg!(target_os = "windows") {
+        lname.ends_with(".dll")
+    } else {
+        lname.ends_with(".so") || lname.contains(".so.")
+    };
+    if is_dylib && lname.contains("nvidia") {
+        Some(base)
+    } else {
+        None
+    }
+}
+
+fn hash_matches_local(record_hash: &str, path: &Path) -> Result<bool> {
+    // RECORD uses format like "sha256=urlsafe_b64" (no padding). Accept '=' or '-'.
+    let (algo, b64) = record_hash
+        .split_once('=')
+        .or_else(|| record_hash.split_once('-'))
+        .ok_or_else(|| anyhow::anyhow!("unrecognized RECORD hash format"))?;
+    if algo != "sha256" {
+        anyhow::bail!("unsupported RECORD hash algorithm: {}", algo);
+    }
+    let mut file = fs::File::open(path)?;
+    let mut hasher = Sha256::new();
+    io::copy(&mut file, &mut hasher)?;
+    let digest = hasher.finalize();
+    // urlsafe base64 no padding
+    let enc = base64::engine::general_purpose::URL_SAFE_NO_PAD.encode(digest);
+    Ok(enc == b64)
 }
