@@ -13,15 +13,16 @@ pub static HTTP_CLIENT: Lazy<reqwest::blocking::Client> = Lazy::new(|| {
         .expect("build reqwest client")
 });
 
-// CUDA packages to pull wheels for
-pub const PACKAGES: &[&str] = &[
+pub const CUDA_PACKAGES: &[&str] = &[
     "nvidia-cuda-runtime-cu12",
     "nvidia-cudnn-cu12",
     "nvidia-cublas-cu12",
     "nvidia-cufft-cu12",
 ];
 
-pub fn ensure_dylibs(path: impl AsRef<Path>) -> Result<()> {
+pub const ONNXRUNTIME_PACKAGES: &[&str] = &["onnxruntime-gpu"];
+
+pub fn ensure_dylibs(packages: &[&str], path: impl AsRef<Path>) -> Result<()> {
     let out_dir = path.as_ref();
 
     fs::create_dir_all(&out_dir)?;
@@ -30,8 +31,8 @@ pub fn ensure_dylibs(path: impl AsRef<Path>) -> Result<()> {
     let platform_tag = current_platform_tag()?;
     info!("ensure_dylibs: start -> {}", out_dir.display());
 
-    // Fetch wheels and extract CUDA libs
-    PACKAGES
+    // Fetch wheels and extract libs
+    packages
         .par_iter()
         .try_for_each(|pkg| fetch_and_extract(pkg, platform_tag, &out_dir))?;
 
@@ -119,7 +120,6 @@ fn extract_from_wheel(bytes: &[u8], out_dir: &Path) -> Result<()> {
             targets.push((file.name().to_owned(), base.to_owned()));
         }
     }
-    drop(archive);
 
     if targets.is_empty() {
         anyhow::bail!("no CUDA libraries found in wheel");
@@ -172,11 +172,7 @@ fn target_basename(path: &str) -> Option<&str> {
     } else {
         lname.ends_with(".so") || lname.contains(".so.")
     };
-    if is_dylib && path.contains("nvidia") {
-        Some(base)
-    } else {
-        None
-    }
+    if is_dylib { Some(base) } else { None }
 }
 
 #[cfg(test)]
@@ -189,13 +185,13 @@ mod tests {
         let out_dir = temp_dir.path();
 
         let t0 = std::time::Instant::now();
-        ensure_dylibs(out_dir)?;
+        ensure_dylibs(CUDA_PACKAGES, out_dir)?;
 
         let elapsed = t0.elapsed();
         println!("Elapsed time: {:?}", elapsed);
 
         let t1 = std::time::Instant::now();
-        ensure_dylibs(out_dir)?;
+        ensure_dylibs(CUDA_PACKAGES, out_dir)?;
 
         let elapsed = t1.elapsed();
         println!("Elapsed time: {:?}", elapsed);

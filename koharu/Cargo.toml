@@ -15,6 +15,7 @@ comic-text-detector = { workspace = true }
 manga-ocr = { workspace = true }
 lama = { workspace = true }
 llm = { workspace = true }
+cuda-rt = { workspace = true }
 anyhow = { workspace = true }
 ort = { workspace = true }
 rfd = { workspace = true }
@@ -35,7 +36,6 @@ rayon = { workspace = true }
 imageproc = { workspace = true }
 strum = { workspace = true }
 hf-hub = { workspace = true }
-cuda-rt = { workspace = true, optional = true }
 velopack = { workspace = true, optional = true }
 dirs = { workspace = true }
 
@@ -46,7 +46,6 @@ cuda = [
     "manga-ocr/cuda",
     "lama/cuda",
     "llm/cuda",
-    "cuda-rt",
 ]
 bundle = ["velopack"]
 
