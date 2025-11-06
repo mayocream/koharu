@@ -25,45 +25,27 @@ fn initialize() -> Result<()> {
         velopack::VelopackApp::build().run();
     }
 
-    Ok(())
-}
-
-fn load_dylibs() -> Result<()> {
-    let lib_root = dirs::data_local_dir()
-        .unwrap_or_default()
-        .join("Koharu")
-        .join("lib");
-
-    // Ensure ONNX Runtime dylibs
-    cuda_rt::ensure_dylibs(cuda_rt::ONNXRUNTIME_PACKAGES, &lib_root)?;
-
     #[cfg(feature = "cuda")]
     {
-        cuda_rt::ensure_dylibs(cuda_rt::CUDA_PACKAGES, &lib_root)?;
-        ort::execution_providers::cuda::preload_dylibs(Some(&lib_root), Some(&lib_root))?;
+        let cuda_root = dirs::data_local_dir()
+            .unwrap_or_default()
+            .join("Koharu")
+            .join("cuda");
+        cuda_rt::ensure_dylibs(&cuda_root)?;
+        ort::execution_providers::cuda::preload_dylibs(Some(&cuda_root), Some(&cuda_root))?;
     }
 
-    ort::init_from(
-        lib_root
-            .join(if cfg!(target_os = "windows") {
-                "onnxruntime.dll"
-            } else {
-                "libonnxruntime.so"
-            })
-            .to_string_lossy(),
-    )
-    .with_execution_providers([
-        #[cfg(feature = "cuda")]
-        ort::execution_providers::CUDAExecutionProvider::default().build(),
-    ])
-    .commit()?;
+    ort::init()
+        .with_execution_providers([
+            #[cfg(feature = "cuda")]
+            ort::execution_providers::CUDAExecutionProvider::default().build(),
+        ])
+        .commit()?;
 
     Ok(())
 }
 
 async fn setup(app: tauri::AppHandle) -> Result<()> {
-    tokio::task::spawn_blocking(|| load_dylibs()).await??;
-
     let onnx = Arc::new(onnx::Model::new()?);
     let llm = Arc::new(llm::Model::new());
     let state = Arc::new(RwLock::new(State::default()));

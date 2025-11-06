@@ -222,7 +222,7 @@ mod tests {
                 .ok_or_else(|| anyhow::anyhow!("no suitable wheel for tag {tag}"))
         }
 
-        for pkg in crate::CUDA_PACKAGES {
+        for pkg in crate::PACKAGES {
             for tag in ["win_amd64", "manylinux"] {
                 let url = pick_wheel_url(pkg, tag)?;
                 let entries = fetch_record(&url)?;
