@@ -1,12 +1,5 @@
 [workspace]
-members = [
-    "comic-text-detector",
-    "cuda-rt",
-    "koharu",
-    "lama",
-    "llm",
-    "manga-ocr",
-]
+members = ["comic-text-detector", "cuda-rt", "lama", "llm", "manga-ocr"]
 default-members = ["koharu"]
 resolver = "3"
 
