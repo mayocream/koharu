@@ -1,10 +1,12 @@
+mod zip;
+
 use anyhow::Result;
 use rayon::iter::{IntoParallelRefIterator, ParallelIterator};
 use std::{fs, io, path::Path};
 use tracing::info;
 
 // CUDA packages to pull wheels for
-const PACKAGES: &[&str] = &[
+pub const PACKAGES: &[&str] = &[
     "nvidia-cuda-runtime-cu12",
     "nvidia-cudnn-cu12",
     "nvidia-cublas-cu12",
@@ -82,7 +84,7 @@ fn fetch_and_extract(pkg: &str, platform_tag: &str, out_dir: &Path) -> Result<()
 
 fn extract_from_wheel(bytes: &[u8], out_dir: &Path) -> Result<()> {
     let reader = std::io::Cursor::new(bytes);
-    let mut zip = zip::ZipArchive::new(reader)?;
+    let mut zip = ::zip::ZipArchive::new(reader)?;
     let mut copied = 0usize;
 
     for i in 0..zip.len() {

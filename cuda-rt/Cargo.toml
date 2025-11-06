@@ -18,3 +18,8 @@ zip = { workspace = true }
 dirs = { workspace = true }
 rayon = { workspace = true }
 tracing = { workspace = true }
+blake3 = { workspace = true }
+tokio = { workspace = true }
+reqwest = { workspace = true }
+flate2 = { workspace = true }
+csv = { workspace = true }
