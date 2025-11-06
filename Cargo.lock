@@ -972,7 +972,7 @@ dependencies = [
 
 [[package]]
 name = "comic-text-detector"
-version = "0.7.2"
+version = "0.7.3"
 dependencies = [
  "anyhow",
  "candle-transformers",
@@ -1228,7 +1228,7 @@ dependencies = [
 
 [[package]]
 name = "cuda-rt"
-version = "0.7.2"
+version = "0.7.3"
 dependencies = [
  "anyhow",
  "base64 0.22.1",
@@ -3184,7 +3184,7 @@ dependencies = [
 
 [[package]]
 name = "koharu"
-version = "0.7.2"
+version = "0.7.3"
 dependencies = [
  "anyhow",
  "blake3",
@@ -3239,7 +3239,7 @@ dependencies = [
 
 [[package]]
 name = "lama"
-version = "0.7.2"
+version = "0.7.3"
 dependencies = [
  "anyhow",
  "clap",
@@ -3375,7 +3375,7 @@ checksum = "241eaef5fd12c88705a01fc1066c48c4b36e0dd4377dcdc7ec3942cea7a69956"
 
 [[package]]
 name = "llm"
-version = "0.7.2"
+version = "0.7.3"
 dependencies = [
  "anyhow",
  "candle-core",
@@ -3447,7 +3447,7 @@ checksum = "670fdfda89751bc4a84ac13eaa63e205cf0fd22b4c9a5fbfa085b63c1f1d3a30"
 
 [[package]]
 name = "manga-ocr"
-version = "0.7.2"
+version = "0.7.3"
 dependencies = [
  "anyhow",
  "clap",
