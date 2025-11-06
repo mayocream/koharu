@@ -66,7 +66,6 @@ We provide pre-built binaries for Windows, for other platforms, you may need to 
 
 - [Rust](https://www.rust-lang.org/tools/install) (1.85 or later)
 - [Bun](https://bun.sh/) (1.0 or later)
-- [Python](https://www.python.org/downloads/) (3.12 or later) (_optional_)
 
 ### Install dependencies
 
