@@ -35,7 +35,7 @@ rayon = { workspace = true }
 imageproc = { workspace = true }
 strum = { workspace = true }
 hf-hub = { workspace = true }
-cuda-rt = { workspace = true, optional = true }
+cuda-rt = { workspace = true }
 velopack = { workspace = true, optional = true }
 dirs = { workspace = true }
 
@@ -46,7 +46,6 @@ cuda = [
     "manga-ocr/cuda",
     "lama/cuda",
     "llm/cuda",
-    "cuda-rt",
 ]
 bundle = ["velopack"]
 

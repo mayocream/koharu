@@ -27,12 +27,7 @@ fn initialize() -> Result<()> {
 
     #[cfg(feature = "cuda")]
     {
-        let cuda_root = dirs::data_local_dir()
-            .unwrap_or_default()
-            .join("Koharu")
-            .join("cuda");
-        cuda_rt::ensure_dylibs(&cuda_root)?;
-        ort::execution_providers::cuda::preload_dylibs(Some(&cuda_root), Some(&cuda_root))?;
+        cuda_rt::ensure_dylibs(std::env::current_exe()?.parent().unwrap())?;
     }
 
     ort::init()
