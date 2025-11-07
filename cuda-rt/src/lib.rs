@@ -1,11 +1,12 @@
 mod zip;
 
 use anyhow::Result;
-use once_cell::sync::Lazy;
+use once_cell::sync::{Lazy, OnceCell};
 use rayon::iter::{IntoParallelRefIterator, ParallelIterator};
 use std::{fs, io::BufWriter, io::Read, io::Write, path::Path};
-use tracing::info;
+use tracing::{error, info};
 
+/// Shared HTTP client to reuse connections
 pub static HTTP_CLIENT: Lazy<reqwest::blocking::Client> = Lazy::new(|| {
     reqwest::blocking::Client::builder()
         .user_agent("cuda-rt/0.1 (+https://github.com)")
@@ -13,12 +14,54 @@ pub static HTTP_CLIENT: Lazy<reqwest::blocking::Client> = Lazy::new(|| {
         .expect("build reqwest client")
 });
 
-// CUDA packages to pull wheels for
+/// Keep handles to loaded dynamic libraries alive for process lifetime
+static DYLIB_HANDLES: OnceCell<Vec<libloading::Library>> = OnceCell::new();
+
+/// CUDA packages to pull wheels for
 pub const PACKAGES: &[&str] = &[
     "nvidia-cuda-runtime-cu12",
     "nvidia-cudnn-cu12",
     "nvidia-cublas-cu12",
     "nvidia-cufft-cu12",
+];
+
+/// Hard-coded load list by platform
+#[cfg(target_os = "windows")]
+const DYLIBS: &[&str] = &[
+    // Core CUDA runtime and BLAS/FFT
+    "cudart64_12.dll",
+    "cublasLt64_12.dll",
+    "cublas64_12.dll",
+    "cufft64_11.dll",
+    // cuDNN core and dependency chain (graph -> ops -> adv/cnn)
+    "cudnn64_9.dll",
+    "cudnn_graph64_9.dll",
+    "cudnn_ops64_9.dll",
+    "cudnn_heuristic64_9.dll",
+    "cudnn_adv64_9.dll",
+    "cudnn_cnn64_9.dll",
+    // cuDNN engine packs (may require NVRTC/NVJITLINK; load last, ignore failures)
+    "cudnn_engines_precompiled64_9.dll",
+    "cudnn_engines_runtime_compiled64_9.dll",
+];
+
+#[cfg(not(target_os = "windows"))]
+const DYLIBS: &[&str] = &[
+    // Core CUDA runtime and BLAS/FFT (sonames)
+    "libcudart.so.12",
+    "libcublasLt.so.12",
+    "libcublas.so.12",
+    "libcufft.so.11",
+    // cuDNN core and dependency chain
+    "libcudnn.so.9",
+    "libcudnn_graph.so.9",
+    "libcudnn_ops.so.9",
+    "libcudnn_heuristic.so.9",
+    "libcudnn_adv.so.9",
+    "libcudnn_cnn.so.9",
+    // cuDNN engine packs
+    "libcudnn_engines_precompiled.so.9",
+    "libcudnn_engines_runtime_compiled.so.9",
 ];
 
 pub fn ensure_dylibs(path: impl AsRef<Path>) -> Result<()> {
@@ -37,6 +80,47 @@ pub fn ensure_dylibs(path: impl AsRef<Path>) -> Result<()> {
 
     info!("ensure_dylibs: done");
     Ok(())
+}
+
+/// Preload CUDA/cuDNN dynamic libraries with a dependency-friendly order (Windows).
+/// Keeps the library handles alive for the process lifetime.
+pub fn preload_dylibs(dir: impl AsRef<Path>) -> Result<()> {
+    let dir = dir.as_ref();
+
+    let mut libs = Vec::new();
+
+    // Load exactly in our hard-coded order; skip names that are not present.
+    for name in DYLIBS {
+        let path = dir.join(name);
+        if !path.exists() {
+            continue;
+        }
+        unsafe {
+            match libloading::Library::new(&path) {
+                Ok(lib) => libs.push(lib),
+                Err(err) => {
+                    error!("preload_dylibs: failed {}: {}", path.display(), err);
+                    anyhow::bail!("preload_dylibs: failed {}: {}", path.display(), err);
+                }
+            }
+        }
+    }
+
+    DYLIB_HANDLES
+        .set(libs)
+        .map_err(|_| anyhow::anyhow!("preload_dylibs: already initialized"))?;
+    Ok(())
+}
+
+// Check if a RECORD or archive entry matches a wanted library by basename
+fn wanted_basename(path: &str) -> Option<&str> {
+    let base = std::path::Path::new(path).file_name()?.to_str()?;
+    for want in DYLIBS {
+        if base.eq_ignore_ascii_case(want) {
+            return Some(base);
+        }
+    }
+    None
 }
 
 fn current_platform_tag() -> Result<&'static str> {
@@ -84,7 +168,7 @@ fn fetch_and_extract(pkg: &str, platform_tag: &str, out_dir: &Path) -> Result<()
     // If size is None and file exists, treat as OK (no further verification).
     let needs_download = entries
         .iter()
-        .filter_map(|e| target_basename(&e.path).map(|base| (base, e.size)))
+        .filter_map(|e| wanted_basename(&e.path).map(|base| (base, e.size)))
         .any(|(base, rec_size)| {
             let local = out_dir.join(base);
             if !local.exists() {
@@ -115,7 +199,7 @@ fn extract_from_wheel(bytes: &[u8], out_dir: &Path) -> Result<()> {
     let mut targets: Vec<(String, String)> = Vec::new(); // (full archive path, output basename)
     for i in 0..archive.len() {
         let file = archive.by_index(i)?;
-        if let Some(base) = target_basename(file.name()) {
+        if let Some(base) = wanted_basename(file.name()) {
             targets.push((file.name().to_owned(), base.to_owned()));
         }
     }
@@ -162,21 +246,6 @@ fn extract_from_wheel(bytes: &[u8], out_dir: &Path) -> Result<()> {
     );
 
     Ok(())
-}
-
-fn target_basename(path: &str) -> Option<&str> {
-    let base = std::path::Path::new(path).file_name()?.to_str()?;
-    let lname = base.to_ascii_lowercase();
-    let is_dylib = if cfg!(target_os = "windows") {
-        lname.ends_with(".dll")
-    } else {
-        lname.ends_with(".so") || lname.contains(".so.")
-    };
-    if is_dylib && path.contains("nvidia") {
-        Some(base)
-    } else {
-        None
-    }
 }
 
 #[cfg(test)]

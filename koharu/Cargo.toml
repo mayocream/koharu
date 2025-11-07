@@ -38,8 +38,6 @@ hf-hub = { workspace = true }
 cuda-rt = { workspace = true }
 velopack = { workspace = true, optional = true }
 dirs = { workspace = true }
-once_cell = { workspace = true }
-libloading = { workspace = true }
 
 [features]
 cuda = [

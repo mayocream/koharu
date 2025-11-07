@@ -37,7 +37,7 @@ fn runtime_setup() -> Result<()> {
             .join("koharu")
             .join("lib");
         cuda_rt::ensure_dylibs(&lib_root)?;
-        crate::dylib::preload_dylibs(&lib_root)?;
+        cuda_rt::preload_dylibs(&lib_root)?;
     }
 
     ort::init()

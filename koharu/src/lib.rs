@@ -1,6 +1,5 @@
 pub mod app;
 pub mod command;
-pub mod dylib;
 pub mod image;
 pub mod llm;
 pub mod onnx;

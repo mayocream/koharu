@@ -22,6 +22,7 @@ csv = { workspace = true }
 sha2 = { workspace = true }
 base64 = { workspace = true }
 once_cell = { workspace = true }
+libloading = { workspace = true }
 
 [dev-dependencies]
 tempfile = { workspace = true }
