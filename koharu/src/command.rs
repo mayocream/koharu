@@ -119,12 +119,14 @@ pub fn llm_list() -> Vec<String> {
 pub async fn llm_load(model: State<'_, Arc<llm::Model>>, id: String) -> Result<()> {
     let id = ModelId::from_str(&id)?;
 
-    Ok(model.load(id).await)
+    let _ = model.load(id).await;
+    Ok(())
 }
 
 #[tauri::command]
 pub async fn llm_offload(model: State<'_, Arc<llm::Model>>) -> Result<()> {
-    Ok(model.offload().await)
+    let _ = model.offload().await;
+    Ok(())
 }
 
 #[tauri::command]

@@ -19,8 +19,6 @@ tracing = { workspace = true }
 reqwest = { workspace = true }
 flate2 = { workspace = true }
 csv = { workspace = true }
-sha2 = { workspace = true }
-base64 = { workspace = true }
 once_cell = { workspace = true }
 libloading = { workspace = true }
 

@@ -29,7 +29,6 @@ postcard = { workspace = true }
 thiserror = { workspace = true }
 tauri = { workspace = true }
 blake3 = { workspace = true }
-lru = { workspace = true }
 tokio = { workspace = true }
 rayon = { workspace = true }
 imageproc = { workspace = true }

@@ -5,6 +5,7 @@ use strum::Display;
 use tokio::sync::RwLock;
 
 /// Load state of the LLM
+#[allow(clippy::large_enum_variant)]
 #[derive(Display)]
 #[strum(serialize_all = "lowercase")]
 pub enum State {
@@ -18,6 +19,12 @@ pub enum State {
 /// Minimal owner for the LLM with non-blocking initialization.
 pub struct Model {
     state: Arc<RwLock<State>>,
+}
+
+impl Default for Model {
+    fn default() -> Self {
+        Self::new()
+    }
 }
 
 impl Model {
