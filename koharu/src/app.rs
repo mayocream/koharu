@@ -1,6 +1,7 @@
-use std::sync::Arc;
+use std::{sync::Arc, time::Duration};
 
 use anyhow::Result;
+use backon::{BackoffBuilder, BlockingRetryable, ExponentialBuilder};
 use ort::execution_providers::ExecutionProvider;
 use rfd::MessageDialog;
 use tauri::Manager;
@@ -38,7 +39,21 @@ fn runtime_setup() -> Result<()> {
             .ok_or_else(|| anyhow::anyhow!("Failed to get local data directory"))?
             .join("koharu")
             .join("lib");
-        cuda_rt::ensure_dylibs(&lib_root)?;
+        (|| cuda_rt::ensure_dylibs(&lib_root))
+            .retry(
+                ExponentialBuilder::new()
+                    .with_max_delay(Duration::from_millis(500))
+                    .with_min_delay(Duration::from_millis(50))
+                    .with_max_times(3)
+                    .build(),
+            )
+            .notify(|err, dur| {
+                warn!(
+                    "Failed to ensure CUDA runtime dylibs: {}. Retrying in {:?}",
+                    err, dur
+                );
+            })
+            .call()?;
         cuda_rt::preload_dylibs(&lib_root)?;
     }
 

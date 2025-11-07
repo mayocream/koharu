@@ -73,6 +73,7 @@ base64 = "0.22"
 tempfile = "3.10"
 once_cell = "1.21"
 libloading = "0.9"
+backon = "1.6"
 
 [profile.release]
 opt-level = "z"
