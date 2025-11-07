@@ -164,7 +164,7 @@ impl Llm {
     pub fn from_pretrained(which: ModelId) -> Result<Self> {
         let cfg = which.config();
         let api = Api::new()?;
-        let model_path = api.model(cfg.repo.to_string()).get(&cfg.filename)?;
+        let model_path = api.model(cfg.repo.to_string()).get(cfg.filename)?;
         let tokenizer_path = api
             .model(cfg.tokenizer_repo.to_string())
             .get("tokenizer.json")?;

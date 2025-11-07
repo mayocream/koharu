@@ -111,7 +111,7 @@ const DYLIBS: &[&str] = &[
 pub fn ensure_dylibs(path: impl AsRef<Path>) -> Result<()> {
     let out_dir = path.as_ref();
 
-    fs::create_dir_all(&out_dir)?;
+    fs::create_dir_all(out_dir)?;
 
     // Pick a simple platform tag to select wheels.
     let platform_tag = current_platform_tag()?;
@@ -120,7 +120,7 @@ pub fn ensure_dylibs(path: impl AsRef<Path>) -> Result<()> {
     // Fetch wheels and extract CUDA libs
     PACKAGES
         .par_iter()
-        .try_for_each(|pkg| fetch_and_extract(pkg, platform_tag, &out_dir))?;
+        .try_for_each(|pkg| fetch_and_extract(pkg, platform_tag, out_dir))?;
 
     info!("ensure_dylibs: done");
     Ok(())
@@ -293,7 +293,7 @@ fn extract_from_wheel(bytes: &[u8], out_dir: &Path) -> Result<()> {
         .collect();
 
     let results = results?;
-    let _total_bytes: u64 = results.iter().map(|(_, w)| *w as u64).sum();
+    let _total_bytes: u64 = results.iter().map(|(_, w)| *w).sum();
     info!(
         "extract: copied {} libraries into {}",
         results.len(),

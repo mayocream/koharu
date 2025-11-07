@@ -52,7 +52,7 @@ pub fn fetch_record(url: &str) -> Result<Vec<RecordEntry>> {
 
     // 2) Read local header to compute exact data offset
     let lh_fixed = http_get_range(url, lh_off, lh_off + LFH_FIXED_LEN - 1)?;
-    if lh_fixed.len() < LFH_FIXED_LEN as usize || &lh_fixed[0..4] != SIG_LFH {
+    if lh_fixed.len() < LFH_FIXED_LEN as usize || lh_fixed[0..4] != SIG_LFH {
         anyhow::bail!("bad local file header");
     }
     let name_len = le_u16(&lh_fixed, LFH_OFF_NAME_LEN) as u64;
@@ -76,7 +76,7 @@ pub fn fetch_record(url: &str) -> Result<Vec<RecordEntry>> {
 fn parse_central_directory_for_record(cd: &[u8]) -> Result<(u64, u32, u16)> {
     let mut i = 0usize;
     while i + CFH_FIXED_LEN <= cd.len() {
-        if &cd[i..i + 4] != SIG_CFH {
+        if cd[i..i + 4] != SIG_CFH {
             i += 1;
             continue;
         }
@@ -112,7 +112,7 @@ fn http_zip_eocd_and_cd(url: &str) -> Result<(u64, u64)> {
     let tail = http_get_tail(url, 70 * 1024)?;
     let mut found = None;
     for i in (0..=tail.len().saturating_sub(EOCD_MIN_LEN)).rev() {
-        if &tail[i..i + 4] == SIG_EOCD {
+        if tail[i..i + 4] == SIG_EOCD {
             found = Some(i);
             break;
         }
