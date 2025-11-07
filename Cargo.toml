@@ -69,6 +69,7 @@ sha2 = "0.10"
 base64 = "0.22"
 tempfile = "3.10"
 once_cell = "1.21"
+libloading = "0.9"
 
 [profile.release]
 opt-level = "z"

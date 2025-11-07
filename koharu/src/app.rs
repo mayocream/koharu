@@ -17,6 +17,7 @@ fn initialize() -> Result<()> {
             .set_title("Panic")
             .set_description(&msg)
             .show();
+        std::process::exit(1);
     }));
 
     #[cfg(feature = "bundle")]
@@ -25,9 +26,18 @@ fn initialize() -> Result<()> {
         velopack::VelopackApp::build().run();
     }
 
+    Ok(())
+}
+
+fn runtime_setup() -> Result<()> {
     #[cfg(feature = "cuda")]
     {
-        cuda_rt::ensure_dylibs(std::env::current_exe()?.parent().unwrap())?;
+        let lib_root = dirs::data_local_dir()
+            .ok_or_else(|| anyhow::anyhow!("Failed to get local data directory"))?
+            .join("koharu")
+            .join("lib");
+        cuda_rt::ensure_dylibs(&lib_root)?;
+        crate::dylib::preload_dylibs(&lib_root)?;
     }
 
     ort::init()
@@ -40,7 +50,9 @@ fn initialize() -> Result<()> {
     Ok(())
 }
 
-async fn setup(app: tauri::AppHandle) -> Result<()> {
+fn setup(app: tauri::AppHandle) -> Result<()> {
+    runtime_setup()?;
+
     let onnx = Arc::new(onnx::Model::new()?);
     let llm = Arc::new(llm::Model::new());
     let state = Arc::new(RwLock::new(State::default()));
@@ -60,7 +72,15 @@ pub fn run() -> Result<()> {
 
     tauri::Builder::default()
         .setup(|app| {
-            tauri::async_runtime::spawn(setup(app.handle().clone()));
+            std::thread::spawn({
+                let app = app.handle().clone();
+                move || {
+                    if let Err(e) = setup(app) {
+                        panic!("Failed to set up: {}", e);
+                    }
+                }
+            });
+
             Ok(())
         })
         .invoke_handler(tauri::generate_handler![
