@@ -19,49 +19,93 @@ static DYLIB_HANDLES: OnceCell<Vec<libloading::Library>> = OnceCell::new();
 
 /// CUDA packages to pull wheels for
 pub const PACKAGES: &[&str] = &[
+    #[cfg(feature = "cuda")]
     "nvidia-cuda-runtime-cu12",
+    #[cfg(feature = "cuda")]
     "nvidia-cudnn-cu12",
+    #[cfg(feature = "cuda")]
     "nvidia-cublas-cu12",
+    #[cfg(feature = "cuda")]
     "nvidia-cufft-cu12",
+    #[cfg(feature = "onnxruntime")]
+    "onnxruntime-gpu/1.22.0",
 ];
 
 /// Hard-coded load list by platform
 #[cfg(target_os = "windows")]
 const DYLIBS: &[&str] = &[
     // Core CUDA runtime and BLAS/FFT
+    #[cfg(feature = "cuda")]
     "cudart64_12.dll",
+    #[cfg(feature = "cuda")]
     "cublasLt64_12.dll",
+    #[cfg(feature = "cuda")]
     "cublas64_12.dll",
+    #[cfg(feature = "cuda")]
     "cufft64_11.dll",
     // cuDNN core and dependency chain (graph -> ops -> adv/cnn)
+    #[cfg(feature = "cuda")]
     "cudnn64_9.dll",
+    #[cfg(feature = "cuda")]
     "cudnn_graph64_9.dll",
+    #[cfg(feature = "cuda")]
     "cudnn_ops64_9.dll",
+    #[cfg(feature = "cuda")]
     "cudnn_heuristic64_9.dll",
+    #[cfg(feature = "cuda")]
     "cudnn_adv64_9.dll",
+    #[cfg(feature = "cuda")]
     "cudnn_cnn64_9.dll",
     // cuDNN engine packs (may require NVRTC/NVJITLINK; load last, ignore failures)
+    #[cfg(feature = "cuda")]
     "cudnn_engines_precompiled64_9.dll",
+    #[cfg(feature = "cuda")]
     "cudnn_engines_runtime_compiled64_9.dll",
+    // ONNX Runtime GPU
+    #[cfg(feature = "onnxruntime")]
+    "onnxruntime.dll",
+    #[cfg(feature = "onnxruntime")]
+    "onnxruntime_providers_shared.dll",
+    #[cfg(feature = "onnxruntime")]
+    "onnxruntime_providers_cuda.dll",
 ];
 
 #[cfg(not(target_os = "windows"))]
 const DYLIBS: &[&str] = &[
     // Core CUDA runtime and BLAS/FFT (sonames)
+    #[cfg(feature = "cuda")]
     "libcudart.so.12",
+    #[cfg(feature = "cuda")]
     "libcublasLt.so.12",
+    #[cfg(feature = "cuda")]
     "libcublas.so.12",
+    #[cfg(feature = "cuda")]
     "libcufft.so.11",
     // cuDNN core and dependency chain
+    #[cfg(feature = "cuda")]
     "libcudnn.so.9",
+    #[cfg(feature = "cuda")]
     "libcudnn_graph.so.9",
+    #[cfg(feature = "cuda")]
     "libcudnn_ops.so.9",
+    #[cfg(feature = "cuda")]
     "libcudnn_heuristic.so.9",
+    #[cfg(feature = "cuda")]
     "libcudnn_adv.so.9",
+    #[cfg(feature = "cuda")]
     "libcudnn_cnn.so.9",
     // cuDNN engine packs
+    #[cfg(feature = "cuda")]
     "libcudnn_engines_precompiled.so.9",
+    #[cfg(feature = "cuda")]
     "libcudnn_engines_runtime_compiled.so.9",
+    // ONNX Runtime GPU
+    #[cfg(feature = "onnxruntime")]
+    "libonnxruntime.so",
+    #[cfg(feature = "onnxruntime")]
+    "libonnxruntime_providers_shared.so",
+    #[cfg(feature = "onnxruntime")]
+    "libonnxruntime_providers_cuda.so",
 ];
 
 pub fn ensure_dylibs(path: impl AsRef<Path>) -> Result<()> {

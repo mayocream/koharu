@@ -40,12 +40,14 @@ velopack = { workspace = true, optional = true }
 dirs = { workspace = true }
 
 [features]
+default = ["cuda-rt/onnxruntime"]
 cuda = [
     "ort/cuda",
     "comic-text-detector/cuda",
     "manga-ocr/cuda",
     "lama/cuda",
     "llm/cuda",
+    "cuda-rt/cuda",
 ]
 bundle = ["velopack"]
 

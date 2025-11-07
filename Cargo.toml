@@ -22,17 +22,20 @@ repository = "https://github.com/mayocream/koharu"
 keywords = ["manga", "ocr", "translation", "deep_learning", "computer_vision"]
 
 [workspace.dependencies]
-comic-text-detector = { path = "./comic-text-detector" }
-manga-ocr = { path = "./manga-ocr" }
-lama = { path = "./lama" }
-llm = { path = "./llm" }
-cuda-rt = { path = "./cuda-rt" }
+comic-text-detector = { path = "./comic-text-detector", default-features = false }
+manga-ocr = { path = "./manga-ocr", default-features = false }
+lama = { path = "./lama", default-features = false }
+llm = { path = "./llm", default-features = false }
+cuda-rt = { path = "./cuda-rt", default-features = false }
 
 candle-transformers = "=0.9.2-alpha.1"
 candle-core = "=0.9.2-alpha.1"
 hf-hub = "0.4"
 image = "0.25"
-ort = "=2.0.0-rc.10"
+ort = { version = "=2.0.0-rc.10", default-features = false, features = [
+    "ndarray",
+    "load-dynamic",
+] }
 anyhow = "1.0"
 ndarray = "0.16"
 imageproc = "0.25"

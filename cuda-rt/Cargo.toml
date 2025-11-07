@@ -26,3 +26,8 @@ libloading = { workspace = true }
 
 [dev-dependencies]
 tempfile = { workspace = true }
+
+[features]
+default = ["cuda"]
+cuda = []
+onnxruntime = []

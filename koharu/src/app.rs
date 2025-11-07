@@ -30,7 +30,7 @@ fn initialize() -> Result<()> {
 }
 
 fn runtime_setup() -> Result<()> {
-    #[cfg(feature = "cuda")]
+    // Dynamically dylibs depending on features automatically
     {
         let lib_root = dirs::data_local_dir()
             .ok_or_else(|| anyhow::anyhow!("Failed to get local data directory"))?
