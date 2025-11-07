@@ -59,7 +59,7 @@ tokenizers = { version = "0.22", default-features = false, features = ["onig"] }
 strum = { version = "0.27", features = ["derive"] }
 zip = { version = "6.0", default-features = false, features = ["deflate"] }
 ureq = { version = "3.1", features = ["json"] }
-dirs = "5.0"
+dirs = "6.0"
 reqwest = { version = "0.12", features = ["blocking", "stream", "json"] }
 flate2 = { version = "1.0", default-features = false, features = [
     "zlib-ng-compat",
