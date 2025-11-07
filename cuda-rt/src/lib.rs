@@ -61,12 +61,15 @@ const DYLIBS: &[&str] = &[
     "cudnn_engines_precompiled64_9.dll",
     #[cfg(feature = "cuda")]
     "cudnn_engines_runtime_compiled64_9.dll",
-    // ONNX Runtime GPU
+    // ONNX Runtime core + providers
     #[cfg(feature = "onnxruntime")]
     "onnxruntime.dll",
     #[cfg(feature = "onnxruntime")]
     "onnxruntime_providers_shared.dll",
-    #[cfg(feature = "onnxruntime")]
+    // Only attempt to load CUDA provider when CUDA feature is enabled.
+    // The CUDA provider DLL depends on CUDA/cuDNN system libraries; loading it
+    // without the CUDA feature (and thus without those deps) causes a hard failure.
+    #[cfg(all(feature = "onnxruntime", feature = "cuda"))]
     "onnxruntime_providers_cuda.dll",
 ];
 
@@ -99,12 +102,13 @@ const DYLIBS: &[&str] = &[
     "libcudnn_engines_precompiled.so.9",
     #[cfg(feature = "cuda")]
     "libcudnn_engines_runtime_compiled.so.9",
-    // ONNX Runtime GPU
+    // ONNX Runtime core + providers
     #[cfg(feature = "onnxruntime")]
     "libonnxruntime.so",
     #[cfg(feature = "onnxruntime")]
     "libonnxruntime_providers_shared.so",
-    #[cfg(feature = "onnxruntime")]
+    // Only attempt to load CUDA provider when CUDA feature is enabled.
+    #[cfg(all(feature = "onnxruntime", feature = "cuda"))]
     "libonnxruntime_providers_cuda.so",
 ];
 
