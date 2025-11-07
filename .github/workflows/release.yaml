@@ -32,7 +32,6 @@ jobs:
         run: |
           mkdir dist
           cp target/release/koharu.exe dist/
-          cp target/release/*.dll dist/
       - name: Release
         shell: bash
         env:
