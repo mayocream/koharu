@@ -66,12 +66,8 @@ const DYLIBS: &[&str] = &[
     "onnxruntime.dll",
     #[cfg(feature = "onnxruntime")]
     "onnxruntime_providers_shared.dll",
-    // IMPORTANT: Do NOT preload provider DLLs (e.g. onnxruntime_providers_cuda.dll).
-    // Providers expect onnxruntime.dll to load them and to initialize the
-    // ProviderHost via providers_shared. Manually loading a provider causes its
-    // DllMain to fail (ERROR_DLL_INIT_FAILED/1114) because the host is not set.
-    // We only ensure CUDA/cuDNN libraries and the main onnxruntime.dll are
-    // present; ONNX Runtime will load the CUDA provider on demand.
+    #[cfg(all(feature = "onnxruntime", feature = "onnxruntime"))]
+    "onnxruntime_providers_cuda.dll",
 ];
 
 #[cfg(not(target_os = "windows"))]
@@ -108,6 +104,8 @@ const DYLIBS: &[&str] = &[
     "libonnxruntime.so",
     #[cfg(feature = "onnxruntime")]
     "libonnxruntime_providers_shared.so",
+    #[cfg(all(feature = "onnxruntime", feature = "onnxruntime"))]
+    "libonnxruntime_providers_cuda.so",
 ];
 
 pub fn ensure_dylibs(path: impl AsRef<Path>) -> Result<()> {
@@ -141,6 +139,17 @@ pub fn preload_dylibs(dir: impl AsRef<Path>) -> Result<()> {
         if !path.exists() {
             continue;
         }
+
+        // IMPORTANT: Do NOT preload provider DLLs (e.g. onnxruntime_providers_cuda.dll).
+        // Providers expect onnxruntime.dll to load them and to initialize the
+        // ProviderHost via providers_shared. Manually loading a provider causes its
+        // DllMain to fail (ERROR_DLL_INIT_FAILED/1114) because the host is not set.
+        // We only ensure CUDA/cuDNN libraries and the main onnxruntime.dll are
+        // present; ONNX Runtime will load the CUDA provider on demand.
+        if name.contains("onnxruntime_providers_cuda") {
+            continue;
+        }
+
         unsafe {
             match libloading::Library::new(&path) {
                 Ok(lib) => libs.push(lib),
