@@ -1,9 +1,11 @@
 use std::sync::Arc;
 
 use anyhow::Result;
+use ort::execution_providers::ExecutionProvider;
 use rfd::MessageDialog;
 use tauri::Manager;
 use tokio::sync::RwLock;
+use tracing::warn;
 
 use crate::{command, llm, onnx, state::State};
 
@@ -40,12 +42,22 @@ fn runtime_setup() -> Result<()> {
         cuda_rt::preload_dylibs(&lib_root)?;
     }
 
-    ort::init()
-        .with_execution_providers([
-            #[cfg(feature = "cuda")]
-            ort::execution_providers::CUDAExecutionProvider::default().build(),
-        ])
-        .commit()?;
+    // Initialize ONNX Runtime
+    {
+        let cuda = ort::execution_providers::CUDAExecutionProvider::default();
+        if !cuda.is_available()? {
+            warn!(
+                "CUDA Execution Provider is not available. Falling back to CPU Execution Provider."
+            );
+        }
+
+        ort::init()
+            .with_execution_providers([
+                #[cfg(feature = "cuda")]
+                cuda.build(),
+            ])
+            .commit()?;
+    }
 
     Ok(())
 }

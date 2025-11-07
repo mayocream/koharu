@@ -28,6 +28,6 @@ libloading = { workspace = true }
 tempfile = { workspace = true }
 
 [features]
-default = ["cuda"]
+default = ["cuda", "onnxruntime"]
 cuda = []
 onnxruntime = []

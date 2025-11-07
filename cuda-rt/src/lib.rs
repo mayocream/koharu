@@ -61,16 +61,17 @@ const DYLIBS: &[&str] = &[
     "cudnn_engines_precompiled64_9.dll",
     #[cfg(feature = "cuda")]
     "cudnn_engines_runtime_compiled64_9.dll",
-    // ONNX Runtime core + providers
+    // ONNX Runtime core + shared provider glue
     #[cfg(feature = "onnxruntime")]
     "onnxruntime.dll",
     #[cfg(feature = "onnxruntime")]
     "onnxruntime_providers_shared.dll",
-    // Only attempt to load CUDA provider when CUDA feature is enabled.
-    // The CUDA provider DLL depends on CUDA/cuDNN system libraries; loading it
-    // without the CUDA feature (and thus without those deps) causes a hard failure.
-    #[cfg(all(feature = "onnxruntime", feature = "cuda"))]
-    "onnxruntime_providers_cuda.dll",
+    // IMPORTANT: Do NOT preload provider DLLs (e.g. onnxruntime_providers_cuda.dll).
+    // Providers expect onnxruntime.dll to load them and to initialize the
+    // ProviderHost via providers_shared. Manually loading a provider causes its
+    // DllMain to fail (ERROR_DLL_INIT_FAILED/1114) because the host is not set.
+    // We only ensure CUDA/cuDNN libraries and the main onnxruntime.dll are
+    // present; ONNX Runtime will load the CUDA provider on demand.
 ];
 
 #[cfg(not(target_os = "windows"))]
@@ -107,9 +108,6 @@ const DYLIBS: &[&str] = &[
     "libonnxruntime.so",
     #[cfg(feature = "onnxruntime")]
     "libonnxruntime_providers_shared.so",
-    // Only attempt to load CUDA provider when CUDA feature is enabled.
-    #[cfg(all(feature = "onnxruntime", feature = "cuda"))]
-    "libonnxruntime_providers_cuda.so",
 ];
 
 pub fn ensure_dylibs(path: impl AsRef<Path>) -> Result<()> {
@@ -318,6 +316,17 @@ mod tests {
         println!("Elapsed time: {:?}", elapsed);
 
         assert!(elapsed < t0.elapsed());
+
+        Ok(())
+    }
+
+    #[test]
+    fn test_preload_dylibs() -> Result<()> {
+        let temp_dir = std::env::temp_dir();
+        let out_dir = temp_dir.join("cuda_rt_test_dylibs");
+
+        ensure_dylibs(&out_dir)?;
+        preload_dylibs(&out_dir)?;
 
         Ok(())
     }
