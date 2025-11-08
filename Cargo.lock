@@ -1226,23 +1226,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "cuda-rt"
-version = "0.7.6"
-dependencies = [
- "anyhow",
- "csv",
- "flate2",
- "libloading 0.9.0",
- "once_cell",
- "rayon",
- "reqwest",
- "serde_json",
- "tempfile",
- "tracing",
- "zip 6.0.0",
-]
-
-[[package]]
 name = "cudarc"
 version = "0.17.7"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -3134,11 +3117,11 @@ dependencies = [
  "backon",
  "blake3",
  "comic-text-detector",
- "cuda-rt",
  "dirs",
  "hf-hub",
  "image",
  "imageproc",
+ "koharu-runtime",
  "lama",
  "llm",
  "manga-ocr",
@@ -3158,6 +3141,26 @@ dependencies = [
  "tracing",
  "tracing-subscriber",
  "velopack",
+]
+
+[[package]]
+name = "koharu-runtime"
+version = "0.7.6"
+dependencies = [
+ "anyhow",
+ "csv",
+ "flate2",
+ "hf-hub",
+ "libloading 0.9.0",
+ "once_cell",
+ "rayon",
+ "reqwest",
+ "serde",
+ "serde_json",
+ "tauri",
+ "tempfile",
+ "tracing",
+ "zip 6.0.0",
 ]
 
 [[package]]

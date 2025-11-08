@@ -59,3 +59,4 @@ impl hf_hub::api::tokio::Progress for Emitter {
         });
     }
 }
+

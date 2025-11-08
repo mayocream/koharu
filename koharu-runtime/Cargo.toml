@@ -1,5 +1,5 @@
 [package]
-name = "cuda-rt"
+name = "koharu-runtime"
 version.workspace = true
 edition.workspace = true
 description.workspace = true
@@ -21,6 +21,9 @@ flate2 = { workspace = true }
 csv = { workspace = true }
 once_cell = { workspace = true }
 libloading = { workspace = true }
+tauri = { workspace = true }
+serde = { workspace = true }
+hf-hub = { workspace = true }
 
 [dev-dependencies]
 tempfile = { workspace = true }
@@ -29,3 +32,4 @@ tempfile = { workspace = true }
 default = ["cuda", "onnxruntime"]
 cuda = []
 onnxruntime = []
+

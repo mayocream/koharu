@@ -1,4 +1,5 @@
 mod zip;
+pub mod progress;
 
 use anyhow::Result;
 use once_cell::sync::{Lazy, OnceCell};
@@ -9,7 +10,7 @@ use tracing::{error, info};
 /// Shared HTTP client to reuse connections
 pub static HTTP_CLIENT: Lazy<reqwest::blocking::Client> = Lazy::new(|| {
     reqwest::blocking::Client::builder()
-        .user_agent("cuda-rt/0.1 (+https://github.com)")
+        .user_agent("koharu-runtime/0.1 (+https://github.com)")
         .build()
         .expect("build reqwest client")
 });
@@ -126,50 +127,46 @@ pub fn ensure_dylibs(path: impl AsRef<Path>) -> Result<()> {
     Ok(())
 }
 
-/// Preload CUDA/cuDNN dynamic libraries with a dependency-friendly order (Windows).
-/// Keeps the library handles alive for the process lifetime.
-pub fn preload_dylibs(dir: impl AsRef<Path>) -> Result<()> {
-    let dir = dir.as_ref();
+pub fn preload_dylibs(path: impl AsRef<Path>) -> Result<()> {
+    let out_dir = path.as_ref();
 
-    let mut libs = Vec::new();
+    // Read directory entries once to a vector, then load in order.
+    let entries: Vec<_> = fs::read_dir(out_dir)?.collect();
+    let mut handles: Vec<libloading::Library> = Vec::new();
 
-    // Load exactly in our hard-coded order; skip names that are not present.
-    for name in DYLIBS {
-        let path = dir.join(name);
-        if !path.exists() {
-            continue;
-        }
+    // Load all DLLs first, then try providers
+    for entry in &entries {
+        let entry = entry.as_ref().map_err(|e| anyhow::anyhow!("{}", e))?;
+        let path = entry.path();
+        let name = path
+            .file_name()
+            .and_then(|f| f.to_str())
+            .unwrap_or("");
 
-        // IMPORTANT: Do NOT preload provider DLLs (e.g. onnxruntime_providers_cuda.dll).
-        // Providers expect onnxruntime.dll to load them and to initialize the
-        // ProviderHost via providers_shared. Manually loading a provider causes its
-        // DllMain to fail (ERROR_DLL_INIT_FAILED/1114) because the host is not set.
-        // We only ensure CUDA/cuDNN libraries and the main onnxruntime.dll are
-        // present; ONNX Runtime will load the CUDA provider on demand.
-        if name.contains("onnxruntime_providers_cuda") {
-            continue;
-        }
-
-        unsafe {
-            match libloading::Library::new(&path) {
-                Ok(lib) => libs.push(lib),
+        if wanted_basename(name).is_some() {
+            match unsafe { libloading::Library::new(&path) } {
+                Ok(lib) => {
+                    handles.push(lib);
+                }
                 Err(err) => {
-                    error!("preload_dylibs: failed {}: {}", path.display(), err);
-                    anyhow::bail!("preload_dylibs: failed {}: {}", path.display(), err);
+                    // Some optional engines may fail to load due to missing NVRTC; ignore.
+                    error!("failed to load {}: {}", path.display(), err);
                 }
             }
         }
     }
 
-    DYLIB_HANDLES
-        .set(libs)
-        .map_err(|_| anyhow::anyhow!("preload_dylibs: already initialized"))?;
+    // Keep handles alive for the process lifetime
+    let _ = DYLIB_HANDLES.set(handles);
     Ok(())
 }
 
-// Check if a RECORD or archive entry matches a wanted library by basename
 fn wanted_basename(path: &str) -> Option<&str> {
-    let base = std::path::Path::new(path).file_name()?.to_str()?;
+    let base = Path::new(path)
+        .file_name()
+        .and_then(|s| s.to_str())
+        .unwrap_or(path);
+
     for want in DYLIBS {
         if base.eq_ignore_ascii_case(want) {
             return Some(base);
@@ -340,3 +337,4 @@ mod tests {
         Ok(())
     }
 }
+

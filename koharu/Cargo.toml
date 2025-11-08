@@ -11,6 +11,7 @@ repository.workspace = true
 keywords.workspace = true
 
 [dependencies]
+koharu-runtime = { workspace = true }
 comic-text-detector = { workspace = true }
 manga-ocr = { workspace = true }
 lama = { workspace = true }
@@ -34,20 +35,19 @@ rayon = { workspace = true }
 imageproc = { workspace = true }
 strum = { workspace = true }
 hf-hub = { workspace = true }
-cuda-rt = { workspace = true }
 velopack = { workspace = true, optional = true }
 dirs = { workspace = true }
 backon = { workspace = true }
 
 [features]
-default = ["cuda-rt/onnxruntime"]
+default = ["koharu-runtime/onnxruntime"]
 cuda = [
     "ort/cuda",
     "comic-text-detector/cuda",
     "manga-ocr/cuda",
     "lama/cuda",
     "llm/cuda",
-    "cuda-rt/cuda",
+    "koharu-runtime/cuda",
 ]
 bundle = ["velopack"]
 
