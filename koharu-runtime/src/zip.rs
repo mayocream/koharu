@@ -135,7 +135,7 @@ fn http_get_tail(url: &str, nbytes: usize) -> Result<Vec<u8>> {
 }
 
 fn http_get_range(url: &str, start: u64, end_inclusive: u64) -> Result<Vec<u8>> {
-    let resp = crate::HTTP_CLIENT
+    let resp = crate::dylib::HTTP_CLIENT
         .get(url)
         .header(
             reqwest::header::RANGE,
@@ -149,7 +149,7 @@ fn http_get_range(url: &str, start: u64, end_inclusive: u64) -> Result<Vec<u8>> 
 }
 
 fn head_content_length(url: &str) -> Result<u64> {
-    let resp = crate::HTTP_CLIENT.head(url).send()?;
+    let resp = crate::dylib::HTTP_CLIENT.head(url).send()?;
     if !resp.status().is_success() {
         anyhow::bail!("HEAD failed: {}", resp.status());
     }
@@ -222,7 +222,7 @@ mod tests {
                 .ok_or_else(|| anyhow::anyhow!("no suitable wheel for tag {tag}"))
         }
 
-        for pkg in crate::PACKAGES {
+        for pkg in crate::dylib::PACKAGES {
             for tag in ["win_amd64", "manylinux"] {
                 let url = pick_wheel_url(pkg, tag)?;
                 let entries = fetch_record(&url)?;
