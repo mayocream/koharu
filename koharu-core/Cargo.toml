@@ -1,0 +1,24 @@
+[package]
+name = "koharu-core"
+version.workspace = true
+edition.workspace = true
+description.workspace = true
+license-file.workspace = true
+authors.workspace = true
+readme.workspace = true
+homepage.workspace = true
+repository.workspace = true
+keywords.workspace = true
+
+[dependencies]
+anyhow = { workspace = true }
+thiserror = { workspace = true }
+serde = { workspace = true }
+serde_bytes = { workspace = true }
+image = { workspace = true }
+strum = { workspace = true }
+tauri = { workspace = true }
+hf-hub = { workspace = true }
+tokio = { workspace = true }
+blake3 = { workspace = true }
+postcard = { workspace = true }

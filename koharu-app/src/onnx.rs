@@ -1,13 +1,12 @@
 use std::sync::Arc;
 
 use anyhow::Result;
+use koharu_core::image::SerializableDynamicImage;
+use koharu_core::state::TextBlock;
 use koharu_models::comic_text_detector::ComicTextDetector;
 use koharu_models::lama::Lama;
 use koharu_models::manga_ocr::MangaOCR;
 use tokio::sync::Mutex;
-
-use crate::image::SerializableDynamicImage;
-use crate::state::TextBlock;
 
 #[derive(Debug, Clone)]
 pub struct Model {

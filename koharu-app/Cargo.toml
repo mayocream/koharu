@@ -1,5 +1,5 @@
 [package]
-name = "koharu"
+name = "koharu-app"
 version.workspace = true
 edition.workspace = true
 description.workspace = true
@@ -11,6 +11,7 @@ repository.workspace = true
 keywords.workspace = true
 
 [dependencies]
+koharu-core = { workspace = true }
 koharu-runtime = { workspace = true }
 koharu-models = { workspace = true }
 anyhow = { workspace = true }

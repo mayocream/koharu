@@ -40,3 +40,6 @@ models/
 
 # Python
 .venv/
+
+# Tauri
+gen/

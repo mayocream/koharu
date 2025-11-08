@@ -2,13 +2,14 @@ use std::{sync::Arc, time::Duration};
 
 use anyhow::Result;
 use backon::{BackoffBuilder, BlockingRetryable, ExponentialBuilder};
+use koharu_core::state::State;
 use ort::execution_providers::ExecutionProvider;
 use rfd::MessageDialog;
 use tauri::Manager;
 use tokio::sync::RwLock;
 use tracing::warn;
 
-use crate::{command, llm, onnx, state::State};
+use crate::{command, llm, onnx};
 
 fn initialize() -> Result<()> {
     tracing_subscriber::fmt().init();

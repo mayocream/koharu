@@ -1,4 +1,3 @@
-pub mod progress;
 mod zip;
 
 use anyhow::Result;

@@ -3095,7 +3095,7 @@ dependencies = [
 ]
 
 [[package]]
-name = "koharu"
+name = "koharu-app"
 version = "0.7.6"
 dependencies = [
  "anyhow",
@@ -3105,6 +3105,7 @@ dependencies = [
  "hf-hub",
  "image",
  "imageproc",
+ "koharu-core",
  "koharu-models",
  "koharu-runtime",
  "open",
@@ -3123,6 +3124,23 @@ dependencies = [
  "tracing",
  "tracing-subscriber",
  "velopack",
+]
+
+[[package]]
+name = "koharu-core"
+version = "0.7.6"
+dependencies = [
+ "anyhow",
+ "blake3",
+ "hf-hub",
+ "image",
+ "postcard",
+ "serde",
+ "serde_bytes",
+ "strum",
+ "tauri",
+ "thiserror 2.0.17",
+ "tokio",
 ]
 
 [[package]]

@@ -6,7 +6,6 @@ use tokio::sync::RwLock;
 
 use crate::image::SerializableDynamicImage;
 
-/// A block of text detected in an image.
 #[derive(Default, Debug, Clone, Serialize, Deserialize)]
 pub struct TextBlock {
     pub x: u32,
@@ -18,7 +17,6 @@ pub struct TextBlock {
     pub translation: Option<String>,
 }
 
-/// Represents a document with associated metadata and images.
 #[derive(Default, Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct Document {
@@ -47,20 +45,16 @@ impl Document {
         }
     }
 
-    /// Load a document from an image file.
     fn image(path: PathBuf) -> anyhow::Result<Self> {
         let bytes = std::fs::read(&path)?;
-
         let img = image::load_from_memory(&bytes)?;
         let (width, height) = img.dimensions();
-
         let id = blake3::hash(&bytes).to_hex().to_string();
         let name = path
             .file_stem()
             .unwrap_or_default()
             .to_string_lossy()
             .to_string();
-
         Ok(Document {
             id,
             path,
@@ -74,11 +68,9 @@ impl Document {
         })
     }
 
-    /// Load a document from a Koharu (.khr) file.
     fn khr(path: PathBuf) -> anyhow::Result<Self> {
         let bytes = std::fs::read(&path)?;
         let doc: Document = postcard::from_bytes(&bytes)?;
-
         Ok(doc)
     }
 }

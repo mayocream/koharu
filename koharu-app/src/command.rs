@@ -1,14 +1,14 @@
 use std::{str::FromStr, sync::Arc};
 
+use koharu_core::{
+    result::Result,
+    state::{AppState, Document},
+};
 use koharu_models::llm::{GenerateOptions, ModelId};
 use rayon::iter::{IntoParallelIterator, ParallelIterator};
 use tauri::State;
 
-use crate::{
-    llm, onnx,
-    result::Result,
-    state::{AppState, Document},
-};
+use crate::{llm, onnx};
 
 #[tauri::command]
 pub fn open_external(url: &str) -> Result<()> {
