@@ -1,4 +1,4 @@
-use llm::{ChatMessage, ChatRole, Llm, ModelId};
+use koharu_models::llm::{ChatMessage, ChatRole, Llm, ModelId};
 use serde::{Deserialize, Serialize};
 use std::sync::Arc;
 use strum::Display;

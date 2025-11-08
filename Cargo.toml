@@ -1,12 +1,5 @@
 [workspace]
-members = [
-    "comic-text-detector",
-    "lama",
-    "llm",
-    "manga-ocr",
-    "koharu",
-    "koharu-runtime",
-]
+members = ["koharu", "koharu-models", "koharu-runtime"]
 default-members = ["koharu"]
 resolver = "3"
 
@@ -23,10 +16,7 @@ keywords = ["manga", "ocr", "translation", "deep_learning", "computer_vision"]
 
 [workspace.dependencies]
 koharu-runtime = { path = "./koharu-runtime", default-features = false }
-comic-text-detector = { path = "./comic-text-detector", default-features = false }
-manga-ocr = { path = "./manga-ocr", default-features = false }
-lama = { path = "./lama", default-features = false }
-llm = { path = "./llm", default-features = false }
+koharu-models = { path = "./koharu-models", default-features = false }
 
 candle-transformers = "=0.9.2-alpha.1"
 candle-core = "=0.9.2-alpha.1"

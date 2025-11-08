@@ -1,5 +1,5 @@
 use clap::Parser;
-use comic_text_detector::ComicTextDetector;
+use koharu_models::comic_text_detector::ComicTextDetector;
 use ort::execution_providers::CUDAExecutionProvider;
 
 #[derive(Parser)]

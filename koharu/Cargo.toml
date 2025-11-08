@@ -12,10 +12,7 @@ keywords.workspace = true
 
 [dependencies]
 koharu-runtime = { workspace = true }
-comic-text-detector = { workspace = true }
-manga-ocr = { workspace = true }
-lama = { workspace = true }
-llm = { workspace = true }
+koharu-models = { workspace = true }
 anyhow = { workspace = true }
 ort = { workspace = true }
 rfd = { workspace = true }
@@ -43,10 +40,7 @@ backon = { workspace = true }
 default = ["koharu-runtime/onnxruntime"]
 cuda = [
     "ort/cuda",
-    "comic-text-detector/cuda",
-    "manga-ocr/cuda",
-    "lama/cuda",
-    "llm/cuda",
+    "koharu-models/cuda",
     "koharu-runtime/cuda",
 ]
 bundle = ["velopack"]

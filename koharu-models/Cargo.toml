@@ -1,0 +1,44 @@
+[package]
+name = "koharu-models"
+version.workspace = true
+edition.workspace = true
+description.workspace = true
+license-file.workspace = true
+authors.workspace = true
+readme.workspace = true
+homepage.workspace = true
+repository.workspace = true
+keywords.workspace = true
+
+[dependencies]
+anyhow = { workspace = true }
+clap = { workspace = true }
+image = { workspace = true }
+imageproc = { workspace = true }
+ndarray = { workspace = true }
+ort = { workspace = true }
+hf-hub = { workspace = true }
+candle-core = { workspace = true }
+candle-transformers = { workspace = true }
+tokenizers = { workspace = true }
+strum = { workspace = true }
+tracing = { workspace = true }
+
+[features]
+cuda = ["ort/cuda", "candle-core/cuda", "candle-transformers/cuda"]
+
+[[bin]]
+name = "comic-text-detector"
+path = "bin/comic-text-detector.rs"
+
+[[bin]]
+name = "lama"
+path = "bin/lama.rs"
+
+[[bin]]
+name = "llm"
+path = "bin/llm.rs"
+
+[[bin]]
+name = "manga-ocr"
+path = "bin/manga-ocr.rs"

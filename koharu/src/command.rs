@@ -1,6 +1,6 @@
 use std::{str::FromStr, sync::Arc};
 
-use ::llm::{GenerateOptions, ModelId};
+use koharu_models::llm::{GenerateOptions, ModelId};
 use rayon::iter::{IntoParallelIterator, ParallelIterator};
 use tauri::State;
 
@@ -148,7 +148,7 @@ pub async fn llm_generate(
                 .documents
                 .get_mut(index)
                 .ok_or_else(|| anyhow::anyhow!("Document not found"))?;
-            let messages: Vec<::llm::ChatMessage> = llm::Prompt::new(
+            let messages: Vec<koharu_models::llm::ChatMessage> = llm::Prompt::new(
                 prompt,
                 document
                     .text_blocks

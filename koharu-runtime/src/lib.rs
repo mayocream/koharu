@@ -1,5 +1,5 @@
-mod zip;
 pub mod progress;
+mod zip;
 
 use anyhow::Result;
 use once_cell::sync::{Lazy, OnceCell};
@@ -138,10 +138,7 @@ pub fn preload_dylibs(path: impl AsRef<Path>) -> Result<()> {
     for entry in &entries {
         let entry = entry.as_ref().map_err(|e| anyhow::anyhow!("{}", e))?;
         let path = entry.path();
-        let name = path
-            .file_name()
-            .and_then(|f| f.to_str())
-            .unwrap_or("");
+        let name = path.file_name().and_then(|f| f.to_str()).unwrap_or("");
 
         if wanted_basename(name).is_some() {
             match unsafe { libloading::Library::new(&path) } {
@@ -337,4 +334,3 @@ mod tests {
         Ok(())
     }
 }
-

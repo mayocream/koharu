@@ -1,9 +1,9 @@
 use std::sync::Arc;
 
 use anyhow::Result;
-use comic_text_detector::ComicTextDetector;
-use lama::Lama;
-use manga_ocr::MangaOCR;
+use koharu_models::comic_text_detector::ComicTextDetector;
+use koharu_models::lama::Lama;
+use koharu_models::manga_ocr::MangaOCR;
 use tokio::sync::Mutex;
 
 use crate::image::SerializableDynamicImage;

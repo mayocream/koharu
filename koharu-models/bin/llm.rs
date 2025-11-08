@@ -1,5 +1,5 @@
 use clap::Parser;
-use llm::{ChatMessage, GenerateOptions, Llm, ModelId};
+use koharu_models::llm::{ChatMessage, ChatRole, GenerateOptions, Llm, ModelId};
 
 #[derive(Parser, Debug)]
 #[command(author, version, about)]
@@ -61,7 +61,7 @@ fn main() -> anyhow::Result<()> {
         repeat_last_n: args.repeat_last_n,
     };
 
-    let out = llm.generate(&[ChatMessage::new(llm::ChatRole::User, args.prompt)], &opts)?;
+    let out = llm.generate(&[ChatMessage::new(ChatRole::User, args.prompt)], &opts)?;
 
     println!("{}", out);
     Ok(())
