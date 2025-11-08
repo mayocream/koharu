@@ -1,6 +1,6 @@
 [workspace]
-members = ["koharu", "koharu-models", "koharu-runtime", "koharu-core"]
-default-members = ["koharu"]
+members = ["koharu-app", "koharu-models", "koharu-runtime", "koharu-core"]
+default-members = ["koharu-app"]
 resolver = "3"
 
 [workspace.package]

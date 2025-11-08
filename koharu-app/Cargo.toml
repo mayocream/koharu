@@ -1,5 +1,5 @@
 [package]
-name = "koharu"
+name = "koharu-app"
 version.workspace = true
 edition.workspace = true
 description.workspace = true

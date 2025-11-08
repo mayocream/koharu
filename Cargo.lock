@@ -3095,7 +3095,7 @@ dependencies = [
 ]
 
 [[package]]
-name = "koharu"
+name = "koharu-app"
 version = "0.7.6"
 dependencies = [
  "anyhow",
