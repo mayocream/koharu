@@ -2,7 +2,7 @@ use serde::Serialize;
 use tracing::{Level, event};
 
 pub const PROGRESS_TRACE_TARGET: &str = "koharu::progress";
-pub const PROGRESS_WINDOW_EVENT: &str = "download://progress";
+pub const PROGRESS_WINDOW_EVENT: &str = "koharu://progress";
 
 // refer: https://v2.tauri.app/develop/calling-frontend/#channels
 #[derive(Debug, Serialize, Clone)]
