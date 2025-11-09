@@ -17,6 +17,8 @@ zip = { workspace = true }
 rayon = { workspace = true }
 tracing = { workspace = true }
 reqwest = { workspace = true }
+tokio = { workspace = true }
+futures = { workspace = true }
 flate2 = { workspace = true }
 csv = { workspace = true }
 once_cell = { workspace = true }
@@ -24,6 +26,7 @@ libloading = { workspace = true }
 tauri = { workspace = true }
 serde = { workspace = true }
 hf-hub = { workspace = true }
+num_cpus = { workspace = true }
 
 [dev-dependencies]
 tempfile = { workspace = true }
@@ -32,4 +35,3 @@ tempfile = { workspace = true }
 default = ["cuda", "onnxruntime"]
 cuda = []
 onnxruntime = []
-

@@ -1,14 +1,23 @@
 use anyhow::Result;
+use futures::stream::{self, StreamExt, TryStreamExt};
 use once_cell::sync::{Lazy, OnceCell};
 use rayon::iter::{IntoParallelRefIterator, ParallelIterator};
-use std::{fs, io::BufWriter, io::Read, io::Write, path::Path};
+use std::{
+    fs,
+    io::BufWriter,
+    io::Read,
+    io::Write,
+    path::{Path, PathBuf},
+    sync::Arc,
+};
+use tokio::task;
 use tracing::{error, info};
 
 use crate::zip;
 
 /// Shared HTTP client to reuse connections
-pub static HTTP_CLIENT: Lazy<reqwest::blocking::Client> = Lazy::new(|| {
-    reqwest::blocking::Client::builder()
+pub static HTTP_CLIENT: Lazy<reqwest::Client> = Lazy::new(|| {
+    reqwest::Client::builder()
         .user_agent("koharu-runtime/0.1 (+https://github.com)")
         .build()
         .expect("build reqwest client")
@@ -108,19 +117,23 @@ const DYLIBS: &[&str] = &[
     "libonnxruntime_providers_cuda.so",
 ];
 
-pub fn ensure_dylibs(path: impl AsRef<Path>) -> Result<()> {
-    let out_dir = path.as_ref();
+pub async fn ensure_dylibs(path: impl AsRef<Path>) -> Result<()> {
+    let path = path.as_ref().to_owned();
 
-    fs::create_dir_all(out_dir)?;
+    fs::create_dir_all(&path)?;
 
-    // Pick a simple platform tag to select wheels.
     let platform_tag = current_platform_tag()?;
-    info!("ensure_dylibs: start -> {}", out_dir.display());
+    info!("ensure_dylibs: start -> {}", path.display());
 
-    // Fetch wheels and extract CUDA libs
-    PACKAGES
-        .par_iter()
-        .try_for_each(|pkg| fetch_and_extract(pkg, platform_tag, out_dir))?;
+    let out_dir = Arc::new(path);
+    stream::iter(PACKAGES.iter().copied())
+        .map(|pkg| {
+            let out_dir = Arc::clone(&out_dir);
+            async move { fetch_and_extract(pkg, platform_tag, out_dir).await }
+        })
+        .buffer_unordered(num_cpus::get())
+        .try_collect::<Vec<_>>()
+        .await?;
 
     info!("ensure_dylibs: done");
     Ok(())
@@ -181,11 +194,11 @@ fn current_platform_tag() -> Result<&'static str> {
     }
 }
 
-fn fetch_and_extract(pkg: &str, platform_tag: &str, out_dir: &Path) -> Result<()> {
+async fn fetch_and_extract(pkg: &str, platform_tag: &str, out_dir: Arc<PathBuf>) -> Result<()> {
     // 1) Query PyPI JSON
     let meta_url = format!("https://pypi.org/pypi/{pkg}/json");
-    let resp = HTTP_CLIENT.get(&meta_url).send()?;
-    let json: serde_json::Value = resp.json()?;
+    let resp = HTTP_CLIENT.get(&meta_url).send().await?;
+    let json: serde_json::Value = resp.json().await?;
 
     // 2) Choose a wheel
     let files = json
@@ -210,15 +223,15 @@ fn fetch_and_extract(pkg: &str, platform_tag: &str, out_dir: &Path) -> Result<()
     info!("{pkg}: selected wheel {wheel_name}");
 
     // 3) Use RECORD to check local dylibs; download only if needed
-    let entries = zip::fetch_record(&wheel_url)?;
+    let entries = zip::fetch_record(&wheel_url).await?;
 
     // Fast path: existence + size-only check; no hashing.
     // If size is None and file exists, treat as OK (no further verification).
     let needs_download = entries
-        .iter()
+        .par_iter()
         .filter_map(|e| wanted_basename(&e.path).map(|base| (base, e.size)))
         .any(|(base, rec_size)| {
-            let local = out_dir.join(base);
+            let local = out_dir.as_ref().join(base);
             if !local.exists() {
                 return true;
             }
@@ -230,11 +243,13 @@ fn fetch_and_extract(pkg: &str, platform_tag: &str, out_dir: &Path) -> Result<()
 
     if needs_download {
         info!("{pkg}: downloading {wheel_name}...");
-        let resp = HTTP_CLIENT.get(&wheel_url).send()?;
-        let bytes = resp.bytes()?;
-        let res = extract_from_wheel(&bytes, out_dir);
+        let resp = HTTP_CLIENT.get(&wheel_url).send().await?;
+        let bytes = resp.bytes().await?;
+        let out = Arc::clone(&out_dir);
+
+        task::spawn_blocking(move || extract_from_wheel(bytes.as_ref(), out.as_ref())).await??;
         info!("{pkg}: download and extract complete");
-        res
+        Ok(())
     } else {
         info!("{pkg}: {wheel_name} CUDA libs are up-to-date");
         Ok(())
@@ -300,19 +315,19 @@ fn extract_from_wheel(bytes: &[u8], out_dir: &Path) -> Result<()> {
 mod tests {
     use super::*;
 
-    #[test]
-    fn test_skip_download_if_up_to_date() -> Result<()> {
+    #[tokio::test]
+    async fn test_skip_download_if_up_to_date() -> Result<()> {
         let temp_dir = tempfile::tempdir()?;
         let out_dir = temp_dir.path();
 
         let t0 = std::time::Instant::now();
-        ensure_dylibs(out_dir)?;
+        ensure_dylibs(out_dir).await?;
 
         let elapsed = t0.elapsed();
         println!("Elapsed time: {:?}", elapsed);
 
         let t1 = std::time::Instant::now();
-        ensure_dylibs(out_dir)?;
+        ensure_dylibs(out_dir).await?;
 
         let elapsed = t1.elapsed();
         println!("Elapsed time: {:?}", elapsed);
@@ -322,12 +337,12 @@ mod tests {
         Ok(())
     }
 
-    #[test]
-    fn test_preload_dylibs() -> Result<()> {
+    #[tokio::test]
+    async fn test_preload_dylibs() -> Result<()> {
         let temp_dir = std::env::temp_dir();
         let out_dir = temp_dir.join("cuda_rt_test_dylibs");
 
-        ensure_dylibs(&out_dir)?;
+        ensure_dylibs(&out_dir).await?;
         preload_dylibs(&out_dir)?;
 
         Ok(())
