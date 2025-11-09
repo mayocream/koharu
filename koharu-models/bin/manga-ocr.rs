@@ -8,14 +8,15 @@ struct Cli {
     input: String,
 }
 
-fn main() -> anyhow::Result<()> {
+#[tokio::main]
+async fn main() -> anyhow::Result<()> {
     ort::init()
         .with_execution_providers([CUDAExecutionProvider::default().build().error_on_failure()])
         .commit()?;
 
     let cli = Cli::parse();
 
-    let mut model = MangaOCR::new()?;
+    let mut model = MangaOCR::new().await?;
     let image = image::open(&cli.input)?;
 
     let output = model.inference(&image)?;

@@ -7,7 +7,7 @@ use candle_core::utils::cuda_is_available;
 use candle_core::{Device, Tensor};
 use candle_transformers::generation::{LogitsProcessor, Sampling};
 use candle_transformers::models::{quantized_gemma3, quantized_qwen2};
-use hf_hub::api::sync::Api;
+use koharu_core::download;
 use strum::{Display, EnumIter, EnumString, IntoEnumIterator};
 use tokenizers::Tokenizer;
 
@@ -161,13 +161,10 @@ impl Default for GenerateOptions {
 impl Llm {
     /// Loads a quantized model from Hugging Face based on the given identifier.
     /// Downloads artifacts if necessary, following Candle examples' pattern.
-    pub fn from_pretrained(which: ModelId) -> Result<Self> {
+    pub async fn from_pretrained(which: ModelId) -> Result<Self> {
         let cfg = which.config();
-        let api = Api::new()?;
-        let model_path = api.model(cfg.repo.to_string()).get(cfg.filename)?;
-        let tokenizer_path = api
-            .model(cfg.tokenizer_repo.to_string())
-            .get("tokenizer.json")?;
+        let model_path = download::hf_hub(cfg.repo, cfg.filename).await?;
+        let tokenizer_path = download::hf_hub(cfg.tokenizer_repo, "tokenizer.json").await?;
         Self::new(model_path, tokenizer_path)
     }
 
@@ -389,9 +386,11 @@ mod tests {
         assert!(device.is_ok());
     }
 
-    #[test]
-    fn test_translation_task() {
-        let mut llm = Llm::from_pretrained(ModelId::Sakura1_5BQwen2_5_1_0).unwrap();
+    #[tokio::test]
+    async fn test_translation_task() {
+        let mut llm = Llm::from_pretrained(ModelId::Sakura1_5BQwen2_5_1_0)
+            .await
+            .unwrap();
         let messages = vec![
             ChatMessage::new(
                 ChatRole::System,

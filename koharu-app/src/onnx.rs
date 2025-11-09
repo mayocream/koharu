@@ -16,11 +16,11 @@ pub struct Model {
 }
 
 impl Model {
-    pub fn new() -> Result<Self> {
+    pub async fn new() -> Result<Self> {
         Ok(Self {
-            detector: Arc::new(Mutex::new(ComicTextDetector::new()?)),
-            ocr: Arc::new(Mutex::new(MangaOCR::new()?)),
-            lama: Arc::new(Mutex::new(Lama::new()?)),
+            detector: Arc::new(Mutex::new(ComicTextDetector::new().await?)),
+            ocr: Arc::new(Mutex::new(MangaOCR::new().await?)),
+            lama: Arc::new(Mutex::new(Lama::new().await?)),
         })
     }
 

@@ -1,6 +1,7 @@
 use anyhow::Result;
 use futures::stream::{self, StreamExt, TryStreamExt};
-use once_cell::sync::{Lazy, OnceCell};
+use koharu_core::download;
+use once_cell::sync::OnceCell;
 use rayon::iter::{IntoParallelRefIterator, ParallelIterator};
 use std::{
     fs,
@@ -11,17 +12,9 @@ use std::{
     sync::Arc,
 };
 use tokio::task;
-use tracing::{error, info};
+use tracing::info;
 
 use crate::zip;
-
-/// Shared HTTP client to reuse connections
-pub static HTTP_CLIENT: Lazy<reqwest::Client> = Lazy::new(|| {
-    reqwest::Client::builder()
-        .user_agent("koharu-runtime/0.1 (+https://github.com)")
-        .build()
-        .expect("build reqwest client")
-});
 
 /// Keep handles to loaded dynamic libraries alive for process lifetime
 static DYLIB_HANDLES: OnceCell<Vec<libloading::Library>> = OnceCell::new();
@@ -125,8 +118,9 @@ pub async fn ensure_dylibs(path: impl AsRef<Path>) -> Result<()> {
     let platform_tag = current_platform_tag()?;
     info!("ensure_dylibs: start -> {}", path.display());
 
+    let packages: Vec<String> = PACKAGES.iter().map(|&pkg| pkg.to_string()).collect();
     let out_dir = Arc::new(path);
-    stream::iter(PACKAGES.iter().copied())
+    stream::iter(packages.into_iter())
         .map(|pkg| {
             let out_dir = Arc::clone(&out_dir);
             async move { fetch_and_extract(pkg, platform_tag, out_dir).await }
@@ -139,34 +133,43 @@ pub async fn ensure_dylibs(path: impl AsRef<Path>) -> Result<()> {
     Ok(())
 }
 
-pub fn preload_dylibs(path: impl AsRef<Path>) -> Result<()> {
-    let out_dir = path.as_ref();
+/// Preload CUDA/cuDNN dynamic libraries with a dependency-friendly order (Windows).
+/// Keeps the library handles alive for the process lifetime.
+pub fn preload_dylibs(dir: impl AsRef<Path>) -> Result<()> {
+    let dir = dir.as_ref();
 
-    // Read directory entries once to a vector, then load in order.
-    let entries: Vec<_> = fs::read_dir(out_dir)?.collect();
-    let mut handles: Vec<libloading::Library> = Vec::new();
+    let mut libs = Vec::new();
 
-    // Load all DLLs first, then try providers
-    for entry in &entries {
-        let entry = entry.as_ref().map_err(|e| anyhow::anyhow!("{}", e))?;
-        let path = entry.path();
-        let name = path.file_name().and_then(|f| f.to_str()).unwrap_or("");
+    // Load exactly in our hard-coded order; skip names that are not present.
+    for name in DYLIBS {
+        let path = dir.join(name);
+        if !path.exists() {
+            continue;
+        }
 
-        if wanted_basename(name).is_some() {
-            match unsafe { libloading::Library::new(&path) } {
-                Ok(lib) => {
-                    handles.push(lib);
-                }
+        // IMPORTANT: Do NOT preload provider DLLs (e.g. onnxruntime_providers_cuda.dll).
+        // Providers expect onnxruntime.dll to load them and to initialize the
+        // ProviderHost via providers_shared. Manually loading a provider causes its
+        // DllMain to fail (ERROR_DLL_INIT_FAILED/1114) because the host is not set.
+        // We only ensure CUDA/cuDNN libraries and the main onnxruntime.dll are
+        // present; ONNX Runtime will load the CUDA provider on demand.
+        if name.contains("onnxruntime_providers_cuda") {
+            continue;
+        }
+
+        unsafe {
+            match libloading::Library::new(&path) {
+                Ok(lib) => libs.push(lib),
                 Err(err) => {
-                    // Some optional engines may fail to load due to missing NVRTC; ignore.
-                    error!("failed to load {}: {}", path.display(), err);
+                    anyhow::bail!("preload_dylibs: failed {}: {}", path.display(), err);
                 }
             }
         }
     }
 
-    // Keep handles alive for the process lifetime
-    let _ = DYLIB_HANDLES.set(handles);
+    DYLIB_HANDLES
+        .set(libs)
+        .map_err(|_| anyhow::anyhow!("preload_dylibs: already initialized"))?;
     Ok(())
 }
 
@@ -194,10 +197,10 @@ fn current_platform_tag() -> Result<&'static str> {
     }
 }
 
-async fn fetch_and_extract(pkg: &str, platform_tag: &str, out_dir: Arc<PathBuf>) -> Result<()> {
+async fn fetch_and_extract(pkg: String, platform_tag: &str, out_dir: Arc<PathBuf>) -> Result<()> {
     // 1) Query PyPI JSON
     let meta_url = format!("https://pypi.org/pypi/{pkg}/json");
-    let resp = HTTP_CLIENT.get(&meta_url).send().await?;
+    let resp = crate::HTTP_CLIENT.get(&meta_url).send().await?;
     let json: serde_json::Value = resp.json().await?;
 
     // 2) Choose a wheel
@@ -243,11 +246,10 @@ async fn fetch_and_extract(pkg: &str, platform_tag: &str, out_dir: Arc<PathBuf>)
 
     if needs_download {
         info!("{pkg}: downloading {wheel_name}...");
-        let resp = HTTP_CLIENT.get(&wheel_url).send().await?;
-        let bytes = resp.bytes().await?;
+        let bytes = download::http(wheel_url.clone()).await?;
         let out = Arc::clone(&out_dir);
 
-        task::spawn_blocking(move || extract_from_wheel(bytes.as_ref(), out.as_ref())).await??;
+        task::spawn_blocking(move || extract_from_wheel(&bytes, out.as_ref())).await??;
         info!("{pkg}: download and extract complete");
         Ok(())
     } else {

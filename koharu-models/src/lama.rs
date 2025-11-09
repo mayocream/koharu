@@ -1,5 +1,5 @@
-use hf_hub::api::sync::Api;
 use image::{DynamicImage, GenericImageView};
+use koharu_core::download;
 use ort::{inputs, session::Session, value::TensorRef};
 use std::cmp::{max, min};
 
@@ -9,10 +9,8 @@ pub struct Lama {
 }
 
 impl Lama {
-    pub fn new() -> anyhow::Result<Self> {
-        let api = Api::new()?;
-        let repo = api.model("mayocream/lama-manga-onnx".to_string());
-        let model_path = repo.get("lama-manga.onnx")?;
+    pub async fn new() -> anyhow::Result<Self> {
+        let model_path = download::hf_hub("mayocream/lama-manga-onnx", "lama-manga.onnx").await?;
 
         let model = Session::builder()?
             .with_optimization_level(ort::session::builder::GraphOptimizationLevel::Level3)?

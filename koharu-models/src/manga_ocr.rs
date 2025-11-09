@@ -1,4 +1,4 @@
-use hf_hub::api::sync::Api;
+use koharu_core::download;
 use ndarray::s;
 use ort::{inputs, session::Session, value::TensorRef};
 
@@ -10,12 +10,12 @@ pub struct MangaOCR {
 }
 
 impl MangaOCR {
-    pub fn new() -> anyhow::Result<Self> {
-        let api = Api::new()?;
-        let repo = api.model("mayocream/manga-ocr-onnx".to_string());
-        let encoder_model_path = repo.get("encoder_model.onnx")?;
-        let decoder_model_path = repo.get("decoder_model.onnx")?;
-        let vocab_path = repo.get("vocab.txt")?;
+    pub async fn new() -> anyhow::Result<Self> {
+        let encoder_model_path =
+            download::hf_hub("mayocream/manga-ocr-onnx", "encoder_model.onnx").await?;
+        let decoder_model_path =
+            download::hf_hub("mayocream/manga-ocr-onnx", "decoder_model.onnx").await?;
+        let vocab_path = download::hf_hub("mayocream/manga-ocr-onnx", "vocab.txt").await?;
 
         let encoder_model = Session::builder()?
             .with_optimization_level(ort::session::builder::GraphOptimizationLevel::Level3)?

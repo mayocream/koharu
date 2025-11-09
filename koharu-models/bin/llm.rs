@@ -45,10 +45,11 @@ struct Args {
     repeat_last_n: usize,
 }
 
-fn main() -> anyhow::Result<()> {
+#[tokio::main]
+async fn main() -> anyhow::Result<()> {
     let args = Args::parse();
 
-    let mut llm = Llm::from_pretrained(args.model)?;
+    let mut llm = Llm::from_pretrained(args.model).await?;
 
     let opts = GenerateOptions {
         max_tokens: args.max_tokens,

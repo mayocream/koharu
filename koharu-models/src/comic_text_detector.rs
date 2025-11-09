@@ -1,6 +1,6 @@
 use candle_transformers::object_detection::{Bbox, non_maximum_suppression};
-use hf_hub::api::sync::Api;
 use image::{DynamicImage, GenericImageView};
+use koharu_core::download;
 use ort::{inputs, session::Session, value::TensorRef};
 
 #[derive(Debug)]
@@ -27,10 +27,12 @@ pub struct ClassifiedBbox {
 const MASK_THRESHOLD: u8 = 30;
 
 impl ComicTextDetector {
-    pub fn new() -> anyhow::Result<Self> {
-        let api = Api::new()?;
-        let repo = api.model("mayocream/comic-text-detector-onnx".to_string());
-        let model_path = repo.get("comic-text-detector.onnx")?;
+    pub async fn new() -> anyhow::Result<Self> {
+        let model_path = download::hf_hub(
+            "mayocream/comic-text-detector-onnx",
+            "comic-text-detector.onnx",
+        )
+        .await?;
 
         let model = Session::builder()?
             .with_optimization_level(ort::session::builder::GraphOptimizationLevel::Level3)?

@@ -14,14 +14,15 @@ struct Cli {
     output: String,
 }
 
-fn main() -> anyhow::Result<()> {
+#[tokio::main]
+async fn main() -> anyhow::Result<()> {
     ort::init()
         .with_execution_providers([CUDAExecutionProvider::default().build().error_on_failure()])
         .commit()?;
 
     let cli = Cli::parse();
 
-    let mut model = Lama::new()?;
+    let mut model = Lama::new().await?;
     let image = image::open(&cli.input)?;
     let mask = image::open(&cli.mask)?;
 

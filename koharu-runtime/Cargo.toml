@@ -27,6 +27,7 @@ tauri = { workspace = true }
 serde = { workspace = true }
 hf-hub = { workspace = true }
 num_cpus = { workspace = true }
+koharu-core = { workspace = true }
 
 [dev-dependencies]
 tempfile = { workspace = true }

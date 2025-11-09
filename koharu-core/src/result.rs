@@ -8,6 +8,9 @@ pub enum CommandError {
 
     #[error(transparent)]
     Anyhow(#[from] anyhow::Error),
+
+    #[error(transparent)]
+    Window(#[from] tauri::Error),
 }
 
 impl serde::Serialize for CommandError {

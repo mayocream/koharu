@@ -44,16 +44,11 @@ impl Model {
 
         let state_cloned = self.state.clone();
         tokio::spawn(async move {
-            let res = tokio::task::spawn_blocking(move || Llm::from_pretrained(id)).await;
+            let res = Llm::from_pretrained(id).await;
             match res {
-                Ok(Ok(llm)) => {
+                Ok(llm) => {
                     let mut guard = state_cloned.write().await;
                     *guard = State::Ready(llm);
-                }
-                Ok(Err(e)) => {
-                    tracing::error!("LLM load error: {e}");
-                    let mut guard = state_cloned.write().await;
-                    *guard = State::Failed(e.to_string());
                 }
                 Err(e) => {
                     tracing::error!("LLM load join error: {e}");

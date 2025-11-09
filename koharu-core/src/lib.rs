@@ -1,3 +1,4 @@
+pub mod download;
 pub mod image;
 pub mod progress;
 pub mod result;

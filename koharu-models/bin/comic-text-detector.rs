@@ -17,14 +17,15 @@ struct Cli {
     nms_threshold: f32,
 }
 
-fn main() -> anyhow::Result<()> {
+#[tokio::main]
+async fn main() -> anyhow::Result<()> {
     ort::init()
         .with_execution_providers([CUDAExecutionProvider::default().build().error_on_failure()])
         .commit()?;
 
     let cli = Cli::parse();
 
-    let mut model = ComicTextDetector::new()?;
+    let mut model = ComicTextDetector::new().await?;
     let image = image::open(&cli.input)?;
 
     let output = model.inference(&image, cli.confidence_threshold, cli.nms_threshold)?;

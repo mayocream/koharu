@@ -1,10 +1,13 @@
 use serde::Serialize;
-use tauri::ipc::Channel;
+use tracing::{Level, event};
+
+pub const PROGRESS_TRACE_TARGET: &str = "koharu::progress";
+pub const PROGRESS_WINDOW_EVENT: &str = "download://progress";
 
 // refer: https://v2.tauri.app/develop/calling-frontend/#channels
-#[derive(Debug, Serialize)]
+#[derive(Debug, Serialize, Clone)]
 #[serde(tag = "event", content = "data")]
-pub enum DownloadEvent {
+pub enum ProgressEvent {
     Started {
         url: String,
         total: usize,
@@ -19,43 +22,70 @@ pub enum DownloadEvent {
     },
 }
 
+#[derive(Clone)]
 pub struct Emitter {
     url: String,
     total: usize,
-    channel: Channel<DownloadEvent>,
+    current: usize,
 }
 
 impl Emitter {
-    pub fn new(url: impl Into<String>, channel: Channel<DownloadEvent>) -> Self {
+    pub fn new(url: impl Into<String>) -> Self {
         Self {
             url: url.into(),
             total: 0,
-            channel,
+            current: 0,
         }
+    }
+
+    pub fn begin(&mut self, total: usize) {
+        self.total = total;
+        self.current = 0;
+        event!(
+            target: PROGRESS_TRACE_TARGET,
+            Level::TRACE,
+            kind = "started",
+            url = %self.url,
+            total = total as u64
+        );
+    }
+
+    pub fn advance(&mut self, delta: usize) {
+        if delta == 0 {
+            return;
+        }
+
+        self.current = self.current.saturating_add(delta);
+        event!(
+            target: PROGRESS_TRACE_TARGET,
+            Level::TRACE,
+            kind = "progress",
+            url = %self.url,
+            current = self.current as u64,
+            total = self.total as u64
+        );
+    }
+
+    pub fn complete(&mut self) {
+        event!(
+            target: PROGRESS_TRACE_TARGET,
+            Level::TRACE,
+            kind = "finished",
+            url = %self.url
+        );
     }
 }
 
-// refer: https://github.com/huggingface/hf-hub/blob/c165283bf78a06ec2a227c7f40da092d59adbd87/examples/iced/src/main.rs#L42
 impl hf_hub::api::tokio::Progress for Emitter {
     async fn init(&mut self, size: usize, _filename: &str) {
-        self.total = size;
-        let _ = self.channel.send(DownloadEvent::Started {
-            url: self.url.clone(),
-            total: size,
-        });
+        self.begin(size);
     }
 
     async fn update(&mut self, size: usize) {
-        let _ = self.channel.send(DownloadEvent::Progress {
-            url: self.url.clone(),
-            current: size,
-            total: self.total,
-        });
+        self.advance(size);
     }
 
     async fn finish(&mut self) {
-        let _ = self.channel.send(DownloadEvent::Finished {
-            url: self.url.clone(),
-        });
+        self.complete();
     }
 }

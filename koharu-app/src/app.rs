@@ -1,19 +1,15 @@
-use std::{sync::Arc, time::Duration};
+use std::sync::{Arc, Mutex};
 
-use anyhow::Result;
-use backon::{BackoffBuilder, BlockingRetryable, ExponentialBuilder};
-use koharu_core::state::State;
+use koharu_core::{result::Result, state::State};
 use ort::execution_providers::ExecutionProvider;
 use rfd::MessageDialog;
 use tauri::Manager;
 use tokio::sync::RwLock;
-use tracing::warn;
+use tracing::{error, warn};
 
-use crate::{command, llm, onnx};
+use crate::{command, llm, onnx, telemetry};
 
-fn initialize() -> Result<()> {
-    tracing_subscriber::fmt().init();
-
+fn initialize() -> anyhow::Result<()> {
     std::panic::set_hook(Box::new(|info| {
         let msg = info.to_string();
         MessageDialog::new()
@@ -33,35 +29,23 @@ fn initialize() -> Result<()> {
     Ok(())
 }
 
-fn runtime_setup() -> Result<()> {
+async fn setup(app: tauri::AppHandle) -> anyhow::Result<()> {
+    telemetry::init(Arc::new(Mutex::new(app.clone())))?;
+
     // Dynamically dylibs depending on features automatically
     {
         let lib_root = dirs::data_local_dir()
             .ok_or_else(|| anyhow::anyhow!("Failed to get local data directory"))?
             .join("koharu")
             .join("lib");
-        (|| koharu_runtime::dylib::ensure_dylibs(&lib_root))
-            .retry(
-                ExponentialBuilder::new()
-                    .with_max_delay(Duration::from_millis(500))
-                    .with_min_delay(Duration::from_millis(50))
-                    .with_max_times(3)
-                    .build(),
-            )
-            .notify(|err, dur| {
-                warn!(
-                    "Failed to ensure CUDA runtime dylibs: {}. Retrying in {:?}",
-                    err, dur
-                );
-            })
-            .call()?;
+        koharu_runtime::dylib::ensure_dylibs(lib_root.clone()).await?;
         koharu_runtime::dylib::preload_dylibs(&lib_root)?;
     }
 
     // Initialize ONNX Runtime
     {
         let cuda = ort::execution_providers::CUDAExecutionProvider::default();
-        if !cuda.is_available()? {
+        if !cuda.is_available().map_err(anyhow::Error::from)? {
             warn!(
                 "CUDA Execution Provider is not available. Falling back to CPU Execution Provider."
             );
@@ -75,13 +59,7 @@ fn runtime_setup() -> Result<()> {
             .commit()?;
     }
 
-    Ok(())
-}
-
-fn setup(app: tauri::AppHandle) -> Result<()> {
-    runtime_setup()?;
-
-    let onnx = Arc::new(onnx::Model::new()?);
+    let onnx = Arc::new(onnx::Model::new().await?);
     let llm = Arc::new(llm::Model::new());
     let state = Arc::new(RwLock::new(State::default()));
 
@@ -99,18 +77,6 @@ pub fn run() -> Result<()> {
     initialize()?;
 
     tauri::Builder::default()
-        .setup(|app| {
-            std::thread::spawn({
-                let app = app.handle().clone();
-                move || {
-                    if let Err(e) = setup(app) {
-                        panic!("Failed to set up: {}", e);
-                    }
-                }
-            });
-
-            Ok(())
-        })
         .invoke_handler(tauri::generate_handler![
             command::open_external,
             command::open_documents,
@@ -123,6 +89,15 @@ pub fn run() -> Result<()> {
             command::llm_ready,
             command::llm_generate,
         ])
+        .setup(|app| {
+            let handle = app.handle().clone();
+            tauri::async_runtime::spawn(async move {
+                if let Err(err) = setup(handle).await {
+                    error!("application setup failed: {err:#}");
+                }
+            });
+            Ok(())
+        })
         .run(tauri::generate_context!())?;
 
     Ok(())

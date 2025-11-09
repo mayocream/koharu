@@ -3142,6 +3142,7 @@ dependencies = [
  "tauri",
  "thiserror 2.0.17",
  "tokio",
+ "tracing",
 ]
 
 [[package]]
@@ -3155,10 +3156,12 @@ dependencies = [
  "hf-hub",
  "image",
  "imageproc",
+ "koharu-core",
  "ndarray",
  "ort",
  "strum",
  "tokenizers",
+ "tokio",
  "tracing",
 ]
 
@@ -3171,6 +3174,7 @@ dependencies = [
  "flate2",
  "futures",
  "hf-hub",
+ "koharu-core",
  "libloading 0.9.0",
  "num_cpus",
  "once_cell",

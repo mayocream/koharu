@@ -4,5 +4,5 @@
 use koharu_app::app;
 
 fn main() -> anyhow::Result<()> {
-    app::run()
+    Ok(app::run()?)
 }
