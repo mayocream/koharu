@@ -5,7 +5,7 @@ use ort::execution_providers::ExecutionProvider;
 use rfd::MessageDialog;
 use tauri::Manager;
 use tokio::sync::RwLock;
-use tracing::{error, warn};
+use tracing::warn;
 
 use crate::{command, llm, onnx, telemetry};
 
@@ -93,7 +93,7 @@ pub fn run() -> Result<()> {
             let handle = app.handle().clone();
             tauri::async_runtime::spawn(async move {
                 if let Err(err) = setup(handle).await {
-                    error!("application setup failed: {err:#}");
+                    panic!("application setup failed: {err:#}");
                 }
             });
             Ok(())
