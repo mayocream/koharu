@@ -38,7 +38,7 @@ async fn setup(app: tauri::AppHandle) -> anyhow::Result<()> {
             .ok_or_else(|| anyhow::anyhow!("Failed to get local data directory"))?
             .join("koharu")
             .join("lib");
-        koharu_runtime::dylib::ensure_dylibs(lib_root.clone()).await?;
+        koharu_runtime::dylib::ensure_dylibs(&lib_root).await?;
         koharu_runtime::dylib::preload_dylibs(&lib_root)?;
     }
 

@@ -24,3 +24,4 @@ reqwest = { workspace = true }
 blake3 = { workspace = true }
 postcard = { workspace = true }
 tracing = { workspace = true }
+futures = { workspace = true }

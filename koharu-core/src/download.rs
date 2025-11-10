@@ -1,12 +1,13 @@
 use std::path::PathBuf;
 
 use anyhow::Context;
+use futures::StreamExt;
 use hf_hub::{Cache, Repo, api::tokio::Api};
 use reqwest::Client;
 
 use crate::progress::Emitter;
 
-const USER_AGENT: &str = concat!("koharu-core/", env!("CARGO_PKG_VERSION"));
+const USER_AGENT: &str = concat!(env!("CARGO_PKG_NAME"), "/", env!("CARGO_PKG_VERSION"));
 
 /// Download arbitrary bytes over HTTP using reqwest's async client.
 /// All progress updates are emitted via `tracing::event!` with the `koharu::download` target.
@@ -14,7 +15,7 @@ pub async fn http(url: impl Into<String>) -> anyhow::Result<Vec<u8>> {
     let url = url.into();
     let client = Client::builder().user_agent(USER_AGENT).build()?;
 
-    let mut response = client.get(&url).send().await?.error_for_status()?;
+    let response = client.get(&url).send().await?.error_for_status()?;
 
     let total = response.content_length().unwrap_or(0) as usize;
 
@@ -22,13 +23,11 @@ pub async fn http(url: impl Into<String>) -> anyhow::Result<Vec<u8>> {
     emitter.begin(total);
 
     let mut bytes = Vec::with_capacity(total);
-    while let Some(chunk) = response
-        .chunk()
-        .await
-        .with_context(|| format!("failed to download chunk from `{}`", &url))?
-    {
+    let mut stream = response.bytes_stream();
+    while let Some(chunk) = stream.next().await {
+        let chunk = chunk.context("failed to read a chunk from the response stream")?;
         emitter.advance(chunk.len());
-        bytes.extend_from_slice(&chunk);
+        bytes.extend(&chunk);
     }
 
     emitter.complete();
