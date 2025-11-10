@@ -37,7 +37,7 @@ export function Navigator() {
         )}
       </div>
 
-      <ScrollArea.Root className='flex-1'>
+      <ScrollArea.Root className='min-h-0 flex-1'>
         <ScrollArea.Viewport className='size-full p-2'>
           <div className='flex flex-col gap-1.5'>
             {documents.map((doc, idx) => (
@@ -51,7 +51,10 @@ export function Navigator() {
             ))}
           </div>
         </ScrollArea.Viewport>
-        <ScrollArea.Scrollbar orientation='vertical' className='w-2'>
+        <ScrollArea.Scrollbar
+          orientation='vertical'
+          className='flex w-2 touch-none p-px select-none'
+        >
           <ScrollArea.Thumb className='flex-1 rounded bg-neutral-300' />
         </ScrollArea.Scrollbar>
       </ScrollArea.Root>
