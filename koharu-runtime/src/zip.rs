@@ -1,5 +1,6 @@
 use anyhow::Result;
 use flate2::read::DeflateDecoder;
+use koharu_core::download::http_client;
 use std::io;
 
 // ZIP signatures and constants
@@ -135,7 +136,7 @@ async fn http_get_tail(url: &str, nbytes: usize) -> Result<Vec<u8>> {
 }
 
 async fn http_get_range(url: &str, start: u64, end_inclusive: u64) -> Result<Vec<u8>> {
-    let resp = crate::HTTP_CLIENT
+    let resp = http_client()
         .get(url)
         .header(
             reqwest::header::RANGE,
@@ -150,7 +151,7 @@ async fn http_get_range(url: &str, start: u64, end_inclusive: u64) -> Result<Vec
 }
 
 async fn head_content_length(url: &str) -> Result<u64> {
-    let resp = crate::HTTP_CLIENT.head(url).send().await?;
+    let resp = http_client().head(url).send().await?;
     if !resp.status().is_success() {
         anyhow::bail!("HEAD failed: {}", resp.status());
     }
@@ -195,7 +196,7 @@ mod tests {
     async fn test_pip_wheels() -> Result<()> {
         async fn pick_wheel_url(pkg: &str, tag: &str) -> Result<String> {
             let meta_url = format!("https://pypi.org/pypi/{pkg}/json");
-            let resp = crate::HTTP_CLIENT.get(&meta_url).send().await?;
+            let resp = http_client().get(&meta_url).send().await?;
             let json: serde_json::Value = resp.json().await?;
             let urls = json
                 .get("urls")

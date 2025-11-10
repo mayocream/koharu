@@ -1,4 +1,4 @@
-use std::sync::{Arc, Mutex};
+use std::sync::Arc;
 
 use koharu_core::{result::Result, state::State};
 use ort::execution_providers::ExecutionProvider;
@@ -7,7 +7,7 @@ use tauri::Manager;
 use tokio::sync::RwLock;
 use tracing::warn;
 
-use crate::{command, llm, onnx, telemetry};
+use crate::{command, llm, onnx};
 
 fn initialize() -> anyhow::Result<()> {
     std::panic::set_hook(Box::new(|info| {
@@ -30,8 +30,6 @@ fn initialize() -> anyhow::Result<()> {
 }
 
 async fn setup(app: tauri::AppHandle) -> anyhow::Result<()> {
-    telemetry::init(Arc::new(Mutex::new(app.clone())))?;
-
     // Dynamically dylibs depending on features automatically
     {
         let lib_root = dirs::data_local_dir()

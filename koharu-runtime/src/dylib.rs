@@ -1,6 +1,6 @@
 use anyhow::Result;
 use futures::stream::{self, StreamExt, TryStreamExt};
-use koharu_core::download;
+use koharu_core::download::{self, http_client};
 use once_cell::sync::OnceCell;
 use rayon::iter::{IntoParallelRefIterator, ParallelIterator};
 use std::{
@@ -200,7 +200,7 @@ fn current_platform_tag() -> Result<&'static str> {
 async fn fetch_and_extract(pkg: String, platform_tag: &str, out_dir: Arc<PathBuf>) -> Result<()> {
     // 1) Query PyPI JSON
     let meta_url = format!("https://pypi.org/pypi/{pkg}/json");
-    let resp = crate::HTTP_CLIENT.get(&meta_url).send().await?;
+    let resp = http_client().get(&meta_url).send().await?;
     let json: serde_json::Value = resp.json().await?;
 
     // 2) Choose a wheel
@@ -246,7 +246,7 @@ async fn fetch_and_extract(pkg: String, platform_tag: &str, out_dir: Arc<PathBuf
 
     if needs_download {
         info!("{pkg}: downloading {wheel_name}...");
-        let bytes = download::http(wheel_url.clone()).await?;
+        let bytes = download::http(&wheel_url).await?;
         let out = Arc::clone(&out_dir);
 
         task::spawn_blocking(move || extract_from_wheel(&bytes, out.as_ref())).await??;
