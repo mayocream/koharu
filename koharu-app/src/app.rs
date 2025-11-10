@@ -10,6 +10,14 @@ use tracing::warn;
 use crate::{command, llm, onnx};
 
 fn initialize() -> anyhow::Result<()> {
+    tracing_subscriber::fmt()
+        .with_env_filter(
+            tracing_subscriber::filter::EnvFilter::builder()
+                .with_default_directive(tracing::Level::INFO.into())
+                .from_env_lossy(),
+        )
+        .init();
+
     std::panic::set_hook(Box::new(|info| {
         let msg = info.to_string();
         MessageDialog::new()
