@@ -2,7 +2,10 @@
 
 import { create } from 'zustand'
 import { invoke } from '@tauri-apps/api/core'
-import { Document } from '@/types'
+import { Document, TextBlock, ToolMode } from '@/types'
+
+const replaceDocument = (docs: Document[], index: number, doc: Document) =>
+  docs.map((item, idx) => (idx === index ? doc : item))
 
 // A mixin of application state, ui state and actions.
 type AppState = {
@@ -11,6 +14,8 @@ type AppState = {
   scale: number
   showSegmentationMask: boolean
   showInpaintedImage: boolean
+  mode: ToolMode
+  selectedBlockIndex?: number
   // LLM state
   llmModels: string[]
   llmSelectedModel?: string
@@ -23,6 +28,9 @@ type AppState = {
   setScale: (scale: number) => void
   setShowSegmentationMask: (show: boolean) => void
   setShowInpaintedImage: (show: boolean) => void
+  setMode: (mode: ToolMode) => void
+  setSelectedBlockIndex: (index?: number) => void
+  updateBlock: (blockIndex: number, updates: Partial<TextBlock>) => void
   detect: (confThreshold: number, nmsThreshold: number) => Promise<void>
   ocr: () => Promise<void>
   inpaint: (dilateKernelSize: number, erodeDistance: number) => Promise<void>
@@ -42,6 +50,8 @@ export const useAppStore = create<AppState>((set, get) => ({
   scale: 100,
   showSegmentationMask: false,
   showInpaintedImage: false,
+  mode: 'navigate',
+  selectedBlockIndex: undefined,
   llmModels: [],
   llmSelectedModel: undefined,
   llmReady: false,
@@ -49,13 +59,17 @@ export const useAppStore = create<AppState>((set, get) => ({
     'You are a helpful assistant that rewrites extracted text cleanly.',
   openDocuments: async () => {
     const docs: Document[] = await invoke('open_documents')
-    set({ documents: docs })
+    set({
+      documents: docs,
+      currentDocumentIndex: 0,
+      selectedBlockIndex: undefined,
+    })
   },
   openExternal: async (url: string) => {
     await invoke('open_external', { url })
   },
   setCurrentDocumentIndex: (index: number) => {
-    set({ currentDocumentIndex: index })
+    set({ currentDocumentIndex: index, selectedBlockIndex: undefined })
   },
   setScale: (scale: number) => {
     const clamped = Math.max(10, Math.min(200, Math.round(scale)))
@@ -67,6 +81,22 @@ export const useAppStore = create<AppState>((set, get) => ({
   setShowInpaintedImage: (show: boolean) => {
     set({ showInpaintedImage: show })
   },
+  setMode: (mode: ToolMode) => set({ mode }),
+  setSelectedBlockIndex: (index?: number) => set({ selectedBlockIndex: index }),
+  updateBlock: (blockIndex: number, updates: Partial<TextBlock>) => {
+    const { documents, currentDocumentIndex } = get()
+    const doc = documents[currentDocumentIndex]
+    if (!doc) return
+    const updatedDoc: Document = {
+      ...doc,
+      textBlocks: doc.textBlocks.map((block, idx) =>
+        idx === blockIndex ? { ...block, ...updates } : block,
+      ),
+    }
+    set({
+      documents: replaceDocument(documents, currentDocumentIndex, updatedDoc),
+    })
+  },
   detect: async (confThreshold: number, nmsThreshold: number) => {
     const index = get().currentDocumentIndex
     const doc: Document = await invoke('detect', {
@@ -74,24 +104,16 @@ export const useAppStore = create<AppState>((set, get) => ({
       confThreshold,
       nmsThreshold,
     })
-    set({
-      documents: [
-        ...get().documents.slice(0, index),
-        doc,
-        ...get().documents.slice(index + 1),
-      ],
-    })
+    set((state) => ({
+      documents: replaceDocument(state.documents, index, doc),
+    }))
   },
   ocr: async () => {
     const index = get().currentDocumentIndex
     const doc: Document = await invoke('ocr', { index })
-    set({
-      documents: [
-        ...get().documents.slice(0, index),
-        doc,
-        ...get().documents.slice(index + 1),
-      ],
-    })
+    set((state) => ({
+      documents: replaceDocument(state.documents, index, doc),
+    }))
   },
   inpaint: async (dilateKernelSize: number, erodeDistance: number) => {
     const index = get().currentDocumentIndex
@@ -100,13 +122,9 @@ export const useAppStore = create<AppState>((set, get) => ({
       dilateKernelSize,
       erodeDistance,
     })
-    set({
-      documents: [
-        ...get().documents.slice(0, index),
-        doc,
-        ...get().documents.slice(index + 1),
-      ],
-    })
+    set((state) => ({
+      documents: replaceDocument(state.documents, index, doc),
+    }))
   },
   llmList: async () => {
     try {
@@ -142,12 +160,8 @@ export const useAppStore = create<AppState>((set, get) => ({
       index: currentDocumentIndex,
       prompt: llmSystemPrompt,
     })
-    set({
-      documents: [
-        ...get().documents.slice(0, currentDocumentIndex),
-        doc,
-        ...get().documents.slice(currentDocumentIndex + 1),
-      ],
-    })
+    set((state) => ({
+      documents: replaceDocument(state.documents, currentDocumentIndex, doc),
+    }))
   },
 }))

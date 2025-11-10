@@ -1,141 +1,364 @@
 'use client'
 
-import { useAppStore } from '@/lib/store'
+import { useEffect, useState } from 'react'
+import type { KonvaEventObject } from 'konva/lib/Node'
 import { Stage, Layer, Rect, Circle, Text } from 'react-konva'
+import { ScrollArea, Slider, Tooltip, Toolbar } from 'radix-ui'
+import {
+  Move,
+  MousePointer,
+  Square,
+  Brush,
+  Type as TypeIcon,
+} from 'lucide-react'
 import { Image } from '@/components/Image'
-import { ScrollArea, Slider } from 'radix-ui'
-import { TextBlock } from '@/types'
-// Simple module-level ref for the canvas viewport
+import { useAppStore } from '@/lib/store'
+import { convertToBlob } from '@/lib/util'
+import { TextBlock, ToolMode } from '@/types'
+
 const canvasViewportRef: { current: HTMLDivElement | null } = { current: null }
 
-export function Canvas() {
+export function fitCanvasToViewport() {
+  const { documents, currentDocumentIndex, setScale } = useAppStore.getState()
+  const doc = documents[currentDocumentIndex]
+  const viewport = canvasViewportRef.current
+  if (!doc || !viewport) return
+  const rect = viewport.getBoundingClientRect()
+  if (!rect.width || !rect.height || !doc.width || !doc.height) return
+  const scaleW = (rect.width / doc.width) * 100
+  const scaleH = (rect.height / doc.height) * 100
+  const fit = Math.max(
+    10,
+    Math.min(200, Math.floor(Math.min(scaleW, scaleH) / 10) * 10),
+  )
+  setScale(fit)
+}
+
+export function resetCanvasScale() {
+  const { setScale } = useAppStore.getState()
+  setScale(100)
+}
+
+const MASK_CURSOR =
+  'url(\'data:image/svg+xml,%3Csvg xmlns="http://www.w3.org/2000/svg" width="16" height="16"%3E%3Ccircle cx="8" cy="8" r="4" stroke="black" stroke-width="1.5" fill="white"/%3E%3C/svg%3E\') 8 8, crosshair'
+
+export function Workspace() {
   const {
     documents,
     currentDocumentIndex,
     scale,
     showSegmentationMask,
     showInpaintedImage,
+    mode,
+    selectedBlockIndex,
+    setSelectedBlockIndex,
   } = useAppStore()
   const currentDocument = documents[currentDocumentIndex]
+  const hasDocument = Boolean(currentDocument)
   const scaleRatio = scale / 100
 
   return (
-    <ScrollArea.Root className='flex flex-1 min-w-0 min-h-0 bg-neutral-100'>
-      <ScrollArea.Viewport
-        ref={(el) => {
-          canvasViewportRef.current = el
-        }}
-        className='size-full grid place-content-center-safe'
-      >
-        <Stage
-          width={currentDocument?.width * scaleRatio}
-          height={currentDocument?.height * scaleRatio}
-          scaleX={scaleRatio}
-          scaleY={scaleRatio}
-        >
-          <Layer>
-            <Image data={currentDocument?.image} />
-            <Image
-              data={currentDocument?.segment}
-              visible={showSegmentationMask}
-              opacity={0.5}
-            />
-            <Image
-              data={currentDocument?.inpainted}
-              visible={showInpaintedImage}
-            />
-          </Layer>
-          <Layer>
-            <TextBlockAnnotations />
-          </Layer>
-        </Stage>
-      </ScrollArea.Viewport>
-      <ScrollArea.Scrollbar
-        orientation='vertical'
-        className='flex w-2 select-none touch-none p-px'
-      >
-        <ScrollArea.Thumb className='flex-1 rounded bg-neutral-300' />
-      </ScrollArea.Scrollbar>
-      <ScrollArea.Scrollbar
-        orientation='horizontal'
-        className='flex h-2 select-none touch-none p-px'
-      >
-        <ScrollArea.Thumb className='rounded bg-neutral-300' />
-      </ScrollArea.Scrollbar>
-    </ScrollArea.Root>
-  )
-}
-
-export function CanvasControl() {
-  const scale = useAppStore((state) => state.scale)
-  const setScale = useAppStore((state) => state.setScale)
-  const documents = useAppStore((state) => state.documents)
-  const currentDocumentIndex = useAppStore(
-    (state) => state.currentDocumentIndex
-  )
-
-  function fitToViewport() {
-    const doc = documents[currentDocumentIndex]
-    const viewport = canvasViewportRef.current
-    if (!doc || !viewport) return
-    const rect = viewport.getBoundingClientRect()
-    if (!rect.width || !rect.height || !doc.width || !doc.height) return
-    const scaleW = (rect.width / doc.width) * 100
-    const scaleH = (rect.height / doc.height) * 100
-    const fit = Math.max(
-      10,
-      Math.min(200, Math.floor(Math.min(scaleW, scaleH) / 10) * 10)
-    )
-    setScale(fit)
-  }
-
-  return (
-    <div className='flex items-center justify-end gap-3 border-t border-neutral-300 px-2 py-1'>
-      <div className='flex items-center gap-2 text-sm text-neutral-700'>
-        <button
-          onClick={fitToViewport}
-          className='h-7 rounded border border-neutral-300 bg-white px-2 hover:bg-neutral-100'
-        >
-          Fit window
-        </button>
-        <button
-          onClick={() => setScale(100)}
-          className='h-7 rounded border border-neutral-300 bg-white px-2 hover:bg-neutral-100'
-        >
-          Original
-        </button>
-        <span className='mx-1 h-5 w-px bg-neutral-300' />
-        <span className='text-neutral-500'>Scale</span>
-        <div className='w-40'>
-          <Slider.Root
-            className='relative flex h-5 w-full touch-none select-none items-center'
-            min={10}
-            max={200}
-            step={10}
-            value={[scale]}
-            onValueChange={(v) => setScale(v[0] ?? scale)}
-          >
-            <Slider.Track className='relative h-1 flex-1 rounded bg-neutral-200'>
-              <Slider.Range className='absolute h-full rounded bg-neutral-800' />
-            </Slider.Track>
-            <Slider.Thumb className='block h-3 w-3 rounded-full bg-neutral-800' />
-          </Slider.Root>
+    <div className='flex min-h-0 min-w-0 flex-1 bg-neutral-100'>
+      <ToolRail />
+      <div className='flex min-h-0 min-w-0 flex-1 flex-col'>
+        <CanvasToolbar />
+        <div className='flex min-h-0 min-w-0 flex-1'>
+          <ScrollArea.Root className='flex min-h-0 min-w-0 flex-1'>
+            <ScrollArea.Viewport
+              ref={(el) => {
+                canvasViewportRef.current = el
+              }}
+              className='grid size-full place-content-center-safe'
+            >
+              {hasDocument ? (
+                <Stage
+                  width={currentDocument!.width * scaleRatio}
+                  height={currentDocument!.height * scaleRatio}
+                  scaleX={scaleRatio}
+                  scaleY={scaleRatio}
+                  className='rounded shadow-sm'
+                  onMouseDown={(event: KonvaEventObject<MouseEvent>) => {
+                    const target = event.target
+                    if (target === target.getStage()) {
+                      setSelectedBlockIndex(undefined)
+                    }
+                  }}
+                  style={{
+                    cursor:
+                      mode === 'select'
+                        ? 'crosshair'
+                        : mode === 'block'
+                          ? 'cell'
+                          : mode === 'mask'
+                            ? MASK_CURSOR
+                            : 'default',
+                  }}
+                >
+                  <Layer>
+                    <Image data={currentDocument!.image} />
+                    <Image
+                      data={currentDocument!.segment}
+                      visible={showSegmentationMask}
+                      opacity={0.45}
+                    />
+                    <Image
+                      data={currentDocument!.inpainted}
+                      visible={showInpaintedImage}
+                      opacity={0.95}
+                    />
+                  </Layer>
+                  <Layer>
+                    <TextBlockAnnotations
+                      selectedIndex={selectedBlockIndex}
+                      onSelect={setSelectedBlockIndex}
+                    />
+                  </Layer>
+                </Stage>
+              ) : (
+                <div className='flex h-full w-full items-center justify-center text-sm text-neutral-500'>
+                  Import a page to begin editing.
+                </div>
+              )}
+            </ScrollArea.Viewport>
+            <ScrollArea.Scrollbar
+              orientation='vertical'
+              className='flex w-2 touch-none p-px select-none'
+            >
+              <ScrollArea.Thumb className='flex-1 rounded bg-neutral-300' />
+            </ScrollArea.Scrollbar>
+            <ScrollArea.Scrollbar
+              orientation='horizontal'
+              className='flex h-2 touch-none p-px select-none'
+            >
+              <ScrollArea.Thumb className='rounded bg-neutral-300' />
+            </ScrollArea.Scrollbar>
+          </ScrollArea.Root>
+          <div className='pointer-events-none absolute bottom-4 left-4'>
+            <SelectionOverlay />
+          </div>
+          <div className='pointer-events-none absolute right-4 bottom-4'>
+            <MaskMiniMap />
+          </div>
         </div>
-        <span className='w-10 text-right tabular-nums'>{scale}%</span>
       </div>
     </div>
   )
 }
 
-function TextBlockAnnotations() {
+export function StatusBar() {
+  const { scale, setScale, documents, currentDocumentIndex } = useAppStore()
+  const currentDocument = documents[currentDocumentIndex]
+
+  return (
+    <div className='flex items-center justify-end gap-3 border-t border-neutral-300 px-2 py-1 text-xs'>
+      <div className='flex items-center gap-1.5'>
+        <span className='text-neutral-500'>Zoom</span>
+        <div className='w-44'>
+          <Slider.Root
+            className='relative flex h-4 w-full touch-none items-center select-none'
+            min={10}
+            max={200}
+            step={5}
+            value={[scale]}
+            onValueChange={(v) => setScale(v[0] ?? scale)}
+          >
+            <Slider.Track className='relative h-1 flex-1 rounded bg-rose-100'>
+              <Slider.Range className='absolute h-full rounded bg-rose-400' />
+            </Slider.Track>
+            <Slider.Thumb className='block h-2.5 w-2.5 rounded-full bg-rose-500' />
+          </Slider.Root>
+        </div>
+        <span className='w-10 text-right tabular-nums'>{scale}%</span>
+      </div>
+      <span className='ml-auto text-[11px] text-neutral-600'>
+        Canvas:{' '}
+        {currentDocument
+          ? `${currentDocument.width} × ${currentDocument.height}`
+          : '—'}
+      </span>
+    </div>
+  )
+}
+
+function ToolRail() {
+  const mode = useAppStore((state) => state.mode)
+  const setMode = useAppStore((state) => state.setMode)
+  const modes: {
+    label: string
+    value: ToolMode
+    icon: React.ComponentType<{ className?: string }>
+  }[] = [
+    { label: 'Navigate', value: 'navigate', icon: Move },
+    { label: 'Select', value: 'select', icon: MousePointer },
+    { label: 'Block', value: 'block', icon: Square },
+    { label: 'Mask', value: 'mask', icon: Brush },
+    { label: 'Text', value: 'text', icon: TypeIcon },
+  ]
+  return (
+    <div className='flex w-12 flex-col border-r border-neutral-200 bg-white'>
+      <Toolbar.Root
+        orientation='vertical'
+        className='flex flex-1 flex-col items-center gap-1.5 py-3'
+      >
+        {modes.map((item) => (
+          <Toolbar.Button
+            key={item.value}
+            data-active={item.value === mode}
+            onClick={() => setMode(item.value)}
+            className='flex h-8 w-8 items-center justify-center rounded border border-transparent text-neutral-600 hover:border-neutral-300 data-[active=true]:border-rose-400 data-[active=true]:bg-rose-50 data-[active=true]:text-rose-600'
+            aria-label={item.label}
+          >
+            <item.icon className='h-4 w-4' />
+          </Toolbar.Button>
+        ))}
+      </Toolbar.Root>
+    </div>
+  )
+}
+
+function CanvasToolbar() {
+  const { detect, ocr, inpaint, llmGenerate, documents, llmReady } =
+    useAppStore()
+
+  const hasDocument = documents.length > 0
+
+  const runDetect = () => {
+    if (!hasDocument) return
+    detect(0.5, 0.4)
+  }
+  const runOcr = () => {
+    if (!hasDocument) return
+    ocr()
+  }
+  const runInpaint = () => {
+    if (!hasDocument) return
+    inpaint(9, 3)
+  }
+  const runTranslate = () => {
+    if (!hasDocument) return
+    llmGenerate()
+  }
+
+  const quickActions = [
+    { label: 'Detect', action: runDetect },
+    { label: 'OCR', action: runOcr },
+    { label: 'Inpaint', action: runInpaint },
+    { label: 'Translate', action: runTranslate },
+  ]
+
+  return (
+    <Toolbar.Root className='flex items-center gap-1 border-b border-neutral-200 bg-white px-2 py-1.5 text-xs text-neutral-900'>
+      {quickActions.map((item) => (
+        <Tooltip.Root key={item.label} delayDuration={0}>
+          <Tooltip.Trigger asChild>
+            <Toolbar.Button
+              onClick={item.action}
+              disabled={!hasDocument}
+              className='rounded border border-neutral-200 bg-white px-2.5 py-1 font-semibold hover:bg-neutral-100 disabled:opacity-40 data-[state=on]:bg-neutral-900 data-[state=on]:text-white'
+            >
+              {item.label}
+            </Toolbar.Button>
+          </Tooltip.Trigger>
+          <Tooltip.Content
+            sideOffset={6}
+            className='rounded bg-black px-2 py-1 text-xs text-white'
+          >
+            Run {item.label.toLowerCase()}
+          </Tooltip.Content>
+        </Tooltip.Root>
+      ))}
+      <span
+        className={`ml-auto rounded-full px-2 py-1 text-xs ${
+          llmReady ? 'bg-rose-100 text-rose-700' : 'bg-rose-50 text-rose-400'
+        }`}
+      >
+        {llmReady ? 'LLM Ready' : 'LLM Idle'}
+      </span>
+    </Toolbar.Root>
+  )
+}
+
+function SelectionOverlay() {
+  const { documents, currentDocumentIndex, selectedBlockIndex } = useAppStore()
+  const currentDocument = documents[currentDocumentIndex]
+  const block =
+    currentDocument && selectedBlockIndex !== undefined
+      ? currentDocument.textBlocks[selectedBlockIndex]
+      : undefined
+
+  if (!block) return null
+
+  return (
+    <div className='pointer-events-auto rounded border border-neutral-200 bg-white/90 px-3 py-2 text-xs shadow-sm'>
+      <p className='text-[11px] font-semibold tracking-wide text-neutral-500 uppercase'>
+        Selection
+      </p>
+      <p className='text-neutral-800'>
+        Block #{selectedBlockIndex! + 1} ({block.width}×{block.height})
+      </p>
+      <p className='text-neutral-500'>
+        Position {block.x}, {block.y}
+      </p>
+    </div>
+  )
+}
+
+function MaskMiniMap() {
+  const { documents, currentDocumentIndex, showSegmentationMask } =
+    useAppStore()
+  const mask = documents[currentDocumentIndex]?.segment
+  const [preview, setPreview] = useState<string>()
+
+  useEffect(() => {
+    if (!mask) {
+      setPreview(undefined)
+      return
+    }
+    const url = URL.createObjectURL(convertToBlob(mask))
+    setPreview(url)
+    return () => URL.revokeObjectURL(url)
+  }, [mask])
+
+  if (!mask || !preview) return null
+
+  return (
+    <div className='pointer-events-auto rounded border border-neutral-200 bg-white/90 p-2 text-xs shadow-sm'>
+      <p className='mb-2 text-[11px] font-semibold tracking-wide text-neutral-500 uppercase'>
+        Segmentation
+      </p>
+      <img
+        src={preview}
+        alt='Segmentation preview'
+        className='h-24 w-20 rounded object-cover opacity-70'
+      />
+      <p className='mt-1 text-[11px] text-neutral-500'>
+        {showSegmentationMask ? 'Visible' : 'Hidden'}
+      </p>
+    </div>
+  )
+}
+
+function TextBlockAnnotations({
+  selectedIndex,
+  onSelect,
+}: {
+  selectedIndex?: number
+  onSelect: (index?: number) => void
+}) {
   const currentDocument = useAppStore(
-    (state) => state.documents[state.currentDocumentIndex]
+    (state) => state.documents[state.currentDocumentIndex],
   )
 
   return (
     <>
       {currentDocument?.textBlocks.map((block, index) => (
-        <TextBlockAnnotation key={index} block={block} index={index} />
+        <TextBlockAnnotation
+          key={`${block.x}-${block.y}-${index}`}
+          block={block}
+          index={index}
+          selected={index === selectedIndex}
+          onSelect={onSelect}
+        />
       ))}
     </>
   )
@@ -144,9 +367,13 @@ function TextBlockAnnotations() {
 function TextBlockAnnotation({
   block,
   index,
+  selected,
+  onSelect,
 }: {
   block: TextBlock
   index: number
+  selected: boolean
+  onSelect: (index: number) => void
 }) {
   return (
     <>
@@ -155,9 +382,19 @@ function TextBlockAnnotation({
         y={block.y}
         width={block.width}
         height={block.height}
-        stroke='rgba(255, 0, 0, 0.5)'
+        stroke={selected ? 'rgba(59, 130, 246, 0.9)' : 'rgba(255, 0, 0, 0.5)'}
+        strokeWidth={selected ? 3 : 1}
+        onClick={(event) => {
+          event.cancelBubble = true
+          onSelect(index)
+        }}
       />
-      <Circle x={block.x} y={block.y} radius={9} fill='rgba(255, 0, 0, 0.7)' />
+      <Circle
+        x={block.x}
+        y={block.y}
+        radius={9}
+        fill={selected ? 'rgba(59, 130, 246, 0.9)' : 'rgba(255, 0, 0, 0.7)'}
+      />
       <Text
         x={block.x - 4}
         y={block.y - 6}
@@ -168,3 +405,5 @@ function TextBlockAnnotation({
     </>
   )
 }
+
+// CanvasControl merged into StatusBar

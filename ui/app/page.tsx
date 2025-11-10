@@ -1,17 +1,17 @@
 import { MenuBar } from '@/components/MenuBar'
 import { Panels } from '@/components/Panels'
-import { Canvas, CanvasControl } from '@/components/Canvas'
-import { ThumbnailPanel } from '@/components/ThumbnailPanel'
+import { Workspace, StatusBar } from '@/components/Canvas'
+import { Navigator } from '@/components/Navigator'
 
 export default function Page() {
   return (
-    <main className='flex flex-1 flex-col h-screen w-screen overflow-hidden'>
+    <main className='flex h-screen w-screen flex-col overflow-hidden bg-neutral-50'>
       <MenuBar />
-      <div className='flex min-h-0 min-w-0 flex-1'>
-        <ThumbnailPanel />
-        <div className='flex min-h-0 min-w-0 flex-1 flex-col'>
-          <Canvas />
-          <CanvasControl />
+      <div className='flex min-h-0 flex-1'>
+        <Navigator />
+        <div className='flex min-h-0 flex-1 flex-col'>
+          <Workspace />
+          <StatusBar />
         </div>
         <Panels />
       </div>
