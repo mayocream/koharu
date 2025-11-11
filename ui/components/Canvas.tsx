@@ -1,6 +1,6 @@
 'use client'
 
-import { useEffect, useRef } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import type { ComponentType } from 'react'
 import type Konva from 'konva'
 import type { KonvaEventObject } from 'konva/lib/Node'
@@ -53,10 +53,102 @@ export function Workspace() {
     mode,
     selectedBlockIndex,
     setSelectedBlockIndex,
+    updateTextBlocks,
   } = useAppStore()
   const currentDocument = documents[currentDocumentIndex]
   const hasDocument = Boolean(currentDocument)
   const scaleRatio = scale / 100
+  const dragStartRef = useRef<{ x: number; y: number } | null>(null)
+  const [draftBlock, setDraftBlock] = useState<TextBlock | null>(null)
+
+  const pointerToDocument = (event: KonvaEventObject<MouseEvent>) => {
+    const stage = event.target.getStage()
+    if (!stage) return null
+    const pointer = stage.getPointerPosition()
+    if (!pointer) return null
+    return {
+      x: pointer.x / scaleRatio,
+      y: pointer.y / scaleRatio,
+    }
+  }
+
+  const resetDraft = () => {
+    dragStartRef.current = null
+    setDraftBlock(null)
+  }
+
+  const handleStageMouseDown = (event: KonvaEventObject<MouseEvent>) => {
+    if (!currentDocument) return
+    if (mode === 'block') {
+      const point = pointerToDocument(event)
+      if (!point) return
+      dragStartRef.current = point
+      setDraftBlock({
+        x: point.x,
+        y: point.y,
+        width: 0,
+        height: 0,
+        confidence: 1,
+      })
+      setSelectedBlockIndex(undefined)
+      return
+    }
+
+    const target = event.target
+    if (target === target.getStage()) {
+      setSelectedBlockIndex(undefined)
+    }
+  }
+
+  const handleStageMouseMove = (event: KonvaEventObject<MouseEvent>) => {
+    if (mode !== 'block') return
+    const start = dragStartRef.current
+    if (!start) return
+    const point = pointerToDocument(event)
+    if (!point) return
+    const x = Math.min(start.x, point.x)
+    const y = Math.min(start.y, point.y)
+    const width = Math.abs(point.x - start.x)
+    const height = Math.abs(point.y - start.y)
+    setDraftBlock({
+      x,
+      y,
+      width,
+      height,
+      confidence: 1,
+    })
+  }
+
+  const handleStageMouseUp = () => {
+    if (mode !== 'block') {
+      resetDraft()
+      return
+    }
+    const block = draftBlock
+    dragStartRef.current = null
+    setDraftBlock(null)
+    if (!block || !currentDocument) return
+    const minSize = 4
+    if (block.width < minSize || block.height < minSize) return
+    const normalized: TextBlock = {
+      x: Math.round(block.x),
+      y: Math.round(block.y),
+      width: Math.round(block.width),
+      height: Math.round(block.height),
+      confidence: block.confidence ?? 1,
+      text: block.text,
+      translation: block.translation,
+    }
+    const nextBlocks = [...currentDocument.textBlocks, normalized]
+    void updateTextBlocks(nextBlocks)
+    setSelectedBlockIndex(nextBlocks.length - 1)
+  }
+
+  const handleStageMouseLeave = () => {
+    if (mode === 'block') {
+      resetDraft()
+    }
+  }
 
   return (
     <div className='flex min-h-0 min-w-0 flex-1 bg-neutral-100'>
@@ -77,12 +169,10 @@ export function Workspace() {
                 scaleX={scaleRatio}
                 scaleY={scaleRatio}
                 className='rounded shadow-sm'
-                onMouseDown={(event: KonvaEventObject<MouseEvent>) => {
-                  const target = event.target
-                  if (target === target.getStage()) {
-                    setSelectedBlockIndex(undefined)
-                  }
-                }}
+                onMouseDown={handleStageMouseDown}
+                onMouseMove={handleStageMouseMove}
+                onMouseUp={handleStageMouseUp}
+                onMouseLeave={handleStageMouseLeave}
                 style={{
                   cursor:
                     mode === 'select'
@@ -113,6 +203,20 @@ export function Workspace() {
                     onSelect={setSelectedBlockIndex}
                   />
                 </Layer>
+                {draftBlock && (
+                  <Layer listening={false}>
+                    <Rect
+                      x={draftBlock.x}
+                      y={draftBlock.y}
+                      width={draftBlock.width}
+                      height={draftBlock.height}
+                      stroke='rgba(244, 63, 94, 0.9)'
+                      dash={[8, 4]}
+                      strokeWidth={2 / scaleRatio}
+                      fill='rgba(244, 63, 94, 0.1)'
+                    />
+                  </Layer>
+                )}
               </Stage>
             ) : (
               <div className='flex h-full w-full items-center justify-center text-sm text-neutral-500'>
