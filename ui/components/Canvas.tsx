@@ -29,7 +29,7 @@ export function fitCanvasToViewport() {
   const scaleH = (rect.height / doc.height) * 100
   const fit = Math.max(
     10,
-    Math.min(200, Math.floor(Math.min(scaleW, scaleH) / 10) * 10),
+    Math.min(100, Math.floor(Math.min(scaleW, scaleH) / 10) * 10),
   )
   setScale(fit)
 }
@@ -157,7 +157,7 @@ export function StatusBar() {
           <Slider.Root
             className='relative flex h-4 w-full touch-none items-center select-none'
             min={10}
-            max={200}
+            max={100}
             step={5}
             value={[scale]}
             onValueChange={(v) => setScale(v[0] ?? scale)}
@@ -375,6 +375,9 @@ function TextBlockAnnotation({
   selected: boolean
   onSelect: (index: number) => void
 }) {
+  let scale = useAppStore((state) => state.scale)
+  let scaleRatio = scale / 100
+
   return (
     <>
       <Rect
@@ -383,7 +386,7 @@ function TextBlockAnnotation({
         width={block.width}
         height={block.height}
         stroke={selected ? 'rgba(59, 130, 246, 0.9)' : 'rgba(255, 0, 0, 0.5)'}
-        strokeWidth={selected ? 3 : 1}
+        strokeWidth={2 / scaleRatio}
         onClick={(event) => {
           event.cancelBubble = true
           onSelect(index)
@@ -392,18 +395,16 @@ function TextBlockAnnotation({
       <Circle
         x={block.x}
         y={block.y}
-        radius={9}
+        radius={9 / scaleRatio}
         fill={selected ? 'rgba(59, 130, 246, 0.9)' : 'rgba(255, 0, 0, 0.7)'}
       />
       <Text
-        x={block.x - 4}
-        y={block.y - 6}
+        x={block.x - (index + 1 >= 10 ? 6 : 4) / scaleRatio}
+        y={block.y - 6 / scaleRatio}
         text={(index + 1).toString()}
-        fontSize={12}
+        fontSize={12 / scaleRatio}
         fill='white'
       />
     </>
   )
 }
-
-// CanvasControl merged into StatusBar

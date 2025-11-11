@@ -12,7 +12,7 @@ export function Navigator() {
   const current = documents[currentDocumentIndex]
 
   return (
-    <div className='flex w-48 shrink-0 flex-col border-r border-neutral-200 bg-neutral-50'>
+    <div className='flex w-32 shrink-0 flex-col border-r border-neutral-200 bg-neutral-50'>
       <div className='border-b border-neutral-200 px-2.5 py-1.5'>
         <p className='text-[11px] tracking-wide text-neutral-500 uppercase'>
           Navigator
@@ -24,14 +24,9 @@ export function Navigator() {
 
       <div className='flex items-center gap-1.5 px-2.5 py-1.5 text-[11px] text-neutral-600'>
         {current ? (
-          <>
-            <span className='rounded bg-neutral-100 px-2 py-0.5 font-mono text-[10px] text-neutral-700'>
-              #{currentDocumentIndex + 1}
-            </span>
-            <span>
-              {current.width} × {current.height}
-            </span>
-          </>
+          <span className='bg-neutral-100 px-2 py-0.5 font-mono text-[10px] text-neutral-700'>
+            #{currentDocumentIndex + 1}
+          </span>
         ) : (
           <span>Select or import a page to begin</span>
         )}
@@ -110,15 +105,15 @@ function PagePreview({
           ) : (
             <div className='aspect-3/4 w-full rounded bg-neutral-200' />
           )}
-          <div className='flex items-center justify-between text-[11px] text-neutral-600'>
-            <span className='font-semibold text-neutral-900'>
-              {index + 1}. {document.name}
-            </span>
+          <div className='flex flex-1 items-center text-[11px] text-neutral-600'>
+            <div className='mx-auto flex text-center font-semibold text-neutral-900'>
+              {document.name}
+            </div>
           </div>
         </button>
       </Tooltip.Trigger>
       <Tooltip.Content
-        className='rounded bg-black px-2 py-1 text-xs text-white'
+        className='z-10 rounded bg-black px-2 py-1 text-xs text-white'
         sideOffset={4}
       >
         {document.path}

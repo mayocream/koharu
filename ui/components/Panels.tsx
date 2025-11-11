@@ -15,7 +15,7 @@ import { TextBlock } from '@/types'
 
 export function Panels() {
   return (
-    <div className='flex w-80 shrink-0 flex-col border-l border-neutral-200 bg-neutral-50'>
+    <div className='flex w-64 shrink-0 flex-col border-l border-neutral-200 bg-neutral-50'>
       <Tabs.Root
         defaultValue='processing'
         className='border-b border-neutral-200'
@@ -266,11 +266,11 @@ function TextBlocksPanel() {
   }
 
   return (
-    <div className='flex flex-1 flex-col'>
+    <div className='flex min-h-0 flex-1 flex-col'>
       <div className='border-b border-neutral-200 px-2.5 py-1.5 text-xs font-semibold tracking-wide text-neutral-600 uppercase'>
         Text Blocks ({document.textBlocks.length})
       </div>
-      <ScrollArea.Root className='flex-1'>
+      <ScrollArea.Root className='min-h-0 flex-1'>
         <ScrollArea.Viewport className='size-full p-2'>
           <div className='flex flex-col gap-2'>
             {document.textBlocks.length === 0 ? (

@@ -26,10 +26,12 @@ pub async fn open_documents(state: State<'_, AppState>) -> Result<Vec<Document>>
         .pick_files()
         .unwrap_or_default();
 
-    let documents = paths
+    let mut documents = paths
         .into_par_iter()
         .filter_map(|path| Document::open(path).ok())
         .collect::<Vec<_>>();
+
+    documents.sort_by_key(|doc| doc.name.clone());
 
     // store documents in app state
     let mut state = state.write().await;
