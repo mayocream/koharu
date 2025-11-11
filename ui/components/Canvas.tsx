@@ -6,13 +6,7 @@ import type Konva from 'konva'
 import type { KonvaEventObject } from 'konva/lib/Node'
 import { Stage, Layer, Rect, Circle, Text, Transformer } from 'react-konva'
 import { ScrollArea, Slider, Tooltip, Toolbar, ContextMenu } from 'radix-ui'
-import {
-  Move,
-  MousePointer,
-  Square,
-  Brush,
-  Type as TypeIcon,
-} from 'lucide-react'
+import { MousePointer, Square, Brush } from 'lucide-react'
 import { Image } from '@/components/Image'
 import { useAppStore, useConfigStore } from '@/lib/store'
 import { TextBlock, ToolMode } from '@/types'
@@ -224,13 +218,11 @@ export function Workspace() {
                       onContextMenu={handleStageContextMenu}
                       style={{
                         cursor:
-                          mode === 'select'
-                            ? 'crosshair'
+                          mode === 'mask'
+                            ? MASK_CURSOR
                             : mode === 'block'
                               ? 'cell'
-                              : mode === 'mask'
-                                ? MASK_CURSOR
-                                : 'default',
+                              : 'default',
                       }}
                     >
                       <Layer>
@@ -348,11 +340,9 @@ function ToolRail() {
     value: ToolMode
     icon: ComponentType<{ className?: string }>
   }[] = [
-    { label: 'Navigate', value: 'navigate', icon: Move },
     { label: 'Select', value: 'select', icon: MousePointer },
     { label: 'Block', value: 'block', icon: Square },
     { label: 'Mask', value: 'mask', icon: Brush },
-    { label: 'Text', value: 'text', icon: TypeIcon },
   ]
   return (
     <div className='flex w-12 flex-col border-r border-neutral-200 bg-white'>

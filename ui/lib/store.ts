@@ -50,7 +50,7 @@ export const useAppStore = create<AppState>((set, get) => ({
   scale: 100,
   showSegmentationMask: false,
   showInpaintedImage: false,
-  mode: 'navigate',
+  mode: 'select',
   selectedBlockIndex: undefined,
   llmModels: [],
   llmSelectedModel: undefined,

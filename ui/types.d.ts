@@ -8,7 +8,7 @@ export type TextBlock = {
   translation?: string
 }
 
-export type ToolMode = 'navigate' | 'select' | 'block' | 'mask' | 'text'
+export type ToolMode = 'select' | 'block' | 'mask'
 
 export type Document = {
   id: string
