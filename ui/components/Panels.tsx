@@ -9,6 +9,7 @@ import {
   Select,
   Tooltip,
   Separator,
+  Accordion,
 } from 'radix-ui'
 import { useAppStore, useConfigStore } from '@/lib/store'
 import { TextBlock } from '@/types'
@@ -267,6 +268,9 @@ function TextBlocksPanel() {
     )
   }
 
+  const accordionValue =
+    selectedBlockIndex !== undefined ? selectedBlockIndex.toString() : ''
+
   return (
     <div className='flex min-h-0 flex-1 flex-col'>
       <div className='border-b border-neutral-200 px-2.5 py-1.5 text-xs font-semibold tracking-wide text-neutral-600 uppercase'>
@@ -274,26 +278,37 @@ function TextBlocksPanel() {
       </div>
       <ScrollArea.Root className='min-h-0 flex-1'>
         <ScrollArea.Viewport className='size-full p-2'>
-          <div className='flex flex-col gap-2'>
-            {document.textBlocks.length === 0 ? (
-              <p className='text-sm text-neutral-500'>
-                No text blocks yet. Run detection to populate the list.
-              </p>
-            ) : (
-              document.textBlocks.map((block, index) => (
+          {document.textBlocks.length === 0 ? (
+            <p className='rounded border border-dashed border-neutral-300 p-4 text-sm text-neutral-500'>
+              No text blocks yet. Run detection to populate the list.
+            </p>
+          ) : (
+            <Accordion.Root
+              type='single'
+              collapsible
+              value={accordionValue}
+              onValueChange={(value) => {
+                if (!value) {
+                  setSelectedBlockIndex(undefined)
+                  return
+                }
+                setSelectedBlockIndex(Number(value))
+              }}
+              className='flex flex-col gap-2'
+            >
+              {document.textBlocks.map((block, index) => (
                 <BlockCard
                   key={`${block.x}-${block.y}-${index}`}
                   block={block}
                   index={index}
                   selected={index === selectedBlockIndex}
-                  onSelect={() => setSelectedBlockIndex(index)}
                   onChange={(updates) => {
                     updateBlock(index, updates)
                   }}
                 />
-              ))
-            )}
-          </div>
+              ))}
+            </Accordion.Root>
+          )}
         </ScrollArea.Viewport>
         <ScrollArea.Scrollbar orientation='vertical' className='w-2'>
           <ScrollArea.Thumb className='flex-1 rounded bg-neutral-300' />
@@ -307,90 +322,84 @@ function BlockCard({
   block,
   index,
   selected,
-  onSelect,
   onChange,
 }: {
   block: TextBlock
   index: number
   selected: boolean
-  onSelect: () => void
   onChange: (updates: Partial<TextBlock>) => void
 }) {
-  const handleNumberChange = (
-    field: keyof Pick<TextBlock, 'x' | 'y' | 'width' | 'height'>,
-    value: string,
-  ) => {
-    const parsed = Number.parseInt(value, 10)
-    if (Number.isNaN(parsed)) return
-    onChange({ [field]: parsed } as Partial<TextBlock>)
-  }
+  const summary = block.translation?.trim() || block.text?.trim() || '<empty>'
+  const isEmpty = summary === '<empty>'
 
   return (
-    <div
+    <Accordion.Item
+      value={index.toString()}
       data-selected={selected}
-      className='space-y-1.5 rounded border border-neutral-200 bg-white/90 p-2.5 text-sm data-[selected=true]:border-pink-500'
+      className='overflow-hidden rounded border border-neutral-200 bg-white/90 text-sm transition data-[selected=true]:border-rose-400 data-[state=open]:shadow-sm'
     >
-      <div className='flex items-center justify-between text-xs text-neutral-500'>
-        <span className='font-semibold text-neutral-800'>
-          Block {index + 1}
-        </span>
-        <button
-          onClick={onSelect}
-          className='rounded border border-neutral-200 px-2 py-0.5 text-[11px] tracking-wide text-neutral-600 uppercase hover:bg-neutral-100'
-        >
-          {selected ? 'Selected' : 'Select'}
-        </button>
-      </div>
-      <div className='grid grid-cols-4 gap-2 text-xs'>
-        {(['x', 'y', 'width', 'height'] as const).map((field) => (
-          <label key={field} className='flex flex-col gap-1'>
-            <span className='text-[11px] tracking-wide text-neutral-500 uppercase'>
-              {field}
+      <Accordion.Header>
+        <Accordion.Trigger className='flex w-full flex-col gap-1 px-3 py-2 text-left transition outline-none data-[state=open]:bg-rose-50'>
+          <div className='flex items-center justify-between text-xs text-neutral-500'>
+            <span className='font-semibold text-neutral-800'>
+              Block {index + 1}
             </span>
-            <input
-              type='number'
-              className='rounded border border-neutral-200 px-2 py-1 text-sm'
-              value={block[field]}
-              onChange={(e) => handleNumberChange(field, e.target.value)}
-            />
-          </label>
-        ))}
-      </div>
-      <div className='space-y-2'>
-        <label className='flex flex-col gap-1 text-xs'>
-          <span className='text-[11px] tracking-wide text-neutral-500 uppercase'>
-            OCR text
-          </span>
-          <textarea
-            className='h-16 rounded border border-neutral-200 p-2 text-sm'
+            <span className='text-[11px] tracking-wide text-neutral-400 uppercase'>
+              Click to edit
+            </span>
+          </div>
+          {!selected && (
+            <p
+              className={`line-clamp-2 text-sm ${
+                isEmpty ? 'text-neutral-400 italic' : 'text-neutral-700'
+              }`}
+            >
+              {summary}
+            </p>
+          )}
+        </Accordion.Trigger>
+      </Accordion.Header>
+      <Accordion.Content className='border-t border-neutral-100 px-3 pt-2 pb-3 data-[state=closed]:hidden'>
+        <div className='space-y-3'>
+          <EditableField
+            label='OCR text'
             value={block.text ?? ''}
-            onChange={(e) => onChange({ text: e.target.value })}
+            placeholder='Add OCR text'
+            onCommit={(value) => onChange({ text: value })}
           />
-        </label>
-        <label className='flex flex-col gap-1 text-xs'>
-          <span className='text-[11px] tracking-wide text-neutral-500 uppercase'>
-            Translation
-          </span>
-          <textarea
-            className='h-20 rounded border border-neutral-200 p-2 text-sm'
+          <EditableField
+            label='Translation'
             value={block.translation ?? ''}
-            onChange={(e) => onChange({ translation: e.target.value })}
-          />
-        </label>
-        <div className='flex gap-2'>
-          <ActionButton
-            label='Copy OCR'
-            tooltip='Copy OCR text into translation field'
-            onClick={() => onChange({ translation: block.text ?? '' })}
-          />
-          <ActionButton
-            label='Clear'
-            tooltip='Clear translation text'
-            onClick={() => onChange({ translation: '' })}
+            placeholder='Add translation'
+            onCommit={(value) => onChange({ translation: value })}
           />
         </div>
-      </div>
-    </div>
+      </Accordion.Content>
+    </Accordion.Item>
+  )
+}
+
+function EditableField({
+  label,
+  value,
+  placeholder,
+  onCommit,
+}: {
+  label: string
+  value: string
+  placeholder: string
+  onCommit: (value: string) => void
+}) {
+  return (
+    <label className='flex flex-col gap-1 text-xs text-neutral-500'>
+      <span className='text-[11px] tracking-wide uppercase'>{label}</span>
+      <textarea
+        value={value}
+        placeholder={placeholder}
+        onChange={(event) => onCommit(event.target.value)}
+        className='min-h-[72px] w-full rounded border border-neutral-200 bg-white px-2 py-2 text-sm text-neutral-800 outline-none focus:border-rose-400'
+      />
+    </label>
   )
 }
 
