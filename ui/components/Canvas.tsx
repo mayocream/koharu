@@ -1,6 +1,6 @@
 'use client'
 
-import { useEffect, useState } from 'react'
+import type { ComponentType } from 'react'
 import type { KonvaEventObject } from 'konva/lib/Node'
 import { Stage, Layer, Rect, Circle, Text } from 'react-konva'
 import { ScrollArea, Slider, Tooltip, Toolbar } from 'radix-ui'
@@ -13,7 +13,6 @@ import {
 } from 'lucide-react'
 import { Image } from '@/components/Image'
 import { useAppStore } from '@/lib/store'
-import { convertToBlob } from '@/lib/util'
 import { TextBlock, ToolMode } from '@/types'
 
 const canvasViewportRef: { current: HTMLDivElement | null } = { current: null }
@@ -62,84 +61,76 @@ export function Workspace() {
       <ToolRail />
       <div className='flex min-h-0 min-w-0 flex-1 flex-col'>
         <CanvasToolbar />
-        <div className='flex min-h-0 min-w-0 flex-1'>
-          <ScrollArea.Root className='flex min-h-0 min-w-0 flex-1'>
-            <ScrollArea.Viewport
-              ref={(el) => {
-                canvasViewportRef.current = el
-              }}
-              className='grid size-full place-content-center-safe'
-            >
-              {hasDocument ? (
-                <Stage
-                  width={currentDocument!.width * scaleRatio}
-                  height={currentDocument!.height * scaleRatio}
-                  scaleX={scaleRatio}
-                  scaleY={scaleRatio}
-                  className='rounded shadow-sm'
-                  onMouseDown={(event: KonvaEventObject<MouseEvent>) => {
-                    const target = event.target
-                    if (target === target.getStage()) {
-                      setSelectedBlockIndex(undefined)
-                    }
-                  }}
-                  style={{
-                    cursor:
-                      mode === 'select'
-                        ? 'crosshair'
-                        : mode === 'block'
-                          ? 'cell'
-                          : mode === 'mask'
-                            ? MASK_CURSOR
-                            : 'default',
-                  }}
-                >
-                  <Layer>
-                    <Image data={currentDocument!.image} />
-                    <Image
-                      data={currentDocument!.segment}
-                      visible={showSegmentationMask}
-                      opacity={0.45}
-                    />
-                    <Image
-                      data={currentDocument!.inpainted}
-                      visible={showInpaintedImage}
-                      opacity={0.95}
-                    />
-                  </Layer>
-                  <Layer>
-                    <TextBlockAnnotations
-                      selectedIndex={selectedBlockIndex}
-                      onSelect={setSelectedBlockIndex}
-                    />
-                  </Layer>
-                </Stage>
-              ) : (
-                <div className='flex h-full w-full items-center justify-center text-sm text-neutral-500'>
-                  Import a page to begin editing.
-                </div>
-              )}
-            </ScrollArea.Viewport>
-            <ScrollArea.Scrollbar
-              orientation='vertical'
-              className='flex w-2 touch-none p-px select-none'
-            >
-              <ScrollArea.Thumb className='flex-1 rounded bg-neutral-300' />
-            </ScrollArea.Scrollbar>
-            <ScrollArea.Scrollbar
-              orientation='horizontal'
-              className='flex h-2 touch-none p-px select-none'
-            >
-              <ScrollArea.Thumb className='rounded bg-neutral-300' />
-            </ScrollArea.Scrollbar>
-          </ScrollArea.Root>
-          <div className='pointer-events-none absolute bottom-4 left-4'>
-            <SelectionOverlay />
-          </div>
-          <div className='pointer-events-none absolute right-4 bottom-4'>
-            <MaskMiniMap />
-          </div>
-        </div>
+        <ScrollArea.Root className='flex min-h-0 min-w-0 flex-1'>
+          <ScrollArea.Viewport
+            ref={(el) => {
+              canvasViewportRef.current = el
+            }}
+            className='grid size-full place-content-center-safe'
+          >
+            {hasDocument ? (
+              <Stage
+                width={currentDocument!.width * scaleRatio}
+                height={currentDocument!.height * scaleRatio}
+                scaleX={scaleRatio}
+                scaleY={scaleRatio}
+                className='rounded shadow-sm'
+                onMouseDown={(event: KonvaEventObject<MouseEvent>) => {
+                  const target = event.target
+                  if (target === target.getStage()) {
+                    setSelectedBlockIndex(undefined)
+                  }
+                }}
+                style={{
+                  cursor:
+                    mode === 'select'
+                      ? 'crosshair'
+                      : mode === 'block'
+                        ? 'cell'
+                        : mode === 'mask'
+                          ? MASK_CURSOR
+                          : 'default',
+                }}
+              >
+                <Layer>
+                  <Image data={currentDocument!.image} />
+                  <Image
+                    data={currentDocument!.segment}
+                    visible={showSegmentationMask}
+                    opacity={0.45}
+                  />
+                  <Image
+                    data={currentDocument!.inpainted}
+                    visible={showInpaintedImage}
+                    opacity={0.95}
+                  />
+                </Layer>
+                <Layer>
+                  <TextBlockAnnotations
+                    selectedIndex={selectedBlockIndex}
+                    onSelect={setSelectedBlockIndex}
+                  />
+                </Layer>
+              </Stage>
+            ) : (
+              <div className='flex h-full w-full items-center justify-center text-sm text-neutral-500'>
+                Import a page to begin editing.
+              </div>
+            )}
+          </ScrollArea.Viewport>
+          <ScrollArea.Scrollbar
+            orientation='vertical'
+            className='flex w-2 touch-none p-px select-none'
+          >
+            <ScrollArea.Thumb className='flex-1 rounded bg-neutral-300' />
+          </ScrollArea.Scrollbar>
+          <ScrollArea.Scrollbar
+            orientation='horizontal'
+            className='flex h-2 touch-none p-px select-none'
+          >
+            <ScrollArea.Thumb className='rounded bg-neutral-300' />
+          </ScrollArea.Scrollbar>
+        </ScrollArea.Root>
       </div>
     </div>
   )
@@ -186,7 +177,7 @@ function ToolRail() {
   const modes: {
     label: string
     value: ToolMode
-    icon: React.ComponentType<{ className?: string }>
+    icon: ComponentType<{ className?: string }>
   }[] = [
     { label: 'Navigate', value: 'navigate', icon: Move },
     { label: 'Select', value: 'select', icon: MousePointer },
@@ -275,66 +266,6 @@ function CanvasToolbar() {
         {llmReady ? 'LLM Ready' : 'LLM Idle'}
       </span>
     </Toolbar.Root>
-  )
-}
-
-function SelectionOverlay() {
-  const { documents, currentDocumentIndex, selectedBlockIndex } = useAppStore()
-  const currentDocument = documents[currentDocumentIndex]
-  const block =
-    currentDocument && selectedBlockIndex !== undefined
-      ? currentDocument.textBlocks[selectedBlockIndex]
-      : undefined
-
-  if (!block) return null
-
-  return (
-    <div className='pointer-events-auto rounded border border-neutral-200 bg-white/90 px-3 py-2 text-xs shadow-sm'>
-      <p className='text-[11px] font-semibold tracking-wide text-neutral-500 uppercase'>
-        Selection
-      </p>
-      <p className='text-neutral-800'>
-        Block #{selectedBlockIndex! + 1} ({block.width}×{block.height})
-      </p>
-      <p className='text-neutral-500'>
-        Position {block.x}, {block.y}
-      </p>
-    </div>
-  )
-}
-
-function MaskMiniMap() {
-  const { documents, currentDocumentIndex, showSegmentationMask } =
-    useAppStore()
-  const mask = documents[currentDocumentIndex]?.segment
-  const [preview, setPreview] = useState<string>()
-
-  useEffect(() => {
-    if (!mask) {
-      setPreview(undefined)
-      return
-    }
-    const url = URL.createObjectURL(convertToBlob(mask))
-    setPreview(url)
-    return () => URL.revokeObjectURL(url)
-  }, [mask])
-
-  if (!mask || !preview) return null
-
-  return (
-    <div className='pointer-events-auto rounded border border-neutral-200 bg-white/90 p-2 text-xs shadow-sm'>
-      <p className='mb-2 text-[11px] font-semibold tracking-wide text-neutral-500 uppercase'>
-        Segmentation
-      </p>
-      <img
-        src={preview}
-        alt='Segmentation preview'
-        className='h-24 w-20 rounded object-cover opacity-70'
-      />
-      <p className='mt-1 text-[11px] text-neutral-500'>
-        {showSegmentationMask ? 'Visible' : 'Hidden'}
-      </p>
-    </div>
   )
 }
 
