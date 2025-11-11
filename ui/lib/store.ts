@@ -16,6 +16,7 @@ type AppState = {
   showInpaintedImage: boolean
   mode: ToolMode
   selectedBlockIndex?: number
+  autoFitEnabled: boolean
   // LLM state
   llmModels: string[]
   llmSelectedModel?: string
@@ -30,6 +31,7 @@ type AppState = {
   setShowInpaintedImage: (show: boolean) => void
   setMode: (mode: ToolMode) => void
   setSelectedBlockIndex: (index?: number) => void
+  setAutoFitEnabled: (enabled: boolean) => void
   updateTextBlocks: (textBlocks: TextBlock[]) => Promise<void>
   detect: (confThreshold: number, nmsThreshold: number) => Promise<void>
   ocr: () => Promise<void>
@@ -52,6 +54,7 @@ export const useAppStore = create<AppState>((set, get) => ({
   showInpaintedImage: false,
   mode: 'select',
   selectedBlockIndex: undefined,
+  autoFitEnabled: true,
   llmModels: [],
   llmSelectedModel: undefined,
   llmReady: false,
@@ -83,6 +86,7 @@ export const useAppStore = create<AppState>((set, get) => ({
   },
   setMode: (mode: ToolMode) => set({ mode }),
   setSelectedBlockIndex: (index?: number) => set({ selectedBlockIndex: index }),
+  setAutoFitEnabled: (enabled: boolean) => set({ autoFitEnabled: enabled }),
   updateTextBlocks: async (textBlocks: TextBlock[]) => {
     const { documents, currentDocumentIndex } = get()
     const doc = documents[currentDocumentIndex]

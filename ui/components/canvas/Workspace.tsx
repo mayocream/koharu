@@ -1,10 +1,14 @@
 'use client'
 
+import { useEffect } from 'react'
 import { Stage, Layer, Rect } from 'react-konva'
 import { ScrollArea, ContextMenu } from 'radix-ui'
 import { Image } from '@/components/Image'
 import { useAppStore } from '@/lib/store'
-import { setCanvasViewport } from '@/components/canvas/canvasViewport'
+import {
+  setCanvasViewport,
+  fitCanvasToViewport,
+} from '@/components/canvas/canvasViewport'
 import { ToolRail } from '@/components/canvas/ToolRail'
 import { CanvasToolbar } from '@/components/canvas/CanvasToolbar'
 import { TextBlockAnnotations } from '@/components/canvas/TextBlockAnnotations'
@@ -17,7 +21,7 @@ const MASK_CURSOR =
   'url(\'data:image/svg+xml,%3Csvg xmlns="http://www.w3.org/2000/svg" width="16" height="16"%3E%3Ccircle cx="8" cy="8" r="4" stroke="black" stroke-width="1.5" fill="white"/%3E%3C/svg%3E\') 8 8, crosshair'
 
 export function Workspace() {
-  const { scale, showSegmentationMask, showInpaintedImage, mode } =
+  const { scale, showSegmentationMask, showInpaintedImage, mode, autoFitEnabled } =
     useAppStore()
   const {
     document: currentDocument,
@@ -44,6 +48,12 @@ export function Workspace() {
       void appendBlock(block)
     },
   })
+
+  useEffect(() => {
+    if (currentDocument && autoFitEnabled) {
+      fitCanvasToViewport()
+    }
+  }, [currentDocument?.id, autoFitEnabled])
   const {
     contextMenuBlockIndex,
     handleContextMenu,

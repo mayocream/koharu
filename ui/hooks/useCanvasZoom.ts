@@ -4,7 +4,8 @@ import { useMemo } from 'react'
 import { useAppStore } from '@/lib/store'
 
 export function useCanvasZoom() {
-  const { scale, setScale, documents, currentDocumentIndex } = useAppStore()
+  const { scale, setScale, documents, currentDocumentIndex, setAutoFitEnabled } =
+    useAppStore()
   const currentDocument = documents[currentDocumentIndex]
 
   const summary = useMemo(() => {
@@ -13,6 +14,7 @@ export function useCanvasZoom() {
   }, [currentDocument])
 
   const applyScale = (value: number) => {
+    setAutoFitEnabled(false)
     setScale(value)
   }
 
