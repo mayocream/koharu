@@ -89,6 +89,7 @@ pub fn run() -> Result<()> {
             command::detect,
             command::ocr,
             command::inpaint,
+            command::update_text_blocks,
             command::llm_list,
             command::llm_load,
             command::llm_offload,

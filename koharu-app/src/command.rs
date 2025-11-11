@@ -2,7 +2,7 @@ use std::{str::FromStr, sync::Arc};
 
 use koharu_core::{
     result::Result,
-    state::{AppState, Document},
+    state::{AppState, Document, TextBlock},
 };
 use koharu_models::llm::{GenerateOptions, ModelId};
 use rayon::iter::{IntoParallelIterator, ParallelIterator};
@@ -106,6 +106,22 @@ pub async fn inpaint(
         .await?;
     document.inpainted = Some(inpainted);
 
+    Ok(document.clone())
+}
+
+#[tauri::command]
+pub async fn update_text_blocks(
+    state: State<'_, AppState>,
+    index: usize,
+    text_blocks: Vec<TextBlock>,
+) -> Result<Document> {
+    let mut state = state.write().await;
+    let document = state
+        .documents
+        .get_mut(index)
+        .ok_or_else(|| anyhow::anyhow!("Document not found"))?;
+
+    document.text_blocks = text_blocks;
     Ok(document.clone())
 }
 
