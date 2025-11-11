@@ -58,8 +58,12 @@ export const useAppStore = create<AppState>((set, get) => ({
   llmModels: [],
   llmSelectedModel: undefined,
   llmReady: false,
-  llmSystemPrompt:
-    'You are a helpful assistant that rewrites extracted text cleanly.',
+  llmSystemPrompt: `You are a Japanese→English line-matched translator.
+Rules:
+- Output ENGLISH ONLY. Never copy Japanese.
+- Preserve line count, line breaks, punctuation, and indentation.
+- Each output line corresponds to the same input line.
+- Keep tone/nuance; do not add or omit meaning.`,
   openDocuments: async () => {
     const docs: Document[] = await invoke('open_documents')
     set({
