@@ -165,3 +165,35 @@ export const useAppStore = create<AppState>((set, get) => ({
     }))
   },
 }))
+
+type ConfigState = {
+  detectConfig: {
+    confThreshold: number
+    nmsThreshold: number
+  }
+  inpaintConfig: {
+    dilateKernelSize: number
+    erodeDistance: number
+  }
+  setDetectConfig: (config: Partial<ConfigState['detectConfig']>) => void
+  setInpaintConfig: (config: Partial<ConfigState['inpaintConfig']>) => void
+}
+
+export const useConfigStore = create<ConfigState>((set) => ({
+  detectConfig: {
+    confThreshold: 0.5,
+    nmsThreshold: 0.4,
+  },
+  inpaintConfig: {
+    dilateKernelSize: 9,
+    erodeDistance: 3,
+  },
+  setDetectConfig: (config) =>
+    set((state) => ({
+      detectConfig: { ...state.detectConfig, ...config },
+    })),
+  setInpaintConfig: (config) =>
+    set((state) => ({
+      inpaintConfig: { ...state.inpaintConfig, ...config },
+    })),
+}))

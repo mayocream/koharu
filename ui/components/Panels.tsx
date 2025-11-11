@@ -10,7 +10,7 @@ import {
   Tooltip,
   Separator,
 } from 'radix-ui'
-import { useAppStore } from '@/lib/store'
+import { useAppStore, useConfigStore } from '@/lib/store'
 import { TextBlock } from '@/types'
 
 export function Panels() {
@@ -59,8 +59,7 @@ export function Panels() {
 
 function ProcessingControls() {
   const { detect, ocr } = useAppStore()
-  const [conf, setConf] = useState(0.5)
-  const [nms, setNms] = useState(0.4)
+  const { detectConfig, setDetectConfig } = useConfigStore()
 
   return (
     <div className='space-y-2 text-xs text-neutral-600'>
@@ -69,22 +68,24 @@ function ProcessingControls() {
         min={0.1}
         max={1}
         step={0.05}
-        value={conf}
-        onChange={setConf}
+        value={detectConfig.confThreshold}
+        onChange={(value) => setDetectConfig({ confThreshold: value })}
       />
       <LabeledSlider
         label='NMS threshold'
         min={0.1}
         max={1}
         step={0.05}
-        value={nms}
-        onChange={setNms}
+        value={detectConfig.nmsThreshold}
+        onChange={(value) => setDetectConfig({ nmsThreshold: value })}
       />
       <div className='flex gap-2'>
         <ActionButton
           label='Detect'
           tooltip='Run text detection on current page'
-          onClick={() => detect(conf, nms)}
+          onClick={() =>
+            detect(detectConfig.confThreshold, detectConfig.nmsThreshold)
+          }
         />
         <ActionButton
           label='OCR'
@@ -104,8 +105,7 @@ function MaskControls() {
     setShowInpaintedImage,
     inpaint,
   } = useAppStore()
-  const [dilateKernelSize, setDilateKernelSize] = useState(9)
-  const [erodeDistance, setErodeDistance] = useState(3)
+  const { inpaintConfig, setInpaintConfig } = useConfigStore()
   const [brushSize, setBrushSize] = useState(36)
 
   return (
@@ -135,23 +135,25 @@ function MaskControls() {
           min={1}
           max={20}
           step={1}
-          value={dilateKernelSize}
-          onChange={setDilateKernelSize}
+          value={inpaintConfig.dilateKernelSize}
+          onChange={(value) => setInpaintConfig({ dilateKernelSize: value })}
         />
         <LabeledSlider
           label='Erode'
           min={1}
           max={10}
           step={1}
-          value={erodeDistance}
-          onChange={setErodeDistance}
+          value={inpaintConfig.erodeDistance}
+          onChange={(value) => setInpaintConfig({ erodeDistance: value })}
         />
       </div>
       <ActionButton
         label='Inpaint'
         tooltip='Apply inpainting'
         width='w-full'
-        onClick={() => inpaint(dilateKernelSize, erodeDistance)}
+        onClick={() =>
+          inpaint(inpaintConfig.dilateKernelSize, inpaintConfig.erodeDistance)
+        }
       />
     </div>
   )

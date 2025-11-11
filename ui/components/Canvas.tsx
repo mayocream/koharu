@@ -12,7 +12,7 @@ import {
   Type as TypeIcon,
 } from 'lucide-react'
 import { Image } from '@/components/Image'
-import { useAppStore } from '@/lib/store'
+import { useAppStore, useConfigStore } from '@/lib/store'
 import { TextBlock, ToolMode } from '@/types'
 
 const canvasViewportRef: { current: HTMLDivElement | null } = { current: null }
@@ -210,12 +210,13 @@ function ToolRail() {
 function CanvasToolbar() {
   const { detect, ocr, inpaint, llmGenerate, documents, llmReady } =
     useAppStore()
+  const { detectConfig, inpaintConfig } = useConfigStore()
 
   const hasDocument = documents.length > 0
 
   const runDetect = () => {
     if (!hasDocument) return
-    detect(0.5, 0.4)
+    detect(detectConfig.confThreshold, detectConfig.nmsThreshold)
   }
   const runOcr = () => {
     if (!hasDocument) return
@@ -223,7 +224,7 @@ function CanvasToolbar() {
   }
   const runInpaint = () => {
     if (!hasDocument) return
-    inpaint(9, 3)
+    inpaint(inpaintConfig.dilateKernelSize, inpaintConfig.erodeDistance)
   }
   const runTranslate = () => {
     if (!hasDocument) return
