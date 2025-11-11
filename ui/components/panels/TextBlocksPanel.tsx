@@ -88,13 +88,12 @@ function BlockCard({ block, index, selected, onChange }: BlockCardProps) {
       className='overflow-hidden rounded border border-neutral-200 bg-white/90 text-sm transition data-[selected=true]:border-rose-400 data-[state=open]:shadow-sm'
     >
       <Accordion.Header>
-        <Accordion.Trigger className='flex w-full flex-col gap-1 px-3 py-2 text-left transition outline-none data-[state=open]:bg-rose-50'>
+        <Accordion.Trigger className='flex w-full cursor-pointer flex-col gap-1 px-3 py-2 text-left transition outline-none data-[state=open]:bg-rose-50'>
           <div className='flex items-center justify-between text-xs text-neutral-500'>
-            <span className='font-semibold text-neutral-800'>
-              Block {index + 1}
-            </span>
-            <span className='text-[11px] tracking-wide text-neutral-400 uppercase'>
-              Click to edit
+            <span className='inline-flex items-center gap-2'>
+              <span className='rounded-full bg-rose-100 px-2 py-0.5 text-[11px] font-semibold text-rose-700'>
+                #{index + 1}
+              </span>
             </span>
           </div>
           {!selected && (

@@ -177,8 +177,12 @@ type ConfigState = {
     dilateKernelSize: number
     erodeDistance: number
   }
+  maskConfig: {
+    brushSize: number
+  }
   setDetectConfig: (config: Partial<ConfigState['detectConfig']>) => void
   setInpaintConfig: (config: Partial<ConfigState['inpaintConfig']>) => void
+  setMaskConfig: (config: Partial<ConfigState['maskConfig']>) => void
 }
 
 export const useConfigStore = create<ConfigState>((set) => ({
@@ -190,6 +194,9 @@ export const useConfigStore = create<ConfigState>((set) => ({
     dilateKernelSize: 9,
     erodeDistance: 3,
   },
+  maskConfig: {
+    brushSize: 36,
+  },
   setDetectConfig: (config) =>
     set((state) => ({
       detectConfig: { ...state.detectConfig, ...config },
@@ -197,5 +204,9 @@ export const useConfigStore = create<ConfigState>((set) => ({
   setInpaintConfig: (config) =>
     set((state) => ({
       inpaintConfig: { ...state.inpaintConfig, ...config },
+    })),
+  setMaskConfig: (config) =>
+    set((state) => ({
+      maskConfig: { ...state.maskConfig, ...config },
     })),
 }))

@@ -17,7 +17,8 @@ const MASK_CURSOR =
   'url(\'data:image/svg+xml,%3Csvg xmlns="http://www.w3.org/2000/svg" width="16" height="16"%3E%3Ccircle cx="8" cy="8" r="4" stroke="black" stroke-width="1.5" fill="white"/%3E%3C/svg%3E\') 8 8, crosshair'
 
 export function Workspace() {
-  const { scale, showSegmentationMask, showInpaintedImage, mode } = useAppStore()
+  const { scale, showSegmentationMask, showInpaintedImage, mode } =
+    useAppStore()
   const {
     document: currentDocument,
     selectedBlockIndex,
@@ -99,16 +100,19 @@ export function Workspace() {
                     >
                       <Layer>
                         <Image data={currentDocument.image} />
-                        <Image
-                          data={currentDocument.segment}
-                          visible={showSegmentationMask}
-                          opacity={0.45}
-                        />
-                        <Image
-                          data={currentDocument.inpainted}
-                          visible={showInpaintedImage}
-                          opacity={0.95}
-                        />
+                        {currentDocument?.segment && (
+                          <Image
+                            data={currentDocument.segment}
+                            visible={showSegmentationMask}
+                            opacity={0.8}
+                          />
+                        )}
+                        {currentDocument.inpainted && (
+                          <Image
+                            data={currentDocument.inpainted}
+                            visible={showInpaintedImage}
+                          />
+                        )}
                       </Layer>
                       <Layer>
                         <TextBlockAnnotations

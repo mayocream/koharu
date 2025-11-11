@@ -1,6 +1,5 @@
 'use client'
 
-import { useState } from 'react'
 import { Separator } from 'radix-ui'
 import { useAppStore, useConfigStore } from '@/lib/store'
 import {
@@ -18,7 +17,6 @@ export function MaskControls() {
     inpaint,
   } = useAppStore()
   const { inpaintConfig, setInpaintConfig } = useConfigStore()
-  const [brushSize, setBrushSize] = useState(36)
 
   return (
     <div className='space-y-2 text-xs text-neutral-600'>
@@ -33,14 +31,6 @@ export function MaskControls() {
         onChange={setShowInpaintedImage}
       />
       <Separator.Root className='my-1 h-px bg-neutral-200' />
-      <SliderField
-        label='Brush size'
-        min={8}
-        max={128}
-        step={4}
-        value={brushSize}
-        onChange={setBrushSize}
-      />
       <div className='grid grid-cols-2 gap-1.5'>
         <SliderField
           label='Dilate'
