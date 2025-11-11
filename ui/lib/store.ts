@@ -30,7 +30,7 @@ type AppState = {
   setShowInpaintedImage: (show: boolean) => void
   setMode: (mode: ToolMode) => void
   setSelectedBlockIndex: (index?: number) => void
-  updateBlock: (blockIndex: number, updates: Partial<TextBlock>) => void
+  updateTextBlocks: (textBlocks: TextBlock[]) => Promise<void>
   detect: (confThreshold: number, nmsThreshold: number) => Promise<void>
   ocr: () => Promise<void>
   inpaint: (dilateKernelSize: number, erodeDistance: number) => Promise<void>
@@ -72,7 +72,7 @@ export const useAppStore = create<AppState>((set, get) => ({
     set({ currentDocumentIndex: index, selectedBlockIndex: undefined })
   },
   setScale: (scale: number) => {
-    const clamped = Math.max(10, Math.min(200, Math.round(scale)))
+    const clamped = Math.max(10, Math.min(100, Math.round(scale)))
     set({ scale: clamped })
   },
   setShowSegmentationMask: (show: boolean) => {
@@ -83,18 +83,20 @@ export const useAppStore = create<AppState>((set, get) => ({
   },
   setMode: (mode: ToolMode) => set({ mode }),
   setSelectedBlockIndex: (index?: number) => set({ selectedBlockIndex: index }),
-  updateBlock: (blockIndex: number, updates: Partial<TextBlock>) => {
+  updateTextBlocks: async (textBlocks: TextBlock[]) => {
     const { documents, currentDocumentIndex } = get()
     const doc = documents[currentDocumentIndex]
     if (!doc) return
     const updatedDoc: Document = {
       ...doc,
-      textBlocks: doc.textBlocks.map((block, idx) =>
-        idx === blockIndex ? { ...block, ...updates } : block,
-      ),
+      textBlocks,
     }
     set({
       documents: replaceDocument(documents, currentDocumentIndex, updatedDoc),
+    })
+    await invoke<Document>('update_text_blocks', {
+      index: currentDocumentIndex,
+      textBlocks,
     })
   },
   detect: async (confThreshold: number, nmsThreshold: number) => {

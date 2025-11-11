@@ -256,7 +256,7 @@ function TextBlocksPanel() {
     currentDocumentIndex,
     selectedBlockIndex,
     setSelectedBlockIndex,
-    updateBlock,
+    updateTextBlocks,
   } = useAppStore()
   const document = documents[currentDocumentIndex]
 
@@ -303,7 +303,10 @@ function TextBlocksPanel() {
                   index={index}
                   selected={index === selectedBlockIndex}
                   onChange={(updates) => {
-                    updateBlock(index, updates)
+                    const nextBlocks = document.textBlocks.map((b, idx) =>
+                      idx === index ? { ...b, ...updates } : b,
+                    )
+                    void updateTextBlocks(nextBlocks)
                   }}
                 />
               ))}
