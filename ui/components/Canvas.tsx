@@ -5,7 +5,7 @@ import type { ComponentType } from 'react'
 import type Konva from 'konva'
 import type { KonvaEventObject } from 'konva/lib/Node'
 import { Stage, Layer, Rect, Circle, Text, Transformer } from 'react-konva'
-import { ScrollArea, Slider, Tooltip, Toolbar } from 'radix-ui'
+import { ScrollArea, Slider, Tooltip, Toolbar, ContextMenu } from 'radix-ui'
 import {
   Move,
   MousePointer,
@@ -60,6 +60,9 @@ export function Workspace() {
   const scaleRatio = scale / 100
   const dragStartRef = useRef<{ x: number; y: number } | null>(null)
   const [draftBlock, setDraftBlock] = useState<TextBlock | null>(null)
+  const [contextMenuBlockIndex, setContextMenuBlockIndex] = useState<
+    number | undefined
+  >(undefined)
 
   const pointerToDocument = (event: KonvaEventObject<MouseEvent>) => {
     const stage = event.target.getStage()
@@ -150,6 +153,42 @@ export function Workspace() {
     }
   }
 
+  const handleStageContextMenu = (event: KonvaEventObject<MouseEvent>) => {
+    if (!currentDocument) return
+    const point = pointerToDocument(event)
+    if (!point) {
+      event.evt.preventDefault()
+      setContextMenuBlockIndex(undefined)
+      setSelectedBlockIndex(undefined)
+      return
+    }
+    const blockIndex = currentDocument.textBlocks.findIndex(
+      (block) =>
+        point.x >= block.x &&
+        point.x <= block.x + block.width &&
+        point.y >= block.y &&
+        point.y <= block.y + block.height,
+    )
+    if (blockIndex >= 0) {
+      setSelectedBlockIndex(blockIndex)
+      setContextMenuBlockIndex(blockIndex)
+    } else {
+      event.evt.preventDefault()
+      setContextMenuBlockIndex(undefined)
+      setSelectedBlockIndex(undefined)
+    }
+  }
+
+  const handleDeleteBlock = () => {
+    if (contextMenuBlockIndex === undefined || !currentDocument) return
+    const nextBlocks = currentDocument.textBlocks.filter(
+      (_, idx) => idx !== contextMenuBlockIndex,
+    )
+    void updateTextBlocks(nextBlocks)
+    setSelectedBlockIndex(undefined)
+    setContextMenuBlockIndex(undefined)
+  }
+
   return (
     <div className='flex min-h-0 min-w-0 flex-1 bg-neutral-100'>
       <ToolRail />
@@ -163,61 +202,85 @@ export function Workspace() {
             className='grid size-full place-content-center-safe'
           >
             {hasDocument ? (
-              <Stage
-                width={currentDocument!.width * scaleRatio}
-                height={currentDocument!.height * scaleRatio}
-                scaleX={scaleRatio}
-                scaleY={scaleRatio}
-                className='rounded shadow-sm'
-                onMouseDown={handleStageMouseDown}
-                onMouseMove={handleStageMouseMove}
-                onMouseUp={handleStageMouseUp}
-                onMouseLeave={handleStageMouseLeave}
-                style={{
-                  cursor:
-                    mode === 'select'
-                      ? 'crosshair'
-                      : mode === 'block'
-                        ? 'cell'
-                        : mode === 'mask'
-                          ? MASK_CURSOR
-                          : 'default',
+              <ContextMenu.Root
+                onOpenChange={(open) => {
+                  if (!open) {
+                    setContextMenuBlockIndex(undefined)
+                  }
                 }}
               >
-                <Layer>
-                  <Image data={currentDocument!.image} />
-                  <Image
-                    data={currentDocument!.segment}
-                    visible={showSegmentationMask}
-                    opacity={0.45}
-                  />
-                  <Image
-                    data={currentDocument!.inpainted}
-                    visible={showInpaintedImage}
-                    opacity={0.95}
-                  />
-                </Layer>
-                <Layer>
-                  <TextBlockAnnotations
-                    selectedIndex={selectedBlockIndex}
-                    onSelect={setSelectedBlockIndex}
-                  />
-                </Layer>
-                {draftBlock && (
-                  <Layer listening={false}>
-                    <Rect
-                      x={draftBlock.x}
-                      y={draftBlock.y}
-                      width={draftBlock.width}
-                      height={draftBlock.height}
-                      stroke='rgba(244, 63, 94, 0.9)'
-                      dash={[8, 4]}
-                      strokeWidth={2 / scaleRatio}
-                      fill='rgba(244, 63, 94, 0.1)'
-                    />
-                  </Layer>
-                )}
-              </Stage>
+                <ContextMenu.Trigger asChild>
+                  <div>
+                    <Stage
+                      width={currentDocument!.width * scaleRatio}
+                      height={currentDocument!.height * scaleRatio}
+                      scaleX={scaleRatio}
+                      scaleY={scaleRatio}
+                      className='rounded shadow-sm'
+                      onMouseDown={handleStageMouseDown}
+                      onMouseMove={handleStageMouseMove}
+                      onMouseUp={handleStageMouseUp}
+                      onMouseLeave={handleStageMouseLeave}
+                      onContextMenu={handleStageContextMenu}
+                      style={{
+                        cursor:
+                          mode === 'select'
+                            ? 'crosshair'
+                            : mode === 'block'
+                              ? 'cell'
+                              : mode === 'mask'
+                                ? MASK_CURSOR
+                                : 'default',
+                      }}
+                    >
+                      <Layer>
+                        <Image data={currentDocument!.image} />
+                        <Image
+                          data={currentDocument!.segment}
+                          visible={showSegmentationMask}
+                          opacity={0.45}
+                        />
+                        <Image
+                          data={currentDocument!.inpainted}
+                          visible={showInpaintedImage}
+                          opacity={0.95}
+                        />
+                      </Layer>
+                      <Layer>
+                        <TextBlockAnnotations
+                          selectedIndex={selectedBlockIndex}
+                          onSelect={setSelectedBlockIndex}
+                        />
+                      </Layer>
+                      {draftBlock && (
+                        <Layer listening={false}>
+                          <Rect
+                            x={draftBlock.x}
+                            y={draftBlock.y}
+                            width={draftBlock.width}
+                            height={draftBlock.height}
+                            stroke='rgba(244, 63, 94, 0.9)'
+                            dash={[8, 4]}
+                            strokeWidth={2 / scaleRatio}
+                            fill='rgba(244, 63, 94, 0.1)'
+                          />
+                        </Layer>
+                      )}
+                    </Stage>
+                  </div>
+                </ContextMenu.Trigger>
+                <ContextMenu.Portal>
+                  <ContextMenu.Content className='min-w-32 rounded-md border border-neutral-200 bg-white p-1 text-sm shadow-lg'>
+                    <ContextMenu.Item
+                      disabled={contextMenuBlockIndex === undefined}
+                      onSelect={handleDeleteBlock}
+                      className='flex cursor-pointer items-center rounded px-3 py-1.5 text-sm text-neutral-800 outline-none select-none hover:bg-neutral-100 data-disabled:cursor-default data-disabled:opacity-40'
+                    >
+                      Delete block
+                    </ContextMenu.Item>
+                  </ContextMenu.Content>
+                </ContextMenu.Portal>
+              </ContextMenu.Root>
             ) : (
               <div className='flex h-full w-full items-center justify-center text-sm text-neutral-500'>
                 Import a page to begin editing.
