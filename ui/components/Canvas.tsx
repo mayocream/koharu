@@ -1,8 +1,10 @@
 'use client'
 
+import { useEffect, useRef } from 'react'
 import type { ComponentType } from 'react'
+import type Konva from 'konva'
 import type { KonvaEventObject } from 'konva/lib/Node'
-import { Stage, Layer, Rect, Circle, Text } from 'react-konva'
+import { Stage, Layer, Rect, Circle, Text, Transformer } from 'react-konva'
 import { ScrollArea, Slider, Tooltip, Toolbar } from 'radix-ui'
 import {
   Move,
@@ -277,19 +279,28 @@ function TextBlockAnnotations({
   selectedIndex?: number
   onSelect: (index?: number) => void
 }) {
-  const currentDocument = useAppStore(
-    (state) => state.documents[state.currentDocumentIndex],
+  const textBlocks = useAppStore(
+    (state) => state.documents[state.currentDocumentIndex]?.textBlocks ?? [],
   )
+  const updateTextBlocks = useAppStore((state) => state.updateTextBlocks)
+
+  const handleUpdate = (index: number, updates: Partial<TextBlock>) => {
+    const nextBlocks = textBlocks.map((block, idx) =>
+      idx === index ? { ...block, ...updates } : block,
+    )
+    void updateTextBlocks(nextBlocks)
+  }
 
   return (
     <>
-      {currentDocument?.textBlocks.map((block, index) => (
+      {textBlocks.map((block, index) => (
         <TextBlockAnnotation
           key={`${block.x}-${block.y}-${index}`}
           block={block}
           index={index}
           selected={index === selectedIndex}
           onSelect={onSelect}
+          onUpdate={(updates) => handleUpdate(index, updates)}
         />
       ))}
     </>
@@ -301,18 +312,49 @@ function TextBlockAnnotation({
   index,
   selected,
   onSelect,
+  onUpdate,
 }: {
   block: TextBlock
   index: number
   selected: boolean
   onSelect: (index: number) => void
+  onUpdate: (updates: Partial<TextBlock>) => void
 }) {
-  let scale = useAppStore((state) => state.scale)
-  let scaleRatio = scale / 100
+  const scale = useAppStore((state) => state.scale)
+  const scaleRatio = scale / 100
+  const rectRef = useRef<Konva.Rect>(null)
+  const transformerRef = useRef<Konva.Transformer>(null)
+
+  useEffect(() => {
+    if (!selected || !transformerRef.current || !rectRef.current) return
+    transformerRef.current.nodes([rectRef.current])
+    transformerRef.current.getLayer()?.batchDraw()
+  }, [selected])
+
+  const handleTransformEnd = () => {
+    const node = rectRef.current
+    if (!node) return
+
+    const scaleX = node.scaleX()
+    const scaleY = node.scaleY()
+    const width = Math.max(4, node.width() * scaleX)
+    const height = Math.max(4, node.height() * scaleY)
+
+    node.scaleX(1)
+    node.scaleY(1)
+
+    onUpdate({
+      x: Math.round(node.x()),
+      y: Math.round(node.y()),
+      width: Math.round(width),
+      height: Math.round(height),
+    })
+  }
 
   return (
     <>
       <Rect
+        ref={rectRef}
         x={block.x}
         y={block.y}
         width={block.width}
@@ -323,7 +365,21 @@ function TextBlockAnnotation({
           event.cancelBubble = true
           onSelect(index)
         }}
+        onTransformEnd={handleTransformEnd}
+        listening
       />
+      {selected && (
+        <Transformer
+          ref={transformerRef}
+          rotateEnabled={false}
+          boundBoxFunc={(oldBox, newBox) => {
+            if (newBox.width < 8 || newBox.height < 8) {
+              return oldBox
+            }
+            return newBox
+          }}
+        />
+      )}
       <Circle
         x={block.x}
         y={block.y}
