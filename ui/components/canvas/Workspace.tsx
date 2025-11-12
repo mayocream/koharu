@@ -12,6 +12,7 @@ import {
 import { ToolRail } from '@/components/canvas/ToolRail'
 import { CanvasToolbar } from '@/components/canvas/CanvasToolbar'
 import { TextBlockAnnotations } from '@/components/canvas/TextBlockAnnotations'
+import { TextBlockRenderer } from '@/components/canvas/TextBlockRenderer'
 import { usePointerToDocument } from '@/hooks/usePointerToDocument'
 import { useBlockDrafting } from '@/hooks/useBlockDrafting'
 import { useBlockContextMenu } from '@/hooks/useBlockContextMenu'
@@ -140,6 +141,7 @@ export function Workspace() {
                           />
                         )}
                       </div>
+                      <TextBlockRenderer />
                       <TextBlockAnnotations
                         selectedIndex={selectedBlockIndex}
                         onSelect={setSelectedBlockIndex}
