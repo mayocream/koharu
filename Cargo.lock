@@ -3108,7 +3108,7 @@ dependencies = [
 
 [[package]]
 name = "koharu"
-version = "0.7.6"
+version = "0.8.0"
 dependencies = [
  "anyhow",
  "backon",
@@ -3140,7 +3140,7 @@ dependencies = [
 
 [[package]]
 name = "koharu-core"
-version = "0.7.6"
+version = "0.8.0"
 dependencies = [
  "anyhow",
  "blake3",
@@ -3163,7 +3163,7 @@ dependencies = [
 
 [[package]]
 name = "koharu-models"
-version = "0.7.6"
+version = "0.8.0"
 dependencies = [
  "anyhow",
  "candle-core",
@@ -3183,7 +3183,7 @@ dependencies = [
 
 [[package]]
 name = "koharu-runtime"
-version = "0.7.6"
+version = "0.8.0"
 dependencies = [
  "anyhow",
  "csv",
