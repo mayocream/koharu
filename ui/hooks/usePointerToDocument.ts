@@ -1,27 +1,29 @@
 'use client'
 
-import { useCallback } from 'react'
-import type { KonvaEventObject } from 'konva/lib/Node'
+import type React from 'react'
 
 export type DocumentPointer = { x: number; y: number }
+
+export type PointerEventLike =
+  | React.PointerEvent<Element>
+  | React.MouseEvent<Element>
+  | MouseEvent
+
 export type PointerToDocumentFn = (
-  event: KonvaEventObject<MouseEvent>,
+  event: PointerEventLike,
 ) => DocumentPointer | null
 
 export function usePointerToDocument(
   scaleRatio: number,
+  ref: React.RefObject<HTMLElement | null>,
 ): PointerToDocumentFn {
-  return useCallback(
-    (event: KonvaEventObject<MouseEvent>) => {
-      const stage = event.target.getStage()
-      if (!stage) return null
-      const pointer = stage.getPointerPosition()
-      if (!pointer) return null
-      return {
-        x: pointer.x / scaleRatio,
-        y: pointer.y / scaleRatio,
-      }
-    },
-    [scaleRatio],
-  )
+  return (event: PointerEventLike) => {
+    const container = ref.current
+    if (!container) return null
+    const rect = container.getBoundingClientRect()
+    const x = (event.clientX - rect.left) / scaleRatio
+    const y = (event.clientY - rect.top) / scaleRatio
+    if (Number.isNaN(x) || Number.isNaN(y)) return null
+    return { x, y }
+  }
 }

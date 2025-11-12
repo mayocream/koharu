@@ -1,9 +1,12 @@
 'use client'
 
-import { useCallback, useRef, useState } from 'react'
-import type { KonvaEventObject } from 'konva/lib/Node'
+import { useRef, useState } from 'react'
+import type React from 'react'
 import { Document, TextBlock, ToolMode } from '@/types'
-import type { PointerToDocumentFn, DocumentPointer } from '@/hooks/usePointerToDocument'
+import type {
+  PointerToDocumentFn,
+  DocumentPointer,
+} from '@/hooks/usePointerToDocument'
 
 type BlockDraftingOptions = {
   mode: ToolMode
@@ -23,60 +26,47 @@ export function useBlockDrafting({
   const dragStartRef = useRef<DocumentPointer | null>(null)
   const [draftBlock, setDraftBlock] = useState<TextBlock | null>(null)
 
-  const resetDraft = useCallback(() => {
+  const resetDraft = () => {
     dragStartRef.current = null
     setDraftBlock(null)
-  }, [])
+  }
 
-  const handleMouseDown = useCallback(
-    (event: KonvaEventObject<MouseEvent>) => {
-      if (!currentDocument) return
-      if (mode === 'block') {
-        const point = pointerToDocument(event)
-        if (!point) return
-        dragStartRef.current = point
-        setDraftBlock({
-          x: point.x,
-          y: point.y,
-          width: 0,
-          height: 0,
-          confidence: 1,
-        })
-        clearSelection()
-        return
-      }
+  const handleMouseDown = (event: React.PointerEvent<HTMLElement>) => {
+    if (!currentDocument || mode !== 'block') return
+    const point = pointerToDocument(event)
+    if (!point) return
+    event.preventDefault()
+    dragStartRef.current = point
+    setDraftBlock({
+      x: point.x,
+      y: point.y,
+      width: 0,
+      height: 0,
+      confidence: 1,
+    })
+    clearSelection()
+  }
 
-      const target = event.target
-      if (target === target.getStage()) {
-        clearSelection()
-      }
-    },
-    [clearSelection, currentDocument, mode, pointerToDocument],
-  )
+  const handleMouseMove = (event: React.PointerEvent<HTMLElement>) => {
+    if (mode !== 'block') return
+    const start = dragStartRef.current
+    if (!start) return
+    const point = pointerToDocument(event)
+    if (!point) return
+    const x = Math.min(start.x, point.x)
+    const y = Math.min(start.y, point.y)
+    const width = Math.abs(point.x - start.x)
+    const height = Math.abs(point.y - start.y)
+    setDraftBlock({
+      x,
+      y,
+      width,
+      height,
+      confidence: 1,
+    })
+  }
 
-  const handleMouseMove = useCallback(
-    (event: KonvaEventObject<MouseEvent>) => {
-      if (mode !== 'block') return
-      const start = dragStartRef.current
-      if (!start) return
-      const point = pointerToDocument(event)
-      if (!point) return
-      const x = Math.min(start.x, point.x)
-      const y = Math.min(start.y, point.y)
-      const width = Math.abs(point.x - start.x)
-      const height = Math.abs(point.y - start.y)
-      setDraftBlock({
-        x,
-        y,
-        width,
-        height,
-        confidence: 1,
-      })
-    },
-    [mode, pointerToDocument],
-  )
-
-  const handleMouseUp = useCallback(() => {
+  const handleMouseUp = () => {
     if (mode !== 'block') {
       resetDraft()
       return
@@ -97,13 +87,13 @@ export function useBlockDrafting({
       translation: block.translation,
     }
     onCreateBlock(normalized)
-  }, [currentDocument, draftBlock, mode, onCreateBlock, resetDraft])
+  }
 
-  const handleMouseLeave = useCallback(() => {
+  const handleMouseLeave = () => {
     if (mode === 'block') {
       resetDraft()
     }
-  }, [mode, resetDraft])
+  }
 
   return {
     draftBlock,

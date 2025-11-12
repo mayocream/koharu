@@ -1,7 +1,7 @@
 'use client'
 
-import { useEffect } from 'react'
-import { Stage, Layer, Rect } from 'react-konva'
+import { useEffect, useRef } from 'react'
+import type React from 'react'
 import { ScrollArea, ContextMenu } from 'radix-ui'
 import { Image } from '@/components/Image'
 import { useAppStore } from '@/lib/store'
@@ -32,7 +32,8 @@ export function Workspace() {
     removeBlock,
   } = useTextBlocks()
   const scaleRatio = scale / 100
-  const pointerToDocument = usePointerToDocument(scaleRatio)
+  const canvasRef = useRef<HTMLDivElement | null>(null)
+  const pointerToDocument = usePointerToDocument(scaleRatio, canvasRef)
   const {
     draftBlock,
     handleMouseDown,
@@ -68,6 +69,31 @@ export function Workspace() {
     },
   })
 
+  const handleCanvasPointerDown = (
+    event: React.PointerEvent<HTMLDivElement>,
+  ) => {
+    if (mode !== 'block' && event.target === event.currentTarget) {
+      clearSelection()
+    }
+    handleMouseDown(event)
+  }
+
+  const handleCanvasContextMenu = (
+    event: React.MouseEvent<HTMLDivElement>,
+  ) => {
+    handleContextMenu(event)
+  }
+
+  const canvasCursor =
+    mode === 'mask' ? MASK_CURSOR : mode === 'block' ? 'cell' : 'default'
+
+  const canvasDimensions = currentDocument
+    ? {
+        width: currentDocument.width * scaleRatio,
+        height: currentDocument.height * scaleRatio,
+      }
+    : { width: 0, height: 0 }
+
   return (
     <div className='flex min-h-0 min-w-0 flex-1 bg-neutral-100'>
       <ToolRail />
@@ -87,28 +113,18 @@ export function Workspace() {
                 }}
               >
                 <ContextMenu.Trigger asChild>
-                  <div>
-                    <Stage
-                      width={currentDocument.width * scaleRatio}
-                      height={currentDocument.height * scaleRatio}
-                      scaleX={scaleRatio}
-                      scaleY={scaleRatio}
-                      className='rounded shadow-sm'
-                      onMouseDown={handleMouseDown}
-                      onMouseMove={handleMouseMove}
-                      onMouseUp={handleMouseUp}
-                      onMouseLeave={handleMouseLeave}
-                      onContextMenu={handleContextMenu}
-                      style={{
-                        cursor:
-                          mode === 'mask'
-                            ? MASK_CURSOR
-                            : mode === 'block'
-                              ? 'cell'
-                              : 'default',
-                      }}
+                  <div className='grid place-items-center'>
+                    <div
+                      ref={canvasRef}
+                      className='relative rounded border border-neutral-200 bg-white shadow-sm'
+                      style={{ ...canvasDimensions, cursor: canvasCursor }}
+                      onPointerDown={handleCanvasPointerDown}
+                      onPointerMove={handleMouseMove}
+                      onPointerUp={handleMouseUp}
+                      onPointerLeave={handleMouseLeave}
+                      onContextMenuCapture={handleCanvasContextMenu}
                     >
-                      <Layer>
+                      <div className='absolute inset-0'>
                         <Image data={currentDocument.image} />
                         {currentDocument?.segment && (
                           <Image
@@ -123,28 +139,23 @@ export function Workspace() {
                             visible={showInpaintedImage}
                           />
                         )}
-                      </Layer>
-                      <Layer>
-                        <TextBlockAnnotations
-                          selectedIndex={selectedBlockIndex}
-                          onSelect={setSelectedBlockIndex}
-                        />
-                      </Layer>
+                      </div>
+                      <TextBlockAnnotations
+                        selectedIndex={selectedBlockIndex}
+                        onSelect={setSelectedBlockIndex}
+                      />
                       {draftBlock && (
-                        <Layer listening={false}>
-                          <Rect
-                            x={draftBlock.x}
-                            y={draftBlock.y}
-                            width={draftBlock.width}
-                            height={draftBlock.height}
-                            stroke='rgba(244, 63, 94, 0.9)'
-                            dash={[8, 4]}
-                            strokeWidth={2 / scaleRatio}
-                            fill='rgba(244, 63, 94, 0.1)'
-                          />
-                        </Layer>
+                        <div
+                          className='pointer-events-none absolute rounded border-2 border-dashed border-rose-500 bg-rose-500/10'
+                          style={{
+                            left: draftBlock.x * scaleRatio,
+                            top: draftBlock.y * scaleRatio,
+                            width: Math.max(0, draftBlock.width * scaleRatio),
+                            height: Math.max(0, draftBlock.height * scaleRatio),
+                          }}
+                        />
                       )}
-                    </Stage>
+                    </div>
                   </div>
                 </ContextMenu.Trigger>
                 <ContextMenu.Portal>

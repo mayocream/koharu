@@ -1,7 +1,7 @@
 'use client'
 
-import { useCallback, useState } from 'react'
-import type { KonvaEventObject } from 'konva/lib/Node'
+import { useState } from 'react'
+import type React from 'react'
 import { Document } from '@/types'
 import type { PointerToDocumentFn } from '@/hooks/usePointerToDocument'
 
@@ -22,44 +22,41 @@ export function useBlockContextMenu({
     number | undefined
   >(undefined)
 
-  const handleContextMenu = useCallback(
-    (event: KonvaEventObject<MouseEvent>) => {
-      if (!currentDocument) return
-      const point = pointerToDocument(event)
-      if (!point) {
-        event.evt.preventDefault()
-        setContextMenuBlockIndex(undefined)
-        selectBlock(undefined)
-        return
-      }
-      const blockIndex = currentDocument.textBlocks.findIndex(
-        (block) =>
-          point.x >= block.x &&
-          point.x <= block.x + block.width &&
-          point.y >= block.y &&
-          point.y <= block.y + block.height,
-      )
-      if (blockIndex >= 0) {
-        selectBlock(blockIndex)
-        setContextMenuBlockIndex(blockIndex)
-      } else {
-        event.evt.preventDefault()
-        setContextMenuBlockIndex(undefined)
-        selectBlock(undefined)
-      }
-    },
-    [currentDocument, pointerToDocument, selectBlock],
-  )
+  const handleContextMenu = (event: React.MouseEvent<HTMLElement>) => {
+    if (!currentDocument) return
+    const point = pointerToDocument(event)
+    if (!point) {
+      event.preventDefault()
+      setContextMenuBlockIndex(undefined)
+      selectBlock(undefined)
+      return
+    }
+    const blockIndex = currentDocument.textBlocks.findIndex(
+      (block) =>
+        point.x >= block.x &&
+        point.x <= block.x + block.width &&
+        point.y >= block.y &&
+        point.y <= block.y + block.height,
+    )
+    if (blockIndex >= 0) {
+      selectBlock(blockIndex)
+      setContextMenuBlockIndex(blockIndex)
+    } else {
+      event.preventDefault()
+      setContextMenuBlockIndex(undefined)
+      selectBlock(undefined)
+    }
+  }
 
-  const handleDeleteBlock = useCallback(() => {
+  const handleDeleteBlock = () => {
     if (contextMenuBlockIndex === undefined) return
     removeBlock(contextMenuBlockIndex)
     setContextMenuBlockIndex(undefined)
-  }, [contextMenuBlockIndex, removeBlock])
+  }
 
-  const clearContextMenu = useCallback(() => {
+  const clearContextMenu = () => {
     setContextMenuBlockIndex(undefined)
-  }, [])
+  }
 
   return {
     contextMenuBlockIndex,

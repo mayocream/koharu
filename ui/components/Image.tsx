@@ -1,21 +1,56 @@
 'use client'
 
 import { useEffect, useState } from 'react'
-import { Image as KonvaImage } from 'react-konva'
-import { convertToImageBitmap } from '@/lib/util'
+import { convertToBlob } from '@/lib/util'
+
+type ImageProps = {
+  data?: number[]
+  visible?: boolean
+  opacity?: number
+} & Omit<React.ImgHTMLAttributes<HTMLImageElement>, 'src'>
 
 export function Image({
   data,
+  visible = true,
+  opacity = 1,
+  style,
+  alt = '',
   ...props
-}: { data?: number[] } & Omit<
-  React.ComponentProps<typeof KonvaImage>,
-  'image'
->) {
-  const [imageBitmap, setImageBitmap] = useState<ImageBitmap | null>(null)
+}: ImageProps) {
+  const [src, setSrc] = useState<string | null>(null)
 
   useEffect(() => {
-    if (data) convertToImageBitmap(data).then(setImageBitmap)
+    if (!data) {
+      setSrc(null)
+      return
+    }
+    const blob = convertToBlob(data)
+    const objectUrl = URL.createObjectURL(blob)
+    setSrc(objectUrl)
+    return () => {
+      URL.revokeObjectURL(objectUrl)
+    }
   }, [data])
 
-  return imageBitmap ? <KonvaImage {...props} image={imageBitmap} /> : null
+  if (!visible || !src) return null
+
+  return (
+    <img
+      {...props}
+      alt={alt}
+      src={src}
+      draggable={false}
+      style={{
+        position: 'absolute',
+        inset: 0,
+        pointerEvents: 'none',
+        userSelect: 'none',
+        width: '100%',
+        height: '100%',
+        objectFit: 'contain',
+        ...style,
+        opacity,
+      }}
+    />
+  )
 }

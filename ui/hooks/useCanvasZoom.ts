@@ -1,6 +1,5 @@
 'use client'
 
-import { useMemo } from 'react'
 import { useAppStore } from '@/lib/store'
 
 export function useCanvasZoom() {
@@ -8,10 +7,9 @@ export function useCanvasZoom() {
     useAppStore()
   const currentDocument = documents[currentDocumentIndex]
 
-  const summary = useMemo(() => {
-    if (!currentDocument) return '--'
-    return `${currentDocument.width} x ${currentDocument.height}`
-  }, [currentDocument])
+  const summary = currentDocument
+    ? `${currentDocument.width} x ${currentDocument.height}`
+    : '--'
 
   const applyScale = (value: number) => {
     setAutoFitEnabled(false)
