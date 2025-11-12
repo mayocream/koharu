@@ -11,11 +11,12 @@ Under the hood, Koharu uses [ort](https://github.com/pykeio/ort) and [candle](ht
 
 ## Features
 
-- **Automated Workflow**: From image input to translated output, Koharu automates the entire manga translation process.
-- **GPU Acceleration**: Leverages NVIDIA GPUs via CUDA for faster processing.
-- **High-Quality Models**: Utilizes state-of-the-art ONNX models for text detection, OCR, and inpainting.
-- **LLM Integration**: Supports various quantized LLM models in GGUF format for translation tasks.
-- **User-Friendly GUI**: Built with Tauri, providing an intuitive interface for users.
+- Automatic speech bubble detection
+- OCR for manga text recognition
+- Inpainting to remove original text from images
+- LLM-powered translation
+- [UAX #50](https://www.unicode.org/reports/tr50/) compliant vertical text layout
+- GPU acceleration via CUDA
 
 ## GPU Acceleration
 
