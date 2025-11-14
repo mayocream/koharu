@@ -1,0 +1,23 @@
+[package]
+name = "koharu-renderer"
+version.workspace = true
+edition.workspace = true
+description.workspace = true
+license-file.workspace = true
+authors.workspace = true
+readme.workspace = true
+homepage.workspace = true
+repository.workspace = true
+keywords.workspace = true
+
+[dependencies]
+swash = { workspace = true }
+fontdb = { workspace = true }
+anyhow = { workspace = true }
+unicode-properties = { workspace = true }
+unicode-vo = { workspace = true }
+unicode-segmentation = { workspace = true }
+unicode-script = { workspace = true }
+ndarray = { workspace = true }
+image = { workspace = true }
+koharu-core = { workspace = true }

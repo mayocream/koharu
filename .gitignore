@@ -43,3 +43,6 @@ models/
 
 # Tauri
 gen/
+
+# Temporary files
+temp/
