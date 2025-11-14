@@ -381,4 +381,48 @@ mod tests {
         }
         Ok(())
     }
+
+    #[test]
+    fn applies_vertical_features() -> Result<()> {
+        let mut book = FontBook::new();
+        let families: [Family<'static>; 0] = [];
+        let horizontal_opts = LayoutOptions {
+            text: "(vert)",
+            font_query: FontQuery::new(&families).with_script(Script::Han),
+            font_size: 24.0,
+            max_primary_axis: 160.0,
+            line_height: 32.0,
+            direction: LayoutOrientation::Horizontal,
+        };
+        let vertical_opts = LayoutOptions {
+            direction: LayoutOrientation::Vertical,
+            ..horizontal_opts
+        };
+
+        let horizontal = {
+            let mut layouter = TextLayouter::new();
+            layouter.layout(&mut book, &horizontal_opts)?.output
+        };
+        let vertical = {
+            let mut layouter = TextLayouter::new();
+            layouter.layout(&mut book, &vertical_opts)?.output
+        };
+
+        let horizontal_ids: Vec<u16> = horizontal
+            .lines
+            .iter()
+            .flat_map(|line| line.glyphs.iter().map(|glyph| glyph.id))
+            .collect();
+        let vertical_ids: Vec<u16> = vertical
+            .lines
+            .iter()
+            .flat_map(|line| line.glyphs.iter().map(|glyph| glyph.id))
+            .collect();
+
+        assert_ne!(
+            horizontal_ids, vertical_ids,
+            "vertical shaping should substitute glyphs for ASCII punctuation"
+        );
+        Ok(())
+    }
 }
