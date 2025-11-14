@@ -74,10 +74,6 @@ backon = "1.6"
 num_cpus = "1.17"
 swash = "0.2"
 fontdb = "0.23"
-unicode-properties = "0.1"
-unicode-vo = "0.1"
-unicode-segmentation = "1.12"
-unicode-script = "0.5"
 unicode-linebreak = "0.1.5"
 
 [profile.release]
