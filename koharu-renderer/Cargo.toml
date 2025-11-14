@@ -21,3 +21,4 @@ unicode-script = { workspace = true }
 ndarray = { workspace = true }
 image = { workspace = true }
 koharu-core = { workspace = true }
+unicode-linebreak = { workspace = true }
