@@ -189,6 +189,9 @@ impl TextLayouter {
             LayoutOrientation::Vertical => Direction::LeftToRight,
         };
         builder = builder.direction(swash_direction);
+        if matches!(direction, LayoutOrientation::Vertical) {
+            builder = builder.features([("vert", 1u16), ("vrt2", 1u16)]);
+        }
         let mut shaper = builder.build();
         if !text.is_empty() {
             shaper.add_str(text);
