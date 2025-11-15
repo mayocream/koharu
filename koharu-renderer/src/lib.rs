@@ -8,9 +8,11 @@ pub mod font;
 pub mod layout;
 pub mod render;
 
-pub use font::{Font, FontBook, FontMetadata, FontQuery};
+pub use font::{Font, FontBook};
+pub use fontdb::{FaceInfo, Query};
 pub use layout::{
-    LayoutBounds, LayoutLine, LayoutOptions, LayoutOrientation, LayoutOutput, LayoutSession,
-    PositionedGlyph, TextLayouter,
+    LayoutBounds, LayoutLine, LayoutRequest, Orientation, LayoutResult, LayoutSession,
+    TextLayouter,
 };
 pub use render::{RenderRequest, RenderedText, TextRenderer};
+pub use swash::shape::cluster::Glyph;

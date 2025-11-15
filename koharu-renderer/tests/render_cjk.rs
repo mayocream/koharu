@@ -2,14 +2,14 @@ use std::fs;
 use std::path::{Path, PathBuf};
 
 use anyhow::Result;
-use fontdb::Family;
+use fontdb::{Family, Query, Stretch, Style, Weight};
 use koharu_renderer::{
-    FontBook, FontQuery, LayoutOptions, LayoutOrientation, LayoutSession, RenderRequest,
-    TextLayouter, TextRenderer,
+    FontBook, LayoutRequest, Orientation, LayoutSession, RenderRequest, TextLayouter,
+    TextRenderer,
 };
 use swash::text::Script;
 
-const EMPTY_FAMILIES: [Family<'static>; 0] = [];
+const FALLBACK_FAMILY: [Family<'static>; 1] = [Family::SansSerif];
 
 fn workspace_dir() -> PathBuf {
     if let Ok(value) = std::env::var("CARGO_WORKSPACE_DIR") {
@@ -34,13 +34,19 @@ fn writes_cjk_paragraph_preview() -> Result<()> {
 月光は小春のレンダラーを照らす。\
 ";
 
-    let options = LayoutOptions {
+    let options = LayoutRequest {
         text,
-        font_query: FontQuery::new(&EMPTY_FAMILIES).with_script(Script::Han),
+        font_query: Query {
+            families: &FALLBACK_FAMILY,
+            weight: Weight::NORMAL,
+            stretch: Stretch::Normal,
+            style: Style::Normal,
+        },
+        script: Some(Script::Han),
         font_size: 28.0,
         max_primary_axis: 220.0,
         line_height: 34.0,
-        direction: LayoutOrientation::Vertical,
+        direction: Orientation::Vertical,
     };
 
     let LayoutSession { font, output } = layouter.layout(&mut book, &options)?;

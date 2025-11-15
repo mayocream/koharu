@@ -1,15 +1,17 @@
-use crate::font::Font;
-use crate::layout::{LayoutOutput, PositionedGlyph};
 use anyhow::Result;
 use image::{Rgba, RgbaImage};
 use swash::scale::image::{Content, Image as GlyphImage};
 use swash::scale::{Render, ScaleContext, Scaler, Source, StrikeWith};
+use swash::shape::cluster::Glyph;
 use swash::zeno::Vector;
+
+use crate::font::Font;
+use crate::layout::LayoutResult;
 
 /// Describes the input needed to paint previously laid out text.
 pub struct RenderRequest<'a> {
     pub font: &'a Font,
-    pub layout: &'a LayoutOutput,
+    pub layout: &'a LayoutResult,
     pub foreground: [u8; 4],
     pub background: [u8; 4],
 }
@@ -24,6 +26,38 @@ struct RasterGlyph {
     image: GlyphImage,
     left: f32,
     top: f32,
+}
+
+#[derive(Clone, Copy)]
+struct GlyphBounds {
+    min_x: f32,
+    min_y: f32,
+    max_x: f32,
+    max_y: f32,
+}
+
+impl GlyphBounds {
+    fn from_glyph(glyph: &RasterGlyph) -> Self {
+        let right = glyph.left + glyph.image.placement.width as f32;
+        let bottom = glyph.top + glyph.image.placement.height as f32;
+        Self {
+            min_x: glyph.left,
+            min_y: glyph.top,
+            max_x: right,
+            max_y: bottom,
+        }
+    }
+
+    fn include(self, glyph: &RasterGlyph) -> Self {
+        let right = glyph.left + glyph.image.placement.width as f32;
+        let bottom = glyph.top + glyph.image.placement.height as f32;
+        Self {
+            min_x: self.min_x.min(glyph.left),
+            min_y: self.min_y.min(glyph.top),
+            max_x: self.max_x.max(right),
+            max_y: self.max_y.max(bottom),
+        }
+    }
 }
 
 /// Rasterizes glyph runs produced by [`TextLayouter`](crate::layout::TextLayouter).
@@ -61,48 +95,43 @@ impl TextRenderer {
             .build();
 
         let mut rasterized = Vec::new();
-        let mut min_x = f32::INFINITY;
-        let mut min_y = f32::INFINITY;
-        let mut max_x = f32::NEG_INFINITY;
-        let mut max_y = f32::NEG_INFINITY;
+        let mut bounds: Option<GlyphBounds> = None;
 
         for line in &request.layout.lines {
             for glyph in &line.glyphs {
                 if let Some(raster_glyph) =
                     rasterize_glyph(&self.sources, &mut scaler, glyph, request.foreground)?
                 {
-                    min_x = min_x.min(raster_glyph.left);
-                    min_y = min_y.min(raster_glyph.top);
-                    max_x =
-                        max_x.max(raster_glyph.left + raster_glyph.image.placement.width as f32);
-                    max_y =
-                        max_y.max(raster_glyph.top + raster_glyph.image.placement.height as f32);
+                    bounds = Some(match bounds {
+                        Some(existing) => existing.include(&raster_glyph),
+                        None => GlyphBounds::from_glyph(&raster_glyph),
+                    });
                     rasterized.push(raster_glyph);
                 }
             }
         }
 
-        if !min_x.is_finite() || !min_y.is_finite() {
+        let Some(bounds) = bounds else {
             let image = RgbaImage::from_pixel(1, 1, Rgba(request.background));
             return Ok(RenderedText {
                 image,
                 origin: (0.0, 0.0),
             });
-        }
+        };
 
-        let width = (max_x - min_x).ceil().max(1.0) as u32;
-        let height = (max_y - min_y).ceil().max(1.0) as u32;
+        let width = (bounds.max_x - bounds.min_x).ceil().max(1.0) as u32;
+        let height = (bounds.max_y - bounds.min_y).ceil().max(1.0) as u32;
         let mut surface = RgbaImage::from_pixel(width, height, Rgba(request.background));
 
         for glyph in &rasterized {
-            let dest_x = (glyph.left - min_x).floor() as i32;
-            let dest_y = (glyph.top - min_y).floor() as i32;
+            let dest_x = (glyph.left - bounds.min_x).floor() as i32;
+            let dest_y = (glyph.top - bounds.min_y).floor() as i32;
             blit_glyph(&mut surface, dest_x, dest_y, glyph, request.foreground);
         }
 
         Ok(RenderedText {
             image: surface,
-            origin: (min_x, min_y),
+            origin: (bounds.min_x, bounds.min_y),
         })
     }
 }
@@ -116,7 +145,7 @@ impl Default for TextRenderer {
 fn rasterize_glyph(
     sources: &[Source; 3],
     scaler: &mut Scaler,
-    glyph: &PositionedGlyph,
+    glyph: &Glyph,
     foreground: [u8; 4],
 ) -> Result<Option<RasterGlyph>> {
     let mut render = Render::new(sources);
@@ -174,9 +203,9 @@ fn fill_mask(
             if alpha == 0 {
                 continue;
             }
-            let mut src = tint_color(color, alpha);
+            let src = tint_color(color, alpha);
             let pixel = surface.get_pixel_mut(x as u32, y as u32);
-            blend_pixel(&mut pixel.0, &mut src);
+            blend_pixel(&mut pixel.0, src);
         }
     }
 }
@@ -198,7 +227,7 @@ fn fill_color(surface: &mut RgbaImage, dest_x: i32, dest_y: i32, glyph: &RasterG
                 continue;
             }
             let idx = ((row * width + col) * 4) as usize;
-            let mut src = [
+            let src = [
                 glyph.image.data[idx],
                 glyph.image.data[idx + 1],
                 glyph.image.data[idx + 2],
@@ -208,7 +237,7 @@ fn fill_color(surface: &mut RgbaImage, dest_x: i32, dest_y: i32, glyph: &RasterG
                 continue;
             }
             let pixel = surface.get_pixel_mut(x as u32, y as u32);
-            blend_pixel(&mut pixel.0, &mut src);
+            blend_pixel(&mut pixel.0, src);
         }
     }
 }
@@ -223,7 +252,7 @@ fn tint_color(color: [u8; 4], alpha: u8) -> [u8; 4] {
     ]
 }
 
-fn blend_pixel(dst: &mut [u8; 4], src: &mut [u8; 4]) {
+fn blend_pixel(dst: &mut [u8; 4], src: [u8; 4]) {
     let sa = u16::from(src[3]);
     if sa == 0 {
         return;
@@ -241,23 +270,33 @@ fn blend_pixel(dst: &mut [u8; 4], src: &mut [u8; 4]) {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::font::{FontBook, FontQuery};
-    use crate::layout::{LayoutOptions, LayoutOrientation, LayoutSession, TextLayouter};
-    use fontdb::Family;
+    use crate::font::FontBook;
+    use crate::layout::{LayoutRequest, Orientation, LayoutSession, TextLayouter};
+    use fontdb::{Family, Query, Stretch, Style, Weight};
     use swash::text::Script;
+
+    fn default_query<'a>(families: &'a [Family<'a>]) -> Query<'a> {
+        Query {
+            families,
+            weight: Weight::NORMAL,
+            stretch: Stretch::Normal,
+            style: Style::Normal,
+        }
+    }
 
     #[test]
     fn renders_layout_to_image() -> Result<()> {
         let mut book = FontBook::new();
         let mut layouter = TextLayouter::new();
         let families = [Family::SansSerif];
-        let options = LayoutOptions {
+        let options = LayoutRequest {
             text: "Render test",
-            font_query: FontQuery::new(&families).with_script(Script::Latin),
+            font_query: default_query(&families),
+            script: Some(Script::Latin),
             font_size: 22.0,
             max_primary_axis: 400.0,
             line_height: 30.0,
-            direction: LayoutOrientation::Horizontal,
+            direction: Orientation::Horizontal,
         };
         let LayoutSession { font, output } = layouter.layout(&mut book, &options)?;
         let mut renderer = TextRenderer::new();
