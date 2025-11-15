@@ -3230,6 +3230,7 @@ dependencies = [
  "fontdb",
  "image",
  "ndarray",
+ "rayon",
  "swash",
  "unicode-linebreak",
 ]

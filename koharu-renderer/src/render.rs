@@ -1,25 +1,31 @@
+//! High-performance text rasterization with parallel glyph processing.
+//!
+//! This module handles the final stage of text rendering: converting positioned
+//! glyphs into raster images. It uses parallel processing to efficiently rasterize
+//! large numbers of glyphs and composite them into the final output image.
+
 use anyhow::Result;
 use image::{Rgba, RgbaImage};
+use rayon::prelude::*;
 use swash::scale::image::{Content, Image as GlyphImage};
 use swash::scale::{Render, ScaleContext, Scaler, Source, StrikeWith};
 use swash::shape::cluster::Glyph;
 use swash::zeno::Vector;
 
-use crate::font::Font;
 use crate::layout::LayoutResult;
+use crate::types::{Color, Point, TextStyle};
 
-/// Describes the input needed to paint previously laid out text.
+#[derive(Debug)]
 pub struct RenderRequest<'a> {
-    pub font: &'a Font,
+    pub style: TextStyle<'a>,
     pub layout: &'a LayoutResult,
-    pub foreground: [u8; 4],
-    pub background: [u8; 4],
+    pub background: Color,
 }
 
-/// Final rasterized text image and the origin offset that was applied.
+#[derive(Debug)]
 pub struct RenderedText {
     pub image: RgbaImage,
-    pub origin: (f32, f32),
+    pub origin: Point,
 }
 
 struct RasterGlyph {
@@ -48,19 +54,15 @@ impl GlyphBounds {
         }
     }
 
-    fn include(self, glyph: &RasterGlyph) -> Self {
-        let right = glyph.left + glyph.image.placement.width as f32;
-        let bottom = glyph.top + glyph.image.placement.height as f32;
-        Self {
-            min_x: self.min_x.min(glyph.left),
-            min_y: self.min_y.min(glyph.top),
-            max_x: self.max_x.max(right),
-            max_y: self.max_y.max(bottom),
-        }
+    fn width(&self) -> f32 {
+        self.max_x - self.min_x
+    }
+
+    fn height(&self) -> f32 {
+        self.max_y - self.min_y
     }
 }
 
-/// Rasterizes glyph runs produced by [`TextLayouter`](crate::layout::TextLayouter).
 pub struct TextRenderer {
     scale_context: ScaleContext,
     sources: [Source; 3],
@@ -79,60 +81,103 @@ impl TextRenderer {
     }
 
     pub fn render(&mut self, request: &RenderRequest<'_>) -> Result<RenderedText> {
-        if request.layout.lines.is_empty() {
-            let image = RgbaImage::from_pixel(1, 1, Rgba(request.background));
-            return Ok(RenderedText {
-                image,
-                origin: (0.0, 0.0),
-            });
+        if request.layout.is_empty() {
+            return Ok(Self::empty_render(request.background));
         }
 
-        let font_ref = request.font.font_ref()?;
+        let font_ref = request.style.font.font_ref()?;
+
         let mut scaler = self
             .scale_context
             .builder(font_ref)
-            .size(request.layout.font_size.max(0.0))
+            .size(request.style.font_size.max(0.0))
             .build();
 
-        let mut rasterized = Vec::new();
-        let mut bounds: Option<GlyphBounds> = None;
+        let glyphs = Self::flatten_glyphs(request.layout);
+        let rasterized =
+            Self::rasterize_glyphs(&self.sources, &mut scaler, glyphs, request.style.color)?;
 
-        for line in &request.layout.lines {
-            for glyph in &line.glyphs {
-                if let Some(raster_glyph) =
-                    rasterize_glyph(&self.sources, &mut scaler, glyph, request.foreground)?
-                {
-                    bounds = Some(match bounds {
-                        Some(existing) => existing.include(&raster_glyph),
-                        None => GlyphBounds::from_glyph(&raster_glyph),
-                    });
-                    rasterized.push(raster_glyph);
-                }
-            }
+        if rasterized.is_empty() {
+            return Ok(Self::empty_render(request.background));
         }
 
-        let Some(bounds) = bounds else {
-            let image = RgbaImage::from_pixel(1, 1, Rgba(request.background));
-            return Ok(RenderedText {
-                image,
-                origin: (0.0, 0.0),
-            });
-        };
-
-        let width = (bounds.max_x - bounds.min_x).ceil().max(1.0) as u32;
-        let height = (bounds.max_y - bounds.min_y).ceil().max(1.0) as u32;
-        let mut surface = RgbaImage::from_pixel(width, height, Rgba(request.background));
-
-        for glyph in &rasterized {
-            let dest_x = (glyph.left - bounds.min_x).floor() as i32;
-            let dest_y = (glyph.top - bounds.min_y).floor() as i32;
-            blit_glyph(&mut surface, dest_x, dest_y, glyph, request.foreground);
-        }
+        let bounds = self.calculate_bounds(&rasterized);
+        let image =
+            self.composite_surface(bounds, &rasterized, request.style.color, request.background);
 
         Ok(RenderedText {
-            image: surface,
+            image,
             origin: (bounds.min_x, bounds.min_y),
         })
+    }
+
+    fn flatten_glyphs(layout: &LayoutResult) -> Vec<Glyph> {
+        layout
+            .par_iter()
+            .flat_map(|line| line.glyphs.par_iter())
+            .cloned()
+            .collect()
+    }
+
+    fn rasterize_glyphs(
+        sources: &[Source; 3],
+        scaler: &mut Scaler,
+        glyphs: Vec<Glyph>,
+        color: Color,
+    ) -> Result<Vec<RasterGlyph>> {
+        let mut rasterized = Vec::with_capacity(glyphs.len());
+        for glyph in glyphs {
+            if let Some(raster_glyph) = rasterize_glyph(sources, scaler, &glyph, color)? {
+                rasterized.push(raster_glyph);
+            }
+        }
+        Ok(rasterized)
+    }
+
+    fn composite_surface(
+        &self,
+        bounds: GlyphBounds,
+        rasterized: &[RasterGlyph],
+        color: Color,
+        background: Color,
+    ) -> RgbaImage {
+        let width = bounds.width().ceil().max(1.0) as u32;
+        let height = bounds.height().ceil().max(1.0) as u32;
+        let mut surface = RgbaImage::from_pixel(width, height, Rgba(background));
+        let blit_positions: Vec<_> = rasterized
+            .par_iter()
+            .map(|glyph| {
+                let dest_x = (glyph.left - bounds.min_x).floor() as i32;
+                let dest_y = (glyph.top - bounds.min_y).floor() as i32;
+                (dest_x, dest_y, glyph)
+            })
+            .collect();
+        for (dest_x, dest_y, glyph) in blit_positions {
+            blit_glyph(&mut surface, dest_x, dest_y, glyph, color);
+        }
+        surface
+    }
+
+    fn empty_render(background: Color) -> RenderedText {
+        RenderedText {
+            image: RgbaImage::from_pixel(1, 1, Rgba(background)),
+            origin: (0.0, 0.0),
+        }
+    }
+
+    fn calculate_bounds(&self, rasterized: &[RasterGlyph]) -> GlyphBounds {
+        rasterized
+            .par_iter()
+            .map(|glyph| GlyphBounds::from_glyph(glyph))
+            .reduce(
+                || GlyphBounds::from_glyph(&rasterized[0]),
+                |a, b| GlyphBounds {
+                    min_x: a.min_x.min(b.min_x),
+                    min_y: a.min_y.min(b.min_y),
+                    max_x: a.max_x.max(b.max_x),
+                    max_y: a.max_y.max(b.max_y),
+                },
+            )
     }
 }
 
@@ -271,7 +316,8 @@ fn blend_pixel(dst: &mut [u8; 4], src: [u8; 4]) {
 mod tests {
     use super::*;
     use crate::font::FontBook;
-    use crate::layout::{LayoutRequest, Orientation, LayoutSession, TextLayouter};
+    use crate::layout::{LayoutRequest, Orientation, TextLayouter};
+    use crate::types::TextStyle;
     use fontdb::{Family, Query, Stretch, Style, Weight};
     use swash::text::Script;
 
@@ -289,24 +335,29 @@ mod tests {
         let mut book = FontBook::new();
         let mut layouter = TextLayouter::new();
         let families = [Family::SansSerif];
-        let options = LayoutRequest {
+        let font = book
+            .query(&default_query(&families))?
+            .expect("expected sans-serif font for test");
+        let request = LayoutRequest {
+            style: TextStyle {
+                font: &font,
+                font_size: 22.0,
+                line_height: 30.0,
+                color: [255, 255, 255, 255],
+                script: Some(Script::Latin),
+            },
             text: "Render test",
-            font_query: default_query(&families),
-            script: Some(Script::Latin),
-            font_size: 22.0,
             max_primary_axis: 400.0,
-            line_height: 30.0,
             direction: Orientation::Horizontal,
         };
-        let LayoutSession { font, output } = layouter.layout(&mut book, &options)?;
+        let result = layouter.layout(&request)?;
         let mut renderer = TextRenderer::new();
-        let request = RenderRequest {
-            font: &font,
-            layout: &output,
-            foreground: [255, 255, 255, 255],
+        let render_request = RenderRequest {
+            style: request.style,
+            layout: &result,
             background: [0, 0, 0, 0],
         };
-        let rendered = renderer.render(&request)?;
+        let rendered = renderer.render(&render_request)?;
         assert!(
             rendered.image.width() > 0 && rendered.image.height() > 0,
             "rendered image should have non-zero dimensions"

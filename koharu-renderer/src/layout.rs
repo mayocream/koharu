@@ -1,20 +1,29 @@
-use std::ops::Range;
+//! Text layout engine with line breaking and glyph positioning.
+//!
+//! This module handles the conversion of text strings into positioned glyphs,
+//! including line breaking, text shaping, and glyph positioning for both
+//! horizontal and vertical text layouts.
 
-use anyhow::{Result, anyhow, bail};
-use fontdb::Query;
+use std::{collections::VecDeque, ops::Range};
+
+use anyhow::{Result, bail};
+use rayon::prelude::*;
+use swash::FontRef;
 use swash::shape::cluster::Glyph;
 use swash::shape::{Direction, ShapeContext};
 use swash::text::Script;
 use unicode_linebreak::{BreakOpportunity, linebreaks};
 
-use crate::font::{Font, FontBook};
+use crate::types::{Point, TextStyle};
 
-/// Controls the primary flow of glyph advances.
+/// Controls the primary flow of glyph advances and line progression.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum Orientation {
     /// Glyph advances grow along the X axis and lines progress on the Y axis.
+    /// This is the standard left-to-right, top-to-bottom text layout.
     Horizontal,
     /// Glyph advances grow along the Y axis and lines progress on the X axis.
+    /// This is used for vertical text layouts like traditional Chinese/Japanese.
     Vertical,
 }
 
@@ -24,47 +33,58 @@ impl Default for Orientation {
     }
 }
 
+impl Orientation {
+    /// Returns the swash Direction for text shaping.
+    fn to_swash_direction(self) -> Direction {
+        match self {
+            Orientation::Horizontal => Direction::LeftToRight,
+            Orientation::Vertical => Direction::LeftToRight, // Vertical text still shapes LTR
+        }
+    }
+
+    /// Calculates baseline position for a line.
+    fn baseline_for_line(self, line_index: usize, line_height: f32) -> Point {
+        let secondary_offset = line_index as f32 * line_height;
+        match self {
+            Orientation::Horizontal => (0.0, secondary_offset),
+            Orientation::Vertical => (-secondary_offset, 0.0),
+        }
+    }
+
+    /// Calculates final glyph position.
+    fn position_glyph(self, glyph: &Glyph, baseline: Point, primary_offset: f32) -> Point {
+        match self {
+            Orientation::Horizontal => {
+                (baseline.0 + primary_offset + glyph.x, baseline.1 + glyph.y)
+            }
+            Orientation::Vertical => (baseline.0 + glyph.x, baseline.1 + primary_offset + glyph.y),
+        }
+    }
+}
+
 /// Parameters shared by a layout request.
 #[derive(Clone, Copy, Debug)]
 pub struct LayoutRequest<'a> {
+    pub style: TextStyle<'a>,
     pub text: &'a str,
-    pub font_query: Query<'a>,
-    pub script: Option<Script>,
-    pub font_size: f32,
     pub max_primary_axis: f32,
-    pub line_height: f32,
     pub direction: Orientation,
 }
 
 /// Resulting glyph arrangement for a piece of text.
-#[derive(Debug, Default)]
-pub struct LayoutResult {
-    pub lines: Vec<LayoutLine>,
-    pub direction: Orientation,
-    pub bounds: LayoutBounds,
-    pub font_size: f32,
-}
-
-/// Captures both the font and layout output for a shaping run.
-pub struct LayoutSession {
-    pub font: Font,
-    pub output: LayoutResult,
-}
-
-/// Bounding box of the entire layout.
-#[derive(Debug, Default, Clone, Copy)]
-pub struct LayoutBounds {
-    pub width: f32,
-    pub height: f32,
-}
+pub type LayoutResult = Vec<LayoutLine>;
 
 /// Glyphs for one line alongside metadata required by the renderer.
 #[derive(Debug, Default)]
 pub struct LayoutLine {
+    /// Positioned glyphs in this line.
     pub glyphs: Vec<Glyph>,
+    /// Range in the original text that this line covers.
     pub range: Range<usize>,
+    /// Total advance (width for horizontal, height for vertical) of this line.
     pub advance: f32,
-    pub baseline: (f32, f32),
+    /// Baseline position as (x, y) coordinates.
+    pub baseline: Point,
 }
 
 /// Shapes text into positioned glyphs with optional line wrapping.
@@ -79,28 +99,35 @@ impl TextLayouter {
         }
     }
 
-    pub fn layout(
-        &mut self,
-        font_book: &mut FontBook,
-        request: &LayoutRequest<'_>,
-    ) -> Result<LayoutSession> {
-        if request.line_height <= 0.0 {
+    pub fn layout(&mut self, request: &LayoutRequest<'_>) -> Result<LayoutResult> {
+        if request.style.line_height <= 0.0 {
             bail!("line height must be positive");
         }
 
-        let font = font_book
-            .query(&request.font_query)?
-            .ok_or_else(|| anyhow!("no font matched the provided query"))?;
-        let script = request.script.unwrap_or(Script::Latin);
-        let breaks = ensure_terminal_breaks(request.text, linebreaks(request.text).collect());
-        let mut pending: Option<PendingLine> = None;
-        let mut start = 0usize;
-        let mut shaped_lines = Vec::new();
-        let unlimited = !request.max_primary_axis.is_finite() || request.max_primary_axis <= 0.0;
-        let mut replay: Option<(usize, BreakOpportunity)> = None;
-        let mut break_iter = breaks.into_iter();
+        let script = request.style.script.unwrap_or(Script::Latin);
+        let font_ref = request.style.font.font_ref()?;
+        let shaped_lines = self.shape_lines(font_ref, request, script)?;
 
-        while let Some((pos, kind)) = replay.take().or_else(|| break_iter.next()) {
+        let layout_lines =
+            self.place_lines(shaped_lines, request.direction, request.style.line_height);
+
+        Ok(layout_lines)
+    }
+
+    fn shape_lines(
+        &mut self,
+        font_ref: FontRef<'_>,
+        request: &LayoutRequest<'_>,
+        script: Script,
+    ) -> Result<Vec<ShapedLine>> {
+        let wrap_limit = wrap_limit(request.max_primary_axis);
+        let mut pending: Option<PendingLine> = None;
+        let mut shaped_lines = Vec::new();
+        let mut start = 0usize;
+        let mut breakpoints: VecDeque<_> =
+            ensure_terminal_breaks(request.text, linebreaks(request.text).collect()).into();
+
+        while let Some((pos, kind)) = breakpoints.pop_front() {
             if pos < start {
                 continue;
             }
@@ -109,22 +136,22 @@ impl TextLayouter {
             let trimmed = slice.trim_end_matches(|ch| ch == '\n' || ch == '\r');
             let trimmed_end = start + trimmed.len();
             let shaped_line = self.shape_segment(
-                &font,
+                font_ref,
                 trimmed,
                 script,
-                request.font_size,
+                request.style.font_size,
                 start..trimmed_end,
                 request.direction,
             )?;
 
             let exceeds =
-                !unlimited && shaped_line.advance > request.max_primary_axis + f32::EPSILON;
+                wrap_limit.is_some_and(|limit| shaped_line.advance > limit + f32::EPSILON);
 
             if exceeds {
                 if let Some(previous) = pending.take() {
                     shaped_lines.push(previous.line);
                     start = previous.break_pos;
-                    replay = Some((pos, kind));
+                    breakpoints.push_front((pos, kind));
                     continue;
                 } else {
                     shaped_lines.push(shaped_line);
@@ -139,45 +166,26 @@ impl TextLayouter {
             });
 
             if matches!(kind, BreakOpportunity::Mandatory) {
-                if let Some(line) = pending.take() {
-                    shaped_lines.push(line.line);
-                    start = line.break_pos;
+                if let Some(next_start) = flush_pending(&mut pending, &mut shaped_lines) {
+                    start = next_start;
                 }
             }
         }
 
-        if let Some(line) = pending.take() {
-            shaped_lines.push(line.line);
-        }
-
-        let layout_lines = self.place_lines(shaped_lines, request.direction, request.line_height);
-        let bounds = compute_bounds(&layout_lines, request.direction, request.line_height);
-
-        Ok(LayoutSession {
-            font,
-            output: LayoutResult {
-                lines: layout_lines,
-                direction: request.direction,
-                bounds,
-                font_size: request.font_size,
-            },
-        })
+        flush_pending(&mut pending, &mut shaped_lines);
+        Ok(shaped_lines)
     }
 
     fn shape_segment(
         &mut self,
-        font: &Font,
+        font_ref: FontRef<'_>,
         text: &str,
         script: Script,
         font_size: f32,
         range: Range<usize>,
         direction: Orientation,
     ) -> Result<ShapedLine> {
-        let font_ref = font.font_ref()?;
-        let swash_direction = match direction {
-            Orientation::Horizontal => Direction::LeftToRight,
-            Orientation::Vertical => Direction::LeftToRight,
-        };
+        let swash_direction = direction.to_swash_direction();
         let builder = self
             .shape_context
             .builder(font_ref)
@@ -193,8 +201,11 @@ impl TextLayouter {
         if !text.is_empty() {
             shaper.add_str(text);
         }
-        let mut glyphs = Vec::new();
-        shaper.shape_with(|cluster| glyphs.extend(cluster.glyphs.iter().copied()));
+        let glyphs = {
+            let mut temp = Vec::new();
+            shaper.shape_with(|cluster| temp.extend(cluster.glyphs.iter().copied()));
+            temp
+        };
         let advance = glyphs.iter().map(|g| g.advance).sum();
 
         Ok(ShapedLine {
@@ -204,45 +215,62 @@ impl TextLayouter {
         })
     }
 
+    /// Positions shaped lines into final layout coordinates with parallel processing.
     fn place_lines(
         &self,
         shaped_lines: Vec<ShapedLine>,
         direction: Orientation,
         line_height: f32,
     ) -> Vec<LayoutLine> {
-        let mut positioned = Vec::with_capacity(shaped_lines.len());
-        let mut secondary_offset = 0.0f32;
-        for shaped in shaped_lines {
-            let baseline = match direction {
-                Orientation::Horizontal => (0.0, secondary_offset),
-                Orientation::Vertical => (-secondary_offset, 0.0),
-            };
-            let mut glyphs = Vec::with_capacity(shaped.glyphs.len());
-            let mut primary_offset = 0.0f32;
-            for glyph in shaped.glyphs {
-                let (x, y) = match direction {
-                    Orientation::Horizontal => {
-                        (baseline.0 + primary_offset + glyph.x, baseline.1 + glyph.y)
-                    }
-                    Orientation::Vertical => {
-                        (baseline.0 + glyph.x, baseline.1 + primary_offset + glyph.y)
-                    }
-                };
-                let mut positioned_glyph = glyph;
-                positioned_glyph.x = x;
-                positioned_glyph.y = y;
-                glyphs.push(positioned_glyph);
-                primary_offset += glyph.advance;
-            }
-            positioned.push(LayoutLine {
-                glyphs,
-                range: shaped.range,
-                advance: shaped.advance,
-                baseline,
-            });
-            secondary_offset += line_height;
+        shaped_lines
+            .into_par_iter()
+            .enumerate()
+            .map(|(line_index, shaped)| {
+                self.place_single_line(shaped, line_index, direction, line_height)
+            })
+            .collect()
+    }
+
+    /// Positions a single line's glyphs with parallel processing.
+    fn place_single_line(
+        &self,
+        shaped: ShapedLine,
+        line_index: usize,
+        direction: Orientation,
+        line_height: f32,
+    ) -> LayoutLine {
+        let baseline = direction.baseline_for_line(line_index, line_height);
+
+        // Calculate cumulative advances for parallel positioning
+        let advances: Vec<f32> = shaped.glyphs.par_iter().map(|g| g.advance).collect();
+        let cumulative_advances = self.calculate_cumulative_advances(&advances);
+
+        let glyphs = shaped
+            .glyphs
+            .into_par_iter()
+            .enumerate()
+            .map(|(i, glyph)| {
+                let primary_offset = cumulative_advances[i];
+                let (x, y) = direction.position_glyph(&glyph, baseline, primary_offset);
+                Glyph { x, y, ..glyph }
+            })
+            .collect();
+
+        LayoutLine {
+            glyphs,
+            range: shaped.range,
+            advance: shaped.advance,
+            baseline,
         }
-        positioned
+    }
+
+    /// Calculates cumulative advances for positioning glyphs.
+    fn calculate_cumulative_advances(&self, advances: &[f32]) -> Vec<f32> {
+        let mut cumulative = vec![0.0f32; advances.len() + 1];
+        for i in 0..advances.len() {
+            cumulative[i + 1] = cumulative[i] + advances[i];
+        }
+        cumulative
     }
 }
 
@@ -263,6 +291,22 @@ struct ShapedLine {
     range: Range<usize>,
 }
 
+fn flush_pending(pending: &mut Option<PendingLine>, lines: &mut Vec<ShapedLine>) -> Option<usize> {
+    pending.take().map(|pending_line| {
+        let break_pos = pending_line.break_pos;
+        lines.push(pending_line.line);
+        break_pos
+    })
+}
+
+fn wrap_limit(max_primary_axis: f32) -> Option<f32> {
+    if max_primary_axis.is_finite() && max_primary_axis > 0.0 {
+        Some(max_primary_axis)
+    } else {
+        None
+    }
+}
+
 fn ensure_terminal_breaks(
     text: &str,
     mut breaks: Vec<(usize, BreakOpportunity)>,
@@ -275,27 +319,6 @@ fn ensure_terminal_breaks(
         breaks.push((text.len(), BreakOpportunity::Mandatory));
     }
     breaks
-}
-
-fn compute_bounds(lines: &[LayoutLine], direction: Orientation, line_height: f32) -> LayoutBounds {
-    if lines.is_empty() {
-        return LayoutBounds {
-            width: 0.0,
-            height: 0.0,
-        };
-    }
-    let max_primary = lines.iter().fold(0.0f32, |acc, line| acc.max(line.advance));
-    let secondary = line_height * lines.len() as f32;
-    match direction {
-        Orientation::Horizontal => LayoutBounds {
-            width: max_primary,
-            height: secondary,
-        },
-        Orientation::Vertical => LayoutBounds {
-            width: secondary,
-            height: max_primary,
-        },
-    }
 }
 
 #[cfg(test)]
@@ -319,23 +342,28 @@ mod tests {
         let mut book = FontBook::new();
         let mut engine = TextLayouter::new();
         let families = [Family::SansSerif];
+        let font = book
+            .query(&default_query(&families))?
+            .expect("expected sans-serif font for test");
         let request = LayoutRequest {
+            style: TextStyle {
+                font: &font,
+                font_size: 20.0,
+                line_height: 28.0,
+                color: [0, 0, 0, 255],
+                script: Some(Script::Latin),
+            },
             text: "Koharu renderer needs thoughtful wrapping for lengthy passages of text.",
-            font_query: default_query(&families),
-            script: Some(Script::Latin),
-            font_size: 20.0,
             max_primary_axis: 160.0,
-            line_height: 28.0,
             direction: Orientation::Horizontal,
         };
-        let LayoutSession { output, .. } = engine.layout(&mut book, &request)?;
+        let result = engine.layout(&request)?;
         assert!(
-            output.lines.len() > 1,
+            result.len() > 1,
             "expecting automatic wrapping to create multiple lines"
         );
         assert!(
-            output
-                .lines
+            result
                 .iter()
                 .all(|line| line.advance <= request.max_primary_axis + f32::EPSILON),
             "each line should respect the configured width"
@@ -348,18 +376,24 @@ mod tests {
         let mut book = FontBook::new();
         let mut engine = TextLayouter::new();
         let families = [Family::SansSerif];
+        let font = book
+            .query(&default_query(&families))?
+            .expect("expected sans-serif font for test");
         let request = LayoutRequest {
+            style: TextStyle {
+                font: &font,
+                font_size: 18.0,
+                line_height: 24.0,
+                color: [0, 0, 0, 255],
+                script: Some(Script::Latin),
+            },
             text: "Vertical writing is stacked by this layout engine.",
-            font_query: default_query(&families),
-            script: Some(Script::Latin),
-            font_size: 18.0,
             max_primary_axis: 140.0,
-            line_height: 24.0,
             direction: Orientation::Vertical,
         };
-        let LayoutSession { output, .. } = engine.layout(&mut book, &request)?;
-        for (index, line) in output.lines.iter().enumerate() {
-            let expected = -(index as f32 * request.line_height);
+        let result = engine.layout(&request)?;
+        for (index, line) in result.iter().enumerate() {
+            let expected = -(index as f32 * request.style.line_height);
             assert!(
                 (line.baseline.0 - expected).abs() <= f32::EPSILON,
                 "vertical layout should place columns right-to-left"

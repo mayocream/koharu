@@ -4,8 +4,7 @@ use std::path::{Path, PathBuf};
 use anyhow::Result;
 use fontdb::{Family, Query, Stretch, Style, Weight};
 use koharu_renderer::{
-    FontBook, LayoutRequest, Orientation, LayoutSession, RenderRequest, TextLayouter,
-    TextRenderer,
+    FontBook, LayoutRequest, Orientation, RenderRequest, TextLayouter, TextRenderer, TextStyle,
 };
 use swash::text::Script;
 
@@ -34,30 +33,37 @@ fn writes_cjk_paragraph_preview() -> Result<()> {
 月光は小春のレンダラーを照らす。\
 ";
 
-    let options = LayoutRequest {
-        text,
-        font_query: Query {
-            families: &FALLBACK_FAMILY,
-            weight: Weight::NORMAL,
-            stretch: Stretch::Normal,
-            style: Style::Normal,
+    let query = Query {
+        families: &FALLBACK_FAMILY,
+        weight: Weight::NORMAL,
+        stretch: Stretch::Normal,
+        style: Style::Normal,
+    };
+    let font = book
+        .query(&query)?
+        .expect("expected fallback font for renderer preview");
+
+    let request = LayoutRequest {
+        style: TextStyle {
+            font: &font,
+            font_size: 28.0,
+            line_height: 34.0,
+            color: [0, 0, 0, 255],
+            script: Some(Script::Han),
         },
-        script: Some(Script::Han),
-        font_size: 28.0,
+        text,
         max_primary_axis: 220.0,
-        line_height: 34.0,
         direction: Orientation::Vertical,
     };
 
-    let LayoutSession { font, output } = layouter.layout(&mut book, &options)?;
+    let result = layouter.layout(&request)?;
     let mut renderer = TextRenderer::new();
-    let request = RenderRequest {
-        font: &font,
-        layout: &output,
-        foreground: [0, 0, 0, 255],
+    let render_request = RenderRequest {
+        style: request.style,
+        layout: &result,
         background: [255, 255, 255, 255],
     };
-    let rendered = renderer.render(&request)?;
+    let rendered = renderer.render(&render_request)?;
 
     let mut dir = workspace_dir();
     dir.push("target");

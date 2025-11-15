@@ -1,24 +1,42 @@
+//! Font management and caching system.
+//!
+//! This module provides a high-level interface for working with system fonts,
+//! including font discovery, caching, and conversion to swash FontRef objects
+//! for text shaping and rendering.
+
 use std::{collections::HashMap, sync::Arc};
 
 use anyhow::{Context, Result, anyhow};
 use fontdb::{Database, FaceInfo, ID, Query};
 use swash::FontRef;
 
-/// Loads and caches system fonts via [`fontdb`] and exposes them as [`FontRef`]s.
+/// Font provider that loads and caches system fonts.
+///
+/// `FontBook` provides a high-level interface for font discovery and loading.
+/// It maintains an internal cache of font data to avoid repeated file I/O
+/// and integrates with the system's font management.
 pub struct FontBook {
+    /// The underlying font database for system font discovery.
     database: Database,
+    /// Cache of loaded font data indexed by font ID.
     cache: HashMap<ID, Arc<[u8]>>,
 }
 
 impl FontBook {
-    /// Builds a provider that eagerly loads fonts from the operating system.
+    /// Creates a new font book with all available system fonts loaded.
+    ///
+    /// This eagerly discovers all fonts available on the system and prepares
+    /// them for querying. The actual font data is loaded lazily when needed.
     pub fn new() -> Self {
         let mut database = Database::new();
         database.load_system_fonts();
         Self::from_database(database)
     }
 
-    /// Builds a provider from an existing database. Primarily useful in tests.
+    /// Creates a font book from an existing font database.
+    ///
+    /// This is primarily useful for testing with custom font collections
+    /// or when you need fine-grained control over which fonts are available.
     pub fn from_database(database: Database) -> Self {
         Self {
             database,
@@ -26,12 +44,10 @@ impl FontBook {
         }
     }
 
-    /// Returns a read-only view of the underlying database.
-    pub fn database(&self) -> &Database {
-        &self.database
-    }
-
-    /// Attempts to find a font that satisfies the query.
+    /// Finds a font that best matches the given criteria.
+    ///
+    /// Returns `None` if no font matches the query, or an error if font loading fails.
+    /// The query uses fontdb's matching algorithm to find the best available font.
     pub fn query(&mut self, query: &Query<'_>) -> Result<Option<Font>> {
         if let Some(id) = self.database.query(query) {
             let face = self
@@ -46,7 +62,10 @@ impl FontBook {
         Ok(None)
     }
 
-    /// Lists metadata for every font currently loaded.
+    /// Returns metadata for all available fonts, sorted by name.
+    ///
+    /// This provides a complete list of all fonts that can be queried,
+    /// useful for font selection UIs or debugging font availability.
     pub fn list_all(&self) -> Vec<FaceInfo> {
         let mut faces: Vec<_> = self.database.faces().cloned().collect();
         faces.sort_by_key(|face| face.post_script_name.clone());
@@ -78,19 +97,21 @@ impl FontBook {
     }
 }
 
-/// Holds cached font data and allows creating `swash::FontRef` values.
-#[derive(Clone)]
+/// A cached font with its data ready for text shaping and rendering.
+///
+/// `Font` represents a loaded font face with cached binary data that can be
+/// efficiently converted to swash FontRef objects for text operations.
+#[derive(Clone, Debug)]
 pub struct Font {
+    /// Unique identifier from the font database.
     id: ID,
+    /// Face index within the font file (for TTC files).
     index: u32,
+    /// Cached font data shared across instances.
     data: Arc<[u8]>,
 }
 
 impl Font {
-    pub fn id(&self) -> ID {
-        self.id
-    }
-
     /// Builds a `FontRef` backed by the cached font data.
     pub fn font_ref(&self) -> Result<FontRef<'_>> {
         FontRef::from_index(&self.data, self.index as usize)

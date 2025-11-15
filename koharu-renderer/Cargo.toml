@@ -17,3 +17,4 @@ anyhow = { workspace = true }
 ndarray = { workspace = true }
 image = { workspace = true }
 unicode-linebreak = { workspace = true }
+rayon = { workspace = true }
