@@ -1,74 +1,28 @@
-//! High-performance text rasterization with parallel glyph processing.
-//!
-//! This module handles the final stage of text rendering: converting positioned
-//! glyphs into raster images. It uses parallel processing to efficiently rasterize
-//! large numbers of glyphs and composite them into the final output image.
-
 use anyhow::Result;
-use image::{Rgba, RgbaImage};
-use rayon::prelude::*;
-use swash::scale::image::{Content, Image as GlyphImage};
-use swash::scale::{Render, ScaleContext, Scaler, Source, StrikeWith};
-use swash::shape::cluster::Glyph;
-use swash::zeno::Vector;
+use image::{Pixel, Rgba, RgbaImage};
+use swash::scale::image::Content;
+use swash::scale::{Render, ScaleContext, Source, StrikeWith};
+use swash::zeno::{Format, Vector};
 
 use crate::layout::LayoutResult;
-use crate::types::{Color, Point, TextStyle};
+use crate::types::Color;
 
 #[derive(Debug)]
 pub struct RenderRequest<'a> {
-    pub style: TextStyle<'a>,
     pub layout: &'a LayoutResult,
-    pub background: Color,
+    pub image: &'a mut RgbaImage,
+    pub x: f32,
+    pub y: f32,
+    pub font_size: f32,
+    pub color: Color,
 }
 
-#[derive(Debug)]
-pub struct RenderedText {
-    pub image: RgbaImage,
-    pub origin: Point,
-}
-
-struct RasterGlyph {
-    image: GlyphImage,
-    left: f32,
-    top: f32,
-}
-
-#[derive(Clone, Copy)]
-struct GlyphBounds {
-    min_x: f32,
-    min_y: f32,
-    max_x: f32,
-    max_y: f32,
-}
-
-impl GlyphBounds {
-    fn from_glyph(glyph: &RasterGlyph) -> Self {
-        let right = glyph.left + glyph.image.placement.width as f32;
-        let bottom = glyph.top + glyph.image.placement.height as f32;
-        Self {
-            min_x: glyph.left,
-            min_y: glyph.top,
-            max_x: right,
-            max_y: bottom,
-        }
-    }
-
-    fn width(&self) -> f32 {
-        self.max_x - self.min_x
-    }
-
-    fn height(&self) -> f32 {
-        self.max_y - self.min_y
-    }
-}
-
-pub struct TextRenderer {
+pub struct Renderer {
     scale_context: ScaleContext,
     sources: [Source; 3],
 }
 
-impl TextRenderer {
+impl Renderer {
     pub fn new() -> Self {
         Self {
             scale_context: ScaleContext::new(),
@@ -80,288 +34,312 @@ impl TextRenderer {
         }
     }
 
-    pub fn render(&mut self, request: &RenderRequest<'_>) -> Result<RenderedText> {
-        if request.layout.is_empty() {
-            return Ok(Self::empty_render(request.background));
-        }
+    pub fn render(&mut self, request: &mut RenderRequest) -> Result<()> {
+        for line in request.layout {
+            let font = line.font.font_ref()?;
+            let mut scaler = self
+                .scale_context
+                .builder(font)
+                .size(request.font_size)
+                .hint(true)
+                .build();
 
-        let font_ref = request.style.font.font_ref()?;
+            let baseline_x = line.baseline.0 + request.x;
+            let baseline_y = line.baseline.1 + request.y;
 
-        let mut scaler = self
-            .scale_context
-            .builder(font_ref)
-            .size(request.style.font_size.max(0.0))
-            .build();
+            for glyph in &line.glyphs {
+                let glyph_x = baseline_x + glyph.x;
+                let glyph_y = baseline_y + glyph.y;
 
-        let glyphs = Self::flatten_glyphs(request.layout);
-        let rasterized =
-            Self::rasterize_glyphs(&self.sources, &mut scaler, glyphs, request.style.color)?;
-
-        if rasterized.is_empty() {
-            return Ok(Self::empty_render(request.background));
-        }
-
-        let bounds = self.calculate_bounds(&rasterized);
-        let image =
-            self.composite_surface(bounds, &rasterized, request.style.color, request.background);
-
-        Ok(RenderedText {
-            image,
-            origin: (bounds.min_x, bounds.min_y),
-        })
-    }
-
-    fn flatten_glyphs(layout: &LayoutResult) -> Vec<Glyph> {
-        layout
-            .par_iter()
-            .flat_map(|line| line.glyphs.par_iter())
-            .cloned()
-            .collect()
-    }
-
-    fn rasterize_glyphs(
-        sources: &[Source; 3],
-        scaler: &mut Scaler,
-        glyphs: Vec<Glyph>,
-        color: Color,
-    ) -> Result<Vec<RasterGlyph>> {
-        let mut rasterized = Vec::with_capacity(glyphs.len());
-        for glyph in glyphs {
-            if let Some(raster_glyph) = rasterize_glyph(sources, scaler, &glyph, color)? {
-                rasterized.push(raster_glyph);
+                if let Some(rendered) = Render::new(&self.sources)
+                    .format(Format::Subpixel)
+                    .offset(Vector::new(glyph_x.fract(), glyph_y.fract()))
+                    .render(&mut scaler, glyph.id)
+                {
+                    blit_glyph(
+                        &mut request.image,
+                        &rendered,
+                        glyph_x.floor() as i32,
+                        glyph_y.floor() as i32,
+                        request.color,
+                    );
+                }
             }
         }
-        Ok(rasterized)
+
+        Ok(())
     }
 
-    fn composite_surface(
-        &self,
-        bounds: GlyphBounds,
-        rasterized: &[RasterGlyph],
-        color: Color,
-        background: Color,
-    ) -> RgbaImage {
-        let width = bounds.width().ceil().max(1.0) as u32;
-        let height = bounds.height().ceil().max(1.0) as u32;
-        let mut surface = RgbaImage::from_pixel(width, height, Rgba(background));
-        let blit_positions: Vec<_> = rasterized
-            .par_iter()
-            .map(|glyph| {
-                let dest_x = (glyph.left - bounds.min_x).floor() as i32;
-                let dest_y = (glyph.top - bounds.min_y).floor() as i32;
-                (dest_x, dest_y, glyph)
-            })
-            .collect();
-        for (dest_x, dest_y, glyph) in blit_positions {
-            blit_glyph(&mut surface, dest_x, dest_y, glyph, color);
+    /// Calculate the bounding box of the layout
+    pub fn calculate_bounds(layout: &LayoutResult) -> (f32, f32, f32, f32) {
+        let mut min_x = f32::MAX;
+        let mut min_y = f32::MAX;
+        let mut max_x = f32::MIN;
+        let mut max_y = f32::MIN;
+
+        for line in layout {
+            let baseline_x = line.baseline.0;
+            let baseline_y = line.baseline.1;
+
+            for glyph in &line.glyphs {
+                let glyph_x = baseline_x + glyph.x;
+                let glyph_y = baseline_y + glyph.y;
+
+                min_x = min_x.min(glyph_x);
+                min_y = min_y.min(glyph_y);
+                max_x = max_x.max(glyph_x + glyph.advance);
+                max_y = max_y.max(glyph_y);
+            }
         }
-        surface
-    }
 
-    fn empty_render(background: Color) -> RenderedText {
-        RenderedText {
-            image: RgbaImage::from_pixel(1, 1, Rgba(background)),
-            origin: (0.0, 0.0),
-        }
-    }
-
-    fn calculate_bounds(&self, rasterized: &[RasterGlyph]) -> GlyphBounds {
-        rasterized
-            .par_iter()
-            .map(|glyph| GlyphBounds::from_glyph(glyph))
-            .reduce(
-                || GlyphBounds::from_glyph(&rasterized[0]),
-                |a, b| GlyphBounds {
-                    min_x: a.min_x.min(b.min_x),
-                    min_y: a.min_y.min(b.min_y),
-                    max_x: a.max_x.max(b.max_x),
-                    max_y: a.max_y.max(b.max_y),
-                },
-            )
+        (min_x, min_y, max_x, max_y)
     }
 }
 
-impl Default for TextRenderer {
-    fn default() -> Self {
-        Self::new()
+/// Blit a rendered glyph onto the image
+fn blit_glyph(
+    image: &mut RgbaImage,
+    glyph_image: &swash::scale::image::Image,
+    x: i32,
+    y: i32,
+    color: Color,
+) {
+    let placement = glyph_image.placement;
+    let glyph_x = x + placement.left;
+    let glyph_y = y - placement.top;
+
+    match glyph_image.content {
+        Content::Mask => blit_mask(image, glyph_image, glyph_x, glyph_y, color),
+        Content::SubpixelMask => blit_subpixel(image, glyph_image, glyph_x, glyph_y, color),
+        Content::Color => blit_color(image, glyph_image, glyph_x, glyph_y),
     }
 }
 
-fn rasterize_glyph(
-    sources: &[Source; 3],
-    scaler: &mut Scaler,
-    glyph: &Glyph,
-    foreground: [u8; 4],
-) -> Result<Option<RasterGlyph>> {
-    let mut render = Render::new(sources);
-    let offset = Vector::new(glyph.x.fract(), glyph.y.fract());
-    render.offset(offset).default_color(foreground);
-    let Some(image) = render.render(scaler, glyph.id) else {
-        return Ok(None);
+fn blit_mask(
+    image: &mut RgbaImage,
+    glyph_image: &swash::scale::image::Image,
+    glyph_x: i32,
+    glyph_y: i32,
+    color: Color,
+) {
+    visit_glyph_pixels(
+        image,
+        glyph_image,
+        glyph_x,
+        glyph_y,
+        1,
+        |pixel, src_data| {
+            blend_alpha(pixel, src_data, color);
+        },
+    );
+}
+
+fn blit_subpixel(
+    image: &mut RgbaImage,
+    glyph_image: &swash::scale::image::Image,
+    glyph_x: i32,
+    glyph_y: i32,
+    color: Color,
+) {
+    visit_glyph_pixels(
+        image,
+        glyph_image,
+        glyph_x,
+        glyph_y,
+        4,
+        |pixel, src_data| {
+            blend_subpixel(pixel, src_data, color);
+        },
+    );
+}
+
+fn blit_color(
+    image: &mut RgbaImage,
+    glyph_image: &swash::scale::image::Image,
+    glyph_x: i32,
+    glyph_y: i32,
+) {
+    visit_glyph_pixels(
+        image,
+        glyph_image,
+        glyph_x,
+        glyph_y,
+        4,
+        |pixel, src_data| {
+            blend_color(pixel, src_data);
+        },
+    );
+}
+
+fn visit_glyph_pixels<F>(
+    image: &mut RgbaImage,
+    glyph_image: &swash::scale::image::Image,
+    glyph_x: i32,
+    glyph_y: i32,
+    bytes_per_pixel: usize,
+    mut f: F,
+) where
+    F: FnMut(&mut Rgba<u8>, &[u8]),
+{
+    let placement = glyph_image.placement;
+    let width = placement.width as usize;
+    let height = placement.height as usize;
+    if width == 0 || height == 0 {
+        return;
+    }
+
+    let (image_width, image_height) = image.dimensions();
+    for dy in 0..height {
+        let dst_y = glyph_y + dy as i32;
+        if dst_y < 0 || dst_y >= image_height as i32 {
+            continue;
+        }
+
+        for dx in 0..width {
+            let dst_x = glyph_x + dx as i32;
+            if dst_x < 0 || dst_x >= image_width as i32 {
+                continue;
+            }
+
+            let src_idx = (dy * width + dx) * bytes_per_pixel;
+            if src_idx + bytes_per_pixel > glyph_image.data.len() {
+                continue;
+            }
+
+            let src_data = &glyph_image.data[src_idx..src_idx + bytes_per_pixel];
+            let pixel = image.get_pixel_mut(dst_x as u32, dst_y as u32);
+            f(pixel, src_data);
+        }
+    }
+}
+
+/// Blend alpha mask with text color
+#[inline]
+fn blend_alpha(pixel: &mut Rgba<u8>, src_data: &[u8], color: Color) {
+    let coverage = src_data[0] as u32;
+    if coverage == 0 {
+        return;
+    }
+
+    let tinted = [
+        ((color[0] as u32 * coverage) / 255) as u8,
+        ((color[1] as u32 * coverage) / 255) as u8,
+        ((color[2] as u32 * coverage) / 255) as u8,
+        ((color[3] as u32 * coverage) / 255) as u8,
+    ];
+    composite_pixel(pixel, tinted);
+}
+
+/// Blend subpixel mask with text color
+#[inline]
+fn blend_subpixel(pixel: &mut Rgba<u8>, src_data: &[u8], color: Color) {
+    let r = src_data[0] as u32;
+    let g = src_data[1] as u32;
+    let b = src_data[2] as u32;
+    let stored_alpha = *src_data.get(3).unwrap_or(&0) as u32;
+    if r == 0 && g == 0 && b == 0 && stored_alpha == 0 {
+        return;
+    }
+    let coverage_alpha = if stored_alpha != 0 {
+        stored_alpha
+    } else {
+        (r + g + b) / 3
     };
 
-    let base_x = glyph.x.floor();
-    let base_y = glyph.y.floor();
-    let left = base_x + image.placement.left as f32;
-    let top = base_y - image.placement.top as f32;
-
-    Ok(Some(RasterGlyph { image, left, top }))
+    let tinted = [
+        ((color[0] as u32 * r) / 255) as u8,
+        ((color[1] as u32 * g) / 255) as u8,
+        ((color[2] as u32 * b) / 255) as u8,
+        ((color[3] as u32 * coverage_alpha) / 255) as u8,
+    ];
+    composite_pixel(pixel, tinted);
 }
 
-fn blit_glyph(
-    surface: &mut RgbaImage,
-    dest_x: i32,
-    dest_y: i32,
-    glyph: &RasterGlyph,
-    color: [u8; 4],
-) {
-    match glyph.image.content {
-        Content::Mask => fill_mask(surface, dest_x, dest_y, glyph, color),
-        Content::Color => fill_color(surface, dest_x, dest_y, glyph),
-        Content::SubpixelMask => fill_mask(surface, dest_x, dest_y, glyph, color),
-    }
-}
-
-fn fill_mask(
-    surface: &mut RgbaImage,
-    dest_x: i32,
-    dest_y: i32,
-    glyph: &RasterGlyph,
-    color: [u8; 4],
-) {
-    let width = glyph.image.placement.width as i32;
-    let height = glyph.image.placement.height as i32;
-    if width == 0 || height == 0 {
+/// Blend color bitmap
+#[inline]
+fn blend_color(pixel: &mut Rgba<u8>, src_data: &[u8]) {
+    let alpha = src_data[3];
+    if alpha == 0 {
         return;
     }
-    for row in 0..height {
-        let y = dest_y + row;
-        if y < 0 || y >= surface.height() as i32 {
-            continue;
-        }
-        for col in 0..width {
-            let x = dest_x + col;
-            if x < 0 || x >= surface.width() as i32 {
-                continue;
-            }
-            let alpha = glyph.image.data[(row * width + col) as usize];
-            if alpha == 0 {
-                continue;
-            }
-            let src = tint_color(color, alpha);
-            let pixel = surface.get_pixel_mut(x as u32, y as u32);
-            blend_pixel(&mut pixel.0, src);
-        }
-    }
+    composite_pixel(pixel, [src_data[0], src_data[1], src_data[2], alpha]);
 }
 
-fn fill_color(surface: &mut RgbaImage, dest_x: i32, dest_y: i32, glyph: &RasterGlyph) {
-    let width = glyph.image.placement.width as i32;
-    let height = glyph.image.placement.height as i32;
-    if width == 0 || height == 0 {
+#[inline]
+fn composite_pixel(pixel: &mut Rgba<u8>, src: [u8; 4]) {
+    let alpha = src[3] as u32;
+    if alpha == 0 {
         return;
     }
-    for row in 0..height {
-        let y = dest_y + row;
-        if y < 0 || y >= surface.height() as i32 {
-            continue;
-        }
-        for col in 0..width {
-            let x = dest_x + col;
-            if x < 0 || x >= surface.width() as i32 {
-                continue;
-            }
-            let idx = ((row * width + col) * 4) as usize;
-            let src = [
-                glyph.image.data[idx],
-                glyph.image.data[idx + 1],
-                glyph.image.data[idx + 2],
-                glyph.image.data[idx + 3],
-            ];
-            if src[3] == 0 {
-                continue;
-            }
-            let pixel = surface.get_pixel_mut(x as u32, y as u32);
-            blend_pixel(&mut pixel.0, src);
-        }
-    }
-}
-
-fn tint_color(color: [u8; 4], alpha: u8) -> [u8; 4] {
-    let src_a = (u16::from(color[3]) * u16::from(alpha) + 127) / 255;
-    [
-        ((u16::from(color[0]) * src_a + 127) / 255) as u8,
-        ((u16::from(color[1]) * src_a + 127) / 255) as u8,
-        ((u16::from(color[2]) * src_a + 127) / 255) as u8,
-        src_a as u8,
-    ]
-}
-
-fn blend_pixel(dst: &mut [u8; 4], src: [u8; 4]) {
-    let sa = u16::from(src[3]);
-    if sa == 0 {
-        return;
-    }
-    let inv = 255 - sa;
-    for i in 0..3 {
-        let sc = u16::from(src[i]);
-        let dc = u16::from(dst[i]);
-        dst[i] = ((sc * sa + dc * inv + 127) / 255) as u8;
-    }
-    let da = u16::from(dst[3]);
-    dst[3] = (sa + (da * inv + 127) / 255).min(255) as u8;
+    let inv_alpha = 255 - alpha;
+    let channels = pixel.channels_mut();
+    channels[0] = ((inv_alpha * channels[0] as u32 + alpha * src[0] as u32) / 255) as u8;
+    channels[1] = ((inv_alpha * channels[1] as u32 + alpha * src[1] as u32) / 255) as u8;
+    channels[2] = ((inv_alpha * channels[2] as u32 + alpha * src[2] as u32) / 255) as u8;
+    channels[3] = ((inv_alpha * channels[3] as u32 + alpha * 255) / 255) as u8;
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::font::FontBook;
-    use crate::layout::{LayoutRequest, Orientation, TextLayouter};
-    use crate::types::TextStyle;
-    use fontdb::{Family, Query, Stretch, Style, Weight};
-    use swash::text::Script;
 
-    fn default_query<'a>(families: &'a [Family<'a>]) -> Query<'a> {
-        Query {
-            families,
-            weight: Weight::NORMAL,
-            stretch: Stretch::Normal,
-            style: Style::Normal,
-        }
+    fn rgba(value: [u8; 4]) -> Rgba<u8> {
+        Rgba(value)
     }
 
     #[test]
-    fn renders_layout_to_image() -> Result<()> {
-        let mut book = FontBook::new();
-        let mut layouter = TextLayouter::new();
-        let families = [Family::SansSerif];
-        let font = book
-            .query(&default_query(&families))?
-            .expect("expected sans-serif font for test");
-        let request = LayoutRequest {
-            style: TextStyle {
-                font: &font,
-                font_size: 22.0,
-                line_height: 30.0,
-                color: [255, 255, 255, 255],
-                script: Some(Script::Latin),
-            },
-            text: "Render test",
-            max_primary_axis: 400.0,
-            direction: Orientation::Horizontal,
-        };
-        let result = layouter.layout(&request)?;
-        let mut renderer = TextRenderer::new();
-        let render_request = RenderRequest {
-            style: request.style,
-            layout: &result,
-            background: [0, 0, 0, 0],
-        };
-        let rendered = renderer.render(&render_request)?;
-        assert!(
-            rendered.image.width() > 0 && rendered.image.height() > 0,
-            "rendered image should have non-zero dimensions"
-        );
-        Ok(())
+    fn blend_alpha_applies_full_coverage() {
+        let mut pixel = rgba([0, 0, 0, 0]);
+        blend_alpha(&mut pixel, &[255], [10, 20, 30, 255]);
+        assert_eq!(pixel.0, [10, 20, 30, 255]);
+    }
+
+    #[test]
+    fn blend_alpha_noops_on_zero_coverage() {
+        let mut pixel = rgba([1, 2, 3, 4]);
+        blend_alpha(&mut pixel, &[0], [200, 200, 200, 200]);
+        assert_eq!(pixel.0, [1, 2, 3, 4]);
+    }
+
+    #[test]
+    fn blend_subpixel_uses_rgb_coverage_when_alpha_missing() {
+        let mut pixel = rgba([0, 0, 0, 0]);
+        blend_subpixel(&mut pixel, &[64, 128, 255, 0], [255, 255, 255, 255]);
+        assert_eq!(pixel.0, [37, 74, 149, 149]); // avg alpha of RGB channels
+    }
+
+    #[test]
+    fn blend_subpixel_prefers_stored_alpha() {
+        let mut pixel = rgba([0, 0, 0, 0]);
+        blend_subpixel(&mut pixel, &[10, 20, 30, 200], [255, 255, 255, 255]);
+        assert_eq!(pixel.0, [7, 15, 23, 200]);
+    }
+
+    #[test]
+    fn blend_subpixel_respects_text_color() {
+        let mut pixel = rgba([0, 0, 0, 0]);
+        blend_subpixel(&mut pixel, &[128, 64, 32, 0], [100, 150, 200, 255]);
+        assert_eq!(pixel.0, [14, 10, 7, 74]);
+    }
+
+    #[test]
+    fn blend_subpixel_composites_with_existing_color() {
+        let mut pixel = rgba([200, 200, 200, 255]);
+        blend_subpixel(&mut pixel, &[255, 0, 0, 128], [255, 255, 255, 255]);
+        assert_eq!(pixel.0, [227, 99, 99, 255]);
+    }
+
+    #[test]
+    fn blend_color_copies_src_when_opaque() {
+        let mut pixel = rgba([0, 0, 0, 0]);
+        blend_color(&mut pixel, &[5, 6, 7, 255]);
+        assert_eq!(pixel.0, [5, 6, 7, 255]);
+    }
+
+    #[test]
+    fn blend_color_ignores_transparent_src() {
+        let mut pixel = rgba([9, 9, 9, 9]);
+        blend_color(&mut pixel, &[5, 6, 7, 0]);
+        assert_eq!(pixel.0, [9, 9, 9, 9]);
     }
 }
