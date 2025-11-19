@@ -68,7 +68,7 @@ const DYLIBS: &[&str] = &[
     "onnxruntime.dll",
     #[cfg(feature = "onnxruntime")]
     "onnxruntime_providers_shared.dll",
-    #[cfg(all(feature = "onnxruntime", feature = "onnxruntime"))]
+    #[cfg(all(feature = "onnxruntime", feature = "cuda"))]
     "onnxruntime_providers_cuda.dll",
 ];
 
@@ -106,7 +106,7 @@ const DYLIBS: &[&str] = &[
     "libonnxruntime.so",
     #[cfg(feature = "onnxruntime")]
     "libonnxruntime_providers_shared.so",
-    #[cfg(all(feature = "onnxruntime", feature = "onnxruntime"))]
+    #[cfg(all(feature = "onnxruntime", feature = "cuda"))]
     "libonnxruntime_providers_cuda.so",
 ];
 
