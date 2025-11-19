@@ -42,7 +42,7 @@ fn test_horizontal_text_rendering() -> Result<()> {
 
     let layout = layouter.layout(&request)?;
 
-    let mut image = RgbaImage::new(1000 + 50, 500);
+    let mut image = RgbaImage::new(1000, 500);
     image.fill(255);
 
     let mut renderer = Renderer::new();
@@ -50,7 +50,7 @@ fn test_horizontal_text_rendering() -> Result<()> {
         layout: &layout,
         image: &mut image,
         x: 0.0,
-        y: 50.0 + 50.0,
+        y: 50.0,
         font_size,
         color: [0, 0, 0, 255],
     };
@@ -77,7 +77,7 @@ fn test_vertical_text_rendering() -> Result<()> {
 
     let mut layouter = Layouter::new();
     let request = LayoutRequest {
-        text: "吾輩は猫である。名前はまだ無い。どこで生れたかとんと見当がつかぬ。何でも薄暗いじめじめした所でニャーニャー泣いていた事だけは記憶している。",
+        text: "吾輩は猫である。名前はまだ無い。どこで生れたかとんと見当がつかぬ。何でも薄暗いじめじめした所でニャーニャー泣いていた事だけは記憶している。吾輩はここで始めて人間というものを見た。しかもあとで聞くとそれは書生という人間中で一番獰悪な種族であったそうだ。",
         fonts: &fonts,
         font_size,
         line_height: 60.0,
@@ -89,8 +89,8 @@ fn test_vertical_text_rendering() -> Result<()> {
     let layout = layouter.layout(&request)?;
 
     let (min_x, min_y, max_x, max_y) = Renderer::calculate_bounds(&layout);
-    let width = (max_x - min_x).ceil() as u32 + 100;
-    let height = (max_y - min_y).ceil() as u32 + 100;
+    let width = (max_x - min_x).ceil() as u32;
+    let height = (max_y - min_y).ceil() as u32;
 
     let mut image = RgbaImage::new(width.max(500), height.max(1000));
     image.fill(255);
@@ -99,8 +99,8 @@ fn test_vertical_text_rendering() -> Result<()> {
     let mut render_request = RenderRequest {
         layout: &layout,
         image: &mut image,
-        x: -min_x + 50.0,
-        y: -min_y + 50.0,
+        x: 500.0 - max_x,
+        y: 50.0,
         font_size,
         color: [0, 0, 0, 255],
     };
