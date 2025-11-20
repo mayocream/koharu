@@ -58,8 +58,8 @@ pub async fn http(url: &str) -> anyhow::Result<Vec<u8>> {
 
     let total_len =
         usize::try_from(total_bytes).context("resource too large to fit into memory")?;
-    let chunk_size = total_len.min(RANGE_CHUNK_SIZE_BYTES).max(1);
-    let segments = (total_len + chunk_size - 1) / chunk_size;
+    let chunk_size = total_len.clamp(1, RANGE_CHUNK_SIZE_BYTES);
+    let segments = total_len.div_ceil(chunk_size);
 
     info!(
         %url,
