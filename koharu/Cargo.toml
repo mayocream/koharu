@@ -35,7 +35,6 @@ strum = { workspace = true }
 hf-hub = { workspace = true }
 velopack = { workspace = true, optional = true }
 dirs = { workspace = true }
-backon = { workspace = true }
 
 [features]
 default = ["koharu-runtime/onnxruntime"]
