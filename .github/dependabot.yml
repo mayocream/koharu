@@ -11,8 +11,6 @@ updates:
     interval: "daily"
 
 - package-ecosystem: "bun"
-  directories:
-  - "/"
-  - "/ui"
+  directory: "/"
   schedule:
     interval: "daily"
