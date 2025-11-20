@@ -5,7 +5,14 @@
 
 version: 2
 updates:
-  - package-ecosystem: "cargo" # See documentation for possible values
-    directory: "/" # Location of package manifests
-    schedule:
-      interval: "daily"
+- package-ecosystem: "cargo" # See documentation for possible values
+  directory: "/" # Location of package manifests
+  schedule:
+    interval: "daily"
+
+- package-ecosystem: "bun"
+  directories:
+  - "/"
+  - "/ui"
+  schedule:
+    interval: "daily"
