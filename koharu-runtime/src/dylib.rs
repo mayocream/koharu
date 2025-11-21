@@ -1,8 +1,3 @@
-use anyhow::Result;
-use futures::stream::{self, StreamExt, TryStreamExt};
-use koharu_core::download::{self, http_client};
-use once_cell::sync::OnceCell;
-use rayon::iter::{IntoParallelRefIterator, ParallelIterator};
 use std::{
     fs,
     io::BufWriter,
@@ -11,6 +6,12 @@ use std::{
     path::{Path, PathBuf},
     sync::Arc,
 };
+
+use anyhow::Result;
+use futures::stream::{self, StreamExt, TryStreamExt};
+use koharu_core::download::{self, http_client};
+use once_cell::sync::OnceCell;
+use rayon::iter::{IntoParallelRefIterator, ParallelIterator};
 use tokio::task;
 use tracing::info;
 
