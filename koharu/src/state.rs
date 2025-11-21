@@ -15,14 +15,14 @@ pub struct TextBlock {
     pub confidence: f32,
     pub text: Option<String>,
     pub translation: Option<String>,
-    pub style: Option<TextStyle>,
+    pub style: TextStyle,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct TextStyle {
     pub font_families: Vec<String>,
-    pub font_size: f32,
+    pub font_size: Option<f32>,
     pub color: Color,
     pub line_height: f32,
 }
@@ -30,8 +30,8 @@ pub struct TextStyle {
 impl Default for TextStyle {
     fn default() -> Self {
         TextStyle {
-            font_families: vec!["SimHei".to_string()],
-            font_size: 40.0,
+            font_families: vec!["Microsoft YaHei".to_string()],
+            font_size: None,
             color: [0, 0, 0, 255],
             line_height: 1.2,
         }

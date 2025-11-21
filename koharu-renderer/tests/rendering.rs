@@ -4,7 +4,7 @@ use anyhow::Result;
 use image::RgbaImage;
 use koharu_renderer::{
     font::FontBook,
-    layout::{LayoutRequest, Layouter, Orientation},
+    layout::{LayoutRequest, Layouter, Orientation, calculate_bounds},
     render::{RenderRequest, Renderer},
 };
 use swash::text::Script;
@@ -88,7 +88,7 @@ fn test_vertical_text_rendering() -> Result<()> {
 
     let layout = layouter.layout(&request)?;
 
-    let (min_x, min_y, max_x, max_y) = Renderer::calculate_bounds(&layout);
+    let (min_x, min_y, max_x, max_y) = calculate_bounds(&layout);
     let width = (max_x - min_x).ceil() as u32;
     let height = (max_y - min_y).ceil() as u32;
 

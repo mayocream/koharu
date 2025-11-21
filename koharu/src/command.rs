@@ -61,7 +61,6 @@ pub async fn detect(
         .await?;
     document.text_blocks = text_blocks;
     document.segment = Some(segment);
-    document.rendered = None;
 
     Ok(document.clone())
 }
@@ -80,7 +79,6 @@ pub async fn ocr(
 
     let text_blocks = model.ocr(&document.image, &document.text_blocks).await?;
     document.text_blocks = text_blocks;
-    document.rendered = None;
 
     Ok(document.clone())
 }
@@ -107,8 +105,8 @@ pub async fn inpaint(
     let inpainted = model
         .inpaint(&document.image, segment, dilate_kernel_size, erode_distance)
         .await?;
+
     document.inpainted = Some(inpainted);
-    document.rendered = None;
 
     Ok(document.clone())
 }
@@ -143,7 +141,7 @@ pub async fn update_text_blocks(
         .ok_or_else(|| anyhow::anyhow!("Document not found"))?;
 
     document.text_blocks = text_blocks;
-    document.rendered = None;
+
     Ok(document.clone())
 }
 

@@ -226,6 +226,31 @@ impl Layouter {
     }
 }
 
+/// Calculate the bounding box of the layout
+pub fn calculate_bounds(layout: &LayoutResult) -> (f32, f32, f32, f32) {
+    let mut min_x = f32::MAX;
+    let mut min_y = f32::MAX;
+    let mut max_x = f32::MIN;
+    let mut max_y = f32::MIN;
+
+    for line in layout {
+        let baseline_x = line.baseline.0;
+        let baseline_y = line.baseline.1;
+
+        for glyph in &line.glyphs {
+            let glyph_x = baseline_x + glyph.x;
+            let glyph_y = baseline_y + glyph.y;
+
+            min_x = min_x.min(glyph_x);
+            min_y = min_y.min(glyph_y);
+            max_x = max_x.max(glyph_x + glyph.advance);
+            max_y = max_y.max(glyph_y);
+        }
+    }
+
+    (min_x, min_y, max_x, max_y)
+}
+
 fn should_break_line(cluster: &GlyphCluster, current_offset: f32, max_primary_axis: f32) -> bool {
     // Handle hard line breaks (newlines)
     if cluster.info.boundary() == Boundary::Mandatory {
