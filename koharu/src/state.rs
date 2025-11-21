@@ -1,20 +1,41 @@
 use std::{path::PathBuf, sync::Arc};
 
 use image::GenericImageView;
+use koharu_core::image::SerializableDynamicImage;
+use koharu_renderer::types::Color;
 use serde::{Deserialize, Serialize};
 use tokio::sync::RwLock;
 
-use crate::image::SerializableDynamicImage;
-
 #[derive(Default, Debug, Clone, Serialize, Deserialize)]
 pub struct TextBlock {
-    pub x: u32,
-    pub y: u32,
-    pub width: u32,
-    pub height: u32,
+    pub x: f32,
+    pub y: f32,
+    pub width: f32,
+    pub height: f32,
     pub confidence: f32,
     pub text: Option<String>,
     pub translation: Option<String>,
+    pub style: TextStyle,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct TextStyle {
+    pub font_families: Vec<String>,
+    pub font_size: f32,
+    pub color: Color,
+    pub line_height: f32,
+}
+
+impl Default for TextStyle {
+    fn default() -> Self {
+        TextStyle {
+            font_families: vec!["Arial".to_string()],
+            font_size: 16.0,
+            color: [0, 0, 0, 255],
+            line_height: 1.2,
+        }
+    }
 }
 
 #[derive(Default, Debug, Clone, Serialize, Deserialize)]
@@ -29,6 +50,7 @@ pub struct Document {
     pub text_blocks: Vec<TextBlock>,
     pub segment: Option<SerializableDynamicImage>,
     pub inpainted: Option<SerializableDynamicImage>,
+    pub rendered: Option<SerializableDynamicImage>,
 }
 
 impl Document {
@@ -62,9 +84,7 @@ impl Document {
             image: SerializableDynamicImage(img),
             width,
             height,
-            text_blocks: Vec::new(),
-            segment: None,
-            inpainted: None,
+            ..Default::default()
         })
     }
 

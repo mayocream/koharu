@@ -1,14 +1,15 @@
 use std::{str::FromStr, sync::Arc};
 
-use koharu_core::{
-    result::Result,
-    state::{AppState, Document, TextBlock},
-};
 use koharu_models::llm::{GenerateOptions, ModelId};
 use rayon::iter::{IntoParallelIterator, ParallelIterator};
 use tauri::State;
 
-use crate::{llm, onnx};
+use crate::{
+    llm, onnx,
+    renderer::TextRenderer,
+    result::Result,
+    state::{AppState, Document, TextBlock},
+};
 
 #[tauri::command]
 pub fn open_external(url: &str) -> Result<()> {
@@ -105,6 +106,23 @@ pub async fn inpaint(
         .inpaint(&document.image, segment, dilate_kernel_size, erode_distance)
         .await?;
     document.inpainted = Some(inpainted);
+
+    Ok(document.clone())
+}
+
+#[tauri::command]
+pub async fn render(
+    state: State<'_, AppState>,
+    renderer: State<'_, Arc<TextRenderer>>,
+    index: usize,
+) -> Result<Document> {
+    let mut state = state.write().await;
+    let document = state
+        .documents
+        .get_mut(index)
+        .ok_or_else(|| anyhow::anyhow!("Document not found"))?;
+
+    renderer.render(document).await?;
 
     Ok(document.clone())
 }

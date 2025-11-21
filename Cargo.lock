@@ -3198,6 +3198,7 @@ dependencies = [
  "imageproc",
  "koharu-core",
  "koharu-models",
+ "koharu-renderer",
  "koharu-runtime",
  "open",
  "ort",
@@ -3222,21 +3223,16 @@ name = "koharu-core"
 version = "0.8.0"
 dependencies = [
  "anyhow",
- "blake3",
  "futures",
  "hf-hub",
  "image",
  "once_cell",
- "postcard",
  "reqwest",
  "reqwest-middleware",
  "reqwest-retry",
  "serde",
  "serde_bytes",
- "strum",
- "tauri",
  "thiserror 2.0.17",
- "tokio",
  "tracing",
 ]
 

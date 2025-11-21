@@ -16,15 +16,10 @@ thiserror = { workspace = true }
 serde = { workspace = true }
 serde_bytes = { workspace = true }
 image = { workspace = true }
-strum = { workspace = true }
-tauri = { workspace = true }
 hf-hub = { workspace = true }
-tokio = { workspace = true }
 reqwest = { workspace = true }
 reqwest-middleware = { workspace = true }
 reqwest-retry = { workspace = true }
-blake3 = { workspace = true }
-postcard = { workspace = true }
 tracing = { workspace = true }
 futures = { workspace = true }
 once_cell = { workspace = true }

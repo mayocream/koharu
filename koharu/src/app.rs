@@ -1,15 +1,15 @@
 use std::sync::Arc;
 
-use koharu_core::{result::Result, state::State};
+use anyhow::Result;
 use ort::execution_providers::ExecutionProvider;
 use rfd::MessageDialog;
 use tauri::Manager;
 use tokio::sync::RwLock;
 use tracing::warn;
 
-use crate::{command, llm, onnx};
+use crate::{command, llm, onnx, renderer::TextRenderer, state::State};
 
-fn initialize() -> anyhow::Result<()> {
+fn initialize() -> Result<()> {
     tracing_subscriber::fmt()
         .with_env_filter(
             tracing_subscriber::filter::EnvFilter::builder()
@@ -37,7 +37,7 @@ fn initialize() -> anyhow::Result<()> {
     Ok(())
 }
 
-async fn setup(app: tauri::AppHandle) -> anyhow::Result<()> {
+async fn setup(app: tauri::AppHandle) -> Result<()> {
     // Dynamically dylibs depending on features automatically
     {
         let lib_root = dirs::data_local_dir()
@@ -67,10 +67,12 @@ async fn setup(app: tauri::AppHandle) -> anyhow::Result<()> {
 
     let onnx = Arc::new(onnx::Model::new().await?);
     let llm = Arc::new(llm::Model::new());
+    let renderer = Arc::new(TextRenderer::new());
     let state = Arc::new(RwLock::new(State::default()));
 
     app.manage(onnx);
     app.manage(llm);
+    app.manage(renderer);
     app.manage(state);
 
     app.get_webview_window("splashscreen").unwrap().close()?;
@@ -89,6 +91,7 @@ pub fn run() -> Result<()> {
             command::detect,
             command::ocr,
             command::inpaint,
+            command::render,
             command::update_text_blocks,
             command::llm_list,
             command::llm_load,

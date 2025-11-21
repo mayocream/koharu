@@ -41,9 +41,17 @@ impl FontBook {
             .collect()
     }
 
-    /// Queries a font face by its ID.
-    pub fn query(&self, id: ID) -> Option<FaceInfo> {
-        self.database.face(id).cloned()
+    /// Returns font faces that belong to any of the specified families.
+    pub fn filter_by_families(&self, families: &[String]) -> Vec<FaceInfo> {
+        self.all()
+            .iter()
+            .filter(|face| {
+                face.families
+                    .iter()
+                    .any(|(family, _)| families.iter().any(|f| f == family))
+            })
+            .cloned()
+            .collect()
     }
 
     /// Loads the font data for the specified face, utilizing caching.

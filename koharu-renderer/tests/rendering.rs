@@ -99,7 +99,7 @@ fn test_vertical_text_rendering() -> Result<()> {
     let mut render_request = RenderRequest {
         layout: &layout,
         image: &mut image,
-        x: 500.0 - max_x,
+        x: 500.0 - font_size,
         y: 50.0,
         font_size,
         color: [0, 0, 0, 255],

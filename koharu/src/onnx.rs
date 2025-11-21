@@ -2,11 +2,12 @@ use std::sync::Arc;
 
 use anyhow::Result;
 use koharu_core::image::SerializableDynamicImage;
-use koharu_core::state::TextBlock;
 use koharu_models::comic_text_detector::ComicTextDetector;
 use koharu_models::lama::Lama;
 use koharu_models::manga_ocr::MangaOCR;
 use tokio::sync::Mutex;
+
+use crate::state::TextBlock;
 
 #[derive(Debug, Clone)]
 pub struct Model {
@@ -37,18 +38,18 @@ impl Model {
             .bboxes
             .into_iter()
             .map(|bbox| TextBlock {
-                x: bbox.xmin.round() as u32,
-                y: bbox.ymin.round() as u32,
-                width: (bbox.xmax - bbox.xmin).round() as u32,
-                height: (bbox.ymax - bbox.ymin).round() as u32,
+                x: bbox.xmin,
+                y: bbox.ymin,
+                width: bbox.xmax - bbox.xmin,
+                height: bbox.ymax - bbox.ymin,
                 confidence: bbox.confidence,
                 ..Default::default()
             })
             .collect();
 
         text_blocks.sort_unstable_by(|a, b| {
-            (a.y + a.height / 2)
-                .partial_cmp(&(b.y + b.height / 2))
+            (a.y + a.height / 2.0)
+                .partial_cmp(&(b.y + b.height / 2.0))
                 .unwrap_or(std::cmp::Ordering::Equal)
         });
 
@@ -65,7 +66,12 @@ impl Model {
         blocks
             .iter()
             .map(|block| {
-                let crop = image.crop_imm(block.x, block.y, block.width, block.height);
+                let crop = image.crop_imm(
+                    block.x as u32,
+                    block.y as u32,
+                    block.width as u32,
+                    block.height as u32,
+                );
                 let text = ocr.inference(&crop)?;
 
                 Ok(TextBlock {
