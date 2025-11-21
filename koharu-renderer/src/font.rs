@@ -1,8 +1,10 @@
 use std::{collections::HashMap, sync::Arc};
 
 use anyhow::{Context, Result, anyhow};
-use fontdb::{Database, FaceInfo, ID, Language};
+use fontdb::Database;
 use swash::FontRef;
+
+pub use fontdb::{FaceInfo, ID, Language};
 
 /// A font provider that loads system fonts and caches font data.
 pub struct FontBook {
@@ -37,6 +39,11 @@ impl FontBook {
             .filter(|face| face.families.iter().any(|(_, l)| l == lang))
             .cloned()
             .collect()
+    }
+
+    /// Queries a font face by its ID.
+    pub fn query(&self, id: ID) -> Option<FaceInfo> {
+        self.database.face(id).cloned()
     }
 
     /// Loads the font data for the specified face, utilizing caching.
