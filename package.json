@@ -2,7 +2,8 @@
   "scripts": {
     "setup": "bun scripts/dev.ts",
     "dev": "bun run setup tauri dev",
-    "build": "bun run setup tauri build"
+    "build": "bun run setup tauri build",
+    "cargo": "bun run setup cargo"
   },
   "workspaces": [
     "ui/"
