@@ -14,6 +14,8 @@ export function MaskControls() {
     setShowSegmentationMask,
     showInpaintedImage,
     setShowInpaintedImage,
+    showRenderedImage,
+    setShowRenderedImage,
     inpaint,
   } = useAppStore()
   const { inpaintConfig, setInpaintConfig } = useConfigStore()
@@ -29,6 +31,11 @@ export function MaskControls() {
         label='Show inpainted image'
         checked={showInpaintedImage}
         onChange={setShowInpaintedImage}
+      />
+      <ToggleField
+        label='Show rendered text'
+        checked={showRenderedImage}
+        onChange={setShowRenderedImage}
       />
       <Separator.Root className='my-1 h-px bg-neutral-200' />
       <div className='grid grid-cols-2 gap-1.5'>

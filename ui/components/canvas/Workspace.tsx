@@ -12,7 +12,6 @@ import {
 import { ToolRail } from '@/components/canvas/ToolRail'
 import { CanvasToolbar } from '@/components/canvas/CanvasToolbar'
 import { TextBlockAnnotations } from '@/components/canvas/TextBlockAnnotations'
-import { TextBlockRenderer } from '@/components/canvas/TextBlockRenderer'
 import { usePointerToDocument } from '@/hooks/usePointerToDocument'
 import { useBlockDrafting } from '@/hooks/useBlockDrafting'
 import { useBlockContextMenu } from '@/hooks/useBlockContextMenu'
@@ -22,8 +21,14 @@ const MASK_CURSOR =
   'url(\'data:image/svg+xml,%3Csvg xmlns="http://www.w3.org/2000/svg" width="16" height="16"%3E%3Ccircle cx="8" cy="8" r="4" stroke="black" stroke-width="1.5" fill="white"/%3E%3C/svg%3E\') 8 8, crosshair'
 
 export function Workspace() {
-  const { scale, showSegmentationMask, showInpaintedImage, mode, autoFitEnabled } =
-    useAppStore()
+  const {
+    scale,
+    showSegmentationMask,
+    showInpaintedImage,
+    showRenderedImage,
+    mode,
+    autoFitEnabled,
+  } = useAppStore()
   const {
     document: currentDocument,
     selectedBlockIndex,
@@ -140,8 +145,13 @@ export function Workspace() {
                             visible={showInpaintedImage}
                           />
                         )}
+                        {currentDocument.rendered && (
+                          <Image
+                            data={currentDocument.rendered}
+                            visible={showRenderedImage}
+                          />
+                        )}
                       </div>
-                      <TextBlockRenderer />
                       <TextBlockAnnotations
                         selectedIndex={selectedBlockIndex}
                         onSelect={setSelectedBlockIndex}

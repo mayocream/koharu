@@ -14,6 +14,7 @@ type AppState = {
   scale: number
   showSegmentationMask: boolean
   showInpaintedImage: boolean
+  showRenderedImage: boolean
   mode: ToolMode
   selectedBlockIndex?: number
   autoFitEnabled: boolean
@@ -29,6 +30,7 @@ type AppState = {
   setScale: (scale: number) => void
   setShowSegmentationMask: (show: boolean) => void
   setShowInpaintedImage: (show: boolean) => void
+  setShowRenderedImage: (show: boolean) => void
   setMode: (mode: ToolMode) => void
   setSelectedBlockIndex: (index?: number) => void
   setAutoFitEnabled: (enabled: boolean) => void
@@ -36,6 +38,7 @@ type AppState = {
   detect: (confThreshold: number, nmsThreshold: number) => Promise<void>
   ocr: () => Promise<void>
   inpaint: (dilateKernelSize: number, erodeDistance: number) => Promise<void>
+  render: () => Promise<void>
   // LLM actions
   llmList: () => Promise<void>
   llmSetSelectedModel: (id: string) => void
@@ -52,6 +55,7 @@ export const useAppStore = create<AppState>((set, get) => ({
   scale: 100,
   showSegmentationMask: true,
   showInpaintedImage: true,
+  showRenderedImage: true,
   mode: 'select',
   selectedBlockIndex: undefined,
   autoFitEnabled: true,
@@ -88,6 +92,9 @@ Rules:
   setShowInpaintedImage: (show: boolean) => {
     set({ showInpaintedImage: show })
   },
+  setShowRenderedImage: (show: boolean) => {
+    set({ showRenderedImage: show })
+  },
   setMode: (mode: ToolMode) => set({ mode }),
   setSelectedBlockIndex: (index?: number) => set({ selectedBlockIndex: index }),
   setAutoFitEnabled: (enabled: boolean) => set({ autoFitEnabled: enabled }),
@@ -98,6 +105,7 @@ Rules:
     const updatedDoc: Document = {
       ...doc,
       textBlocks,
+      rendered: undefined,
     }
     set({
       documents: replaceDocument(documents, currentDocumentIndex, updatedDoc),
@@ -132,6 +140,13 @@ Rules:
       dilateKernelSize,
       erodeDistance,
     })
+    set((state) => ({
+      documents: replaceDocument(state.documents, index, doc),
+    }))
+  },
+  render: async () => {
+    const index = get().currentDocumentIndex
+    const doc: Document = await invoke('render', { index })
     set((state) => ({
       documents: replaceDocument(state.documents, index, doc),
     }))

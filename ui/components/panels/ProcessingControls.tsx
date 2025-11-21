@@ -7,7 +7,7 @@ import {
 } from '@/components/ui/form-controls'
 
 export function ProcessingControls() {
-  const { detect, ocr } = useAppStore()
+  const { detect, ocr, render } = useAppStore()
   const { detectConfig, setDetectConfig } = useConfigStore()
 
   return (
@@ -44,6 +44,12 @@ export function ProcessingControls() {
           widthClass='w-full'
         />
       </div>
+      <TooltipButton
+        label='Render text'
+        tooltip='Render translations onto the page'
+        onClick={render}
+        widthClass='w-full'
+      />
     </div>
   )
 }

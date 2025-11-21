@@ -1,3 +1,12 @@
+export type RgbaColor = [number, number, number, number]
+
+export type TextStyle = {
+  fontFamilies: string[]
+  fontSize: number
+  color: RgbaColor
+  lineHeight: number
+}
+
 export type TextBlock = {
   x: number
   y: number
@@ -6,6 +15,7 @@ export type TextBlock = {
   confidence: number
   text?: string
   translation?: string
+  style?: TextStyle
 }
 
 export type ToolMode = 'select' | 'block' | 'mask'
@@ -20,4 +30,5 @@ export type Document = {
   textBlocks: TextBlock[]
   segment?: number[]
   inpainted?: number[]
+  rendered?: number[]
 }
