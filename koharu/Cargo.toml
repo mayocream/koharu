@@ -9,6 +9,16 @@ readme.workspace = true
 homepage.workspace = true
 repository.workspace = true
 keywords.workspace = true
+include = [
+    "src/**",
+    "icons/**",
+    "gen/**",
+    "tauri.conf.json",
+    "tauri.*.conf.json",
+    "capabilities/**",
+    "build.rs",
+    "../ui/out/**",
+]
 
 [dependencies]
 koharu-core = { workspace = true }
@@ -39,11 +49,7 @@ dirs = { workspace = true }
 
 [features]
 default = ["koharu-runtime/onnxruntime"]
-cuda = [
-    "ort/cuda",
-    "koharu-models/cuda",
-    "koharu-runtime/cuda",
-]
+cuda = ["ort/cuda", "koharu-models/cuda", "koharu-runtime/cuda"]
 bundle = ["velopack"]
 
 [build-dependencies]
