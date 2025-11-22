@@ -2,7 +2,7 @@
 
 AI-powered manga translator, written in **Rust**.
 
-Koharu introduces a new workflow for manga translation, utilizing the power of LLMs to automate the process. It combines the capabilities of object detection, OCR, inpainting, and LLMs to create a seamless translation experience.
+Koharu introduces a new workflow for manga translation, utilizing the power of AI to automate the process. It combines the capabilities of object detection, OCR, inpainting, and LLMs to create a seamless translation experience.
 
 Under the hood, Koharu uses [ort](https://github.com/pykeio/ort) and [candle](https://github.com/huggingface/candle) for high-performance inference, and uses [Tauri](https://github.com/tauri-apps/tauri) for the GUI. All components are written in Rust, ensuring safety and speed.
 
@@ -11,12 +11,11 @@ Under the hood, Koharu uses [ort](https://github.com/pykeio/ort) and [candle](ht
 
 ## Features
 
-- Automatic speech bubble detection
+- Automatic speech bubble detection and segmentation
 - OCR for manga text recognition
 - Inpainting to remove original text from images
 - LLM-powered translation
-- [UAX #50](https://www.unicode.org/reports/tr50/) compliant vertical text layout
-- GPU acceleration via CUDA
+- Vertical text layout for CJK languages
 
 ## GPU acceleration
 
@@ -44,9 +43,9 @@ The models will be automatically downloaded when you run Koharu for the first ti
 
 We convert the original models to ONNX format for better performance and compatibility with Rust. The converted models are hosted on [Hugging Face](https://huggingface.co/mayocream).
 
-### LLM models
+### LLMs
 
-Koharu supports various quantized LLM models in GGUF format via [candle](https://github.com/huggingface/candle). Currently supported models include:
+Koharu supports various quantized LLMs in GGUF format via [candle](https://github.com/huggingface/candle). Currently supported models include:
 
 - [vntl-llama3-8b-v2](https://huggingface.co/lmg-anon/vntl-llama3-8b-v2-gguf)
 - [sakura-galtransl-7b-v3.7](https://huggingface.co/SakuraLLM/Sakura-GalTransl-7B-v3.7)
