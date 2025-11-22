@@ -97,7 +97,6 @@ export const useAppStore = create<AppState>((set, get) => ({
     const updatedDoc: Document = {
       ...doc,
       textBlocks,
-      rendered: undefined,
     }
     set({
       documents: replaceDocument(documents, currentDocumentIndex, updatedDoc),

@@ -16,6 +16,7 @@ export function LlmControls() {
     llmOffload,
     llmGenerate,
     llmCheckReady,
+    render,
   } = useAppStore()
   const [generating, setGenerating] = useState(false)
 
@@ -66,23 +67,26 @@ export function LlmControls() {
           onClick={llmOffload}
         />
       </div>
-      <div className='flex justify-end'>
-        <button
-          type='button'
-          onClick={async () => {
-            setGenerating(true)
-            try {
-              await llmGenerate()
-            } finally {
-              setGenerating(false)
-            }
-          }}
-          disabled={!llmReady || generating}
-          className='rounded border border-neutral-200 bg-white px-3 py-1.5 text-sm font-semibold hover:bg-neutral-100 disabled:opacity-50'
-        >
-          {generating ? 'Generating...' : 'Generate'}
-        </button>
-      </div>
+      <TooltipButton
+        label={generating ? 'Generating...' : 'Generate'}
+        tooltip='Generate translations for detected text blocks'
+        disabled={!llmReady || generating}
+        onClick={async () => {
+          setGenerating(true)
+          try {
+            await llmGenerate()
+          } finally {
+            setGenerating(false)
+          }
+        }}
+        widthClass='w-full'
+      />
+      <TooltipButton
+        label='Render text'
+        tooltip='Render translations onto the page'
+        onClick={render}
+        widthClass='w-full'
+      />
     </div>
   )
 }

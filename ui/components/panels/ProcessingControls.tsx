@@ -1,13 +1,10 @@
 'use client'
 
 import { useAppStore, useConfigStore } from '@/lib/store'
-import {
-  SliderField,
-  TooltipButton,
-} from '@/components/ui/form-controls'
+import { SliderField, TooltipButton } from '@/components/ui/form-controls'
 
 export function ProcessingControls() {
-  const { detect, ocr, render } = useAppStore()
+  const { detect, ocr } = useAppStore()
   const { detectConfig, setDetectConfig } = useConfigStore()
 
   return (
@@ -44,12 +41,6 @@ export function ProcessingControls() {
           widthClass='w-full'
         />
       </div>
-      <TooltipButton
-        label='Render text'
-        tooltip='Render translations onto the page'
-        onClick={render}
-        widthClass='w-full'
-      />
     </div>
   )
 }
