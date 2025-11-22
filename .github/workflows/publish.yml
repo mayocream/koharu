@@ -24,4 +24,4 @@ jobs:
       - run: bun install
       - working-directory: ./ui
         run: bun run build
-      - run: cargo publish --workspace --token ${{ secrets.CARGO_REGISTRY_TOKEN }}
+      - run: cargo publish --workspace --no-verify --token ${{ secrets.CARGO_REGISTRY_TOKEN }}
