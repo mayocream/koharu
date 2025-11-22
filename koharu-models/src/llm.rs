@@ -6,7 +6,7 @@ use candle_core::quantized::gguf_file;
 use candle_core::utils::cuda_is_available;
 use candle_core::{Device, Tensor};
 use candle_transformers::generation::{LogitsProcessor, Sampling};
-use candle_transformers::models::{quantized_gemma3, quantized_qwen2};
+use candle_transformers::models::{quantized_llama, quantized_qwen2};
 use koharu_core::download;
 use strum::{Display, EnumIter, EnumString, IntoEnumIterator};
 use tokenizers::Tokenizer;
@@ -14,10 +14,9 @@ use tokenizers::Tokenizer;
 /// Supported model identifiers
 #[derive(Debug, Clone, Copy, PartialEq, Eq, EnumString, Display, EnumIter)]
 pub enum ModelId {
-    #[strum(serialize = "gemma-3-4b-it")]
-    Gemma3_4BInstruct,
-    #[strum(serialize = "qwen2-1.5b-it")]
-    Qwen2_1_5BInstruct,
+    #[strum(serialize = "vntl-llama3-8b-v2")]
+    VntlLlama3_8bV2,
+
     #[strum(serialize = "sakura-1.5b-qwen2.5-1.0")]
     Sakura1_5BQwen2_5_1_0,
 }
@@ -41,15 +40,10 @@ struct ModelConfig {
 impl ModelId {
     const fn config(&self) -> ModelConfig {
         match self {
-            ModelId::Gemma3_4BInstruct => ModelConfig {
-                repo: "google/gemma-3-4b-it-qat-q4_0-gguf",
-                filename: "gemma-3-4b-it-q4_0.gguf",
-                tokenizer_repo: "google/gemma-3-4b-it",
-            },
-            ModelId::Qwen2_1_5BInstruct => ModelConfig {
-                repo: "Qwen/Qwen2-1.5B-Instruct-GGUF",
-                filename: "qwen2-1_5b-instruct-q4_0.gguf",
-                tokenizer_repo: "Qwen/Qwen2-1.5B-Instruct",
+            ModelId::VntlLlama3_8bV2 => ModelConfig {
+                repo: "lmg-anon/vntl-llama3-8b-v2-gguf",
+                filename: "vntl-llama3-8b-v2-hf-q8_0.gguf",
+                tokenizer_repo: "rinna/llama-3-youko-8b", // or "meta-llama/Meta-Llama-3-8B"
             },
             ModelId::Sakura1_5BQwen2_5_1_0 => ModelConfig {
                 repo: "SakuraLLM/Sakura-1.5B-Qwen2.5-v1.0-GGUF",
@@ -62,14 +56,14 @@ impl ModelId {
 
 /// Supported model architectures
 enum Model {
-    Gemma3(quantized_gemma3::ModelWeights),
+    Llama(quantized_llama::ModelWeights),
     Qwen2(quantized_qwen2::ModelWeights),
 }
 
 impl Model {
     fn forward(&mut self, input: &Tensor, pos: usize) -> candle_core::Result<Tensor> {
         match self {
-            Model::Gemma3(m) => m.forward(input, pos),
+            Model::Llama(m) => m.forward(input, pos),
             Model::Qwen2(m) => m.forward(input, pos),
         }
     }
@@ -77,23 +71,26 @@ impl Model {
 
 #[derive(Debug, Clone, Copy)]
 struct Markers {
-    start: &'static str,
-    end: &'static str,
-    assistant_start: &'static str,
+    prefix: Option<&'static str>,
+    role_start: Option<&'static str>,
+    role_end: Option<&'static str>,
+    message_end: &'static str,
 }
 
 impl Model {
     fn markers(&self) -> Markers {
         match self {
-            Model::Gemma3(_) => Markers {
-                start: "<start_of_turn>",
-                end: "<end_of_turn>",
-                assistant_start: "<start_of_turn>assistant\n",
+            Model::Llama(_) => Markers {
+                prefix: Some("<|begin_of_text|>"),
+                role_start: Some("<|start_header_id|>"),
+                role_end: Some("<|end_header_id|>"),
+                message_end: "<|eot_id|>",
             },
             Model::Qwen2(_) => Markers {
-                start: "<|im_start|>",
-                end: "<|im_end|>",
-                assistant_start: "<|im_start|>assistant\n",
+                prefix: None,
+                role_start: Some("<|im_start|>"),
+                role_end: None,
+                message_end: "<|im_end|>",
             },
         }
     }
@@ -102,6 +99,7 @@ impl Model {
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Display, EnumString)]
 #[strum(serialize_all = "lowercase")]
 pub enum ChatRole {
+    Name(&'static str),
     System,
     User,
     Assistant,
@@ -118,6 +116,13 @@ impl ChatMessage {
         Self {
             role,
             content: content.into(),
+        }
+    }
+
+    pub const fn assistant() -> Self {
+        Self {
+            role: ChatRole::Assistant,
+            content: String::new(),
         }
     }
 }
@@ -192,7 +197,7 @@ impl Llm {
 
         // Load quantized model for the chosen architecture
         let model = match arch.as_str() {
-            "gemma3" => Model::Gemma3(quantized_gemma3::ModelWeights::from_gguf(
+            "llama" => Model::Llama(quantized_llama::ModelWeights::from_gguf(
                 ct, &mut file, &device,
             )?),
             "qwen2" => Model::Qwen2(quantized_qwen2::ModelWeights::from_gguf(
@@ -210,7 +215,7 @@ impl Llm {
                 let ids = enc.get_ids();
                 if ids.len() == 1 { Some(ids[0]) } else { None }
             };
-            try_marker(&tokenizer, markers.end)
+            try_marker(&tokenizer, markers.message_end)
                 .or_else(|| try_marker(&tokenizer, "<end_of_turn>"))
                 .or_else(|| tokenizer.get_vocab(true).get("<eos>").cloned())
                 .or_else(|| tokenizer.get_vocab(true).get("</s>").cloned())
@@ -346,21 +351,27 @@ impl Llm {
         let markers = self.model.markers();
         let mut out = String::new();
 
-        for msg in messages {
-            out.push_str(markers.start);
-            out.push_str(msg.role.to_string().as_ref());
-            out.push('\n');
-            out.push_str(msg.content.as_str());
-            out.push_str(markers.end);
+        if let Some(prefix) = markers.prefix {
+            out.push_str(prefix);
             out.push('\n');
         }
 
-        // If the last message isn't an assistant turn, open one to prompt generation.
-        if !messages
-            .last()
-            .is_some_and(|m| m.role == ChatRole::Assistant)
-        {
-            out.push_str(markers.assistant_start);
+        // Format each message
+        for msg in messages {
+            if let Some(role_start) = markers.role_start {
+                out.push_str(role_start);
+            }
+            out.push_str(msg.role.to_string().as_ref());
+            if let Some(role_end) = markers.role_end {
+                out.push_str(role_end);
+            }
+            out.push('\n');
+
+            if !msg.content.is_empty() {
+                out.push_str(&msg.content);
+                out.push_str(markers.message_end);
+                out.push('\n');
+            }
         }
         out
     }
@@ -400,6 +411,7 @@ mod tests {
                 ChatRole::User,
                 "彼は静かに微笑んだ。「君の言う通りだ。私たちは共に戦うべきだ」",
             ),
+            ChatMessage::assistant(),
         ];
 
         let response = llm

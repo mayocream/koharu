@@ -5,11 +5,14 @@ use koharu_models::llm::{ChatMessage, ChatRole, GenerateOptions, Llm, ModelId};
 #[command(author, version, about)]
 struct Args {
     /// Prompt to generate from
-    #[arg(long, default_value = "Hello")]
+    #[arg(
+        long,
+        default_value = "「吾輩は猫である。名前はまだ無い。どこで生れたかとんと見当がつかぬ。何でも薄暗いじめじめした所でニャーニャー泣いていた事だけは記憶している。吾輩はここで始めて人間というものを見た。しかもあとで聞くとそれは書生という人間中で一番獰悪な種族であったそうだ。」"
+    )]
     prompt: String,
 
     /// Model to use
-    #[arg(long, default_value = "qwen2-1.5b-it")]
+    #[arg(long, default_value = "vntl-llama3-8b-v2")]
     model: ModelId,
 
     /// Max new tokens
@@ -62,7 +65,13 @@ async fn main() -> anyhow::Result<()> {
         repeat_last_n: args.repeat_last_n,
     };
 
-    let out = llm.generate(&[ChatMessage::new(ChatRole::User, args.prompt)], &opts)?;
+    let out = llm.generate(
+        &[
+            ChatMessage::new(ChatRole::Name("Japanese"), args.prompt),
+            ChatMessage::new(ChatRole::Name("English"), String::new()),
+        ],
+        &opts,
+    )?;
 
     println!("{}", out);
     Ok(())
