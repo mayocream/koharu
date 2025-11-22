@@ -10,6 +10,7 @@ use koharu_renderer::{
     render::{RenderRequest, Renderer},
 };
 use tokio::sync::Mutex;
+use unicode_script::UnicodeScript;
 
 use crate::state::{Document, TextBlock};
 
@@ -46,6 +47,10 @@ impl TextRenderer {
         let mut rendered = inpainted.to_rgba8();
 
         for block in &doc.text_blocks {
+            if block.translation.as_ref().is_none_or(|x| x.is_empty()) {
+                continue;
+            }
+
             self.render_block(block, &mut rendered).await?;
         }
 
@@ -65,7 +70,16 @@ impl TextRenderer {
             .filter_map(|face| fontbook.font(face).ok())
             .collect::<Vec<_>>();
 
-        let direction = if block.width >= block.height {
+        // infer script and direction
+        let script = block
+            .translation
+            .iter()
+            .flat_map(|text| text.chars())
+            .all(|ch| ch.script() == unicode_script::Script::Latin)
+            .then_some(Script::Latin)
+            .unwrap_or(Script::Han);
+
+        let direction = if block.width < block.height || script == Script::Latin {
             Orientation::Horizontal
         } else {
             Orientation::Vertical
@@ -78,13 +92,13 @@ impl TextRenderer {
                 fonts: &fonts,
                 font_size: size,
                 line_height: style.line_height * size,
-                script: Script::Han,
+                script,
                 max_primary_axis: if direction == Orientation::Horizontal {
                     block.width
                 } else {
                     block.height
                 },
-                direction: direction,
+                direction,
             })
         };
 
@@ -107,17 +121,10 @@ impl TextRenderer {
                     continue;
                 }
 
-                let (min_x, min_y, max_x, max_y) = calculate_bounds(&glyphs);
-                let width = max_x - min_x;
+                let (_, min_y, _, max_y) = calculate_bounds(&glyphs);
                 let height = max_y - min_y;
 
-                // Check if text fits within the block
-                let fits = match direction {
-                    Orientation::Horizontal => width <= block.width && height <= block.height,
-                    Orientation::Vertical => height <= block.height && width <= block.width,
-                };
-
-                if fits {
+                if height <= block.height {
                     low = mid;
                 } else {
                     high = mid;
@@ -139,7 +146,7 @@ impl TextRenderer {
                 block.x + block.width - font_size
             },
             y: block.y + font_size,
-            font_size: font_size,
+            font_size,
             color: style.color,
         })?;
 

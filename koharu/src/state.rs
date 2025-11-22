@@ -30,7 +30,7 @@ pub struct TextStyle {
 impl Default for TextStyle {
     fn default() -> Self {
         TextStyle {
-            font_families: vec!["Microsoft YaHei".to_string(), "Arial".to_string()],
+            font_families: vec!["Arial".to_string(), "Microsoft Jhenghei".to_string()],
             font_size: None,
             color: [0, 0, 0, 255],
             line_height: 1.2,

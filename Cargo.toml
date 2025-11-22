@@ -73,6 +73,7 @@ libloading = "0.9"
 num_cpus = "1.17"
 swash = "0.2"
 fontdb = "0.23"
+unicode-script = "0.5"
 
 [profile.release]
 opt-level = "z"
