@@ -1,6 +1,6 @@
 # Koharu
 
-Automated manga translation tool with LLM, written in **Rust**.
+AI-powered manga translator, written in **Rust**.
 
 Koharu introduces a new workflow for manga translation, utilizing the power of LLMs to automate the process. It combines the capabilities of object detection, OCR, inpainting, and LLMs to create a seamless translation experience.
 
@@ -18,7 +18,7 @@ Under the hood, Koharu uses [ort](https://github.com/pykeio/ort) and [candle](ht
 - [UAX #50](https://www.unicode.org/reports/tr50/) compliant vertical text layout
 - GPU acceleration via CUDA
 
-## GPU Acceleration
+## GPU acceleration
 
 Currently, Koharu only supports NVIDIA GPUs via CUDA.
 
@@ -32,7 +32,7 @@ Koharu bundles CUDA toolkit 12 and cuDNN 9, so you don't need to install them se
 
 Koharu relies on a mixin of ONNX models and LLM models to perform various tasks.
 
-### ONNX Models
+### ONNX models
 
 Koharu uses several pre-trained models for different tasks:
 
@@ -44,7 +44,7 @@ The models will be automatically downloaded when you run Koharu for the first ti
 
 We convert the original models to ONNX format for better performance and compatibility with Rust. The converted models are hosted on [Hugging Face](https://huggingface.co/mayocream).
 
-### LLM Models
+### LLM models
 
 Koharu supports various quantized LLM models in GGUF format via [candle](https://github.com/huggingface/candle). Currently supported models include:
 
@@ -76,14 +76,7 @@ bun install
 bun run build
 ```
 
-### Usage
-
-After building, you can run the Koharu binary located in `target/release/`.
-
-## Related Projects
-
-- [LabelPlus](https://github.com/LabelPlus/LabelPlus) - A manga annotation tool with Photoshop integration.
-- [LunaTranslator](https://github.com/HIllya51/LunaTranslator) - Translation tool for visual novels and games.
+The built binaries will be located in the `target/release` directory.
 
 ## License
 
