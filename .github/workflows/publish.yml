@@ -1,0 +1,27 @@
+name: Publish
+
+on:
+  push:
+    tags:
+      - '*'
+
+env:
+  CARGO_TERM_COLOR: always
+  CUDA_COMPUTE_CAP: 121
+
+jobs:
+  crates-io:
+    name: crates.io
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: oven-sh/setup-bun@v2
+      - uses: Swatinem/rust-cache@v2
+      - uses: Jimver/cuda-toolkit@master
+        with:
+          cuda: '12.9.1'
+      - uses: ilammy/msvc-dev-cmd@v1
+      - run: bun install
+      - working-directory: ./ui
+        run: bun run build
+      - run: cargo publish --workspace --token ${{ secrets.CARGO_REGISTRY_TOKEN }}
