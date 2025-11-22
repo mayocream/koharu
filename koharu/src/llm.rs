@@ -1,8 +1,9 @@
-use koharu_models::llm::{ChatMessage, ChatRole, Llm, ModelId};
-use serde::{Deserialize, Serialize};
+use koharu_models::llm::{GenerateOptions, Llm, ModelId};
 use std::sync::Arc;
 use strum::Display;
 use tokio::sync::RwLock;
+
+use crate::state::Document;
 
 /// Load state of the LLM
 #[allow(clippy::large_enum_variant)]
@@ -44,7 +45,7 @@ impl Model {
 
         let state_cloned = self.state.clone();
         tokio::spawn(async move {
-            let res = Llm::from_pretrained(id).await;
+            let res = Llm::new(id).await;
             match res {
                 Ok(llm) => {
                     let mut guard = state_cloned.write().await;
@@ -80,28 +81,35 @@ impl Model {
     pub async fn ready(&self) -> bool {
         matches!(*self.state.read().await, State::Ready(_))
     }
-}
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct Prompt {
-    system: String,
-    user: String,
-}
+    /// Generate text from the loaded model.
+    pub async fn generate(&self, doc: &mut Document) -> anyhow::Result<()> {
+        let mut guard = self.state.write().await;
+        match &mut *guard {
+            State::Ready(llm) => {
+                let text = doc
+                    .text_blocks
+                    .clone()
+                    .into_iter()
+                    .map(|block| block.text.unwrap_or_else(|| "<empty>".to_string()))
+                    .collect::<Vec<_>>()
+                    .join("\n");
 
-impl Prompt {
-    pub fn new(system: impl Into<String>, user: impl Into<String>) -> Self {
-        Self {
-            system: system.into(),
-            user: user.into(),
+                let prompt = llm.prompt(text);
+
+                tracing::info!("Generating translation with messages: {:?}", prompt);
+
+                let response = llm.generate(&prompt, &GenerateOptions::default())?;
+                let translations = response.split("\n").collect::<Vec<_>>();
+                for (block, translation) in doc.text_blocks.iter_mut().zip(translations) {
+                    block.translation = Some(translation.to_string());
+                }
+
+                Ok(())
+            }
+            State::Loading => Err(anyhow::anyhow!("Model is still loading")),
+            State::Failed(e) => Err(anyhow::anyhow!("Model failed to load: {}", e)),
+            State::Empty => Err(anyhow::anyhow!("No model is loaded")),
         }
-    }
-}
-
-impl From<Prompt> for Vec<ChatMessage> {
-    fn from(prompt: Prompt) -> Self {
-        vec![
-            ChatMessage::new(ChatRole::System, prompt.system),
-            ChatMessage::new(ChatRole::User, prompt.user),
-        ]
     }
 }

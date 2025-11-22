@@ -52,7 +52,7 @@ struct Args {
 async fn main() -> anyhow::Result<()> {
     let args = Args::parse();
 
-    let mut llm = Llm::from_pretrained(args.model).await?;
+    let mut llm = Llm::new(args.model).await?;
 
     let opts = GenerateOptions {
         max_tokens: args.max_tokens,
@@ -76,6 +76,7 @@ async fn main() -> anyhow::Result<()> {
                 "你是一个视觉小说翻译模型，可以通顺地使用给定的术语表以指定的风格将日文翻译成简体中文，并联系上下文正确使用人称代词，注意不要混淆使役态和被动态的主语和宾语，不要擅自添加原文中没有的特殊符号，也不要擅自增加或减少换行。",
             ),
             ChatMessage::new(ChatRole::User, args.prompt),
+            ChatMessage::assistant(),
         ],
     };
 

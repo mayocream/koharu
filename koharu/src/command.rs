@@ -1,6 +1,6 @@
 use std::{str::FromStr, sync::Arc};
 
-use koharu_models::llm::{GenerateOptions, ModelId};
+use koharu_models::llm::ModelId;
 use rayon::iter::{IntoParallelIterator, ParallelIterator};
 use tauri::State;
 
@@ -176,41 +176,14 @@ pub async fn llm_generate(
     state: State<'_, AppState>,
     model: State<'_, Arc<llm::Model>>,
     index: usize,
-    prompt: &str,
 ) -> Result<Document> {
-    let mut guard = model.get_mut().await;
-    match &mut *guard {
-        llm::State::Ready(llm) => {
-            let mut state = state.write().await;
-            let document = state
-                .documents
-                .get_mut(index)
-                .ok_or_else(|| anyhow::anyhow!("Document not found"))?;
-            let messages: Vec<koharu_models::llm::ChatMessage> = llm::Prompt::new(
-                prompt,
-                document
-                    .text_blocks
-                    .clone()
-                    .into_iter()
-                    .map(|block| block.text.unwrap_or_else(|| "<empty>".to_string()))
-                    .collect::<Vec<_>>()
-                    .join("\n"),
-            )
-            .into();
+    let mut state = state.write().await;
+    let document = state
+        .documents
+        .get_mut(index)
+        .ok_or_else(|| anyhow::anyhow!("Document not found"))?;
 
-            tracing::info!("Generating translation with messages: {:?}", messages);
+    model.generate(document).await?;
 
-            let response = llm.generate(&messages, &GenerateOptions::default())?;
-            let translations = response.split("\n").collect::<Vec<_>>();
-            for (block, translation) in document.text_blocks.iter_mut().zip(translations) {
-                block.translation = Some(translation.to_string());
-            }
-            document.rendered = None;
-
-            Ok(document.clone())
-        }
-        llm::State::Loading => Err(anyhow::anyhow!("Model is still loading").into()),
-        llm::State::Failed(e) => Err(anyhow::anyhow!("Model failed to load: {}", e).into()),
-        llm::State::Empty => Err(anyhow::anyhow!("No model is loaded").into()),
-    }
+    Ok(document.clone())
 }
