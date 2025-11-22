@@ -30,6 +30,8 @@ pub const PACKAGES: &[&str] = &[
     "nvidia-cublas-cu12",
     #[cfg(feature = "cuda")]
     "nvidia-cufft-cu12",
+    #[cfg(feature = "cuda")]
+    "nvidia-curand-cu12",
     #[cfg(feature = "onnxruntime")]
     "onnxruntime-gpu/1.22.0",
 ];
@@ -46,6 +48,8 @@ const DYLIBS: &[&str] = &[
     "cublas64_12.dll",
     #[cfg(feature = "cuda")]
     "cufft64_11.dll",
+    #[cfg(feature = "cuda")]
+    "curand64_10.dll",
     // cuDNN core and dependency chain (graph -> ops -> adv/cnn)
     #[cfg(feature = "cuda")]
     "cudnn64_9.dll",
@@ -84,6 +88,8 @@ const DYLIBS: &[&str] = &[
     "libcublas.so.12",
     #[cfg(feature = "cuda")]
     "libcufft.so.11",
+    #[cfg(feature = "cuda")]
+    "libcurand.so.10",
     // cuDNN core and dependency chain
     #[cfg(feature = "cuda")]
     "libcudnn.so.9",

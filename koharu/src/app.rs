@@ -38,16 +38,6 @@ fn initialize() -> Result<()> {
 }
 
 async fn setup(app: tauri::AppHandle) -> Result<()> {
-    // Dynamically dylibs depending on features automatically
-    {
-        let lib_root = dirs::data_local_dir()
-            .ok_or_else(|| anyhow::anyhow!("Failed to get local data directory"))?
-            .join("koharu")
-            .join("lib");
-        koharu_runtime::ensure_dylibs(&lib_root).await?;
-        koharu_runtime::preload_dylibs(&lib_root)?;
-    }
-
     // Initialize ONNX Runtime
     {
         let cuda = ort::execution_providers::CUDAExecutionProvider::default();
