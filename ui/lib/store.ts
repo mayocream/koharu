@@ -22,7 +22,6 @@ type AppState = {
   llmModels: string[]
   llmSelectedModel?: string
   llmReady: boolean
-  llmSystemPrompt: string
   // ui + actions
   openDocuments: () => Promise<void>
   openExternal: (url: string) => Promise<void>
@@ -45,7 +44,6 @@ type AppState = {
   llmLoad: () => Promise<void>
   llmOffload: () => Promise<void>
   llmCheckReady: () => Promise<void>
-  llmSetSystemPrompt: (prompt: string) => void
   llmGenerate: () => Promise<void>
 }
 
@@ -62,12 +60,6 @@ export const useAppStore = create<AppState>((set, get) => ({
   llmModels: [],
   llmSelectedModel: undefined,
   llmReady: false,
-  llmSystemPrompt: `You are a Japanese→English line-matched translator.
-Rules:
-- Output ENGLISH ONLY. Never copy Japanese.
-- Preserve line count, line breaks, punctuation, and indentation.
-- Each output line corresponds to the same input line.
-- Keep tone/nuance; do not add or omit meaning.`,
   openDocuments: async () => {
     const docs: Document[] = await invoke('open_documents')
     set({
@@ -178,15 +170,13 @@ Rules:
       set({ llmReady: ready })
     } catch (_) {}
   },
-  llmSetSystemPrompt: (prompt: string) => set({ llmSystemPrompt: prompt }),
   llmGenerate: async () => {
-    const { currentDocumentIndex, llmSystemPrompt } = get()
+    const index = get().currentDocumentIndex
     const doc = await invoke<Document>('llm_generate', {
-      index: currentDocumentIndex,
-      prompt: llmSystemPrompt,
+      index,
     })
     set((state) => ({
-      documents: replaceDocument(state.documents, currentDocumentIndex, doc),
+      documents: replaceDocument(state.documents, index, doc),
     }))
   },
 }))

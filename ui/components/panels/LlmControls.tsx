@@ -3,19 +3,17 @@
 import { useEffect, useState } from 'react'
 import { Select } from 'radix-ui'
 import { useAppStore } from '@/lib/store'
-import { TextareaField, TooltipButton } from '@/components/ui/form-controls'
+import { TooltipButton } from '@/components/ui/form-controls'
 
 export function LlmControls() {
   const {
     llmModels,
     llmSelectedModel,
     llmReady,
-    llmSystemPrompt,
     llmList,
     llmSetSelectedModel,
     llmLoad,
     llmOffload,
-    llmSetSystemPrompt,
     llmGenerate,
     llmCheckReady,
   } = useAppStore()
@@ -68,12 +66,6 @@ export function LlmControls() {
           onClick={llmOffload}
         />
       </div>
-      <TextareaField
-        label='System prompt'
-        value={llmSystemPrompt}
-        placeholder='Describe how the assistant should rewrite text'
-        onChange={llmSetSystemPrompt}
-      />
       <div className='flex justify-end'>
         <button
           type='button'
