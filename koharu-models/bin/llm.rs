@@ -12,7 +12,7 @@ struct Args {
     prompt: String,
 
     /// Model to use
-    #[arg(long, default_value = "vntl-llama3-8b-v2")]
+    #[arg(long, default_value = "sakura-galtransl-7b-v3.7")]
     model: ModelId,
 
     /// Max new tokens
@@ -65,13 +65,21 @@ async fn main() -> anyhow::Result<()> {
         repeat_last_n: args.repeat_last_n,
     };
 
-    let out = llm.generate(
-        &[
+    let messages = match args.model {
+        ModelId::VntlLlama3_8Bv2 => vec![
             ChatMessage::new(ChatRole::Name("Japanese"), args.prompt),
             ChatMessage::new(ChatRole::Name("English"), String::new()),
         ],
-        &opts,
-    )?;
+        ModelId::SakuraGaltransl7Bv3_7 => vec![
+            ChatMessage::new(
+                ChatRole::System,
+                "你是一个视觉小说翻译模型，可以通顺地使用给定的术语表以指定的风格将日文翻译成简体中文，并联系上下文正确使用人称代词，注意不要混淆使役态和被动态的主语和宾语，不要擅自添加原文中没有的特殊符号，也不要擅自增加或减少换行。",
+            ),
+            ChatMessage::new(ChatRole::User, args.prompt),
+        ],
+    };
+
+    let out = llm.generate(&messages, &opts)?;
 
     println!("{}", out);
     Ok(())

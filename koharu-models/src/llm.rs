@@ -15,10 +15,10 @@ use tokenizers::Tokenizer;
 #[derive(Debug, Clone, Copy, PartialEq, Eq, EnumString, Display, EnumIter)]
 pub enum ModelId {
     #[strum(serialize = "vntl-llama3-8b-v2")]
-    VntlLlama3_8bV2,
+    VntlLlama3_8Bv2,
 
-    #[strum(serialize = "sakura-1.5b-qwen2.5-1.0")]
-    Sakura1_5BQwen2_5_1_0,
+    #[strum(serialize = "sakura-galtransl-7b-v3.7")]
+    SakuraGaltransl7Bv3_7,
 }
 
 impl ModelId {
@@ -40,14 +40,14 @@ struct ModelConfig {
 impl ModelId {
     const fn config(&self) -> ModelConfig {
         match self {
-            ModelId::VntlLlama3_8bV2 => ModelConfig {
+            ModelId::VntlLlama3_8Bv2 => ModelConfig {
                 repo: "lmg-anon/vntl-llama3-8b-v2-gguf",
                 filename: "vntl-llama3-8b-v2-hf-q8_0.gguf",
                 tokenizer_repo: "rinna/llama-3-youko-8b", // or "meta-llama/Meta-Llama-3-8B"
             },
-            ModelId::Sakura1_5BQwen2_5_1_0 => ModelConfig {
-                repo: "SakuraLLM/Sakura-1.5B-Qwen2.5-v1.0-GGUF",
-                filename: "sakura-1.5b-qwen2.5-v1.0-fp16.gguf",
+            ModelId::SakuraGaltransl7Bv3_7 => ModelConfig {
+                repo: "SakuraLLM/Sakura-GalTransl-7B-v3.7",
+                filename: "Sakura-Galtransl-7B-v3.7.gguf",
                 tokenizer_repo: "Qwen/Qwen2.5-1.5B-Instruct",
             },
         }
@@ -399,7 +399,7 @@ mod tests {
 
     #[tokio::test]
     async fn test_translation_task() {
-        let mut llm = Llm::from_pretrained(ModelId::Sakura1_5BQwen2_5_1_0)
+        let mut llm = Llm::from_pretrained(ModelId::SakuraGaltransl7Bv3_7)
             .await
             .unwrap();
         let messages = vec![

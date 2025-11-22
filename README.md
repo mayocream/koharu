@@ -49,7 +49,7 @@ We convert the original models to ONNX format for better performance and compati
 Koharu supports various quantized LLM models in GGUF format via [candle](https://github.com/huggingface/candle). Currently supported models include:
 
 - [vntl-llama3-8b-v2](https://huggingface.co/lmg-anon/vntl-llama3-8b-v2-gguf)
-- [sakura-1.5b-qwen2.5-1.0](https://huggingface.co/SakuraLLM/Sakura-1.5B-Qwen2.5-v1.0-GGUF)
+- [sakura-galtransl-7b-v3.7](https://huggingface.co/SakuraLLM/Sakura-GalTransl-7B-v3.7)
 
 ## Installation
 
