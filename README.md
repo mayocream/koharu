@@ -82,4 +82,6 @@ The built binaries will be located in the `target/release` directory.
 
 ## License
 
-Koharu is licensed under the [GNU General Public License v3.0](LICENSE).
+Koharu application is licensed under the [GNU General Public License v3.0](LICENSE-GPL).
+
+The sub-crates of Koharu are licensed under the [Apache License 2.0](LICENSE-APACHE).
