@@ -4,6 +4,8 @@ on:
   push:
     tags:
       - '*'
+    branches:
+      - main
 
 permissions:
   contents: write
@@ -32,7 +34,7 @@ jobs:
           mkdir dist
           cp target/release/koharu.exe dist/
           cp target/release/*.dll dist/
-      - name: Release
+      - name: Package
         shell: bash
         env:
           AZURE_CLIENT_ID: ${{ secrets.AZURE_CLIENT_ID }}
@@ -40,5 +42,76 @@ jobs:
           AZURE_TENANT_ID: ${{ secrets.AZURE_TENANT_ID }}
         run: |
           dotnet tool update -g vpk
-          vpk pack -u Koharu -v ${{ github.ref_name }} -p dist -e koharu.exe -i assets/Koharu_Halo.ico --azureTrustedSignFile .github/signing/metadata.json
-          vpk upload github --repoUrl https://github.com/${{ github.repository }} --publish --releaseName ${{ github.ref_name }} --tag ${{ github.ref_name }} --token ${{ secrets.GITHUB_TOKEN }} --merge
+          vpk pack -u Koharu -v ${{ github.ref_name }} -p dist -e koharu.exe -i assets/Koharu_Halo.ico \
+            --azureTrustedSignFile .github/signing/metadata.json
+      - name: Release
+        if: github.ref_type == 'tag'
+        run: |
+          vpk upload github \
+            --repoUrl https://github.com/${{ github.repository }} \
+            --publish --releaseName ${{ github.ref_name }} \
+            --tag ${{ github.ref_name }} \
+            --token ${{ secrets.GITHUB_TOKEN }} \
+            --merge
+
+  build-macos:
+    name: macOS
+    runs-on: macos-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: oven-sh/setup-bun@v2
+      - name: Install Apple certificates and notary profile
+        env:
+          BUILD_CERTIFICATE_BASE64: ${{ secrets.BUILD_CERTIFICATE_BASE64 }}
+          INSTALLER_CERTIFICATE_BASE64: ${{ secrets.INSTALLER_CERTIFICATE_BASE64 }}
+          P12_PASSWORD: ""
+          APPLE_ID: ${{ secrets.APPLE_ID }}
+          APPLE_PASSWORD: ${{ secrets.APPLE_PASSWORD }}
+          APPLE_TEAM: ${{ secrets.APPLE_TEAM }}
+          KEYCHAIN_PASSWORD: ${{ secrets.KEYCHAIN_PASSWORD }}
+        run: |
+          # create variables for file paths
+          CERT_BUILD_PATH=$RUNNER_TEMP/build_certificate.p12
+          CERT_INSTALLER_PATH=$RUNNER_TEMP/installer_certificate.p12
+          KEYCHAIN_PATH=$RUNNER_TEMP/app-signing.keychain-db
+
+          # import certificates from secrets
+          echo -n "$BUILD_CERTIFICATE_BASE64" | base64 --decode -o $CERT_BUILD_PATH
+          echo -n "$INSTALLER_CERTIFICATE_BASE64" | base64 --decode -o $CERT_INSTALLER_PATH
+
+          # create temporary keychain
+          security create-keychain -p "$KEYCHAIN_PASSWORD" $KEYCHAIN_PATH
+          security set-keychain-settings -lut 21600 $KEYCHAIN_PATH
+          security unlock-keychain -p "$KEYCHAIN_PASSWORD" $KEYCHAIN_PATH
+
+          # import certificates to keychain
+          security import $CERT_BUILD_PATH -P "$P12_PASSWORD" -A -t cert -f pkcs12 -k $KEYCHAIN_PATH
+          security import $CERT_INSTALLER_PATH -P "$P12_PASSWORD" -A -t cert -f pkcs12 -k $KEYCHAIN_PATH
+          security list-keychain -d user -s $KEYCHAIN_PATH
+
+          # create notarytool profile
+          xcrun notarytool store-credentials --apple-id "$APPLE_ID" --team-id "$APPLE_TEAM" --password "$APPLE_PASSWORD" velopack-profile
+      - run: bun install
+      - run: bun tauri build --features=metal,coreml,bundle
+      - name: Prepare distribution folder
+        run: |
+          mkdir dist
+          cp target/release/koharu.app dist/
+          cp target/release/*.dylib dist/
+      - name: Package
+        run: |
+          dotnet tool update -g vpk
+          vpk pack -u Koharu -v ${{ github.ref_name }} -p dist -e koharu.app -i assets/Koharu_Halo.ico \
+            --signAppIdentity "Developer ID Application: Mayo Takanashi" \
+            --signInstallIdentity "Developer ID Installer: Mayo Takanashi" \
+            --notaryProfile "velopack-profile" \
+            --keychain $RUNNER_TEMP/app-signing.keychain-db
+      - name: Release
+        if: github.ref_type == 'tag'
+        run: |
+          vpk upload github \
+            --repoUrl https://github.com/${{ github.repository }} \
+            --publish --releaseName ${{ github.ref_name }} \
+            --tag ${{ github.ref_name }} \
+            --token ${{ secrets.GITHUB_TOKEN }} \
+            --merge
