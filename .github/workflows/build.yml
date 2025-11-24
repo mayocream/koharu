@@ -10,16 +10,21 @@ env:
   CUDA_COMPUTE_CAP: 75
 
 jobs:
-  build-windows:
-    name: Windows
-    runs-on: windows-latest
+  build:
+    strategy:
+      matrix:
+        os: [macos-latest, windows-latest]
+    name: ${{ matrix.os }}
+    runs-on: ${{ matrix.os }}
     steps:
       - uses: actions/checkout@v4
       - uses: oven-sh/setup-bun@v2
       - uses: Swatinem/rust-cache@v2
       - uses: Jimver/cuda-toolkit@master
+        if: matrix.os == 'windows-latest'
         with:
           cuda: '12.9.1'
       - uses: ilammy/msvc-dev-cmd@v1
+        if: matrix.os == 'windows-latest'
       - run: bun install
-      - run: bun tauri build --features=cuda
+      - run: bun tauri build
