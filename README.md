@@ -82,9 +82,10 @@ The built binaries will be located in the `target/release` directory.
 
 ## Sponsorship
 
-If you find Koharu useful, consider sponsoring the project to support its development. Either via GitHub Sponsors or Patreon.
+If you find Koharu useful, consider sponsoring the project to support its development!
 
-<iframe src="https://github.com/sponsors/mayocream/button" title="Sponsor Mayo" height="32" width="114" style="border: 0; border-radius: 6px;"></iframe>
+- [GitHub Sponsors](https://github.com/sponsors/mayocream)
+- [Patreon](https://www.patreon.com/mayocream)
 
 ## License
 
