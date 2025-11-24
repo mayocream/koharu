@@ -5,7 +5,6 @@ use ort::execution_providers::ExecutionProvider;
 use rfd::MessageDialog;
 use tauri::Manager;
 use tokio::sync::RwLock;
-use tracing::warn;
 
 use crate::{command, llm, onnx, renderer::TextRenderer, state::State};
 
@@ -49,16 +48,22 @@ async fn setup(app: tauri::AppHandle) -> Result<()> {
     // Initialize ONNX Runtime
     {
         let cuda = ort::execution_providers::CUDAExecutionProvider::default();
-        if !cuda.is_available().map_err(anyhow::Error::from)? {
-            warn!(
-                "CUDA Execution Provider is not available. Falling back to CPU Execution Provider."
-            );
+        let coreml = ort::execution_providers::CoreMLExecutionProvider::default();
+
+        if cuda.is_available().map_err(anyhow::Error::from)? {
+            tracing::info!("Using CUDA Execution Provider for ONNX Runtime.");
+        } else if coreml.is_available().map_err(anyhow::Error::from)? {
+            tracing::info!("Using CoreML Execution Provider for ONNX Runtime.");
+        } else {
+            tracing::info!("Using default CPU Execution Provider for ONNX Runtime.");
         }
 
         ort::init()
             .with_execution_providers([
                 #[cfg(feature = "cuda")]
                 cuda.build(),
+                #[cfg(feature = "coreml")]
+                coreml.build(),
             ])
             .commit()?;
     }

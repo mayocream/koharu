@@ -3,7 +3,8 @@
   "identifier": "Koharu",
   "build": {
     "features": [
-      "metal"
+      "metal",
+      "coreml"
     ]
   }
 }
