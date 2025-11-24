@@ -60,6 +60,13 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       - uses: oven-sh/setup-bun@v2
+      - run: bun install
+      - run: bun tauri build --features=metal,coreml,bundle
+      - name: Prepare distribution folder
+        run: |
+          mkdir dist
+          cp target/release/koharu.app dist/
+          cp target/release/*.dylib dist/
       - name: Install Apple certificates and notary profile
         env:
           BUILD_CERTIFICATE_BASE64: ${{ secrets.BUILD_CERTIFICATE_BASE64 }}
@@ -91,13 +98,6 @@ jobs:
 
           # create notarytool profile
           xcrun notarytool store-credentials --apple-id "$APPLE_ID" --team-id "$APPLE_TEAM" --password "$APPLE_PASSWORD" velopack-profile
-      - run: bun install
-      - run: bun tauri build --features=metal,coreml,bundle
-      - name: Prepare distribution folder
-        run: |
-          mkdir dist
-          cp target/release/koharu.app dist/
-          cp target/release/*.dylib dist/
       - name: Package
         run: |
           dotnet tool update -g vpk
