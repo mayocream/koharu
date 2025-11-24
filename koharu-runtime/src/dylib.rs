@@ -33,6 +33,8 @@ pub const PACKAGES: &[&str] = &[
     #[cfg(feature = "cuda")]
     "nvidia-curand-cu12",
     #[cfg(feature = "onnxruntime")]
+    "onnxruntime/1.22.0",
+    #[cfg(all(feature = "onnxruntime", feature = "cuda"))]
     "onnxruntime-gpu/1.22.0",
 ];
 
@@ -198,9 +200,11 @@ fn current_platform_tag() -> Result<&'static str> {
     if cfg!(target_os = "windows") {
         Ok("win_amd64")
     } else if cfg!(all(target_os = "linux", target_arch = "x86_64")) {
-        Ok("manylinux")
+        Ok("manylinux_2_27_x86_64")
+    } else if cfg!(target_os = "macos") {
+        Ok("macosx_13_0_arm64")
     } else {
-        anyhow::bail!("unsupported platform for CUDA runtime bundling");
+        anyhow::bail!("unsupported platform for runtime bundling");
     }
 }
 
@@ -222,9 +226,7 @@ async fn fetch_and_extract(pkg: String, platform_tag: &str, out_dir: Arc<PathBuf
         if !filename.ends_with(".whl") {
             continue;
         }
-        if filename.contains(platform_tag)
-            || (platform_tag == "manylinux" && filename.contains("x86_64"))
-        {
+        if filename.contains(platform_tag) {
             chosen = Some((file_url.to_string(), filename.to_string()));
             break;
         }
