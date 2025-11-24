@@ -4,8 +4,6 @@ on:
   push:
     tags:
       - '*'
-    branches:
-      - main
 
 permissions:
   contents: write
@@ -44,9 +42,6 @@ jobs:
           dotnet tool update -g vpk
           vpk pack -u Koharu -v ${{ github.ref_name }} -p dist -e koharu.exe -i assets/Koharu_Halo.ico \
             --azureTrustedSignFile .github/signing/metadata.json
-      - name: Release
-        if: github.ref_type == 'tag'
-        run: |
           vpk upload github \
             --repoUrl https://github.com/${{ github.repository }} \
             --publish --releaseName ${{ github.ref_name }} \
@@ -106,9 +101,6 @@ jobs:
             --signInstallIdentity "Developer ID Installer: Mayo Takanashi" \
             --notaryProfile "velopack-profile" \
             --keychain $RUNNER_TEMP/app-signing.keychain-db
-      - name: Release
-        if: github.ref_type == 'tag'
-        run: |
           vpk upload github \
             --repoUrl https://github.com/${{ github.repository }} \
             --publish --releaseName ${{ github.ref_name }} \
