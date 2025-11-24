@@ -20,6 +20,45 @@ use crate::zip;
 /// Keep handles to loaded dynamic libraries alive for process lifetime
 static DYLIB_HANDLES: OnceCell<Vec<libloading::Library>> = OnceCell::new();
 
+#[derive(Clone, Copy)]
+struct DylibSpec {
+    /// Basename as shipped inside the wheel/archive
+    archive_filename: &'static str,
+    /// Basename to write locally (may differ to accommodate preload expectations)
+    alias_filename: &'static str,
+    /// Whether we should preload the library eagerly
+    preload: bool,
+}
+
+#[allow(unused)]
+const fn dylib(name: &'static str) -> DylibSpec {
+    DylibSpec {
+        archive_filename: name,
+        alias_filename: name,
+        preload: true,
+    }
+}
+
+#[allow(unused)]
+const fn dylib_with_alias(
+    archive_filename: &'static str,
+    alias_filename: &'static str,
+) -> DylibSpec {
+    DylibSpec {
+        archive_filename,
+        alias_filename,
+        preload: true,
+    }
+}
+
+#[allow(unused)]
+const fn skip_preload(spec: DylibSpec) -> DylibSpec {
+    DylibSpec {
+        preload: false,
+        ..spec
+    }
+}
+
 /// CUDA packages to pull wheels for
 pub const PACKAGES: &[&str] = &[
     #[cfg(feature = "cuda")]
@@ -40,83 +79,90 @@ pub const PACKAGES: &[&str] = &[
 
 /// Hard-coded load list by platform
 #[cfg(target_os = "windows")]
-const DYLIBS: &[&str] = &[
+const DYLIBS: &[DylibSpec] = &[
     // Core CUDA runtime and BLAS/FFT
     #[cfg(feature = "cuda")]
-    "cudart64_12.dll",
+    dylib("cudart64_12.dll"),
     #[cfg(feature = "cuda")]
-    "cublasLt64_12.dll",
+    dylib("cublasLt64_12.dll"),
     #[cfg(feature = "cuda")]
-    "cublas64_12.dll",
+    dylib("cublas64_12.dll"),
     #[cfg(feature = "cuda")]
-    "cufft64_11.dll",
+    dylib("cufft64_11.dll"),
     #[cfg(feature = "cuda")]
-    "curand64_10.dll",
+    dylib("curand64_10.dll"),
     // cuDNN core and dependency chain (graph -> ops -> adv/cnn)
     #[cfg(feature = "cuda")]
-    "cudnn64_9.dll",
+    dylib("cudnn64_9.dll"),
     #[cfg(feature = "cuda")]
-    "cudnn_graph64_9.dll",
+    dylib("cudnn_graph64_9.dll"),
     #[cfg(feature = "cuda")]
-    "cudnn_ops64_9.dll",
+    dylib("cudnn_ops64_9.dll"),
     #[cfg(feature = "cuda")]
-    "cudnn_heuristic64_9.dll",
+    dylib("cudnn_heuristic64_9.dll"),
     #[cfg(feature = "cuda")]
-    "cudnn_adv64_9.dll",
+    dylib("cudnn_adv64_9.dll"),
     #[cfg(feature = "cuda")]
-    "cudnn_cnn64_9.dll",
+    dylib("cudnn_cnn64_9.dll"),
     // cuDNN engine packs (may require NVRTC/NVJITLINK; load last, ignore failures)
     #[cfg(feature = "cuda")]
-    "cudnn_engines_precompiled64_9.dll",
+    dylib("cudnn_engines_precompiled64_9.dll"),
     #[cfg(feature = "cuda")]
-    "cudnn_engines_runtime_compiled64_9.dll",
+    dylib("cudnn_engines_runtime_compiled64_9.dll"),
     // ONNX Runtime core + shared provider glue
     #[cfg(feature = "onnxruntime")]
-    "onnxruntime.dll",
+    dylib("onnxruntime.dll"),
     #[cfg(feature = "onnxruntime")]
-    "onnxruntime_providers_shared.dll",
+    dylib("onnxruntime_providers_shared.dll"),
     #[cfg(all(feature = "onnxruntime", feature = "cuda"))]
-    "onnxruntime_providers_cuda.dll",
+    skip_preload(dylib("onnxruntime_providers_cuda.dll")),
 ];
 
-#[cfg(not(target_os = "windows"))]
-const DYLIBS: &[&str] = &[
+#[cfg(target_os = "macos")]
+const DYLIBS: &[DylibSpec] = &[
+    // ONNX Runtime core (wheel ships with a versioned basename)
+    #[cfg(feature = "onnxruntime")]
+    dylib_with_alias("libonnxruntime.1.22.0.dylib", "libonnxruntime.dylib"),
+];
+
+#[cfg(all(not(target_os = "windows"), not(target_os = "macos")))]
+const DYLIBS: &[DylibSpec] = &[
     // Core CUDA runtime and BLAS/FFT (sonames)
     #[cfg(feature = "cuda")]
-    "libcudart.so.12",
+    dylib("libcudart.so.12"),
     #[cfg(feature = "cuda")]
-    "libcublasLt.so.12",
+    dylib("libcublasLt.so.12"),
     #[cfg(feature = "cuda")]
-    "libcublas.so.12",
+    dylib("libcublas.so.12"),
     #[cfg(feature = "cuda")]
-    "libcufft.so.11",
+    dylib("libcufft.so.11"),
     #[cfg(feature = "cuda")]
-    "libcurand.so.10",
+    dylib("libcurand.so.10"),
     // cuDNN core and dependency chain
     #[cfg(feature = "cuda")]
-    "libcudnn.so.9",
+    dylib("libcudnn.so.9"),
     #[cfg(feature = "cuda")]
-    "libcudnn_graph.so.9",
+    dylib("libcudnn_graph.so.9"),
     #[cfg(feature = "cuda")]
-    "libcudnn_ops.so.9",
+    dylib("libcudnn_ops.so.9"),
     #[cfg(feature = "cuda")]
-    "libcudnn_heuristic.so.9",
+    dylib("libcudnn_heuristic.so.9"),
     #[cfg(feature = "cuda")]
-    "libcudnn_adv.so.9",
+    dylib("libcudnn_adv.so.9"),
     #[cfg(feature = "cuda")]
-    "libcudnn_cnn.so.9",
+    dylib("libcudnn_cnn.so.9"),
     // cuDNN engine packs
     #[cfg(feature = "cuda")]
-    "libcudnn_engines_precompiled.so.9",
+    dylib("libcudnn_engines_precompiled.so.9"),
     #[cfg(feature = "cuda")]
-    "libcudnn_engines_runtime_compiled.so.9",
+    dylib("libcudnn_engines_runtime_compiled.so.9"),
     // ONNX Runtime core + providers
     #[cfg(feature = "onnxruntime")]
-    "libonnxruntime.so",
+    dylib("libonnxruntime.so"),
     #[cfg(feature = "onnxruntime")]
-    "libonnxruntime_providers_shared.so",
+    dylib("libonnxruntime_providers_shared.so"),
     #[cfg(all(feature = "onnxruntime", feature = "cuda"))]
-    "libonnxruntime_providers_cuda.so",
+    skip_preload(dylib("libonnxruntime_providers_cuda.so")),
 ];
 
 pub async fn ensure_dylibs(path: impl AsRef<Path>) -> Result<()> {
@@ -142,7 +188,7 @@ pub async fn ensure_dylibs(path: impl AsRef<Path>) -> Result<()> {
     Ok(())
 }
 
-/// Preload CUDA/cuDNN dynamic libraries with a dependency-friendly order (Windows).
+/// Preload runtime dynamic libraries with a dependency-friendly order.
 /// Keeps the library handles alive for the process lifetime.
 pub fn preload_dylibs(dir: impl AsRef<Path>) -> Result<()> {
     let dir = dir.as_ref();
@@ -150,19 +196,20 @@ pub fn preload_dylibs(dir: impl AsRef<Path>) -> Result<()> {
     let mut libs = Vec::new();
 
     // Load exactly in our hard-coded order; skip names that are not present.
-    for name in DYLIBS {
-        let path = dir.join(name);
+    for spec in DYLIBS {
+        let path = dir.join(spec.alias_filename);
         if !path.exists() {
             continue;
         }
 
-        // IMPORTANT: Do NOT preload provider DLLs (e.g. onnxruntime_providers_cuda.dll).
+        // IMPORTANT: Do NOT preload provider libraries that expect to be pulled in by
+        // onnxruntime itself (e.g. onnxruntime_providers_cuda.*).
         // Providers expect onnxruntime.dll to load them and to initialize the
         // ProviderHost via providers_shared. Manually loading a provider causes its
         // DllMain to fail (ERROR_DLL_INIT_FAILED/1114) because the host is not set.
         // We only ensure CUDA/cuDNN libraries and the main onnxruntime.dll are
         // present; ONNX Runtime will load the CUDA provider on demand.
-        if name.contains("onnxruntime_providers_cuda") {
+        if !spec.preload {
             continue;
         }
 
@@ -182,15 +229,15 @@ pub fn preload_dylibs(dir: impl AsRef<Path>) -> Result<()> {
     Ok(())
 }
 
-fn wanted_basename(path: &str) -> Option<&str> {
+fn wanted_spec(path: &str) -> Option<&'static DylibSpec> {
     let base = Path::new(path)
         .file_name()
         .and_then(|s| s.to_str())
         .unwrap_or(path);
 
     for want in DYLIBS {
-        if base.eq_ignore_ascii_case(want) {
-            return Some(base);
+        if base.eq_ignore_ascii_case(want.archive_filename) {
+            return Some(want);
         }
     }
     None
@@ -241,7 +288,7 @@ async fn fetch_and_extract(pkg: String, platform_tag: &str, out_dir: Arc<PathBuf
     // If size is None and file exists, treat as OK (no further verification).
     let needs_download = entries
         .par_iter()
-        .filter_map(|e| wanted_basename(&e.path).map(|base| (base, e.size)))
+        .filter_map(|e| wanted_spec(&e.path).map(|spec| (spec.alias_filename, e.size)))
         .any(|(base, rec_size)| {
             let local = out_dir.as_ref().join(base);
             if !local.exists() {
@@ -262,7 +309,7 @@ async fn fetch_and_extract(pkg: String, platform_tag: &str, out_dir: Arc<PathBuf
         info!("{pkg}: download and extract complete");
         Ok(())
     } else {
-        info!("{pkg}: {wheel_name} CUDA libs are up-to-date");
+        info!("{pkg}: {wheel_name} runtime libs are up-to-date");
         Ok(())
     }
 }
@@ -273,14 +320,14 @@ fn extract_from_wheel(bytes: &[u8], out_dir: &Path) -> Result<()> {
     let mut targets: Vec<(String, String)> = Vec::new(); // (full archive path, output basename)
     for i in 0..archive.len() {
         let file = archive.by_index(i)?;
-        if let Some(base) = wanted_basename(file.name()) {
-            targets.push((file.name().to_owned(), base.to_owned()));
+        if let Some(spec) = wanted_spec(file.name()) {
+            targets.push((file.name().to_owned(), spec.alias_filename.to_owned()));
         }
     }
     drop(archive);
 
     if targets.is_empty() {
-        anyhow::bail!("no CUDA libraries found in wheel");
+        anyhow::bail!("no runtime libraries found in wheel");
     }
 
     let results: Result<Vec<(String, u64)>> = targets
