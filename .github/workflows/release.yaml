@@ -92,7 +92,7 @@ jobs:
           security list-keychain -d user -s $KEYCHAIN_PATH
 
           # create notarytool profile
-          xcrun notarytool store-credentials --apple-id "$APPLE_ID" --team-id "$APPLE_TEAM" --password "$APPLE_PASSWORD" velopack-profile
+          xcrun notarytool store-credentials --keychain $KEYCHAIN_PATH --apple-id "$APPLE_ID" --team-id "$APPLE_TEAM" --password "$APPLE_PASSWORD" velopack-profile
       - name: Package
         run: |
           dotnet tool update -g vpk
