@@ -50,6 +50,7 @@ unicode-script = { workspace = true }
 [features]
 default = ["koharu-runtime/onnxruntime"]
 cuda = ["ort/cuda", "koharu-models/cuda", "koharu-runtime/cuda"]
+metal = ["koharu-models/metal"]
 bundle = ["velopack"]
 
 [build-dependencies]

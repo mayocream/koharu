@@ -2,7 +2,7 @@ use std::io::Seek;
 
 use anyhow::Result;
 use candle_core::quantized::gguf_file;
-use candle_core::utils::cuda_is_available;
+use candle_core::utils::{cuda_is_available, metal_is_available};
 use candle_core::{Device, Tensor};
 use candle_transformers::generation::{LogitsProcessor, Sampling};
 use candle_transformers::models::{quantized_llama, quantized_qwen2};
@@ -398,8 +398,12 @@ impl Llm {
 pub fn device() -> Result<Device> {
     if cuda_is_available() {
         Ok(Device::new_cuda(0)?)
+    } else if metal_is_available() {
+        Ok(Device::new_metal(0)?)
     } else {
-        tracing::info!("Running on CPU, to run on GPU, build with `--features cuda`");
+        tracing::info!(
+            "Running on CPU, to run on GPU, build with `--features cuda` or `--features metal` and ensure compatible hardware is available."
+        );
         Ok(Device::Cpu)
     }
 }

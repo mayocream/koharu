@@ -28,6 +28,7 @@ koharu-core = { workspace = true }
 
 [features]
 cuda = ["ort/cuda", "candle-core/cuda", "candle-transformers/cuda"]
+metal = ["candle-core/metal", "candle-transformers/metal"]
 
 [[bin]]
 name = "comic-text-detector"
