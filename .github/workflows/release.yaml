@@ -44,7 +44,7 @@ jobs:
             --azureTrustedSignFile .github/signing/metadata.json
           vpk upload github \
             --repoUrl https://github.com/${{ github.repository }} \
-            --publish --releaseName ${{ github.ref_name }} \
+            --releaseName ${{ github.ref_name }} \
             --tag ${{ github.ref_name }} \
             --token ${{ secrets.GITHUB_TOKEN }} \
             --merge
@@ -103,7 +103,7 @@ jobs:
             --keychain $RUNNER_TEMP/app-signing.keychain-db
           vpk upload github \
             --repoUrl https://github.com/${{ github.repository }} \
-            --publish --releaseName ${{ github.ref_name }} \
+            --releaseName ${{ github.ref_name }} \
             --tag ${{ github.ref_name }} \
             --token ${{ secrets.GITHUB_TOKEN }} \
             --merge
