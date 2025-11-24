@@ -202,7 +202,7 @@ fn current_platform_tag() -> Result<&'static str> {
     } else if cfg!(all(target_os = "linux", target_arch = "x86_64")) {
         Ok("manylinux_2_27_x86_64")
     } else if cfg!(target_os = "macos") {
-        Ok("macosx_13_0_arm64")
+        Ok("macosx_13_0_universal2")
     } else {
         anyhow::bail!("unsupported platform for runtime bundling");
     }
