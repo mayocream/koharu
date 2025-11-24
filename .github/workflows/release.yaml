@@ -65,7 +65,7 @@ jobs:
       - name: Prepare distribution folder
         run: |
           mkdir dist
-          cp target/release/koharu.app dist/
+          cp target/release/koharu dist/
           cp target/release/*.dylib dist/
       - name: Install Apple certificates and notary profile
         env:
@@ -101,7 +101,7 @@ jobs:
       - name: Package
         run: |
           dotnet tool update -g vpk
-          vpk pack -u Koharu -v ${{ github.ref_name }} -p dist -e koharu.app -i assets/Koharu_Halo.ico \
+          vpk pack -u Koharu -v ${{ github.ref_name }} -p dist -e koharu -i assets/Koharu_Halo.ico \
             --signAppIdentity "Developer ID Application: Mayo Takanashi" \
             --signInstallIdentity "Developer ID Installer: Mayo Takanashi" \
             --notaryProfile "velopack-profile" \
