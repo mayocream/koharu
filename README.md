@@ -22,13 +22,15 @@ Under the hood, Koharu uses [ort](https://github.com/pykeio/ort) and [candle](ht
 
 ## GPU acceleration
 
-Currently, Koharu only supports NVIDIA GPUs via CUDA.
-
 ### CUDA
 
 Koharu is built with CUDA support, allowing it to leverage the power of NVIDIA GPUs for faster processing.
 
 Koharu bundles CUDA toolkit 12 and cuDNN 9, so you don't need to install them separately. Just make sure you have the appropriate NVIDIA drivers installed on your system.
+
+### Metal
+
+Koharu also supports Metal for GPU acceleration on macOS with Apple Silicon (M1, M2, etc.). This allows Koharu to run efficiently on a wide range of Apple devices.
 
 ## Models
 
@@ -57,7 +59,7 @@ Koharu supports various quantized LLMs in GGUF format via [candle](https://githu
 
 You can download the latest release of Koharu from the [releases page](https://github.com/mayocream/koharu/releases/latest).
 
-We provide pre-built binaries for Windows, for other platforms, you may need to build from source, see the [Development](#development) section below.
+We provide pre-built binaries for Windows and macOS, for other platforms, you may need to build from source, see the [Development](#development) section below.
 
 ## Development
 
