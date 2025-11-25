@@ -45,6 +45,15 @@ fn initialize() -> Result<()> {
 }
 
 async fn setup(app: tauri::AppHandle) -> Result<()> {
+    // Pre-download dynamic libraries
+    {
+        let lib_dir = dirs::data_local_dir()
+            .unwrap_or_default()
+            .join("Koharu")
+            .join("libs");
+        koharu_runtime::ensure_dylibs(&lib_dir).await?;
+        koharu_runtime::preload_dylibs(&lib_dir)?;
+    }
     // Initialize ONNX Runtime
     {
         let cuda = ort::execution_providers::CUDAExecutionProvider::default();

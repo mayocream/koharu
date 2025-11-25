@@ -753,8 +753,7 @@ dependencies = [
 [[package]]
 name = "candle-core"
 version = "0.9.2-alpha.1"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "14057890649ac8068ff0460f57398f6e3c9d8d168ebec9f43fb894446b131fe3"
+source = "git+https://github.com/mayocream/candle?branch=cuda-dynamic-loading#105204b24b65077b5a541caef4c64459d891feb6"
 dependencies = [
  "byteorder",
  "candle-kernels",
@@ -763,6 +762,7 @@ dependencies = [
  "float8 0.4.2",
  "gemm",
  "half",
+ "libm",
  "memmap2",
  "num-traits",
  "num_cpus",
@@ -771,7 +771,7 @@ dependencies = [
  "rand 0.9.2",
  "rand_distr 0.5.1",
  "rayon",
- "safetensors",
+ "safetensors 0.6.2",
  "thiserror 1.0.69",
  "ug",
  "ug-cuda",
@@ -783,8 +783,7 @@ dependencies = [
 [[package]]
 name = "candle-kernels"
 version = "0.9.2-alpha.1"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "0fad895887a51d1824a5d259d2303b94a28e05c15fad84f9f436bc966a9737da"
+source = "git+https://github.com/mayocream/candle?branch=cuda-dynamic-loading#105204b24b65077b5a541caef4c64459d891feb6"
 dependencies = [
  "bindgen_cuda",
 ]
@@ -792,8 +791,7 @@ dependencies = [
 [[package]]
 name = "candle-metal-kernels"
 version = "0.9.2-alpha.1"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "f4b88d24e8252a0ced24c405a7e2cc70d1c88687e6c023f595da102736df6160"
+source = "git+https://github.com/mayocream/candle?branch=cuda-dynamic-loading#105204b24b65077b5a541caef4c64459d891feb6"
 dependencies = [
  "half",
  "objc2 0.6.3",
@@ -807,8 +805,7 @@ dependencies = [
 [[package]]
 name = "candle-nn"
 version = "0.9.2-alpha.1"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "a5ff267dd576a7d3e66caa8d8f4629b3aedd737400d69f7c9c599fe5aa5f51de"
+source = "git+https://github.com/mayocream/candle?branch=cuda-dynamic-loading#105204b24b65077b5a541caef4c64459d891feb6"
 dependencies = [
  "candle-core",
  "candle-metal-kernels",
@@ -817,7 +814,7 @@ dependencies = [
  "num-traits",
  "objc2-metal 0.3.2",
  "rayon",
- "safetensors",
+ "safetensors 0.6.2",
  "serde",
  "thiserror 1.0.69",
 ]
@@ -825,8 +822,7 @@ dependencies = [
 [[package]]
 name = "candle-transformers"
 version = "0.9.2-alpha.1"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "bbbb4ed0bbce963538fba5adbde9eff822690cc6fdf3fe5d36fd2e94c349cf79"
+source = "git+https://github.com/mayocream/candle?branch=cuda-dynamic-loading#105204b24b65077b5a541caef4c64459d891feb6"
 dependencies = [
  "byteorder",
  "candle-core",
@@ -1885,8 +1881,7 @@ dependencies = [
 [[package]]
 name = "float8"
 version = "0.4.2"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "4203231de188ebbdfb85c11f3c20ca2b063945710de04e7b59268731e728b462"
+source = "git+https://github.com/mayocream/float8?branch=cuda-dynamic-loading#eb2f653be3df4c5b551966d797cbf4f3315bcfa8"
 dependencies = [
  "cudarc",
  "half",
@@ -5525,6 +5520,16 @@ dependencies = [
 ]
 
 [[package]]
+name = "safetensors"
+version = "0.6.2"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "172dd94c5a87b5c79f945c863da53b2ebc7ccef4eca24ac63cca66a41aab2178"
+dependencies = [
+ "serde",
+ "serde_json",
+]
+
+[[package]]
 name = "same-file"
 version = "1.0.6"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -7021,8 +7026,7 @@ dependencies = [
 [[package]]
 name = "ug"
 version = "0.5.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "76b761acf8af3494640d826a8609e2265e19778fb43306c7f15379c78c9b05b0"
+source = "git+https://github.com/mayocream/ug?branch=cuda-dynamic-loading#bce254b909c02f687d9587d90b8bdacb8d2fbd60"
 dependencies = [
  "gemm",
  "half",
@@ -7032,7 +7036,7 @@ dependencies = [
  "num-traits",
  "num_cpus",
  "rayon",
- "safetensors",
+ "safetensors 0.4.5",
  "serde",
  "thiserror 1.0.69",
  "tracing",
@@ -7042,8 +7046,7 @@ dependencies = [
 [[package]]
 name = "ug-cuda"
 version = "0.5.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "9f0a1fa748f26166778c33b8498255ebb7c6bffb472bcc0a72839e07ebb1d9b5"
+source = "git+https://github.com/mayocream/ug?branch=cuda-dynamic-loading#bce254b909c02f687d9587d90b8bdacb8d2fbd60"
 dependencies = [
  "cudarc",
  "half",

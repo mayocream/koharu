@@ -24,6 +24,7 @@ include = [
 koharu-core = { workspace = true }
 koharu-models = { workspace = true }
 koharu-renderer = { workspace = true }
+koharu-runtime = { workspace = true }
 anyhow = { workspace = true }
 ort = { workspace = true }
 rfd = { workspace = true }
@@ -56,5 +57,3 @@ bundle = ["velopack"]
 
 [build-dependencies]
 tauri-build = { workspace = true }
-koharu-runtime = { workspace = true }
-tokio = { workspace = true }

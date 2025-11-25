@@ -31,7 +31,6 @@ jobs:
         run: |
           mkdir dist
           cp target/release/koharu.exe dist/
-          cp target/release/*.dll dist/
       - name: Package
         shell: bash
         env:
@@ -61,7 +60,6 @@ jobs:
         run: |
           mkdir dist
           cp target/release/koharu dist/
-          cp target/release/*.dylib dist/
       - name: Install Apple certificates and notary profile
         env:
           BUILD_CERTIFICATE_BASE64: ${{ secrets.BUILD_CERTIFICATE_BASE64 }}
