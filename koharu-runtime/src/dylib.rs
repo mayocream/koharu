@@ -71,7 +71,7 @@ pub const PACKAGES: &[&str] = &[
     "nvidia-cufft-cu12",
     #[cfg(feature = "cuda")]
     "nvidia-curand-cu12",
-    #[cfg(feature = "onnxruntime")]
+    #[cfg(all(feature = "onnxruntime", not(feature = "cuda")))]
     "onnxruntime/1.22.0",
     #[cfg(all(feature = "onnxruntime", feature = "cuda"))]
     "onnxruntime-gpu/1.22.0",
@@ -112,7 +112,7 @@ const DYLIBS: &[DylibSpec] = &[
     // ONNX Runtime core + shared provider glue
     #[cfg(feature = "onnxruntime")]
     dylib("onnxruntime.dll"),
-    #[cfg(feature = "onnxruntime")]
+    #[cfg(all(feature = "onnxruntime", feature = "cuda"))]
     dylib("onnxruntime_providers_shared.dll"),
     #[cfg(all(feature = "onnxruntime", feature = "cuda"))]
     skip_preload(dylib("onnxruntime_providers_cuda.dll")),
@@ -159,7 +159,7 @@ const DYLIBS: &[DylibSpec] = &[
     // ONNX Runtime core + providers
     #[cfg(feature = "onnxruntime")]
     dylib("libonnxruntime.so"),
-    #[cfg(feature = "onnxruntime")]
+    #[cfg(all(feature = "onnxruntime", feature = "cuda"))]
     dylib("libonnxruntime_providers_shared.so"),
     #[cfg(all(feature = "onnxruntime", feature = "cuda"))]
     skip_preload(dylib("libonnxruntime_providers_cuda.so")),
