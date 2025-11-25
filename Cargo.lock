@@ -3276,6 +3276,7 @@ version = "0.10.1"
 dependencies = [
  "anyhow",
  "candle-core",
+ "candle-nn",
  "candle-transformers",
  "clap",
  "hf-hub",
