@@ -82,10 +82,3 @@ candle-core = { git = "https://github.com/mayocream/candle", branch = "cuda-dyna
 float8 = { git = "https://github.com/mayocream/float8", branch = "cuda-dynamic-loading" }
 ug = { git = "https://github.com/mayocream/ug", branch = "cuda-dynamic-loading" }
 ug-cuda = { git = "https://github.com/mayocream/ug", branch = "cuda-dynamic-loading" }
-
-[profile.release]
-opt-level = "z"
-lto = true
-codegen-units = 1
-panic = "abort"
-strip = true
