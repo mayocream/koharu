@@ -23,6 +23,8 @@ candle-transformers = { workspace = true }
 koharu-core = { workspace = true }
 candle-nn = { workspace = true }
 tokenizers = { workspace = true }
+serde = { workspace = true }
+serde_json = { workspace = true }
 strum = { workspace = true }
 tracing = { workspace = true }
 tokio = { workspace = true }

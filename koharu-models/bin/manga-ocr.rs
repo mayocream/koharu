@@ -1,6 +1,5 @@
 use clap::Parser;
-use koharu_models::manga_ocr::MangaOCR;
-use ort::execution_providers::CUDAExecutionProvider;
+use koharu_models::manga_ocr_candle::MangaOcr;
 
 #[derive(Parser)]
 struct Cli {
@@ -8,19 +7,13 @@ struct Cli {
     input: String,
 }
 
-#[tokio::main]
-async fn main() -> anyhow::Result<()> {
-    ort::init()
-        .with_execution_providers([CUDAExecutionProvider::default().build().error_on_failure()])
-        .commit()?;
-
+fn main() -> anyhow::Result<()> {
     let cli = Cli::parse();
-
-    let mut model = MangaOCR::new().await?;
     let image = image::open(&cli.input)?;
 
-    let output = model.inference(&image)?;
-    println!("{:?}", output);
+    let model = MangaOcr::new()?;
+    let output = model.infer(&image)?;
+    println!("{output}");
 
     Ok(())
 }
