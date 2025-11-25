@@ -31,6 +31,14 @@ fn initialize() -> Result<()> {
     {
         // https://docs.velopack.io/integrating/overview#application-startup
         velopack::VelopackApp::build().run();
+    }
+
+    Ok(())
+}
+
+async fn setup(app: tauri::AppHandle) -> Result<()> {
+    #[cfg(feature = "bundle")]
+    {
         let source = velopack::sources::HttpSource::new(
             "https://github.com/mayocream/koharu/releases/latest/download",
         );
@@ -41,10 +49,6 @@ fn initialize() -> Result<()> {
         }
     }
 
-    Ok(())
-}
-
-async fn setup(app: tauri::AppHandle) -> Result<()> {
     // Pre-download dynamic libraries
     {
         let lib_dir = dirs::data_local_dir()
