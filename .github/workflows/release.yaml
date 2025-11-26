@@ -25,7 +25,7 @@ jobs:
           cuda: '12.9.1'
       - uses: ilammy/msvc-dev-cmd@v1
       - run: bun install
-      - run: bun tauri build --features=cuda,bundle
+      - run: bun tauri build --features=cuda,cudnn,bundle
       - name: Prepare distribution folder
         shell: bash
         run: |

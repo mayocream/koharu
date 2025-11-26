@@ -23,6 +23,14 @@ async function checkNvcc() {
   }
 }
 
+function sortVersionsDesc(versions: string[]) {
+  return versions.sort((a, b) => {
+    const verA = parseInt(a.replace('v', '').replace('.', ''))
+    const verB = parseInt(b.replace('v', '').replace('.', ''))
+    return verB - verA
+  })
+}
+
 async function setupCuda() {
   const cudaPath = process.env.CUDA_PATH
   if (cudaPath) {
@@ -34,6 +42,8 @@ async function setupCuda() {
   const cudaRoot = 'C:/Program Files/NVIDIA GPU Computing Toolkit/CUDA'
   const versions = await readdir(cudaRoot).catch(() => [])
 
+  sortVersionsDesc(versions)
+
   for (const version of versions) {
     if (version.startsWith('v')) {
       const binPath = path.join(cudaRoot, version, 'bin')
@@ -41,7 +51,7 @@ async function setupCuda() {
         process.env.PATH = `${binPath}${path.delimiter}${process.env.PATH}`
         process.env.CUDA_PATH = path.join(cudaRoot, version)
 
-        console.log(`Added CUDA ${version} to PATH: ${binPath}`)
+        console.log(`Added CUDA to PATH: ${binPath}`)
         return
       }
     }
@@ -50,6 +60,37 @@ async function setupCuda() {
   throw new Error(
     'NVCC not found. Please install the CUDA Toolkit from https://developer.nvidia.com/cuda-12-9-1-download-archive',
   )
+}
+
+async function setupCudnn() {
+  const cudnnRoot = 'C:/Program Files/NVIDIA/CUDNN'
+  const versions = await readdir(cudnnRoot).catch(() => [])
+
+  sortVersionsDesc(versions)
+
+  for (const version of versions) {
+    if (version.startsWith('v')) {
+      const binPath = path.join(cudnnRoot, version, 'bin')
+
+      if (await pathExists(binPath)) {
+        const versions = await readdir(binPath)
+
+        sortVersionsDesc(versions)
+
+        for (const version of versions) {
+          const fullPath = path.join(binPath, version)
+          process.env.PATH = `${fullPath}${path.delimiter}${process.env.PATH}`
+
+          console.log(`Added cuDNN to PATH: ${fullPath}`)
+          return
+        }
+      }
+    }
+
+    throw new Error(
+      'cuDNN not found. Please install cuDNN from https://developer.nvidia.com/rdp/cudnn-download',
+    )
+  }
 }
 
 async function setupCl() {
@@ -88,6 +129,9 @@ async function dev() {
         await checkNvcc()
       })
 
+    // Setup cuDNN path
+    await setupCudnn()
+
     // Setup cl.exe path
     await setupCl()
   }
@@ -113,6 +157,6 @@ async function dev() {
 }
 
 dev().catch((err) => {
-  process.stderr.write(`Error: ${err.message}`)
+  process.stderr.write(`Error: ${err.message} \n`)
   process.exit(1)
 })

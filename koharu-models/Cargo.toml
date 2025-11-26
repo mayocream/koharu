@@ -28,10 +28,10 @@ serde_json = { workspace = true }
 strum = { workspace = true }
 tracing = { workspace = true }
 tokio = { workspace = true }
-rustfft = "6"
 
 [features]
 cuda = ["ort/cuda", "candle-core/cuda", "candle-transformers/cuda"]
+cudnn = ["candle-core/cudnn", "candle-transformers/cudnn"]
 metal = ["candle-core/metal", "candle-transformers/metal"]
 coreml = ["ort/coreml"]
 
