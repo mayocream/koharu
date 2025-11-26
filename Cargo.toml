@@ -37,7 +37,7 @@ ort = { version = "=2.0.0-rc.10", default-features = false, features = [
     "tracing",
 ] }
 anyhow = "1.0"
-ndarray = "0.16"
+ndarray = "0.17"
 imageproc = "0.25"
 clap = { version = "4.5", features = ["derive"] }
 serde = { version = "1", features = ["derive"] }
