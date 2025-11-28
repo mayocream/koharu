@@ -391,13 +391,6 @@ pub struct YoloV5 {
     head: YoloV3Head,
 }
 
-pub struct YoloV5Output {
-    pub predictions: Tensor,
-    pub raw_maps: Vec<Tensor>,
-    pub features: Vec<Tensor>,
-    pub detection_features: [Tensor; 3],
-}
-
 impl YoloV5 {
     pub fn load(vb: VarBuilder, num_classes: usize, num_anchors: usize) -> Result<Self> {
         let backbone = CspDarknet53::load(vb.clone())?;
@@ -411,16 +404,11 @@ impl YoloV5 {
         })
     }
 
-    pub fn forward(&self, xs: &Tensor) -> Result<YoloV5Output> {
+    pub fn forward(&self, xs: &Tensor) -> Result<(Tensor, Vec<Tensor>)> {
         let (p3, p4, p5, feature_maps) = self.backbone.forward(xs)?;
         let detection_features = self.neck.forward(&p3, &p4, &p5)?;
-        let (predictions, raw_maps) = self.head.forward(&detection_features)?;
+        let (predictions, _) = self.head.forward(&detection_features)?;
 
-        Ok(YoloV5Output {
-            predictions,
-            raw_maps,
-            features: feature_maps,
-            detection_features,
-        })
+        Ok((predictions, feature_maps))
     }
 }

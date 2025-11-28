@@ -1,6 +1,6 @@
+use anyhow::Result;
 use clap::Parser;
-use koharu_models::comic_text_detector::ComicTextDetector;
-use ort::execution_providers::CUDAExecutionProvider;
+use koharu_models::{comic_text_detector::ComicTextDetector, device};
 
 #[derive(Parser)]
 struct Cli {
@@ -10,29 +10,29 @@ struct Cli {
     #[arg(short, long, value_name = "FILE")]
     output: String,
 
-    #[arg(short, long, default_value_t = 0.5)]
+    #[arg(long, default_value_t = 0.5)]
     confidence_threshold: f32,
 
-    #[arg(short, long, default_value_t = 0.4)]
+    #[arg(long, default_value_t = 0.4)]
     nms_threshold: f32,
+
+    #[arg(long, default_value_t = false)]
+    cpu: bool,
 }
 
 #[tokio::main]
-async fn main() -> anyhow::Result<()> {
-    ort::init()
-        .with_execution_providers([CUDAExecutionProvider::default().build().error_on_failure()])
-        .commit()?;
-
+async fn main() -> Result<()> {
     let cli = Cli::parse();
+    let device = device(cli.cpu)?;
 
-    let mut model = ComicTextDetector::new().await?;
+    let model = ComicTextDetector::load(device).await?;
     let image = image::open(&cli.input)?;
 
-    let output = model.inference(&image, cli.confidence_threshold, cli.nms_threshold)?;
+    let (bboxes, mask) = model.inference(&image)?;
 
     // draw the boxes on the image
     let mut image = image.to_rgba8();
-    for bbox in output.bboxes {
+    for bbox in bboxes {
         imageproc::drawing::draw_hollow_rect_mut(
             &mut image,
             imageproc::rect::Rect::at(bbox.xmin as i32, bbox.ymin as i32).of_size(
@@ -46,7 +46,7 @@ async fn main() -> anyhow::Result<()> {
     let output_image = image::DynamicImage::ImageRgba8(image);
     output_image.save(&cli.output)?;
 
-    output.segment.save(format!("{}_segment.png", cli.output))?;
+    mask.save(format!("{}_mask.png", cli.output))?;
 
     Ok(())
 }
