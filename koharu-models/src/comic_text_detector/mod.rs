@@ -2,6 +2,7 @@ mod dbnet;
 mod unet;
 mod yolo_v5;
 
+use anyhow::bail;
 use candle_core::IndexOp;
 use candle_core::{DType, Device, Tensor};
 use candle_nn::VarBuilder;
@@ -76,11 +77,12 @@ impl ComicTextDetector {
 }
 
 fn preprocess(image: &DynamicImage, device: &Device) -> anyhow::Result<Tensor> {
-    let image = image.resize_to_fill(640, 640, FilterType::CatmullRom);
-    let tensor =
-        Tensor::from_vec(image.to_rgb8().into_raw(), (640, 640, 3), device)?.permute((2, 0, 1))?;
-    let tensor = (tensor.unsqueeze(0)?.to_dtype(DType::F32)? * (1. / 255.))?;
-    Ok(tensor)
+    let image = image::imageops::resize(&image.to_rgb8(), 640, 640, FilterType::CatmullRom);
+    let data = image.into_raw();
+    let tensor = Tensor::from_vec(data, (1, 640, 640, 3), device)?
+        .permute((0, 3, 1, 2))?
+        .to_dtype(DType::F32)?;
+    Ok((tensor * (1. / 255.))?)
 }
 
 fn postprocess_yolo(
@@ -91,7 +93,10 @@ fn postprocess_yolo(
     nms_threshold: f32,
 ) -> anyhow::Result<Vec<Bbox<usize>>> {
     let predictions = predictions.squeeze(0)?;
-    let (num_outputs, num_boxes) = predictions.dims2()?;
+    let (num_boxes, num_outputs) = predictions.dims2()?;
+    if num_outputs < 6 {
+        bail!("invalid prediction shape: expected at least 6 outputs, got {num_outputs}");
+    }
     let num_classes = num_outputs - 5;
 
     let width_scale = original_dimensions.0 as f32 / resized_dimensions.0 as f32;
@@ -100,34 +105,56 @@ fn postprocess_yolo(
     let mut bboxes: Vec<Vec<Bbox<usize>>> = (0..num_classes).map(|_| vec![]).collect();
 
     for index in 0..num_boxes {
-        let pred = Vec::<f32>::try_from(predictions.i((.., index))?)?;
-        let confidence = *pred[4..].iter().max_by(|x, y| x.total_cmp(y)).unwrap();
-        if confidence > confidence_threshold {
-            let mut class_index = 0;
-            for i in 0..num_classes {
-                if pred[4 + i] > pred[4 + class_index] {
-                    class_index = i;
-                }
-            }
-            if pred[class_index + 4] > 0. {
-                let xmin = (pred[0] - pred[2] / 2.) * width_scale;
-                let ymin = (pred[1] - pred[3] / 2.) * height_scale;
-                let xmax = (pred[0] + pred[2] / 2.) * width_scale;
-                let ymax = (pred[1] + pred[3] / 2.) * height_scale;
-                if xmax <= xmin || ymax <= ymin {
-                    continue;
-                }
-                let bbox = Bbox {
-                    xmin,
-                    ymin,
-                    xmax,
-                    ymax,
-                    confidence,
-                    data: class_index,
-                };
-                bboxes[class_index].push(bbox);
-            }
+        let pred = Vec::<f32>::try_from(predictions.i(index)?)?;
+        if pred.len() < num_outputs {
+            continue;
         }
+        if !pred.iter().all(|v| v.is_finite()) {
+            continue;
+        }
+        let objectness = pred[4];
+        let (class_index, class_score) = pred[5..]
+            .iter()
+            .copied()
+            .enumerate()
+            .max_by(|a, b| a.1.total_cmp(&b.1))
+            .unwrap_or((0, 0.0));
+        let confidence = objectness * class_score;
+        if confidence < confidence_threshold || class_index >= num_classes {
+            continue;
+        }
+
+        let cx = pred[0] * width_scale;
+        let cy = pred[1] * height_scale;
+        let w = pred[2] * width_scale;
+        let h = pred[3] * height_scale;
+
+        let mut xmin = cx - w / 2.0;
+        let mut ymin = cy - h / 2.0;
+        let mut xmax = cx + w / 2.0;
+        let mut ymax = cy + h / 2.0;
+
+        let (ow, oh) = (original_dimensions.0 as f32, original_dimensions.1 as f32);
+        xmin = xmin.clamp(0.0, ow);
+        xmax = xmax.clamp(0.0, ow);
+        ymin = ymin.clamp(0.0, oh);
+        ymax = ymax.clamp(0.0, oh);
+
+        let width = xmax - xmin;
+        let height = ymax - ymin;
+        if width < 1.0 || height < 1.0 {
+            continue;
+        }
+
+        let bbox = Bbox {
+            xmin,
+            ymin,
+            xmax,
+            ymax,
+            confidence,
+            data: class_index,
+        };
+        bboxes[class_index].push(bbox);
     }
 
     non_maximum_suppression(&mut bboxes, nms_threshold);
