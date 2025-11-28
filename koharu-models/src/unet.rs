@@ -1,17 +1,8 @@
-use std::collections::HashMap;
-use std::path::Path;
-
-use candle_core::{Error, ModuleT, Result, Tensor};
+use candle_core::{ModuleT, Result, Tensor};
 use candle_nn::{
-    BatchNorm, Conv2d, Conv2dConfig, ConvTranspose2d, ConvTranspose2dConfig, Module, ops,
+    BatchNorm, Conv2d, Conv2dConfig, ConvTranspose2d, ConvTranspose2dConfig, Module, VarBuilder,
+    batch_norm, conv_transpose2d, conv2d, ops,
 };
-
-fn load_tensor(tensors: &HashMap<String, Tensor>, name: &str) -> Result<Tensor> {
-    tensors
-        .get(name)
-        .cloned()
-        .ok_or_else(|| Error::Msg(format!("missing tensor {name}")))
-}
 
 #[allow(unused)]
 #[derive(Clone, Copy)]
@@ -29,34 +20,23 @@ struct ConvBnAct {
 
 impl ConvBnAct {
     fn load(
-        tensors: &HashMap<String, Tensor>,
-        prefix: &str,
-        _k: usize,
+        vb: VarBuilder,
+        c1: usize,
+        c2: usize,
+        k: usize,
         stride: usize,
         padding: usize,
         act: Act,
     ) -> Result<Self> {
-        let conv_w = load_tensor(tensors, &format!("{prefix}.conv.weight"))?;
-        let conv_b = tensors.get(&format!("{prefix}.conv.bias")).cloned();
-        let conv = Conv2d::new(
-            conv_w,
-            conv_b,
-            Conv2dConfig {
-                padding,
-                stride,
-                dilation: 1,
-                groups: 1,
-                cudnn_fwd_algo: None,
-            },
-        );
-        let bn = BatchNorm::new(
-            conv.weight().dims4()?.0,
-            load_tensor(tensors, &format!("{prefix}.bn.running_mean"))?,
-            load_tensor(tensors, &format!("{prefix}.bn.running_var"))?,
-            load_tensor(tensors, &format!("{prefix}.bn.weight"))?,
-            load_tensor(tensors, &format!("{prefix}.bn.bias"))?,
-            1e-5,
-        )?;
+        let cfg = Conv2dConfig {
+            padding,
+            stride,
+            dilation: 1,
+            groups: 1,
+            cudnn_fwd_algo: None,
+        };
+        let conv = conv2d(c1, c2, k, cfg, vb.pp("conv"))?;
+        let bn = batch_norm(c2, 1e-5, vb.pp("bn"))?;
         Ok(Self { conv, bn, act })
     }
 }
@@ -80,14 +60,9 @@ struct Bottleneck {
 }
 
 impl Bottleneck {
-    fn load(
-        tensors: &HashMap<String, Tensor>,
-        prefix: &str,
-        shortcut: bool,
-        act: Act,
-    ) -> Result<Self> {
-        let cv1 = ConvBnAct::load(tensors, &format!("{prefix}.cv1"), 1, 1, 0, act)?;
-        let cv2 = ConvBnAct::load(tensors, &format!("{prefix}.cv2"), 3, 1, 1, act)?;
+    fn load(vb: VarBuilder, c1: usize, c2: usize, shortcut: bool, act: Act) -> Result<Self> {
+        let cv1 = ConvBnAct::load(vb.pp("cv1"), c1, c2, 1, 1, 0, act)?;
+        let cv2 = ConvBnAct::load(vb.pp("cv2"), c2, c2, 3, 1, 1, act)?;
         Ok(Self {
             add: shortcut,
             cv1,
@@ -113,21 +88,24 @@ struct C3 {
 
 impl C3 {
     fn load(
-        tensors: &HashMap<String, Tensor>,
-        prefix: &str,
+        vb: VarBuilder,
+        c1: usize,
+        c2: usize,
         n: usize,
         shortcut: bool,
         act: Act,
     ) -> Result<Self> {
-        let cv1 = ConvBnAct::load(tensors, &format!("{prefix}.cv1"), 1, 1, 0, act)?;
-        let cv2 = ConvBnAct::load(tensors, &format!("{prefix}.cv2"), 1, 1, 0, act)?;
-        let cv3 = ConvBnAct::load(tensors, &format!("{prefix}.cv3"), 1, 1, 0, act)?;
+        let hidden = c2 / 2;
+        let cv1 = ConvBnAct::load(vb.pp("cv1"), c1, hidden, 1, 1, 0, act)?;
+        let cv2 = ConvBnAct::load(vb.pp("cv2"), c1, hidden, 1, 1, 0, act)?;
+        let cv3 = ConvBnAct::load(vb.pp("cv3"), hidden * 2, c2, 1, 1, 0, act)?;
 
         let mut m = Vec::with_capacity(n);
         for i in 0..n {
             m.push(Bottleneck::load(
-                tensors,
-                &format!("{prefix}.m.{i}"),
+                vb.pp(format!("m.{i}")),
+                hidden,
+                hidden,
                 shortcut,
                 act,
             )?);
@@ -157,13 +135,8 @@ struct DoubleConvC3 {
 }
 
 impl DoubleConvC3 {
-    fn load(
-        tensors: &HashMap<String, Tensor>,
-        prefix: &str,
-        stride: usize,
-        act: Act,
-    ) -> Result<Self> {
-        let c3 = C3::load(tensors, &format!("{prefix}.conv"), 1, true, act)?;
+    fn load(vb: VarBuilder, c1: usize, c2: usize, stride: usize, act: Act) -> Result<Self> {
+        let c3 = C3::load(vb.pp("conv"), c1, c2, 1, true, act)?;
         Ok(Self {
             down: stride > 1,
             c3,
@@ -190,26 +163,16 @@ struct DoubleConvUpC3 {
 }
 
 impl DoubleConvUpC3 {
-    fn load(tensors: &HashMap<String, Tensor>, prefix: &str, act: Act) -> Result<Self> {
-        let c3 = C3::load(tensors, &format!("{prefix}.0"), 1, true, act)?;
-        let deconv = ConvTranspose2d::new(
-            load_tensor(tensors, &format!("{prefix}.1.weight"))?,
-            None,
-            ConvTranspose2dConfig {
-                padding: 1,
-                output_padding: 0,
-                stride: 2,
-                dilation: 1,
-            },
-        );
-        let bn = BatchNorm::new(
-            deconv.weight().dims4()?.1,
-            load_tensor(tensors, &format!("{prefix}.2.running_mean"))?,
-            load_tensor(tensors, &format!("{prefix}.2.running_var"))?,
-            load_tensor(tensors, &format!("{prefix}.2.weight"))?,
-            load_tensor(tensors, &format!("{prefix}.2.bias"))?,
-            1e-5,
-        )?;
+    fn load(vb: VarBuilder, c1: usize, c2: usize, act: Act) -> Result<Self> {
+        let c3 = C3::load(vb.pp("0"), c1, c2, 1, true, act)?;
+        let cfg = ConvTranspose2dConfig {
+            padding: 1,
+            output_padding: 0,
+            stride: 2,
+            dilation: 1,
+        };
+        let deconv = conv_transpose2d(c2, c2 / 2, 3, cfg, vb.pp("1"))?;
+        let bn = batch_norm(c2 / 2, 1e-5, vb.pp("2"))?;
         Ok(Self { c3, deconv, bn })
     }
 }
@@ -229,17 +192,14 @@ struct UpsampleConv {
 }
 
 impl UpsampleConv {
-    fn load(tensors: &HashMap<String, Tensor>, prefix: &str) -> Result<Self> {
-        let deconv = ConvTranspose2d::new(
-            load_tensor(tensors, &format!("{prefix}.0.weight"))?,
-            None,
-            ConvTranspose2dConfig {
-                padding: 1,
-                output_padding: 0,
-                stride: 2,
-                dilation: 1,
-            },
-        );
+    fn load(vb: VarBuilder, c1: usize, c2: usize) -> Result<Self> {
+        let cfg = ConvTranspose2dConfig {
+            padding: 1,
+            output_padding: 0,
+            stride: 2,
+            dilation: 1,
+        };
+        let deconv = conv_transpose2d(c1, c2, 3, cfg, vb.pp("0"))?;
         Ok(Self { deconv })
     }
 }
@@ -261,30 +221,17 @@ pub struct Unet {
     upconv6: UpsampleConv,
 }
 
-fn tensor_map_from_pth(
-    weights: impl AsRef<Path>,
-    key: &str,
-    device: &candle_core::Device,
-) -> Result<HashMap<String, Tensor>> {
-    let tensors = candle_core::pickle::read_all_with_key(weights, Some(key))?;
-    tensors
-        .into_iter()
-        .map(|(name, tensor)| tensor.to_device(device).map(|t| (name, t)))
-        .collect()
-}
-
 impl Unet {
-    pub fn load(weights: impl AsRef<Path>, device: &candle_core::Device) -> Result<Self> {
-        let tensors = tensor_map_from_pth(weights, "text_seg", device)?;
+    pub fn load(vb: VarBuilder) -> Result<Self> {
         let act = Act::Leaky;
         Ok(Self {
-            down_conv1: DoubleConvC3::load(&tensors, "down_conv1", 2, act)?,
-            upconv0: DoubleConvUpC3::load(&tensors, "upconv0.conv", act)?,
-            upconv2: DoubleConvUpC3::load(&tensors, "upconv2.conv", act)?,
-            upconv3: DoubleConvUpC3::load(&tensors, "upconv3.conv", act)?,
-            upconv4: DoubleConvUpC3::load(&tensors, "upconv4.conv", act)?,
-            upconv5: DoubleConvUpC3::load(&tensors, "upconv5.conv", act)?,
-            upconv6: UpsampleConv::load(&tensors, "upconv6")?,
+            down_conv1: DoubleConvC3::load(vb.pp("down_conv1"), 3, 64, 2, act)?,
+            upconv0: DoubleConvUpC3::load(vb.pp("upconv0.conv"), 64, 128, act)?,
+            upconv2: DoubleConvUpC3::load(vb.pp("upconv2.conv"), 128, 64, act)?,
+            upconv3: DoubleConvUpC3::load(vb.pp("upconv3.conv"), 128, 64, act)?,
+            upconv4: DoubleConvUpC3::load(vb.pp("upconv4.conv"), 128, 64, act)?,
+            upconv5: DoubleConvUpC3::load(vb.pp("upconv5.conv"), 64, 32, act)?,
+            upconv6: UpsampleConv::load(vb.pp("upconv6"), 32, 1)?,
         })
     }
 
