@@ -1,6 +1,5 @@
 pub mod comic_text_detector;
 pub mod lama;
-pub mod lama_candle;
 pub mod llm;
 pub mod manga_ocr;
 

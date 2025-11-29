@@ -3283,8 +3283,6 @@ dependencies = [
  "image",
  "imageproc",
  "koharu-core",
- "ndarray",
- "ort",
  "serde",
  "serde_json",
  "strum",

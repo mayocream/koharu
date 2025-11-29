@@ -15,8 +15,6 @@ anyhow = { workspace = true }
 clap = { workspace = true }
 image = { workspace = true }
 imageproc = { workspace = true }
-ndarray = { workspace = true }
-ort = { workspace = true }
 hf-hub = { workspace = true }
 candle-core = { workspace = true }
 candle-transformers = { workspace = true }
@@ -30,10 +28,10 @@ tracing = { workspace = true }
 tokio = { workspace = true }
 
 [features]
-cuda = ["ort/cuda", "candle-core/cuda", "candle-transformers/cuda"]
 cudnn = ["candle-core/cudnn", "candle-transformers/cudnn"]
+cuda = ["candle-core/cuda", "candle-transformers/cuda"]
 metal = ["candle-core/metal", "candle-transformers/metal"]
-coreml = ["ort/coreml"]
+coreml = []
 
 [[bin]]
 name = "comic-text-detector"

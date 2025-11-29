@@ -3,6 +3,7 @@ use std::sync::Arc;
 use anyhow::Result;
 use koharu_core::image::SerializableDynamicImage;
 use koharu_models::comic_text_detector::ComicTextDetector;
+use koharu_models::device;
 use koharu_models::lama::Lama;
 use koharu_models::manga_ocr::MangaOcr;
 use tokio::sync::Mutex;
@@ -18,10 +19,11 @@ pub struct Model {
 
 impl Model {
     pub async fn new() -> Result<Self> {
+        let device = device(false)?;
         Ok(Self {
-            detector: Arc::new(Mutex::new(ComicTextDetector::new().await?)),
-            ocr: Arc::new(Mutex::new(MangaOcr::load().await?)),
-            lama: Arc::new(Mutex::new(Lama::new().await?)),
+            detector: Arc::new(Mutex::new(ComicTextDetector::load(device.clone()).await?)),
+            ocr: Arc::new(Mutex::new(MangaOcr::load(device.clone()).await?)),
+            lama: Arc::new(Mutex::new(Lama::load(device).await?)),
         })
     }
 
@@ -99,7 +101,7 @@ impl Model {
             erode_distance,
         );
 
-        let mut lama = self.lama.lock().await;
+        let lama = self.lama.lock().await;
         let result = lama.inference(image, &image::DynamicImage::ImageLuma8(mask))?;
 
         Ok(result.into())
