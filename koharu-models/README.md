@@ -18,4 +18,6 @@ cargo run -p koharu-models --bin llm -- --prompt "konnichiwa" --model vntl-llama
 
 Feature `cuda` enables the CUDA execution provider for ONNX Runtime and candle; without it the models fall back to CPU.
 
-Licensed under Apache-2.0 (`../LICENSE-APACHE`).
+## License
+
+Licensed under Apache-2.0.

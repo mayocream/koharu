@@ -16,4 +16,5 @@ cargo run -p koharu --release --features cuda     # enable CUDA + ORT GPU provid
 `bundle` enables Velopack auto-updates for packaged builds. The UI expects `ui/out` to exist; run `bun run build` in the repo root before packaging.
 
 ## License
-GPL-3.0 for this crate (`../LICENSE-GPL`). Workspace support crates are Apache-2.0 (`../LICENSE-APACHE`).
+
+Licensed under GPL-3.0-only.

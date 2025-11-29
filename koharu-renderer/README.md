@@ -42,4 +42,6 @@ renderer.render(&mut RenderRequest {
 })?;
 ```
 
-Licensed under Apache-2.0 (`../LICENSE-APACHE`).
+## License
+
+Licensed under Apache-2.0.

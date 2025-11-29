@@ -18,4 +18,6 @@ let img = image::open("page.png")?;
 let blob = serde_json::to_vec(&koharu_core::image::SerializableDynamicImage::from(img))?;
 ```
 
-Licensed under Apache-2.0 (`../LICENSE-APACHE`).
+## License
+
+Licensed under Apache-2.0.

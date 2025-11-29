@@ -16,4 +16,6 @@ koharu_runtime::ensure_dylibs(&cache_dir).await?;
 koharu_runtime::preload_dylibs(&cache_dir)?;
 ```
 
-Licensed under Apache-2.0 (`../LICENSE-APACHE`).
+## License
+
+Licensed under Apache-2.0.
