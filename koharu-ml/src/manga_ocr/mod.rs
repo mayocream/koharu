@@ -7,8 +7,10 @@ use std::path::Path;
 use anyhow::{Context, Result};
 use candle_core::{DType, Device, Tensor};
 use candle_nn::VarBuilder;
+use image::GenericImageView;
 use serde::de::DeserializeOwned;
 use tokenizers::Tokenizer;
+use tracing::instrument;
 
 use crate::hf_hub;
 use model::{PreprocessorConfig, VisionEncoderDecoder, VisionEncoderDecoderConfig};
@@ -48,6 +50,7 @@ impl MangaOcr {
         })
     }
 
+    #[instrument(level = "info", skip_all)]
     pub fn inference(&self, image: &image::DynamicImage) -> Result<String> {
         let pixel_values = preprocess_image(
             image,
@@ -63,6 +66,7 @@ impl MangaOcr {
         Ok(post_process(&text))
     }
 
+    #[instrument(level = "info", skip_all)]
     fn forward(&self, pixel_values: &Tensor) -> Result<Vec<u32>> {
         self.model.forward(pixel_values)
     }
@@ -76,6 +80,7 @@ fn load_json<T: DeserializeOwned>(path: &Path) -> Result<T> {
     Ok(parsed)
 }
 
+#[instrument(level = "info", skip_all)]
 fn preprocess_image(
     image: &image::DynamicImage,
     image_size: u32,
@@ -85,41 +90,57 @@ fn preprocess_image(
     do_normalize: bool,
     device: &Device,
 ) -> Result<Tensor> {
-    let gray = image.grayscale().to_rgb8();
-    let resized = if do_resize {
-        image::imageops::resize(
-            &gray,
-            image_size,
-            image_size,
-            image::imageops::FilterType::Triangle,
-        )
+    let (orig_w, orig_h) = image.dimensions();
+    let (width, height) = if do_resize {
+        (image_size as usize, image_size as usize)
     } else {
-        gray
+        (orig_w as usize, orig_h as usize)
     };
-    let (width, height) = resized.dimensions();
-    let mut data = Vec::with_capacity((3 * width * height) as usize);
-    for c in 0..3 {
-        for pixel in resized.pixels() {
-            let std = if image_std[c] == 0.0 {
+
+    let tensor = Tensor::from_vec(
+        image.grayscale().to_rgb8().into_raw(),
+        (1, orig_h as usize, orig_w as usize, 3),
+        device,
+    )?
+    .permute((0, 3, 1, 2))?
+    .to_dtype(DType::F32)?;
+
+    let tensor = if do_resize {
+        tensor.interpolate2d(height, width)?
+    } else {
+        tensor
+    };
+
+    let tensor = (tensor * (1.0 / 255.0))?;
+    let tensor = if do_normalize {
+        let std = [
+            if image_std[0] == 0.0 {
                 1.0
             } else {
-                image_std[c]
-            };
-            let value = if do_normalize {
-                (pixel[c] as f32 / 255.0 - image_mean[c]) / std
+                image_std[0]
+            },
+            if image_std[1] == 0.0 {
+                1.0
             } else {
-                pixel[c] as f32 / 255.0
-            };
-            data.push(value);
-        }
-    }
-    Ok(Tensor::from_vec(
-        data,
-        (1, 3, height as usize, width as usize),
-        device,
-    )?)
+                image_std[1]
+            },
+            if image_std[2] == 0.0 {
+                1.0
+            } else {
+                image_std[2]
+            },
+        ];
+        let mean_t = Tensor::from_slice(image_mean, (1, 3, 1, 1), device)?;
+        let std_t = Tensor::from_slice(&std, (1, 3, 1, 1), device)?;
+        tensor.broadcast_sub(&mean_t)?.broadcast_div(&std_t)?
+    } else {
+        tensor
+    };
+
+    Ok(tensor)
 }
 
+#[instrument(level = "info", skip_all)]
 fn post_process(text: &str) -> String {
     let mut clean = text
         .chars()
