@@ -3,7 +3,6 @@ pub mod lama;
 pub mod lama_candle;
 pub mod llm;
 pub mod manga_ocr;
-pub mod manga_ocr_candle;
 
 use anyhow::Result;
 use candle_core::{

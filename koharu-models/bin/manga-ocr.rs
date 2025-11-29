@@ -1,18 +1,25 @@
 use clap::Parser;
-use koharu_models::manga_ocr_candle::MangaOcr;
+use koharu_models::{device, manga_ocr::MangaOcr};
 
 #[derive(Parser)]
 struct Cli {
     #[arg(short, long, value_name = "FILE")]
     input: String,
+
+    #[arg(long, default_value_t = false)]
+    cpu: bool,
 }
 
-fn main() -> anyhow::Result<()> {
+#[tokio::main]
+async fn main() -> anyhow::Result<()> {
     let cli = Cli::parse();
     let image = image::open(&cli.input)?;
 
-    let model = MangaOcr::new()?;
-    let output = model.infer(&image)?;
+    let device = device(cli.cpu)?;
+
+    let model = MangaOcr::load(device).await?;
+    let output = model.inference(&image)?;
+
     println!("{output}");
 
     Ok(())

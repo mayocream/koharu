@@ -4,7 +4,7 @@ use anyhow::Result;
 use koharu_core::image::SerializableDynamicImage;
 use koharu_models::comic_text_detector::ComicTextDetector;
 use koharu_models::lama::Lama;
-use koharu_models::manga_ocr::MangaOCR;
+use koharu_models::manga_ocr::MangaOcr;
 use tokio::sync::Mutex;
 
 use crate::state::TextBlock;
@@ -12,7 +12,7 @@ use crate::state::TextBlock;
 #[derive(Debug, Clone)]
 pub struct Model {
     detector: Arc<Mutex<ComicTextDetector>>,
-    ocr: Arc<Mutex<MangaOCR>>,
+    ocr: Arc<Mutex<MangaOcr>>,
     lama: Arc<Mutex<Lama>>,
 }
 
@@ -20,7 +20,7 @@ impl Model {
     pub async fn new() -> Result<Self> {
         Ok(Self {
             detector: Arc::new(Mutex::new(ComicTextDetector::new().await?)),
-            ocr: Arc::new(Mutex::new(MangaOCR::new().await?)),
+            ocr: Arc::new(Mutex::new(MangaOcr::load().await?)),
             lama: Arc::new(Mutex::new(Lama::new().await?)),
         })
     }
@@ -61,7 +61,7 @@ impl Model {
         image: &SerializableDynamicImage,
         blocks: &[TextBlock],
     ) -> Result<Vec<TextBlock>> {
-        let mut ocr = self.ocr.lock().await;
+        let ocr = self.ocr.lock().await;
 
         blocks
             .iter()
@@ -72,7 +72,7 @@ impl Model {
                     block.width as u32,
                     block.height as u32,
                 );
-                let text = ocr.inference(&crop)?;
+                let text = ocr.infer(&crop)?;
 
                 Ok(TextBlock {
                     text: text.into(),
