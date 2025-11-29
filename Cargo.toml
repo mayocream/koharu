@@ -1,7 +1,7 @@
 [workspace]
 members = [
     "koharu",
-    "koharu-models",
+    "koharu-ml",
     "koharu-runtime",
     "koharu-core",
     "koharu-renderer",
@@ -22,7 +22,7 @@ keywords = ["manga", "ocr", "translation", "deep_learning", "computer_vision"]
 
 [workspace.dependencies]
 koharu-runtime = { version = "0.10.1", path = "koharu-runtime", default-features = false }
-koharu-models = { version = "0.10.1", path = "koharu-models", default-features = false }
+koharu-ml = { version = "0.10.1", path = "koharu-ml", default-features = false }
 koharu-core = { version = "0.10.1", path = "koharu-core", default-features = false }
 koharu-renderer = { version = "0.10.1", path = "koharu-renderer", default-features = false }
 

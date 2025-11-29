@@ -22,11 +22,10 @@ include = [
 
 [dependencies]
 koharu-core = { workspace = true }
-koharu-models = { workspace = true }
+koharu-ml = { workspace = true }
 koharu-renderer = { workspace = true }
 koharu-runtime = { workspace = true }
 anyhow = { workspace = true }
-ort = { workspace = true }
 rfd = { workspace = true }
 open = { workspace = true }
 serde = { workspace = true }
@@ -49,11 +48,9 @@ dirs = { workspace = true }
 unicode-script = { workspace = true }
 
 [features]
-default = ["koharu-runtime/onnxruntime"]
-cuda = ["ort/cuda", "koharu-models/cuda", "koharu-runtime/cuda"]
-cudnn = ["koharu-models/cudnn"]
-metal = ["koharu-models/metal"]
-coreml = ["ort/coreml", "koharu-models/coreml"]
+cuda = ["koharu-ml/cuda", "koharu-runtime/cuda"]
+cudnn = ["koharu-ml/cudnn"]
+metal = ["koharu-ml/metal"]
 bundle = ["velopack"]
 
 [build-dependencies]
