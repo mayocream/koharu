@@ -1,4 +1,4 @@
-use anyhow::Result;
+use anyhow::{Result, ensure};
 use clap::Parser;
 use koharu_ml::{comic_text_detector::ComicTextDetector, device};
 use tracing_subscriber::fmt::format::FmtSpan;
@@ -10,12 +10,6 @@ struct Cli {
 
     #[arg(short, long, value_name = "FILE")]
     output: String,
-
-    #[arg(long, default_value_t = 0.5)]
-    confidence_threshold: f32,
-
-    #[arg(long, default_value_t = 0.4)]
-    nms_threshold: f32,
 
     #[arg(long, default_value_t = false)]
     cpu: bool,
@@ -34,6 +28,9 @@ async fn main() -> Result<()> {
     let image = image::open(&cli.input)?;
 
     let (bboxes, mask) = model.inference(&image)?;
+
+    ensure!(!bboxes.is_empty(), "No text detected in the image.");
+    ensure!(!mask.iter().all(|m| *m < 255), "No text mask generated.");
 
     // draw the boxes on the image
     let mut image = image.to_rgba8();

@@ -8,15 +8,7 @@ use anyhow::bail;
 use candle_core::{DType, Device, IndexOp, Tensor};
 use candle_nn::VarBuilder;
 use candle_transformers::object_detection::{Bbox, non_maximum_suppression};
-use image::{
-    DynamicImage, GenericImageView, GrayImage, ImageBuffer,
-    imageops::{FilterType, replace, resize},
-};
-use imageproc::{
-    contrast::{ThresholdType, threshold_mut},
-    distance_transform::Norm,
-    morphology::{close, dilate_mut},
-};
+use image::{DynamicImage, GenericImageView, GrayImage};
 use tracing::instrument;
 
 use crate::hf_hub;
@@ -102,29 +94,23 @@ impl ComicTextDetector {
 
 #[instrument(level = "info", skip_all)]
 fn preprocess(image: &DynamicImage, device: &Device) -> anyhow::Result<(Tensor, (u32, u32))> {
-    let (initial_h, initial_w) = image.dimensions();
-    // resize while keeping aspect ratio
-    let (height, width) = if initial_h < initial_w {
-        (IMAGE_SIZE * initial_h / initial_w, IMAGE_SIZE)
+    let (orig_w, orig_h) = image.dimensions();
+    let (width, height) = if orig_w >= orig_h {
+        (IMAGE_SIZE, IMAGE_SIZE * orig_h / orig_w)
     } else {
-        (IMAGE_SIZE, IMAGE_SIZE * initial_w / initial_h)
+        (IMAGE_SIZE * orig_w / orig_h, IMAGE_SIZE)
     };
-    let resized = resize(&image.to_rgb8(), width, height, FilterType::Triangle);
-
-    // pad to reserve aspect ratio
-    let mut padded = ImageBuffer::new(IMAGE_SIZE, IMAGE_SIZE);
-    replace(&mut padded, &resized, 0, 0);
-
-    let data = padded.to_vec();
+    let (w, h) = (width as usize, height as usize);
     let tensor = (Tensor::from_vec(
-        data,
-        (1, IMAGE_SIZE as usize, IMAGE_SIZE as usize, 3),
+        image.to_rgb8().into_raw(),
+        (1, orig_h as usize, orig_w as usize, 3),
         device,
     )?
-    // NHWC to NCHW
     .permute((0, 3, 1, 2))?
-    // Normalize to [0, 1]
     .to_dtype(DType::F32)?
+    .interpolate2d(h, w)?
+    .pad_with_zeros(2, 0, IMAGE_SIZE as usize - h)?
+    .pad_with_zeros(3, 0, IMAGE_SIZE as usize - w)?
         * (1. / 255.))?;
 
     Ok((tensor, (width, height)))
@@ -218,33 +204,46 @@ fn postprocess_mask(
     let valid_h = mask_h.min(resized_dimensions.1 as usize);
     let valid_w = mask_w.min(resized_dimensions.0 as usize);
 
-    let mask: Vec<Vec<f32>> = fused
+    let fused = fused
         .narrow(0, 0, valid_h)?
         .narrow(1, 0, valid_w)?
-        .to_vec2()?;
-    let data: Vec<u8> = mask
-        .into_iter()
-        .flatten()
-        .map(|x| (x.clamp(0.0, 1.0) * 255.0) as u8)
-        .collect();
-    let image = GrayImage::from_raw(valid_w as u32, valid_h as u32, data)
+        .unsqueeze(0)?
+        .unsqueeze(0)?;
+
+    let resized = fused.interpolate2d(
+        original_dimensions.1 as usize,
+        original_dimensions.0 as usize,
+    )?;
+    let threshold = BINARY_THRESHOLD as f32 / 255.0;
+    let binary = resized.ge(threshold)?.to_dtype(DType::F32)?;
+
+    let closed = morph_close(&binary, HOLE_CLOSE_RADIUS as usize)?;
+    let dilated = dilate(&closed, DILATION_RADIUS as usize)?;
+    let mask = dilated.squeeze(0)?.squeeze(0)?;
+
+    let mask = (mask * 255.)?.to_dtype(DType::U8)?;
+    let data: Vec<u8> = mask.flatten_all()?.to_vec1()?;
+    let image = GrayImage::from_raw(original_dimensions.0, original_dimensions.1, data)
         .ok_or_else(|| anyhow::anyhow!("failed to build mask image"))?;
 
-    let mut mask = resize(
-        &image,
-        original_dimensions.0,
-        original_dimensions.1,
-        FilterType::Nearest,
-    );
+    Ok(image)
+}
 
-    // Binarize aggressively to avoid thin edges from interpolation.
-    threshold_mut(&mut mask, BINARY_THRESHOLD, ThresholdType::Binary);
+fn dilate(mask: &Tensor, radius: usize) -> anyhow::Result<Tensor> {
+    let kernel = 2 * radius + 1;
+    let padded = mask
+        .pad_with_zeros(2, radius, radius)?
+        .pad_with_zeros(3, radius, radius)?;
+    Ok(padded.max_pool2d_with_stride((kernel, kernel), (1, 1))?)
+}
 
-    // Close small holes and smooth stroke interiors.
-    mask = close(&mask, Norm::LInf, HOLE_CLOSE_RADIUS as u8);
+fn erode(mask: &Tensor, radius: usize) -> anyhow::Result<Tensor> {
+    let inverted = (1.0 - mask)?;
+    let dilated = dilate(&inverted, radius)?;
+    Ok((1.0 - dilated)?)
+}
 
-    // Light dilation to regain thickness.
-    dilate_mut(&mut mask, Norm::L1, DILATION_RADIUS as u8);
-
-    Ok(mask)
+fn morph_close(mask: &Tensor, radius: usize) -> anyhow::Result<Tensor> {
+    let dilated = dilate(mask, radius)?;
+    erode(&dilated, radius)
 }
