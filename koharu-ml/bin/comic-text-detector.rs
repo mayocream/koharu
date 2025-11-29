@@ -1,6 +1,7 @@
 use anyhow::Result;
 use clap::Parser;
 use koharu_ml::{comic_text_detector::ComicTextDetector, device};
+use tracing_subscriber::fmt::format::FmtSpan;
 
 #[derive(Parser)]
 struct Cli {
@@ -22,6 +23,10 @@ struct Cli {
 
 #[tokio::main]
 async fn main() -> Result<()> {
+    tracing_subscriber::fmt()
+        .with_span_events(FmtSpan::CLOSE)
+        .init();
+
     let cli = Cli::parse();
     let device = device(cli.cpu)?;
 

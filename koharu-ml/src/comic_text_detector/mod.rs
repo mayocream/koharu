@@ -17,6 +17,7 @@ use imageproc::{
     distance_transform::Norm,
     morphology::{close, dilate_mut},
 };
+use tracing::instrument;
 
 use crate::hf_hub;
 
@@ -65,6 +66,7 @@ impl ComicTextDetector {
         })
     }
 
+    #[instrument(level = "info", skip_all)]
     pub fn inference(&self, image: &DynamicImage) -> anyhow::Result<(Vec<Bbox<usize>>, GrayImage)> {
         let original_dimensions = image.dimensions();
         let (image_tensor, resized_dimensions) = preprocess(image, &self.device)?;
@@ -80,6 +82,7 @@ impl ComicTextDetector {
         Ok((bboxes, mask))
     }
 
+    #[instrument(level = "info", skip_all)]
     fn forward(&self, image: &Tensor) -> anyhow::Result<(Tensor, Tensor, Tensor)> {
         let (predictions, features) = self.yolo.forward(image)?;
         let (mask, features) = self.unet.forward(
@@ -97,6 +100,7 @@ impl ComicTextDetector {
     }
 }
 
+#[instrument(level = "info", skip_all)]
 fn preprocess(image: &DynamicImage, device: &Device) -> anyhow::Result<(Tensor, (u32, u32))> {
     let (initial_h, initial_w) = image.dimensions();
     // resize while keeping aspect ratio
@@ -126,6 +130,7 @@ fn preprocess(image: &DynamicImage, device: &Device) -> anyhow::Result<(Tensor, 
     Ok((tensor, (width, height)))
 }
 
+#[instrument(level = "info", skip(predictions))]
 fn postprocess_yolo(
     predictions: &Tensor,
     original_dimensions: (u32, u32),
@@ -183,6 +188,7 @@ fn postprocess_yolo(
     Ok(bboxes.into_iter().flatten().collect())
 }
 
+#[instrument(level = "info", skip(mask, shrink_thresh))]
 fn postprocess_mask(
     mask: &Tensor,
     shrink_thresh: &Tensor,
