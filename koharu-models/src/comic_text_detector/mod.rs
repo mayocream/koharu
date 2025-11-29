@@ -3,15 +3,18 @@ mod unet;
 mod yolo_v5;
 
 use anyhow::bail;
-use candle_core::IndexOp;
-use candle_core::{DType, Device, Tensor};
+use candle_core::{DType, Device, IndexOp, Tensor};
 use candle_nn::VarBuilder;
 use candle_transformers::object_detection::{Bbox, non_maximum_suppression};
-use image::DynamicImage;
-use image::GenericImageView;
-use image::GrayImage;
-use image::imageops::FilterType;
+use image::{
+    DynamicImage, GenericImageView, GrayImage, ImageBuffer,
+    imageops::{FilterType, replace, resize},
+};
 use koharu_core::download::hf_hub;
+
+const IMAGE_SIZE: u32 = 1024;
+const CONFIDENCE_THRESHOLD: f32 = 0.4;
+const NMS_THRESHOLD: f32 = 0.35;
 
 pub struct ComicTextDetector {
     yolo: yolo_v5::YoloV5,
@@ -50,12 +53,18 @@ impl ComicTextDetector {
     }
 
     pub fn inference(&self, image: &DynamicImage) -> anyhow::Result<(Vec<Bbox<usize>>, GrayImage)> {
-        let image_t = preprocess(image, &self.device)?;
-        let (predictions, mask, _shrink_thresh) = self.forward(&image_t)?;
+        let original_dimensions = image.dimensions();
+        let (image_tensor, resized_dimensions) = preprocess(image, &self.device)?;
+        let (predictions, mask, shrink_threshold) = self.forward(&image_tensor)?;
 
         Ok((
-            postprocess_yolo(&predictions, image.dimensions(), (640, 640), 0.3, 0.5)?,
-            postprocess_mask(&mask, image.dimensions(), (640, 640))?,
+            postprocess_yolo(&predictions, original_dimensions, resized_dimensions)?,
+            postprocess_mask(
+                &mask,
+                &shrink_threshold,
+                original_dimensions,
+                resized_dimensions,
+            )?,
         ))
     }
 
@@ -76,117 +85,127 @@ impl ComicTextDetector {
     }
 }
 
-fn preprocess(image: &DynamicImage, device: &Device) -> anyhow::Result<Tensor> {
-    let image = image::imageops::resize(&image.to_rgb8(), 640, 640, FilterType::CatmullRom);
-    let data = image.into_raw();
-    let tensor = Tensor::from_vec(data, (1, 640, 640, 3), device)?
-        .permute((0, 3, 1, 2))?
-        .to_dtype(DType::F32)?;
-    Ok((tensor * (1. / 255.))?)
+fn preprocess(image: &DynamicImage, device: &Device) -> anyhow::Result<(Tensor, (u32, u32))> {
+    let (initial_h, initial_w) = image.dimensions();
+    // resize while keeping aspect ratio
+    let (height, width) = if initial_h < initial_w {
+        (IMAGE_SIZE * initial_h / initial_w, IMAGE_SIZE)
+    } else {
+        (IMAGE_SIZE, IMAGE_SIZE * initial_w / initial_h)
+    };
+    let resized = resize(&image.to_rgb8(), width, height, FilterType::Triangle);
+
+    // pad to reserve aspect ratio
+    let mut padded = ImageBuffer::new(IMAGE_SIZE, IMAGE_SIZE);
+    replace(&mut padded, &resized, 0, 0);
+
+    let data = padded.to_vec();
+    let tensor = (Tensor::from_vec(
+        data,
+        (1, IMAGE_SIZE as usize, IMAGE_SIZE as usize, 3),
+        device,
+    )?
+    // NHWC to NCHW
+    .permute((0, 3, 1, 2))?
+    // Normalize to [0, 1]
+    .to_dtype(DType::F32)?
+        * (1. / 255.))?;
+
+    Ok((tensor, (width, height)))
 }
 
 fn postprocess_yolo(
     predictions: &Tensor,
     original_dimensions: (u32, u32),
     resized_dimensions: (u32, u32),
-    confidence_threshold: f32,
-    nms_threshold: f32,
 ) -> anyhow::Result<Vec<Bbox<usize>>> {
+    // predictions shape: (1, num_boxes, num_outputs)
+    // this removes the batch dimension
     let predictions = predictions.squeeze(0)?;
     let (num_boxes, num_outputs) = predictions.dims2()?;
     if num_outputs < 6 {
         bail!("invalid prediction shape: expected at least 6 outputs, got {num_outputs}");
     }
+    // YOLOv5 format: [cx, cy, w, h, objectness, class1_score, class2_score, ...]
     let num_classes = num_outputs - 5;
 
-    let width_scale = original_dimensions.0 as f32 / resized_dimensions.0 as f32;
-    let height_scale = original_dimensions.1 as f32 / resized_dimensions.1 as f32;
+    let (orig_w, orig_h) = original_dimensions;
+    let (resized_w, resized_h) = resized_dimensions;
+    let w_ratio = orig_w as f32 / resized_w as f32;
+    let h_ratio = orig_h as f32 / resized_h as f32;
 
-    let mut bboxes: Vec<Vec<Bbox<usize>>> = (0..num_classes).map(|_| vec![]).collect();
-
-    for index in 0..num_boxes {
-        let pred = Vec::<f32>::try_from(predictions.i(index)?)?;
-        if pred.len() < num_outputs {
-            continue;
-        }
-        if !pred.iter().all(|v| v.is_finite()) {
-            continue;
-        }
-        let objectness = pred[4];
-        let (class_index, class_score) = pred[5..]
-            .iter()
-            .copied()
-            .enumerate()
-            .max_by(|a, b| a.1.total_cmp(&b.1))
-            .unwrap_or((0, 0.0));
-        let confidence = objectness * class_score;
-        if confidence < confidence_threshold || class_index >= num_classes {
-            continue;
-        }
-
-        let cx = pred[0] * width_scale;
-        let cy = pred[1] * height_scale;
-        let w = pred[2] * width_scale;
-        let h = pred[3] * height_scale;
-
-        let mut xmin = cx - w / 2.0;
-        let mut ymin = cy - h / 2.0;
-        let mut xmax = cx + w / 2.0;
-        let mut ymax = cy + h / 2.0;
-
-        let (ow, oh) = (original_dimensions.0 as f32, original_dimensions.1 as f32);
-        xmin = xmin.clamp(0.0, ow);
-        xmax = xmax.clamp(0.0, ow);
-        ymin = ymin.clamp(0.0, oh);
-        ymax = ymax.clamp(0.0, oh);
-
-        let width = xmax - xmin;
-        let height = ymax - ymin;
-        if width < 1.0 || height < 1.0 {
+    let mut bboxes: Vec<Vec<Bbox<usize>>> = (0..num_classes).map(|_| Vec::new()).collect();
+    for idx in 0..num_boxes {
+        let pred = Vec::<f32>::try_from(predictions.i(idx)?)?;
+        let (class_index, confidence) = {
+            let (cls_idx, cls_score) = pred[5..]
+                .iter()
+                .copied()
+                .enumerate()
+                .max_by(|a, b| a.1.total_cmp(&b.1))
+                .unwrap_or((0, 0.0));
+            (cls_idx, pred[4] * cls_score)
+        };
+        if confidence < CONFIDENCE_THRESHOLD {
             continue;
         }
 
         let bbox = Bbox {
-            xmin,
-            ymin,
-            xmax,
-            ymax,
+            xmin: ((pred[0] - pred[2] / 2.) * w_ratio).clamp(0., orig_w as f32),
+            xmax: ((pred[0] + pred[2] / 2.) * w_ratio).clamp(0., orig_w as f32),
+            ymin: ((pred[1] - pred[3] / 2.) * h_ratio).clamp(0., orig_h as f32),
+            ymax: ((pred[1] + pred[3] / 2.) * h_ratio).clamp(0., orig_h as f32),
             confidence,
             data: class_index,
         };
         bboxes[class_index].push(bbox);
     }
 
-    non_maximum_suppression(&mut bboxes, nms_threshold);
+    non_maximum_suppression(&mut bboxes, NMS_THRESHOLD);
 
-    let bboxes = bboxes.into_iter().flatten().collect();
-
-    Ok(bboxes)
+    Ok(bboxes.into_iter().flatten().collect())
 }
 
 fn postprocess_mask(
     mask: &Tensor,
+    shrink_thresh: &Tensor,
     original_dimensions: (u32, u32),
     resized_dimensions: (u32, u32),
 ) -> anyhow::Result<GrayImage> {
-    let mask = mask.squeeze(0)?.squeeze(0)?;
-    let mask: Vec<Vec<f32>> = mask.to_vec2()?;
+    // Fuse UNet mask with DBNet shrink map before resizing back
+    let shrink = shrink_thresh.squeeze(0)?.i(0)?.unsqueeze(0)?; // (1, H, W)
+    let mask = mask.squeeze(0)?; // (1, H, W)
+
+    let (_, h_mask, w_mask) = mask.dims3()?;
+    let (_, h_shrink, w_shrink) = shrink.dims3()?;
+    let (h, w) = (h_mask.min(h_shrink), w_mask.min(w_shrink));
+
+    let fused = mask
+        .narrow(1, 0, h)?
+        .narrow(2, 0, w)?
+        .minimum(&shrink.narrow(1, 0, h)?.narrow(2, 0, w)?)?
+        .squeeze(0)?;
+
+    let (mask_h, mask_w) = fused.dims2()?;
+    let valid_h = mask_h.min(resized_dimensions.1 as usize);
+    let valid_w = mask_w.min(resized_dimensions.0 as usize);
+
+    let mask: Vec<Vec<f32>> = fused
+        .narrow(0, 0, valid_h)?
+        .narrow(1, 0, valid_w)?
+        .to_vec2()?;
     let data: Vec<u8> = mask
         .into_iter()
         .flatten()
         .map(|x| (x.clamp(0.0, 1.0) * 255.0) as u8)
         .collect();
-    let image = GrayImage::from_raw(
-        resized_dimensions.0 as u32,
-        resized_dimensions.1 as u32,
-        data,
-    )
-    .ok_or_else(|| anyhow::anyhow!("failed to build mask image"))?;
+    let image = GrayImage::from_raw(valid_w as u32, valid_h as u32, data)
+        .ok_or_else(|| anyhow::anyhow!("failed to build mask image"))?;
 
-    Ok(image::imageops::resize(
+    Ok(resize(
         &image,
         original_dimensions.0,
         original_dimensions.1,
-        image::imageops::FilterType::Lanczos3,
+        FilterType::Triangle,
     ))
 }
