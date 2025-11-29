@@ -6,6 +6,8 @@ Koharu introduces a new workflow for manga translation, utilizing the power of A
 
 Under the hood, Koharu uses [candle](https://github.com/huggingface/candle) for high-performance inference, and uses [Tauri](https://github.com/tauri-apps/tauri) for the GUI. All components are written in Rust, ensuring safety and speed.
 
+---
+
 ![screenshot-1](assets/koharu-screenshot-1.png)
 ![screenshot-2](assets/koharu-screenshot-2.png)
 
