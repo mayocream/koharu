@@ -1,4 +1,5 @@
 use candle_core::{DType, Tensor};
+use tracing::{info, instrument};
 
 pub(super) fn move_axis_last(
     t: &Tensor,
@@ -34,6 +35,7 @@ fn bit_reverse_indices(len: usize) -> Vec<i64> {
         .collect()
 }
 
+#[instrument(level = "info", skip_all)]
 pub(super) fn fft_axis_power2(
     re: &Tensor,
     im: &Tensor,
@@ -144,11 +146,21 @@ fn pad_to_pow2(xs: &Tensor) -> candle_core::Result<(Tensor, usize, usize)> {
     Ok((xs, h2, w2))
 }
 
+#[instrument(level = "info", skip_all)]
 pub(super) fn rfft2_power2(
     xs: &Tensor,
 ) -> candle_core::Result<(Tensor, Tensor, usize, usize, usize, usize)> {
     let (b, c, h, w) = xs.dims4()?;
     let (padded, h2, w2) = pad_to_pow2(xs)?;
+    info!(
+        batch = b,
+        channels = c,
+        height = h,
+        width = w,
+        padded_height = h2,
+        padded_width = w2,
+        "rfft2_power2 padding input"
+    );
     let re0 = padded.to_dtype(DType::F32)?;
     let im0 = Tensor::zeros_like(&re0)?;
     let (re_w, im_w) = dft_axis(&re0, &im0, 3, false)?;
@@ -161,6 +173,7 @@ pub(super) fn rfft2_power2(
     Ok((re_hw, im_hw, h2, w2, h, w))
 }
 
+#[instrument(level = "info", skip_all)]
 pub(super) fn irfft2_power2(
     re_half: &Tensor,
     im_half: &Tensor,

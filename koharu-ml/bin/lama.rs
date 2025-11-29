@@ -1,5 +1,6 @@
 use clap::Parser;
 use koharu_ml::{device, lama::Lama};
+use tracing_subscriber::fmt::format::FmtSpan;
 
 #[derive(Parser)]
 struct Cli {
@@ -18,6 +19,10 @@ struct Cli {
 
 #[tokio::main]
 async fn main() -> anyhow::Result<()> {
+    tracing_subscriber::fmt()
+        .with_span_events(FmtSpan::CLOSE)
+        .init();
+
     let cli = Cli::parse();
 
     let device = device(cli.cpu)?;
