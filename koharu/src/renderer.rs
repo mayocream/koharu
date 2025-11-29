@@ -2,7 +2,6 @@ use std::sync::Arc;
 
 use anyhow::Result;
 use image::{DynamicImage, RgbaImage};
-use koharu_core::image::SerializableDynamicImage;
 use koharu_renderer::{
     Script,
     font::{FontBook, Language},
@@ -12,7 +11,10 @@ use koharu_renderer::{
 use tokio::sync::Mutex;
 use unicode_script::UnicodeScript;
 
-use crate::state::{Document, TextBlock};
+use crate::{
+    image::SerializableDynamicImage,
+    state::{Document, TextBlock},
+};
 
 pub struct TextRenderer {
     fontbook: Arc<Mutex<FontBook>>,

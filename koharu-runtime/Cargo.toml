@@ -17,6 +17,8 @@ zip = { workspace = true }
 rayon = { workspace = true }
 tracing = { workspace = true }
 reqwest = { workspace = true }
+reqwest-middleware = { workspace = true }
+reqwest-retry = { workspace = true }
 tokio = { workspace = true }
 futures = { workspace = true }
 flate2 = { workspace = true }
@@ -24,12 +26,11 @@ csv = { workspace = true }
 once_cell = { workspace = true }
 libloading = { workspace = true }
 num_cpus = { workspace = true }
-koharu-core = { workspace = true }
 
 [dev-dependencies]
 tempfile = { workspace = true }
 
 [features]
-default = ["cuda", "onnxruntime"]
+default = ["cuda", "cudnn"]
 cuda = []
-onnxruntime = []
+cudnn = []

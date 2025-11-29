@@ -21,7 +21,6 @@ include = [
 ]
 
 [dependencies]
-koharu-core = { workspace = true }
 koharu-ml = { workspace = true }
 koharu-renderer = { workspace = true }
 koharu-runtime = { workspace = true }
@@ -48,8 +47,8 @@ dirs = { workspace = true }
 unicode-script = { workspace = true }
 
 [features]
-cuda = ["koharu-ml/cuda", "koharu-runtime/cuda"]
-cudnn = ["koharu-ml/cudnn"]
+cuda = ["koharu-runtime/cuda", "koharu-ml/cuda"]
+cudnn = ["koharu-runtime/cudnn", "koharu-ml/cudnn"]
 metal = ["koharu-ml/metal"]
 bundle = ["velopack"]
 

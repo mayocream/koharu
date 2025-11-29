@@ -9,13 +9,15 @@ use std::{
 
 use anyhow::Result;
 use futures::stream::{self, StreamExt, TryStreamExt};
-use koharu_core::download::{self, http_client};
 use once_cell::sync::OnceCell;
 use rayon::iter::{IntoParallelRefIterator, ParallelIterator};
 use tokio::task;
 use tracing::info;
 
-use crate::zip;
+use crate::{
+    http::{http_client, http_download},
+    zip,
+};
 
 /// Keep handles to loaded dynamic libraries alive for process lifetime
 static DYLIB_HANDLES: OnceCell<Vec<libloading::Library>> = OnceCell::new();
@@ -64,17 +66,13 @@ pub const PACKAGES: &[&str] = &[
     #[cfg(feature = "cuda")]
     "nvidia-cuda-runtime-cu12",
     #[cfg(feature = "cuda")]
-    "nvidia-cudnn-cu12",
-    #[cfg(feature = "cuda")]
     "nvidia-cublas-cu12",
     #[cfg(feature = "cuda")]
     "nvidia-cufft-cu12",
     #[cfg(feature = "cuda")]
     "nvidia-curand-cu12",
-    #[cfg(all(feature = "onnxruntime", not(feature = "cuda")))]
-    "onnxruntime/1.22.0",
-    #[cfg(all(feature = "onnxruntime", feature = "cuda"))]
-    "onnxruntime-gpu/1.22.0",
+    #[cfg(feature = "cudnn")]
+    "nvidia-cudnn-cu12",
 ];
 
 /// Hard-coded load list by platform
@@ -92,38 +90,27 @@ const DYLIBS: &[DylibSpec] = &[
     #[cfg(feature = "cuda")]
     dylib("curand64_10.dll"),
     // cuDNN core and dependency chain (graph -> ops -> adv/cnn)
-    #[cfg(feature = "cuda")]
+    #[cfg(feature = "cudnn")]
     dylib("cudnn64_9.dll"),
-    #[cfg(feature = "cuda")]
+    #[cfg(feature = "cudnn")]
     dylib("cudnn_graph64_9.dll"),
-    #[cfg(feature = "cuda")]
+    #[cfg(feature = "cudnn")]
     dylib("cudnn_ops64_9.dll"),
-    #[cfg(feature = "cuda")]
+    #[cfg(feature = "cudnn")]
     dylib("cudnn_heuristic64_9.dll"),
-    #[cfg(feature = "cuda")]
+    #[cfg(feature = "cudnn")]
     dylib("cudnn_adv64_9.dll"),
-    #[cfg(feature = "cuda")]
+    #[cfg(feature = "cudnn")]
     dylib("cudnn_cnn64_9.dll"),
     // cuDNN engine packs (may require NVRTC/NVJITLINK; load last, ignore failures)
-    #[cfg(feature = "cuda")]
+    #[cfg(feature = "cudnn")]
     dylib("cudnn_engines_precompiled64_9.dll"),
-    #[cfg(feature = "cuda")]
+    #[cfg(feature = "cudnn")]
     dylib("cudnn_engines_runtime_compiled64_9.dll"),
-    // ONNX Runtime core + shared provider glue
-    #[cfg(feature = "onnxruntime")]
-    dylib("onnxruntime.dll"),
-    #[cfg(all(feature = "onnxruntime", feature = "cuda"))]
-    dylib("onnxruntime_providers_shared.dll"),
-    #[cfg(all(feature = "onnxruntime", feature = "cuda"))]
-    skip_preload(dylib("onnxruntime_providers_cuda.dll")),
 ];
 
 #[cfg(target_os = "macos")]
-const DYLIBS: &[DylibSpec] = &[
-    // ONNX Runtime core (wheel ships with a versioned basename)
-    #[cfg(feature = "onnxruntime")]
-    dylib_with_alias("libonnxruntime.1.22.0.dylib", "libonnxruntime.dylib"),
-];
+const DYLIBS: &[DylibSpec] = &vec![];
 
 #[cfg(all(not(target_os = "windows"), not(target_os = "macos")))]
 const DYLIBS: &[DylibSpec] = &[
@@ -139,30 +126,23 @@ const DYLIBS: &[DylibSpec] = &[
     #[cfg(feature = "cuda")]
     dylib("libcurand.so.10"),
     // cuDNN core and dependency chain
-    #[cfg(feature = "cuda")]
+    #[cfg(feature = "cudnn")]
     dylib("libcudnn.so.9"),
-    #[cfg(feature = "cuda")]
+    #[cfg(feature = "cudnn")]
     dylib("libcudnn_graph.so.9"),
-    #[cfg(feature = "cuda")]
+    #[cfg(feature = "cudnn")]
     dylib("libcudnn_ops.so.9"),
-    #[cfg(feature = "cuda")]
+    #[cfg(feature = "cudnn")]
     dylib("libcudnn_heuristic.so.9"),
-    #[cfg(feature = "cuda")]
+    #[cfg(feature = "cudnn")]
     dylib("libcudnn_adv.so.9"),
-    #[cfg(feature = "cuda")]
+    #[cfg(feature = "cudnn")]
     dylib("libcudnn_cnn.so.9"),
     // cuDNN engine packs
-    #[cfg(feature = "cuda")]
+    #[cfg(feature = "cudnn")]
     dylib("libcudnn_engines_precompiled.so.9"),
-    #[cfg(feature = "cuda")]
+    #[cfg(feature = "cudnn")]
     dylib("libcudnn_engines_runtime_compiled.so.9"),
-    // ONNX Runtime core + providers
-    #[cfg(feature = "onnxruntime")]
-    dylib("libonnxruntime.so"),
-    #[cfg(all(feature = "onnxruntime", feature = "cuda"))]
-    dylib("libonnxruntime_providers_shared.so"),
-    #[cfg(all(feature = "onnxruntime", feature = "cuda"))]
-    skip_preload(dylib("libonnxruntime_providers_cuda.so")),
 ];
 
 pub async fn ensure_dylibs(path: impl AsRef<Path>) -> Result<()> {
@@ -202,13 +182,6 @@ pub fn preload_dylibs(dir: impl AsRef<Path>) -> Result<()> {
             continue;
         }
 
-        // IMPORTANT: Do NOT preload provider libraries that expect to be pulled in by
-        // onnxruntime itself (e.g. onnxruntime_providers_cuda.*).
-        // Providers expect onnxruntime.dll to load them and to initialize the
-        // ProviderHost via providers_shared. Manually loading a provider causes its
-        // DllMain to fail (ERROR_DLL_INIT_FAILED/1114) because the host is not set.
-        // We only ensure CUDA/cuDNN libraries and the main onnxruntime.dll are
-        // present; ONNX Runtime will load the CUDA provider on demand.
         if !spec.preload {
             continue;
         }
@@ -302,7 +275,7 @@ async fn fetch_and_extract(pkg: String, platform_tag: &str, out_dir: Arc<PathBuf
 
     if needs_download {
         info!("{pkg}: downloading {wheel_name}...");
-        let bytes = download::http(&wheel_url).await?;
+        let bytes = http_download(&wheel_url).await?;
         let out = Arc::clone(&out_dir);
 
         task::spawn_blocking(move || extract_from_wheel(&bytes, out.as_ref())).await??;

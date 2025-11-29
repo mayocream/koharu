@@ -1,11 +1,11 @@
 use std::{str::FromStr, sync::Arc};
 
-use koharu_models::llm::ModelId;
+use koharu_ml::llm::ModelId;
 use rayon::iter::{IntoParallelIterator, ParallelIterator};
 use tauri::State;
 
 use crate::{
-    llm, onnx,
+    llm, ml,
     renderer::TextRenderer,
     result::Result,
     state::{AppState, Document, TextBlock},
@@ -45,10 +45,8 @@ pub async fn open_documents(state: State<'_, AppState>) -> Result<Vec<Document>>
 #[tauri::command]
 pub async fn detect(
     state: State<'_, AppState>,
-    model: State<'_, Arc<onnx::Model>>,
+    model: State<'_, Arc<ml::Model>>,
     index: usize,
-    conf_threshold: f32,
-    nms_threshold: f32,
 ) -> Result<Document> {
     let mut state = state.write().await;
     let document = state
@@ -56,9 +54,7 @@ pub async fn detect(
         .get_mut(index)
         .ok_or_else(|| anyhow::anyhow!("Document not found"))?;
 
-    let (text_blocks, segment) = model
-        .detect(&document.image, conf_threshold, nms_threshold)
-        .await?;
+    let (text_blocks, segment) = model.detect(&document.image).await?;
     document.text_blocks = text_blocks;
     document.segment = Some(segment);
 
@@ -68,7 +64,7 @@ pub async fn detect(
 #[tauri::command]
 pub async fn ocr(
     state: State<'_, AppState>,
-    model: State<'_, Arc<onnx::Model>>,
+    model: State<'_, Arc<ml::Model>>,
     index: usize,
 ) -> Result<Document> {
     let mut state = state.write().await;
@@ -86,7 +82,7 @@ pub async fn ocr(
 #[tauri::command]
 pub async fn inpaint(
     state: State<'_, AppState>,
-    model: State<'_, Arc<onnx::Model>>,
+    model: State<'_, Arc<ml::Model>>,
     index: usize,
     dilate_kernel_size: u8,
     erode_distance: u8,

@@ -1,10 +1,11 @@
 use std::{path::PathBuf, sync::Arc};
 
 use image::GenericImageView;
-use koharu_core::image::SerializableDynamicImage;
 use koharu_renderer::types::Color;
 use serde::{Deserialize, Serialize};
 use tokio::sync::RwLock;
+
+use crate::image::SerializableDynamicImage;
 
 #[derive(Default, Debug, Clone, Serialize, Deserialize)]
 pub struct TextBlock {

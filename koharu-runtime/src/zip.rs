@@ -2,7 +2,8 @@ use std::io;
 
 use anyhow::Result;
 use flate2::read::DeflateDecoder;
-use koharu_core::download::http_client;
+
+use crate::http::http_client;
 
 // ZIP signatures and constants
 const SIG_EOCD: [u8; 4] = [0x50, 0x4b, 0x05, 0x06]; // End Of Central Directory

@@ -1,4 +1,4 @@
-use koharu_models::llm::{GenerateOptions, Llm, ModelId};
+use koharu_ml::llm::{GenerateOptions, Llm, ModelId};
 use std::sync::Arc;
 use strum::Display;
 use tokio::sync::RwLock;

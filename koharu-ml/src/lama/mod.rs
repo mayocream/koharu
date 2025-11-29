@@ -5,7 +5,8 @@ use anyhow::{Result, bail};
 use candle_core::{DType, Device, Tensor};
 use candle_nn::VarBuilder;
 use image::{DynamicImage, GenericImageView, ImageBuffer, RgbImage};
-use koharu_core::download::hf_hub;
+
+use crate::hf_hub;
 
 pub struct Lama {
     model: model::Lama,

@@ -1,11 +1,10 @@
-use std::{path::PathBuf, sync::Arc};
+use std::sync::Arc;
 
 use anyhow::Context;
 use futures::{
     StreamExt,
     stream::{self, TryStreamExt},
 };
-use hf_hub::{Cache, Repo, api::tokio::ApiBuilder};
 use once_cell::sync::Lazy;
 use reqwest::header::{ACCEPT_RANGES, CONTENT_LENGTH, RANGE};
 use reqwest_middleware::{ClientBuilder, ClientWithMiddleware};
@@ -34,7 +33,7 @@ pub fn http_client() -> &'static ClientWithMiddleware {
 
 /// Download a file using aggressive HTTP range requests with maximum concurrency.
 /// The server must advertise `Accept-Ranges: bytes`; otherwise this call fails.
-pub async fn http(url: &str) -> anyhow::Result<Vec<u8>> {
+pub async fn http_download(url: &str) -> anyhow::Result<Vec<u8>> {
     let head = HTTP_CLIENT.head(url).send().await?.error_for_status()?;
     let headers = head.headers();
     let total_bytes = headers
@@ -124,25 +123,4 @@ async fn http_range(url: &str, start: u64, end: u64) -> anyhow::Result<Vec<u8>> 
     );
 
     Ok(bytes)
-}
-
-/// Download a file from the Hugging Face Hub.
-/// Returns the on-disk path managed by hf-hub's cache.
-pub async fn hf_hub(repo: impl AsRef<str>, filename: impl AsRef<str>) -> anyhow::Result<PathBuf> {
-    let api = ApiBuilder::new().high().build()?;
-    let hf_repo = Repo::new(repo.as_ref().to_string(), hf_hub::RepoType::Model);
-    let filename = filename.as_ref();
-
-    // hit the cache first
-    if let Some(path) = Cache::default().repo(hf_repo.clone()).get(filename) {
-        return Ok(path);
-    }
-
-    info!(
-        "downloading {filename} from Hugging Face Hub repo {}",
-        repo.as_ref()
-    );
-
-    let path = api.repo(hf_repo).download(filename).await?;
-    Ok(path)
 }

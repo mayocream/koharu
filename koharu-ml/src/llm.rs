@@ -6,9 +6,10 @@ use candle_core::utils::{cuda_is_available, metal_is_available};
 use candle_core::{Device, Tensor};
 use candle_transformers::generation::{LogitsProcessor, Sampling};
 use candle_transformers::models::{quantized_llama, quantized_qwen2};
-use koharu_core::download;
 use strum::{Display, EnumIter, EnumString, IntoEnumIterator};
 use tokenizers::Tokenizer;
+
+use crate::hf_hub;
 
 /// Supported model identifiers
 #[derive(Debug, Clone, Copy, PartialEq, Eq, EnumString, Display, EnumIter)]
@@ -186,8 +187,8 @@ impl Llm {
     /// Constructs a new LLM instance from a quantized GGUF model and tokenizer.json.
     pub async fn new(id: ModelId) -> Result<Self> {
         let cfg = id.config();
-        let model_path = download::hf_hub(cfg.repo, cfg.filename).await?;
-        let tokenizer_path = download::hf_hub(cfg.tokenizer_repo, "tokenizer.json").await?;
+        let model_path = hf_hub(cfg.repo, cfg.filename).await?;
+        let tokenizer_path = hf_hub(cfg.tokenizer_repo, "tokenizer.json").await?;
 
         // Load tokenizer
         let tokenizer = Tokenizer::from_file(&tokenizer_path).map_err(anyhow::Error::msg)?;

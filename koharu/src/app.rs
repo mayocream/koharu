@@ -1,12 +1,11 @@
 use std::sync::Arc;
 
 use anyhow::Result;
-use ort::execution_providers::ExecutionProvider;
 use rfd::MessageDialog;
 use tauri::Manager;
 use tokio::sync::RwLock;
 
-use crate::{command, llm, onnx, renderer::TextRenderer, state::State};
+use crate::{command, llm, ml, renderer::TextRenderer, state::State};
 
 fn initialize() -> Result<()> {
     tracing_subscriber::fmt()
@@ -58,30 +57,8 @@ async fn setup(app: tauri::AppHandle) -> Result<()> {
         koharu_runtime::ensure_dylibs(&lib_dir).await?;
         koharu_runtime::preload_dylibs(&lib_dir)?;
     }
-    // Initialize ONNX Runtime
-    {
-        let cuda = ort::execution_providers::CUDAExecutionProvider::default();
-        let coreml = ort::execution_providers::CoreMLExecutionProvider::default();
 
-        if cuda.is_available().map_err(anyhow::Error::from)? {
-            tracing::info!("Using CUDA Execution Provider for ONNX Runtime.");
-        } else if coreml.is_available().map_err(anyhow::Error::from)? {
-            tracing::info!("Using CoreML Execution Provider for ONNX Runtime.");
-        } else {
-            tracing::info!("Using default CPU Execution Provider for ONNX Runtime.");
-        }
-
-        ort::init()
-            .with_execution_providers([
-                #[cfg(feature = "cuda")]
-                cuda.build(),
-                #[cfg(feature = "coreml")]
-                coreml.build(),
-            ])
-            .commit()?;
-    }
-
-    let onnx = Arc::new(onnx::Model::new().await?);
+    let onnx = Arc::new(ml::Model::new().await?);
     let llm = Arc::new(llm::Model::new());
     let renderer = Arc::new(TextRenderer::new());
     let state = Arc::new(RwLock::new(State::default()));

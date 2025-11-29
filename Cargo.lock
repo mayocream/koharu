@@ -3229,7 +3229,6 @@ dependencies = [
  "hf-hub",
  "image",
  "imageproc",
- "koharu-core",
  "koharu-ml",
  "koharu-renderer",
  "koharu-runtime",
@@ -3252,24 +3251,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "koharu-core"
-version = "0.10.1"
-dependencies = [
- "anyhow",
- "futures",
- "hf-hub",
- "image",
- "once_cell",
- "reqwest",
- "reqwest-middleware",
- "reqwest-retry",
- "serde",
- "serde_bytes",
- "thiserror 2.0.17",
- "tracing",
-]
-
-[[package]]
 name = "koharu-ml"
 version = "0.10.1"
 dependencies = [
@@ -3281,7 +3262,6 @@ dependencies = [
  "hf-hub",
  "image",
  "imageproc",
- "koharu-core",
  "serde",
  "serde_json",
  "strum",
@@ -3308,12 +3288,13 @@ dependencies = [
  "csv",
  "flate2",
  "futures",
- "koharu-core",
  "libloading 0.9.0",
  "num_cpus",
  "once_cell",
  "rayon",
  "reqwest",
+ "reqwest-middleware",
+ "reqwest-retry",
  "serde_json",
  "tempfile",
  "tokio",

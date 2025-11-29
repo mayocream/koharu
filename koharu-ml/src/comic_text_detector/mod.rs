@@ -2,6 +2,8 @@ mod dbnet;
 mod unet;
 mod yolo_v5;
 
+use std::cmp;
+
 use anyhow::bail;
 use candle_core::{DType, Device, IndexOp, Tensor};
 use candle_nn::VarBuilder;
@@ -10,14 +12,13 @@ use image::{
     DynamicImage, GenericImageView, GrayImage, ImageBuffer,
     imageops::{FilterType, replace, resize},
 };
-use koharu_core::download::hf_hub;
-use std::cmp;
-
 use imageproc::{
     contrast::{ThresholdType, threshold_mut},
     distance_transform::Norm,
     morphology::{close, dilate_mut},
 };
+
+use crate::hf_hub;
 
 const IMAGE_SIZE: u32 = 1024;
 const CONFIDENCE_THRESHOLD: f32 = 0.4;

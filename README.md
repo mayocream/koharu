@@ -4,7 +4,7 @@ AI-powered manga translator, written in **Rust**.
 
 Koharu introduces a new workflow for manga translation, utilizing the power of AI to automate the process. It combines the capabilities of object detection, OCR, inpainting, and LLMs to create a seamless translation experience.
 
-Under the hood, Koharu uses [ort](https://github.com/pykeio/ort) and [candle](https://github.com/huggingface/candle) for high-performance inference, and uses [Tauri](https://github.com/tauri-apps/tauri) for the GUI. All components are written in Rust, ensuring safety and speed.
+Under the hood, Koharu uses [candle](https://github.com/huggingface/candle) for high-performance inference, and uses [Tauri](https://github.com/tauri-apps/tauri) for the GUI. All components are written in Rust, ensuring safety and speed.
 
 ![screenshot-1](assets/koharu-screenshot-1.png)
 ![screenshot-2](assets/koharu-screenshot-2.png)
@@ -22,21 +22,29 @@ Under the hood, Koharu uses [ort](https://github.com/pykeio/ort) and [candle](ht
 
 ## GPU acceleration
 
+CUDA and Metal are supported for GPU acceleration, significantly improving performance on supported hardware.
+
 ### CUDA
 
 Koharu is built with CUDA support, allowing it to leverage the power of NVIDIA GPUs for faster processing.
 
-Koharu bundles CUDA toolkit 12 and cuDNN 9, so you don't need to install them separately. Just make sure you have the appropriate NVIDIA drivers installed on your system.
+Koharu bundles CUDA toolkit 12.x and cuDNN 9.x, dylibs will be automatically extracted to the application data directory on first run.
+
+#### Supported NVIDIA GPUs
+
+Koharu supports NVIDIA GPUs with compute capability 7.5 or higher.
+
+Please make sure your GPU is supported by checking the [CUDA GPU Compute Capability](https://developer.nvidia.com/cuda-gpus) and the [cuDNN Support Matrix](https://docs.nvidia.com/deeplearning/cudnn/backend/latest/reference/support-matrix.html).
 
 ### Metal
 
-Koharu also supports Metal for GPU acceleration on macOS with Apple Silicon (M1, M2, etc.). This allows Koharu to run efficiently on a wide range of Apple devices.
+Koharu supports Metal for GPU acceleration on macOS with Apple Silicon (M1, M2, etc.). This allows Koharu to run efficiently on a wide range of Apple devices.
 
-## Models
+## AI Models
 
-Koharu relies on a mixin of ONNX models and LLM models to perform various tasks.
+Koharu relies on a mixin of computer vision and natural language processing models to perform its tasks.
 
-### ONNX models
+### Computer Vision Models
 
 Koharu uses several pre-trained models for different tasks:
 
@@ -46,14 +54,16 @@ Koharu uses several pre-trained models for different tasks:
 
 The models will be automatically downloaded when you run Koharu for the first time.
 
-We convert the original models to ONNX format for better performance and compatibility with Rust. The converted models are hosted on [Hugging Face](https://huggingface.co/mayocream).
+We convert the original models to safetensors format for better performance and compatibility with Rust. The converted models are hosted on [Hugging Face](https://huggingface.co/mayocream).
 
-### LLMs
+### Large Language Models
 
 Koharu supports various quantized LLMs in GGUF format via [candle](https://github.com/huggingface/candle). Currently supported models include:
 
 - [vntl-llama3-8b-v2](https://huggingface.co/lmg-anon/vntl-llama3-8b-v2-gguf)
 - [sakura-galtransl-7b-v3.7](https://huggingface.co/SakuraLLM/Sakura-GalTransl-7B-v3.7)
+
+LLMs will be automatically downloaded on demand when you select a model in the settings.
 
 ## Installation
 
@@ -62,6 +72,8 @@ You can download the latest release of Koharu from the [releases page](https://g
 We provide pre-built binaries for Windows and macOS, for other platforms, you may need to build from source, see the [Development](#development) section below.
 
 ## Development
+
+To build Koharu from source, follow the steps below.
 
 ### Prerequisites
 

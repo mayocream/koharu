@@ -1,43 +1,36 @@
-use std::sync::Arc;
-
 use anyhow::Result;
-use koharu_core::image::SerializableDynamicImage;
-use koharu_models::comic_text_detector::ComicTextDetector;
-use koharu_models::device;
-use koharu_models::lama::Lama;
-use koharu_models::manga_ocr::MangaOcr;
-use tokio::sync::Mutex;
+use image::DynamicImage;
+use koharu_ml::comic_text_detector::ComicTextDetector;
+use koharu_ml::device;
+use koharu_ml::lama::Lama;
+use koharu_ml::manga_ocr::MangaOcr;
 
+use crate::image::SerializableDynamicImage;
 use crate::state::TextBlock;
 
-#[derive(Debug, Clone)]
 pub struct Model {
-    detector: Arc<Mutex<ComicTextDetector>>,
-    ocr: Arc<Mutex<MangaOcr>>,
-    lama: Arc<Mutex<Lama>>,
+    detector: ComicTextDetector,
+    ocr: MangaOcr,
+    lama: Lama,
 }
 
 impl Model {
     pub async fn new() -> Result<Self> {
         let device = device(false)?;
         Ok(Self {
-            detector: Arc::new(Mutex::new(ComicTextDetector::load(device.clone()).await?)),
-            ocr: Arc::new(Mutex::new(MangaOcr::load(device.clone()).await?)),
-            lama: Arc::new(Mutex::new(Lama::load(device).await?)),
+            detector: ComicTextDetector::load(device.clone()).await?,
+            ocr: MangaOcr::load(device.clone()).await?,
+            lama: Lama::load(device.clone()).await?,
         })
     }
 
     pub async fn detect(
         &self,
         image: &SerializableDynamicImage,
-        conf_threshold: f32,
-        nms_threshold: f32,
     ) -> Result<(Vec<TextBlock>, SerializableDynamicImage)> {
-        let mut detector = self.detector.lock().await;
-        let result = detector.inference(image, conf_threshold, nms_threshold)?;
+        let (bboxes, segment) = self.detector.inference(image)?;
 
-        let mut text_blocks: Vec<TextBlock> = result
-            .bboxes
+        let mut text_blocks: Vec<TextBlock> = bboxes
             .into_iter()
             .map(|bbox| TextBlock {
                 x: bbox.xmin,
@@ -55,7 +48,7 @@ impl Model {
                 .unwrap_or(std::cmp::Ordering::Equal)
         });
 
-        Ok((text_blocks, result.segment.into()))
+        Ok((text_blocks, DynamicImage::ImageLuma8(segment).into()))
     }
 
     pub async fn ocr(
@@ -63,8 +56,6 @@ impl Model {
         image: &SerializableDynamicImage,
         blocks: &[TextBlock],
     ) -> Result<Vec<TextBlock>> {
-        let ocr = self.ocr.lock().await;
-
         blocks
             .iter()
             .map(|block| {
@@ -74,7 +65,7 @@ impl Model {
                     block.width as u32,
                     block.height as u32,
                 );
-                let text = ocr.infer(&crop)?;
+                let text = self.ocr.inference(&crop)?;
 
                 Ok(TextBlock {
                     text: text.into(),
@@ -101,8 +92,9 @@ impl Model {
             erode_distance,
         );
 
-        let lama = self.lama.lock().await;
-        let result = lama.inference(image, &image::DynamicImage::ImageLuma8(mask))?;
+        let result = self
+            .lama
+            .inference(image, &image::DynamicImage::ImageLuma8(mask))?;
 
         Ok(result.into())
     }

@@ -7,10 +7,10 @@ use std::path::Path;
 use anyhow::{Context, Result};
 use candle_core::{DType, Device, Tensor};
 use candle_nn::VarBuilder;
-use koharu_core::download::hf_hub;
 use serde::de::DeserializeOwned;
 use tokenizers::Tokenizer;
 
+use crate::hf_hub;
 use model::{PreprocessorConfig, VisionEncoderDecoder, VisionEncoderDecoderConfig};
 use tokenizer::load_tokenizer;
 
