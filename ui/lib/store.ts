@@ -34,9 +34,9 @@ type AppState = {
   setSelectedBlockIndex: (index?: number) => void
   setAutoFitEnabled: (enabled: boolean) => void
   updateTextBlocks: (textBlocks: TextBlock[]) => Promise<void>
-  detect: (confThreshold: number, nmsThreshold: number) => Promise<void>
+  detect: () => Promise<void>
   ocr: () => Promise<void>
-  inpaint: (dilateKernelSize: number, erodeDistance: number) => Promise<void>
+  inpaint: () => Promise<void>
   render: () => Promise<void>
   // LLM actions
   llmList: () => Promise<void>
@@ -106,12 +106,10 @@ export const useAppStore = create<AppState>((set, get) => ({
       textBlocks,
     })
   },
-  detect: async (confThreshold: number, nmsThreshold: number) => {
+  detect: async () => {
     const index = get().currentDocumentIndex
     const doc: Document = await invoke('detect', {
       index,
-      confThreshold,
-      nmsThreshold,
     })
     set((state) => ({
       documents: replaceDocument(state.documents, index, doc),
@@ -124,12 +122,10 @@ export const useAppStore = create<AppState>((set, get) => ({
       documents: replaceDocument(state.documents, index, doc),
     }))
   },
-  inpaint: async (dilateKernelSize: number, erodeDistance: number) => {
+  inpaint: async () => {
     const index = get().currentDocumentIndex
     const doc: Document = await invoke('inpaint', {
       index,
-      dilateKernelSize,
-      erodeDistance,
     })
     set((state) => ({
       documents: replaceDocument(state.documents, index, doc),
@@ -181,42 +177,16 @@ export const useAppStore = create<AppState>((set, get) => ({
 }))
 
 type ConfigState = {
-  detectConfig: {
-    confThreshold: number
-    nmsThreshold: number
-  }
-  inpaintConfig: {
-    dilateKernelSize: number
-    erodeDistance: number
-  }
   maskConfig: {
     brushSize: number
   }
-  setDetectConfig: (config: Partial<ConfigState['detectConfig']>) => void
-  setInpaintConfig: (config: Partial<ConfigState['inpaintConfig']>) => void
   setMaskConfig: (config: Partial<ConfigState['maskConfig']>) => void
 }
 
 export const useConfigStore = create<ConfigState>((set) => ({
-  detectConfig: {
-    confThreshold: 0.5,
-    nmsThreshold: 0.4,
-  },
-  inpaintConfig: {
-    dilateKernelSize: 9,
-    erodeDistance: 3,
-  },
   maskConfig: {
     brushSize: 36,
   },
-  setDetectConfig: (config) =>
-    set((state) => ({
-      detectConfig: { ...state.detectConfig, ...config },
-    })),
-  setInpaintConfig: (config) =>
-    set((state) => ({
-      inpaintConfig: { ...state.inpaintConfig, ...config },
-    })),
   setMaskConfig: (config) =>
     set((state) => ({
       maskConfig: { ...state.maskConfig, ...config },

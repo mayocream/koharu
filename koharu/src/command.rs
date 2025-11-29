@@ -84,8 +84,6 @@ pub async fn inpaint(
     state: State<'_, AppState>,
     model: State<'_, Arc<ml::Model>>,
     index: usize,
-    dilate_kernel_size: u8,
-    erode_distance: u8,
 ) -> Result<Document> {
     let mut state = state.write().await;
     let document = state
@@ -98,9 +96,7 @@ pub async fn inpaint(
         .as_ref()
         .ok_or_else(|| anyhow::anyhow!("Segment image not found"))?;
 
-    let inpainted = model
-        .inpaint(&document.image, segment, dilate_kernel_size, erode_distance)
-        .await?;
+    let inpainted = model.inpaint(&document.image, segment).await?;
 
     document.inpainted = Some(inpainted);
 

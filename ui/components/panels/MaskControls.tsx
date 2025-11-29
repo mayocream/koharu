@@ -1,12 +1,8 @@
 'use client'
 
 import { Separator } from 'radix-ui'
-import { useAppStore, useConfigStore } from '@/lib/store'
-import {
-  SliderField,
-  ToggleField,
-  TooltipButton,
-} from '@/components/ui/form-controls'
+import { useAppStore } from '@/lib/store'
+import { ToggleField, TooltipButton } from '@/components/ui/form-controls'
 
 export function MaskControls() {
   const {
@@ -18,7 +14,6 @@ export function MaskControls() {
     setShowRenderedImage,
     inpaint,
   } = useAppStore()
-  const { inpaintConfig, setInpaintConfig } = useConfigStore()
 
   return (
     <div className='space-y-2 text-xs text-neutral-600'>
@@ -38,33 +33,11 @@ export function MaskControls() {
         onChange={setShowRenderedImage}
       />
       <Separator.Root className='my-1 h-px bg-neutral-200' />
-      <div className='grid grid-cols-2 gap-1.5'>
-        <SliderField
-          label='Dilate'
-          min={1}
-          max={20}
-          step={1}
-          value={inpaintConfig.dilateKernelSize}
-          onChange={(value) => setInpaintConfig({ dilateKernelSize: value })}
-          formatValue={(value) => value.toString()}
-        />
-        <SliderField
-          label='Erode'
-          min={1}
-          max={10}
-          step={1}
-          value={inpaintConfig.erodeDistance}
-          onChange={(value) => setInpaintConfig({ erodeDistance: value })}
-          formatValue={(value) => value.toString()}
-        />
-      </div>
       <TooltipButton
         label='Inpaint'
         tooltip='Apply inpainting'
         widthClass='w-full'
-        onClick={() =>
-          inpaint(inpaintConfig.dilateKernelSize, inpaintConfig.erodeDistance)
-        }
+        onClick={inpaint}
       />
     </div>
   )
