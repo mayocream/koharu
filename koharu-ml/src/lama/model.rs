@@ -575,12 +575,14 @@ impl Lama {
         xs = reflect_pad2d(&xs, self.pad_input)?;
         let xs = self.final_conv.forward(&xs)?;
         let xs = ops::sigmoid(&xs)?;
+        let xs = xs.narrow(2, 0, h)?.narrow(3, 0, w)?.contiguous()?;
         let keep = (Tensor::ones_like(&mask)? - &mask)?;
         let keep3 = keep.broadcast_as((b, 3, h, w))?;
         let mask3 = mask.broadcast_as((b, 3, h, w))?;
         let pred = (&xs * &mask3)?;
         let base = (&img * &keep3)?;
         let output = (pred + base)?;
+        let output = output.narrow(2, 0, h)?.narrow(3, 0, w)?.contiguous()?;
         Ok(output)
     }
 }
