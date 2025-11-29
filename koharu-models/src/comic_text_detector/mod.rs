@@ -56,16 +56,15 @@ impl ComicTextDetector {
         let original_dimensions = image.dimensions();
         let (image_tensor, resized_dimensions) = preprocess(image, &self.device)?;
         let (predictions, mask, shrink_threshold) = self.forward(&image_tensor)?;
+        let bboxes = postprocess_yolo(&predictions, original_dimensions, resized_dimensions)?;
+        let mask = postprocess_mask(
+            &mask,
+            &shrink_threshold,
+            original_dimensions,
+            resized_dimensions,
+        )?;
 
-        Ok((
-            postprocess_yolo(&predictions, original_dimensions, resized_dimensions)?,
-            postprocess_mask(
-                &mask,
-                &shrink_threshold,
-                original_dimensions,
-                resized_dimensions,
-            )?,
-        ))
+        Ok((bboxes, mask))
     }
 
     fn forward(&self, image: &Tensor) -> anyhow::Result<(Tensor, Tensor, Tensor)> {
@@ -122,7 +121,7 @@ fn postprocess_yolo(
     // predictions shape: (1, num_boxes, num_outputs)
     // this removes the batch dimension
     let predictions = predictions.squeeze(0)?;
-    let (num_boxes, num_outputs) = predictions.dims2()?;
+    let (_, num_outputs) = predictions.dims2()?;
     if num_outputs < 6 {
         bail!("invalid prediction shape: expected at least 6 outputs, got {num_outputs}");
     }
@@ -135,8 +134,8 @@ fn postprocess_yolo(
     let h_ratio = orig_h as f32 / resized_h as f32;
 
     let mut bboxes: Vec<Vec<Bbox<usize>>> = (0..num_classes).map(|_| Vec::new()).collect();
-    for idx in 0..num_boxes {
-        let pred = Vec::<f32>::try_from(predictions.i(idx)?)?;
+    let predictions: Vec<Vec<f32>> = predictions.to_vec2()?;
+    for pred in predictions {
         let (class_index, confidence) = {
             let (cls_idx, cls_score) = pred[5..]
                 .iter()
