@@ -1,5 +1,5 @@
 use clap::Parser;
-use koharu_models::{device, lama::Lama};
+use koharu_ml::{device, lama::Lama};
 
 #[derive(Parser)]
 struct Cli {

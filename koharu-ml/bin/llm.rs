@@ -1,5 +1,5 @@
 use clap::Parser;
-use koharu_models::llm::{ChatMessage, ChatRole, GenerateOptions, Llm, ModelId};
+use koharu_ml::llm::{ChatMessage, ChatRole, GenerateOptions, Llm, ModelId};
 
 #[derive(Parser, Debug)]
 #[command(author, version, about)]

@@ -1,6 +1,6 @@
 use anyhow::Result;
 use clap::Parser;
-use koharu_models::{comic_text_detector::ComicTextDetector, device};
+use koharu_ml::{comic_text_detector::ComicTextDetector, device};
 
 #[derive(Parser)]
 struct Cli {

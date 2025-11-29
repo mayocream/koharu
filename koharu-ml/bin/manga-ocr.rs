@@ -1,5 +1,5 @@
 use clap::Parser;
-use koharu_models::{device, manga_ocr::MangaOcr};
+use koharu_ml::{device, manga_ocr::MangaOcr};
 
 #[derive(Parser)]
 struct Cli {
