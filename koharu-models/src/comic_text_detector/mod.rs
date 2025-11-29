@@ -11,10 +11,22 @@ use image::{
     imageops::{FilterType, replace, resize},
 };
 use koharu_core::download::hf_hub;
+use std::cmp;
+
+use imageproc::{
+    contrast::{ThresholdType, threshold_mut},
+    distance_transform::Norm,
+    morphology::{close, dilate_mut},
+};
 
 const IMAGE_SIZE: u32 = 1024;
 const CONFIDENCE_THRESHOLD: f32 = 0.4;
 const NMS_THRESHOLD: f32 = 0.35;
+const DBNET_BINARIZE_K: f64 = 50.0;
+const BINARY_THRESHOLD: u8 = 60;
+const DILATION_RADIUS: u32 = 2;
+const HOLE_CLOSE_RADIUS: u32 = 1;
+const BBOX_DILATION: f32 = 1.0;
 
 pub struct ComicTextDetector {
     yolo: yolo_v5::YoloV5,
@@ -149,11 +161,16 @@ fn postprocess_yolo(
             continue;
         }
 
+        let xmin = ((pred[0] - pred[2] / 2.) * w_ratio - BBOX_DILATION).clamp(0., orig_w as f32);
+        let xmax = ((pred[0] + pred[2] / 2.) * w_ratio + BBOX_DILATION).clamp(0., orig_w as f32);
+        let ymin = ((pred[1] - pred[3] / 2.) * h_ratio - BBOX_DILATION).clamp(0., orig_h as f32);
+        let ymax = ((pred[1] + pred[3] / 2.) * h_ratio + BBOX_DILATION).clamp(0., orig_h as f32);
+
         let bbox = Bbox {
-            xmin: ((pred[0] - pred[2] / 2.) * w_ratio).clamp(0., orig_w as f32),
-            xmax: ((pred[0] + pred[2] / 2.) * w_ratio).clamp(0., orig_w as f32),
-            ymin: ((pred[1] - pred[3] / 2.) * h_ratio).clamp(0., orig_h as f32),
-            ymax: ((pred[1] + pred[3] / 2.) * h_ratio).clamp(0., orig_h as f32),
+            xmin,
+            xmax,
+            ymin,
+            ymax,
             confidence,
             data: class_index,
         };
@@ -171,19 +188,24 @@ fn postprocess_mask(
     original_dimensions: (u32, u32),
     resized_dimensions: (u32, u32),
 ) -> anyhow::Result<GrayImage> {
-    // Fuse UNet mask with DBNet shrink map before resizing back
-    let shrink = shrink_thresh.squeeze(0)?.i(0)?.unsqueeze(0)?; // (1, H, W)
-    let mask = mask.squeeze(0)?; // (1, H, W)
+    let shrink_and_thresh = shrink_thresh.squeeze(0)?; // (2, H, W)
+    let shrink = shrink_and_thresh.i(0)?; // (H, W)
+    let thresh = shrink_and_thresh.i(1)?; // (H, W)
+    let unet_mask = mask.squeeze(0)?; // (1, H, W)
 
-    let (_, h_mask, w_mask) = mask.dims3()?;
-    let (_, h_shrink, w_shrink) = shrink.dims3()?;
-    let (h, w) = (h_mask.min(h_shrink), w_mask.min(w_shrink));
+    let (_, h_db, w_db) = shrink_and_thresh.dims3()?;
+    let (_, h_unet, w_unet) = unet_mask.dims3()?;
+    let h = cmp::min(h_db, h_unet);
+    let w = cmp::min(w_db, w_unet);
 
-    let fused = mask
-        .narrow(1, 0, h)?
-        .narrow(2, 0, w)?
-        .minimum(&shrink.narrow(1, 0, h)?.narrow(2, 0, w)?)?
-        .squeeze(0)?;
+    let shrink = shrink.narrow(0, 0, h)?.narrow(1, 0, w)?;
+    let thresh = thresh.narrow(0, 0, h)?.narrow(1, 0, w)?;
+    let unet_mask = unet_mask.narrow(1, 0, h)?.narrow(2, 0, w)?.squeeze(0)?;
+
+    // Differentiable binarization: prob = sigmoid(k * (shrink - threshold)).
+    let prob = candle_nn::ops::sigmoid(&((&shrink - &thresh)? * DBNET_BINARIZE_K)?)?;
+    // Keep the thickest response between UNet mask and DBNet prob.
+    let fused = prob.maximum(&unet_mask)?;
 
     let (mask_h, mask_w) = fused.dims2()?;
     let valid_h = mask_h.min(resized_dimensions.1 as usize);
@@ -201,10 +223,21 @@ fn postprocess_mask(
     let image = GrayImage::from_raw(valid_w as u32, valid_h as u32, data)
         .ok_or_else(|| anyhow::anyhow!("failed to build mask image"))?;
 
-    Ok(resize(
+    let mut mask = resize(
         &image,
         original_dimensions.0,
         original_dimensions.1,
-        FilterType::Triangle,
-    ))
+        FilterType::Nearest,
+    );
+
+    // Binarize aggressively to avoid thin edges from interpolation.
+    threshold_mut(&mut mask, BINARY_THRESHOLD, ThresholdType::Binary);
+
+    // Close small holes and smooth stroke interiors.
+    mask = close(&mask, Norm::LInf, HOLE_CLOSE_RADIUS as u8);
+
+    // Light dilation to regain thickness.
+    dilate_mut(&mut mask, Norm::L1, DILATION_RADIUS as u8);
+
+    Ok(mask)
 }
