@@ -110,7 +110,7 @@ const DYLIBS: &[DylibSpec] = &[
 ];
 
 #[cfg(target_os = "macos")]
-const DYLIBS: &[DylibSpec] = &vec![];
+const DYLIBS: &[DylibSpec] = &[];
 
 #[cfg(all(not(target_os = "windows"), not(target_os = "macos")))]
 const DYLIBS: &[DylibSpec] = &[
