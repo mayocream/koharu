@@ -28,9 +28,9 @@ tracing-subscriber = { workspace = true }
 tokio = { workspace = true }
 
 [features]
-cudnn = ["candle-core/cudnn", "candle-transformers/cudnn"]
-cuda = ["candle-core/cuda", "candle-transformers/cuda"]
-metal = ["candle-core/metal", "candle-transformers/metal"]
+cuda = ["candle-core/cuda", "candle-nn/cuda", "candle-transformers/cuda"]
+cudnn = ["candle-core/cudnn", "candle-nn/cudnn", "candle-transformers/cudnn"]
+metal = ["candle-core/metal", "candle-nn/metal", "candle-transformers/metal"]
 
 [[bin]]
 name = "comic-text-detector"
