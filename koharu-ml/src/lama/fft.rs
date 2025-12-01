@@ -1,8 +1,11 @@
-#[cfg(feature = "metal")]
-use candle_core::metal_backend::MetalStorage;
 use candle_core::{CpuStorage, CustomOp1, Layout, Result, Shape, Tensor, bail};
 #[cfg(feature = "cuda")]
 use candle_core::{DType, backend::BackendStorage, cuda_backend::CudaStorage};
+#[cfg(feature = "metal")]
+use candle_core::{
+    backend::{BackendDevice, BackendStorage},
+    metal_backend::MetalStorage,
+};
 use rustfft::{FftPlanner, num_complex::Complex32};
 use tracing::instrument;
 
