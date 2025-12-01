@@ -63,6 +63,12 @@ impl Renderer {
                         glyph_y.floor() as i32,
                         request.color,
                     );
+                } else {
+                    tracing::warn!(
+                        "Failed to render glyph id {} at size {}",
+                        glyph.id,
+                        request.font_size
+                    );
                 }
             }
         }

@@ -34,7 +34,12 @@ impl TextRenderer {
     pub async fn available_fonts(&self) -> Vec<String> {
         let fontbook = self.fontbook.lock().await;
         fontbook
-            .filter_by_language(&Language::Chinese_PeoplesRepublicOfChina)
+            .filter_by_language(&[
+                Language::Chinese_PeoplesRepublicOfChina,
+                Language::Chinese_Taiwan,
+                Language::Chinese_HongKongSAR,
+                Language::English_UnitedStates,
+            ])
             .iter()
             .map(|face| face.families.iter().map(|f| f.0.clone()))
             .flatten()
@@ -43,6 +48,7 @@ impl TextRenderer {
 
     pub async fn render(&self, doc: &mut Document) -> Result<()> {
         let Some(inpainted) = doc.inpainted.as_deref() else {
+            tracing::warn!("No inpainted image found for rendering");
             return Ok(());
         };
 
@@ -67,7 +73,13 @@ impl TextRenderer {
         let mut fontbook = self.fontbook.lock().await;
         let style = block.style.clone();
         let fonts = fontbook
-            .filter_by_families(&style.font_families)
+            .filter_by_families(&style.font_families, &[
+                // TODO: define by frontend
+                Language::Chinese_PeoplesRepublicOfChina,
+                Language::Chinese_Taiwan,
+                Language::Chinese_HongKongSAR,
+                Language::English_UnitedStates,
+            ])
             .iter()
             .filter_map(|face| fontbook.font(face).ok())
             .collect::<Vec<_>>();

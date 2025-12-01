@@ -1,6 +1,7 @@
 use std::path::{Path, PathBuf};
 
 use anyhow::Result;
+use fontdb::Language;
 use image::RgbaImage;
 use koharu_renderer::{
     font::FontBook,
@@ -22,7 +23,9 @@ fn output_dir() -> PathBuf {
 fn test_horizontal_text_rendering() -> Result<()> {
     let mut fontbook = FontBook::new();
     let fonts = fontbook
-        .filter_by_language(&fontdb::Language::Japanese_Japan)
+        .filter_by_language(
+    &[Language::Chinese_PeoplesRepublicOfChina,
+                Language::English_UnitedStates])
         .iter()
         .filter_map(|face| fontbook.font(face).ok())
         .collect::<Vec<_>>();
@@ -67,8 +70,15 @@ fn test_horizontal_text_rendering() -> Result<()> {
 #[test]
 fn test_vertical_text_rendering() -> Result<()> {
     let mut fontbook = FontBook::new();
+    let font_families = vec!["Microsoft Jhenghei".to_string(), "Microsoft YaHei".to_string(), "Arial".to_string(), "Yu Mincho".to_string()];
     let fonts = fontbook
-        .filter_by_language(&fontdb::Language::Japanese_Japan)
+        .filter_by_families(&font_families, &[
+                //Language::Japanese_Japan,
+                Language::Chinese_PeoplesRepublicOfChina,
+                Language::Chinese_Taiwan,
+                Language::Chinese_HongKongSAR,
+                Language::English_UnitedStates,
+            ])
         .iter()
         .filter_map(|face| fontbook.font(face).ok())
         .collect::<Vec<_>>();

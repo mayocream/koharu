@@ -3290,6 +3290,7 @@ dependencies = [
  "fontdb",
  "image",
  "swash",
+ "tracing",
 ]
 
 [[package]]

@@ -33,17 +33,21 @@ impl FontBook {
     /// Returns font faces that support the specified language.
     ///
     /// refer: https://learn.microsoft.com/en-us/typography/opentype/spec/name#windows-language-ids
-    pub fn filter_by_language(&self, lang: &Language) -> Vec<FaceInfo> {
+    pub fn filter_by_language(&self, languages: &[Language]) -> Vec<FaceInfo> {
         self.all()
             .iter()
-            .filter(|face| face.families.iter().any(|(_, l)| l == lang))
+            .filter(|face| {
+                face.families
+                    .iter()
+                    .any(|(_, language)| languages.iter().any(|l| l == language))
+            })
             .cloned()
             .collect()
     }
 
     /// Returns font faces that belong to any of the specified families.
-    pub fn filter_by_families(&self, families: &[String]) -> Vec<FaceInfo> {
-        self.all()
+    pub fn filter_by_families(&self, families: &[String], languages: &[Language]) -> Vec<FaceInfo> {
+        let mut collected: Vec<FaceInfo> = self.all()
             .iter()
             .filter(|face| {
                 face.families
@@ -51,7 +55,14 @@ impl FontBook {
                     .any(|(family, _)| families.iter().any(|f| f == family))
             })
             .cloned()
-            .collect()
+            .collect();
+
+        collected.sort_by_key(|face| {
+                languages.iter().position(|lang| {
+                    face.families.iter().any(|(_, l)| l == lang)
+                }).unwrap_or(languages.len())
+            });
+        collected
     }
 
     /// Loads the font data for the specified face, utilizing caching.
