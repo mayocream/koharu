@@ -70,10 +70,11 @@ impl Lama {
         if channels != 3 {
             bail!("expected 3 channels in output, got {channels}");
         }
-        let output = (output * 255.)?.clamp(0., 255.)?;
-        let output = output.to_device(&Device::Cpu)?.to_dtype(DType::U8)?;
-        let hwc = output.permute((1, 2, 0))?; // HWC for ImageBuffer
-        let raw: Vec<u8> = hwc.flatten_all()?.to_vec1()?;
+        let output = (output * 255.)?
+            .clamp(0., 255.)?
+            .permute((1, 2, 0))?
+            .to_dtype(DType::U8)?;
+        let raw: Vec<u8> = output.flatten_all()?.to_vec1()?;
         let image = RgbImage::from_raw(width as u32, height as u32, raw)
             .ok_or_else(|| anyhow::anyhow!("failed to create image buffer from model output"))?;
         Ok(DynamicImage::ImageRgb8(image))
