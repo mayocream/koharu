@@ -44,6 +44,68 @@ pub async fn open_documents(state: State<'_, AppState>) -> Result<Vec<Document>>
 }
 
 #[tauri::command]
+pub async fn save_document(state: State<'_, AppState>, index: usize) -> Result<()> {
+    let mut state = state.write().await;
+    let document = state
+        .documents
+        .get_mut(index)
+        .ok_or_else(|| anyhow::anyhow!("Document not found"))?;
+
+    let document_ext = document.path.extension()
+        .and_then(|ext| ext.to_str())
+        .unwrap_or("jpg");
+    let default_filename = format!("{}_koharu.{}", document.name, document_ext);
+
+    let dest = rfd::FileDialog::new()
+        .set_title("Select Export Destinition")
+        // default as filename_koharu.file_ext
+        .set_file_name(default_filename)
+        .save_file()
+        .ok_or_else(|| anyhow::anyhow!("No file selected"))?;
+
+    document.rendered
+        .as_ref()
+        .ok_or_else(|| anyhow::anyhow!("No inpainted image found"))?
+        .save(&dest)
+        .or_else(|e| {
+            Err(anyhow::anyhow!("Failed to save image: {}", e))
+        })? ;
+
+    Ok(())
+}
+
+#[tauri::command]
+pub async fn save_all_documents(state: State<'_, AppState>) -> Result<()> {
+    let dest = rfd::FileDialog::new()
+        .set_title("Select Export Destinition Folder")
+        // default as filename_koharu.file_ext
+        .pick_folder()
+        .ok_or_else(|| anyhow::anyhow!("No directory selected"))?;
+
+    let state = state.read().await;
+
+    let documents = state.documents.iter();
+
+    for document in documents {
+        let document_ext = document.path.extension()
+            .and_then(|ext| ext.to_str())
+            .unwrap_or("jpg");
+        let default_filename = format!("{}_koharu.{}", document.name, document_ext);
+
+        document.rendered
+            .as_ref()
+            .ok_or_else(|| anyhow::anyhow!("No inpainted image found"))?
+            // save to dest/default_filename
+            .save(dest.join(&default_filename))
+            .or_else(|e| {
+                Err(anyhow::anyhow!("Failed to save image: {}", e))
+            })? ;
+    }
+
+    Ok(())
+}
+
+#[tauri::command]
 pub async fn detect(
     state: State<'_, AppState>,
     model: State<'_, Arc<ml::Model>>,

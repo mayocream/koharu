@@ -44,6 +44,8 @@ type AppState = {
   render: () => Promise<void>
   processImage: () => Promise<void>
   processAllImages: () => Promise<void>
+  exportDocument: () => Promise<void>
+  exportAllDocuments: () => Promise<void>
   // LLM actions
   llmList: () => Promise<void>
   llmSetSelectedModel: (id: string) => void
@@ -152,36 +154,6 @@ export const useAppStore = create<AppState>((set, get) => ({
       documents: replaceDocument(state.documents, index, doc),
     }))
   },
-  processImage: async () => {
-    set({ processJobName: 'Loading LLM' })
-    // TODO: deduplicate this
-    let try_time = 0
-    while(try_time++ < 300) {
-      await get().llmCheckReady()
-      if (get().llmReady) {
-        set({ llmLoading: false })
-        break
-      }
-      await new Promise((resolve) => setTimeout(resolve, 100))
-    }
-    set({ processJobName: '' })
-
-    const index = get().currentDocumentIndex
-
-    console.log("Processing image ", index)
-
-    await get().detect()
-    await get().ocr()
-    await get().inpaint()
-    await get().llmGenerate()
-    await get().render()
-  },
-  processAllImages: async () => {
-    for (let index = 0; index < get().documents.length; index++) {
-      set({ currentDocumentIndex: index, selectedBlockIndex: undefined })
-      await get().processImage()
-    }
-  },
   llmList: async () => {
     try {
       const models = await invoke<string[]>('llm_list')
@@ -219,8 +191,6 @@ export const useAppStore = create<AppState>((set, get) => ({
       await new Promise((resolve) => setTimeout(resolve, 100))
     }
   },
-  _llmWaitUntilReady: async () => {
-  },
   llmCheckReady: async () => {
     try {
       const ready = await invoke<boolean>('llm_ready')
@@ -235,6 +205,44 @@ export const useAppStore = create<AppState>((set, get) => ({
     set((state) => ({
       documents: replaceDocument(state.documents, index, doc),
     }))
+  },
+
+  // batch proceeses
+  processImage: async () => {
+    if(!get().llmReady) {
+      set({ processJobName: 'Loading LLM Model' })
+      await get().llmList()
+      await get().llmToggleLoadUnload()
+    }
+
+    set({ processJobName: '' })
+
+    const index = get().currentDocumentIndex
+
+    console.log("Processing image ", index)
+
+    await get().detect()
+    await get().ocr()
+    await get().inpaint()
+    await get().llmGenerate()
+    await get().render()
+  },
+  processAllImages: async () => {
+    for (let index = 0; index < get().documents.length; index++) {
+      set({ currentDocumentIndex: index, selectedBlockIndex: undefined })
+      await get().processImage()
+    }
+  },
+
+  exportDocument: async () => {
+    const index = get().currentDocumentIndex
+    if (!index) return
+    await invoke('save_document', { index })
+  },
+
+  exportAllDocuments: async () => {
+    if(!get().documents.length) return
+    await invoke('save_all_documents')
   },
 }))
 

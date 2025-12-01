@@ -5,11 +5,15 @@ import { useAppStore } from '@/lib/store'
 import { fitCanvasToViewport, resetCanvasScale } from '@/components/Canvas'
 
 export function MenuBar() {
-  const { openDocuments, openExternal, processImage, processAllImages  } = useAppStore()
+  const { openDocuments, openExternal, processImage, processAllImages, exportDocument, exportAllDocuments } = useAppStore()
   const menus = [
     {
       label: 'File',
-      items: [{ label: 'Open File...', onSelect: openDocuments }],
+      items: [
+        { label: 'Open File...', onSelect: openDocuments },
+        { label: 'Export...', onSelect: exportDocument },
+        { label: 'Export All', onSelect: exportAllDocuments },
+      ],
     },
     {
       label: 'View',

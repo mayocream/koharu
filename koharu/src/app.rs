@@ -83,6 +83,8 @@ pub fn run() -> Result<()> {
         .invoke_handler(tauri::generate_handler![
             command::open_external,
             command::open_documents,
+            command::save_document,
+            command::save_all_documents,
             command::detect,
             command::ocr,
             command::inpaint,
