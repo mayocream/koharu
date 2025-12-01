@@ -81,7 +81,9 @@ impl TextRenderer {
             .then_some(Script::Latin)
             .unwrap_or(Script::Han);
 
-        let direction = if block.width < block.height || script == Script::Latin {
+        tracing::info!("Inferred script: {:?}", script);
+
+        let direction = if block.width > block.height || script == Script::Latin {
             Orientation::Horizontal
         } else {
             Orientation::Vertical
@@ -111,9 +113,14 @@ impl TextRenderer {
             let mut low = 8.0;
             let mut high = 200.0;
             let epsilon = 0.5; // Convergence threshold
+            let smallest_readable_size = if script == Script::Latin {
+                12
+            } else {
+                16
+            }; // px
 
             // Binary search with proper convergence
-            while high - low > epsilon {
+            while high - low > epsilon && high > smallest_readable_size as f32 {
                 let mid = (low + high) / 2.0;
                 let glyphs = layout_with_size(mid)?;
 
@@ -123,19 +130,20 @@ impl TextRenderer {
                     continue;
                 }
 
-                let (_, min_y, _, max_y) = calculate_bounds(&glyphs);
-                let height = max_y - min_y;
-
-                if height <= block.height {
+                let (min_x, min_y, max_x, max_y) = calculate_bounds(&glyphs);
+                if max_y - min_y <= block.height && max_x - min_x <= block.width {
                     low = mid;
                 } else {
                     high = mid;
                 }
+                tracing::info!("font size search: low={}, high={}, mid={}, height={}, width={}", low, high, mid, max_y-min_y, max_x-min_x);
             }
 
             // Use a slightly smaller size to ensure it fits with some margin
             low * 0.95
         };
+
+        tracing::info!("Determined font size: {}", font_size);
 
         let glyphs = layout_with_size(font_size)?;
         let mut renderer = self.renderer.lock().await;
