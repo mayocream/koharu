@@ -314,7 +314,9 @@ impl CustomOp1 for Rfft2 {
 }
 
 #[derive(Clone, Copy)]
-struct Irfft2;
+struct Irfft2 {
+    width: usize,
+}
 
 impl CustomOp1 for Irfft2 {
     fn name(&self) -> &'static str {
@@ -327,7 +329,7 @@ impl CustomOp1 for Irfft2 {
             bail!("irfft2 expects spectrum shaped [batch, channels, height, width/2+1, 2]")
         }
         let (batch, channels, height, w_half) = (dims[0], dims[1], dims[2], dims[3]);
-        let width = (w_half - 1) * 2;
+        let width = self.width;
         let src = match storage {
             CpuStorage::F32(vs) => vs,
             _ => bail!("irfft2 only supports f32 inputs on cpu"),
@@ -409,7 +411,7 @@ impl CustomOp1 for Irfft2 {
             .contiguous_offsets()
             .ok_or_else(|| candle_core::Error::RequiresContiguous { op: "irfft2" }.bt())?;
         let (batch, channels, height, w_half) = (dims[0], dims[1], dims[2], dims[3]);
-        let width = (w_half - 1) * 2;
+        let width = self.width;
         let batch = (batch * channels) as i32;
         let input = storage.as_cuda_slice::<f32>()?;
         let input = input.slice(start..end);
@@ -490,7 +492,7 @@ impl CustomOp1 for Irfft2 {
         let channels = dims[1];
         let height = dims[2];
         let w_half = dims[3];
-        let width = (w_half - 1) * 2;
+        let width = self.width;
 
         let input_shape = nsarray_from_usize(&[batch, channels, height, w_half])?;
         let axes = nsarray_from_usize(&[2, 3])?;
@@ -565,15 +567,22 @@ pub fn rfft2(xs: &Tensor) -> candle_core::Result<Tensor> {
 }
 
 #[instrument(level = "info", skip_all)]
-pub fn irfft2(spectrum: &Tensor) -> candle_core::Result<Tensor> {
+pub fn irfft2(spectrum: &Tensor, width: usize) -> candle_core::Result<Tensor> {
     let spectrum = spectrum.contiguous()?;
     let dims = spectrum.dims();
     if dims.len() != 5 || *dims.last().unwrap() != 2 {
         bail!("irfft2 expects spectrum shaped [batch, channels, height, width/2+1, 2]")
     }
     let (_b, _c, h, w_half) = (dims[0], dims[1], dims[2], dims[3]);
-    let width = (w_half - 1) * 2;
-    let op = Irfft2;
+    let inferred_width = (w_half - 1) * 2;
+    if width != inferred_width && width != inferred_width + 1 {
+        bail!(
+            "irfft2 width mismatch: spectrum implies {} or {}, got {width}",
+            inferred_width,
+            inferred_width + 1
+        );
+    }
+    let op = Irfft2 { width };
     let time = spectrum.apply_op1_no_bwd(&op)?;
     let scale = 1.0f32 / ((h * width) as f32);
     time.affine(scale as f64, 0.0)?.contiguous()
@@ -591,7 +600,7 @@ mod tests {
             .map(|i| (i as f32).sin() * 0.25)
             .collect();
         let input = Tensor::from_vec(data.clone(), (1, 2, 4, 6), &device)?;
-        let reconstructed = irfft2(&rfft2(&input)?)?;
+        let reconstructed = irfft2(&rfft2(&input)?, 6)?;
         let diffs: Vec<f32> = (reconstructed - &input)?
             .flatten_all()?
             .to_vec1()?

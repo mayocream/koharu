@@ -95,13 +95,16 @@ impl FourierUnit {
     }
 
     fn forward(&self, xs: &Tensor) -> candle_core::Result<Tensor> {
+        let orig_width = xs.dim(3)?;
         let spectrum = rfft2(xs)?;
         let h_freq = spectrum.dim(2)?;
         let w_half = spectrum.dim(3)?;
-        let stacked = spectrum
-            .permute((0, 1, 4, 2, 3))?
-            .contiguous()?
-            .reshape((spectrum.dim(0)?, spectrum.dim(1)? * 2, h_freq, w_half))?;
+        let stacked = spectrum.permute((0, 1, 4, 2, 3))?.contiguous()?.reshape((
+            spectrum.dim(0)?,
+            spectrum.dim(1)? * 2,
+            h_freq,
+            w_half,
+        ))?;
 
         let mut y = self.conv.forward(&stacked)?;
         y = self.bn.forward_t(&y, false)?;
@@ -109,7 +112,7 @@ impl FourierUnit {
 
         let y = y.reshape((spectrum.dim(0)?, self.out_channels, 2usize, h_freq, w_half))?;
         let y = y.permute((0, 1, 3, 4, 2))?;
-        irfft2(&y)
+        irfft2(&y, orig_width)
     }
 }
 
