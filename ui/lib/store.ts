@@ -18,6 +18,7 @@ type AppState = {
   mode: ToolMode
   selectedBlockIndex?: number
   autoFitEnabled: boolean
+  processJobName: string
   // LLM state
   llmModels: string[]
   llmSelectedModel?: string
@@ -34,10 +35,14 @@ type AppState = {
   setSelectedBlockIndex: (index?: number) => void
   setAutoFitEnabled: (enabled: boolean) => void
   updateTextBlocks: (textBlocks: TextBlock[]) => Promise<void>
+  invokeWithStatus: (command: string, args?: any) => Promise<Document>
+  // Processing actions
   detect: () => Promise<void>
   ocr: () => Promise<void>
   inpaint: () => Promise<void>
   render: () => Promise<void>
+  processImage: () => Promise<void>
+  processAllImages: () => Promise<void>
   // LLM actions
   llmList: () => Promise<void>
   llmSetSelectedModel: (id: string) => void
@@ -55,6 +60,7 @@ export const useAppStore = create<AppState>((set, get) => ({
   showInpaintedImage: true,
   showRenderedImage: true,
   mode: 'select',
+  processJobName: '',
   selectedBlockIndex: undefined,
   autoFitEnabled: true,
   llmModels: [],
@@ -106,9 +112,16 @@ export const useAppStore = create<AppState>((set, get) => ({
       textBlocks,
     })
   },
+  invokeWithStatus: async (command: string, args: any = {}) => {
+    // replace underscore case with CamelCases
+    set({ processJobName: command.replace(/_/g, ' ').replace(/\b\w/g, (c) => c.toUpperCase()) })
+    let ret: Document = await invoke<Document>(command, args)
+    set({ processJobName: '' })
+    return ret
+  },
   detect: async () => {
     const index = get().currentDocumentIndex
-    const doc: Document = await invoke('detect', {
+    const doc: Document = await get().invokeWithStatus('detect', {
       index,
     })
     set((state) => ({
@@ -117,14 +130,14 @@ export const useAppStore = create<AppState>((set, get) => ({
   },
   ocr: async () => {
     const index = get().currentDocumentIndex
-    const doc: Document = await invoke('ocr', { index })
+    const doc: Document = await get().invokeWithStatus('ocr', { index })
     set((state) => ({
       documents: replaceDocument(state.documents, index, doc),
     }))
   },
   inpaint: async () => {
     const index = get().currentDocumentIndex
-    const doc: Document = await invoke('inpaint', {
+    const doc: Document = await get().invokeWithStatus('inpaint', {
       index,
     })
     set((state) => ({
@@ -133,10 +146,38 @@ export const useAppStore = create<AppState>((set, get) => ({
   },
   render: async () => {
     const index = get().currentDocumentIndex
-    const doc: Document = await invoke('render', { index })
+    const doc: Document = await get().invokeWithStatus('render', { index })
     set((state) => ({
       documents: replaceDocument(state.documents, index, doc),
     }))
+  },
+  processImage: async () => {
+    // TODO: deduplicate this
+    let try_time = 0
+    while(try_time++ < 300) {
+      await get().llmCheckReady()
+      if (get().llmReady) {
+        set({ llmLoading: false })
+        break
+      }
+      await new Promise((resolve) => setTimeout(resolve, 100))
+    }
+
+    const index = get().currentDocumentIndex
+
+    console.log("Processing image ", index)
+
+    await get().detect()
+    await get().ocr()
+    await get().inpaint()
+    await get().llmGenerate()
+    await get().render()
+  },
+  processAllImages: async () => {
+    for (let index = 0; index < get().documents.length; index++) {
+      set({ currentDocumentIndex: index, selectedBlockIndex: undefined })
+      await get().processImage()
+    }
   },
   llmList: async () => {
     try {
@@ -167,7 +208,7 @@ export const useAppStore = create<AppState>((set, get) => ({
   },
   llmGenerate: async () => {
     const index = get().currentDocumentIndex
-    const doc = await invoke<Document>('llm_generate', {
+    const doc: Document = await get().invokeWithStatus('llm_generate', {
       index,
     })
     set((state) => ({

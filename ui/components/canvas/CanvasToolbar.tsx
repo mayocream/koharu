@@ -6,6 +6,10 @@ import { useAppStore, useConfigStore } from '@/lib/store'
 export function CanvasToolbar() {
   const llmReady = useAppStore((state) => state.llmReady)
   const {
+    processJobName,
+    currentDocumentIndex
+  } = useAppStore()
+  const {
     maskConfig: { brushSize },
     setMaskConfig,
   } = useConfigStore()
@@ -34,7 +38,13 @@ export function CanvasToolbar() {
         <span className='w-14 text-right tabular-nums'>{brushSize}px</span>
       </div>
       <span
-        className={`ml-auto rounded-full px-2 py-1 text-xs ${
+        className={`ml-auto rounded-sm px-2 py-1 text-xs bg-gray-600 text-white`}
+        hidden={processJobName === ''}
+      >
+        {processJobName} {currentDocumentIndex+1}
+      </span>
+      <span
+        className={`ml-auto rounded-sm px-2 py-1 text-xs ${
           llmReady ? 'bg-rose-100 text-rose-700' : 'bg-rose-50 text-rose-400'
         }`}
       >
