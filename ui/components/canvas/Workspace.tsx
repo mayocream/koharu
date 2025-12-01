@@ -152,10 +152,10 @@ export function Workspace() {
                           />
                         )}
                       </div>
-                      <TextBlockAnnotations
+                      {!showRenderedImage && <TextBlockAnnotations
                         selectedIndex={selectedBlockIndex}
                         onSelect={setSelectedBlockIndex}
-                      />
+                      />}
                       {draftBlock && (
                         <div
                           className='pointer-events-none absolute rounded border-2 border-dashed border-rose-500 bg-rose-500/10'

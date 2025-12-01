@@ -153,6 +153,7 @@ export const useAppStore = create<AppState>((set, get) => ({
     }))
   },
   processImage: async () => {
+    set({ processJobName: 'Loading LLM' })
     // TODO: deduplicate this
     let try_time = 0
     while(try_time++ < 300) {
@@ -163,6 +164,7 @@ export const useAppStore = create<AppState>((set, get) => ({
       }
       await new Promise((resolve) => setTimeout(resolve, 100))
     }
+    set({ processJobName: '' })
 
     const index = get().currentDocumentIndex
 
