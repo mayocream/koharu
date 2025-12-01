@@ -4,11 +4,13 @@ use anyhow::Result;
 use rfd::MessageDialog;
 use tauri::Manager;
 use tokio::sync::RwLock;
+use tracing_subscriber::fmt::format::FmtSpan;
 
 use crate::{command, llm, ml, renderer::TextRenderer, state::State};
 
 fn initialize() -> Result<()> {
     tracing_subscriber::fmt()
+        .with_span_events(FmtSpan::CLOSE)
         .with_env_filter(
             tracing_subscriber::filter::EnvFilter::builder()
                 .with_default_directive(tracing::Level::INFO.into())
