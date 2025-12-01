@@ -71,23 +71,21 @@ fn test_horizontal_text_rendering() -> Result<()> {
 fn test_vertical_text_rendering() -> Result<()> {
     let mut fontbook = FontBook::new();
     let font_families = vec!["Microsoft Jhenghei".to_string(), "Microsoft YaHei".to_string(), "Arial".to_string(), "Yu Mincho".to_string()];
-    let fonts = fontbook
-        .filter_by_families(&font_families, &[
-                //Language::Japanese_Japan,
-                Language::Chinese_PeoplesRepublicOfChina,
-                Language::Chinese_Taiwan,
-                Language::Chinese_HongKongSAR,
-                Language::English_UnitedStates,
-            ])
-        .iter()
+    let text = "我，……？abc你是誰？吾輩は猫である。";
+    let (collected, script) = fontbook
+        .filter_by_families_for_text(&font_families, &text.to_string());
+    
+    let fonts = collected.iter()
         .filter_map(|face| fontbook.font(face).ok())
         .collect::<Vec<_>>();
+
+    println!("Preferred script for rendering: {:?}", script);
 
     let font_size = 50.0;
 
     let mut layouter = Layouter::new();
     let request = LayoutRequest {
-        text: "吾輩は猫である。名前はまだ無い。どこで生れたかとんと見当がつかぬ。何でも薄暗いじめじめした所でニャーニャー泣いていた事だけは記憶している。吾輩はここで始めて人間というものを見た。しかもあとで聞くとそれは書生という人間中で一番獰悪な種族であったそうだ。",
+        text: text,
         fonts: &fonts,
         font_size,
         line_height: 60.0,

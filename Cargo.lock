@@ -3250,7 +3250,6 @@ dependencies = [
  "tokio",
  "tracing",
  "tracing-subscriber",
- "unicode-script",
  "velopack",
 ]
 
@@ -3291,6 +3290,7 @@ dependencies = [
  "image",
  "swash",
  "tracing",
+ "unicode-script",
 ]
 
 [[package]]

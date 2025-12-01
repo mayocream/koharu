@@ -16,3 +16,4 @@ fontdb = { workspace = true }
 anyhow = { workspace = true }
 image = { workspace = true }
 tracing = { workspace = true }
+unicode-script = { workspace = true }

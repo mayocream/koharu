@@ -9,7 +9,6 @@ use koharu_renderer::{
     render::{RenderRequest, Renderer},
 };
 use tokio::sync::Mutex;
-use unicode_script::UnicodeScript;
 
 use crate::{
     image::SerializableDynamicImage,
@@ -72,28 +71,15 @@ impl TextRenderer {
     async fn render_block(&self, block: &TextBlock, image: &mut RgbaImage) -> Result<()> {
         let mut fontbook = self.fontbook.lock().await;
         let style = block.style.clone();
-        let fonts = fontbook
-            .filter_by_families(&style.font_families, &[
-                // TODO: define by frontend
-                Language::Chinese_PeoplesRepublicOfChina,
-                Language::Chinese_Taiwan,
-                Language::Chinese_HongKongSAR,
-                Language::English_UnitedStates,
-            ])
+
+
+        let (collected_faces, script) = fontbook
+            .filter_by_families_for_text(&style.font_families, block.translation.as_ref().unwrap_or(&"".to_string()));
+
+        let fonts = collected_faces
             .iter()
             .filter_map(|face| fontbook.font(face).ok())
             .collect::<Vec<_>>();
-
-        // infer script and direction
-        let script = block
-            .translation
-            .iter()
-            .flat_map(|text| text.chars())
-            .all(|ch| ch.script() == unicode_script::Script::Latin)
-            .then_some(Script::Latin)
-            .unwrap_or(Script::Han);
-
-        tracing::info!("Inferred script: {:?}", script);
 
         let direction = if block.width > block.height || script == Script::Latin {
             Orientation::Horizontal
