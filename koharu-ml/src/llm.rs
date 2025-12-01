@@ -8,6 +8,7 @@ use candle_transformers::generation::{LogitsProcessor, Sampling};
 use candle_transformers::models::{quantized_llama, quantized_qwen2};
 use strum::{Display, EnumIter, EnumString, IntoEnumIterator};
 use tokenizers::Tokenizer;
+use sys_locale::get_locale;
 
 use crate::hf_hub;
 
@@ -23,8 +24,25 @@ pub enum ModelId {
 
 impl ModelId {
     pub fn all() -> Vec<Self> {
-        Self::iter().collect()
-    }
+        let mut models: Vec<Self> = ModelId::iter().collect();
+        match get_locale() {
+            Some(locale) => {
+                println!("Current locale: {}", locale);
+                
+                if locale.starts_with("zh") {
+                    models.sort_by_key(|m| match m {
+                        ModelId::VntlLlama3_8Bv2 => 1,
+                        ModelId::SakuraGalTransl7Bv3_7 => 0,
+                    });
+                }
+                // add more condition if more languages are supported
+            }
+            None => {
+                // default ordering for english
+            }
+        }
+        models
+    }   
 }
 
 #[derive(Debug, Clone)]

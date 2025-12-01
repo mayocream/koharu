@@ -45,6 +45,7 @@ hf-hub = { workspace = true }
 velopack = { workspace = true, optional = true }
 dirs = { workspace = true }
 unicode-script = { workspace = true }
+sys-locale = "0.3.2"
 
 [features]
 cuda = ["koharu-runtime/cuda", "koharu-ml/cuda"]

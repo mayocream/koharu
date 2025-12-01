@@ -32,6 +32,7 @@ objc2 = { workspace = true, optional = true }
 objc2-metal-performance-shaders = { workspace = true, optional = true }
 objc2-metal-performance-shaders-graph = { workspace = true, optional = true }
 objc2-foundation = { workspace = true, optional = true }
+sys-locale = "0.3"
 
 [features]
 cuda = [
