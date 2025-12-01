@@ -1,10 +1,5 @@
 [workspace]
-members = [
-    "koharu",
-    "koharu-ml",
-    "koharu-runtime",
-    "koharu-renderer",
-]
+members = ["koharu", "koharu-ml", "koharu-runtime", "koharu-renderer"]
 default-members = ["koharu"]
 resolver = "3"
 
@@ -67,6 +62,19 @@ num_cpus = "1.17"
 swash = "0.2"
 fontdb = "0.23"
 unicode-script = "0.5"
+rustfft = "6.4"
+cudarc = { version = "0.18", features = [
+    "cuda-version-from-build-system",
+    "cufft",
+    "std",
+    "cublas",
+    "cublaslt",
+    "curand",
+    "driver",
+    "nvrtc",
+    "f16",
+    "f8",
+] }
 
 [patch.crates-io]
 candle-transformers = { git = "https://github.com/mayocream/candle", branch = "cuda-dynamic-loading" }
@@ -75,3 +83,4 @@ candle-nn = { git = "https://github.com/mayocream/candle", branch = "cuda-dynami
 float8 = { git = "https://github.com/mayocream/float8", branch = "cuda-dynamic-loading" }
 ug = { git = "https://github.com/mayocream/ug", branch = "cuda-dynamic-loading" }
 ug-cuda = { git = "https://github.com/mayocream/ug", branch = "cuda-dynamic-loading" }
+cudarc = { git = "https://github.com/mayocream/cudarc", branch = "feat/cufft" }

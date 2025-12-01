@@ -1,203 +1,364 @@
-use candle_core::{DType, Tensor};
-use tracing::{info, instrument};
+#[cfg(feature = "metal")]
+use candle_core::metal_backend::MetalStorage;
+use candle_core::{CpuStorage, CustomOp1, Layout, Result, Shape, Tensor, bail};
+#[cfg(feature = "cuda")]
+use candle_core::{DType, backend::BackendStorage, cuda_backend::CudaStorage};
+use rustfft::{FftPlanner, num_complex::Complex32};
+use tracing::instrument;
 
-pub(super) fn move_axis_last(
-    t: &Tensor,
-    axis: usize,
-) -> candle_core::Result<(Tensor, Vec<usize>, Vec<usize>)> {
-    let rank = t.rank();
-    let mut perm: Vec<usize> = (0..rank).collect();
-    let moved = perm.remove(axis);
-    perm.push(moved);
-    let mut inv_perm = vec![0usize; rank];
-    for (i, &p) in perm.iter().enumerate() {
-        inv_perm[p] = i;
+#[derive(Clone, Copy)]
+struct Rfft2;
+
+impl CustomOp1 for Rfft2 {
+    fn name(&self) -> &'static str {
+        "rfft2"
     }
-    Ok((t.permute(perm.clone())?, perm, inv_perm))
-}
 
-fn is_power_of_two(n: usize) -> bool {
-    n != 0 && (n & (n - 1)) == 0
-}
+    fn cpu_fwd(&self, storage: &CpuStorage, layout: &Layout) -> Result<(CpuStorage, Shape)> {
+        let dims = layout.dims();
+        if dims.len() != 4 {
+            bail!("rfft2 expects rank-4 input, got {:?}", dims)
+        }
+        let (batch, channels, height, width) = (dims[0], dims[1], dims[2], dims[3]);
+        let w_half = width / 2 + 1;
+        let src = match storage {
+            CpuStorage::F32(vs) => vs,
+            _ => bail!("rfft2 only supports f32 inputs on cpu"),
+        };
+        let (start, end) = layout
+            .contiguous_offsets()
+            .ok_or_else(|| candle_core::Error::RequiresContiguous { op: "rfft2" }.bt())?;
+        let src = &src[start..end];
 
-fn bit_reverse_indices(len: usize) -> Vec<i64> {
-    let bits = (usize::BITS - (len.leading_zeros() + 1)) as u32;
-    (0..len)
-        .map(|i| {
-            let mut v = i;
-            let mut r = 0usize;
-            for _ in 0..bits {
-                r = (r << 1) | (v & 1);
-                v >>= 1;
+        let mut planner = FftPlanner::<f32>::new();
+        let fft_w = planner.plan_fft_forward(width);
+        let fft_h = planner.plan_fft_forward(height);
+
+        let mut row_buffer = vec![Complex32::default(); width * height];
+        let mut col_buffer = vec![Complex32::default(); height];
+        let mut dst = vec![0f32; batch * channels * height * w_half * 2];
+
+        let plane_in_stride = height * width;
+        let plane_out_stride = height * w_half * 2;
+        for bc in 0..(batch * channels) {
+            let plane = &src[bc * plane_in_stride..(bc + 1) * plane_in_stride];
+            row_buffer
+                .iter_mut()
+                .zip(plane.iter())
+                .for_each(|(dst, &v)| *dst = Complex32::new(v, 0.0));
+
+            for row in row_buffer.chunks_exact_mut(width) {
+                fft_w.process(row);
             }
-            r as i64
-        })
-        .collect()
+
+            for x in 0..width {
+                for (dst, src) in col_buffer
+                    .iter_mut()
+                    .zip(row_buffer.iter().skip(x).step_by(width))
+                {
+                    *dst = *src;
+                }
+                fft_h.process(&mut col_buffer);
+                for (dst, src) in row_buffer
+                    .iter_mut()
+                    .skip(x)
+                    .step_by(width)
+                    .zip(col_buffer.iter())
+                {
+                    *dst = *src;
+                }
+            }
+
+            for (y, row) in row_buffer.chunks_exact(width).enumerate() {
+                let out_row = &mut dst[bc * plane_out_stride + y * w_half * 2
+                    ..bc * plane_out_stride + (y + 1) * w_half * 2];
+                for x in 0..w_half {
+                    let c = row[x];
+                    let base = x * 2;
+                    out_row[base] = c.re;
+                    out_row[base + 1] = c.im;
+                }
+            }
+        }
+
+        let shape = Shape::from(vec![batch, channels, height, w_half, 2]);
+        Ok((CpuStorage::F32(dst), shape))
+    }
+
+    #[cfg(feature = "cuda")]
+    fn cuda_fwd(&self, storage: &CudaStorage, layout: &Layout) -> Result<(CudaStorage, Shape)> {
+        use cudarc::cufft::{result as cufft, sys};
+        use cudarc::driver::{DevicePtr, DevicePtrMut};
+
+        let dims = layout.dims();
+        if dims.len() != 4 {
+            bail!("rfft2 expects rank-4 input, got {:?}", dims)
+        }
+        let (batch, channels, height, width) = (dims[0], dims[1], dims[2], dims[3]);
+        if storage.dtype() != DType::F32 {
+            bail!("rfft2 cuda path only supports f32 inputs")
+        }
+        let (start, end) = layout
+            .contiguous_offsets()
+            .ok_or_else(|| candle_core::Error::RequiresContiguous { op: "rfft2" }.bt())?;
+        let w_half = width / 2 + 1;
+        let batch = (batch * channels) as i32;
+        let input = storage.as_cuda_slice::<f32>()?;
+        let input = input.slice(start..end);
+        let dev = storage.device();
+        let mut output =
+            dev.alloc_zeros::<f32>(dims.iter().product::<usize>() / width * w_half * 2)?;
+
+        let mut n = [height as i32, width as i32];
+        let mut inembed = [height as i32, width as i32];
+        let mut onembed = [height as i32, w_half as i32];
+        let istride = 1;
+        let ostride = 1;
+        let idist = (height * width) as i32;
+        let odist = (height * w_half) as i32;
+
+        let plan = unsafe {
+            cufft::plan_many(
+                2,
+                n.as_mut_ptr(),
+                inembed.as_mut_ptr(),
+                istride,
+                idist,
+                onembed.as_mut_ptr(),
+                ostride,
+                odist,
+                sys::cufftType::CUFFT_R2C,
+                batch,
+            )
+            .map_err(|e| candle_core::Error::Cuda(Box::new(e)))?
+        };
+
+        let stream = dev.cuda_stream();
+        unsafe { sys::cufftSetStream(plan, stream.cu_stream() as sys::cudaStream_t) }
+            .result()
+            .map_err(|e| candle_core::Error::Cuda(Box::new(e)))?;
+
+        {
+            let mut output_view = output.as_view_mut();
+
+            let (input_ptr, _in_sync) = input.device_ptr(stream.as_ref());
+            let (output_ptr, _out_sync) = output_view.device_ptr_mut(stream.as_ref());
+
+            let exec_res = unsafe {
+                cufft::exec_r2c(
+                    plan,
+                    input_ptr as *mut sys::cufftReal,
+                    output_ptr as *mut sys::cufftComplex,
+                )
+            };
+            let destroy_res = unsafe { cufft::destroy(plan) };
+            exec_res.map_err(|e| candle_core::Error::Cuda(Box::new(e)))?;
+            destroy_res.map_err(|e| candle_core::Error::Cuda(Box::new(e)))?;
+        }
+
+        let shape = Shape::from(vec![dims[0], dims[1], dims[2], w_half, 2]);
+        Ok((CudaStorage::wrap_cuda_slice(output, dev.clone()), shape))
+    }
+
+    #[cfg(feature = "metal")]
+    fn metal_fwd(&self, storage: &MetalStorage, layout: &Layout) -> Result<(MetalStorage, Shape)> {
+        let dims = layout.dims();
+        if dims.len() != 4 {
+            bail!("rfft2 expects rank-4 input, got {:?}", dims)
+        }
+        let cpu = storage.to_cpu_storage()?;
+        let (cpu_out, shape) = self.cpu_fwd(&cpu, layout)?;
+        let metal_out = storage.device().storage_from_cpu_storage(&cpu_out)?;
+        Ok((metal_out, shape))
+    }
+}
+
+#[derive(Clone, Copy)]
+struct Irfft2;
+
+impl CustomOp1 for Irfft2 {
+    fn name(&self) -> &'static str {
+        "irfft2"
+    }
+
+    fn cpu_fwd(&self, storage: &CpuStorage, layout: &Layout) -> Result<(CpuStorage, Shape)> {
+        let dims = layout.dims();
+        if dims.len() != 5 || dims[4] != 2 {
+            bail!("irfft2 expects spectrum shaped [batch, channels, height, width/2+1, 2]")
+        }
+        let (batch, channels, height, w_half) = (dims[0], dims[1], dims[2], dims[3]);
+        let width = (w_half - 1) * 2;
+        let src = match storage {
+            CpuStorage::F32(vs) => vs,
+            _ => bail!("irfft2 only supports f32 inputs on cpu"),
+        };
+        let (start, end) = layout
+            .contiguous_offsets()
+            .ok_or_else(|| candle_core::Error::RequiresContiguous { op: "irfft2" }.bt())?;
+        let src = &src[start..end];
+
+        let mut planner = FftPlanner::<f32>::new();
+        let ifft_w = planner.plan_fft_inverse(width);
+        let ifft_h = planner.plan_fft_inverse(height);
+
+        let mut buffer = vec![Complex32::default(); height * width];
+        let mut col_buffer = vec![Complex32::default(); height];
+        let mut dst = vec![0f32; batch * channels * height * width];
+
+        let plane_in_stride = height * w_half * 2;
+        let plane_out_stride = height * width;
+        for bc in 0..(batch * channels) {
+            let plane = &src[bc * plane_in_stride..(bc + 1) * plane_in_stride];
+            for (y, row) in plane.chunks_exact(w_half * 2).enumerate() {
+                let dst_row = &mut buffer[y * width..(y + 1) * width];
+                for x in 0..w_half {
+                    let base = x * 2;
+                    dst_row[x] = Complex32::new(row[base], row[base + 1]);
+                }
+                for x in 1..w_half {
+                    let mirror = width - x;
+                    dst_row[mirror] = dst_row[x].conj();
+                }
+            }
+
+            for row in buffer.chunks_exact_mut(width) {
+                ifft_w.process(row);
+            }
+
+            for x in 0..width {
+                for (dst, src) in col_buffer
+                    .iter_mut()
+                    .zip(buffer.iter().skip(x).step_by(width))
+                {
+                    *dst = *src;
+                }
+                ifft_h.process(&mut col_buffer);
+                for (dst, src) in buffer
+                    .iter_mut()
+                    .skip(x)
+                    .step_by(width)
+                    .zip(col_buffer.iter())
+                {
+                    *dst = *src;
+                }
+            }
+
+            let out_plane = &mut dst[bc * plane_out_stride..(bc + 1) * plane_out_stride];
+            for (out, val) in out_plane.iter_mut().zip(buffer.iter()) {
+                *out = val.re;
+            }
+        }
+
+        let shape = Shape::from(vec![batch, channels, height, width]);
+        Ok((CpuStorage::F32(dst), shape))
+    }
+
+    #[cfg(feature = "cuda")]
+    fn cuda_fwd(&self, storage: &CudaStorage, layout: &Layout) -> Result<(CudaStorage, Shape)> {
+        use cudarc::cufft::{result as cufft, sys};
+        use cudarc::driver::{DevicePtr, DevicePtrMut};
+
+        let dims = layout.dims();
+        if dims.len() != 5 || dims[4] != 2 {
+            bail!("irfft2 expects spectrum shaped [batch, channels, height, width/2+1, 2]")
+        }
+        if storage.dtype() != DType::F32 {
+            bail!("irfft2 cuda path only supports f32 inputs")
+        }
+        let (start, end) = layout
+            .contiguous_offsets()
+            .ok_or_else(|| candle_core::Error::RequiresContiguous { op: "irfft2" }.bt())?;
+        let (batch, channels, height, w_half) = (dims[0], dims[1], dims[2], dims[3]);
+        let width = (w_half - 1) * 2;
+        let batch = (batch * channels) as i32;
+        let input = storage.as_cuda_slice::<f32>()?;
+        let input = input.slice(start..end);
+        let dev = storage.device();
+        let mut output = dev.alloc_zeros::<f32>(dims[0] * dims[1] * dims[2] * width)?;
+
+        let mut n = [height as i32, width as i32];
+        let mut inembed = [height as i32, w_half as i32];
+        let mut onembed = [height as i32, width as i32];
+        let istride = 1;
+        let ostride = 1;
+        let idist = (height * w_half) as i32;
+        let odist = (height * width) as i32;
+
+        let plan = unsafe {
+            cufft::plan_many(
+                2,
+                n.as_mut_ptr(),
+                inembed.as_mut_ptr(),
+                istride,
+                idist,
+                onembed.as_mut_ptr(),
+                ostride,
+                odist,
+                sys::cufftType::CUFFT_C2R,
+                batch,
+            )
+            .map_err(|e| candle_core::Error::Cuda(Box::new(e)))?
+        };
+
+        let stream = dev.cuda_stream();
+        unsafe { sys::cufftSetStream(plan, stream.cu_stream() as sys::cudaStream_t) }
+            .result()
+            .map_err(|e| candle_core::Error::Cuda(Box::new(e)))?;
+
+        {
+            let mut output_view = output.as_view_mut();
+
+            let (input_ptr, _in_sync) = input.device_ptr(stream.as_ref());
+            let (output_ptr, _out_sync) = output_view.device_ptr_mut(stream.as_ref());
+
+            let exec_res = unsafe {
+                cufft::exec_c2r(
+                    plan,
+                    input_ptr as *mut sys::cufftComplex,
+                    output_ptr as *mut sys::cufftReal,
+                )
+            };
+            let destroy_res = unsafe { cufft::destroy(plan) };
+            exec_res.map_err(|e| candle_core::Error::Cuda(Box::new(e)))?;
+            destroy_res.map_err(|e| candle_core::Error::Cuda(Box::new(e)))?;
+        }
+
+        let shape = Shape::from(vec![dims[0], dims[1], dims[2], width]);
+        Ok((CudaStorage::wrap_cuda_slice(output, dev.clone()), shape))
+    }
+
+    #[cfg(feature = "metal")]
+    fn metal_fwd(&self, storage: &MetalStorage, layout: &Layout) -> Result<(MetalStorage, Shape)> {
+        let dims = layout.dims();
+        if dims.len() != 5 || dims[4] != 2 {
+            bail!("irfft2 expects spectrum shaped [batch, channels, height, width/2+1, 2]")
+        }
+        let cpu = storage.to_cpu_storage()?;
+        let (cpu_out, shape) = self.cpu_fwd(&cpu, layout)?;
+        let metal_out = storage.device().storage_from_cpu_storage(&cpu_out)?;
+        Ok((metal_out, shape))
+    }
 }
 
 #[instrument(level = "info", skip_all)]
-pub(super) fn fft_axis_power2(
-    re: &Tensor,
-    im: &Tensor,
-    inverse: bool,
-) -> candle_core::Result<(Tensor, Tensor)> {
-    let (outer, len) = re.dims2()?;
-    if len == 1 {
-        return Ok((re.clone(), im.clone()));
-    }
-
-    let idx = Tensor::from_vec(bit_reverse_indices(len), len, re.device())?;
-    let mut re = re.index_select(&idx, 1)?;
-    let mut im = im.index_select(&idx, 1)?;
-
-    let mut step = 2;
-    while step <= len {
-        let half = step / 2;
-        let blocks = len / step;
-        let angles = (0..half)
-            .map(|k| 2.0f32 * std::f32::consts::PI * k as f32 / step as f32)
-            .collect::<Vec<_>>();
-        let cos = Tensor::from_vec(
-            angles.iter().map(|a| a.cos()).collect::<Vec<_>>(),
-            (1, 1, half),
-            re.device(),
-        )?;
-        let sign = if inverse { 1.0f32 } else { -1.0f32 };
-        let sin = Tensor::from_vec(
-            angles.iter().map(|a| sign * a.sin()).collect::<Vec<_>>(),
-            (1, 1, half),
-            re.device(),
-        )?;
-
-        let re_blocks = re.reshape((outer, blocks, step))?;
-        let im_blocks = im.reshape((outer, blocks, step))?;
-
-        let even_re = re_blocks.narrow(2, 0, half)?;
-        let odd_re = re_blocks.narrow(2, half, half)?;
-        let even_im = im_blocks.narrow(2, 0, half)?;
-        let odd_im = im_blocks.narrow(2, half, half)?;
-
-        let cos_b = cos.broadcast_as(odd_re.shape())?;
-        let sin_b = sin.broadcast_as(odd_re.shape())?;
-
-        let t_re = ((&odd_re * &cos_b)? - (&odd_im * &sin_b)?)?;
-        let t_im = ((&odd_im * &cos_b)? + (&odd_re * &sin_b)?)?;
-
-        let out_even_re = (&even_re + &t_re)?;
-        let out_even_im = (&even_im + &t_im)?;
-        let out_odd_re = (&even_re - &t_re)?;
-        let out_odd_im = (&even_im - &t_im)?;
-
-        let re_new = Tensor::cat(&[&out_even_re, &out_odd_re], 2)?;
-        let im_new = Tensor::cat(&[&out_even_im, &out_odd_im], 2)?;
-
-        re = re_new.reshape((outer, len))?;
-        im = im_new.reshape((outer, len))?;
-
-        step *= 2;
-    }
-
-    let scale = Tensor::full(1.0f32 / (len as f32).sqrt(), (outer, len), re.device())?;
-    re = (re * &scale)?;
-    im = (im * &scale)?;
-    Ok((re, im))
-}
-
-pub(super) fn dft_axis(
-    re: &Tensor,
-    im: &Tensor,
-    axis: usize,
-    inverse: bool,
-) -> candle_core::Result<(Tensor, Tensor)> {
-    let (re_p, perm, inv_perm) = move_axis_last(re, axis)?;
-    let im_p = im.permute(perm.clone())?;
-    let dims = re_p.dims().to_vec();
-    let len = *dims.last().unwrap();
-    let outer = re.elem_count() / len;
-    let re_flat = re_p.reshape((outer, len))?;
-    let im_flat = im_p.reshape((outer, len))?;
-
-    let (re_fft, im_fft) = fft_axis_power2(&re_flat, &im_flat, inverse)?;
-
-    let re_back = re_fft.reshape(dims.clone())?;
-    let im_back = im_fft.reshape(dims)?;
-    let re_final = re_back.permute(inv_perm.clone())?;
-    let im_final = im_back.permute(inv_perm)?;
-    Ok((re_final, im_final))
-}
-
-fn next_pow2(n: usize) -> usize {
-    if is_power_of_two(n) {
-        n
-    } else {
-        1usize << (usize::BITS - (n - 1).leading_zeros())
-    }
-}
-
-fn pad_to_pow2(xs: &Tensor) -> candle_core::Result<(Tensor, usize, usize)> {
-    let (_b, _c, h, w) = xs.dims4()?;
-    let h2 = next_pow2(h);
-    let w2 = next_pow2(w);
-    let pad_h = h2 - h;
-    let pad_w = w2 - w;
-    let xs = xs
-        .pad_with_zeros(3, 0, pad_w)?
-        .pad_with_zeros(2, 0, pad_h)?;
-    Ok((xs, h2, w2))
+pub fn rfft2(xs: &Tensor) -> candle_core::Result<Tensor> {
+    let xs = xs.contiguous()?;
+    let op = Rfft2;
+    let spectrum = xs.apply_op1_no_bwd(&op)?;
+    Ok(spectrum)
 }
 
 #[instrument(level = "info", skip_all)]
-pub(super) fn rfft2_power2(
-    xs: &Tensor,
-) -> candle_core::Result<(Tensor, Tensor, usize, usize, usize, usize)> {
-    let (b, c, h, w) = xs.dims4()?;
-    let (padded, h2, w2) = pad_to_pow2(xs)?;
-    info!(
-        batch = b,
-        channels = c,
-        height = h,
-        width = w,
-        padded_height = h2,
-        padded_width = w2,
-        "rfft2_power2 padding input"
-    );
-    let re0 = padded.to_dtype(DType::F32)?;
-    let im0 = Tensor::zeros_like(&re0)?;
-    let (re_w, im_w) = dft_axis(&re0, &im0, 3, false)?;
-    let (mut re_hw, mut im_hw) = dft_axis(&re_w, &im_w, 2, false)?;
-    let w_half = w2 / 2 + 1;
-    re_hw = re_hw.narrow(3, 0, w_half)?;
-    im_hw = im_hw.narrow(3, 0, w_half)?;
-    re_hw = re_hw.reshape((b, c, h2, w_half))?;
-    im_hw = im_hw.reshape((b, c, h2, w_half))?;
-    Ok((re_hw, im_hw, h2, w2, h, w))
-}
-
-#[instrument(level = "info", skip_all)]
-pub(super) fn irfft2_power2(
-    re_half: &Tensor,
-    im_half: &Tensor,
-    h_pad: usize,
-    w_pad: usize,
-    h_orig: usize,
-    w_orig: usize,
-) -> candle_core::Result<Tensor> {
-    let (b, c, _h, w_half) = re_half.dims4()?;
-    let mirror_len = if w_pad % 2 == 0 {
-        w_half - 2
-    } else {
-        w_half - 1
-    };
-    let tail_re = re_half.narrow(3, 1, mirror_len)?.contiguous()?.flip(&[3])?;
-    let tail_im = im_half
-        .narrow(3, 1, mirror_len)?
-        .contiguous()?
-        .flip(&[3])?
-        .neg()?;
-    let re_full = Tensor::cat(&[re_half, &tail_re], 3)?;
-    let im_full = Tensor::cat(&[im_half, &tail_im], 3)?;
-    let (re_h, im_h) = dft_axis(&re_full, &im_full, 3, true)?;
-    let (re, _im) = dft_axis(&re_h, &im_h, 2, true)?;
-    let re = re.reshape((b, c, h_pad, w_pad))?;
-    re.narrow(2, 0, h_orig)?.narrow(3, 0, w_orig)?.contiguous()
+pub fn irfft2(spectrum: &Tensor) -> candle_core::Result<Tensor> {
+    let spectrum = spectrum.contiguous()?;
+    let dims = spectrum.dims();
+    if dims.len() != 5 || *dims.last().unwrap() != 2 {
+        bail!("irfft2 expects spectrum shaped [batch, channels, height, width/2+1, 2]")
+    }
+    let (_b, _c, h, w_half) = (dims[0], dims[1], dims[2], dims[3]);
+    let width = (w_half - 1) * 2;
+    let op = Irfft2;
+    let time = spectrum.apply_op1_no_bwd(&op)?;
+    let scale = 1.0f32 / ((h * width) as f32);
+    time.affine(scale as f64, 0.0)?.contiguous()
 }

@@ -1,10 +1,10 @@
 use anyhow::{Result, anyhow};
-use candle_core::{DType, Device, IndexOp, Module, ModuleT, Tensor};
+use candle_core::{DType, Device, Module, ModuleT, Tensor};
 use candle_nn::{
     BatchNorm, Conv2d, Conv2dConfig, ConvTranspose2d, ConvTranspose2dConfig, VarBuilder, ops,
 };
 
-use super::fft::{irfft2_power2, rfft2_power2};
+use super::fft::{irfft2, rfft2};
 
 #[derive(Clone, Copy)]
 struct FfcChannels {
@@ -95,21 +95,21 @@ impl FourierUnit {
     }
 
     fn forward(&self, xs: &Tensor) -> candle_core::Result<Tensor> {
-        let (real, imag, h_pad, w_pad, h_orig, w_orig) = rfft2_power2(xs)?;
-        let stacked = Tensor::stack(&[&real, &imag], 4)?
+        let spectrum = rfft2(xs)?;
+        let h_freq = spectrum.dim(2)?;
+        let w_half = spectrum.dim(3)?;
+        let stacked = spectrum
             .permute((0, 1, 4, 2, 3))?
             .contiguous()?
-            .reshape((real.dim(0)?, real.dim(1)? * 2, h_pad, real.dim(3)?))?;
+            .reshape((spectrum.dim(0)?, spectrum.dim(1)? * 2, h_freq, w_half))?;
 
         let mut y = self.conv.forward(&stacked)?;
         y = self.bn.forward_t(&y, false)?;
         y = y.relu()?;
 
-        let y = y.reshape((real.dim(0)?, self.out_channels, 2usize, h_pad, real.dim(3)?))?;
+        let y = y.reshape((spectrum.dim(0)?, self.out_channels, 2usize, h_freq, w_half))?;
         let y = y.permute((0, 1, 3, 4, 2))?;
-        let y_re = y.i((.., .., .., .., 0))?;
-        let y_im = y.i((.., .., .., .., 1))?;
-        irfft2_power2(&y_re, &y_im, h_pad, w_pad, h_orig, w_orig)
+        irfft2(&y)
     }
 }
 

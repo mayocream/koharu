@@ -26,9 +26,16 @@ strum = { workspace = true }
 tracing = { workspace = true }
 tracing-subscriber = { workspace = true }
 tokio = { workspace = true }
+rustfft = { workspace = true }
+cudarc = { workspace = true, optional = true }
 
 [features]
-cuda = ["candle-core/cuda", "candle-nn/cuda", "candle-transformers/cuda"]
+cuda = [
+    "cudarc",
+    "candle-core/cuda",
+    "candle-nn/cuda",
+    "candle-transformers/cuda",
+]
 cudnn = ["candle-core/cudnn", "candle-nn/cudnn", "candle-transformers/cudnn"]
 metal = ["candle-core/metal", "candle-nn/metal", "candle-transformers/metal"]
 
