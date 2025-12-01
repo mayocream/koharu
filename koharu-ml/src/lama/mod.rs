@@ -48,30 +48,30 @@ impl Lama {
         let (w, h) = (image.width() as usize, image.height() as usize);
 
         let rgb = image.to_rgb8().into_raw();
-        let mask_gray = mask.to_luma8().into_raw();
+        let luma = mask.to_luma8().into_raw();
 
         let image_tensor = (Tensor::from_vec(rgb, (1, h, w, 3), &self.device)?
             .permute((0, 3, 1, 2))?
             .to_dtype(DType::F32)?
             * (1. / 255.))?;
 
-        let mask_tensor = (Tensor::from_vec(mask_gray, (1, h, w, 1), &self.device)?
+        let mask_tensor = Tensor::from_vec(luma, (1, h, w, 1), &self.device)?
             .permute((0, 3, 1, 2))?
             .to_dtype(DType::F32)?
-            * (1. / 255.))?;
+            .gt(1.0f32)?;
 
         Ok((image_tensor, mask_tensor))
     }
 
     #[instrument(level = "info", skip_all)]
     fn postprocess(&self, output: &Tensor) -> Result<DynamicImage> {
-        let output = output.to_device(&Device::Cpu)?;
         let output = output.squeeze(0)?;
         let (channels, height, width) = output.dims3()?;
         if channels != 3 {
             bail!("expected 3 channels in output, got {channels}");
         }
-        let output = (output * 255.)?.clamp(0., 255.)?.to_dtype(DType::U8)?;
+        let output = (output * 255.)?.clamp(0., 255.)?;
+        let output = output.to_device(&Device::Cpu)?.to_dtype(DType::U8)?;
         let hwc = output.permute((1, 2, 0))?; // HWC for ImageBuffer
         let raw: Vec<u8> = hwc.flatten_all()?.to_vec1()?;
         let image = RgbImage::from_raw(width as u32, height as u32, raw)

@@ -561,8 +561,7 @@ impl CustomOp1 for Irfft2 {
 pub fn rfft2(xs: &Tensor) -> candle_core::Result<Tensor> {
     let xs = xs.contiguous()?;
     let op = Rfft2;
-    let spectrum = xs.apply_op1_no_bwd(&op)?;
-    Ok(spectrum)
+    xs.apply_op1_no_bwd(&op)
 }
 
 #[instrument(level = "info", skip_all)]
