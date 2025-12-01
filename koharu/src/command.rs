@@ -3,6 +3,7 @@ use std::{str::FromStr, sync::Arc};
 use koharu_ml::llm::ModelId;
 use rayon::iter::{IntoParallelIterator, ParallelIterator};
 use tauri::State;
+use crate::image::SerializableDynamicImage;
 
 use crate::{
     llm, ml,
@@ -96,7 +97,37 @@ pub async fn inpaint(
         .as_ref()
         .ok_or_else(|| anyhow::anyhow!("Segment image not found"))?;
 
-    let inpainted = model.inpaint(&document.image, segment).await?;
+
+    let text_blocks = document.text_blocks.clone();
+
+    // for every pixel in segment_ref that is not black, check if it's inside any text block, else set to black
+    let mut segment_data = segment.to_rgba8();
+    let (seg_width, seg_height) = segment_data.dimensions();
+    for y in 0..seg_height {
+        for x in 0..seg_width {
+            let pixel = segment_data.get_pixel_mut(x, y);
+            if pixel.0 != [0, 0, 0, 255] {
+                let mut inside_any_block = false;
+                for block in &text_blocks {
+                    if x >= block.x as u32
+                        && x < (block.x + block.width) as u32
+                        && y >= block.y as u32
+                        && y < (block.y + block.height) as u32
+                    {
+                        inside_any_block = true;
+                        break;
+                    }
+                }
+                if !inside_any_block {
+                    *pixel = image::Rgba([0, 0, 0, 255]);
+                }
+            }
+        }
+    }
+
+    let mask = SerializableDynamicImage::from(image::DynamicImage::ImageRgba8(segment_data));
+
+    let inpainted = model.inpaint(&document.image, &mask).await?;
 
     document.inpainted = Some(inpainted);
 
