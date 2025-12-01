@@ -23,6 +23,7 @@ type AppState = {
   llmModels: string[]
   llmSelectedModel?: string
   llmReady: boolean
+  llmLoading: boolean
   // ui + actions
   openDocuments: () => Promise<void>
   openExternal: (url: string) => Promise<void>
@@ -46,8 +47,7 @@ type AppState = {
   // LLM actions
   llmList: () => Promise<void>
   llmSetSelectedModel: (id: string) => void
-  llmLoad: () => Promise<void>
-  llmOffload: () => Promise<void>
+  llmToggleLoadUnload: () => Promise<void>
   llmCheckReady: () => Promise<void>
   llmGenerate: () => Promise<void>
 }
@@ -56,7 +56,7 @@ export const useAppStore = create<AppState>((set, get) => ({
   documents: [],
   currentDocumentIndex: 0,
   scale: 100,
-  showSegmentationMask: true,
+  showSegmentationMask: false,
   showInpaintedImage: true,
   showRenderedImage: true,
   mode: 'select',
@@ -66,6 +66,7 @@ export const useAppStore = create<AppState>((set, get) => ({
   llmModels: [],
   llmSelectedModel: undefined,
   llmReady: false,
+  llmLoading: false,
   openDocuments: async () => {
     const docs: Document[] = await invoke('open_documents')
     set({
@@ -191,14 +192,32 @@ export const useAppStore = create<AppState>((set, get) => ({
     } catch (_) {}
   },
   llmSetSelectedModel: (id: string) => set({ llmSelectedModel: id }),
-  llmLoad: async () => {
+  llmToggleLoadUnload: async () => {
+    // unload
+    if (get().llmReady) {
+      await invoke('llm_offload')
+      set({ llmLoading: false, llmReady: false })
+      return
+    }
+  
+    // load
     const id = get().llmSelectedModel
     if (!id) return
     await invoke('llm_load', { id })
+    
+    set({ llmLoading: true })
+    // poll for llmCheckReady and set llmLoading false
+    let try_time = 0
+    while(try_time++ < 300) {
+      await get().llmCheckReady()
+      if (get().llmReady) {
+        set({ llmLoading: false })
+        break
+      }
+      await new Promise((resolve) => setTimeout(resolve, 100))
+    }
   },
-  llmOffload: async () => {
-    await invoke('llm_offload')
-    set({ llmReady: false })
+  _llmWaitUntilReady: async () => {
   },
   llmCheckReady: async () => {
     try {

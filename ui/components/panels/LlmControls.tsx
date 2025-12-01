@@ -10,10 +10,10 @@ export function LlmControls() {
     llmModels,
     llmSelectedModel,
     llmReady,
+    llmLoading,
     llmList,
     llmSetSelectedModel,
-    llmLoad,
-    llmOffload,
+    llmToggleLoadUnload,
     llmGenerate,
     llmCheckReady,
     render,
@@ -54,39 +54,35 @@ export function LlmControls() {
       </Select.Root>
       <div className='flex gap-2'>
         <TooltipButton
-          label='Load'
+          label={!llmReady ? 'Load' : 'Unload'}
           tooltip='Load selected model'
           widthClass='w-full'
-          onClick={llmLoad}
-          disabled={!llmSelectedModel}
+          onClick={llmToggleLoadUnload}
+          disabled={!llmSelectedModel || llmLoading}
         />
         <TooltipButton
-          label='Offload'
-          tooltip='Release model from memory'
+          label={generating ? 'Generating...' : 'Generate'}
+          tooltip='Generate translations for detected text blocks'
+          disabled={!llmReady || generating}
+          onClick={async () => {
+            setGenerating(true)
+            try {
+              await llmGenerate()
+            } finally {
+              setGenerating(false)
+            }
+          }}
           widthClass='w-full'
-          onClick={llmOffload}
         />
       </div>
-      <TooltipButton
-        label={generating ? 'Generating...' : 'Generate'}
-        tooltip='Generate translations for detected text blocks'
-        disabled={!llmReady || generating}
-        onClick={async () => {
-          setGenerating(true)
-          try {
-            await llmGenerate()
-          } finally {
-            setGenerating(false)
-          }
-        }}
-        widthClass='w-full'
-      />
-      <TooltipButton
-        label='Render text'
-        tooltip='Render translations onto the page'
-        onClick={render}
-        widthClass='w-full'
-      />
+      <div className='flex col'>
+        <TooltipButton
+          label='Render text'
+          tooltip='Render translations onto the page'
+          onClick={render}
+          widthClass='w-full'
+        />
+      </div>
     </div>
   )
 }

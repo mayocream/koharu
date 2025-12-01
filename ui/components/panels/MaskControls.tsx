@@ -33,12 +33,14 @@ export function MaskControls() {
         onChange={setShowRenderedImage}
       />
       <Separator.Root className='my-1 h-px bg-neutral-200' />
-      <TooltipButton
-        label='Inpaint'
-        tooltip='Apply inpainting'
-        widthClass='w-full'
-        onClick={inpaint}
-      />
+      <div className='flex'>
+        <TooltipButton
+          label='Inpaint'
+          tooltip='Apply inpainting'
+          widthClass='w-full'
+          onClick={inpaint}
+        />
+      </div>
     </div>
   )
 }
