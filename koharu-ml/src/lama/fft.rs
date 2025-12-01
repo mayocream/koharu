@@ -2,15 +2,73 @@ use candle_core::{CpuStorage, CustomOp1, Layout, Result, Shape, Tensor, bail};
 #[cfg(feature = "cuda")]
 use candle_core::{DType, backend::BackendStorage, cuda_backend::CudaStorage};
 #[cfg(feature = "metal")]
-use candle_core::{
-    backend::{BackendDevice, BackendStorage},
-    metal_backend::MetalStorage,
-};
+use candle_core::{backend::BackendStorage, metal_backend::MetalStorage};
 use rustfft::{FftPlanner, num_complex::Complex32};
 use tracing::instrument;
 
+#[cfg(feature = "metal")]
+use {
+    candle_core::metal_backend::MetalError,
+    objc2::{AnyThread, rc::Retained, runtime::ProtocolObject},
+    objc2_foundation::{NSCopying, NSDictionary, NSNumber},
+    objc2_metal_performance_shaders::MPSDataType,
+    objc2_metal_performance_shaders_graph::{
+        MPSGraph, MPSGraphFFTDescriptor, MPSGraphFFTScalingMode, MPSGraphTensorData,
+        MPSGraphTensorDataDictionary,
+    },
+    std::ptr::NonNull,
+};
+
 #[derive(Clone, Copy)]
 struct Rfft2;
+
+#[cfg(feature = "metal")]
+fn nsarray_from_usize(values: &[usize]) -> Result<Retained<objc2_foundation::NSArray<NSNumber>>> {
+    let nums: Vec<Retained<NSNumber>> = values
+        .iter()
+        .map(|&v| NSNumber::numberWithUnsignedLongLong(v as u64))
+        .collect();
+    let mut ptrs: Vec<NonNull<NSNumber>> = nums
+        .iter()
+        .map(|n| unsafe {
+            // Retained always holds a non-null pointer.
+            NonNull::new_unchecked(Retained::as_ptr(n) as *mut NSNumber)
+        })
+        .collect();
+    let arr = unsafe {
+        objc2_foundation::NSArray::<NSNumber>::arrayWithObjects_count(
+            NonNull::new(ptrs.as_mut_ptr()).expect("non-null array backing"),
+            ptrs.len(),
+        )
+    };
+    Ok(arr)
+}
+
+#[cfg(feature = "metal")]
+fn single_entry_dictionary<K, V>(key: &K, value: &V) -> Retained<NSDictionary<K, V>>
+where
+    K: NSCopying + objc2::Message,
+    V: objc2::Message,
+{
+    unsafe { NSDictionary::dictionaryWithObject_forKey(value, ProtocolObject::from_ref(key)) }
+}
+
+#[cfg(feature = "metal")]
+fn make_fft_descriptor(inverse: bool) -> Result<Retained<MPSGraphFFTDescriptor>> {
+    let desc = unsafe {
+        MPSGraphFFTDescriptor::descriptor().ok_or_else(|| {
+            candle_core::Error::Msg("MPSGraphFFTDescriptor::descriptor returned nil".to_string())
+                .bt()
+        })?
+    };
+    unsafe {
+        desc.setInverse(inverse);
+        // Stay unnormalized; we apply explicit scaling in `irfft2` for all backends.
+        desc.setScalingMode(MPSGraphFFTScalingMode::None);
+        desc.setRoundToOddHermitean(false);
+    }
+    Ok(desc)
+}
 
 impl CustomOp1 for Rfft2 {
     fn name(&self) -> &'static str {
@@ -169,10 +227,89 @@ impl CustomOp1 for Rfft2 {
         if dims.len() != 4 {
             bail!("rfft2 expects rank-4 input, got {:?}", dims)
         }
-        let cpu = storage.to_cpu_storage()?;
-        let (cpu_out, shape) = self.cpu_fwd(&cpu, layout)?;
-        let metal_out = storage.device().storage_from_cpu_storage(&cpu_out)?;
-        Ok((metal_out, shape))
+        if storage.dtype() != candle_core::DType::F32 {
+            bail!("rfft2 metal path only supports f32 inputs")
+        }
+        let (start, _end) = layout
+            .contiguous_offsets()
+            .ok_or_else(|| candle_core::Error::RequiresContiguous { op: "rfft2" }.bt())?;
+        if start != 0 {
+            bail!("rfft2 metal path requires zero start offset, got {start}")
+        }
+
+        let device = storage.device().clone();
+        // Ensure pending work on the shared command queue is flushed before we use the buffer
+        // from a fresh queue for MPSGraph.
+        device.wait_until_completed()?;
+
+        let batch = dims[0];
+        let channels = dims[1];
+        let height = dims[2];
+        let width = dims[3];
+        let w_half = width / 2 + 1;
+
+        let input_shape = nsarray_from_usize(&[batch, channels, height, width])?;
+        let axes = nsarray_from_usize(&[2, 3])?;
+        let graph = unsafe { MPSGraph::new() };
+        let placeholder = unsafe {
+            graph.placeholderWithShape_dataType_name(
+                Some(input_shape.as_ref()),
+                MPSDataType::Float32,
+                None,
+            )
+        };
+        let desc = make_fft_descriptor(false)?;
+        let spectrum = unsafe {
+            graph.realToHermiteanFFTWithTensor_axes_descriptor_name(
+                &placeholder,
+                axes.as_ref(),
+                desc.as_ref(),
+                None,
+            )
+        };
+
+        let output_shape = nsarray_from_usize(&[batch, channels, height, w_half])?;
+        let output_elems = batch * channels * height * w_half * 2;
+        let output_buffer =
+            device.new_buffer(output_elems, candle_core::DType::F32, "rfft2-mps")?;
+
+        let input_td = unsafe {
+            MPSGraphTensorData::initWithMTLBuffer_shape_dataType(
+                MPSGraphTensorData::alloc(),
+                storage.buffer().as_ref(),
+                input_shape.as_ref(),
+                MPSDataType::Float32,
+            )
+        };
+        let output_td = unsafe {
+            MPSGraphTensorData::initWithMTLBuffer_shape_dataType(
+                MPSGraphTensorData::alloc(),
+                output_buffer.as_ref().as_ref(),
+                output_shape.as_ref(),
+                MPSDataType::ComplexFloat32,
+            )
+        };
+
+        let feeds: Retained<MPSGraphTensorDataDictionary> =
+            single_entry_dictionary(placeholder.as_ref(), input_td.as_ref());
+        let results: Retained<MPSGraphTensorDataDictionary> =
+            single_entry_dictionary(spectrum.as_ref(), output_td.as_ref());
+
+        let command_queue = device.new_command_queue().map_err(MetalError::from)?;
+        unsafe {
+            graph.runWithMTLCommandQueue_feeds_targetOperations_resultsDictionary(
+                command_queue.as_ref(),
+                feeds.as_ref(),
+                None,
+                results.as_ref(),
+            );
+        }
+
+        let shape = Shape::from(vec![batch, channels, height, w_half, 2]);
+        Ok((
+            MetalStorage::new(output_buffer, device, output_elems, candle_core::DType::F32),
+            shape,
+        ))
     }
 }
 
@@ -336,10 +473,87 @@ impl CustomOp1 for Irfft2 {
         if dims.len() != 5 || dims[4] != 2 {
             bail!("irfft2 expects spectrum shaped [batch, channels, height, width/2+1, 2]")
         }
-        let cpu = storage.to_cpu_storage()?;
-        let (cpu_out, shape) = self.cpu_fwd(&cpu, layout)?;
-        let metal_out = storage.device().storage_from_cpu_storage(&cpu_out)?;
-        Ok((metal_out, shape))
+        if storage.dtype() != candle_core::DType::F32 {
+            bail!("irfft2 metal path only supports f32 inputs")
+        }
+        let (start, _end) = layout
+            .contiguous_offsets()
+            .ok_or_else(|| candle_core::Error::RequiresContiguous { op: "irfft2" }.bt())?;
+        if start != 0 {
+            bail!("irfft2 metal path requires zero start offset, got {start}")
+        }
+
+        let device = storage.device().clone();
+        device.wait_until_completed()?;
+
+        let batch = dims[0];
+        let channels = dims[1];
+        let height = dims[2];
+        let w_half = dims[3];
+        let width = (w_half - 1) * 2;
+
+        let input_shape = nsarray_from_usize(&[batch, channels, height, w_half])?;
+        let axes = nsarray_from_usize(&[2, 3])?;
+        let graph = unsafe { MPSGraph::new() };
+        let placeholder = unsafe {
+            graph.placeholderWithShape_dataType_name(
+                Some(input_shape.as_ref()),
+                MPSDataType::ComplexFloat32,
+                None,
+            )
+        };
+        let desc = make_fft_descriptor(true)?;
+        let time = unsafe {
+            graph.HermiteanToRealFFTWithTensor_axes_descriptor_name(
+                &placeholder,
+                axes.as_ref(),
+                desc.as_ref(),
+                None,
+            )
+        };
+
+        let output_shape = nsarray_from_usize(&[batch, channels, height, width])?;
+        let output_elems = batch * channels * height * width;
+        let output_buffer =
+            device.new_buffer(output_elems, candle_core::DType::F32, "irfft2-mps")?;
+
+        let input_td = unsafe {
+            MPSGraphTensorData::initWithMTLBuffer_shape_dataType(
+                MPSGraphTensorData::alloc(),
+                storage.buffer().as_ref(),
+                input_shape.as_ref(),
+                MPSDataType::ComplexFloat32,
+            )
+        };
+        let output_td = unsafe {
+            MPSGraphTensorData::initWithMTLBuffer_shape_dataType(
+                MPSGraphTensorData::alloc(),
+                output_buffer.as_ref().as_ref(),
+                output_shape.as_ref(),
+                MPSDataType::Float32,
+            )
+        };
+
+        let feeds: Retained<MPSGraphTensorDataDictionary> =
+            single_entry_dictionary(placeholder.as_ref(), input_td.as_ref());
+        let results: Retained<MPSGraphTensorDataDictionary> =
+            single_entry_dictionary(time.as_ref(), output_td.as_ref());
+
+        let command_queue = device.new_command_queue().map_err(MetalError::from)?;
+        unsafe {
+            graph.runWithMTLCommandQueue_feeds_targetOperations_resultsDictionary(
+                command_queue.as_ref(),
+                feeds.as_ref(),
+                None,
+                results.as_ref(),
+            );
+        }
+
+        let shape = Shape::from(vec![batch, channels, height, width]);
+        Ok((
+            MetalStorage::new(output_buffer, device, output_elems, candle_core::DType::F32),
+            shape,
+        ))
     }
 }
 
@@ -364,4 +578,31 @@ pub fn irfft2(spectrum: &Tensor) -> candle_core::Result<Tensor> {
     let time = spectrum.apply_op1_no_bwd(&op)?;
     let scale = 1.0f32 / ((h * width) as f32);
     time.affine(scale as f64, 0.0)?.contiguous()
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use candle_core::{Device, Tensor};
+
+    #[test]
+    fn cpu_rfft2_roundtrip_matches_input() -> Result<()> {
+        let device = Device::Cpu;
+        let data: Vec<f32> = (0..(1 * 2 * 4 * 6))
+            .map(|i| (i as f32).sin() * 0.25)
+            .collect();
+        let input = Tensor::from_vec(data.clone(), (1, 2, 4, 6), &device)?;
+        let reconstructed = irfft2(&rfft2(&input)?)?;
+        let diffs: Vec<f32> = (reconstructed - &input)?
+            .flatten_all()?
+            .to_vec1()?
+            .into_iter()
+            .map(|v: f32| v.abs())
+            .collect();
+        let max_err = diffs
+            .into_iter()
+            .fold(0f32, |acc, v| if v > acc { v } else { acc });
+        assert!(max_err < 1e-3, "max reconstruction error: {max_err}");
+        Ok(())
+    }
 }
