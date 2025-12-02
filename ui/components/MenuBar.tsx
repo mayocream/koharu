@@ -5,7 +5,7 @@ import { useAppStore } from '@/lib/store'
 import { fitCanvasToViewport, resetCanvasScale } from '@/components/Canvas'
 
 export function MenuBar() {
-  const { openDocuments, openExternal, processImage, processAllImages, exportDocument, exportAllDocuments } = useAppStore()
+  const { openDocuments, openExternal, processImage, inpaintAndRenderImage, processAllImages, exportDocument, exportAllDocuments } = useAppStore()
   const menus = [
     {
       label: 'File',
@@ -26,6 +26,7 @@ export function MenuBar() {
       label: 'Process',
       items: [
         { label: 'Process current image', onSelect: processImage },
+        { label: 'Redo inpaint and render', onSelect: inpaintAndRenderImage },
         { label: 'Process all images', onSelect: processAllImages },
       ],
     },

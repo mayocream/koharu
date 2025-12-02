@@ -4,6 +4,7 @@ import { useEffect, useState } from 'react'
 import { ScrollArea, Tooltip } from 'radix-ui'
 import { useAppStore } from '@/lib/store'
 import { convertToBlob } from '@/lib/util'
+import { Document } from '@/types'
 
 export function Navigator() {
   const { documents, currentDocumentIndex, setCurrentDocumentIndex } =
@@ -39,7 +40,6 @@ export function Navigator() {
               <PagePreview
                 key={doc.id}
                 document={doc}
-                index={idx}
                 selected={idx === currentDocumentIndex}
                 onSelect={() => setCurrentDocumentIndex?.(idx)}
               />
@@ -58,31 +58,28 @@ export function Navigator() {
 }
 
 type PagePreviewProps = {
-  document: {
-    id: string
-    name: string
-    path: string
-    image: number[]
-  }
-  index: number
+  document: Document
   selected: boolean
   onSelect: () => void
 }
 
 function PagePreview({
   document,
-  index,
   selected,
   onSelect,
 }: PagePreviewProps) {
   const [preview, setPreview] = useState<string>()
 
   useEffect(() => {
-    if (!document.image?.length) {
+    let img = document.rendered
+    if (!img?.length) {
+      img = document.image
+    }
+    if (!img?.length) {
       setPreview(undefined)
       return
     }
-    const blob = convertToBlob(document.image)
+    const blob = convertToBlob(img)
     const url = URL.createObjectURL(blob)
     setPreview(url)
     return () => URL.revokeObjectURL(url)

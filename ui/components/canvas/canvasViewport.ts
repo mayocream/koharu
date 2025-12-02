@@ -16,17 +16,18 @@ export function fitCanvasToViewport() {
   if (!doc || !viewport) return
   const rect = viewport.getBoundingClientRect()
   if (!rect.width || !rect.height || !doc.width || !doc.height) return
-  const scaleW = (rect.width / doc.width) * 100
-  const scaleH = (rect.height / doc.height) * 100
+  const scaleW = ((rect.width - 10) / doc.width) * 100 // leave 10px for margin
+  const scaleH = ((rect.height- 10) / doc.height) * 100 // leave 10px for margin
   const fit = Math.max(
     10,
-    Math.min(100, Math.floor(Math.min(scaleW, scaleH) / 10) * 10),
+    Math.min(100, Math.min(scaleW, scaleH)),
   )
   setAutoFitEnabled(true)
   setScale(fit)
 }
 
 export function resetCanvasScale() {
-  const { setScale } = useAppStore.getState()
+  const { setScale, setAutoFitEnabled } = useAppStore.getState()
+  setAutoFitEnabled(false)
   setScale(100)
 }

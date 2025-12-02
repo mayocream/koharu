@@ -3,6 +3,7 @@
 import { useEffect, useRef } from 'react'
 import type React from 'react'
 import { ScrollArea, ContextMenu } from 'radix-ui'
+import { listen } from '@tauri-apps/api/event'
 import { Image } from '@/components/Image'
 import { useAppStore } from '@/lib/store'
 import {
@@ -74,6 +75,27 @@ export function Workspace() {
       void removeBlock(index)
     },
   })
+
+  // Listen for Tauri resize events
+  useEffect(() => {
+    let unlisten: (() => void) | undefined
+
+    const setupListener = async () => {
+      unlisten = await listen('tauri://resize', () => {
+        if (currentDocument && autoFitEnabled) {
+          fitCanvasToViewport()
+        }
+      })
+    }
+
+    void setupListener()
+
+    return () => {
+      if (unlisten) {
+        unlisten()
+      }
+    }
+  }, [currentDocument])
 
   const handleCanvasPointerDown = (
     event: React.PointerEvent<HTMLDivElement>,
@@ -152,7 +174,7 @@ export function Workspace() {
                           />
                         )}
                       </div>
-                      {!showRenderedImage && <TextBlockAnnotations
+                      {(!showRenderedImage || currentDocument.rendered === undefined ) && <TextBlockAnnotations
                         selectedIndex={selectedBlockIndex}
                         onSelect={setSelectedBlockIndex}
                       />}

@@ -38,11 +38,12 @@ type AppState = {
   updateTextBlocks: (textBlocks: TextBlock[]) => Promise<void>
   invokeWithStatus: (command: string, args?: any) => Promise<Document>
   // Processing actions
-  detect: () => Promise<void>
-  ocr: () => Promise<void>
-  inpaint: () => Promise<void>
-  render: () => Promise<void>
-  processImage: () => Promise<void>
+  detect: (_: any, index?: number) => Promise<void>
+  ocr: (_: any, index?: number) => Promise<void>
+  inpaint: (_: any, index?: number) => Promise<void>
+  render: (_: any, index?: number) => Promise<void>
+  processImage: (_: any, index?: number) => Promise<void>
+  inpaintAndRenderImage: (_: any, index?: number) => Promise<void>
   processAllImages: () => Promise<void>
   exportDocument: () => Promise<void>
   exportAllDocuments: () => Promise<void>
@@ -51,7 +52,7 @@ type AppState = {
   llmSetSelectedModel: (id: string) => void
   llmToggleLoadUnload: () => Promise<void>
   llmCheckReady: () => Promise<void>
-  llmGenerate: () => Promise<void>
+  llmGenerate: (_: any, index?: number) => Promise<void>
 }
 
 export const useAppStore = create<AppState>((set, get) => ({
@@ -115,43 +116,46 @@ export const useAppStore = create<AppState>((set, get) => ({
       textBlocks,
     })
   },
-  invokeWithStatus: async (command: string, args: any = {}) => {
+  invokeWithStatus: async (command: string, args: {}) => {
     // replace underscore case with CamelCases
     set({ processJobName: command.replace(/_/g, ' ').replace(/\b\w/g, (c) => c.toUpperCase()) })
     let ret: Document = await invoke<Document>(command, args)
     set({ processJobName: '' })
     return ret
   },
-  detect: async () => {
-    const index = get().currentDocumentIndex
+  detect: async (_, index) => {
+    index = index ?? get().currentDocumentIndex
     const doc: Document = await get().invokeWithStatus('detect', {
       index,
     })
     set((state) => ({
       documents: replaceDocument(state.documents, index, doc),
+      showRenderedImage: false, // hide rendered image to show the boxes
     }))
   },
-  ocr: async () => {
-    const index = get().currentDocumentIndex
+  ocr: async (_, index) => {
+    index = index ?? get().currentDocumentIndex
     const doc: Document = await get().invokeWithStatus('ocr', { index })
     set((state) => ({
       documents: replaceDocument(state.documents, index, doc),
     }))
   },
-  inpaint: async () => {
-    const index = get().currentDocumentIndex
+  inpaint: async (_, index) => {
+    index = index ?? get().currentDocumentIndex
     const doc: Document = await get().invokeWithStatus('inpaint', {
       index,
     })
     set((state) => ({
       documents: replaceDocument(state.documents, index, doc),
+      showInpaintedImage: true,
     }))
   },
-  render: async () => {
-    const index = get().currentDocumentIndex
+  render: async (_, index) => {
+    index = index ?? get().currentDocumentIndex
     const doc: Document = await get().invokeWithStatus('render', { index })
     set((state) => ({
       documents: replaceDocument(state.documents, index, doc),
+      showRenderedImage: true,
     }))
   },
   llmList: async () => {
@@ -197,8 +201,8 @@ export const useAppStore = create<AppState>((set, get) => ({
       set({ llmReady: ready })
     } catch (_) {}
   },
-  llmGenerate: async () => {
-    const index = get().currentDocumentIndex
+  llmGenerate: async (_: any, index?: number) => {
+    index = index ?? get().currentDocumentIndex
     const doc: Document = await get().invokeWithStatus('llm_generate', {
       index,
     })
@@ -208,35 +212,40 @@ export const useAppStore = create<AppState>((set, get) => ({
   },
 
   // batch proceeses
-  processImage: async () => {
+  processImage: async (_, index) => {
     if(!get().llmReady) {
       set({ processJobName: 'Loading LLM Model' })
       await get().llmList()
       await get().llmToggleLoadUnload()
     }
 
+    index = index ?? get().currentDocumentIndex
+    console.log('Processing image at index', index)
+
     set({ processJobName: '' })
 
-    const index = get().currentDocumentIndex
-
-    console.log("Processing image ", index)
-
-    await get().detect()
-    await get().ocr()
-    await get().inpaint()
-    await get().llmGenerate()
-    await get().render()
+    await get().detect(_, index)
+    await get().ocr(_, index)
+    await get().inpaint(_, index)
+    await get().llmGenerate(_, index)
+    await get().render(_, index)
   },
+
+  inpaintAndRenderImage: async (_, index) => {
+    index = index ?? get().currentDocumentIndex
+    await get().inpaint(_, index)
+    await get().render(_, index)
+  },
+
   processAllImages: async () => {
     for (let index = 0; index < get().documents.length; index++) {
-      set({ currentDocumentIndex: index, selectedBlockIndex: undefined })
-      await get().processImage()
+      set({ currentDocumentIndex: index,  selectedBlockIndex: undefined })
+      await get().processImage(null, index)
     }
   },
 
   exportDocument: async () => {
     const index = get().currentDocumentIndex
-    if (!index) return
     await invoke('save_document', { index })
   },
 

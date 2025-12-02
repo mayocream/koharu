@@ -7,7 +7,6 @@ export function CanvasToolbar() {
   const llmReady = useAppStore((state) => state.llmReady)
   const {
     processJobName,
-    currentDocumentIndex
   } = useAppStore()
   const {
     maskConfig: { brushSize },
@@ -41,7 +40,7 @@ export function CanvasToolbar() {
         className={`ml-auto rounded-sm px-2 py-1 text-xs bg-gray-600 text-white`}
         hidden={processJobName === ''}
       >
-        {processJobName} {currentDocumentIndex+1}
+        {processJobName}
       </span>
       <span
         className={`ml-auto rounded-sm px-2 py-1 text-xs ${
