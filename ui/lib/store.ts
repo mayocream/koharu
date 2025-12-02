@@ -38,12 +38,12 @@ type AppState = {
   updateTextBlocks: (textBlocks: TextBlock[]) => Promise<void>
   invokeWithStatus: (command: string, args?: any) => Promise<Document>
   // Processing actions
-  detect: (_: any, index?: number) => Promise<void>
-  ocr: (_: any, index?: number) => Promise<void>
-  inpaint: (_: any, index?: number) => Promise<void>
-  render: (_: any, index?: number) => Promise<void>
-  processImage: (_: any, index?: number) => Promise<void>
-  inpaintAndRenderImage: (_: any, index?: number) => Promise<void>
+  detect: (_?: any, index?: number) => Promise<void>
+  ocr: (_?: any, index?: number) => Promise<void>
+  inpaint: (_?: any, index?: number) => Promise<void>
+  render: (_?: any, index?: number) => Promise<void>
+  processImage: (_?: any, index?: number) => Promise<void>
+  inpaintAndRenderImage: (_?: any, index?: number) => Promise<void>
   processAllImages: () => Promise<void>
   exportDocument: () => Promise<void>
   exportAllDocuments: () => Promise<void>
@@ -52,7 +52,7 @@ type AppState = {
   llmSetSelectedModel: (id: string) => void
   llmToggleLoadUnload: () => Promise<void>
   llmCheckReady: () => Promise<void>
-  llmGenerate: (_: any, index?: number) => Promise<void>
+  llmGenerate: (_?: any, index?: number) => Promise<void>
 }
 
 export const useAppStore = create<AppState>((set, get) => ({
