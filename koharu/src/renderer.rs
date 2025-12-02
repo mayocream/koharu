@@ -156,6 +156,7 @@ impl TextRenderer {
             y: block.y + font_size,
             font_size,
             color: style.color,
+            direction,
         })?;
 
         Ok(())

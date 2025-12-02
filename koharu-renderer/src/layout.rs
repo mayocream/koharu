@@ -197,8 +197,7 @@ impl Layouter {
                         cluster,
                         &mut current_line,
                         primary_offset,
-                        request.direction,
-                        request.font_size,
+                        request,
                     );
 
                     primary_offset += cluster_advance;
@@ -276,8 +275,7 @@ fn add_cluster_to_line(
     cluster: &swash::shape::cluster::GlyphCluster,
     line: &mut LayoutLine,
     primary_offset: f32,
-    direction: Orientation,
-    font_size: f32
+    request: &LayoutRequest<'_>,
 ) -> f32 {
     let baseline = line.baseline;
     let mut cluster_advance = 0.0;
@@ -285,16 +283,16 @@ fn add_cluster_to_line(
     for glyph in cluster.glyphs {
         // Position the glyph
         let mut positioned_glyph = *glyph;
-        let pos = direction.position_glyph(glyph, baseline, primary_offset + cluster_advance);
+        let pos = request.direction.position_glyph(glyph, baseline, primary_offset + cluster_advance);
 
         positioned_glyph.x = pos.0;
         positioned_glyph.y = pos.1;
 
         line.glyphs.push(positioned_glyph);
 
-        cluster_advance += if direction.is_vertical() {
+        cluster_advance += if request.direction.is_vertical() {
             // Right now latin characters inside non-latin text is rotated, so we always use font_size as advance
-            font_size.max(glyph.advance)
+            request.font_size.max(glyph.advance)
         } else {
             glyph.advance
         }

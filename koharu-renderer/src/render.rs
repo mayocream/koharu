@@ -4,7 +4,7 @@ use swash::scale::image::Content;
 use swash::scale::{Render, ScaleContext, Source, StrikeWith};
 use swash::zeno::{Format, Vector};
 
-use crate::layout::LayoutResult;
+use crate::layout::{LayoutResult, Orientation};
 use crate::types::Color;
 
 #[derive(Debug)]
@@ -15,6 +15,7 @@ pub struct RenderRequest<'a> {
     pub y: f32,
     pub font_size: f32,
     pub color: Color,
+    pub direction: Orientation,
 }
 
 pub struct Renderer {
@@ -56,11 +57,17 @@ impl Renderer {
                     .offset(Vector::new(glyph_x.fract(), glyph_y.fract()))
                     .render(&mut scaler, glyph.id)
                 {
+                    let y_offset = if request.direction == Orientation::Vertical {
+                        // slightly adjust vertical position to better center glyphs
+                        (request.font_size - rendered.placement.height as f32) / 3.0
+                    } else {
+                        0.0
+                    };
                     blit_glyph(
                         &mut request.image,
                         &rendered,
                         glyph_x.floor() as i32,
-                        glyph_y.floor() as i32,
+                        (glyph_y.floor() + y_offset) as i32,
                         request.color,
                     );
                 } else {
