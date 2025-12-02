@@ -140,8 +140,8 @@ impl TextRenderer {
                 } else {
                     high = mid;
                 }
-                x_offset = (block.width - (max_x - min_x)) / 2.;
-                y_offset = (block.height - (max_y - min_y)) / 2.;
+                x_offset = ((block.width - (max_x - min_x)) / 2.).max(0.);
+                y_offset = ((block.height - (max_y - min_y)) / 2.).max(0.);
             }
 
             tracing::info!(
