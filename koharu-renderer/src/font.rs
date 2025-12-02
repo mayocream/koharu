@@ -3,8 +3,8 @@ use std::{collections::HashMap, sync::Arc};
 use anyhow::{Context, Result, anyhow};
 use fontdb::Database;
 use swash::FontRef;
-use unicode_script::UnicodeScript;
 use swash::text::Script;
+use unicode_script::UnicodeScript;
 
 pub use fontdb::{FaceInfo, ID, Language};
 
@@ -66,26 +66,37 @@ impl FontBook {
 
     /// Returns font faces that belong to any of the specified families,
     /// prioritized by language support for the given text.
-    pub fn filter_by_families_for_text(&self, families: &[String], text: &String) -> (Vec<FaceInfo>, Script) {
+    pub fn filter_by_families_for_text(
+        &self,
+        families: &[String],
+        text: &String,
+    ) -> (Vec<FaceInfo>, Script) {
         let mut collected = self.filter_by_families(families);
 
         let script = {
-            let chars: Vec<char> = text
-                .chars()
-                .collect();
-            
-            if chars.iter().all(|ch| ch.script() == unicode_script::Script::Latin) {
+            let chars: Vec<char> = text.chars().collect();
+
+            if chars
+                .iter()
+                .all(|ch| ch.script() == unicode_script::Script::Latin)
+            {
                 Script::Latin // only latin
             } else if chars.iter().any(|ch| {
-                matches!(ch.script(),
-                    unicode_script::Script::Hiragana |
-                    unicode_script::Script::Katakana
+                matches!(
+                    ch.script(),
+                    unicode_script::Script::Hiragana | unicode_script::Script::Katakana
                 )
             }) {
                 Script::Hiragana // Using Hiragana to represent Japanese scripts
-            } else if chars.iter().any(|ch| ch.script() == unicode_script::Script::Hangul) {
+            } else if chars
+                .iter()
+                .any(|ch| ch.script() == unicode_script::Script::Hangul)
+            {
                 Script::Hangul // Korean
-            } else if chars.iter().any(|ch| ch.script() == unicode_script::Script::Han) {
+            } else if chars
+                .iter()
+                .any(|ch| ch.script() == unicode_script::Script::Han)
+            {
                 Script::Han
             } else {
                 Script::Latin // Default
@@ -100,21 +111,16 @@ impl FontBook {
                 Language::Chinese_HongKongSAR,
                 Language::English_UnitedStates,
             ],
-            Script::Hiragana => vec![
-                Language::Japanese_Japan,
-                Language::English_UnitedStates,
-            ],
-            Script::Hangul => vec![
-                Language::Korean_Korea,
-                Language::English_UnitedStates,
-            ],
+            Script::Hiragana => vec![Language::Japanese_Japan, Language::English_UnitedStates],
+            Script::Hangul => vec![Language::Korean_Korea, Language::English_UnitedStates],
             _ => vec![],
         };
 
         collected.sort_by_key(|face| {
-            languages.iter().position(|lang| {
-                face.families.iter().any(|(_, l)| l == lang)
-            }).unwrap_or(languages.len())
+            languages
+                .iter()
+                .position(|lang| face.families.iter().any(|(_, l)| l == lang))
+                .unwrap_or(languages.len())
         });
         (collected, script)
     }

@@ -193,12 +193,8 @@ impl Layouter {
                     }
 
                     // add glyphs from this cluster to the current line
-                    let cluster_advance = add_cluster_to_line(
-                        cluster,
-                        &mut current_line,
-                        primary_offset,
-                        request,
-                    );
+                    let cluster_advance =
+                        add_cluster_to_line(cluster, &mut current_line, primary_offset, request);
 
                     primary_offset += cluster_advance;
                     current_line.advance = primary_offset;
@@ -283,7 +279,10 @@ fn add_cluster_to_line(
     for glyph in cluster.glyphs {
         // Position the glyph
         let mut positioned_glyph = *glyph;
-        let pos = request.direction.position_glyph(glyph, baseline, primary_offset + cluster_advance);
+        let pos =
+            request
+                .direction
+                .position_glyph(glyph, baseline, primary_offset + cluster_advance);
 
         positioned_glyph.x = pos.0;
         positioned_glyph.y = pos.1;

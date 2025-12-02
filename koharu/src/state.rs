@@ -34,9 +34,14 @@ impl Default for TextStyle {
             font_families: vec![
                 "Arial".to_string(),
                 // Windows defaults
-                "Microsoft Jhenghei".to_string(), "Microsoft YaHei".to_string(), "Yu Mincho".to_string(),
+                "Microsoft Jhenghei".to_string(),
+                "Microsoft YaHei".to_string(),
+                "Yu Mincho".to_string(),
                 // macOS defaults
-                "PingFang TC".to_string(), "PingFang SC".to_string(), "Hiragino Mincho".to_string(), "SF Pro".to_string(),
+                "PingFang TC".to_string(),
+                "PingFang SC".to_string(),
+                "Hiragino Mincho".to_string(),
+                "SF Pro".to_string(),
                 // linux defaults
                 "Source Han Sans CN".to_string(),
             ],

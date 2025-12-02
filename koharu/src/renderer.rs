@@ -72,9 +72,10 @@ impl TextRenderer {
         let mut fontbook = self.fontbook.lock().await;
         let style = block.style.clone();
 
-
-        let (collected_faces, script) = fontbook
-            .filter_by_families_for_text(&style.font_families, block.translation.as_ref().unwrap_or(&"".to_string()));
+        let (collected_faces, script) = fontbook.filter_by_families_for_text(
+            &style.font_families,
+            block.translation.as_ref().unwrap_or(&"".to_string()),
+        );
 
         let fonts = collected_faces
             .iter()
@@ -111,11 +112,7 @@ impl TextRenderer {
             let mut low = 8.0;
             let mut high = 200.0;
             let epsilon = 0.5; // Convergence threshold
-            let smallest_readable_size = if script == Script::Latin {
-                12
-            } else {
-                16
-            }; // px
+            let smallest_readable_size = if script == Script::Latin { 12 } else { 16 }; // px
 
             // the compesation offsets to center the rendered text inside the block
             let mut x_offset = 0.;
@@ -145,12 +142,20 @@ impl TextRenderer {
                 }
                 x_offset = (block.width - (max_x - min_x)) / 2.;
                 y_offset = (block.height - (max_y - min_y)) / 2.;
-                tracing::info!("font size search: low={}, high={}, mid={}, {} x {} => {} x {}", low, high, mid, max_x-min_x, max_y-min_y, block.width, block.height);
+                tracing::info!(
+                    "font size search: low={}, high={}, mid={}, {} x {} => {} x {}",
+                    low,
+                    high,
+                    mid,
+                    max_x - min_x,
+                    max_y - min_y,
+                    block.width,
+                    block.height
+                );
             }
-            
 
             // Use a slightly smaller size to ensure it fits with some margin
-            if direction == Orientation::Horizontal{
+            if direction == Orientation::Horizontal {
                 (low * 0.95, 0., y_offset.floor())
             } else {
                 (low * 0.95, x_offset.floor(), 0.)
@@ -164,11 +169,12 @@ impl TextRenderer {
         renderer.render(&mut RenderRequest {
             layout: &glyphs,
             image,
-            x: x_offset + if direction == Orientation::Horizontal {
-                block.x
-            } else {
-                block.x + block.width - font_size
-            },
+            x: x_offset
+                + if direction == Orientation::Horizontal {
+                    block.x
+                } else {
+                    block.x + block.width - font_size
+                },
             y: y_offset + block.y + font_size,
             font_size,
             color: style.color,

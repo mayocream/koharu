@@ -3,9 +3,9 @@ use std::{str::FromStr, sync::Arc};
 use koharu_ml::llm::ModelId;
 use rayon::iter::{IntoParallelIterator, ParallelIterator};
 use tauri::State;
-use crate::image::SerializableDynamicImage;
 
 use crate::{
+    image::SerializableDynamicImage,
     llm, ml,
     renderer::TextRenderer,
     result::Result,
@@ -51,7 +51,9 @@ pub async fn save_document(state: State<'_, AppState>, index: usize) -> Result<(
         .get_mut(index)
         .ok_or_else(|| anyhow::anyhow!("Document not found"))?;
 
-    let document_ext = document.path.extension()
+    let document_ext = document
+        .path
+        .extension()
         .and_then(|ext| ext.to_str())
         .unwrap_or("jpg");
     let default_filename = format!("{}_koharu.{}", document.name, document_ext);
@@ -63,13 +65,12 @@ pub async fn save_document(state: State<'_, AppState>, index: usize) -> Result<(
         .save_file()
         .ok_or_else(|| anyhow::anyhow!("No file selected"))?;
 
-    document.rendered
+    document
+        .rendered
         .as_ref()
         .ok_or_else(|| anyhow::anyhow!("No inpainted image found"))?
         .save(&dest)
-        .or_else(|e| {
-            Err(anyhow::anyhow!("Failed to save image: {}", e))
-        })? ;
+        .or_else(|e| Err(anyhow::anyhow!("Failed to save image: {}", e)))?;
 
     Ok(())
 }
@@ -87,19 +88,20 @@ pub async fn save_all_documents(state: State<'_, AppState>) -> Result<()> {
     let documents = state.documents.iter();
 
     for document in documents {
-        let document_ext = document.path.extension()
+        let document_ext = document
+            .path
+            .extension()
             .and_then(|ext| ext.to_str())
             .unwrap_or("jpg");
         let default_filename = format!("{}_koharu.{}", document.name, document_ext);
 
-        document.rendered
+        document
+            .rendered
             .as_ref()
             .ok_or_else(|| anyhow::anyhow!("No inpainted image found"))?
             // save to dest/default_filename
             .save(dest.join(&default_filename))
-            .or_else(|e| {
-                Err(anyhow::anyhow!("Failed to save image: {}", e))
-            })? ;
+            .or_else(|e| Err(anyhow::anyhow!("Failed to save image: {}", e)))?;
     }
 
     Ok(())
@@ -158,7 +160,6 @@ pub async fn inpaint(
         .segment
         .as_ref()
         .ok_or_else(|| anyhow::anyhow!("Segment image not found"))?;
-
 
     let text_blocks = document.text_blocks.clone();
 

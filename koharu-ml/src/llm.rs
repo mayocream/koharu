@@ -7,8 +7,8 @@ use candle_core::{Device, Tensor};
 use candle_transformers::generation::{LogitsProcessor, Sampling};
 use candle_transformers::models::{quantized_llama, quantized_qwen2};
 use strum::{Display, EnumIter, EnumString, IntoEnumIterator};
-use tokenizers::Tokenizer;
 use sys_locale::get_locale;
+use tokenizers::Tokenizer;
 
 use crate::hf_hub;
 
@@ -28,7 +28,7 @@ impl ModelId {
         match get_locale() {
             Some(locale) => {
                 println!("Current locale: {}", locale);
-                
+
                 if locale.starts_with("zh") {
                     models.sort_by_key(|m| match m {
                         ModelId::VntlLlama3_8Bv2 => 1,
@@ -42,7 +42,7 @@ impl ModelId {
             }
         }
         models
-    }   
+    }
 }
 
 #[derive(Debug, Clone)]
