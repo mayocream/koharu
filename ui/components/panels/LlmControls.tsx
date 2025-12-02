@@ -67,7 +67,7 @@ export function LlmControls() {
           onClick={async () => {
             setGenerating(true)
             try {
-              await llmGenerate()
+              await llmGenerate(null)
             } finally {
               setGenerating(false)
             }
