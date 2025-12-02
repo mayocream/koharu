@@ -142,17 +142,14 @@ impl TextRenderer {
                 }
                 x_offset = (block.width - (max_x - min_x)) / 2.;
                 y_offset = (block.height - (max_y - min_y)) / 2.;
-                tracing::info!(
-                    "font size search: low={}, high={}, mid={}, {} x {} => {} x {}",
-                    low,
-                    high,
-                    mid,
-                    max_x - min_x,
-                    max_y - min_y,
-                    block.width,
-                    block.height
-                );
             }
+
+            tracing::info!(
+                "font size {}, {} x {}",
+                low * 0.95,
+                block.width,
+                block.height
+            );
 
             // Use a slightly smaller size to ensure it fits with some margin
             if direction == Orientation::Horizontal {
@@ -169,12 +166,11 @@ impl TextRenderer {
         renderer.render(&mut RenderRequest {
             layout: &glyphs,
             image,
-            x: x_offset
-                + if direction == Orientation::Horizontal {
-                    block.x
-                } else {
-                    block.x + block.width - font_size
-                },
+            x: if direction == Orientation::Horizontal {
+                block.x + x_offset
+            } else {
+                block.x + block.width - font_size - x_offset
+            },
             y: y_offset + block.y + font_size,
             font_size,
             color: style.color,

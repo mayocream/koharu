@@ -171,7 +171,17 @@ impl Layouter {
             |font, shaper| {
                 shaper.shape_with(|cluster| {
                     // handle line breaking
-                    if should_break_line(cluster, primary_offset, request.max_primary_axis) {
+                    let min_size = if request.direction == Orientation::Vertical {
+                        request.font_size as u32
+                    } else {
+                        0 // in horizontal layout, we don't enforce a minimum advance
+                    };
+                    if should_break_line(
+                        cluster,
+                        primary_offset,
+                        request.max_primary_axis,
+                        min_size,
+                    ) {
                         // Finalize the current line
                         if !current_line.glyphs.is_empty() {
                             current_line.baseline = request
@@ -247,16 +257,23 @@ pub fn calculate_bounds(layout: &LayoutResult) -> (f32, f32, f32, f32) {
     (min_x, min_y, max_x, max_y)
 }
 
-fn should_break_line(cluster: &GlyphCluster, current_offset: f32, max_primary_axis: f32) -> bool {
+fn should_break_line(
+    cluster: &GlyphCluster,
+    current_offset: f32,
+    max_primary_axis: f32,
+    min_advance: u32,
+) -> bool {
     // Handle hard line breaks (newlines)
     if cluster.info.boundary() == Boundary::Mandatory {
         return true;
     }
 
     // Check if we exceed the maximum width/height
-    // TODO: cluster.advance() may not be accurate for vertical text with non-rotated glyphs
-    // replace with the same method used in add_cluster_to_line
-    let cluster_advance = cluster.advance();
+    let mut cluster_advance = 0.;
+
+    cluster.glyphs.iter().for_each(|glyph| {
+        cluster_advance += glyph.advance.max(min_advance as f32);
+    });
     let would_exceed = current_offset + cluster_advance > max_primary_axis;
 
     // Only break if we're at a valid break point and would exceed the limit

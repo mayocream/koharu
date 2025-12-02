@@ -118,6 +118,8 @@ fn test_vertical_text_rendering() -> Result<()> {
     let width = (max_x - min_x).ceil() as u32;
     let height = (max_y - min_y).ceil() as u32;
 
+    println!("Calculated layout bounds: {} x {}", width, height);
+
     let mut image = RgbaImage::new(width.max(500), height.max(1000));
     image.fill(255);
 
