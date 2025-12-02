@@ -52,10 +52,14 @@ async fn setup(app: tauri::AppHandle) -> Result<()> {
 
     // Pre-download dynamic libraries
     {
-        let lib_dir = dirs::data_local_dir()
-            .unwrap_or_default()
-            .join("Koharu")
-            .join("libs");
+        let lib_dir = if std::path::Path::new(".portable").exists() {
+            std::env::current_dir()?.join("libs")
+        } else {
+            dirs::data_local_dir()
+                .unwrap_or_default()
+                .join("Koharu")
+                .join("libs")
+        };
         koharu_runtime::ensure_dylibs(&lib_dir).await?;
         koharu_runtime::preload_dylibs(&lib_dir)?;
     }
