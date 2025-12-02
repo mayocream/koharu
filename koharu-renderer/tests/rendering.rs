@@ -71,7 +71,9 @@ fn test_horizontal_text_rendering() -> Result<()> {
 fn test_vertical_text_rendering() -> Result<()> {
     let mut fontbook = FontBook::new();
     let font_families = vec!["Microsoft Jhenghei".to_string(), "Microsoft YaHei".to_string(), "Arial".to_string(), "Yu Mincho".to_string()];
-    let text = "我，……？abc你是誰？吾輩は猫である。";
+    let text = "我，……？you是誰？吾輩は猫である。";
+    let text = "我，……？you你是誰？";
+    let text = "abcdefg";
     let (collected, script) = fontbook
         .filter_by_families_for_text(&font_families, &text.to_string());
     
@@ -89,7 +91,7 @@ fn test_vertical_text_rendering() -> Result<()> {
         fonts: &fonts,
         font_size,
         line_height: 60.0,
-        script: Script::Han,
+        script: script,
         max_primary_axis: 1000.0,
         direction: Orientation::Vertical,
     };

@@ -81,7 +81,7 @@ impl TextRenderer {
             .filter_map(|face| fontbook.font(face).ok())
             .collect::<Vec<_>>();
 
-        let direction = if block.width > block.height || script == Script::Latin {
+        let direction = if block.width > block.height {
             Orientation::Horizontal
         } else {
             Orientation::Vertical

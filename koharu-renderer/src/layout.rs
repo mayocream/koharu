@@ -198,6 +198,7 @@ impl Layouter {
                         &mut current_line,
                         primary_offset,
                         request.direction,
+                        request.font_size,
                     );
 
                     primary_offset += cluster_advance;
@@ -258,6 +259,8 @@ fn should_break_line(cluster: &GlyphCluster, current_offset: f32, max_primary_ax
     }
 
     // Check if we exceed the maximum width/height
+    // TODO: cluster.advance() may not be accurate for vertical text with non-rotated glyphs
+    // replace with the same method used in add_cluster_to_line
     let cluster_advance = cluster.advance();
     let would_exceed = current_offset + cluster_advance > max_primary_axis;
 
@@ -274,6 +277,7 @@ fn add_cluster_to_line(
     line: &mut LayoutLine,
     primary_offset: f32,
     direction: Orientation,
+    font_size: f32
 ) -> f32 {
     let baseline = line.baseline;
     let mut cluster_advance = 0.0;
@@ -288,7 +292,12 @@ fn add_cluster_to_line(
 
         line.glyphs.push(positioned_glyph);
 
-        cluster_advance += glyph.advance;
+        cluster_advance += if direction.is_vertical() {
+            // Right now latin characters inside non-latin text is rotated, so we always use font_size as advance
+            font_size.max(glyph.advance)
+        } else {
+            glyph.advance
+        }
     }
 
     cluster_advance
