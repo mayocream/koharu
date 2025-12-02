@@ -124,7 +124,9 @@ impl TextRenderer {
             // Binary search with proper convergence
             while high - low > epsilon {
                 let mid = (low + high) / 2.0;
+                // TODO: fix horizonal latin text measuring issue
                 if mid < smallest_readable_size as f32 {
+                    low = smallest_readable_size as f32;
                     break;
                 }
                 let glyphs = layout_with_size(mid)?;
