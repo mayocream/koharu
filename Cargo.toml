@@ -75,10 +75,10 @@ cudarc = { version = "0.18", features = [
     "f16",
     "f8",
 ] }
-objc2 = { version = "0.6" }
-objc2-metal-performance-shaders = { version = "0.3" }
-objc2-metal-performance-shaders-graph = { version = "0.3" }
-objc2-foundation = { version = "0.3" }
+objc2 = "0.6"
+objc2-metal-performance-shaders = "0.3"
+objc2-metal-performance-shaders-graph = "0.3"
+objc2-foundation = "0.3"
 sys-locale = "0.3"
 
 [patch.crates-io]
