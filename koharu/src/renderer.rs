@@ -150,7 +150,11 @@ impl TextRenderer {
             
 
             // Use a slightly smaller size to ensure it fits with some margin
-            (low * 0.95, x_offset.floor(), y_offset.floor())
+            if direction == Orientation::Horizontal{
+                (low * 0.95, 0., y_offset.floor())
+            } else {
+                (low * 0.95, x_offset.floor(), 0.)
+            }
         };
 
         tracing::info!("Determined font size: {}", font_size);
