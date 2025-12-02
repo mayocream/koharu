@@ -81,7 +81,7 @@ impl TextRenderer {
             .filter_map(|face| fontbook.font(face).ok())
             .collect::<Vec<_>>();
 
-        let direction = if block.width > block.height {
+        let direction = if block.width > block.height || script == Script::Latin {
             Orientation::Horizontal
         } else {
             Orientation::Vertical
@@ -134,7 +134,7 @@ impl TextRenderer {
                 } else {
                     high = mid;
                 }
-                tracing::info!("font size search: low={}, high={}, mid={}, height={}, width={}", low, high, mid, max_y-min_y, max_x-min_x);
+                tracing::info!("font size search: low={}, high={}, mid={}, {} x {} => {} x {}", low, high, mid, max_x-min_x, max_y-min_y, block.width, block.height);
             }
 
             // Use a slightly smaller size to ensure it fits with some margin
