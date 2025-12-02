@@ -104,8 +104,8 @@ impl TextRenderer {
             })
         };
 
-        let font_size = if let Some(font_size) = style.font_size {
-            font_size
+        let (font_size, x_offset, y_offset) = if let Some(font_size) = style.font_size {
+            (font_size, 0., 0.)
         } else {
             // binary search for optimal font size to fit the text block
             let mut low = 8.0;
@@ -117,9 +117,16 @@ impl TextRenderer {
                 16
             }; // px
 
+            // the compesation offsets to center the rendered text inside the block
+            let mut x_offset = 0.;
+            let mut y_offset = 0.;
+
             // Binary search with proper convergence
-            while high - low > epsilon && high > smallest_readable_size as f32 {
+            while high - low > epsilon {
                 let mid = (low + high) / 2.0;
+                if mid < smallest_readable_size as f32 {
+                    break;
+                }
                 let glyphs = layout_with_size(mid)?;
 
                 // Handle empty layout
@@ -134,11 +141,14 @@ impl TextRenderer {
                 } else {
                     high = mid;
                 }
+                x_offset = (block.width - (max_x - min_x)) / 2.;
+                y_offset = (block.height - (max_y - min_y)) / 2.;
                 tracing::info!("font size search: low={}, high={}, mid={}, {} x {} => {} x {}", low, high, mid, max_x-min_x, max_y-min_y, block.width, block.height);
             }
+            
 
             // Use a slightly smaller size to ensure it fits with some margin
-            low * 0.95
+            (low * 0.95, x_offset.floor(), y_offset.floor())
         };
 
         tracing::info!("Determined font size: {}", font_size);
@@ -148,12 +158,12 @@ impl TextRenderer {
         renderer.render(&mut RenderRequest {
             layout: &glyphs,
             image,
-            x: if direction == Orientation::Horizontal {
+            x: x_offset + if direction == Orientation::Horizontal {
                 block.x
             } else {
                 block.x + block.width - font_size
             },
-            y: block.y + font_size,
+            y: y_offset + block.y + font_size,
             font_size,
             color: style.color,
             direction,
