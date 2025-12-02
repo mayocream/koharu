@@ -292,7 +292,7 @@ fn add_cluster_to_line(
 
         cluster_advance += if request.direction.is_vertical() {
             // Right now latin characters inside non-latin text is rotated, so we always use font_size as advance
-            request.font_size.max(glyph.advance) * 1.08
+            request.font_size.max(glyph.advance) * if request.script == Script::Latin { 1. } else { 1.08 }
         } else {
             glyph.advance
         }

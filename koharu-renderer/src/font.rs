@@ -54,7 +54,11 @@ impl FontBook {
             .filter(|face| {
                 face.families
                     .iter()
-                    .any(|(family, _)| families.iter().any(|f| f == family))
+                    .any(|(family, _)| families.iter().any(|f| f == family)) &&
+                // skip thin, italic, bold variants
+                face.weight == fontdb::Weight::NORMAL &&
+                face.stretch == fontdb::Stretch::Normal &&
+                face.style == fontdb::Style::Normal
             })
             .cloned()
             .collect()

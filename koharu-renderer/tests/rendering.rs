@@ -71,10 +71,18 @@ fn test_horizontal_text_rendering() -> Result<()> {
 #[test]
 fn test_vertical_text_rendering() -> Result<()> {
     let mut fontbook = FontBook::new();
-    let font_families = vec!["Microsoft Jhenghei".to_string(), "Microsoft YaHei".to_string(), "Arial".to_string(), "Yu Mincho".to_string()];
+    let font_families = vec![
+        "Arial".to_string(),
+        // Windows defaults
+        "Microsoft Jhenghei".to_string(), "Microsoft YaHei".to_string(), "Yu Mincho".to_string(),
+        // macOS defaults
+        "PingFang TC".to_string(), "PingFang SC".to_string(), "Hiragino Mincho".to_string(), "SF Pro".to_string(),
+        // linux defaults
+        "Source Han Sans CN".to_string(),
+    ];
     let text = "我，……？you是誰？吾輩は猫である。";
     let text = "我，……？you你是誰？";
-    //let text = "abcdefg";
+    let text = "abcdefg";
     let (collected, script) = fontbook
         .filter_by_families_for_text(&font_families, &text.to_string());
     
