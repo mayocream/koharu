@@ -14,7 +14,7 @@
     "next": "16.0.6",
     "radix-ui": "^1.4.3",
     "react": "19.2.0",
-    "react-dom": "19.2.0",
+    "react-dom": "19.2.1",
     "react-rnd": "^10.5.2",
     "zustand": "^5.0.8"
   },
