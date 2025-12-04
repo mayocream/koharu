@@ -150,7 +150,7 @@ pub async fn ensure_dylibs(path: impl AsRef<Path>) -> Result<()> {
 
     fs::create_dir_all(&path)?;
 
-    let platform_tag = current_platform_tag()?;
+    let platform_tags = current_platform_tags()?;
     info!("ensure_dylibs: start -> {}", path.display());
 
     let packages: Vec<String> = PACKAGES.iter().map(|&pkg| pkg.to_string()).collect();
@@ -158,7 +158,7 @@ pub async fn ensure_dylibs(path: impl AsRef<Path>) -> Result<()> {
     stream::iter(packages.into_iter())
         .map(|pkg| {
             let out_dir = Arc::clone(&out_dir);
-            async move { fetch_and_extract(pkg, platform_tag, out_dir).await }
+            async move { fetch_and_extract(pkg, platform_tags, out_dir).await }
         })
         .buffer_unordered(num_cpus::get())
         .try_collect::<Vec<_>>()
@@ -216,19 +216,23 @@ fn wanted_spec(path: &str) -> Option<&'static DylibSpec> {
     None
 }
 
-fn current_platform_tag() -> Result<&'static str> {
+fn current_platform_tags() -> Result<&'static [&'static str]> {
     if cfg!(target_os = "windows") {
-        Ok("win_amd64")
+        Ok(&["win_amd64"])
     } else if cfg!(all(target_os = "linux", target_arch = "x86_64")) {
-        Ok("manylinux_2_27_x86_64")
+        Ok(&["manylinux_2_27_x86_64", "manylinux_2_17_x86_64"])
     } else if cfg!(target_os = "macos") {
-        Ok("macosx_13_0_universal2")
+        Ok(&["macosx_13_0_universal2"])
     } else {
         anyhow::bail!("unsupported platform for runtime bundling");
     }
 }
 
-async fn fetch_and_extract(pkg: String, platform_tag: &str, out_dir: Arc<PathBuf>) -> Result<()> {
+async fn fetch_and_extract(
+    pkg: String,
+    platform_tags: &[&str],
+    out_dir: Arc<PathBuf>,
+) -> Result<()> {
     // 1) Query PyPI JSON
     let meta_url = format!("https://pypi.org/pypi/{pkg}/json");
     let resp = http_client().get(&meta_url).send().await?;
@@ -246,7 +250,7 @@ async fn fetch_and_extract(pkg: String, platform_tag: &str, out_dir: Arc<PathBuf
         if !filename.ends_with(".whl") {
             continue;
         }
-        if filename.contains(platform_tag) {
+        if platform_tags.iter().any(|tag| filename.contains(tag)) {
             chosen = Some((file_url.to_string(), filename.to_string()));
             break;
         }
