@@ -35,7 +35,7 @@ impl PypiEndpoint {
     pub fn refine_url(&self, path: &str) -> String {
         match self {
             PypiEndpoint::Tsinghua => path.replace(
-                "https://files.pythonhosted.org/",
+                "https://files.pythonhosted.org",
                 format!("{self}/pypi/web").as_str(),
             ),
             _ => path.to_string(),
