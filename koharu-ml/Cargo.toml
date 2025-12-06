@@ -33,6 +33,9 @@ objc2-metal-performance-shaders = { workspace = true, optional = true }
 objc2-metal-performance-shaders-graph = { workspace = true, optional = true }
 objc2-foundation = { workspace = true, optional = true }
 sys-locale = { workspace = true }
+reqwest = { workspace = true }
+once_cell = { workspace = true }
+rayon = { workspace = true }
 
 [features]
 cuda = [

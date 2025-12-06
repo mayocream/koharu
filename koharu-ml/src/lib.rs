@@ -3,7 +3,10 @@ pub mod lama;
 pub mod llm;
 pub mod manga_ocr;
 
-use std::path::PathBuf;
+use std::{
+    path::PathBuf,
+    time::{Duration, Instant},
+};
 
 use anyhow::Result;
 use candle_core::{
@@ -11,7 +14,29 @@ use candle_core::{
     utils::{cuda_is_available, metal_is_available},
 };
 use hf_hub::{Cache, Repo, api::tokio::ApiBuilder};
+use rayon::iter::{IntoParallelRefIterator, ParallelIterator};
 use tracing::info;
+
+const HF_MIRROS: &[&str] = &["https://huggingface.co", "https://hf-mirror.com"];
+
+static HF_ENDPOINT: once_cell::sync::Lazy<String> = once_cell::sync::Lazy::new(|| {
+    HF_MIRROS
+        .par_iter()
+        .map(|endpoint| {
+            let start = Instant::now();
+            let resp = reqwest::blocking::get(*endpoint);
+            match resp {
+                Ok(resp) if resp.status().is_success() => {
+                    let duration = start.elapsed();
+                    (duration, (*endpoint).to_string())
+                }
+                _ => (Duration::MAX, (*endpoint).to_string()),
+            }
+        })
+        .min_by_key(|(duration, _)| *duration)
+        .map(|(_, endpoint)| endpoint)
+        .unwrap_or_else(|| HF_MIRROS[0].to_string())
+});
 
 pub fn device(cpu: bool) -> Result<Device> {
     if cpu {
@@ -27,7 +52,10 @@ pub fn device(cpu: bool) -> Result<Device> {
 }
 
 pub async fn hf_hub(repo: impl AsRef<str>, filename: impl AsRef<str>) -> anyhow::Result<PathBuf> {
-    let api = ApiBuilder::new().high().build()?;
+    let api = ApiBuilder::new()
+        .with_endpoint(HF_ENDPOINT.to_string())
+        .high()
+        .build()?;
     let hf_repo = Repo::new(repo.as_ref().to_string(), hf_hub::RepoType::Model);
     let filename = filename.as_ref();
 
