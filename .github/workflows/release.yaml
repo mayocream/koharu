@@ -24,7 +24,7 @@ jobs:
         with:
           cuda: '12.9.1'
           method: 'network'
-          sub-packages: '["cudart", "cublas", "cufft"]'
+          sub-packages: '["cudart", "cublas", "cufft", "nvcc"]'
       - uses: ilammy/msvc-dev-cmd@v1
       - run: bun install
       - run: bun tauri build --features=cuda,cudnn,bundle

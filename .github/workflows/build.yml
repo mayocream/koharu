@@ -26,8 +26,16 @@ jobs:
         with:
           cuda: '12.9.1'
           method: 'network'
-          sub-packages: '["cudart", "cublas", "cufft"]'
+          sub-packages: '["cudart", "cublas", "cufft", "nvcc"]'
       - uses: ilammy/msvc-dev-cmd@v1
         if: matrix.os == 'windows-latest'
       - run: bun install
       - run: bun tauri build
+      # upload artifacts
+      - name: Upload Artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: koharu-${{ matrix.os }}
+          path: |
+            target/release/koharu*
+          retention-days: 3
