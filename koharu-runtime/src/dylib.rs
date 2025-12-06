@@ -3,7 +3,6 @@ use std::{
     io::{BufWriter, Read, Write},
     path::{Path, PathBuf},
     sync::Arc,
-    time::Duration,
 };
 
 use anyhow::Result;
@@ -14,7 +13,8 @@ use tokio::task;
 use tracing::info;
 
 use crate::{
-    http::{self, http_client, http_download},
+    http::{http_client, http_download},
+    pypi::PYPI_ENDPOINT,
     zip,
 };
 
@@ -144,10 +144,6 @@ const DYLIBS: &[DylibSpec] = &[
     dylib("libcudnn_engines_runtime_compiled.so.9"),
 ];
 
-const PYPI_MIRRORS: [&str; 2] = ["https://pypi.org/", "https://mirrors.tuna.tsinghua.edu.cn/"];
-
-const PYPI_TEST_URI: &str = "pypi/sampleproject/json";
-
 pub async fn ensure_dylibs(path: impl AsRef<Path>) -> Result<()> {
     let path = path.as_ref().to_owned();
 
@@ -157,20 +153,11 @@ pub async fn ensure_dylibs(path: impl AsRef<Path>) -> Result<()> {
     info!("ensure_dylibs: start -> {}", path.display());
 
     let out_dir = Arc::new(path);
-
-    let selected_pypi_mirror =
-        http::fastest_mirror(&PYPI_MIRRORS, PYPI_TEST_URI, Duration::from_secs(3))
-            .await
-            .unwrap_or(PYPI_MIRRORS[0])
-            .to_owned();
-    info!("selected PyPI mirror: {}", selected_pypi_mirror);
-
     let packages: Vec<String> = PACKAGES.iter().map(|s| s.to_string()).collect();
 
     let fetches = packages.into_iter().map(|pkg| {
         let out_dir = Arc::clone(&out_dir);
-        let mirror = selected_pypi_mirror.clone();
-        async move { fetch_and_extract(&mirror, pkg.as_str(), platform_tags, out_dir).await }
+        async move { fetch_and_extract(pkg.as_str(), platform_tags, out_dir).await }
     });
 
     stream::iter(fetches)
@@ -242,14 +229,9 @@ fn current_platform_tags() -> Result<&'static [&'static str]> {
     }
 }
 
-async fn fetch_and_extract(
-    base_url: &str,
-    pkg: &str,
-    platform_tags: &[&str],
-    out_dir: Arc<PathBuf>,
-) -> Result<()> {
+async fn fetch_and_extract(pkg: &str, platform_tags: &[&str], out_dir: Arc<PathBuf>) -> Result<()> {
     // 1) Query PyPI JSON
-    let meta_url = format!("{base_url}/pypi/{pkg}/json");
+    let meta_url = format!("{}/pypi/{pkg}/json", PYPI_ENDPOINT.to_string());
     let resp = http_client().get(&meta_url).send().await?;
     let json: serde_json::Value = resp.json().await?;
 
@@ -261,10 +243,8 @@ async fn fetch_and_extract(
     let mut chosen: Option<(String, String)> = None; // (url, filename)
     for f in files {
         let filename = f.get("filename").and_then(|v| v.as_str()).unwrap_or("");
-        let file_url = f.get("url").and_then(|v| v.as_str()).unwrap_or("").replace(
-            "https://files.pythonhosted.org/",
-            format!("{base_url}/pypi/web/").as_str(),
-        );
+        let file_url = f.get("url").and_then(|v| v.as_str()).unwrap_or("");
+        let file_url = PYPI_ENDPOINT.refine_url(file_url);
 
         if !filename.ends_with(".whl") {
             continue;

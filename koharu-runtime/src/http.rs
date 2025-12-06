@@ -1,10 +1,8 @@
 use std::sync::Arc;
-use std::time::{Duration, Instant};
 
 use anyhow::Context;
 use futures::{
     StreamExt,
-    future::join_all,
     stream::{self, TryStreamExt},
 };
 use once_cell::sync::Lazy;
@@ -130,60 +128,4 @@ async fn http_range(url: &str, start: u64, end: u64) -> anyhow::Result<Vec<u8>> 
     );
 
     Ok(bytes)
-}
-
-/// Given a list of base URLs and a test path, returns the fastest mirror
-/// (by HTTP round-trip time) that successfully responds (2xx / 3xx).
-///
-/// `test_path` is appended to each base URL like `<base>/<test_path>`.
-pub async fn fastest_mirror<'a>(
-    base_urls: &[&'a str],
-    test_path: &str,
-    timeout: Duration,
-) -> Option<&'a str> {
-    // Build all the requests as futures
-    let futures = base_urls.iter().map(|&base| {
-        let client = http_client();
-
-        // Join base + path safely
-        let url = format!(
-            "{}/{}",
-            base.trim_end_matches('/'),
-            test_path.trim_start_matches('/')
-        );
-
-        async move {
-            let start = Instant::now();
-            let res = client
-                .head(&url)
-                .timeout(timeout)
-                .send()
-                .await
-                .and_then(|r| Ok(r.error_for_status()));
-
-            match res {
-                Ok(_) => Some((base, start.elapsed())),
-                Err(_) => None,
-            }
-        }
-    });
-
-    let results = join_all(futures).await;
-
-    // Pick the one with the smallest elapsed time
-    let mut best: Option<(&str, Duration)> = None;
-
-    for r in results.into_iter().flatten() {
-        let (base, elapsed) = r;
-        match &mut best {
-            None => best = Some((base, elapsed)),
-            Some((_, best_elapsed)) if elapsed < *best_elapsed => {
-                *best_elapsed = elapsed;
-                best.as_mut().unwrap().0 = base;
-            }
-            _ => {}
-        }
-    }
-
-    best.map(|(base, _)| base)
 }

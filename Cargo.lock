@@ -3300,6 +3300,7 @@ dependencies = [
  "reqwest-middleware",
  "reqwest-retry",
  "serde_json",
+ "strum",
  "tempfile",
  "tokio",
  "tracing",
