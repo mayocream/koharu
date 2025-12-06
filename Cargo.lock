@@ -3216,6 +3216,7 @@ version = "0.12.0"
 dependencies = [
  "anyhow",
  "blake3",
+ "clap",
  "dirs",
  "hf-hub",
  "image",
@@ -3231,7 +3232,6 @@ dependencies = [
  "serde_bytes",
  "serde_json",
  "strum",
- "sys-locale",
  "tauri",
  "tauri-build",
  "thiserror 2.0.17",

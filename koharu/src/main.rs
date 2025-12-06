@@ -2,6 +2,7 @@
 
 use koharu::app;
 
-fn main() -> anyhow::Result<()> {
-    Ok(app::run()?)
+#[tokio::main]
+async fn main() -> anyhow::Result<()> {
+    Ok(app::run().await?)
 }

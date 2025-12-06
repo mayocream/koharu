@@ -1,12 +1,24 @@
 use std::sync::Arc;
 
 use anyhow::Result;
+use clap::Parser;
 use rfd::MessageDialog;
 use tauri::Manager;
 use tokio::sync::RwLock;
 use tracing_subscriber::fmt::format::FmtSpan;
 
 use crate::{command, llm, ml, renderer::TextRenderer, state::State};
+
+#[derive(Parser)]
+struct Cli {
+    #[arg(
+        short,
+        long,
+        help = "Download dynamic libraries and exit",
+        default_value_t = false
+    )]
+    download: bool,
+}
 
 fn initialize() -> Result<()> {
     tracing_subscriber::fmt()
@@ -37,7 +49,7 @@ fn initialize() -> Result<()> {
     Ok(())
 }
 
-async fn setup(app: tauri::AppHandle) -> Result<()> {
+async fn setup(app: Option<tauri::AppHandle>) -> Result<()> {
     #[cfg(feature = "bundle")]
     {
         let source = velopack::sources::HttpSource::new(
@@ -78,19 +90,27 @@ async fn setup(app: tauri::AppHandle) -> Result<()> {
     let renderer = Arc::new(TextRenderer::new());
     let state = Arc::new(RwLock::new(State::default()));
 
-    app.manage(onnx);
-    app.manage(llm);
-    app.manage(renderer);
-    app.manage(state);
+    if let Some(app) = app {
+        app.manage(onnx);
+        app.manage(llm);
+        app.manage(renderer);
+        app.manage(state);
 
-    app.get_webview_window("splashscreen").unwrap().close()?;
-    app.get_webview_window("main").unwrap().show()?;
+        app.get_webview_window("splashscreen").unwrap().close()?;
+        app.get_webview_window("main").unwrap().show()?;
+    }
 
     Ok(())
 }
 
-pub fn run() -> Result<()> {
+pub async fn run() -> Result<()> {
     initialize()?;
+
+    let cli = Cli::parse();
+    if cli.download {
+        setup(None).await?;
+        return Ok(());
+    }
 
     tauri::Builder::default()
         .invoke_handler(tauri::generate_handler![
@@ -112,7 +132,7 @@ pub fn run() -> Result<()> {
         .setup(|app| {
             let handle = app.handle().clone();
             tauri::async_runtime::spawn(async move {
-                if let Err(err) = setup(handle).await {
+                if let Err(err) = setup(Some(handle)).await {
                     panic!("application setup failed: {err:#}");
                 }
             });
