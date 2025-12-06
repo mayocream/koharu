@@ -3212,7 +3212,7 @@ dependencies = [
 
 [[package]]
 name = "koharu"
-version = "0.12.0"
+version = "0.12.1"
 dependencies = [
  "anyhow",
  "blake3",
@@ -3243,7 +3243,7 @@ dependencies = [
 
 [[package]]
 name = "koharu-ml"
-version = "0.12.0"
+version = "0.12.1"
 dependencies = [
  "anyhow",
  "candle-core",
@@ -3274,7 +3274,7 @@ dependencies = [
 
 [[package]]
 name = "koharu-renderer"
-version = "0.12.0"
+version = "0.12.1"
 dependencies = [
  "anyhow",
  "fontdb",
@@ -3286,7 +3286,7 @@ dependencies = [
 
 [[package]]
 name = "koharu-runtime"
-version = "0.12.0"
+version = "0.12.1"
 dependencies = [
  "anyhow",
  "csv",
