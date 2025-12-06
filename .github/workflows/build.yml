@@ -25,6 +25,8 @@ jobs:
         if: matrix.os == 'windows-latest'
         with:
           cuda: '12.9.1'
+          method: 'network'
+          sub-packages: '["cudart", "cublas", "cufft"]'
       - uses: ilammy/msvc-dev-cmd@v1
         if: matrix.os == 'windows-latest'
       - run: bun install
