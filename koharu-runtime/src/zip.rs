@@ -155,7 +155,7 @@ async fn http_get_range(url: &str, start: u64, end_inclusive: u64) -> Result<Vec
 async fn head_content_length(url: &str) -> Result<u64> {
     let resp = http_client().head(url).send().await?;
     if !resp.status().is_success() {
-        anyhow::bail!("HEAD failed: {}", resp.status());
+        anyhow::bail!("HEAD failed: {} with url {}", resp.status(), url);
     }
     let len = resp
         .headers()
