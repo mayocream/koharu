@@ -144,10 +144,7 @@ const DYLIBS: &[DylibSpec] = &[
     dylib("libcudnn_engines_runtime_compiled.so.9"),
 ];
 
-const PYPI_MIRRORS: [&str; 2] = [
-    "https://pypi.org/",
-    "https://mirrors.tuna.tsinghua.edu.cn/",
-];
+const PYPI_MIRRORS: [&str; 2] = ["https://pypi.org/", "https://mirrors.tuna.tsinghua.edu.cn/"];
 
 const PYPI_TEST_URI: &str = "pypi/sampleproject/json";
 
@@ -161,14 +158,11 @@ pub async fn ensure_dylibs(path: impl AsRef<Path>) -> Result<()> {
 
     let out_dir = Arc::new(path);
 
-    let selected_pypi_mirror = http::fastest_mirror(
-        &PYPI_MIRRORS,
-        PYPI_TEST_URI,
-        Duration::from_secs(3),
-    )
-    .await
-    .unwrap_or(PYPI_MIRRORS[0])
-    .to_owned();
+    let selected_pypi_mirror =
+        http::fastest_mirror(&PYPI_MIRRORS, PYPI_TEST_URI, Duration::from_secs(3))
+            .await
+            .unwrap_or(PYPI_MIRRORS[0])
+            .to_owned();
     info!("selected PyPI mirror: {}", selected_pypi_mirror);
 
     let packages: Vec<String> = PACKAGES.iter().map(|s| s.to_string()).collect();

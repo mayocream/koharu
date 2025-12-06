@@ -1,12 +1,11 @@
-use std::time::{
-    Duration,
-    Instant
-};
-
 use std::sync::Arc;
+use std::time::{Duration, Instant};
+
 use anyhow::Context;
 use futures::{
-    StreamExt, future::join_all, stream::{self, TryStreamExt}
+    StreamExt,
+    future::join_all,
+    stream::{self, TryStreamExt},
 };
 use once_cell::sync::Lazy;
 use reqwest::header::{ACCEPT_RANGES, CONTENT_LENGTH, RANGE};
@@ -34,11 +33,15 @@ pub fn http_client() -> &'static ClientWithMiddleware {
     &HTTP_CLIENT
 }
 
-
 /// Download a file using aggressive HTTP range requests with maximum concurrency.
 /// The server must advertise `Accept-Ranges: bytes`; otherwise this call fails.
 pub async fn http_download(url: &str) -> anyhow::Result<Vec<u8>> {
-    let head = HTTP_CLIENT.head(url).send().await?.error_for_status().context(format!("cannot download {url}"))?;
+    let head = HTTP_CLIENT
+        .head(url)
+        .send()
+        .await?
+        .error_for_status()
+        .context(format!("cannot download {url}"))?;
     let headers = head.headers();
     let total_bytes = headers
         .get(CONTENT_LENGTH)
@@ -128,7 +131,6 @@ async fn http_range(url: &str, start: u64, end: u64) -> anyhow::Result<Vec<u8>> 
 
     Ok(bytes)
 }
-
 
 /// Given a list of base URLs and a test path, returns the fastest mirror
 /// (by HTTP round-trip time) that successfully responds (2xx / 3xx).
