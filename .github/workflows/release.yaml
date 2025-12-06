@@ -50,6 +50,25 @@ jobs:
             --token ${{ secrets.GITHUB_TOKEN }} \
             --merge
 
+      - name: Prepare bundled artifacts
+        shell: bash
+        run: |
+          7z x Releases/Koharu-win-Portable.zip -obundled-artifacts
+          cd bundled-artifacts
+          ./current/koharu.exe -d
+          rm -f velopack.log
+          cd ..
+          7z a Releases/Koharu-win-Bundled.zip bundled-artifacts/*
+
+      # upload Releases/Koharu-win-Bundled.zip to release artifacts
+      - name: Upload Bundled Artifacts
+        uses: softprops/action-gh-release@v2
+        with:
+          files: Releases/Koharu-win-Bundled.zip
+        env:
+          token: ${{ secrets.GITHUB_TOKEN }}
+
+
   build-macos:
     name: macOS
     runs-on: macos-latest
