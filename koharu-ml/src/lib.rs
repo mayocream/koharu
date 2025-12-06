@@ -38,7 +38,7 @@ static HF_ENDPOINT: once_cell::sync::Lazy<String> = once_cell::sync::Lazy::new(|
         .unwrap_or_else(|| HF_MIRROS[0].to_string())
 });
 
-static APP_ROOT : once_cell::sync::Lazy<PathBuf> = once_cell::sync::Lazy::new(|| {
+static APP_ROOT: once_cell::sync::Lazy<PathBuf> = once_cell::sync::Lazy::new(|| {
     std::env::current_exe()
         .ok()
         .and_then(|p| p.parent().map(|p| p.to_path_buf()))
@@ -67,7 +67,7 @@ pub async fn hf_hub(repo: impl AsRef<str>, filename: impl AsRef<str>) -> anyhow:
     let hf_repo = Repo::new(repo.as_ref().to_string(), hf_hub::RepoType::Model);
     let filename = filename.as_ref();
 
-    let cache =  {
+    let cache = {
         if APP_ROOT.join(".portable").exists() {
             Cache::new(APP_ROOT.join("models"))
         } else {
