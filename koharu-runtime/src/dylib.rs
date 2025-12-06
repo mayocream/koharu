@@ -283,7 +283,7 @@ async fn fetch_and_extract(pkg: &str, platform_tags: &[&str], out_dir: Arc<PathB
 
         task::spawn_blocking(move || extract_from_wheel(&bytes, out.as_ref())).await??;
         info!("{pkg}: download and extract complete");
-        Ok(())
+        Ok(())        
     } else {
         info!("{pkg}: {wheel_name} runtime libs are up-to-date");
         Ok(())

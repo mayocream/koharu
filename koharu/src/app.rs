@@ -52,8 +52,17 @@ async fn setup(app: tauri::AppHandle) -> Result<()> {
 
     // Pre-download dynamic libraries
     {
-        let lib_dir = if std::path::Path::new(".portable").exists() {
-            std::env::current_dir()?.join("libs")
+        // if C:\koharu\current\koharu.exe, then we need to look at C:\koharu as that's
+        // where the loader locates
+        let app_root = std::env::current_exe()
+            .ok()
+            .and_then(|p| p.parent().map(|p| p.to_path_buf()))
+            .and_then(|p| p.parent().map(|p| p.to_path_buf()))
+            .unwrap_or_else(|| std::env::current_dir().unwrap_or_default());
+
+        tracing::info!("App root directory: {:?}", app_root);
+        let lib_dir = if app_root.join(".portable").exists() {
+            app_root.join("libs")
         } else {
             dirs::data_local_dir()
                 .unwrap_or_default()
