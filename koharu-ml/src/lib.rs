@@ -60,20 +60,21 @@ pub fn device(cpu: bool) -> Result<Device> {
 }
 
 pub async fn hf_hub(repo: impl AsRef<str>, filename: impl AsRef<str>) -> anyhow::Result<PathBuf> {
+    let cache =  if APP_ROOT.join(".portable").exists() {
+        Cache::new(APP_ROOT.join("models"))
+    } else {
+        Cache::default()
+    };
+
     let api = ApiBuilder::new()
         .with_endpoint(HF_ENDPOINT.to_string())
+        .with_cache_dir((*cache.path()).clone())
         .high()
         .build()?;
+    
     let hf_repo = Repo::new(repo.as_ref().to_string(), hf_hub::RepoType::Model);
     let filename = filename.as_ref();
 
-    let cache = {
-        if APP_ROOT.join(".portable").exists() {
-            Cache::new(APP_ROOT.join("models"))
-        } else {
-            Cache::default()
-        }
-    };
     tracing::info!("Models directory: {:?}", cache.path());
     // hit the cache first
     if let Some(path) = cache.repo(hf_repo.clone()).get(filename) {
