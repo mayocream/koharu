@@ -54,12 +54,11 @@ macro_rules! define_llms {
             let models = [
                 $(ModelId::$name),*
             ];
-            let len = models.len();
             stream::iter(models)
                 .map(|manifest| async move {
                     manifest.get().await
                 })
-                .buffer_unordered(len)
+                .buffer_unordered(num_cpus::get())
                 .try_collect::<Vec<_>>()
                 .await?;
             Ok(())

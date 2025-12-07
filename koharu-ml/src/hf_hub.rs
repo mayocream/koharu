@@ -59,6 +59,7 @@ pub fn set_cache_dir(path: PathBuf) -> anyhow::Result<()> {
         .map_err(|_| anyhow::anyhow!("cache dir has already been set"))
 }
 
+#[tracing::instrument(level = "info")]
 pub async fn hf_download(repo: &str, filename: &str) -> anyhow::Result<PathBuf> {
     let repo = Repo::model(repo.to_string());
     if let Some(path) = HF_CACHE.repo(repo.clone()).get(filename) {
@@ -101,12 +102,11 @@ macro_rules! define_models {
             let manifests = [
                 $(Manifest::$variant),*
             ];
-            let len = manifests.len();
             stream::iter(manifests)
                 .map(|manifest| async move {
                     manifest.get().await
                 })
-                .buffer_unordered(len)
+                .buffer_unordered(num_cpus::get())
                 .try_collect::<Vec<_>>()
                 .await?;
             Ok(())

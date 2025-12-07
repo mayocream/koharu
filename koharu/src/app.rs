@@ -2,7 +2,6 @@ use std::{path::PathBuf, sync::Arc};
 
 use anyhow::Result;
 use clap::Parser;
-use futures::try_join;
 use koharu_runtime::{ensure_dylibs, preload_dylibs};
 use once_cell::sync::Lazy;
 use rfd::MessageDialog;
@@ -66,11 +65,9 @@ fn initialize() -> Result<()> {
 }
 
 async fn prefetch() -> Result<()> {
-    try_join!(
-        ensure_dylibs(LIB_ROOT.to_path_buf()),
-        llm::prefetch(),
-        ml::prefetch()
-    )?;
+    ensure_dylibs(LIB_ROOT.to_path_buf()).await?;
+    ml::prefetch().await?;
+    llm::prefetch().await?;
 
     Ok(())
 }
@@ -88,9 +85,7 @@ async fn setup(app: tauri::AppHandle) -> Result<()> {
         }
     }
 
-    // preload resources
-    prefetch().await?;
-
+    ensure_dylibs(LIB_ROOT.to_path_buf()).await?;
     preload_dylibs(LIB_ROOT.to_path_buf())?;
 
     let onnx = Arc::new(ml::Model::new().await?);

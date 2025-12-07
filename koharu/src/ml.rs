@@ -1,5 +1,4 @@
 use anyhow::Result;
-use futures::try_join;
 use image::DynamicImage;
 use koharu_ml::comic_text_detector::{self, ComicTextDetector};
 use koharu_ml::device;
@@ -88,11 +87,9 @@ impl Model {
 }
 
 pub async fn prefetch() -> Result<()> {
-    try_join!(
-        comic_text_detector::prefetch(),
-        manga_ocr::prefetch(),
-        lama::prefetch(),
-    )?;
+    comic_text_detector::prefetch().await?;
+    manga_ocr::prefetch().await?;
+    lama::prefetch().await?;
 
     Ok(())
 }

@@ -29,6 +29,7 @@ pub fn http_client() -> &'static ClientWithMiddleware {
     &HTTP_CLIENT
 }
 
+#[tracing::instrument(level = "info")]
 pub async fn http_download(url: &str) -> anyhow::Result<Vec<u8>> {
     let head = HTTP_CLIENT
         .head(url)

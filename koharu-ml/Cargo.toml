@@ -39,6 +39,7 @@ once_cell = { workspace = true }
 rayon = { workspace = true }
 dirs = { workspace = true }
 futures = { workspace = true }
+num_cpus = { workspace = true }
 
 [features]
 cuda = [
