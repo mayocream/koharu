@@ -3233,6 +3233,7 @@ dependencies = [
  "serde_bytes",
  "serde_json",
  "strum",
+ "sys-locale",
  "tauri",
  "tauri-build",
  "thiserror 2.0.17",

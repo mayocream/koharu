@@ -3,6 +3,7 @@ use std::{str::FromStr, sync::Arc};
 use koharu_ml::llm::ModelId;
 use rayon::iter::{IntoParallelIterator, ParallelIterator};
 use strum::IntoEnumIterator;
+use sys_locale::get_locale;
 use tauri::State;
 
 use crate::{
@@ -234,7 +235,26 @@ pub async fn update_text_blocks(
 
 #[tauri::command]
 pub fn llm_list() -> Vec<String> {
-    ModelId::iter().map(|id| id.to_string()).collect()
+    let mut models: Vec<ModelId> = ModelId::iter().collect();
+
+    match get_locale() {
+        Some(locale) => {
+            println!("Current locale: {}", locale);
+
+            if locale.starts_with("zh") {
+                models.sort_by_key(|m| match m {
+                    ModelId::VntlLlama3_8Bv2 => 1,
+                    ModelId::SakuraGalTransl7Bv3_7 => 0,
+                });
+            }
+            // add more condition if more languages are supported
+        }
+        None => {
+            // default ordering for english
+        }
+    }
+
+    models.into_iter().map(|id| id.to_string()).collect()
 }
 
 #[tauri::command]
