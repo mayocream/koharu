@@ -243,8 +243,10 @@ pub fn llm_list() -> Vec<String> {
 
             if locale.starts_with("zh") {
                 models.sort_by_key(|m| match m {
-                    ModelId::VntlLlama3_8Bv2 => 1,
+                    ModelId::VntlLlama3_8Bv2 => 2,
+                    ModelId::Lfm2_350mEnjpMt => 3,
                     ModelId::SakuraGalTransl7Bv3_7 => 0,
+                    ModelId::Sakura1_5bQwen2_5v1_0 => 1,
                 });
             }
             // add more condition if more languages are supported

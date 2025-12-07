@@ -1,5 +1,6 @@
 mod model;
 mod prompt;
+mod quantized_lfm2;
 
 pub use model::{GenerateOptions, Llm};
 pub use prompt::{ChatMessage, ChatRole};
@@ -73,10 +74,22 @@ define_llms! {
         filename = "vntl-llama3-8b-v2-hf-q8_0.gguf",
         tokenizer_repo = "rinna/llama-3-youko-8b"
     },
+    Lfm2_350mEnjpMt => {
+        id = "lfm2-350m-enjp-mt",
+        repo = "LiquidAI/LFM2-350M-ENJP-MT-GGUF",
+        filename = "LFM2-350M-ENJP-MT-Q8_0.gguf",
+        tokenizer_repo = "LiquidAI/LFM2-350M-ENJP-MT"
+    },
     SakuraGalTransl7Bv3_7 => {
         id = "sakura-galtransl-7b-v3.7",
         repo = "SakuraLLM/Sakura-GalTransl-7B-v3.7",
         filename = "Sakura-Galtransl-7B-v3.7.gguf",
+        tokenizer_repo = "Qwen/Qwen2.5-1.5B-Instruct"
+    },
+    Sakura1_5bQwen2_5v1_0 => {
+        id = "sakura-1.5b-qwen2.5-v1.0",
+        repo = "shing3232/Sakura-1.5B-Qwen2.5-v1.0-GGUF-IMX",
+        filename = "sakura-1.5b-qwen2.5-v1.0-Q5KS.gguf",
         tokenizer_repo = "Qwen/Qwen2.5-1.5B-Instruct"
     },
 }

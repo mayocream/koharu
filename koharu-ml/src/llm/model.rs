@@ -10,10 +10,12 @@ use tokenizers::Tokenizer;
 use crate::device;
 use crate::llm::ModelId;
 use crate::llm::prompt::ChatMessage;
+use crate::llm::quantized_lfm2;
 
 pub enum Model {
     Llama(quantized_llama::ModelWeights),
     Qwen2(quantized_qwen2::ModelWeights),
+    Lfm2(quantized_lfm2::ModelWeights),
 }
 
 impl Model {
@@ -21,6 +23,7 @@ impl Model {
         match self {
             Model::Llama(m) => m.forward(input, pos),
             Model::Qwen2(m) => m.forward(input, pos),
+            Model::Lfm2(m) => m.forward(input, pos),
         }
     }
 }
@@ -91,6 +94,9 @@ impl Llm {
                 ct, &mut file, &device,
             )?),
             "qwen2" => Model::Qwen2(quantized_qwen2::ModelWeights::from_gguf(
+                ct, &mut file, &device,
+            )?),
+            "lfm2" => Model::Lfm2(quantized_lfm2::ModelWeights::from_gguf(
                 ct, &mut file, &device,
             )?),
             _ => anyhow::bail!("unsupported model architecture: {}", arch),
@@ -257,16 +263,24 @@ impl Llm {
                 out.push_str(role_start);
             }
             out.push_str(msg.role.to_string().as_ref());
-            if let Some(role_end) = markers.role_end {
-                out.push_str(role_end);
-            }
             out.push('\n');
 
             if !msg.content.is_empty() {
                 out.push_str(&msg.content);
-                out.push_str(markers.message_end);
                 out.push('\n');
             }
+
+            if let Some(role_end) = markers.role_end {
+                out.push_str(role_end);
+            } else {
+                out.push_str(markers.message_end);
+            }
+        }
+
+        // Add a generation preamble so chat models expect to produce assistant output.
+        if let Some(role_start) = markers.role_start {
+            out.push_str(role_start);
+            out.push_str("assistant\n");
         }
         out
     }

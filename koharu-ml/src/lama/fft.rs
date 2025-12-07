@@ -5,6 +5,7 @@ use candle_core::{DType, backend::BackendStorage, cuda_backend::CudaStorage};
 use candle_core::{backend::BackendStorage, metal_backend::MetalStorage};
 use rustfft::{FftPlanner, num_complex::Complex32};
 use tracing::instrument;
+use tracing;
 
 #[cfg(feature = "metal")]
 use {
@@ -150,6 +151,8 @@ impl CustomOp1 for Rfft2 {
     fn cuda_fwd(&self, storage: &CudaStorage, layout: &Layout) -> Result<(CudaStorage, Shape)> {
         use cudarc::cufft::{result as cufft, sys};
         use cudarc::driver::{DevicePtr, DevicePtrMut};
+
+        tracing::info!("using cuda irfft");
 
         let dims = layout.dims();
         if dims.len() != 4 {
@@ -400,6 +403,8 @@ impl CustomOp1 for Irfft2 {
         use cudarc::cufft::{result as cufft, sys};
         use cudarc::driver::{DevicePtr, DevicePtrMut};
 
+        tracing::info!("using cuda irfft");
+
         let dims = layout.dims();
         if dims.len() != 5 || dims[4] != 2 {
             bail!("irfft2 expects spectrum shaped [batch, channels, height, width/2+1, 2]")
@@ -559,14 +564,14 @@ impl CustomOp1 for Irfft2 {
     }
 }
 
-#[instrument(level = "info", skip_all)]
+#[instrument(level = "debug", skip_all)]
 pub fn rfft2(xs: &Tensor) -> candle_core::Result<Tensor> {
     let xs = xs.contiguous()?;
     let op = Rfft2;
     xs.apply_op1_no_bwd(&op)
 }
 
-#[instrument(level = "info", skip_all)]
+#[instrument(level = "debug", skip_all)]
 pub fn irfft2(spectrum: &Tensor, width: usize) -> candle_core::Result<Tensor> {
     let spectrum = spectrum.contiguous()?;
     let dims = spectrum.dims();
