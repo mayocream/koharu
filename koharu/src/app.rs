@@ -67,7 +67,8 @@ fn initialize() -> Result<()> {
 async fn prefetch() -> Result<()> {
     ensure_dylibs(LIB_ROOT.to_path_buf()).await?;
     ml::prefetch().await?;
-    llm::prefetch().await?;
+    // Skip for now as it's too big
+    // llm::prefetch().await?;
 
     Ok(())
 }
