@@ -186,7 +186,7 @@ export const useAppStore = create<AppState>((set, get) => ({
     if (!id) return
     await invoke('llm_load', { id })
 
-    await get().setProgress(0, ProgressBarStatus.Paused);
+    await get().setProgress(100, ProgressBarStatus.Paused);
     
     set({ llmLoading: true })
     // poll for llmCheckReady and set llmLoading false
@@ -194,7 +194,7 @@ export const useAppStore = create<AppState>((set, get) => ({
     while(try_time++ < 300) {
       await get().llmCheckReady()
       if (get().llmReady) {
-        await get().setProgress(0, ProgressBarStatus.Normal);
+        await get().clearProgress();
         set({ llmLoading: false })
         break
       }
@@ -279,6 +279,7 @@ export const useAppStore = create<AppState>((set, get) => ({
   clearProgress: async () => {
     await getCurrentWindow().setProgressBar({
       status: ProgressBarStatus.None,
+      progress: 0,
     });
   }
 }))
