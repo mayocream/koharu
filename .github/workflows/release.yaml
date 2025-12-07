@@ -56,15 +56,15 @@ jobs:
           7z x Releases/Koharu-win-Portable.zip -obundled-artifacts
           cd bundled-artifacts
           ./current/koharu.exe -d
-          rm -f velopack.log
-          cd ..
-          7z a Releases/Koharu-win-Bundled.zip bundled-artifacts/*
+          echo "Creating archive, check back in 20 years later"
+          # skip blobs, let 7z copy the resolved symlink instead; and use spf to strip leading folder
+          7z a ../Releases/Koharu-win-CUDA-Bundled.7z -x!models/*/blobs '-x!*.log' *
 
       # upload Releases/Koharu-win-Bundled.zip to release artifacts
       - name: Upload Bundled Artifacts
         uses: softprops/action-gh-release@v2
         with:
-          files: Releases/Koharu-win-Bundled.zip
+          files: Releases/Koharu-win-CUDA-Bundled.zip
         env:
           token: ${{ secrets.GITHUB_TOKEN }}
 
