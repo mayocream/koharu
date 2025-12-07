@@ -2,78 +2,16 @@ use std::io::Seek;
 
 use anyhow::Result;
 use candle_core::quantized::gguf_file;
-use candle_core::utils::{cuda_is_available, metal_is_available};
 use candle_core::{Device, Tensor};
 use candle_transformers::generation::{LogitsProcessor, Sampling};
 use candle_transformers::models::{quantized_llama, quantized_qwen2};
-use strum::{Display, EnumIter, EnumString, IntoEnumIterator};
-use sys_locale::get_locale;
 use tokenizers::Tokenizer;
 
-use crate::hf_hub;
+use crate::device;
+use crate::llm::ModelId;
+use crate::llm::prompt::ChatMessage;
 
-/// Supported model identifiers
-#[derive(Debug, Clone, Copy, PartialEq, Eq, EnumString, Display, EnumIter)]
-pub enum ModelId {
-    #[strum(serialize = "vntl-llama3-8b-v2")]
-    VntlLlama3_8Bv2,
-
-    #[strum(serialize = "sakura-galtransl-7b-v3.7")]
-    SakuraGalTransl7Bv3_7,
-}
-
-impl ModelId {
-    pub fn all() -> Vec<Self> {
-        let mut models: Vec<Self> = ModelId::iter().collect();
-        match get_locale() {
-            Some(locale) => {
-                println!("Current locale: {}", locale);
-
-                if locale.starts_with("zh") {
-                    models.sort_by_key(|m| match m {
-                        ModelId::VntlLlama3_8Bv2 => 1,
-                        ModelId::SakuraGalTransl7Bv3_7 => 0,
-                    });
-                }
-                // add more condition if more languages are supported
-            }
-            None => {
-                // default ordering for english
-            }
-        }
-        models
-    }
-}
-
-#[derive(Debug, Clone)]
-struct ModelConfig {
-    /// HF model repo hosting the `.gguf` file
-    repo: &'static str,
-    /// File name of the GGUF within the repo
-    filename: &'static str,
-    /// HF repo that contains `tokenizer.json`
-    tokenizer_repo: &'static str,
-}
-
-impl ModelId {
-    const fn config(&self) -> ModelConfig {
-        match self {
-            ModelId::VntlLlama3_8Bv2 => ModelConfig {
-                repo: "lmg-anon/vntl-llama3-8b-v2-gguf",
-                filename: "vntl-llama3-8b-v2-hf-q8_0.gguf",
-                tokenizer_repo: "rinna/llama-3-youko-8b", // or "meta-llama/Meta-Llama-3-8B"
-            },
-            ModelId::SakuraGalTransl7Bv3_7 => ModelConfig {
-                repo: "SakuraLLM/Sakura-GalTransl-7B-v3.7",
-                filename: "Sakura-Galtransl-7B-v3.7.gguf",
-                tokenizer_repo: "Qwen/Qwen2.5-1.5B-Instruct",
-            },
-        }
-    }
-}
-
-/// Supported model architectures
-enum Model {
+pub enum Model {
     Llama(quantized_llama::ModelWeights),
     Qwen2(quantized_qwen2::ModelWeights),
 }
@@ -83,83 +21,6 @@ impl Model {
         match self {
             Model::Llama(m) => m.forward(input, pos),
             Model::Qwen2(m) => m.forward(input, pos),
-        }
-    }
-}
-
-#[derive(Debug, Clone, Copy)]
-struct Markers {
-    prefix: Option<&'static str>,
-    role_start: Option<&'static str>,
-    role_end: Option<&'static str>,
-    message_end: &'static str,
-}
-
-impl Model {
-    fn markers(&self) -> Markers {
-        match self {
-            Model::Llama(_) => Markers {
-                prefix: Some("<|begin_of_text|>"),
-                role_start: Some("<|start_header_id|>"),
-                role_end: Some("<|end_header_id|>"),
-                message_end: "<|eot_id|>",
-            },
-            Model::Qwen2(_) => Markers {
-                prefix: None,
-                role_start: Some("<|im_start|>"),
-                role_end: None,
-                message_end: "<|im_end|>",
-            },
-        }
-    }
-}
-
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Display, EnumString)]
-#[strum(serialize_all = "lowercase")]
-pub enum ChatRole {
-    Name(&'static str),
-    System,
-    User,
-    Assistant,
-}
-
-#[derive(Debug, Clone)]
-pub struct ChatMessage {
-    role: ChatRole,
-    content: String,
-}
-
-impl ChatMessage {
-    pub fn new(role: ChatRole, content: impl Into<String>) -> Self {
-        Self {
-            role,
-            content: content.into(),
-        }
-    }
-
-    pub const fn assistant() -> Self {
-        Self {
-            role: ChatRole::Assistant,
-            content: String::new(),
-        }
-    }
-}
-
-impl ModelId {
-    pub fn prompt(&self, text: impl Into<String>) -> Vec<ChatMessage> {
-        match self {
-            ModelId::VntlLlama3_8Bv2 => vec![
-                ChatMessage::new(ChatRole::Name("Japanese"), text),
-                ChatMessage::new(ChatRole::Name("English"), String::new()),
-            ],
-            ModelId::SakuraGalTransl7Bv3_7 => vec![
-                ChatMessage::new(
-                    ChatRole::System,
-                    "你是一个视觉小说翻译模型，可以通顺地使用给定的术语表以指定的风格将日文翻译成简体中文，并联系上下文正确使用人称代词，注意不要混淆使役态和被动态的主语和宾语，不要擅自添加原文中没有的特殊符号，也不要擅自增加或减少换行。",
-                ),
-                ChatMessage::new(ChatRole::User, text),
-                ChatMessage::assistant(),
-            ],
         }
     }
 }
@@ -203,10 +64,8 @@ impl Default for GenerateOptions {
 
 impl Llm {
     /// Constructs a new LLM instance from a quantized GGUF model and tokenizer.json.
-    pub async fn new(id: ModelId) -> Result<Self> {
-        let cfg = id.config();
-        let model_path = hf_hub(cfg.repo, cfg.filename).await?;
-        let tokenizer_path = hf_hub(cfg.tokenizer_repo, "tokenizer.json").await?;
+    pub async fn load(id: ModelId) -> Result<Self> {
+        let (model_path, tokenizer_path) = id.get().await?;
 
         // Load tokenizer
         let tokenizer = Tokenizer::from_file(&tokenizer_path).map_err(anyhow::Error::msg)?;
@@ -221,7 +80,7 @@ impl Llm {
             .map(|s| s.to_lowercase())
             .unwrap_or_default();
 
-        let device = device()?;
+        let device = device(false)?;
 
         // Rewind reader before loading tensors
         file.rewind()?;
@@ -410,19 +269,5 @@ impl Llm {
             }
         }
         out
-    }
-}
-
-// refer: https://github.com/huggingface/candle/blob/d4545ebbbfb37d3cf0e228642ffaaa75b5d6bce9/candle-examples/src/lib.rs#L10
-pub fn device() -> Result<Device> {
-    if cuda_is_available() {
-        Ok(Device::new_cuda(0)?)
-    } else if metal_is_available() {
-        Ok(Device::new_metal(0)?)
-    } else {
-        tracing::info!(
-            "Running on CPU, to run on GPU, build with `--features cuda` or `--features metal` and ensure compatible hardware is available."
-        );
-        Ok(Device::Cpu)
     }
 }

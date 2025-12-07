@@ -7,7 +7,11 @@ use candle_nn::VarBuilder;
 use image::{DynamicImage, GenericImageView, RgbImage};
 use tracing::instrument;
 
-use crate::hf_hub;
+use crate::define_models;
+
+define_models! {
+    Lama => ("mayocream/lama-manga", "lama-manga.safetensors"),
+}
 
 pub struct Lama {
     model: model::Lama,
@@ -16,7 +20,7 @@ pub struct Lama {
 
 impl Lama {
     pub async fn load(device: Device) -> Result<Self> {
-        let weights = hf_hub("mayocream/lama-manga", "lama-manga.safetensors").await?;
+        let weights = Manifest::Lama.get().await?;
         let data = std::fs::read(&weights)?;
         let vb = VarBuilder::from_buffered_safetensors(data, DType::F32, &device)?;
         let model = model::Lama::load(&vb)?;

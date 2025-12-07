@@ -11,14 +11,13 @@ repository.workspace = true
 keywords.workspace = true
 
 [dependencies]
+koharu-core = { workspace = true }
 anyhow = { workspace = true }
 serde_json = { workspace = true }
 zip = { workspace = true }
 rayon = { workspace = true }
 tracing = { workspace = true }
 reqwest = { workspace = true }
-reqwest-middleware = { workspace = true }
-reqwest-retry = { workspace = true }
 tokio = { workspace = true }
 futures = { workspace = true }
 flate2 = { workspace = true }
@@ -27,6 +26,7 @@ once_cell = { workspace = true }
 libloading = { workspace = true }
 num_cpus = { workspace = true }
 strum = { workspace = true }
+dirs = { workspace = true }
 
 [dev-dependencies]
 tempfile = { workspace = true }

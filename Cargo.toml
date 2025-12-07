@@ -1,5 +1,11 @@
 [workspace]
-members = ["koharu", "koharu-ml", "koharu-runtime", "koharu-renderer"]
+members = [
+    "koharu",
+    "koharu-core",
+    "koharu-ml",
+    "koharu-runtime",
+    "koharu-renderer",
+]
 default-members = ["koharu"]
 resolver = "3"
 
@@ -15,6 +21,7 @@ repository = "https://github.com/mayocream/koharu"
 keywords = ["manga", "ocr", "translation", "deep_learning", "computer_vision"]
 
 [workspace.dependencies]
+koharu-core = { version = "0.12.1", path = "koharu-core", default-features = false }
 koharu-runtime = { version = "0.12.1", path = "koharu-runtime", default-features = false }
 koharu-ml = { version = "0.12.1", path = "koharu-ml", default-features = false }
 koharu-renderer = { version = "0.12.1", path = "koharu-renderer", default-features = false }
@@ -80,6 +87,7 @@ objc2-metal-performance-shaders = "0.3"
 objc2-metal-performance-shaders-graph = "0.3"
 objc2-foundation = "0.3"
 sys-locale = "0.3"
+indicatif = "0.17"
 
 [patch.crates-io]
 candle-transformers = { git = "https://github.com/mayocream/candle", branch = "cuda-dynamic-loading" }

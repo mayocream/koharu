@@ -7,16 +7,13 @@ use std::{
 
 use anyhow::Result;
 use futures::stream::{self, StreamExt, TryStreamExt};
+use koharu_core::http::{http_client, http_download};
 use once_cell::sync::OnceCell;
 use rayon::iter::{IntoParallelRefIterator, ParallelIterator};
 use tokio::task;
 use tracing::info;
 
-use crate::{
-    http::{http_client, http_download},
-    pypi::PYPI_ENDPOINT,
-    zip,
-};
+use crate::{pypi::PYPI_ENDPOINT, zip::fetch_record};
 
 /// Keep handles to loaded dynamic libraries alive for process lifetime
 static DYLIB_HANDLES: OnceCell<Vec<libloading::Library>> = OnceCell::new();
@@ -258,7 +255,7 @@ async fn fetch_and_extract(pkg: &str, platform_tags: &[&str], out_dir: Arc<PathB
     info!("{pkg}: selected wheel {wheel_name}");
 
     // 3) Use RECORD to check local dylibs; download only if needed
-    let entries = zip::fetch_record(&wheel_url).await?;
+    let entries = fetch_record(&wheel_url).await?;
 
     // Fast path: existence + size-only check; no hashing.
     // If size is None and file exists, treat as OK (no further verification).
@@ -283,7 +280,7 @@ async fn fetch_and_extract(pkg: &str, platform_tags: &[&str], out_dir: Arc<PathB
 
         task::spawn_blocking(move || extract_from_wheel(&bytes, out.as_ref())).await??;
         info!("{pkg}: download and extract complete");
-        Ok(())        
+        Ok(())
     } else {
         info!("{pkg}: {wheel_name} runtime libs are up-to-date");
         Ok(())

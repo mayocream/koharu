@@ -1,5 +1,4 @@
 mod dylib;
-mod http;
 mod pypi;
 mod zip;
 

@@ -12,9 +12,18 @@ use serde::de::DeserializeOwned;
 use tokenizers::Tokenizer;
 use tracing::instrument;
 
-use crate::hf_hub;
 use model::{PreprocessorConfig, VisionEncoderDecoder, VisionEncoderDecoderConfig};
 use tokenizer::load_tokenizer;
+
+use crate::define_models;
+
+define_models! {
+    Config => ("mayocream/manga-ocr", "config.json"),
+    PreprocessorConfig => ("mayocream/manga-ocr", "preprocessor_config.json"),
+    Vocab => ("mayocream/manga-ocr", "vocab.txt"),
+    SpecialTokensMap => ("mayocream/manga-ocr", "special_tokens_map.json"),
+    Model => ("mayocream/manga-ocr", "model.safetensors"),
+}
 
 pub struct MangaOcr {
     model: VisionEncoderDecoder,
@@ -25,19 +34,17 @@ pub struct MangaOcr {
 
 impl MangaOcr {
     pub async fn load(device: Device) -> Result<Self> {
-        let config_path = hf_hub("mayocream/manga-ocr", "config.json").await?;
-        let preprocessor_path = hf_hub("mayocream/manga-ocr", "preprocessor_config.json").await?;
-        let vocab_path = hf_hub("mayocream/manga-ocr", "vocab.txt").await?;
-        let special_tokens_path = hf_hub("mayocream/manga-ocr", "special_tokens_map.json").await?;
-        let tokenizer_json = hf_hub("mayocream/manga-ocr", "tokenizer.json").await.ok();
-        let weights_path = hf_hub("mayocream/manga-ocr", "model.safetensors").await?;
+        let config_path = Manifest::Config.get().await?;
+        let preprocessor_path = Manifest::PreprocessorConfig.get().await?;
+        let vocab_path = Manifest::Vocab.get().await?;
+        let special_tokens_path = Manifest::SpecialTokensMap.get().await?;
+        let weights_path = Manifest::Model.get().await?;
 
         let config: VisionEncoderDecoderConfig =
             load_json(&config_path).context("failed to parse model config")?;
         let preprocessor: PreprocessorConfig =
             load_json(&preprocessor_path).context("failed to parse preprocessor config")?;
-        let tokenizer =
-            load_tokenizer(tokenizer_json.as_deref(), &vocab_path, &special_tokens_path)?;
+        let tokenizer = load_tokenizer(None, &vocab_path, &special_tokens_path)?;
         let vb =
             unsafe { VarBuilder::from_mmaped_safetensors(&[weights_path], DType::F32, &device)? };
         let model = VisionEncoderDecoder::from_config(config, vb, device.clone())?;

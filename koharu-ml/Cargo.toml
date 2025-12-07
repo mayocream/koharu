@@ -11,6 +11,7 @@ repository.workspace = true
 keywords.workspace = true
 
 [dependencies]
+koharu-core = { workspace = true }
 anyhow = { workspace = true }
 clap = { workspace = true }
 image = { workspace = true }
@@ -36,6 +37,8 @@ sys-locale = { workspace = true }
 reqwest = { workspace = true }
 once_cell = { workspace = true }
 rayon = { workspace = true }
+dirs = { workspace = true }
+futures = { workspace = true }
 
 [features]
 cuda = [

@@ -2,8 +2,7 @@ use std::io;
 
 use anyhow::Result;
 use flate2::read::DeflateDecoder;
-
-use crate::http::http_client;
+use koharu_core::http::http_client;
 
 // ZIP signatures and constants
 const SIG_EOCD: [u8; 4] = [0x50, 0x4b, 0x05, 0x06]; // End Of Central Directory
@@ -227,7 +226,7 @@ mod tests {
                 .ok_or_else(|| anyhow::anyhow!("no suitable wheel for tag {tag}"))
         }
 
-        for pkg in crate::dylib::PACKAGES {
+        for pkg in ["sampleproject", "requests", "numpy"] {
             for tag in ["win_amd64", "manylinux"] {
                 let url = pick_wheel_url(pkg, tag).await?;
                 let entries = fetch_record(&url).await?;

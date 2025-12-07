@@ -2,6 +2,7 @@ use std::{str::FromStr, sync::Arc};
 
 use koharu_ml::llm::ModelId;
 use rayon::iter::{IntoParallelIterator, ParallelIterator};
+use strum::IntoEnumIterator;
 use tauri::State;
 
 use crate::{
@@ -233,10 +234,7 @@ pub async fn update_text_blocks(
 
 #[tauri::command]
 pub fn llm_list() -> Vec<String> {
-    ModelId::all()
-        .into_iter()
-        .map(|id| id.to_string())
-        .collect()
+    ModelId::iter().map(|id| id.to_string()).collect()
 }
 
 #[tauri::command]

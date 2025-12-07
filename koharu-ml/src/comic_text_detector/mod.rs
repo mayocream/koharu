@@ -11,7 +11,7 @@ use candle_transformers::object_detection::{Bbox, non_maximum_suppression};
 use image::{DynamicImage, GenericImageView, GrayImage};
 use tracing::instrument;
 
-use crate::hf_hub;
+use crate::define_models;
 
 const IMAGE_SIZE: u32 = 1024;
 const CONFIDENCE_THRESHOLD: f32 = 0.4;
@@ -21,6 +21,12 @@ const BINARY_THRESHOLD: u8 = 60;
 const DILATION_RADIUS: u32 = 2;
 const HOLE_CLOSE_RADIUS: u32 = 1;
 const BBOX_DILATION: f32 = 1.0;
+
+define_models! {
+    Yolov5 => ("mayocream/comic-text-detector", "yolo-v5.safetensors"),
+    Unet => ("mayocream/comic-text-detector", "unet.safetensors"),
+    DbNet => ("mayocream/comic-text-detector", "dbnet.safetensors"),
+}
 
 pub struct ComicTextDetector {
     yolo: yolo_v5::YoloV5,
@@ -32,19 +38,19 @@ pub struct ComicTextDetector {
 impl ComicTextDetector {
     pub async fn load(device: Device) -> anyhow::Result<Self> {
         let yolo = {
-            let weights = hf_hub("mayocream/comic-text-detector", "yolo-v5.safetensors").await?;
+            let weights = Manifest::Yolov5.get().await?;
             let vb =
                 unsafe { VarBuilder::from_mmaped_safetensors(&[weights], DType::F32, &device)? };
             yolo_v5::YoloV5::load(vb, 2, 3)?
         };
         let unet = {
-            let weights = hf_hub("mayocream/comic-text-detector", "unet.safetensors").await?;
+            let weights = Manifest::Unet.get().await?;
             let vb =
                 unsafe { VarBuilder::from_mmaped_safetensors(&[weights], DType::F32, &device)? };
             unet::UNet::load(vb)?
         };
         let dbnet = {
-            let weights = hf_hub("mayocream/comic-text-detector", "dbnet.safetensors").await?;
+            let weights = Manifest::DbNet.get().await?;
             let vb =
                 unsafe { VarBuilder::from_mmaped_safetensors(&[weights], DType::F32, &device)? };
             dbnet::DbNet::load(vb)?

@@ -3218,12 +3218,14 @@ dependencies = [
  "blake3",
  "clap",
  "dirs",
+ "futures",
  "hf-hub",
  "image",
  "imageproc",
  "koharu-ml",
  "koharu-renderer",
  "koharu-runtime",
+ "once_cell",
  "open",
  "postcard",
  "rayon",
@@ -3242,6 +3244,29 @@ dependencies = [
 ]
 
 [[package]]
+name = "koharu-core"
+version = "0.12.1"
+dependencies = [
+ "anyhow",
+ "csv",
+ "flate2",
+ "futures",
+ "hf-hub",
+ "indicatif",
+ "once_cell",
+ "rayon",
+ "reqwest",
+ "reqwest-middleware",
+ "reqwest-retry",
+ "serde",
+ "serde_json",
+ "strum",
+ "tokio",
+ "tracing",
+ "zip 6.0.0",
+]
+
+[[package]]
 name = "koharu-ml"
 version = "0.12.1"
 dependencies = [
@@ -3251,9 +3276,12 @@ dependencies = [
  "candle-transformers",
  "clap",
  "cudarc 0.18.1",
+ "dirs",
+ "futures",
  "hf-hub",
  "image",
  "imageproc",
+ "koharu-core",
  "objc2 0.6.3",
  "objc2-foundation 0.3.2",
  "objc2-metal-performance-shaders",
@@ -3290,15 +3318,15 @@ version = "0.12.1"
 dependencies = [
  "anyhow",
  "csv",
+ "dirs",
  "flate2",
  "futures",
+ "koharu-core",
  "libloading 0.9.0",
  "num_cpus",
  "once_cell",
  "rayon",
  "reqwest",
- "reqwest-middleware",
- "reqwest-retry",
  "serde_json",
  "strum",
  "tempfile",

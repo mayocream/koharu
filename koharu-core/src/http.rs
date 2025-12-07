@@ -1,15 +1,13 @@
 use std::sync::Arc;
 
 use anyhow::Context;
-use futures::{
-    StreamExt,
-    stream::{self, TryStreamExt},
-};
+use futures::{StreamExt, TryStreamExt, stream};
 use once_cell::sync::Lazy;
 use reqwest::header::{ACCEPT_RANGES, CONTENT_LENGTH, RANGE};
 use reqwest_middleware::{ClientBuilder, ClientWithMiddleware};
 use reqwest_retry::{RetryTransientMiddleware, policies::ExponentialBackoff};
-use tracing::info;
+
+use crate::progress::progress_bar;
 
 const USER_AGENT: &str = concat!(env!("CARGO_PKG_NAME"), "/", env!("CARGO_PKG_VERSION"));
 const RANGE_CHUNK_SIZE_BYTES: usize = 16 * 1024 * 1024;
@@ -31,8 +29,6 @@ pub fn http_client() -> &'static ClientWithMiddleware {
     &HTTP_CLIENT
 }
 
-/// Download a file using aggressive HTTP range requests with maximum concurrency.
-/// The server must advertise `Accept-Ranges: bytes`; otherwise this call fails.
 pub async fn http_download(url: &str) -> anyhow::Result<Vec<u8>> {
     let head = HTTP_CLIENT
         .head(url)
@@ -60,32 +56,43 @@ pub async fn http_download(url: &str) -> anyhow::Result<Vec<u8>> {
         "remote server does not advertise byte ranges"
     );
 
+    let pb = Arc::new(progress_bar(url.split('/').last().unwrap_or(url)));
+
     let total_len =
         usize::try_from(total_bytes).context("resource too large to fit into memory")?;
     let chunk_size = total_len.clamp(1, RANGE_CHUNK_SIZE_BYTES);
     let segments = total_len.div_ceil(chunk_size);
 
-    info!(
+    pb.set_length(total_len as u64);
+
+    tracing::info!(
         %url,
         total_bytes,
         segments,
         "downloading resource via HTTP range requests"
     );
 
-    let url = Arc::new(url.to_string());
-    let chunks = stream::iter((0..segments).map(move |index| {
-        let start = (index * chunk_size) as u64;
-        let len = ((index + 1) * chunk_size).min(total_len) - (index * chunk_size);
-        let end = start + len as u64 - 1;
-        let url = Arc::clone(&url);
-        async move {
-            let chunk = http_range(&url, start, end).await?;
-            Ok::<_, anyhow::Error>((start, chunk))
-        }
-    }))
-    .buffer_unordered(segments)
-    .try_collect::<Vec<_>>()
-    .await?;
+    let chunks = {
+        let url = Arc::new(url.to_string());
+        let pb = Arc::clone(&pb);
+        stream::iter((0..segments).map(move |index| {
+            let start = (index * chunk_size) as u64;
+            let len = ((index + 1) * chunk_size).min(total_len) - (index * chunk_size);
+            let end = start + len as u64 - 1;
+            let url = Arc::clone(&url);
+            let pb = Arc::clone(&pb);
+            async move {
+                let chunk = http_chunk(&url, start, end).await?;
+                pb.inc(len as u64);
+                Ok::<_, anyhow::Error>((start, chunk))
+            }
+        }))
+        .buffer_unordered(segments)
+        .try_collect::<Vec<_>>()
+        .await?
+    };
+
+    pb.finish_and_clear();
 
     let mut parts = chunks;
     parts.sort_by_key(|(start, _)| *start);
@@ -105,7 +112,7 @@ pub async fn http_download(url: &str) -> anyhow::Result<Vec<u8>> {
     Ok(buffer)
 }
 
-async fn http_range(url: &str, start: u64, end: u64) -> anyhow::Result<Vec<u8>> {
+async fn http_chunk(url: &str, start: u64, end: u64) -> anyhow::Result<Vec<u8>> {
     let expected_len = usize::try_from(end - start + 1)?;
     let response = HTTP_CLIENT
         .get(url)

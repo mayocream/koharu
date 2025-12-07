@@ -52,7 +52,7 @@ struct Args {
 async fn main() -> anyhow::Result<()> {
     let args = Args::parse();
 
-    let mut llm = Llm::new(args.model).await?;
+    let mut llm = Llm::load(args.model).await?;
 
     let opts = GenerateOptions {
         max_tokens: args.max_tokens,

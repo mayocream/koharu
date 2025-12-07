@@ -1,13 +1,26 @@
-use std::sync::Arc;
+use std::{path::PathBuf, sync::Arc};
 
 use anyhow::Result;
 use clap::Parser;
+use futures::try_join;
+use koharu_runtime::{ensure_dylibs, preload_dylibs};
+use once_cell::sync::Lazy;
 use rfd::MessageDialog;
 use tauri::Manager;
 use tokio::sync::RwLock;
 use tracing_subscriber::fmt::format::FmtSpan;
 
 use crate::{command, llm, ml, renderer::TextRenderer, state::State};
+
+static APP_ROOT: Lazy<PathBuf> = Lazy::new(|| {
+    std::env::current_exe()
+        .ok()
+        .and_then(|p| p.parent().map(|p| p.to_path_buf()))
+        .and_then(|p| p.parent().map(|p| p.to_path_buf()))
+        .expect("failed to determine application root directory")
+});
+static LIB_ROOT: Lazy<PathBuf> = Lazy::new(|| APP_ROOT.join("libs"));
+static MODEL_ROOT: Lazy<PathBuf> = Lazy::new(|| APP_ROOT.join("models"));
 
 #[derive(Parser)]
 struct Cli {
@@ -30,6 +43,9 @@ fn initialize() -> Result<()> {
         )
         .init();
 
+    // hook model cache dir
+    koharu_ml::set_cache_dir(MODEL_ROOT.to_path_buf())?;
+
     std::panic::set_hook(Box::new(|info| {
         let msg = info.to_string();
         MessageDialog::new()
@@ -49,7 +65,17 @@ fn initialize() -> Result<()> {
     Ok(())
 }
 
-async fn setup(app: Option<tauri::AppHandle>) -> Result<()> {
+async fn prefetch() -> Result<()> {
+    try_join!(
+        ensure_dylibs(LIB_ROOT.to_path_buf()),
+        llm::prefetch(),
+        ml::prefetch()
+    )?;
+
+    Ok(())
+}
+
+async fn setup(app: tauri::AppHandle) -> Result<()> {
     #[cfg(feature = "bundle")]
     {
         let source = velopack::sources::HttpSource::new(
@@ -62,43 +88,23 @@ async fn setup(app: Option<tauri::AppHandle>) -> Result<()> {
         }
     }
 
-    // Pre-download dynamic libraries
-    {
-        // if C:\koharu\current\koharu.exe, then we need to look at C:\koharu as that's
-        // where the loader locates
-        let app_root = std::env::current_exe()
-            .ok()
-            .and_then(|p| p.parent().map(|p| p.to_path_buf()))
-            .and_then(|p| p.parent().map(|p| p.to_path_buf()))
-            .unwrap_or_else(|| std::env::current_dir().unwrap_or_default());
+    // preload resources
+    prefetch().await?;
 
-        tracing::info!("App root directory: {:?}", app_root);
-        let lib_dir = if app_root.join(".portable").exists() {
-            app_root.join("libs")
-        } else {
-            dirs::data_local_dir()
-                .unwrap_or_default()
-                .join("Koharu")
-                .join("libs")
-        };
-        koharu_runtime::ensure_dylibs(&lib_dir).await?;
-        koharu_runtime::preload_dylibs(&lib_dir)?;
-    }
+    preload_dylibs(LIB_ROOT.to_path_buf())?;
 
     let onnx = Arc::new(ml::Model::new().await?);
     let llm = Arc::new(llm::Model::new());
     let renderer = Arc::new(TextRenderer::new());
     let state = Arc::new(RwLock::new(State::default()));
 
-    if let Some(app) = app {
-        app.manage(onnx);
-        app.manage(llm);
-        app.manage(renderer);
-        app.manage(state);
+    app.manage(onnx);
+    app.manage(llm);
+    app.manage(renderer);
+    app.manage(state);
 
-        app.get_webview_window("splashscreen").unwrap().close()?;
-        app.get_webview_window("main").unwrap().show()?;
-    }
+    app.get_webview_window("splashscreen").unwrap().close()?;
+    app.get_webview_window("main").unwrap().show()?;
 
     Ok(())
 }
@@ -108,7 +114,7 @@ pub async fn run() -> Result<()> {
 
     let cli = Cli::parse();
     if cli.download {
-        setup(None).await?;
+        prefetch().await?;
         return Ok(());
     }
 
@@ -132,7 +138,7 @@ pub async fn run() -> Result<()> {
         .setup(|app| {
             let handle = app.handle().clone();
             tauri::async_runtime::spawn(async move {
-                if let Err(err) = setup(Some(handle)).await {
+                if let Err(err) = setup(handle).await {
                     panic!("application setup failed: {err:#}");
                 }
             });

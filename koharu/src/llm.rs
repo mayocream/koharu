@@ -5,6 +5,8 @@ use tokio::sync::RwLock;
 
 use crate::state::Document;
 
+pub use koharu_ml::llm::prefetch;
+
 /// Load state of the LLM
 #[allow(clippy::large_enum_variant)]
 #[derive(Display)]
@@ -45,7 +47,7 @@ impl Model {
 
         let state_cloned = self.state.clone();
         tokio::spawn(async move {
-            let res = Llm::new(id).await;
+            let res = Llm::load(id).await;
             match res {
                 Ok(llm) => {
                     let mut guard = state_cloned.write().await;
