@@ -2,6 +2,7 @@
 
 import { create } from 'zustand'
 import { invoke } from '@tauri-apps/api/core'
+import { getCurrentWindow, ProgressBarStatus } from '@tauri-apps/api/window';
 import { Document, TextBlock, ToolMode } from '@/types'
 
 const replaceDocument = (docs: Document[], index: number, doc: Document) =>
@@ -37,12 +38,14 @@ type AppState = {
   setAutoFitEnabled: (enabled: boolean) => void
   updateTextBlocks: (textBlocks: TextBlock[]) => Promise<void>
   invokeWithStatus: (command: string, args?: any) => Promise<Document>
+  setProgress: (progress?: number, status?: ProgressBarStatus) => Promise<void>
+  clearProgress: () => Promise<void>
   // Processing actions
   detect: (_?: any, index?: number) => Promise<void>
   ocr: (_?: any, index?: number) => Promise<void>
   inpaint: (_?: any, index?: number) => Promise<void>
   render: (_?: any, index?: number) => Promise<void>
-  processImage: (_?: any, index?: number) => Promise<void>
+  processImage: (_?: any, index?: number, setProgressCallbck?: (progress: number) => Promise<void>) => Promise<void>
   inpaintAndRenderImage: (_?: any, index?: number) => Promise<void>
   processAllImages: () => Promise<void>
   exportDocument: () => Promise<void>
@@ -182,6 +185,8 @@ export const useAppStore = create<AppState>((set, get) => ({
     const id = get().llmSelectedModel
     if (!id) return
     await invoke('llm_load', { id })
+
+    await get().setProgress(0, ProgressBarStatus.Paused);
     
     set({ llmLoading: true })
     // poll for llmCheckReady and set llmLoading false
@@ -189,6 +194,7 @@ export const useAppStore = create<AppState>((set, get) => ({
     while(try_time++ < 300) {
       await get().llmCheckReady()
       if (get().llmReady) {
+        await get().setProgress(0, ProgressBarStatus.Normal);
         set({ llmLoading: false })
         break
       }
@@ -212,7 +218,7 @@ export const useAppStore = create<AppState>((set, get) => ({
   },
 
   // batch proceeses
-  processImage: async (_, index) => {
+  processImage: async (_, index, setGlobalProgress) => {
     if(!get().llmReady) {
       set({ processJobName: 'Loading LLM Model' })
       await get().llmList()
@@ -221,14 +227,19 @@ export const useAppStore = create<AppState>((set, get) => ({
 
     index = index ?? get().currentDocumentIndex
     console.log('Processing image at index', index)
+    const setProgres = setGlobalProgress ?? get().setProgress;
 
     set({ processJobName: '' })
 
-    await get().detect(_, index)
-    await get().ocr(_, index)
-    await get().inpaint(_, index)
-    await get().llmGenerate(_, index)
-    await get().render(_, index)
+    await setProgres(0);
+    const actions = ["detect", "ocr", "inpaint", "llmGenerate", "render"];
+    actions.forEach(async (action, i, arr) => {
+      await (get() as any)[action](_, index)
+      await setProgres(Math.floor(((i + 1) / arr.length) * 100));
+    })
+
+
+    if (!setGlobalProgress) get().clearProgress();
   },
 
   inpaintAndRenderImage: async (_, index) => {
@@ -238,10 +249,14 @@ export const useAppStore = create<AppState>((set, get) => ({
   },
 
   processAllImages: async () => {
-    for (let index = 0; index < get().documents.length; index++) {
+    const total = get().documents.length
+    for (let index = 0; index < total; index++) {
       set({ currentDocumentIndex: index,  selectedBlockIndex: undefined })
-      await get().processImage(null, index)
+      await get().processImage(null, index, async (progress) => {
+        await get().setProgress(Math.floor(progress / total + (index / total) * 100));
+      })
     }
+    await get().clearProgress();
   },
 
   exportDocument: async () => {
@@ -253,6 +268,19 @@ export const useAppStore = create<AppState>((set, get) => ({
     if(!get().documents.length) return
     await invoke('save_all_documents')
   },
+
+  setProgress: async (progress?: number, state?: ProgressBarStatus) => {
+    await getCurrentWindow().setProgressBar({
+      status: state ?? ProgressBarStatus.Normal,
+      progress: progress,
+    });
+  },
+
+  clearProgress: async () => {
+    await getCurrentWindow().setProgressBar({
+      status: ProgressBarStatus.None,
+    });
+  }
 }))
 
 type ConfigState = {
