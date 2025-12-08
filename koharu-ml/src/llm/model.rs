@@ -83,8 +83,7 @@ impl Llm {
             .map(|s| s.to_lowercase())
             .unwrap_or_default();
 
-        let force_cpu = std::env::var("KOHARU_FORCE_CPU").is_ok();
-        let device = device(force_cpu)?;
+        let device = device(false)?;
 
         // Rewind reader before loading tensors
         file.rewind()?;
@@ -255,6 +254,7 @@ impl Llm {
 
         if let Some(prefix) = markers.prefix {
             out.push_str(prefix);
+            out.push('\n');
         }
 
         // Format each message
@@ -272,10 +272,8 @@ impl Llm {
 
             if let Some(role_end) = markers.role_end {
                 out.push_str(role_end);
-                out.push('\n');
             } else {
                 out.push_str(markers.message_end);
-                out.push('\n');
             }
         }
 
