@@ -54,18 +54,28 @@ Koharu uses several pre-trained models for different tasks:
 - [manga-ocr](https://github.com/kha-white/manga-ocr)
 - [AnimeMangaInpainting](https://huggingface.co/dreMaz/AnimeMangaInpainting)
 
-The models will be automatically downloaded when you run Koharu for the first time.
+The models will be automatically downloaded when you run Koharu for the first time. Windows user can download the `Koharu-win-CUDA-bundled.7z` release package to get those models pre-bundled.
 
 We convert the original models to safetensors format for better performance and compatibility with Rust. The converted models are hosted on [Hugging Face](https://huggingface.co/mayocream).
 
 ### Large Language Models
 
-Koharu supports various quantized LLMs in GGUF format via [candle](https://github.com/huggingface/candle). Currently supported models include:
+Koharu supports various quantized LLMs in GGUF format via [candle](https://github.com/huggingface/candle), and preselect model based on system locale settings. Supported models and suggested usage:
 
-- [vntl-llama3-8b-v2](https://huggingface.co/lmg-anon/vntl-llama3-8b-v2-gguf)
-- [sakura-galtransl-7b-v3.7](https://huggingface.co/SakuraLLM/Sakura-GalTransl-7B-v3.7)
+For translating to English:
 
-LLMs will be automatically downloaded on demand when you select a model in the settings.
+- [vntl-llama3-8b-v2](https://huggingface.co/lmg-anon/vntl-llama3-8b-v2-gguf): ~8.5 GB Q8_0 weight size and suggests >=10 GB VRAM or plenty of system RAM for CPU inference, best when accuracy matters most.
+- [lfm2-350m-enjp-mt](https://huggingface.co/LiquidAI/LFM2-350M-ENJP-MT-GGUF): ultra-light (≈350M, Q8_0); runs comfortably on CPUs and low-memory GPUs, ideal for quick previews or low-spec machines at the cost of quality.
+
+For translating to Chinese:
+
+- [sakura-galtransl-7b-v3.7](https://huggingface.co/SakuraLLM/Sakura-GalTransl-7B-v3.7): ~6.3 GB and fits on 8 GB VRAM, good balance of quality and speed.
+- [sakura-1.5b-qwen2.5-v1.0](https://huggingface.co/shing3232/Sakura-1.5B-Qwen2.5-v1.0-GGUF-IMX): lightweight (≈1.5B, Q5KS); fits on mid-range GPUs (4–6 GB VRAM) or CPU-only setups with moderate RAM, faster than 7B/8B while keeping Qwen-style tokenizer behavior.
+
+
+~8.5 GB Q8_0 weight size and suggests >=10 GB VRAM
+
+LLMs will be automatically downloaded on demand when you select a model in the settings. Choose the smallest model that meets your quality needs if you are memory-bound; prefer the 7B/8B variants when you have sufficient VRAM/RAM for better translations.
 
 ## Installation
 
