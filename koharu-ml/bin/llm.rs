@@ -1,5 +1,6 @@
 use clap::Parser;
 use koharu_ml::llm::{ChatMessage, ChatRole, GenerateOptions, Llm, ModelId};
+use tracing_subscriber::fmt::format::FmtSpan;
 
 #[derive(Parser, Debug)]
 #[command(author, version, about)]
@@ -50,6 +51,10 @@ struct Args {
 
 #[tokio::main]
 async fn main() -> anyhow::Result<()> {
+        tracing_subscriber::fmt()
+        .with_span_events(FmtSpan::CLOSE)
+        .init();
+
     let args = Args::parse();
 
     let mut llm = Llm::load(args.model).await?;
@@ -90,7 +95,7 @@ async fn main() -> anyhow::Result<()> {
             ),
             ChatMessage::new(ChatRole::User, args.prompt),
             ChatMessage::assistant(),
-        ],
+        ], 
     };
 
     let out = llm.generate(&messages, &opts)?;
