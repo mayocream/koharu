@@ -11,7 +11,7 @@ use koharu_core::http::{http_client, http_download};
 use once_cell::sync::OnceCell;
 use rayon::iter::{IntoParallelRefIterator, ParallelIterator};
 use tokio::task;
-use tracing::info;
+use tracing::debug;
 
 use crate::{pypi::PYPI_ENDPOINT, zip::fetch_record};
 
@@ -147,7 +147,7 @@ pub async fn ensure_dylibs(path: impl AsRef<Path>) -> Result<()> {
     fs::create_dir_all(&path)?;
 
     let platform_tags = current_platform_tags()?;
-    info!("ensure_dylibs: start -> {}", path.display());
+    debug!("ensure_dylibs: start -> {}", path.display());
 
     let out_dir = Arc::new(path);
     let packages: Vec<String> = PACKAGES.iter().map(|s| s.to_string()).collect();
@@ -162,7 +162,7 @@ pub async fn ensure_dylibs(path: impl AsRef<Path>) -> Result<()> {
         .try_collect::<Vec<_>>()
         .await?;
 
-    info!("ensure_dylibs: done");
+    debug!("ensure_dylibs: done");
     Ok(())
 }
 
@@ -252,7 +252,7 @@ async fn fetch_and_extract(pkg: &str, platform_tags: &[&str], out_dir: Arc<PathB
         }
     }
     let (wheel_url, wheel_name) = chosen.ok_or_else(|| anyhow::anyhow!("no suitable wheel"))?;
-    info!("{pkg}: selected wheel {wheel_name}");
+    debug!("{pkg}: selected wheel {wheel_name}");
 
     // 3) Use RECORD to check local dylibs; download only if needed
     let entries = fetch_record(&wheel_url).await?;
@@ -274,15 +274,15 @@ async fn fetch_and_extract(pkg: &str, platform_tags: &[&str], out_dir: Arc<PathB
         });
 
     if needs_download {
-        info!("{pkg}: downloading {wheel_name}...");
+        debug!("{pkg}: downloading {wheel_name}...");
         let bytes = http_download(&wheel_url).await?;
         let out = Arc::clone(&out_dir);
 
         task::spawn_blocking(move || extract_from_wheel(&bytes, out.as_ref())).await??;
-        info!("{pkg}: download and extract complete");
+        debug!("{pkg}: download and extract complete");
         Ok(())
     } else {
-        info!("{pkg}: {wheel_name} runtime libs are up-to-date");
+        debug!("{pkg}: {wheel_name} runtime libs are up-to-date");
         Ok(())
     }
 }
@@ -333,7 +333,7 @@ fn extract_from_wheel(bytes: &[u8], out_dir: &Path) -> Result<()> {
 
     let results = results?;
     let _total_bytes: u64 = results.iter().map(|(_, w)| *w).sum();
-    info!(
+    debug!(
         "extract: copied {} libraries into {}",
         results.len(),
         out_dir.display()

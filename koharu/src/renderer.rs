@@ -144,7 +144,7 @@ impl TextRenderer {
                 y_offset = ((block.height - (max_y - min_y)) / 2.).max(0.);
             }
 
-            tracing::info!(
+            tracing::debug!(
                 "font size {}, {} x {}",
                 low * 0.95,
                 block.width,
@@ -159,7 +159,7 @@ impl TextRenderer {
             }
         };
 
-        tracing::info!("Determined font size: {}", font_size);
+        tracing::debug!("Determined font size: {}", font_size);
 
         let glyphs = layout_with_size(font_size)?;
         let mut renderer = self.renderer.lock().await;

@@ -66,7 +66,7 @@ pub async fn http_download(url: &str) -> anyhow::Result<Vec<u8>> {
 
     pb.set_length(total_len as u64);
 
-    tracing::info!(
+    tracing::debug!(
         %url,
         total_bytes,
         segments,
