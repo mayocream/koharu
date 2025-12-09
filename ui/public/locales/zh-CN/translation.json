@@ -66,7 +66,7 @@
     "renderTooltip": "将翻译渲染到页面",
     "loadingModel": "正在加载 LLM 模型",
     "statusReady": "LLM 已就绪",
-    "statusIdle": "LLM 空闲"
+    "statusIdle": "LLM 未加载"
   },
   "textBlocks": {
     "emptyPrompt": "打开图像以查看文本块。",

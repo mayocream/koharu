@@ -66,7 +66,7 @@
     "renderTooltip": "翻訳をページにレンダー",
     "loadingModel": "LLM モデルを読み込み中",
     "statusReady": "LLM 準備完了",
-    "statusIdle": "LLM 待機中"
+    "statusIdle": "LLM 未読み込み"
   },
   "textBlocks": {
     "emptyPrompt": "画像を開くとテキストブロックが表示されます。",

@@ -66,7 +66,7 @@
     "renderTooltip": "Render translations onto the page",
     "loadingModel": "Loading LLM model",
     "statusReady": "LLM Ready",
-    "statusIdle": "LLM Idle"
+    "statusIdle": "LLM Not Loaded"
   },
   "textBlocks": {
     "emptyPrompt": "Open an image to see text blocks.",

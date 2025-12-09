@@ -66,7 +66,7 @@
     "renderTooltip": "將翻譯渲染到頁面",
     "loadingModel": "正在載入 LLM 模型",
     "statusReady": "LLM 已就緒",
-    "statusIdle": "LLM 閒置"
+    "statusIdle": "LLM 未載入"
   },
   "textBlocks": {
     "emptyPrompt": "開啟影像以查看文字區塊。",
