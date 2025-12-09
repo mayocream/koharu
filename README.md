@@ -72,9 +72,6 @@ For translating to Chinese:
 - [sakura-galtransl-7b-v3.7](https://huggingface.co/SakuraLLM/Sakura-GalTransl-7B-v3.7): ~6.3 GB and fits on 8 GB VRAM, good balance of quality and speed.
 - [sakura-1.5b-qwen2.5-v1.0](https://huggingface.co/shing3232/Sakura-1.5B-Qwen2.5-v1.0-GGUF-IMX): lightweight (≈1.5B, Q5KS); fits on mid-range GPUs (4–6 GB VRAM) or CPU-only setups with moderate RAM, faster than 7B/8B while keeping Qwen-style tokenizer behavior.
 
-
-~8.5 GB Q8_0 weight size and suggests >=10 GB VRAM
-
 LLMs will be automatically downloaded on demand when you select a model in the settings. Choose the smallest model that meets your quality needs if you are memory-bound; prefer the 7B/8B variants when you have sufficient VRAM/RAM for better translations.
 
 ## Installation
