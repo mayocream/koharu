@@ -16,7 +16,7 @@ pub struct TextBlock {
     pub confidence: f32,
     pub text: Option<String>,
     pub translation: Option<String>,
-    pub style: TextStyle,
+    pub style: Option<TextStyle>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]

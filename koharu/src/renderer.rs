@@ -70,7 +70,7 @@ impl TextRenderer {
 
     async fn render_block(&self, block: &TextBlock, image: &mut RgbaImage) -> Result<()> {
         let mut fontbook = self.fontbook.lock().await;
-        let style = block.style.clone();
+        let style = block.style.clone().unwrap_or_default();
 
         let (collected_faces, script) = fontbook.filter_by_families_for_text(
             &style.font_families,
