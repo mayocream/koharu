@@ -1,6 +1,8 @@
 mod model;
 mod prompt;
 mod quantized_lfm2;
+mod quantized_llama;
+mod quantized_qwen2;
 
 pub use model::{GenerateOptions, Llm};
 pub use prompt::{ChatMessage, ChatRole};

@@ -62,6 +62,7 @@ struct AttentionLayer {
     kv_cache: Option<(Tensor, Tensor)>,
     span_attn: tracing::Span,
     span_rot: tracing::Span,
+    use_flash_attn: bool,
 }
 
 #[derive(Debug, Clone)]
@@ -92,6 +93,22 @@ fn masked_fill(on_false: &Tensor, mask: &Tensor, on_true: &Tensor) -> Result<Ten
     let shape = mask.shape();
     let m = mask.where_cond(&on_true.broadcast_as(shape.dims())?, on_false)?;
     Ok(m)
+}
+
+#[cfg(feature = "flash-attn")]
+fn flash_attn(
+    q: &Tensor,
+    k: &Tensor,
+    v: &Tensor,
+    softmax_scale: f32,
+    causal: bool,
+) -> Result<Tensor> {
+    candle_flash_attn::flash_attn(q, k, v, softmax_scale, causal)
+}
+
+#[cfg(not(feature = "flash-attn"))]
+fn flash_attn(_: &Tensor, _: &Tensor, _: &Tensor, _: f32, _: bool) -> Result<Tensor> {
+    unimplemented!("compile with '--features flash-attn' to enable flash attention")
 }
 
 fn precomput_freqs_cis(
@@ -165,16 +182,27 @@ impl AttentionLayer {
         let k = repeat_kv(k, self.n_head / self.n_kv_head)?;
         let v = repeat_kv(v, self.n_head / self.n_kv_head)?;
 
-        let att = (q.matmul(&k.t()?)? / (self.head_dim as f64).sqrt())?;
-        let att = match mask {
-            None => att,
-            Some(mask) => {
-                let mask = mask.broadcast_as(att.shape())?;
-                masked_fill(&att, &mask, &self.neg_inf)?
-            }
+        let softmax_scale = 1f32 / (self.head_dim as f32).sqrt();
+        let y = if self.use_flash_attn && q.device().is_cuda() {
+            let q = q.to_dtype(DType::BF16)?.transpose(1, 2)?;
+            let k = k.to_dtype(DType::BF16)?.transpose(1, 2)?;
+            let v = v.to_dtype(DType::BF16)?.transpose(1, 2)?;
+            let causal = index_pos > 0 || seq_len > 1;
+            flash_attn(&q, &k, &v, softmax_scale, causal)?
+                .to_dtype(DType::F32)?
+                .transpose(1, 2)?
+        } else {
+            let att = (q.matmul(&k.t()?)? / (self.head_dim as f64).sqrt())?;
+            let att = match mask {
+                None => att,
+                Some(mask) => {
+                    let mask = mask.broadcast_as(att.shape())?;
+                    masked_fill(&att, &mask, &self.neg_inf)?
+                }
+            };
+            let att = candle_nn::ops::softmax_last_dim(&att)?;
+            att.matmul(&v.contiguous()?)?
         };
-        let att = candle_nn::ops::softmax_last_dim(&att)?;
-        let y = att.matmul(&v.contiguous()?)?;
 
         let y = y.transpose(1, 2)?.reshape(&[b_sz, seq_len, n_embd])?;
         self.wo.forward(&y)
@@ -333,6 +361,7 @@ impl ModelWeights {
         let head_dim = embedding_length / head_count;
         let (cos, sin) = precomput_freqs_cis(head_dim, rope_freq_base, context_length, device)?;
         let neg_inf = Tensor::new(f32::NEG_INFINITY, device)?;
+        let use_flash_attn = cfg!(feature = "flash-attn") && device.is_cuda();
 
         let tok_embeddings_q = get_qtensor(
             &ct,
@@ -528,6 +557,7 @@ impl ModelWeights {
                     kv_cache: None,
                     span_attn: tracing::span!(tracing::Level::TRACE, "attn"),
                     span_rot: tracing::span!(tracing::Level::TRACE, "attn-rot"),
+                    use_flash_attn,
                 })
             } else {
                 let in_proj = get_qtensor(

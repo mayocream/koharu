@@ -30,6 +30,8 @@ koharu-renderer = { path = "koharu-renderer", default-features = false }
 candle-transformers = "=0.9.2-alpha.1"
 candle-core = "=0.9.2-alpha.1"
 candle-nn = "=0.9.2-alpha.1"
+candle-flash-attn = "=0.9.2-alpha.1"
+
 hf-hub = "0.4"
 image = "0.25"
 anyhow = "1.0"
@@ -95,6 +97,7 @@ minijinja = "2.0"
 candle-transformers = { git = "https://github.com/mayocream/candle", branch = "cuda-dynamic-loading" }
 candle-core = { git = "https://github.com/mayocream/candle", branch = "cuda-dynamic-loading" }
 candle-nn = { git = "https://github.com/mayocream/candle", branch = "cuda-dynamic-loading" }
+candle-flash-attn = { git = "https://github.com/mayocream/candle", branch = "cuda-dynamic-loading" }
 float8 = { git = "https://github.com/mayocream/float8", branch = "cuda-dynamic-loading" }
 ug = { git = "https://github.com/mayocream/ug", branch = "cuda-dynamic-loading" }
 ug-cuda = { git = "https://github.com/mayocream/ug", branch = "cuda-dynamic-loading" }

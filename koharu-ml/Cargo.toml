@@ -10,6 +10,7 @@ homepage.workspace = true
 repository.workspace = true
 keywords.workspace = true
 publish.workspace = true
+build = "build.rs"
 
 [dependencies]
 koharu-core = { workspace = true }
@@ -21,6 +22,7 @@ hf-hub = { workspace = true }
 candle-core = { workspace = true }
 candle-transformers = { workspace = true }
 candle-nn = { workspace = true }
+candle-flash-attn = { workspace = true, optional = true }
 tokenizers = { workspace = true }
 serde = { workspace = true }
 serde_json = { workspace = true }
@@ -61,6 +63,7 @@ metal = [
     "objc2",
     "objc2-foundation",
 ]
+flash-attn = ["cuda", "candle-flash-attn"]
 
 [[bin]]
 name = "comic-text-detector"
