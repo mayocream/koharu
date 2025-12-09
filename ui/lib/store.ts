@@ -2,7 +2,7 @@
 
 import { create } from 'zustand'
 import { invoke } from '@tauri-apps/api/core'
-import { getCurrentWindow, ProgressBarStatus } from '@tauri-apps/api/window';
+import { getCurrentWindow, ProgressBarStatus } from '@tauri-apps/api/window'
 import { Document, TextBlock, ToolMode } from '@/types'
 
 const replaceDocument = (docs: Document[], index: number, doc: Document) =>
@@ -45,7 +45,11 @@ type AppState = {
   ocr: (_?: any, index?: number) => Promise<void>
   inpaint: (_?: any, index?: number) => Promise<void>
   render: (_?: any, index?: number) => Promise<void>
-  processImage: (_?: any, index?: number, setProgressCallbck?: (progress: number) => Promise<void>) => Promise<void>
+  processImage: (
+    _?: any,
+    index?: number,
+    setProgressCallbck?: (progress: number) => Promise<void>,
+  ) => Promise<void>
   inpaintAndRenderImage: (_?: any, index?: number) => Promise<void>
   processAllImages: () => Promise<void>
   exportDocument: () => Promise<void>
@@ -121,7 +125,11 @@ export const useAppStore = create<AppState>((set, get) => ({
   },
   invokeWithStatus: async (command: string, args: {}) => {
     // replace underscore case with CamelCases
-    set({ processJobName: command.replace(/_/g, ' ').replace(/\b\w/g, (c) => c.toUpperCase()) })
+    set({
+      processJobName: command
+        .replace(/_/g, ' ')
+        .replace(/\b\w/g, (c) => c.toUpperCase()),
+    })
     let ret: Document = await invoke<Document>(command, args)
     set({ processJobName: '' })
     return ret
@@ -180,21 +188,21 @@ export const useAppStore = create<AppState>((set, get) => ({
       set({ llmLoading: false, llmReady: false })
       return
     }
-  
+
     // load
     const id = get().llmSelectedModel
     if (!id) return
     await invoke('llm_load', { id })
 
-    await get().setProgress(100, ProgressBarStatus.Paused);
-    
+    await get().setProgress(100, ProgressBarStatus.Paused)
+
     set({ llmLoading: true })
     // poll for llmCheckReady and set llmLoading false
     let try_time = 0
-    while(try_time++ < 300) {
+    while (try_time++ < 300) {
       await get().llmCheckReady()
       if (get().llmReady) {
-        await get().clearProgress();
+        await get().clearProgress()
         set({ llmLoading: false })
         break
       }
@@ -219,7 +227,7 @@ export const useAppStore = create<AppState>((set, get) => ({
 
   // batch proceeses
   processImage: async (_, index, setGlobalProgress) => {
-    if(!get().llmReady) {
+    if (!get().llmReady) {
       set({ processJobName: 'Loading LLM Model' })
       await get().llmList()
       await get().llmToggleLoadUnload()
@@ -227,19 +235,18 @@ export const useAppStore = create<AppState>((set, get) => ({
 
     index = index ?? get().currentDocumentIndex
     console.log('Processing image at index', index)
-    const setProgres = setGlobalProgress ?? get().setProgress;
+    const setProgres = setGlobalProgress ?? get().setProgress
 
     set({ processJobName: '' })
 
-    await setProgres(0);
-    const actions = ["detect", "ocr", "inpaint", "llmGenerate", "render"];
+    await setProgres(0)
+    const actions = ['detect', 'ocr', 'inpaint', 'llmGenerate', 'render']
     actions.forEach(async (action, i, arr) => {
       await (get() as any)[action](_, index)
-      await setProgres(Math.floor(((i + 1) / arr.length) * 100));
+      await setProgres(Math.floor(((i + 1) / arr.length) * 100))
     })
 
-
-    if (!setGlobalProgress) get().clearProgress();
+    if (!setGlobalProgress) get().clearProgress()
   },
 
   inpaintAndRenderImage: async (_, index) => {
@@ -251,12 +258,14 @@ export const useAppStore = create<AppState>((set, get) => ({
   processAllImages: async () => {
     const total = get().documents.length
     for (let index = 0; index < total; index++) {
-      set({ currentDocumentIndex: index,  selectedBlockIndex: undefined })
+      set({ currentDocumentIndex: index, selectedBlockIndex: undefined })
       await get().processImage(null, index, async (progress) => {
-        await get().setProgress(Math.floor(progress / total + (index / total) * 100));
+        await get().setProgress(
+          Math.floor(progress / total + (index / total) * 100),
+        )
       })
     }
-    await get().clearProgress();
+    await get().clearProgress()
   },
 
   exportDocument: async () => {
@@ -265,7 +274,7 @@ export const useAppStore = create<AppState>((set, get) => ({
   },
 
   exportAllDocuments: async () => {
-    if(!get().documents.length) return
+    if (!get().documents.length) return
     await invoke('save_all_documents')
   },
 
@@ -273,15 +282,15 @@ export const useAppStore = create<AppState>((set, get) => ({
     await getCurrentWindow().setProgressBar({
       status: state ?? ProgressBarStatus.Normal,
       progress: progress,
-    });
+    })
   },
 
   clearProgress: async () => {
     await getCurrentWindow().setProgressBar({
       status: ProgressBarStatus.None,
       progress: 0,
-    });
-  }
+    })
+  },
 }))
 
 type ConfigState = {

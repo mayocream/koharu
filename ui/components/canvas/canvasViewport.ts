@@ -17,11 +17,8 @@ export function fitCanvasToViewport() {
   const rect = viewport.getBoundingClientRect()
   if (!rect.width || !rect.height || !doc.width || !doc.height) return
   const scaleW = ((rect.width - 10) / doc.width) * 100 // leave 10px for margin
-  const scaleH = ((rect.height- 10) / doc.height) * 100 // leave 10px for margin
-  const fit = Math.max(
-    10,
-    Math.min(100, Math.min(scaleW, scaleH)),
-  )
+  const scaleH = ((rect.height - 10) / doc.height) * 100 // leave 10px for margin
+  const fit = Math.max(10, Math.min(100, Math.min(scaleW, scaleH)))
   setAutoFitEnabled(true)
   setScale(fit)
 }

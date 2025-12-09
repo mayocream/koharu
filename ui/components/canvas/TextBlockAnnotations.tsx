@@ -97,7 +97,16 @@ function TextBlockAnnotation({
       disableDragging={!selected || !interactive}
       enableResizing={
         selected && interactive
-          ? { bottom: true, bottomLeft: true, bottomRight: true, left: true, right: true, top: true, topLeft: true, topRight: true }
+          ? {
+              bottom: true,
+              bottomLeft: true,
+              bottomRight: true,
+              left: true,
+              right: true,
+              top: true,
+              topLeft: true,
+              topRight: true,
+            }
           : false
       }
       onDragStop={handleDragStop}
@@ -126,7 +135,7 @@ function TextBlockAnnotation({
           }}
         />
         <div
-          className={`pointer-events-none absolute -left-1.5 -top-1.5 flex h-4 w-4 items-center justify-center rounded-full text-[9px] font-semibold text-white shadow ${
+          className={`pointer-events-none absolute -top-1.5 -left-1.5 flex h-4 w-4 items-center justify-center rounded-full text-[9px] font-semibold text-white shadow ${
             selected ? 'bg-sky-500' : 'bg-rose-500'
           }`}
         >

@@ -1,0 +1,97 @@
+{
+  "common": {
+    "initializing": "初始化中..."
+  },
+  "menu": {
+    "file": "檔案",
+    "openFile": "開啟檔案...",
+    "export": "匯出...",
+    "exportAll": "匯出全部",
+    "view": "檢視",
+    "fitWindow": "符合視窗",
+    "originalSize": "原始大小",
+    "process": "處理",
+    "processCurrent": "處理目前圖片",
+    "redoInpaintRender": "重新修補並渲染",
+    "processAll": "處理所有圖片",
+    "help": "說明",
+    "discord": "Discord",
+    "github": "GitHub",
+    "language": "語言",
+    "languages": {
+      "en-US": "English",
+      "zh-CN": "简体中文",
+      "zh-TW": "繁體中文",
+      "ja-JP": "日本語"
+    }
+  },
+  "navigator": {
+    "title": "導覽",
+    "pages_one": "{{count}} 頁",
+    "pages_other": "{{count}} 頁",
+    "empty": "沒有文件",
+    "prompt": "選擇或匯入頁面以開始"
+  },
+  "panels": {
+    "processing": "處理",
+    "mask": "遮罩",
+    "llm": "LLM"
+  },
+  "processing": {
+    "detect": "偵測",
+    "detectTooltip": "在目前頁面執行文字偵測",
+    "ocr": "辨識",
+    "ocrTooltip": "辨識已偵測區域中的文字"
+  },
+  "mask": {
+    "showSegmentationMask": "顯示分割遮罩",
+    "showInpainted": "顯示修補影像",
+    "showRendered": "顯示渲染文字",
+    "inpaint": "修補",
+    "inpaintTooltip": "套用影像修補"
+  },
+  "llm": {
+    "title": "LLM",
+    "ready": "就緒",
+    "idle": "閒置",
+    "selectPlaceholder": "選擇模型",
+    "load": "載入",
+    "unload": "卸載",
+    "loadTooltip": "載入所選模型",
+    "unloadTooltip": "卸載目前模型",
+    "generate": "產生",
+    "generating": "產生中...",
+    "generateTooltip": "為偵測到的文字區塊產生翻譯",
+    "render": "渲染文字",
+    "renderTooltip": "將翻譯渲染到頁面",
+    "loadingModel": "正在載入 LLM 模型",
+    "statusReady": "LLM 已就緒",
+    "statusIdle": "LLM 閒置"
+  },
+  "textBlocks": {
+    "emptyPrompt": "開啟影像以查看文字區塊。",
+    "title": "文字區塊（{{count}}）",
+    "none": "尚無文字區塊。請執行偵測以產生列表。",
+    "emptySummary": "<空>",
+    "ocrLabel": "OCR 文字",
+    "translationLabel": "翻譯",
+    "addOcrPlaceholder": "新增 OCR 文字",
+    "addTranslationPlaceholder": "新增翻譯"
+  },
+  "workspace": {
+    "importPrompt": "匯入頁面以開始編輯。",
+    "deleteBlock": "刪除區塊"
+  },
+  "statusBar": {
+    "zoom": "縮放",
+    "canvas": "畫布"
+  },
+  "toolbar": {
+    "brush": "筆刷"
+  },
+  "toolRail": {
+    "select": "選擇",
+    "block": "框選",
+    "mask": "遮罩"
+  }
+}

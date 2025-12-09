@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from 'react'
 import { ScrollArea, Tooltip } from 'radix-ui'
+import { useTranslation } from 'react-i18next'
 import { useAppStore } from '@/lib/store'
 import { convertToBlob } from '@/lib/util'
 import { Document } from '@/types'
@@ -9,6 +10,7 @@ import { Document } from '@/types'
 export function Navigator() {
   const { documents, currentDocumentIndex, setCurrentDocumentIndex } =
     useAppStore()
+  const { t } = useTranslation()
 
   const current = documents[currentDocumentIndex]
 
@@ -16,10 +18,12 @@ export function Navigator() {
     <div className='flex w-32 shrink-0 flex-col border-r border-neutral-200 bg-neutral-50'>
       <div className='border-b border-neutral-200 px-2.5 py-1.5'>
         <p className='text-[11px] tracking-wide text-neutral-500 uppercase'>
-          Navigator
+          {t('navigator.title')}
         </p>
         <p className='text-xs font-semibold text-neutral-900'>
-          {documents.length ? `${documents.length} pages` : 'No documents'}
+          {documents.length
+            ? t('navigator.pages', { count: documents.length })
+            : t('navigator.empty')}
         </p>
       </div>
 
@@ -29,7 +33,7 @@ export function Navigator() {
             #{currentDocumentIndex + 1}
           </span>
         ) : (
-          <span>Select or import a page to begin</span>
+          <span>{t('navigator.prompt')}</span>
         )}
       </div>
 
@@ -63,11 +67,7 @@ type PagePreviewProps = {
   onSelect: () => void
 }
 
-function PagePreview({
-  document,
-  selected,
-  onSelect,
-}: PagePreviewProps) {
+function PagePreview({ document, selected, onSelect }: PagePreviewProps) {
   const [preview, setPreview] = useState<string>()
 
   useEffect(() => {

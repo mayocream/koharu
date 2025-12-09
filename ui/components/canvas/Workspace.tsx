@@ -3,6 +3,7 @@
 import { useEffect, useRef } from 'react'
 import type React from 'react'
 import { ScrollArea, ContextMenu } from 'radix-ui'
+import { useTranslation } from 'react-i18next'
 import { listen } from '@tauri-apps/api/event'
 import { Image } from '@/components/Image'
 import { useAppStore } from '@/lib/store'
@@ -75,6 +76,7 @@ export function Workspace() {
       void removeBlock(index)
     },
   })
+  const { t } = useTranslation()
 
   // Listen for Tauri resize events
   useEffect(() => {
@@ -106,9 +108,7 @@ export function Workspace() {
     handleMouseDown(event)
   }
 
-  const handleCanvasContextMenu = (
-    event: React.MouseEvent<HTMLDivElement>,
-  ) => {
+  const handleCanvasContextMenu = (event: React.MouseEvent<HTMLDivElement>) => {
     handleContextMenu(event)
   }
 
@@ -174,10 +174,13 @@ export function Workspace() {
                           />
                         )}
                       </div>
-                      {(!showRenderedImage || currentDocument.rendered === undefined ) && <TextBlockAnnotations
-                        selectedIndex={selectedBlockIndex}
-                        onSelect={setSelectedBlockIndex}
-                      />}
+                      {(!showRenderedImage ||
+                        currentDocument.rendered === undefined) && (
+                        <TextBlockAnnotations
+                          selectedIndex={selectedBlockIndex}
+                          onSelect={setSelectedBlockIndex}
+                        />
+                      )}
                       {draftBlock && (
                         <div
                           className='pointer-events-none absolute rounded border-2 border-dashed border-rose-500 bg-rose-500/10'
@@ -199,14 +202,14 @@ export function Workspace() {
                       onSelect={handleDeleteBlock}
                       className='flex cursor-pointer items-center rounded px-3 py-1.5 text-sm text-neutral-800 outline-none select-none hover:bg-neutral-100 data-disabled:cursor-default data-disabled:opacity-40'
                     >
-                      Delete block
+                      {t('workspace.deleteBlock')}
                     </ContextMenu.Item>
                   </ContextMenu.Content>
                 </ContextMenu.Portal>
               </ContextMenu.Root>
             ) : (
               <div className='flex h-full w-full items-center justify-center text-sm text-neutral-500'>
-                Import a page to begin editing.
+                {t('workspace.importPrompt')}
               </div>
             )}
           </ScrollArea.Viewport>

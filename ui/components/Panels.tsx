@@ -1,18 +1,25 @@
 'use client'
 
 import { Tabs } from 'radix-ui'
+import { useTranslation } from 'react-i18next'
 import { ProcessingControls } from '@/components/panels/ProcessingControls'
 import { MaskControls } from '@/components/panels/MaskControls'
 import { LlmControls } from '@/components/panels/LlmControls'
 import { TextBlocksPanel } from '@/components/panels/TextBlocksPanel'
 
 const PANEL_TABS = [
-  { value: 'processing', label: 'Processing', Component: ProcessingControls },
-  { value: 'mask', label: 'Mask', Component: MaskControls },
-  { value: 'llm', label: 'LLM', Component: LlmControls },
+  {
+    value: 'processing',
+    labelKey: 'panels.processing',
+    Component: ProcessingControls,
+  },
+  { value: 'mask', labelKey: 'panels.mask', Component: MaskControls },
+  { value: 'llm', labelKey: 'panels.llm', Component: LlmControls },
 ] as const
 
 export function Panels() {
+  const { t } = useTranslation()
+
   return (
     <div className='flex w-64 shrink-0 flex-col border-l border-neutral-200 bg-neutral-50'>
       <Tabs.Root
@@ -26,7 +33,7 @@ export function Panels() {
               value={tab.value}
               className='px-2.5 py-1.5 hover:bg-neutral-100'
             >
-              {tab.label}
+              {t(tab.labelKey)}
             </Tabs.Trigger>
           ))}
         </Tabs.List>

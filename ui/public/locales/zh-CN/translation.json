@@ -1,0 +1,97 @@
+{
+  "common": {
+    "initializing": "初始化中..."
+  },
+  "menu": {
+    "file": "文件",
+    "openFile": "打开文件...",
+    "export": "导出...",
+    "exportAll": "导出全部",
+    "view": "视图",
+    "fitWindow": "适应窗口",
+    "originalSize": "原始大小",
+    "process": "处理",
+    "processCurrent": "处理当前图片",
+    "redoInpaintRender": "重新修补并渲染",
+    "processAll": "处理所有图片",
+    "help": "帮助",
+    "discord": "Discord",
+    "github": "GitHub",
+    "language": "语言",
+    "languages": {
+      "en-US": "English",
+      "zh-CN": "简体中文",
+      "zh-TW": "繁體中文",
+      "ja-JP": "日本語"
+    }
+  },
+  "navigator": {
+    "title": "导航",
+    "pages_one": "{{count}} 页",
+    "pages_other": "{{count}} 页",
+    "empty": "没有文档",
+    "prompt": "选择或导入页面开始"
+  },
+  "panels": {
+    "processing": "处理",
+    "mask": "遮罩",
+    "llm": "LLM"
+  },
+  "processing": {
+    "detect": "检测",
+    "detectTooltip": "对当前页面运行文本检测",
+    "ocr": "识别",
+    "ocrTooltip": "识别已检测区域中的文本"
+  },
+  "mask": {
+    "showSegmentationMask": "显示分割遮罩",
+    "showInpainted": "显示修补图像",
+    "showRendered": "显示渲染文本",
+    "inpaint": "修补",
+    "inpaintTooltip": "执行图像修补"
+  },
+  "llm": {
+    "title": "LLM",
+    "ready": "就绪",
+    "idle": "空闲",
+    "selectPlaceholder": "选择模型",
+    "load": "加载",
+    "unload": "卸载",
+    "loadTooltip": "加载所选模型",
+    "unloadTooltip": "卸载当前模型",
+    "generate": "生成",
+    "generating": "生成中...",
+    "generateTooltip": "为检测到的文本块生成翻译",
+    "render": "渲染文本",
+    "renderTooltip": "将翻译渲染到页面",
+    "loadingModel": "正在加载 LLM 模型",
+    "statusReady": "LLM 已就绪",
+    "statusIdle": "LLM 空闲"
+  },
+  "textBlocks": {
+    "emptyPrompt": "打开图像以查看文本块。",
+    "title": "文本块（{{count}}）",
+    "none": "尚无文本块。运行检测以填充列表。",
+    "emptySummary": "<空>",
+    "ocrLabel": "OCR 文本",
+    "translationLabel": "翻译",
+    "addOcrPlaceholder": "添加 OCR 文本",
+    "addTranslationPlaceholder": "添加翻译"
+  },
+  "workspace": {
+    "importPrompt": "导入页面以开始编辑。",
+    "deleteBlock": "删除块"
+  },
+  "statusBar": {
+    "zoom": "缩放",
+    "canvas": "画布"
+  },
+  "toolbar": {
+    "brush": "画笔"
+  },
+  "toolRail": {
+    "select": "选择",
+    "block": "框选",
+    "mask": "遮罩"
+  }
+}

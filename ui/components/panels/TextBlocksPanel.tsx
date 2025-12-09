@@ -1,6 +1,7 @@
 'use client'
 
 import { Accordion, ScrollArea } from 'radix-ui'
+import { useTranslation } from 'react-i18next'
 import { TextBlock } from '@/types'
 import { TextareaField } from '@/components/ui/form-controls'
 import { useTextBlocks } from '@/hooks/useTextBlocks'
@@ -13,11 +14,12 @@ export function TextBlocksPanel() {
     setSelectedBlockIndex,
     replaceBlock,
   } = useTextBlocks()
+  const { t } = useTranslation()
 
   if (!document) {
     return (
       <div className='flex flex-1 items-center justify-center text-sm text-neutral-500'>
-        Open an image to see text blocks.
+        {t('textBlocks.emptyPrompt')}
       </div>
     )
   }
@@ -28,13 +30,13 @@ export function TextBlocksPanel() {
   return (
     <div className='flex min-h-0 flex-1 flex-col'>
       <div className='border-b border-neutral-200 px-2.5 py-1.5 text-xs font-semibold tracking-wide text-neutral-600 uppercase'>
-        Text Blocks ({textBlocks.length})
+        {t('textBlocks.title', { count: textBlocks.length })}
       </div>
       <ScrollArea.Root className='min-h-0 flex-1'>
         <ScrollArea.Viewport className='size-full p-2'>
           {textBlocks.length === 0 ? (
             <p className='rounded border border-dashed border-neutral-300 p-4 text-sm text-neutral-500'>
-              No text blocks yet. Run detection to populate the list.
+              {t('textBlocks.none')}
             </p>
           ) : (
             <Accordion.Root
@@ -78,8 +80,11 @@ type BlockCardProps = {
 }
 
 function BlockCard({ block, index, selected, onChange }: BlockCardProps) {
-  const summary = block.translation?.trim() || block.text?.trim() || '<empty>'
-  const isEmpty = summary === '<empty>'
+  const { t } = useTranslation()
+  const emptySummary = t('textBlocks.emptySummary')
+  const summary =
+    block.translation?.trim() || block.text?.trim() || emptySummary
+  const isEmpty = summary === emptySummary
 
   return (
     <Accordion.Item
@@ -110,15 +115,15 @@ function BlockCard({ block, index, selected, onChange }: BlockCardProps) {
       <Accordion.Content className='border-t border-neutral-100 px-3 pt-2 pb-3 data-[state=closed]:hidden'>
         <div className='space-y-3'>
           <TextareaField
-            label='OCR text'
+            label={t('textBlocks.ocrLabel')}
             value={block.text ?? ''}
-            placeholder='Add OCR text'
+            placeholder={t('textBlocks.addOcrPlaceholder')}
             onChange={(value) => onChange({ text: value })}
           />
           <TextareaField
-            label='Translation'
+            label={t('textBlocks.translationLabel')}
             value={block.translation ?? ''}
-            placeholder='Add translation'
+            placeholder={t('textBlocks.addTranslationPlaceholder')}
             onChange={(value) => onChange({ translation: value })}
           />
         </div>

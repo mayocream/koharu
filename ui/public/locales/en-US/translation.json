@@ -1,0 +1,97 @@
+{
+  "common": {
+    "initializing": "Initializing..."
+  },
+  "menu": {
+    "file": "File",
+    "openFile": "Open File...",
+    "export": "Export...",
+    "exportAll": "Export All",
+    "view": "View",
+    "fitWindow": "Fit Window",
+    "originalSize": "Original Size",
+    "process": "Process",
+    "processCurrent": "Process current image",
+    "redoInpaintRender": "Redo inpaint and render",
+    "processAll": "Process all images",
+    "help": "Help",
+    "discord": "Discord",
+    "github": "GitHub",
+    "language": "Language",
+    "languages": {
+      "en-US": "English",
+      "zh-CN": "简体中文",
+      "zh-TW": "繁體中文",
+      "ja-JP": "日本語"
+    }
+  },
+  "navigator": {
+    "title": "Navigator",
+    "pages_one": "{{count}} page",
+    "pages_other": "{{count}} pages",
+    "empty": "No documents",
+    "prompt": "Select or import a page to begin"
+  },
+  "panels": {
+    "processing": "Processing",
+    "mask": "Mask",
+    "llm": "LLM"
+  },
+  "processing": {
+    "detect": "Detect",
+    "detectTooltip": "Run text detection on current page",
+    "ocr": "OCR",
+    "ocrTooltip": "Recognize text for detected regions"
+  },
+  "mask": {
+    "showSegmentationMask": "Show segmentation mask",
+    "showInpainted": "Show inpainted image",
+    "showRendered": "Show rendered text",
+    "inpaint": "Inpaint",
+    "inpaintTooltip": "Apply inpainting"
+  },
+  "llm": {
+    "title": "LLM",
+    "ready": "Ready",
+    "idle": "Idle",
+    "selectPlaceholder": "Select model",
+    "load": "Load",
+    "unload": "Unload",
+    "loadTooltip": "Load selected model",
+    "unloadTooltip": "Unload model",
+    "generate": "Generate",
+    "generating": "Generating...",
+    "generateTooltip": "Generate translations for detected text blocks",
+    "render": "Render text",
+    "renderTooltip": "Render translations onto the page",
+    "loadingModel": "Loading LLM model",
+    "statusReady": "LLM Ready",
+    "statusIdle": "LLM Idle"
+  },
+  "textBlocks": {
+    "emptyPrompt": "Open an image to see text blocks.",
+    "title": "Text Blocks ({{count}})",
+    "none": "No text blocks yet. Run detection to populate the list.",
+    "emptySummary": "<empty>",
+    "ocrLabel": "OCR text",
+    "translationLabel": "Translation",
+    "addOcrPlaceholder": "Add OCR text",
+    "addTranslationPlaceholder": "Add translation"
+  },
+  "workspace": {
+    "importPrompt": "Import a page to begin editing.",
+    "deleteBlock": "Delete block"
+  },
+  "statusBar": {
+    "zoom": "Zoom",
+    "canvas": "Canvas"
+  },
+  "toolbar": {
+    "brush": "Brush"
+  },
+  "toolRail": {
+    "select": "Select",
+    "block": "Block",
+    "mask": "Mask"
+  }
+}
