@@ -1,7 +1,4 @@
-use std::{
-    path::PathBuf,
-    time::{Duration, Instant},
-};
+use std::path::PathBuf;
 
 use hf_hub::{
     Cache, Repo,
@@ -24,24 +21,19 @@ static HF_API: Lazy<Api> = Lazy::new(|| {
 static HF_CACHE: Lazy<Cache> = Lazy::new(|| Cache::new(get_cache_dir().to_path_buf()));
 
 // maybe we need to place hf-hub logic separately
-const HF_MIRROS: &[&str] = &["https://huggingface.co", "https://hf-mirror.com"];
+const HF_MIRRORS: &[&str] = &["https://huggingface.co", "https://hf-mirror.com"];
 static HF_ENDPOINT: once_cell::sync::Lazy<String> = once_cell::sync::Lazy::new(|| {
-    HF_MIRROS
+    HF_MIRRORS
         .par_iter()
-        .map(|endpoint| {
-            let start = Instant::now();
-            let resp = reqwest::blocking::get(*endpoint);
-            match resp {
-                Ok(resp) if resp.status().is_success() => {
-                    let duration = start.elapsed();
-                    (duration, (*endpoint).to_string())
-                }
-                _ => (Duration::MAX, (*endpoint).to_string()),
-            }
+        .filter_map(|endpoint| {
+            reqwest::blocking::get(*endpoint)
+                .ok()
+                .filter(|resp| resp.status().is_success())
+                .map(|_| *endpoint)
         })
-        .min_by_key(|(duration, _)| *duration)
-        .map(|(_, endpoint)| endpoint)
-        .unwrap_or_else(|| HF_MIRROS[0].to_string())
+        .max_by_key(|endpoint| *endpoint == HF_MIRRORS[0]) // prefer the official one
+        .unwrap_or(HF_MIRRORS[0])
+        .to_string()
 });
 
 fn get_cache_dir() -> &'static PathBuf {
