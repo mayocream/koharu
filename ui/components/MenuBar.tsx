@@ -66,7 +66,7 @@ export function MenuBar() {
             </Menubar.Trigger>
             <Menubar.Portal>
               <Menubar.Content
-                className='min-w-36 rounded-md bg-white p-1 shadow-sm'
+                className='z-11 min-w-36 rounded-md bg-white p-1 shadow-sm'
                 align='start'
                 sideOffset={5}
                 alignOffset={-3}
@@ -90,7 +90,7 @@ export function MenuBar() {
           </Menubar.Trigger>
           <Menubar.Portal>
             <Menubar.Content
-              className='min-w-36 rounded-md bg-white p-1 shadow-sm'
+              className='z-11 min-w-36 rounded-md bg-white p-1 shadow-sm'
               align='start'
               sideOffset={5}
               alignOffset={-3}
