@@ -74,7 +74,7 @@ impl ModelId {
                 ChatMessage::new(ChatRole::Name("English"), String::new()),
             ],
             ModelId::Lfm2_350mEnjpMt => vec![
-                ChatMessage::new(ChatRole::System, "system Translate to English"),
+                ChatMessage::new(ChatRole::System, "Translate to English, do not add any explanations, do not add or delete line breaks."),
                 ChatMessage::new(ChatRole::User, text),
                 ChatMessage::assistant(),
             ],
