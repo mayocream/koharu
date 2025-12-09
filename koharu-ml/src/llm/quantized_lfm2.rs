@@ -1,8 +1,8 @@
 use std::collections::HashMap;
 
-use candle_core::quantized::gguf_file;
 use candle_core::quantized::QMatMul;
-use candle_core::{bail, DType, Device, IndexOp, Result, Tensor};
+use candle_core::quantized::gguf_file;
+use candle_core::{DType, Device, IndexOp, Result, Tensor, bail};
 use candle_nn::{Conv1d, Conv1dConfig, Embedding, Module};
 use candle_transformers::quantized_nn::RmsNorm;
 use candle_transformers::utils::repeat_kv;
@@ -203,11 +203,7 @@ impl ShortConvLayer {
             let mut state = if let Some(cache) = &self.cache {
                 cache.clone()
             } else {
-                Tensor::zeros(
-                    (b_sz, hidden, self.l_cache),
-                    bx.dtype(),
-                    bx.device(),
-                )?
+                Tensor::zeros((b_sz, hidden, self.l_cache), bx.dtype(), bx.device())?
             };
 
             if self.l_cache > 1 {
@@ -301,7 +297,10 @@ fn read_usize_list(v: &gguf_file::Value, len: usize) -> Result<Vec<usize>> {
             } else if out.len() == 1 {
                 Ok(vec![out[0]; len])
             } else {
-                bail!("unexpected array length in metadata, expected {len} got {}", out.len())
+                bail!(
+                    "unexpected array length in metadata, expected {len} got {}",
+                    out.len()
+                )
             }
         }
         _ => Ok(vec![value_to_usize(v)?; len]),
@@ -361,15 +360,15 @@ impl ModelWeights {
                 device,
                 &[
                     "output_norm.weight",
-                "embedding_norm.weight",
-                "model.embedding_norm.weight",
-                "model.embedding_norm",
-                "token_embd_norm.weight",
-            ]
-            .iter()
-            .map(|s| s.to_string())
-            .collect::<Vec<_>>(),
-        )?,
+                    "embedding_norm.weight",
+                    "model.embedding_norm.weight",
+                    "model.embedding_norm",
+                    "token_embd_norm.weight",
+                ]
+                .iter()
+                .map(|s| s.to_string())
+                .collect::<Vec<_>>(),
+            )?,
             rms_norm_eps,
         )?;
         let output_q = get_qtensor(
@@ -395,11 +394,7 @@ impl ModelWeights {
         let mut layers = Vec::with_capacity(block_count);
         for layer_idx in 0..block_count {
             let prefix = format!("blk.{layer_idx}");
-            let is_attention = head_count_kv
-                .get(layer_idx)
-                .copied()
-                .unwrap_or(head_count)
-                > 0;
+            let is_attention = head_count_kv.get(layer_idx).copied().unwrap_or(head_count) > 0;
 
             let operator_norm = get_qtensor(
                 &ct,
@@ -415,7 +410,10 @@ impl ModelWeights {
                 &ct,
                 reader,
                 device,
-                &[format!("{prefix}.ffn_norm.weight"), format!("{prefix}.ffn_norm")],
+                &[
+                    format!("{prefix}.ffn_norm.weight"),
+                    format!("{prefix}.ffn_norm"),
+                ],
             )?;
             let mlp = {
                 let w1 = get_qtensor(

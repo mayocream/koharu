@@ -51,7 +51,7 @@ struct Args {
 
 #[tokio::main]
 async fn main() -> anyhow::Result<()> {
-        tracing_subscriber::fmt()
+    tracing_subscriber::fmt()
         .with_span_events(FmtSpan::CLOSE)
         .init();
 
@@ -76,7 +76,10 @@ async fn main() -> anyhow::Result<()> {
             ChatMessage::new(ChatRole::Name("English"), String::new()),
         ],
         ModelId::Lfm2_350mEnjpMt => vec![
-            ChatMessage::new(ChatRole::System, "Translate to English, do not add any explanations, do not add or delete line breaks."),
+            ChatMessage::new(
+                ChatRole::System,
+                "Translate to English, do not add any explanations, do not add or delete line breaks.",
+            ),
             ChatMessage::new(ChatRole::User, args.prompt),
             ChatMessage::assistant(),
         ],
@@ -95,7 +98,7 @@ async fn main() -> anyhow::Result<()> {
             ),
             ChatMessage::new(ChatRole::User, args.prompt),
             ChatMessage::assistant(),
-        ], 
+        ],
     };
 
     let out = llm.generate(&messages, &opts)?;

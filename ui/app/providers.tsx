@@ -3,7 +3,12 @@
 import { useEffect, type ReactNode } from 'react'
 import { I18nextProvider } from 'react-i18next'
 import { Tooltip } from 'radix-ui'
-import i18n, { getPreferredLocale, locales, persistLocale, type LocaleCode } from '@/lib/i18n'
+import i18n, {
+  getPreferredLocale,
+  locales,
+  persistLocale,
+  type LocaleCode,
+} from '@/lib/i18n'
 
 export function Providers({ children }: { children: ReactNode }) {
   useEffect(() => {

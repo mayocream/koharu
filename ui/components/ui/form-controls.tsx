@@ -7,12 +7,16 @@ type FieldStackProps = {
   label: string
   footer?: ReactNode
   children: ReactNode
+  button?: ReactNode
 }
 
-function FieldStack({ label, footer, children }: FieldStackProps) {
+function FieldStack({ label, footer, children, button }: FieldStackProps) {
   return (
-    <label className='flex flex-col gap-1 text-xs text-neutral-500'>
-      <span className='text-[11px] tracking-wide uppercase'>{label}</span>
+    <label className='flex w-full flex-col gap-1 text-xs text-neutral-500'>
+      <div className='flex items-center justify-between gap-2'>
+        <span className='text-[11px] tracking-wide uppercase'>{label}</span>
+        {button ? <span className='shrink-0'>{button}</span> : null}
+      </div>
       {children}
       {footer ? <span className='text-[11px]'>{footer}</span> : null}
     </label>
@@ -88,6 +92,7 @@ type TextareaFieldProps = {
   placeholder?: string
   onChange: (value: string) => void
   rows?: number
+  button?: ReactNode
 }
 
 export function TextareaField({
@@ -96,9 +101,10 @@ export function TextareaField({
   placeholder,
   onChange,
   rows = 4,
+  button,
 }: TextareaFieldProps) {
   return (
-    <FieldStack label={label}>
+    <FieldStack label={label} button={button}>
       <textarea
         value={value}
         placeholder={placeholder}

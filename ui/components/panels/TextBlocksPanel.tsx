@@ -1,10 +1,13 @@
 'use client'
 
+import { useState } from 'react'
 import { Accordion, ScrollArea } from 'radix-ui'
 import { useTranslation } from 'react-i18next'
 import { TextBlock } from '@/types'
-import { TextareaField } from '@/components/ui/form-controls'
+import { Languages } from 'lucide-react'
+import { TextareaField, TooltipButton } from '@/components/ui/form-controls'
 import { useTextBlocks } from '@/hooks/useTextBlocks'
+import { useAppStore } from '@/lib/store'
 
 export function TextBlocksPanel() {
   const {
@@ -15,6 +18,8 @@ export function TextBlocksPanel() {
     replaceBlock,
   } = useTextBlocks()
   const { t } = useTranslation()
+  const { llmGenerate, llmReady } = useAppStore()
+  const [generatingIndex, setGeneratingIndex] = useState<number | null>(null)
 
   if (!document) {
     return (
@@ -26,6 +31,15 @@ export function TextBlocksPanel() {
 
   const accordionValue =
     selectedBlockIndex !== undefined ? selectedBlockIndex.toString() : ''
+
+  const handleGenerate = async (blockIndex: number) => {
+    setGeneratingIndex(blockIndex)
+    try {
+      await llmGenerate(undefined, undefined, blockIndex)
+    } finally {
+      setGeneratingIndex(null)
+    }
+  }
 
   return (
     <div className='flex min-h-0 flex-1 flex-col'>
@@ -59,6 +73,9 @@ export function TextBlocksPanel() {
                   index={index}
                   selected={index === selectedBlockIndex}
                   onChange={(updates) => void replaceBlock(index, updates)}
+                  onGenerate={() => void handleGenerate(index)}
+                  generating={generatingIndex === index}
+                  llmReady={llmReady}
                 />
               ))}
             </Accordion.Root>
@@ -77,9 +94,20 @@ type BlockCardProps = {
   index: number
   selected: boolean
   onChange: (updates: Partial<TextBlock>) => void
+  onGenerate: () => void | Promise<void>
+  generating: boolean
+  llmReady: boolean
 }
 
-function BlockCard({ block, index, selected, onChange }: BlockCardProps) {
+function BlockCard({
+  block,
+  index,
+  selected,
+  onChange,
+  onGenerate,
+  generating,
+  llmReady,
+}: BlockCardProps) {
   const { t } = useTranslation()
   const emptySummary = t('textBlocks.emptySummary')
   const summary =
@@ -125,6 +153,15 @@ function BlockCard({ block, index, selected, onChange }: BlockCardProps) {
             value={block.translation ?? ''}
             placeholder={t('textBlocks.addTranslationPlaceholder')}
             onChange={(value) => onChange({ translation: value })}
+            button={
+              <TooltipButton
+                label={<Languages className='h-4 w-4' />}
+                tooltip={t('llm.generateTooltip')}
+                disabled={!llmReady || generating}
+                onClick={onGenerate}
+                widthClass='h-8 px-2 py-1 text-xs'
+              ></TooltipButton>
+            }
           />
         </div>
       </Accordion.Content>

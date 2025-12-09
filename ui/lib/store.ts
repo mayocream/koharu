@@ -59,7 +59,11 @@ type AppState = {
   llmSetSelectedModel: (id: string) => void
   llmToggleLoadUnload: () => Promise<void>
   llmCheckReady: () => Promise<void>
-  llmGenerate: (_?: any, index?: number) => Promise<void>
+  llmGenerate: (
+    _?: any,
+    index?: number,
+    text_block_index?: number,
+  ) => Promise<void>
 }
 
 export const useAppStore = create<AppState>((set, get) => ({
@@ -215,10 +219,17 @@ export const useAppStore = create<AppState>((set, get) => ({
       set({ llmReady: ready })
     } catch (_) {}
   },
-  llmGenerate: async (_: any, index?: number) => {
+  llmGenerate: async (_: any, index?: number, textBlockIndex?: number) => {
     index = index ?? get().currentDocumentIndex
+    console.log(
+      'Generating LLM content for document',
+      index,
+      'text block',
+      textBlockIndex,
+    )
     const doc: Document = await get().invokeWithStatus('llm_generate', {
       index,
+      textBlockIndex,
     })
     set((state) => ({
       documents: replaceDocument(state.documents, index, doc),
@@ -239,14 +250,14 @@ export const useAppStore = create<AppState>((set, get) => ({
 
     set({ processJobName: '' })
 
-    await setProgres(0);
-    const actions = ["detect", "ocr", "inpaint", "llmGenerate", "render"];
+    await setProgres(0)
+    const actions = ['detect', 'ocr', 'inpaint', 'llmGenerate', 'render']
     for (let i = 0; i < actions.length; i++) {
-      await (get() as any)[actions[i]](_, index);
-      await setProgres(Math.floor(((i + 1) / actions.length) * 100));
+      await (get() as any)[actions[i]](_, index)
+      await setProgres(Math.floor(((i + 1) / actions.length) * 100))
     }
 
-    if (!setGlobalProgress) get().clearProgress();
+    if (!setGlobalProgress) get().clearProgress()
   },
 
   inpaintAndRenderImage: async (_, index) => {

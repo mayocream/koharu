@@ -3,7 +3,7 @@ use std::sync::Arc;
 use strum::Display;
 use tokio::sync::RwLock;
 
-use crate::state::Document;
+use crate::state::{Document, TextBlock};
 
 pub use koharu_ml::llm::prefetch;
 
@@ -27,6 +27,47 @@ pub struct Model {
 impl Default for Model {
     fn default() -> Self {
         Self::new()
+    }
+}
+
+pub trait Translatable {
+    fn get_source(&self) -> anyhow::Result<String>;
+    fn set_translation(&mut self, translation: String) -> anyhow::Result<()>;
+}
+
+impl Translatable for Document {
+    fn get_source(&self) -> anyhow::Result<String> {
+        let source = self
+            .text_blocks
+            .clone()
+            .into_iter()
+            .map(|block| block.text.unwrap_or_else(|| "<empty>".to_string()))
+            .collect::<Vec<_>>()
+            .join("\n");
+        Ok(source)
+    }
+
+    fn set_translation(&mut self, translation: String) -> anyhow::Result<()> {
+        let translations = translation.split("\n").collect::<Vec<_>>();
+        for (block, translation) in self.text_blocks.iter_mut().zip(translations) {
+            block.translation = Some(translation.to_string());
+        }
+        Ok(())
+    }
+}
+
+impl Translatable for TextBlock {
+    fn get_source(&self) -> anyhow::Result<String> {
+        let source = self
+            .text
+            .clone()
+            .ok_or_else(|| anyhow::anyhow!("No source text found"))?;
+        Ok(source)
+    }
+
+    fn set_translation(&mut self, translation: String) -> anyhow::Result<()> {
+        self.translation = Some(translation);
+        Ok(())
     }
 }
 
@@ -85,29 +126,18 @@ impl Model {
     }
 
     /// Generate text from the loaded model.
-    pub async fn generate(&self, doc: &mut Document) -> anyhow::Result<()> {
+    pub async fn generate(&self, doc: &mut impl Translatable) -> anyhow::Result<()> {
         let mut guard = self.state.write().await;
         match &mut *guard {
             State::Ready(llm) => {
-                let text = doc
-                    .text_blocks
-                    .clone()
-                    .into_iter()
-                    .map(|block| block.text.unwrap_or_else(|| "<empty>".to_string()))
-                    .collect::<Vec<_>>()
-                    .join("\n");
+                let text = doc.get_source()?;
 
                 let prompt = llm.prompt(text);
 
                 tracing::info!("Generating translation with messages: {:?}", prompt);
 
                 let response = llm.generate(&prompt, &GenerateOptions::default())?;
-                let translations = response.split("\n").collect::<Vec<_>>();
-                for (block, translation) in doc.text_blocks.iter_mut().zip(translations) {
-                    block.translation = Some(translation.to_string());
-                }
-
-                Ok(())
+                doc.set_translation(response)
             }
             State::Loading => Err(anyhow::anyhow!("Model is still loading")),
             State::Failed(e) => Err(anyhow::anyhow!("Model failed to load: {}", e)),

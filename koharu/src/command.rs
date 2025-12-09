@@ -282,6 +282,7 @@ pub async fn llm_generate(
     state: State<'_, AppState>,
     model: State<'_, Arc<llm::Model>>,
     index: usize,
+    text_block_index: Option<usize>,
 ) -> Result<Document> {
     let mut state = state.write().await;
     let document = state
@@ -289,7 +290,19 @@ pub async fn llm_generate(
         .get_mut(index)
         .ok_or_else(|| anyhow::anyhow!("Document not found"))?;
 
-    model.generate(document).await?;
+    match text_block_index {
+        Some(bi) => {
+            let text_block = document
+                .text_blocks
+                .get_mut(bi)
+                .ok_or_else(|| anyhow::anyhow!("Text block not found"))?;
+
+            model.generate(text_block).await?;
+        }
+        None => {
+            model.generate(document).await?;
+        }
+    }
 
     Ok(document.clone())
 }
