@@ -173,25 +173,13 @@ impl Llm {
             next_token
         };
         let prompt_dt = start_prompt_processing.elapsed();
-        all_tokens.push(next_token);
 
-        // If EOS after prompt, log metrics and return.
         if next_token == self.eos_token {
-            tracing::info!(
-                "{:4} prompt tokens processed: {:.2} token/s",
-                prompt_tokens.len(),
-                if prompt_dt.as_secs_f64() > 0.0 {
-                    prompt_tokens.len() as f64 / prompt_dt.as_secs_f64()
-                } else {
-                    0.0
-                }
-            );
-            return self
-                .tokenizer
-                .decode(&all_tokens, true)
-                .map_err(anyhow::Error::msg);
+            tracing::warn!("Early stopping: EOS token generated at end of prompt");
+            return Ok("".to_string());
         }
 
+        all_tokens.push(next_token);
         // Generate tokens autoregressively
         let start_post_prompt = std::time::Instant::now();
         let mut sampled = 0usize;

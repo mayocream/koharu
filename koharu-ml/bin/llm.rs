@@ -8,7 +8,7 @@ struct Args {
     /// Prompt to generate from
     #[arg(
         long,
-        default_value = "「吾輩は猫である。名前はまだ無い。どこで生れたかとんと見当がつかぬ。何でも薄暗いじめじめした所でニャーニャー泣いていた事だけは記憶している。吾輩はここで始めて人間というものを見た。しかもあとで聞くとそれは書生という人間中で一番獰悪な種族であったそうだ。」"
+        default_value = "「吾輩は猫である。\n\n\n名前はまだ無い。\n\n\nどこで生れたかとんと見当がつかぬ。\n\n\n何でも薄暗いじめじめした所でニャーニャー泣いていた事だけは記憶している。\n\n\n吾輩はここで始めて人間というものを見た。\n\n\nしかもあとで聞くとそれは書生という人間中で一番獰悪な種族であったそうだ。」"
     )]
     prompt: String,
 
@@ -76,7 +76,7 @@ async fn main() -> anyhow::Result<()> {
             ChatMessage::new(ChatRole::Name("English"), String::new()),
         ],
         ModelId::Lfm2_350mEnjpMt => vec![
-            ChatMessage::new(ChatRole::System, "Translate to English"),
+            ChatMessage::new(ChatRole::System, "Translate to English, do not add any explanations, do not add or delete line breaks."),
             ChatMessage::new(ChatRole::User, args.prompt),
             ChatMessage::assistant(),
         ],

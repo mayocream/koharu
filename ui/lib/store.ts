@@ -239,14 +239,14 @@ export const useAppStore = create<AppState>((set, get) => ({
 
     set({ processJobName: '' })
 
-    await setProgres(0)
-    const actions = ['detect', 'ocr', 'inpaint', 'llmGenerate', 'render']
-    actions.forEach(async (action, i, arr) => {
-      await (get() as any)[action](_, index)
-      await setProgres(Math.floor(((i + 1) / arr.length) * 100))
-    })
+    await setProgres(0);
+    const actions = ["detect", "ocr", "inpaint", "llmGenerate", "render"];
+    for (let i = 0; i < actions.length; i++) {
+      await (get() as any)[actions[i]](_, index);
+      await setProgres(Math.floor(((i + 1) / actions.length) * 100));
+    }
 
-    if (!setGlobalProgress) get().clearProgress()
+    if (!setGlobalProgress) get().clearProgress();
   },
 
   inpaintAndRenderImage: async (_, index) => {
