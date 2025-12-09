@@ -22,6 +22,7 @@ static LIB_ROOT: Lazy<PathBuf> = Lazy::new(|| APP_ROOT.join("libs"));
 static MODEL_ROOT: Lazy<PathBuf> = Lazy::new(|| APP_ROOT.join("models"));
 
 #[derive(Parser)]
+#[command(version, about)]
 struct Cli {
     #[arg(
         short,
