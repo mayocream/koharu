@@ -11,13 +11,32 @@ use tracing_subscriber::fmt::format::FmtSpan;
 
 use crate::{command, llm, ml, renderer::TextRenderer, state::State};
 
-static APP_ROOT: Lazy<PathBuf> = Lazy::new(|| {
-    std::env::current_exe()
+#[cfg(not(target_os = "windows"))]
+fn resolve_app_root() -> PathBuf {
+    dirs::data_local_dir()
+        .map(|path| path.join("Koharu"))
+        .unwrap_or(PathBuf::from("."))
+}
+
+#[cfg(target_os = "windows")]
+fn resolve_app_root() -> PathBuf {
+    let exe_dir = std::env::current_exe()
         .ok()
-        .and_then(|p| p.parent().map(|p| p.to_path_buf()))
-        .and_then(|p| p.parent().map(|p| p.to_path_buf()))
-        .expect("failed to determine application root directory")
-});
+        .and_then(|p| p.parent().map(|p| p.to_path_buf()));
+
+    if let Some(parent_dir) = exe_dir.as_ref().and_then(|dir| dir.parent()) {
+        if parent_dir.join(".portable").is_file() {
+            return parent_dir.to_path_buf();
+        }
+    }
+
+    dirs::data_local_dir()
+        .map(|path| path.join("Koharu"))
+        .or(exe_dir)
+        .unwrap_or(PathBuf::from("."))
+}
+
+static APP_ROOT: Lazy<PathBuf> = Lazy::new(resolve_app_root);
 static LIB_ROOT: Lazy<PathBuf> = Lazy::new(|| APP_ROOT.join("libs"));
 static MODEL_ROOT: Lazy<PathBuf> = Lazy::new(|| APP_ROOT.join("models"));
 
