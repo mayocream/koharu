@@ -1,5 +1,5 @@
 use minijinja::{Environment, context};
-use serde::{Deserialize, Serialize};
+use serde::Serialize;
 use strum::{Display, EnumString};
 
 use crate::llm::ModelId;
@@ -14,6 +14,7 @@ pub enum ChatRole {
     Assistant,
 }
 
+// To make minijinja serialize ChatRole
 impl Serialize for ChatRole {
     fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
     where
@@ -23,23 +24,7 @@ impl Serialize for ChatRole {
     }
 }
 
-impl<'de> Deserialize<'de> for ChatRole {
-    fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
-    where
-        D: serde::Deserializer<'de>,
-    {
-        let value = String::deserialize(deserializer)?;
-        let role = match value.to_lowercase().as_str() {
-            "system" => ChatRole::System,
-            "user" => ChatRole::User,
-            "assistant" => ChatRole::Assistant,
-            _ => ChatRole::Name(value),
-        };
-        Ok(role)
-    }
-}
-
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
 pub struct ChatMessage {
     pub role: ChatRole,
     pub content: String,
@@ -71,12 +56,7 @@ pub struct PromptRenderer {
 }
 
 impl PromptRenderer {
-    pub fn new(
-        model_id: ModelId,
-        template: String,
-        bos_token: String,
-        eos_token: String,
-    ) -> Self {
+    pub fn new(model_id: ModelId, template: String, bos_token: String, eos_token: String) -> Self {
         let mut env = Environment::new();
 
         // Add custom filters that are commonly used in chat templates
@@ -118,18 +98,15 @@ impl PromptRenderer {
     pub fn format_chat_prompt(&self, prompt: String) -> String {
         let messages = self.messages(prompt.clone());
 
-        let tmpl = self
-            .env
-            .template_from_str(&self.template).unwrap();
+        let tmpl = self.env.template_from_str(&self.template).unwrap();
 
-        tmpl.render(
-            context! {
-                messages => messages,
-                bos_token => self.bos_token,
-                eos_token => self.eos_token,
-                add_generation_prompt => true,
-            }
-        ).unwrap()
+        tmpl.render(context! {
+            messages => messages,
+            bos_token => self.bos_token,
+            eos_token => self.eos_token,
+            add_generation_prompt => true,
+        })
+        .unwrap()
     }
 }
 
