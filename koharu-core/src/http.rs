@@ -1,4 +1,4 @@
-use std::sync::Arc;
+use std::{sync::Arc, time::Duration};
 
 use anyhow::Context;
 use futures::{StreamExt, TryStreamExt, stream};
@@ -16,6 +16,9 @@ static HTTP_CLIENT: Lazy<ClientWithMiddleware> = Lazy::new(|| {
     ClientBuilder::new(
         reqwest::Client::builder()
             .user_agent(USER_AGENT)
+            .connect_timeout(Duration::from_secs(10))
+            .timeout(Duration::from_secs(120))
+            .tcp_nodelay(true)
             .build()
             .expect("build reqwest client"),
     )
