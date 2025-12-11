@@ -2,6 +2,7 @@ use std::{path::PathBuf, sync::Arc};
 
 use anyhow::Result;
 use clap::Parser;
+use koharu_ml::cuda_is_available;
 use koharu_runtime::{ensure_dylibs, preload_dylibs};
 use once_cell::sync::Lazy;
 use rfd::MessageDialog;
@@ -106,8 +107,11 @@ async fn setup(app: tauri::AppHandle) -> Result<()> {
         }
     }
 
-    ensure_dylibs(LIB_ROOT.to_path_buf()).await?;
-    preload_dylibs(LIB_ROOT.to_path_buf())?;
+    // Preload dynamic libraries only if CUDA is available.
+    if cuda_is_available() {
+        ensure_dylibs(LIB_ROOT.to_path_buf()).await?;
+        preload_dylibs(LIB_ROOT.to_path_buf())?;
+    }
 
     let onnx = Arc::new(ml::Model::new().await?);
     let llm = Arc::new(llm::Model::new());

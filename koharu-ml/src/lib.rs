@@ -6,10 +6,7 @@ pub mod llm;
 pub mod manga_ocr;
 
 use anyhow::Result;
-use candle_core::{
-    Device,
-    utils::{cuda_is_available, metal_is_available},
-};
+use candle_core::{Device, utils::metal_is_available};
 
 pub use hf_hub::set_cache_dir;
 
@@ -23,5 +20,16 @@ pub fn device(cpu: bool) -> Result<Device> {
     } else {
         println!("CUDA and Metal are not available. Using CPU device.");
         Ok(Device::Cpu)
+    }
+}
+
+pub fn cuda_is_available() -> bool {
+    unsafe {
+        libloading::Library::new(if cfg!(target_os = "windows") {
+            "nvcuda.dll"
+        } else {
+            "libcuda.so"
+        })
+        .is_ok()
     }
 }

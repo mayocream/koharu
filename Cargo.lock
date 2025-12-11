@@ -3282,6 +3282,7 @@ dependencies = [
  "image",
  "imageproc",
  "koharu-core",
+ "libloading 0.9.0",
  "num_cpus",
  "objc2 0.6.3",
  "objc2-foundation 0.3.2",
