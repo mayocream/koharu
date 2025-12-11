@@ -17,7 +17,7 @@
     "react-dom": "19.2.1",
     "react-i18next": "^15.5.2",
     "react-rnd": "^10.5.2",
-    "zustand": "^5.0.8",
+    "zustand": "^5.0.9",
     "i18next": "^25.7.2"
   },
   "devDependencies": {
