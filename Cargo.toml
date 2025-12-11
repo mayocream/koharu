@@ -21,10 +21,10 @@ repository = "https://github.com/mayocream/koharu"
 keywords = ["manga", "ocr", "translation", "deep_learning", "computer_vision"]
 
 [workspace.dependencies]
-koharu-core = { version = "0.14.2", path = "koharu-core", default-features = false }
-koharu-runtime = { version = "0.14.2", path = "koharu-runtime", default-features = false }
-koharu-ml = { version = "0.14.2", path = "koharu-ml", default-features = false }
-koharu-renderer = { version = "0.14.2", path = "koharu-renderer", default-features = false }
+koharu-core = { path = "koharu-core", default-features = false }
+koharu-runtime = { path = "koharu-runtime", default-features = false }
+koharu-ml = { path = "koharu-ml", default-features = false }
+koharu-renderer = { path = "koharu-renderer", default-features = false }
 
 candle-transformers = "=0.9.2-alpha.1"
 candle-core = "=0.9.2-alpha.1"
