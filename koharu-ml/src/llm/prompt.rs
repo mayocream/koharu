@@ -1,5 +1,5 @@
 use minijinja::{Environment, context};
-use serde::{Deserialize, Serialize};
+use serde::Serialize;
 use strum::{Display, EnumString};
 
 use crate::llm::ModelId;
@@ -14,6 +14,7 @@ pub enum ChatRole {
     Assistant,
 }
 
+// To make minijinja serialize ChatRole
 impl Serialize for ChatRole {
     fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
     where
@@ -23,23 +24,7 @@ impl Serialize for ChatRole {
     }
 }
 
-impl<'de> Deserialize<'de> for ChatRole {
-    fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
-    where
-        D: serde::Deserializer<'de>,
-    {
-        let value = String::deserialize(deserializer)?;
-        let role = match value.to_lowercase().as_str() {
-            "system" => ChatRole::System,
-            "user" => ChatRole::User,
-            "assistant" => ChatRole::Assistant,
-            _ => ChatRole::Name(value),
-        };
-        Ok(role)
-    }
-}
-
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
 pub struct ChatMessage {
     pub role: ChatRole,
     pub content: String,
