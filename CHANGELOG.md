@@ -1,8 +1,16 @@
-## [unreleased]
+## [0.14.3] - 2025-12-11
 
 ### 🐛 Bug Fixes
 
 - Support non-nvidia gpu on windows
+
+### 💼 Other
+
+- 0.14.3
+
+### 📚 Documentation
+
+- Add changelog.md
 
 ### ⚙️ Miscellaneous Tasks
 
