@@ -19,6 +19,7 @@ readme = "README.md"
 homepage = "https://koharu.rs"
 repository = "https://github.com/mayocream/koharu"
 keywords = ["manga", "ocr", "translation", "deep_learning", "computer_vision"]
+publish = false
 
 [workspace.dependencies]
 koharu-core = { path = "koharu-core", default-features = false }

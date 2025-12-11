@@ -9,6 +9,7 @@ readme.workspace = true
 homepage.workspace = true
 repository.workspace = true
 keywords.workspace = true
+publish.workspace = true
 
 [dependencies]
 swash = { workspace = true }
