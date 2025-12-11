@@ -90,6 +90,12 @@ impl Llm {
         let bos_token_id = md_get("tokenizer.ggml.bos_token_id")?.to_u32()?;
         let eos_token_id = md_get("tokenizer.ggml.eos_token_id")?.to_u32()?;
 
+        // The gguf metadata for Sakura1.5bQwen2.5v1.0 has wrong eos_token_id, override it here
+        let eos_token_id = match id {
+            ModelId::Sakura1_5bQwen2_5v1_0 => 151645,
+            _ => eos_token_id,
+        };
+
         let device = device(false)?;
 
         let bos_token = tokenizer
