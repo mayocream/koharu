@@ -1,3 +1,21 @@
+## [0.15.0] - 2025-12-11
+
+### 🐛 Bug Fixes
+
+- Add top level tracing and mark others as debug
+
+### 🚜 Refactor
+
+- Move fft to seperate files
+
+### ⚡ Performance
+
+- Cache cufft plan
+
+### ⚙️ Miscellaneous Tasks
+
+- Format lama code with LF
+- Release 0.15.0
 ## [0.14.5] - 2025-12-11
 
 ### 🐛 Bug Fixes
