@@ -28,19 +28,19 @@ impl Lama {
         Ok(Self { model, device })
     }
 
-    #[instrument(level = "info", skip_all)]
+    #[instrument(level = "debug", skip_all)]
     fn forward(&self, image: &Tensor, mask: &Tensor) -> Result<Tensor> {
         self.model.forward(image, mask)
     }
 
-    #[instrument(level = "info", skip_all)]
+    #[instrument(level = "debug", skip_all)]
     pub fn inference(&self, image: &DynamicImage, mask: &DynamicImage) -> Result<DynamicImage> {
         let (image_tensor, mask_tensor) = self.preprocess(image, mask)?;
         let output = self.forward(&image_tensor, &mask_tensor)?;
         self.postprocess(&output)
     }
 
-    #[instrument(level = "info", skip_all)]
+    #[instrument(level = "debug", skip_all)]
     fn preprocess(&self, image: &DynamicImage, mask: &DynamicImage) -> Result<(Tensor, Tensor)> {
         if image.dimensions() != mask.dimensions() {
             bail!(
@@ -67,7 +67,7 @@ impl Lama {
         Ok((image_tensor, mask_tensor))
     }
 
-    #[instrument(level = "info", skip_all)]
+    #[instrument(level = "debug", skip_all)]
     fn postprocess(&self, output: &Tensor) -> Result<DynamicImage> {
         let output = output.squeeze(0)?;
         let (channels, height, width) = output.dims3()?;

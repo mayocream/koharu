@@ -5,6 +5,7 @@ use rayon::iter::{IntoParallelIterator, ParallelIterator};
 use strum::IntoEnumIterator;
 use sys_locale::get_locale;
 use tauri::State;
+use tracing::instrument;
 
 use crate::{
     image::SerializableDynamicImage,
@@ -110,6 +111,7 @@ pub async fn save_all_documents(state: State<'_, AppState>) -> Result<()> {
 }
 
 #[tauri::command]
+#[instrument(level = "info", skip_all)]
 pub async fn detect(
     state: State<'_, AppState>,
     model: State<'_, Arc<ml::Model>>,
@@ -129,6 +131,7 @@ pub async fn detect(
 }
 
 #[tauri::command]
+#[instrument(level = "info", skip_all)]
 pub async fn ocr(
     state: State<'_, AppState>,
     model: State<'_, Arc<ml::Model>>,
@@ -147,6 +150,7 @@ pub async fn ocr(
 }
 
 #[tauri::command]
+#[instrument(level = "info", skip_all)]
 pub async fn inpaint(
     state: State<'_, AppState>,
     model: State<'_, Arc<ml::Model>>,
@@ -200,6 +204,7 @@ pub async fn inpaint(
 }
 
 #[tauri::command]
+#[instrument(level = "info", skip_all)]
 pub async fn render(
     state: State<'_, AppState>,
     renderer: State<'_, Arc<TextRenderer>>,
@@ -260,6 +265,7 @@ pub fn llm_list() -> Vec<String> {
 }
 
 #[tauri::command]
+#[instrument(level = "info", skip_all)]
 pub async fn llm_load(model: State<'_, Arc<llm::Model>>, id: String) -> Result<()> {
     let id = ModelId::from_str(&id)?;
     model.load(id).await;
@@ -278,6 +284,7 @@ pub async fn llm_ready(model: State<'_, Arc<llm::Model>>) -> Result<bool> {
 }
 
 #[tauri::command]
+#[instrument(level = "info", skip_all)]
 pub async fn llm_generate(
     state: State<'_, AppState>,
     model: State<'_, Arc<llm::Model>>,

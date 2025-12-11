@@ -57,7 +57,7 @@ impl MangaOcr {
         })
     }
 
-    #[instrument(level = "info", skip_all)]
+    #[instrument(level = "debug", skip_all)]
     pub fn inference(&self, image: &image::DynamicImage) -> Result<String> {
         let pixel_values = preprocess_image(
             image,
@@ -73,7 +73,7 @@ impl MangaOcr {
         Ok(post_process(&text))
     }
 
-    #[instrument(level = "info", skip_all)]
+    #[instrument(level = "debug", skip_all)]
     fn forward(&self, pixel_values: &Tensor) -> Result<Vec<u32>> {
         self.model.forward(pixel_values)
     }
@@ -87,7 +87,7 @@ fn load_json<T: DeserializeOwned>(path: &Path) -> Result<T> {
     Ok(parsed)
 }
 
-#[instrument(level = "info", skip_all)]
+#[instrument(level = "debug", skip_all)]
 fn preprocess_image(
     image: &image::DynamicImage,
     image_size: u32,
@@ -147,7 +147,7 @@ fn preprocess_image(
     Ok(tensor)
 }
 
-#[instrument(level = "info", skip_all)]
+#[instrument(level = "debug", skip_all)]
 fn post_process(text: &str) -> String {
     let mut clean = text
         .chars()

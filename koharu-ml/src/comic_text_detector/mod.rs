@@ -64,7 +64,7 @@ impl ComicTextDetector {
         })
     }
 
-    #[instrument(level = "info", skip_all)]
+    #[instrument(level = "debug", skip_all)]
     pub fn inference(&self, image: &DynamicImage) -> anyhow::Result<(Vec<Bbox<usize>>, GrayImage)> {
         let original_dimensions = image.dimensions();
         let (image_tensor, resized_dimensions) = preprocess(image, &self.device)?;
@@ -80,7 +80,7 @@ impl ComicTextDetector {
         Ok((bboxes, mask))
     }
 
-    #[instrument(level = "info", skip_all)]
+    #[instrument(level = "debug", skip_all)]
     fn forward(&self, image: &Tensor) -> anyhow::Result<(Tensor, Tensor, Tensor)> {
         let (predictions, features) = self.yolo.forward(image)?;
         let (mask, features) = self.unet.forward(
@@ -98,7 +98,7 @@ impl ComicTextDetector {
     }
 }
 
-#[instrument(level = "info", skip_all)]
+#[instrument(level = "debug", skip_all)]
 fn preprocess(image: &DynamicImage, device: &Device) -> anyhow::Result<(Tensor, (u32, u32))> {
     let (orig_w, orig_h) = image.dimensions();
     let (width, height) = if orig_w >= orig_h {
@@ -122,7 +122,7 @@ fn preprocess(image: &DynamicImage, device: &Device) -> anyhow::Result<(Tensor, 
     Ok((tensor, (width, height)))
 }
 
-#[instrument(level = "info", skip(predictions))]
+#[instrument(level = "debug", skip(predictions))]
 fn postprocess_yolo(
     predictions: &Tensor,
     original_dimensions: (u32, u32),
@@ -180,7 +180,7 @@ fn postprocess_yolo(
     Ok(bboxes.into_iter().flatten().collect())
 }
 
-#[instrument(level = "info", skip(mask, shrink_thresh))]
+#[instrument(level = "debug", skip(mask, shrink_thresh))]
 fn postprocess_mask(
     mask: &Tensor,
     shrink_thresh: &Tensor,
