@@ -49,6 +49,7 @@ clap = { workspace = true }
 once_cell = { workspace = true }
 sys-locale = { workspace = true }
 minijinja = "2.13.0"
+url = { workspace = true }
 
 [features]
 cuda = ["koharu-runtime/cuda", "koharu-ml/cuda"]

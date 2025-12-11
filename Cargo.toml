@@ -71,6 +71,7 @@ swash = "0.2"
 fontdb = "0.23"
 unicode-script = "0.5"
 rustfft = "6.4"
+url = "2.5"
 cudarc = { version = "0.18", features = [
     "cuda-version-from-build-system",
     "cufft",

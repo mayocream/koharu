@@ -5,6 +5,7 @@ use rayon::iter::{IntoParallelIterator, ParallelIterator};
 use strum::IntoEnumIterator;
 use sys_locale::get_locale;
 use tauri::State;
+use url::Url;
 
 use crate::{
     image::SerializableDynamicImage,
@@ -16,9 +17,14 @@ use crate::{
 
 #[tauri::command]
 pub fn open_external(url: &str) -> Result<()> {
-    open::that(url)?;
-
-    Ok(())
+    let parsed = Url::parse(url).map_err(|e| anyhow::anyhow!("invalid URL: {}", e))?;
+    match parsed.scheme() {
+        "http" | "https" | "mailto" => {
+            open::that(parsed.as_str())?;
+            Ok(())
+        }
+        _ => Err(anyhow::anyhow!("unsupported URL scheme")),
+    }
 }
 
 #[tauri::command]
