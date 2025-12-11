@@ -1,3 +1,19 @@
+## [0.14.4] - 2025-12-11
+
+### 🐛 Bug Fixes
+
+- Use templates from gguf file
+- Format code and llm example
+- Remove unused deserialize
+
+### 📚 Documentation
+
+- Update changelog
+
+### ⚙️ Miscellaneous Tasks
+
+- Add release script
+- Release 0.14.4
 ## [0.14.3] - 2025-12-11
 
 ### 🐛 Bug Fixes
