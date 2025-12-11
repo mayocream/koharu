@@ -1,9 +1,23 @@
 use candle_core::{CpuStorage, CustomOp1, Layout, Result, Shape, Tensor, bail};
 #[cfg(feature = "cuda")]
-use candle_core::{DType, backend::BackendStorage, cuda_backend::CudaStorage};
+use candle_core::{
+    DType, DeviceLocation,
+    backend::{BackendDevice, BackendStorage},
+    cuda_backend::CudaStorage,
+};
 #[cfg(feature = "metal")]
 use candle_core::{backend::BackendStorage, metal_backend::MetalStorage};
+#[cfg(feature = "cuda")]
+use cudarc::{
+    cufft::{result as cufft, sys},
+    driver::{DevicePtr, DevicePtrMut},
+};
 use rustfft::{FftPlanner, num_complex::Complex32};
+#[cfg(feature = "cuda")]
+use std::{
+    collections::HashMap,
+    sync::{Arc, Mutex, OnceLock},
+};
 use tracing::instrument;
 
 #[cfg(feature = "metal")]
@@ -68,6 +82,107 @@ fn make_fft_descriptor(inverse: bool) -> Result<Retained<MPSGraphFFTDescriptor>>
         desc.setRoundToOddHermitean(false);
     }
     Ok(desc)
+}
+
+#[cfg(feature = "cuda")]
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
+enum PlanKind {
+    R2C,
+    C2R,
+}
+
+#[cfg(feature = "cuda")]
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
+struct PlanKey {
+    device: DeviceLocation,
+    height: i32,
+    width: i32,
+    batch: i32,
+    kind: PlanKind,
+}
+
+#[cfg(feature = "cuda")]
+struct CachedPlan {
+    handle: sys::cufftHandle,
+    lock: Mutex<()>,
+}
+
+#[cfg(feature = "cuda")]
+impl Drop for CachedPlan {
+    fn drop(&mut self) {
+        unsafe {
+            let _ = cufft::destroy(self.handle);
+        }
+    }
+}
+
+#[cfg(feature = "cuda")]
+fn plan_cache() -> &'static Mutex<HashMap<PlanKey, Arc<CachedPlan>>> {
+    static CACHE: OnceLock<Mutex<HashMap<PlanKey, Arc<CachedPlan>>>> = OnceLock::new();
+    CACHE.get_or_init(|| Mutex::new(HashMap::new()))
+}
+
+#[cfg(feature = "cuda")]
+fn get_or_create_plan(
+    device: DeviceLocation,
+    height: i32,
+    width: i32,
+    batch: i32,
+    kind: PlanKind,
+) -> Result<Arc<CachedPlan>> {
+    let key = PlanKey {
+        device,
+        height,
+        width,
+        batch,
+        kind,
+    };
+    let mut cache = plan_cache().lock().expect("cufft cache poisoned");
+    if let Some(plan) = cache.get(&key) {
+        return Ok(plan.clone());
+    }
+
+    let w_half = width / 2 + 1;
+    let mut n = [height, width];
+    let (mut inembed, mut onembed, idist, odist, fft_type) = match kind {
+        PlanKind::R2C => (
+            [height, width],
+            [height, w_half],
+            height * width,
+            height * w_half,
+            sys::cufftType::CUFFT_R2C,
+        ),
+        PlanKind::C2R => (
+            [height, w_half],
+            [height, width],
+            height * w_half,
+            height * width,
+            sys::cufftType::CUFFT_C2R,
+        ),
+    };
+
+    let handle = unsafe {
+        cufft::plan_many(
+            2,
+            n.as_mut_ptr(),
+            inembed.as_mut_ptr(),
+            1,
+            idist,
+            onembed.as_mut_ptr(),
+            1,
+            odist,
+            fft_type,
+            batch,
+        )
+    }
+    .map_err(|e| candle_core::Error::Cuda(Box::new(e)))?;
+
+    let plan = Arc::new(CachedPlan {
+        handle,
+        lock: Mutex::new(()),
+    });
+    cache.insert(key, plan.clone());
+    Ok(plan)
 }
 
 impl CustomOp1 for Rfft2 {
@@ -150,9 +265,6 @@ impl CustomOp1 for Rfft2 {
     #[cfg(feature = "cuda")]
     #[instrument(level = "info", skip_all)]
     fn cuda_fwd(&self, storage: &CudaStorage, layout: &Layout) -> Result<(CudaStorage, Shape)> {
-        use cudarc::cufft::{result as cufft, sys};
-        use cudarc::driver::{DevicePtr, DevicePtrMut};
-
         let dims = layout.dims();
         if dims.len() != 4 {
             bail!("rfft2 expects rank-4 input, got {:?}", dims)
@@ -166,42 +278,26 @@ impl CustomOp1 for Rfft2 {
             .ok_or_else(|| candle_core::Error::RequiresContiguous { op: "rfft2" }.bt())?;
         let w_half = width / 2 + 1;
         let batch = (batch * channels) as i32;
+        let device_loc = storage.device().location();
         let input = storage.as_cuda_slice::<f32>()?;
         let input = input.slice(start..end);
         let dev = storage.device();
         let mut output =
             dev.alloc_zeros::<f32>(dims.iter().product::<usize>() / width * w_half * 2)?;
 
-        let mut n = [height as i32, width as i32];
-        let mut inembed = [height as i32, width as i32];
-        let mut onembed = [height as i32, w_half as i32];
-        let istride = 1;
-        let ostride = 1;
-        let idist = (height * width) as i32;
-        let odist = (height * w_half) as i32;
-
-        let plan = unsafe {
-            cufft::plan_many(
-                2,
-                n.as_mut_ptr(),
-                inembed.as_mut_ptr(),
-                istride,
-                idist,
-                onembed.as_mut_ptr(),
-                ostride,
-                odist,
-                sys::cufftType::CUFFT_R2C,
-                batch,
-            )
-            .map_err(|e| candle_core::Error::Cuda(Box::new(e)))?
-        };
-
+        let plan = get_or_create_plan(
+            device_loc,
+            height as i32,
+            width as i32,
+            batch,
+            PlanKind::R2C,
+        )?;
         let stream = dev.cuda_stream();
-        unsafe { sys::cufftSetStream(plan, stream.cu_stream() as sys::cudaStream_t) }
-            .result()
-            .map_err(|e| candle_core::Error::Cuda(Box::new(e)))?;
 
         {
+            let _plan_guard = plan.lock.lock().expect("cufft rfft plan mutex poisoned");
+            unsafe { cufft::set_stream(plan.handle, stream.cu_stream() as sys::cudaStream_t) }
+                .map_err(|e| candle_core::Error::Cuda(Box::new(e)))?;
             let mut output_view = output.as_view_mut();
 
             let (input_ptr, _in_sync) = input.device_ptr(stream.as_ref());
@@ -209,14 +305,12 @@ impl CustomOp1 for Rfft2 {
 
             let exec_res = unsafe {
                 cufft::exec_r2c(
-                    plan,
+                    plan.handle,
                     input_ptr as *mut sys::cufftReal,
                     output_ptr as *mut sys::cufftComplex,
                 )
             };
-            let destroy_res = unsafe { cufft::destroy(plan) };
             exec_res.map_err(|e| candle_core::Error::Cuda(Box::new(e)))?;
-            destroy_res.map_err(|e| candle_core::Error::Cuda(Box::new(e)))?;
         }
 
         let shape = Shape::from(vec![dims[0], dims[1], dims[2], w_half, 2]);
@@ -402,9 +496,6 @@ impl CustomOp1 for Irfft2 {
     #[cfg(feature = "cuda")]
     #[instrument(level = "info", skip_all)]
     fn cuda_fwd(&self, storage: &CudaStorage, layout: &Layout) -> Result<(CudaStorage, Shape)> {
-        use cudarc::cufft::{result as cufft, sys};
-        use cudarc::driver::{DevicePtr, DevicePtrMut};
-
         let dims = layout.dims();
         if dims.len() != 5 || dims[4] != 2 {
             bail!("irfft2 expects spectrum shaped [batch, channels, height, width/2+1, 2]")
@@ -415,44 +506,28 @@ impl CustomOp1 for Irfft2 {
         let (start, end) = layout
             .contiguous_offsets()
             .ok_or_else(|| candle_core::Error::RequiresContiguous { op: "irfft2" }.bt())?;
-        let (batch, channels, height, w_half) = (dims[0], dims[1], dims[2], dims[3]);
+        let (batch, channels, height, _w_half) = (dims[0], dims[1], dims[2], dims[3]);
         let width = self.width;
         let batch = (batch * channels) as i32;
+        let device_loc = storage.device().location();
         let input = storage.as_cuda_slice::<f32>()?;
         let input = input.slice(start..end);
         let dev = storage.device();
         let mut output = dev.alloc_zeros::<f32>(dims[0] * dims[1] * dims[2] * width)?;
 
-        let mut n = [height as i32, width as i32];
-        let mut inembed = [height as i32, w_half as i32];
-        let mut onembed = [height as i32, width as i32];
-        let istride = 1;
-        let ostride = 1;
-        let idist = (height * w_half) as i32;
-        let odist = (height * width) as i32;
-
-        let plan = unsafe {
-            cufft::plan_many(
-                2,
-                n.as_mut_ptr(),
-                inembed.as_mut_ptr(),
-                istride,
-                idist,
-                onembed.as_mut_ptr(),
-                ostride,
-                odist,
-                sys::cufftType::CUFFT_C2R,
-                batch,
-            )
-            .map_err(|e| candle_core::Error::Cuda(Box::new(e)))?
-        };
-
+        let plan = get_or_create_plan(
+            device_loc,
+            height as i32,
+            width as i32,
+            batch,
+            PlanKind::C2R,
+        )?;
         let stream = dev.cuda_stream();
-        unsafe { sys::cufftSetStream(plan, stream.cu_stream() as sys::cudaStream_t) }
-            .result()
-            .map_err(|e| candle_core::Error::Cuda(Box::new(e)))?;
 
         {
+            let _plan_guard = plan.lock.lock().expect("cufft irfft plan mutex poisoned");
+            unsafe { cufft::set_stream(plan.handle, stream.cu_stream() as sys::cudaStream_t) }
+                .map_err(|e| candle_core::Error::Cuda(Box::new(e)))?;
             let mut output_view = output.as_view_mut();
 
             let (input_ptr, _in_sync) = input.device_ptr(stream.as_ref());
@@ -460,14 +535,12 @@ impl CustomOp1 for Irfft2 {
 
             let exec_res = unsafe {
                 cufft::exec_c2r(
-                    plan,
+                    plan.handle,
                     input_ptr as *mut sys::cufftComplex,
                     output_ptr as *mut sys::cufftReal,
                 )
             };
-            let destroy_res = unsafe { cufft::destroy(plan) };
             exec_res.map_err(|e| candle_core::Error::Cuda(Box::new(e)))?;
-            destroy_res.map_err(|e| candle_core::Error::Cuda(Box::new(e)))?;
         }
 
         let shape = Shape::from(vec![dims[0], dims[1], dims[2], width]);

@@ -547,6 +547,7 @@ impl Lama {
         let mask = mask.to_device(device)?.to_dtype(dtype)?;
         let (b, _c, h, w) = img.dims4()?;
         let mask_inv = (Tensor::ones_like(&mask)? - &mask)?;
+        let mask3 = mask.broadcast_as((b, 3, h, w))?;
         let mask_inv3 = mask_inv.broadcast_as((b, 3, h, w))?;
         let img_masked = (&img * &mask_inv3)?;
         let masked = Tensor::cat(&[&img_masked, &mask], 1)?;
@@ -579,13 +580,9 @@ impl Lama {
         let xs = self.final_conv.forward(&xs)?;
         let xs = ops::sigmoid(&xs)?;
         let xs = xs.narrow(2, 0, h)?.narrow(3, 0, w)?.contiguous()?;
-        let keep = (Tensor::ones_like(&mask)? - &mask)?;
-        let keep3 = keep.broadcast_as((b, 3, h, w))?;
-        let mask3 = mask.broadcast_as((b, 3, h, w))?;
         let pred = (&xs * &mask3)?;
-        let base = (&img * &keep3)?;
+        let base = (&img * &mask_inv3)?;
         let output = (pred + base)?;
-        let output = output.narrow(2, 0, h)?.narrow(3, 0, w)?.contiguous()?;
         Ok(output)
     }
 }

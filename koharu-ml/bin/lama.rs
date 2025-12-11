@@ -30,7 +30,16 @@ async fn main() -> anyhow::Result<()> {
     let image = image::open(&cli.input)?;
     let mask = image::open(&cli.mask)?;
 
+
+    // inferernce start time
+    let start = std::time::Instant::now();
+
     let output = model.inference(&image, &mask)?;
+
+    // measure inference speed
+    let duration = start.elapsed();
+    println!("Inference took: {:?}", duration);
+    
     output.save(&cli.output)?;
 
     Ok(())
