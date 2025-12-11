@@ -131,8 +131,7 @@ impl Model {
         match &mut *guard {
             State::Ready(llm) => {
                 let text = doc.get_source()?;
-                let prompt = llm.prompt(text);
-                let response = llm.generate(&prompt, &GenerateOptions::default())?;
+                let response = llm.generate(&text, &GenerateOptions::default())?;
                 let response = response.trim().to_string();
                 doc.set_translation(response)
             }

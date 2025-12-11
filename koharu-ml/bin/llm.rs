@@ -70,9 +70,7 @@ async fn main() -> anyhow::Result<()> {
         repeat_last_n: args.repeat_last_n,
     };
 
-    let messages = args.model.prompt(args.prompt.as_str());
-
-    let out = llm.generate(&messages, &opts)?;
+    let out = llm.generate(&args.prompt, &opts)?;
 
     println!("{}", out);
     Ok(())

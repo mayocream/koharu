@@ -89,6 +89,7 @@ objc2-metal-performance-shaders-graph = "0.3"
 objc2-foundation = "0.3"
 sys-locale = "0.3"
 indicatif = "0.17"
+minijinja = "2.0"
 
 [patch.crates-io]
 candle-transformers = { git = "https://github.com/mayocream/candle", branch = "cuda-dynamic-loading" }

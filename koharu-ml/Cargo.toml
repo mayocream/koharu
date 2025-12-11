@@ -42,6 +42,7 @@ dirs = { workspace = true }
 futures = { workspace = true }
 num_cpus = { workspace = true }
 libloading = { workspace = true }
+minijinja = { workspace = true }
 
 [features]
 cuda = [

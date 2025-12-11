@@ -9,7 +9,7 @@ use tokenizers::Tokenizer;
 
 use crate::device;
 use crate::llm::ModelId;
-use crate::llm::prompt::ChatMessage;
+use crate::llm::prompt::PromptRenderer;
 use crate::llm::quantized_lfm2;
 
 pub enum Model {
@@ -30,11 +30,11 @@ impl Model {
 
 /// Minimal quantized LLM wrapper
 pub struct Llm {
-    id: ModelId,
     device: Device,
     model: Model,
     tokenizer: Tokenizer,
-    eos_token: u32,
+    prompt_renderer: PromptRenderer,
+    eos_token_id: u32,
 }
 
 #[derive(Debug, Clone)]
@@ -71,19 +71,33 @@ impl Llm {
         let (model_path, tokenizer_path) = id.get().await?;
 
         // Load tokenizer
+        // TODO: load tokenzier from gguf, seems candle-transformers doesn't support it yet
         let tokenizer = Tokenizer::from_file(&tokenizer_path).map_err(anyhow::Error::msg)?;
 
         // Peek GGUF metadata to choose device/loader
         let mut file = std::fs::File::open(&model_path)?;
         let ct = gguf_file::Content::read(&mut file).map_err(|e| e.with_path(&model_path))?;
-        let arch = ct
-            .metadata
-            .get("general.architecture")
-            .and_then(|v| v.to_string().ok())
-            .map(|s| s.to_lowercase())
-            .unwrap_or_default();
+        let metadata = ct.metadata.clone();
+        let md_get = |s: &str| match metadata.get(s) {
+            None => anyhow::bail!("missing {} in GGUF metadata", s),
+            Some(v) => Ok(v),
+        };
+        let arch = md_get("general.architecture")?.to_string()?;
+        let chat_template = md_get("tokenizer.ggml.chat_template")
+            .or_else(|_| md_get("tokenizer.chat_template"))?
+            .to_string()?;
+        let bos_token_id = md_get("tokenizer.ggml.bos_token_id")?.to_u32()?;
+        let eos_token_id = md_get("tokenizer.ggml.eos_token_id")?.to_u32()?;
 
         let device = device(false)?;
+
+        let bos_token = tokenizer
+            .id_to_token(bos_token_id)
+            .unwrap_or_else(|| bos_token_id.to_string());
+        let eos_token = tokenizer
+            .id_to_token(eos_token_id)
+            .unwrap_or_else(|| eos_token_id.to_string());
+        let prompt_renderer = PromptRenderer::new(id, chat_template.clone(), bos_token, eos_token);
 
         // Rewind reader before loading tensors
         file.rewind()?;
@@ -102,36 +116,19 @@ impl Llm {
             _ => anyhow::bail!("unsupported model architecture: {}", arch),
         };
 
-        // Prefer the model's end-turn marker as EOS if it exists as a single special token;
-        // fall back to a few common alternatives.
-        let eos_token = {
-            let markers = id.markers();
-            let try_marker = |tok: &Tokenizer, s: &str| -> Option<u32> {
-                let enc = tok.encode(s, true).ok()?;
-                let ids = enc.get_ids();
-                if ids.len() == 1 { Some(ids[0]) } else { None }
-            };
-            try_marker(&tokenizer, markers.message_end)
-                .or_else(|| try_marker(&tokenizer, "<end_of_turn>"))
-                .or_else(|| tokenizer.get_vocab(true).get("<eos>").cloned())
-                .or_else(|| tokenizer.get_vocab(true).get("</s>").cloned())
-                .or_else(|| tokenizer.get_vocab(true).get("<|im_end|>").cloned())
-                .unwrap_or(2)
-        };
-
         Ok(Self {
-            id,
             device,
             model,
             tokenizer,
-            eos_token,
+            prompt_renderer,
+            eos_token_id,
         })
     }
 
     /// Generate up to `max_tokens` following `prompt` using temperature/top-k/p settings.
     /// Logs simple performance metrics via `tracing`.
-    pub fn generate(&mut self, prompt: &[ChatMessage], opts: &GenerateOptions) -> Result<String> {
-        let prompt = self.id.format_chat_prompt(prompt);
+    pub fn generate(&mut self, prompt: &str, opts: &GenerateOptions) -> Result<String> {
+        let prompt = self.prompt_renderer.format_chat_prompt(prompt.to_string());
         tracing::info!("Generating with prompt:\n{}", prompt);
 
         // Encode prompt
@@ -175,7 +172,7 @@ impl Llm {
         };
         let prompt_dt = start_prompt_processing.elapsed();
 
-        if next_token == self.eos_token {
+        if next_token == self.eos_token_id {
             tracing::warn!("Early stopping: EOS token generated at end of prompt");
             return Ok("".to_string());
         }
@@ -203,7 +200,7 @@ impl Llm {
             next_token = logits_processor.sample(&logits)?;
             all_tokens.push(next_token);
             sampled += 1;
-            if next_token == self.eos_token {
+            if next_token == self.eos_token_id {
                 break;
             }
         }
@@ -231,9 +228,5 @@ impl Llm {
         self.tokenizer
             .decode(&all_tokens, true)
             .map_err(anyhow::Error::msg)
-    }
-
-    pub fn prompt(&self, text: impl Into<String>) -> Vec<ChatMessage> {
-        self.id.prompt(text)
     }
 }
