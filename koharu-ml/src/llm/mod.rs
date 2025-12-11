@@ -76,8 +76,8 @@ define_llms! {
     },
     Lfm2_350mEnjpMt => {
         id = "lfm2-350m-enjp-mt",
-        repo = "LiquidAI/LFM2-700M-GGUF",
-        filename = "LFM2-700M-Q8_0.gguf",
+        repo = "LiquidAI/LFM2-350M-ENJP-MT-GGUF",
+        filename = "LFM2-350M-ENJP-MT-Q8_0.gguf",
         tokenizer_repo = "LiquidAI/LFM2-350M-ENJP-MT"
     },
     SakuraGalTransl7Bv3_7 => {

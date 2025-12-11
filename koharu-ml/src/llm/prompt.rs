@@ -71,7 +71,12 @@ pub struct PromptRenderer {
 }
 
 impl PromptRenderer {
-    pub fn new(model_id: ModelId, template: String, bos_token: String, eos_token: String) -> Self {
+    pub fn new(
+        model_id: ModelId,
+        template: String,
+        bos_token: String,
+        eos_token: String,
+    ) -> Self {
         let mut env = Environment::new();
 
         // Add custom filters that are commonly used in chat templates
@@ -113,15 +118,18 @@ impl PromptRenderer {
     pub fn format_chat_prompt(&self, prompt: String) -> String {
         let messages = self.messages(prompt.clone());
 
-        let tmpl = self.env.template_from_str(&self.template).unwrap();
+        let tmpl = self
+            .env
+            .template_from_str(&self.template).unwrap();
 
-        tmpl.render(context! {
-            messages => messages,
-            bos_token => self.bos_token,
-            eos_token => self.eos_token,
-            add_generation_prompt => true,
-        })
-        .unwrap()
+        tmpl.render(
+            context! {
+                messages => messages,
+                bos_token => self.bos_token,
+                eos_token => self.eos_token,
+                add_generation_prompt => true,
+            }
+        ).unwrap()
     }
 }
 
