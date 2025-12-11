@@ -45,8 +45,9 @@ impl MangaOcr {
         let preprocessor: PreprocessorConfig =
             load_json(&preprocessor_path).context("failed to parse preprocessor config")?;
         let tokenizer = load_tokenizer(None, &vocab_path, &special_tokens_path)?;
-        let vb =
-            unsafe { VarBuilder::from_mmaped_safetensors(&[weights_path], DType::F32, &device)? };
+        // SAFETY: The weights file is memory-mapped read-only by Candle; the path is owned
+        // and valid for the duration of model construction. DType matches the stored tensors.
+        let vb = unsafe { VarBuilder::from_mmaped_safetensors(&[weights_path], DType::F32, &device)? };
         let model = VisionEncoderDecoder::from_config(config, vb, device.clone())?;
 
         Ok(Self {

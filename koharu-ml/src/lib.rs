@@ -24,6 +24,9 @@ pub fn device(cpu: bool) -> Result<Device> {
 }
 
 pub fn cuda_is_available() -> bool {
+    // SAFETY: This probes for presence of the CUDA driver by attempting to load
+    // its vendor library by name without calling into it. The operation does not
+    // execute code from the library; only success/failure is observed.
     unsafe {
         libloading::Library::new(if cfg!(target_os = "windows") {
             "nvcuda.dll"

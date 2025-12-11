@@ -31,11 +31,13 @@ fn nsarray_from_usize(values: &[usize]) -> Result<Retained<objc2_foundation::NSA
     let mut ptrs: Vec<NonNull<NSNumber>> = nums
         .iter()
         .map(|n| unsafe {
-            // Retained always holds a non-null pointer.
+            // SAFETY: Retained ensures a non-null Objective-C pointer; casting to NonNull is valid.
             NonNull::new_unchecked(Retained::as_ptr(n) as *mut NSNumber)
         })
         .collect();
     let arr = unsafe {
+        // SAFETY: Backing pointer references a contiguous array of non-null NSNumber pointers
+        // with the given count; lifetime is bound to the newly created NSArray.
         objc2_foundation::NSArray::<NSNumber>::arrayWithObjects_count(
             NonNull::new(ptrs.as_mut_ptr()).expect("non-null array backing"),
             ptrs.len(),
@@ -50,17 +52,20 @@ where
     K: NSCopying + objc2::Message,
     V: objc2::Message,
 {
+    // SAFETY: Key and value are valid Objective-C objects; dictionary retains references.
     unsafe { NSDictionary::dictionaryWithObject_forKey(value, ProtocolObject::from_ref(key)) }
 }
 
 #[cfg(feature = "metal")]
 fn make_fft_descriptor(inverse: bool) -> Result<Retained<MPSGraphFFTDescriptor>> {
+    // SAFETY: Descriptor constructor returns a retained object or nil; checked for non-nil.
     let desc = unsafe {
         MPSGraphFFTDescriptor::descriptor().ok_or_else(|| {
             candle_core::Error::Msg("MPSGraphFFTDescriptor::descriptor returned nil".to_string())
                 .bt()
         })?
     };
+    // SAFETY: Setting properties on a valid descriptor object is safe.
     unsafe {
         desc.setInverse(inverse);
         // Stay unnormalized; we apply explicit scaling in `irfft2` for all backends.
@@ -180,6 +185,8 @@ impl CustomOp1 for Rfft2 {
         let idist = (height * width) as i32;
         let odist = (height * w_half) as i32;
 
+        // SAFETY: FFT plan parameters (dims, strides, distances) are derived from checked
+        // layout and sizes; pointers reference initialized arrays with correct lengths.
         let plan = unsafe {
             cufft::plan_many(
                 2,
@@ -197,6 +204,8 @@ impl CustomOp1 for Rfft2 {
         };
 
         let stream = dev.cuda_stream();
+        // SAFETY: Plan handle and CUDA stream are valid; associating stream with plan is required
+        // before execution.
         unsafe { sys::cufftSetStream(plan, stream.cu_stream() as sys::cudaStream_t) }
             .result()
             .map_err(|e| candle_core::Error::Cuda(Box::new(e)))?;
@@ -207,6 +216,7 @@ impl CustomOp1 for Rfft2 {
             let (input_ptr, _in_sync) = input.device_ptr(stream.as_ref());
             let (output_ptr, _out_sync) = output_view.device_ptr_mut(stream.as_ref());
 
+            // SAFETY: Device pointers point to correctly sized buffers; plan configured for R2C.
             let exec_res = unsafe {
                 cufft::exec_r2c(
                     plan,
@@ -214,6 +224,7 @@ impl CustomOp1 for Rfft2 {
                     output_ptr as *mut sys::cufftComplex,
                 )
             };
+            // SAFETY: Destroying a valid plan after execution frees resources.
             let destroy_res = unsafe { cufft::destroy(plan) };
             exec_res.map_err(|e| candle_core::Error::Cuda(Box::new(e)))?;
             destroy_res.map_err(|e| candle_core::Error::Cuda(Box::new(e)))?;
@@ -253,7 +264,9 @@ impl CustomOp1 for Rfft2 {
 
         let input_shape = nsarray_from_usize(&[batch, channels, height, width])?;
         let axes = nsarray_from_usize(&[2, 3])?;
+        // SAFETY: Creating a new MPSGraph instance returns a valid object managed by ARC.
         let graph = unsafe { MPSGraph::new() };
+        // SAFETY: Shape array and dtype are valid; placeholder is created within graph lifetime.
         let placeholder = unsafe {
             graph.placeholderWithShape_dataType_name(
                 Some(input_shape.as_ref()),
@@ -262,6 +275,7 @@ impl CustomOp1 for Rfft2 {
             )
         };
         let desc = make_fft_descriptor(false)?;
+        // SAFETY: FFT operation references valid tensor and descriptor; returns a graph tensor.
         let spectrum = unsafe {
             graph.realToHermiteanFFTWithTensor_axes_descriptor_name(
                 &placeholder,
@@ -276,6 +290,7 @@ impl CustomOp1 for Rfft2 {
         let output_buffer =
             device.new_buffer(output_elems, candle_core::DType::F32, "rfft2-mps")?;
 
+        // SAFETY: Buffer and shape are valid and match Float32 dtype for input.
         let input_td = unsafe {
             MPSGraphTensorData::initWithMTLBuffer_shape_dataType(
                 MPSGraphTensorData::alloc(),
@@ -284,6 +299,7 @@ impl CustomOp1 for Rfft2 {
                 MPSDataType::Float32,
             )
         };
+        // SAFETY: Output buffer and shape are valid; using complex float dtype for spectrum.
         let output_td = unsafe {
             MPSGraphTensorData::initWithMTLBuffer_shape_dataType(
                 MPSGraphTensorData::alloc(),
@@ -299,6 +315,7 @@ impl CustomOp1 for Rfft2 {
             single_entry_dictionary(spectrum.as_ref(), output_td.as_ref());
 
         let command_queue = device.new_command_queue().map_err(MetalError::from)?;
+        // SAFETY: Command queue, feeds, and results dictionaries are valid and retained.
         unsafe {
             graph.runWithMTLCommandQueue_feeds_targetOperations_resultsDictionary(
                 command_queue.as_ref(),
@@ -431,6 +448,8 @@ impl CustomOp1 for Irfft2 {
         let idist = (height * w_half) as i32;
         let odist = (height * width) as i32;
 
+        // SAFETY: FFT plan parameters (dims, strides, distances) are derived from checked
+        // layout and sizes; pointers reference initialized arrays with correct lengths.
         let plan = unsafe {
             cufft::plan_many(
                 2,
@@ -448,6 +467,8 @@ impl CustomOp1 for Irfft2 {
         };
 
         let stream = dev.cuda_stream();
+        // SAFETY: Plan handle and CUDA stream are valid; associating stream with plan is required
+        // before execution.
         unsafe { sys::cufftSetStream(plan, stream.cu_stream() as sys::cudaStream_t) }
             .result()
             .map_err(|e| candle_core::Error::Cuda(Box::new(e)))?;
@@ -458,6 +479,7 @@ impl CustomOp1 for Irfft2 {
             let (input_ptr, _in_sync) = input.device_ptr(stream.as_ref());
             let (output_ptr, _out_sync) = output_view.device_ptr_mut(stream.as_ref());
 
+            // SAFETY: Device pointers point to correctly sized buffers; plan configured for C2R.
             let exec_res = unsafe {
                 cufft::exec_c2r(
                     plan,
@@ -465,6 +487,7 @@ impl CustomOp1 for Irfft2 {
                     output_ptr as *mut sys::cufftReal,
                 )
             };
+            // SAFETY: Destroying a valid plan after execution frees resources.
             let destroy_res = unsafe { cufft::destroy(plan) };
             exec_res.map_err(|e| candle_core::Error::Cuda(Box::new(e)))?;
             destroy_res.map_err(|e| candle_core::Error::Cuda(Box::new(e)))?;

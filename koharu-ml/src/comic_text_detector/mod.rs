@@ -39,20 +39,21 @@ impl ComicTextDetector {
     pub async fn load(device: Device) -> anyhow::Result<Self> {
         let yolo = {
             let weights = Manifest::Yolov5.get().await?;
-            let vb =
-                unsafe { VarBuilder::from_mmaped_safetensors(&[weights], DType::F32, &device)? };
+            // SAFETY: Weights are memory-mapped read-only; Candle expects F32 tensors
+            // and holds the map for the duration of variable building.
+            let vb = unsafe { VarBuilder::from_mmaped_safetensors(&[weights], DType::F32, &device)? };
             yolo_v5::YoloV5::load(vb, 2, 3)?
         };
         let unet = {
             let weights = Manifest::Unet.get().await?;
-            let vb =
-                unsafe { VarBuilder::from_mmaped_safetensors(&[weights], DType::F32, &device)? };
+            // SAFETY: Memory-mapped weights are read-only and type-checked as F32.
+            let vb = unsafe { VarBuilder::from_mmaped_safetensors(&[weights], DType::F32, &device)? };
             unet::UNet::load(vb)?
         };
         let dbnet = {
             let weights = Manifest::DbNet.get().await?;
-            let vb =
-                unsafe { VarBuilder::from_mmaped_safetensors(&[weights], DType::F32, &device)? };
+            // SAFETY: Memory-mapped weights are read-only and type-checked as F32.
+            let vb = unsafe { VarBuilder::from_mmaped_safetensors(&[weights], DType::F32, &device)? };
             dbnet::DbNet::load(vb)?
         };
 

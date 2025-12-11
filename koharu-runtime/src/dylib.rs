@@ -184,6 +184,9 @@ pub fn preload_dylibs(dir: impl AsRef<Path>) -> Result<()> {
             continue;
         }
 
+        // SAFETY: The library paths are resolved from a fixed allowlist (DYLIBS)
+        // and loaded from the given directory. No symbols are fetched/executed here;
+        // the Library handle is stored to extend lifetime for the process.
         unsafe {
             match libloading::Library::new(&path) {
                 Ok(lib) => libs.push(lib),

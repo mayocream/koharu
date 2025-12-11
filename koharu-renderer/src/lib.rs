@@ -1,3 +1,4 @@
+#![forbid(unsafe_code)]
 pub mod font;
 pub mod layout;
 pub mod render;
