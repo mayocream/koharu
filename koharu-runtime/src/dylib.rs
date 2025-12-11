@@ -7,10 +7,10 @@ use std::{
 
 use anyhow::Result;
 use futures::stream::{self, StreamExt, TryStreamExt};
-use koharu_core::http::{http_client, http_download};
+use koharu_core::http::http_client;
 use once_cell::sync::OnceCell;
 use rayon::iter::{IntoParallelRefIterator, ParallelIterator};
-use tokio::task;
+use tokio::{io::AsyncWriteExt, task};
 use tracing::debug;
 
 use crate::{pypi::PYPI_ENDPOINT, zip::fetch_record};
@@ -275,10 +275,18 @@ async fn fetch_and_extract(pkg: &str, platform_tags: &[&str], out_dir: Arc<PathB
 
     if needs_download {
         debug!("{pkg}: downloading {wheel_name}...");
-        let bytes = http_download(&wheel_url).await?;
-        let out = Arc::clone(&out_dir);
+        let resp = http_client().get(&wheel_url).send().await?;
+        let tmp_path = out_dir.as_ref().join(format!("{wheel_name}.tmp"));
+        let mut file = tokio::fs::File::create(&tmp_path).await?;
+        let mut stream = resp.bytes_stream();
+        while let Some(chunk) = stream.try_next().await? {
+            file.write_all(&chunk).await?;
+        }
+        file.flush().await?;
 
-        task::spawn_blocking(move || extract_from_wheel(&bytes, out.as_ref())).await??;
+        let out = Arc::clone(&out_dir);
+        task::spawn_blocking(move || extract_from_wheel_file(&tmp_path, out.as_ref())).await??;
+        tokio::fs::remove_file(&tmp_path).await.ok();
         debug!("{pkg}: download and extract complete");
         Ok(())
     } else {
@@ -287,9 +295,9 @@ async fn fetch_and_extract(pkg: &str, platform_tags: &[&str], out_dir: Arc<PathB
     }
 }
 
-fn extract_from_wheel(bytes: &[u8], out_dir: &Path) -> Result<()> {
+fn extract_from_wheel_file(zip_path: &Path, out_dir: &Path) -> Result<()> {
     // First, list target entries to extract
-    let mut archive = ::zip::ZipArchive::new(std::io::Cursor::new(bytes))?;
+    let mut archive = ::zip::ZipArchive::new(std::fs::File::open(zip_path)?)?;
     let mut targets: Vec<(String, String)> = Vec::new(); // (full archive path, output basename)
     for i in 0..archive.len() {
         let file = archive.by_index(i)?;
@@ -306,7 +314,7 @@ fn extract_from_wheel(bytes: &[u8], out_dir: &Path) -> Result<()> {
     let results: Result<Vec<(String, u64)>> = targets
         .par_iter()
         .map(|(full_name, base_name)| -> Result<(String, u64)> {
-            let mut zip = ::zip::ZipArchive::new(std::io::Cursor::new(bytes))?;
+            let mut zip = ::zip::ZipArchive::new(std::fs::File::open(zip_path)?)?;
             let mut file = zip.by_name(full_name)?;
 
             let out_path = out_dir.join(base_name);
