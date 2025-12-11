@@ -10,7 +10,7 @@ const execOpts = { cwd: root, maxBuffer: 10 * 1024 * 1024 }
 async function main() {
   console.log('Calculating bumped version with git-cliff...')
   const bumpedVersion = (
-    await exec('bun git-cliff --bumped-version', execOpts)
+    await exec('bun git-cliff --unreleased --bumped-version', execOpts)
   ).stdout.trim()
 
   if (!bumpedVersion) {
