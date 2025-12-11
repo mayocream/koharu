@@ -110,10 +110,9 @@ impl PromptRenderer {
         }
     }
 
-    pub fn format_chat_prompt(&self, prompt: String) -> String {
-        let messages = self.messages(prompt.clone());
-
-        let tmpl = self.env.template_from_str(&self.template).unwrap();
+    pub fn format_chat_prompt(&self, prompt: String) -> anyhow::Result<String> {
+        let messages = self.messages(prompt);
+        let tmpl = self.env.template_from_str(&self.template)?;
 
         tmpl.render(context! {
             messages => messages,
@@ -121,7 +120,7 @@ impl PromptRenderer {
             eos_token => self.eos_token,
             add_generation_prompt => true,
         })
-        .unwrap()
+        .map_err(anyhow::Error::msg)
     }
 }
 
@@ -130,7 +129,7 @@ mod tests {
     use super::*;
 
     #[test]
-    fn llama_prompt_format() {
+    fn llama_prompt_format() -> anyhow::Result<()> {
         let model_id = ModelId::VntlLlama3_8Bv2;
         let renderer = PromptRenderer::new(
             model_id,
@@ -138,8 +137,10 @@ mod tests {
             "<|begin_of_text|>".to_string(),
             "<|end_of_text|>".to_string(),
         );
-        let formatted = renderer.format_chat_prompt("こんにちは".to_string());
+        let formatted = renderer.format_chat_prompt("こんにちは".to_string())?;
         let expected = "<|begin_of_text|><|start_header_id|>Metadata<|end_header_id|>\n\n<|eot_id|><|start_header_id|>Japanese<|end_header_id|>\n\nこんにちは<|eot_id|><|start_header_id|>English<|end_header_id|>\n\n<|eot_id|><|start_header_id|>assistant<|end_header_id|>\n\n";
         assert_eq!(formatted, expected);
+
+        Ok(())
     }
 }

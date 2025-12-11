@@ -78,9 +78,10 @@ impl Llm {
         let mut file = std::fs::File::open(&model_path)?;
         let ct = gguf_file::Content::read(&mut file).map_err(|e| e.with_path(&model_path))?;
         let metadata = ct.metadata.clone();
-        let md_get = |s: &str| match metadata.get(s) {
-            None => anyhow::bail!("missing {} in GGUF metadata", s),
-            Some(v) => Ok(v),
+        let md_get = |s: &str| {
+            metadata
+                .get(s)
+                .ok_or_else(|| anyhow::anyhow!("missing GGUF metadata key `{s}`"))
         };
         let arch = md_get("general.architecture")?.to_string()?;
         let chat_template = md_get("tokenizer.ggml.chat_template")
@@ -128,7 +129,9 @@ impl Llm {
     /// Generate up to `max_tokens` following `prompt` using temperature/top-k/p settings.
     /// Logs simple performance metrics via `tracing`.
     pub fn generate(&mut self, prompt: &str, opts: &GenerateOptions) -> Result<String> {
-        let prompt = self.prompt_renderer.format_chat_prompt(prompt.to_string());
+        let prompt = self
+            .prompt_renderer
+            .format_chat_prompt(prompt.to_string())?;
         tracing::info!("Generating with prompt:\n{}", prompt);
 
         // Encode prompt
