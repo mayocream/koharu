@@ -1,5 +1,5 @@
 use clap::Parser;
-use koharu_ml::llm::{ChatMessage, ChatRole, GenerateOptions, Llm, ModelId};
+use koharu_ml::llm::{GenerateOptions, Llm, ModelId};
 use tracing_subscriber::fmt::format::FmtSpan;
 
 #[derive(Parser, Debug)]
@@ -8,7 +8,7 @@ struct Args {
     /// Prompt to generate from
     #[arg(
         long,
-        default_value = "「吾輩は猫である。\n\n\n名前はまだ無い。\n\n\nどこで生れたかとんと見当がつかぬ。\n\n\n何でも薄暗いじめじめした所でニャーニャー泣いていた事だけは記憶している。\n\n\n吾輩はここで始めて人間というものを見た。\n\n\nしかもあとで聞くとそれは書生という人間中で一番獰悪な種族であったそうだ。」"
+        default_value = "吾輩は猫である。\n名前はまだ無い。\nどこで生れたかとんと見当がつかぬ。\n何でも薄暗いじめじめした所でニャーニャー泣いていた事だけは記憶している。\n吾輩はここで始めて人間というものを見た。\nしかもあとで聞くとそれは書生という人間中で一番獰悪な種族であったそうだ。"
     )]
     prompt: String,
 
@@ -70,36 +70,7 @@ async fn main() -> anyhow::Result<()> {
         repeat_last_n: args.repeat_last_n,
     };
 
-    let messages = match args.model {
-        ModelId::VntlLlama3_8Bv2 => vec![
-            ChatMessage::new(ChatRole::Name("Japanese"), args.prompt),
-            ChatMessage::new(ChatRole::Name("English"), String::new()),
-        ],
-        ModelId::Lfm2_350mEnjpMt => vec![
-            ChatMessage::new(
-                ChatRole::System,
-                "Translate to English, do not add any explanations, do not add or delete line breaks.",
-            ),
-            ChatMessage::new(ChatRole::User, args.prompt),
-            ChatMessage::assistant(),
-        ],
-        ModelId::SakuraGalTransl7Bv3_7 => vec![
-            ChatMessage::new(
-                ChatRole::System,
-                "你是一个视觉小说翻译模型，可以通顺地使用给定的术语表以指定的风格将日文翻译成简体中文，并联系上下文正确使用人称代词，注意不要混淆使役态和被动态的主语和宾语，不要擅自添加原文中没有的特殊符号，也不要擅自增加或减少换行。",
-            ),
-            ChatMessage::new(ChatRole::User, args.prompt),
-            ChatMessage::assistant(),
-        ],
-        ModelId::Sakura1_5bQwen2_5v1_0 => vec![
-            ChatMessage::new(
-                ChatRole::System,
-                "你是一个轻小说翻译模型，可以通顺地使用给定的术语表以指定的风格将日文翻译成简体中文，并联系上下文正确使用人称代词，注意不要混淆使役态和被动态的主语和宾语，不要擅自添加原文中没有的特殊符号，也不要擅自增加或减少换行。",
-            ),
-            ChatMessage::new(ChatRole::User, args.prompt),
-            ChatMessage::assistant(),
-        ],
-    };
+    let messages = args.model.prompt(args.prompt.as_str());
 
     let out = llm.generate(&messages, &opts)?;
 

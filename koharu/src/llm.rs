@@ -131,12 +131,9 @@ impl Model {
         match &mut *guard {
             State::Ready(llm) => {
                 let text = doc.get_source()?;
-
                 let prompt = llm.prompt(text);
-
-                tracing::info!("Generating translation with messages: {:?}", prompt);
-
                 let response = llm.generate(&prompt, &GenerateOptions::default())?;
+                let response = response.trim().to_string();
                 doc.set_translation(response)
             }
             State::Loading => Err(anyhow::anyhow!("Model is still loading")),

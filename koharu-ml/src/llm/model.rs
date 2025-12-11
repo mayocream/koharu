@@ -105,7 +105,7 @@ impl Llm {
         // Prefer the model's end-turn marker as EOS if it exists as a single special token;
         // fall back to a few common alternatives.
         let eos_token = {
-            let markers = model.markers();
+            let markers = id.markers();
             let try_marker = |tok: &Tokenizer, s: &str| -> Option<u32> {
                 let enc = tok.encode(s, true).ok()?;
                 let ids = enc.get_ids();
@@ -131,7 +131,8 @@ impl Llm {
     /// Generate up to `max_tokens` following `prompt` using temperature/top-k/p settings.
     /// Logs simple performance metrics via `tracing`.
     pub fn generate(&mut self, prompt: &[ChatMessage], opts: &GenerateOptions) -> Result<String> {
-        let prompt = self.format_chat_prompt(prompt);
+        let prompt = self.id.format_chat_prompt(prompt);
+        tracing::info!("Generating with prompt:\n{}", prompt);
 
         // Encode prompt
         let enc = self
@@ -234,42 +235,5 @@ impl Llm {
 
     pub fn prompt(&self, text: impl Into<String>) -> Vec<ChatMessage> {
         self.id.prompt(text)
-    }
-
-    fn format_chat_prompt(&self, messages: &[ChatMessage]) -> String {
-        let markers = self.model.markers();
-        let mut out = String::new();
-
-        if let Some(prefix) = markers.prefix {
-            out.push_str(prefix);
-            out.push('\n');
-        }
-
-        // Format each message
-        for msg in messages {
-            if let Some(role_start) = markers.role_start {
-                out.push_str(role_start);
-            }
-            out.push_str(msg.role.to_string().as_ref());
-            out.push('\n');
-
-            if !msg.content.is_empty() {
-                out.push_str(&msg.content);
-                out.push('\n');
-            }
-
-            if let Some(role_end) = markers.role_end {
-                out.push_str(role_end);
-            } else {
-                out.push_str(markers.message_end);
-            }
-        }
-
-        // Add a generation preamble so chat models expect to produce assistant output.
-        if let Some(role_start) = markers.role_start {
-            out.push_str(role_start);
-            out.push_str("assistant\n");
-        }
-        out
     }
 }
