@@ -80,7 +80,7 @@ impl VisionEncoderDecoder {
                 Some(&encoder_attention_mask),
             )?;
             let last_logits = logits.i((0, token_ids.len() - 1, ..))?;
-            let next_id = sampler.sample(&last_logits)? as u32;
+            let next_id = sampler.sample(&last_logits)?;
             token_ids.push(next_id);
             if next_id == self.eos_token_id {
                 break;
