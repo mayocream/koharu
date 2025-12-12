@@ -1,3 +1,4 @@
+use std::collections::HashMap;
 use std::sync::Arc;
 
 use anyhow::Result;
@@ -25,10 +26,38 @@ const FONT_SIZE_SAFETY_MARGIN: f32 = 0.95;
 const DEFAULT_FONT_SIZE: f32 = 16.0;
 const IQR_MULTIPLIER: f32 = 1.5;
 
+/// Cache key for font size calculations based on block dimensions and text characteristics
+#[derive(Hash, Eq, PartialEq)]
+struct FontSizeCacheKey {
+    width: u32,
+    height: u32,
+    text_len: usize,
+    text_hash: u64,
+}
+
+impl FontSizeCacheKey {
+    fn from_block(block: &TextBlock) -> Self {
+        use std::collections::hash_map::DefaultHasher;
+        use std::hash::{Hash, Hasher};
+        
+        let text = block.translation.as_deref().unwrap_or_default();
+        let mut hasher = DefaultHasher::new();
+        text.hash(&mut hasher);
+        
+        Self {
+            width: block.width as u32,
+            height: block.height as u32,
+            text_len: text.len(),
+            text_hash: hasher.finish(),
+        }
+    }
+}
+
 pub struct TextRenderer {
     fontbook: Arc<Mutex<FontBook>>,
     renderer: Arc<Mutex<Renderer>>,
     layouter: Arc<Mutex<Layouter>>,
+    font_size_cache: Arc<Mutex<HashMap<FontSizeCacheKey, f32>>>,
 }
 
 impl Default for TextRenderer {
@@ -43,6 +72,7 @@ impl TextRenderer {
             fontbook: Arc::new(Mutex::new(FontBook::new())),
             renderer: Arc::new(Mutex::new(Renderer::new())),
             layouter: Arc::new(Mutex::new(Layouter::new())),
+            font_size_cache: Arc::new(Mutex::new(HashMap::new())),
         }
     }
 
@@ -110,12 +140,25 @@ impl TextRenderer {
 
         // Remove outliers using IQR method (only if we have enough data points)
         if font_sizes.len() >= 4 {
-            // Calculate proper quartile indices
-            let q1_idx = (font_sizes.len() - 1) / 4;
-            let q3_idx = 3 * (font_sizes.len() - 1) / 4;
+            // Helper function to calculate quantile with linear interpolation
+            let get_quartile = |sorted: &[f32], quantile: f32| -> f32 {
+                let n = sorted.len();
+                if n == 0 {
+                    return 0.0;
+                }
+                let pos = (n - 1) as f32 * quantile;
+                let lower = pos.floor() as usize;
+                let upper = pos.ceil() as usize;
+                if lower == upper {
+                    sorted[lower]
+                } else {
+                    let weight = pos - lower as f32;
+                    sorted[lower] * (1.0 - weight) + sorted[upper] * weight
+                }
+            };
             
-            let q1 = font_sizes[q1_idx];
-            let q3 = font_sizes[q3_idx];
+            let q1 = get_quartile(&font_sizes, 0.25);
+            let q3 = get_quartile(&font_sizes, 0.75);
             let iqr = q3 - q1;
             let lower_bound = q1 - IQR_MULTIPLIER * iqr;
             let upper_bound = q3 + IQR_MULTIPLIER * iqr;
@@ -135,6 +178,15 @@ impl TextRenderer {
 
     /// Calculate the optimal font size for a single block
     async fn calculate_block_font_size(&self, block: &TextBlock) -> Result<f32> {
+        // Check cache first
+        let cache_key = FontSizeCacheKey::from_block(block);
+        {
+            let cache = self.font_size_cache.lock().await;
+            if let Some(&cached_size) = cache.get(&cache_key) {
+                return Ok(cached_size);
+            }
+        }
+
         let mut fontbook = self.fontbook.lock().await;
         let style = block.style.clone().unwrap_or_default();
 
@@ -160,10 +212,42 @@ impl TextRenderer {
         };
 
         let mut layouter = self.layouter.lock().await;
+        
+        let font_size = Self::binary_search_font_size(
+            &mut layouter,
+            block,
+            &fonts,
+            &style,
+            script,
+            direction,
+        )?;
+
+        // Apply a 5% reduction to the calculated font size to provide a margin,
+        // ensuring the rendered text fits comfortably within the block and avoids overflow.
+        let final_size = font_size * FONT_SIZE_SAFETY_MARGIN;
+        
+        // Cache the result
+        {
+            let mut cache = self.font_size_cache.lock().await;
+            cache.insert(cache_key, final_size);
+        }
+        
+        Ok(final_size)
+    }
+
+    /// Perform binary search to find the largest font size that fits within block dimensions
+    fn binary_search_font_size(
+        layouter: &mut Layouter,
+        block: &TextBlock,
+        fonts: &[koharu_renderer::font::Font],
+        style: &crate::state::TextStyle,
+        script: Script,
+        direction: Orientation,
+    ) -> Result<f32> {
         let mut layout_with_size = |size: f32| -> Result<_> {
             layouter.layout(&LayoutRequest {
                 text: block.translation.as_deref().unwrap_or_default(),
-                fonts: &fonts,
+                fonts,
                 font_size: size,
                 line_height: style.line_height * size,
                 script,
@@ -176,7 +260,6 @@ impl TextRenderer {
             })
         };
 
-        // Binary search for optimal font size
         let mut low = MIN_FONT_SIZE;
         let mut high = MAX_FONT_SIZE;
         let smallest_readable_size = if script == Script::Latin { MIN_LATIN_SIZE } else { MIN_NON_LATIN_SIZE };
@@ -202,7 +285,7 @@ impl TextRenderer {
             }
         }
 
-        Ok(low * FONT_SIZE_SAFETY_MARGIN)
+        Ok(low)
     }
 
     async fn render_block(&self, block: &TextBlock, image: &mut RgbaImage, override_font_size: Option<f32>) -> Result<()> {
@@ -262,37 +345,35 @@ impl TextRenderer {
         } else if let Some(font_size) = style.font_size {
             (font_size, 0., 0.)
         } else {
-            // binary search for optimal font size to fit the text block
-            let mut low = MIN_FONT_SIZE;
-            let mut high = MAX_FONT_SIZE;
-            let smallest_readable_size = if script == Script::Latin { MIN_LATIN_SIZE } else { MIN_NON_LATIN_SIZE };
+            // Use binary search for optimal font size to fit the text block
+            let low = Self::binary_search_font_size(
+                &mut layouter,
+                block,
+                &fonts,
+                &style,
+                script,
+                direction,
+            )?;
 
-            // the compesation offsets to center the rendered text inside the block
+            // Calculate offsets to center the rendered text inside the block
+            let sized_glyphs = layouter.layout(&LayoutRequest {
+                text: block.translation.as_deref().unwrap_or_default(),
+                fonts: &fonts,
+                font_size: low,
+                line_height: style.line_height * low,
+                script,
+                max_primary_axis: if direction == Orientation::Horizontal {
+                    block.width
+                } else {
+                    block.height
+                },
+                direction,
+            })?;
+
             let mut x_offset = 0.;
             let mut y_offset = 0.;
-
-            // Binary search with proper convergence
-            while high - low > CONVERGENCE_EPSILON {
-                let mid = (low + high) / 2.0;
-                // TODO: fix horizonal latin text measuring issue
-                if mid < smallest_readable_size as f32 {
-                    low = smallest_readable_size as f32;
-                    break;
-                }
-                let glyphs = layout_with_size(mid)?;
-
-                // Handle empty layout
-                if glyphs.is_empty() {
-                    high = mid;
-                    continue;
-                }
-
-                let (min_x, min_y, max_x, max_y) = calculate_bounds(&glyphs);
-                if max_y - min_y <= block.height && max_x - min_x <= block.width {
-                    low = mid;
-                } else {
-                    high = mid;
-                }
+            if !sized_glyphs.is_empty() {
+                let (min_x, min_y, max_x, max_y) = calculate_bounds(&sized_glyphs);
                 x_offset = ((block.width - (max_x - min_x)) / 2.).max(0.);
                 y_offset = ((block.height - (max_y - min_y)) / 2.).max(0.);
             }
@@ -344,15 +425,29 @@ mod tests {
         // Test that outliers are correctly excluded from average calculation
         let font_sizes = vec![10.0, 12.0, 14.0, 15.0, 16.0, 17.0, 18.0, 100.0]; // 100.0 is an outlier
         
-        // Simulate the outlier removal logic with corrected quartile calculation
+        // Simulate the outlier removal logic with linear interpolation
         let mut sizes = font_sizes.clone();
         sizes.sort_by(|a, b| a.partial_cmp(b).unwrap_or(std::cmp::Ordering::Equal));
         
-        let q1_idx = (sizes.len() - 1) / 4;
-        let q3_idx = 3 * (sizes.len() - 1) / 4;
+        // Helper function to calculate quantile with linear interpolation
+        let get_quartile = |sorted: &[f32], quantile: f32| -> f32 {
+            let n = sorted.len();
+            if n == 0 {
+                return 0.0;
+            }
+            let pos = (n - 1) as f32 * quantile;
+            let lower = pos.floor() as usize;
+            let upper = pos.ceil() as usize;
+            if lower == upper {
+                sorted[lower]
+            } else {
+                let weight = pos - lower as f32;
+                sorted[lower] * (1.0 - weight) + sorted[upper] * weight
+            }
+        };
         
-        let q1 = sizes[q1_idx];
-        let q3 = sizes[q3_idx];
+        let q1 = get_quartile(&sizes, 0.25);
+        let q3 = get_quartile(&sizes, 0.75);
         let iqr = q3 - q1;
         let lower_bound = q1 - 1.5 * iqr;
         let upper_bound = q3 + 1.5 * iqr;
