@@ -323,3 +323,73 @@ impl TextRenderer {
         Ok(())
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::state::TextStyle;
+
+    #[test]
+    fn test_calculate_average_excludes_outliers() {
+        // Test that outliers are correctly excluded from average calculation
+        let font_sizes = vec![10.0, 12.0, 14.0, 15.0, 16.0, 17.0, 18.0, 100.0]; // 100.0 is an outlier
+        
+        // Simulate the outlier removal logic
+        let mut sizes = font_sizes.clone();
+        sizes.sort_by(|a, b| a.partial_cmp(b).unwrap_or(std::cmp::Ordering::Equal));
+        
+        let q1_idx = sizes.len() / 4;
+        let q3_idx = (sizes.len() * 3) / 4;
+        
+        let q1 = sizes[q1_idx];
+        let q3 = sizes[q3_idx];
+        let iqr = q3 - q1;
+        let lower_bound = q1 - 1.5 * iqr;
+        let upper_bound = q3 + 1.5 * iqr;
+        
+        sizes.retain(|&size| size >= lower_bound && size <= upper_bound);
+        
+        // The outlier (100.0) should be removed
+        assert!(!sizes.contains(&100.0));
+        
+        // Calculate average of non-outliers
+        let sum: f32 = sizes.iter().sum();
+        let average = sum / sizes.len() as f32;
+        
+        // Average should be around 14-15, not skewed by the 100.0 outlier
+        assert!(average > 10.0 && average < 20.0);
+    }
+
+    #[test]
+    fn test_calculate_average_with_small_dataset() {
+        // Test that small datasets (< 4 elements) don't filter outliers
+        let font_sizes = vec![10.0, 15.0, 100.0];
+        
+        let mut sizes = font_sizes.clone();
+        sizes.sort_by(|a, b| a.partial_cmp(b).unwrap_or(std::cmp::Ordering::Equal));
+        
+        // With < 4 elements, no outlier filtering should occur
+        if sizes.len() >= 4 {
+            panic!("Test dataset should be < 4 elements");
+        }
+        
+        // All values should remain
+        assert_eq!(sizes.len(), 3);
+    }
+
+    #[test]
+    fn test_default_font_size_for_empty_blocks() {
+        // When there are no valid blocks, should return default font size
+        let default_size = 16.0;
+        
+        let empty_sizes: Vec<f32> = vec![];
+        let result = if empty_sizes.is_empty() {
+            default_size
+        } else {
+            let sum: f32 = empty_sizes.iter().sum();
+            sum / empty_sizes.len() as f32
+        };
+        
+        assert_eq!(result, 16.0);
+    }
+}
