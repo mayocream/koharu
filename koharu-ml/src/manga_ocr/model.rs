@@ -34,6 +34,7 @@ pub struct VisionEncoderDecoder {
     max_length: usize,
     decoder_start_token_id: u32,
     eos_token_id: u32,
+    pad_token_id: u32,
 }
 
 impl VisionEncoderDecoder {
@@ -52,10 +53,12 @@ impl VisionEncoderDecoder {
             max_length: config.max_length,
             decoder_start_token_id: config.decoder_start_token_id,
             eos_token_id: config.eos_token_id,
+            pad_token_id: config.pad_token_id,
         })
     }
 
-    pub fn forward(&self, pixel_values: &Tensor) -> Result<Vec<u32>> {
+    pub fn forward(&self, pixel_values: &Tensor) -> Result<Vec<Vec<u32>>> {
+        let batch_size = pixel_values.dim(0)?;
         let encoder_hidden_states = self.encoder.forward(pixel_values)?;
         let encoder_attention_mask = Tensor::ones(
             (encoder_hidden_states.dim(0)?, encoder_hidden_states.dim(1)?),
@@ -63,14 +66,30 @@ impl VisionEncoderDecoder {
             &self.device,
         )?;
 
-        let mut token_ids = vec![self.decoder_start_token_id];
+        let mut token_ids = vec![vec![self.decoder_start_token_id]; batch_size];
+        let mut is_finished = vec![false; batch_size];
         let mut sampler = LogitsProcessor::new(0, None, None);
+
         for _ in 0..self.max_length {
-            let input_ids = Tensor::new(token_ids.as_slice(), &self.device)?
-                .to_dtype(DType::I64)?
-                .reshape((1, token_ids.len()))?;
-            let token_type_ids = Tensor::zeros((1, token_ids.len()), DType::I64, &self.device)?;
-            let attention_mask = Tensor::ones((1, token_ids.len()), DType::F32, &self.device)?;
+            let seq_lengths: Vec<usize> = token_ids.iter().map(Vec::len).collect();
+            let max_len = *seq_lengths.iter().max().unwrap_or(&0);
+            if max_len == 0 {
+                break;
+            }
+
+            let mut flat_tokens = vec![self.pad_token_id; batch_size * max_len];
+            let mut flat_attention = vec![0f32; batch_size * max_len];
+            for (batch_idx, seq) in token_ids.iter().enumerate() {
+                let offset = batch_idx * max_len;
+                flat_tokens[offset..offset + seq.len()].copy_from_slice(seq);
+                flat_attention[offset..offset + seq.len()].fill(1.0);
+            }
+
+            let input_ids = Tensor::from_vec(flat_tokens, (batch_size, max_len), &self.device)?
+                .to_dtype(DType::I64)?;
+            let token_type_ids = Tensor::zeros((batch_size, max_len), DType::I64, &self.device)?;
+            let attention_mask =
+                Tensor::from_vec(flat_attention, (batch_size, max_len), &self.device)?;
 
             let logits = self.decoder.forward(
                 &input_ids,
@@ -79,10 +98,25 @@ impl VisionEncoderDecoder {
                 &encoder_hidden_states,
                 Some(&encoder_attention_mask),
             )?;
-            let last_logits = logits.i((0, token_ids.len() - 1, ..))?;
-            let next_id = sampler.sample(&last_logits)?;
-            token_ids.push(next_id);
-            if next_id == self.eos_token_id {
+
+            let mut has_active = false;
+            for (batch_idx, seq) in token_ids.iter_mut().enumerate() {
+                if is_finished[batch_idx] {
+                    continue;
+                }
+
+                let last_idx = seq_lengths[batch_idx].saturating_sub(1);
+                let last_logits = logits.i((batch_idx, last_idx, ..))?;
+                let next_id = sampler.sample(&last_logits)?;
+                seq.push(next_id);
+                if next_id == self.eos_token_id {
+                    is_finished[batch_idx] = true;
+                } else {
+                    has_active = true;
+                }
+            }
+
+            if !has_active {
                 break;
             }
         }

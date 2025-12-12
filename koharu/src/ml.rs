@@ -56,23 +56,32 @@ impl Model {
         image: &SerializableDynamicImage,
         blocks: &[TextBlock],
     ) -> Result<Vec<TextBlock>> {
-        blocks
+        if blocks.is_empty() {
+            return Ok(Vec::new());
+        }
+
+        let crops: Vec<DynamicImage> = blocks
             .iter()
             .map(|block| {
-                let crop = image.crop_imm(
+                image.crop_imm(
                     block.x as u32,
                     block.y as u32,
                     block.width as u32,
                     block.height as u32,
-                );
-                let text = self.ocr.inference(&crop)?;
-
-                Ok(TextBlock {
-                    text: text.into(),
-                    ..block.clone()
-                })
+                )
             })
-            .collect()
+            .collect();
+        let texts = self.ocr.inference(&crops)?;
+
+        Ok(blocks
+            .iter()
+            .cloned()
+            .zip(texts.into_iter())
+            .map(|(block, text)| TextBlock {
+                text: text.into(),
+                ..block
+            })
+            .collect())
     }
 
     pub async fn inpaint(

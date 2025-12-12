@@ -19,9 +19,6 @@
   ],
   "lint-staged": {
     "*.{js,ts,tsx,css}": "prettier --write",
-    "*.rs": [
-      "cargo fmt",
-      "cargo clippy --fix --allow-dirty --allow-staged"
-    ]
+    "*.rs": "cargo fmt -- --check"
   }
 }

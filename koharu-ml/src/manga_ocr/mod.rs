@@ -58,9 +58,13 @@ impl MangaOcr {
     }
 
     #[instrument(level = "debug", skip_all)]
-    pub fn inference(&self, image: &image::DynamicImage) -> Result<String> {
-        let pixel_values = preprocess_image(
-            image,
+    pub fn inference(&self, images: &[image::DynamicImage]) -> Result<Vec<String>> {
+        if images.is_empty() {
+            return Ok(Vec::new());
+        }
+
+        let pixel_values = preprocess_images(
+            images,
             self.preprocessor.size,
             &self.preprocessor.image_mean,
             &self.preprocessor.image_std,
@@ -69,12 +73,18 @@ impl MangaOcr {
             &self.device,
         )?;
         let token_ids = self.forward(&pixel_values)?;
-        let text = self.tokenizer.decode(&token_ids, true).unwrap_or_default();
-        Ok(post_process(&text))
+        let texts = token_ids
+            .into_iter()
+            .map(|ids| {
+                let text = self.tokenizer.decode(&ids, true).unwrap_or_default();
+                post_process(&text)
+            })
+            .collect();
+        Ok(texts)
     }
 
     #[instrument(level = "debug", skip_all)]
-    fn forward(&self, pixel_values: &Tensor) -> Result<Vec<u32>> {
+    fn forward(&self, pixel_values: &Tensor) -> Result<Vec<Vec<u32>>> {
         self.model.forward(pixel_values)
     }
 }
@@ -88,7 +98,34 @@ fn load_json<T: DeserializeOwned>(path: &Path) -> Result<T> {
 }
 
 #[instrument(level = "debug", skip_all)]
-fn preprocess_image(
+fn preprocess_images(
+    images: &[image::DynamicImage],
+    image_size: u32,
+    image_mean: &[f32; 3],
+    image_std: &[f32; 3],
+    do_resize: bool,
+    do_normalize: bool,
+    device: &Device,
+) -> Result<Tensor> {
+    let mut batch = Vec::with_capacity(images.len());
+    for image in images {
+        let processed = preprocess_single_image(
+            image,
+            image_size,
+            image_mean,
+            image_std,
+            do_resize,
+            do_normalize,
+            device,
+        )?;
+        batch.push(processed);
+    }
+
+    Ok(Tensor::cat(&batch, 0)?)
+}
+
+#[instrument(level = "debug", skip_all)]
+fn preprocess_single_image(
     image: &image::DynamicImage,
     image_size: u32,
     image_mean: &[f32; 3],

@@ -19,11 +19,16 @@ async fn main() -> anyhow::Result<()> {
 
     let cli = Cli::parse();
     let image = image::open(&cli.input)?;
+    let images = vec![image];
 
     let device = device(cli.cpu)?;
 
     let model = MangaOcr::load(device).await?;
-    let output = model.inference(&image)?;
+    let output = model
+        .inference(&images)?
+        .into_iter()
+        .next()
+        .unwrap_or_default();
 
     println!("{output}");
 
