@@ -15,6 +15,16 @@ use crate::{
     state::{Document, TextBlock},
 };
 
+// Font size calculation constants
+const MIN_FONT_SIZE: f32 = 8.0;
+const MAX_FONT_SIZE: f32 = 200.0;
+const CONVERGENCE_EPSILON: f32 = 0.5;
+const MIN_LATIN_SIZE: i32 = 12;
+const MIN_NON_LATIN_SIZE: i32 = 16;
+const FONT_SIZE_SAFETY_MARGIN: f32 = 0.95;
+const DEFAULT_FONT_SIZE: f32 = 16.0;
+const IQR_MULTIPLIER: f32 = 1.5;
+
 pub struct TextRenderer {
     fontbook: Arc<Mutex<FontBook>>,
     renderer: Arc<Mutex<Renderer>>,
@@ -78,6 +88,7 @@ impl TextRenderer {
     }
 
     /// Calculate the average font size across all blocks, excluding outliers
+    /// using the Interquartile Range (IQR) method.
     async fn calculate_average_font_size(&self, doc: &Document) -> Result<f32> {
         let mut font_sizes = Vec::new();
 
@@ -91,29 +102,30 @@ impl TextRenderer {
         }
 
         if font_sizes.is_empty() {
-            return Ok(16.0); // Default font size
+            return Ok(DEFAULT_FONT_SIZE);
         }
 
         // Sort to calculate quartiles
         font_sizes.sort_by(|a, b| a.partial_cmp(b).unwrap_or(std::cmp::Ordering::Equal));
 
-        // Remove outliers using IQR method
-        let q1_idx = font_sizes.len() / 4;
-        let q3_idx = (font_sizes.len() * 3) / 4;
-        
+        // Remove outliers using IQR method (only if we have enough data points)
         if font_sizes.len() >= 4 {
+            // Calculate proper quartile indices
+            let q1_idx = (font_sizes.len() - 1) / 4;
+            let q3_idx = 3 * (font_sizes.len() - 1) / 4;
+            
             let q1 = font_sizes[q1_idx];
             let q3 = font_sizes[q3_idx];
             let iqr = q3 - q1;
-            let lower_bound = q1 - 1.5 * iqr;
-            let upper_bound = q3 + 1.5 * iqr;
+            let lower_bound = q1 - IQR_MULTIPLIER * iqr;
+            let upper_bound = q3 + IQR_MULTIPLIER * iqr;
 
             // Filter out outliers
             font_sizes.retain(|&size| size >= lower_bound && size <= upper_bound);
         }
 
         if font_sizes.is_empty() {
-            return Ok(16.0); // Default font size if all were outliers
+            return Ok(DEFAULT_FONT_SIZE); // Fallback if all were outliers
         }
 
         // Calculate average
@@ -165,12 +177,11 @@ impl TextRenderer {
         };
 
         // Binary search for optimal font size
-        let mut low = 8.0;
-        let mut high = 200.0;
-        let epsilon = 0.5;
-        let smallest_readable_size = if script == Script::Latin { 12 } else { 16 };
+        let mut low = MIN_FONT_SIZE;
+        let mut high = MAX_FONT_SIZE;
+        let smallest_readable_size = if script == Script::Latin { MIN_LATIN_SIZE } else { MIN_NON_LATIN_SIZE };
 
-        while high - low > epsilon {
+        while high - low > CONVERGENCE_EPSILON {
             let mid = (low + high) / 2.0;
             if mid < smallest_readable_size as f32 {
                 low = smallest_readable_size as f32;
@@ -191,7 +202,7 @@ impl TextRenderer {
             }
         }
 
-        Ok(low * 0.95)
+        Ok(low * FONT_SIZE_SAFETY_MARGIN)
     }
 
     async fn render_block(&self, block: &TextBlock, image: &mut RgbaImage, override_font_size: Option<f32>) -> Result<()> {
@@ -252,17 +263,16 @@ impl TextRenderer {
             (font_size, 0., 0.)
         } else {
             // binary search for optimal font size to fit the text block
-            let mut low = 8.0;
-            let mut high = 200.0;
-            let epsilon = 0.5; // Convergence threshold
-            let smallest_readable_size = if script == Script::Latin { 12 } else { 16 }; // px
+            let mut low = MIN_FONT_SIZE;
+            let mut high = MAX_FONT_SIZE;
+            let smallest_readable_size = if script == Script::Latin { MIN_LATIN_SIZE } else { MIN_NON_LATIN_SIZE };
 
             // the compesation offsets to center the rendered text inside the block
             let mut x_offset = 0.;
             let mut y_offset = 0.;
 
             // Binary search with proper convergence
-            while high - low > epsilon {
+            while high - low > CONVERGENCE_EPSILON {
                 let mid = (low + high) / 2.0;
                 // TODO: fix horizonal latin text measuring issue
                 if mid < smallest_readable_size as f32 {
@@ -289,16 +299,16 @@ impl TextRenderer {
 
             tracing::debug!(
                 "font size {}, {} x {}",
-                low * 0.95,
+                low * FONT_SIZE_SAFETY_MARGIN,
                 block.width,
                 block.height
             );
 
             // Use a slightly smaller size to ensure it fits with some margin
             if direction == Orientation::Horizontal {
-                (low * 0.95, 0., y_offset.floor())
+                (low * FONT_SIZE_SAFETY_MARGIN, 0., y_offset.floor())
             } else {
-                (low * 0.95, x_offset.floor(), 0.)
+                (low * FONT_SIZE_SAFETY_MARGIN, x_offset.floor(), 0.)
             }
         };
 
@@ -334,12 +344,12 @@ mod tests {
         // Test that outliers are correctly excluded from average calculation
         let font_sizes = vec![10.0, 12.0, 14.0, 15.0, 16.0, 17.0, 18.0, 100.0]; // 100.0 is an outlier
         
-        // Simulate the outlier removal logic
+        // Simulate the outlier removal logic with corrected quartile calculation
         let mut sizes = font_sizes.clone();
         sizes.sort_by(|a, b| a.partial_cmp(b).unwrap_or(std::cmp::Ordering::Equal));
         
-        let q1_idx = sizes.len() / 4;
-        let q3_idx = (sizes.len() * 3) / 4;
+        let q1_idx = (sizes.len() - 1) / 4;
+        let q3_idx = 3 * (sizes.len() - 1) / 4;
         
         let q1 = sizes[q1_idx];
         let q3 = sizes[q3_idx];
