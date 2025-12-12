@@ -206,12 +206,10 @@ fn wanted_spec(path: &str) -> Option<&'static DylibSpec> {
         .and_then(|s| s.to_str())
         .unwrap_or(path);
 
-    for want in DYLIBS {
-        if base.eq_ignore_ascii_case(want.archive_filename) {
-            return Some(want);
-        }
-    }
-    None
+    DYLIBS
+        .iter()
+        .find(|&want| base.eq_ignore_ascii_case(want.archive_filename))
+        .map(|v| v as _)
 }
 
 fn current_platform_tags() -> Result<&'static [&'static str]> {
@@ -228,7 +226,7 @@ fn current_platform_tags() -> Result<&'static [&'static str]> {
 
 async fn fetch_and_extract(pkg: &str, platform_tags: &[&str], out_dir: Arc<PathBuf>) -> Result<()> {
     // 1) Query PyPI JSON
-    let meta_url = format!("{}/pypi/{pkg}/json", PYPI_ENDPOINT.to_string());
+    let meta_url = format!("{}/pypi/{pkg}/json", *PYPI_ENDPOINT);
     let resp = http_client().get(&meta_url).send().await?;
     let json: serde_json::Value = resp.json().await?;
 

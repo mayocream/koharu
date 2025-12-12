@@ -129,6 +129,7 @@ impl ShapeOptions for LayoutRequest<'_> {
     }
 }
 
+#[derive(Default)]
 pub struct Layouter {
     shape_context: ShapeContext,
 }

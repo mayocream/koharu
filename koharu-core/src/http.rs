@@ -57,7 +57,7 @@ pub async fn http_download(url: &str) -> anyhow::Result<Vec<u8>> {
         "remote server does not advertise byte ranges"
     );
 
-    let pb = Arc::new(progress_bar(url.split('/').last().unwrap_or(url)));
+    let pb = Arc::new(progress_bar(url.split('/').next_back().unwrap_or(url)));
 
     let total_len =
         usize::try_from(total_bytes).context("resource too large to fit into memory")?;

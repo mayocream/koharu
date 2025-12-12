@@ -4,5 +4,5 @@ use koharu::app;
 
 #[tokio::main]
 async fn main() -> anyhow::Result<()> {
-    Ok(app::run().await?)
+    app::run().await
 }

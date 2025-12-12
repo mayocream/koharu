@@ -281,7 +281,7 @@ impl DbNet {
     }
 
     pub fn forward(&self, f80: &Tensor, f40: &Tensor, u40: &Tensor) -> Result<Tensor> {
-        let u80 = self.upconv3.forward(&Tensor::cat(&[f40, &u40], 1)?)?;
+        let u80 = self.upconv3.forward(&Tensor::cat(&[f40, u40], 1)?)?;
         let x = self.upconv4.forward(&Tensor::cat(&[f80, &u80], 1)?)?;
         let x = self.conv.forward(&x)?;
         let thresh = self.thresh.forward(&x)?;

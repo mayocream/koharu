@@ -1,8 +1,8 @@
-use candle_core::{bail, CpuStorage, CustomOp1, Layout, Result, Shape, Tensor};
 #[cfg(feature = "cuda")]
 use candle_core::cuda_backend::CudaStorage;
 #[cfg(feature = "metal")]
 use candle_core::metal_backend::MetalStorage;
+use candle_core::{CpuStorage, CustomOp1, Layout, Result, Shape, Tensor, bail};
 use tracing::instrument;
 
 mod cpu;

@@ -18,6 +18,7 @@ pub struct RenderRequest<'a> {
     pub direction: Orientation,
 }
 
+#[derive(Default)]
 pub struct Renderer {
     scale_context: ScaleContext,
     sources: [Source; 3],
@@ -64,7 +65,7 @@ impl Renderer {
                         0.0
                     };
                     blit_glyph(
-                        &mut request.image,
+                        request.image,
                         &rendered,
                         glyph_x.floor() as i32,
                         (glyph_y.floor() + y_offset) as i32,

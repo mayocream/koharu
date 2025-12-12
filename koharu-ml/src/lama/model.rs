@@ -182,14 +182,14 @@ impl SpectralTransform {
 }
 
 #[derive(Clone)]
-struct FFC {
+struct Ffc {
     convl2l: Option<Conv2dPad>,
     convl2g: Option<Conv2dPad>,
     convg2l: Option<Conv2dPad>,
     convg2g: Option<SpectralTransform>,
 }
 
-impl FFC {
+impl Ffc {
     fn load(
         vb: &VarBuilder,
         channels: FfcChannels,
@@ -307,7 +307,7 @@ impl FFC {
 
 #[derive(Clone)]
 struct FFCBnAct {
-    ffc: FFC,
+    ffc: Ffc,
     bn_l: Option<BatchNorm>,
     bn_g: Option<BatchNorm>,
 }
@@ -321,7 +321,7 @@ impl FFCBnAct {
         padding: usize,
         dilation: usize,
     ) -> Result<Self> {
-        let ffc = FFC::load(vb, channels, kernel_size, stride, padding, dilation)?;
+        let ffc = Ffc::load(vb, channels, kernel_size, stride, padding, dilation)?;
         let bn_l = if channels.out_local > 0 && vb.contains_tensor("bn_l.weight") {
             Some(load_batch_norm(&vb.pp("bn_l"), channels.out_local)?)
         } else {

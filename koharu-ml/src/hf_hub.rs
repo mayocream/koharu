@@ -81,7 +81,7 @@ macro_rules! define_models {
         impl Manifest {
             pub async fn get(&self) -> anyhow::Result<std::path::PathBuf> {
                 use strum::EnumProperty;
-                use crate::hf_hub::hf_download;
+                use $crate::hf_hub::hf_download;
                 let repo = self.get_str("repo").expect("repo property");
                 let filename = self.get_str("filename").expect("filename property");
                 hf_download(repo, filename).await

@@ -10,10 +10,10 @@ pub fn load_tokenizer(
     vocab_path: &Path,
     special_tokens_path: &Path,
 ) -> Result<Tokenizer> {
-    if let Some(path) = tokenizer_json {
-        if path.exists() {
-            return Tokenizer::from_file(path).map_err(|e| anyhow!(e));
-        }
+    if let Some(path) = tokenizer_json
+        && path.exists()
+    {
+        return Tokenizer::from_file(path).map_err(|e| anyhow!(e));
     }
 
     let model = WordPiece::from_file(vocab_path.to_string_lossy().as_ref())

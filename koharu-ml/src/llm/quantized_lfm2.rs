@@ -27,7 +27,7 @@ fn get_dequantized<R: std::io::Seek + std::io::Read>(
     device: &Device,
     names: &[String],
 ) -> Result<Tensor> {
-    Ok(get_qtensor(ct, reader, device, names)?.dequantize(device)?)
+    get_qtensor(ct, reader, device, names)?.dequantize(device)
 }
 
 #[derive(Debug, Clone)]
@@ -73,6 +73,7 @@ struct ShortConvLayer {
     cache: Option<Tensor>,
 }
 
+#[allow(clippy::large_enum_variant)]
 #[derive(Debug, Clone)]
 enum LayerKind {
     Attention(AttentionLayer),
@@ -214,10 +215,9 @@ impl ShortConvLayer {
             }
             self.cache = Some(state.clone());
 
-            let conv_out = (state * &conv_weight.unsqueeze(0)?)?
+            (state * &conv_weight.unsqueeze(0)?)?
                 .sum_keepdim(2)?
-                .contiguous()?;
-            conv_out
+                .contiguous()?
         } else {
             let conv = Conv1d::new(
                 conv_weight

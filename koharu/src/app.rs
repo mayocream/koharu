@@ -25,10 +25,10 @@ fn resolve_app_root() -> PathBuf {
         .ok()
         .and_then(|p| p.parent().map(|p| p.to_path_buf()));
 
-    if let Some(parent_dir) = exe_dir.as_ref().and_then(|dir| dir.parent()) {
-        if parent_dir.join(".portable").is_file() {
-            return parent_dir.to_path_buf();
-        }
+    if let Some(parent_dir) = exe_dir.as_ref().and_then(|dir| dir.parent())
+        && parent_dir.join(".portable").is_file()
+    {
+        return parent_dir.to_path_buf();
     }
 
     dirs::data_local_dir()

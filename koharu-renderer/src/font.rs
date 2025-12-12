@@ -9,6 +9,7 @@ use unicode_script::UnicodeScript;
 pub use fontdb::{FaceInfo, ID, Language};
 
 /// A font provider that loads system fonts and caches font data.
+#[derive(Debug, Default)]
 pub struct FontBook {
     database: Database,
     /// cached font data by face ID
@@ -69,7 +70,7 @@ impl FontBook {
     pub fn filter_by_families_for_text(
         &self,
         families: &[String],
-        text: &String,
+        text: &str,
     ) -> (Vec<FaceInfo>, Script) {
         let mut collected = self.filter_by_families(families);
 

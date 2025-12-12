@@ -1,8 +1,8 @@
 use candle_core::{
-    bail,
+    DType, DeviceLocation, Layout, Result, Shape,
     backend::{BackendDevice, BackendStorage},
+    bail,
     cuda_backend::CudaStorage,
-    DeviceLocation, DType, Layout, Result, Shape,
 };
 use cudarc::{
     cufft::{result as cufft, sys},

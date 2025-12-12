@@ -21,6 +21,12 @@ pub struct TextRenderer {
     layouter: Arc<Mutex<Layouter>>,
 }
 
+impl Default for TextRenderer {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl TextRenderer {
     pub fn new() -> Self {
         Self {
@@ -40,8 +46,7 @@ impl TextRenderer {
                 Language::English_UnitedStates,
             ])
             .iter()
-            .map(|face| face.families.iter().map(|f| f.0.clone()))
-            .flatten()
+            .flat_map(|face| face.families.iter().map(|f| f.0.clone()))
             .collect()
     }
 

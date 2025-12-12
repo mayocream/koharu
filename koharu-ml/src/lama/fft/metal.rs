@@ -1,8 +1,8 @@
 use candle_core::{
-    bail,
-    backend::BackendStorage,
-    metal_backend::{MetalError, MetalStorage},
     Layout, Result, Shape,
+    backend::BackendStorage,
+    bail,
+    metal_backend::{MetalError, MetalStorage},
 };
 use objc2::{AnyThread, rc::Retained, runtime::ProtocolObject};
 use objc2_foundation::{NSCopying, NSDictionary, NSNumber};

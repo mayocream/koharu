@@ -73,7 +73,7 @@ pub async fn save_document(state: State<'_, AppState>, index: usize) -> Result<(
         .as_ref()
         .ok_or_else(|| anyhow::anyhow!("No inpainted image found"))?
         .save(&dest)
-        .or_else(|e| Err(anyhow::anyhow!("Failed to save image: {}", e)))?;
+        .map_err(|e| anyhow::anyhow!("Failed to save image: {}", e))?;
 
     Ok(())
 }
@@ -104,7 +104,7 @@ pub async fn save_all_documents(state: State<'_, AppState>) -> Result<()> {
             .ok_or_else(|| anyhow::anyhow!("No inpainted image found"))?
             // save to dest/default_filename
             .save(dest.join(&default_filename))
-            .or_else(|e| Err(anyhow::anyhow!("Failed to save image: {}", e)))?;
+            .map_err(|e| anyhow::anyhow!("Failed to save image: {}", e))?;
     }
 
     Ok(())
