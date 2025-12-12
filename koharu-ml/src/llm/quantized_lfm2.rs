@@ -6,6 +6,8 @@ use candle_core::{DType, Device, IndexOp, Result, Tensor, bail};
 use candle_nn::{Conv1d, Conv1dConfig, Embedding, Module};
 use candle_transformers::quantized_nn::RmsNorm;
 use candle_transformers::utils::repeat_kv;
+#[cfg(feature = "cuda")]
+use candle_graph::cache::KvCache as GraphKvCache;
 
 fn get_qtensor<R: std::io::Seek + std::io::Read>(
     ct: &gguf_file::Content,
@@ -59,7 +61,7 @@ struct AttentionLayer {
     cos: Tensor,
     sin: Tensor,
     neg_inf: Tensor,
-    kv_cache: Option<(Tensor, Tensor)>,
+    cache: AttentionCache,
     span_attn: tracing::Span,
     span_rot: tracing::Span,
 }
@@ -87,6 +89,63 @@ struct LayerWeights {
     mlp: Mlp,
     kind: LayerKind,
     span_mlp: tracing::Span,
+}
+
+#[derive(Debug, Clone)]
+struct AttentionCache {
+    standard: Option<(Tensor, Tensor)>,
+    #[cfg(feature = "cuda")]
+    graph: Option<GraphKvCache>,
+}
+
+impl AttentionCache {
+    fn new(_use_cuda_graphs: bool, _max_seq_len: usize) -> Self {
+        Self {
+            standard: None,
+            #[cfg(feature = "cuda")]
+            graph: if _use_cuda_graphs {
+                Some(GraphKvCache::new(2, _max_seq_len))
+            } else {
+                None
+            },
+        }
+    }
+
+    fn reset(&mut self) {
+        self.standard = None;
+        #[cfg(feature = "cuda")]
+        if let Some(cache) = &mut self.graph {
+            cache.reset();
+        }
+    }
+
+    fn append(&mut self, k: &Tensor, v: &Tensor, index_pos: usize) -> Result<(Tensor, Tensor)> {
+        if index_pos == 0 {
+            self.reset();
+        }
+
+        #[cfg(feature = "cuda")]
+        if let Some(cache) = &mut self.graph {
+            return cache.append(k, v);
+        }
+
+        let (k_new, v_new) = match &self.standard {
+            None => (k.clone(), v.clone()),
+            Some((k_cache, v_cache)) => {
+                if index_pos == 0 {
+                    (k.clone(), v.clone())
+                } else {
+                    (
+                        Tensor::cat(&[k_cache, k], 2)?,
+                        Tensor::cat(&[v_cache, v], 2)?,
+                    )
+                }
+            }
+        };
+
+        self.standard = Some((k_new.clone(), v_new.clone()));
+        Ok((k_new, v_new))
+    }
 }
 
 fn masked_fill(on_false: &Tensor, mask: &Tensor, on_true: &Tensor) -> Result<Tensor> {
@@ -149,19 +208,7 @@ impl AttentionLayer {
         let q = self.apply_rotary_emb(&q, index_pos)?;
         let k = self.apply_rotary_emb(&k, index_pos)?;
 
-        let (k, v) = match &self.kv_cache {
-            None => (k, v),
-            Some((k_cache, v_cache)) => {
-                if index_pos == 0 {
-                    (k, v)
-                } else {
-                    let k = Tensor::cat(&[k_cache, &k], 2)?;
-                    let v = Tensor::cat(&[v_cache, &v], 2)?;
-                    (k, v)
-                }
-            }
-        };
-        self.kv_cache = Some((k.clone(), v.clone()));
+        let (k, v) = self.cache.append(&k, &v, index_pos)?;
 
         let k = repeat_kv(k, self.n_head / self.n_kv_head)?;
         let v = repeat_kv(v, self.n_head / self.n_kv_head)?;
@@ -328,6 +375,7 @@ impl ModelWeights {
             .and_then(|m| m.to_f32())
             .unwrap_or(1_000_000f32);
         let l_cache = md_get("lfm2.shortconv.l_cache")?.to_u32()? as usize;
+        let use_cuda_graphs = cfg!(feature = "cuda") && matches!(device, &Device::Cuda(_));
 
         let head_count_kv = read_usize_list(head_count_kv_meta, block_count)?;
         let head_dim = embedding_length / head_count;
@@ -525,7 +573,7 @@ impl ModelWeights {
                     cos: cos.clone(),
                     sin: sin.clone(),
                     neg_inf: neg_inf.clone(),
-                    kv_cache: None,
+                    cache: AttentionCache::new(use_cuda_graphs, context_length),
                     span_attn: tracing::span!(tracing::Level::TRACE, "attn"),
                     span_rot: tracing::span!(tracing::Level::TRACE, "attn-rot"),
                 })

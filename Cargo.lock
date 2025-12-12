@@ -838,6 +838,17 @@ dependencies = [
 ]
 
 [[package]]
+name = "candle_graph"
+version = "0.1.0"
+dependencies = [
+ "anyhow",
+ "candle-core",
+ "candle-nn",
+ "half",
+ "once_cell",
+]
+
+[[package]]
 name = "cargo-platform"
 version = "0.1.9"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -3263,6 +3274,7 @@ dependencies = [
  "candle-core",
  "candle-nn",
  "candle-transformers",
+ "candle_graph",
  "clap",
  "cudarc 0.18.2",
  "dirs",

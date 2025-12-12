@@ -21,6 +21,7 @@ hf-hub = { workspace = true }
 candle-core = { workspace = true }
 candle-transformers = { workspace = true }
 candle-nn = { workspace = true }
+candle_graph = { path = "../candle_graph", optional = true }
 tokenizers = { workspace = true }
 serde = { workspace = true }
 serde_json = { workspace = true }
@@ -48,6 +49,7 @@ cuda = [
     "candle-core/cuda",
     "candle-nn/cuda",
     "candle-transformers/cuda",
+    "candle_graph",
     "cudarc",
 ]
 cudnn = ["candle-core/cudnn", "candle-nn/cudnn", "candle-transformers/cudnn"]

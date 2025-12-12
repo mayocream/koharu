@@ -5,6 +5,7 @@ members = [
     "koharu-ml",
     "koharu-runtime",
     "koharu-renderer",
+    "candle_graph",
 ]
 default-members = ["koharu"]
 resolver = "3"
