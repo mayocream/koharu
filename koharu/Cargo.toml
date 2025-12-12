@@ -30,7 +30,6 @@ rfd = { workspace = true }
 open = { workspace = true }
 serde = { workspace = true }
 serde_bytes = { workspace = true }
-serde_json = { workspace = true }
 image = { workspace = true }
 tracing = { workspace = true }
 tracing-subscriber = { workspace = true }
@@ -40,15 +39,12 @@ tauri = { workspace = true }
 blake3 = { workspace = true }
 tokio = { workspace = true }
 rayon = { workspace = true }
-imageproc = { workspace = true }
 strum = { workspace = true }
-hf-hub = { workspace = true }
 velopack = { workspace = true, optional = true }
 dirs = { workspace = true }
 clap = { workspace = true }
 once_cell = { workspace = true }
 sys-locale = { workspace = true }
-minijinja = "2.13.0"
 
 [features]
 cuda = ["koharu-runtime/cuda", "koharu-ml/cuda"]
