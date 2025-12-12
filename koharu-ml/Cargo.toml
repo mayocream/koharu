@@ -31,6 +31,7 @@ tokio = { workspace = true }
 rustfft = { workspace = true }
 cudarc = { workspace = true, optional = true }
 objc2 = { workspace = true, optional = true }
+objc2-metal = { workspace = true, optional = true }
 objc2-metal-performance-shaders = { workspace = true, optional = true }
 objc2-metal-performance-shaders-graph = { workspace = true, optional = true }
 objc2-foundation = { workspace = true, optional = true }
@@ -55,10 +56,11 @@ metal = [
     "candle-core/metal",
     "candle-nn/metal",
     "candle-transformers/metal",
+    "objc2",
+    "objc2-metal",
+    "objc2-foundation",
     "objc2-metal-performance-shaders",
     "objc2-metal-performance-shaders-graph",
-    "objc2",
-    "objc2-foundation",
 ]
 
 [[bin]]

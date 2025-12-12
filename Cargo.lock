@@ -3276,6 +3276,7 @@ dependencies = [
  "num_cpus",
  "objc2 0.6.3",
  "objc2-foundation 0.3.2",
+ "objc2-metal 0.3.2",
  "objc2-metal-performance-shaders",
  "objc2-metal-performance-shaders-graph",
  "once_cell",
