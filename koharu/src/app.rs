@@ -37,7 +37,7 @@ fn resolve_app_root() -> PathBuf {
         .unwrap_or(PathBuf::from("."))
 }
 
-#[cfg(windows)]
+#[cfg(target_os = "windows")]
 mod windows_ansi {
     use windows::Win32::Foundation::HANDLE;
     use windows::Win32::System::Console::ENABLE_VIRTUAL_TERMINAL_PROCESSING;
@@ -86,7 +86,7 @@ struct Cli {
 }
 
 fn initialize() -> Result<()> {
-    #[cfg(windows)]
+    #[cfg(target_os = "windows")]
     {
         windows_ansi::enable_ansi_support().ok();
     }

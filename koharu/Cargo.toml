@@ -46,7 +46,7 @@ clap = { workspace = true }
 once_cell = { workspace = true }
 sys-locale = { workspace = true }
 
-[target.'cfg(windows)'.dependencies]
+[target.'cfg(target_os = "windows")'.dependencies]
 windows = { workspace = true }
 
 [features]
