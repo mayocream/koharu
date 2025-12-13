@@ -1,5 +1,5 @@
 use clap::Parser;
-use koharu_ml::{device, manga_ocr::MangaOcr};
+use koharu_ml::{manga_ocr::MangaOcr};
 use tracing_subscriber::fmt::format::FmtSpan;
 
 #[derive(Parser)]
@@ -21,9 +21,7 @@ async fn main() -> anyhow::Result<()> {
     let image = image::open(&cli.input)?;
     let images = vec![image];
 
-    let device = device(cli.cpu)?;
-
-    let model = MangaOcr::load(device).await?;
+    let model = MangaOcr::load(cli.cpu).await?;
     let output = model
         .inference(&images)?
         .into_iter()

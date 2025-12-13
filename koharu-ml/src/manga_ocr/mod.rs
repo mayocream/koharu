@@ -15,7 +15,7 @@ use tracing::instrument;
 use model::{PreprocessorConfig, VisionEncoderDecoder, VisionEncoderDecoderConfig};
 use tokenizer::load_tokenizer;
 
-use crate::define_models;
+use crate::{define_models, device};
 
 define_models! {
     Config => ("mayocream/manga-ocr", "config.json"),
@@ -33,7 +33,8 @@ pub struct MangaOcr {
 }
 
 impl MangaOcr {
-    pub async fn load(device: Device) -> Result<Self> {
+    pub async fn load(use_cpu: bool) -> Result<Self> {
+        let device = device(use_cpu)?;
         let config_path = Manifest::Config.get().await?;
         let preprocessor_path = Manifest::PreprocessorConfig.get().await?;
         let vocab_path = Manifest::Vocab.get().await?;

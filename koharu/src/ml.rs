@@ -1,7 +1,6 @@
 use anyhow::Result;
 use image::DynamicImage;
 use koharu_ml::comic_text_detector::{self, ComicTextDetector};
-use koharu_ml::device;
 use koharu_ml::lama::{self, Lama};
 use koharu_ml::manga_ocr::{self, MangaOcr};
 
@@ -15,12 +14,11 @@ pub struct Model {
 }
 
 impl Model {
-    pub async fn new() -> Result<Self> {
-        let device = device(false)?;
+    pub async fn new(use_cpu: bool) -> Result<Self> {
         Ok(Self {
-            detector: ComicTextDetector::load(device.clone()).await?,
-            ocr: MangaOcr::load(device.clone()).await?,
-            lama: Lama::load(device.clone()).await?,
+            detector: ComicTextDetector::load(use_cpu).await?,
+            ocr: MangaOcr::load(use_cpu).await?,
+            lama: Lama::load(use_cpu).await?,
         })
     }
 

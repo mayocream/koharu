@@ -1,6 +1,6 @@
 use anyhow::{Result, ensure};
 use clap::Parser;
-use koharu_ml::{comic_text_detector::ComicTextDetector, device};
+use koharu_ml::{comic_text_detector::ComicTextDetector};
 use tracing_subscriber::fmt::format::FmtSpan;
 
 #[derive(Parser)]
@@ -22,9 +22,8 @@ async fn main() -> Result<()> {
         .init();
 
     let cli = Cli::parse();
-    let device = device(cli.cpu)?;
 
-    let model = ComicTextDetector::load(device).await?;
+    let model = ComicTextDetector::load(cli.cpu).await?;
     let image = image::open(&cli.input)?;
 
     let (bboxes, mask) = model.inference(&image)?;

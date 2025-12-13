@@ -51,6 +51,12 @@ struct Cli {
         default_value_t = false
     )]
     download: bool,
+    #[arg(
+        long,
+        help = "Force using CPU even if GPU is available",
+        default_value_t = false
+    )]
+    cpu: bool,
 }
 
 fn initialize() -> Result<()> {
@@ -94,7 +100,7 @@ async fn prefetch() -> Result<()> {
     Ok(())
 }
 
-async fn setup(app: tauri::AppHandle) -> Result<()> {
+async fn setup(app: tauri::AppHandle, use_cpu: bool) -> Result<()> {
     #[cfg(feature = "bundle")]
     {
         let source = velopack::sources::HttpSource::new(
@@ -113,12 +119,12 @@ async fn setup(app: tauri::AppHandle) -> Result<()> {
         preload_dylibs(LIB_ROOT.to_path_buf())?;
     }
 
-    let onnx = Arc::new(ml::Model::new().await?);
-    let llm = Arc::new(llm::Model::new());
+    let ml = Arc::new(ml::Model::new(use_cpu).await?);
+    let llm = Arc::new(llm::Model::new(use_cpu));
     let renderer = Arc::new(TextRenderer::new());
     let state = Arc::new(RwLock::new(State::default()));
 
-    app.manage(onnx);
+    app.manage(ml);
     app.manage(llm);
     app.manage(renderer);
     app.manage(state);
@@ -155,10 +161,10 @@ pub async fn run() -> Result<()> {
             command::llm_ready,
             command::llm_generate,
         ])
-        .setup(|app| {
+        .setup(move |app| {
             let handle = app.handle().clone();
             tauri::async_runtime::spawn(async move {
-                if let Err(err) = setup(handle).await {
+                if let Err(err) = setup(handle, cli.cpu).await {
                     panic!("application setup failed: {err:#}");
                 }
             });

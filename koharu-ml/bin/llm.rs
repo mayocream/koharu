@@ -61,6 +61,9 @@ struct Args {
     /// Context size considered for the repeat penalty
     #[arg(long, default_value_t = 64)]
     repeat_last_n: usize,
+
+    #[arg(long, default_value_t = false)]
+    cpu: bool,
 }
 
 #[tokio::main]
@@ -71,7 +74,7 @@ async fn main() -> anyhow::Result<()> {
 
     let args = Args::parse();
 
-    let mut llm = Llm::load(args.model).await?;
+    let mut llm = Llm::load(args.model, args.cpu).await?;
 
     let opts = GenerateOptions {
         max_tokens: args.max_tokens,

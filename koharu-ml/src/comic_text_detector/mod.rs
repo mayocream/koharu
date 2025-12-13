@@ -41,7 +41,8 @@ pub struct ComicTextDetector {
 }
 
 impl ComicTextDetector {
-    pub async fn load(device: Device) -> anyhow::Result<Self> {
+    pub async fn load(use_cpu: bool) -> anyhow::Result<Self> {
+        let device = device(use_cpu)?;
         let yolo = {
             let weights = Manifest::Yolov5.get().await?;
             let vb =

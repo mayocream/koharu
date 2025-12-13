@@ -1,5 +1,5 @@
 use clap::Parser;
-use koharu_ml::{device, lama::Lama};
+use koharu_ml::lama::Lama;
 use tracing_subscriber::fmt::format::FmtSpan;
 
 #[derive(Parser)]
@@ -25,8 +25,7 @@ async fn main() -> anyhow::Result<()> {
 
     let cli = Cli::parse();
 
-    let device = device(cli.cpu)?;
-    let model = Lama::load(device).await?;
+    let model = Lama::load(cli.cpu).await?;
     let image = image::open(&cli.input)?;
     let mask = image::open(&cli.mask)?;
 

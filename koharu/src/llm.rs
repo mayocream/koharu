@@ -22,11 +22,12 @@ pub enum State {
 /// Minimal owner for the LLM with non-blocking initialization.
 pub struct Model {
     state: Arc<RwLock<State>>,
+    use_cpu: bool,
 }
 
 impl Default for Model {
     fn default() -> Self {
-        Self::new()
+        Self::new(false)
     }
 }
 
@@ -72,9 +73,10 @@ impl Translatable for TextBlock {
 }
 
 impl Model {
-    pub fn new() -> Self {
+    pub fn new(use_cpu: bool) -> Self {
         Self {
             state: Arc::new(RwLock::new(State::Empty)),
+            use_cpu,
         }
     }
 
@@ -87,8 +89,9 @@ impl Model {
         }
 
         let state_cloned = self.state.clone();
+        let use_cpu = self.use_cpu;
         tokio::spawn(async move {
-            let res = Llm::load(id).await;
+            let res = Llm::load(id, use_cpu).await;
             match res {
                 Ok(llm) => {
                     let mut guard = state_cloned.write().await;
