@@ -9,11 +9,16 @@ use candle_core::{DType, Device, IndexOp, Tensor};
 use candle_nn::VarBuilder;
 use candle_transformers::object_detection::{Bbox, non_maximum_suppression};
 use image::{DynamicImage, GenericImageView, GrayImage};
+use once_cell::sync::Lazy;
 use tracing::instrument;
 
-use crate::define_models;
+use crate::{define_models, device};
 
-const IMAGE_SIZE: u32 = 1024;
+// The model was trained at 640x640; larger inputs collapse confidence on CPU.
+static IMAGE_SIZE: Lazy<u32> = Lazy::new(|| match device(false) {
+    Ok(Device::Cpu) => 640,
+    _ => 1024,
+});
 const CONFIDENCE_THRESHOLD: f32 = 0.4;
 const NMS_THRESHOLD: f32 = 0.35;
 const DBNET_BINARIZE_K: f64 = 50.0;
@@ -102,9 +107,9 @@ impl ComicTextDetector {
 fn preprocess(image: &DynamicImage, device: &Device) -> anyhow::Result<(Tensor, (u32, u32))> {
     let (orig_w, orig_h) = image.dimensions();
     let (width, height) = if orig_w >= orig_h {
-        (IMAGE_SIZE, IMAGE_SIZE * orig_h / orig_w)
+        (*IMAGE_SIZE, *IMAGE_SIZE * orig_h / orig_w)
     } else {
-        (IMAGE_SIZE * orig_w / orig_h, IMAGE_SIZE)
+        (*IMAGE_SIZE * orig_w / orig_h, *IMAGE_SIZE)
     };
     let (w, h) = (width as usize, height as usize);
     let tensor = (Tensor::from_vec(
@@ -115,8 +120,8 @@ fn preprocess(image: &DynamicImage, device: &Device) -> anyhow::Result<(Tensor, 
     .permute((0, 3, 1, 2))?
     .to_dtype(DType::F32)?
     .interpolate2d(h, w)?
-    .pad_with_zeros(2, 0, IMAGE_SIZE as usize - h)?
-    .pad_with_zeros(3, 0, IMAGE_SIZE as usize - w)?
+    .pad_with_zeros(2, 0, *IMAGE_SIZE as usize - h)?
+    .pad_with_zeros(3, 0, *IMAGE_SIZE as usize - w)?
         * (1. / 255.))?;
 
     Ok((tensor, (width, height)))

@@ -24,12 +24,12 @@ pub fn device(cpu: bool) -> Result<Device> {
 }
 
 pub fn cuda_is_available() -> bool {
-    unsafe {
+    (unsafe {
         libloading::Library::new(if cfg!(target_os = "windows") {
             "nvcuda.dll"
         } else {
             "libcuda.so"
         })
         .is_ok()
-    }
+    }) && cfg!(feature = "cuda")
 }
