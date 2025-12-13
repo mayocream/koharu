@@ -80,6 +80,10 @@ impl Model {
         }
     }
 
+    pub fn is_cpu(&self) -> bool {
+        self.use_cpu
+    }
+
     /// Start loading the model on a blocking thread and return immediately.
     pub async fn load(&self, id: ModelId) {
         // mark as loading

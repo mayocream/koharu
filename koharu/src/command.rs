@@ -239,27 +239,26 @@ pub async fn update_text_blocks(
 }
 
 #[tauri::command]
-pub fn llm_list() -> Vec<String> {
+pub fn llm_list(model: State<'_, Arc<llm::Model>>) -> Vec<String> {
     let mut models: Vec<ModelId> = ModelId::iter().collect();
 
-    match get_locale() {
-        Some(locale) => {
-            println!("Current locale: {}", locale);
+    let cpu_factor = match model.is_cpu() {
+        true => 10,
+        false => 1,
+    };
 
-            if locale.starts_with("zh") {
-                models.sort_by_key(|m| match m {
-                    ModelId::VntlLlama3_8Bv2 => 2,
-                    ModelId::Lfm2_350mEnjpMt => 3,
-                    ModelId::SakuraGalTransl7Bv3_7 => 0,
-                    ModelId::Sakura1_5bQwen2_5v1_0 => 1,
-                });
-            }
-            // add more condition if more languages are supported
-        }
-        None => {
-            // default ordering for english
-        }
-    }
+    let zh_locale_factor = match get_locale().unwrap_or_default() {
+        locale if locale.starts_with("zh") => 10,
+        _ => 1,
+    };
+
+    // sort models by language preference, the smaller the value, the higher the priority
+    models.sort_by_key(|m| match m {
+        ModelId::VntlLlama3_8Bv2 => 100,
+        ModelId::Lfm2_350mEnjpMt => 200 / cpu_factor,
+        ModelId::SakuraGalTransl7Bv3_7 => 300 / zh_locale_factor,
+        ModelId::Sakura1_5bQwen2_5v1_0 => 400 / zh_locale_factor / cpu_factor,
+    });
 
     models.into_iter().map(|id| id.to_string()).collect()
 }
