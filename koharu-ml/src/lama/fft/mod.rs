@@ -92,6 +92,7 @@ pub fn irfft2(spectrum: &Tensor, width: usize) -> candle_core::Result<Tensor> {
     time.affine(scale as f64, 0.0)?.contiguous()
 }
 
+// copilot:ignore
 // #[cfg(test)]
 // mod tests {
 //     use super::*;
