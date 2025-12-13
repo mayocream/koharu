@@ -15,7 +15,7 @@ env:
 
 jobs:
   build-windows:
-    name: マイクロソフト ウィンドウズ
+    name: Windows
     runs-on: windows-latest
     steps:
       - uses: actions/checkout@v6
