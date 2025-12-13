@@ -37,7 +37,6 @@ jobs:
       - run: cargo test --workspace --tests
 
   build:
-    needs: test
     name: Build - ${{ matrix.os }}
     strategy:
       matrix:
