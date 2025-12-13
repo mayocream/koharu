@@ -71,7 +71,7 @@ jobs:
 
 
   build-macos:
-    name: マックオーエス
+    name: macOS
     runs-on: macos-latest
     steps:
       - uses: actions/checkout@v6
