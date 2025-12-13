@@ -1,6 +1,6 @@
 use std::path::Path;
 
-use koharu_ml::{comic_text_detector::ComicTextDetector};
+use koharu_ml::comic_text_detector::ComicTextDetector;
 
 #[tokio::test]
 async fn comic_text_detector() -> anyhow::Result<()> {
