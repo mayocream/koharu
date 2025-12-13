@@ -146,6 +146,9 @@ impl Layouter {
         let mut current_line = LayoutLine::default();
         let mut line_index = 0;
         let mut primary_offset = 0.0;
+        // Buffers used for horizontal layout to allow early breaking on word boundaries.
+        let mut pending_word: Vec<OwnedCluster> = Vec::new();
+        let mut pending_whitespace: Vec<OwnedCluster> = Vec::new();
 
         let mut selector = FontSelector {
             fonts: request.fonts,
@@ -177,49 +180,104 @@ impl Layouter {
                     } else {
                         0 // in horizontal layout, we don't enforce a minimum advance
                     };
-                    if should_break_line(
-                        cluster,
-                        primary_offset,
-                        request.max_primary_axis,
-                        min_size,
-                    ) {
-                        // Finalize the current line
-                        if !current_line.glyphs.is_empty() {
-                            current_line.baseline = request
-                                .direction
-                                .baseline_for_line(line_index, request.line_height);
-                            lines.push(std::mem::take(&mut current_line));
-                            line_index += 1;
+                    if request.direction.is_vertical() {
+                        if should_break_line(
+                            cluster,
+                            primary_offset,
+                            request.max_primary_axis,
+                            min_size,
+                        ) {
+                            finalize_line(
+                                &mut current_line,
+                                &mut lines,
+                                &mut line_index,
+                                request,
+                            );
+                            current_line.font = font.clone();
+                            primary_offset = 0.0;
                         }
 
-                        // Start a new line
-                        current_line = LayoutLine::default();
-                        current_line.font = font.clone();
+                        if current_line.glyphs.is_empty() {
+                            current_line.font = font.clone();
+                        }
+
+                        let cluster_advance = add_cluster_to_line(
+                            cluster,
+                            &mut current_line,
+                            primary_offset,
+                            request,
+                        );
+
+                        primary_offset += cluster_advance;
+                        current_line.advance = primary_offset;
+
+                        let source_range = cluster.source;
+                        if current_line.range.is_empty() {
+                            current_line.range =
+                                source_range.start as usize..source_range.end as usize;
+                        } else {
+                            current_line.range.end = source_range.end as usize;
+                        }
+                        return;
+                    }
+
+                    let owned_cluster = OwnedCluster::new(cluster, font.clone());
+
+                    // Handle hard line breaks immediately.
+                    if cluster.info.boundary() == Boundary::Mandatory {
+                        flush_word(
+                            &mut pending_whitespace,
+                            &mut pending_word,
+                            &mut current_line,
+                            &mut lines,
+                            &mut line_index,
+                            &mut primary_offset,
+                            request,
+                        );
+                        finalize_line(
+                            &mut current_line,
+                            &mut lines,
+                            &mut line_index,
+                            request,
+                        );
+                        pending_whitespace.clear();
+                        pending_word.clear();
                         primary_offset = 0.0;
+                        return;
                     }
 
-                    // ensure the line has a correct font
-                    if current_line.glyphs.is_empty() {
-                        current_line.font = font.clone();
+                    if cluster.info.is_whitespace() {
+                        // Word boundary reached; decide whether to place the buffered word.
+                        flush_word(
+                            &mut pending_whitespace,
+                            &mut pending_word,
+                            &mut current_line,
+                            &mut lines,
+                            &mut line_index,
+                            &mut primary_offset,
+                            request,
+                        );
+                        pending_whitespace.push(owned_cluster);
+                        return;
                     }
 
-                    // add glyphs from this cluster to the current line
-                    let cluster_advance =
-                        add_cluster_to_line(cluster, &mut current_line, primary_offset, request);
-
-                    primary_offset += cluster_advance;
-                    current_line.advance = primary_offset;
-
-                    // update the range covered by this line
-                    let source_range = cluster.source;
-                    if current_line.range.is_empty() {
-                        current_line.range = source_range.start as usize..source_range.end as usize;
-                    } else {
-                        current_line.range.end = source_range.end as usize;
-                    }
+                    // Non-whitespace: keep buffering the current word so we can measure it as a whole.
+                    pending_word.push(owned_cluster);
                 });
             },
         );
+
+        if !request.direction.is_vertical() {
+            flush_word(
+                &mut pending_whitespace,
+                &mut pending_word,
+                &mut current_line,
+                &mut lines,
+                &mut line_index,
+                &mut primary_offset,
+                request,
+            );
+        }
 
         // Add the last line if it has content
         if !current_line.glyphs.is_empty() {
@@ -256,6 +314,135 @@ pub fn calculate_bounds(layout: &LayoutResult) -> (f32, f32, f32, f32) {
     }
 
     (min_x, min_y, max_x, max_y)
+}
+
+#[derive(Clone)]
+struct OwnedCluster {
+    glyphs: Vec<Glyph>,
+    source_range: Range<usize>,
+    font: Font,
+}
+
+impl OwnedCluster {
+    fn new(cluster: &GlyphCluster, font: Font) -> Self {
+        Self {
+            glyphs: cluster.glyphs.to_vec(),
+            source_range: cluster.source.to_range(),
+            font,
+        }
+    }
+}
+
+fn cluster_advance_for_layout(cluster: &OwnedCluster, request: &LayoutRequest<'_>) -> f32 {
+    cluster.glyphs.iter().fold(0.0, |advance, glyph| {
+        advance
+            + if request.direction.is_vertical() {
+                request.font_size.max(glyph.advance) * 1.08
+            } else {
+                glyph.advance
+            }
+    })
+}
+
+fn add_owned_cluster_to_line(
+    cluster: &OwnedCluster,
+    line: &mut LayoutLine,
+    primary_offset: f32,
+    request: &LayoutRequest<'_>,
+) -> f32 {
+    if line.glyphs.is_empty() {
+        line.font = cluster.font.clone();
+    }
+
+    let baseline = line.baseline;
+    let mut cluster_advance = 0.0;
+
+    for glyph in &cluster.glyphs {
+        let mut positioned_glyph = *glyph;
+        let pos = request
+            .direction
+            .position_glyph(glyph, baseline, primary_offset + cluster_advance);
+
+        positioned_glyph.x = pos.0;
+        positioned_glyph.y = pos.1;
+
+        line.glyphs.push(positioned_glyph);
+
+        cluster_advance += if request.direction.is_vertical() {
+            request.font_size.max(glyph.advance) * 1.08
+        } else {
+            glyph.advance
+        };
+    }
+
+    if line.range.is_empty() {
+        line.range = cluster.source_range.clone();
+    } else {
+        line.range.end = cluster.source_range.end;
+    }
+
+    cluster_advance
+}
+
+fn finalize_line(
+    current_line: &mut LayoutLine,
+    lines: &mut Vec<LayoutLine>,
+    line_index: &mut usize,
+    request: &LayoutRequest<'_>,
+) {
+    if current_line.glyphs.is_empty() {
+        return;
+    }
+
+    current_line.baseline = request
+        .direction
+        .baseline_for_line(*line_index, request.line_height);
+    lines.push(std::mem::take(current_line));
+    *line_index += 1;
+}
+
+fn flush_word(
+    pending_whitespace: &mut Vec<OwnedCluster>,
+    pending_word: &mut Vec<OwnedCluster>,
+    current_line: &mut LayoutLine,
+    lines: &mut Vec<LayoutLine>,
+    line_index: &mut usize,
+    primary_offset: &mut f32,
+    request: &LayoutRequest<'_>,
+) {
+    if pending_word.is_empty() {
+        return;
+    }
+
+    let whitespace_advance: f32 = pending_whitespace
+        .iter()
+        .map(|cluster| cluster_advance_for_layout(cluster, request))
+        .sum();
+    let word_advance: f32 = pending_word
+        .iter()
+        .map(|cluster| cluster_advance_for_layout(cluster, request))
+        .sum();
+
+    let would_exceed =
+        *primary_offset + whitespace_advance + word_advance > request.max_primary_axis;
+    let line_has_content = !current_line.glyphs.is_empty();
+
+    if request.direction == Orientation::Horizontal && line_has_content && would_exceed {
+        finalize_line(current_line, lines, line_index, request);
+        *primary_offset = 0.0;
+        // Drop buffered whitespace so we don't start the next line with spaces.
+        pending_whitespace.clear();
+    }
+
+    for cluster in pending_whitespace.iter().chain(pending_word.iter()) {
+        let advance =
+            add_owned_cluster_to_line(cluster, current_line, *primary_offset, request);
+        *primary_offset += advance;
+    }
+
+    current_line.advance = *primary_offset;
+    pending_whitespace.clear();
+    pending_word.clear();
 }
 
 fn should_break_line(
