@@ -15,7 +15,7 @@ concurrency:
 
 jobs:
   test:
-    name: test
+    name: Test
     runs-on: ubuntu-latest
     steps:
       # refer: https://v2.tauri.app/start/prerequisites/#linux
