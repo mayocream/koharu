@@ -15,7 +15,7 @@ env:
 
 jobs:
   build-windows:
-    name: Windows
+    name: マイクロソフト ウィンドウズ
     runs-on: windows-latest
     steps:
       - uses: actions/checkout@v6
@@ -71,7 +71,7 @@ jobs:
 
 
   build-macos:
-    name: macOS
+    name: マックオーエス
     runs-on: macos-latest
     steps:
       - uses: actions/checkout@v6

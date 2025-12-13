@@ -1,17 +1,23 @@
 use std::path::Path;
 
-use koharu_ml::{comic_text_detector::ComicTextDetector, device};
+use koharu_ml::{comic_text_detector::ComicTextDetector};
 
-#[tokio::test]
-async fn comic_text_detector() -> anyhow::Result<()> {
-    let device = device(true)?;
-    let model = ComicTextDetector::load(device).await?;
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use tracing::instrument;
 
-    let img = image::open(Path::new(env!("CARGO_MANIFEST_DIR")).join("tests/fixtures/1.jpg"))?;
-    let (boxes, mask) = model.inference(&img)?;
+    #[tokio::test]
+    #[instrument(level = "debug", skip_all)]
+    async fn comic_text_detector() -> anyhow::Result<()> {
+        let model = ComicTextDetector::load(false).await?;
 
-    assert!(!boxes.is_empty());
-    assert!(mask.iter().any(|&v| v > 0u8));
+        let img = image::open(Path::new(env!("CARGO_MANIFEST_DIR")).join("tests/fixtures/1.jpg"))?;
+        let (boxes, mask) = model.inference(&img)?;
 
-    Ok(())
+        assert!(!boxes.is_empty());
+        assert!(mask.iter().any(|&v| v > 0u8));
+
+        Ok(())
+    }
 }
