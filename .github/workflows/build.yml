@@ -11,11 +11,11 @@ env:
 
 jobs:
   build:
+    name: ${{ matrix.os }}
     strategy:
       matrix:
         os: [macos-latest, windows-latest]
       fail-fast: false
-    name: ${{ matrix.os }}
     runs-on: ${{ matrix.os }}
     steps:
       - uses: actions/checkout@v6

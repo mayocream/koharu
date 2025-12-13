@@ -104,16 +104,21 @@ pub fn irfft2(storage: &CpuStorage, layout: &Layout, width: usize) -> Result<(Cp
                 let base = x * 2;
                 *c = Complex32::new(row[base], row[base + 1]);
             }
-            for x in 1..w_half {
-                let mirror = width - x;
-                dst_row[mirror] = dst_row[x].conj();
+        }
+        // Reconstruct the full complex spectrum using the conjugate symmetry
+        // property of real-valued signals: F(-ky, -kx) = conj(F(ky, kx)).
+        for ky in 0..height {
+            let mirror_ky = if ky == 0 { 0 } else { height - ky };
+            let row_start = ky * width;
+            let mirror_row_start = mirror_ky * width;
+            for kx in 1..w_half {
+                let mirror_kx = width - kx;
+                buffer[row_start + mirror_kx] = buffer[mirror_row_start + kx].conj();
             }
         }
 
-        for row in buffer.chunks_exact_mut(width) {
-            ifft_w.process(row);
-        }
-
+        // Apply the inverse transform in the reverse order of the forward pass:
+        // first undo the height transform, then undo the width transform.
         for x in 0..width {
             for (dst, src) in col_buffer
                 .iter_mut()
@@ -130,6 +135,10 @@ pub fn irfft2(storage: &CpuStorage, layout: &Layout, width: usize) -> Result<(Cp
             {
                 *dst = *src;
             }
+        }
+
+        for row in buffer.chunks_exact_mut(width) {
+            ifft_w.process(row);
         }
 
         let out_plane = &mut dst[bc * plane_out_stride..(bc + 1) * plane_out_stride];
