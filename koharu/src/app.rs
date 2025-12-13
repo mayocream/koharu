@@ -37,6 +37,32 @@ fn resolve_app_root() -> PathBuf {
         .unwrap_or(PathBuf::from("."))
 }
 
+#[cfg(windows)]
+mod windows_ansi {
+    use windows::Win32::Foundation::HANDLE;
+    use windows::Win32::System::Console::ENABLE_VIRTUAL_TERMINAL_PROCESSING;
+    use windows::Win32::System::Console::GetConsoleMode;
+    use windows::Win32::System::Console::GetStdHandle;
+    use windows::Win32::System::Console::STD_OUTPUT_HANDLE;
+    use windows::Win32::System::Console::SetConsoleMode;
+    use windows::core::Result;
+
+    pub fn enable_ansi_support() -> Result<()> {
+        unsafe {
+            let handle = GetStdHandle(STD_OUTPUT_HANDLE)?;
+            if handle == HANDLE::default() {
+                println!("Failed to get console handle");
+                return Ok(());
+            }
+
+            let mut mode = std::mem::zeroed();
+            GetConsoleMode(handle, &mut mode)?;
+            SetConsoleMode(handle, mode | ENABLE_VIRTUAL_TERMINAL_PROCESSING)?;
+            Ok(())
+        }
+    }
+}
+
 static APP_ROOT: Lazy<PathBuf> = Lazy::new(resolve_app_root);
 static LIB_ROOT: Lazy<PathBuf> = Lazy::new(|| APP_ROOT.join("libs"));
 static MODEL_ROOT: Lazy<PathBuf> = Lazy::new(|| APP_ROOT.join("models"));
@@ -60,6 +86,11 @@ struct Cli {
 }
 
 fn initialize() -> Result<()> {
+    #[cfg(windows)]
+    {
+        windows_ansi::enable_ansi_support().ok();
+    }
+
     tracing_subscriber::fmt()
         .with_span_events(FmtSpan::CLOSE)
         .with_env_filter(

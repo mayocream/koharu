@@ -92,6 +92,12 @@ sys-locale = "0.3"
 indicatif = "0.17"
 minijinja = "2.0"
 
+windows = { version = "0.62", features = [
+    "Win32",
+    "Win32_System",
+    "Win32_System_Console",
+] }
+
 [patch.crates-io]
 candle-transformers = { git = "https://github.com/mayocream/candle", branch = "cuda-dynamic-loading" }
 candle-core = { git = "https://github.com/mayocream/candle", branch = "cuda-dynamic-loading" }

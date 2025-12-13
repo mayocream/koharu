@@ -46,6 +46,9 @@ clap = { workspace = true }
 once_cell = { workspace = true }
 sys-locale = { workspace = true }
 
+[target.'cfg(windows)'.dependencies]
+windows = { workspace = true }
+
 [features]
 cuda = ["koharu-runtime/cuda", "koharu-ml/cuda"]
 cudnn = ["koharu-runtime/cudnn", "koharu-ml/cudnn"]
