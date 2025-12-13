@@ -1,0 +1,71 @@
+name: Build
+
+on:
+  push:
+    branches: ['main']
+  pull_request:
+
+env:
+  CARGO_TERM_COLOR: always
+  CUDA_COMPUTE_CAP: 75
+
+jobs:
+  lint:
+    name: リントとテスト
+    env:
+      REVIEWDOG_GITHUB_API_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+    runs-on: ubuntu-latest
+    steps:
+      # refer: https://v2.tauri.app/start/prerequisites/#linux
+      - run: |
+          sudo apt update
+          sudo apt install libwebkit2gtk-4.1-dev \
+            build-essential \
+            curl \
+            wget \
+            file \
+            libxdo-dev \
+            libssl-dev \
+            libayatana-appindicator3-dev \
+            librsvg2-dev
+      - uses: actions/checkout@v6
+      - uses: Swatinem/rust-cache@v2
+      - uses: reviewdog/action-setup@v1
+      - run: cargo check -q --message-format=short | reviewdog -f cargo-check -reporter=github-check
+      - run: cargo clippy -q --message-format=short | reviewdog -f clippy -reporter=github-check
+      - uses: bnjbvr/cargo-machete@main
+      - name: koharu-ml tests
+        working-directory: ./koharu-ml
+        run: |
+          cargo test --workspace --tests
+
+  build:
+    needs: lint
+    name: ビルド - ${{ matrix.os }}
+    strategy:
+      matrix:
+        os: [macos-latest, windows-latest]
+      fail-fast: false
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v6
+      - uses: oven-sh/setup-bun@v2
+      - uses: Swatinem/rust-cache@v2
+      - uses: Jimver/cuda-toolkit@master
+        if: matrix.os == 'windows-latest'
+        with:
+          cuda: '12.9.1'
+          method: 'network'
+          sub-packages: '["cudart", "cublas", "cufft", "nvcc"]'
+      - uses: ilammy/msvc-dev-cmd@v1
+        if: matrix.os == 'windows-latest'
+      - run: bun install
+      - run: bun tauri build
+      # upload artifacts
+      - name: Upload Artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: koharu-${{ matrix.os }}
+          path: |
+            target/release/koharu*
+          retention-days: 3
