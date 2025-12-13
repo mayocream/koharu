@@ -184,7 +184,10 @@ export const useAppStore = create<AppState>((set, get) => ({
       }
     } catch (_) {}
   },
-  llmSetSelectedModel: (id: string) => set({ llmSelectedModel: id }),
+  llmSetSelectedModel: async (id: string) => {
+    await invoke('llm_offload')
+    set({ llmSelectedModel: id, llmLoading: false, llmReady: false })
+  },
   llmToggleLoadUnload: async () => {
     // unload
     if (get().llmReady) {
