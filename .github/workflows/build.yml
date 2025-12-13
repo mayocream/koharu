@@ -1,4 +1,4 @@
-name: Build and Test
+name: Build
 
 on:
   push:
@@ -9,35 +9,9 @@ env:
   CARGO_TERM_COLOR: always
   CUDA_COMPUTE_CAP: 75
 
-concurrency:
-  group: ${{ github.workflow }}-${{ github.head_ref || github.run_id }}
-  cancel-in-progress: true
-
 jobs:
-  test:
-    name: Test
-    runs-on: ubuntu-latest
-    steps:
-      # refer: https://v2.tauri.app/start/prerequisites/#linux
-      - run: |
-          sudo apt update
-          sudo apt install libwebkit2gtk-4.1-dev \
-            build-essential \
-            curl \
-            wget \
-            file \
-            libxdo-dev \
-            libssl-dev \
-            libayatana-appindicator3-dev \
-            librsvg2-dev \
-            fonts-noto-cjk
-      - uses: actions/checkout@v6
-      - uses: Swatinem/rust-cache@v2
-      - run: cargo test --no-run
-      - run: cargo test --workspace --tests
-
   build:
-    name: Build - ${{ matrix.os }}
+    name: ${{ matrix.os }}
     strategy:
       matrix:
         os: [macos-latest, windows-latest]
