@@ -7,11 +7,6 @@ on:
 
 env:
   CARGO_TERM_COLOR: always
-  CUDA_COMPUTE_CAP: 75
-
-concurrency:
-  group: ${{ github.workflow }}-${{ github.head_ref || github.run_id }}
-  cancel-in-progress: true
 
 jobs:
   lint:
@@ -38,4 +33,3 @@ jobs:
       - run: cargo check -q --message-format=short | reviewdog -f cargo-check -reporter=github-check
       - run: cargo clippy -q --message-format=short | reviewdog -f clippy -reporter=github-check
       - uses: bnjbvr/cargo-machete@main
-
