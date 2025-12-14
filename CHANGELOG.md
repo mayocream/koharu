@@ -1,3 +1,16 @@
+## [0.17.0] - 2025-12-14
+
+### 🚀 Features
+
+- Load tokenizer from gguf
+
+### 🐛 Bug Fixes
+
+- Llm template should add generation prompt
+
+### ⚙️ Miscellaneous Tasks
+
+- Release 0.17.0
 ## [0.16.0] - 2025-12-14
 
 ### 🚀 Features
