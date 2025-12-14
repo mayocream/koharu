@@ -31,5 +31,5 @@ jobs:
       - uses: Swatinem/rust-cache@v2
       - uses: reviewdog/action-setup@v1
       - run: cargo check -q --message-format=short | reviewdog -f cargo-check -reporter=github-check
-      - run: cargo clippy -q --message-format=short | reviewdog -f clippy -reporter=github-check
+      - run: cargo clippy -q --message-format=short -- -D warnings | reviewdog -f clippy -reporter=github-check
       - uses: bnjbvr/cargo-machete@main
