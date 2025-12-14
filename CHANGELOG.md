@@ -1,3 +1,40 @@
+## [0.16.0] - 2025-12-14
+
+### 🚀 Features
+
+- Add cpu only mode
+- Predict word wrap in horizontal layout
+- Normalize font sizes
+
+### 🐛 Bug Fixes
+
+- Cpu only mode ctd and model sorting
+- Unload llm on change
+- Better compatiblity with windows conhost
+- Use cfg target_os in Cargo.toml
+- Vntl incorrect template
+
+### ⚡ Performance
+
+- Batch inference for manga-ocr
+- Speed up metal fft
+
+### 🧪 Testing
+
+- Add ctd integration test
+
+### ⚙️ Miscellaneous Tasks
+
+- Switch to cudarc 0.18.2
+- Remove unused deps
+- Add linter
+- Make clippy happy
+- Fix linter
+- Make clippy happy again
+- Add husky & lint-staged
+- Add reviewdog
+- Add cargo tests (#89)
+- Release 0.16.0
 ## [0.15.0] - 2025-12-11
 
 ### 🐛 Bug Fixes
