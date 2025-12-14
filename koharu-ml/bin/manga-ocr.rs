@@ -1,5 +1,5 @@
 use clap::Parser;
-use koharu_ml::{manga_ocr::MangaOcr};
+use koharu_ml::manga_ocr::MangaOcr;
 use tracing_subscriber::fmt::format::FmtSpan;
 
 #[derive(Parser)]

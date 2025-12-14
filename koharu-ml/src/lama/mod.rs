@@ -7,8 +7,7 @@ use candle_nn::VarBuilder;
 use image::{DynamicImage, GenericImageView, RgbImage};
 use tracing::instrument;
 
-use crate::{device, define_models};
-
+use crate::{define_models, device};
 
 define_models! {
     Lama => ("mayocream/lama-manga", "lama-manga.safetensors"),

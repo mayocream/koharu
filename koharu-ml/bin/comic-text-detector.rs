@@ -1,6 +1,6 @@
 use anyhow::{Result, ensure};
 use clap::Parser;
-use koharu_ml::{comic_text_detector::ComicTextDetector};
+use koharu_ml::comic_text_detector::ComicTextDetector;
 use tracing_subscriber::fmt::format::FmtSpan;
 
 #[derive(Parser)]

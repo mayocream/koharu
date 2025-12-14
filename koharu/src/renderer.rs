@@ -319,7 +319,11 @@ impl TextRenderer {
             .filter(|v| *v >= lower && *v <= upper)
             .collect();
 
-        let final_values = if filtered.is_empty() { values } else { filtered };
+        let final_values = if filtered.is_empty() {
+            values
+        } else {
+            filtered
+        };
         let sum: f32 = final_values.iter().copied().sum();
         Some(sum / final_values.len() as f32)
     }

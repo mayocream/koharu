@@ -13,8 +13,8 @@ use tokenizers::{
         sequence::Sequence,
         split::{Split, SplitPattern},
     },
-    processors::{PostProcessorWrapper, byte_level::ByteLevel as ByteLevelProcessor},
     processors::sequence::Sequence as ProcessorSequence,
+    processors::{PostProcessorWrapper, byte_level::ByteLevel as ByteLevelProcessor},
     tokenizer::SplitDelimiterBehavior,
 };
 

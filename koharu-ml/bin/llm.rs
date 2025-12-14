@@ -83,6 +83,9 @@ async fn main() -> anyhow::Result<()> {
     let out = llm.generate(&args.prompt, &opts)?;
 
     println!("{}", out);
-    println!("** Out has {} lines", out.lines().filter(|l| !l.trim().is_empty()).count());
+    println!(
+        "** Out has {} lines",
+        out.lines().filter(|l| !l.trim().is_empty()).count()
+    );
     Ok(())
 }

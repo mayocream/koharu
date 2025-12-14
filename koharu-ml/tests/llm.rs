@@ -4,6 +4,7 @@ use koharu_ml::llm::{GenerateOptions, Llm, ModelId};
 use strum::IntoEnumIterator;
 
 #[tokio::test]
+#[ignore] // Ignored because it requires downloading multiple large models.
 async fn llm_generates_text_for_all_models() -> anyhow::Result<()> {
     let prompt = r#"こんにちは。
 テストです。

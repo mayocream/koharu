@@ -187,12 +187,7 @@ impl Layouter {
                             request.max_primary_axis,
                             min_size,
                         ) {
-                            finalize_line(
-                                &mut current_line,
-                                &mut lines,
-                                &mut line_index,
-                                request,
-                            );
+                            finalize_line(&mut current_line, &mut lines, &mut line_index, request);
                             current_line.font = font.clone();
                             primary_offset = 0.0;
                         }
@@ -234,12 +229,7 @@ impl Layouter {
                             &mut primary_offset,
                             request,
                         );
-                        finalize_line(
-                            &mut current_line,
-                            &mut lines,
-                            &mut line_index,
-                            request,
-                        );
+                        finalize_line(&mut current_line, &mut lines, &mut line_index, request);
                         pending_whitespace.clear();
                         pending_word.clear();
                         primary_offset = 0.0;
@@ -359,9 +349,10 @@ fn add_owned_cluster_to_line(
 
     for glyph in &cluster.glyphs {
         let mut positioned_glyph = *glyph;
-        let pos = request
-            .direction
-            .position_glyph(glyph, baseline, primary_offset + cluster_advance);
+        let pos =
+            request
+                .direction
+                .position_glyph(glyph, baseline, primary_offset + cluster_advance);
 
         positioned_glyph.x = pos.0;
         positioned_glyph.y = pos.1;
@@ -435,8 +426,7 @@ fn flush_word(
     }
 
     for cluster in pending_whitespace.iter().chain(pending_word.iter()) {
-        let advance =
-            add_owned_cluster_to_line(cluster, current_line, *primary_offset, request);
+        let advance = add_owned_cluster_to_line(cluster, current_line, *primary_offset, request);
         *primary_offset += advance;
     }
 
