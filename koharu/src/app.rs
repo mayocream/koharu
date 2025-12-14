@@ -148,6 +148,41 @@ async fn setup(app: tauri::AppHandle, use_cpu: bool) -> Result<()> {
     if cuda_is_available() {
         ensure_dylibs(LIB_ROOT.to_path_buf()).await?;
         preload_dylibs(LIB_ROOT.to_path_buf())?;
+
+        // Only search DLLs in the custom directory on Windows, this avoids potential
+        // conflicts with existing DLLs in the system PATH.
+        #[cfg(target_os = "windows")]
+        {
+            use std::os::windows::ffi::OsStrExt;
+            use windows_sys::Win32::System::LibraryLoader::{
+                AddDllDirectory, LOAD_LIBRARY_SEARCH_USER_DIRS, SetDefaultDllDirectories,
+            };
+
+            let wide = LIB_ROOT
+                .as_os_str()
+                .encode_wide()
+                .chain(std::iter::once(0))
+                .collect::<Vec<_>>();
+            unsafe {
+                if SetDefaultDllDirectories(LOAD_LIBRARY_SEARCH_USER_DIRS) == 0 {
+                    anyhow::bail!(
+                        "Failed to set default DLL directories: {}",
+                        std::io::Error::last_os_error()
+                    );
+                }
+                if AddDllDirectory(wide.as_ptr()).is_null() {
+                    anyhow::bail!(
+                        "Failed to add DLL directory: {}",
+                        std::io::Error::last_os_error()
+                    );
+                }
+            }
+        }
+
+        tracing::info!(
+            "CUDA is available, loaded dynamic libraries from {:?}",
+            *LIB_ROOT
+        );
     }
 
     let ml = Arc::new(ml::Model::new(use_cpu).await?);

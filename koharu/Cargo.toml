@@ -48,6 +48,7 @@ sys-locale = { workspace = true }
 
 [target.'cfg(target_os = "windows")'.dependencies]
 windows = { workspace = true }
+windows-sys = { workspace = true }
 
 [features]
 cuda = ["koharu-runtime/cuda", "koharu-ml/cuda"]
