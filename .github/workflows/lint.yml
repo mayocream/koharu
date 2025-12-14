@@ -29,7 +29,6 @@ jobs:
             librsvg2-dev
       - uses: actions/checkout@v6
       - uses: Swatinem/rust-cache@v2
-      - uses: reviewdog/action-setup@v1
-      - run: cargo check -q --message-format=short | reviewdog -f cargo-check -reporter=github-check
-      - run: cargo clippy -q --message-format=short -- -D warnings | reviewdog -f clippy -reporter=github-check
+      - run: cargo check
+      - run: cargo clippy -- -D warnings
       - uses: bnjbvr/cargo-machete@main
