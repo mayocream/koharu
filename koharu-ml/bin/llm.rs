@@ -9,19 +9,12 @@ struct Args {
     #[arg(
         long,
         default_value = r#"「え、マジで!?」
-
 俺、田中太郎は気がつくと見知らぬ森の中にいた。目の前には巨大な魔獣が牙を剥いている。
-
 「やばい、死ぬ!」
-
 その瞬間、俺の手から青白い光が放たれた。魔獣は一瞬で消滅する。
-
 『レベルアップしました。新スキル「爆炎魔法」を習得』
-
 頭の中に謎の声が響く。どうやら俺、チート能力を手に入れたらしい。
-
 「この世界で、俺は最強になる!」
-
 こうして俺の異世界ライフが始まった。美少女との出会いも、もちろん待っている。"#
     )]
     prompt: String,
@@ -90,5 +83,6 @@ async fn main() -> anyhow::Result<()> {
     let out = llm.generate(&args.prompt, &opts)?;
 
     println!("{}", out);
+    println!("** Out has {} lines", out.lines().filter(|l| !l.trim().is_empty()).count());
     Ok(())
 }
