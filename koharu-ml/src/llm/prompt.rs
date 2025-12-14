@@ -84,6 +84,7 @@ impl PromptRenderer {
                     "Translate to English, do not add any explanations, do not add or delete line breaks.",
                 ),
                 ChatMessage::new(ChatRole::User, text),
+                ChatMessage::new(ChatRole::Assistant, String::new()),
             ],
             ModelId::SakuraGalTransl7Bv3_7 | ModelId::Sakura1_5bQwen2_5v1_0 => vec![
                 ChatMessage::new(
@@ -91,6 +92,7 @@ impl PromptRenderer {
                     "你是一个视觉小说翻译模型，可以通顺地使用给定的术语表以指定的风格将日文翻译成简体中文，并联系上下文正确使用人称代词，注意不要混淆使役态和被动态的主语和宾语，不要擅自添加原文中没有的特殊符号，也不要擅自增加或减少换行。",
                 ),
                 ChatMessage::new(ChatRole::User, text),
+                ChatMessage::new(ChatRole::Assistant, String::new()),
             ],
         }
     }
@@ -99,13 +101,20 @@ impl PromptRenderer {
         let messages = self.messages(prompt);
         let tmpl = self.env.template_from_str(&self.template)?;
 
-        tmpl.render(context! {
-            messages => messages,
-            bos_token => self.bos_token,
-            eos_token => self.eos_token,
-            add_generation_prompt => true,
-        })
-        .map_err(anyhow::Error::msg)
+        let prompt = tmpl
+            .render(context! {
+                messages => messages,
+                bos_token => self.bos_token,
+                eos_token => self.eos_token,
+            })
+            .map_err(anyhow::Error::msg);
+
+        // hotfix the vntl-llama3-8b-v2 extra eos_token issue
+        if self.model_id == ModelId::VntlLlama3_8Bv2 {
+            prompt.map(|s| s.trim_end_matches("<|eot_id|>").to_string())
+        } else {
+            prompt
+        }
     }
 }
 
@@ -114,7 +123,7 @@ mod tests {
     use super::*;
 
     #[test]
-    fn llama_prompt_format() -> anyhow::Result<()> {
+    fn vntl_prompt_format() -> anyhow::Result<()> {
         let model_id = ModelId::VntlLlama3_8Bv2;
         let renderer = PromptRenderer::new(
             model_id,
@@ -123,7 +132,39 @@ mod tests {
             "<|end_of_text|>".to_string(),
         );
         let formatted = renderer.format_chat_prompt("こんにちは".to_string())?;
-        let expected = "<|begin_of_text|><|start_header_id|>Metadata<|end_header_id|>\n\n<|eot_id|><|start_header_id|>Japanese<|end_header_id|>\n\nこんにちは<|eot_id|><|start_header_id|>English<|end_header_id|>\n\n<|eot_id|><|start_header_id|>assistant<|end_header_id|>\n\n";
+        let expected = "<|begin_of_text|><|start_header_id|>Metadata<|end_header_id|>\n\n<|eot_id|><|start_header_id|>Japanese<|end_header_id|>\n\nこんにちは<|eot_id|><|start_header_id|>English<|end_header_id|>\n\n";
+        assert_eq!(formatted, expected);
+
+        Ok(())
+    }
+
+    #[test]
+    fn lfm2_prompt_format() -> anyhow::Result<()> {
+        let model_id = ModelId::Lfm2_350mEnjpMt;
+        let renderer = PromptRenderer::new(
+            model_id,
+            r#"{{- bos_token -}}{%- set system_prompt = "" -%}{%- set ns = namespace(system_prompt="") -%}{%- if messages[0]["role"] == "system" -%} {%- set ns.system_prompt = messages[0]["content"] -%} {%- set messages = messages[1:] -%}{%- endif -%}{%- if tools -%} {%- set ns.system_prompt = ns.system_prompt + (" " if ns.system_prompt else "") + "List of tools: <|tool_list_start|>[" -%} {%- for tool in tools -%} {%- if tool is not string -%} {%- set tool = tool | tojson -%} {%- endif -%} {%- set ns.system_prompt = ns.system_prompt + tool -%} {%- if not loop.last -%} {%- set ns.system_prompt = ns.system_prompt + ", " -%} {%- endif -%} {%- endfor -%} {%- set ns.system_prompt = ns.system_prompt + "]<|tool_list_end|>" -%}{%- endif -%}{%- if ns.system_prompt -%} {{- "<|im_start|>system " + ns.system_prompt + "<|im_end|> " -}}{%- endif -%}{%- for message in messages -%} {{- "<|im_start|>" + message["role"] + " " -}} {%- set content = message["content"] -%} {%- if content is not string -%} {%- set content = content | tojson -%} {%- endif -%} {%- if message["role"] == "tool" -%} {%- set content = "<|tool_response_start|>" + content + "<|tool_response_end|>" -%} {%- endif -%} {{- content + "<|im_end|> " -}}{%- endfor -%}{%- if add_generation_prompt -%} {{- "<|im_start|>assistant " -}}{%- endif -%}"#.to_string(),
+            "<|begin_of_text|>".to_string(),
+            "<|end_of_text|>".to_string(),
+        );
+        let formatted = renderer.format_chat_prompt("こんにちは".to_string())?;
+        let expected = "<|begin_of_text|><|im_start|>system Translate to English, do not add any explanations, do not add or delete line breaks.<|im_end|> <|im_start|>user こんにちは<|im_end|> <|im_start|>assistant <|im_end|> ";
+        assert_eq!(formatted, expected);
+
+        Ok(())
+    }
+
+    #[test]
+    fn qwen25_prompt_format() -> anyhow::Result<()> {
+        let model_id = ModelId::SakuraGalTransl7Bv3_7;
+        let renderer = PromptRenderer::new(
+            model_id,
+            r#"{% for message in messages %}{% if message['role'] == 'user' %}{{'<|im_start|>user ' + message['content'] + '<|im_end|> '}}{% elif message['role'] == 'assistant' %}{{'<|im_start|>assistant ' + message['content'] + '<|im_end|> ' }}{% else %}{{ '<|im_start|>system ' + message['content'] + '<|im_end|> ' }}{% endif %}{% endfor %}{% if add_generation_prompt %}{{ '<|im_start|>assistant ' }}{% endif %}"#.to_string(),
+            "<s>".to_string(),
+            "</s>".to_string(),
+        );
+        let formatted = renderer.format_chat_prompt("こんにちは".to_string())?;
+        let expected = "<|im_start|>system 你是一个视觉小说翻译模型，可以通顺地使用给定的术语表以指定的风格将日文翻译成简体中文，并联系上下文正确使用人称代词，注意不要混淆使役态和被动态的主语和宾语，不要擅自添加原文中没有的特殊符号，也不要擅自增加或减少换行。<|im_end|> <|im_start|>user こんにちは<|im_end|> <|im_start|>assistant <|im_end|> ";
         assert_eq!(formatted, expected);
 
         Ok(())

@@ -72,7 +72,7 @@ define_llms! {
         id = "vntl-llama3-8b-v2",
         repo = "lmg-anon/vntl-llama3-8b-v2-gguf",
         filename = "vntl-llama3-8b-v2-hf-q8_0.gguf",
-        tokenizer_repo = "rinna/llama-3-youko-8b"
+        tokenizer_repo = "lmg-anon/vntl-llama3-8b-v2-hf"
     },
     Lfm2_350mEnjpMt => {
         id = "lfm2-350m-enjp-mt",
@@ -84,7 +84,7 @@ define_llms! {
         id = "sakura-galtransl-7b-v3.7",
         repo = "SakuraLLM/Sakura-GalTransl-7B-v3.7",
         filename = "Sakura-Galtransl-7B-v3.7.gguf",
-        tokenizer_repo = "Qwen/Qwen2.5-1.5B-Instruct"
+        tokenizer_repo = "Qwen/Qwen2.5-7B-Instruct"
     },
     Sakura1_5bQwen2_5v1_0 => {
         id = "sakura-1.5b-qwen2.5-v1.0",
