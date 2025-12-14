@@ -48,7 +48,7 @@ struct Args {
     split_prompt: bool,
 
     /// Penalty to be applied for repeating tokens (1.0 = no penalty)
-    #[arg(long, default_value_t = 1.1)]
+    #[arg(long, default_value_t = 1.0)]
     repeat_penalty: f32,
 
     /// Context size considered for the repeat penalty
