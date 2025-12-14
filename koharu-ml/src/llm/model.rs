@@ -11,7 +11,6 @@ use crate::device;
 use crate::llm::ModelId;
 use crate::llm::prompt::PromptRenderer;
 use crate::llm::quantized_lfm2;
-use crate::llm::tokenizer::TokenizerFromGguf;
 
 pub enum Model {
     Llama(quantized_llama::ModelWeights),
@@ -67,14 +66,17 @@ impl Default for GenerateOptions {
 }
 
 impl Llm {
-    /// Constructs a new LLM instance from a quantized GGUF model (including tokenizer metadata).
+    /// Constructs a new LLM instance from a quantized GGUF model and tokenizer.json.
     pub async fn load(id: ModelId, use_cpu: bool) -> Result<Self> {
-        let model_path = id.get().await?;
+        let (model_path, tokenizer_path) = id.get().await?;
+
+        // Load tokenizer
+        // TODO: load tokenzier from gguf, seems candle-transformers doesn't support it yet
+        let tokenizer = Tokenizer::from_file(&tokenizer_path).map_err(anyhow::Error::msg)?;
 
         // Peek GGUF metadata to choose device/loader
         let mut file = std::fs::File::open(&model_path)?;
         let ct = gguf_file::Content::read(&mut file).map_err(|e| e.with_path(&model_path))?;
-        let tokenizer = Tokenizer::from_gguf(&ct)?;
         let metadata = ct.metadata.clone();
         let md_get = |s: &str| {
             metadata
