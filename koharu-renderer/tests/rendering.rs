@@ -24,6 +24,7 @@ fn test_horizontal_text_rendering() -> Result<()> {
     let mut fontbook = FontBook::new();
     let fonts = fontbook
         .filter_by_language(&[
+            Language::Japanese_Japan,
             Language::Chinese_PeoplesRepublicOfChina,
             Language::English_UnitedStates,
         ])
@@ -72,42 +73,25 @@ fn test_horizontal_text_rendering() -> Result<()> {
 #[test]
 fn test_vertical_text_rendering() -> Result<()> {
     let mut fontbook = FontBook::new();
-    let font_families = vec![
-        "Arial".to_string(),
-        // Windows defaults
-        "Microsoft Jhenghei".to_string(),
-        "Microsoft YaHei".to_string(),
-        "Yu Mincho".to_string(),
-        // macOS defaults
-        "PingFang TC".to_string(),
-        "PingFang SC".to_string(),
-        "Hiragino Mincho".to_string(),
-        "SF Pro".to_string(),
-        // linux defaults
-        "Source Han Sans CN".to_string(),
-    ];
-    // let text = "我，……？you是誰？吾輩は猫である。";
-    // let text = "我，……？you你是誰？";
-    let text = "abcdefg";
-    let (collected, script) =
-        fontbook.filter_by_families_for_text(&font_families, &text.to_string());
-
-    let fonts = collected
+    let fonts = fontbook
+        .filter_by_language(&[
+            Language::Japanese_Japan,
+            Language::Chinese_PeoplesRepublicOfChina,
+            Language::English_UnitedStates,
+        ])
         .iter()
         .filter_map(|face| fontbook.font(face).ok())
         .collect::<Vec<_>>();
-
-    println!("Preferred script for rendering: {:?}", script);
 
     let font_size = 50.0;
 
     let mut layouter = Layouter::new();
     let request = LayoutRequest {
-        text: text,
+        text: "吾輩は猫である。名前はまだ無い。どこで生れたかとんと見当がつかぬ。何でも薄暗いじめじめした所でニャーニャー泣いていた事だけは記憶している。吾輩はここで始めて人間というものを見た。しかもあとで聞くとそれは書生という人間中で一番獰悪な種族であったそうだ。",
         fonts: &fonts,
         font_size,
         line_height: 60.0,
-        script: script,
+        script: Script::Han,
         max_primary_axis: 1000.0,
         direction: Orientation::Vertical,
     };

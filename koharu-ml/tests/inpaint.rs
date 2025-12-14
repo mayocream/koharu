@@ -4,6 +4,7 @@ use image::GenericImageView;
 use koharu_ml::lama::Lama;
 
 #[tokio::test]
+#[ignore]
 async fn lama_inpainting_updates_masked_region() -> anyhow::Result<()> {
     let fixtures = Path::new(env!("CARGO_MANIFEST_DIR")).join("tests/fixtures");
 

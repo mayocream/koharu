@@ -226,7 +226,7 @@ mod tests {
                 .ok_or_else(|| anyhow::anyhow!("no suitable wheel for tag {tag}"))
         }
 
-        for pkg in ["sampleproject", "requests", "numpy"] {
+        for pkg in ["nvidia-cuda-runtime-cu12", "nvidia-cublas-cu12"] {
             for tag in ["win_amd64", "manylinux"] {
                 let url = pick_wheel_url(pkg, tag).await?;
                 let entries = fetch_record(&url).await?;
