@@ -181,6 +181,16 @@ impl Llm {
         };
         let prompt_dt = start_prompt_processing.elapsed();
 
+        tracing::info!(
+            "{:4} prompt tokens processed: {:.2} token/s",
+            prompt_tokens.len(),
+            if prompt_dt.as_secs_f64() > 0.0 {
+                prompt_tokens.len() as f64 / prompt_dt.as_secs_f64()
+            } else {
+                0.0
+            }
+        );
+
         if next_token == self.eos_token_id {
             tracing::warn!("Early stopping: EOS token generated at end of prompt");
             return Ok("".to_string());
@@ -215,15 +225,6 @@ impl Llm {
         }
         let gen_dt = start_post_prompt.elapsed();
 
-        tracing::info!(
-            "{:4} prompt tokens processed: {:.2} token/s",
-            prompt_tokens.len(),
-            if prompt_dt.as_secs_f64() > 0.0 {
-                prompt_tokens.len() as f64 / prompt_dt.as_secs_f64()
-            } else {
-                0.0
-            }
-        );
         tracing::info!(
             "{:<4} tokens generated: {:.2} token/s",
             sampled,
