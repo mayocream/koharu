@@ -221,10 +221,10 @@ impl TokenizerFromGguf for Tokenizer {
 
         let mut builder = BPE::builder().vocab_and_merges(vocab, merges);
 
-        if let Ok(val) = metadata_value(ct, "tokenizer.ggml.unk_token_id") {
-            if let Some(token) = tokens.get(gguf_value_to_u32(val)? as usize) {
-                builder = builder.unk_token(token.clone());
-            }
+        if let Ok(val) = metadata_value(ct, "tokenizer.ggml.unk_token_id")
+            && let Some(token) = tokens.get(gguf_value_to_u32(val)? as usize)
+        {
+            builder = builder.unk_token(token.clone());
         }
 
         if let Ok(val) = metadata_value(ct, "tokenizer.ggml.byte_fallback") {
@@ -279,22 +279,18 @@ impl TokenizerFromGguf for Tokenizer {
         }
 
         // Mark special tokens so decode(skip_special_tokens = true) behaves as expected
-        if let Ok(types) = metadata_value(ct, "tokenizer.ggml.token_type") {
-            if let gguf_file::Value::Array(arr) = types {
-                let mut specials = Vec::new();
-                for (idx, v) in arr.iter().enumerate() {
-                    let ty = gguf_value_to_u32(v)?;
-                    // Aligns with llama_token_type: treat non-normal/non-byte tokens as special.
-                    let is_special = matches!(ty, 2 | 3 | 4 | 5);
-                    if is_special {
-                        if let Some(tok) = tokens.get(idx) {
-                            specials.push(AddedToken::from(tok.clone(), true));
-                        }
-                    }
+        if let Ok(gguf_file::Value::Array(arr)) = metadata_value(ct, "tokenizer.ggml.token_type") {
+            let mut specials = Vec::new();
+            for (idx, v) in arr.iter().enumerate() {
+                let ty = gguf_value_to_u32(v)?;
+                // Aligns with llama_token_type: treat non-normal/non-byte tokens as special.
+                let is_special = matches!(ty, 2..=5);
+                if is_special && let Some(tok) = tokens.get(idx) {
+                    specials.push(AddedToken::from(tok.clone(), true));
                 }
-                if !specials.is_empty() {
-                    tokenizer.add_special_tokens(&specials);
-                }
+            }
+            if !specials.is_empty() {
+                tokenizer.add_special_tokens(&specials);
             }
         }
 

@@ -104,10 +104,7 @@ impl PromptRenderer {
                 messages => messages,
                 bos_token => self.bos_token,
                 eos_token => self.eos_token,
-                add_generation_prompt => match self.model_id {
-                    ModelId::VntlLlama3_8Bv2 => false,
-                    _ => true,
-                },
+                add_generation_prompt => !matches!(self.model_id, ModelId::VntlLlama3_8Bv2),
             })
             .map_err(anyhow::Error::msg);
 

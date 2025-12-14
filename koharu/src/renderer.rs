@@ -83,7 +83,7 @@ impl TextRenderer {
             let mut fontbook = self.fontbook.lock().await;
             renderable_indices
                 .into_iter()
-                .filter_map(|index| {
+                .map(|index| {
                     let block = &doc.text_blocks[index];
                     let style = block.style.clone().unwrap_or_default();
                     let (collected_faces, script) = fontbook.filter_by_families_for_text(
@@ -98,7 +98,7 @@ impl TextRenderer {
 
                     let direction = Self::orientation_for_block(script, block);
 
-                    Some(BlockPlan {
+                    BlockPlan {
                         index,
                         context: BlockContext {
                             style,
@@ -107,7 +107,7 @@ impl TextRenderer {
                             direction,
                         },
                         best_fit_size: 0.0,
-                    })
+                    }
                 })
                 .collect::<Vec<_>>()
         };
