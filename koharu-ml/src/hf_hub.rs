@@ -51,16 +51,18 @@ pub fn set_cache_dir(path: PathBuf) -> anyhow::Result<()> {
         .map_err(|_| anyhow::anyhow!("cache dir has already been set"))
 }
 
-#[tracing::instrument(level = "info")]
 pub async fn hf_download(repo: &str, filename: &str) -> anyhow::Result<PathBuf> {
-    let repo = Repo::model(repo.to_string());
-    if let Some(path) = HF_CACHE.repo(repo.clone()).get(filename) {
+    let hf_repo = Repo::model(repo.to_string());
+    if let Some(path) = HF_CACHE.repo(hf_repo.clone()).get(filename) {
         return Ok(path);
     }
 
+    let span = tracing::info_span!("hf_download", repo, filename);
+    let _enter = span.enter();
+
     let pb = progress_bar(filename);
     let path = HF_API
-        .repo(repo)
+        .repo(hf_repo)
         .download_with_progress(filename, pb)
         .await?;
 
