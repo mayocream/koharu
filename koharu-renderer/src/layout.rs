@@ -685,6 +685,38 @@ mod tests {
     }
 
     #[tokio::test]
+    async fn vertical_layout_multiline_cjk() -> Result<()> {
+        let text = "こんにちは世界。これはテストです。";
+        let font = noto_sans_jp().await?;
+
+        let mut layouter = Layouter::new();
+        let layout = layouter.layout(&LayoutRequest {
+            text,
+            fonts: &[font],
+            font_size: 20.0,
+            line_height: 32.0,
+            script: Script::Han,
+            max_primary_axis: 100.0, // force wrapping
+            direction: Orientation::Vertical,
+        })?;
+
+        let expected = vec![
+            vec!["こんにち"],
+            vec!["は世界。"],
+            vec!["これはテ"],
+            // CJK text wraps at character boundaries
+            vec!["ストです。"],
+        ];
+        assert_eq!(
+            visualize_layout(text, &layout, Orientation::Horizontal),
+            expected,
+            "virtualized layout should mirror CJK line wrapping"
+        );
+
+        Ok(())
+    }
+
+    #[tokio::test]
     async fn horizontal_layout_wraps_english_lines() -> Result<()> {
         let text = "My name is Frankensteinvsky-san. I don't wrap even I'm long.";
         let font = noto_sans().await?;
@@ -696,7 +728,7 @@ mod tests {
             font_size: 20.0,
             line_height: 32.0,
             script: Script::Latin,
-            max_primary_axis: 220.0,
+            max_primary_axis: 210.0,
             direction: Orientation::Horizontal,
         })?;
 
