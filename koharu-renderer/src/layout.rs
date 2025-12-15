@@ -494,3 +494,193 @@ fn add_cluster_to_line(
 
     cluster_advance
 }
+
+#[cfg(test)]
+/// Convert a layout into a simple nested, row-major representation.
+///
+/// Horizontal example: `vec![vec!["hello"], vec!["world"]]`
+///
+/// Vertical example (columns ordered left-to-right):
+/// `vec![vec!["w", "h"], vec!["o", "e"]]`
+fn visualize_layout<'a>(
+    text: &'a str,
+    layout: &LayoutResult,
+    direction: Orientation,
+) -> Vec<Vec<&'a str>> {
+    if layout.is_empty() {
+        return Vec::new();
+    }
+
+    fn split_visible_chars(s: &str) -> Vec<&str> {
+        let mut out = Vec::new();
+        let mut iter = s.char_indices().peekable();
+        while let Some((start, ch)) = iter.next() {
+            let end = iter.peek().map(|(i, _)| *i).unwrap_or_else(|| s.len());
+            if !ch.is_whitespace() {
+                out.push(&s[start..end]);
+            }
+        }
+        out
+    }
+
+    let mut lines: Vec<(f32, &str)> = layout
+        .iter()
+        .map(|line| {
+            let mut slice = &text[line.range.clone()];
+            slice = slice.trim_end_matches(['\n', '\r']);
+            let key = match direction {
+                Orientation::Horizontal => line.baseline.1, // y
+                Orientation::Vertical => line.baseline.0,   // x
+            };
+            (key, slice)
+        })
+        .collect();
+
+    lines.sort_by(|a, b| a.0.partial_cmp(&b.0).unwrap_or(std::cmp::Ordering::Equal));
+
+    if direction == Orientation::Horizontal {
+        return lines.into_iter().map(|(_, slice)| vec![slice]).collect();
+    }
+
+    let mut columns: Vec<Vec<&str>> = lines
+        .into_iter()
+        .map(|(_, slice)| split_visible_chars(slice))
+        .collect();
+    columns.retain(|col| !col.is_empty());
+    let max_height = columns.iter().map(|col| col.len()).max().unwrap_or(0);
+
+    let mut rows: Vec<Vec<&str>> = Vec::with_capacity(max_height);
+    for row_idx in 0..max_height {
+        let mut row: Vec<&str> = columns
+            .iter()
+            .map(|col| col.get(row_idx).copied().unwrap_or(""))
+            .collect();
+        while row.last().map(|s| s.is_empty()).unwrap_or(false) {
+            row.pop();
+        }
+        if !row.is_empty() {
+            rows.push(row);
+        }
+    }
+
+    rows
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::{font::*, google_fonts::GoogleFonts};
+
+    async fn google_font(family: &str) -> anyhow::Result<Font> {
+        let mut book = FontBook::new();
+        let google_fonts = GoogleFonts::new();
+        let font_path = google_fonts.font_families(&[family]).await?;
+        for path in font_path {
+            book.load_font_file(&path)?;
+        }
+
+        let face = book.query(&Query {
+            families: &[Family::Name(family)],
+            ..Default::default()
+        })?;
+        let font = book.font(&face)?;
+
+        Ok(font)
+    }
+
+    async fn noto_sans() -> anyhow::Result<Font> {
+        google_font("Noto Sans").await
+    }
+
+    async fn noto_sans_jp() -> anyhow::Result<Font> {
+        google_font("Noto Sans JP").await
+    }
+
+    #[tokio::test]
+    async fn horizontal_layout_wraps_on_word_boundary() -> Result<()> {
+        let text = "hello world";
+        let font = noto_sans().await?;
+
+        let mut layouter = Layouter::new();
+        let layout = layouter.layout(&LayoutRequest {
+            text,
+            fonts: &[font],
+            font_size: 20.0,
+            line_height: 32.0,
+            script: Script::Latin,
+            max_primary_axis: 1.0, // force the second word onto a new line
+            direction: Orientation::Horizontal,
+        })?;
+
+        let expected = vec![vec!["hello"], vec!["world"]];
+        assert_eq!(
+            visualize_layout(text, &layout, Orientation::Horizontal),
+            expected,
+            "virtualized layout should mirror word wrapping"
+        );
+
+        Ok(())
+    }
+
+    #[tokio::test]
+    async fn vertical_layout_wraps_on_word_boundary() -> Result<()> {
+        let text = "hello world";
+        let font = noto_sans().await?;
+
+        let mut layouter = Layouter::new();
+        let layout = layouter.layout(&LayoutRequest {
+            text,
+            fonts: &[font],
+            font_size: 20.0,
+            line_height: 32.0,
+            script: Script::Latin,
+            max_primary_axis: 1.0, // force wrapping
+            direction: Orientation::Vertical,
+        })?;
+
+        let expected = vec![
+            vec!["w", "h"],
+            vec!["o", "e"],
+            vec!["r", "l"],
+            vec!["l", "l"],
+            vec!["d", "o"],
+        ];
+        assert_eq!(
+            visualize_layout(text, &layout, Orientation::Vertical),
+            expected,
+            "virtualized vertical layout should reflect top-to-bottom columns"
+        );
+
+        Ok(())
+    }
+
+    #[tokio::test]
+    async fn horizontal_layout_multiline_cjk() -> Result<()> {
+        let text = "こんにちは世界。これはテストです。";
+        let font = noto_sans_jp().await?;
+
+        let mut layouter = Layouter::new();
+        let layout = layouter.layout(&LayoutRequest {
+            text,
+            fonts: &[font],
+            font_size: 20.0,
+            line_height: 32.0,
+            script: Script::Han,
+            max_primary_axis: 100.0, // force wrapping
+            direction: Orientation::Horizontal,
+        })?;
+
+        let expected = vec![
+            vec!["こんにちは世界。"],
+            // CJK text wraps at character boundaries
+            vec!["これはテストです。"],
+        ];
+        assert_eq!(
+            visualize_layout(text, &layout, Orientation::Horizontal),
+            expected,
+            "virtualized layout should mirror CJK line wrapping"
+        );
+
+        Ok(())
+    }
+}
