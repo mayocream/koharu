@@ -683,4 +683,61 @@ mod tests {
 
         Ok(())
     }
+
+    #[tokio::test]
+    async fn horizontal_layout_wraps_english_lines() -> Result<()> {
+        let text = "My name is Frankensteinvsky-san. I don't wrap even I'm long.";
+        let font = noto_sans().await?;
+
+        let mut layouter = Layouter::new();
+        let layout = layouter.layout(&LayoutRequest {
+            text,
+            fonts: &[font],
+            font_size: 20.0,
+            line_height: 32.0,
+            script: Script::Latin,
+            max_primary_axis: 220.0,
+            direction: Orientation::Horizontal,
+        })?;
+
+        let expected = vec![
+            vec!["My name is"],
+            vec!["Frankensteinvsky-san."],
+            vec!["I don't wrap even I'm"],
+            vec!["long."],
+        ];
+        assert_eq!(
+            visualize_layout(text, &layout, Orientation::Horizontal),
+            expected,
+            "english words should wrap individually when width is tiny"
+        );
+
+        Ok(())
+    }
+
+    #[tokio::test]
+    async fn horizontal_layout_keeps_long_word_intact() -> Result<()> {
+        let text = "supercalifragilisticexpialidocious";
+        let font = noto_sans().await?;
+
+        let mut layouter = Layouter::new();
+        let layout = layouter.layout(&LayoutRequest {
+            text,
+            fonts: &[font],
+            font_size: 20.0,
+            line_height: 32.0,
+            script: Script::Latin,
+            max_primary_axis: 10.0, // narrower than the word but should not force a split
+            direction: Orientation::Horizontal,
+        })?;
+
+        let expected = vec![vec![text]];
+        assert_eq!(
+            visualize_layout(text, &layout, Orientation::Horizontal),
+            expected,
+            "single long words should stay on the same line even when wider than the limit"
+        );
+
+        Ok(())
+    }
 }
