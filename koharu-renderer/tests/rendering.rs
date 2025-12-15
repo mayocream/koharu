@@ -1,17 +1,17 @@
 use std::path::{Path, PathBuf};
 
 use anyhow::Result;
-use fontdb::Language;
 use image::RgbaImage;
 use koharu_renderer::{
-    font::FontBook,
+    font::{Family, FontBook, Query, Stretch, Style, Weight},
+    google_fonts::GoogleFonts,
     layout::{LayoutRequest, Layouter, Orientation, calculate_bounds},
     render::{RenderRequest, Renderer},
 };
 use swash::text::Script;
 
 fn output_dir() -> PathBuf {
-    let path = Path::new(env!("CARGO_WORKSPACE_DIR"))
+    let path = Path::new(env!("CARGO_MANIFEST_DIR"))
         .join("target")
         .join("tests");
 
@@ -19,25 +19,26 @@ fn output_dir() -> PathBuf {
     path
 }
 
-#[test]
-fn test_horizontal_text_rendering() -> Result<()> {
+#[tokio::test]
+async fn test_horizontal_text_rendering() -> Result<()> {
     let mut fontbook = FontBook::new();
-    let fonts = fontbook
-        .filter_by_language(&[
-            Language::Japanese_Japan,
-            Language::Chinese_PeoplesRepublicOfChina,
-            Language::English_UnitedStates,
-        ])
-        .iter()
-        .filter_map(|face| fontbook.font(face).ok())
-        .collect::<Vec<_>>();
-
+    let google_fonts = GoogleFonts::new();
+    let font_paths = google_fonts.font_families(&["Noto Sans JP"]).await?;
+    for path in font_paths {
+        fontbook.load_font_file(&path)?;
+    }
+    let font = fontbook.query(&Query {
+        families: &[Family::Name("Noto Sans JP")],
+        weight: Weight::NORMAL,
+        stretch: Stretch::Normal,
+        style: Style::Normal,
+    })?;
     let font_size = 50.0;
 
     let mut layouter = Layouter::new();
     let request = LayoutRequest {
         text: "吾輩は猫である。名前はまだ無い。どこで生れたかとんと見当がつかぬ。何でも薄暗いじめじめした所でニャーニャー泣いていた事だけは記憶している。吾輩はここで始めて人間というものを見た。しかもあとで聞くとそれは書生という人間中で一番獰悪な種族であったそうだ。",
-        fonts: &fonts,
+        fonts: &[fontbook.font(&font)?],
         font_size,
         line_height: 60.0,
         script: Script::Han,
@@ -70,25 +71,26 @@ fn test_horizontal_text_rendering() -> Result<()> {
     Ok(())
 }
 
-#[test]
-fn test_vertical_text_rendering() -> Result<()> {
+#[tokio::test]
+async fn test_vertical_text_rendering() -> Result<()> {
     let mut fontbook = FontBook::new();
-    let fonts = fontbook
-        .filter_by_language(&[
-            Language::Japanese_Japan,
-            Language::Chinese_PeoplesRepublicOfChina,
-            Language::English_UnitedStates,
-        ])
-        .iter()
-        .filter_map(|face| fontbook.font(face).ok())
-        .collect::<Vec<_>>();
-
+    let google_fonts = GoogleFonts::new();
+    let font_paths = google_fonts.font_families(&["Noto Sans JP"]).await?;
+    for path in font_paths {
+        fontbook.load_font_file(&path)?;
+    }
+    let font = fontbook.query(&Query {
+        families: &[Family::Name("Noto Sans JP")],
+        weight: Weight::NORMAL,
+        stretch: Stretch::Normal,
+        style: Style::Normal,
+    })?;
     let font_size = 50.0;
 
     let mut layouter = Layouter::new();
     let request = LayoutRequest {
         text: "吾輩は猫である。名前はまだ無い。どこで生れたかとんと見当がつかぬ。何でも薄暗いじめじめした所でニャーニャー泣いていた事だけは記憶している。吾輩はここで始めて人間というものを見た。しかもあとで聞くとそれは書生という人間中で一番獰悪な種族であったそうだ。",
-        fonts: &fonts,
+        fonts: &[fontbook.font(&font)?],
         font_size,
         line_height: 60.0,
         script: Script::Han,

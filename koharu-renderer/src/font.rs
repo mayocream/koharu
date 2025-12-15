@@ -1,12 +1,12 @@
 use std::{collections::HashMap, sync::Arc};
 
-use anyhow::{Context, Result, anyhow};
+use anyhow::{Context, Result, anyhow, bail};
 use fontdb::Database;
 use swash::FontRef;
 use swash::text::Script;
 use unicode_script::UnicodeScript;
 
-pub use fontdb::{FaceInfo, ID, Language};
+pub use fontdb::{FaceInfo, Family, ID, Language, Query, Stretch, Style, Weight};
 
 /// A font provider that loads system fonts and caches font data.
 #[derive(Debug, Default)]
@@ -124,6 +124,20 @@ impl FontBook {
                 .unwrap_or(languages.len())
         });
         (collected, script)
+    }
+
+    /// Queries a font face that matches the specified query.
+    pub fn query(&self, query: &Query) -> Result<FaceInfo> {
+        if let Some(id) = self.database.query(query) {
+            return self
+                .database
+                .faces()
+                .find(|face| face.id == id)
+                .cloned()
+                .ok_or_else(|| anyhow!("font face not found for id: {:?}", id));
+        }
+
+        bail!("no font face matches the query: {:?}", query);
     }
 
     /// Loads a font file into the database.
