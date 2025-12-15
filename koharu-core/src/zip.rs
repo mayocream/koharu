@@ -2,7 +2,8 @@ use std::io;
 
 use anyhow::Result;
 use flate2::read::DeflateDecoder;
-use koharu_core::http::http_client;
+
+use crate::http::http_client;
 
 // ZIP signatures and constants
 const SIG_EOCD: [u8; 4] = [0x50, 0x4b, 0x05, 0x06]; // End Of Central Directory
@@ -193,7 +194,7 @@ fn parse_record_csv(csv_bytes: &[u8]) -> Result<Vec<RecordEntry>> {
 mod tests {
     use super::*;
 
-    #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+    #[tokio::test]
     async fn test_pip_wheels() -> Result<()> {
         async fn pick_wheel_url(pkg: &str, tag: &str) -> Result<String> {
             let meta_url = format!("https://pypi.org/pypi/{pkg}/json");

@@ -984,9 +984,9 @@ checksum = "a1d728cc89cf3aee9ff92b05e62b19ee65a02b5702cff7d5a377e32c6ae29d8d"
 
 [[package]]
 name = "cmake"
-version = "0.1.54"
+version = "0.1.56"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "e7caa3f9de89ddbe2c607f4101924c5abec803763ae9534e4f4d7d8f84aa81f0"
+checksum = "b042e5d8a74ae91bb0961acd039822472ec99f8ab0948cbf6d1369588f8be586"
 dependencies = [
  "cc",
 ]
@@ -3248,12 +3248,16 @@ name = "koharu-core"
 version = "0.17.0"
 dependencies = [
  "anyhow",
+ "csv",
+ "flate2",
  "futures",
  "indicatif",
  "once_cell",
  "reqwest",
  "reqwest-middleware",
  "reqwest-retry",
+ "serde_json",
+ "tokio",
  "tracing",
 ]
 
@@ -3299,9 +3303,18 @@ name = "koharu-renderer"
 version = "0.17.0"
 dependencies = [
  "anyhow",
+ "dirs",
  "fontdb",
+ "futures",
  "image",
+ "koharu-core",
+ "num_cpus",
+ "once_cell",
+ "rayon",
+ "serde",
+ "serde_json",
  "swash",
+ "tokio",
  "tracing",
  "unicode-script",
 ]
@@ -3311,8 +3324,6 @@ name = "koharu-runtime"
 version = "0.17.0"
 dependencies = [
  "anyhow",
- "csv",
- "flate2",
  "futures",
  "koharu-core",
  "libloading 0.9.0",

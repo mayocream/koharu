@@ -126,6 +126,13 @@ impl FontBook {
         (collected, script)
     }
 
+    /// Loads a font file into the database.
+    pub fn load_font_file<P: AsRef<std::path::Path>>(&mut self, path: P) -> Result<()> {
+        self.database
+            .load_font_file(&path)
+            .with_context(|| format!("failed to load font file: {:?}", path.as_ref()))
+    }
+
     /// Loads the font data for the specified face, utilizing caching.
     pub fn font(&mut self, face: &FaceInfo) -> Result<Font> {
         let data = self.cached_face_data(face.id)?;

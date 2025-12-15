@@ -20,3 +20,7 @@ once_cell = { workspace = true }
 futures = { workspace = true }
 indicatif = { workspace = true }
 tracing = { workspace = true }
+flate2 = { workspace = true }
+csv = { workspace = true }
+tokio = { workspace = true }
+serde_json = { workspace = true }

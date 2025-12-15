@@ -21,8 +21,6 @@ tracing = { workspace = true }
 reqwest = { workspace = true }
 tokio = { workspace = true }
 futures = { workspace = true }
-flate2 = { workspace = true }
-csv = { workspace = true }
 once_cell = { workspace = true }
 libloading = { workspace = true }
 num_cpus = { workspace = true }

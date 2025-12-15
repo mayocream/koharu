@@ -7,13 +7,16 @@ use std::{
 
 use anyhow::Result;
 use futures::stream::{self, StreamExt, TryStreamExt};
-use koharu_core::http::{http_client, http_download};
+use koharu_core::{
+    http::{http_client, http_download},
+    zip::fetch_record,
+};
 use once_cell::sync::OnceCell;
 use rayon::iter::{IntoParallelRefIterator, ParallelIterator};
 use tokio::task;
 use tracing::debug;
 
-use crate::{pypi::PYPI_ENDPOINT, zip::fetch_record};
+use crate::pypi::PYPI_ENDPOINT;
 
 /// Keep handles to loaded dynamic libraries alive for process lifetime
 static DYLIB_HANDLES: OnceCell<Vec<libloading::Library>> = OnceCell::new();
@@ -287,7 +290,7 @@ async fn fetch_and_extract(pkg: &str, platform_tags: &[&str], out_dir: Arc<PathB
 
 fn extract_from_wheel(bytes: &[u8], out_dir: &Path) -> Result<()> {
     // First, list target entries to extract
-    let mut archive = ::zip::ZipArchive::new(std::io::Cursor::new(bytes))?;
+    let mut archive = zip::ZipArchive::new(std::io::Cursor::new(bytes))?;
     let mut targets: Vec<(String, String)> = Vec::new(); // (full archive path, output basename)
     for i in 0..archive.len() {
         let file = archive.by_index(i)?;
@@ -304,7 +307,7 @@ fn extract_from_wheel(bytes: &[u8], out_dir: &Path) -> Result<()> {
     let results: Result<Vec<(String, u64)>> = targets
         .par_iter()
         .map(|(full_name, base_name)| -> Result<(String, u64)> {
-            let mut zip = ::zip::ZipArchive::new(std::io::Cursor::new(bytes))?;
+            let mut zip = zip::ZipArchive::new(std::io::Cursor::new(bytes))?;
             let mut file = zip.by_name(full_name)?;
 
             let out_path = out_dir.join(base_name);

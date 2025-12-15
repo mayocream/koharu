@@ -12,9 +12,18 @@ keywords.workspace = true
 publish.workspace = true
 
 [dependencies]
+koharu-core = { workspace = true }
 swash = { workspace = true }
 fontdb = { workspace = true }
 anyhow = { workspace = true }
 image = { workspace = true }
 tracing = { workspace = true }
 unicode-script = { workspace = true }
+dirs = { workspace = true }
+once_cell = { workspace = true }
+rayon = { workspace = true }
+tokio = { workspace = true }
+futures = { workspace = true }
+num_cpus = { workspace = true }
+serde = { workspace = true }
+serde_json = { workspace = true }
