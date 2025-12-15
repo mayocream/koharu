@@ -5,7 +5,7 @@ use swash::shape::ShapeContext;
 use swash::shape::cluster::{Glyph, GlyphCluster};
 use swash::shape::partition::{SelectedFont, Selector, ShapeOptions, shape};
 use swash::text::cluster::{Boundary, CharCluster, CharInfo, Status, Token};
-use swash::text::{Script, analyze};
+use swash::text::{Codepoint, Script, analyze};
 use swash::{FontRef, Setting};
 
 use crate::font::Font;
@@ -217,6 +217,8 @@ impl Layouter {
                     }
 
                     let owned_cluster = OwnedCluster::new(cluster, font.clone());
+                    let is_ascii_word = is_ascii_word_cluster(&owned_cluster, request.text);
+                    let is_cjk = is_cjk_cluster(&owned_cluster, request.text);
 
                     // Handle hard line breaks immediately.
                     if cluster.info.boundary() == Boundary::Mandatory {
@@ -233,6 +235,66 @@ impl Layouter {
                         pending_whitespace.clear();
                         pending_word.clear();
                         primary_offset = 0.0;
+                        return;
+                    }
+
+                    if is_cjk {
+                        if cluster.info.is_whitespace() {
+                            // Finalize any pending ASCII word before dealing with the whitespace.
+                            flush_word(
+                                &mut pending_whitespace,
+                                &mut pending_word,
+                                &mut current_line,
+                                &mut lines,
+                                &mut line_index,
+                                &mut primary_offset,
+                                request,
+                            );
+                            pending_whitespace.push(owned_cluster);
+                            return;
+                        }
+
+                        if is_ascii_word {
+                            // Buffer ASCII so we can wrap on word boundaries even in CJK mode.
+                            pending_word.push(owned_cluster);
+                            return;
+                        }
+
+                        // Place any buffered ASCII segments before handling the next CJK glyph.
+                        flush_word(
+                            &mut pending_whitespace,
+                            &mut pending_word,
+                            &mut current_line,
+                            &mut lines,
+                            &mut line_index,
+                            &mut primary_offset,
+                            request,
+                        );
+
+                        // CJK scripts can break between any characters, so place clusters immediately.
+                        let cluster_advance = cluster_advance_for_layout(&owned_cluster, request);
+                        let line_has_content = !current_line.glyphs.is_empty();
+                        let would_exceed =
+                            primary_offset + cluster_advance > request.max_primary_axis;
+
+                        if line_has_content && would_exceed {
+                            finalize_line(&mut current_line, &mut lines, &mut line_index, request);
+                            primary_offset = 0.0;
+                        }
+
+                        // Avoid leading whitespace on a new line.
+                        if current_line.glyphs.is_empty() && cluster.info.is_whitespace() {
+                            return;
+                        }
+
+                        let advance = add_owned_cluster_to_line(
+                            &owned_cluster,
+                            &mut current_line,
+                            primary_offset,
+                            request,
+                        );
+                        primary_offset += advance;
+                        current_line.advance = primary_offset;
                         return;
                     }
 
@@ -433,6 +495,29 @@ fn flush_word(
     current_line.advance = *primary_offset;
     pending_whitespace.clear();
     pending_word.clear();
+}
+
+fn is_ascii_word_cluster(cluster: &OwnedCluster, text: &str) -> bool {
+    text.get(cluster.source_range.clone())
+        .map(|slice| {
+            slice
+                .chars()
+                .all(|ch| ch.is_ascii() && !ch.is_ascii_whitespace())
+        })
+        .unwrap_or(false)
+}
+
+fn is_cjk_cluster(cluster: &OwnedCluster, text: &str) -> bool {
+    text.get(cluster.source_range.clone())
+        .map(|slice| slice.chars().any(is_cjk_char))
+        .unwrap_or(false)
+}
+
+fn is_cjk_char(ch: char) -> bool {
+    matches!(
+        ch.script(),
+        Script::Han | Script::Hiragana | Script::Katakana | Script::Hangul | Script::Bopomofo
+    )
 }
 
 fn should_break_line(
@@ -655,8 +740,8 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn horizontal_layout_multiline_cjk() -> Result<()> {
-        let text = "こんにちは世界。これはテストです。";
+    async fn horizlayout_multiline_cjk_wrap_on_word() -> Result<()> {
+        let text = "こんにちは世界。これはテストです。A English word.";
         let font = noto_sans_jp().await?;
 
         let mut layouter = Layouter::new();
@@ -671,9 +756,12 @@ mod tests {
         })?;
 
         let expected = vec![
-            vec!["こんにちは世界。"],
-            // CJK text wraps at character boundaries
-            vec!["これはテストです。"],
+            vec!["こんにちは"],
+            vec!["世界。これ"],
+            vec!["はテストで"],
+            vec!["す。A"],
+            vec!["English"],
+            vec!["word."],
         ];
         assert_eq!(
             visualize_layout(text, &layout, Orientation::Horizontal),
@@ -685,7 +773,7 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn vertical_layout_multiline_cjk() -> Result<()> {
+    async fn vertical_layout_multiline_cjk_wrap_on_word() -> Result<()> {
         let text = "こんにちは世界。これはテストです。";
         let font = noto_sans_jp().await?;
 
@@ -701,14 +789,14 @@ mod tests {
         })?;
 
         let expected = vec![
-            vec!["こんにち"],
-            vec!["は世界。"],
-            vec!["これはテ"],
-            // CJK text wraps at character boundaries
-            vec!["ストです。"],
+            vec!["ス", "こ", "は", "こ"],
+            vec!["ト", "れ", "世", "ん"],
+            vec!["で", "は", "界", "に"],
+            vec!["す", "テ", "。", "ち"],
+            vec!["。"],
         ];
         assert_eq!(
-            visualize_layout(text, &layout, Orientation::Horizontal),
+            visualize_layout(text, &layout, Orientation::Vertical),
             expected,
             "virtualized layout should mirror CJK line wrapping"
         );
@@ -717,7 +805,7 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn horizontal_layout_wraps_english_lines() -> Result<()> {
+    async fn horizontal_layout_wraps_english_on_space() -> Result<()> {
         let text = "My name is Frankensteinvsky-san. I don't wrap even I'm long.";
         let font = noto_sans().await?;
 
@@ -748,7 +836,7 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn horizontal_layout_keeps_long_word_intact() -> Result<()> {
+    async fn vertical_layout_wraps_english_on_space() -> Result<()> {
         let text = "supercalifragilisticexpialidocious";
         let font = noto_sans().await?;
 
