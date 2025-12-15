@@ -155,7 +155,8 @@ async fn setup(app: tauri::AppHandle, use_cpu: bool) -> Result<()> {
         {
             use std::os::windows::ffi::OsStrExt;
             use windows_sys::Win32::System::LibraryLoader::{
-                AddDllDirectory, LOAD_LIBRARY_SEARCH_USER_DIRS, SetDefaultDllDirectories,
+                AddDllDirectory, LOAD_LIBRARY_SEARCH_SYSTEM32, LOAD_LIBRARY_SEARCH_USER_DIRS,
+                SetDefaultDllDirectories,
             };
 
             let wide = LIB_ROOT
@@ -164,7 +165,10 @@ async fn setup(app: tauri::AppHandle, use_cpu: bool) -> Result<()> {
                 .chain(std::iter::once(0))
                 .collect::<Vec<_>>();
             unsafe {
-                if SetDefaultDllDirectories(LOAD_LIBRARY_SEARCH_USER_DIRS) == 0 {
+                if SetDefaultDllDirectories(
+                    LOAD_LIBRARY_SEARCH_USER_DIRS | LOAD_LIBRARY_SEARCH_SYSTEM32,
+                ) == 0
+                {
                     anyhow::bail!(
                         "Failed to set default DLL directories: {}",
                         std::io::Error::last_os_error()
