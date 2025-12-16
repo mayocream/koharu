@@ -35,7 +35,7 @@
   "panels": {
     "processing": "処理",
     "mask": "マスク",
-    "llm": "LLM"
+    "render": "レンダー"
   },
   "processing": {
     "detect": "検出",
@@ -47,6 +47,7 @@
     "showSegmentationMask": "セグメンテーションマスクを表示",
     "showInpainted": "インペイント画像を表示",
     "showRendered": "レンダー済みテキストを表示",
+    "showTextBlocks": "テキスト枠を表示",
     "inpaint": "インペイント",
     "inpaintTooltip": "インペイントを適用"
   },

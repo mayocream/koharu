@@ -17,14 +17,14 @@ pub struct TextBlock {
     pub text: Option<String>,
     pub translation: Option<String>,
     pub style: Option<TextStyle>,
-    pub font_info: Option<FontPrediction>,
+    pub font_prediction: Option<FontPrediction>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct TextStyle {
     pub font_families: Vec<String>,
-    pub font_size: Option<f32>,
+    pub font_size: f32,
     pub color: [u8; 4],
 }
 
@@ -46,7 +46,7 @@ impl Default for TextStyle {
                 // Fallback
                 "Arial".to_string(),
             ],
-            font_size: None,
+            font_size: 0.0,
             color: [0, 0, 0, 255],
         }
     }
