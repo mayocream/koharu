@@ -123,9 +123,35 @@ pub async fn detect(
         .get_mut(index)
         .ok_or_else(|| anyhow::anyhow!("Document not found"))?;
 
-    let (text_blocks, segment) = model.detect(&document.image).await?;
+    let (text_blocks, segment) = model.detect_dialog(&document.image).await?;
     document.text_blocks = text_blocks;
     document.segment = Some(segment);
+
+    // detect fonts for each text block
+    if !document.text_blocks.is_empty() {
+        let images: Vec<image::DynamicImage> = document
+            .text_blocks
+            .iter()
+            .map(|block| {
+                let sub_image = document.image.crop_imm(
+                    block.x as u32,
+                    block.y as u32,
+                    block.width as u32,
+                    block.height as u32,
+                );
+                sub_image
+            })
+            .collect();
+        let font_predictions = model.detect_fonts(&images, 1).await?;
+        for (block, prediction) in document
+            .text_blocks
+            .iter_mut()
+            .zip(font_predictions.into_iter())
+        {
+            tracing::info!("Detected font for block {:?}: {:?}", block.text, prediction);
+            block.font_info = Some(prediction);
+        }
+    }
 
     Ok(document.clone())
 }

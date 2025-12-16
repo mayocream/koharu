@@ -1,6 +1,7 @@
 use std::{path::PathBuf, sync::Arc};
 
 use image::GenericImageView;
+use koharu_ml::font_detector::FontPrediction;
 use koharu_renderer::types::Color;
 use serde::{Deserialize, Serialize};
 use tokio::sync::RwLock;
@@ -17,6 +18,7 @@ pub struct TextBlock {
     pub text: Option<String>,
     pub translation: Option<String>,
     pub style: Option<TextStyle>,
+    pub font_info: Option<FontPrediction>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]

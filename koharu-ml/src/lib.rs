@@ -1,6 +1,7 @@
 mod hf_hub;
 
 pub mod comic_text_detector;
+pub mod font_detector;
 pub mod lama;
 pub mod llm;
 pub mod manga_ocr;
