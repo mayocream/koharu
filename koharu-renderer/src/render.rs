@@ -7,6 +7,31 @@ use swash::zeno::{Format, Vector};
 use crate::layout::{LayoutResult, Orientation};
 use crate::types::Color;
 
+const NEAR_BLACK_THRESHOLD: u8 = 12;
+const GRAY_NEAR_BLACK_THRESHOLD: u8 = 60;
+const GRAY_TOLERANCE: u8 = 10;
+
+fn is_grayish(r: u8, g: u8, b: u8) -> bool {
+    let max = r.max(g).max(b);
+    let min = r.min(g).min(b);
+    max - min <= GRAY_TOLERANCE
+}
+
+fn adjust_near_black(color: Color) -> Color {
+    let [r, g, b, a] = color;
+    let threshold = if is_grayish(r, g, b) {
+        GRAY_NEAR_BLACK_THRESHOLD
+    } else {
+        NEAR_BLACK_THRESHOLD
+    };
+
+    if r <= threshold && g <= threshold && b <= threshold {
+        [0, 0, 0, a]
+    } else {
+        color
+    }
+}
+
 #[derive(Debug)]
 pub struct RenderRequest<'a> {
     pub layout: &'a LayoutResult,
@@ -37,6 +62,8 @@ impl Renderer {
     }
 
     pub fn render(&mut self, request: &mut RenderRequest) -> Result<()> {
+        let text_color = adjust_near_black(request.color);
+
         for line in request.layout {
             let font = line.font.font_ref()?;
             let mut scaler = self
@@ -69,7 +96,7 @@ impl Renderer {
                         &rendered,
                         glyph_x.floor() as i32,
                         (glyph_y.floor() + y_offset) as i32,
-                        request.color,
+                        text_color,
                     );
                 } else {
                     tracing::warn!(
@@ -330,5 +357,29 @@ mod tests {
         let mut pixel = rgba([9, 9, 9, 9]);
         blend_color(&mut pixel, &[5, 6, 7, 0]);
         assert_eq!(pixel.0, [9, 9, 9, 9]);
+    }
+
+    #[test]
+    fn adjust_near_black_forces_pure_black() {
+        let color = [5, 4, 6, 200];
+        assert_eq!(adjust_near_black(color), [0, 0, 0, 200]);
+    }
+
+    #[test]
+    fn adjust_near_black_allows_gray_higher_threshold() {
+        let color = [55, 57, 54, 180];
+        assert_eq!(adjust_near_black(color), [0, 0, 0, 180]);
+    }
+
+    #[test]
+    fn adjust_near_black_leaves_non_black() {
+        let color = [30, 2, 2, 255];
+        assert_eq!(adjust_near_black(color), color);
+    }
+
+    #[test]
+    fn adjust_near_black_keeps_mid_gray_above_threshold() {
+        let color = [65, 66, 64, 255];
+        assert_eq!(adjust_near_black(color), color);
     }
 }
