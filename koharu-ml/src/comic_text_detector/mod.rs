@@ -17,8 +17,8 @@ const CONFIDENCE_THRESHOLD: f32 = 0.4;
 const NMS_THRESHOLD: f32 = 0.35;
 const DBNET_BINARIZE_K: f64 = 50.0;
 const BINARY_THRESHOLD: u8 = 60;
-const DILATION_RADIUS: u32 = 2;
-const HOLE_CLOSE_RADIUS: u32 = 1;
+const DILATION_RADIUS: u32 = 3;
+const HOLE_CLOSE_RADIUS: u32 = 10;
 const BBOX_DILATION: f32 = 1.0;
 
 define_models! {
