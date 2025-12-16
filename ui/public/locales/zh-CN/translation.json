@@ -47,6 +47,7 @@
     "showSegmentationMask": "显示分割遮罩",
     "showInpainted": "显示修补图像",
     "showRendered": "显示渲染文本",
+    "showTextBlocks": "显示文本框",
     "inpaint": "修补",
     "inpaintTooltip": "执行图像修补"
   },

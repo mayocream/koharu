@@ -13,6 +13,8 @@ export function MaskControls() {
     setShowInpaintedImage,
     showRenderedImage,
     setShowRenderedImage,
+    showTextBlocksOverlay,
+    setShowTextBlocksOverlay,
     inpaint,
   } = useAppStore()
   const { t } = useTranslation()
@@ -33,6 +35,11 @@ export function MaskControls() {
         label={t('mask.showRendered')}
         checked={showRenderedImage}
         onChange={setShowRenderedImage}
+      />
+      <ToggleField
+        label={t('mask.showTextBlocks')}
+        checked={showTextBlocksOverlay}
+        onChange={setShowTextBlocksOverlay}
       />
       <Separator.Root className='my-1 h-px bg-neutral-200' />
       <div className='flex'>

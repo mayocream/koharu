@@ -4,6 +4,9 @@ import { create } from 'zustand'
 import { invoke } from '@tauri-apps/api/core'
 import { getCurrentWindow, ProgressBarStatus } from '@tauri-apps/api/window'
 import { Document, TextBlock, ToolMode } from '@/types'
+import { domRenderEnabled } from '@/lib/featureFlags'
+import { convertToImageBitmap } from '@/lib/util'
+import { rasterizeDomLayer, waitForAnimationFrame } from '@/lib/domRender'
 
 const replaceDocument = (docs: Document[], index: number, doc: Document) =>
   docs.map((item, idx) => (idx === index ? doc : item))
@@ -16,6 +19,7 @@ type AppState = {
   showSegmentationMask: boolean
   showInpaintedImage: boolean
   showRenderedImage: boolean
+  showTextBlocksOverlay: boolean
   mode: ToolMode
   selectedBlockIndex?: number
   autoFitEnabled: boolean
@@ -33,6 +37,7 @@ type AppState = {
   setShowSegmentationMask: (show: boolean) => void
   setShowInpaintedImage: (show: boolean) => void
   setShowRenderedImage: (show: boolean) => void
+  setShowTextBlocksOverlay: (show: boolean) => void
   setMode: (mode: ToolMode) => void
   setSelectedBlockIndex: (index?: number) => void
   setAutoFitEnabled: (enabled: boolean) => void
@@ -45,6 +50,7 @@ type AppState = {
   ocr: (_?: any, index?: number) => Promise<void>
   inpaint: (_?: any, index?: number) => Promise<void>
   render: (_?: any, index?: number) => Promise<void>
+  composeDomRender: (_?: any, index?: number) => Promise<Document>
   processImage: (
     _?: any,
     index?: number,
@@ -73,6 +79,7 @@ export const useAppStore = create<AppState>((set, get) => ({
   showSegmentationMask: false,
   showInpaintedImage: true,
   showRenderedImage: true,
+  showTextBlocksOverlay: false,
   mode: 'select',
   processJobName: '',
   selectedBlockIndex: undefined,
@@ -107,6 +114,9 @@ export const useAppStore = create<AppState>((set, get) => ({
   },
   setShowRenderedImage: (show: boolean) => {
     set({ showRenderedImage: show })
+  },
+  setShowTextBlocksOverlay: (show: boolean) => {
+    set({ showTextBlocksOverlay: show })
   },
   setMode: (mode: ToolMode) => set({ mode }),
   setSelectedBlockIndex: (index?: number) => set({ selectedBlockIndex: index }),
@@ -167,6 +177,10 @@ export const useAppStore = create<AppState>((set, get) => ({
   },
   render: async (_, index) => {
     index = index ?? get().currentDocumentIndex
+    if (domRenderEnabled) {
+      await get().composeDomRender(_, index)
+      return
+    }
     const doc: Document = await get().invokeWithStatus('render', { index })
     set((state) => ({
       documents: replaceDocument(state.documents, index, doc),
@@ -239,6 +253,53 @@ export const useAppStore = create<AppState>((set, get) => ({
     }))
   },
 
+  composeDomRender: async (_, index) => {
+    index = index ?? get().currentDocumentIndex
+    const { documents, scale } = get()
+    const doc = documents[index]
+    if (!doc) throw new Error('Document not found')
+    set({ showRenderedImage: true })
+    await waitForAnimationFrame()
+
+    const overlay = await rasterizeDomLayer(scale, doc.width, doc.height)
+    if (!overlay) throw new Error('Render layer is not ready to export')
+
+    const baseBitmap = await convertToImageBitmap(doc.inpainted ?? doc.image)
+    const overlayBitmap = await createImageBitmap(
+      new Blob([new Uint8Array(overlay)], { type: 'image/png' }),
+    )
+
+    const canvas = document.createElement('canvas')
+    canvas.width = doc.width
+    canvas.height = doc.height
+    const ctx = canvas.getContext('2d')
+    if (!ctx) throw new Error('Canvas rendering not supported')
+
+    ctx.clearRect(0, 0, canvas.width, canvas.height)
+    ctx.drawImage(baseBitmap, 0, 0, canvas.width, canvas.height)
+    ctx.drawImage(overlayBitmap, 0, 0, canvas.width, canvas.height)
+
+    const renderedBlob: Blob = await new Promise((resolve, reject) =>
+      canvas.toBlob(
+        (b) => (b ? resolve(b) : reject(new Error('Failed to render canvas'))),
+        'image/png',
+      ),
+    )
+
+    const buffer = await renderedBlob.arrayBuffer()
+    const renderedBytes = Array.from(new Uint8Array(buffer))
+
+    await invoke('set_rendered_image', { index, rendered: renderedBytes })
+
+    const updated: Document = { ...doc, rendered: renderedBytes }
+    set((state) => ({
+      documents: replaceDocument(state.documents, index as number, updated),
+      showRenderedImage: true,
+    }))
+
+    return updated
+  },
+
   // batch proceeses
   processImage: async (_, index, setGlobalProgress) => {
     if (!get().llmReady) {
@@ -284,11 +345,23 @@ export const useAppStore = create<AppState>((set, get) => ({
 
   exportDocument: async () => {
     const index = get().currentDocumentIndex
+    if (domRenderEnabled) {
+      await get().composeDomRender(null, index)
+    }
     await invoke('save_document', { index })
   },
 
   exportAllDocuments: async () => {
     if (!get().documents.length) return
+    if (domRenderEnabled) {
+      for (let index = 0; index < get().documents.length; index++) {
+        if (get().currentDocumentIndex !== index) {
+          set({ currentDocumentIndex: index })
+          await waitForAnimationFrame()
+        }
+        await get().composeDomRender(null, index)
+      }
+    }
     await invoke('save_all_documents')
   },
 

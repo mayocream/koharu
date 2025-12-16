@@ -224,6 +224,7 @@ pub async fn run() -> Result<()> {
             command::ocr,
             command::inpaint,
             command::render,
+            command::set_rendered_image,
             command::update_text_blocks,
             command::llm_list,
             command::llm_load,

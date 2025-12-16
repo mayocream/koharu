@@ -247,6 +247,25 @@ pub async fn render(
 }
 
 #[tauri::command]
+pub async fn set_rendered_image(
+    state: State<'_, AppState>,
+    index: usize,
+    rendered: Vec<u8>,
+) -> Result<Document> {
+    let mut state = state.write().await;
+    let document = state
+        .documents
+        .get_mut(index)
+        .ok_or_else(|| anyhow::anyhow!("Document not found"))?;
+
+    let img = image::load_from_memory(&rendered)
+        .map_err(|e| anyhow::anyhow!("Failed to load image from memory: {}", e))?;
+    document.rendered = Some(SerializableDynamicImage::from(img));
+
+    Ok(document.clone())
+}
+
+#[tauri::command]
 pub async fn update_text_blocks(
     state: State<'_, AppState>,
     index: usize,

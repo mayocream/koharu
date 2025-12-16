@@ -5,6 +5,7 @@ import { Select } from 'radix-ui'
 import { useTranslation } from 'react-i18next'
 import { useAppStore } from '@/lib/store'
 import { TooltipButton } from '@/components/ui/form-controls'
+import { domRenderEnabled } from '@/lib/featureFlags'
 
 export function LlmControls() {
   const {
@@ -83,12 +84,14 @@ export function LlmControls() {
         />
       </div>
       <div className='col flex'>
-        <TooltipButton
-          label={t('llm.render')}
-          tooltip={t('llm.renderTooltip')}
-          onClick={render}
-          widthClass='w-full'
-        />
+        {!domRenderEnabled && (
+          <TooltipButton
+            label={t('llm.render')}
+            tooltip={t('llm.renderTooltip')}
+            onClick={render}
+            widthClass='w-full'
+          />
+        )}
       </div>
     </div>
   )

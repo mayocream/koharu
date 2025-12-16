@@ -47,6 +47,7 @@
     "showSegmentationMask": "Show segmentation mask",
     "showInpainted": "Show inpainted image",
     "showRendered": "Show rendered text",
+    "showTextBlocks": "Show text blocks",
     "inpaint": "Inpaint",
     "inpaintTooltip": "Apply inpainting"
   },

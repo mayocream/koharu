@@ -14,10 +14,12 @@ import {
 import { ToolRail } from '@/components/canvas/ToolRail'
 import { CanvasToolbar } from '@/components/canvas/CanvasToolbar'
 import { TextBlockAnnotations } from '@/components/canvas/TextBlockAnnotations'
+import { DomTextLayer } from '@/components/canvas/DomTextLayer'
 import { usePointerToDocument } from '@/hooks/usePointerToDocument'
 import { useBlockDrafting } from '@/hooks/useBlockDrafting'
 import { useBlockContextMenu } from '@/hooks/useBlockContextMenu'
 import { useTextBlocks } from '@/hooks/useTextBlocks'
+import { domRenderEnabled } from '@/lib/featureFlags'
 
 const MASK_CURSOR =
   'url(\'data:image/svg+xml,%3Csvg xmlns="http://www.w3.org/2000/svg" width="16" height="16"%3E%3Ccircle cx="8" cy="8" r="4" stroke="black" stroke-width="1.5" fill="white"/%3E%3C/svg%3E\') 8 8, crosshair'
@@ -28,6 +30,7 @@ export function Workspace() {
     showSegmentationMask,
     showInpaintedImage,
     showRenderedImage,
+    showTextBlocksOverlay,
     mode,
     autoFitEnabled,
   } = useAppStore()
@@ -161,21 +164,32 @@ export function Workspace() {
                             opacity={0.8}
                           />
                         )}
-                        {currentDocument.inpainted && (
+                        {currentDocument?.inpainted && (
                           <Image
                             data={currentDocument.inpainted}
                             visible={showInpaintedImage}
                           />
                         )}
-                        {currentDocument.rendered && (
-                          <Image
-                            data={currentDocument.rendered}
+                        {domRenderEnabled ? (
+                          <DomTextLayer
+                            blocks={currentDocument?.textBlocks}
+                            scale={scaleRatio}
                             visible={showRenderedImage}
+                            image={currentDocument.image}
                           />
+                        ) : (
+                          currentDocument?.rendered && (
+                            <Image
+                              data={currentDocument?.rendered}
+                              visible={showRenderedImage}
+                            />
+                          )
                         )}
                       </div>
-                      {(!showRenderedImage ||
-                        currentDocument.rendered === undefined) && (
+                      {(showTextBlocksOverlay ||
+                        !showRenderedImage ||
+                        (currentDocument?.rendered === undefined &&
+                          !domRenderEnabled)) && (
                         <TextBlockAnnotations
                           selectedIndex={selectedBlockIndex}
                           onSelect={setSelectedBlockIndex}
