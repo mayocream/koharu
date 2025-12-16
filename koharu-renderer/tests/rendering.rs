@@ -59,6 +59,8 @@ async fn test_horizontal_text_rendering() -> Result<()> {
         y: 50.0,
         font_size,
         color: [0, 0, 0, 255],
+        stroke_color: None,
+        stroke_width: 0.0,
         direction: Orientation::Horizontal,
     };
 
@@ -117,6 +119,8 @@ async fn test_vertical_text_rendering() -> Result<()> {
         y: 50.0,
         font_size,
         color: [0, 0, 0, 255],
+        stroke_color: None,
+        stroke_width: 0.0,
         direction: Orientation::Vertical,
     };
 

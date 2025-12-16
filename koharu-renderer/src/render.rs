@@ -15,6 +15,8 @@ pub struct RenderRequest<'a> {
     pub y: f32,
     pub font_size: f32,
     pub color: Color,
+    pub stroke_color: Option<Color>,
+    pub stroke_width: f32,
     pub direction: Orientation,
 }
 
@@ -37,6 +39,13 @@ impl Renderer {
     }
 
     pub fn render(&mut self, request: &mut RenderRequest) -> Result<()> {
+        let stroke = match request.stroke_color {
+            Some(color) if request.stroke_width > 0.0 => {
+                Some((color, stroke_offsets(request.stroke_width)))
+            }
+            _ => None,
+        };
+
         for line in request.layout {
             let font = line.font.font_ref()?;
             let mut scaler = self
@@ -64,6 +73,17 @@ impl Renderer {
                     } else {
                         0.0
                     };
+                    if let Some((stroke_color, offsets)) = stroke.as_ref() {
+                        for (dx, dy) in offsets {
+                            blit_glyph(
+                                request.image,
+                                &rendered,
+                                glyph_x.floor() as i32 + dx,
+                                (glyph_y.floor() + y_offset) as i32 + dy,
+                                *stroke_color,
+                            );
+                        }
+                    }
                     blit_glyph(
                         request.image,
                         &rendered,
@@ -266,6 +286,28 @@ fn composite_pixel(pixel: &mut Rgba<u8>, src: [u8; 4]) {
     channels[1] = ((inv_alpha * channels[1] as u32 + alpha * src[1] as u32) / 255) as u8;
     channels[2] = ((inv_alpha * channels[2] as u32 + alpha * src[2] as u32) / 255) as u8;
     channels[3] = ((inv_alpha * channels[3] as u32 + alpha * 255) / 255) as u8;
+}
+
+fn stroke_offsets(width: f32) -> Vec<(i32, i32)> {
+    let radius = width.ceil() as i32;
+    if radius <= 0 {
+        return Vec::new();
+    }
+
+    let limit = (width * width).ceil() as i32;
+    let mut offsets = Vec::new();
+    for dy in -radius..=radius {
+        for dx in -radius..=radius {
+            if dx == 0 && dy == 0 {
+                continue;
+            }
+            if dx * dx + dy * dy <= limit {
+                offsets.push((dx, dy));
+            }
+        }
+    }
+
+    offsets
 }
 
 #[cfg(test)]
