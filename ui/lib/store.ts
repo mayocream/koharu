@@ -16,6 +16,7 @@ type AppState = {
   showSegmentationMask: boolean
   showInpaintedImage: boolean
   showRenderedImage: boolean
+  showTextBlocksOverlay: boolean
   mode: ToolMode
   selectedBlockIndex?: number
   autoFitEnabled: boolean
@@ -33,6 +34,7 @@ type AppState = {
   setShowSegmentationMask: (show: boolean) => void
   setShowInpaintedImage: (show: boolean) => void
   setShowRenderedImage: (show: boolean) => void
+  setShowTextBlocksOverlay: (show: boolean) => void
   setMode: (mode: ToolMode) => void
   setSelectedBlockIndex: (index?: number) => void
   setAutoFitEnabled: (enabled: boolean) => void
@@ -71,8 +73,9 @@ export const useAppStore = create<AppState>((set, get) => ({
   currentDocumentIndex: 0,
   scale: 100,
   showSegmentationMask: false,
-  showInpaintedImage: true,
-  showRenderedImage: true,
+  showInpaintedImage: false,
+  showRenderedImage: false,
+  showTextBlocksOverlay: false,
   mode: 'select',
   processJobName: '',
   selectedBlockIndex: undefined,
@@ -107,6 +110,9 @@ export const useAppStore = create<AppState>((set, get) => ({
   },
   setShowRenderedImage: (show: boolean) => {
     set({ showRenderedImage: show })
+  },
+  setShowTextBlocksOverlay: (show: boolean) => {
+    set({ showTextBlocksOverlay: show })
   },
   setMode: (mode: ToolMode) => set({ mode }),
   setSelectedBlockIndex: (index?: number) => set({ selectedBlockIndex: index }),
@@ -236,6 +242,7 @@ export const useAppStore = create<AppState>((set, get) => ({
     })
     set((state) => ({
       documents: replaceDocument(state.documents, index, doc),
+      showTextBlocksOverlay: true,
     }))
   },
 
@@ -254,7 +261,7 @@ export const useAppStore = create<AppState>((set, get) => ({
     set({ processJobName: '' })
 
     await setProgres(0)
-    const actions = ['detect', 'ocr', 'inpaint', 'llmGenerate', 'render']
+    const actions = ['detect', 'ocr', 'inpaint', 'llmGenerate']
     for (let i = 0; i < actions.length; i++) {
       await (get() as any)[actions[i]](_, index)
       await setProgres(Math.floor(((i + 1) / actions.length) * 100))

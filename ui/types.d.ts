@@ -4,7 +4,6 @@ export type TextStyle = {
   fontFamilies: string[]
   fontSize: number
   color: RgbaColor
-  lineHeight: number
 }
 
 export type TextBlock = {

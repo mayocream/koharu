@@ -1,10 +1,10 @@
 'use client'
 
 import { useEffect, useState } from 'react'
-import { Select } from 'radix-ui'
+import { Select, Separator } from 'radix-ui'
 import { useTranslation } from 'react-i18next'
 import { useAppStore } from '@/lib/store'
-import { TooltipButton } from '@/components/ui/form-controls'
+import { ToggleField, TooltipButton } from '@/components/ui/form-controls'
 
 export function LlmControls() {
   const {
@@ -17,6 +17,8 @@ export function LlmControls() {
     llmToggleLoadUnload,
     llmGenerate,
     llmCheckReady,
+    showRenderedImage,
+    setShowRenderedImage,
     render,
   } = useAppStore()
   const [generating, setGenerating] = useState(false)
@@ -82,6 +84,12 @@ export function LlmControls() {
           widthClass='w-full'
         />
       </div>
+      <Separator.Root className='my-1 h-px bg-neutral-200' />
+      <ToggleField
+        label={t('mask.showRendered')}
+        checked={showRenderedImage}
+        onChange={setShowRenderedImage}
+      />
       <div className='col flex'>
         <TooltipButton
           label={t('llm.render')}

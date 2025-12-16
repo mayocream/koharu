@@ -12,7 +12,7 @@ use crate::{
     llm, ml,
     renderer::Renderer,
     result::Result,
-    state::{AppState, Document, TextBlock},
+    state::{AppState, Document, TextBlock, TextStyle},
 };
 
 #[tauri::command]
@@ -148,7 +148,17 @@ pub async fn detect(
             .zip(font_predictions.into_iter())
         {
             tracing::debug!("Detected font for block {:?}: {:?}", block.text, prediction);
-            block.font_info = Some(prediction);
+
+            // fill style with prediction, and use default font families for now
+            let color = prediction.text_color.clone();
+            let font_size = prediction.font_size_px.clone();
+
+            block.font_prediction = Some(prediction);
+            block.style = Some(TextStyle {
+                font_size: font_size,
+                color: [color[0], color[1], color[2], 255],
+                ..Default::default()
+            });
         }
     }
 

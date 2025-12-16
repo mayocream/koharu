@@ -14,7 +14,7 @@ const PANEL_TABS = [
     Component: ProcessingControls,
   },
   { value: 'mask', labelKey: 'panels.mask', Component: MaskControls },
-  { value: 'llm', labelKey: 'panels.llm', Component: LlmControls },
+  { value: 'render', labelKey: 'panels.render', Component: LlmControls },
 ] as const
 
 export function Panels() {

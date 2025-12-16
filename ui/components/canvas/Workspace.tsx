@@ -14,6 +14,7 @@ import {
 import { ToolRail } from '@/components/canvas/ToolRail'
 import { CanvasToolbar } from '@/components/canvas/CanvasToolbar'
 import { TextBlockAnnotations } from '@/components/canvas/TextBlockAnnotations'
+import { DomTextLayer } from '@/components/canvas/DomTextLayer'
 import { usePointerToDocument } from '@/hooks/usePointerToDocument'
 import { useBlockDrafting } from '@/hooks/useBlockDrafting'
 import { useBlockContextMenu } from '@/hooks/useBlockContextMenu'
@@ -28,6 +29,7 @@ export function Workspace() {
     showSegmentationMask,
     showInpaintedImage,
     showRenderedImage,
+    showTextBlocksOverlay,
     mode,
     autoFitEnabled,
   } = useAppStore()
@@ -161,21 +163,24 @@ export function Workspace() {
                             opacity={0.8}
                           />
                         )}
-                        {currentDocument.inpainted && (
+                        {currentDocument?.inpainted && (
                           <Image
                             data={currentDocument.inpainted}
                             visible={showInpaintedImage}
                           />
                         )}
-                        {currentDocument.rendered && (
-                          <Image
-                            data={currentDocument.rendered}
-                            visible={showRenderedImage}
+                        {showTextBlocksOverlay && (
+                          <DomTextLayer
+                            blocks={currentDocument?.textBlocks}
+                            scale={scaleRatio}
+                            visible={!showRenderedImage}
                           />
                         )}
+                        {currentDocument?.rendered && showRenderedImage && (
+                          <Image data={currentDocument?.rendered} />
+                        )}
                       </div>
-                      {(!showRenderedImage ||
-                        currentDocument.rendered === undefined) && (
+                      {showTextBlocksOverlay && !showRenderedImage && (
                         <TextBlockAnnotations
                           selectedIndex={selectedBlockIndex}
                           onSelect={setSelectedBlockIndex}

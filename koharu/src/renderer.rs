@@ -25,7 +25,6 @@ struct BlockContext {
 struct BlockPlan {
     index: usize,
     context: BlockContext,
-    best_fit_size: f32,
 }
 
 pub struct Renderer {
@@ -54,7 +53,7 @@ impl Renderer {
             .map(|(index, _)| index)
             .collect();
 
-        let mut plans = renderable_indices
+        let plans = renderable_indices
             .into_iter()
             .map(|index| {
                 let block = &doc.text_blocks[index];
@@ -70,31 +69,14 @@ impl Renderer {
                         font,
                         writing_mode,
                     },
-                    best_fit_size: 0.0,
                 })
             })
             .collect::<Result<Vec<_>>>()?;
 
-        let mut average_samples = Vec::new();
-        for plan in plans.iter_mut() {
-            let block = &doc.text_blocks[plan.index];
-            let text = block.translation.as_deref().unwrap_or_default();
-            let best_fit = if let Some(font_size) = plan.context.style.font_size {
-                font_size
-            } else {
-                self.best_fit_font_size(block, &plan.context, text)?
-            };
-
-            plan.best_fit_size = best_fit;
-            average_samples.push(best_fit);
-        }
-
-        let default_font_size = Self::filtered_average(&average_samples);
-
         for plan in &plans {
             let block = &doc.text_blocks[plan.index];
             let text = block.translation.as_deref().unwrap_or_default();
-            self.render_block(block, text, plan, default_font_size, &mut rendered)?;
+            self.render_block(block, text, plan, &mut rendered)?;
         }
 
         doc.rendered = Some(SerializableDynamicImage::from(DynamicImage::ImageRgba8(
@@ -122,7 +104,6 @@ impl Renderer {
         block: &TextBlock,
         text: &str,
         plan: &BlockPlan,
-        shared_default: Option<f32>,
         image: &mut RgbaImage,
     ) -> Result<()> {
         if text.is_empty() {
@@ -130,7 +111,7 @@ impl Renderer {
         }
 
         let (layout, layout_width, layout_height, font_size) =
-            self.layout_for_render(block, plan, shared_default, text)?;
+            self.layout_for_render(block, plan, text)?;
 
         if layout.lines.is_empty() {
             return Ok(());
@@ -161,28 +142,13 @@ impl Renderer {
         &self,
         block: &TextBlock,
         plan: &BlockPlan,
-        shared_default: Option<f32>,
         text: &str,
     ) -> Result<(LayoutRun, f32, f32, f32)> {
-        let use_default = plan.context.style.font_size.is_none();
-        let mut font_size = plan
-            .context
-            .style
-            .font_size
-            .or(shared_default)
-            .unwrap_or(plan.best_fit_size);
+        let font_size = plan.context.style.font_size;
 
-        let mut layout = self.layout_with_size(block, &plan.context, font_size, text)?;
-        let (mut width, mut height) = (layout.width, layout.height);
-        let mut fits = Self::fits((width, height), block);
-
-        if use_default && shared_default.is_some() && !fits {
-            font_size = plan.best_fit_size;
-            layout = self.layout_with_size(block, &plan.context, font_size, text)?;
-            width = layout.width;
-            height = layout.height;
-            fits = Self::fits((width, height), block);
-        }
+        let layout = self.layout_with_size(block, &plan.context, font_size, text)?;
+        let (width, height) = (layout.width, layout.height);
+        let fits = Self::fits((width, height), block);
 
         if !fits {
             tracing::debug!(
@@ -195,41 +161,6 @@ impl Renderer {
         }
 
         Ok((layout, width, height, font_size))
-    }
-
-    fn best_fit_font_size(
-        &self,
-        block: &TextBlock,
-        context: &BlockContext,
-        text: &str,
-    ) -> Result<f32> {
-        if text.trim().is_empty() {
-            return Ok(context.style.font_size.unwrap_or(12.0));
-        }
-
-        let mut low = 8.0;
-        let mut high = 200.0;
-        let epsilon = 0.5;
-        let min_size = if Self::contains_cjk(text) { 16.0 } else { 12.0 };
-
-        while high - low > epsilon {
-            let mid = (low + high) / 2.0;
-            let layout = self.layout_with_size(block, context, mid, text)?;
-            let (width, height) = (layout.width, layout.height);
-
-            if layout.lines.is_empty() {
-                high = mid;
-                continue;
-            }
-
-            if Self::fits((width, height), block) {
-                low = mid;
-            } else {
-                high = mid;
-            }
-        }
-
-        Ok(low.max(min_size))
     }
 
     fn layout_with_size(
@@ -283,7 +214,7 @@ impl Renderer {
     fn paint_for_block(block: &TextBlock, style: &TextStyle) -> PaintInfo {
         let mut fill = style.color;
 
-        if let Some(info) = block.font_info.as_ref() {
+        if let Some(info) = block.font_prediction.as_ref() {
             fill = [
                 info.text_color[0],
                 info.text_color[1],
@@ -293,53 +224,6 @@ impl Renderer {
         }
 
         PaintInfo { fill }
-    }
-
-    fn filtered_average(samples: &[f32]) -> Option<f32> {
-        let mut values: Vec<f32> = samples.iter().copied().filter(|v| v.is_finite()).collect();
-        if values.is_empty() {
-            return None;
-        }
-
-        values.sort_by(|a, b| a.partial_cmp(b).unwrap_or(std::cmp::Ordering::Equal));
-
-        let q1 = Self::quantile(&values, 0.25);
-        let q3 = Self::quantile(&values, 0.75);
-        let iqr = q3 - q1;
-        let lower = q1 - 1.5 * iqr;
-        let upper = q3 + 1.5 * iqr;
-
-        let filtered: Vec<f32> = values
-            .iter()
-            .copied()
-            .filter(|v| *v >= lower && *v <= upper)
-            .collect();
-
-        let final_values = if filtered.is_empty() {
-            values
-        } else {
-            filtered
-        };
-        let sum: f32 = final_values.iter().copied().sum();
-        Some(sum / final_values.len() as f32)
-    }
-
-    fn quantile(values: &[f32], percentile: f32) -> f32 {
-        if values.is_empty() {
-            return 0.0;
-        }
-
-        let clamped = percentile.clamp(0.0, 1.0);
-        let pos = clamped * (values.len() as f32 - 1.0);
-        let lower = pos.floor() as usize;
-        let upper = pos.ceil() as usize;
-
-        if lower == upper {
-            values[lower]
-        } else {
-            let weight = pos - lower as f32;
-            values[lower] * (1.0 - weight) + values[upper] * weight
-        }
     }
 }
 

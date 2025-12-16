@@ -35,7 +35,7 @@
   "panels": {
     "processing": "處理",
     "mask": "遮罩",
-    "llm": "LLM"
+    "render": "渲染"
   },
   "processing": {
     "detect": "偵測",
@@ -47,6 +47,7 @@
     "showSegmentationMask": "顯示分割遮罩",
     "showInpainted": "顯示修補影像",
     "showRendered": "顯示渲染文字",
+    "showTextBlocks": "顯示文字框",
     "inpaint": "修補",
     "inpaintTooltip": "套用影像修補"
   },
