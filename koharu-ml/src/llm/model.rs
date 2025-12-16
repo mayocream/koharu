@@ -8,15 +8,15 @@ use candle_transformers::models::{quantized_llama, quantized_qwen2};
 use tokenizers::Tokenizer;
 
 use crate::device;
-use crate::llm::ModelId;
 use crate::llm::prompt::PromptRenderer;
-use crate::llm::quantized_lfm2;
 use crate::llm::tokenizer::TokenizerFromGguf;
+use crate::llm::{ModelId, quantized_hunyuan_dense, quantized_lfm2};
 
 pub enum Model {
     Llama(quantized_llama::ModelWeights),
     Qwen2(quantized_qwen2::ModelWeights),
     Lfm2(quantized_lfm2::ModelWeights),
+    HunyuanDense(quantized_hunyuan_dense::ModelWeights),
 }
 
 impl Model {
@@ -25,6 +25,7 @@ impl Model {
             Model::Llama(m) => m.forward(input, pos),
             Model::Qwen2(m) => m.forward(input, pos),
             Model::Lfm2(m) => m.forward(input, pos),
+            Model::HunyuanDense(m) => m.forward(input, pos),
         }
     }
 }
@@ -112,6 +113,9 @@ impl Llm {
             "llama" => Model::Llama(quantized_llama::ModelWeights::from_gguf(
                 ct, &mut file, &device,
             )?),
+            "hunyuan-dense" => Model::HunyuanDense(
+                quantized_hunyuan_dense::ModelWeights::from_gguf(ct, &mut file, &device)?,
+            ),
             "qwen2" => Model::Qwen2(quantized_qwen2::ModelWeights::from_gguf(
                 ct, &mut file, &device,
             )?),

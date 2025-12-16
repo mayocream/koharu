@@ -277,12 +277,18 @@ pub fn llm_list(model: State<'_, Arc<llm::Model>>) -> Vec<String> {
         _ => 1,
     };
 
+    let non_zh_en_locale_factor = match get_locale().unwrap_or_default() {
+        locale if locale.starts_with("zh") || locale.starts_with("en") => 1,
+        _ => 100,
+    };
+
     // sort models by language preference, the smaller the value, the higher the priority
     models.sort_by_key(|m| match m {
         ModelId::VntlLlama3_8Bv2 => 100,
         ModelId::Lfm2_350mEnjpMt => 200 / cpu_factor,
         ModelId::SakuraGalTransl7Bv3_7 => 300 / zh_locale_factor,
         ModelId::Sakura1_5bQwen2_5v1_0 => 400 / zh_locale_factor / cpu_factor,
+        ModelId::HunyuanMT7B => 500 / non_zh_en_locale_factor,
     });
 
     models.into_iter().map(|id| id.to_string()).collect()

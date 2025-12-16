@@ -1,5 +1,6 @@
 mod model;
-mod prompt;
+pub mod prompt;
+mod quantized_hunyuan_dense;
 mod quantized_lfm2;
 mod tokenizer;
 
@@ -85,5 +86,11 @@ define_llms! {
         id = "sakura-1.5b-qwen2.5-v1.0",
         repo = "shing3232/Sakura-1.5B-Qwen2.5-v1.0-GGUF-IMX",
         filename = "sakura-1.5b-qwen2.5-v1.0-Q5KS.gguf"
+    },
+    // Mungert/Hunyuan-MT-7B-GGUF
+    HunyuanMT7B => {
+        id = "hunyuan-mt-7b",
+        repo = "Mungert/Hunyuan-MT-7B-GGUF",
+        filename = "Hunyuan-MT-7B-q6_k_m.gguf"
     },
 }

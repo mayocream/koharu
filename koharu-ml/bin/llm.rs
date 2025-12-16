@@ -1,5 +1,8 @@
 use clap::Parser;
-use koharu_ml::llm::{GenerateOptions, Llm, ModelId};
+use koharu_ml::{
+    llm::{GenerateOptions, Llm, ModelId},
+    set_default_locale,
+};
 use tracing_subscriber::fmt::format::FmtSpan;
 
 #[derive(Parser, Debug)]
@@ -57,6 +60,10 @@ struct Args {
 
     #[arg(long, default_value_t = false)]
     cpu: bool,
+
+    /// override locale for translation models
+    #[arg(long, default_value = "zh-CN")]
+    locale: String,
 }
 
 #[tokio::main]
@@ -66,6 +73,8 @@ async fn main() -> anyhow::Result<()> {
         .init();
 
     let args = Args::parse();
+
+    set_default_locale(args.locale.clone());
 
     let mut llm = Llm::load(args.model, args.cpu).await?;
 
