@@ -3310,7 +3310,6 @@ dependencies = [
  "koharu-core",
  "num_cpus",
  "once_cell",
- "rayon",
  "serde",
  "serde_json",
  "swash",
