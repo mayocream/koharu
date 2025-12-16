@@ -63,13 +63,33 @@ const MAX_FONT_SIZE = 180
 const clampFontSize = (value: number) =>
   Math.min(MAX_FONT_SIZE, Math.max(MIN_FONT_SIZE, value))
 
+const NEAR_BLACK_THRESHOLD = 12
+const GRAY_NEAR_BLACK_THRESHOLD = 60
+const GRAY_TOLERANCE = 10
+
+const clampNearBlack = (color?: RgbOrRgba): RgbOrRgba | undefined => {
+  if (!color) return color
+  const [r, g, b] = color
+  const maxChannel = Math.max(r, g, b)
+  const minChannel = Math.min(r, g, b)
+  const isGrayish = maxChannel - minChannel <= GRAY_TOLERANCE
+  const threshold = isGrayish ? GRAY_NEAR_BLACK_THRESHOLD : NEAR_BLACK_THRESHOLD
+
+  if (r <= threshold && g <= threshold && b <= threshold) {
+    return color.length === 4 ? [0, 0, 0, color[3]] : [0, 0, 0]
+  }
+  return color
+}
+
 const isColorTuple = (value: unknown): value is RgbOrRgba =>
   Array.isArray(value) &&
   (value.length === 3 || value.length === 4) &&
   value.every((channel) => typeof channel === 'number')
 
-const pickColor = (...candidates: unknown[]): RgbOrRgba | undefined =>
-  candidates.find(isColorTuple)
+const pickColor = (...candidates: unknown[]): RgbOrRgba | undefined => {
+  const found = candidates.find(isColorTuple)
+  return found ? (found as RgbOrRgba) : undefined
+}
 
 const pickNumber = (...candidates: unknown[]): number | undefined =>
   candidates.find((value): value is number => typeof value === 'number')
@@ -101,7 +121,8 @@ const formatFontFamilies = (
   const script = detectScriptForFallback(text)
   const fallbackGroup = FALLBACK_FONTS[script]
   const fallback = serifPreferred ? fallbackGroup.serif : fallbackGroup.sans
-  const list = families?.length ? families : fallback
+  const list =
+    families && families.length > 0 ? [...families, ...fallback] : fallback
   return list
     .map((name) => (name.includes(' ') ? `"${name}"` : name))
     .join(', ')
@@ -184,7 +205,9 @@ function DomTextBlock({
   )
   const [fontSize, setFontSize] = useState<number>(initialSize)
   const textColor = toCssColor(
-    pickColor(fontInfo?.text_color, fontInfo?.textColor, style?.color),
+    clampNearBlack(
+      pickColor(fontInfo?.text_color, fontInfo?.textColor, style?.color),
+    ),
   )
   const strokeColor = pickColor(
     fontInfo?.stroke_color,
