@@ -39,8 +39,6 @@ renderer.render(&mut RenderRequest {
     y: 48.0,
     font_size: 28.0,
     color: [0, 0, 0, 255],
-    stroke_color: None,
-    stroke_width: 0.0,
     direction: Orientation::Horizontal,
 })?;
 ```
