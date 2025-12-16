@@ -133,13 +133,12 @@ pub async fn detect(
             .text_blocks
             .iter()
             .map(|block| {
-                let sub_image = document.image.crop_imm(
+                document.image.crop_imm(
                     block.x as u32,
                     block.y as u32,
                     block.width as u32,
                     block.height as u32,
-                );
-                sub_image
+                )
             })
             .collect();
         let font_predictions = model.detect_fonts(&images, 1).await?;

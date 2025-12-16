@@ -16,6 +16,12 @@ static FONTS_DIR: Lazy<PathBuf> = Lazy::new(|| {
 #[derive(Debug)]
 pub struct GoogleFonts;
 
+impl Default for GoogleFonts {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl GoogleFonts {
     pub fn new() -> Self {
         Self

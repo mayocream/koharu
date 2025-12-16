@@ -5,20 +5,16 @@ use clap::ValueEnum;
 
 use super::{FONT_COUNT, REGRESSION_DIM};
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq, ValueEnum)]
+#[derive(Default, Debug, Clone, Copy, PartialEq, Eq, ValueEnum)]
 #[value(rename_all = "kebab-case")]
+#[allow(clippy::large_enum_variant)]
 pub enum ModelKind {
     Resnet18,
     Resnet34,
+    #[default]
     Resnet50,
     Resnet101,
     Deepfont,
-}
-
-impl Default for ModelKind {
-    fn default() -> Self {
-        ModelKind::Resnet50
-    }
 }
 
 pub struct Model {
@@ -27,20 +23,26 @@ pub struct Model {
 }
 
 enum ModelImpl {
-    ResNet(ResNet),
-    DeepFont(DeepFont),
+    ResNet(Box<ResNet>),
+    DeepFont(Box<DeepFont>),
 }
 
 impl Model {
     pub fn load(vb: VarBuilder, kind: ModelKind) -> Result<Self> {
         let model = match kind {
-            ModelKind::Resnet18 => ModelImpl::ResNet(ResNet::load_basic(vb, [2, 2, 2, 2], 1)?),
-            ModelKind::Resnet34 => ModelImpl::ResNet(ResNet::load_basic(vb, [3, 4, 6, 3], 1)?),
-            ModelKind::Resnet50 => ModelImpl::ResNet(ResNet::load_bottleneck(vb, [3, 4, 6, 3], 4)?),
-            ModelKind::Resnet101 => {
-                ModelImpl::ResNet(ResNet::load_bottleneck(vb, [3, 4, 23, 3], 4)?)
+            ModelKind::Resnet18 => {
+                ModelImpl::ResNet(Box::new(ResNet::load_basic(vb, [2, 2, 2, 2], 1)?))
             }
-            ModelKind::Deepfont => ModelImpl::DeepFont(DeepFont::load(vb)?),
+            ModelKind::Resnet34 => {
+                ModelImpl::ResNet(Box::new(ResNet::load_basic(vb, [3, 4, 6, 3], 1)?))
+            }
+            ModelKind::Resnet50 => {
+                ModelImpl::ResNet(Box::new(ResNet::load_bottleneck(vb, [3, 4, 6, 3], 4)?))
+            }
+            ModelKind::Resnet101 => {
+                ModelImpl::ResNet(Box::new(ResNet::load_bottleneck(vb, [3, 4, 23, 3], 4)?))
+            }
+            ModelKind::Deepfont => ModelImpl::DeepFont(Box::new(DeepFont::load(vb)?)),
         };
         Ok(Self { kind, inner: model })
     }

@@ -205,7 +205,7 @@ impl FontLabels {
     }
 
     pub fn from_path(path: &PathBuf) -> Result<Self> {
-        let data = fs::read_to_string(&path)
+        let data = fs::read_to_string(path)
             .with_context(|| format!("Failed to read labels file {}", path.display()))?;
         let entries: Vec<FontLabelEntry> = serde_json::from_str(&data)
             .with_context(|| format!("Failed to parse labels file {}", path.display()))?;
