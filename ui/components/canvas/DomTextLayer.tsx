@@ -81,6 +81,39 @@ const clampNearBlack = (color?: RgbOrRgba): RgbOrRgba | undefined => {
   return color
 }
 
+const quantile = (values: number[], percentile: number) => {
+  if (!values.length) return 0
+  const clamped = Math.min(Math.max(percentile, 0), 1)
+  const pos = clamped * (values.length - 1)
+  const lower = Math.floor(pos)
+  const upper = Math.ceil(pos)
+
+  if (lower === upper) return values[lower]
+
+  const weight = pos - lower
+  return values[lower] * (1 - weight) + values[upper] * weight
+}
+
+const filteredAverage = (samples: Array<number | undefined>) => {
+  const values = samples.filter(
+    (value): value is number =>
+      typeof value === 'number' && Number.isFinite(value),
+  )
+  if (values.length === 0) return undefined
+
+  const sorted = [...values].sort((a, b) => a - b)
+  const q1 = quantile(sorted, 0.25)
+  const q3 = quantile(sorted, 0.75)
+  const iqr = q3 - q1
+  const lower = q1 - 1.5 * iqr
+  const upper = q3 + 1.5 * iqr
+
+  const filtered = sorted.filter((v) => v >= lower && v <= upper)
+  const finalValues = filtered.length > 0 ? filtered : sorted
+  const sum = finalValues.reduce((acc, v) => acc + v, 0)
+  return sum / finalValues.length
+}
+
 const isColorTuple = (value: unknown): value is RgbOrRgba =>
   Array.isArray(value) &&
   (value.length === 3 || value.length === 4) &&
@@ -134,6 +167,10 @@ const shouldUseVertical = (block: TextBlock, text: string) =>
 export const DomTextLayer = forwardRef<HTMLDivElement, DomTextLayerProps>(
   function DomTextLayer({ blocks, scale, visible }, ref) {
     const renderBlocks = blocks ?? []
+    const sharedDefaultFontSize = useMemo(
+      () => filteredAverage(renderBlocks.map((block) => block.style?.fontSize)),
+      [renderBlocks],
+    )
     return (
       <div
         ref={ref}
@@ -156,6 +193,7 @@ export const DomTextLayer = forwardRef<HTMLDivElement, DomTextLayerProps>(
               key={`${block?.x}-${block?.y}-${index}`}
               block={block}
               scale={scale}
+              sharedDefaultFontSize={sharedDefaultFontSize}
             />
           )
         })}
@@ -168,10 +206,12 @@ function DomTextBlock({
   block,
   scale,
   serifPreferred,
+  sharedDefaultFontSize,
 }: {
   block: TextBlock
   scale: number
   serifPreferred?: boolean
+  sharedDefaultFontSize?: number
 }) {
   const text = block.translation ?? block.text
   if (!text) return null
@@ -182,7 +222,7 @@ function DomTextBlock({
     (block as { fontInfo?: FontInfo; font_info?: FontInfo }).font_info
 
   const textRef = useRef<HTMLDivElement>(null)
-  const requestedSize = block.style?.fontSize
+  const requestedSize = block.style?.fontSize ?? sharedDefaultFontSize
   const lineHeightRatio = block.style?.lineHeight ?? 1.2
   const writingMode = useMemo(
     () => (shouldUseVertical(block, text) ? 'vertical-rl' : 'horizontal-tb'),
@@ -311,7 +351,6 @@ function DomTextBlock({
         top: block.y * scale,
         width: Math.max(0, block.width * scale),
         height: Math.max(0, block.height * scale),
-        overflow: 'wrap',
         pointerEvents: 'none',
         color: textColor,
         background: 'transparent',
