@@ -18,9 +18,6 @@ use crate::{
 #[derive(Clone, Copy)]
 struct PaintInfo {
     fill: koharu_renderer::types::Color,
-    stroke: Option<koharu_renderer::types::Color>,
-    stroke_ratio: Option<f32>,
-    stroke_width_px: f32,
 }
 
 struct BlockContext {
@@ -178,8 +175,6 @@ impl TextRenderer {
             y: y_offset + block.y + font_size,
             font_size,
             color: plan.context.paint.fill,
-            stroke_color: plan.context.paint.stroke,
-            stroke_width: Self::stroke_width_for_block(plan, font_size),
             direction: plan.context.direction,
         })?;
 
@@ -312,19 +307,8 @@ impl TextRenderer {
         }
     }
 
-    fn stroke_width_for_block(plan: &BlockPlan, font_size: f32) -> f32 {
-        let mut width = plan.context.paint.stroke_width_px.max(0.0);
-        if let Some(ratio) = plan.context.paint.stroke_ratio {
-            width = (ratio * font_size).clamp(0.0, font_size * 0.6);
-        }
-        width
-    }
-
     fn paint_for_block(block: &TextBlock, style: &TextStyle) -> PaintInfo {
         let mut fill = style.color;
-        let mut stroke = None;
-        let mut stroke_ratio = None;
-        let mut stroke_width_px = 0.0;
 
         if let Some(info) = block.font_info.as_ref() {
             fill = [
@@ -333,27 +317,9 @@ impl TextRenderer {
                 info.text_color[2],
                 255,
             ];
-
-            if info.stroke_width_px > 0.0 {
-                stroke = Some([
-                    info.stroke_color[0],
-                    info.stroke_color[1],
-                    info.stroke_color[2],
-                    255,
-                ]);
-                stroke_width_px = info.stroke_width_px.max(0.0);
-                if info.font_size_px > 0.0 {
-                    stroke_ratio = Some((info.stroke_width_px / info.font_size_px).max(0.0));
-                }
-            }
         }
 
-        PaintInfo {
-            fill,
-            stroke,
-            stroke_ratio,
-            stroke_width_px,
-        }
+        PaintInfo { fill }
     }
 
     fn filtered_average(samples: &[f32]) -> Option<f32> {
