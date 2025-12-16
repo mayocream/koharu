@@ -211,7 +211,9 @@ function DomTextBlock({
             ? (baseStrokeWidth * fontSize) / referenceFontSize
             : baseStrokeWidth * scale,
         )
-  const strokeCss = strokeWidthPx > 0 ? toCssColor(strokeColor) : 'transparent'
+  // disable for now, the detection is not good enough
+  // const strokeCss = strokeWidthPx > 0 ? toCssColor(strokeColor) : 'transparent'
+  const strokeCss = 'transparent'
 
   useLayoutEffect(() => {
     const node = textRef.current
