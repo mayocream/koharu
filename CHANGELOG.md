@@ -1,3 +1,42 @@
+## [0.18.0] - 2025-12-16
+
+### 🚀 Features
+
+- Reimplement load tokenizer from gguf
+- Google fonts
+- Font detection using yuzumaker.FontDetection
+- Auto choose color and stroke
+- Renderer to clamp near black
+
+### 🐛 Bug Fixes
+
+- Llm test running locally
+- Avoid conflict with existing dlls on windows
+- Layout CJK and English at same time in horizontal view
+- Windows to search system32 for DLLs too
+- Clippy happy
+- Close bigger holes in ctd
+- Add font detect test
+- Remove stroke auto color, keep font auto color
+
+### 🧪 Testing
+
+- Fix tests
+- Use google fonts
+- Add layout line wrapping test
+- Add vertical CJK layout test
+
+### ⚙️ Miscellaneous Tasks
+
+- Update cargo clippy command to treat warnings as errors
+- Add ignore annotation for llm test requiring large model downloads
+- Remove reviewdog
+- Make clippy happy
+- Only create span when cache is not valid
+- Remove unnessary conditional deps
+- Add layout tests
+- Remove unused import in koharu-renderer
+- Release 0.18.0
 ## [0.17.0] - 2025-12-14
 
 ### 🚀 Features
