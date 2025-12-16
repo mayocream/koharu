@@ -90,7 +90,7 @@ objc2-metal-performance-shaders-graph = "0.3"
 objc2-foundation = "0.3"
 sys-locale = "0.3"
 indicatif = "0.17"
-minijinja = "2.0"
+minijinja = "2.14"
 windows = { version = "0.62", features = [
     "Win32",
     "Win32_System",
