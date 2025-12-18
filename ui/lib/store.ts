@@ -262,7 +262,6 @@ export const useAppStore = create<AppState>((set, get) => ({
     get().startOperation({
       type: 'llm-load',
       cancellable: false,
-      progress: 0,
     })
     let ready = false
     try {
@@ -338,23 +337,23 @@ export const useAppStore = create<AppState>((set, get) => ({
     const ownsOperation = shouldTrackOperation && !isBatchRun
 
     const actions = ['detect', 'ocr', 'inpaint', 'llmGenerate'] as const
+    const totalSteps = actions.length
 
     if (shouldTrackOperation) {
       const firstStep = actions[0] ?? 'detect'
       if (ownsOperation) {
         get().startOperation({
           type: 'process-current',
-          progress: 0,
           step: firstStep,
-          stepIndex: 0,
-          stepCount: actions.length,
+          current: 0,
+          total: totalSteps,
           cancellable: true,
         })
       } else {
         get().updateOperation({
           step: firstStep,
-          stepIndex: 0,
-          stepCount: actions.length,
+          current: 0,
+          total: totalSteps,
         })
       }
     }
@@ -370,20 +369,19 @@ export const useAppStore = create<AppState>((set, get) => ({
       if (shouldTrackOperation) {
         get().updateOperation({
           step: action,
-          stepIndex: i,
-          stepCount: actions.length,
-          progress: Math.floor((i / actions.length) * 100),
+          current: i,
+          total: totalSteps,
         })
       }
 
       await (get() as any)[actions[i]](_, index)
-      await setProgres(Math.floor(((i + 1) / actions.length) * 100))
+      await setProgres(Math.floor(((i + 1) / totalSteps) * 100))
     }
 
     const cancelled = get().operation?.cancelRequested
 
     if (shouldTrackOperation && ownsOperation && !cancelled) {
-      get().updateOperation({ progress: 100 })
+      get().updateOperation({ current: totalSteps, total: totalSteps })
     }
 
     if (shouldTrackOperation && ownsOperation) {
@@ -416,10 +414,9 @@ export const useAppStore = create<AppState>((set, get) => ({
 
     get().startOperation({
       type: 'process-all',
-      progress: 0,
-      currentIndex: 1,
-      total,
       cancellable: true,
+      current: 0,
+      total,
     })
 
     for (let index = 0; index < total; index++) {
@@ -427,22 +424,20 @@ export const useAppStore = create<AppState>((set, get) => ({
 
       set({ currentDocumentIndex: index, selectedBlockIndex: undefined })
       get().updateOperation({
-        currentIndex: index + 1,
-        progress: Math.round((index / total) * 100),
-        step: undefined,
-        stepIndex: undefined,
-        stepCount: undefined,
+        current: index,
+        total,
       })
 
       await get().processImage(null, index, {
         onProgress: async (progress) => {
           if (get().operation?.cancelRequested) return
+          const currentValue = index + progress / 100
           const overall = Math.min(
             100,
-            Math.round(progress / total + (index / total) * 100),
+            Math.round((currentValue / total) * 100),
           )
           await get().setProgress(overall)
-          get().updateOperation({ progress: overall })
+          get().updateOperation({ current: currentValue, total })
         },
         skipOperationTracking: true,
       })
@@ -450,10 +445,12 @@ export const useAppStore = create<AppState>((set, get) => ({
       if (get().operation?.cancelRequested) {
         break
       }
+
+      get().updateOperation({ current: index + 1, total })
     }
 
     if (!get().operation?.cancelRequested) {
-      get().updateOperation({ progress: 100 })
+      get().updateOperation({ current: total, total })
     }
 
     await get().clearProgress()

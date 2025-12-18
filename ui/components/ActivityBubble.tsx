@@ -51,7 +51,24 @@ function OperationCard({
   onCancel: () => void
   t: TranslateFunc
 }) {
-  const progress = clampProgress(operation.progress)
+  const hasProgressNumbers =
+    typeof operation.current === 'number' &&
+    typeof operation.total === 'number' &&
+    operation.total > 0
+  const currentValue = hasProgressNumbers ? operation.current : undefined
+  const total = hasProgressNumbers ? operation.total : undefined
+  const progress = clampProgress(
+    total && typeof currentValue === 'number'
+      ? (currentValue / total) * 100
+      : undefined,
+  )
+  const displayCurrent =
+    total && typeof currentValue === 'number'
+      ? Math.min(
+          total,
+          Math.floor(currentValue) + (currentValue >= total ? 0 : 1),
+        )
+      : undefined
   const titles: Record<OperationState['type'], string> = {
     'load-khr': t('operations.loadKhr'),
     'save-khr': t('operations.saveKhr'),
@@ -69,25 +86,22 @@ function OperationCard({
   const stepLabel = operation.step
     ? (stepLabels[operation.step] ?? operation.step)
     : undefined
-  const stepCount = operation.stepCount ?? 0
-  const stepIndex = Math.min(
-    operation.stepIndex ?? 0,
-    stepCount ? stepCount - 1 : 0,
-  )
   const stepText =
-    stepLabel && stepCount
+    stepLabel && total && typeof displayCurrent === 'number'
       ? t('operations.stepProgress', {
-          current: stepIndex + 1,
-          total: stepCount,
+          current: displayCurrent,
+          total,
           step: stepLabel,
         })
       : undefined
 
   const imageText =
-    operation.type === 'process-all' && operation.total
+    operation.type === 'process-all' &&
+    total &&
+    typeof displayCurrent === 'number'
       ? t('operations.imageProgress', {
-          current: Math.min(operation.currentIndex ?? 1, operation.total),
-          total: operation.total,
+          current: displayCurrent,
+          total,
         })
       : undefined
 
@@ -107,14 +121,13 @@ function OperationCard({
                 {subtitle || t('operations.inProgress')}
               </div>
             </div>
-            {operation.type === 'process-all' && operation.total ? (
+            {operation.type === 'process-all' &&
+            total &&
+            typeof displayCurrent === 'number' ? (
               <span className='rounded-full bg-neutral-100 px-2 py-0.5 text-[11px] font-medium text-neutral-600'>
                 {t('operations.imageProgress', {
-                  current: Math.min(
-                    operation.currentIndex ?? 1,
-                    operation.total,
-                  ),
-                  total: operation.total,
+                  current: displayCurrent,
+                  total,
                 })}
               </span>
             ) : null}
