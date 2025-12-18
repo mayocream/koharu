@@ -12,7 +12,7 @@ use crate::{
     llm, ml,
     renderer::Renderer,
     result::Result,
-    state::{deserialize_khr, serialize_khr, AppState, Document, TextBlock, TextStyle},
+    state::{AppState, Document, TextBlock, TextStyle, deserialize_khr, serialize_khr},
     version,
 };
 
@@ -210,12 +210,12 @@ pub async fn detect(
             tracing::debug!("Detected font for block {:?}: {:?}", block.text, prediction);
 
             // fill style with prediction, and use default font families for now
-            let color = prediction.text_color.clone();
-            let font_size = prediction.font_size_px.clone();
+            let color = prediction.text_color;
+            let font_size = prediction.font_size_px;
 
             block.font_prediction = Some(prediction);
             block.style = Some(TextStyle {
-                font_size: font_size,
+                font_size,
                 color: [color[0], color[1], color[2], 255],
                 ..Default::default()
             });
