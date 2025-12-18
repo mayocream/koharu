@@ -14,7 +14,7 @@
     "lucide-react": "^0.560.0",
     "next": "16.0.8",
     "radix-ui": "^1.4.3",
-    "react": "19.2.1",
+    "react": "19.2.3",
     "react-dom": "19.2.1",
     "react-i18next": "^16.4.1",
     "react-rnd": "^10.5.2",
