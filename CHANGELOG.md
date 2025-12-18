@@ -1,3 +1,12 @@
+## [0.20.0] - 2025-12-18
+
+### 🚀 Features
+
+- Double click or CLI to open a file
+
+### ⚙️ Miscellaneous Tasks
+
+- Release 0.20.0
 ## [0.19.0] - 2025-12-18
 
 ### 🚀 Features
