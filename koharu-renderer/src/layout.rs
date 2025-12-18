@@ -153,7 +153,7 @@ impl<'a> TextLayout<'a> {
             let has_content = !current.glyphs.is_empty();
             let is_mandatory = window[1].is_mandatory; // Check if the END of segment is mandatory
 
-            if (would_overflow && has_content) || (is_mandatory && has_content) {
+            if (is_mandatory || would_overflow) && has_content {
                 // Finalize current line
                 current.range = line_offset..start;
                 lines.push(current);

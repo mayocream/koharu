@@ -1,9 +1,9 @@
 use std::{io::Cursor, path::PathBuf, sync::Arc};
 
 use anyhow::{anyhow, bail};
-use image::{imageops, DynamicImage, GenericImageView, ImageFormat, RgbaImage};
-use once_cell::sync::Lazy;
+use image::{DynamicImage, GenericImageView, ImageFormat, RgbaImage, imageops};
 use koharu_ml::font_detector::FontPrediction;
+use once_cell::sync::Lazy;
 use serde::{Deserialize, Serialize};
 use tokio::sync::RwLock;
 
@@ -150,9 +150,7 @@ fn thumbnail_contact_sheet(documents: &[Document]) -> DynamicImage {
     } else {
         // First image takes the left 1/3 of the canvas.
         let left_width = THUMBNAIL_WIDTH / 3;
-        let first_thumb = documents[0]
-            .image
-            .thumbnail(left_width, THUMBNAIL_HEIGHT);
+        let first_thumb = documents[0].image.thumbnail(left_width, THUMBNAIL_HEIGHT);
         let (first_w, first_h) = first_thumb.dimensions();
         let first_x = ((left_width - first_w) / 2) as i64;
         let first_y = ((THUMBNAIL_HEIGHT - first_h) / 2) as i64;
@@ -165,7 +163,7 @@ fn thumbnail_contact_sheet(documents: &[Document]) -> DynamicImage {
             let area_height = THUMBNAIL_HEIGHT;
 
             let cols = ((remaining.len() as f64).sqrt().ceil() as u32).max(1);
-            let rows = ((remaining.len() as u32) + cols - 1) / cols;
+            let rows = (remaining.len() as u32).div_ceil(cols);
 
             let cell_w = (area_width / cols).max(1);
             let cell_h = (area_height / rows).max(1);
@@ -242,8 +240,7 @@ impl Document {
     fn khr(path: PathBuf) -> anyhow::Result<Self> {
         let bytes = std::fs::read(&path)?;
         let docs = deserialize_khr(&bytes)?;
-        docs
-            .into_iter()
+        docs.into_iter()
             .next()
             .ok_or_else(|| anyhow!("No document found in KHR file"))
     }

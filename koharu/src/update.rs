@@ -131,24 +131,19 @@ async fn check_for_updates(app: AppHandle) -> anyhow::Result<()> {
 }
 
 #[tauri::command]
-pub async fn get_available_update(
-    state: State<'_, UpdateState>,
-) -> Result<Option<UpdateSummary>> {
+pub async fn get_available_update(state: State<'_, UpdateState>) -> Result<Option<UpdateSummary>> {
     #[cfg(feature = "bundle")]
     {
         let ignored_version = state.ignored_version().await;
-        let summary = state
-            .pending()
-            .await
-            .and_then(|update| {
-                let version = update.TargetFullRelease.Version.clone();
-                if ignored_version.as_deref() == Some(version.as_str()) {
-                    None
-                } else {
-                    Some(UpdateSummary::from(&update))
-                }
-            });
-        return Ok(summary);
+        let summary = state.pending().await.and_then(|update| {
+            let version = update.TargetFullRelease.Version.clone();
+            if ignored_version.as_deref() == Some(version.as_str()) {
+                None
+            } else {
+                Some(UpdateSummary::from(&update))
+            }
+        });
+        Ok(summary)
     }
 
     #[cfg(not(feature = "bundle"))]
@@ -185,10 +180,7 @@ pub async fn apply_available_update(app: AppHandle, state: State<'_, UpdateState
 }
 
 #[tauri::command]
-pub async fn ignore_update(
-    state: State<'_, UpdateState>,
-    version: Option<String>,
-) -> Result<()> {
+pub async fn ignore_update(state: State<'_, UpdateState>, version: Option<String>) -> Result<()> {
     #[cfg(feature = "bundle")]
     {
         let target_version = if let Some(version) = version {
@@ -201,9 +193,7 @@ pub async fn ignore_update(
         };
 
         if let Some(version) = target_version {
-            state
-                .set_ignored_version(Some(version))
-                .await?;
+            state.set_ignored_version(Some(version)).await?;
             state.clear_pending().await;
         }
     }

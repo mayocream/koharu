@@ -67,8 +67,8 @@ mod windows_ansi {
 #[cfg(target_os = "windows")]
 mod windows_file_assoc {
     use anyhow::Result;
-    use winreg::enums::HKEY_CURRENT_USER;
     use winreg::RegKey;
+    use winreg::enums::HKEY_CURRENT_USER;
 
     const CLASS_NAME: &str = "Koharu.khr";
     // const THUMBNAIL_PROVIDER: &str = "{e357fccd-a995-4576-b01f-234630154e96}";
@@ -89,13 +89,19 @@ mod windows_file_assoc {
         // let (thumb_key, _) = class_key.create_subkey(format!("ShellEx\\{THUMBNAIL_PROVIDER}"))?;
         // thumb_key.set_value("", &THUMBNAIL_PROVIDER)?;
 
-        if let Some(exe) = std::env::current_exe().ok().and_then(|p| p.to_str().map(|s| s.to_owned())) {
+        if let Some(exe) = std::env::current_exe()
+            .ok()
+            .and_then(|p| p.to_str().map(|s| s.to_owned()))
+        {
             let (icon_key, _) = class_key.create_subkey("DefaultIcon")?;
             icon_key.set_value("", &format!("{exe},0"))?;
         }
         // add default open with
         let (shell_key, _) = class_key.create_subkey("shell\\open\\command")?;
-        if let Some(exe) = std::env::current_exe().ok().and_then(|p| p.to_str().map(|s| s.to_owned())) {
+        if let Some(exe) = std::env::current_exe()
+            .ok()
+            .and_then(|p| p.to_str().map(|s| s.to_owned()))
+        {
             shell_key.set_value("", &format!("\"{exe}\" \"%1\""))?;
         }
 

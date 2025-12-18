@@ -51,6 +51,12 @@ pub struct FontBook {
     source: MultiSource,
 }
 
+impl Default for FontBook {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl FontBook {
     /// Creates a FontBook with only system fonts.
     pub fn new() -> Self {
