@@ -1,3 +1,40 @@
+## [0.19.0] - 2025-12-18
+
+### 🚀 Features
+
+- Add hunyuan to translate more languages
+- Wysiwyg canvas
+- Save and load projects
+- Save and load projects
+- Show version number
+- .khr file association on windows
+- Async update check
+- Operation bubble and cancellable batch
+
+### 🐛 Bug Fixes
+
+- Stroke and font color normalization
+- Dom text layer bug
+- Cargo happy
+- Add a textBlockSyncer to avoid block on mutex
+
+### 🚜 Refactor
+
+- New renderer (#99)
+
+### 📚 Documentation
+
+- Change demo image
+
+### ⚡ Performance
+
+- Improve renderer performance
+
+### ⚙️ Miscellaneous Tasks
+
+- Clippy happier
+- Use workspace Cargo
+- Release 0.19.0
 ## [0.18.0] - 2025-12-16
 
 ### 🚀 Features
