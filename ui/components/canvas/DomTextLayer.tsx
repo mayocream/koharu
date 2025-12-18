@@ -198,8 +198,8 @@ function DomTextBlock({
   sharedDefaultFontSize?: number
 }) {
   const { replaceBlock } = useTextBlocks()
-  const text = block.translation ?? block.text
-  if (!text) return null
+  const text = block.translation ?? ''
+  const hasText = text.length > 0
 
   const style = block.style as BlockStyle
   const fontPrediction =
@@ -349,6 +349,8 @@ function DomTextBlock({
     fontFamily,
     writingMode,
   ])
+
+  if (!hasText) return null
 
   return (
     <div
