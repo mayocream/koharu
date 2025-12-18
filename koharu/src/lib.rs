@@ -6,4 +6,5 @@ pub mod ml;
 pub mod renderer;
 pub mod result;
 pub mod state;
+pub mod update;
 pub mod version;

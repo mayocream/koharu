@@ -2,6 +2,7 @@ use std::{io::Cursor, path::PathBuf, sync::Arc};
 
 use anyhow::{anyhow, bail};
 use image::{imageops, DynamicImage, GenericImageView, ImageFormat, RgbaImage};
+use once_cell::sync::Lazy;
 use koharu_ml::font_detector::FontPrediction;
 use serde::{Deserialize, Serialize};
 use tokio::sync::RwLock;
