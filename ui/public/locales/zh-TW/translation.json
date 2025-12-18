@@ -38,6 +38,19 @@
     "applying": "正在下載並套用更新...",
     "error": "更新失敗：{{message}}"
   },
+  "operations": {
+    "title": "處理中",
+    "inProgress": "請稍候，正在處理。",
+    "loadKhr": "正在載入專案",
+    "saveKhr": "正在儲存專案",
+    "loadModel": "正在載入 LLM 模型",
+    "processCurrent": "正在處理目前圖片",
+    "processAll": "正在批次處理所有圖片",
+    "imageProgress": "圖片 {{current}} / {{total}}",
+    "stepProgress": "步驟 {{current}} / {{total}}：{{step}}",
+    "cancel": "停止",
+    "cancelling": "停止中..."
+  },
   "navigator": {
     "title": "導覽",
     "pages_one": "{{count}} 頁",
