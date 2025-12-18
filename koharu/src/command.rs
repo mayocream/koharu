@@ -10,7 +10,7 @@ use tracing::instrument;
 use crate::{
     image::SerializableDynamicImage,
     llm, ml,
-    renderer::TextRenderer,
+    renderer::Renderer,
     result::Result,
     state::{AppState, Document, TextBlock},
 };
@@ -73,7 +73,7 @@ pub async fn save_document(state: State<'_, AppState>, index: usize) -> Result<(
         .as_ref()
         .ok_or_else(|| anyhow::anyhow!("No inpainted image found"))?
         .save(&dest)
-        .map_err(|e| anyhow::anyhow!("Failed to save image: {}", e))?;
+        .map_err(|e| anyhow::anyhow!("Failed to save image: {e}"))?;
 
     Ok(())
 }
@@ -104,7 +104,7 @@ pub async fn save_all_documents(state: State<'_, AppState>) -> Result<()> {
             .ok_or_else(|| anyhow::anyhow!("No inpainted image found"))?
             // save to dest/default_filename
             .save(dest.join(&default_filename))
-            .map_err(|e| anyhow::anyhow!("Failed to save image: {}", e))?;
+            .map_err(|e| anyhow::anyhow!("Failed to save image: {e}"))?;
     }
 
     Ok(())
@@ -147,7 +147,7 @@ pub async fn detect(
             .iter_mut()
             .zip(font_predictions.into_iter())
         {
-            tracing::info!("Detected font for block {:?}: {:?}", block.text, prediction);
+            tracing::debug!("Detected font for block {:?}: {:?}", block.text, prediction);
             block.font_info = Some(prediction);
         }
     }
@@ -232,7 +232,7 @@ pub async fn inpaint(
 #[instrument(level = "info", skip_all)]
 pub async fn render(
     state: State<'_, AppState>,
-    renderer: State<'_, Arc<TextRenderer>>,
+    renderer: State<'_, Arc<Renderer>>,
     index: usize,
 ) -> Result<Document> {
     let mut state = state.write().await;
@@ -241,7 +241,7 @@ pub async fn render(
         .get_mut(index)
         .ok_or_else(|| anyhow::anyhow!("Document not found"))?;
 
-    renderer.render(document).await?;
+    renderer.render(document)?;
 
     Ok(document.clone())
 }

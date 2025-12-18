@@ -142,7 +142,7 @@ async fn http_get_range(url: &str, start: u64, end_inclusive: u64) -> Result<Vec
         .get(url)
         .header(
             reqwest::header::RANGE,
-            format!("bytes={}-{}", start, end_inclusive),
+            format!("bytes={start}-{end_inclusive}"),
         )
         .send()
         .await?;

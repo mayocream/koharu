@@ -2,7 +2,6 @@ use std::{path::PathBuf, sync::Arc};
 
 use image::GenericImageView;
 use koharu_ml::font_detector::FontPrediction;
-use koharu_renderer::types::Color;
 use serde::{Deserialize, Serialize};
 use tokio::sync::RwLock;
 
@@ -26,18 +25,16 @@ pub struct TextBlock {
 pub struct TextStyle {
     pub font_families: Vec<String>,
     pub font_size: Option<f32>,
-    pub color: Color,
-    pub line_height: f32,
+    pub color: [u8; 4],
 }
 
 impl Default for TextStyle {
     fn default() -> Self {
         TextStyle {
             font_families: vec![
-                "Arial".to_string(),
                 // Windows defaults
-                "Microsoft Jhenghei".to_string(),
                 "Microsoft YaHei".to_string(),
+                "Microsoft Jhenghei".to_string(),
                 "Yu Mincho".to_string(),
                 // macOS defaults
                 "PingFang TC".to_string(),
@@ -46,10 +43,11 @@ impl Default for TextStyle {
                 "SF Pro".to_string(),
                 // linux defaults
                 "Source Han Sans CN".to_string(),
+                // Fallback
+                "Arial".to_string(),
             ],
             font_size: None,
             color: [0, 0, 0, 255],
-            line_height: 1.2,
         }
     }
 }

@@ -36,7 +36,7 @@ impl BertForCausalLM {
     pub fn new(cfg: &BertConfig, vb: VarBuilder) -> Result<Self> {
         let pad_token_id = cfg.pad_token_id.unwrap_or(0);
         if pad_token_id as usize >= cfg.vocab_size {
-            anyhow::bail!("pad_token_id {} is outside of vocab", pad_token_id);
+            anyhow::bail!("pad_token_id {pad_token_id} is outside of vocab");
         }
         Ok(Self {
             bert: BertModel::new(cfg, vb.pp("bert"))?,

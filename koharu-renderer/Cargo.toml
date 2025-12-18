@@ -13,8 +13,6 @@ publish.workspace = true
 
 [dependencies]
 koharu-core = { workspace = true }
-swash = { workspace = true }
-fontdb = { workspace = true }
 anyhow = { workspace = true }
 image = { workspace = true }
 tracing = { workspace = true }
@@ -26,3 +24,8 @@ futures = { workspace = true }
 num_cpus = { workspace = true }
 serde = { workspace = true }
 serde_json = { workspace = true }
+font-kit = { workspace = true }
+skrifa = { workspace = true }
+harfrust = { workspace = true }
+icu = { workspace = true }
+skia-safe = { workspace = true }
