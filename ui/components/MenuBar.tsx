@@ -1,13 +1,22 @@
 'use client'
 
+import { useEffect, useState } from 'react'
 import { Menubar } from 'radix-ui'
+import { invoke } from '@tauri-apps/api/core'
 import { useTranslation } from 'react-i18next'
 import { useAppStore } from '@/lib/store'
 import { locales } from '@/lib/i18n'
 import { fitCanvasToViewport, resetCanvasScale } from '@/components/Canvas'
 
+type MenuItem = {
+  label: string
+  onSelect?: () => void | Promise<void>
+  disabled?: boolean
+}
+
 export function MenuBar() {
   const { t, i18n } = useTranslation()
+  const [appVersion, setAppVersion] = useState<string>()
   const {
     openDocuments,
     openExternal,
@@ -18,7 +27,21 @@ export function MenuBar() {
     saveDocuments,
     exportAllDocuments,
   } = useAppStore()
-  const menus = [
+  useEffect(() => {
+    const loadVersion = async () => {
+      try {
+        const version = await invoke<string>('app_version')
+        setAppVersion(version)
+      } catch (error) {
+        console.error('Failed to load app version', error)
+        setAppVersion(undefined)
+      }
+    }
+
+    void loadVersion()
+  }, [])
+
+  const menus: { label: string; items: MenuItem[] }[] = [
     {
       label: t('menu.file'),
       items: [
@@ -46,6 +69,12 @@ export function MenuBar() {
     {
       label: t('menu.help'),
       items: [
+        {
+          label: appVersion
+            ? t('menu.version', { version: appVersion })
+            : t('menu.versionUnknown'),
+          disabled: true,
+        },
         {
           label: t('menu.discord'),
           onSelect: () => openExternal('https://discord.gg/mHvHkxGnUY'),
@@ -77,7 +106,14 @@ export function MenuBar() {
                   <Menubar.Item
                     key={item.label}
                     className='rounded px-3 py-1.5 text-[13px] outline-none select-none hover:bg-black/10 data-highlighted:bg-black/10 data-[state=open]:bg-black/10'
-                    onSelect={item.onSelect}
+                    disabled={item.disabled}
+                    onSelect={
+                      item.onSelect
+                        ? () => {
+                            void item.onSelect?.()
+                          }
+                        : undefined
+                    }
                   >
                     {item.label}
                   </Menubar.Item>

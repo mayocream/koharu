@@ -18,6 +18,8 @@
     "help": "帮助",
     "discord": "Discord",
     "github": "GitHub",
+    "version": "版本：{{version}}",
+    "versionUnknown": "版本：未知",
     "language": "语言",
     "languages": {
       "en-US": "English",

@@ -18,6 +18,8 @@
     "help": "Help",
     "discord": "Discord",
     "github": "GitHub",
+    "version": "Version: {{version}}",
+    "versionUnknown": "Version: Unknown",
     "language": "Language",
     "languages": {
       "en-US": "English",

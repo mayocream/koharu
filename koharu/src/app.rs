@@ -68,7 +68,7 @@ static LIB_ROOT: Lazy<PathBuf> = Lazy::new(|| APP_ROOT.join("libs"));
 static MODEL_ROOT: Lazy<PathBuf> = Lazy::new(|| APP_ROOT.join("models"));
 
 #[derive(Parser)]
-#[command(version, about)]
+#[command(version = crate::version::APP_VERSION, about)]
 struct Cli {
     #[arg(
         short,
@@ -216,6 +216,7 @@ pub async fn run() -> Result<()> {
 
     tauri::Builder::default()
         .invoke_handler(tauri::generate_handler![
+            command::app_version,
             command::open_external,
             command::open_documents,
             command::save_documents,

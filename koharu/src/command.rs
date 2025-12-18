@@ -12,7 +12,8 @@ use crate::{
     llm, ml,
     renderer::Renderer,
     result::Result,
-    state::{AppState, Document, TextBlock, TextStyle},
+    state::{deserialize_khr, serialize_khr, AppState, Document, TextBlock, TextStyle},
+    version,
 };
 
 #[tauri::command]
@@ -62,6 +63,11 @@ pub async fn open_documents(state: State<'_, AppState>) -> Result<Vec<Document>>
 
     // return opened documents as a copy
     Ok(documents)
+}
+
+#[tauri::command]
+pub fn app_version() -> String {
+    version::current().to_string()
 }
 
 #[tauri::command]
