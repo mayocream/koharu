@@ -11,7 +11,7 @@
   "dependencies": {
     "@tauri-apps/api": "^2.9.1",
     "i18next": "^25.7.2",
-    "lucide-react": "^0.560.0",
+    "lucide-react": "^0.562.0",
     "next": "16.0.8",
     "radix-ui": "^1.4.3",
     "react": "19.2.1",
