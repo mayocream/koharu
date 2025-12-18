@@ -44,9 +44,7 @@ pub async fn open_documents(state: State<'_, AppState>) -> Result<Vec<Document>>
     // khr loader or load image files
     let documents: Vec<Document> = if load_khr {
         let bytes = std::fs::read(&paths[0])?;
-        postcard::from_bytes(&bytes)
-            .or_else(|_| postcard::from_bytes(&bytes).map(|doc: Document| vec![doc]))
-            .map_err(|e| anyhow::anyhow!("Failed to load documents: {e}"))?
+        deserialize_khr(&bytes).map_err(|e| anyhow::anyhow!("Failed to load documents: {e}"))?
     } else {
         let mut documents = paths
             .into_par_iter()
@@ -159,7 +157,7 @@ pub async fn save_documents(state: State<'_, AppState>) -> Result<()> {
         return Ok(());
     };
 
-    let bytes = postcard::to_allocvec(&state.documents)
+    let bytes = serialize_khr(&state.documents)
         .map_err(|e| anyhow::anyhow!("Failed to serialize documents: {e}"))?;
     std::fs::write(dest, bytes)?;
 
