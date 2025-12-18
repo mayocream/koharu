@@ -99,7 +99,7 @@ font-kit = "0.14"
 skrifa = "0.39"
 harfrust = "0.4"
 icu = "2.1"
-skia-safe = "0.91"
+skia-safe = { version = "0.91", features = ["gl"] }
 
 [patch.crates-io]
 candle-transformers = { git = "https://github.com/mayocream/candle", branch = "cuda-dynamic-loading" }

@@ -5,6 +5,7 @@ use koharu_renderer::{
     layout::{LayoutRun, TextLayout, WritingMode},
     renderer::{RenderOptions, SkiaRenderer},
 };
+use rayon::iter::{IntoParallelRefIterator, ParallelIterator};
 
 use crate::{
     image::SerializableDynamicImage,
@@ -54,16 +55,16 @@ impl Renderer {
             .collect();
 
         let plans = renderable_indices
-            .into_iter()
+            .par_iter()
             .map(|index| {
-                let block = &doc.text_blocks[index];
+                let block = &doc.text_blocks[*index];
                 let style = block.style.clone().unwrap_or_default();
                 let text = block.translation.as_deref().unwrap_or_default();
                 let writing_mode = Self::writing_mode_for_block(block, text);
                 let font = self.select_font(&style).context("failed to select font")?;
 
                 Ok(BlockPlan {
-                    index,
+                    index: *index,
                     context: BlockContext {
                         style,
                         font,
@@ -73,10 +74,18 @@ impl Renderer {
             })
             .collect::<Result<Vec<_>>>()?;
 
-        for plan in &plans {
-            let block = &doc.text_blocks[plan.index];
-            let text = block.translation.as_deref().unwrap_or_default();
-            self.render_block(block, text, plan, &mut rendered)?;
+        let render_results = plans
+            .par_iter()
+            .map(|plan| {
+                let block = &doc.text_blocks[plan.index];
+                let text = block.translation.as_deref().unwrap_or_default();
+                self.render_block(block, text, plan)
+                    .with_context(|| format!("failed to render block at index {}", plan.index))
+            })
+            .collect::<Result<Vec<_>>>()?;
+
+        for (glyph_image, dest_x, dest_y) in render_results {
+            imageops::overlay(&mut rendered, &glyph_image, dest_x, dest_y);
         }
 
         doc.rendered = Some(SerializableDynamicImage::from(DynamicImage::ImageRgba8(
@@ -104,18 +113,9 @@ impl Renderer {
         block: &TextBlock,
         text: &str,
         plan: &BlockPlan,
-        image: &mut RgbaImage,
-    ) -> Result<()> {
-        if text.is_empty() {
-            return Ok(());
-        }
-
+    ) -> Result<(RgbaImage, i64, i64)> {
         let (layout, layout_width, layout_height, font_size) =
             self.layout_for_render(block, plan, text)?;
-
-        if layout.lines.is_empty() {
-            return Ok(());
-        }
 
         let glyph_image = self.renderer.render(
             &layout,
@@ -134,8 +134,7 @@ impl Renderer {
         let dest_x = (block.x + x_offset).floor().max(0.0) as i64;
         let dest_y = (block.y + y_offset).floor().max(0.0) as i64;
 
-        imageops::overlay(image, &glyph_image, dest_x, dest_y);
-        Ok(())
+        Ok((glyph_image, dest_x, dest_y))
     }
 
     fn layout_for_render(
