@@ -118,7 +118,7 @@ impl Llm {
             "lfm2" => Model::Lfm2(quantized_lfm2::ModelWeights::from_gguf(
                 ct, &mut file, &device,
             )?),
-            _ => anyhow::bail!("unsupported model architecture: {}", arch),
+            _ => anyhow::bail!("unsupported model architecture: {arch}"),
         };
 
         Ok(Self {

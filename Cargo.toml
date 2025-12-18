@@ -67,8 +67,6 @@ tempfile = "3.10"
 once_cell = "1.21"
 libloading = "0.9"
 num_cpus = "1.17"
-swash = "0.2"
-fontdb = "0.23"
 unicode-script = "0.5"
 rustfft = "6.4"
 cudarc = { version = "0.18.2", features = [
@@ -97,6 +95,11 @@ windows = { version = "0.62", features = [
     "Win32_System_Console",
 ] }
 windows-sys = "0.61"
+font-kit = "0.14"
+skrifa = "0.39"
+harfrust = "0.4"
+icu = "2.1"
+skia-safe = "0.91"
 
 [patch.crates-io]
 candle-transformers = { git = "https://github.com/mayocream/candle", branch = "cuda-dynamic-loading" }

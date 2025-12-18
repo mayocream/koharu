@@ -10,7 +10,7 @@ use tauri::Manager;
 use tokio::sync::RwLock;
 use tracing_subscriber::fmt::format::FmtSpan;
 
-use crate::{command, llm, ml, renderer::TextRenderer, state::State};
+use crate::{command, llm, ml, renderer::Renderer, state::State};
 
 #[cfg(not(target_os = "windows"))]
 fn resolve_app_root() -> PathBuf {
@@ -191,7 +191,7 @@ async fn setup(app: tauri::AppHandle, use_cpu: bool) -> Result<()> {
 
     let ml = Arc::new(ml::Model::new(use_cpu).await?);
     let llm = Arc::new(llm::Model::new(use_cpu));
-    let renderer = Arc::new(TextRenderer::new());
+    let renderer = Arc::new(Renderer::new());
     let state = Arc::new(RwLock::new(State::default()));
 
     app.manage(ml);

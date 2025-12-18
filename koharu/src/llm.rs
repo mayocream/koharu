@@ -143,7 +143,7 @@ impl Model {
                 doc.set_translation(response)
             }
             State::Loading => Err(anyhow::anyhow!("Model is still loading")),
-            State::Failed(e) => Err(anyhow::anyhow!("Model failed to load: {}", e)),
+            State::Failed(e) => Err(anyhow::anyhow!("Model failed to load: {e}")),
             State::Empty => Err(anyhow::anyhow!("No model is loaded")),
         }
     }

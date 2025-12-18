@@ -2,31 +2,29 @@ use std::path::{Path, PathBuf};
 
 use anyhow::Context;
 use futures::{StreamExt, TryStreamExt};
-use koharu_core::http::{http_client, http_download};
+use koharu_core::http::http_client;
 use once_cell::sync::Lazy;
 use serde::Deserialize;
 
-static FONTS_DIR: Lazy<PathBuf> = Lazy::new(|| {
+pub static FONTS_DIR: Lazy<PathBuf> = Lazy::new(|| {
     dirs::data_local_dir()
         .unwrap_or_else(|| PathBuf::from("."))
         .join("Koharu")
         .join("fonts")
 });
 
-#[derive(Debug)]
+/// Google Fonts downloader and cache manager.
+#[derive(Default)]
 pub struct GoogleFonts;
-
-impl Default for GoogleFonts {
-    fn default() -> Self {
-        Self::new()
-    }
-}
 
 impl GoogleFonts {
     pub fn new() -> Self {
         Self
     }
 
+    /// Downloads font families and returns paths to the font files.
+    ///
+    /// Downloaded fonts are cached locally and reused on subsequent calls.
     pub async fn font_families(&self, families: &[&str]) -> anyhow::Result<Vec<PathBuf>> {
         tokio::fs::create_dir_all(&*FONTS_DIR).await?;
 
@@ -44,8 +42,6 @@ impl GoogleFonts {
 }
 
 async fn fetch_and_extract(family: &str) -> anyhow::Result<Vec<PathBuf>> {
-    tokio::fs::create_dir_all(&*FONTS_DIR).await?;
-
     let manifest = fetch_manifest(family).await?;
     let font_entries = manifest
         .file_refs
@@ -133,7 +129,13 @@ async fn download_font(entry: FileRef) -> anyhow::Result<PathBuf> {
         return Ok(out_path);
     }
 
-    let data = http_download(entry.url.as_str()).await?;
+    let data = http_client()
+        .get(entry.url.as_str())
+        .send()
+        .await?
+        .error_for_status()?
+        .bytes()
+        .await?;
     tokio::fs::write(&out_path, &data)
         .await
         .with_context(|| format!("failed to write font file {}", out_path.display()))?;
