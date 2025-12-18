@@ -16,6 +16,42 @@ type ProcessImageOptions =
 const replaceDocument = (docs: Document[], index: number, doc: Document) =>
   docs.map((item, idx) => (idx === index ? doc : item))
 
+const createTextBlockSyncer = () => {
+  let pending: {
+    index: number
+    textBlocks: TextBlock[]
+  } | null = null
+  let flushPromise: Promise<void> | null = null
+
+  const flush = async (): Promise<void> => {
+    if (!flushPromise) {
+      flushPromise = (async () => {
+        while (pending) {
+          const payload = pending
+          pending = null
+          await invoke<Document>('update_text_blocks', payload)
+        }
+      })().finally(() => {
+        flushPromise = null
+      })
+    }
+
+    return flushPromise
+  }
+
+  const enqueue = (index: number, textBlocks: TextBlock[]) => {
+    pending = { index, textBlocks }
+    return flush()
+  }
+
+  return {
+    enqueue,
+    flush,
+  }
+}
+
+const textBlockSyncer = createTextBlockSyncer()
+
 // A mixin of application state, ui state and actions.
 type AppState = OperationSlice & {
   documents: Document[]
@@ -150,10 +186,7 @@ export const useAppStore = create<AppState>((set, get) => ({
     set({
       documents: replaceDocument(documents, currentDocumentIndex, updatedDoc),
     })
-    await invoke<Document>('update_text_blocks', {
-      index: currentDocumentIndex,
-      textBlocks,
-    })
+    await textBlockSyncer.enqueue(currentDocumentIndex, textBlocks)
   },
   invokeWithStatus: async (command: string, args: {}) => {
     let ret: Document = await invoke<Document>(command, args)
@@ -178,6 +211,7 @@ export const useAppStore = create<AppState>((set, get) => ({
   },
   inpaint: async (_, index) => {
     index = index ?? get().currentDocumentIndex
+    await textBlockSyncer.flush()
     const doc: Document = await get().invokeWithStatus('inpaint', {
       index,
     })
@@ -188,6 +222,7 @@ export const useAppStore = create<AppState>((set, get) => ({
   },
   render: async (_, index) => {
     index = index ?? get().currentDocumentIndex
+    await textBlockSyncer.flush()
     const doc: Document = await get().invokeWithStatus('render', { index })
     set((state) => ({
       documents: replaceDocument(state.documents, index, doc),

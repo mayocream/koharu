@@ -15,20 +15,26 @@ export function useTextBlocks() {
   const updateTextBlocks = useAppStore((state) => state.updateTextBlocks)
 
   const replaceBlock = async (index: number, updates: Partial<TextBlock>) => {
-    const nextBlocks = textBlocks.map((block, idx) =>
+    const { documents, currentDocumentIndex } = useAppStore.getState()
+    const currentBlocks = documents[currentDocumentIndex]?.textBlocks ?? []
+    const nextBlocks = currentBlocks.map((block, idx) =>
       idx === index ? { ...block, ...updates } : block,
     )
     await updateTextBlocks(nextBlocks)
   }
 
   const appendBlock = async (block: TextBlock) => {
-    const nextBlocks = [...textBlocks, block]
+    const { documents, currentDocumentIndex } = useAppStore.getState()
+    const currentBlocks = documents[currentDocumentIndex]?.textBlocks ?? []
+    const nextBlocks = [...currentBlocks, block]
     await updateTextBlocks(nextBlocks)
     setSelectedBlockIndex(nextBlocks.length - 1)
   }
 
   const removeBlock = async (index: number) => {
-    const nextBlocks = textBlocks.filter((_, idx) => idx !== index)
+    const { documents, currentDocumentIndex } = useAppStore.getState()
+    const currentBlocks = documents[currentDocumentIndex]?.textBlocks ?? []
+    const nextBlocks = currentBlocks.filter((_, idx) => idx !== index)
     await updateTextBlocks(nextBlocks)
     setSelectedBlockIndex(undefined)
   }
