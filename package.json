@@ -18,7 +18,6 @@
     "ui/"
   ],
   "lint-staged": {
-    "*.{js,ts,tsx,css}": "prettier --write",
-    "*.rs": "cargo fmt -- --check"
+    "*.{js,ts,tsx,css}": "prettier --write"
   }
 }

@@ -8,9 +8,10 @@ use once_cell::sync::Lazy;
 use rfd::MessageDialog;
 use tauri::Manager;
 use tokio::sync::RwLock;
+use tracing::warn;
 use tracing_subscriber::fmt::format::FmtSpan;
 
-use crate::{command, llm, ml, renderer::Renderer, state::State};
+use crate::{command, llm, ml, renderer::Renderer, state::State, update};
 
 #[cfg(not(target_os = "windows"))]
 fn resolve_app_root() -> PathBuf {
@@ -171,18 +172,6 @@ async fn prefetch() -> Result<()> {
 }
 
 async fn setup(app: tauri::AppHandle, use_cpu: bool) -> Result<()> {
-    #[cfg(feature = "bundle")]
-    {
-        let source = velopack::sources::HttpSource::new(
-            "https://github.com/mayocream/koharu/releases/latest/download",
-        );
-        let um = velopack::UpdateManager::new(source, None, None)?;
-        if let velopack::UpdateCheck::UpdateAvailable(updates) = um.check_for_updates()? {
-            um.download_updates(&updates, None)?;
-            um.apply_updates_and_restart(&updates)?;
-        }
-    }
-
     // Preload dynamic libraries only if CUDA is available.
     if cuda_is_available() {
         ensure_dylibs(LIB_ROOT.to_path_buf()).await?;
@@ -275,8 +264,14 @@ pub async fn run() -> Result<()> {
             command::llm_offload,
             command::llm_ready,
             command::llm_generate,
+            update::apply_available_update,
+            update::get_available_update,
+            update::ignore_update,
         ])
         .setup(move |app| {
+            app.manage(update::UpdateState::new(APP_ROOT.to_path_buf()));
+            update::spawn_background_update_check(app.handle().clone());
+
             let handle = app.handle().clone();
             tauri::async_runtime::spawn(async move {
                 if let Err(err) = setup(handle, cli.cpu).await {

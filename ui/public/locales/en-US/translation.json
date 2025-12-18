@@ -28,6 +28,16 @@
       "ja-JP": "日本語"
     }
   },
+  "updates": {
+    "title": "Update available",
+    "message": "Koharu {{version}} is ready to install.",
+    "size": "Size: {{size}}",
+    "updateNow": "Update now",
+    "skip": "Skip",
+    "ignore": "Ignore this version",
+    "applying": "Downloading and applying update...",
+    "error": "Update failed: {{message}}"
+  },
   "navigator": {
     "title": "Navigator",
     "pages_one": "{{count}} page",

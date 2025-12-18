@@ -28,6 +28,16 @@
       "ja-JP": "日本語"
     }
   },
+  "updates": {
+    "title": "發現新版本",
+    "message": "Koharu {{version}} 可供安裝。",
+    "size": "大小：{{size}}",
+    "updateNow": "立即更新",
+    "skip": "稍後再說",
+    "ignore": "忽略此版本",
+    "applying": "正在下載並套用更新...",
+    "error": "更新失敗：{{message}}"
+  },
   "navigator": {
     "title": "導覽",
     "pages_one": "{{count}} 頁",
