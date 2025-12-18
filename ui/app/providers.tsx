@@ -3,14 +3,42 @@
 import { useEffect, type ReactNode } from 'react'
 import { I18nextProvider } from 'react-i18next'
 import { Tooltip } from 'radix-ui'
+import { invoke } from '@tauri-apps/api/core'
+import { listen } from '@tauri-apps/api/event'
 import i18n, {
   getPreferredLocale,
   locales,
   persistLocale,
   type LocaleCode,
 } from '@/lib/i18n'
+import { useAppStore } from '@/lib/store'
+import { Document } from '@/types'
 
 export function Providers({ children }: { children: ReactNode }) {
+  const hydrateDocuments = useAppStore((state) => state.hydrateDocuments)
+
+  useEffect(() => {
+    let unlisten: (() => void) | undefined
+    ;(async () => {
+      try {
+        const docs = await invoke<Document[]>('get_documents')
+        if (docs.length) {
+          hydrateDocuments(docs)
+        }
+      } catch (_) {}
+
+      try {
+        unlisten = await listen<Document[]>('documents:opened', (event) => {
+          hydrateDocuments(event.payload ?? [])
+        })
+      } catch (_) {}
+    })()
+
+    return () => {
+      unlisten?.()
+    }
+  }, [hydrateDocuments])
+
   useEffect(() => {
     const preferred = getPreferredLocale()
     if (preferred && preferred !== i18n.language) {

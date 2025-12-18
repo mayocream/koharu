@@ -1,10 +1,11 @@
 use std::path::PathBuf;
 
 use serde::Serialize;
-#[warn(unused_imports)]
-use tauri::{AppHandle, Emitter, Manager, State};
+use tauri::{AppHandle, State};
+#[cfg(feature = "bundle")]
+use tauri::{Emitter, Manager};
 use tokio::sync::RwLock;
-#[warn(unused_imports)]
+#[cfg(feature = "bundle")]
 use tracing::{error, info, warn};
 
 use crate::result::Result;
@@ -182,7 +183,6 @@ pub async fn apply_available_update(app: AppHandle, state: State<'_, UpdateState
 }
 
 #[tauri::command]
-#[warn(unused_variables)]
 pub async fn ignore_update(state: State<'_, UpdateState>, version: Option<String>) -> Result<()> {
     #[cfg(feature = "bundle")]
     {
@@ -200,8 +200,11 @@ pub async fn ignore_update(state: State<'_, UpdateState>, version: Option<String
             state.clear_pending().await;
         }
     }
-
-    let _ = state;
+    #[cfg(not(feature = "bundle"))]
+    {
+        let _ = version;
+        let _ = state;
+    }
 
     Ok(())
 }

@@ -1,6 +1,7 @@
 pub mod app;
 pub mod command;
 pub mod image;
+pub mod khr;
 pub mod llm;
 pub mod ml;
 pub mod renderer;

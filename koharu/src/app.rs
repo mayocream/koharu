@@ -1,17 +1,24 @@
 use std::{path::PathBuf, sync::Arc};
 
 use anyhow::Result;
-use clap::Parser;
+use clap::{Parser, ValueHint};
 use koharu_ml::cuda_is_available;
 use koharu_runtime::{ensure_dylibs, preload_dylibs};
 use once_cell::sync::Lazy;
 use rfd::MessageDialog;
-use tauri::Manager;
+use tauri::{Emitter, Manager};
 use tokio::sync::RwLock;
 use tracing::warn;
 use tracing_subscriber::fmt::format::FmtSpan;
 
-use crate::{command, llm, ml, renderer::Renderer, state::State, update};
+use crate::{
+    command,
+    khr::{deserialize_khr, has_khr_magic},
+    llm, ml,
+    renderer::Renderer,
+    state::{Document, State},
+    update,
+};
 
 #[cfg(not(target_os = "windows"))]
 fn resolve_app_root() -> PathBuf {
@@ -129,6 +136,27 @@ struct Cli {
         default_value_t = false
     )]
     cpu: bool,
+    #[arg(
+        value_name = "PATH",
+        value_hint = ValueHint::FilePath,
+        help = "Open file on startup"
+    )]
+    path: Option<PathBuf>,
+}
+
+fn load_documents_from_path(path: PathBuf) -> Result<Vec<Document>> {
+    if !path.exists() {
+        return Err(anyhow::anyhow!("File not found: {}", path.display()));
+    }
+
+    let bytes = std::fs::read(&path)?;
+
+    if has_khr_magic(&bytes) {
+        return deserialize_khr(&bytes)
+            .map_err(|err| anyhow::anyhow!("Failed to load documents: {err}"));
+    }
+
+    Ok(vec![Document::open(path)?])
 }
 
 fn initialize() -> Result<()> {
@@ -177,7 +205,11 @@ async fn prefetch() -> Result<()> {
     Ok(())
 }
 
-async fn setup(app: tauri::AppHandle, use_cpu: bool) -> Result<()> {
+async fn setup(
+    app: tauri::AppHandle,
+    use_cpu: bool,
+    startup_document: Option<PathBuf>,
+) -> Result<()> {
     // Preload dynamic libraries only if CUDA is available.
     if cuda_is_available() {
         ensure_dylibs(LIB_ROOT.to_path_buf()).await?;
@@ -235,10 +267,34 @@ async fn setup(app: tauri::AppHandle, use_cpu: bool) -> Result<()> {
     app.manage(ml);
     app.manage(llm);
     app.manage(renderer);
-    app.manage(state);
 
     app.get_webview_window("splashscreen").unwrap().close()?;
-    app.get_webview_window("main").unwrap().show()?;
+    let main_window = app.get_webview_window("main").unwrap();
+    main_window.show()?;
+
+    if let Some(path) = startup_document {
+        match load_documents_from_path(path) {
+            Ok(documents) => {
+                {
+                    let mut guard = state.write().await;
+                    guard.documents = documents.clone();
+                }
+                if let Err(err) = main_window.emit("documents:opened", &documents) {
+                    warn!(?err, "Failed to emit documents:opened event");
+                }
+            }
+            Err(err) => {
+                warn!(?err, "Failed to open startup document");
+                MessageDialog::new()
+                    .set_level(rfd::MessageLevel::Error)
+                    .set_title("Failed to open file")
+                    .set_description(format!("{err:#}"))
+                    .show();
+            }
+        }
+    }
+
+    app.manage(state);
 
     Ok(())
 }
@@ -246,8 +302,13 @@ async fn setup(app: tauri::AppHandle, use_cpu: bool) -> Result<()> {
 pub async fn run() -> Result<()> {
     initialize()?;
 
-    let cli = Cli::parse();
-    if cli.download {
+    let Cli {
+        download,
+        cpu,
+        path,
+    } = Cli::parse();
+
+    if download {
         prefetch().await?;
         return Ok(());
     }
@@ -256,6 +317,7 @@ pub async fn run() -> Result<()> {
         .invoke_handler(tauri::generate_handler![
             command::app_version,
             command::open_external,
+            command::get_documents,
             command::open_documents,
             command::save_documents,
             command::export_document,
@@ -279,8 +341,9 @@ pub async fn run() -> Result<()> {
             update::spawn_background_update_check(app.handle().clone());
 
             let handle = app.handle().clone();
+            let startup_path = path.clone();
             tauri::async_runtime::spawn(async move {
-                if let Err(err) = setup(handle, cli.cpu).await {
+                if let Err(err) = setup(handle, cpu, startup_path).await {
                     panic!("application setup failed: {err:#}");
                 }
             });

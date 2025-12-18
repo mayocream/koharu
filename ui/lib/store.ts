@@ -70,6 +70,7 @@ type AppState = OperationSlice & {
   llmReady: boolean
   llmLoading: boolean
   // ui + actions
+  hydrateDocuments: (docs: Document[]) => void
   openDocuments: () => Promise<void>
   saveDocuments: () => Promise<void>
   openExternal: (url: string) => Promise<void>
@@ -129,15 +130,18 @@ export const useAppStore = create<AppState>((set, get) => ({
   llmReady: false,
   llmLoading: false,
   operation: undefined,
+  hydrateDocuments: (docs: Document[]) => {
+    set({
+      documents: docs,
+      currentDocumentIndex: 0,
+      selectedBlockIndex: undefined,
+    })
+  },
   openDocuments: async () => {
     get().startOperation({ type: 'load-khr', cancellable: false })
     try {
       const docs: Document[] = await invoke('open_documents')
-      set({
-        documents: docs,
-        currentDocumentIndex: 0,
-        selectedBlockIndex: undefined,
-      })
+      get().hydrateDocuments(docs)
     } finally {
       get().finishOperation()
     }

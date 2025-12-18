@@ -9,10 +9,11 @@ use tracing::instrument;
 
 use crate::{
     image::SerializableDynamicImage,
+    khr::{deserialize_khr, has_khr_magic, serialize_khr},
     llm, ml,
     renderer::Renderer,
     result::Result,
-    state::{AppState, Document, TextBlock, TextStyle, deserialize_khr, serialize_khr},
+    state::{AppState, Document, TextBlock, TextStyle},
     version,
 };
 
@@ -31,22 +32,13 @@ pub async fn open_documents(state: State<'_, AppState>) -> Result<Vec<Document>>
         .pick_files()
         .unwrap_or_default();
 
-    let load_khr = paths.len() == 1
-        && matches!(
-            paths[0]
-                .extension()
-                .unwrap_or_default()
-                .to_string_lossy()
-                .to_lowercase()
-                .as_str(),
-            "khr"
-        );
-
-    // khr loader or load image files
-    let documents: Vec<Document> = if load_khr {
-        let bytes = std::fs::read(&paths[0])?;
-        deserialize_khr(&bytes).map_err(|e| anyhow::anyhow!("Failed to load documents: {e}"))?
+    let single_file_bytes = if paths.len() == 1 {
+        Some(std::fs::read(&paths[0])?)
     } else {
+        None
+    };
+
+    let load_images = |paths: Vec<std::path::PathBuf>| {
         let mut documents = paths
             .into_par_iter()
             .filter_map(|path| Document::open(path).ok())
@@ -55,6 +47,17 @@ pub async fn open_documents(state: State<'_, AppState>) -> Result<Vec<Document>>
         documents.sort_by_key(|doc| doc.name.clone());
 
         documents
+    };
+
+    // khr loader or load image files
+    let documents: Vec<Document> = if let Some(bytes) = single_file_bytes.as_ref() {
+        if has_khr_magic(bytes) {
+            deserialize_khr(bytes).map_err(|e| anyhow::anyhow!("Failed to load documents: {e}"))?
+        } else {
+            load_images(paths)
+        }
+    } else {
+        load_images(paths)
     };
 
     // store documents in app state
@@ -68,6 +71,12 @@ pub async fn open_documents(state: State<'_, AppState>) -> Result<Vec<Document>>
 #[tauri::command]
 pub fn app_version() -> String {
     version::current().to_string()
+}
+
+#[tauri::command]
+pub async fn get_documents(state: State<'_, AppState>) -> Result<Vec<Document>> {
+    let state = state.read().await;
+    Ok(state.documents.clone())
 }
 
 #[tauri::command]
