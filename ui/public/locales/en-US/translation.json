@@ -5,6 +5,7 @@
   "menu": {
     "file": "File",
     "openFile": "Open File...",
+    "save": "Save...",
     "export": "Export...",
     "exportAll": "Export All",
     "view": "View",

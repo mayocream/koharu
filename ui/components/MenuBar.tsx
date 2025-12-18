@@ -15,6 +15,7 @@ export function MenuBar() {
     inpaintAndRenderImage,
     processAllImages,
     exportDocument,
+    saveDocuments,
     exportAllDocuments,
   } = useAppStore()
   const menus = [
@@ -22,6 +23,7 @@ export function MenuBar() {
       label: t('menu.file'),
       items: [
         { label: t('menu.openFile'), onSelect: openDocuments },
+        { label: t('menu.save'), onSelect: saveDocuments },
         { label: t('menu.export'), onSelect: exportDocument },
         { label: t('menu.exportAll'), onSelect: exportAllDocuments },
       ],

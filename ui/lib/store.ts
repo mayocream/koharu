@@ -28,6 +28,7 @@ type AppState = {
   llmLoading: boolean
   // ui + actions
   openDocuments: () => Promise<void>
+  saveDocuments: () => Promise<void>
   openExternal: (url: string) => Promise<void>
   setCurrentDocumentIndex?: (index: number) => void
   setScale: (scale: number) => void
@@ -91,6 +92,9 @@ export const useAppStore = create<AppState>((set, get) => ({
       currentDocumentIndex: 0,
       selectedBlockIndex: undefined,
     })
+  },
+  saveDocuments: async () => {
+    await invoke('save_documents')
   },
   openExternal: async (url: string) => {
     await invoke('open_external', { url })
@@ -291,12 +295,12 @@ export const useAppStore = create<AppState>((set, get) => ({
 
   exportDocument: async () => {
     const index = get().currentDocumentIndex
-    await invoke('save_document', { index })
+    await invoke('export_document', { index })
   },
 
   exportAllDocuments: async () => {
     if (!get().documents.length) return
-    await invoke('save_all_documents')
+    await invoke('export_all_documents')
   },
 
   setProgress: async (progress?: number, state?: ProgressBarStatus) => {

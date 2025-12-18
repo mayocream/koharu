@@ -25,18 +25,38 @@ pub fn open_external(url: &str) -> Result<()> {
 #[tauri::command]
 pub async fn open_documents(state: State<'_, AppState>) -> Result<Vec<Document>> {
     let paths = rfd::FileDialog::new()
-        .add_filter("Image Files", &["png", "jpg", "jpeg", "webp"])
-        .add_filter("Koharu Document", &["khr"])
+        .add_filter("Supported Files", &["khr", "png", "jpg", "jpeg", "webp"])
         .set_title("Pick Files")
         .pick_files()
         .unwrap_or_default();
 
-    let mut documents = paths
-        .into_par_iter()
-        .filter_map(|path| Document::open(path).ok())
-        .collect::<Vec<_>>();
+    let load_khr = paths.len() == 1
+        && matches!(
+            paths[0]
+                .extension()
+                .unwrap_or_default()
+                .to_string_lossy()
+                .to_lowercase()
+                .as_str(),
+            "khr"
+        );
 
-    documents.sort_by_key(|doc| doc.name.clone());
+    // khr loader or load image files
+    let documents: Vec<Document> = if load_khr {
+        let bytes = std::fs::read(&paths[0])?;
+        postcard::from_bytes(&bytes)
+            .or_else(|_| postcard::from_bytes(&bytes).map(|doc: Document| vec![doc]))
+            .map_err(|e| anyhow::anyhow!("Failed to load documents: {e}"))?
+    } else {
+        let mut documents = paths
+            .into_par_iter()
+            .filter_map(|path| Document::open(path).ok())
+            .collect::<Vec<_>>();
+
+        documents.sort_by_key(|doc| doc.name.clone());
+
+        documents
+    };
 
     // store documents in app state
     let mut state = state.write().await;
@@ -47,7 +67,7 @@ pub async fn open_documents(state: State<'_, AppState>) -> Result<Vec<Document>>
 }
 
 #[tauri::command]
-pub async fn save_document(state: State<'_, AppState>, index: usize) -> Result<()> {
+pub async fn export_document(state: State<'_, AppState>, index: usize) -> Result<()> {
     let mut state = state.write().await;
     let document = state
         .documents
@@ -79,7 +99,7 @@ pub async fn save_document(state: State<'_, AppState>, index: usize) -> Result<(
 }
 
 #[tauri::command]
-pub async fn save_all_documents(state: State<'_, AppState>) -> Result<()> {
+pub async fn export_all_documents(state: State<'_, AppState>) -> Result<()> {
     let dest = rfd::FileDialog::new()
         .set_title("Select Export Destinition Folder")
         // default as filename_koharu.file_ext
@@ -106,6 +126,42 @@ pub async fn save_all_documents(state: State<'_, AppState>) -> Result<()> {
             .save(dest.join(&default_filename))
             .map_err(|e| anyhow::anyhow!("Failed to save image: {e}"))?;
     }
+
+    Ok(())
+}
+
+#[tauri::command]
+pub async fn save_documents(state: State<'_, AppState>) -> Result<()> {
+    let state = state.read().await;
+
+    if state.documents.is_empty() {
+        return Ok(());
+    }
+
+    let default_filename = if state.documents.len() == 1 {
+        // use the directory name of the document
+        let stem = &state.documents[0]
+            .path
+            .file_stem()
+            .and_then(|s| s.to_str())
+            .unwrap_or("project");
+        format!("{}.khr", stem)
+    } else {
+        "project.khr".to_string()
+    };
+
+    let Some(dest) = rfd::FileDialog::new()
+        .set_title("Save Koharu Document")
+        .add_filter("Koharu Document", &["khr"])
+        .set_file_name(default_filename)
+        .save_file()
+    else {
+        return Ok(());
+    };
+
+    let bytes = postcard::to_allocvec(&state.documents)
+        .map_err(|e| anyhow::anyhow!("Failed to serialize documents: {e}"))?;
+    std::fs::write(dest, bytes)?;
 
     Ok(())
 }
