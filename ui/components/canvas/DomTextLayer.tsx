@@ -63,24 +63,6 @@ const MAX_FONT_SIZE = 180
 const clampFontSize = (value: number) =>
   Math.min(MAX_FONT_SIZE, Math.max(MIN_FONT_SIZE, value))
 
-const NEAR_BLACK_THRESHOLD = 12
-const GRAY_NEAR_BLACK_THRESHOLD = 60
-const GRAY_TOLERANCE = 10
-
-const clampNearBlack = (color?: RgbOrRgba): RgbOrRgba | undefined => {
-  if (!color) return color
-  const [r, g, b] = color
-  const maxChannel = Math.max(r, g, b)
-  const minChannel = Math.min(r, g, b)
-  const isGrayish = maxChannel - minChannel <= GRAY_TOLERANCE
-  const threshold = isGrayish ? GRAY_NEAR_BLACK_THRESHOLD : NEAR_BLACK_THRESHOLD
-
-  if (r <= threshold && g <= threshold && b <= threshold) {
-    return color.length === 4 ? [0, 0, 0, color[3]] : [0, 0, 0]
-  }
-  return color
-}
-
 const quantile = (values: number[], percentile: number) => {
   if (!values.length) return 0
   const clamped = Math.min(Math.max(percentile, 0), 1)
@@ -258,12 +240,10 @@ function DomTextBlock({
   )
   const [fontSize, setFontSize] = useState<number>(initialSize)
   const textColor = toCssColor(
-    clampNearBlack(
-      pickColor(
-        fontPrediction?.text_color,
-        fontPrediction?.textColor,
-        style?.color,
-      ),
+    pickColor(
+      fontPrediction?.text_color,
+      fontPrediction?.textColor,
+      style?.color,
     ),
   )
   const strokeColor = pickColor(

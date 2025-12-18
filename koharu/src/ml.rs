@@ -8,6 +8,66 @@ use koharu_ml::manga_ocr::{self, MangaOcr};
 use crate::image::SerializableDynamicImage;
 use crate::state::TextBlock;
 
+const NEAR_BLACK_THRESHOLD: u8 = 12;
+const GRAY_NEAR_BLACK_THRESHOLD: u8 = 60;
+const NEAR_WHITE_THRESHOLD: u8 = 12;
+const GRAY_NEAR_WHITE_THRESHOLD: u8 = 60;
+const GRAY_TOLERANCE: u8 = 10;
+const SIMILAR_COLOR_MAX_DIFF: u8 = 16;
+
+fn clamp_near_black(color: [u8; 3]) -> [u8; 3] {
+    let max_channel = *color.iter().max().unwrap_or(&0);
+    let min_channel = *color.iter().min().unwrap_or(&0);
+    let is_grayish = max_channel.saturating_sub(min_channel) <= GRAY_TOLERANCE;
+    let threshold = if is_grayish {
+        GRAY_NEAR_BLACK_THRESHOLD
+    } else {
+        NEAR_BLACK_THRESHOLD
+    };
+
+    if color[0] <= threshold && color[1] <= threshold && color[2] <= threshold {
+        [0, 0, 0]
+    } else {
+        color
+    }
+}
+
+fn clamp_near_white(color: [u8; 3]) -> [u8; 3] {
+    let max_channel = *color.iter().max().unwrap_or(&0);
+    let min_channel = *color.iter().min().unwrap_or(&0);
+    let is_grayish = max_channel.saturating_sub(min_channel) <= GRAY_TOLERANCE;
+    let threshold = if is_grayish {
+        GRAY_NEAR_WHITE_THRESHOLD
+    } else {
+        NEAR_WHITE_THRESHOLD
+    };
+
+    let min_white = 255u8.saturating_sub(threshold);
+    if color[0] >= min_white && color[1] >= min_white && color[2] >= min_white {
+        [255, 255, 255]
+    } else {
+        color
+    }
+}
+
+fn colors_similar(a: [u8; 3], b: [u8; 3]) -> bool {
+    a[0].abs_diff(b[0]) <= SIMILAR_COLOR_MAX_DIFF
+        && a[1].abs_diff(b[1]) <= SIMILAR_COLOR_MAX_DIFF
+        && a[2].abs_diff(b[2]) <= SIMILAR_COLOR_MAX_DIFF
+}
+
+fn normalize_font_prediction(prediction: &mut font_detector::FontPrediction) {
+    prediction.text_color = clamp_near_white(clamp_near_black(prediction.text_color));
+    prediction.stroke_color = clamp_near_white(clamp_near_black(prediction.stroke_color));
+
+    if prediction.stroke_width_px > 0.0
+        && colors_similar(prediction.text_color, prediction.stroke_color)
+    {
+        prediction.stroke_width_px = 0.0;
+        prediction.stroke_color = prediction.text_color;
+    }
+}
+
 pub struct Model {
     dialog_detector: ComicTextDetector,
     ocr: MangaOcr,
@@ -115,7 +175,11 @@ impl Model {
             return Ok(Vec::new());
         }
 
-        self.font_detector.inference(images, top_k)
+        let mut predictions = self.font_detector.inference(images, top_k)?;
+        for prediction in &mut predictions {
+            normalize_font_prediction(prediction);
+        }
+        Ok(predictions)
     }
 }
 
