@@ -4,12 +4,20 @@ import { create } from 'zustand'
 import { invoke } from '@tauri-apps/api/core'
 import { getCurrentWindow, ProgressBarStatus } from '@tauri-apps/api/window'
 import { Document, TextBlock, ToolMode } from '@/types'
+import { createOperationSlice, type OperationSlice } from '@/lib/operations'
+
+type ProcessImageOptions =
+  | ((progress: number) => Promise<void>)
+  | {
+      onProgress?: (progress: number) => Promise<void>
+      skipOperationTracking?: boolean
+    }
 
 const replaceDocument = (docs: Document[], index: number, doc: Document) =>
   docs.map((item, idx) => (idx === index ? doc : item))
 
 // A mixin of application state, ui state and actions.
-type AppState = {
+type AppState = OperationSlice & {
   documents: Document[]
   currentDocumentIndex: number
   scale: number
@@ -20,7 +28,6 @@ type AppState = {
   mode: ToolMode
   selectedBlockIndex?: number
   autoFitEnabled: boolean
-  processJobName: string
   // LLM state
   llmModels: string[]
   llmSelectedModel?: string
@@ -51,7 +58,7 @@ type AppState = {
   processImage: (
     _?: any,
     index?: number,
-    setProgressCallbck?: (progress: number) => Promise<void>,
+    options?: ProcessImageOptions,
   ) => Promise<void>
   inpaintAndRenderImage: (_?: any, index?: number) => Promise<void>
   processAllImages: () => Promise<void>
@@ -70,6 +77,7 @@ type AppState = {
 }
 
 export const useAppStore = create<AppState>((set, get) => ({
+  ...createOperationSlice(set),
   documents: [],
   currentDocumentIndex: 0,
   scale: 100,
@@ -78,23 +86,33 @@ export const useAppStore = create<AppState>((set, get) => ({
   showRenderedImage: false,
   showTextBlocksOverlay: false,
   mode: 'select',
-  processJobName: '',
   selectedBlockIndex: undefined,
   autoFitEnabled: true,
   llmModels: [],
   llmSelectedModel: undefined,
   llmReady: false,
   llmLoading: false,
+  operation: undefined,
   openDocuments: async () => {
-    const docs: Document[] = await invoke('open_documents')
-    set({
-      documents: docs,
-      currentDocumentIndex: 0,
-      selectedBlockIndex: undefined,
-    })
+    get().startOperation({ type: 'load-khr', cancellable: false })
+    try {
+      const docs: Document[] = await invoke('open_documents')
+      set({
+        documents: docs,
+        currentDocumentIndex: 0,
+        selectedBlockIndex: undefined,
+      })
+    } finally {
+      get().finishOperation()
+    }
   },
   saveDocuments: async () => {
-    await invoke('save_documents')
+    get().startOperation({ type: 'save-khr', cancellable: false })
+    try {
+      await invoke('save_documents')
+    } finally {
+      get().finishOperation()
+    }
   },
   openExternal: async (url: string) => {
     await invoke('open_external', { url })
@@ -138,14 +156,7 @@ export const useAppStore = create<AppState>((set, get) => ({
     })
   },
   invokeWithStatus: async (command: string, args: {}) => {
-    // replace underscore case with CamelCases
-    set({
-      processJobName: command
-        .replace(/_/g, ' ')
-        .replace(/\b\w/g, (c) => c.toUpperCase()),
-    })
     let ret: Document = await invoke<Document>(command, args)
-    set({ processJobName: '' })
     return ret
   },
   detect: async (_, index) => {
@@ -209,21 +220,36 @@ export const useAppStore = create<AppState>((set, get) => ({
     // load
     const id = get().llmSelectedModel
     if (!id) return
-    await invoke('llm_load', { id })
+    get().startOperation({
+      type: 'llm-load',
+      cancellable: false,
+      progress: 0,
+    })
+    let ready = false
+    try {
+      await invoke('llm_load', { id })
 
-    await get().setProgress(100, ProgressBarStatus.Paused)
+      await get().setProgress(100, ProgressBarStatus.Paused)
 
-    set({ llmLoading: true })
-    // poll for llmCheckReady and set llmLoading false
-    let try_time = 0
-    while (try_time++ < 300) {
-      await get().llmCheckReady()
-      if (get().llmReady) {
-        await get().clearProgress()
-        set({ llmLoading: false })
-        break
+      set({ llmLoading: true })
+      // poll for llmCheckReady and set llmLoading false
+      let try_time = 0
+      while (try_time++ < 300) {
+        await get().llmCheckReady()
+        if (get().llmReady) {
+          ready = true
+          await get().clearProgress()
+          set({ llmLoading: false })
+          break
+        }
+        await new Promise((resolve) => setTimeout(resolve, 100))
       }
-      await new Promise((resolve) => setTimeout(resolve, 100))
+    } finally {
+      if (!ready) {
+        set({ llmLoading: false })
+        await get().clearProgress()
+      }
+      get().finishOperation()
     }
   },
   llmCheckReady: async () => {
@@ -251,27 +277,87 @@ export const useAppStore = create<AppState>((set, get) => ({
   },
 
   // batch proceeses
-  processImage: async (_, index, setGlobalProgress) => {
+  processImage: async (_, index, options) => {
+    const normalizedOptions =
+      typeof options === 'function'
+        ? { onProgress: options, skipOperationTracking: false }
+        : (options ?? {})
+
+    const { onProgress, skipOperationTracking } = normalizedOptions
+    const operation = get().operation
+    const isBatchRun = operation?.type === 'process-all'
+
     if (!get().llmReady) {
-      set({ processJobName: 'Loading LLM Model' })
       await get().llmList()
       await get().llmToggleLoadUnload()
     }
 
     index = index ?? get().currentDocumentIndex
     console.log('Processing image at index', index)
-    const setProgres = setGlobalProgress ?? get().setProgress
+    const setProgres = onProgress ?? get().setProgress
+    const shouldTrackOperation = skipOperationTracking !== true && !isBatchRun
+    const ownsOperation = shouldTrackOperation && !isBatchRun
 
-    set({ processJobName: '' })
+    const actions = ['detect', 'ocr', 'inpaint', 'llmGenerate'] as const
+
+    if (shouldTrackOperation) {
+      const firstStep = actions[0] ?? 'detect'
+      if (ownsOperation) {
+        get().startOperation({
+          type: 'process-current',
+          progress: 0,
+          step: firstStep,
+          stepIndex: 0,
+          stepCount: actions.length,
+          cancellable: true,
+        })
+      } else {
+        get().updateOperation({
+          step: firstStep,
+          stepIndex: 0,
+          stepCount: actions.length,
+        })
+      }
+    }
 
     await setProgres(0)
-    const actions = ['detect', 'ocr', 'inpaint', 'llmGenerate']
     for (let i = 0; i < actions.length; i++) {
+      if (get().operation?.cancelRequested) {
+        break
+      }
+
+      const action = actions[i]
+
+      if (shouldTrackOperation) {
+        get().updateOperation({
+          step: action,
+          stepIndex: i,
+          stepCount: actions.length,
+          progress: Math.floor((i / actions.length) * 100),
+        })
+      }
+
       await (get() as any)[actions[i]](_, index)
       await setProgres(Math.floor(((i + 1) / actions.length) * 100))
     }
 
-    if (!setGlobalProgress) get().clearProgress()
+    const cancelled = get().operation?.cancelRequested
+
+    if (shouldTrackOperation && ownsOperation && !cancelled) {
+      get().updateOperation({ progress: 100 })
+    }
+
+    if (shouldTrackOperation && ownsOperation) {
+      get().finishOperation()
+    }
+
+    if (!onProgress) {
+      await get().clearProgress()
+    }
+
+    if (cancelled) {
+      return
+    }
   },
 
   inpaintAndRenderImage: async (_, index) => {
@@ -282,15 +368,57 @@ export const useAppStore = create<AppState>((set, get) => ({
 
   processAllImages: async () => {
     const total = get().documents.length
-    for (let index = 0; index < total; index++) {
-      set({ currentDocumentIndex: index, selectedBlockIndex: undefined })
-      await get().processImage(null, index, async (progress) => {
-        await get().setProgress(
-          Math.floor(progress / total + (index / total) * 100),
-        )
-      })
+    if (!total) return
+
+    if (!get().llmReady) {
+      await get().llmList()
+      await get().llmToggleLoadUnload()
     }
+
+    get().startOperation({
+      type: 'process-all',
+      progress: 0,
+      currentIndex: 1,
+      total,
+      cancellable: true,
+    })
+
+    for (let index = 0; index < total; index++) {
+      if (get().operation?.cancelRequested) break
+
+      set({ currentDocumentIndex: index, selectedBlockIndex: undefined })
+      get().updateOperation({
+        currentIndex: index + 1,
+        progress: Math.round((index / total) * 100),
+        step: undefined,
+        stepIndex: undefined,
+        stepCount: undefined,
+      })
+
+      await get().processImage(null, index, {
+        onProgress: async (progress) => {
+          if (get().operation?.cancelRequested) return
+          const overall = Math.min(
+            100,
+            Math.round(progress / total + (index / total) * 100),
+          )
+          await get().setProgress(overall)
+          get().updateOperation({ progress: overall })
+        },
+        skipOperationTracking: true,
+      })
+
+      if (get().operation?.cancelRequested) {
+        break
+      }
+    }
+
+    if (!get().operation?.cancelRequested) {
+      get().updateOperation({ progress: 100 })
+    }
+
     await get().clearProgress()
+    get().finishOperation()
   },
 
   exportDocument: async () => {

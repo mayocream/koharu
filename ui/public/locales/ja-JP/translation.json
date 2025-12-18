@@ -38,6 +38,19 @@
     "applying": "更新をダウンロードして適用しています...",
     "error": "更新に失敗しました: {{message}}"
   },
+  "operations": {
+    "title": "処理中",
+    "inProgress": "処理が完了するまでお待ちください。",
+    "loadKhr": "プロジェクトを読み込み中",
+    "saveKhr": "プロジェクトを保存中",
+    "loadModel": "LLM モデルを読み込み中",
+    "processCurrent": "現在の画像を処理中",
+    "processAll": "すべての画像を一括処理中",
+    "imageProgress": "画像 {{current}} / {{total}}",
+    "stepProgress": "ステップ {{current}} / {{total}}：{{step}}",
+    "cancel": "停止",
+    "cancelling": "停止中..."
+  },
   "navigator": {
     "title": "ナビゲーター",
     "pages_one": "{{count}} ページ",
