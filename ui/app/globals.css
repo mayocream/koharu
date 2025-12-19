@@ -1,1 +1,18 @@
-@import "tailwindcss";
+@import 'tailwindcss';
+
+@keyframes activity-progress-indeterminate {
+  0% {
+    transform: translateX(-100%);
+  }
+  50% {
+    transform: translateX(50%);
+  }
+  100% {
+    transform: translateX(200%);
+  }
+}
+
+.activity-progress-indeterminate {
+  animation: activity-progress-indeterminate 2s linear infinite;
+  will-change: transform;
+}

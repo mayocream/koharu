@@ -51,6 +51,7 @@ function OperationCard({
   onCancel: () => void
   t: TranslateFunc
 }) {
+  const isProcessAll = operation.type === 'process-all'
   const hasProgressNumbers =
     typeof operation.current === 'number' &&
     typeof operation.total === 'number' &&
@@ -105,7 +106,12 @@ function OperationCard({
         })
       : undefined
 
-  const subtitle = [imageText, stepText].filter(Boolean).join(' • ')
+  const subtitleParts =
+    operation.type === 'process-all'
+      ? [stepLabel]
+      : [imageText, stepText ?? stepLabel].filter(Boolean)
+  const subtitle =
+    subtitleParts.filter(Boolean).join(' \u00b7 ') || t('operations.inProgress')
 
   return (
     <BubbleCard>
@@ -121,9 +127,7 @@ function OperationCard({
                 {subtitle || t('operations.inProgress')}
               </div>
             </div>
-            {operation.type === 'process-all' &&
-            total &&
-            typeof displayCurrent === 'number' ? (
+            {isProcessAll && total && typeof displayCurrent === 'number' ? (
               <span className='rounded-full bg-neutral-100 px-2 py-0.5 text-[11px] font-medium text-neutral-600'>
                 {t('operations.imageProgress', {
                   current: displayCurrent,
@@ -140,7 +144,7 @@ function OperationCard({
                   style={{ width: `${progress}%` }}
                 />
               ) : (
-                <div className='absolute inset-0 w-1/2 animate-pulse rounded-full bg-rose-200' />
+                <div className='activity-progress-indeterminate absolute inset-0 w-1/2 rounded-full bg-gradient-to-r from-rose-200 via-rose-500 to-rose-200' />
               )}
             </div>
             {typeof progress === 'number' && (

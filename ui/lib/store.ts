@@ -15,12 +15,17 @@ import {
 } from '@/lib/openai'
 import { t } from 'i18next'
 
+type ProcessAction = 'detect' | 'ocr' | 'inpaint' | 'llmGenerate'
+
+type ProcessImageOptionsObject = {
+  onProgress?: (progress: number) => Promise<void>
+  onStepChange?: (step: ProcessAction) => Promise<void> | void
+  skipOperationTracking?: boolean
+}
+
 type ProcessImageOptions =
   | ((progress: number) => Promise<void>)
-  | {
-      onProgress?: (progress: number) => Promise<void>
-      skipOperationTracking?: boolean
-    }
+  | ProcessImageOptionsObject
 
 const replaceDocument = (docs: Document[], index: number, doc: Document) =>
   docs.map((item, idx) => (idx === index ? doc : item))
@@ -481,12 +486,13 @@ export const useAppStore = create<AppState>((set, get) => {
     // batch proceeses
     processImage: async (_, index, options) => {
       const openAISelected = isOpenAICompatible()
-      const normalizedOptions =
+      const normalizedOptions: ProcessImageOptionsObject =
         typeof options === 'function'
           ? { onProgress: options, skipOperationTracking: false }
           : (options ?? {})
 
-      const { onProgress, skipOperationTracking } = normalizedOptions
+      const { onProgress, onStepChange, skipOperationTracking } =
+        normalizedOptions
       const operation = get().operation
       const isBatchRun = operation?.type === 'process-all'
 
@@ -508,7 +514,7 @@ export const useAppStore = create<AppState>((set, get) => {
       const shouldTrackOperation = skipOperationTracking !== true && !isBatchRun
       const ownsOperation = shouldTrackOperation && !isBatchRun
 
-      const actions: Array<'detect' | 'ocr' | 'inpaint' | 'llmGenerate'> = [
+      const actions: ProcessAction[] = [
         'detect',
         'ocr',
         'inpaint',
@@ -542,6 +548,10 @@ export const useAppStore = create<AppState>((set, get) => {
         }
 
         const action = actions[i]
+
+        if (onStepChange) {
+          await onStepChange(action)
+        }
 
         if (shouldTrackOperation) {
           get().updateOperation({
@@ -623,6 +633,10 @@ export const useAppStore = create<AppState>((set, get) => {
             )
             await get().setProgress(overall)
             get().updateOperation({ current: currentValue, total })
+          },
+          onStepChange: (step) => {
+            if (get().operation?.cancelRequested) return
+            get().updateOperation({ step })
           },
           skipOperationTracking: true,
         })
