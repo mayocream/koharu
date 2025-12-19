@@ -3,6 +3,7 @@
 import { useEffect, useState } from 'react'
 import { Select } from 'radix-ui'
 import { useTranslation } from 'react-i18next'
+import { OPENAI_COMPATIBLE_MODEL_ID } from '@/lib/openai'
 import { useAppStore } from '@/lib/store'
 import { TooltipButton } from '@/components/ui/form-controls'
 
@@ -19,12 +20,21 @@ export function LlmControls() {
     llmToggleLoadUnload,
     llmGenerate,
     llmCheckReady,
+    llmOpenAIEndpoint,
+    llmOpenAIApiKey,
+    llmOpenAIPrompt,
+    llmOpenAIModel,
+    setLlmOpenAIEndpoint,
+    setLlmOpenAIApiKey,
+    setLlmOpenAIPrompt,
+    setLlmOpenAIModel,
   } = useAppStore()
   const [generating, setGenerating] = useState(false)
   const { t } = useTranslation()
 
   const activeLanguages =
     llmModels.find((model) => model.id === llmSelectedModel)?.languages ?? []
+  const isOpenAICompatible = llmSelectedModel === OPENAI_COMPATIBLE_MODEL_ID
 
   useEffect(() => {
     llmList()
@@ -64,7 +74,11 @@ export function LlmControls() {
                       value={model.id}
                       className='rounded px-3 py-1.5 text-sm outline-none select-none hover:bg-black/5 data-[state=checked]:bg-black/5'
                     >
-                      <Select.ItemText>{model.id}</Select.ItemText>
+                      <Select.ItemText>
+                        {model.id === OPENAI_COMPATIBLE_MODEL_ID
+                          ? t('llm.openaiCompatible')
+                          : model.id}
+                      </Select.ItemText>
                     </Select.Item>
                   ))}
                 </Select.Viewport>
@@ -103,14 +117,67 @@ export function LlmControls() {
           </div>
         ) : null}
       </div>
+      {isOpenAICompatible ? (
+        <div className='space-y-2 rounded border border-neutral-200 bg-white p-2'>
+          <div className='space-y-1'>
+            <div className='text-[11px] font-semibold tracking-wide text-neutral-500 uppercase'>
+              {t('llm.openaiEndpointLabel')}
+            </div>
+            <input
+              type='text'
+              value={llmOpenAIEndpoint}
+              placeholder={t('llm.openaiEndpointPlaceholder')}
+              onChange={(event) => setLlmOpenAIEndpoint(event.target.value)}
+              className='w-full rounded border border-neutral-200 bg-white px-2 py-1.5 text-sm text-neutral-800 outline-none focus:border-rose-400'
+            />
+          </div>
+          <div className='space-y-1'>
+            <div className='text-[11px] font-semibold tracking-wide text-neutral-500 uppercase'>
+              {t('llm.openaiApiKeyLabel')}
+            </div>
+            <input
+              type='password'
+              value={llmOpenAIApiKey}
+              placeholder={t('llm.openaiApiKeyPlaceholder')}
+              autoComplete='off'
+              onChange={(event) => setLlmOpenAIApiKey(event.target.value)}
+              className='w-full rounded border border-neutral-200 bg-white px-2 py-1.5 text-sm text-neutral-800 outline-none focus:border-rose-400'
+            />
+          </div>
+          <div className='space-y-1'>
+            <div className='text-[11px] font-semibold tracking-wide text-neutral-500 uppercase'>
+              {t('llm.openaiModelLabel')}
+            </div>
+            <input
+              value={llmOpenAIModel}
+              placeholder={t('llm.openaiModelPlaceholder')}
+              onChange={(event) => setLlmOpenAIModel(event.target.value)}
+              className='w-full rounded border border-neutral-200 bg-white px-2 py-1.5 text-sm text-neutral-800 outline-none focus:border-rose-400'
+            />
+          </div>
+          <div className='space-y-1'>
+            <div className='text-[11px] font-semibold tracking-wide text-neutral-500 uppercase'>
+              {t('llm.openaiPromptLabel')}
+            </div>
+            <textarea
+              value={llmOpenAIPrompt}
+              rows={3}
+              onChange={(event) => setLlmOpenAIPrompt(event.target.value)}
+              className='w-full rounded border border-neutral-200 bg-white px-2 py-2 text-sm text-neutral-800 outline-none focus:border-rose-400'
+            />
+          </div>
+        </div>
+      ) : null}
       <div className='flex gap-2'>
-        <TooltipButton
-          label={!llmReady ? t('llm.load') : t('llm.unload')}
-          tooltip={!llmReady ? t('llm.loadTooltip') : t('llm.unloadTooltip')}
-          widthClass='w-full'
-          onClick={llmToggleLoadUnload}
-          disabled={!llmSelectedModel || llmLoading}
-        />
+        {!isOpenAICompatible && (
+          <TooltipButton
+            label={!llmReady ? t('llm.load') : t('llm.unload')}
+            tooltip={!llmReady ? t('llm.loadTooltip') : t('llm.unloadTooltip')}
+            widthClass='w-full'
+            onClick={llmToggleLoadUnload}
+            disabled={!llmSelectedModel || llmLoading || isOpenAICompatible}
+          />
+        )}
         <TooltipButton
           label={generating ? t('llm.generating') : t('llm.generate')}
           tooltip={t('llm.generateTooltip')}
@@ -119,6 +186,8 @@ export function LlmControls() {
             setGenerating(true)
             try {
               await llmGenerate(null)
+            } catch (error) {
+              console.error(error)
             } finally {
               setGenerating(false)
             }

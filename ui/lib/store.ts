@@ -5,6 +5,15 @@ import { invoke } from '@tauri-apps/api/core'
 import { getCurrentWindow, ProgressBarStatus } from '@tauri-apps/api/window'
 import { Document, TextBlock, ToolMode } from '@/types'
 import { createOperationSlice, type OperationSlice } from '@/lib/operations'
+import {
+  callOpenAICompletion,
+  isOpenAIConfigured,
+  isOpenAIModel,
+  OPENAI_COMPATIBLE_MODEL,
+  OPENAI_DEFAULT_MODEL,
+  type LlmModelInfo,
+} from '@/lib/openai'
+import { t } from 'i18next'
 
 type ProcessImageOptions =
   | ((progress: number) => Promise<void>)
@@ -12,11 +21,6 @@ type ProcessImageOptions =
       onProgress?: (progress: number) => Promise<void>
       skipOperationTracking?: boolean
     }
-
-export type LlmModelInfo = {
-  id: string
-  languages: string[]
-}
 
 const replaceDocument = (docs: Document[], index: number, doc: Document) =>
   docs.map((item, idx) => (idx === index ? doc : item))
@@ -89,6 +93,10 @@ type AppState = OperationSlice & {
   llmSelectedLanguage?: string
   llmReady: boolean
   llmLoading: boolean
+  llmOpenAIEndpoint: string
+  llmOpenAIApiKey: string
+  llmOpenAIPrompt: string
+  llmOpenAIModel: string
   // ui + actions
   hydrateDocuments: (docs: Document[]) => void
   openDocuments: () => Promise<void>
@@ -104,7 +112,6 @@ type AppState = OperationSlice & {
   setSelectedBlockIndex: (index?: number) => void
   setAutoFitEnabled: (enabled: boolean) => void
   updateTextBlocks: (textBlocks: TextBlock[]) => Promise<void>
-  invokeWithStatus: (command: string, args?: any) => Promise<Document>
   setProgress: (progress?: number, status?: ProgressBarStatus) => Promise<void>
   clearProgress: () => Promise<void>
   // Processing actions
@@ -132,417 +139,534 @@ type AppState = OperationSlice & {
     index?: number,
     text_block_index?: number,
   ) => Promise<void>
+  setLlmOpenAIEndpoint: (endpoint: string) => void
+  setLlmOpenAIApiKey: (apiKey: string) => void
+  setLlmOpenAIPrompt: (prompt: string) => void
+  setLlmOpenAIModel: (model: string) => void
 }
 
-export const useAppStore = create<AppState>((set, get) => ({
-  ...createOperationSlice(set),
-  documents: [],
-  currentDocumentIndex: 0,
-  scale: 100,
-  showSegmentationMask: false,
-  showInpaintedImage: false,
-  showRenderedImage: false,
-  showTextBlocksOverlay: false,
-  mode: 'select',
-  selectedBlockIndex: undefined,
-  autoFitEnabled: true,
-  llmModels: [],
-  llmSelectedModel: undefined,
-  llmSelectedLanguage: undefined,
-  llmReady: false,
-  llmLoading: false,
-  operation: undefined,
-  hydrateDocuments: (docs: Document[]) => {
-    set({
-      documents: docs,
-      currentDocumentIndex: 0,
-      selectedBlockIndex: undefined,
-    })
-  },
-  openDocuments: async () => {
-    get().startOperation({ type: 'load-khr', cancellable: false })
-    try {
-      const docs: Document[] = await invoke('open_documents')
-      get().hydrateDocuments(docs)
-    } finally {
-      get().finishOperation()
-    }
-  },
-  saveDocuments: async () => {
-    get().startOperation({ type: 'save-khr', cancellable: false })
-    try {
-      await invoke('save_documents')
-    } finally {
-      get().finishOperation()
-    }
-  },
-  openExternal: async (url: string) => {
-    await invoke('open_external', { url })
-  },
-  setCurrentDocumentIndex: (index: number) => {
-    set({ currentDocumentIndex: index, selectedBlockIndex: undefined })
-  },
-  setScale: (scale: number) => {
-    const clamped = Math.max(10, Math.min(100, Math.round(scale)))
-    set({ scale: clamped })
-  },
-  setShowSegmentationMask: (show: boolean) => {
-    set({ showSegmentationMask: show })
-  },
-  setShowInpaintedImage: (show: boolean) => {
-    set({ showInpaintedImage: show })
-  },
-  setShowRenderedImage: (show: boolean) => {
-    set({ showRenderedImage: show })
-  },
-  setShowTextBlocksOverlay: (show: boolean) => {
-    set({ showTextBlocksOverlay: show })
-  },
-  setMode: (mode: ToolMode) => set({ mode }),
-  setSelectedBlockIndex: (index?: number) => set({ selectedBlockIndex: index }),
-  setAutoFitEnabled: (enabled: boolean) => set({ autoFitEnabled: enabled }),
-  updateTextBlocks: async (textBlocks: TextBlock[]) => {
-    const { documents, currentDocumentIndex } = get()
-    const doc = documents[currentDocumentIndex]
+export const useAppStore = create<AppState>((set, get) => {
+  const isOpenAICompatible = () => isOpenAIModel(get().llmSelectedModel)
+
+  const syncOpenAIReady = () => {
+    if (!isOpenAICompatible()) return false
+    const { llmOpenAIEndpoint, llmOpenAIApiKey } = get()
+    const ready = isOpenAIConfigured(llmOpenAIEndpoint, llmOpenAIApiKey)
+    set({ llmReady: ready, llmLoading: false })
+    return true
+  }
+
+  const generateWithOpenAI = async (
+    index: number,
+    textBlockIndex?: number,
+  ): Promise<Document | void> => {
+    const {
+      documents,
+      llmOpenAIEndpoint,
+      llmOpenAIApiKey,
+      llmOpenAIPrompt,
+      llmOpenAIModel,
+    } = get()
+    const doc = documents[index]
     if (!doc) return
-    const updatedDoc: Document = {
-      ...doc,
-      textBlocks,
-    }
-    set({
-      documents: replaceDocument(documents, currentDocumentIndex, updatedDoc),
-    })
-    await textBlockSyncer.enqueue(currentDocumentIndex, textBlocks)
-  },
-  invokeWithStatus: async (command: string, args: {}) => {
-    let ret: Document = await invoke<Document>(command, args)
-    return ret
-  },
-  detect: async (_, index) => {
-    index = index ?? get().currentDocumentIndex
-    const doc: Document = await get().invokeWithStatus('detect', {
-      index,
-    })
-    set((state) => ({
-      documents: replaceDocument(state.documents, index, doc),
-      showRenderedImage: false, // hide rendered image to show the boxes
-    }))
-  },
-  ocr: async (_, index) => {
-    index = index ?? get().currentDocumentIndex
-    const doc: Document = await get().invokeWithStatus('ocr', { index })
-    set((state) => ({
-      documents: replaceDocument(state.documents, index, doc),
-    }))
-  },
-  inpaint: async (_, index) => {
-    index = index ?? get().currentDocumentIndex
     await textBlockSyncer.flush()
-    const doc: Document = await get().invokeWithStatus('inpaint', {
-      index,
+
+    const blocks = doc.textBlocks ?? []
+    const hasSingle = typeof textBlockIndex === 'number' && textBlockIndex >= 0
+    const sourceText = hasSingle
+      ? (blocks[textBlockIndex!]?.text ?? '')
+      : blocks.map((block) => block.text ?? '').join('\n')
+    if (!sourceText.trim()) return
+
+    const completion = await callOpenAICompletion({
+      endpoint: llmOpenAIEndpoint,
+      apiKey: llmOpenAIApiKey,
+      prompt: llmOpenAIPrompt.trim(),
+      content: sourceText,
+      model: llmOpenAIModel,
     })
-    set((state) => ({
-      documents: replaceDocument(state.documents, index, doc),
-      showInpaintedImage: true,
-    }))
-  },
-  render: async (_, index) => {
-    index = index ?? get().currentDocumentIndex
-    await textBlockSyncer.flush()
-    const doc: Document = await get().invokeWithStatus('render', { index })
-    set((state) => ({
-      documents: replaceDocument(state.documents, index, doc),
-      showRenderedImage: true,
-    }))
-  },
-  llmList: async () => {
-    try {
-      const models = await invoke<LlmModelInfo[]>('llm_list')
-      set({ llmModels: models })
-      const currentModel = get().llmSelectedModel
-      const currentLanguage = get().llmSelectedLanguage
-      const hasCurrent = models.some((model) => model.id === currentModel)
-      const nextModel = hasCurrent
-        ? (currentModel ?? models[0]?.id)
-        : models[0]?.id
+
+    const translatedLines = hasSingle ? null : completion.split(/\r?\n/)
+    const updatedBlocks = blocks.map((block, i) => {
+      if (hasSingle) {
+        return i === textBlockIndex
+          ? { ...block, translation: completion }
+          : block
+      }
+      const translated = translatedLines?.[i]
+      if (translated === undefined) return block
+      return { ...block, translation: translated }
+    })
+
+    return { ...doc, textBlocks: updatedBlocks }
+  }
+
+  return {
+    ...createOperationSlice(set),
+    documents: [],
+    currentDocumentIndex: 0,
+    scale: 100,
+    showSegmentationMask: false,
+    showInpaintedImage: false,
+    showRenderedImage: false,
+    showTextBlocksOverlay: false,
+    mode: 'select',
+    selectedBlockIndex: undefined,
+    autoFitEnabled: true,
+    llmModels: [],
+    llmSelectedModel: undefined,
+    llmSelectedLanguage: undefined,
+    llmReady: false,
+    llmLoading: false,
+    llmOpenAIEndpoint: '',
+    llmOpenAIApiKey: '',
+    llmOpenAIPrompt: t('llm.openaiPromptPlaceholder'),
+    llmOpenAIModel: OPENAI_DEFAULT_MODEL,
+    operation: undefined,
+    hydrateDocuments: (docs: Document[]) => {
+      set({
+        documents: docs,
+        currentDocumentIndex: 0,
+        selectedBlockIndex: undefined,
+      })
+    },
+    openDocuments: async () => {
+      get().startOperation({ type: 'load-khr', cancellable: false })
+      try {
+        const docs: Document[] = await invoke('open_documents')
+        get().hydrateDocuments(docs)
+      } finally {
+        get().finishOperation()
+      }
+    },
+    saveDocuments: async () => {
+      get().startOperation({ type: 'save-khr', cancellable: false })
+      try {
+        await invoke('save_documents')
+      } finally {
+        get().finishOperation()
+      }
+    },
+    openExternal: async (url: string) => {
+      await invoke('open_external', { url })
+    },
+    setCurrentDocumentIndex: (index: number) => {
+      set({ currentDocumentIndex: index, selectedBlockIndex: undefined })
+    },
+    setScale: (scale: number) => {
+      const clamped = Math.max(10, Math.min(100, Math.round(scale)))
+      set({ scale: clamped })
+    },
+    setShowSegmentationMask: (show: boolean) => {
+      set({ showSegmentationMask: show })
+    },
+    setShowInpaintedImage: (show: boolean) => {
+      set({ showInpaintedImage: show })
+    },
+    setShowRenderedImage: (show: boolean) => {
+      set({ showRenderedImage: show })
+    },
+    setShowTextBlocksOverlay: (show: boolean) => {
+      set({ showTextBlocksOverlay: show })
+    },
+    setMode: (mode: ToolMode) => set({ mode }),
+    setSelectedBlockIndex: (index?: number) =>
+      set({ selectedBlockIndex: index }),
+    setAutoFitEnabled: (enabled: boolean) => set({ autoFitEnabled: enabled }),
+    updateTextBlocks: async (textBlocks: TextBlock[]) => {
+      const { documents, currentDocumentIndex } = get()
+      const doc = documents[currentDocumentIndex]
+      if (!doc) return
+      const updatedDoc: Document = {
+        ...doc,
+        textBlocks,
+      }
+      set({
+        documents: replaceDocument(documents, currentDocumentIndex, updatedDoc),
+      })
+      await textBlockSyncer.enqueue(currentDocumentIndex, textBlocks)
+    },
+    detect: async (_, index) => {
+      index = index ?? get().currentDocumentIndex
+      const doc: Document = await invoke<Document>('detect', {
+        index,
+      })
+      set((state) => ({
+        documents: replaceDocument(state.documents, index, doc),
+        showRenderedImage: false, // hide rendered image to show the boxes
+      }))
+    },
+    ocr: async (_, index) => {
+      index = index ?? get().currentDocumentIndex
+      const doc: Document = await invoke<Document>('ocr', { index })
+      set((state) => ({
+        documents: replaceDocument(state.documents, index, doc),
+      }))
+    },
+    inpaint: async (_, index) => {
+      index = index ?? get().currentDocumentIndex
+      await textBlockSyncer.flush()
+      const doc: Document = await invoke<Document>('inpaint', {
+        index,
+      })
+      set((state) => ({
+        documents: replaceDocument(state.documents, index, doc),
+        showInpaintedImage: true,
+      }))
+    },
+    render: async (_, index) => {
+      index = index ?? get().currentDocumentIndex
+      await textBlockSyncer.flush()
+      const doc: Document = await invoke<Document>('render', { index })
+      set((state) => ({
+        documents: replaceDocument(state.documents, index, doc),
+        showRenderedImage: true,
+      }))
+    },
+    llmList: async () => {
+      try {
+        const models = [
+          ...(await invoke<LlmModelInfo[]>('llm_list')),
+          OPENAI_COMPATIBLE_MODEL,
+        ]
+        set({ llmModels: models })
+        const currentModel = get().llmSelectedModel
+        const currentLanguage = get().llmSelectedLanguage
+        const hasCurrent = models.some((model) => model.id === currentModel)
+        const nextModel = hasCurrent
+          ? (currentModel ?? models[0]?.id)
+          : models[0]?.id
+        const nextLanguage = pickLanguage(
+          models,
+          nextModel,
+          hasCurrent ? currentLanguage : undefined,
+        )
+        set({
+          llmSelectedModel: nextModel,
+          llmSelectedLanguage: nextLanguage,
+        })
+        syncOpenAIReady()
+      } catch (_) {}
+    },
+    llmSetSelectedModel: async (id: string) => {
+      await invoke('llm_offload')
       const nextLanguage = pickLanguage(
-        models,
-        nextModel,
-        hasCurrent ? currentLanguage : undefined,
+        get().llmModels,
+        id,
+        get().llmSelectedLanguage,
       )
       set({
-        llmSelectedModel: nextModel,
+        llmSelectedModel: id,
         llmSelectedLanguage: nextLanguage,
+        llmLoading: false,
+        llmReady: false,
       })
-    } catch (_) {}
-  },
-  llmSetSelectedModel: async (id: string) => {
-    await invoke('llm_offload')
-    const nextLanguage = pickLanguage(
-      get().llmModels,
-      id,
-      get().llmSelectedLanguage,
-    )
-    set({
-      llmSelectedModel: id,
-      llmSelectedLanguage: nextLanguage,
-      llmLoading: false,
-      llmReady: false,
-    })
-  },
-  llmSetSelectedLanguage: (language: string) => {
-    const languages = findModelLanguages(
-      get().llmModels,
-      get().llmSelectedModel,
-    )
-    if (!languages.includes(language)) return
-    set({ llmSelectedLanguage: language })
-  },
-  llmToggleLoadUnload: async () => {
-    // unload
-    if (get().llmReady) {
-      await invoke('llm_offload')
-      set({ llmLoading: false, llmReady: false })
-      return
-    }
+      syncOpenAIReady()
+    },
+    llmSetSelectedLanguage: (language: string) => {
+      const languages = findModelLanguages(
+        get().llmModels,
+        get().llmSelectedModel,
+      )
+      if (!languages.includes(language)) return
+      set({ llmSelectedLanguage: language })
+    },
+    llmToggleLoadUnload: async () => {
+      if (isOpenAICompatible()) {
+        syncOpenAIReady()
+        return
+      }
 
-    // load
-    const id = get().llmSelectedModel
-    if (!id) return
-    get().startOperation({
-      type: 'llm-load',
-      cancellable: false,
-    })
-    let ready = false
-    try {
-      await invoke('llm_load', { id })
+      // unload
+      if (get().llmReady) {
+        await invoke('llm_offload')
+        set({ llmLoading: false, llmReady: false })
+        return
+      }
 
-      await get().setProgress(100, ProgressBarStatus.Paused)
+      // load
+      const id = get().llmSelectedModel
+      if (!id) return
+      get().startOperation({
+        type: 'llm-load',
+        cancellable: false,
+      })
+      let ready = false
+      try {
+        await invoke('llm_load', { id })
 
-      set({ llmLoading: true })
-      // poll for llmCheckReady and set llmLoading false
-      let try_time = 0
-      while (try_time++ < 300) {
-        await get().llmCheckReady()
-        if (get().llmReady) {
-          ready = true
-          await get().clearProgress()
-          set({ llmLoading: false })
-          break
+        await get().setProgress(100, ProgressBarStatus.Paused)
+
+        set({ llmLoading: true })
+        // poll for llmCheckReady and set llmLoading false
+        let try_time = 0
+        while (try_time++ < 300) {
+          await get().llmCheckReady()
+          if (get().llmReady) {
+            ready = true
+            await get().clearProgress()
+            set({ llmLoading: false })
+            break
+          }
+          await new Promise((resolve) => setTimeout(resolve, 100))
         }
-        await new Promise((resolve) => setTimeout(resolve, 100))
+      } finally {
+        if (!ready) {
+          set({ llmLoading: false })
+          await get().clearProgress()
+        }
+        get().finishOperation()
       }
-    } finally {
-      if (!ready) {
-        set({ llmLoading: false })
-        await get().clearProgress()
+    },
+    llmCheckReady: async () => {
+      if (syncOpenAIReady()) return
+      try {
+        const ready = await invoke<boolean>('llm_ready')
+        set({ llmReady: ready })
+      } catch (_) {}
+    },
+    llmGenerate: async (_: any, index?: number, textBlockIndex?: number) => {
+      index = index ?? get().currentDocumentIndex
+      const languages = findModelLanguages(
+        get().llmModels,
+        get().llmSelectedModel,
+      )
+      const selectedLanguage = get().llmSelectedLanguage
+      const language =
+        languages.length > 0
+          ? selectedLanguage && languages.includes(selectedLanguage)
+            ? selectedLanguage
+            : languages[0]
+          : undefined
+
+      let doc: Document | void = undefined
+      if (isOpenAICompatible()) {
+        if (!syncOpenAIReady()) {
+          throw new Error(
+            'Provide an OpenAI compatible endpoint and API key to generate translations.',
+          )
+        }
+        doc = await generateWithOpenAI(index, textBlockIndex)
       }
-      get().finishOperation()
-    }
-  },
-  llmCheckReady: async () => {
-    try {
-      const ready = await invoke<boolean>('llm_ready')
-      set({ llmReady: ready })
-    } catch (_) {}
-  },
-  llmGenerate: async (_: any, index?: number, textBlockIndex?: number) => {
-    index = index ?? get().currentDocumentIndex
-    console.log(
-      'Generating LLM content for document',
-      index,
-      'text block',
-      textBlockIndex,
-    )
-    const languages = findModelLanguages(
-      get().llmModels,
-      get().llmSelectedModel,
-    )
-    const selectedLanguage = get().llmSelectedLanguage
-    const language =
-      languages.length > 0
-        ? selectedLanguage && languages.includes(selectedLanguage)
-          ? selectedLanguage
-          : languages[0]
-        : undefined
-    const doc: Document = await get().invokeWithStatus('llm_generate', {
-      index,
-      textBlockIndex,
-      language,
-    })
-    set((state) => ({
-      documents: replaceDocument(state.documents, index, doc),
-      showTextBlocksOverlay: true,
-    }))
-  },
 
-  // batch proceeses
-  processImage: async (_, index, options) => {
-    const normalizedOptions =
-      typeof options === 'function'
-        ? { onProgress: options, skipOperationTracking: false }
-        : (options ?? {})
-
-    const { onProgress, skipOperationTracking } = normalizedOptions
-    const operation = get().operation
-    const isBatchRun = operation?.type === 'process-all'
-
-    if (!get().llmReady) {
-      await get().llmList()
-      await get().llmToggleLoadUnload()
-    }
-
-    index = index ?? get().currentDocumentIndex
-    console.log('Processing image at index', index)
-    const setProgres = onProgress ?? get().setProgress
-    const shouldTrackOperation = skipOperationTracking !== true && !isBatchRun
-    const ownsOperation = shouldTrackOperation && !isBatchRun
-
-    const actions = ['detect', 'ocr', 'inpaint', 'llmGenerate'] as const
-    const totalSteps = actions.length
-
-    if (shouldTrackOperation) {
-      const firstStep = actions[0] ?? 'detect'
-      if (ownsOperation) {
-        get().startOperation({
-          type: 'process-current',
-          step: firstStep,
-          current: 0,
-          total: totalSteps,
-          cancellable: true,
-        })
-      } else {
-        get().updateOperation({
-          step: firstStep,
-          current: 0,
-          total: totalSteps,
+      if (doc === undefined) {
+        doc = await invoke<Document>('llm_generate', {
+          index,
+          textBlockIndex,
+          language,
         })
       }
-    }
+      set((state) => ({
+        documents: replaceDocument(state.documents, index, doc),
+        showTextBlocksOverlay: true,
+      }))
+    },
+    setLlmOpenAIEndpoint: (endpoint: string) => {
+      set({ llmOpenAIEndpoint: endpoint })
+      syncOpenAIReady()
+    },
+    setLlmOpenAIApiKey: (apiKey: string) => {
+      set({ llmOpenAIApiKey: apiKey })
+      syncOpenAIReady()
+    },
+    setLlmOpenAIPrompt: (prompt: string) => {
+      set({ llmOpenAIPrompt: prompt })
+      syncOpenAIReady()
+    },
+    setLlmOpenAIModel: (model: string) => {
+      set({ llmOpenAIModel: model })
+      syncOpenAIReady()
+    },
 
-    await setProgres(0)
-    for (let i = 0; i < actions.length; i++) {
-      if (get().operation?.cancelRequested) {
-        break
+    // batch proceeses
+    processImage: async (_, index, options) => {
+      const openAISelected = isOpenAICompatible()
+      const normalizedOptions =
+        typeof options === 'function'
+          ? { onProgress: options, skipOperationTracking: false }
+          : (options ?? {})
+
+      const { onProgress, skipOperationTracking } = normalizedOptions
+      const operation = get().operation
+      const isBatchRun = operation?.type === 'process-all'
+
+      if (!get().llmReady && !openAISelected) {
+        await get().llmList()
+        await get().llmToggleLoadUnload()
+      } else if (openAISelected) {
+        syncOpenAIReady()
+        if (!get().llmReady) {
+          throw new Error(
+            'OpenAI compatible endpoint and API key are required before processing.',
+          )
+        }
       }
 
-      const action = actions[i]
+      index = index ?? get().currentDocumentIndex
+      console.log('Processing image at index', index)
+      const setProgres = onProgress ?? get().setProgress
+      const shouldTrackOperation = skipOperationTracking !== true && !isBatchRun
+      const ownsOperation = shouldTrackOperation && !isBatchRun
+
+      const actions: Array<'detect' | 'ocr' | 'inpaint' | 'llmGenerate'> = [
+        'detect',
+        'ocr',
+        'inpaint',
+        'llmGenerate',
+      ]
+      const totalSteps = actions.length
 
       if (shouldTrackOperation) {
-        get().updateOperation({
-          step: action,
-          current: i,
-          total: totalSteps,
-        })
+        const firstStep = actions[0] ?? 'detect'
+        if (ownsOperation) {
+          get().startOperation({
+            type: 'process-current',
+            step: firstStep,
+            current: 0,
+            total: totalSteps,
+            cancellable: true,
+          })
+        } else {
+          get().updateOperation({
+            step: firstStep,
+            current: 0,
+            total: totalSteps,
+          })
+        }
       }
 
-      await (get() as any)[actions[i]](_, index)
-      await setProgres(Math.floor(((i + 1) / totalSteps) * 100))
-    }
+      await setProgres(0)
+      for (let i = 0; i < actions.length; i++) {
+        if (get().operation?.cancelRequested) {
+          break
+        }
 
-    const cancelled = get().operation?.cancelRequested
+        const action = actions[i]
 
-    if (shouldTrackOperation && ownsOperation && !cancelled) {
-      get().updateOperation({ current: totalSteps, total: totalSteps })
-    }
+        if (shouldTrackOperation) {
+          get().updateOperation({
+            step: action,
+            current: i,
+            total: totalSteps,
+          })
+        }
 
-    if (shouldTrackOperation && ownsOperation) {
-      get().finishOperation()
-    }
+        await (get() as any)[actions[i]](_, index)
+        await setProgres(Math.floor(((i + 1) / totalSteps) * 100))
+      }
 
-    if (!onProgress) {
-      await get().clearProgress()
-    }
+      const cancelled = get().operation?.cancelRequested
 
-    if (cancelled) {
-      return
-    }
-  },
+      if (shouldTrackOperation && ownsOperation && !cancelled) {
+        get().updateOperation({ current: totalSteps, total: totalSteps })
+      }
 
-  inpaintAndRenderImage: async (_, index) => {
-    index = index ?? get().currentDocumentIndex
-    await get().inpaint(_, index)
-    await get().render(_, index)
-  },
+      if (shouldTrackOperation && ownsOperation) {
+        get().finishOperation()
+      }
 
-  processAllImages: async () => {
-    const total = get().documents.length
-    if (!total) return
+      if (!onProgress) {
+        await get().clearProgress()
+      }
 
-    if (!get().llmReady) {
-      await get().llmList()
-      await get().llmToggleLoadUnload()
-    }
+      if (cancelled) {
+        return
+      }
+    },
 
-    get().startOperation({
-      type: 'process-all',
-      cancellable: true,
-      current: 0,
-      total,
-    })
+    inpaintAndRenderImage: async (_, index) => {
+      index = index ?? get().currentDocumentIndex
+      await get().inpaint(_, index)
+      await get().render(_, index)
+    },
 
-    for (let index = 0; index < total; index++) {
-      if (get().operation?.cancelRequested) break
+    processAllImages: async () => {
+      const total = get().documents.length
+      if (!total) return
+      const openAISelected = isOpenAICompatible()
 
-      set({ currentDocumentIndex: index, selectedBlockIndex: undefined })
-      get().updateOperation({
-        current: index,
+      if (!get().llmReady && !openAISelected) {
+        await get().llmList()
+        await get().llmToggleLoadUnload()
+      } else if (openAISelected) {
+        syncOpenAIReady()
+        if (!get().llmReady) {
+          throw new Error(
+            'OpenAI compatible endpoint and API key are required before processing.',
+          )
+        }
+      }
+
+      get().startOperation({
+        type: 'process-all',
+        cancellable: true,
+        current: 0,
         total,
       })
 
-      await get().processImage(null, index, {
-        onProgress: async (progress) => {
-          if (get().operation?.cancelRequested) return
-          const currentValue = index + progress / 100
-          const overall = Math.min(
-            100,
-            Math.round((currentValue / total) * 100),
-          )
-          await get().setProgress(overall)
-          get().updateOperation({ current: currentValue, total })
-        },
-        skipOperationTracking: true,
-      })
+      for (let index = 0; index < total; index++) {
+        if (get().operation?.cancelRequested) break
 
-      if (get().operation?.cancelRequested) {
-        break
+        set({ currentDocumentIndex: index, selectedBlockIndex: undefined })
+        get().updateOperation({
+          current: index,
+          total,
+        })
+
+        await get().processImage(null, index, {
+          onProgress: async (progress) => {
+            if (get().operation?.cancelRequested) return
+            const currentValue = index + progress / 100
+            const overall = Math.min(
+              100,
+              Math.round((currentValue / total) * 100),
+            )
+            await get().setProgress(overall)
+            get().updateOperation({ current: currentValue, total })
+          },
+          skipOperationTracking: true,
+        })
+
+        if (get().operation?.cancelRequested) {
+          break
+        }
+
+        get().updateOperation({ current: index + 1, total })
       }
 
-      get().updateOperation({ current: index + 1, total })
-    }
+      if (!get().operation?.cancelRequested) {
+        get().updateOperation({ current: total, total })
+      }
 
-    if (!get().operation?.cancelRequested) {
-      get().updateOperation({ current: total, total })
-    }
+      await get().clearProgress()
+      get().finishOperation()
+    },
 
-    await get().clearProgress()
-    get().finishOperation()
-  },
+    exportDocument: async () => {
+      const index = get().currentDocumentIndex
+      await invoke('export_document', { index })
+    },
 
-  exportDocument: async () => {
-    const index = get().currentDocumentIndex
-    await invoke('export_document', { index })
-  },
+    exportAllDocuments: async () => {
+      if (!get().documents.length) return
+      await invoke('export_all_documents')
+    },
 
-  exportAllDocuments: async () => {
-    if (!get().documents.length) return
-    await invoke('export_all_documents')
-  },
+    setProgress: async (progress?: number, state?: ProgressBarStatus) => {
+      await getCurrentWindow().setProgressBar({
+        status: state ?? ProgressBarStatus.Normal,
+        progress: progress,
+      })
+    },
 
-  setProgress: async (progress?: number, state?: ProgressBarStatus) => {
-    await getCurrentWindow().setProgressBar({
-      status: state ?? ProgressBarStatus.Normal,
-      progress: progress,
-    })
-  },
-
-  clearProgress: async () => {
-    await getCurrentWindow().setProgressBar({
-      status: ProgressBarStatus.None,
-      progress: 0,
-    })
-  },
-}))
+    clearProgress: async () => {
+      await getCurrentWindow().setProgressBar({
+        status: ProgressBarStatus.None,
+        progress: 0,
+      })
+    },
+  }
+})
 
 type ConfigState = {
   maskConfig: {

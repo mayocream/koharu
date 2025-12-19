@@ -7,6 +7,7 @@ import { TextBlock } from '@/types'
 import { Languages } from 'lucide-react'
 import { TextareaField, TooltipButton } from '@/components/ui/form-controls'
 import { useTextBlocks } from '@/hooks/useTextBlocks'
+import { isOpenAIConfigured, OPENAI_COMPATIBLE_MODEL_ID } from '@/lib/openai'
 import { useAppStore } from '@/lib/store'
 
 export function TextBlocksPanel() {
@@ -18,8 +19,18 @@ export function TextBlocksPanel() {
     replaceBlock,
   } = useTextBlocks()
   const { t } = useTranslation()
-  const { llmGenerate, llmReady } = useAppStore()
+  const {
+    llmGenerate,
+    llmReady,
+    llmSelectedModel,
+    llmOpenAIEndpoint,
+    llmOpenAIApiKey,
+  } = useAppStore()
   const [generatingIndex, setGeneratingIndex] = useState<number | null>(null)
+  const llmAvailable =
+    llmSelectedModel === OPENAI_COMPATIBLE_MODEL_ID
+      ? isOpenAIConfigured(llmOpenAIEndpoint, llmOpenAIApiKey)
+      : llmReady
 
   if (!document) {
     return (
@@ -36,6 +47,8 @@ export function TextBlocksPanel() {
     setGeneratingIndex(blockIndex)
     try {
       await llmGenerate(undefined, undefined, blockIndex)
+    } catch (error) {
+      console.error(error)
     } finally {
       setGeneratingIndex(null)
     }
@@ -75,7 +88,7 @@ export function TextBlocksPanel() {
                   onChange={(updates) => void replaceBlock(index, updates)}
                   onGenerate={() => void handleGenerate(index)}
                   generating={generatingIndex === index}
-                  llmReady={llmReady}
+                  llmReady={llmAvailable}
                 />
               ))}
             </Accordion.Root>
