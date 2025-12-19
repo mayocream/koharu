@@ -6,6 +6,7 @@ import { useTranslation } from 'react-i18next'
 import { useAppStore } from '@/lib/store'
 import { convertToBlob } from '@/lib/util'
 import { Document } from '@/types'
+import { ResizableSidebar } from '@/components/ResizableSidebar'
 
 export function Navigator() {
   const { documents, currentDocumentIndex, setCurrentDocumentIndex } =
@@ -15,49 +16,57 @@ export function Navigator() {
   const current = documents[currentDocumentIndex]
 
   return (
-    <div className='flex w-32 shrink-0 flex-col border-r border-neutral-200 bg-neutral-50'>
-      <div className='border-b border-neutral-200 px-2.5 py-1.5'>
-        <p className='text-[11px] tracking-wide text-neutral-500 uppercase'>
-          {t('navigator.title')}
-        </p>
-        <p className='text-xs font-semibold text-neutral-900'>
-          {documents.length
-            ? t('navigator.pages', { count: documents.length })
-            : t('navigator.empty')}
-        </p>
-      </div>
+    <ResizableSidebar
+      side='left'
+      initialWidth={128}
+      minWidth={120}
+      maxWidth={320}
+      className='border-r border-neutral-200 bg-neutral-50'
+    >
+      <div className='flex h-full min-h-0 w-full flex-col'>
+        <div className='border-b border-neutral-200 px-2.5 py-1.5'>
+          <p className='text-[11px] tracking-wide text-neutral-500 uppercase'>
+            {t('navigator.title')}
+          </p>
+          <p className='text-xs font-semibold text-neutral-900'>
+            {documents.length
+              ? t('navigator.pages', { count: documents.length })
+              : t('navigator.empty')}
+          </p>
+        </div>
 
-      <div className='flex items-center gap-1.5 px-2.5 py-1.5 text-[11px] text-neutral-600'>
-        {current ? (
-          <span className='bg-neutral-100 px-2 py-0.5 font-mono text-[10px] text-neutral-700'>
-            #{currentDocumentIndex + 1}
-          </span>
-        ) : (
-          <span>{t('navigator.prompt')}</span>
-        )}
-      </div>
+        <div className='flex items-center gap-1.5 px-2.5 py-1.5 text-[11px] text-neutral-600'>
+          {current ? (
+            <span className='bg-neutral-100 px-2 py-0.5 font-mono text-[10px] text-neutral-700'>
+              #{currentDocumentIndex + 1}
+            </span>
+          ) : (
+            <span>{t('navigator.prompt')}</span>
+          )}
+        </div>
 
-      <ScrollArea.Root className='min-h-0 flex-1'>
-        <ScrollArea.Viewport className='size-full p-2'>
-          <div className='flex flex-col gap-1.5'>
-            {documents.map((doc, idx) => (
-              <PagePreview
-                key={doc.id}
-                document={doc}
-                selected={idx === currentDocumentIndex}
-                onSelect={() => setCurrentDocumentIndex?.(idx)}
-              />
-            ))}
-          </div>
-        </ScrollArea.Viewport>
-        <ScrollArea.Scrollbar
-          orientation='vertical'
-          className='flex w-2 touch-none p-px select-none'
-        >
-          <ScrollArea.Thumb className='flex-1 rounded bg-neutral-300' />
-        </ScrollArea.Scrollbar>
-      </ScrollArea.Root>
-    </div>
+        <ScrollArea.Root className='min-h-0 flex-1'>
+          <ScrollArea.Viewport className='size-full p-2'>
+            <div className='flex flex-col gap-1.5'>
+              {documents.map((doc, idx) => (
+                <PagePreview
+                  key={doc.id}
+                  document={doc}
+                  selected={idx === currentDocumentIndex}
+                  onSelect={() => setCurrentDocumentIndex?.(idx)}
+                />
+              ))}
+            </div>
+          </ScrollArea.Viewport>
+          <ScrollArea.Scrollbar
+            orientation='vertical'
+            className='flex w-2 touch-none p-px select-none'
+          >
+            <ScrollArea.Thumb className='flex-1 rounded bg-neutral-300' />
+          </ScrollArea.Scrollbar>
+        </ScrollArea.Root>
+      </div>
+    </ResizableSidebar>
   )
 }
 
@@ -97,6 +106,7 @@ function PagePreview({ document, selected, onSelect }: PagePreviewProps) {
             <img
               src={preview}
               alt={document.name}
+              style={{ objectFit: 'contain' }}
               className='aspect-3/4 w-full rounded object-cover'
             />
           ) : (
