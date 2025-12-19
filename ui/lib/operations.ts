@@ -9,12 +9,9 @@ export type OperationType =
 
 export type OperationState = {
   type: OperationType
-  progress?: number
-  currentIndex?: number
-  total?: number
   step?: string
-  stepIndex?: number
-  stepCount?: number
+  current?: number
+  total?: number
   cancellable: boolean
   cancelRequested: boolean
 }

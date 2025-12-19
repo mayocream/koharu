@@ -61,6 +61,7 @@
   "panels": {
     "processing": "Processing",
     "mask": "Mask",
+    "llm": "LLM",
     "render": "Render"
   },
   "processing": {
@@ -82,6 +83,9 @@
     "ready": "Ready",
     "idle": "Idle",
     "selectPlaceholder": "Select model",
+    "modelLabel": "Model",
+    "languageLabel": "Target language",
+    "languagePlaceholder": "Select language",
     "load": "Load",
     "unload": "Unload",
     "loadTooltip": "Load selected model",

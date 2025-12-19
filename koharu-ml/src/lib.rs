@@ -10,7 +10,7 @@ use anyhow::Result;
 use candle_core::{Device, utils::metal_is_available};
 
 pub use hf_hub::set_cache_dir;
-pub use llm::prompt::set_default_locale;
+pub use llm::{language_from_tag, set_default_locale, set_locale, supported_locales};
 
 pub fn device(cpu: bool) -> Result<Device> {
     if cpu {

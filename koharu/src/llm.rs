@@ -1,4 +1,5 @@
 use koharu_ml::llm::{GenerateOptions, Llm, ModelId};
+use serde::Serialize;
 use std::sync::Arc;
 use strum::Display;
 use tokio::sync::RwLock;
@@ -6,6 +7,22 @@ use tokio::sync::RwLock;
 use crate::state::{Document, TextBlock};
 
 pub use koharu_ml::llm::prefetch;
+
+#[derive(Debug, Clone, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ModelInfo {
+    pub id: String,
+    pub languages: Vec<String>,
+}
+
+impl ModelInfo {
+    pub fn new(id: ModelId) -> Self {
+        Self {
+            id: id.to_string(),
+            languages: id.languages(),
+        }
+    }
+}
 
 /// Load state of the LLM
 #[allow(clippy::large_enum_variant)]

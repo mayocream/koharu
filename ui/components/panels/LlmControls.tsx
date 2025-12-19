@@ -1,28 +1,30 @@
 'use client'
 
 import { useEffect, useState } from 'react'
-import { Select, Separator } from 'radix-ui'
+import { Select } from 'radix-ui'
 import { useTranslation } from 'react-i18next'
 import { useAppStore } from '@/lib/store'
-import { ToggleField, TooltipButton } from '@/components/ui/form-controls'
+import { TooltipButton } from '@/components/ui/form-controls'
 
 export function LlmControls() {
   const {
     llmModels,
     llmSelectedModel,
+    llmSelectedLanguage,
     llmReady,
     llmLoading,
     llmList,
     llmSetSelectedModel,
+    llmSetSelectedLanguage,
     llmToggleLoadUnload,
     llmGenerate,
     llmCheckReady,
-    showRenderedImage,
-    setShowRenderedImage,
-    render,
   } = useAppStore()
   const [generating, setGenerating] = useState(false)
   const { t } = useTranslation()
+
+  const activeLanguages =
+    llmModels.find((model) => model.id === llmSelectedModel)?.languages ?? []
 
   useEffect(() => {
     llmList()
@@ -41,26 +43,66 @@ export function LlmControls() {
           idleLabel={t('llm.idle')}
         />
       </div>
-      <Select.Root value={llmSelectedModel} onValueChange={llmSetSelectedModel}>
-        <Select.Trigger className='inline-flex w-full items-center justify-between gap-2 rounded border border-neutral-200 bg-white px-2 py-1 text-sm hover:bg-neutral-50'>
-          <Select.Value placeholder={t('llm.selectPlaceholder')} />
-        </Select.Trigger>
-        <Select.Portal>
-          <Select.Content className='min-w-56 rounded-md bg-white p-1 shadow-sm'>
-            <Select.Viewport>
-              {llmModels.map((model) => (
-                <Select.Item
-                  key={model}
-                  value={model}
-                  className='rounded px-3 py-1.5 text-sm outline-none select-none hover:bg-black/5 data-[state=checked]:bg-black/5'
-                >
-                  <Select.ItemText>{model}</Select.ItemText>
-                </Select.Item>
-              ))}
-            </Select.Viewport>
-          </Select.Content>
-        </Select.Portal>
-      </Select.Root>
+      <div className='space-y-2'>
+        <div className='space-y-1'>
+          <div className='text-[11px] font-semibold tracking-wide text-neutral-500 uppercase'>
+            {t('llm.modelLabel')}
+          </div>
+          <Select.Root
+            value={llmSelectedModel}
+            onValueChange={llmSetSelectedModel}
+          >
+            <Select.Trigger className='inline-flex w-full items-center justify-between gap-2 rounded border border-neutral-200 bg-white px-2 py-1 text-sm hover:bg-neutral-50'>
+              <Select.Value placeholder={t('llm.selectPlaceholder')} />
+            </Select.Trigger>
+            <Select.Portal>
+              <Select.Content className='min-w-56 rounded-md bg-white p-1 shadow-sm'>
+                <Select.Viewport>
+                  {llmModels.map((model) => (
+                    <Select.Item
+                      key={model.id}
+                      value={model.id}
+                      className='rounded px-3 py-1.5 text-sm outline-none select-none hover:bg-black/5 data-[state=checked]:bg-black/5'
+                    >
+                      <Select.ItemText>{model.id}</Select.ItemText>
+                    </Select.Item>
+                  ))}
+                </Select.Viewport>
+              </Select.Content>
+            </Select.Portal>
+          </Select.Root>
+        </div>
+        {activeLanguages.length > 0 ? (
+          <div className='space-y-1'>
+            <div className='text-[11px] font-semibold tracking-wide text-neutral-500 uppercase'>
+              {t('llm.languageLabel')}
+            </div>
+            <Select.Root
+              value={llmSelectedLanguage ?? activeLanguages[0]}
+              onValueChange={llmSetSelectedLanguage}
+            >
+              <Select.Trigger className='inline-flex w-full items-center justify-between gap-2 rounded border border-neutral-200 bg-white px-2 py-1 text-sm hover:bg-neutral-50'>
+                <Select.Value placeholder={t('llm.languagePlaceholder')} />
+              </Select.Trigger>
+              <Select.Portal>
+                <Select.Content className='min-w-56 rounded-md bg-white p-1 shadow-sm'>
+                  <Select.Viewport>
+                    {activeLanguages.map((language) => (
+                      <Select.Item
+                        key={language}
+                        value={language}
+                        className='rounded px-3 py-1.5 text-sm outline-none select-none hover:bg-black/5 data-[state=checked]:bg-black/5'
+                      >
+                        <Select.ItemText>{language}</Select.ItemText>
+                      </Select.Item>
+                    ))}
+                  </Select.Viewport>
+                </Select.Content>
+              </Select.Portal>
+            </Select.Root>
+          </div>
+        ) : null}
+      </div>
       <div className='flex gap-2'>
         <TooltipButton
           label={!llmReady ? t('llm.load') : t('llm.unload')}
@@ -81,20 +123,6 @@ export function LlmControls() {
               setGenerating(false)
             }
           }}
-          widthClass='w-full'
-        />
-      </div>
-      <Separator.Root className='my-1 h-px bg-neutral-200' />
-      <ToggleField
-        label={t('mask.showRendered')}
-        checked={showRenderedImage}
-        onChange={setShowRenderedImage}
-      />
-      <div className='col flex'>
-        <TooltipButton
-          label={t('llm.render')}
-          tooltip={t('llm.renderTooltip')}
-          onClick={render}
           widthClass='w-full'
         />
       </div>

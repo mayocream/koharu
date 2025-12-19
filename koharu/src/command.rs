@@ -1,6 +1,6 @@
 use std::{str::FromStr, sync::Arc};
 
-use koharu_ml::llm::ModelId;
+use koharu_ml::{llm::ModelId, set_locale};
 use rayon::iter::{IntoParallelIterator, ParallelIterator};
 use strum::IntoEnumIterator;
 use sys_locale::get_locale;
@@ -343,7 +343,7 @@ pub async fn update_text_blocks(
 }
 
 #[tauri::command]
-pub fn llm_list(model: State<'_, Arc<llm::Model>>) -> Vec<String> {
+pub fn llm_list(model: State<'_, Arc<llm::Model>>) -> Vec<llm::ModelInfo> {
     let mut models: Vec<ModelId> = ModelId::iter().collect();
 
     let cpu_factor = match model.is_cpu() {
@@ -370,7 +370,7 @@ pub fn llm_list(model: State<'_, Arc<llm::Model>>) -> Vec<String> {
         ModelId::HunyuanMT7B => 500 / non_zh_en_locale_factor,
     });
 
-    models.into_iter().map(|id| id.to_string()).collect()
+    models.into_iter().map(llm::ModelInfo::new).collect()
 }
 
 #[tauri::command]
@@ -399,12 +399,17 @@ pub async fn llm_generate(
     model: State<'_, Arc<llm::Model>>,
     index: usize,
     text_block_index: Option<usize>,
+    language: Option<String>,
 ) -> Result<Document> {
     let mut state = state.write().await;
     let document = state
         .documents
         .get_mut(index)
         .ok_or_else(|| anyhow::anyhow!("Document not found"))?;
+
+    if let Some(locale) = language.as_ref() {
+        set_locale(locale.clone());
+    }
 
     match text_block_index {
         Some(bi) => {

@@ -61,6 +61,7 @@
   "panels": {
     "processing": "处理",
     "mask": "遮罩",
+    "llm": "LLM",
     "render": "渲染"
   },
   "processing": {
@@ -82,6 +83,9 @@
     "ready": "就绪",
     "idle": "空闲",
     "selectPlaceholder": "选择模型",
+    "modelLabel": "模型",
+    "languageLabel": "目标语言",
+    "languagePlaceholder": "选择语言",
     "load": "加载",
     "unload": "卸载",
     "loadTooltip": "加载所选模型",

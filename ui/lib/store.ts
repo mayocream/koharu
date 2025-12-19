@@ -13,6 +13,11 @@ type ProcessImageOptions =
       skipOperationTracking?: boolean
     }
 
+export type LlmModelInfo = {
+  id: string
+  languages: string[]
+}
+
 const replaceDocument = (docs: Document[], index: number, doc: Document) =>
   docs.map((item, idx) => (idx === index ? doc : item))
 
@@ -52,6 +57,20 @@ const createTextBlockSyncer = () => {
 
 const textBlockSyncer = createTextBlockSyncer()
 
+const findModelLanguages = (models: LlmModelInfo[], modelId?: string) =>
+  models.find((model) => model.id === modelId)?.languages ?? []
+
+const pickLanguage = (
+  models: LlmModelInfo[],
+  modelId?: string,
+  preferred?: string,
+) => {
+  const languages = findModelLanguages(models, modelId)
+  if (!languages.length) return undefined
+  if (preferred && languages.includes(preferred)) return preferred
+  return languages[0]
+}
+
 // A mixin of application state, ui state and actions.
 type AppState = OperationSlice & {
   documents: Document[]
@@ -65,8 +84,9 @@ type AppState = OperationSlice & {
   selectedBlockIndex?: number
   autoFitEnabled: boolean
   // LLM state
-  llmModels: string[]
+  llmModels: LlmModelInfo[]
   llmSelectedModel?: string
+  llmSelectedLanguage?: string
   llmReady: boolean
   llmLoading: boolean
   // ui + actions
@@ -104,6 +124,7 @@ type AppState = OperationSlice & {
   // LLM actions
   llmList: () => Promise<void>
   llmSetSelectedModel: (id: string) => void
+  llmSetSelectedLanguage: (language: string) => void
   llmToggleLoadUnload: () => Promise<void>
   llmCheckReady: () => Promise<void>
   llmGenerate: (
@@ -127,6 +148,7 @@ export const useAppStore = create<AppState>((set, get) => ({
   autoFitEnabled: true,
   llmModels: [],
   llmSelectedModel: undefined,
+  llmSelectedLanguage: undefined,
   llmReady: false,
   llmLoading: false,
   operation: undefined,
@@ -235,18 +257,46 @@ export const useAppStore = create<AppState>((set, get) => ({
   },
   llmList: async () => {
     try {
-      const models = await invoke<string[]>('llm_list')
+      const models = await invoke<LlmModelInfo[]>('llm_list')
       set({ llmModels: models })
-      // Keep selected if still present, otherwise default to first
-      const current = get().llmSelectedModel
-      if (!current || !models.includes(current)) {
-        set({ llmSelectedModel: models[0] })
-      }
+      const currentModel = get().llmSelectedModel
+      const currentLanguage = get().llmSelectedLanguage
+      const hasCurrent = models.some((model) => model.id === currentModel)
+      const nextModel = hasCurrent
+        ? (currentModel ?? models[0]?.id)
+        : models[0]?.id
+      const nextLanguage = pickLanguage(
+        models,
+        nextModel,
+        hasCurrent ? currentLanguage : undefined,
+      )
+      set({
+        llmSelectedModel: nextModel,
+        llmSelectedLanguage: nextLanguage,
+      })
     } catch (_) {}
   },
   llmSetSelectedModel: async (id: string) => {
     await invoke('llm_offload')
-    set({ llmSelectedModel: id, llmLoading: false, llmReady: false })
+    const nextLanguage = pickLanguage(
+      get().llmModels,
+      id,
+      get().llmSelectedLanguage,
+    )
+    set({
+      llmSelectedModel: id,
+      llmSelectedLanguage: nextLanguage,
+      llmLoading: false,
+      llmReady: false,
+    })
+  },
+  llmSetSelectedLanguage: (language: string) => {
+    const languages = findModelLanguages(
+      get().llmModels,
+      get().llmSelectedModel,
+    )
+    if (!languages.includes(language)) return
+    set({ llmSelectedLanguage: language })
   },
   llmToggleLoadUnload: async () => {
     // unload
@@ -304,9 +354,21 @@ export const useAppStore = create<AppState>((set, get) => ({
       'text block',
       textBlockIndex,
     )
+    const languages = findModelLanguages(
+      get().llmModels,
+      get().llmSelectedModel,
+    )
+    const selectedLanguage = get().llmSelectedLanguage
+    const language =
+      languages.length > 0
+        ? selectedLanguage && languages.includes(selectedLanguage)
+          ? selectedLanguage
+          : languages[0]
+        : undefined
     const doc: Document = await get().invokeWithStatus('llm_generate', {
       index,
       textBlockIndex,
+      language,
     })
     set((state) => ({
       documents: replaceDocument(state.documents, index, doc),

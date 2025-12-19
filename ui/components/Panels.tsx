@@ -3,8 +3,8 @@
 import { Tabs } from 'radix-ui'
 import { useTranslation } from 'react-i18next'
 import { ProcessingControls } from '@/components/panels/ProcessingControls'
-import { MaskControls } from '@/components/panels/MaskControls'
 import { LlmControls } from '@/components/panels/LlmControls'
+import { RenderControls } from '@/components/panels/RenderControls'
 import { TextBlocksPanel } from '@/components/panels/TextBlocksPanel'
 
 const PANEL_TABS = [
@@ -13,8 +13,8 @@ const PANEL_TABS = [
     labelKey: 'panels.processing',
     Component: ProcessingControls,
   },
-  { value: 'mask', labelKey: 'panels.mask', Component: MaskControls },
-  { value: 'render', labelKey: 'panels.render', Component: LlmControls },
+  { value: 'llm', labelKey: 'panels.llm', Component: LlmControls },
+  { value: 'render', labelKey: 'panels.render', Component: RenderControls },
 ] as const
 
 export function Panels() {

@@ -61,6 +61,7 @@
   "panels": {
     "processing": "処理",
     "mask": "マスク",
+    "llm": "LLM",
     "render": "レンダー"
   },
   "processing": {
@@ -82,6 +83,9 @@
     "ready": "準備完了",
     "idle": "待機中",
     "selectPlaceholder": "モデルを選択",
+    "modelLabel": "モデル",
+    "languageLabel": "翻訳先の言語",
+    "languagePlaceholder": "言語を選択",
     "load": "読み込み",
     "unload": "解放",
     "loadTooltip": "選択したモデルを読み込む",

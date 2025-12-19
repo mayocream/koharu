@@ -1,68 +1,35 @@
 use minijinja::{Environment, context};
-use once_cell::sync::OnceCell;
+use once_cell::sync::Lazy;
 use serde::Serialize;
+use std::sync::RwLock;
 use strum::{Display, EnumString};
 use sys_locale::get_locale;
 
-use crate::llm::ModelId;
+use crate::llm::{ModelId, language_from_tag};
 
-// global static LOCALE
-static LOCALE: OnceCell<String> = OnceCell::new();
+static LOCALE: Lazy<RwLock<String>> = Lazy::new(|| RwLock::new(system_locale_name()));
+
+fn system_locale_name() -> String {
+    get_locale()
+        .map(|locale| language_from_tag(&locale).to_string())
+        .unwrap_or_else(|| "English".to_string())
+}
 
 fn get_default_locale() -> String {
     LOCALE
-        .get_or_init(|| {
-            match get_locale()
-                .unwrap_or_default()
-                .split("-")
-                .next()
-                .unwrap_or("en")
-            {
-                "zh" => "Chinese".to_string(),
-                "en" => "English".to_string(),
-                "fr" => "French".to_string(),
-                "pt" => "Portuguese".to_string(),
-                "es" => "Spanish".to_string(),
-                "ja" => "Japanese".to_string(),
-                "tr" => "Turkish".to_string(),
-                "ru" => "Russian".to_string(),
-                "ar" => "Arabic".to_string(),
-                "ko" => "Korean".to_string(),
-                "th" => "Thai".to_string(),
-                "it" => "Italian".to_string(),
-                "de" => "German".to_string(),
-                "vi" => "Vietnamese".to_string(),
-                "ms" => "Malay".to_string(),
-                "id" => "Indonesian".to_string(),
-                "tl" => "Filipino".to_string(),
-                "hi" => "Hindi".to_string(),
-                "pl" => "Polish".to_string(),
-                "cs" => "Czech".to_string(),
-                "nl" => "Dutch".to_string(),
-                "km" => "Khmer".to_string(),
-                "my" => "Burmese".to_string(),
-                "fa" => "Persian".to_string(),
-                "gu" => "Gujarati".to_string(),
-                "ur" => "Urdu".to_string(),
-                "te" => "Telugu".to_string(),
-                "mr" => "Marathi".to_string(),
-                "he" => "Hebrew".to_string(),
-                "bn" => "Bengali".to_string(),
-                "ta" => "Tamil".to_string(),
-                "uk" => "Ukrainian".to_string(),
-                "bo" => "Tibetan".to_string(),
-                "kk" => "Kazakh".to_string(),
-                "mn" => "Mongolian".to_string(),
-                "ug" => "Uyghur".to_string(),
-                "yue" => "Cantonese".to_string(),
-                _ => "English".to_string(),
-            }
-        })
-        .clone()
+        .read()
+        .map(|locale| locale.clone())
+        .unwrap_or_else(|_| system_locale_name())
 }
 
 pub fn set_default_locale(locale: String) {
-    let _ = LOCALE.set(locale);
+    set_locale(locale);
+}
+
+pub fn set_locale(locale: String) {
+    if let Ok(mut guard) = LOCALE.write() {
+        *guard = locale;
+    }
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Display, EnumString)]
