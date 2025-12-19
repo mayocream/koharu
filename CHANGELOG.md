@@ -1,3 +1,13 @@
+## [0.21.0] - 2025-12-19
+
+### 🚀 Features
+
+- Multi lang llm translate
+
+### ⚙️ Miscellaneous Tasks
+
+- Simplify bubble logic
+- Release 0.21.0
 ## [0.20.0] - 2025-12-18
 
 ### 🚀 Features
