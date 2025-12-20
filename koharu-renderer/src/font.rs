@@ -128,8 +128,8 @@ impl FontBook {
         });
         let source_cache = SourceCache::new(SourceCacheOptions { shared: true });
         Self {
-            collection: collection,
-            source_cache: source_cache,
+            collection,
+            source_cache,
             cache: HashMap::new(),
         }
     }

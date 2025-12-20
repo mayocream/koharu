@@ -695,7 +695,7 @@ fn align_to(value: u32, alignment: u32) -> u32 {
     if alignment == 0 {
         return value;
     }
-    ((value + alignment - 1) / alignment) * alignment
+    value.div_ceil(alignment) * alignment
 }
 
 const GLYPH_SHADER: &str = r#"
