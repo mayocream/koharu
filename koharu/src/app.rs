@@ -261,7 +261,7 @@ async fn setup(
 
     let ml = Arc::new(ml::Model::new(use_cpu).await?);
     let llm = Arc::new(llm::Model::new(use_cpu));
-    let renderer = Arc::new(Renderer::new());
+    let renderer = Arc::new(Renderer::new()?);
     let state = Arc::new(RwLock::new(State::default()));
 
     app.manage(ml);

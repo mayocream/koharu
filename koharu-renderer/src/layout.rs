@@ -303,7 +303,7 @@ mod tests {
     };
 
     fn any_system_font() -> Font {
-        let book = FontBook::new();
+        let mut book = FontBook::new();
         let props = Properties::default();
 
         // Prefer fonts that are commonly available depending on OS/environment.
@@ -321,15 +321,6 @@ mod tests {
         for name in preferred {
             if let Ok(font) = book.query(&[FamilyName::Title(name.to_string())], &props) {
                 return font;
-            }
-        }
-
-        // Fallback: pick the first enumerated family that can be loaded.
-        if let Ok(families) = book.all_families() {
-            for name in families.into_iter().take(50) {
-                if let Ok(font) = book.query(&[FamilyName::Title(name)], &props) {
-                    return font;
-                }
             }
         }
 

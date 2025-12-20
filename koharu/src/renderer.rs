@@ -1,9 +1,11 @@
+use std::sync::{Arc, Mutex};
+
 use anyhow::{Context, Result};
 use image::{DynamicImage, RgbaImage, imageops};
 use koharu_renderer::{
     font::{FamilyName, Font, FontBook, Properties},
     layout::{LayoutRun, TextLayout, WritingMode},
-    renderer::{RenderOptions, SkiaRenderer},
+    renderer::{RenderOptions, WgpuRenderer},
 };
 use rayon::iter::{IntoParallelRefIterator, ParallelIterator};
 
@@ -29,14 +31,16 @@ struct BlockPlan {
 }
 
 pub struct Renderer {
-    renderer: SkiaRenderer,
+    fontbook: Arc<Mutex<FontBook>>,
+    renderer: WgpuRenderer,
 }
 
 impl Renderer {
-    pub fn new() -> Self {
-        Self {
-            renderer: SkiaRenderer::new(),
-        }
+    pub fn new() -> Result<Self> {
+        Ok(Self {
+            fontbook: Arc::new(Mutex::new(FontBook::new())),
+            renderer: WgpuRenderer::new()?,
+        })
     }
 
     pub fn render(&self, doc: &mut Document) -> Result<()> {
@@ -55,13 +59,13 @@ impl Renderer {
             .collect();
 
         let plans = renderable_indices
-            .par_iter()
+            .iter()
             .map(|index| {
                 let block = &doc.text_blocks[*index];
                 let style = block.style.clone().unwrap_or_default();
                 let text = block.translation.as_deref().unwrap_or_default();
                 let writing_mode = Self::writing_mode_for_block(block, text);
-                let font = self.select_font(&style).context("failed to select font")?;
+                let font = self.select_font(&style)?;
 
                 Ok(BlockPlan {
                     index: *index,
@@ -102,10 +106,10 @@ impl Renderer {
             .map(|name| FamilyName::Title(name.clone()))
             .collect();
 
-        // `FontBook` (font-kit MultiSource) is not `Send + Sync`, so we keep it local per call.
-        // This keeps `Renderer` compatible with Tauri state (`Send + Sync`).
-        let book = FontBook::new();
-        book.query(&families, &Properties::default())
+        self.fontbook
+            .lock()
+            .map_err(|_| anyhow::anyhow!("failed to lock fontbook"))?
+            .query(&families, &Properties::default())
     }
 
     fn render_block(
@@ -223,11 +227,5 @@ impl Renderer {
         }
 
         PaintInfo { fill }
-    }
-}
-
-impl Default for Renderer {
-    fn default() -> Self {
-        Self::new()
     }
 }
