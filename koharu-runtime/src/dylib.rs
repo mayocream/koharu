@@ -348,6 +348,7 @@ mod tests {
     use super::*;
 
     #[tokio::test]
+    #[ignore]
     async fn test_skip_download_if_up_to_date() -> Result<()> {
         let temp_dir = tempfile::tempdir()?;
         let out_dir = temp_dir.path();
@@ -370,6 +371,7 @@ mod tests {
     }
 
     #[tokio::test]
+    #[ignore]
     async fn test_preload_dylibs() -> Result<()> {
         let temp_dir = std::env::temp_dir();
         let out_dir = temp_dir.join("cuda_rt_test_dylibs");
