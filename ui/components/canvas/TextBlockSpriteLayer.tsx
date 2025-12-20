@@ -66,10 +66,6 @@ function TextBlockSprite({
 
   if (!src) return null
 
-  const width = Math.max(0, block.width * scale)
-  const height = Math.max(0, block.height * scale)
-  if (!width || !height) return null
-
   return (
     <img
       alt=''
@@ -77,11 +73,8 @@ function TextBlockSprite({
       draggable={false}
       style={{
         position: 'absolute',
-        left: block.x * scale,
-        top: block.y * scale,
-        width,
-        height,
-        objectFit: 'contain',
+        transformOrigin: 'top left',
+        transform: `translate(${block.x * scale}px, ${block.y * scale}px) scale(${scale})`,
         userSelect: 'none',
         pointerEvents: 'none',
       }}

@@ -30,3 +30,4 @@ fontdue = { workspace = true }
 wgpu = { workspace = true }
 etagere = { workspace = true }
 bytemuck = { workspace = true }
+tracing = { workspace = true }

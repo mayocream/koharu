@@ -3863,6 +3863,7 @@ dependencies = [
  "serde_json",
  "skrifa",
  "tokio",
+ "tracing",
  "wgpu",
 ]
 

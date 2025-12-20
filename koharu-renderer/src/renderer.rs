@@ -283,6 +283,12 @@ impl WgpuContext {
             }))
             .context("failed to request wgpu adapter")?;
 
+        tracing::info!(
+            "selected wgpu adapter: {} ({:?})",
+            adapter.get_info().name,
+            adapter.get_info().backend,
+        );
+
         let (device, queue) =
             futures::executor::block_on(adapter.request_device(&wgpu::DeviceDescriptor {
                 label: None,

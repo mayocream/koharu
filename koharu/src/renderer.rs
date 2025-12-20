@@ -66,6 +66,9 @@ impl Renderer {
         let Some(translation) = &text_block.translation else {
             return Ok(());
         };
+        if translation.is_empty() {
+            return Ok(());
+        };
 
         let font = self.select_font(&text_block.style.clone().unwrap_or_default())?;
         let writing_mode = writing_mode(text_block);
