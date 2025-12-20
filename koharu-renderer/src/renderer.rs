@@ -82,11 +82,10 @@ impl WgpuRenderer {
             opts.anti_alias,
         )?;
 
-        // Preserve the previous Skia renderer channel swap to avoid changing output colors.
         let color = [
-            opts.color[2] as f32 / 255.0,
-            opts.color[1] as f32 / 255.0,
             opts.color[0] as f32 / 255.0,
+            opts.color[1] as f32 / 255.0,
+            opts.color[2] as f32 / 255.0,
             opts.color[3] as f32 / 255.0,
         ];
         let color_uniform = ColorUniform { color };
