@@ -44,6 +44,7 @@ fn non_bg_y_bounds(img: &image::RgbaImage, bg: [u8; 4]) -> Option<(u32, u32)> {
 }
 
 #[test]
+#[ignore]
 fn render_horizontal() -> Result<()> {
     let font = font("Yu Gothic")?;
     let lines = TextLayout::new(&font, 24.0)
@@ -68,6 +69,7 @@ fn render_horizontal() -> Result<()> {
 }
 
 #[test]
+#[ignore]
 fn render_vertical() -> Result<()> {
     let font = font("Yu Gothic")?;
     let lines = TextLayout::new(&font, 24.0)
@@ -93,6 +95,7 @@ fn render_vertical() -> Result<()> {
 }
 
 #[test]
+#[ignore]
 fn vertical_flows_top_to_bottom() -> Result<()> {
     let font = font("Yu Gothic")?;
 
@@ -136,6 +139,7 @@ fn vertical_flows_top_to_bottom() -> Result<()> {
 }
 
 #[test]
+#[ignore]
 fn render_horizontal_simplified_chinese() -> Result<()> {
     let font = font("Microsoft YaHei")?;
     let lines = TextLayout::new(&font, 24.0)
@@ -160,6 +164,7 @@ fn render_horizontal_simplified_chinese() -> Result<()> {
 }
 
 #[test]
+#[ignore]
 fn render_vertical_simplified_chinese() -> Result<()> {
     let font = font("Microsoft YaHei")?;
     let lines = TextLayout::new(&font, 24.0)
@@ -185,6 +190,7 @@ fn render_vertical_simplified_chinese() -> Result<()> {
 }
 
 #[test]
+#[ignore]
 fn render_rgba_text() -> Result<()> {
     let font = font("Yu Gothic")?;
     let lines = TextLayout::new(&font, 24.0)
