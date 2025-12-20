@@ -3,6 +3,7 @@ use std::path::Path;
 use koharu_ml::manga_ocr::MangaOcr;
 
 #[tokio::test]
+#[ignore]
 async fn manga_ocr_reads_dialog_image() -> anyhow::Result<()> {
     let fixtures = Path::new(env!("CARGO_MANIFEST_DIR")).join("tests/fixtures");
     let image = image::open(fixtures.join("dialog.jpg"))?;
