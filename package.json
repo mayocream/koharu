@@ -1,6 +1,6 @@
 {
   "devDependencies": {
-    "@tauri-apps/cli": "^2.9.5",
+    "@tauri-apps/cli": "^2.9.6",
     "git-cliff": "^2.10.1",
     "husky": "^9.1.7",
     "lint-staged": "^16.2.7",
