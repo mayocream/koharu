@@ -67,7 +67,6 @@ tempfile = "3.10"
 once_cell = "1.21"
 libloading = "0.9"
 num_cpus = "1.17"
-unicode-script = "0.5"
 rustfft = "6.4"
 cudarc = { version = "0.18.2", features = [
     "cuda-version-from-build-system",

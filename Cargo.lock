@@ -3781,8 +3781,6 @@ dependencies = [
  "skia-safe",
  "skrifa",
  "tokio",
- "tracing",
- "unicode-script",
 ]
 
 [[package]]
@@ -7633,12 +7631,6 @@ checksum = "43f613e4fa046e69818dd287fdc4bc78175ff20331479dab6e1b0f98d57062de"
 dependencies = [
  "smallvec",
 ]
-
-[[package]]
-name = "unicode-script"
-version = "0.5.8"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "383ad40bb927465ec0ce7720e033cb4ca06912855fc35db31b5755d0de75b1ee"
 
 [[package]]
 name = "unicode-segmentation"
