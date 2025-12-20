@@ -58,7 +58,7 @@ fn non_bg_y_bounds(img: &image::RgbaImage, bg: [u8; 4]) -> Option<(u32, u32)> {
 #[ignore]
 fn render_horizontal() -> Result<()> {
     let font = font("Yu Gothic")?;
-    let lines = TextLayout::new(&font, 24.0)
+    let lines = TextLayout::new(&font, Some(24.0))
         .with_max_width(1000.0)
         .run(SAMPLE_TEXT)?;
 
@@ -83,7 +83,7 @@ fn render_horizontal() -> Result<()> {
 #[ignore]
 fn render_vertical() -> Result<()> {
     let font = font("Yu Gothic")?;
-    let lines = TextLayout::new(&font, 24.0)
+    let lines = TextLayout::new(&font, Some(24.0))
         .with_writing_mode(WritingMode::VerticalRl)
         .with_max_height(1000.0)
         .run(SAMPLE_TEXT)?;
@@ -112,7 +112,7 @@ fn vertical_flows_top_to_bottom() -> Result<()> {
 
     // Repeated CJK characters so vertical advances are obvious and stable.
     let text = "\u{65E5}\u{672C}\u{8A9E}".repeat(40);
-    let layout = TextLayout::new(&font, 24.0)
+    let layout = TextLayout::new(&font, Some(24.0))
         .with_writing_mode(WritingMode::VerticalRl)
         // Keep it in a single column so we can reason about Y extents.
         .with_max_height(10_000.0)
@@ -153,7 +153,7 @@ fn vertical_flows_top_to_bottom() -> Result<()> {
 #[ignore]
 fn render_horizontal_simplified_chinese() -> Result<()> {
     let font = font("Microsoft YaHei")?;
-    let lines = TextLayout::new(&font, 24.0)
+    let lines = TextLayout::new(&font, Some(24.0))
         .with_max_width(1000.0)
         .run(SAMPLE_TEXT_ZH_CN)?;
 
@@ -178,7 +178,7 @@ fn render_horizontal_simplified_chinese() -> Result<()> {
 #[ignore]
 fn render_vertical_simplified_chinese() -> Result<()> {
     let font = font("Microsoft YaHei")?;
-    let lines = TextLayout::new(&font, 24.0)
+    let lines = TextLayout::new(&font, Some(24.0))
         .with_writing_mode(WritingMode::VerticalRl)
         .with_max_height(1000.0)
         .run(SAMPLE_TEXT_ZH_CN)?;
@@ -204,7 +204,7 @@ fn render_vertical_simplified_chinese() -> Result<()> {
 #[ignore]
 fn render_rgba_text() -> Result<()> {
     let font = font("Yu Gothic")?;
-    let lines = TextLayout::new(&font, 24.0)
+    let lines = TextLayout::new(&font, Some(24.0))
         .with_max_width(1000.0)
         .run(SAMPLE_TEXT)?;
 

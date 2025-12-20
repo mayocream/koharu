@@ -60,18 +60,20 @@ pub struct LayoutRun {
     pub width: f32,
     /// Total height of the layout.
     pub height: f32,
+    /// Font size used to generate this layout.
+    pub font_size: f32,
 }
 
 pub struct TextLayout<'a> {
     writing_mode: WritingMode,
     font: &'a Font,
-    font_size: f32,
+    font_size: Option<f32>,
     max_width: Option<f32>,
     max_height: Option<f32>,
 }
 
 impl<'a> TextLayout<'a> {
-    pub fn new(font: &'a Font, font_size: f32) -> Self {
+    pub fn new(font: &'a Font, font_size: Option<f32>) -> Self {
         Self {
             writing_mode: WritingMode::Horizontal,
             font,
@@ -79,6 +81,11 @@ impl<'a> TextLayout<'a> {
             max_width: None,
             max_height: None,
         }
+    }
+
+    pub fn with_font_size(mut self, size: f32) -> Self {
+        self.font_size = Some(size);
+        self
     }
 
     pub fn with_writing_mode(mut self, mode: WritingMode) -> Self {
@@ -97,19 +104,50 @@ impl<'a> TextLayout<'a> {
     }
 
     pub fn run(&self, text: &str) -> Result<LayoutRun> {
+        if let Some(font_size) = self.font_size {
+            return self.run_with_size(text, font_size);
+        }
+
+        self.run_auto(text)
+    }
+
+    fn run_auto(&self, text: &str) -> Result<LayoutRun> {
+        let max_height = self.max_height.unwrap_or(f32::INFINITY);
+        let max_width = self.max_width.unwrap_or(f32::INFINITY);
+
+        let mut low = 6;
+        let mut high = 300;
+        let mut best: Option<LayoutRun> = None;
+
+        while low <= high {
+            let mid = (low + high) / 2;
+            let size = mid as f32;
+            let layout = self.run_with_size(text, size)?;
+            if layout.width <= max_width && layout.height <= max_height {
+                best = Some(layout);
+                low = mid + 1;
+            } else {
+                high = mid - 1;
+            }
+        }
+
+        best.ok_or_else(|| anyhow::anyhow!("failed to layout text within constraints"))
+    }
+
+    fn run_with_size(&self, text: &str, font_size: f32) -> Result<LayoutRun> {
         let shaper = TextShaper::new();
         let line_breaker = LineBreaker::new();
 
         // Use real font metrics for consistent line sizing across modes.
         let font_ref = self.font.skrifa()?;
-        let metrics = font_ref.metrics(Size::new(self.font_size), LocationRef::default());
+        let metrics = font_ref.metrics(Size::new(font_size), LocationRef::default());
         let ascent = metrics.ascent;
         let descent = -metrics.descent;
-        let line_height = (ascent + descent + metrics.leading).max(self.font_size);
+        let line_height = (ascent + descent + metrics.leading).max(font_size);
 
         let opts = ShapingOptions {
             direction: self.writing_mode.into(),
-            font_size: self.font_size,
+            font_size,
             features: if self.writing_mode.is_vertical() {
                 &[
                     Feature::new(Tag::new(b"vert"), 1, ..),
@@ -200,7 +238,7 @@ impl<'a> TextLayout<'a> {
         // having to measure Skia paths in the renderer.
         let (mut width, mut height) = self.compute_bounds(&lines, line_height, descent);
         if let Some((mut min_x, mut min_y, mut max_x, mut max_y)) =
-            self.ink_bounds(&font_ref, &lines)
+            self.ink_bounds(&font_ref, font_size, &lines)
         {
             // Keep a tiny safety pad for hinting/AA differences.
             const PAD: f32 = 1.0;
@@ -221,6 +259,7 @@ impl<'a> TextLayout<'a> {
             lines,
             width,
             height,
+            font_size,
         })
     }
 
@@ -251,10 +290,10 @@ impl<'a> TextLayout<'a> {
     fn ink_bounds(
         &self,
         font_ref: &skrifa::FontRef<'_>,
+        font_size: f32,
         lines: &[LayoutLine],
     ) -> Option<(f32, f32, f32, f32)> {
-        let glyph_metrics =
-            font_ref.glyph_metrics(Size::new(self.font_size), LocationRef::default());
+        let glyph_metrics = font_ref.glyph_metrics(Size::new(font_size), LocationRef::default());
 
         let mut min_x = f32::INFINITY;
         let mut min_y = f32::INFINITY;
@@ -338,7 +377,7 @@ mod tests {
     #[test]
     fn compute_bounds_horizontal_uses_max_advance_and_baseline() {
         let font = any_system_font();
-        let layout = TextLayout::new(&font, 16.0).with_writing_mode(WritingMode::Horizontal);
+        let layout = TextLayout::new(&font, Some(16.0)).with_writing_mode(WritingMode::Horizontal);
 
         let lines = vec![
             LayoutLine {
@@ -370,7 +409,7 @@ mod tests {
     #[test]
     fn compute_bounds_vertical_accounts_for_baseline_and_descent() {
         let font = any_system_font();
-        let layout = TextLayout::new(&font, 16.0).with_writing_mode(WritingMode::VerticalRl);
+        let layout = TextLayout::new(&font, Some(16.0)).with_writing_mode(WritingMode::VerticalRl);
 
         let lines = vec![
             LayoutLine {
@@ -404,7 +443,7 @@ mod tests {
     fn layout_baselines_horizontal_follow_font_metrics() -> anyhow::Result<()> {
         let font = any_system_font();
         let font_size = 16.0;
-        let layout = TextLayout::new(&font, font_size)
+        let layout = TextLayout::new(&font, Some(font_size))
             .with_writing_mode(WritingMode::Horizontal)
             .run("A\nB\nC")?;
 
@@ -433,7 +472,7 @@ mod tests {
     fn layout_baselines_vertical_follow_font_metrics() -> anyhow::Result<()> {
         let font = any_system_font();
         let font_size = 16.0;
-        let layout = TextLayout::new(&font, font_size)
+        let layout = TextLayout::new(&font, Some(font_size))
             .with_writing_mode(WritingMode::VerticalRl)
             .run("A\nB\nC")?;
 

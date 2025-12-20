@@ -68,7 +68,8 @@
     "detect": "偵測",
     "detectTooltip": "在目前頁面執行文字偵測",
     "ocr": "辨識",
-    "ocrTooltip": "辨識已偵測區域中的文字"
+    "ocrTooltip": "辨識已偵測區域中的文字",
+    "render": "渲染"
   },
   "mask": {
     "showSegmentationMask": "顯示分割遮罩",

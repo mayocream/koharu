@@ -13,6 +13,13 @@ export function useTextBlocks() {
     (state) => state.setSelectedBlockIndex,
   )
   const updateTextBlocks = useAppStore((state) => state.updateTextBlocks)
+  const renderTextBlock = useAppStore((state) => state.renderTextBlock)
+
+  const shouldRenderSprite = (updates: Partial<TextBlock>) =>
+    Object.prototype.hasOwnProperty.call(updates, 'width') ||
+    Object.prototype.hasOwnProperty.call(updates, 'height') ||
+    Object.prototype.hasOwnProperty.call(updates, 'translation') ||
+    Object.prototype.hasOwnProperty.call(updates, 'style')
 
   const replaceBlock = async (index: number, updates: Partial<TextBlock>) => {
     const { documents, currentDocumentIndex } = useAppStore.getState()
@@ -21,6 +28,9 @@ export function useTextBlocks() {
       idx === index ? { ...block, ...updates } : block,
     )
     await updateTextBlocks(nextBlocks)
+    if (shouldRenderSprite(updates)) {
+      void renderTextBlock(undefined, currentDocumentIndex, index)
+    }
   }
 
   const appendBlock = async (block: TextBlock) => {

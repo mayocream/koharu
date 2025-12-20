@@ -68,7 +68,8 @@
     "detect": "检测",
     "detectTooltip": "对当前页面运行文本检测",
     "ocr": "识别",
-    "ocrTooltip": "识别已检测区域中的文本"
+    "ocrTooltip": "识别已检测区域中的文本",
+    "render": "渲染"
   },
   "mask": {
     "showSegmentationMask": "显示分割遮罩",

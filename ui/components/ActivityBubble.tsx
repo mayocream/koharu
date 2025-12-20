@@ -82,6 +82,7 @@ function OperationCard({
     ocr: t('processing.ocr'),
     inpaint: t('mask.inpaint'),
     llmGenerate: t('llm.generate'),
+    render: t('processing.render'),
   }
 
   const stepLabel = operation.step
@@ -144,7 +145,7 @@ function OperationCard({
                   style={{ width: `${progress}%` }}
                 />
               ) : (
-                <div className='activity-progress-indeterminate absolute inset-0 w-1/2 rounded-full bg-gradient-to-r from-rose-200 via-rose-500 to-rose-200' />
+                <div className='activity-progress-indeterminate absolute inset-0 w-1/2 rounded-full bg-linear-to-r from-rose-200 via-rose-500 to-rose-200' />
               )}
             </div>
             {typeof progress === 'number' && (

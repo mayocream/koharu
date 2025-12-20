@@ -12,6 +12,7 @@ use crate::{
 };
 
 #[derive(Default, Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
 pub struct TextBlock {
     pub x: f32,
     pub y: f32,
@@ -22,13 +23,14 @@ pub struct TextBlock {
     pub translation: Option<String>,
     pub style: Option<TextStyle>,
     pub font_prediction: Option<FontPrediction>,
+    pub rendered: Option<SerializableDynamicImage>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct TextStyle {
     pub font_families: Vec<String>,
-    pub font_size: f32,
+    pub font_size: Option<f32>,
     pub color: [u8; 4],
 }
 
@@ -50,7 +52,7 @@ impl Default for TextStyle {
                 // Fallback
                 "Arial".to_string(),
             ],
-            font_size: 0.0,
+            font_size: None,
             color: [0, 0, 0, 255],
         }
     }

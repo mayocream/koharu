@@ -45,6 +45,7 @@ dirs = { workspace = true }
 clap = { workspace = true }
 once_cell = { workspace = true }
 sys-locale = { workspace = true }
+icu = { workspace = true }
 
 [target.'cfg(target_os = "windows")'.dependencies]
 windows = { workspace = true }

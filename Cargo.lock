@@ -3760,6 +3760,7 @@ dependencies = [
  "blake3",
  "clap",
  "dirs",
+ "icu",
  "image",
  "koharu-ml",
  "koharu-renderer",
