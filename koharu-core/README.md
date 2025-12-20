@@ -1,6 +1,6 @@
-# koharu-renderer
+# koharu-core
 
-Text rendering engine.
+Utilities.
 
 ## License
 
