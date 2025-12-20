@@ -149,6 +149,8 @@ mod tests {
 
     #[tokio::test]
     async fn fetch_and_extract_works() -> anyhow::Result<()> {
+        tokio::fs::create_dir_all(&*FONTS_DIR).await?;
+
         let family = "Roboto";
         let fonts = fetch_and_extract(family).await?;
         assert!(!fonts.is_empty(), "should fetch some font files");
