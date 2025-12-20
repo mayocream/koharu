@@ -220,7 +220,7 @@ pub async fn detect(
 
             // fill style with prediction, and use default font families for now
             let color = prediction.text_color;
-            let font_size = prediction.font_size_px;
+            let font_size = (prediction.font_size_px > 0.0).then_some(prediction.font_size_px);
 
             block.font_prediction = Some(prediction);
             block.style = Some(TextStyle {
@@ -313,6 +313,7 @@ pub async fn render(
     state: State<'_, AppState>,
     renderer: State<'_, Arc<Renderer>>,
     index: usize,
+    text_block_index: Option<usize>,
 ) -> Result<Document> {
     let mut state = state.write().await;
     let document = state
@@ -320,7 +321,7 @@ pub async fn render(
         .get_mut(index)
         .ok_or_else(|| anyhow::anyhow!("Document not found"))?;
 
-    renderer.render(document)?;
+    renderer.render(document, text_block_index)?;
 
     Ok(document.clone())
 }

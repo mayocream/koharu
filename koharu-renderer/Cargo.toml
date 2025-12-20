@@ -22,8 +22,11 @@ futures = { workspace = true }
 num_cpus = { workspace = true }
 serde = { workspace = true }
 serde_json = { workspace = true }
-font-kit = { workspace = true }
 skrifa = { workspace = true }
 harfrust = { workspace = true }
 icu = { workspace = true }
-skia-safe = { workspace = true }
+fontique = { workspace = true }
+fontdue = { workspace = true }
+wgpu = { workspace = true }
+etagere = { workspace = true }
+bytemuck = { workspace = true }

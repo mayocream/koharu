@@ -68,7 +68,8 @@
     "detect": "検出",
     "detectTooltip": "現在のページでテキスト検出を実行",
     "ocr": "OCR",
-    "ocrTooltip": "検出された領域のテキストを認識"
+    "ocrTooltip": "検出された領域のテキストを認識",
+    "render": "レンダー"
   },
   "mask": {
     "showSegmentationMask": "セグメンテーションマスクを表示",

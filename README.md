@@ -86,7 +86,7 @@ To build Koharu from source, follow the steps below.
 
 ### Prerequisites
 
-- [Rust](https://www.rust-lang.org/tools/install) (1.85 or later)
+- [Rust](https://www.rust-lang.org/tools/install) (1.92 or later)
 - [Bun](https://bun.sh/) (1.0 or later)
 
 ### Install dependencies

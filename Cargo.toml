@@ -95,11 +95,14 @@ windows = { version = "0.62", features = [
 ] }
 windows-sys = "0.61"
 winreg = "0.55"
-font-kit = "0.14"
 skrifa = "0.39"
 harfrust = "0.4"
 icu = "2.1"
-skia-safe = { version = "0.91", features = ["gl"] }
+fontique = "0.7"
+fontdue = "0.9"
+wgpu = "28.0"
+etagere = "0.2"
+bytemuck = { version = "1.21", features = ["derive"] }
 
 [patch.crates-io]
 candle-transformers = { git = "https://github.com/mayocream/candle", branch = "cuda-dynamic-loading" }
@@ -108,3 +111,9 @@ candle-nn = { git = "https://github.com/mayocream/candle", branch = "cuda-dynami
 float8 = { git = "https://github.com/mayocream/float8", branch = "cuda-dynamic-loading" }
 ug = { git = "https://github.com/mayocream/ug", branch = "cuda-dynamic-loading" }
 ug-cuda = { git = "https://github.com/mayocream/ug", branch = "cuda-dynamic-loading" }
+
+[profile.dev.package."*"]
+opt-level = 3
+
+[profile.dev]
+opt-level = 1

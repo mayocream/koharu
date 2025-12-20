@@ -14,7 +14,7 @@ import {
 import { ToolRail } from '@/components/canvas/ToolRail'
 import { CanvasToolbar } from '@/components/canvas/CanvasToolbar'
 import { TextBlockAnnotations } from '@/components/canvas/TextBlockAnnotations'
-import { DomTextLayer } from '@/components/canvas/DomTextLayer'
+import { TextBlockSpriteLayer } from '@/components/canvas/TextBlockSpriteLayer'
 import { usePointerToDocument } from '@/hooks/usePointerToDocument'
 import { useBlockDrafting } from '@/hooks/useBlockDrafting'
 import { useBlockContextMenu } from '@/hooks/useBlockContextMenu'
@@ -170,7 +170,7 @@ export function Workspace() {
                           />
                         )}
                         {showTextBlocksOverlay && (
-                          <DomTextLayer
+                          <TextBlockSpriteLayer
                             blocks={currentDocument?.textBlocks}
                             scale={scaleRatio}
                             visible={!showRenderedImage}

@@ -2,7 +2,7 @@ export type RgbaColor = [number, number, number, number]
 
 export type TextStyle = {
   fontFamilies: string[]
-  fontSize: number
+  fontSize?: number
   color: RgbaColor
 }
 
@@ -15,6 +15,7 @@ export type TextBlock = {
   text?: string
   translation?: string
   style?: TextStyle
+  rendered?: number[]
 }
 
 export type ToolMode = 'select' | 'block' | 'mask'

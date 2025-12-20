@@ -1,233 +1,142 @@
-use anyhow::{Context, Result};
-use image::{DynamicImage, RgbaImage, imageops};
+use std::sync::{Arc, Mutex};
+
+use anyhow::Result;
+use icu::properties::{CodePointMapData, props::Script};
+use image::{DynamicImage, imageops};
 use koharu_renderer::{
     font::{FamilyName, Font, FontBook, Properties},
-    layout::{LayoutRun, TextLayout, WritingMode},
-    renderer::{RenderOptions, SkiaRenderer},
+    layout::{TextLayout, WritingMode},
+    renderer::{RenderOptions, WgpuRenderer},
 };
-use rayon::iter::{IntoParallelRefIterator, ParallelIterator};
+use rayon::iter::{IntoParallelRefMutIterator, ParallelIterator};
 
 use crate::{
     image::SerializableDynamicImage,
     state::{Document, TextBlock, TextStyle},
 };
 
-#[derive(Clone, Copy)]
-struct PaintInfo {
-    fill: [u8; 4],
-}
-
-struct BlockContext {
-    style: TextStyle,
-    font: Font,
-    writing_mode: WritingMode,
-}
-
-struct BlockPlan {
-    index: usize,
-    context: BlockContext,
-}
-
 pub struct Renderer {
-    renderer: SkiaRenderer,
+    fontbook: Arc<Mutex<FontBook>>,
+    renderer: WgpuRenderer,
 }
 
 impl Renderer {
-    pub fn new() -> Self {
-        Self {
-            renderer: SkiaRenderer::new(),
-        }
+    pub fn new() -> Result<Self> {
+        Ok(Self {
+            fontbook: Arc::new(Mutex::new(FontBook::new())),
+            renderer: WgpuRenderer::new()?,
+        })
     }
 
-    pub fn render(&self, doc: &mut Document) -> Result<()> {
-        let Some(inpainted) = doc.inpainted.as_deref() else {
-            tracing::warn!("No inpainted image found for rendering");
-            return Ok(());
+    pub fn render(&self, document: &mut Document, text_block_index: Option<usize>) -> Result<()> {
+        let mut text_blocks = match text_block_index {
+            Some(index) => document
+                .text_blocks
+                .get_mut(index)
+                .map(|tb| vec![tb])
+                .ok_or_else(|| anyhow::anyhow!("Text block index out of bounds"))?,
+            None => document.text_blocks.iter_mut().collect(),
         };
 
-        let mut rendered = inpainted.to_rgba8();
-        let renderable_indices: Vec<usize> = doc
-            .text_blocks
-            .iter()
-            .enumerate()
-            .filter(|(_, block)| block.translation.as_ref().is_some_and(|x| !x.is_empty()))
-            .map(|(index, _)| index)
-            .collect();
+        text_blocks
+            .par_iter_mut()
+            .try_for_each(|text_block| self.render_text_block(text_block))?;
 
-        let plans = renderable_indices
-            .par_iter()
-            .map(|index| {
-                let block = &doc.text_blocks[*index];
-                let style = block.style.clone().unwrap_or_default();
-                let text = block.translation.as_deref().unwrap_or_default();
-                let writing_mode = Self::writing_mode_for_block(block, text);
-                let font = self.select_font(&style).context("failed to select font")?;
-
-                Ok(BlockPlan {
-                    index: *index,
-                    context: BlockContext {
-                        style,
-                        font,
-                        writing_mode,
-                    },
-                })
-            })
-            .collect::<Result<Vec<_>>>()?;
-
-        let render_results = plans
-            .par_iter()
-            .map(|plan| {
-                let block = &doc.text_blocks[plan.index];
-                let text = block.translation.as_deref().unwrap_or_default();
-                self.render_block(block, text, plan)
-                    .with_context(|| format!("failed to render block at index {}", plan.index))
-            })
-            .collect::<Result<Vec<_>>>()?;
-
-        for (glyph_image, dest_x, dest_y) in render_results {
-            imageops::overlay(&mut rendered, &glyph_image, dest_x, dest_y);
+        if let Some(inpainted) = &document.inpainted
+            && text_block_index.is_none()
+        {
+            let mut rendered = inpainted.to_rgba8();
+            for text_block in text_blocks {
+                let Some(block) = text_block.rendered.as_ref() else {
+                    continue;
+                };
+                imageops::overlay(
+                    &mut rendered,
+                    &block.0,
+                    text_block.x as i64,
+                    text_block.y as i64,
+                );
+            }
+            document.rendered = Some(SerializableDynamicImage(DynamicImage::ImageRgba8(rendered)));
         }
-
-        doc.rendered = Some(SerializableDynamicImage::from(DynamicImage::ImageRgba8(
-            rendered,
-        )));
-
         Ok(())
     }
 
-    fn select_font(&self, style: &TextStyle) -> Result<Font> {
-        let families: Vec<FamilyName> = style
-            .font_families
-            .iter()
-            .map(|name| FamilyName::Title(name.clone()))
-            .collect();
+    fn render_text_block(&self, text_block: &mut TextBlock) -> Result<()> {
+        let Some(translation) = &text_block.translation else {
+            return Ok(());
+        };
 
-        // `FontBook` (font-kit MultiSource) is not `Send + Sync`, so we keep it local per call.
-        // This keeps `Renderer` compatible with Tauri state (`Send + Sync`).
-        let book = FontBook::new();
-        book.query(&families, &Properties::default())
-    }
+        let font = self.select_font(&text_block.style.clone().unwrap_or_default())?;
+        let writing_mode = writing_mode(text_block);
+        let layout = TextLayout::new(&font, None)
+            .with_max_height(text_block.height)
+            .with_max_width(text_block.width)
+            .with_writing_mode(writing_mode)
+            .run(translation)?;
 
-    fn render_block(
-        &self,
-        block: &TextBlock,
-        text: &str,
-        plan: &BlockPlan,
-    ) -> Result<(RgbaImage, i64, i64)> {
-        let (layout, layout_width, layout_height, font_size) =
-            self.layout_for_render(block, plan, text)?;
-
-        let glyph_image = self.renderer.render(
+        let rendered = self.renderer.render(
             &layout,
-            plan.context.writing_mode,
-            &plan.context.font,
+            writing_mode,
+            &font,
             &RenderOptions {
-                color: Self::paint_for_block(block, &plan.context.style).fill,
-                font_size,
-                padding: 0.0,
+                font_size: layout.font_size,
+                color: text_block
+                    .font_prediction
+                    .as_ref()
+                    .map(|pred| {
+                        [
+                            pred.text_color[0],
+                            pred.text_color[1],
+                            pred.text_color[2],
+                            255,
+                        ]
+                    })
+                    .unwrap_or([0, 0, 0, 255]),
                 ..Default::default()
             },
         )?;
 
-        let x_offset = ((block.width - layout_width).max(0.0) / 2.0).floor();
-        let y_offset = ((block.height - layout_height).max(0.0) / 2.0).floor();
-        let dest_x = (block.x + x_offset).floor().max(0.0) as i64;
-        let dest_y = (block.y + y_offset).floor().max(0.0) as i64;
-
-        Ok((glyph_image, dest_x, dest_y))
+        text_block.rendered = Some(SerializableDynamicImage(DynamicImage::ImageRgba8(rendered)));
+        Ok(())
     }
 
-    fn layout_for_render(
-        &self,
-        block: &TextBlock,
-        plan: &BlockPlan,
-        text: &str,
-    ) -> Result<(LayoutRun, f32, f32, f32)> {
-        let font_size = plan.context.style.font_size;
-
-        let layout = self.layout_with_size(block, &plan.context, font_size, text)?;
-        let (width, height) = (layout.width, layout.height);
-        let fits = Self::fits((width, height), block);
-
-        if !fits {
-            tracing::debug!(
-                "Layout exceeds block bounds; width {:.1} height {:.1} vs block {}x{}",
-                width,
-                height,
-                block.width,
-                block.height
-            );
-        }
-
-        Ok((layout, width, height, font_size))
-    }
-
-    fn layout_with_size(
-        &self,
-        block: &TextBlock,
-        context: &BlockContext,
-        size: f32,
-        text: &str,
-    ) -> Result<LayoutRun> {
-        let layout = if context.writing_mode == WritingMode::VerticalRl {
-            TextLayout::new(&context.font, size)
-                .with_writing_mode(WritingMode::VerticalRl)
-                .with_max_height(block.height)
-        } else {
-            TextLayout::new(&context.font, size).with_max_width(block.width)
-        };
-
-        layout
-            .run(text)
-            .with_context(|| "failed to layout text for rendering")
-    }
-
-    fn fits(extents: (f32, f32), block: &TextBlock) -> bool {
-        let (w, h) = extents;
-        w <= block.width + f32::EPSILON && h <= block.height + f32::EPSILON
-    }
-
-    fn writing_mode_for_block(block: &TextBlock, text: &str) -> WritingMode {
-        if !Self::contains_cjk(text) || block.width >= block.height {
-            WritingMode::Horizontal
-        } else {
-            WritingMode::VerticalRl
-        }
-    }
-
-    fn contains_cjk(text: &str) -> bool {
-        text.chars().any(Self::is_cjk)
-    }
-
-    fn is_cjk(c: char) -> bool {
-        matches!(
-            c,
-            '\u{4E00}'..='\u{9FFF}'
-                | '\u{3400}'..='\u{4DBF}'
-                | '\u{3040}'..='\u{309F}'
-                | '\u{30A0}'..='\u{30FF}'
-                | '\u{AC00}'..='\u{D7AF}'
-        )
-    }
-
-    fn paint_for_block(block: &TextBlock, style: &TextStyle) -> PaintInfo {
-        let mut fill = style.color;
-
-        if let Some(info) = block.font_prediction.as_ref() {
-            fill = [
-                info.text_color[0],
-                info.text_color[1],
-                info.text_color[2],
-                255,
-            ];
-        }
-
-        PaintInfo { fill }
+    fn select_font(&self, style: &TextStyle) -> Result<Font> {
+        let mut fontbook = self
+            .fontbook
+            .lock()
+            .map_err(|_| anyhow::anyhow!("Failed to lock fontbook"))?;
+        let font = fontbook.query(
+            style
+                .font_families
+                .iter()
+                .map(|family| FamilyName::Title(family.to_string()))
+                .collect::<Vec<_>>()
+                .as_slice(),
+            &Properties::default(),
+        )?;
+        Ok(font)
     }
 }
 
-impl Default for Renderer {
-    fn default() -> Self {
-        Self::new()
+fn writing_mode(text_block: &TextBlock) -> WritingMode {
+    let text = match &text_block.translation {
+        Some(t) => t,
+        None => return WritingMode::Horizontal,
+    };
+
+    if !is_cjk(text) || text_block.width >= text_block.height {
+        WritingMode::Horizontal
+    } else {
+        WritingMode::VerticalRl
     }
+}
+
+fn is_cjk(text: &str) -> bool {
+    text.chars().any(|c| {
+        matches!(
+            CodePointMapData::<Script>::new().get(c),
+            Script::Han | Script::Hiragana | Script::Katakana | Script::Hangul | Script::Bopomofo
+        )
+    })
 }

@@ -15,7 +15,7 @@ import {
 } from '@/lib/openai'
 import { t } from 'i18next'
 
-type ProcessAction = 'detect' | 'ocr' | 'inpaint' | 'llmGenerate'
+type ProcessAction = 'detect' | 'ocr' | 'inpaint' | 'llmGenerate' | 'render'
 
 type ProcessImageOptionsObject = {
   onProgress?: (progress: number) => Promise<void>
@@ -124,6 +124,11 @@ type AppState = OperationSlice & {
   ocr: (_?: any, index?: number) => Promise<void>
   inpaint: (_?: any, index?: number) => Promise<void>
   render: (_?: any, index?: number) => Promise<void>
+  renderTextBlock: (
+    _?: any,
+    index?: number,
+    textBlockIndex?: number,
+  ) => Promise<void>
   processImage: (
     _?: any,
     index?: number,
@@ -328,6 +333,20 @@ export const useAppStore = create<AppState>((set, get) => {
         showRenderedImage: true,
       }))
     },
+    renderTextBlock: async (_, index, textBlockIndex) => {
+      index = index ?? get().currentDocumentIndex
+      if (typeof textBlockIndex !== 'number') return
+      const doc = get().documents[index]
+      if (!doc) return
+      await textBlockSyncer.flush()
+      const updatedDoc: Document = await invoke<Document>('render', {
+        index,
+        textBlockIndex,
+      })
+      set((state) => ({
+        documents: replaceDocument(state.documents, index, updatedDoc),
+      }))
+    },
     llmList: async () => {
       try {
         const models = [
@@ -465,6 +484,9 @@ export const useAppStore = create<AppState>((set, get) => {
         documents: replaceDocument(state.documents, index, doc),
         showTextBlocksOverlay: true,
       }))
+      if (typeof textBlockIndex === 'number') {
+        void get().renderTextBlock(undefined, index, textBlockIndex)
+      }
     },
     setLlmOpenAIEndpoint: (endpoint: string) => {
       set({ llmOpenAIEndpoint: endpoint })
@@ -519,6 +541,7 @@ export const useAppStore = create<AppState>((set, get) => {
         'ocr',
         'inpaint',
         'llmGenerate',
+        'render',
       ]
       const totalSteps = actions.length
 

@@ -68,7 +68,8 @@
     "detect": "Detect",
     "detectTooltip": "Run text detection on current page",
     "ocr": "OCR",
-    "ocrTooltip": "Recognize text for detected regions"
+    "ocrTooltip": "Recognize text for detected regions",
+    "render": "Render"
   },
   "mask": {
     "showSegmentationMask": "Show segmentation mask",

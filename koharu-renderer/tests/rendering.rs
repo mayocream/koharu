@@ -4,8 +4,9 @@ use anyhow::Result;
 use koharu_renderer::{
     font::{FamilyName, Font, FontBook, Properties},
     layout::{TextLayout, WritingMode},
-    renderer::{RenderOptions, SkiaRenderer},
+    renderer::{RenderOptions, WgpuRenderer},
 };
+use once_cell::sync::OnceCell;
 
 const SAMPLE_TEXT: &str = "吾輩は猫である。名前はまだ無い。どこで生れたかとんと見当がつかぬ。何でも薄暗いじめじめした所でニャーニャー泣いていた事だけは記憶している。吾輩はここで始めて人間というものを見た。しかもあとで聞くとそれは書生という人間中で一番獰悪な種族であったそうだ。";
 const SAMPLE_TEXT_ZH_CN: &str = "《我是猫》是日本作家夏目漱石创作的长篇小说，也是其代表作，它确立了夏目漱石在文学史上的地位。作品淋漓尽致地反映了二十世纪初，日本中小资产阶级的思想和生活，尖锐地揭露和批判了明治“文明开化”的资本主义社会。小说采用幽默、讽刺、滑稽的手法，借助一只猫的视觉、听觉、感觉，嘲笑了明治时代知识分子空虚的精神生活，小说构思奇巧，描写夸张，结构灵活，具有鲜明的艺术特色。";
@@ -19,11 +20,21 @@ fn output_dir() -> PathBuf {
 }
 
 fn font(family_name: &str) -> Result<Font> {
-    let book = FontBook::new();
-    book.query(
+    let mut book = FontBook::new();
+    let font = book.query(
         &[FamilyName::Title(family_name.to_string())],
         &Properties::default(),
-    )
+    )?;
+    // preload fontdue font
+    let _ = font.fontdue()?;
+
+    Ok(font)
+}
+
+fn wgpu_renderer() -> Result<&'static WgpuRenderer> {
+    static INSTANCE: OnceCell<WgpuRenderer> = OnceCell::new();
+    let wgpu = INSTANCE.get_or_try_init(|| WgpuRenderer::new())?;
+    Ok(wgpu)
 }
 
 fn non_bg_y_bounds(img: &image::RgbaImage, bg: [u8; 4]) -> Option<(u32, u32)> {
@@ -47,11 +58,11 @@ fn non_bg_y_bounds(img: &image::RgbaImage, bg: [u8; 4]) -> Option<(u32, u32)> {
 #[ignore]
 fn render_horizontal() -> Result<()> {
     let font = font("Yu Gothic")?;
-    let lines = TextLayout::new(&font, 24.0)
+    let lines = TextLayout::new(&font, Some(24.0))
         .with_max_width(1000.0)
         .run(SAMPLE_TEXT)?;
 
-    let img = SkiaRenderer::new().render(
+    let img = wgpu_renderer()?.render(
         &lines,
         WritingMode::Horizontal,
         &font,
@@ -72,12 +83,12 @@ fn render_horizontal() -> Result<()> {
 #[ignore]
 fn render_vertical() -> Result<()> {
     let font = font("Yu Gothic")?;
-    let lines = TextLayout::new(&font, 24.0)
+    let lines = TextLayout::new(&font, Some(24.0))
         .with_writing_mode(WritingMode::VerticalRl)
         .with_max_height(1000.0)
         .run(SAMPLE_TEXT)?;
 
-    let img = SkiaRenderer::new().render(
+    let img = wgpu_renderer()?.render(
         &lines,
         WritingMode::VerticalRl,
         &font,
@@ -101,13 +112,13 @@ fn vertical_flows_top_to_bottom() -> Result<()> {
 
     // Repeated CJK characters so vertical advances are obvious and stable.
     let text = "\u{65E5}\u{672C}\u{8A9E}".repeat(40);
-    let layout = TextLayout::new(&font, 24.0)
+    let layout = TextLayout::new(&font, Some(24.0))
         .with_writing_mode(WritingMode::VerticalRl)
         // Keep it in a single column so we can reason about Y extents.
         .with_max_height(10_000.0)
         .run(&text)?;
 
-    let img = SkiaRenderer::new().render(
+    let img = wgpu_renderer()?.render(
         &layout,
         WritingMode::VerticalRl,
         &font,
@@ -142,11 +153,11 @@ fn vertical_flows_top_to_bottom() -> Result<()> {
 #[ignore]
 fn render_horizontal_simplified_chinese() -> Result<()> {
     let font = font("Microsoft YaHei")?;
-    let lines = TextLayout::new(&font, 24.0)
+    let lines = TextLayout::new(&font, Some(24.0))
         .with_max_width(1000.0)
         .run(SAMPLE_TEXT_ZH_CN)?;
 
-    let img = SkiaRenderer::new().render(
+    let img = wgpu_renderer()?.render(
         &lines,
         WritingMode::Horizontal,
         &font,
@@ -167,12 +178,12 @@ fn render_horizontal_simplified_chinese() -> Result<()> {
 #[ignore]
 fn render_vertical_simplified_chinese() -> Result<()> {
     let font = font("Microsoft YaHei")?;
-    let lines = TextLayout::new(&font, 24.0)
+    let lines = TextLayout::new(&font, Some(24.0))
         .with_writing_mode(WritingMode::VerticalRl)
         .with_max_height(1000.0)
         .run(SAMPLE_TEXT_ZH_CN)?;
 
-    let img = SkiaRenderer::new().render(
+    let img = wgpu_renderer()?.render(
         &lines,
         WritingMode::VerticalRl,
         &font,
@@ -193,11 +204,11 @@ fn render_vertical_simplified_chinese() -> Result<()> {
 #[ignore]
 fn render_rgba_text() -> Result<()> {
     let font = font("Yu Gothic")?;
-    let lines = TextLayout::new(&font, 24.0)
+    let lines = TextLayout::new(&font, Some(24.0))
         .with_max_width(1000.0)
         .run(SAMPLE_TEXT)?;
 
-    let img = SkiaRenderer::new().render(
+    let img = wgpu_renderer()?.render(
         &lines,
         WritingMode::Horizontal,
         &font,
