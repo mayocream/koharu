@@ -19,6 +19,6 @@
   ],
   "lint-staged": {
     "*.{js,ts,tsx,css}": "prettier --write",
-    "*.rs": "cargo fmt -- --check"
+    "*.rs": "cargo fmt"
   }
 }
