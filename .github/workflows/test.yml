@@ -28,5 +28,7 @@ jobs:
             fonts-noto-cjk
       - uses: actions/checkout@v6
       - uses: Swatinem/rust-cache@v2
+        with:
+          cache-targets: false
       - run: cargo test --no-run
       - run: cargo test --workspace --tests
