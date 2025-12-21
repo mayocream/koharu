@@ -93,6 +93,7 @@ type AppState = OperationSlice & {
   selectedBlockIndex?: number
   autoFitEnabled: boolean
   renderEffect: RenderEffect
+  availableFonts: string[]
   // LLM state
   llmModels: LlmModelInfo[]
   llmSelectedModel?: string
@@ -118,6 +119,7 @@ type AppState = OperationSlice & {
   setSelectedBlockIndex: (index?: number) => void
   setAutoFitEnabled: (enabled: boolean) => void
   setRenderEffect: (effect: RenderEffect) => void
+  fetchAvailableFonts: () => Promise<void>
   updateTextBlocks: (textBlocks: TextBlock[]) => Promise<void>
   setProgress: (progress?: number, status?: ProgressBarStatus) => Promise<void>
   clearProgress: () => Promise<void>
@@ -226,6 +228,7 @@ export const useAppStore = create<AppState>((set, get) => {
     selectedBlockIndex: undefined,
     autoFitEnabled: true,
     renderEffect: 'normal',
+    availableFonts: [],
     llmModels: [],
     llmSelectedModel: undefined,
     llmSelectedLanguage: undefined,
@@ -287,6 +290,12 @@ export const useAppStore = create<AppState>((set, get) => {
       set({ selectedBlockIndex: index }),
     setAutoFitEnabled: (enabled: boolean) => set({ autoFitEnabled: enabled }),
     setRenderEffect: (effect: RenderEffect) => set({ renderEffect: effect }),
+    fetchAvailableFonts: async () => {
+      try {
+        const fonts = await invoke<string[]>('list_font_families')
+        set({ availableFonts: fonts })
+      } catch (_) {}
+    },
     updateTextBlocks: async (textBlocks: TextBlock[]) => {
       const { documents, currentDocumentIndex } = get()
       const doc = documents[currentDocumentIndex]

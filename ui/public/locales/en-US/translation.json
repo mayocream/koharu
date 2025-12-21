@@ -115,7 +115,13 @@
     "effectAntique": "Antique book",
     "effectMetal": "Metal",
     "effectManga": "Manga tone",
-    "effectMotionBlur": "Motion blur"
+    "effectMotionBlur": "Motion blur",
+    "fontLabel": "Font",
+    "fontPlaceholder": "Select font",
+    "fontColorLabel": "Font color",
+    "fontScopeGlobal": "Global",
+    "fontScopeBlock": "Per block",
+    "fontScopeBlockIndex": "Block {{index}}"
   },
   "textBlocks": {
     "emptyPrompt": "Open an image to see text blocks.",

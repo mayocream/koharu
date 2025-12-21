@@ -327,6 +327,7 @@ pub async fn run() -> Result<()> {
             command::inpaint,
             command::render,
             command::update_text_blocks,
+            command::list_font_families,
             command::llm_list,
             command::llm_load,
             command::llm_offload,

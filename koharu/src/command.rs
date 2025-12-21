@@ -350,6 +350,11 @@ pub async fn update_text_blocks(
 }
 
 #[tauri::command]
+pub fn list_font_families(renderer: State<'_, Arc<Renderer>>) -> Result<Vec<String>> {
+    Ok(renderer.available_fonts()?)
+}
+
+#[tauri::command]
 pub fn llm_list(model: State<'_, Arc<llm::Model>>) -> Vec<llm::ModelInfo> {
     let mut models: Vec<ModelId> = ModelId::iter().collect();
 

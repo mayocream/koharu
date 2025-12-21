@@ -28,6 +28,16 @@ impl Renderer {
         })
     }
 
+    pub fn available_fonts(&self) -> Result<Vec<String>> {
+        let mut fontbook = self
+            .fontbook
+            .lock()
+            .map_err(|_| anyhow::anyhow!("Failed to lock fontbook"))?;
+        let mut families = fontbook.all_families();
+        families.sort();
+        Ok(families)
+    }
+
     pub fn render(
         &self,
         document: &mut Document,
@@ -79,7 +89,24 @@ impl Renderer {
             return Ok(());
         };
 
-        let font = self.select_font(&text_block.style.clone().unwrap_or_default())?;
+        let style = text_block.style.clone().unwrap_or_default();
+        let font = self.select_font(&style)?;
+        let block_effect = style.effect.unwrap_or(effect);
+        let color = text_block
+            .style
+            .as_ref()
+            .map(|style| style.color)
+            .or_else(|| {
+                text_block.font_prediction.as_ref().map(|pred| {
+                    [
+                        pred.text_color[0],
+                        pred.text_color[1],
+                        pred.text_color[2],
+                        255,
+                    ]
+                })
+            })
+            .unwrap_or([0, 0, 0, 255]);
         let writing_mode = writing_mode(text_block);
         let layout = TextLayout::new(&font, None)
             .with_max_height(text_block.height)
@@ -93,19 +120,8 @@ impl Renderer {
             &font,
             &RenderOptions {
                 font_size: layout.font_size,
-                color: text_block
-                    .font_prediction
-                    .as_ref()
-                    .map(|pred| {
-                        [
-                            pred.text_color[0],
-                            pred.text_color[1],
-                            pred.text_color[2],
-                            255,
-                        ]
-                    })
-                    .unwrap_or([0, 0, 0, 255]),
-                effect,
+                color,
+                effect: block_effect,
                 ..Default::default()
             },
         )?;

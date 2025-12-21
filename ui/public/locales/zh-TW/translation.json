@@ -115,7 +115,13 @@
     "effectAntique": "古書質感",
     "effectMetal": "金屬",
     "effectManga": "漫畫網點",
-    "effectMotionBlur": "動態模糊"
+    "effectMotionBlur": "動態模糊",
+    "fontLabel": "字體",
+    "fontPlaceholder": "選擇字體",
+    "fontColorLabel": "字體顏色",
+    "fontScopeGlobal": "Global",
+    "fontScopeBlock": "Per block",
+    "fontScopeBlockIndex": "Block {{index}}"
   },
   "textBlocks": {
     "emptyPrompt": "開啟影像以查看文字區塊。",

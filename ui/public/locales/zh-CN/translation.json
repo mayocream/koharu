@@ -115,7 +115,13 @@
     "effectAntique": "古书质感",
     "effectMetal": "金属",
     "effectManga": "漫画网点",
-    "effectMotionBlur": "动态模糊"
+    "effectMotionBlur": "动态模糊",
+    "fontLabel": "字体",
+    "fontPlaceholder": "选择字体",
+    "fontColorLabel": "字体颜色",
+    "fontScopeGlobal": "Global",
+    "fontScopeBlock": "Per block",
+    "fontScopeBlockIndex": "Block {{index}}"
   },
   "textBlocks": {
     "emptyPrompt": "打开图像以查看文本块。",

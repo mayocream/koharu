@@ -7,10 +7,23 @@ export type RenderEffect =
   | 'manga'
   | 'motionBlur'
 
+export type NamedFontPrediction = {
+  index: number
+  name: string
+  language?: string
+  probability: number
+  serif: boolean
+}
+
+export type FontPrediction = {
+  named_fonts: NamedFontPrediction[]
+}
+
 export type TextStyle = {
   fontFamilies: string[]
   fontSize?: number
   color: RgbaColor
+  effect?: RenderEffect
 }
 
 export type TextBlock = {
@@ -22,6 +35,7 @@ export type TextBlock = {
   text?: string
   translation?: string
   style?: TextStyle
+  fontPrediction?: FontPrediction
   rendered?: number[]
 }
 

@@ -115,7 +115,13 @@
     "effectAntique": "古書風",
     "effectMetal": "メタル",
     "effectManga": "漫画トーン",
-    "effectMotionBlur": "モーションブラー"
+    "effectMotionBlur": "モーションブラー",
+    "fontLabel": "フォント",
+    "fontPlaceholder": "フォントを選択",
+    "fontColorLabel": "フォントカラー",
+    "fontScopeGlobal": "Global",
+    "fontScopeBlock": "Per block",
+    "fontScopeBlockIndex": "Block {{index}}"
   },
   "textBlocks": {
     "emptyPrompt": "画像を開くとテキストブロックが表示されます。",
