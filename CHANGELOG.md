@@ -1,3 +1,42 @@
+## [0.22.0] - 2025-12-21
+
+### 🚀 Features
+
+- Add openai endpoint support
+- Wgpu renderer (#105)
+- Add some text shader styles
+- Block font and color
+
+### 🐛 Bug Fixes
+
+- Activity bubble animation and per operation sub title
+- Add missing ui/components/ResizableSidebar.tsx
+- Integration tests
+- Wgpu renderer minor issues
+
+### 💼 Other
+
+- Resizable navigator and panels
+
+### 📚 Documentation
+
+- Cleanup per-crate docs
+
+### 🧪 Testing
+
+- Ignore dylib tests
+- Yolo ignore tests
+
+### ⚙️ Miscellaneous Tasks
+
+- Remove unused deppendencies
+- Use format mode
+- Update dependencies
+- Mark rendering integration tests as ignored due to lack of fonts
+- Update ui dependencies
+- Hide debug window
+- Make clippy happy
+- Release 0.22.0
 ## [0.21.0] - 2025-12-19
 
 ### 🚀 Features
@@ -8,6 +47,7 @@
 
 - Simplify bubble logic
 - Release 0.21.0
+- Bundled pack portable
 ## [0.20.0] - 2025-12-18
 
 ### 🚀 Features
@@ -1099,9 +1139,6 @@
 
 ### ⚙️ Miscellaneous Tasks
 
-- Fix windows
-- Use underscore
-- Use version from Cargo.toml
 - Update version retrieval method in build workflow
 - Support nsis bundle
 - Remove unused setting
@@ -1111,7 +1148,22 @@
 - Fix windows bundle
 - Refine cuda workflow
 - Bump version to 0.1.2
+## [null] - 2025-05-29
+
+### ⚙️ Miscellaneous Tasks
+
+- Fix windows
+- Use underscore
+- Use version from Cargo.toml
 ## [0.1.1] - 2025-05-28
+
+### ⚙️ Miscellaneous Tasks
+
+- Fix windows bundle
+- Fix version
+- Add prefix for windows bundle
+- Bump version to 0.1.1
+## [] - 2025-05-28
 
 ### 🚀 Features
 
@@ -1254,10 +1306,6 @@
 - Test bundle
 - Trigger build
 - Add distDir and output configuration to next.config.ts
-- Fix windows bundle
-- Fix version
-- Add prefix for windows bundle
-- Bump version to 0.1.1
 ## [0.1.1] - 2025-04-23
 
 ### 🚀 Features
@@ -1303,6 +1351,43 @@
 
 ### 🚀 Features
 
+- Add scale control
+- Add comic text detection functionality and update dependencies
+- Implement comic text detection and update dependencies
+- Add blocks state management and render rectangles in canvas
+- Enhance canvas and detection panel with loading state and reset functionality
+- Order bboxes
+
+### 🐛 Bug Fixes
+
+- Ensure file selection is validated before processing in Topbar component
+- Ensure stage size is set correctly to match image dimensions
+- Simplify ort dependency declaration by removing unnecessary features
+- Clears blocks only when new image loaded
+- Display detected texts in detection and OCR panels
+- Ocr results got cutted
+- Add max height and overflow to OCR panel for better layout
+
+### 🚜 Refactor
+
+- Improve scale control component structure and functionality
+- Update tool selection and improve topbar icon imports
+- Use konva-react
+
+### 📚 Documentation
+
+- Update README with preview section and download instructions
+- Update workflow section to use checklist format
+
+### ⚙️ Miscellaneous Tasks
+
+- Update dependencies to latest versions
+- Add prettier
+- Tauri just output the executable file
+## [app-v0.1.0] - 2025-04-16
+
+### 🚀 Features
+
 - Initialize Tauri + React application with basic greeting functionality
 - Add manga109 to YOLO conversion script
 - Add detection notebook for dataset preparation and training with YOLO
@@ -1320,12 +1405,6 @@
 - Add Tauri plugins for dialog and logging, enhance canvas functionality, and improve app structure
 - Enhance canvas layout and improve image handling in Topbar component
 - Add Tauri plugins for store and persisted scope, update dependencies in Cargo and package files
-- Add scale control
-- Add comic text detection functionality and update dependencies
-- Implement comic text detection and update dependencies
-- Add blocks state management and render rectangles in canvas
-- Enhance canvas and detection panel with loading state and reset functionality
-- Order bboxes
 
 ### 🐛 Bug Fixes
 
@@ -1333,32 +1412,14 @@
 - Update gdown command to use placeholder for ID
 - Add missing description for manga-ocr model in README
 - Move stageRef.current.destroyChildren() call to ensure proper cleanup before loading new image
-- Ensure file selection is validated before processing in Topbar component
-- Ensure stage size is set correctly to match image dimensions
-- Simplify ort dependency declaration by removing unnecessary features
-- Clears blocks only when new image loaded
-- Display detected texts in detection and OCR panels
-- Ocr results got cutted
-- Add max height and overflow to OCR panel for better layout
 
 ### 🚜 Refactor
 
 - Remove execution output from validation cell in detection notebook
 - Update project structure and dependencies
-- Improve scale control component structure and functionality
-- Update tool selection and improve topbar icon imports
-- Use konva-react
-
-### 📚 Documentation
-
-- Update README with preview section and download instructions
-- Update workflow section to use checklist format
 
 ### ⚙️ Miscellaneous Tasks
 
 - Update dependencies to specific versions in bun.lock
 - Update @types/react and vite to latest versions
 - Reorganize README structure and add models section
-- Update dependencies to latest versions
-- Add prettier
-- Tauri just output the executable file
