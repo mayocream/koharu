@@ -19,10 +19,10 @@
         "@tauri-apps/api": "^2.9.1",
         "i18next": "^25.7.3",
         "lucide-react": "^0.562.0",
-        "next": "16.1.0",
+        "next": "^16.1.0",
         "radix-ui": "^1.4.3",
-        "react": "19.2.3",
-        "react-dom": "19.2.3",
+        "react": "^19.2.3",
+        "react-dom": "^19.2.3",
         "react-i18next": "^16.5.0",
         "react-rnd": "^10.5.2",
         "tinyld": "^1.3.4",
@@ -33,7 +33,7 @@
         "@types/node": "^25.0.3",
         "@types/react": "^19.2.7",
         "@types/react-dom": "^19.2.3",
-        "babel-plugin-react-compiler": "1.0.0",
+        "babel-plugin-react-compiler": "^1.0.0",
         "tailwindcss": "^4.1.18",
         "typescript": "^5.9.3",
       },
@@ -378,19 +378,19 @@
 
     "get-stream": ["get-stream@9.0.1", "", { "dependencies": { "@sec-ant/readable-stream": "^0.4.1", "is-stream": "^4.0.1" } }, "sha512-kVCxPF3vQM/N0B1PmoqVUqgHP+EeVjmZSQn+1oCRPxd2P21P2F19lIgbR3HBosbB1PUhOAoctJnfEn2GbN2eZA=="],
 
-    "git-cliff": ["git-cliff@2.10.1", "", { "dependencies": { "execa": "^9.6.0" }, "optionalDependencies": { "git-cliff-darwin-arm64": "2.10.1", "git-cliff-darwin-x64": "2.10.1", "git-cliff-linux-arm64": "2.10.1", "git-cliff-linux-x64": "2.10.1", "git-cliff-windows-arm64": "2.10.1", "git-cliff-windows-x64": "2.10.1" }, "bin": "lib/cli/cli.js" }, "sha512-KU/mmTBVJLxpLhJWa0AJetMXJVjkkMjWnqdxVlKEv+WeOwLXpKyrNd0Ep12+Cbsr1+uQhEQNmqUOHncG3QDL0g=="],
+    "git-cliff": ["git-cliff@2.11.0", "", { "dependencies": { "execa": "^9.6.0" }, "optionalDependencies": { "git-cliff-darwin-arm64": "2.11.0", "git-cliff-darwin-x64": "2.11.0", "git-cliff-linux-arm64": "2.11.0", "git-cliff-linux-x64": "2.11.0", "git-cliff-windows-arm64": "2.11.0", "git-cliff-windows-x64": "2.11.0" }, "bin": "lib/cli/cli.js" }, "sha512-BTr0THAxuPvYXmlCvQs7s6tNBo+1ruZVTM+ub2Rs80EeqhQeIX7Fa0legm4CMvv6h65E9nvD23K/QhneXumLaQ=="],
 
-    "git-cliff-darwin-arm64": ["git-cliff-darwin-arm64@2.10.1", "", { "os": "darwin", "cpu": "arm64" }, "sha512-ns0LnnUZNgVPoQf7HTQP9Clqo/YNtBQ2UIJMmppq350WuA0SWUq1oh/NtHAXc9iqsfZH+ZoI8NTH0KFjtRt/Uw=="],
+    "git-cliff-darwin-arm64": ["git-cliff-darwin-arm64@2.11.0", "", { "os": "darwin", "cpu": "arm64" }, "sha512-/DTHr4lbHSm8i+2lTQTO+2pwssFFRwtKCN6CWhf+TVLFtymyvAfum3CVBsDIbTKst1zNhpWRJr9QFGIJe+lcwA=="],
 
-    "git-cliff-darwin-x64": ["git-cliff-darwin-x64@2.10.1", "", { "os": "darwin", "cpu": "x64" }, "sha512-xrOQnUDYWLAAPKqJMRLp0mI1gCKy8eZv4I+qGyuddsXwljENT7TqGY+So0Ti8lWIrfnDSqGY3sVWuEON42RB7w=="],
+    "git-cliff-darwin-x64": ["git-cliff-darwin-x64@2.11.0", "", { "os": "darwin", "cpu": "x64" }, "sha512-CYx29B2vaarwwIkcGhnZYHyxGIWFxt3D6MyjmwbNpaqja3kf1UvkcV9j/qoj+S2k3R2Z8wM2Ets5JALr109x4Q=="],
 
-    "git-cliff-linux-arm64": ["git-cliff-linux-arm64@2.10.1", "", { "os": "linux", "cpu": "arm64" }, "sha512-syLQBbE3sWphbpRDau6buf5fINtE8zKiuRW+Sq7hwtLGaA0pI3JiOaX+7WrzTfh7qtA8xalFYsURs6iT5D2lXw=="],
+    "git-cliff-linux-arm64": ["git-cliff-linux-arm64@2.11.0", "", { "os": "linux", "cpu": "arm64" }, "sha512-E2G+MNU/AmIiLOqtba5XkzwCaWSLKeX28Ghu9KYTbhgHxoz7w3Tq7wS4qwfaZBrRcBjNQ/xb58OEKtUCx8F2yA=="],
 
-    "git-cliff-linux-x64": ["git-cliff-linux-x64@2.10.1", "", { "os": "linux", "cpu": "x64" }, "sha512-xIj9Img1uZguGnGCgMdWWNOjSlnUJAlbuFTsri/m8AKLX58A4iSUrxUC8Je5Cyy2FZcWj7UlzrxwR8u15ZDYrg=="],
+    "git-cliff-linux-x64": ["git-cliff-linux-x64@2.11.0", "", { "os": "linux", "cpu": "x64" }, "sha512-g3Dv1L5RQn8RLI8gEXtePqixQ436KQjjRgV6yCGP9d5GxLVK34pZ9DepoRJU6vt4oJNT96MaTRnp07/VjFEe6w=="],
 
-    "git-cliff-windows-arm64": ["git-cliff-windows-arm64@2.10.1", "", { "os": "win32", "cpu": "arm64" }, "sha512-0ytL9J0dkHi9M6yhNAIlezHvSERyVaG6XsXBrjdOP1ZhEMODauZXW/Ndsa73065TGPjtSdNrMkZCoZP6A8CyEQ=="],
+    "git-cliff-windows-arm64": ["git-cliff-windows-arm64@2.11.0", "", { "os": "win32", "cpu": "arm64" }, "sha512-2bDR8N7H5wsb2p8f8YONTblHwtAv+wbFKwkvEw3bFItXL9PpByiRi7se2oVUSEXzEuakQFCbEmwaemts5U5MGQ=="],
 
-    "git-cliff-windows-x64": ["git-cliff-windows-x64@2.10.1", "", { "os": "win32", "cpu": "x64" }, "sha512-ux7qc+W/Vsw+QrqsCN/lIjSGWfsOloqlFy2JcHoAdOEEMGQ8sD/wMKNsO/PPz6UShiYvbFJpqPkKtP6BDaKJLQ=="],
+    "git-cliff-windows-x64": ["git-cliff-windows-x64@2.11.0", "", { "os": "win32", "cpu": "x64" }, "sha512-HN4tbKjHSTuaur3A5I0u+OnqMdDsc/oqGMMnITWTwxnI0hUFTdbbVWA3/GtyY8T9OYUFYugUXYovX1i4VUv7/w=="],
 
     "graceful-fs": ["graceful-fs@4.2.11", "", {}, "sha512-RbJ5/jmFcNNCcDV5o9eTnBLJ/HszWV0P73bc+Ff4nS/rJj+YaS6IGyiOL0VoBYX+l1Wrl3k63h/KrH+nhJ0XvQ=="],
 
