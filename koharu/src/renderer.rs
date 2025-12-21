@@ -176,15 +176,12 @@ fn is_cjk(text: &str) -> bool {
 
 fn is_latin_only(text: &str) -> bool {
     let script_map = CodePointMapData::<Script>::new();
-    let mut has_latin = false;
-    for c in text.chars() {
-        match script_map.get(c) {
-            Script::Latin => has_latin = true,
-            Script::Common | Script::Inherited => {}
-            _ => return false,
-        }
-    }
-    has_latin
+    text.chars().all(|c| {
+        matches!(
+            script_map.get(c),
+            Script::Latin | Script::Common | Script::Inherited
+        )
+    })
 }
 
 fn center_layout_horizontally(layout: &mut LayoutRun, container_width: f32) {
