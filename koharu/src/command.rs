@@ -16,6 +16,7 @@ use crate::{
     state::{AppState, Document, TextBlock, TextStyle},
     version,
 };
+use koharu_renderer::renderer::TextShaderEffect;
 
 #[tauri::command]
 pub fn open_external(url: &str) -> Result<()> {
@@ -314,6 +315,7 @@ pub async fn render(
     renderer: State<'_, Arc<Renderer>>,
     index: usize,
     text_block_index: Option<usize>,
+    shader_effect: Option<TextShaderEffect>,
 ) -> Result<Document> {
     let mut state = state.write().await;
     let document = state
@@ -321,7 +323,11 @@ pub async fn render(
         .get_mut(index)
         .ok_or_else(|| anyhow::anyhow!("Document not found"))?;
 
-    renderer.render(document, text_block_index)?;
+    renderer.render(
+        document,
+        text_block_index,
+        shader_effect.unwrap_or_default(),
+    )?;
 
     Ok(document.clone())
 }

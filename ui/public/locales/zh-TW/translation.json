@@ -109,6 +109,14 @@
     "statusReady": "LLM 已就緒",
     "statusIdle": "LLM 未載入"
   },
+  "render": {
+    "effectLabel": "文字效果",
+    "effectNormal": "一般",
+    "effectAntique": "古書質感",
+    "effectMetal": "金屬",
+    "effectManga": "漫畫網點",
+    "effectMotionBlur": "動態模糊"
+  },
   "textBlocks": {
     "emptyPrompt": "開啟影像以查看文字區塊。",
     "title": "文字區塊（{{count}}）",

@@ -109,6 +109,14 @@
     "statusReady": "LLM 已就绪",
     "statusIdle": "LLM 未加载"
   },
+  "render": {
+    "effectLabel": "文字效果",
+    "effectNormal": "正常",
+    "effectAntique": "古书质感",
+    "effectMetal": "金属",
+    "effectManga": "漫画网点",
+    "effectMotionBlur": "动态模糊"
+  },
   "textBlocks": {
     "emptyPrompt": "打开图像以查看文本块。",
     "title": "文本块（{{count}}）",

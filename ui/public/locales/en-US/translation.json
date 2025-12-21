@@ -109,6 +109,14 @@
     "statusReady": "LLM Ready",
     "statusIdle": "LLM Not Loaded"
   },
+  "render": {
+    "effectLabel": "Text effect",
+    "effectNormal": "Normal",
+    "effectAntique": "Antique book",
+    "effectMetal": "Metal",
+    "effectManga": "Manga tone",
+    "effectMotionBlur": "Motion blur"
+  },
   "textBlocks": {
     "emptyPrompt": "Open an image to see text blocks.",
     "title": "Text Blocks ({{count}})",

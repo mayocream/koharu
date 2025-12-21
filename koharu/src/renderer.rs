@@ -6,7 +6,7 @@ use image::{DynamicImage, imageops};
 use koharu_renderer::{
     font::{FamilyName, Font, FontBook, Properties},
     layout::{TextLayout, WritingMode},
-    renderer::{RenderOptions, WgpuRenderer},
+    renderer::{RenderOptions, TextShaderEffect, WgpuRenderer},
 };
 use rayon::iter::{IntoParallelRefMutIterator, ParallelIterator};
 
@@ -28,7 +28,12 @@ impl Renderer {
         })
     }
 
-    pub fn render(&self, document: &mut Document, text_block_index: Option<usize>) -> Result<()> {
+    pub fn render(
+        &self,
+        document: &mut Document,
+        text_block_index: Option<usize>,
+        effect: TextShaderEffect,
+    ) -> Result<()> {
         let mut text_blocks = match text_block_index {
             Some(index) => document
                 .text_blocks
@@ -40,7 +45,7 @@ impl Renderer {
 
         text_blocks
             .par_iter_mut()
-            .try_for_each(|text_block| self.render_text_block(text_block))?;
+            .try_for_each(|text_block| self.render_text_block(text_block, effect))?;
 
         if let Some(inpainted) = &document.inpainted
             && text_block_index.is_none()
@@ -62,7 +67,11 @@ impl Renderer {
         Ok(())
     }
 
-    fn render_text_block(&self, text_block: &mut TextBlock) -> Result<()> {
+    fn render_text_block(
+        &self,
+        text_block: &mut TextBlock,
+        effect: TextShaderEffect,
+    ) -> Result<()> {
         let Some(translation) = &text_block.translation else {
             return Ok(());
         };
@@ -96,6 +105,7 @@ impl Renderer {
                         ]
                     })
                     .unwrap_or([0, 0, 0, 255]),
+                effect,
                 ..Default::default()
             },
         )?;

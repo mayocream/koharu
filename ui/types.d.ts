@@ -1,5 +1,12 @@
 export type RgbaColor = [number, number, number, number]
 
+export type RenderEffect =
+  | 'normal'
+  | 'antique'
+  | 'metal'
+  | 'manga'
+  | 'motionBlur'
+
 export type TextStyle = {
   fontFamilies: string[]
   fontSize?: number

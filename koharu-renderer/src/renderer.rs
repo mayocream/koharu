@@ -5,10 +5,39 @@ use std::{
 
 use anyhow::{Context, Result, bail};
 use image::RgbaImage;
+use serde::{Deserialize, Serialize};
 use wgpu::util::DeviceExt;
 
 use crate::font::Font;
 use crate::layout::{LayoutRun, PositionedGlyph, WritingMode};
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub enum TextShaderEffect {
+    Normal,
+    Antique,
+    Metal,
+    Manga,
+    MotionBlur,
+}
+
+impl Default for TextShaderEffect {
+    fn default() -> Self {
+        Self::Normal
+    }
+}
+
+impl TextShaderEffect {
+    fn id(self) -> f32 {
+        match self {
+            Self::Normal => 0.0,
+            Self::Antique => 1.0,
+            Self::Metal => 2.0,
+            Self::Manga => 3.0,
+            Self::MotionBlur => 4.0,
+        }
+    }
+}
 
 /// Options for rendering text.
 #[derive(Debug, Clone)]
@@ -18,6 +47,7 @@ pub struct RenderOptions {
     pub anti_alias: bool,
     pub padding: f32,
     pub font_size: f32,
+    pub effect: TextShaderEffect,
 }
 
 /// Default render options.
@@ -29,6 +59,7 @@ impl Default for RenderOptions {
             anti_alias: true,
             padding: 0.0,
             font_size: 16.0,
+            effect: TextShaderEffect::Normal,
         }
     }
 }
@@ -88,13 +119,16 @@ impl WgpuRenderer {
             opts.color[2] as f32 / 255.0,
             opts.color[3] as f32 / 255.0,
         ];
-        let color_uniform = ColorUniform { color };
-        let color_buffer =
+        let render_uniform = RenderUniform {
+            color,
+            effect: [opts.effect.id(), opts.font_size, 0.0, 0.0],
+        };
+        let render_buffer =
             self.context
                 .device
                 .create_buffer_init(&wgpu::util::BufferInitDescriptor {
-                    label: Some("glyph_color"),
-                    contents: bytemuck::bytes_of(&color_uniform),
+                    label: Some("glyph_uniforms"),
+                    contents: bytemuck::bytes_of(&render_uniform),
                     usage: wgpu::BufferUsages::UNIFORM | wgpu::BufferUsages::COPY_DST,
                 });
 
@@ -115,7 +149,7 @@ impl WgpuRenderer {
                     },
                     wgpu::BindGroupEntry {
                         binding: 2,
-                        resource: color_buffer.as_entire_binding(),
+                        resource: render_buffer.as_entire_binding(),
                     },
                 ],
             });
@@ -419,8 +453,9 @@ impl Vertex {
 
 #[repr(C)]
 #[derive(Clone, Copy, bytemuck::Pod, bytemuck::Zeroable)]
-struct ColorUniform {
+struct RenderUniform {
     color: [f32; 4],
+    effect: [f32; 4],
 }
 
 struct GlyphAtlas {
@@ -725,12 +760,97 @@ fn vs_main(input: VertexInput) -> VertexOutput {
 
 @group(0) @binding(0) var glyph_tex: texture_2d<f32>;
 @group(0) @binding(1) var glyph_sampler: sampler;
-@group(0) @binding(2) var<uniform> color: vec4<f32>;
+struct RenderUniform {
+    color: vec4<f32>,
+    effect: vec4<f32>,
+};
+
+@group(0) @binding(2) var<uniform> render: RenderUniform;
+
+const EFFECT_NORMAL: f32 = 0.0;
+const EFFECT_ANTIQUE: f32 = 1.0;
+const EFFECT_METAL: f32 = 2.0;
+const EFFECT_MANGA: f32 = 3.0;
+const EFFECT_MOTION_BLUR: f32 = 4.0;
+
+fn hash(p: vec2<f32>) -> f32 {
+    return fract(sin(dot(p, vec2<f32>(127.1, 311.7))) * 43758.5453123);
+}
+
+fn sample_coverage(uv: vec2<f32>) -> f32 {
+    return textureSample(glyph_tex, glyph_sampler, uv).r;
+}
 
 @fragment
 fn fs_main(input: VertexOutput) -> @location(0) vec4<f32> {
-    let coverage = textureSample(glyph_tex, glyph_sampler, input.tex_coord).r;
-    let alpha = coverage * color.a;
-    return vec4<f32>(color.rgb * alpha, alpha);
+    let coverage = sample_coverage(input.tex_coord);
+    let base_alpha = coverage * render.color.a;
+    let base_color = render.color.rgb;
+    let effect_id = render.effect.x;
+    let frag_pos = input.position.xy;
+
+    var alpha = base_alpha;
+    var rgb = base_color;
+
+    if (effect_id < (EFFECT_NORMAL + 0.5)) {
+        rgb = base_color;
+        alpha = base_alpha;
+    } else if (effect_id < (EFFECT_ANTIQUE + 0.5)) {
+        let grain = hash(frag_pos * 0.75 + vec2<f32>(render.effect.y * 1.3));
+        let blotch = hash(frag_pos * 0.08 + vec2<f32>(11.7, 3.9));
+        let fibers = sin(frag_pos.x * 0.045 + frag_pos.y * 0.02) * 0.5 + 0.5;
+        let wrinkles = sin(frag_pos.y * 0.03 + grain * 6.0) * 0.5 + 0.5;
+        let fade = mix(0.45, 1.0, grain);
+        let speckle = step(0.88, grain);
+        let stain = smoothstep(0.55, 0.92, blotch);
+        let texture = mix(0.75, 1.0, fibers) * mix(0.8, 1.0, wrinkles);
+        rgb = base_color * vec3<f32>(1.22, 0.92, 0.62);
+        rgb = mix(rgb, rgb * 0.65, stain);
+        alpha = base_alpha * fade * texture * (1.0 - speckle * 0.75);
+    } else if (effect_id < (EFFECT_METAL + 0.5)) {
+        let curve = sin(frag_pos.x * 0.03 + frag_pos.y * 0.008) * 0.5 + 0.5;
+        let highlight = pow(smoothstep(0.6, 0.95, curve), 2.4);
+        let shadow = mix(0.55, 1.0, curve);
+        let brushed = sin(frag_pos.y * 0.25 + frag_pos.x * 0.06) * 0.5 + 0.5;
+        let brush = mix(0.9, 1.05, brushed);
+        let metallic_base = mix(base_color, vec3<f32>(0.75, 0.78, 0.82), 0.6);
+        rgb = metallic_base * shadow * brush;
+        rgb = rgb + vec3<f32>(0.95, 0.97, 1.0) * highlight * 0.35;
+        alpha = base_alpha;
+    } else if (effect_id < (EFFECT_MANGA + 0.5)) {
+        let size = clamp(render.effect.y * 0.2, 2.5, 6.0);
+        let angle = 0.35;
+        let rot = vec2<f32>(
+            frag_pos.x * cos(angle) - frag_pos.y * sin(angle),
+            frag_pos.x * sin(angle) + frag_pos.y * cos(angle),
+        );
+        let cell = fract(rot / size) - vec2<f32>(0.5);
+        let dist = length(cell);
+        let edge = 0.1;
+        let aa = fwidth(dist) * 1.5;
+        let dot_mask = smoothstep(edge + aa, edge - aa, dist);
+        let tone = mix(0.6, 1.0, dot_mask);
+        rgb = base_color;
+        alpha = base_alpha * tone;
+    } else if (effect_id < (EFFECT_MOTION_BLUR + 0.5)) {
+        let texel = 1.0 / vec2<f32>(textureDimensions(glyph_tex, 0));
+        let dir = normalize(vec2<f32>(1.0, 0.35));
+        let spread = texel * 6.0;
+        var blur = 0.0;
+        blur += sample_coverage(input.tex_coord - dir * spread * 1.5);
+        blur += sample_coverage(input.tex_coord - dir * spread * 0.75);
+        blur += coverage;
+        blur += sample_coverage(input.tex_coord + dir * spread * 0.75);
+        blur += sample_coverage(input.tex_coord + dir * spread * 1.5);
+        let blurred = blur / 5.0;
+        let blur_alpha = blurred * render.color.a;
+        rgb = base_color;
+        alpha = blur_alpha;
+    } else {
+        rgb = base_color;
+        alpha = base_alpha;
+    }
+
+    return vec4<f32>(rgb * alpha, alpha);
 }
 "#;

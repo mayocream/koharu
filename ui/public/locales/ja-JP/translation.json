@@ -109,6 +109,14 @@
     "statusReady": "LLM 準備完了",
     "statusIdle": "LLM 未読み込み"
   },
+  "render": {
+    "effectLabel": "文字効果",
+    "effectNormal": "標準",
+    "effectAntique": "古書風",
+    "effectMetal": "メタル",
+    "effectManga": "漫画トーン",
+    "effectMotionBlur": "モーションブラー"
+  },
   "textBlocks": {
     "emptyPrompt": "画像を開くとテキストブロックが表示されます。",
     "title": "テキストブロック（{{count}}）",

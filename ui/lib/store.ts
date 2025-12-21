@@ -3,7 +3,7 @@
 import { create } from 'zustand'
 import { invoke } from '@tauri-apps/api/core'
 import { getCurrentWindow, ProgressBarStatus } from '@tauri-apps/api/window'
-import { Document, TextBlock, ToolMode } from '@/types'
+import { Document, RenderEffect, TextBlock, ToolMode } from '@/types'
 import { createOperationSlice, type OperationSlice } from '@/lib/operations'
 import {
   callOpenAICompletion,
@@ -92,6 +92,7 @@ type AppState = OperationSlice & {
   mode: ToolMode
   selectedBlockIndex?: number
   autoFitEnabled: boolean
+  renderEffect: RenderEffect
   // LLM state
   llmModels: LlmModelInfo[]
   llmSelectedModel?: string
@@ -116,6 +117,7 @@ type AppState = OperationSlice & {
   setMode: (mode: ToolMode) => void
   setSelectedBlockIndex: (index?: number) => void
   setAutoFitEnabled: (enabled: boolean) => void
+  setRenderEffect: (effect: RenderEffect) => void
   updateTextBlocks: (textBlocks: TextBlock[]) => Promise<void>
   setProgress: (progress?: number, status?: ProgressBarStatus) => Promise<void>
   clearProgress: () => Promise<void>
@@ -223,6 +225,7 @@ export const useAppStore = create<AppState>((set, get) => {
     mode: 'select',
     selectedBlockIndex: undefined,
     autoFitEnabled: true,
+    renderEffect: 'normal',
     llmModels: [],
     llmSelectedModel: undefined,
     llmSelectedLanguage: undefined,
@@ -283,6 +286,7 @@ export const useAppStore = create<AppState>((set, get) => {
     setSelectedBlockIndex: (index?: number) =>
       set({ selectedBlockIndex: index }),
     setAutoFitEnabled: (enabled: boolean) => set({ autoFitEnabled: enabled }),
+    setRenderEffect: (effect: RenderEffect) => set({ renderEffect: effect }),
     updateTextBlocks: async (textBlocks: TextBlock[]) => {
       const { documents, currentDocumentIndex } = get()
       const doc = documents[currentDocumentIndex]
@@ -327,7 +331,10 @@ export const useAppStore = create<AppState>((set, get) => {
     render: async (_, index) => {
       index = index ?? get().currentDocumentIndex
       await textBlockSyncer.flush()
-      const doc: Document = await invoke<Document>('render', { index })
+      const doc: Document = await invoke<Document>('render', {
+        index,
+        shaderEffect: get().renderEffect,
+      })
       set((state) => ({
         documents: replaceDocument(state.documents, index, doc),
         showRenderedImage: true,
@@ -342,6 +349,7 @@ export const useAppStore = create<AppState>((set, get) => {
       const updatedDoc: Document = await invoke<Document>('render', {
         index,
         textBlockIndex,
+        shaderEffect: get().renderEffect,
       })
       set((state) => ({
         documents: replaceDocument(state.documents, index, updatedDoc),
