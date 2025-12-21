@@ -5,7 +5,7 @@ use icu::properties::{CodePointMapData, props::Script};
 use image::{DynamicImage, imageops};
 use koharu_renderer::{
     font::{FamilyName, Font, FontBook, Properties},
-    layout::{TextLayout, WritingMode},
+    layout::{LayoutRun, TextLayout, WritingMode},
     renderer::{RenderOptions, TextShaderEffect, WgpuRenderer},
 };
 use rayon::iter::{IntoParallelRefMutIterator, ParallelIterator};
@@ -108,11 +108,14 @@ impl Renderer {
             })
             .unwrap_or([0, 0, 0, 255]);
         let writing_mode = writing_mode(text_block);
-        let layout = TextLayout::new(&font, None)
+        let mut layout = TextLayout::new(&font, None)
             .with_max_height(text_block.height)
             .with_max_width(text_block.width)
             .with_writing_mode(writing_mode)
             .run(translation)?;
+        if writing_mode == WritingMode::Horizontal && is_latin_only(translation) {
+            center_layout_horizontally(&mut layout, text_block.width);
+        }
 
         let rendered = self.renderer.render(
             &layout,
@@ -162,10 +165,42 @@ fn writing_mode(text_block: &TextBlock) -> WritingMode {
 }
 
 fn is_cjk(text: &str) -> bool {
+    let script_map = CodePointMapData::<Script>::new();
     text.chars().any(|c| {
         matches!(
-            CodePointMapData::<Script>::new().get(c),
+            script_map.get(c),
             Script::Han | Script::Hiragana | Script::Katakana | Script::Hangul | Script::Bopomofo
         )
     })
+}
+
+fn is_latin_only(text: &str) -> bool {
+    let script_map = CodePointMapData::<Script>::new();
+    let mut has_latin = false;
+    for c in text.chars() {
+        match script_map.get(c) {
+            Script::Latin => has_latin = true,
+            Script::Common | Script::Inherited => {}
+            _ => return false,
+        }
+    }
+    has_latin
+}
+
+fn center_layout_horizontally(layout: &mut LayoutRun, container_width: f32) {
+    if !container_width.is_finite() || container_width <= 0.0 {
+        return;
+    }
+
+    let target_width = layout.width.max(container_width);
+    for line in &mut layout.lines {
+        if line.advance <= 0.0 {
+            continue;
+        }
+        let offset = ((container_width - line.advance) * 0.5).max(0.0);
+        if offset > 0.0 {
+            line.baseline.0 += offset;
+        }
+    }
+    layout.width = target_width;
 }

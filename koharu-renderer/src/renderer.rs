@@ -13,18 +13,14 @@ use crate::layout::{LayoutRun, PositionedGlyph, WritingMode};
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
+#[derive(Default)]
 pub enum TextShaderEffect {
+    #[default]
     Normal,
     Antique,
     Metal,
     Manga,
     MotionBlur,
-}
-
-impl Default for TextShaderEffect {
-    fn default() -> Self {
-        Self::Normal
-    }
 }
 
 impl TextShaderEffect {
