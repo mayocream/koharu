@@ -251,7 +251,7 @@ export function RenderControls() {
               if (applyStyleToSelected({ color: nextColor })) return
               applyStyleToAll({ color: nextColor })
             }}
-            className='h-7 w-9 cursor-pointer border-0 bg-transparent p-0 disabled:cursor-not-allowed disabled:opacity-60'
+            className='h-7 w-7 cursor-pointer appearance-none border-none p-0 disabled:cursor-not-allowed disabled:opacity-60'
           />
           <span className='font-mono text-[11px] text-neutral-500'>
             {currentColorHex.toUpperCase()}

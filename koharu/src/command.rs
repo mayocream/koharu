@@ -507,18 +507,32 @@ pub async fn inpaint_partial(
         return Ok(document.clone());
     }
 
-    let image_crop = document.image.crop_imm(x0, y0, crop_width, crop_height);
-    let mask_crop = mask_image.crop_imm(x0, y0, crop_width, crop_height);
+    let patch_x1 = x0 + crop_width;
+    let patch_y1 = y0 + crop_height;
 
-    let inpainted_crop = model
-        .inpaint(&image_crop.clone().into(), &mask_crop.clone().into())
-        .await?;
+    let overlaps_text = document.text_blocks.iter().any(|block| {
+        let bx0 = block.x.max(0.0);
+        let by0 = block.y.max(0.0);
+        let bx1 = (block.x + block.width).max(bx0);
+        let by1 = (block.y + block.height).max(by0);
+        bx0 < patch_x1 as f32 && by0 < patch_y1 as f32 && bx1 > x0 as f32 && by1 > y0 as f32
+    });
+
+    if !overlaps_text {
+        return Ok(document.clone());
+    }
+
+    let image_crop =
+        SerializableDynamicImage(document.image.crop_imm(x0, y0, crop_width, crop_height));
+    let mask_crop = SerializableDynamicImage(mask_image.crop_imm(x0, y0, crop_width, crop_height));
+
+    let inpainted_crop = model.inpaint(&image_crop, &mask_crop).await?;
 
     // Restore erased regions from the original image; only copy inpainted pixels where mask is white.
     let mut stitched = document
         .inpainted
-        .clone()
-        .unwrap_or_else(|| document.image.clone())
+        .as_ref()
+        .unwrap_or(&document.image)
         .to_rgba8();
 
     let patch = inpainted_crop.to_rgba8();
