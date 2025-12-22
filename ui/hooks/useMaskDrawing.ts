@@ -111,7 +111,7 @@ export function useMaskDrawing({
     if (currentDocument.segment) {
       void (async () => {
         try {
-          const bitmap = await convertToImageBitmap(currentDocument.segment)
+          const bitmap = await convertToImageBitmap(currentDocument.segment!)
           if (cancelled) {
             bitmap.close()
             return
