@@ -20,6 +20,8 @@ import { useBlockDrafting } from '@/hooks/useBlockDrafting'
 import { useBlockContextMenu } from '@/hooks/useBlockContextMenu'
 import { useTextBlocks } from '@/hooks/useTextBlocks'
 import { useMaskDrawing } from '@/hooks/useMaskDrawing'
+import { useRenderBrushDrawing } from '@/hooks/useRenderBrushDrawing'
+import { useBrushLayerDisplay } from '@/hooks/useBrushLayerDisplay'
 
 const MASK_CURSOR =
   'url(\'data:image/svg+xml,%3Csvg xmlns="http://www.w3.org/2000/svg" width="16" height="16"%3E%3Ccircle cx="8" cy="8" r="4" stroke="black" stroke-width="1.5" fill="white"/%3E%3C/svg%3E\') 8 8, crosshair'
@@ -29,6 +31,7 @@ export function Workspace() {
     scale,
     showSegmentationMask,
     showInpaintedImage,
+    showBrushLayer,
     showRenderedImage,
     showTextBlocksOverlay,
     mode,
@@ -60,11 +63,30 @@ export function Workspace() {
       void appendBlock(block)
     },
   })
+  const maskPointerEnabled =
+    mode === 'repairBrush' ||
+    (mode === 'eraser' && (showSegmentationMask || !showBrushLayer))
+  const brushPointerEnabled =
+    mode === 'brush' ||
+    (mode === 'eraser' && !showSegmentationMask && showBrushLayer)
   const maskDrawing = useMaskDrawing({
     mode,
     currentDocument,
     pointerToDocument,
     showMask: showSegmentationMask,
+    enabled: maskPointerEnabled,
+  })
+  const brushLayerDisplay = useBrushLayerDisplay({
+    currentDocument,
+    visible: showBrushLayer,
+  })
+  const brushDrawing = useRenderBrushDrawing({
+    mode,
+    currentDocument,
+    pointerToDocument,
+    enabled: brushPointerEnabled,
+    action: mode === 'eraser' ? 'erase' : 'paint',
+    targetCanvasRef: brushLayerDisplay.canvasRef,
   })
 
   useEffect(() => {
@@ -121,8 +143,13 @@ export function Workspace() {
     handleContextMenu(event)
   }
 
-  const canvasCursor =
-    mode === 'mask' ? MASK_CURSOR : mode === 'block' ? 'cell' : 'default'
+  const isBrushMode =
+    mode === 'brush' || mode === 'repairBrush' || mode === 'eraser'
+  const canvasCursor = isBrushMode
+    ? MASK_CURSOR
+    : mode === 'block'
+      ? 'cell'
+      : 'default'
 
   const canvasDimensions = currentDocument
     ? {
@@ -173,8 +200,8 @@ export function Workspace() {
                           style={{
                             width: '100%',
                             height: '100%',
-                            opacity: maskDrawing.visible ? 0.8 : 0,
-                            pointerEvents: mode === 'mask' ? 'auto' : 'none',
+                            opacity: showSegmentationMask ? 0.8 : 0,
+                            pointerEvents: maskPointerEnabled ? 'auto' : 'none',
                             transition: 'opacity 120ms ease',
                           }}
                           onPointerDown={maskDrawing.handlePointerDown}
@@ -188,6 +215,18 @@ export function Workspace() {
                             visible={showInpaintedImage}
                           />
                         )}
+                        <canvas
+                          ref={brushLayerDisplay.canvasRef}
+                          className='absolute inset-0'
+                          style={{
+                            width: '100%',
+                            height: '100%',
+                            opacity: brushLayerDisplay.visible ? 1 : 0,
+                            pointerEvents: 'none',
+                            zIndex: 12,
+                            transition: 'opacity 120ms ease',
+                          }}
+                        />
                         {showTextBlocksOverlay && (
                           <TextBlockSpriteLayer
                             blocks={currentDocument?.textBlocks}
@@ -196,8 +235,29 @@ export function Workspace() {
                           />
                         )}
                         {currentDocument?.rendered && showRenderedImage && (
-                          <Image data={currentDocument?.rendered} />
+                          <Image
+                            data={currentDocument?.rendered}
+                            style={{ zIndex: 30 }}
+                          />
                         )}
+                        <canvas
+                          ref={brushDrawing.canvasRef}
+                          className='absolute inset-0'
+                          style={{
+                            width: '100%',
+                            height: '100%',
+                            opacity: brushDrawing.visible ? 1 : 0,
+                            pointerEvents: brushPointerEnabled
+                              ? 'auto'
+                              : 'none',
+                            zIndex: 15,
+                            transition: 'opacity 120ms ease',
+                          }}
+                          onPointerDown={brushDrawing.handlePointerDown}
+                          onPointerMove={brushDrawing.handlePointerMove}
+                          onPointerUp={brushDrawing.handlePointerUp}
+                          onPointerLeave={brushDrawing.handlePointerLeave}
+                        />
                       </div>
                       {showTextBlocksOverlay && !showRenderedImage && (
                         <TextBlockAnnotations

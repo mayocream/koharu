@@ -74,6 +74,7 @@
   "mask": {
     "showSegmentationMask": "Show segmentation mask",
     "showInpainted": "Show inpainted image",
+    "showBrushLayer": "Show brush layer",
     "showRendered": "Show rendered text",
     "showTextBlocks": "Show text blocks",
     "inpaint": "Inpaint",
@@ -143,11 +144,15 @@
   },
   "toolbar": {
     "brush": "Brush",
-    "eraser": "Eraser"
+    "eraser": "Eraser",
+    "brushSize": "Brush size",
+    "brushColor": "Brush color"
   },
   "toolRail": {
     "select": "Select",
     "block": "Block",
-    "mask": "Mask"
+    "brush": "Brush",
+    "repairBrush": "Repair brush",
+    "eraser": "Eraser"
   }
 }

@@ -11,6 +11,8 @@ export function ProcessingControls() {
     setShowSegmentationMask,
     showInpaintedImage,
     setShowInpaintedImage,
+    showBrushLayer,
+    setShowBrushLayer,
     showTextBlocksOverlay,
     setShowTextBlocksOverlay,
     inpaint,
@@ -23,14 +25,19 @@ export function ProcessingControls() {
     <div className='space-y-2 text-xs text-neutral-600'>
       <Separator.Root className='my-1 h-px bg-neutral-200' />
       <ToggleField
+        label={t('mask.showInpainted')}
+        checked={showInpaintedImage}
+        onChange={setShowInpaintedImage}
+      />
+      <ToggleField
         label={t('mask.showSegmentationMask')}
         checked={showSegmentationMask}
         onChange={setShowSegmentationMask}
       />
       <ToggleField
-        label={t('mask.showInpainted')}
-        checked={showInpaintedImage}
-        onChange={setShowInpaintedImage}
+        label={t('mask.showBrushLayer')}
+        checked={showBrushLayer}
+        onChange={setShowBrushLayer}
       />
       <ToggleField
         label={t('mask.showTextBlocks')}

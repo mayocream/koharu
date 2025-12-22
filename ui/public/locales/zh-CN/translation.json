@@ -74,6 +74,7 @@
   "mask": {
     "showSegmentationMask": "显示分割遮罩",
     "showInpainted": "显示修补图像",
+    "showBrushLayer": "显示笔刷图层",
     "showRendered": "显示渲染文本",
     "showTextBlocks": "显示文本框",
     "inpaint": "修补",
@@ -143,11 +144,15 @@
   },
   "toolbar": {
     "brush": "画笔",
-    "eraser": "橡皮擦"
+    "eraser": "橡皮擦",
+    "brushSize": "笔刷大小",
+    "brushColor": "笔刷颜色"
   },
   "toolRail": {
     "select": "选择",
     "block": "框选",
-    "mask": "遮罩"
+    "brush": "画笔",
+    "repairBrush": "修复笔",
+    "eraser": "橡皮擦"
   }
 }

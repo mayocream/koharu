@@ -1,6 +1,6 @@
 use std::{str::FromStr, sync::Arc};
 
-use image::{self, GenericImageView};
+use image::{self, GenericImageView, RgbaImage};
 use koharu_ml::{llm::ModelId, set_locale};
 use rayon::iter::{IntoParallelIterator, ParallelIterator};
 use serde::{Deserialize, Serialize};
@@ -27,6 +27,22 @@ pub struct InpaintRegion {
     pub y: u32,
     pub width: u32,
     pub height: u32,
+}
+
+fn clamp_region(region: &InpaintRegion, width: u32, height: u32) -> Option<(u32, u32, u32, u32)> {
+    if width == 0 || height == 0 {
+        return None;
+    }
+    let x0 = region.x.min(width.saturating_sub(1));
+    let y0 = region.y.min(height.saturating_sub(1));
+    let x1 = region.x.saturating_add(region.width).min(width).max(x0);
+    let y1 = region.y.saturating_add(region.height).min(height).max(y0);
+    let w = x1.saturating_sub(x0);
+    let h = y1.saturating_sub(y0);
+    if w == 0 || h == 0 {
+        return None;
+    }
+    Some((x0, y0, w, h))
 }
 
 #[tauri::command]
@@ -397,6 +413,61 @@ pub async fn update_inpaint_mask(
     }
 
     document.segment = Some(image::DynamicImage::ImageRgba8(base_mask).into());
+
+    Ok(document.clone())
+}
+
+#[tauri::command]
+#[instrument(level = "info", skip_all)]
+pub async fn update_brush_layer(
+    state: State<'_, AppState>,
+    index: usize,
+    patch: Vec<u8>,
+    region: InpaintRegion,
+) -> Result<Document> {
+    let mut state = state.write().await;
+    let document = state
+        .documents
+        .get_mut(index)
+        .ok_or_else(|| anyhow::anyhow!("Document not found"))?;
+
+    let (img_width, img_height) = (document.width, document.height);
+    let Some((x0, y0, width, height)) = clamp_region(&region, img_width, img_height) else {
+        return Ok(document.clone());
+    };
+
+    let patch_image = image::load_from_memory(&patch)
+        .map_err(|e| anyhow::anyhow!("Failed to decode brush patch: {e}"))?;
+    let (patch_width, patch_height) = patch_image.dimensions();
+    if patch_width != region.width || patch_height != region.height {
+        return Err(anyhow::anyhow!(
+            "Brush patch size mismatch: expected {}x{}, got {}x{}",
+            region.width,
+            region.height,
+            patch_width,
+            patch_height
+        )
+        .into());
+    }
+
+    let brush_rgba = patch_image.to_rgba8();
+
+    let mut brush_layer = document
+        .brush_layer
+        .clone()
+        .unwrap_or_else(|| {
+            let blank = RgbaImage::from_pixel(img_width, img_height, image::Rgba([0, 0, 0, 0]));
+            image::DynamicImage::ImageRgba8(blank).into()
+        })
+        .to_rgba8();
+
+    for y in 0..height {
+        for x in 0..width {
+            brush_layer.put_pixel(x0 + x, y0 + y, *brush_rgba.get_pixel(x, y));
+        }
+    }
+
+    document.brush_layer = Some(image::DynamicImage::ImageRgba8(brush_layer).into());
 
     Ok(document.clone())
 }

@@ -3,7 +3,7 @@
 import type { ComponentType } from 'react'
 import { Toolbar } from 'radix-ui'
 import { useTranslation } from 'react-i18next'
-import { MousePointer, Square, Brush } from 'lucide-react'
+import { MousePointer, Square, Brush, Bandage, Eraser } from 'lucide-react'
 import { useAppStore } from '@/lib/store'
 import { ToolMode } from '@/types'
 
@@ -16,7 +16,9 @@ type ModeDefinition = {
 const MODES: ModeDefinition[] = [
   { labelKey: 'toolRail.select', value: 'select', icon: MousePointer },
   { labelKey: 'toolRail.block', value: 'block', icon: Square },
-  { labelKey: 'toolRail.mask', value: 'mask', icon: Brush },
+  { labelKey: 'toolRail.brush', value: 'brush', icon: Brush },
+  { labelKey: 'toolRail.eraser', value: 'eraser', icon: Eraser },
+  { labelKey: 'toolRail.repairBrush', value: 'repairBrush', icon: Bandage },
 ]
 
 export function ToolRail() {

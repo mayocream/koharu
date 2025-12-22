@@ -39,7 +39,7 @@ export type TextBlock = {
   rendered?: number[]
 }
 
-export type ToolMode = 'select' | 'block' | 'mask'
+export type ToolMode = 'select' | 'block' | 'brush' | 'repairBrush' | 'eraser'
 
 export type InpaintRegion = {
   x: number
@@ -58,5 +58,6 @@ export type Document = {
   textBlocks: TextBlock[]
   segment?: number[]
   inpainted?: number[]
+  brushLayer?: number[]
   rendered?: number[]
 }

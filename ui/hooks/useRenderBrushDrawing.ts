@@ -1,21 +1,21 @@
 'use client'
 
-import type React from 'react'
-import { useEffect, useRef } from 'react'
+import { useEffect, useRef, type RefObject } from 'react'
 import { useAppStore, useConfigStore } from '@/lib/store'
-import { blobToUint8Array, convertToImageBitmap } from '@/lib/util'
 import { Document, InpaintRegion, ToolMode } from '@/types'
+import { blobToUint8Array } from '@/lib/util'
 import {
   PointerToDocumentFn,
   type DocumentPointer,
 } from '@/hooks/usePointerToDocument'
 
-type MaskDrawingOptions = {
+type RenderBrushOptions = {
   mode: ToolMode
   currentDocument?: Document
   pointerToDocument: PointerToDocumentFn
-  showMask: boolean
   enabled: boolean
+  action: 'paint' | 'erase'
+  targetCanvasRef?: RefObject<HTMLCanvasElement | null>
 }
 
 type Bounds = {
@@ -44,28 +44,6 @@ const expandBounds = (bounds: Bounds, point: DocumentPointer, radius: number) =>
     maxY: Math.max(bounds.maxY, point.y + radius),
   }) satisfies Bounds
 
-const withMargin = (
-  bounds: Bounds,
-  brushSize: number,
-  doc: Document,
-): InpaintRegion => {
-  const width = Math.max(brushSize, bounds.maxX - bounds.minX)
-  const height = Math.max(brushSize, bounds.maxY - bounds.minY)
-  const margin = Math.min(width * 0.2, 32)
-
-  const x0 = Math.max(0, Math.floor(bounds.minX - margin))
-  const y0 = Math.max(0, Math.floor(bounds.minY - margin))
-  const x1 = Math.min(doc.width, Math.ceil(bounds.maxX + margin))
-  const y1 = Math.min(doc.height, Math.ceil(bounds.maxY + margin))
-
-  return {
-    x: x0,
-    y: y0,
-    width: Math.max(1, x1 - x0),
-    height: Math.max(1, y1 - y0),
-  }
-}
-
 const boundsToRegion = (bounds: Bounds, doc: Document): InpaintRegion => {
   const x0 = Math.max(0, Math.floor(bounds.minX))
   const y0 = Math.max(0, Math.floor(bounds.minY))
@@ -80,18 +58,18 @@ const boundsToRegion = (bounds: Bounds, doc: Document): InpaintRegion => {
   }
 }
 
-export function useMaskDrawing({
+export function useRenderBrushDrawing({
   mode,
   currentDocument,
   pointerToDocument,
-  showMask,
   enabled,
-}: MaskDrawingOptions) {
+  action,
+  targetCanvasRef,
+}: RenderBrushOptions) {
   const {
-    brushConfig: { size: brushSize },
+    brushConfig: { size: brushSize, color: brushColor },
   } = useConfigStore()
-  const updateMask = useAppStore((state) => state.updateMask)
-  const inpaintPartial = useAppStore((state) => state.inpaintPartial)
+  const paintRendered = useAppStore((state) => state.paintRendered)
   const currentDocumentIndex = useAppStore(
     (state) => state.currentDocumentIndex,
   )
@@ -100,19 +78,7 @@ export function useMaskDrawing({
   const drawingRef = useRef(false)
   const lastPointRef = useRef<DocumentPointer | null>(null)
   const boundsRef = useRef<Bounds | null>(null)
-  const inpaintQueueRef = useRef<Promise<void>>(Promise.resolve())
-  const isRepairMode = mode === 'repairBrush'
-  const isEraseMode = mode === 'eraser'
-  const isActive = enabled && (isRepairMode || isEraseMode)
-
-  // Reset drawing state when interaction is disabled so stale strokes don't carry over.
-  useEffect(() => {
-    if (enabled) return
-    drawingRef.current = false
-    lastPointRef.current = null
-    boundsRef.current = null
-    inpaintQueueRef.current = Promise.resolve()
-  }, [enabled, mode])
+  const paintQueueRef = useRef<Promise<void>>(Promise.resolve())
 
   useEffect(() => {
     const canvas = canvasRef.current
@@ -120,11 +86,16 @@ export function useMaskDrawing({
     const ctx = canvas.getContext('2d')
     ctxRef.current = ctx
 
-    if (!currentDocument) {
+    if (!currentDocument || !enabled) {
       canvas.width = 0
       canvas.height = 0
       ctx?.clearRect(0, 0, canvas.width, canvas.height)
-      return
+      return () => {
+        drawingRef.current = false
+        lastPointRef.current = null
+        boundsRef.current = null
+        paintQueueRef.current = Promise.resolve()
+      }
     }
 
     const needsResize =
@@ -134,87 +105,55 @@ export function useMaskDrawing({
     if (needsResize) {
       canvas.width = currentDocument.width
       canvas.height = currentDocument.height
-      ctx?.clearRect(0, 0, canvas.width, canvas.height)
-      ctx?.save()
-      ctx && (ctx.fillStyle = '#000')
-      ctx?.fillRect(0, 0, canvas.width, canvas.height)
-      ctx?.restore()
     }
-
-    let cancelled = false
-    if (currentDocument.segment) {
-      void (async () => {
-        try {
-          const bitmap = await convertToImageBitmap(currentDocument.segment!)
-          if (cancelled) {
-            bitmap.close()
-            return
-          }
-          // Redraw atomically once the new bitmap is ready so the previous
-          // mask stays visible until swap, avoiding a flicker.
-          ctx?.save()
-          ctx?.clearRect(0, 0, canvas.width, canvas.height)
-          ctx?.drawImage(
-            bitmap,
-            0,
-            0,
-            currentDocument.width,
-            currentDocument.height,
-          )
-          ctx?.restore()
-          bitmap.close()
-        } catch (error) {
-          console.error(error)
-        }
-      })()
-    }
+    ctx?.clearRect(0, 0, canvas.width, canvas.height)
 
     return () => {
-      cancelled = true
       drawingRef.current = false
       lastPointRef.current = null
       boundsRef.current = null
-      inpaintQueueRef.current = Promise.resolve()
+      paintQueueRef.current = Promise.resolve()
     }
   }, [
     currentDocument?.id,
     currentDocument?.width,
     currentDocument?.height,
-    currentDocument?.segment,
+    mode,
+    enabled,
   ])
 
   const drawStroke = (from: DocumentPointer, to: DocumentPointer) => {
+    if (!enabled) return
+    const isErasing = action === 'erase'
+    const stroke = (ctx: CanvasRenderingContext2D) => {
+      ctx.save()
+      ctx.lineCap = 'round'
+      ctx.lineJoin = 'round'
+      ctx.lineWidth = brushSize
+      ctx.strokeStyle = isErasing ? '#000000' : brushColor
+      ctx.fillStyle = ctx.strokeStyle
+      ctx.globalCompositeOperation = isErasing
+        ? 'destination-out'
+        : 'source-over'
+      ctx.beginPath()
+      ctx.moveTo(from.x, from.y)
+      ctx.lineTo(to.x, to.y)
+      ctx.stroke()
+      ctx.restore()
+    }
+
     const ctx = ctxRef.current
-    if (!ctx) return
-    ctx.save()
-    ctx.lineCap = 'round'
-    ctx.lineJoin = 'round'
-    ctx.lineWidth = brushSize
-    ctx.strokeStyle = isEraseMode ? '#000000' : '#ffffff'
-    ctx.fillStyle = ctx.strokeStyle
-    ctx.globalCompositeOperation = 'source-over'
+    if (ctx) stroke(ctx)
 
-    ctx.beginPath()
-    ctx.moveTo(from.x, from.y)
-    ctx.lineTo(to.x, to.y)
-    ctx.stroke()
-    ctx.restore()
+    const targetCanvas = targetCanvasRef?.current
+    const targetCtx = targetCanvas?.getContext('2d')
+    if (targetCtx) stroke(targetCtx)
   }
 
-  const exportMaskBytes = async (): Promise<number[] | null> => {
-    const canvas = canvasRef.current
-    if (!canvas) return null
-    const blob = await new Promise<Blob | null>((resolve) => {
-      canvas.toBlob((result) => resolve(result), 'image/png')
-    })
-    if (!blob) return null
-    return blobToUint8Array(blob)
-  }
-
-  const exportMaskPatch = async (
+  const exportPatch = async (
     region: InpaintRegion,
   ): Promise<number[] | null> => {
-    const canvas = canvasRef.current
+    const canvas = targetCanvasRef?.current ?? canvasRef.current
     if (!canvas || region.width <= 0 || region.height <= 0) return null
 
     const tempCanvas = document.createElement('canvas')
@@ -242,48 +181,48 @@ export function useMaskDrawing({
     return blobToUint8Array(blob)
   }
 
-  const queueInpaint = (task: () => Promise<void>) => {
-    inpaintQueueRef.current = inpaintQueueRef.current.catch(() => {}).then(task)
+  const queuePaint = (task: () => Promise<void>) => {
+    paintQueueRef.current = paintQueueRef.current.catch(() => {}).then(task)
   }
 
   const finalizeStroke = () => {
-    if (!isActive) return
+    if (!enabled) return
     const strokeBounds = boundsRef.current
     if (!currentDocument || !strokeBounds) return
     const patchRegion = boundsToRegion(strokeBounds, currentDocument)
-    const region = withMargin(strokeBounds, brushSize, currentDocument)
     boundsRef.current = null
     drawingRef.current = false
     lastPointRef.current = null
 
     void (async () => {
-      const [maskBytes, patchBytes] = await Promise.all([
-        exportMaskBytes(),
-        exportMaskPatch(patchRegion),
-      ])
-      if (!maskBytes) return
-      try {
-        await updateMask(maskBytes, {
-          patchRegion: patchBytes ? patchRegion : undefined,
-          patch: patchBytes ?? undefined,
-        })
-      } catch (error) {
-        console.error(error)
+      const patchBytes = await exportPatch(patchRegion)
+      if (!patchBytes) {
+        const canvas = canvasRef.current
+        const ctx = ctxRef.current
+        if (canvas && ctx) {
+          ctx.clearRect(0, 0, canvas.width, canvas.height)
+        }
+        return
       }
-      queueInpaint(async () => {
+      queuePaint(async () => {
         try {
-          await inpaintPartial(region, {
+          await paintRendered(patchBytes, patchRegion, {
             index: currentDocumentIndex,
           })
         } catch (error) {
           console.error(error)
+        }
+        const canvas = canvasRef.current
+        const ctx = ctxRef.current
+        if (canvas && ctx) {
+          ctx.clearRect(0, 0, canvas.width, canvas.height)
         }
       })
     })()
   }
 
   const handlePointerDown = (event: React.PointerEvent<HTMLCanvasElement>) => {
-    if (!isActive || !currentDocument) return
+    if (!enabled || !currentDocument) return
     if (event.button !== 0) return
     const point = pointerToDocument(event)
     if (!point) return
@@ -302,7 +241,7 @@ export function useMaskDrawing({
   }
 
   const handlePointerMove = (event: React.PointerEvent<HTMLCanvasElement>) => {
-    if (!drawingRef.current || !isActive || !currentDocument) return
+    if (!enabled || !drawingRef.current || !currentDocument) return
     const point = pointerToDocument(event)
     if (!point) return
     const clamped = clampToDocument(point, currentDocument)
@@ -321,19 +260,19 @@ export function useMaskDrawing({
   }
 
   const handlePointerUp = (event: React.PointerEvent<HTMLCanvasElement>) => {
-    if (!drawingRef.current) return
+    if (!drawingRef.current || !enabled) return
     event.stopPropagation()
     finalizeStroke()
   }
 
   const handlePointerLeave = () => {
-    if (!drawingRef.current) return
+    if (!drawingRef.current || !enabled) return
     finalizeStroke()
   }
 
   return {
     canvasRef,
-    visible: showMask,
+    visible: enabled,
     handlePointerDown,
     handlePointerMove,
     handlePointerUp,

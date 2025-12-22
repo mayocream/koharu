@@ -74,6 +74,7 @@ pub struct Document {
     pub segment: Option<SerializableDynamicImage>,
     pub inpainted: Option<SerializableDynamicImage>,
     pub rendered: Option<SerializableDynamicImage>,
+    pub brush_layer: Option<SerializableDynamicImage>,
 }
 
 impl Document {

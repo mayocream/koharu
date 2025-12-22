@@ -151,6 +151,7 @@ type AppState = OperationSlice & {
   scale: number
   showSegmentationMask: boolean
   showInpaintedImage: boolean
+  showBrushLayer: boolean
   showRenderedImage: boolean
   showTextBlocksOverlay: boolean
   mode: ToolMode
@@ -177,6 +178,7 @@ type AppState = OperationSlice & {
   setScale: (scale: number) => void
   setShowSegmentationMask: (show: boolean) => void
   setShowInpaintedImage: (show: boolean) => void
+  setShowBrushLayer: (show: boolean) => void
   setShowRenderedImage: (show: boolean) => void
   setShowTextBlocksOverlay: (show: boolean) => void
   setMode: (mode: ToolMode) => void
@@ -192,6 +194,11 @@ type AppState = OperationSlice & {
       patch?: number[]
       patchRegion?: InpaintRegion
     },
+  ) => Promise<void>
+  paintRendered: (
+    patch: number[],
+    region: InpaintRegion,
+    options?: { index?: number },
   ) => Promise<void>
   flushMaskSync: () => Promise<void>
   setProgress: (progress?: number, status?: ProgressBarStatus) => Promise<void>
@@ -299,6 +306,7 @@ export const useAppStore = create<AppState>((set, get) => {
     scale: 100,
     showSegmentationMask: false,
     showInpaintedImage: false,
+    showBrushLayer: true,
     showRenderedImage: false,
     showTextBlocksOverlay: false,
     mode: 'select',
@@ -356,6 +364,9 @@ export const useAppStore = create<AppState>((set, get) => {
     setShowInpaintedImage: (show: boolean) => {
       set({ showInpaintedImage: show })
     },
+    setShowBrushLayer: (show: boolean) => {
+      set({ showBrushLayer: show })
+    },
     setShowRenderedImage: (show: boolean) => {
       set({ showRenderedImage: show })
     },
@@ -363,21 +374,30 @@ export const useAppStore = create<AppState>((set, get) => {
       set({ showTextBlocksOverlay: show })
     },
     setMode: (mode: ToolMode) => {
-      set({
-        mode: mode,
-      })
+      set({ mode })
 
-      if (mode === 'mask')
+      if (mode === 'repairBrush' || mode === 'brush' || mode === 'eraser') {
         set({
           showRenderedImage: false,
           showInpaintedImage: true,
+        })
+      }
+
+      if (mode === 'repairBrush') {
+        set({
           showTextBlocksOverlay: true,
           showSegmentationMask: true,
+          showBrushLayer: false,
         })
-      else
-        set({
-          showSegmentationMask: false,
-        })
+      } else {
+        set({ showSegmentationMask: false })
+
+        if (mode === 'brush') {
+          set({
+            showBrushLayer: true,
+          })
+        }
+      }
     },
     setSelectedBlockIndex: (index?: number) =>
       set({ selectedBlockIndex: index }),
@@ -427,6 +447,23 @@ export const useAppStore = create<AppState>((set, get) => {
           region: patchRegion,
         })
       }
+    },
+    paintRendered: async (patch, region, options) => {
+      const index = options?.index ?? get().currentDocumentIndex
+      const doc: Document = await invoke<Document>('update_brush_layer', {
+        index,
+        patch,
+        region,
+      })
+      set((state) => ({
+        documents: state.documents[index]
+          ? replaceDocument(state.documents, index, {
+              ...state.documents[index],
+              brushLayer: doc.brushLayer,
+            } as Document)
+          : state.documents,
+        showBrushLayer: true,
+      }))
     },
     flushMaskSync: async () => {
       await maskSyncer.flush()
@@ -859,20 +896,20 @@ export const useAppStore = create<AppState>((set, get) => {
 })
 
 type ConfigState = {
-  maskConfig: {
-    brushSize: number
-    brushMode: 'brush' | 'eraser'
+  brushConfig: {
+    size: number
+    color: string
   }
-  setMaskConfig: (config: Partial<ConfigState['maskConfig']>) => void
+  setBrushConfig: (config: Partial<ConfigState['brushConfig']>) => void
 }
 
 export const useConfigStore = create<ConfigState>((set) => ({
-  maskConfig: {
-    brushSize: 36,
-    brushMode: 'brush',
+  brushConfig: {
+    size: 36,
+    color: '#ffffff',
   },
-  setMaskConfig: (config) =>
+  setBrushConfig: (config) =>
     set((state) => ({
-      maskConfig: { ...state.maskConfig, ...config },
+      brushConfig: { ...state.brushConfig, ...config },
     })),
 }))
