@@ -73,10 +73,12 @@ const createTextBlockSyncer = () => {
 const textBlockSyncer = createTextBlockSyncer()
 
 const createMaskSyncer = () => {
-  let pending: {
+  type MaskUpdate = {
     index: number
     mask: number[]
-  } | null = null
+    region?: InpaintRegion
+  }
+  let pending: MaskUpdate[] = []
   let flushPromise: Promise<void> | null = null
   let timer: ReturnType<typeof setTimeout> | null = null
 
@@ -87,9 +89,9 @@ const createMaskSyncer = () => {
     }
     if (!flushPromise) {
       flushPromise = (async () => {
-        while (pending) {
-          const payload = pending
-          pending = null
+        while (pending.length) {
+          const payload = pending.shift()
+          if (!payload) break
           await invoke<Document>('update_inpaint_mask', payload)
         }
       })().finally(() => {
@@ -100,8 +102,8 @@ const createMaskSyncer = () => {
     return flushPromise
   }
 
-  const enqueue = (index: number, mask: number[]) => {
-    pending = { index, mask }
+  const enqueue = (update: MaskUpdate) => {
+    pending.push(update)
     if (timer) {
       clearTimeout(timer)
     }
@@ -112,7 +114,7 @@ const createMaskSyncer = () => {
   }
 
   const clearPending = () => {
-    pending = null
+    pending = []
     if (timer) {
       clearTimeout(timer)
       timer = null
@@ -183,7 +185,14 @@ type AppState = OperationSlice & {
   setRenderEffect: (effect: RenderEffect) => void
   fetchAvailableFonts: () => Promise<void>
   updateTextBlocks: (textBlocks: TextBlock[]) => Promise<void>
-  updateMask: (mask: number[], options?: { sync?: boolean }) => Promise<void>
+  updateMask: (
+    mask: number[],
+    options?: {
+      sync?: boolean
+      patch?: number[]
+      patchRegion?: InpaintRegion
+    },
+  ) => Promise<void>
   flushMaskSync: () => Promise<void>
   setProgress: (progress?: number, status?: ProgressBarStatus) => Promise<void>
   clearProgress: () => Promise<void>
@@ -193,7 +202,7 @@ type AppState = OperationSlice & {
   inpaint: (_?: any, index?: number) => Promise<void>
   inpaintPartial: (
     region: InpaintRegion,
-    options?: { mask?: number[]; index?: number },
+    options?: { index?: number },
   ) => Promise<void>
   render: (_?: any, index?: number) => Promise<void>
   renderTextBlock: (
@@ -353,13 +362,23 @@ export const useAppStore = create<AppState>((set, get) => {
     setShowTextBlocksOverlay: (show: boolean) => {
       set({ showTextBlocksOverlay: show })
     },
-    setMode: (mode: ToolMode) =>
+    setMode: (mode: ToolMode) => {
       set({
         mode: mode,
-        // special handling: hide inpainted/rendered image when in mask mode
-        showRenderedImage: mode === 'mask' ? false : get().showRenderedImage,
-        showInpaintedImage: mode === 'mask' ? true : get().showInpaintedImage,
-      }),
+      })
+
+      if (mode === 'mask')
+        set({
+          showRenderedImage: false,
+          showInpaintedImage: true,
+          showTextBlocksOverlay: true,
+          showSegmentationMask: true,
+        })
+      else
+        set({
+          showSegmentationMask: false,
+        })
+    },
     setSelectedBlockIndex: (index?: number) =>
       set({ selectedBlockIndex: index }),
     setAutoFitEnabled: (enabled: boolean) => set({ autoFitEnabled: enabled }),
@@ -396,7 +415,17 @@ export const useAppStore = create<AppState>((set, get) => {
         documents: replaceDocument(documents, currentDocumentIndex, updatedDoc),
       })
       if (sync) {
-        void maskSyncer.enqueue(currentDocumentIndex, mask)
+        const patchRegion =
+          options?.patch && options.patchRegion
+            ? options.patchRegion
+            : undefined
+        const payloadMask = patchRegion && options?.patch ? options.patch : mask
+
+        void maskSyncer.enqueue({
+          index: currentDocumentIndex,
+          mask: payloadMask,
+          region: patchRegion,
+        })
       }
     },
     flushMaskSync: async () => {
@@ -434,10 +463,10 @@ export const useAppStore = create<AppState>((set, get) => {
     inpaintPartial: async (region, options) => {
       const index = options?.index ?? get().currentDocumentIndex
       if (!region) return
+      await maskSyncer.flush()
       const doc: Document = await invoke<Document>('inpaint_partial', {
         index,
         region,
-        mask: options?.mask,
       })
       set((state) => ({
         documents: replaceDocument(state.documents, index, doc),

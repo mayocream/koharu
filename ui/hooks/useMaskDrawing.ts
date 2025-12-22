@@ -65,6 +65,20 @@ const withMargin = (
   }
 }
 
+const boundsToRegion = (bounds: Bounds, doc: Document): InpaintRegion => {
+  const x0 = Math.max(0, Math.floor(bounds.minX))
+  const y0 = Math.max(0, Math.floor(bounds.minY))
+  const x1 = Math.min(doc.width, Math.ceil(bounds.maxX))
+  const y1 = Math.min(doc.height, Math.ceil(bounds.maxY))
+
+  return {
+    x: x0,
+    y: y0,
+    width: Math.max(1, x1 - x0),
+    height: Math.max(1, y1 - y0),
+  }
+}
+
 export function useMaskDrawing({
   mode,
   currentDocument,
@@ -173,34 +187,71 @@ export function useMaskDrawing({
     return blobToUint8Array(blob)
   }
 
+  const exportMaskPatch = async (
+    region: InpaintRegion,
+  ): Promise<number[] | null> => {
+    const canvas = canvasRef.current
+    if (!canvas || region.width <= 0 || region.height <= 0) return null
+
+    const tempCanvas = document.createElement('canvas')
+    tempCanvas.width = region.width
+    tempCanvas.height = region.height
+    const tempCtx = tempCanvas.getContext('2d')
+    if (!tempCtx) return null
+
+    tempCtx.drawImage(
+      canvas,
+      region.x,
+      region.y,
+      region.width,
+      region.height,
+      0,
+      0,
+      region.width,
+      region.height,
+    )
+
+    const blob = await new Promise<Blob | null>((resolve) => {
+      tempCanvas.toBlob((result) => resolve(result), 'image/png')
+    })
+    if (!blob) return null
+    return blobToUint8Array(blob)
+  }
+
   const queueInpaint = (task: () => Promise<void>) => {
     inpaintQueueRef.current = inpaintQueueRef.current.catch(() => {}).then(task)
   }
 
   const finalizeStroke = () => {
-    if (!currentDocument || !boundsRef.current) return
-    const region = withMargin(boundsRef.current, brushSize, currentDocument)
+    const strokeBounds = boundsRef.current
+    if (!currentDocument || !strokeBounds) return
+    const patchRegion = boundsToRegion(strokeBounds, currentDocument)
+    const region = withMargin(strokeBounds, brushSize, currentDocument)
     boundsRef.current = null
     drawingRef.current = false
     lastPointRef.current = null
 
     void (async () => {
-      const maskBytes = await exportMaskBytes()
+      const [maskBytes, patchBytes] = await Promise.all([
+        exportMaskBytes(),
+        exportMaskPatch(patchRegion),
+      ])
       if (!maskBytes) return
       try {
-        await updateMask(maskBytes, { sync: false })
+        await updateMask(maskBytes, {
+          patchRegion: patchBytes ? patchRegion : undefined,
+          patch: patchBytes ?? undefined,
+        })
       } catch (error) {
         console.error(error)
       }
       queueInpaint(async () => {
         try {
           await inpaintPartial(region, {
-            mask: maskBytes,
             index: currentDocumentIndex,
           })
         } catch (error) {
           console.error(error)
-          void updateMask(maskBytes, { sync: true })
         }
       })
     })()
@@ -257,7 +308,7 @@ export function useMaskDrawing({
 
   return {
     canvasRef,
-    visible: showMask || mode === 'mask',
+    visible: showMask,
     handlePointerDown,
     handlePointerMove,
     handlePointerUp,
