@@ -142,7 +142,8 @@
     "canvas": "畫布"
   },
   "toolbar": {
-    "brush": "筆刷"
+    "brush": "筆刷",
+    "eraser": "橡皮擦"
   },
   "toolRail": {
     "select": "選擇",

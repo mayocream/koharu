@@ -1,7 +1,9 @@
 use std::{str::FromStr, sync::Arc};
 
+use image::{self, GenericImageView};
 use koharu_ml::{llm::ModelId, set_locale};
 use rayon::iter::{IntoParallelIterator, ParallelIterator};
+use serde::{Deserialize, Serialize};
 use strum::IntoEnumIterator;
 use sys_locale::get_locale;
 use tauri::State;
@@ -17,6 +19,15 @@ use crate::{
     version,
 };
 use koharu_renderer::renderer::TextShaderEffect;
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct InpaintRegion {
+    pub x: u32,
+    pub y: u32,
+    pub width: u32,
+    pub height: u32,
+}
 
 #[tauri::command]
 pub fn open_external(url: &str) -> Result<()> {
@@ -304,6 +315,126 @@ pub async fn inpaint(
     let inpainted = model.inpaint(&document.image, &mask).await?;
 
     document.inpainted = Some(inpainted);
+
+    Ok(document.clone())
+}
+
+#[tauri::command]
+#[instrument(level = "info", skip_all)]
+pub async fn update_inpaint_mask(
+    state: State<'_, AppState>,
+    index: usize,
+    mask: Vec<u8>,
+) -> Result<Document> {
+    let mut state = state.write().await;
+    let document = state
+        .documents
+        .get_mut(index)
+        .ok_or_else(|| anyhow::anyhow!("Document not found"))?;
+
+    let mask_image = image::load_from_memory(&mask)
+        .map_err(|e| anyhow::anyhow!("Failed to decode mask: {e}"))?;
+    let (mask_width, mask_height) = mask_image.dimensions();
+    if mask_width != document.width || mask_height != document.height {
+        return Err(anyhow::anyhow!(
+            "Mask size mismatch: expected {}x{}, got {}x{}",
+            document.width,
+            document.height,
+            mask_width,
+            mask_height
+        )
+        .into());
+    }
+
+    document.segment = Some(mask_image.into());
+
+    Ok(document.clone())
+}
+
+#[tauri::command]
+#[instrument(level = "info", skip_all)]
+pub async fn inpaint_partial(
+    state: State<'_, AppState>,
+    model: State<'_, Arc<ml::Model>>,
+    index: usize,
+    region: InpaintRegion,
+    mask: Option<Vec<u8>>,
+) -> Result<Document> {
+    let mut state = state.write().await;
+    let document = state
+        .documents
+        .get_mut(index)
+        .ok_or_else(|| anyhow::anyhow!("Document not found"))?;
+
+    if let Some(mask) = mask {
+        let updated_mask = image::load_from_memory(&mask)
+            .map_err(|e| anyhow::anyhow!("Failed to decode mask: {e}"))?;
+        let (mask_width, mask_height) = updated_mask.dimensions();
+        if mask_width != document.width || mask_height != document.height {
+            return Err(anyhow::anyhow!(
+                "Mask size mismatch: expected {}x{}, got {}x{}",
+                document.width,
+                document.height,
+                mask_width,
+                mask_height
+            )
+            .into());
+        }
+        document.segment = Some(updated_mask.into());
+    }
+
+    let mask_image = document
+        .segment
+        .as_ref()
+        .ok_or_else(|| anyhow::anyhow!("Segment image not found"))?;
+
+    if region.width == 0 || region.height == 0 {
+        return Ok(document.clone());
+    }
+
+    let (img_width, img_height) = (document.width, document.height);
+    let x0 = region.x.min(img_width.saturating_sub(1));
+    let y0 = region.y.min(img_height.saturating_sub(1));
+    let x1 = region.x.saturating_add(region.width).min(img_width);
+    let y1 = region.y.saturating_add(region.height).min(img_height);
+    let crop_width = x1.saturating_sub(x0);
+    let crop_height = y1.saturating_sub(y0);
+
+    if crop_width == 0 || crop_height == 0 {
+        return Ok(document.clone());
+    }
+
+    let image_crop = document.image.crop_imm(x0, y0, crop_width, crop_height);
+    let mask_crop = mask_image.crop_imm(x0, y0, crop_width, crop_height);
+
+    let inpainted_crop = model
+        .inpaint(&image_crop.clone().into(), &mask_crop.clone().into())
+        .await?;
+
+    // Restore erased regions from the original image; only copy inpainted pixels where mask is white.
+    let mut stitched = document
+        .inpainted
+        .clone()
+        .unwrap_or_else(|| document.image.clone())
+        .to_rgba8();
+
+    let patch = inpainted_crop.to_rgba8();
+    let original = image_crop.to_rgba8();
+    let mask_rgba = mask_crop.to_rgba8();
+    for y in 0..crop_height {
+        for x in 0..crop_width {
+            let mask_pixel = mask_rgba.get_pixel(x, y);
+            let is_masked = mask_pixel.0[0] > 0 || mask_pixel.0[1] > 0 || mask_pixel.0[2] > 0;
+            let pixel = if is_masked {
+                patch.get_pixel(x, y)
+            } else {
+                original.get_pixel(x, y)
+            };
+            stitched.put_pixel(x0 + x, y0 + y, *pixel);
+        }
+    }
+
+    document.inpainted = Some(image::DynamicImage::ImageRgba8(stitched).into());
 
     Ok(document.clone())
 }

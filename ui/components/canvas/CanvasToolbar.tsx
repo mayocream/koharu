@@ -7,14 +7,32 @@ import { useAppStore, useConfigStore } from '@/lib/store'
 export function CanvasToolbar() {
   const llmReady = useAppStore((state) => state.llmReady)
   const {
-    maskConfig: { brushSize },
+    maskConfig: { brushSize, brushMode },
     setMaskConfig,
   } = useConfigStore()
   const { t } = useTranslation()
 
   return (
     <Toolbar.Root className='flex items-center gap-4 border-b border-neutral-200 bg-white px-3 py-1.5 text-xs text-neutral-900'>
-      <div className='flex items-center gap-2'>
+      <div className='flex items-center gap-3'>
+        <div className='flex overflow-hidden rounded border border-neutral-200 bg-white'>
+          <button
+            type='button'
+            data-active={brushMode === 'brush'}
+            onClick={() => setMaskConfig({ brushMode: 'brush' })}
+            className='border-r border-neutral-200 px-2 py-1 text-xs text-neutral-700 transition data-[active=true]:bg-rose-50 data-[active=true]:text-rose-600'
+          >
+            {t('toolbar.brush')}
+          </button>
+          <button
+            type='button'
+            data-active={brushMode === 'eraser'}
+            onClick={() => setMaskConfig({ brushMode: 'eraser' })}
+            className='px-2 py-1 text-xs text-neutral-700 transition data-[active=true]:bg-rose-50 data-[active=true]:text-rose-600'
+          >
+            {t('toolbar.eraser')}
+          </button>
+        </div>
         <span className='text-neutral-600'>{t('toolbar.brush')}</span>
         <div className='w-40'>
           <Slider.Root

@@ -142,7 +142,8 @@
     "canvas": "キャンバス"
   },
   "toolbar": {
-    "brush": "ブラシ"
+    "brush": "ブラシ",
+    "eraser": "消しゴム"
   },
   "toolRail": {
     "select": "選択",

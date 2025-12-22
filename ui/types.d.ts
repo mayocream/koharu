@@ -41,6 +41,13 @@ export type TextBlock = {
 
 export type ToolMode = 'select' | 'block' | 'mask'
 
+export type InpaintRegion = {
+  x: number
+  y: number
+  width: number
+  height: number
+}
+
 export type Document = {
   id: string
   path: string

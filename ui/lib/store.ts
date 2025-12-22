@@ -3,7 +3,13 @@
 import { create } from 'zustand'
 import { invoke } from '@tauri-apps/api/core'
 import { getCurrentWindow, ProgressBarStatus } from '@tauri-apps/api/window'
-import { Document, RenderEffect, TextBlock, ToolMode } from '@/types'
+import {
+  Document,
+  InpaintRegion,
+  RenderEffect,
+  TextBlock,
+  ToolMode,
+} from '@/types'
 import { createOperationSlice, type OperationSlice } from '@/lib/operations'
 import {
   callOpenAICompletion,
@@ -66,6 +72,62 @@ const createTextBlockSyncer = () => {
 
 const textBlockSyncer = createTextBlockSyncer()
 
+const createMaskSyncer = () => {
+  let pending: {
+    index: number
+    mask: number[]
+  } | null = null
+  let flushPromise: Promise<void> | null = null
+  let timer: ReturnType<typeof setTimeout> | null = null
+
+  const flush = async (): Promise<void> => {
+    if (timer) {
+      clearTimeout(timer)
+      timer = null
+    }
+    if (!flushPromise) {
+      flushPromise = (async () => {
+        while (pending) {
+          const payload = pending
+          pending = null
+          await invoke<Document>('update_inpaint_mask', payload)
+        }
+      })().finally(() => {
+        flushPromise = null
+      })
+    }
+
+    return flushPromise
+  }
+
+  const enqueue = (index: number, mask: number[]) => {
+    pending = { index, mask }
+    if (timer) {
+      clearTimeout(timer)
+    }
+    timer = setTimeout(() => {
+      void flush()
+    }, 250)
+    return flushPromise ?? Promise.resolve()
+  }
+
+  const clearPending = () => {
+    pending = null
+    if (timer) {
+      clearTimeout(timer)
+      timer = null
+    }
+  }
+
+  return {
+    enqueue,
+    flush,
+    clearPending,
+  }
+}
+
+const maskSyncer = createMaskSyncer()
+
 const findModelLanguages = (models: LlmModelInfo[], modelId?: string) =>
   models.find((model) => model.id === modelId)?.languages ?? []
 
@@ -121,12 +183,18 @@ type AppState = OperationSlice & {
   setRenderEffect: (effect: RenderEffect) => void
   fetchAvailableFonts: () => Promise<void>
   updateTextBlocks: (textBlocks: TextBlock[]) => Promise<void>
+  updateMask: (mask: number[], options?: { sync?: boolean }) => Promise<void>
+  flushMaskSync: () => Promise<void>
   setProgress: (progress?: number, status?: ProgressBarStatus) => Promise<void>
   clearProgress: () => Promise<void>
   // Processing actions
   detect: (_?: any, index?: number) => Promise<void>
   ocr: (_?: any, index?: number) => Promise<void>
   inpaint: (_?: any, index?: number) => Promise<void>
+  inpaintPartial: (
+    region: InpaintRegion,
+    options?: { mask?: number[]; index?: number },
+  ) => Promise<void>
   render: (_?: any, index?: number) => Promise<void>
   renderTextBlock: (
     _?: any,
@@ -285,7 +353,13 @@ export const useAppStore = create<AppState>((set, get) => {
     setShowTextBlocksOverlay: (show: boolean) => {
       set({ showTextBlocksOverlay: show })
     },
-    setMode: (mode: ToolMode) => set({ mode }),
+    setMode: (mode: ToolMode) =>
+      set({
+        mode: mode,
+        // special handling: hide inpainted/rendered image when in mask mode
+        showRenderedImage: mode === 'mask' ? false : get().showRenderedImage,
+        showInpaintedImage: mode === 'mask' ? true : get().showInpaintedImage,
+      }),
     setSelectedBlockIndex: (index?: number) =>
       set({ selectedBlockIndex: index }),
     setAutoFitEnabled: (enabled: boolean) => set({ autoFitEnabled: enabled }),
@@ -309,6 +383,25 @@ export const useAppStore = create<AppState>((set, get) => {
       })
       await textBlockSyncer.enqueue(currentDocumentIndex, textBlocks)
     },
+    updateMask: async (mask, options) => {
+      const sync = options?.sync !== false
+      const { documents, currentDocumentIndex } = get()
+      const doc = documents[currentDocumentIndex]
+      if (!doc) return
+      const updatedDoc: Document = {
+        ...doc,
+        segment: mask,
+      }
+      set({
+        documents: replaceDocument(documents, currentDocumentIndex, updatedDoc),
+      })
+      if (sync) {
+        void maskSyncer.enqueue(currentDocumentIndex, mask)
+      }
+    },
+    flushMaskSync: async () => {
+      await maskSyncer.flush()
+    },
     detect: async (_, index) => {
       index = index ?? get().currentDocumentIndex
       const doc: Document = await invoke<Document>('detect', {
@@ -329,8 +422,22 @@ export const useAppStore = create<AppState>((set, get) => {
     inpaint: async (_, index) => {
       index = index ?? get().currentDocumentIndex
       await textBlockSyncer.flush()
+      await maskSyncer.flush()
       const doc: Document = await invoke<Document>('inpaint', {
         index,
+      })
+      set((state) => ({
+        documents: replaceDocument(state.documents, index, doc),
+        showInpaintedImage: true,
+      }))
+    },
+    inpaintPartial: async (region, options) => {
+      const index = options?.index ?? get().currentDocumentIndex
+      if (!region) return
+      const doc: Document = await invoke<Document>('inpaint_partial', {
+        index,
+        region,
+        mask: options?.mask,
       })
       set((state) => ({
         documents: replaceDocument(state.documents, index, doc),
@@ -725,6 +832,7 @@ export const useAppStore = create<AppState>((set, get) => {
 type ConfigState = {
   maskConfig: {
     brushSize: number
+    brushMode: 'brush' | 'eraser'
   }
   setMaskConfig: (config: Partial<ConfigState['maskConfig']>) => void
 }
@@ -732,6 +840,7 @@ type ConfigState = {
 export const useConfigStore = create<ConfigState>((set) => ({
   maskConfig: {
     brushSize: 36,
+    brushMode: 'brush',
   },
   setMaskConfig: (config) =>
     set((state) => ({
