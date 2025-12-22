@@ -389,12 +389,17 @@ export const useAppStore = create<AppState>((set, get) => {
           showSegmentationMask: true,
           showBrushLayer: false,
         })
-      } else {
+      } else if (mode !== 'eraser') {
         set({ showSegmentationMask: false })
 
         if (mode === 'brush') {
           set({
             showBrushLayer: true,
+          })
+        } else if (mode === 'block') {
+          set({
+            showTextBlocksOverlay: true,
+            showInpaintedImage: true,
           })
         }
       }

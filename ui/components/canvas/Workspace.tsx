@@ -1,6 +1,6 @@
 'use client'
 
-import { useEffect, useRef } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import type React from 'react'
 import { ScrollArea, ContextMenu } from 'radix-ui'
 import { useTranslation } from 'react-i18next'
@@ -15,6 +15,7 @@ import { ToolRail } from '@/components/canvas/ToolRail'
 import { CanvasToolbar } from '@/components/canvas/CanvasToolbar'
 import { TextBlockAnnotations } from '@/components/canvas/TextBlockAnnotations'
 import { TextBlockSpriteLayer } from '@/components/canvas/TextBlockSpriteLayer'
+import { useCanvasZoom } from '@/hooks/useCanvasZoom'
 import { usePointerToDocument } from '@/hooks/usePointerToDocument'
 import { useBlockDrafting } from '@/hooks/useBlockDrafting'
 import { useBlockContextMenu } from '@/hooks/useBlockContextMenu'
@@ -23,8 +24,14 @@ import { useMaskDrawing } from '@/hooks/useMaskDrawing'
 import { useRenderBrushDrawing } from '@/hooks/useRenderBrushDrawing'
 import { useBrushLayerDisplay } from '@/hooks/useBrushLayerDisplay'
 
-const MASK_CURSOR =
+const BRUSH_CURSOR =
   'url(\'data:image/svg+xml,%3Csvg xmlns="http://www.w3.org/2000/svg" width="16" height="16"%3E%3Ccircle cx="8" cy="8" r="4" stroke="black" stroke-width="1.5" fill="white"/%3E%3C/svg%3E\') 8 8, crosshair'
+const HAND_CURSOR_SVG =
+  '<svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="white" stroke="#111" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M18 11V6a2 2 0 0 0-2-2a2 2 0 0 0-2 2"/><path d="M14 10V4a2 2 0 0 0-2-2a2 2 0 0 0-2 2v2"/><path d="M10 10.5V6a2 2 0 0 0-2-2a2 2 0 0 0-2 2v8"/><path d="M18 8a2 2 0 1 1 4 0v6a8 8 0 0 1-8 8h-2c-2.8 0-4.5-.86-5.99-2.34l-3.6-3.6a2 2 0 0 1 2.83-2.82L7 15"/></svg>'
+const HAND_GRAB_CURSOR_SVG =
+  '<svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="white" stroke="#111" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M18 11.5V9a2 2 0 0 0-2-2a2 2 0 0 0-2 2v1.4"/><path d="M14 10V8a2 2 0 0 0-2-2a2 2 0 0 0-2 2v2"/><path d="M10 9.9V9a2 2 0 0 0-2-2a2 2 0 0 0-2 2v5"/><path d="M6 14a2 2 0 0 0-2-2a2 2 0 0 0-2 2"/><path d="M18 11a2 2 0 1 1 4 0v3a8 8 0 0 1-8 8h-4a8 8 0 0 1-8-8 2 2 0 1 1 4 0"/></svg>'
+const HAND_CURSOR = `url("data:image/svg+xml;utf8,${encodeURIComponent(HAND_CURSOR_SVG)}") 12 12, grab`
+const HAND_GRAB_CURSOR = `url("data:image/svg+xml;utf8,${encodeURIComponent(HAND_GRAB_CURSOR_SVG)}") 12 12, grabbing`
 
 export function Workspace() {
   const {
@@ -45,6 +52,17 @@ export function Workspace() {
     appendBlock,
     removeBlock,
   } = useTextBlocks()
+  const [ctrlKeyHeld, setCtrlKeyHeld] = useState(false)
+  const [isCtrlPanning, setIsCtrlPanning] = useState(false)
+  const viewportRef = useRef<HTMLDivElement | null>(null)
+  const panState = useRef<{
+    pointerId: number
+    startX: number
+    startY: number
+    scrollLeft: number
+    scrollTop: number
+  } | null>(null)
+  const { setScale: applyScale } = useCanvasZoom()
   const scaleRatio = scale / 100
   const canvasRef = useRef<HTMLDivElement | null>(null)
   const pointerToDocument = usePointerToDocument(scaleRatio, canvasRef)
@@ -130,6 +148,28 @@ export function Workspace() {
     }
   }, [currentDocument])
 
+  useEffect(() => {
+    const handleKeyDown = (event: KeyboardEvent) => {
+      if (event.key === 'Control') {
+        setCtrlKeyHeld(true)
+      }
+    }
+    const handleKeyUp = (event: KeyboardEvent) => {
+      if (event.key === 'Control') {
+        setCtrlKeyHeld(false)
+        if (panState.current) {
+          endPan()
+        }
+      }
+    }
+    window.addEventListener('keydown', handleKeyDown)
+    window.addEventListener('keyup', handleKeyUp)
+    return () => {
+      window.removeEventListener('keydown', handleKeyDown)
+      window.removeEventListener('keyup', handleKeyUp)
+    }
+  }, [])
+
   const handleCanvasPointerDown = (
     event: React.PointerEvent<HTMLDivElement>,
   ) => {
@@ -143,13 +183,95 @@ export function Workspace() {
     handleContextMenu(event)
   }
 
+  const handleWheel = (event: React.WheelEvent<HTMLDivElement>) => {
+    if (!event.ctrlKey || !currentDocument) return
+    event.preventDefault()
+    const direction = Math.sign(event.deltaY)
+    if (!direction) return
+    const step = 5
+    applyScale(scale - direction * step)
+  }
+
+  const startPan = (event: React.PointerEvent<HTMLDivElement>) => {
+    if (!event.ctrlKey || !currentDocument) return false
+    const viewport = viewportRef.current
+    if (!viewport) return false
+    event.preventDefault()
+    event.stopPropagation()
+    panState.current = {
+      pointerId: event.pointerId,
+      startX: event.clientX,
+      startY: event.clientY,
+      scrollLeft: viewport.scrollLeft,
+      scrollTop: viewport.scrollTop,
+    }
+    setIsCtrlPanning(true)
+    viewport.setPointerCapture(event.pointerId)
+    return true
+  }
+
+  const endPan = (pointerId?: number) => {
+    const viewport = viewportRef.current
+    const pan = panState.current
+    const id = pan?.pointerId ?? pointerId
+    if (viewport && id !== undefined && viewport.hasPointerCapture(id)) {
+      viewport.releasePointerCapture(id)
+    }
+    panState.current = null
+    setIsCtrlPanning(false)
+  }
+
+  const handleViewportPointerDown = (
+    event: React.PointerEvent<HTMLDivElement>,
+  ) => {
+    if (startPan(event)) return
+  }
+
+  const handleViewportPointerMove = (
+    event: React.PointerEvent<HTMLDivElement>,
+  ) => {
+    const pan = panState.current
+    const viewport = viewportRef.current
+    if (!pan || pan.pointerId !== event.pointerId || !viewport) return
+    if (!event.ctrlKey) {
+      endPan(event.pointerId)
+      return
+    }
+    event.preventDefault()
+    event.stopPropagation()
+    const deltaX = event.clientX - pan.startX
+    const deltaY = event.clientY - pan.startY
+    viewport.scrollLeft = pan.scrollLeft - deltaX
+    viewport.scrollTop = pan.scrollTop - deltaY
+  }
+
+  const handleViewportPointerUp = (
+    event: React.PointerEvent<HTMLDivElement>,
+  ) => {
+    if (panState.current?.pointerId !== event.pointerId) return
+    event.preventDefault()
+    event.stopPropagation()
+    endPan(event.pointerId)
+  }
+
+  const handleViewportPointerLeave = (
+    event: React.PointerEvent<HTMLDivElement>,
+  ) => {
+    if (panState.current?.pointerId !== event.pointerId) return
+    endPan(event.pointerId)
+  }
+
   const isBrushMode =
     mode === 'brush' || mode === 'repairBrush' || mode === 'eraser'
-  const canvasCursor = isBrushMode
-    ? MASK_CURSOR
-    : mode === 'block'
-      ? 'cell'
-      : 'default'
+  const panCursor =
+    ctrlKeyHeld && currentDocument
+      ? isCtrlPanning
+        ? HAND_GRAB_CURSOR
+        : HAND_CURSOR
+      : undefined
+  const canvasCursor =
+    panCursor ??
+    (isBrushMode ? BRUSH_CURSOR : mode === 'block' ? 'cell' : 'default')
 
   const canvasDimensions = currentDocument
     ? {
@@ -165,8 +287,18 @@ export function Workspace() {
         <CanvasToolbar />
         <ScrollArea.Root className='flex min-h-0 min-w-0 flex-1'>
           <ScrollArea.Viewport
-            ref={(el) => setCanvasViewport(el)}
+            ref={(el) => {
+              viewportRef.current = el
+              setCanvasViewport(el)
+            }}
             className='grid size-full place-content-center-safe'
+            onWheel={handleWheel}
+            onPointerDownCapture={handleViewportPointerDown}
+            onPointerMove={handleViewportPointerMove}
+            onPointerUp={handleViewportPointerUp}
+            onPointerCancel={handleViewportPointerUp}
+            onPointerLeave={handleViewportPointerLeave}
+            style={panCursor ? { cursor: panCursor } : undefined}
           >
             {currentDocument ? (
               <ContextMenu.Root
