@@ -61,6 +61,12 @@ impl Renderer {
             && text_block_index.is_none()
         {
             let mut rendered = inpainted.to_rgba8();
+
+            if let Some(brush_layer) = &document.brush_layer {
+                let brush = brush_layer.to_rgba8();
+                imageops::overlay(&mut rendered, &brush, 0, 0);
+            }
+
             for text_block in text_blocks {
                 let Some(block) = text_block.rendered.as_ref() else {
                     continue;

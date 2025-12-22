@@ -69,14 +69,21 @@ type ToggleFieldProps = {
   label: string
   checked: boolean
   onChange: (value: boolean) => void
+  disabled?: boolean
 }
 
-export function ToggleField({ label, checked, onChange }: ToggleFieldProps) {
+export function ToggleField({
+  label,
+  checked,
+  onChange,
+  disabled,
+}: ToggleFieldProps) {
   return (
     <label className='flex items-center gap-2 text-sm'>
       <Switch.Root
         checked={checked}
         onCheckedChange={(value) => onChange(!!value)}
+        disabled={disabled}
         className='relative h-4 w-8 cursor-pointer rounded-full bg-neutral-300 data-[state=checked]:bg-rose-200'
       >
         <Switch.Thumb className='block h-3 w-3 translate-x-0.5 rounded-full bg-white transition-transform data-[state=checked]:translate-x-3.5 data-[state=checked]:bg-rose-500' />

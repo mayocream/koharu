@@ -306,7 +306,7 @@ export const useAppStore = create<AppState>((set, get) => {
     scale: 100,
     showSegmentationMask: false,
     showInpaintedImage: false,
-    showBrushLayer: true,
+    showBrushLayer: false,
     showRenderedImage: false,
     showTextBlocksOverlay: false,
     mode: 'select',
