@@ -44,7 +44,7 @@ export function CanvasToolbar() {
               onChange={(event) =>
                 setBrushConfig({ color: event.target.value })
               }
-              className='h-7 w-7 cursor-pointer appearance-none border-none p-0'
+              className='h-6 w-6 cursor-pointer appearance-none border-none p-0'
               aria-label={t('toolbar.brushColor')}
             />
           </label>
