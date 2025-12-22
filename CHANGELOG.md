@@ -1,3 +1,13 @@
+## [0.23.1] - 2025-12-22
+
+### 🐛 Bug Fixes
+
+- Render brush
+- Smaller color input button
+
+### ⚙️ Miscellaneous Tasks
+
+- Release 0.23.1
 ## [0.23.0] - 2025-12-22
 
 ### 🚀 Features
