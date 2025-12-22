@@ -113,13 +113,19 @@ export function useMaskDrawing({
       return
     }
 
-    canvas.width = currentDocument.width
-    canvas.height = currentDocument.height
-    ctx?.clearRect(0, 0, canvas.width, canvas.height)
-    ctx?.save()
-    ctx && (ctx.fillStyle = '#000')
-    ctx?.fillRect(0, 0, canvas.width, canvas.height)
-    ctx?.restore()
+    const needsResize =
+      canvas.width !== currentDocument.width ||
+      canvas.height !== currentDocument.height
+
+    if (needsResize) {
+      canvas.width = currentDocument.width
+      canvas.height = currentDocument.height
+      ctx?.clearRect(0, 0, canvas.width, canvas.height)
+      ctx?.save()
+      ctx && (ctx.fillStyle = '#000')
+      ctx?.fillRect(0, 0, canvas.width, canvas.height)
+      ctx?.restore()
+    }
 
     let cancelled = false
     if (currentDocument.segment) {
@@ -130,6 +136,9 @@ export function useMaskDrawing({
             bitmap.close()
             return
           }
+          // Redraw atomically once the new bitmap is ready so the previous
+          // mask stays visible until swap, avoiding a flicker.
+          ctx?.save()
           ctx?.clearRect(0, 0, canvas.width, canvas.height)
           ctx?.drawImage(
             bitmap,
@@ -138,6 +147,7 @@ export function useMaskDrawing({
             currentDocument.width,
             currentDocument.height,
           )
+          ctx?.restore()
           bitmap.close()
         } catch (error) {
           console.error(error)

@@ -162,7 +162,11 @@ export function Workspace() {
                       onContextMenuCapture={handleCanvasContextMenu}
                     >
                       <div className='absolute inset-0'>
-                        <Image data={currentDocument.image} />
+                        <Image
+                          data={currentDocument.image}
+                          dataKey={`${currentDocument.id}-base`}
+                          transition={false}
+                        />
                         <canvas
                           ref={maskDrawing.canvasRef}
                           className='absolute inset-0 z-20'
