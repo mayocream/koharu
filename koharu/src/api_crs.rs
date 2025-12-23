@@ -95,6 +95,25 @@ async fn translate_request(api_state: &ApiState, mut multipart: Multipart) -> Ap
     let working_state: state::AppState = Arc::new(RwLock::new(state::State { documents }));
     let doc_index = 0usize;
 
+    // check llm ready or load the first one
+    if !(operations::llm_ready(api_state.llm()).await?) {
+        let model_id = operations::llm_list(api_state.llm()).first().cloned();
+        if model_id.is_none() {
+            return Err(ApiError::internal("No LLM model available"));
+        }
+        operations::llm_load(api_state.llm(), model_id.unwrap().id).await?;
+
+        tracing::info!("Waiting up to 60 seconds for LLM to be ready...");
+        let mut ready;
+        for _ in 0..60 {
+            tokio::time::sleep(std::time::Duration::from_secs(1)).await;
+            ready = operations::llm_ready(api_state.llm()).await?;
+            if ready {
+                break;
+            }
+        }
+    }
+
     let _ = operations::detect(&working_state, api_state.ml(), doc_index).await?;
     let _ = operations::ocr(&working_state, api_state.ml(), doc_index).await?;
     let _ = operations::inpaint(&working_state, api_state.ml(), doc_index).await?;
