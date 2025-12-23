@@ -17,9 +17,13 @@ use koharu_renderer::renderer::TextShaderEffect;
 use rust_embed::RustEmbed;
 use serde::{Deserialize, Serialize};
 use tokio::net::TcpListener;
-use tower_http::services::{ServeDir, ServeFile};
+use tower_http::{
+    cors::CorsLayer,
+    services::{ServeDir, ServeFile},
+};
 
 use crate::{
+    api_crs,
     app::AppResources,
     llm, ml,
     operations::{self, DocumentInput, ExportedDocument, InpaintRegion},
@@ -29,24 +33,24 @@ use crate::{
 };
 
 #[derive(Clone)]
-struct ApiState {
+pub(crate) struct ApiState {
     resources: AppResources,
 }
 
 impl ApiState {
-    fn app_state(&self) -> &AppState {
+    pub(crate) fn app_state(&self) -> &AppState {
         &self.resources.state
     }
 
-    fn ml(&self) -> &Arc<ml::Model> {
+    pub(crate) fn ml(&self) -> &Arc<ml::Model> {
         &self.resources.ml
     }
 
-    fn llm(&self) -> &Arc<llm::Model> {
+    pub(crate) fn llm(&self) -> &Arc<llm::Model> {
         &self.resources.llm
     }
 
-    fn renderer(&self) -> &Arc<Renderer> {
+    pub(crate) fn renderer(&self) -> &Arc<Renderer> {
         &self.resources.renderer
     }
 }
@@ -57,20 +61,20 @@ struct ErrorResponse {
 }
 
 #[derive(Debug)]
-struct ApiError {
-    status: StatusCode,
-    message: String,
+pub(crate) struct ApiError {
+    pub(crate) status: StatusCode,
+    pub(crate) message: String,
 }
 
 impl ApiError {
-    fn bad_request(message: impl Into<String>) -> Self {
+    pub(crate) fn bad_request(message: impl Into<String>) -> Self {
         Self {
             status: StatusCode::BAD_REQUEST,
             message: message.into(),
         }
     }
 
-    fn internal(message: impl Into<String>) -> Self {
+    pub(crate) fn internal(message: impl Into<String>) -> Self {
         Self {
             status: StatusCode::INTERNAL_SERVER_ERROR,
             message: message.into(),
@@ -108,7 +112,7 @@ impl IntoResponse for ApiError {
     }
 }
 
-type ApiResult<T> = std::result::Result<T, ApiError>;
+pub(crate) type ApiResult<T> = std::result::Result<T, ApiError>;
 
 #[derive(Debug, Deserialize)]
 struct IndexPayload {
@@ -203,8 +207,13 @@ pub async fn serve(bind: String, resources: AppResources) -> Result<()> {
         .route("/api/llm_offload", post(llm_offload))
         .route("/api/llm_ready", get(llm_ready).post(llm_ready))
         .route("/api/llm_generate", post(llm_generate))
+        .route(
+            "/translate/with-form/image/stream",
+            post(api_crs::translate_with_form_image_stream),
+        )
         .with_state(state)
-        .layer(DefaultBodyLimit::max(1024 * 1024 * 1024));
+        .layer(DefaultBodyLimit::max(1024 * 1024 * 1024))
+        .layer(CorsLayer::permissive());
 
     router = match ui_dist {
         UiDist::Fs(path) => router.nest_service(

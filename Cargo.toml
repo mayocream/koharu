@@ -105,7 +105,7 @@ wgpu = "28.0"
 etagere = "0.2"
 bytemuck = { version = "1.21", features = ["derive"] }
 axum = { version = "0.7", features = ["json", "multipart"] }
-tower-http = { version = "0.6", features = ["fs"] }
+tower-http = { version = "0.6", features = ["fs", "cors"] }
 rust-embed = "8.5"
 
 [patch.crates-io]

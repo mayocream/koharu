@@ -1,4 +1,5 @@
 pub mod api;
+pub mod api_crs;
 pub mod app;
 pub mod command;
 pub mod image;
