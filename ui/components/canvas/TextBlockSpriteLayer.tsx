@@ -8,12 +8,14 @@ type TextBlockSpriteLayerProps = {
   blocks?: TextBlock[]
   scale: number
   visible: boolean
+  style?: React.CSSProperties
 }
 
 export function TextBlockSpriteLayer({
   blocks,
   scale,
   visible,
+  style,
 }: TextBlockSpriteLayerProps) {
   const renderBlocks = blocks ?? []
 
@@ -22,6 +24,7 @@ export function TextBlockSpriteLayer({
       data-text-sprite-layer
       aria-hidden
       style={{
+        ...style,
         position: 'absolute',
         inset: 0,
         width: '100%',

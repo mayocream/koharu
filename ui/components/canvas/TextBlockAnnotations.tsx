@@ -9,11 +9,13 @@ import { useTextBlocks } from '@/hooks/useTextBlocks'
 type TextBlockAnnotationsProps = {
   selectedIndex?: number
   onSelect: (index?: number) => void
+  style?: React.CSSProperties
 }
 
 export function TextBlockAnnotations({
   selectedIndex,
   onSelect,
+  style,
 }: TextBlockAnnotationsProps) {
   const { textBlocks, replaceBlock, removeBlock } = useTextBlocks()
   const mode = useAppStore((state) => state.mode)
@@ -45,7 +47,10 @@ export function TextBlockAnnotations({
     <div
       className='absolute inset-0'
       data-annotation-layer
-      style={{ pointerEvents: interactive ? 'auto' : 'none' }}
+      style={{
+        ...style,
+        pointerEvents: interactive ? 'auto' : 'none',
+      }}
     >
       {textBlocks.map((block, index) => (
         <TextBlockAnnotation

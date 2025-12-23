@@ -355,23 +355,10 @@ export function Workspace() {
                             height: '100%',
                             opacity: brushLayerDisplay.visible ? 1 : 0,
                             pointerEvents: 'none',
-                            zIndex: 12,
+                            zIndex: 10,
                             transition: 'opacity 120ms ease',
                           }}
                         />
-                        {showTextBlocksOverlay && (
-                          <TextBlockSpriteLayer
-                            blocks={currentDocument?.textBlocks}
-                            scale={scaleRatio}
-                            visible={!showRenderedImage}
-                          />
-                        )}
-                        {currentDocument?.rendered && showRenderedImage && (
-                          <Image
-                            data={currentDocument?.rendered}
-                            style={{ zIndex: 30 }}
-                          />
-                        )}
                         <canvas
                           ref={brushDrawing.canvasRef}
                           className='absolute inset-0'
@@ -382,7 +369,7 @@ export function Workspace() {
                             pointerEvents: brushPointerEnabled
                               ? 'auto'
                               : 'none',
-                            zIndex: 15,
+                            zIndex: 20,
                             transition: 'opacity 120ms ease',
                           }}
                           onPointerDown={brushDrawing.handlePointerDown}
@@ -390,13 +377,28 @@ export function Workspace() {
                           onPointerUp={brushDrawing.handlePointerUp}
                           onPointerLeave={brushDrawing.handlePointerLeave}
                         />
+                        {showTextBlocksOverlay && (
+                          <TextBlockSpriteLayer
+                            blocks={currentDocument?.textBlocks}
+                            scale={scaleRatio}
+                            visible={!showRenderedImage}
+                            style={{ zIndex: 30 }}
+                          />
+                        )}
+                        {showTextBlocksOverlay && (
+                          <TextBlockAnnotations
+                            selectedIndex={selectedBlockIndex}
+                            onSelect={setSelectedBlockIndex}
+                            style={{ zIndex: 30 }}
+                          />
+                        )}
+                        {currentDocument?.rendered && showRenderedImage && (
+                          <Image
+                            data={currentDocument?.rendered}
+                            style={{ zIndex: 40 }}
+                          />
+                        )}
                       </div>
-                      {showTextBlocksOverlay && !showRenderedImage && (
-                        <TextBlockAnnotations
-                          selectedIndex={selectedBlockIndex}
-                          onSelect={setSelectedBlockIndex}
-                        />
-                      )}
                       {draftBlock && (
                         <div
                           className='pointer-events-none absolute rounded border-2 border-dashed border-rose-500 bg-rose-500/10'
