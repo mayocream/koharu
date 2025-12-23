@@ -139,7 +139,7 @@ export function TooltipButton({
   disabled,
 }: TooltipButtonProps) {
   return (
-    <Tooltip.Root delayDuration={0}>
+    <Tooltip.Root delayDuration={1000}>
       <Tooltip.Trigger asChild>
         <button
           type='button'
@@ -151,7 +151,8 @@ export function TooltipButton({
         </button>
       </Tooltip.Trigger>
       <Tooltip.Content
-        className='rounded bg-black px-2 py-1 text-xs text-white'
+        className='rounded bg-black px-2 py-1 text-xs text-white opacity-25'
+        side='bottom'
         sideOffset={6}
       >
         {tooltip}
