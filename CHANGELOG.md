@@ -1,3 +1,18 @@
+## [0.25.0] - 2025-12-23
+
+### 🚀 Features
+
+- Add comic read script API
+
+### 🐛 Bug Fixes
+
+- Lint
+- Crs api load llm on first request
+
+### ⚙️ Miscellaneous Tasks
+
+- Reorganize code
+- Release 0.25.0
 ## [0.24.0] - 2025-12-23
 
 ### 🚀 Features
