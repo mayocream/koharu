@@ -210,12 +210,12 @@ fn load_documents_from_path(path: PathBuf) -> Result<Vec<Document>> {
     Ok(docs)
 }
 
-fn initialize(headless: bool, debug_flag: bool) -> Result<()> {
+fn initialize(headless: bool, _debug_flag: bool) -> Result<()> {
     #[cfg(target_os = "windows")]
     {
         windows_magics::enable_ansi_support().ok();
         // hide console window in release mode and not headless
-        if headless || debug_flag {
+        if headless || _debug_flag {
             windows_magics::create_console_window();
         }
     }
@@ -266,14 +266,14 @@ async fn prefetch() -> Result<()> {
     Ok(())
 }
 
-async fn build_resources(use_cpu: bool, register_file_assoc: bool) -> Result<AppResources> {
+async fn build_resources(use_cpu: bool, _register_file_assoc: bool) -> Result<AppResources> {
     if cuda_is_available() {
         ensure_dylibs(LIB_ROOT.to_path_buf()).await?;
         preload_dylibs(LIB_ROOT.to_path_buf())?;
 
         #[cfg(target_os = "windows")]
         {
-            if register_file_assoc && let Err(err) = windows_magics::register_khr() {
+            if _register_file_assoc && let Err(err) = windows_magics::register_khr() {
                 warn!(?err, "Failed to register .khr file association");
             }
 
