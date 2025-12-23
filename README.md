@@ -22,6 +22,32 @@ Under the hood, Koharu uses [candle](https://github.com/huggingface/candle) for 
 - LLM-powered translation
 - Vertical text layout for CJK languages
 
+## Usage
+
+### Hot keys
+
+- <kbd>Ctrl</kbd> + Mouse Wheel: Zoom in/out
+- <kbd>Ctrl</kbd> + Drag: Pan the canvas
+- <kbd>Del</kbd>: Delete selected text block
+
+### Headless Mode
+
+Koharu can be run in headless mode via command line, if you want to access it remotely or integrate it with [ComicReadScript](https://github.com/hymbz/ComicReadScript).
+
+```bash
+# macOS / Linux
+koharu -b 0.0.0.0:5003
+# Windows
+koharu.exe -b 0.0.0.0:5003
+```
+
+You can now access Koharu Web UI at `http://<your-server-ip>:5003`, or use directly in ComicReadScript.
+
+### File association
+
+On Windows, Koharu automatically associates `.khr` files, so you can open them by double-clicking. The `.khr` files can also be opened
+from as picture to view the thumbnails of the contained images.
+
 ## GPU acceleration
 
 CUDA and Metal are supported for GPU acceleration, significantly improving performance on supported hardware.
@@ -42,6 +68,17 @@ Please make sure your GPU is supported by checking the [CUDA GPU Compute Capabil
 
 Koharu supports Metal for GPU acceleration on macOS with Apple Silicon (M1, M2, etc.). This allows Koharu to run efficiently on a wide range of Apple devices.
 
+### CPU fallback
+
+You can always force Koharu to use CPU for inference:
+
+```bash
+# macOS / Linux
+koharu --cpu
+# Windows
+koharu.exe --cpu
+```
+
 ## AI Models
 
 Koharu relies on a mixin of computer vision and natural language processing models to perform its tasks.
@@ -53,6 +90,7 @@ Koharu uses several pre-trained models for different tasks:
 - [comic-text-detector](https://github.com/dmMaze/comic-text-detector)
 - [manga-ocr](https://github.com/kha-white/manga-ocr)
 - [AnimeMangaInpainting](https://huggingface.co/dreMaz/AnimeMangaInpainting)
+- [YuzuMarker.FontDetection](https://github.com/JeffersonQin/YuzuMarker.FontDetection)
 
 The models will be automatically downloaded when you run Koharu for the first time. Windows user can download the `Koharu-win-CUDA-bundled.7z` release package to get those models pre-bundled.
 
@@ -71,6 +109,12 @@ For translating to Chinese:
 
 - [sakura-galtransl-7b-v3.7](https://huggingface.co/SakuraLLM/Sakura-GalTransl-7B-v3.7): ~6.3 GB and fits on 8 GB VRAM, good balance of quality and speed.
 - [sakura-1.5b-qwen2.5-v1.0](https://huggingface.co/shing3232/Sakura-1.5B-Qwen2.5-v1.0-GGUF-IMX): lightweight (≈1.5B, Q5KS); fits on mid-range GPUs (4–6 GB VRAM) or CPU-only setups with moderate RAM, faster than 7B/8B while keeping Qwen-style tokenizer behavior.
+
+For other languages, you may use:
+
+- [hunyuan-7b-mt-v1.0](https://huggingface.co/Mungert/Hunyuan-MT-7B-GGUF): ~6.3GB and fits on 8 GB VRAM, decent multi-language translation quality.
+
+Also, OpenAI compatible endpoints are supported if you have access to those services.
 
 LLMs will be automatically downloaded on demand when you select a model in the settings. Choose the smallest model that meets your quality needs if you are memory-bound; prefer the 7B/8B variants when you have sufficient VRAM/RAM for better translations.
 
