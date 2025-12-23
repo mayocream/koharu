@@ -3,8 +3,7 @@
 import { useEffect, type ReactNode } from 'react'
 import { I18nextProvider } from 'react-i18next'
 import { Tooltip } from 'radix-ui'
-import { invoke } from '@tauri-apps/api/core'
-import { listen } from '@tauri-apps/api/event'
+import { invoke, listen } from '@/lib/backend'
 import i18n, {
   getPreferredLocale,
   locales,

@@ -4,7 +4,7 @@ import { useEffect, useRef, useState } from 'react'
 import type React from 'react'
 import { ScrollArea, ContextMenu } from 'radix-ui'
 import { useTranslation } from 'react-i18next'
-import { listen } from '@tauri-apps/api/event'
+import { listen } from '@/lib/backend'
 import { Image } from '@/components/Image'
 import { useAppStore } from '@/lib/store'
 import {

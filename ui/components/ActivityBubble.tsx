@@ -1,7 +1,7 @@
 'use client'
 
 import { useEffect, useState, type ReactNode } from 'react'
-import { listen } from '@tauri-apps/api/event'
+import { listen } from '@/lib/backend'
 import { useTranslation } from 'react-i18next'
 import {
   applyAvailableUpdate,
@@ -363,7 +363,7 @@ export function ActivityBubble() {
   if (!update && !operation) return null
 
   return (
-    <div className='pointer-events-auto fixed right-6 bottom-6 z-40 flex w-80 max-w-[calc(100%-1.5rem)] flex-col gap-3'>
+    <div className='pointer-events-auto fixed right-6 bottom-6 z-100 flex w-80 max-w-[calc(100%-1.5rem)] flex-col gap-3'>
       {operation ? (
         <OperationCard operation={operation} onCancel={cancelOperation} t={t} />
       ) : null}

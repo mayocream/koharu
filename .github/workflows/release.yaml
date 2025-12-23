@@ -55,10 +55,11 @@ jobs:
         run: |
           7z x Releases/Koharu-win-Portable.zip -obundled-artifacts
           cd bundled-artifacts
+          cp ../scripts/start_headless.bat ./start_headless.bat
           ./current/koharu.exe -d
           echo "Creating archive, check back in 20 years later"
           # skip blobs, let 7z copy the resolved symlink instead; and use spf to strip leading folder
-          7z a ../Releases/Koharu-win-CUDA-Bundled.7z -x!models/*/blobs '-x!*.log' * .portable
+          7z a ../Releases/Koharu-win-CUDA-Bundled.7z -x!models/*/blobs '-x!*.log' * .portable start_headless.bat
 
       # upload Releases/Koharu-win-Bundled.zip to release artifacts
       - name: Upload Bundled Artifacts

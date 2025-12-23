@@ -92,6 +92,7 @@ windows = { version = "0.62", features = [
     "Win32",
     "Win32_System",
     "Win32_System_Console",
+    "Win32_UI_WindowsAndMessaging",
 ] }
 windows-sys = "0.61"
 winreg = "0.55"

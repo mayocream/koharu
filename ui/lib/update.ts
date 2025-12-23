@@ -1,6 +1,6 @@
 'use client'
 
-import { invoke } from '@tauri-apps/api/core'
+import { invoke } from '@/lib/backend'
 
 export type AvailableUpdate = {
   version: string

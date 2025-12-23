@@ -1,9 +1,11 @@
+pub mod api;
 pub mod app;
 pub mod command;
 pub mod image;
 pub mod khr;
 pub mod llm;
 pub mod ml;
+pub mod operations;
 pub mod renderer;
 pub mod result;
 pub mod state;

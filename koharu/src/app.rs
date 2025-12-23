@@ -12,11 +12,9 @@ use tracing::warn;
 use tracing_subscriber::fmt::format::FmtSpan;
 
 use crate::{
-    command,
-    khr::{deserialize_khr, has_khr_magic},
-    llm, ml,
+    api, command, llm, ml, operations,
     renderer::Renderer,
-    state::{Document, State},
+    state::{AppState, Document, State},
     update,
 };
 
@@ -46,36 +44,22 @@ fn resolve_app_root() -> PathBuf {
 }
 
 #[cfg(target_os = "windows")]
-mod windows_ansi {
-    use windows::Win32::Foundation::HANDLE;
-    use windows::Win32::System::Console::ENABLE_VIRTUAL_TERMINAL_PROCESSING;
-    use windows::Win32::System::Console::GetConsoleMode;
-    use windows::Win32::System::Console::GetStdHandle;
-    use windows::Win32::System::Console::STD_OUTPUT_HANDLE;
-    use windows::Win32::System::Console::SetConsoleMode;
-    use windows::core::Result;
-
-    pub fn enable_ansi_support() -> Result<()> {
-        unsafe {
-            let handle = GetStdHandle(STD_OUTPUT_HANDLE)?;
-            if handle == HANDLE::default() {
-                println!("Failed to get console handle");
-                return Ok(());
-            }
-
-            let mut mode = std::mem::zeroed();
-            GetConsoleMode(handle, &mut mode)?;
-            SetConsoleMode(handle, mode | ENABLE_VIRTUAL_TERMINAL_PROCESSING)?;
-            Ok(())
-        }
-    }
-}
-
-#[cfg(target_os = "windows")]
-mod windows_file_assoc {
+mod windows_magics {
     use anyhow::Result;
     use winreg::RegKey;
     use winreg::enums::HKEY_CURRENT_USER;
+
+    use windows::Win32::Foundation::HANDLE;
+    use windows::Win32::System::Console::{
+        ATTACH_PARENT_PROCESS, AllocConsole, AttachConsole, ENABLE_VIRTUAL_TERMINAL_PROCESSING,
+        GetConsoleMode, GetStdHandle, STD_OUTPUT_HANDLE, SetConsoleMode,
+    };
+
+    use std::os::windows::ffi::OsStrExt;
+    use windows_sys::Win32::System::LibraryLoader::{
+        AddDllDirectory, LOAD_LIBRARY_SEARCH_SYSTEM32, LOAD_LIBRARY_SEARCH_USER_DIRS,
+        SetDefaultDllDirectories,
+    };
 
     const CLASS_NAME: &str = "Koharu.khr";
     // const THUMBNAIL_PROVIDER: &str = "{e357fccd-a995-4576-b01f-234630154e96}";
@@ -114,11 +98,68 @@ mod windows_file_assoc {
 
         Ok(())
     }
+
+    pub fn enable_ansi_support() -> Result<()> {
+        unsafe {
+            let handle = GetStdHandle(STD_OUTPUT_HANDLE)?;
+            if handle == HANDLE::default() {
+                println!("Failed to get console handle");
+                return Ok(());
+            }
+
+            let mut mode = std::mem::zeroed();
+            GetConsoleMode(handle, &mut mode)?;
+            SetConsoleMode(handle, mode | ENABLE_VIRTUAL_TERMINAL_PROCESSING)?;
+            Ok(())
+        }
+    }
+
+    pub fn create_console_window() {
+        unsafe {
+            if AttachConsole(ATTACH_PARENT_PROCESS).is_err() {
+                let _ = AllocConsole();
+            }
+        }
+    }
+
+    pub fn add_dll_directory(path: &std::path::Path) -> Result<()> {
+        let wide = path
+            .as_os_str()
+            .encode_wide()
+            .chain(std::iter::once(0))
+            .collect::<Vec<_>>();
+        unsafe {
+            if SetDefaultDllDirectories(
+                LOAD_LIBRARY_SEARCH_USER_DIRS | LOAD_LIBRARY_SEARCH_SYSTEM32,
+            ) == 0
+            {
+                anyhow::bail!(
+                    "Failed to set default DLL directories: {}",
+                    std::io::Error::last_os_error()
+                );
+            }
+            if AddDllDirectory(wide.as_ptr()).is_null() {
+                anyhow::bail!(
+                    "Failed to add DLL directory: {}",
+                    std::io::Error::last_os_error()
+                );
+            }
+            Ok(())
+        }
+    }
 }
 
 static APP_ROOT: Lazy<PathBuf> = Lazy::new(resolve_app_root);
 static LIB_ROOT: Lazy<PathBuf> = Lazy::new(|| APP_ROOT.join("libs"));
 static MODEL_ROOT: Lazy<PathBuf> = Lazy::new(|| APP_ROOT.join("models"));
+
+#[derive(Clone)]
+pub struct AppResources {
+    pub state: AppState,
+    pub ml: Arc<ml::Model>,
+    pub llm: Arc<llm::Model>,
+    pub renderer: Arc<Renderer>,
+}
 
 #[derive(Parser)]
 #[command(version = crate::version::APP_VERSION, about)]
@@ -137,6 +178,19 @@ struct Cli {
     )]
     cpu: bool,
     #[arg(
+        short = 'b',
+        long = "bind",
+        value_name = "BIND",
+        help = "Run in headless mode and bind the HTTP server to this address, e.g. 127.0.0.1:23333"
+    )]
+    bind: Option<String>,
+    #[arg(
+        long,
+        help = "Enable debug mode with console output",
+        default_value_t = false
+    )]
+    debug: bool,
+    #[arg(
         value_name = "PATH",
         value_hint = ValueHint::FilePath,
         help = "Open file on startup"
@@ -150,19 +204,20 @@ fn load_documents_from_path(path: PathBuf) -> Result<Vec<Document>> {
     }
 
     let bytes = std::fs::read(&path)?;
-
-    if has_khr_magic(&bytes) {
-        return deserialize_khr(&bytes)
-            .map_err(|err| anyhow::anyhow!("Failed to load documents: {err}"));
-    }
-
-    Ok(vec![Document::open(path)?])
+    let inputs = vec![operations::DocumentInput { path, bytes }];
+    let docs =
+        operations::load_documents(inputs).map_err(|err| anyhow::anyhow!(err.to_string()))?;
+    Ok(docs)
 }
 
-fn initialize() -> Result<()> {
+fn initialize(headless: bool, debug_flag: bool) -> Result<()> {
     #[cfg(target_os = "windows")]
     {
-        windows_ansi::enable_ansi_support().ok();
+        windows_magics::enable_ansi_support().ok();
+        // hide console window in release mode and not headless
+        if headless || debug_flag {
+            windows_magics::create_console_window();
+        }
     }
 
     tracing_subscriber::fmt()
@@ -177,15 +232,21 @@ fn initialize() -> Result<()> {
     // hook model cache dir
     koharu_ml::set_cache_dir(MODEL_ROOT.to_path_buf())?;
 
-    std::panic::set_hook(Box::new(|info| {
-        let msg = info.to_string();
-        MessageDialog::new()
-            .set_level(rfd::MessageLevel::Error)
-            .set_title("Panic")
-            .set_description(&msg)
-            .show();
-        std::process::exit(1);
-    }));
+    if headless {
+        std::panic::set_hook(Box::new(|info| {
+            eprintln!("panic: {info}");
+        }));
+    } else {
+        std::panic::set_hook(Box::new(|info| {
+            let msg = info.to_string();
+            MessageDialog::new()
+                .set_level(rfd::MessageLevel::Error)
+                .set_title("Panic")
+                .set_description(&msg)
+                .show();
+            std::process::exit(1);
+        }));
+    }
 
     #[cfg(feature = "bundle")]
     {
@@ -205,52 +266,18 @@ async fn prefetch() -> Result<()> {
     Ok(())
 }
 
-async fn setup(
-    app: tauri::AppHandle,
-    use_cpu: bool,
-    startup_document: Option<PathBuf>,
-) -> Result<()> {
-    // Preload dynamic libraries only if CUDA is available.
+async fn build_resources(use_cpu: bool, register_file_assoc: bool) -> Result<AppResources> {
     if cuda_is_available() {
         ensure_dylibs(LIB_ROOT.to_path_buf()).await?;
         preload_dylibs(LIB_ROOT.to_path_buf())?;
 
-        // Only search DLLs in the custom directory on Windows, this avoids potential
-        // conflicts with existing DLLs in the system PATH.
         #[cfg(target_os = "windows")]
         {
-            if let Err(err) = windows_file_assoc::register_khr() {
+            if register_file_assoc && let Err(err) = windows_magics::register_khr() {
                 warn!(?err, "Failed to register .khr file association");
             }
 
-            use std::os::windows::ffi::OsStrExt;
-            use windows_sys::Win32::System::LibraryLoader::{
-                AddDllDirectory, LOAD_LIBRARY_SEARCH_SYSTEM32, LOAD_LIBRARY_SEARCH_USER_DIRS,
-                SetDefaultDllDirectories,
-            };
-
-            let wide = LIB_ROOT
-                .as_os_str()
-                .encode_wide()
-                .chain(std::iter::once(0))
-                .collect::<Vec<_>>();
-            unsafe {
-                if SetDefaultDllDirectories(
-                    LOAD_LIBRARY_SEARCH_USER_DIRS | LOAD_LIBRARY_SEARCH_SYSTEM32,
-                ) == 0
-                {
-                    anyhow::bail!(
-                        "Failed to set default DLL directories: {}",
-                        std::io::Error::last_os_error()
-                    );
-                }
-                if AddDllDirectory(wide.as_ptr()).is_null() {
-                    anyhow::bail!(
-                        "Failed to add DLL directory: {}",
-                        std::io::Error::last_os_error()
-                    );
-                }
-            }
+            windows_magics::add_dll_directory(&LIB_ROOT)?;
         }
 
         tracing::info!(
@@ -264,9 +291,25 @@ async fn setup(
     let renderer = Arc::new(Renderer::new()?);
     let state = Arc::new(RwLock::new(State::default()));
 
-    app.manage(ml);
-    app.manage(llm);
-    app.manage(renderer);
+    Ok(AppResources {
+        state,
+        ml,
+        llm,
+        renderer,
+    })
+}
+
+async fn setup(
+    app: tauri::AppHandle,
+    use_cpu: bool,
+    startup_document: Option<PathBuf>,
+) -> Result<()> {
+    let resources = build_resources(use_cpu, true).await?;
+    let state = resources.state.clone();
+
+    app.manage(resources.ml);
+    app.manage(resources.llm);
+    app.manage(resources.renderer);
 
     app.get_webview_window("splashscreen").unwrap().close()?;
     let main_window = app.get_webview_window("main").unwrap();
@@ -275,10 +318,7 @@ async fn setup(
     if let Some(path) = startup_document {
         match load_documents_from_path(path) {
             Ok(documents) => {
-                {
-                    let mut guard = state.write().await;
-                    guard.documents = documents.clone();
-                }
+                let _ = operations::set_documents(&state, documents.clone()).await;
                 if let Err(err) = main_window.emit("documents:opened", &documents) {
                     warn!(?err, "Failed to emit documents:opened event");
                 }
@@ -300,16 +340,36 @@ async fn setup(
 }
 
 pub async fn run() -> Result<()> {
-    initialize()?;
-
     let Cli {
         download,
         cpu,
         path,
+        bind,
+        debug,
     } = Cli::parse();
+
+    initialize(bind.is_some(), debug)?;
 
     if download {
         prefetch().await?;
+        return Ok(());
+    }
+
+    if let Some(bind_addr) = bind {
+        let resources = build_resources(cpu, false).await?;
+
+        if let Some(path) = path {
+            match load_documents_from_path(path.clone()) {
+                Ok(documents) => {
+                    if let Err(err) = operations::set_documents(&resources.state, documents).await {
+                        warn!(?err, "Failed to store startup documents");
+                    }
+                }
+                Err(err) => warn!(?err, "Failed to open startup document"),
+            }
+        }
+
+        api::serve(bind_addr, resources).await?;
         return Ok(());
     }
 

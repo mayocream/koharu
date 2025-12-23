@@ -81,11 +81,22 @@ impl Document {
     pub fn open(path: PathBuf) -> anyhow::Result<Self> {
         let bytes = std::fs::read(&path)?;
 
+        let documents = Self::from_bytes(path, bytes)?;
+        documents
+            .into_iter()
+            .next()
+            .ok_or_else(|| anyhow!("No document found in file"))
+    }
+
+    pub fn from_bytes(path: impl Into<PathBuf>, bytes: Vec<u8>) -> anyhow::Result<Vec<Self>> {
+        let path = path.into();
+
         if has_khr_magic(&bytes) {
-            return Self::khr(path, bytes);
+            return deserialize_khr(&bytes)
+                .map_err(|err| anyhow!("Failed to load documents: {err}"));
         }
 
-        Self::image(path, bytes)
+        Ok(vec![Self::image(path, bytes)?])
     }
 
     fn image(path: PathBuf, bytes: Vec<u8>) -> anyhow::Result<Self> {
@@ -106,13 +117,6 @@ impl Document {
             height,
             ..Default::default()
         })
-    }
-
-    fn khr(_path: PathBuf, bytes: Vec<u8>) -> anyhow::Result<Self> {
-        let docs = deserialize_khr(&bytes)?;
-        docs.into_iter()
-            .next()
-            .ok_or_else(|| anyhow!("No document found in KHR file"))
     }
 }
 

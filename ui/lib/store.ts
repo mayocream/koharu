@@ -1,8 +1,7 @@
 'use client'
 
 import { create } from 'zustand'
-import { invoke } from '@tauri-apps/api/core'
-import { getCurrentWindow, ProgressBarStatus } from '@tauri-apps/api/window'
+import { invoke, getCurrentWindow, ProgressBarStatus } from '@/lib/backend'
 import {
   Document,
   InpaintRegion,
@@ -143,6 +142,8 @@ const pickLanguage = (
   if (preferred && languages.includes(preferred)) return preferred
   return languages[0]
 }
+
+let llmReadyCheckInFlight: Promise<boolean> | null = null
 
 // A mixin of application state, ui state and actions.
 type AppState = OperationSlice & {
@@ -639,10 +640,17 @@ export const useAppStore = create<AppState>((set, get) => {
     },
     llmCheckReady: async () => {
       if (syncOpenAIReady()) return
+      if (get().llmReady) return
+      if (llmReadyCheckInFlight) {
+        await llmReadyCheckInFlight
+        return
+      }
       try {
-        const ready = await invoke<boolean>('llm_ready')
+        llmReadyCheckInFlight = invoke<boolean>('llm_ready')
+        const ready = await llmReadyCheckInFlight
         set({ llmReady: ready })
       } catch (_) {}
+      llmReadyCheckInFlight = null
     },
     llmGenerate: async (_: any, index?: number, textBlockIndex?: number) => {
       index = index ?? get().currentDocumentIndex
