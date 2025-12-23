@@ -1,3 +1,17 @@
+## [0.25.1] - 2025-12-23
+
+### 🐛 Bug Fixes
+
+- Rebase error
+- Adjust tooltip
+
+### 📚 Documentation
+
+- Update readme
+
+### ⚙️ Miscellaneous Tasks
+
+- Release 0.25.1
 ## [0.25.0] - 2025-12-23
 
 ### 🚀 Features
