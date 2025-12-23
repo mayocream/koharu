@@ -18,13 +18,17 @@ use crate::{
 pub struct Renderer {
     fontbook: Arc<Mutex<FontBook>>,
     renderer: WgpuRenderer,
+    symbol_fallbacks: Vec<Font>,
 }
 
 impl Renderer {
     pub fn new() -> Result<Self> {
+        let mut fontbook = FontBook::new();
+        let symbol_fallbacks = load_symbol_fallbacks(&mut fontbook);
         Ok(Self {
-            fontbook: Arc::new(Mutex::new(FontBook::new())),
+            fontbook: Arc::new(Mutex::new(fontbook)),
             renderer: WgpuRenderer::new()?,
+            symbol_fallbacks,
         })
     }
 
@@ -115,6 +119,7 @@ impl Renderer {
             .unwrap_or([0, 0, 0, 255]);
         let writing_mode = writing_mode(text_block);
         let mut layout = TextLayout::new(&font, None)
+            .with_fallback_fonts(&self.symbol_fallbacks)
             .with_max_height(text_block.height)
             .with_max_width(text_block.width)
             .with_writing_mode(writing_mode)
@@ -126,7 +131,6 @@ impl Renderer {
         let rendered = self.renderer.render(
             &layout,
             writing_mode,
-            &font,
             &RenderOptions {
                 font_size: layout.font_size,
                 color,
@@ -190,7 +194,7 @@ fn is_latin_only(text: &str) -> bool {
     })
 }
 
-fn center_layout_horizontally(layout: &mut LayoutRun, container_width: f32) {
+fn center_layout_horizontally(layout: &mut LayoutRun<'_>, container_width: f32) {
     if !container_width.is_finite() || container_width <= 0.0 {
         return;
     }
@@ -206,4 +210,26 @@ fn center_layout_horizontally(layout: &mut LayoutRun, container_width: f32) {
         }
     }
     layout.width = target_width;
+}
+
+fn load_symbol_fallbacks(fontbook: &mut FontBook) -> Vec<Font> {
+    let props = Properties::default();
+    let candidates = [
+        "Segoe UI Symbol",
+        "Segoe UI Emoji",
+        "Noto Sans Symbols",
+        "Noto Sans Symbols2",
+        "Noto Color Emoji",
+        "Apple Color Emoji",
+        "Apple Symbols",
+        "Symbola",
+        "Arial Unicode MS",
+    ];
+    let mut fonts = Vec::new();
+    for name in candidates {
+        if let Ok(font) = fontbook.query(&[FamilyName::Title(name.to_string())], &props) {
+            fonts.push(font);
+        }
+    }
+    fonts
 }

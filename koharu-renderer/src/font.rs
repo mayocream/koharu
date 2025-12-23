@@ -65,7 +65,7 @@ impl Properties {
 /// A loaded font ready for shaping and rendering.
 ///
 /// The font data is reference-counted for cheap cloning.
-#[derive(Clone)]
+#[derive(Clone, Debug)]
 pub struct Font {
     /// Font data stored in a shared blob for cheap cloning.
     blob: Blob<u8>,
@@ -101,6 +101,44 @@ impl Font {
         })?;
         Ok(Arc::clone(font))
     }
+
+    /// Returns true if the font contains a glyph for the given character.
+    pub fn has_glyph(&self, character: char) -> bool {
+        self.fontdue()
+            .map(|font| font.has_glyph(character))
+            .unwrap_or(false)
+    }
+}
+
+pub(crate) fn font_key(font: &Font) -> usize {
+    font as *const Font as usize
+}
+
+pub(crate) fn select_font(cluster: &str, fonts: &[&Font]) -> usize {
+    let mut chars = cluster.chars();
+    let Some(ch) = chars.next() else {
+        return 0;
+    };
+
+    if cluster.len() == ch.len_utf8() {
+        for (index, font) in fonts.iter().enumerate() {
+            if font.has_glyph(ch) {
+                return index;
+            }
+        }
+        return 0;
+    }
+
+    'fonts: for (index, font) in fonts.iter().enumerate() {
+        for ch in cluster.chars() {
+            if !font.has_glyph(ch) {
+                continue 'fonts;
+            }
+        }
+        return index;
+    }
+
+    0
 }
 
 #[derive(Clone, Debug, PartialEq, Eq, Hash)]
