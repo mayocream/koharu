@@ -2,16 +2,18 @@ use anyhow::Result;
 use harfrust::{Direction, Feature, ShaperData, UnicodeBuffer};
 use skrifa::raw::TableProvider;
 
-use crate::font::Font;
+use crate::font::{Font, select_font};
 
 /// A glyph with positioning information.
 /// clone of harfrust::PositionedGlyph with glyph_id and cluster
 #[derive(Debug, Clone)]
-pub struct PositionedGlyph {
+pub struct PositionedGlyph<'a> {
     /// The glyph ID as per the font's glyph set.
     pub glyph_id: u32,
     /// The cluster index in the original text that this glyph corresponds to.
     pub cluster: u32,
+    /// Font used to shape this glyph.
+    pub font: &'a Font,
     /// How much the line advances after drawing this glyph when setting text in
     /// horizontal direction.
     pub x_advance: f32,
@@ -28,8 +30,8 @@ pub struct PositionedGlyph {
 
 /// A shaped run of text, containing positioned glyphs and overall advance.
 #[derive(Debug, Clone)]
-pub struct ShapedRun {
-    pub glyphs: Vec<PositionedGlyph>,
+pub struct ShapedRun<'a> {
+    pub glyphs: Vec<PositionedGlyph<'a>>,
     pub x_advance: f32,
     pub y_advance: f32,
 }
@@ -53,7 +55,12 @@ impl TextShaper {
         Self
     }
 
-    pub fn shape(&self, text: &str, font: &Font, options: &ShapingOptions) -> Result<ShapedRun> {
+    pub fn shape<'a>(
+        &self,
+        text: &str,
+        font: &'a Font,
+        options: &ShapingOptions,
+    ) -> Result<ShapedRun<'a>> {
         let font_ref = font.harfrust()?;
 
         let mut buffer = UnicodeBuffer::new();
@@ -80,6 +87,7 @@ impl TextShaper {
             positioned_glyphs.push(PositionedGlyph {
                 glyph_id: info.glyph_id,
                 cluster: info.cluster,
+                font,
                 x_offset: (pos.x_offset as f32) * scale,
                 y_offset: (pos.y_offset as f32) * scale,
                 x_advance: (pos.x_advance as f32) * scale,
@@ -98,5 +106,166 @@ impl TextShaper {
                 .map(|p| (p.y_advance as f32) * scale)
                 .sum(),
         })
+    }
+}
+
+pub(crate) fn shape_segment_with_fallbacks<'a>(
+    shaper: &TextShaper,
+    segment: &str,
+    fonts: &[&'a Font],
+    options: &ShapingOptions,
+) -> Result<ShapedRun<'a>> {
+    if segment.is_empty() || fonts.is_empty() {
+        return Ok(ShapedRun {
+            glyphs: Vec::new(),
+            x_advance: 0.0,
+            y_advance: 0.0,
+        });
+    }
+
+    if fonts.len() == 1 {
+        return shaper.shape(segment, fonts[0], options);
+    }
+
+    let mut run_start = 0usize;
+    let mut run_font_idx: Option<usize> = None;
+    let mut combined = ShapedRun {
+        glyphs: Vec::new(),
+        x_advance: 0.0,
+        y_advance: 0.0,
+    };
+
+    for (byte_idx, ch) in segment.char_indices() {
+        let next_idx = byte_idx + ch.len_utf8();
+        let cluster = &segment[byte_idx..next_idx];
+        let font_idx = select_font(cluster, fonts);
+
+        match run_font_idx {
+            Some(current_idx) if current_idx == font_idx => {}
+            Some(current_idx) => {
+                let run_text = &segment[run_start..byte_idx];
+                if !run_text.is_empty() {
+                    let mut run = shaper.shape(run_text, fonts[current_idx], options)?;
+                    for glyph in &mut run.glyphs {
+                        glyph.cluster += run_start as u32;
+                    }
+                    combined.x_advance += run.x_advance;
+                    combined.y_advance += run.y_advance;
+                    combined.glyphs.extend(run.glyphs);
+                }
+                run_start = byte_idx;
+                run_font_idx = Some(font_idx);
+            }
+            None => {
+                run_start = byte_idx;
+                run_font_idx = Some(font_idx);
+            }
+        }
+    }
+
+    if let Some(current_idx) = run_font_idx {
+        let run_text = &segment[run_start..];
+        if !run_text.is_empty() {
+            let mut run = shaper.shape(run_text, fonts[current_idx], options)?;
+            for glyph in &mut run.glyphs {
+                glyph.cluster += run_start as u32;
+            }
+            combined.x_advance += run.x_advance;
+            combined.y_advance += run.y_advance;
+            combined.glyphs.extend(run.glyphs);
+        }
+    }
+
+    Ok(combined)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::font::{FamilyName, FontBook, Properties};
+
+    const PRIMARY_FAMILIES: &[&str] = &[
+        "Arial",
+        "Segoe UI",
+        "Noto Sans",
+        "DejaVu Sans",
+        "Liberation Sans",
+        "Yu Gothic",
+        "MS Gothic",
+        "Times New Roman",
+    ];
+    const FALLBACK_FAMILIES: &[&str] = &[
+        "Segoe UI Symbol",
+        "Segoe UI Emoji",
+        "Noto Sans Symbols",
+        "Noto Sans Symbols2",
+        "Noto Color Emoji",
+        "Apple Color Emoji",
+        "Apple Symbols",
+        "Symbola",
+        "Arial Unicode MS",
+    ];
+    const SYMBOLS: &[char] = &[
+        '\u{1F4A9}',
+        '\u{1F642}',
+        '\u{2665}',
+        '\u{2605}',
+        '\u{2713}',
+        '\u{2603}',
+        '\u{262F}',
+        '\u{2691}',
+        '\u{26A0}',
+    ];
+
+    fn query_font(book: &mut FontBook, name: &str) -> Option<Font> {
+        book.query(
+            &[FamilyName::Title(name.to_string())],
+            &Properties::default(),
+        )
+        .ok()
+    }
+
+    #[test]
+    fn shape_segment_uses_fallback_font() -> Result<()> {
+        let mut book = FontBook::new();
+        let primary = PRIMARY_FAMILIES
+            .iter()
+            .find_map(|name| query_font(&mut book, name))
+            .expect("no primary font available for fallback test");
+
+        let mut chosen = None;
+        for ch in SYMBOLS {
+            if primary.has_glyph(*ch) {
+                continue;
+            }
+            if let Some(fallback) = FALLBACK_FAMILIES.iter().find_map(|name| {
+                let font = query_font(&mut book, name)?;
+                font.has_glyph(*ch).then_some(font)
+            }) {
+                chosen = Some((fallback, *ch));
+                break;
+            }
+        }
+
+        let (fallback, symbol) = chosen.expect("no fallback font with missing primary glyph found");
+
+        let text = symbol.to_string();
+        let shaper = TextShaper::new();
+        let opts = ShapingOptions {
+            direction: harfrust::Direction::LeftToRight,
+            font_size: 16.0,
+            features: &[],
+        };
+        let shaped = shape_segment_with_fallbacks(&shaper, &text, &[&primary, &fallback], &opts)?;
+
+        assert!(!shaped.glyphs.is_empty());
+        assert!(
+            shaped
+                .glyphs
+                .iter()
+                .all(|g| std::ptr::eq(g.font, &fallback))
+        );
+
+        Ok(())
     }
 }

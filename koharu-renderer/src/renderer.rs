@@ -75,9 +75,8 @@ impl WgpuRenderer {
     /// Renders the given layout run to an RGBA image.
     pub fn render(
         &self,
-        layout: &LayoutRun,
+        layout: &LayoutRun<'_>,
         writing_mode: WritingMode,
-        font: &Font,
         opts: &RenderOptions,
     ) -> Result<RgbaImage> {
         let width = (layout.width + opts.padding * 2.0).ceil() as u32;
@@ -86,28 +85,47 @@ impl WgpuRenderer {
             bail!("invalid surface size {width}x{height}");
         }
 
-        let mut glyph_ids = HashSet::new();
+        let mut glyphs_by_font: HashMap<FontKey, FontGlyphs<'_>> = HashMap::new();
         for line in &layout.lines {
             for g in &line.glyphs {
                 if let Ok(gid) = u16::try_from(g.glyph_id) {
-                    glyph_ids.insert(gid);
+                    let key = FontKey::of(g.font);
+                    let entry = glyphs_by_font.entry(key).or_insert_with(|| FontGlyphs {
+                        font: g.font,
+                        glyphs: HashSet::new(),
+                    });
+                    entry.glyphs.insert(gid);
                 }
             }
         }
 
-        if glyph_ids.is_empty() {
+        if glyphs_by_font.is_empty() {
             let bg = opts.background.unwrap_or([0, 0, 0, 0]);
             return Ok(RgbaImage::from_pixel(width, height, image::Rgba(bg)));
         }
 
-        let atlas = GlyphAtlas::new(
-            &self.context.device,
-            &self.context.queue,
-            font,
-            glyph_ids,
-            opts.font_size,
-            opts.anti_alias,
-        )?;
+        let mut rasters = Vec::new();
+        for (key, entry) in glyphs_by_font {
+            let fontdue = entry.font.fontdue()?;
+            for gid in entry.glyphs {
+                let (metrics, mut bitmap) = fontdue.rasterize_indexed(gid, opts.font_size);
+                if !opts.anti_alias {
+                    for px in &mut bitmap {
+                        *px = if *px >= 128 { 255 } else { 0 };
+                    }
+                }
+                rasters.push(RasterizedGlyph {
+                    key: FontGlyphId {
+                        font: key,
+                        glyph: gid,
+                    },
+                    metrics,
+                    bitmap,
+                });
+            }
+        }
+
+        let atlas = GlyphAtlas::new(&self.context.device, &self.context.queue, rasters)?;
 
         let color = [
             opts.color[0] as f32 / 255.0,
@@ -454,9 +472,29 @@ struct RenderUniform {
     effect: [f32; 4],
 }
 
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
+struct FontKey(usize);
+
+impl FontKey {
+    fn of(font: &Font) -> Self {
+        Self(font as *const Font as usize)
+    }
+}
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
+struct FontGlyphId {
+    font: FontKey,
+    glyph: u16,
+}
+
+struct FontGlyphs<'a> {
+    font: &'a Font,
+    glyphs: HashSet<u16>,
+}
+
 struct GlyphAtlas {
     view: wgpu::TextureView,
-    glyphs: HashMap<u16, AtlasGlyph>,
+    glyphs: HashMap<FontGlyphId, AtlasGlyph>,
 }
 
 struct AtlasGlyph {
@@ -466,7 +504,7 @@ struct AtlasGlyph {
 }
 
 struct RasterizedGlyph {
-    id: u16,
+    key: FontGlyphId,
     metrics: fontdue::Metrics,
     bitmap: Vec<u8>,
 }
@@ -475,30 +513,11 @@ impl GlyphAtlas {
     fn new(
         device: &wgpu::Device,
         queue: &wgpu::Queue,
-        font: &Font,
-        glyph_ids: HashSet<u16>,
-        font_size: f32,
-        anti_alias: bool,
+        rasters: Vec<RasterizedGlyph>,
     ) -> Result<Self> {
         const ATLAS_PADDING: i32 = 1;
         const MIN_ATLAS_SIZE: u32 = 256;
         const MAX_ATLAS_SIZE: u32 = 8192;
-
-        let fontdue = font.fontdue()?;
-        let mut rasters = Vec::with_capacity(glyph_ids.len());
-        for gid in glyph_ids {
-            let (metrics, mut bitmap) = fontdue.rasterize_indexed(gid, font_size);
-            if !anti_alias {
-                for px in &mut bitmap {
-                    *px = if *px >= 128 { 255 } else { 0 };
-                }
-            }
-            rasters.push(RasterizedGlyph {
-                id: gid,
-                metrics,
-                bitmap,
-            });
-        }
 
         let mut max_dim = 0u32;
         for glyph in &rasters {
@@ -520,7 +539,7 @@ impl GlyphAtlas {
 
             let mut allocator =
                 etagere::AtlasAllocator::new(etagere::size2(atlas_size as i32, atlas_size as i32));
-            let mut allocations = HashMap::new();
+            let mut allocations: HashMap<FontGlyphId, etagere::Allocation> = HashMap::new();
             let mut failed = false;
 
             for glyph in &rasters {
@@ -535,7 +554,7 @@ impl GlyphAtlas {
                     failed = true;
                     break;
                 };
-                allocations.insert(glyph.id, alloc);
+                allocations.insert(glyph.key, alloc);
             }
 
             if !failed {
@@ -555,7 +574,7 @@ impl GlyphAtlas {
                 uv_max: [0.0, 0.0],
             };
 
-            if let Some(alloc) = allocations.get(&glyph.id) {
+            if let Some(alloc) = allocations.get(&glyph.key) {
                 let rect = alloc.rectangle;
                 let x = rect.min.x + ATLAS_PADDING;
                 let y = rect.min.y + ATLAS_PADDING;
@@ -577,7 +596,7 @@ impl GlyphAtlas {
                 ];
             }
 
-            glyphs.insert(glyph.id, entry);
+            glyphs.insert(glyph.key, entry);
         }
 
         let texture = device.create_texture(&wgpu::TextureDescriptor {
@@ -622,7 +641,7 @@ impl GlyphAtlas {
 }
 
 fn build_vertices(
-    layout: &LayoutRun,
+    layout: &LayoutRun<'_>,
     writing_mode: WritingMode,
     atlas: &GlyphAtlas,
     padding: f32,
@@ -645,7 +664,7 @@ fn build_vertices(
 fn append_line_vertices(
     vertices: &mut Vec<Vertex>,
     atlas: &GlyphAtlas,
-    glyphs: &[PositionedGlyph],
+    glyphs: &[PositionedGlyph<'_>],
     origin: (f32, f32),
     width: f32,
     height: f32,
@@ -661,7 +680,10 @@ fn append_line_vertices(
             continue;
         };
 
-        let entry = match atlas.glyphs.get(&gid) {
+        let entry = match atlas.glyphs.get(&FontGlyphId {
+            font: FontKey::of(g.font),
+            glyph: gid,
+        }) {
             Some(entry) => entry,
             None => {
                 pen_x += g.x_advance;

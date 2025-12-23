@@ -65,7 +65,6 @@ fn render_horizontal() -> Result<()> {
     let img = wgpu_renderer()?.render(
         &lines,
         WritingMode::Horizontal,
-        &font,
         &RenderOptions {
             font_size: 24.0,
             padding: 0.0,
@@ -91,7 +90,6 @@ fn render_vertical() -> Result<()> {
     let img = wgpu_renderer()?.render(
         &lines,
         WritingMode::VerticalRl,
-        &font,
         &RenderOptions {
             font_size: 24.0,
             padding: 0.0,
@@ -121,7 +119,6 @@ fn vertical_flows_top_to_bottom() -> Result<()> {
     let img = wgpu_renderer()?.render(
         &layout,
         WritingMode::VerticalRl,
-        &font,
         &RenderOptions {
             font_size: 24.0,
             padding: 0.0,
@@ -160,7 +157,6 @@ fn render_horizontal_simplified_chinese() -> Result<()> {
     let img = wgpu_renderer()?.render(
         &lines,
         WritingMode::Horizontal,
-        &font,
         &RenderOptions {
             font_size: 24.0,
             padding: 0.0,
@@ -186,7 +182,6 @@ fn render_vertical_simplified_chinese() -> Result<()> {
     let img = wgpu_renderer()?.render(
         &lines,
         WritingMode::VerticalRl,
-        &font,
         &RenderOptions {
             font_size: 24.0,
             padding: 0.0,
@@ -211,7 +206,6 @@ fn render_rgba_text() -> Result<()> {
     let img = wgpu_renderer()?.render(
         &lines,
         WritingMode::Horizontal,
-        &font,
         &RenderOptions {
             font_size: 24.0,
             padding: 0.0,
@@ -223,5 +217,30 @@ fn render_rgba_text() -> Result<()> {
 
     assert!(img.pixels().any(|p| p.0 != [255, 255, 255, 255]));
     img.save(output_dir().join("rgba_text.png"))?;
+    Ok(())
+}
+
+#[test]
+#[ignore]
+fn render_with_fallback_fonts() -> Result<()> {
+    let primary_font = font("Yu Gothic")?;
+    let fallback_fonts = vec![font("Segoe UI Symbol")?, font("Segoe UI Emoji")?];
+
+    let lines = TextLayout::new(&primary_font, Some(24.0))
+        .with_fallback_fonts(&fallback_fonts)
+        .run("Here is a smiley: 😊 and a star: ★ and a heart: ♥")?;
+
+    let img = wgpu_renderer()?.render(
+        &lines,
+        WritingMode::Horizontal,
+        &RenderOptions {
+            font_size: 24.0,
+            padding: 0.0,
+            background: Some([255, 255, 255, 255]),
+            ..Default::default()
+        },
+    )?;
+    assert!(img.pixels().any(|p| p.0 != [255, 255, 255, 255]));
+    img.save(output_dir().join("fallback_fonts.png"))?;
     Ok(())
 }

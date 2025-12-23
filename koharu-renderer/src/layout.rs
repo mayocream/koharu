@@ -1,4 +1,4 @@
-use std::ops::Range;
+use std::{collections::HashMap, ops::Range};
 
 use anyhow::Result;
 use harfrust::{Direction, Feature, Tag};
@@ -7,7 +7,8 @@ use skrifa::{
     instance::{LocationRef, Size},
 };
 
-use crate::font::Font;
+use crate::font::{Font, font_key};
+use crate::shape::shape_segment_with_fallbacks;
 
 pub use crate::segment::{LineBreakOpportunity, LineBreaker};
 pub use crate::shape::{PositionedGlyph, ShapedRun, ShapingOptions, TextShaper};
@@ -40,9 +41,9 @@ impl From<WritingMode> for Direction {
 
 /// Glyphs for one line alongside metadata required by the renderer.
 #[derive(Debug, Clone, Default)]
-pub struct LayoutLine {
+pub struct LayoutLine<'a> {
     /// Positioned glyphs in this line.
-    pub glyphs: Vec<PositionedGlyph>,
+    pub glyphs: Vec<PositionedGlyph<'a>>,
     /// Range in the original text that this line covers.
     pub range: Range<usize>,
     /// Total advance (width for horizontal, height for vertical) of this line.
@@ -53,9 +54,9 @@ pub struct LayoutLine {
 
 /// A collection of laid out lines.
 #[derive(Debug, Clone)]
-pub struct LayoutRun {
+pub struct LayoutRun<'a> {
     /// Lines in this layout run.
-    pub lines: Vec<LayoutLine>,
+    pub lines: Vec<LayoutLine<'a>>,
     /// Total width of the layout.
     pub width: f32,
     /// Total height of the layout.
@@ -67,6 +68,7 @@ pub struct LayoutRun {
 pub struct TextLayout<'a> {
     writing_mode: WritingMode,
     font: &'a Font,
+    fallback_fonts: &'a [Font],
     font_size: Option<f32>,
     max_width: Option<f32>,
     max_height: Option<f32>,
@@ -77,6 +79,7 @@ impl<'a> TextLayout<'a> {
         Self {
             writing_mode: WritingMode::Horizontal,
             font,
+            fallback_fonts: &[],
             font_size,
             max_width: None,
             max_height: None,
@@ -93,6 +96,11 @@ impl<'a> TextLayout<'a> {
         self
     }
 
+    pub fn with_fallback_fonts(mut self, fonts: &'a [Font]) -> Self {
+        self.fallback_fonts = fonts;
+        self
+    }
+
     pub fn with_max_width(mut self, width: f32) -> Self {
         self.max_width = Some(width);
         self
@@ -103,7 +111,7 @@ impl<'a> TextLayout<'a> {
         self
     }
 
-    pub fn run(&self, text: &str) -> Result<LayoutRun> {
+    pub fn run(&self, text: &str) -> Result<LayoutRun<'a>> {
         if let Some(font_size) = self.font_size {
             return self.run_with_size(text, font_size);
         }
@@ -111,13 +119,13 @@ impl<'a> TextLayout<'a> {
         self.run_auto(text)
     }
 
-    fn run_auto(&self, text: &str) -> Result<LayoutRun> {
+    fn run_auto(&self, text: &str) -> Result<LayoutRun<'a>> {
         let max_height = self.max_height.unwrap_or(f32::INFINITY);
         let max_width = self.max_width.unwrap_or(f32::INFINITY);
 
         let mut low = 6;
         let mut high = 300;
-        let mut best: Option<LayoutRun> = None;
+        let mut best: Option<LayoutRun<'a>> = None;
 
         while low <= high {
             let mid = (low + high) / 2;
@@ -134,7 +142,7 @@ impl<'a> TextLayout<'a> {
         best.ok_or_else(|| anyhow::anyhow!("failed to layout text within constraints"))
     }
 
-    fn run_with_size(&self, text: &str, font_size: f32) -> Result<LayoutRun> {
+    fn run_with_size(&self, text: &str, font_size: f32) -> Result<LayoutRun<'a>> {
         let shaper = TextShaper::new();
         let line_breaker = LineBreaker::new();
 
@@ -167,7 +175,10 @@ impl<'a> TextLayout<'a> {
 
         let breaks = line_breaker.line_break_opportunities(text);
 
-        let mut lines: Vec<LayoutLine> = Vec::new();
+        let mut fonts: Vec<&Font> = Vec::with_capacity(1 + self.fallback_fonts.len());
+        fonts.push(self.font);
+        fonts.extend(self.fallback_fonts.iter());
+        let mut lines: Vec<LayoutLine<'a>> = Vec::new();
         let mut current = LayoutLine::default();
         let mut line_offset = 0usize;
 
@@ -175,7 +186,11 @@ impl<'a> TextLayout<'a> {
             let (start, end) = (window[0].offset, window[1].offset);
             let segment = &text[start..end];
 
-            let shaped = shaper.shape(segment, self.font, &opts)?;
+            let shaped = if fonts.len() == 1 {
+                shaper.shape(segment, self.font, &opts)?
+            } else {
+                shape_segment_with_fallbacks(&shaper, segment, &fonts, &opts)?
+            };
             let advance = if self.writing_mode.is_vertical() {
                 shaped.y_advance
             } else {
@@ -202,11 +217,9 @@ impl<'a> TextLayout<'a> {
             }
 
             // Adjust cluster indices and add glyphs to current line
-            for glyph in shaped.glyphs {
-                current.glyphs.push(PositionedGlyph {
-                    cluster: glyph.cluster + start as u32,
-                    ..glyph
-                });
+            for mut glyph in shaped.glyphs {
+                glyph.cluster += start as u32;
+                current.glyphs.push(glyph);
             }
             current.advance += advance;
         }
@@ -238,7 +251,7 @@ impl<'a> TextLayout<'a> {
         // having to measure Skia paths in the renderer.
         let (mut width, mut height) = self.compute_bounds(&lines, line_height, descent);
         if let Some((mut min_x, mut min_y, mut max_x, mut max_y)) =
-            self.ink_bounds(&font_ref, font_size, &lines)
+            self.ink_bounds(font_size, &lines)
         {
             // Keep a tiny safety pad for hinting/AA differences.
             const PAD: f32 = 1.0;
@@ -263,7 +276,12 @@ impl<'a> TextLayout<'a> {
         })
     }
 
-    fn compute_bounds(&self, lines: &[LayoutLine], line_height: f32, descent: f32) -> (f32, f32) {
+    fn compute_bounds(
+        &self,
+        lines: &[LayoutLine<'a>],
+        line_height: f32,
+        descent: f32,
+    ) -> (f32, f32) {
         if lines.is_empty() {
             return (0.0, 0.0);
         }
@@ -287,13 +305,8 @@ impl<'a> TextLayout<'a> {
         }
     }
 
-    fn ink_bounds(
-        &self,
-        font_ref: &skrifa::FontRef<'_>,
-        font_size: f32,
-        lines: &[LayoutLine],
-    ) -> Option<(f32, f32, f32, f32)> {
-        let glyph_metrics = font_ref.glyph_metrics(Size::new(font_size), LocationRef::default());
+    fn ink_bounds(&self, font_size: f32, lines: &[LayoutLine<'a>]) -> Option<(f32, f32, f32, f32)> {
+        let mut metrics_cache = HashMap::new();
 
         let mut min_x = f32::INFINITY;
         let mut min_y = f32::INFINITY;
@@ -303,6 +316,21 @@ impl<'a> TextLayout<'a> {
         for line in lines {
             let (mut x, mut y) = line.baseline;
             for g in &line.glyphs {
+                let key = font_key(g.font);
+                let glyph_metrics = match metrics_cache.entry(key) {
+                    std::collections::hash_map::Entry::Occupied(entry) => entry.into_mut(),
+                    std::collections::hash_map::Entry::Vacant(entry) => {
+                        let Ok(font_ref) = g.font.skrifa() else {
+                            x += g.x_advance;
+                            y -= g.y_advance;
+                            continue;
+                        };
+                        entry.insert(
+                            font_ref.glyph_metrics(Size::new(font_size), LocationRef::default()),
+                        )
+                    }
+                };
+
                 let gid = skrifa::GlyphId::new(g.glyph_id);
                 if let Some(b) = glyph_metrics.bounds(gid) {
                     let x0 = x + g.x_offset + b.x_min;
