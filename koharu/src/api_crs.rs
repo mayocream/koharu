@@ -11,6 +11,7 @@ use axum::{
 use image::ImageFormat;
 use koharu_ml::language_from_tag;
 use serde::Deserialize;
+use serde_json;
 use tokio::sync::RwLock;
 
 use crate::{
