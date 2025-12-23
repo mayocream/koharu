@@ -1,3 +1,16 @@
+## [0.24.0] - 2025-12-23
+
+### 🚀 Features
+
+- Add headless mode to be used in browser
+
+### 🐛 Bug Fixes
+
+- Correct image layer
+
+### ⚙️ Miscellaneous Tasks
+
+- Release 0.24.0
 ## [0.23.1] - 2025-12-22
 
 ### 🐛 Bug Fixes
