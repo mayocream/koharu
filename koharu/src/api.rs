@@ -4,23 +4,21 @@ use std::{
     sync::Arc,
 };
 
-use anyhow::{Result, anyhow};
+use anyhow::Result;
 use axum::{
     Json, Router,
     body::Body,
     extract::{DefaultBodyLimit, Multipart, State},
-    http::{HeaderValue, StatusCode, Uri, header},
+    http::{HeaderValue, StatusCode, header},
     response::{IntoResponse, Response},
     routing::{get, post},
 };
 use koharu_renderer::renderer::TextShaderEffect;
-use rust_embed::RustEmbed;
 use serde::{Deserialize, Serialize};
 use tokio::net::TcpListener;
-use tower_http::{
-    cors::CorsLayer,
-    services::{ServeDir, ServeFile},
-};
+use tower_http::cors::CorsLayer;
+#[cfg(debug_assertions)]
+use tower_http::services::{ServeDir, ServeFile};
 
 use crate::{
     api_crs,
@@ -33,24 +31,24 @@ use crate::{
 };
 
 #[derive(Clone)]
-pub(crate) struct ApiState {
+pub struct ApiState {
     resources: AppResources,
 }
 
 impl ApiState {
-    pub(crate) fn app_state(&self) -> &AppState {
+    pub fn app_state(&self) -> &AppState {
         &self.resources.state
     }
 
-    pub(crate) fn ml(&self) -> &Arc<ml::Model> {
+    pub fn ml(&self) -> &Arc<ml::Model> {
         &self.resources.ml
     }
 
-    pub(crate) fn llm(&self) -> &Arc<llm::Model> {
+    pub fn llm(&self) -> &Arc<llm::Model> {
         &self.resources.llm
     }
 
-    pub(crate) fn renderer(&self) -> &Arc<Renderer> {
+    pub fn renderer(&self) -> &Arc<Renderer> {
         &self.resources.renderer
     }
 }
@@ -61,20 +59,20 @@ struct ErrorResponse {
 }
 
 #[derive(Debug)]
-pub(crate) struct ApiError {
-    pub(crate) status: StatusCode,
-    pub(crate) message: String,
+pub struct ApiError {
+    pub status: StatusCode,
+    pub message: String,
 }
 
 impl ApiError {
-    pub(crate) fn bad_request(message: impl Into<String>) -> Self {
+    pub fn bad_request(message: impl Into<String>) -> Self {
         Self {
             status: StatusCode::BAD_REQUEST,
             message: message.into(),
         }
     }
 
-    pub(crate) fn internal(message: impl Into<String>) -> Self {
+    pub fn internal(message: impl Into<String>) -> Self {
         Self {
             status: StatusCode::INTERNAL_SERVER_ERROR,
             message: message.into(),
@@ -112,7 +110,7 @@ impl IntoResponse for ApiError {
     }
 }
 
-pub(crate) type ApiResult<T> = std::result::Result<T, ApiError>;
+pub type ApiResult<T> = std::result::Result<T, ApiError>;
 
 #[derive(Debug, Deserialize)]
 struct IndexPayload {
@@ -170,17 +168,78 @@ struct LlmGeneratePayload {
     language: Option<String>,
 }
 
-#[derive(RustEmbed)]
-#[folder = "../ui/out"]
-struct EmbeddedUi;
+#[cfg(not(debug_assertions))]
+mod embed_ui {
+    use axum::{
+        body::Body,
+        http::{HeaderValue, StatusCode, Uri, header},
+        response::{IntoResponse, Response},
+    };
 
-enum UiDist {
-    Fs(PathBuf),
-    Embedded,
+    use rust_embed::RustEmbed;
+
+    #[derive(RustEmbed)]
+    #[folder = "../ui/out"]
+    struct EmbeddedUi;
+
+    pub async fn serve_embedded(uri: Uri) -> impl IntoResponse {
+        let path = uri.path();
+        let target = match path {
+            "/" => "index.html",
+            _ => path.trim_start_matches('/'),
+        };
+
+        if let Some(resp) = embedded_response(target) {
+            return resp;
+        }
+
+        if let Some(resp) = embedded_response("index.html") {
+            return resp;
+        }
+
+        (StatusCode::NOT_FOUND, "Not Found").into_response()
+    }
+
+    fn embedded_response(path: &str) -> Option<Response> {
+        let asset = EmbeddedUi::get(path)?;
+        let mut response = Response::new(Body::from(asset.data.into_owned()));
+        if let Some(ct) = content_type_for(path) {
+            response.headers_mut().insert(header::CONTENT_TYPE, ct);
+        }
+        Some(response)
+    }
+
+    fn content_type_for(path: &str) -> Option<HeaderValue> {
+        let ext = std::path::Path::new(path)
+            .extension()
+            .and_then(|e| e.to_str())
+            .unwrap_or("")
+            .to_ascii_lowercase();
+
+        let mime = match ext.as_str() {
+            "html" => "text/html; charset=utf-8",
+            "js" => "application/javascript",
+            "mjs" => "application/javascript",
+            "css" => "text/css",
+            "json" => "application/json",
+            "wasm" => "application/wasm",
+            "png" => "image/png",
+            "jpg" | "jpeg" => "image/jpeg",
+            "gif" => "image/gif",
+            "svg" => "image/svg+xml",
+            "webp" => "image/webp",
+            "woff" => "font/woff",
+            "woff2" => "font/woff2",
+            _ => "application/octet-stream",
+        };
+
+        HeaderValue::from_str(mime).ok()
+    }
 }
+#[cfg(not(debug_assertions))]
+use embed_ui::serve_embedded;
 
 pub async fn serve(bind: String, resources: AppResources) -> Result<()> {
-    let ui_dist = resolve_ui_dist()?;
     let state = ApiState { resources };
 
     let mut router = Router::new()
@@ -215,12 +274,17 @@ pub async fn serve(bind: String, resources: AppResources) -> Result<()> {
         .layer(DefaultBodyLimit::max(1024 * 1024 * 1024))
         .layer(CorsLayer::permissive());
 
-    router = match ui_dist {
-        UiDist::Fs(path) => router.nest_service(
-            "/",
-            ServeDir::new(&path).not_found_service(ServeFile::new(path.join("index.html"))),
-        ),
-        UiDist::Embedded => router.fallback(serve_embedded),
+    router = {
+        #[cfg(debug_assertions)]
+        {
+            router.nest_service(
+                "/",
+                ServeDir::new("../ui/out")
+                    .not_found_service(ServeFile::new("../ui/out/index.html")),
+            )
+        }
+        #[cfg(not(debug_assertions))]
+        router.fallback(serve_embedded)
     };
 
     let listener = TcpListener::bind(&bind).await?;
@@ -488,91 +552,4 @@ fn zip_exports(exports: Vec<ExportedDocument>) -> Result<Vec<u8>> {
 
     writer.finish()?;
     Ok(buf)
-}
-
-async fn serve_embedded(uri: Uri) -> impl IntoResponse {
-    let path = uri.path();
-    let target = match path {
-        "/" => "index.html",
-        _ => path.trim_start_matches('/'),
-    };
-
-    if let Some(resp) = embedded_response(target) {
-        return resp;
-    }
-
-    if let Some(resp) = embedded_response("index.html") {
-        return resp;
-    }
-
-    (StatusCode::NOT_FOUND, "Not Found").into_response()
-}
-
-fn embedded_response(path: &str) -> Option<Response> {
-    let asset = EmbeddedUi::get(path)?;
-    let mut response = Response::new(Body::from(asset.data.into_owned()));
-    if let Some(ct) = content_type_for(path) {
-        response.headers_mut().insert(header::CONTENT_TYPE, ct);
-    }
-    Some(response)
-}
-
-fn content_type_for(path: &str) -> Option<HeaderValue> {
-    let ext = std::path::Path::new(path)
-        .extension()
-        .and_then(|e| e.to_str())
-        .unwrap_or("")
-        .to_ascii_lowercase();
-
-    let mime = match ext.as_str() {
-        "html" => "text/html; charset=utf-8",
-        "js" => "application/javascript",
-        "mjs" => "application/javascript",
-        "css" => "text/css",
-        "json" => "application/json",
-        "wasm" => "application/wasm",
-        "png" => "image/png",
-        "jpg" | "jpeg" => "image/jpeg",
-        "gif" => "image/gif",
-        "svg" => "image/svg+xml",
-        "webp" => "image/webp",
-        "woff" => "font/woff",
-        "woff2" => "font/woff2",
-        _ => "application/octet-stream",
-    };
-
-    HeaderValue::from_str(mime).ok()
-}
-
-fn resolve_ui_dist() -> Result<UiDist> {
-    if cfg!(debug_assertions) {
-        let mut candidates = Vec::new();
-        if let Ok(cwd) = std::env::current_dir() {
-            candidates.push(cwd.join("ui").join("out"));
-            candidates.push(cwd.join("../ui/out"));
-        }
-        if let Ok(exe_path) = std::env::current_exe()
-            && let Some(exe_dir) = exe_path.parent()
-        {
-            let exe_dir = exe_dir.to_path_buf();
-            candidates.push(exe_dir.join("ui/out"));
-            candidates.push(exe_dir.join("../ui/out"));
-            if let Some(parent) = exe_dir.parent() {
-                candidates.push(parent.join("ui/out"));
-                candidates.push(parent.join("../ui/out"));
-            }
-        }
-
-        for path in candidates {
-            if path.join("index.html").is_file() {
-                return Ok(UiDist::Fs(path));
-            }
-        }
-
-        Err(anyhow!(
-            "Failed to locate ui/out, build it with `bun --cwd ui build` before running in headless mode"
-        ))
-    } else {
-        Ok(UiDist::Embedded)
-    }
 }

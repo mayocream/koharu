@@ -40,7 +40,7 @@ impl TranslateConfig {
     }
 }
 
-pub(crate) async fn translate_with_form_image_stream(
+pub async fn translate_with_form_image_stream(
     State(state): State<ApiState>,
     multipart: Multipart,
 ) -> ApiResult<Response> {
@@ -112,7 +112,7 @@ async fn translate_request(api_state: &ApiState, mut multipart: Multipart) -> Ap
     let image = doc
         .rendered
         .as_ref()
-        .or_else(|| doc.inpainted.as_ref())
+        .or(doc.inpainted.as_ref())
         .unwrap_or(&doc.image);
 
     let mut buf = Vec::new();
