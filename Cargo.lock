@@ -3843,7 +3843,6 @@ dependencies = [
  "rust-embed",
  "serde",
  "serde_bytes",
- "serde_json",
  "strum",
  "sys-locale",
  "tauri",
@@ -3865,16 +3864,12 @@ name = "koharu-core"
 version = "0.24.0"
 dependencies = [
  "anyhow",
- "csv",
- "flate2",
  "futures",
  "indicatif",
  "once_cell",
  "reqwest",
  "reqwest-middleware",
  "reqwest-retry",
- "serde_json",
- "tokio",
  "tracing",
 ]
 
@@ -3922,7 +3917,6 @@ version = "0.24.0"
 dependencies = [
  "anyhow",
  "bytemuck",
- "dirs",
  "etagere",
  "fontdue",
  "fontique",
@@ -3930,11 +3924,8 @@ dependencies = [
  "harfrust",
  "icu",
  "image",
- "koharu-core",
- "num_cpus",
  "once_cell",
  "serde",
- "serde_json",
  "skrifa",
  "tokio",
  "tracing",
@@ -3946,6 +3937,8 @@ name = "koharu-runtime"
 version = "0.24.0"
 dependencies = [
  "anyhow",
+ "csv",
+ "flate2",
  "futures",
  "koharu-core",
  "libloading 0.9.0",

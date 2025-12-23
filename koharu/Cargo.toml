@@ -29,7 +29,6 @@ anyhow = { workspace = true }
 rfd = { workspace = true }
 open = { workspace = true }
 serde = { workspace = true }
-serde_json = { workspace = true }
 serde_bytes = { workspace = true }
 image = { workspace = true }
 tracing = { workspace = true }
@@ -47,10 +46,10 @@ clap = { workspace = true }
 once_cell = { workspace = true }
 sys-locale = { workspace = true }
 icu = { workspace = true }
-axum = { version = "0.7", features = ["json", "multipart"] }
-tower-http = { version = "0.6", features = ["fs"] }
+axum = { workspace = true }
+tower-http = { workspace = true }
 zip = { workspace = true }
-rust-embed = "8.5"
+rust-embed = { workspace = true }
 
 [target.'cfg(target_os = "windows")'.dependencies]
 windows = { workspace = true }

@@ -7,16 +7,13 @@ use std::{
 
 use anyhow::Result;
 use futures::stream::{self, StreamExt, TryStreamExt};
-use koharu_core::{
-    http::{http_client, http_download},
-    zip::fetch_record,
-};
+use koharu_core::http::{http_client, http_download};
 use once_cell::sync::OnceCell;
 use rayon::iter::{IntoParallelRefIterator, ParallelIterator};
 use tokio::task;
 use tracing::debug;
 
-use crate::pypi::PYPI_ENDPOINT;
+use crate::{pypi::PYPI_ENDPOINT, zip::fetch_record};
 
 /// Keep handles to loaded dynamic libraries alive for process lifetime
 static DYLIB_HANDLES: OnceCell<Vec<libloading::Library>> = OnceCell::new();
