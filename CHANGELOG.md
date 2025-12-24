@@ -1,3 +1,14 @@
+## [0.25.2] - 2025-12-24
+
+### 🐛 Bug Fixes
+
+- Lint happier
+- Font fallbacks (#115)
+
+### ⚙️ Miscellaneous Tasks
+
+- Add benchmark for renderer
+- Release 0.25.2
 ## [0.25.1] - 2025-12-23
 
 ### 🐛 Bug Fixes
