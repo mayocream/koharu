@@ -1,3 +1,9 @@
+## [0.25.3] - 2025-12-24
+
+### ⚙️ Miscellaneous Tasks
+
+- Fix release workflow
+- Release 0.25.3
 ## [0.25.2] - 2025-12-24
 
 ### 🐛 Bug Fixes
