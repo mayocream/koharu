@@ -3915,7 +3915,7 @@ checksum = "e2db585e1d738fc771bf08a151420d3ed193d9d895a36df7f6f8a9456b911ddc"
 
 [[package]]
 name = "koharu"
-version = "0.25.3"
+version = "0.25.4"
 dependencies = [
  "anyhow",
  "axum",
@@ -3954,7 +3954,7 @@ dependencies = [
 
 [[package]]
 name = "koharu-core"
-version = "0.25.3"
+version = "0.25.4"
 dependencies = [
  "anyhow",
  "futures",
@@ -3968,7 +3968,7 @@ dependencies = [
 
 [[package]]
 name = "koharu-ml"
-version = "0.25.3"
+version = "0.25.4"
 dependencies = [
  "anyhow",
  "candle-core",
@@ -4006,7 +4006,7 @@ dependencies = [
 
 [[package]]
 name = "koharu-renderer"
-version = "0.25.3"
+version = "0.25.4"
 dependencies = [
  "anyhow",
  "bytemuck",
@@ -4028,7 +4028,7 @@ dependencies = [
 
 [[package]]
 name = "koharu-runtime"
-version = "0.25.3"
+version = "0.25.4"
 dependencies = [
  "anyhow",
  "csv",

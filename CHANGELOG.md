@@ -1,3 +1,10 @@
+## [0.25.4] - 2025-12-24
+
+### ⚙️ Miscellaneous Tasks
+
+- Add release notes
+- Bundle release notes in velopack
+- Release 0.25.4
 ## [0.25.3] - 2025-12-24
 
 ### ⚙️ Miscellaneous Tasks
