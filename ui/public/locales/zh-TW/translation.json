@@ -32,6 +32,7 @@
     "title": "發現新版本",
     "message": "Koharu {{version}} 可供安裝。",
     "size": "大小：{{size}}",
+    "releaseNotes": "更新日誌",
     "updateNow": "立即更新",
     "skip": "稍後再說",
     "ignore": "忽略此版本",

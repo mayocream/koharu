@@ -81,7 +81,8 @@ impl UpdateState {
 #[cfg(feature = "bundle")]
 impl From<&velopack::UpdateInfo> for UpdateSummary {
     fn from(update: &velopack::UpdateInfo) -> Self {
-        let notes = update.TargetFullRelease.NotesMarkdown.trim();
+        let notes = update.TargetFullRelease.NotesHtml.trim();
+        tracing::info!("releaser notes {}", notes);
         UpdateSummary {
             version: update.TargetFullRelease.Version.clone(),
             notes: if notes.is_empty() {

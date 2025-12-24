@@ -192,6 +192,7 @@ function UpdateCard({
   t: TranslateFunc
 }) {
   const sizeLabel = formatSize(update.size)
+  const releaseNotes = update.notes?.trim()
 
   return (
     <BubbleCard>
@@ -216,9 +217,15 @@ function UpdateCard({
               {t('updates.size', { size: sizeLabel })}
             </div>
           )}
-          {update.notes && (
-            <div className='mt-2 max-h-20 overflow-hidden rounded-md bg-neutral-50 px-3 py-2 text-[11px] text-neutral-700 ring-1 ring-neutral-100'>
-              {update.notes}
+          {releaseNotes && (
+            <div className='mt-3 space-y-1.5'>
+              <div className='text-[11px] font-semibold text-neutral-700'>
+                {t('updates.releaseNotes')}
+              </div>
+              <div
+                className='max-h-48 overflow-y-auto rounded-md bg-neutral-50 px-3 py-2 text-[11px] text-neutral-700 ring-1 ring-neutral-100'
+                dangerouslySetInnerHTML={{ __html: releaseNotes }}
+              />
             </div>
           )}
           {applying && (

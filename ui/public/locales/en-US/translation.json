@@ -32,6 +32,7 @@
     "title": "Update available",
     "message": "Koharu {{version}} is ready to install.",
     "size": "Size: {{size}}",
+    "releaseNotes": "Release notes",
     "updateNow": "Update now",
     "skip": "Skip",
     "ignore": "Ignore this version",

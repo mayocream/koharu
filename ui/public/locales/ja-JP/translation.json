@@ -32,6 +32,7 @@
     "title": "アップデートがあります",
     "message": "Koharu {{version}} をインストールできます。",
     "size": "サイズ: {{size}}",
+    "releaseNotes": "リリースノート",
     "updateNow": "今すぐ更新",
     "skip": "あとで",
     "ignore": "このバージョンを無視",
