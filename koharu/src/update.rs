@@ -81,8 +81,9 @@ impl UpdateState {
 #[cfg(feature = "bundle")]
 impl From<&velopack::UpdateInfo> for UpdateSummary {
     fn from(update: &velopack::UpdateInfo) -> Self {
-        let notes = update.TargetFullRelease.NotesHtml.trim();
-        tracing::info!("releaser notes {}", notes);
+        // although vpk produces NotesHTML, it seems the velopack UpdateCheck in rust doesn't parse it.
+        let notes = update.TargetFullRelease.NotesMarkdown.trim();
+        tracing::info!("release notes {:#?}", update.TargetFullRelease);
         UpdateSummary {
             version: update.TargetFullRelease.Version.clone(),
             notes: if notes.is_empty() {

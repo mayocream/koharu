@@ -3,6 +3,8 @@
 import { useEffect, useState, type ReactNode } from 'react'
 import { listen } from '@/lib/backend'
 import { useTranslation } from 'react-i18next'
+import ReactMarkdown from 'react-markdown'
+import remarkGfm from 'remark-gfm'
 import {
   applyAvailableUpdate,
   fetchAvailableUpdate,
@@ -222,10 +224,14 @@ function UpdateCard({
               <div className='text-[11px] font-semibold text-neutral-700'>
                 {t('updates.releaseNotes')}
               </div>
-              <div
-                className='max-h-48 overflow-y-auto rounded-md bg-neutral-50 px-3 py-2 text-[11px] text-neutral-700 ring-1 ring-neutral-100'
-                dangerouslySetInnerHTML={{ __html: releaseNotes }}
-              />
+              <div className='max-h-[25vh] overflow-y-auto rounded-md bg-neutral-50 px-3 py-2 ring-1 ring-neutral-100'>
+                <ReactMarkdown
+                  className='release-notes text-[11px] leading-relaxed text-neutral-700 [&_a]:text-rose-600 [&_a]:underline [&_h1]:mt-0 [&_h1]:text-xs [&_h1]:leading-tight [&_h1]:font-semibold [&_h2]:mt-0 [&_h2]:text-[12px] [&_h2]:leading-tight [&_h2]:font-semibold [&_h3]:mt-0 [&_h3]:text-[11px] [&_h3]:font-semibold [&_li]:my-0.5 [&_ol]:my-1 [&_ol]:list-decimal [&_ol]:pl-4 [&_p]:mt-0 [&_p]:mb-1.5 [&_strong]:font-semibold [&_ul]:my-1 [&_ul]:list-disc [&_ul]:pl-4'
+                  remarkPlugins={[remarkGfm]}
+                >
+                  {releaseNotes}
+                </ReactMarkdown>
+              </div>
             </div>
           )}
           {applying && (
