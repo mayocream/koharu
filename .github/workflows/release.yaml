@@ -61,15 +61,18 @@ jobs:
           # skip blobs, let 7z copy the resolved symlink instead; and use spf to strip leading folder
           7z a ../Releases/Koharu-win-CUDA-Bundled.7z -x!models/*/blobs '-x!*.log' * .portable
 
+      - name: Generate release notes
+        run: bun git-cliff --current -o RELEASE_NOTES.md
+
       # upload Releases/Koharu-win-Bundled.zip to release artifacts
+      # windows build step always finishes at the end, so we assume everything is ready at this point
       - name: Upload Bundled Artifacts
         uses: softprops/action-gh-release@v2
         with:
           files: Releases/Koharu-win-CUDA-Bundled.7z
-          make_latest: false
+          body_path: RELEASE_NOTES.md
         env:
           token: ${{ secrets.GITHUB_TOKEN }}
-
 
   build-macos:
     name: macOS
