@@ -104,7 +104,7 @@ fontdue = "0.9"
 wgpu = "28.0"
 etagere = "0.2"
 bytemuck = { version = "1.21", features = ["derive"] }
-axum = { version = "0.7", features = ["json", "multipart"] }
+axum = { version = "0.8", features = ["json", "multipart"] }
 tower-http = { version = "0.6", features = ["fs", "cors"] }
 rust-embed = "8.5"
 criterion = { version = "0.8", features = ["html_reports"] }
