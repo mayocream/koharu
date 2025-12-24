@@ -33,6 +33,10 @@ jobs:
         run: |
           mkdir dist
           cp target/release/koharu.exe dist/
+
+      - name: Generate release notes
+        run: bun git-cliff --current -o RELEASE_NOTES.md
+
       - name: Package
         shell: bash
         env:
@@ -42,6 +46,7 @@ jobs:
         run: |
           dotnet tool update -g vpk
           vpk pack -u Koharu -v ${{ github.ref_name }} -p dist -e koharu.exe -i koharu/icons/icon.ico \
+            --releaseNotes RELEASE_NOTES.md \
             --azureTrustedSignFile .github/signing/metadata.json
           vpk upload github \
             --repoUrl https://github.com/${{ github.repository }} \
@@ -60,9 +65,6 @@ jobs:
           echo "Creating archive, check back in 20 years later"
           # skip blobs, let 7z copy the resolved symlink instead; and use spf to strip leading folder
           7z a ../Releases/Koharu-win-CUDA-Bundled.7z -x!models/*/blobs '-x!*.log' * .portable
-
-      - name: Generate release notes
-        run: bun git-cliff --current -o RELEASE_NOTES.md
 
       # upload Releases/Koharu-win-Bundled.zip to release artifacts
       # windows build step always finishes at the end, so we assume everything is ready at this point
@@ -86,6 +88,8 @@ jobs:
         run: |
           mkdir dist
           cp target/release/koharu dist/
+      - name: Generate release notes
+        run: bun git-cliff --current -o RELEASE_NOTES.md
       - name: Install Apple certificates and notary profile
         env:
           BUILD_CERTIFICATE_BASE64: ${{ secrets.BUILD_CERTIFICATE_BASE64 }}
@@ -121,6 +125,7 @@ jobs:
         run: |
           dotnet tool update -g vpk
           vpk pack -u Koharu -v ${{ github.ref_name }} -p dist -e koharu -i koharu/icons/icon.icns \
+            --releaseNotes RELEASE_NOTES.md \
             --signAppIdentity "Developer ID Application: Mayo Takanashi" \
             --signInstallIdentity "Developer ID Installer: Mayo Takanashi" \
             --notaryProfile "velopack-profile" \
