@@ -213,11 +213,12 @@ fn load_documents_from_path(path: PathBuf) -> Result<Vec<Document>> {
 fn initialize(headless: bool, _debug_flag: bool) -> Result<()> {
     #[cfg(target_os = "windows")]
     {
-        windows_magics::enable_ansi_support().ok();
         // hide console window in release mode and not headless
         if headless || _debug_flag {
             windows_magics::create_console_window();
         }
+
+        windows_magics::enable_ansi_support().ok();
     }
 
     tracing_subscriber::fmt()
