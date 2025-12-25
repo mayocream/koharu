@@ -53,7 +53,7 @@ rayon = "1.11"
 # disables `esaxx_fast` feature which is conflicting with `ort`
 tokenizers = { version = "0.22", default-features = false, features = ["onig"] }
 strum = { version = "0.27", features = ["derive"] }
-zip = { version = "6.0", default-features = false, features = ["deflate"] }
+zip = { version = "7.0", default-features = false, features = ["deflate"] }
 dirs = "6.0"
 futures = "0.3"
 reqwest = { version = "0.12", features = ["stream", "json", "blocking"] }
