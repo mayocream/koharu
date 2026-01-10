@@ -1,10 +1,13 @@
 # Koharu
 
-AI-powered manga translator, written in **Rust**.
+ML-powered manga translator, written in **Rust**.
 
-Koharu introduces a new workflow for manga translation, utilizing the power of AI to automate the process. It combines the capabilities of object detection, OCR, inpainting, and LLMs to create a seamless translation experience.
+Koharu introduces a new workflow for manga translation, utilizing the power of ML to automate the process. It combines the capabilities of object detection, OCR, inpainting, and LLMs to create a seamless translation experience.
 
 Under the hood, Koharu uses [candle](https://github.com/huggingface/candle) for high-performance inference, and uses [Tauri](https://github.com/tauri-apps/tauri) for the GUI. All components are written in Rust, ensuring safety and speed.
+
+> [!NOTE]
+> Koharu runs ML models **locally** on your machine, ensuring your data privacy. No data is sent to external servers. We guarantee that Koharu does not collect any user data.
 
 ---
 
@@ -79,7 +82,7 @@ koharu --cpu
 koharu.exe --cpu
 ```
 
-## AI Models
+## ML Models
 
 Koharu relies on a mixin of computer vision and natural language processing models to perform its tasks.
 
