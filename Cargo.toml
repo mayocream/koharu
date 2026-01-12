@@ -97,7 +97,7 @@ windows = { version = "0.62", features = [
 windows-sys = "0.61"
 winreg = "0.55"
 skrifa = "0.40"
-harfrust = "0.4"
+harfrust = "0.5"
 icu = "2.1"
 fontique = "0.7"
 fontdue = "0.9"
