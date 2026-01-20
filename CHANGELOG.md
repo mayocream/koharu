@@ -1,3 +1,9 @@
+## [0.26.1] - 2026-01-20
+
+### ⚙️ Miscellaneous Tasks
+
+- Setup dotnet
+- Release 0.26.1
 ## [0.26.0] - 2026-01-20
 
 ### 🚀 Features
