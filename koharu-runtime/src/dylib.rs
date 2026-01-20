@@ -68,7 +68,7 @@ pub const PACKAGES: &[&str] = &[
     #[cfg(feature = "cuda")]
     "nvidia-curand-cu12",
     #[cfg(feature = "cudnn")]
-    "nvidia-cudnn-cu12",
+    "nvidia-cudnn-cu12/9.17.1.4",
 ];
 
 /// Hard-coded load list by platform
