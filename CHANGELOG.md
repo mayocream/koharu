@@ -1,3 +1,23 @@
+## [0.26.0] - 2026-01-20
+
+### 🚀 Features
+
+- Display release notes
+
+### 🐛 Bug Fixes
+
+- Enable ansi color mode on the debug console too
+- Show release notes from markdown source
+- Select default fonts based on OS and locale
+- Pin cudnn version
+
+### ⚙️ Miscellaneous Tasks
+
+- Improve dev performance
+- Update dependencies
+- Clarifying ml in readme
+- Cargo update dependencies
+- Release 0.26.0
 ## [0.25.4] - 2025-12-24
 
 ### ⚙️ Miscellaneous Tasks
