@@ -37,8 +37,6 @@ jobs:
       - name: Generate release notes
         run: bun git-cliff --current -o RELEASE_NOTES.md
 
-      - uses: actions/setup-dotnet@v5
-
       - name: Package
         shell: bash
         env:
@@ -124,6 +122,8 @@ jobs:
           # create notarytool profile
           xcrun notarytool store-credentials --keychain $KEYCHAIN_PATH --apple-id "$APPLE_ID" --team-id "$APPLE_TEAM" --password "$APPLE_PASSWORD" velopack-profile
       - uses: actions/setup-dotnet@v5
+        with:
+          dotnet-version: '9.0.x'
       - name: Package
         run: |
           dotnet tool update -g vpk
