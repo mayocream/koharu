@@ -1,3 +1,9 @@
+## [0.26.2] - 2026-01-21
+
+### ⚙️ Miscellaneous Tasks
+
+- Setup dotnet 9.0.x for macos
+- Release 0.26.2
 ## [0.26.1] - 2026-01-20
 
 ### ⚙️ Miscellaneous Tasks
