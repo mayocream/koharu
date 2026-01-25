@@ -1,4 +1,10 @@
-use std::{path::PathBuf, sync::Arc};
+use std::{
+    path::PathBuf,
+    sync::{
+        Arc,
+        atomic::{AtomicU16, Ordering},
+    },
+};
 
 use anyhow::Result;
 use clap::Parser;
@@ -7,7 +13,7 @@ use koharu_runtime::{ensure_dylibs, preload_dylibs};
 use once_cell::sync::Lazy;
 use rfd::MessageDialog;
 use tauri::Manager;
-use tokio::sync::RwLock;
+use tokio::{net::TcpListener, sync::RwLock};
 use tracing_subscriber::fmt::format::FmtSpan;
 
 use crate::{
@@ -52,6 +58,26 @@ pub struct AppResources {
     pub ml: Arc<ml::Model>,
     pub llm: Arc<llm::Model>,
     pub renderer: Arc<Renderer>,
+}
+
+pub struct HttpServerState {
+    port: AtomicU16,
+}
+
+impl HttpServerState {
+    pub fn new() -> Self {
+        Self {
+            port: AtomicU16::new(0),
+        }
+    }
+
+    pub fn set_port(&self, port: u16) {
+        self.port.store(port, Ordering::SeqCst);
+    }
+
+    pub fn port(&self) -> u16 {
+        self.port.load(Ordering::SeqCst)
+    }
 }
 
 #[derive(Parser)]
@@ -163,6 +189,22 @@ async fn setup(app: tauri::AppHandle, cpu: bool) -> Result<()> {
     let resources = build_resources(cpu, true).await?;
     let state = resources.state.clone();
 
+    // Start HTTP server on a random available port
+    let listener = TcpListener::bind("127.0.0.1:0").await?;
+    let port = listener.local_addr()?.port();
+
+    // Store port in managed state
+    let http_state = app.state::<HttpServerState>();
+    http_state.set_port(port);
+
+    // Spawn HTTP server in background
+    let server_resources = resources.clone();
+    tokio::spawn(async move {
+        if let Err(err) = api::serve_with_listener(listener, server_resources).await {
+            tracing::error!("HTTP server error: {err:#}");
+        }
+    });
+
     app.manage(resources.ml);
     app.manage(resources.llm);
     app.manage(resources.renderer);
@@ -189,32 +231,13 @@ pub async fn run() -> Result<()> {
 
     tauri::Builder::default()
         .invoke_handler(tauri::generate_handler![
-            command::app_version,
-            command::open_external,
-            command::get_documents,
-            command::open_documents,
-            command::save_documents,
-            command::export_document,
-            command::export_all_documents,
-            command::detect,
-            command::ocr,
-            command::inpaint,
-            command::inpaint_partial,
-            command::render,
-            command::update_brush_layer,
-            command::update_text_blocks,
-            command::update_inpaint_mask,
-            command::list_font_families,
-            command::llm_list,
-            command::llm_load,
-            command::llm_offload,
-            command::llm_ready,
-            command::llm_generate,
+            command::initialize,
             update::apply_available_update,
             update::get_available_update,
             update::ignore_update,
         ])
         .setup(move |app| {
+            app.manage(HttpServerState::new());
             app.manage(update::UpdateState::new(APP_ROOT.to_path_buf()));
             update::spawn_background_update_check(app.handle().clone());
 

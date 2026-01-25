@@ -1,9 +1,29 @@
 'use client'
 
-const API_BASE = '/api'
+let apiBase = '/api'
+let _initPromise: Promise<void> | null = null
 
 const isTauriEnv = (): boolean =>
   typeof window !== 'undefined' && !!(window as any).__TAURI_INTERNALS__
+
+async function ensureInitialized(): Promise<void> {
+  if (!isTauriEnv()) {
+    // In browser/headless mode, use relative URLs
+    return
+  }
+
+  if (_initPromise) {
+    return _initPromise
+  }
+
+  _initPromise = (async () => {
+    const { invoke } = await import('@tauri-apps/api/core')
+    const port = await invoke<number>('initialize')
+    apiBase = `http://127.0.0.1:${port}/api`
+  })()
+
+  return _initPromise
+}
 
 export enum ProgressBarStatus {
   None = 'none',
@@ -60,34 +80,48 @@ export async function invoke<T>(
   cmd: string,
   args?: Record<string, any>,
 ): Promise<T> {
+  await ensureInitialized()
+
+  // Commands that must use Tauri invoke (not available via HTTP)
   if (isTauriEnv()) {
-    const { invoke } = await import('@tauri-apps/api/core')
-    return invoke<T>(cmd, args)
+    switch (cmd) {
+      case 'get_available_update':
+      case 'apply_available_update':
+      case 'ignore_update': {
+        const { invoke: tauriInvoke } = await import('@tauri-apps/api/core')
+        return tauriInvoke<T>(cmd, args)
+      }
+    }
+  } else {
+    // Browser-only implementations
+    switch (cmd) {
+      case 'open_external': {
+        const url = typeof args?.url === 'string' ? args.url : undefined
+        if (url) {
+          window.open(url, '_blank', 'noopener,noreferrer')
+        }
+        return undefined as T
+      }
+      case 'get_available_update':
+        return null as T
+      case 'apply_available_update':
+      case 'ignore_update':
+        return undefined as T
+    }
   }
 
+  // File operations with special handling
   switch (cmd) {
     case 'open_documents':
       return (await openDocumentsHttp()) as T
     case 'save_documents':
-      await downloadBinary('/api/save_documents')
+      await downloadBinary(`${apiBase}/save_documents`)
       return undefined as T
     case 'export_document':
-      await downloadBinary('/api/export_document', args)
+      await downloadBinary(`${apiBase}/export_document`, args)
       return undefined as T
     case 'export_all_documents':
-      await downloadBinary('/api/export_all_documents')
-      return undefined as T
-    case 'open_external': {
-      const url = typeof args?.url === 'string' ? args.url : undefined
-      if (url) {
-        window.open(url, '_blank', 'noopener,noreferrer')
-      }
-      return undefined as T
-    }
-    case 'get_available_update':
-      return null as T
-    case 'apply_available_update':
-    case 'ignore_update':
+      await downloadBinary(`${apiBase}/export_all_documents`)
       return undefined as T
     default:
       return invokeHttp<T>(cmd, args)
@@ -99,7 +133,7 @@ async function invokeHttp<T>(
   args?: Record<string, any>,
 ): Promise<T> {
   const body = args ?? {}
-  const res = await fetch(`${API_BASE}/${cmd}`, {
+  const res = await fetch(`${apiBase}/${cmd}`, {
     method: 'POST',
     headers: {
       'Content-Type': 'application/json',
@@ -134,7 +168,7 @@ async function openDocumentsHttp<T>(): Promise<T> {
     form.append('file', file, file.name)
   })
 
-  const res = await fetch(`${API_BASE}/open_documents`, {
+  const res = await fetch(`${apiBase}/open_documents`, {
     method: 'POST',
     body: form,
   })

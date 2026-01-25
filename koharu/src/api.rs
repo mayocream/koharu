@@ -167,6 +167,11 @@ struct LlmGeneratePayload {
     language: Option<String>,
 }
 
+#[derive(Debug, Deserialize)]
+struct OpenExternalPayload {
+    url: String,
+}
+
 #[derive(Embed)]
 #[folder = "$CARGO_WORKSPACE_DIR/ui/out"]
 #[allow_missing = true]
@@ -226,11 +231,10 @@ fn content_type_for(path: &str) -> Option<HeaderValue> {
     HeaderValue::from_str(mime).ok()
 }
 
-pub async fn serve(bind: String, resources: AppResources) -> Result<()> {
-    let state = ApiState { resources };
-
-    let mut router = Router::new()
+fn build_router(state: ApiState) -> Router {
+    Router::new()
         .route("/api/app_version", get(app_version).post(app_version))
+        .route("/api/open_external", post(open_external))
         .route("/api/get_documents", get(get_documents).post(get_documents))
         .route("/api/open_documents", post(open_documents))
         .route("/api/save_documents", post(save_documents))
@@ -259,19 +263,30 @@ pub async fn serve(bind: String, resources: AppResources) -> Result<()> {
         )
         .with_state(state)
         .layer(DefaultBodyLimit::max(1024 * 1024 * 1024))
-        .layer(CorsLayer::permissive());
+        .layer(CorsLayer::permissive())
+        .fallback(serve_embedded)
+}
 
-    router = router.fallback(serve_embedded);
-
-    let listener = TcpListener::bind(&bind).await?;
-    tracing::info!("Headless server listening on http://{}", bind);
+pub async fn serve_with_listener(listener: TcpListener, resources: AppResources) -> Result<()> {
+    let state = ApiState { resources };
+    let router = build_router(state);
+    tracing::info!("HTTP server listening on http://{}", listener.local_addr()?);
     axum::serve(listener, router.into_make_service()).await?;
-
     Ok(())
+}
+
+pub async fn serve(bind: String, resources: AppResources) -> Result<()> {
+    let listener = TcpListener::bind(&bind).await?;
+    serve_with_listener(listener, resources).await
 }
 
 async fn app_version() -> impl IntoResponse {
     Json(version::current().to_string())
+}
+
+async fn open_external(Json(payload): Json<OpenExternalPayload>) -> ApiResult<StatusCode> {
+    open::that(&payload.url).map_err(|e| ApiError::internal(e.to_string()))?;
+    Ok(StatusCode::NO_CONTENT)
 }
 
 async fn get_documents(State(state): State<ApiState>) -> ApiResult<Json<Vec<Document>>> {
