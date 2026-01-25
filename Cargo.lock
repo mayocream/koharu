@@ -3952,6 +3952,7 @@ dependencies = [
  "git-version",
  "icu",
  "image",
+ "koharu-macros",
  "koharu-ml",
  "koharu-renderer",
  "koharu-runtime",
@@ -3977,7 +3978,6 @@ dependencies = [
  "windows 0.62.2",
  "windows-sys 0.61.2",
  "winreg",
- "zip 7.1.0",
 ]
 
 [[package]]
@@ -3992,6 +3992,16 @@ dependencies = [
  "reqwest-middleware",
  "reqwest-retry",
  "tracing",
+]
+
+[[package]]
+name = "koharu-macros"
+version = "0.26.2"
+dependencies = [
+ "darling 0.20.11",
+ "proc-macro2",
+ "quote",
+ "syn 2.0.114",
 ]
 
 [[package]]

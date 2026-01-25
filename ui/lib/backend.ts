@@ -105,16 +105,6 @@ export async function invoke<T>(
     case 'export_document':
       await downloadBinary(`${apiBase}/export_document`, args)
       return undefined as T
-    case 'export_all_documents':
-      await downloadBinary(`${apiBase}/export_all_documents`)
-      return undefined as T
-    // Update commands may not be available (bundle feature disabled)
-    case 'get_available_update':
-      return (await invokeHttpOptional<T>(cmd, args)) ?? (null as T)
-    case 'apply_available_update':
-    case 'ignore_update':
-      await invokeHttpOptional(cmd, args)
-      return undefined as T
     default:
       return invokeHttp<T>(cmd, args)
   }
@@ -146,36 +136,6 @@ async function invokeHttp<T>(
   return buffer as unknown as T
 }
 
-// Like invokeHttp but returns null if endpoint returns 404
-async function invokeHttpOptional<T>(
-  cmd: string,
-  args?: Record<string, any>,
-): Promise<T | null> {
-  const body = args ?? {}
-  const res = await fetch(`${apiBase}/${cmd}`, {
-    method: 'POST',
-    headers: {
-      'Content-Type': 'application/json',
-    },
-    body: JSON.stringify(body),
-  })
-
-  if (res.status === 404) {
-    return null
-  }
-
-  if (!res.ok) {
-    throw new Error(await readError(res))
-  }
-
-  const contentType = res.headers.get('content-type') ?? ''
-  if (contentType.includes('application/json')) {
-    return (await res.json()) as T
-  }
-
-  return null
-}
-
 async function openDocumentsHttp<T>(): Promise<T> {
   const files = await pickFiles(
     '.khr,.png,.jpg,.jpeg,.webp,.PNG,.JPG,.JPEG,.WEBP',
@@ -185,14 +145,17 @@ async function openDocumentsHttp<T>(): Promise<T> {
     return [] as unknown as T
   }
 
-  const form = new FormData()
-  files.forEach((file) => {
-    form.append('file', file, file.name)
-  })
+  const inputs = await Promise.all(
+    files.map(async (file) => {
+      const bytes = Array.from(new Uint8Array(await file.arrayBuffer()))
+      return { name: file.name, bytes }
+    }),
+  )
 
   const res = await fetch(`${apiBase}/open_documents`, {
     method: 'POST',
-    body: form,
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ inputs }),
   })
   if (!res.ok) {
     throw new Error(await readError(res))

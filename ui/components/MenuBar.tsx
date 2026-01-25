@@ -25,7 +25,6 @@ export function MenuBar() {
     processAllImages,
     exportDocument,
     saveDocuments,
-    exportAllDocuments,
   } = useAppStore()
   useEffect(() => {
     const loadVersion = async () => {
@@ -48,7 +47,6 @@ export function MenuBar() {
         { label: t('menu.openFile'), onSelect: openDocuments },
         { label: t('menu.save'), onSelect: saveDocuments },
         { label: t('menu.export'), onSelect: exportDocument },
-        { label: t('menu.exportAll'), onSelect: exportAllDocuments },
       ],
     },
     {

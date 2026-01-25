@@ -7,7 +7,6 @@
     "openFile": "Open File...",
     "save": "Save...",
     "export": "Export...",
-    "exportAll": "Export All",
     "view": "View",
     "fitWindow": "Fit Window",
     "originalSize": "Original Size",
@@ -27,17 +26,6 @@
       "zh-TW": "繁體中文",
       "ja-JP": "日本語"
     }
-  },
-  "updates": {
-    "title": "Update available",
-    "message": "Koharu {{version}} is ready to install.",
-    "size": "Size: {{size}}",
-    "releaseNotes": "Release notes",
-    "updateNow": "Update now",
-    "skip": "Skip",
-    "ignore": "Ignore this version",
-    "applying": "Downloading and applying update...",
-    "error": "Update failed: {{message}}"
   },
   "operations": {
     "title": "Working",

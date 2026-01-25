@@ -226,7 +226,6 @@ type AppState = OperationSlice & {
   inpaintAndRenderImage: (_?: any, index?: number) => Promise<void>
   processAllImages: () => Promise<void>
   exportDocument: () => Promise<void>
-  exportAllDocuments: () => Promise<void>
   // LLM actions
   llmList: () => Promise<void>
   llmSetSelectedModel: (id: string) => void
@@ -885,11 +884,6 @@ export const useAppStore = create<AppState>((set, get) => {
     exportDocument: async () => {
       const index = get().currentDocumentIndex
       await invoke('export_document', { index })
-    },
-
-    exportAllDocuments: async () => {
-      if (!get().documents.length) return
-      await invoke('export_all_documents')
     },
 
     setProgress: async (progress?: number, state?: ProgressBarStatus) => {

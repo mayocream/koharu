@@ -16,8 +16,6 @@ use tauri::Manager;
 use tokio::{net::TcpListener, sync::RwLock};
 use tracing_subscriber::fmt::format::FmtSpan;
 
-#[cfg(feature = "bundle")]
-use crate::update;
 use crate::{
     api, command, llm, ml,
     renderer::Renderer,
@@ -59,8 +57,6 @@ pub struct AppResources {
     pub ml: Arc<ml::Model>,
     pub llm: Arc<llm::Model>,
     pub renderer: Arc<Renderer>,
-    #[cfg(feature = "bundle")]
-    pub update: Arc<update::UpdateState>,
 }
 
 pub struct HttpServerState {
@@ -155,6 +151,21 @@ fn initialize(headless: bool, _debug_flag: bool) -> Result<()> {
     Ok(())
 }
 
+#[cfg(feature = "bundle")]
+async fn update_app() -> Result<()> {
+    use velopack::{UpdateCheck, UpdateManager, sources::HttpSource};
+
+    let source = HttpSource::new("https://github.com/mayocream/koharu/releases/latest/download");
+    let um = UpdateManager::new(source, None, None)?;
+
+    if let UpdateCheck::UpdateAvailable(updates) = um.check_for_updates()? {
+        um.download_updates(&updates, None)?;
+        um.apply_updates_and_restart(&updates)?;
+    }
+
+    Ok(())
+}
+
 async fn build_resources(use_cpu: bool, _register_file_assoc: bool) -> Result<AppResources> {
     if cuda_is_available() {
         ensure_dylibs(LIB_ROOT.to_path_buf()).await?;
@@ -185,18 +196,20 @@ async fn build_resources(use_cpu: bool, _register_file_assoc: bool) -> Result<Ap
         ml,
         llm,
         renderer,
-        #[cfg(feature = "bundle")]
-        update: Arc::new(update::UpdateState::new(APP_ROOT.to_path_buf())),
     })
 }
 
 async fn setup(app: tauri::AppHandle, cpu: bool) -> Result<()> {
+    // Spawn background update check and auto-apply
+    #[cfg(feature = "bundle")]
+    tokio::spawn(async move {
+        if let Err(err) = update_app().await {
+            tracing::error!("Auto-update failed: {err:#}");
+        }
+    });
+
     let resources = build_resources(cpu, true).await?;
     let state = resources.state.clone();
-
-    // Spawn background update check
-    #[cfg(feature = "bundle")]
-    update::spawn_background_update_check(resources.update.clone(), Some(app.clone()));
 
     // Start HTTP server on a random available port
     let listener = TcpListener::bind("127.0.0.1:0").await?;

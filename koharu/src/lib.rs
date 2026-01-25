@@ -1,17 +1,13 @@
 pub mod api;
-pub mod api_crs;
 pub mod app;
 pub mod command;
 pub mod image;
 pub mod khr;
 pub mod llm;
 pub mod ml;
-pub mod operations;
 pub mod renderer;
 pub mod result;
 pub mod state;
-#[cfg(feature = "bundle")]
-pub mod update;
 pub mod version;
 #[cfg(target_os = "windows")]
 pub mod windows;

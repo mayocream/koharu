@@ -7,7 +7,6 @@
     "openFile": "開啟檔案...",
     "save": "儲存...",
     "export": "匯出...",
-    "exportAll": "匯出全部",
     "view": "檢視",
     "fitWindow": "符合視窗",
     "originalSize": "原始大小",
@@ -27,17 +26,6 @@
       "zh-TW": "繁體中文",
       "ja-JP": "日本語"
     }
-  },
-  "updates": {
-    "title": "發現新版本",
-    "message": "Koharu {{version}} 可供安裝。",
-    "size": "大小：{{size}}",
-    "releaseNotes": "更新日誌",
-    "updateNow": "立即更新",
-    "skip": "稍後再說",
-    "ignore": "忽略此版本",
-    "applying": "正在下載並套用更新...",
-    "error": "更新失敗：{{message}}"
   },
   "operations": {
     "title": "處理中",

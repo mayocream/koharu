@@ -22,6 +22,7 @@ include = [
 ]
 
 [dependencies]
+koharu-macros = { workspace = true }
 koharu-ml = { workspace = true }
 koharu-renderer = { workspace = true }
 koharu-runtime = { workspace = true }
@@ -49,7 +50,6 @@ sys-locale = { workspace = true }
 icu = { workspace = true }
 axum = { workspace = true }
 tower-http = { workspace = true }
-zip = { workspace = true }
 rust-embed = { workspace = true }
 git-version = { workspace = true }
 

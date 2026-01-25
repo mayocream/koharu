@@ -1,0 +1,16 @@
+[package]
+name = "koharu-macros"
+version.workspace = true
+edition.workspace = true
+description = "Procedural macros for koharu API endpoints"
+license.workspace = true
+authors.workspace = true
+
+[lib]
+proc-macro = true
+
+[dependencies]
+darling = "0.20"
+proc-macro2 = "1.0"
+quote = "1.0"
+syn = { version = "2.0", features = ["full", "parsing", "extra-traits"] }
