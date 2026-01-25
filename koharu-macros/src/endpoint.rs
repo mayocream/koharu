@@ -160,7 +160,7 @@ pub fn generate_endpoint(args: EndpointArgs, input: ItemFn) -> syn::Result<Token
     let inner_type = unwrap_result_type(return_type)
         .ok_or_else(|| syn::Error::new(input.sig.span(), "endpoint must return Result<T>"))?;
 
-    let is_response = type_name(inner_type).map_or(false, |n| n == "Response");
+    let is_response = type_name(inner_type).is_some_and(|n| n == "Response");
 
     // Parse and classify parameters
     let params: Vec<Param> = input
