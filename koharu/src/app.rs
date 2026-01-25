@@ -8,7 +8,6 @@ use once_cell::sync::Lazy;
 use rfd::MessageDialog;
 use tauri::Manager;
 use tokio::sync::RwLock;
-use tracing::warn;
 use tracing_subscriber::fmt::format::FmtSpan;
 
 use crate::{
@@ -135,7 +134,7 @@ async fn build_resources(use_cpu: bool, _register_file_assoc: bool) -> Result<Ap
         #[cfg(target_os = "windows")]
         {
             if _register_file_assoc && let Err(err) = crate::windows::register_khr() {
-                warn!(?err, "Failed to register .khr file association");
+                tracing::warn!(?err, "Failed to register .khr file association");
             }
 
             crate::windows::add_dll_directory(&LIB_ROOT)?;
