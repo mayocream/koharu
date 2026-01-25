@@ -11,7 +11,7 @@ import {
 
 type RenderBrushOptions = {
   mode: ToolMode
-  currentDocument?: Document
+  currentDocument: Document | null
   pointerToDocument: PointerToDocumentFn
   enabled: boolean
   action: 'paint' | 'erase'

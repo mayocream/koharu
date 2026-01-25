@@ -10,7 +10,7 @@ import type {
 
 type BlockDraftingOptions = {
   mode: ToolMode
-  currentDocument?: Document
+  currentDocument: Document | null
   pointerToDocument: PointerToDocumentFn
   clearSelection: () => void
   onCreateBlock: (block: TextBlock) => void

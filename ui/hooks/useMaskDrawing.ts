@@ -12,7 +12,7 @@ import {
 
 type MaskDrawingOptions = {
   mode: ToolMode
-  currentDocument?: Document
+  currentDocument: Document | null
   pointerToDocument: PointerToDocumentFn
   showMask: boolean
   enabled: boolean

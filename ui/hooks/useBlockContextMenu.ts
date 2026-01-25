@@ -6,7 +6,7 @@ import { Document } from '@/types'
 import type { PointerToDocumentFn } from '@/hooks/usePointerToDocument'
 
 type BlockContextMenuOptions = {
-  currentDocument?: Document
+  currentDocument: Document | null
   pointerToDocument: PointerToDocumentFn
   selectBlock: (index?: number) => void
   removeBlock: (index: number) => void

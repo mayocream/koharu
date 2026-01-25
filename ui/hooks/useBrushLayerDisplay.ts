@@ -5,7 +5,7 @@ import { convertToImageBitmap } from '@/lib/util'
 import { Document } from '@/types'
 
 type BrushLayerDisplayOptions = {
-  currentDocument?: Document
+  currentDocument: Document | null
   visible: boolean
 }
 
