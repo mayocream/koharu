@@ -32,9 +32,6 @@ type ProcessImageOptions =
   | ((progress: number) => Promise<void>)
   | ProcessImageOptionsObject
 
-const replaceDocument = (docs: Document[], index: number, doc: Document) =>
-  docs.map((item, idx) => (idx === index ? doc : item))
-
 const createTextBlockSyncer = () => {
   let pending: {
     index: number
@@ -48,7 +45,7 @@ const createTextBlockSyncer = () => {
         while (pending) {
           const payload = pending
           pending = null
-          await invoke<Document>('update_text_blocks', payload)
+          await invoke('update_text_blocks', payload)
         }
       })().finally(() => {
         flushPromise = null
@@ -91,7 +88,7 @@ const createMaskSyncer = () => {
         while (pending.length) {
           const payload = pending.shift()
           if (!payload) break
-          await invoke<Document>('update_inpaint_mask', payload)
+          await invoke('update_inpaint_mask', payload)
         }
       })().finally(() => {
         flushPromise = null
@@ -147,8 +144,10 @@ let llmReadyCheckInFlight: Promise<boolean> | null = null
 
 // A mixin of application state, ui state and actions.
 type AppState = OperationSlice & {
-  documents: Document[]
+  totalPages: number
   currentDocumentIndex: number
+  currentDocument: Document | null
+  currentDocumentLoading: boolean
   scale: number
   showSegmentationMask: boolean
   showInpaintedImage: boolean
@@ -171,11 +170,13 @@ type AppState = OperationSlice & {
   llmOpenAIPrompt: string
   llmOpenAIModel: string
   // ui + actions
-  hydrateDocuments: (docs: Document[]) => void
+  setTotalPages: (count: number) => void
+  fetchCurrentDocument: () => Promise<void>
+  refreshCurrentDocument: () => Promise<void>
   openDocuments: () => Promise<void>
   saveDocuments: () => Promise<void>
   openExternal: (url: string) => Promise<void>
-  setCurrentDocumentIndex?: (index: number) => void
+  setCurrentDocumentIndex: (index: number) => Promise<void>
   setScale: (scale: number) => void
   setShowSegmentationMask: (show: boolean) => void
   setShowInpaintedImage: (show: boolean) => void
@@ -255,21 +256,19 @@ export const useAppStore = create<AppState>((set, get) => {
   }
 
   const generateWithOpenAI = async (
-    index: number,
     textBlockIndex?: number,
-  ): Promise<Document | void> => {
+  ): Promise<TextBlock[] | void> => {
     const {
-      documents,
+      currentDocument,
       llmOpenAIEndpoint,
       llmOpenAIApiKey,
       llmOpenAIPrompt,
       llmOpenAIModel,
     } = get()
-    const doc = documents[index]
-    if (!doc) return
+    if (!currentDocument) return
     await textBlockSyncer.flush()
 
-    const blocks = doc.textBlocks ?? []
+    const blocks = currentDocument.textBlocks ?? []
     const hasSingle = typeof textBlockIndex === 'number' && textBlockIndex >= 0
     const sourceText = hasSingle
       ? (blocks[textBlockIndex!]?.text ?? '')
@@ -296,13 +295,15 @@ export const useAppStore = create<AppState>((set, get) => {
       return { ...block, translation: translated }
     })
 
-    return { ...doc, textBlocks: updatedBlocks }
+    return updatedBlocks
   }
 
   return {
     ...createOperationSlice(set),
-    documents: [],
+    totalPages: 0,
     currentDocumentIndex: 0,
+    currentDocument: null,
+    currentDocumentLoading: false,
     scale: 100,
     showSegmentationMask: false,
     showInpaintedImage: false,
@@ -324,18 +325,43 @@ export const useAppStore = create<AppState>((set, get) => {
     llmOpenAIPrompt: t('llm.openaiPromptPlaceholder'),
     llmOpenAIModel: OPENAI_DEFAULT_MODEL,
     operation: undefined,
-    hydrateDocuments: (docs: Document[]) => {
+    setTotalPages: (count: number) => {
       set({
-        documents: docs,
+        totalPages: count,
         currentDocumentIndex: 0,
+        currentDocument: null,
         selectedBlockIndex: undefined,
       })
+      if (count > 0) {
+        void get().fetchCurrentDocument()
+      }
+    },
+    fetchCurrentDocument: async () => {
+      const index = get().currentDocumentIndex
+      if (get().totalPages === 0) return
+
+      set({ currentDocumentLoading: true })
+      try {
+        const doc = await invoke<Document>('get_document', { index })
+        // Only update if we're still on the same index
+        if (get().currentDocumentIndex === index) {
+          set({ currentDocument: doc, currentDocumentLoading: false })
+        }
+      } catch (err) {
+        console.error('Failed to fetch document:', err)
+        if (get().currentDocumentIndex === index) {
+          set({ currentDocumentLoading: false })
+        }
+      }
+    },
+    refreshCurrentDocument: async () => {
+      await get().fetchCurrentDocument()
     },
     openDocuments: async () => {
       get().startOperation({ type: 'load-khr', cancellable: false })
       try {
-        const docs: Document[] = await invoke('open_documents')
-        get().hydrateDocuments(docs)
+        const count = await invoke<number>('open_documents')
+        get().setTotalPages(count)
       } finally {
         get().finishOperation()
       }
@@ -351,8 +377,13 @@ export const useAppStore = create<AppState>((set, get) => {
     openExternal: async (url: string) => {
       await invoke('open_external', { url })
     },
-    setCurrentDocumentIndex: (index: number) => {
-      set({ currentDocumentIndex: index, selectedBlockIndex: undefined })
+    setCurrentDocumentIndex: async (index: number) => {
+      if (index === get().currentDocumentIndex && get().currentDocument) return
+      set({
+        currentDocumentIndex: index,
+        selectedBlockIndex: undefined,
+      })
+      await get().fetchCurrentDocument()
     },
     setScale: (scale: number) => {
       const clamped = Math.max(10, Math.min(100, Math.round(scale)))
@@ -415,29 +446,27 @@ export const useAppStore = create<AppState>((set, get) => {
       } catch (_) {}
     },
     updateTextBlocks: async (textBlocks: TextBlock[]) => {
-      const { documents, currentDocumentIndex } = get()
-      const doc = documents[currentDocumentIndex]
-      if (!doc) return
-      const updatedDoc: Document = {
-        ...doc,
-        textBlocks,
-      }
+      const { currentDocument, currentDocumentIndex } = get()
+      if (!currentDocument) return
+      // Update local state immediately for responsiveness
       set({
-        documents: replaceDocument(documents, currentDocumentIndex, updatedDoc),
+        currentDocument: {
+          ...currentDocument,
+          textBlocks,
+        },
       })
       await textBlockSyncer.enqueue(currentDocumentIndex, textBlocks)
     },
     updateMask: async (mask, options) => {
       const sync = options?.sync !== false
-      const { documents, currentDocumentIndex } = get()
-      const doc = documents[currentDocumentIndex]
-      if (!doc) return
-      const updatedDoc: Document = {
-        ...doc,
-        segment: mask,
-      }
+      const { currentDocument, currentDocumentIndex } = get()
+      if (!currentDocument) return
+      // Update local state immediately
       set({
-        documents: replaceDocument(documents, currentDocumentIndex, updatedDoc),
+        currentDocument: {
+          ...currentDocument,
+          segment: mask,
+        },
       })
       if (sync) {
         const patchRegion =
@@ -455,92 +484,80 @@ export const useAppStore = create<AppState>((set, get) => {
     },
     paintRendered: async (patch, region, options) => {
       const index = options?.index ?? get().currentDocumentIndex
-      const doc: Document = await invoke<Document>('update_brush_layer', {
+      await invoke('update_brush_layer', {
         index,
         patch,
         region,
       })
-      set((state) => ({
-        documents: state.documents[index]
-          ? replaceDocument(state.documents, index, {
-              ...state.documents[index],
-              brushLayer: doc.brushLayer,
-            } as Document)
-          : state.documents,
-        showBrushLayer: true,
-      }))
+      // Only refresh if this is the current document
+      if (index === get().currentDocumentIndex) {
+        await get().refreshCurrentDocument()
+      }
+      set({ showBrushLayer: true })
     },
     flushMaskSync: async () => {
       await maskSyncer.flush()
     },
     detect: async (_, index) => {
       index = index ?? get().currentDocumentIndex
-      const doc: Document = await invoke<Document>('detect', {
-        index,
-      })
-      set((state) => ({
-        documents: replaceDocument(state.documents, index, doc),
-        showRenderedImage: false, // hide rendered image to show the boxes
-      }))
+      await invoke('detect', { index })
+      if (index === get().currentDocumentIndex) {
+        await get().refreshCurrentDocument()
+      }
+      set({ showRenderedImage: false })
     },
     ocr: async (_, index) => {
       index = index ?? get().currentDocumentIndex
-      const doc: Document = await invoke<Document>('ocr', { index })
-      set((state) => ({
-        documents: replaceDocument(state.documents, index, doc),
-      }))
+      await invoke('ocr', { index })
+      if (index === get().currentDocumentIndex) {
+        await get().refreshCurrentDocument()
+      }
     },
     inpaint: async (_, index) => {
       index = index ?? get().currentDocumentIndex
       await textBlockSyncer.flush()
       await maskSyncer.flush()
-      const doc: Document = await invoke<Document>('inpaint', {
-        index,
-      })
-      set((state) => ({
-        documents: replaceDocument(state.documents, index, doc),
-        showInpaintedImage: true,
-      }))
+      await invoke('inpaint', { index })
+      if (index === get().currentDocumentIndex) {
+        await get().refreshCurrentDocument()
+      }
+      set({ showInpaintedImage: true })
     },
     inpaintPartial: async (region, options) => {
       const index = options?.index ?? get().currentDocumentIndex
       if (!region) return
       await maskSyncer.flush()
-      const doc: Document = await invoke<Document>('inpaint_partial', {
-        index,
-        region,
-      })
-      set((state) => ({
-        documents: replaceDocument(state.documents, index, doc),
-        showInpaintedImage: true,
-      }))
+      await invoke('inpaint_partial', { index, region })
+      if (index === get().currentDocumentIndex) {
+        await get().refreshCurrentDocument()
+      }
+      set({ showInpaintedImage: true })
     },
     render: async (_, index) => {
       index = index ?? get().currentDocumentIndex
       await textBlockSyncer.flush()
-      const doc: Document = await invoke<Document>('render', {
+      await invoke('render', {
         index,
         shaderEffect: get().renderEffect,
       })
-      set((state) => ({
-        documents: replaceDocument(state.documents, index, doc),
-        showRenderedImage: true,
-      }))
+      if (index === get().currentDocumentIndex) {
+        await get().refreshCurrentDocument()
+      }
+      set({ showRenderedImage: true })
     },
     renderTextBlock: async (_, index, textBlockIndex) => {
       index = index ?? get().currentDocumentIndex
       if (typeof textBlockIndex !== 'number') return
-      const doc = get().documents[index]
-      if (!doc) return
+      if (!get().currentDocument) return
       await textBlockSyncer.flush()
-      const updatedDoc: Document = await invoke<Document>('render', {
+      await invoke('render', {
         index,
         textBlockIndex,
         shaderEffect: get().renderEffect,
       })
-      set((state) => ({
-        documents: replaceDocument(state.documents, index, updatedDoc),
-      }))
+      if (index === get().currentDocumentIndex) {
+        await get().refreshCurrentDocument()
+      }
     },
     llmList: async () => {
       try {
@@ -665,27 +682,33 @@ export const useAppStore = create<AppState>((set, get) => {
             : languages[0]
           : undefined
 
-      let doc: Document | void = undefined
       if (isOpenAICompatible()) {
         if (!syncOpenAIReady()) {
           throw new Error(
             'Provide an OpenAI compatible endpoint and API key to generate translations.',
           )
         }
-        doc = await generateWithOpenAI(index, textBlockIndex)
-      }
-
-      if (doc === undefined) {
-        doc = await invoke<Document>('llm_generate', {
+        const updatedBlocks = await generateWithOpenAI(textBlockIndex)
+        if (updatedBlocks) {
+          // Save the updated blocks to the server
+          await invoke('update_text_blocks', {
+            index,
+            textBlocks: updatedBlocks,
+          })
+        }
+      } else {
+        await invoke('llm_generate', {
           index,
           textBlockIndex,
           language,
         })
       }
-      set((state) => ({
-        documents: replaceDocument(state.documents, index, doc),
-        showTextBlocksOverlay: true,
-      }))
+
+      if (index === get().currentDocumentIndex) {
+        await get().refreshCurrentDocument()
+      }
+      set({ showTextBlocksOverlay: true })
+
       if (typeof textBlockIndex === 'number') {
         void get().renderTextBlock(undefined, index, textBlockIndex)
       }
@@ -816,7 +839,7 @@ export const useAppStore = create<AppState>((set, get) => {
     },
 
     processAllImages: async () => {
-      const total = get().documents.length
+      const total = get().totalPages
       if (!total) return
       const openAISelected = isOpenAICompatible()
 
@@ -842,7 +865,8 @@ export const useAppStore = create<AppState>((set, get) => {
       for (let index = 0; index < total; index++) {
         if (get().operation?.cancelRequested) break
 
-        set({ currentDocumentIndex: index, selectedBlockIndex: undefined })
+        // Switch to this document
+        await get().setCurrentDocumentIndex(index)
         get().updateOperation({
           current: index,
           total,

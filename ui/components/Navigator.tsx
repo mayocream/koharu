@@ -1,19 +1,15 @@
 'use client'
 
-import { useEffect, useState } from 'react'
+import { useEffect, useState, useCallback } from 'react'
 import { ScrollArea, Tooltip } from 'radix-ui'
 import { useTranslation } from 'react-i18next'
 import { useAppStore } from '@/lib/store'
-import { convertToBlob } from '@/lib/util'
-import { Document } from '@/types'
 import { ResizableSidebar } from '@/components/ResizableSidebar'
 
 export function Navigator() {
-  const { documents, currentDocumentIndex, setCurrentDocumentIndex } =
+  const { totalPages, currentDocumentIndex, setCurrentDocumentIndex } =
     useAppStore()
   const { t } = useTranslation()
-
-  const current = documents[currentDocumentIndex]
 
   return (
     <ResizableSidebar
@@ -29,14 +25,14 @@ export function Navigator() {
             {t('navigator.title')}
           </p>
           <p className='text-xs font-semibold text-neutral-900'>
-            {documents.length
-              ? t('navigator.pages', { count: documents.length })
+            {totalPages
+              ? t('navigator.pages', { count: totalPages })
               : t('navigator.empty')}
           </p>
         </div>
 
         <div className='flex items-center gap-1.5 px-2.5 py-1.5 text-[11px] text-neutral-600'>
-          {current ? (
+          {totalPages > 0 ? (
             <span className='bg-neutral-100 px-2 py-0.5 font-mono text-[10px] text-neutral-700'>
               #{currentDocumentIndex + 1}
             </span>
@@ -48,12 +44,12 @@ export function Navigator() {
         <ScrollArea.Root className='min-h-0 flex-1'>
           <ScrollArea.Viewport className='size-full p-2'>
             <div className='flex flex-col gap-1.5'>
-              {documents.map((doc, idx) => (
+              {Array.from({ length: totalPages }, (_, idx) => (
                 <PagePreview
-                  key={doc.id}
-                  document={doc}
+                  key={idx}
+                  index={idx}
                   selected={idx === currentDocumentIndex}
-                  onSelect={() => setCurrentDocumentIndex?.(idx)}
+                  onSelect={() => void setCurrentDocumentIndex(idx)}
                 />
               ))}
             </div>
@@ -71,28 +67,45 @@ export function Navigator() {
 }
 
 type PagePreviewProps = {
-  document: Document
+  index: number
   selected: boolean
   onSelect: () => void
 }
 
-function PagePreview({ document, selected, onSelect }: PagePreviewProps) {
+function PagePreview({ index, selected, onSelect }: PagePreviewProps) {
   const [preview, setPreview] = useState<string>()
+  const [loading, setLoading] = useState(true)
+  const [error, setError] = useState(false)
+
+  const fetchThumbnail = useCallback(async () => {
+    setLoading(true)
+    setError(false)
+    try {
+      const { fetchThumbnail: fetchThumbnailApi } =
+        await import('@/lib/backend')
+      const blob = await fetchThumbnailApi(index)
+      const url = URL.createObjectURL(blob)
+      setPreview((prev) => {
+        if (prev) URL.revokeObjectURL(prev)
+        return url
+      })
+    } catch (err) {
+      console.error('Failed to fetch thumbnail:', err)
+      setError(true)
+    } finally {
+      setLoading(false)
+    }
+  }, [index])
 
   useEffect(() => {
-    let img = document.rendered
-    if (!img?.length) {
-      img = document.image
+    void fetchThumbnail()
+    return () => {
+      setPreview((prev) => {
+        if (prev) URL.revokeObjectURL(prev)
+        return undefined
+      })
     }
-    if (!img?.length) {
-      setPreview(undefined)
-      return
-    }
-    const blob = convertToBlob(img)
-    const url = URL.createObjectURL(blob)
-    setPreview(url)
-    return () => URL.revokeObjectURL(url)
-  }, [document.image])
+  }, [fetchThumbnail])
 
   return (
     <Tooltip.Root>
@@ -102,10 +115,16 @@ function PagePreview({ document, selected, onSelect }: PagePreviewProps) {
           data-selected={selected}
           className='flex flex-col gap-0.5 rounded border border-transparent bg-white p-1.5 text-left shadow-sm transition hover:border-neutral-200 data-[selected=true]:border-pink-500'
         >
-          {preview ? (
+          {loading ? (
+            <div className='aspect-3/4 w-full animate-pulse rounded bg-neutral-200' />
+          ) : error ? (
+            <div className='flex aspect-3/4 w-full items-center justify-center rounded bg-neutral-200'>
+              <span className='text-[10px] text-neutral-400'>?</span>
+            </div>
+          ) : preview ? (
             <img
               src={preview}
-              alt={document.name}
+              alt={`Page ${index + 1}`}
               style={{ objectFit: 'contain' }}
               className='aspect-3/4 w-full rounded object-cover'
             />
@@ -114,7 +133,7 @@ function PagePreview({ document, selected, onSelect }: PagePreviewProps) {
           )}
           <div className='flex flex-1 items-center text-[11px] text-neutral-600'>
             <div className='mx-auto flex text-center font-semibold text-neutral-900'>
-              {document.name}
+              {index + 1}
             </div>
           </div>
         </button>
@@ -123,7 +142,7 @@ function PagePreview({ document, selected, onSelect }: PagePreviewProps) {
         className='z-10 rounded bg-black px-2 py-1 text-xs text-white'
         sideOffset={4}
       >
-        {document.path}
+        Page {index + 1}
       </Tooltip.Content>
     </Tooltip.Root>
   )

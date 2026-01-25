@@ -11,24 +11,23 @@ import i18n, {
   type LocaleCode,
 } from '@/lib/i18n'
 import { useAppStore } from '@/lib/store'
-import { Document } from '@/types'
 
 export function Providers({ children }: { children: ReactNode }) {
-  const hydrateDocuments = useAppStore((state) => state.hydrateDocuments)
+  const setTotalPages = useAppStore((state) => state.setTotalPages)
 
   useEffect(() => {
     let unlisten: (() => void) | undefined
     ;(async () => {
       try {
-        const docs = await invoke<Document[]>('get_documents')
-        if (docs.length) {
-          hydrateDocuments(docs)
+        const count = await invoke<number>('get_documents')
+        if (count > 0) {
+          setTotalPages(count)
         }
       } catch (_) {}
 
       try {
-        unlisten = await listen<Document[]>('documents:opened', (event) => {
-          hydrateDocuments(event.payload ?? [])
+        unlisten = await listen<number>('documents:opened', (event) => {
+          setTotalPages(event.payload ?? 0)
         })
       } catch (_) {}
     })()
@@ -36,7 +35,7 @@ export function Providers({ children }: { children: ReactNode }) {
     return () => {
       unlisten?.()
     }
-  }, [hydrateDocuments])
+  }, [setTotalPages])
 
   useEffect(() => {
     const preferred = getPreferredLocale()

@@ -9,9 +9,9 @@ export function setCanvasViewport(element: HTMLDivElement | null) {
 }
 
 export function fitCanvasToViewport() {
-  const { documents, currentDocumentIndex, setScale, setAutoFitEnabled } =
+  const { currentDocument, setScale, setAutoFitEnabled } =
     useAppStore.getState()
-  const doc = documents[currentDocumentIndex]
+  const doc = currentDocument
   const viewport = canvasViewportRef.current
   if (!doc || !viewport) return
   const rect = viewport.getBoundingClientRect()

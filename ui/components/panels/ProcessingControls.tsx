@@ -15,14 +15,12 @@ export function ProcessingControls() {
     setShowBrushLayer,
     showTextBlocksOverlay,
     setShowTextBlocksOverlay,
-    documents,
-    currentDocumentIndex,
+    currentDocument,
     inpaint,
     detect,
     ocr,
   } = useAppStore()
   const { t } = useTranslation()
-  const currentDocument = documents[currentDocumentIndex]
 
   return (
     <div className='space-y-2 text-xs text-neutral-600'>

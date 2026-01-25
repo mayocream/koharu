@@ -41,9 +41,7 @@ const shouldInpaint = (updates: Partial<TextBlock>) =>
   Object.prototype.hasOwnProperty.call(updates, 'height')
 
 export function useTextBlocks() {
-  const document = useAppStore(
-    (state) => state.documents[state.currentDocumentIndex],
-  )
+  const document = useAppStore((state) => state.currentDocument)
   const textBlocks = document?.textBlocks ?? []
   const selectedBlockIndex = useAppStore((state) => state.selectedBlockIndex)
   const setSelectedBlockIndex = useAppStore(
@@ -54,14 +52,14 @@ export function useTextBlocks() {
   const inpaintPartial = useAppStore((state) => state.inpaintPartial)
 
   const replaceBlock = async (index: number, updates: Partial<TextBlock>) => {
-    const { documents, currentDocumentIndex } = useAppStore.getState()
-    const currentBlocks = documents[currentDocumentIndex]?.textBlocks ?? []
+    const { currentDocument, currentDocumentIndex } = useAppStore.getState()
+    const currentBlocks = currentDocument?.textBlocks ?? []
     const nextBlocks = currentBlocks.map((block, idx) =>
       idx === index ? { ...block, ...updates } : block,
     )
     await updateTextBlocks(nextBlocks)
 
-    const doc = documents[currentDocumentIndex]
+    const doc = currentDocument
 
     if (shouldRenderSprite(updates)) {
       void renderTextBlock(undefined, currentDocumentIndex, index)
@@ -82,16 +80,16 @@ export function useTextBlocks() {
   }
 
   const appendBlock = async (block: TextBlock) => {
-    const { documents, currentDocumentIndex } = useAppStore.getState()
-    const currentBlocks = documents[currentDocumentIndex]?.textBlocks ?? []
+    const { currentDocument } = useAppStore.getState()
+    const currentBlocks = currentDocument?.textBlocks ?? []
     const nextBlocks = [...currentBlocks, block]
     await updateTextBlocks(nextBlocks)
     setSelectedBlockIndex(nextBlocks.length - 1)
   }
 
   const removeBlock = async (index: number) => {
-    const { documents, currentDocumentIndex } = useAppStore.getState()
-    const currentBlocks = documents[currentDocumentIndex]?.textBlocks ?? []
+    const { currentDocument } = useAppStore.getState()
+    const currentBlocks = currentDocument?.textBlocks ?? []
     const nextBlocks = currentBlocks.filter((_, idx) => idx !== index)
     await updateTextBlocks(nextBlocks)
     setSelectedBlockIndex(undefined)

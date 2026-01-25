@@ -238,4 +238,17 @@ function triggerDownload(blob: Blob, filename: string) {
   URL.revokeObjectURL(url)
 }
 
+export async function fetchThumbnail(index: number): Promise<Blob> {
+  await ensureInitialized()
+  const res = await fetch(`${apiBase}/get_thumbnail`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ index }),
+  })
+  if (!res.ok) {
+    throw new Error(await readError(res))
+  }
+  return res.blob()
+}
+
 export const isTauri = isTauriEnv

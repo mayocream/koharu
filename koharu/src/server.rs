@@ -131,6 +131,8 @@ fn build_router(state: ApiState) -> Router {
         app_version,
         open_external,
         get_documents,
+        get_document,
+        get_thumbnail,
         open_documents,
         save_documents,
         export_document,

@@ -45,13 +45,44 @@ pub async fn open_external(url: String) -> Result<()> {
 }
 
 #[endpoint(path = "/api/get_documents", method = "get,post")]
-pub async fn get_documents(state: ApiState) -> Result<Vec<Document>> {
+pub async fn get_documents(state: ApiState) -> Result<usize> {
     let guard = state.app_state().read().await;
-    Ok(guard.documents.clone())
+    Ok(guard.documents.len())
+}
+
+#[endpoint(path = "/api/get_document", method = "get,post")]
+pub async fn get_document(state: ApiState, index: usize) -> Result<Document> {
+    let guard = state.app_state().read().await;
+    guard
+        .documents
+        .get(index)
+        .cloned()
+        .ok_or_else(|| anyhow::anyhow!("Document not found at index {}", index))
+}
+
+#[endpoint(path = "/api/get_thumbnail", method = "get,post")]
+pub async fn get_thumbnail(state: ApiState, index: usize) -> Result<Response> {
+    let guard = state.app_state().read().await;
+    let doc = guard
+        .documents
+        .get(index)
+        .ok_or_else(|| anyhow::anyhow!("Document not found at index {}", index))?;
+
+    let source = doc.rendered.as_ref().unwrap_or(&doc.image);
+    let thumbnail = source.thumbnail(200, 200);
+
+    let mut buf = Cursor::new(Vec::new());
+    thumbnail.write_to(&mut buf, ImageFormat::WebP)?;
+
+    let mut response = Response::new(Body::from(buf.into_inner()));
+    response
+        .headers_mut()
+        .insert(header::CONTENT_TYPE, HeaderValue::from_static("image/webp"));
+    Ok(response)
 }
 
 #[endpoint(path = "/api/open_documents", method = "post")]
-pub async fn open_documents(state: ApiState, inputs: Vec<FileInput>) -> Result<Vec<Document>> {
+pub async fn open_documents(state: ApiState, inputs: Vec<FileInput>) -> Result<usize> {
     if inputs.is_empty() {
         anyhow::bail!("No files uploaded");
     }
@@ -62,9 +93,10 @@ pub async fn open_documents(state: ApiState, inputs: Vec<FileInput>) -> Result<V
         .collect();
 
     let docs = load_documents(inputs)?;
+    let count = docs.len();
     let mut guard = state.app_state().write().await;
-    guard.documents = docs.clone();
-    Ok(docs)
+    guard.documents = docs;
+    Ok(count)
 }
 
 #[endpoint(path = "/api/save_documents", method = "post")]
@@ -122,7 +154,7 @@ pub async fn export_document(state: ApiState, index: usize) -> Result<Response> 
 
 #[endpoint(path = "/api/detect", method = "post")]
 #[instrument(level = "info", skip_all)]
-pub async fn detect(state: ApiState, index: usize) -> Result<Document> {
+pub async fn detect(state: ApiState, index: usize) -> Result<()> {
     let snapshot = {
         let guard = state.app_state().read().await;
         guard
@@ -169,13 +201,13 @@ pub async fn detect(state: ApiState, index: usize) -> Result<Document> {
         .documents
         .get_mut(index)
         .ok_or_else(|| anyhow::anyhow!("Document not found"))?;
-    *document = updated.clone();
-    Ok(updated)
+    *document = updated;
+    Ok(())
 }
 
 #[endpoint(path = "/api/ocr", method = "post")]
 #[instrument(level = "info", skip_all)]
-pub async fn ocr(state: ApiState, index: usize) -> Result<Document> {
+pub async fn ocr(state: ApiState, index: usize) -> Result<()> {
     let snapshot = {
         let guard = state.app_state().read().await;
         guard
@@ -197,13 +229,13 @@ pub async fn ocr(state: ApiState, index: usize) -> Result<Document> {
         .documents
         .get_mut(index)
         .ok_or_else(|| anyhow::anyhow!("Document not found"))?;
-    *document = updated.clone();
-    Ok(updated)
+    *document = updated;
+    Ok(())
 }
 
 #[endpoint(path = "/api/inpaint", method = "post")]
 #[instrument(level = "info", skip_all)]
-pub async fn inpaint(state: ApiState, index: usize) -> Result<Document> {
+pub async fn inpaint(state: ApiState, index: usize) -> Result<()> {
     let snapshot = {
         let guard = state.app_state().read().await;
         guard
@@ -249,8 +281,8 @@ pub async fn inpaint(state: ApiState, index: usize) -> Result<Document> {
         .documents
         .get_mut(index)
         .ok_or_else(|| anyhow::anyhow!("Document not found"))?;
-    *document = updated.clone();
-    Ok(updated)
+    *document = updated;
+    Ok(())
 }
 
 #[endpoint(path = "/api/update_inpaint_mask", method = "post")]
@@ -259,7 +291,7 @@ pub async fn update_inpaint_mask(
     index: usize,
     mask: Vec<u8>,
     region: Option<InpaintRegion>,
-) -> Result<Document> {
+) -> Result<()> {
     let snapshot = {
         let guard = state.app_state().read().await;
         guard
@@ -297,7 +329,7 @@ pub async fn update_inpaint_mask(
             let y1 = region.y.saturating_add(region.height).min(doc_height);
 
             if x1 <= x0 || y1 <= y0 {
-                return Ok(snapshot);
+                return Ok(());
             }
 
             let patch_rgba = update_image.to_rgba8();
@@ -330,8 +362,8 @@ pub async fn update_inpaint_mask(
         .documents
         .get_mut(index)
         .ok_or_else(|| anyhow::anyhow!("Document not found"))?;
-    *document = updated.clone();
-    Ok(updated)
+    *document = updated;
+    Ok(())
 }
 
 #[endpoint(path = "/api/update_brush_layer", method = "post")]
@@ -340,7 +372,7 @@ pub async fn update_brush_layer(
     index: usize,
     patch: Vec<u8>,
     region: InpaintRegion,
-) -> Result<Document> {
+) -> Result<()> {
     let snapshot = {
         let guard = state.app_state().read().await;
         guard
@@ -352,7 +384,7 @@ pub async fn update_brush_layer(
 
     let (img_width, img_height) = (snapshot.width, snapshot.height);
     let Some((x0, y0, width, height)) = clamp_region(&region, img_width, img_height) else {
-        return Ok(snapshot);
+        return Ok(());
     };
 
     let patch_image = image::load_from_memory(&patch)?;
@@ -389,17 +421,13 @@ pub async fn update_brush_layer(
         .documents
         .get_mut(index)
         .ok_or_else(|| anyhow::anyhow!("Document not found"))?;
-    *document = updated.clone();
-    Ok(updated)
+    *document = updated;
+    Ok(())
 }
 
 #[endpoint(path = "/api/inpaint_partial", method = "post")]
 #[instrument(level = "info", skip_all)]
-pub async fn inpaint_partial(
-    state: ApiState,
-    index: usize,
-    region: InpaintRegion,
-) -> Result<Document> {
+pub async fn inpaint_partial(state: ApiState, index: usize, region: InpaintRegion) -> Result<()> {
     let snapshot = {
         let guard = state.app_state().read().await;
         guard
@@ -415,7 +443,7 @@ pub async fn inpaint_partial(
         .ok_or_else(|| anyhow::anyhow!("Segment image not found"))?;
 
     if region.width == 0 || region.height == 0 {
-        return Ok(snapshot);
+        return Ok(());
     }
 
     let (img_width, img_height) = (snapshot.width, snapshot.height);
@@ -427,7 +455,7 @@ pub async fn inpaint_partial(
     let crop_height = y1.saturating_sub(y0);
 
     if crop_width == 0 || crop_height == 0 {
-        return Ok(snapshot);
+        return Ok(());
     }
 
     let patch_x1 = x0 + crop_width;
@@ -442,7 +470,7 @@ pub async fn inpaint_partial(
     });
 
     if !overlaps_text {
-        return Ok(snapshot);
+        return Ok(());
     }
 
     let image_crop =
@@ -482,8 +510,8 @@ pub async fn inpaint_partial(
         .documents
         .get_mut(index)
         .ok_or_else(|| anyhow::anyhow!("Document not found"))?;
-    *document = updated.clone();
-    Ok(updated)
+    *document = updated;
+    Ok(())
 }
 
 #[endpoint(path = "/api/render", method = "post")]
@@ -493,7 +521,7 @@ pub async fn render(
     index: usize,
     text_block_index: Option<usize>,
     shader_effect: Option<TextShaderEffect>,
-) -> Result<Document> {
+) -> Result<()> {
     let snapshot = {
         let guard = state.app_state().read().await;
         guard
@@ -515,8 +543,8 @@ pub async fn render(
         .documents
         .get_mut(index)
         .ok_or_else(|| anyhow::anyhow!("Document not found"))?;
-    *document = updated.clone();
-    Ok(updated)
+    *document = updated;
+    Ok(())
 }
 
 #[endpoint(path = "/api/update_text_blocks", method = "post")]
@@ -524,14 +552,14 @@ pub async fn update_text_blocks(
     state: ApiState,
     index: usize,
     text_blocks: Vec<TextBlock>,
-) -> Result<Document> {
+) -> Result<()> {
     let mut guard = state.app_state().write().await;
     let document = guard
         .documents
         .get_mut(index)
         .ok_or_else(|| anyhow::anyhow!("Document not found"))?;
     document.text_blocks = text_blocks;
-    Ok(document.clone())
+    Ok(())
 }
 
 #[endpoint(path = "/api/list_font_families", method = "get,post")]
@@ -589,7 +617,7 @@ pub async fn llm_generate(
     index: usize,
     text_block_index: Option<usize>,
     language: Option<String>,
-) -> Result<Document> {
+) -> Result<()> {
     let snapshot = {
         let guard = state.app_state().read().await;
         guard
@@ -623,8 +651,8 @@ pub async fn llm_generate(
         .documents
         .get_mut(index)
         .ok_or_else(|| anyhow::anyhow!("Document not found"))?;
-    *document = updated.clone();
-    Ok(updated)
+    *document = updated;
+    Ok(())
 }
 
 // Helpers

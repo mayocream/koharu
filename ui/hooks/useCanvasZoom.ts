@@ -3,14 +3,7 @@
 import { useAppStore } from '@/lib/store'
 
 export function useCanvasZoom() {
-  const {
-    scale,
-    setScale,
-    documents,
-    currentDocumentIndex,
-    setAutoFitEnabled,
-  } = useAppStore()
-  const currentDocument = documents[currentDocumentIndex]
+  const { scale, setScale, currentDocument, setAutoFitEnabled } = useAppStore()
 
   const summary = currentDocument
     ? `${currentDocument.width} x ${currentDocument.height}`
