@@ -27,12 +27,6 @@ use crate::{
     version,
 };
 
-#[derive(Debug, Deserialize)]
-pub struct FileInput {
-    name: String,
-    bytes: Vec<u8>,
-}
-
 #[endpoint(path = "/api/app_version", method = "get,post")]
 pub async fn app_version(state: ApiState) -> Result<String> {
     Ok(version::current().to_string())
@@ -82,15 +76,21 @@ pub async fn get_thumbnail(state: ApiState, index: usize) -> Result<Response> {
 }
 
 #[endpoint(path = "/api/open_documents", method = "post")]
-pub async fn open_documents(state: ApiState, inputs: Vec<FileInput>) -> Result<usize> {
+pub async fn open_documents(state: ApiState, multipart: Multipart) -> Result<usize> {
+    let mut inputs: Vec<(PathBuf, Vec<u8>)> = Vec::new();
+
+    while let Some(field) = multipart.next_field().await? {
+        let name = field
+            .file_name()
+            .map(|s| s.to_string())
+            .unwrap_or_else(|| "unknown".to_string());
+        let bytes = field.bytes().await?.to_vec();
+        inputs.push((PathBuf::from(name), bytes));
+    }
+
     if inputs.is_empty() {
         anyhow::bail!("No files uploaded");
     }
-
-    let inputs: Vec<_> = inputs
-        .into_iter()
-        .map(|f| (PathBuf::from(f.name), f.bytes))
-        .collect();
 
     let docs = load_documents(inputs)?;
     let count = docs.len();

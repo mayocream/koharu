@@ -142,20 +142,17 @@ async function openDocumentsHttp<T>(): Promise<T> {
     true,
   )
   if (!files.length) {
-    return [] as unknown as T
+    return 0 as unknown as T
   }
 
-  const inputs = await Promise.all(
-    files.map(async (file) => {
-      const bytes = Array.from(new Uint8Array(await file.arrayBuffer()))
-      return { name: file.name, bytes }
-    }),
-  )
+  const formData = new FormData()
+  for (const file of files) {
+    formData.append('files', file, file.name)
+  }
 
   const res = await fetch(`${apiBase}/open_documents`, {
     method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ inputs }),
+    body: formData,
   })
   if (!res.ok) {
     throw new Error(await readError(res))
