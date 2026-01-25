@@ -12,3 +12,5 @@ pub mod result;
 pub mod state;
 pub mod update;
 pub mod version;
+#[cfg(target_os = "windows")]
+pub mod windows;
