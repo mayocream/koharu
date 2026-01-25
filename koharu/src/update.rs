@@ -1,14 +1,9 @@
-use std::path::PathBuf;
+use std::{path::PathBuf, sync::Arc};
 
 use serde::Serialize;
-use tauri::{AppHandle, State};
-#[cfg(feature = "bundle")]
-use tauri::{Emitter, Manager};
+use tauri::{AppHandle, Emitter};
 use tokio::sync::RwLock;
-#[cfg(feature = "bundle")]
 use tracing::{error, info, warn};
-
-use crate::result::Result;
 
 #[derive(Debug, Clone, Serialize)]
 pub struct UpdateSummary {
@@ -18,7 +13,6 @@ pub struct UpdateSummary {
 }
 
 pub struct UpdateState {
-    #[cfg(feature = "bundle")]
     pending: RwLock<Option<velopack::UpdateInfo>>,
     ignored_version: RwLock<Option<String>>,
     ignore_file: PathBuf,
@@ -33,19 +27,16 @@ impl UpdateState {
             .filter(|s| !s.is_empty());
 
         Self {
-            #[cfg(feature = "bundle")]
             pending: RwLock::new(None),
             ignored_version: RwLock::new(ignored_version),
             ignore_file,
         }
     }
 
-    #[cfg(feature = "bundle")]
     pub async fn set_pending(&self, update: velopack::UpdateInfo) {
         *self.pending.write().await = Some(update);
     }
 
-    #[cfg(feature = "bundle")]
     pub async fn pending(&self) -> Option<velopack::UpdateInfo> {
         self.pending.read().await.clone()
     }
@@ -72,16 +63,13 @@ impl UpdateState {
         Ok(())
     }
 
-    #[cfg(feature = "bundle")]
     pub async fn clear_pending(&self) {
         *self.pending.write().await = None;
     }
 }
 
-#[cfg(feature = "bundle")]
 impl From<&velopack::UpdateInfo> for UpdateSummary {
     fn from(update: &velopack::UpdateInfo) -> Self {
-        // although vpk produces NotesHTML, it seems the velopack UpdateCheck in rust doesn't parse it.
         let notes = update.TargetFullRelease.NotesMarkdown.trim();
         tracing::info!("release notes {:#?}", update.TargetFullRelease);
         UpdateSummary {
@@ -96,23 +84,17 @@ impl From<&velopack::UpdateInfo> for UpdateSummary {
     }
 }
 
-pub fn spawn_background_update_check(app: AppHandle) {
-    #[cfg(feature = "bundle")]
-    tauri::async_runtime::spawn(async move {
-        if let Err(err) = check_for_updates(app.clone()).await {
-            warn!("background update check failed: {err:#}");
-        }
-    });
-
-    #[cfg(not(feature = "bundle"))]
-    {
-        let _ = app;
+pub fn spawn_background_update_check(state: Arc<UpdateState>, app: Option<AppHandle>) {
+    if let Some(app_handle) = app {
+        tauri::async_runtime::spawn(async move {
+            if let Err(err) = check_for_updates(state, app_handle).await {
+                warn!("background update check failed: {err:#}");
+            }
+        });
     }
 }
 
-#[cfg(feature = "bundle")]
-async fn check_for_updates(app: AppHandle) -> anyhow::Result<()> {
-    let state = app.state::<UpdateState>();
+async fn check_for_updates(state: Arc<UpdateState>, app: AppHandle) -> anyhow::Result<()> {
     let ignored_version = state.ignored_version().await;
 
     let source = velopack::sources::HttpSource::new(
@@ -135,35 +117,21 @@ async fn check_for_updates(app: AppHandle) -> anyhow::Result<()> {
     Ok(())
 }
 
-#[tauri::command]
-pub async fn get_available_update(state: State<'_, UpdateState>) -> Result<Option<UpdateSummary>> {
-    #[cfg(feature = "bundle")]
-    {
-        let ignored_version = state.ignored_version().await;
-        let summary = state.pending().await.and_then(|update| {
-            let version = update.TargetFullRelease.Version.clone();
-            if ignored_version.as_deref() == Some(version.as_str()) {
-                None
-            } else {
-                Some(UpdateSummary::from(&update))
-            }
-        });
-        Ok(summary)
-    }
-
-    #[cfg(not(feature = "bundle"))]
-    {
-        let _ = state;
-        Ok(None)
-    }
+pub async fn get_available_update(state: &UpdateState) -> Option<UpdateSummary> {
+    let ignored_version = state.ignored_version().await;
+    state.pending().await.and_then(|update| {
+        let version = update.TargetFullRelease.Version.clone();
+        if ignored_version.as_deref() == Some(version.as_str()) {
+            None
+        } else {
+            Some(UpdateSummary::from(&update))
+        }
+    })
 }
 
-#[tauri::command]
-pub async fn apply_available_update(app: AppHandle, state: State<'_, UpdateState>) -> Result<()> {
-    #[cfg(feature = "bundle")]
-    {
-        if let Some(update) = state.pending().await {
-            let handle = app.clone();
+pub async fn apply_available_update(state: &UpdateState, app: Option<AppHandle>) {
+    if let Some(update) = state.pending().await {
+        if let Some(handle) = app {
             tauri::async_runtime::spawn(async move {
                 let emit_start = handle.emit("update:applying", UpdateSummary::from(&update));
                 if let Err(err) = emit_start {
@@ -175,43 +143,35 @@ pub async fn apply_available_update(app: AppHandle, state: State<'_, UpdateState
                     let _ = handle.emit("update:error", err.to_string());
                 }
             });
-        }
-    }
-
-    let _ = app;
-    let _ = state;
-
-    Ok(())
-}
-
-#[tauri::command]
-pub async fn ignore_update(state: State<'_, UpdateState>, version: Option<String>) -> Result<()> {
-    #[cfg(feature = "bundle")]
-    {
-        let target_version = if let Some(version) = version {
-            Some(version)
         } else {
-            state
-                .pending()
-                .await
-                .map(|u| u.TargetFullRelease.Version.clone())
-        };
-
-        if let Some(version) = target_version {
-            state.set_ignored_version(Some(version)).await?;
-            state.clear_pending().await;
+            // Headless mode - just download and apply without events
+            tauri::async_runtime::spawn(async move {
+                if let Err(err) = download_and_apply(update).await {
+                    error!("failed to apply update: {err:#}");
+                }
+            });
         }
     }
-    #[cfg(not(feature = "bundle"))]
-    {
-        let _ = version;
-        let _ = state;
+}
+
+pub async fn ignore_update(state: &UpdateState, version: Option<String>) -> anyhow::Result<()> {
+    let target_version = if let Some(version) = version {
+        Some(version)
+    } else {
+        state
+            .pending()
+            .await
+            .map(|u| u.TargetFullRelease.Version.clone())
+    };
+
+    if let Some(version) = target_version {
+        state.set_ignored_version(Some(version)).await?;
+        state.clear_pending().await;
     }
 
     Ok(())
 }
 
-#[cfg(feature = "bundle")]
 async fn download_and_apply(update: velopack::UpdateInfo) -> anyhow::Result<()> {
     let version = update.TargetFullRelease.Version.clone();
     let source = velopack::sources::HttpSource::new(

@@ -16,11 +16,12 @@ use tauri::Manager;
 use tokio::{net::TcpListener, sync::RwLock};
 use tracing_subscriber::fmt::format::FmtSpan;
 
+#[cfg(feature = "bundle")]
+use crate::update;
 use crate::{
     api, command, llm, ml,
     renderer::Renderer,
     state::{AppState, State},
-    update,
 };
 
 #[cfg(not(target_os = "windows"))]
@@ -58,6 +59,8 @@ pub struct AppResources {
     pub ml: Arc<ml::Model>,
     pub llm: Arc<llm::Model>,
     pub renderer: Arc<Renderer>,
+    #[cfg(feature = "bundle")]
+    pub update: Arc<update::UpdateState>,
 }
 
 pub struct HttpServerState {
@@ -182,12 +185,18 @@ async fn build_resources(use_cpu: bool, _register_file_assoc: bool) -> Result<Ap
         ml,
         llm,
         renderer,
+        #[cfg(feature = "bundle")]
+        update: Arc::new(update::UpdateState::new(APP_ROOT.to_path_buf())),
     })
 }
 
 async fn setup(app: tauri::AppHandle, cpu: bool) -> Result<()> {
     let resources = build_resources(cpu, true).await?;
     let state = resources.state.clone();
+
+    // Spawn background update check
+    #[cfg(feature = "bundle")]
+    update::spawn_background_update_check(resources.update.clone(), Some(app.clone()));
 
     // Start HTTP server on a random available port
     let listener = TcpListener::bind("127.0.0.1:0").await?;
@@ -230,16 +239,9 @@ pub async fn run() -> Result<()> {
     }
 
     tauri::Builder::default()
-        .invoke_handler(tauri::generate_handler![
-            command::initialize,
-            update::apply_available_update,
-            update::get_available_update,
-            update::ignore_update,
-        ])
+        .invoke_handler(tauri::generate_handler![command::initialize])
         .setup(move |app| {
             app.manage(HttpServerState::new());
-            app.manage(update::UpdateState::new(APP_ROOT.to_path_buf()));
-            update::spawn_background_update_check(app.handle().clone());
 
             let handle = app.handle().clone();
             tauri::async_runtime::spawn(async move {

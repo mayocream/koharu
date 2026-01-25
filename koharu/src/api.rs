@@ -19,6 +19,8 @@ use serde::{Deserialize, Serialize};
 use tokio::net::TcpListener;
 use tower_http::cors::CorsLayer;
 
+#[cfg(feature = "bundle")]
+use crate::update::{self, UpdateState, UpdateSummary};
 use crate::{
     api_crs,
     app::AppResources,
@@ -49,6 +51,11 @@ impl ApiState {
 
     pub fn renderer(&self) -> &Arc<Renderer> {
         &self.resources.renderer
+    }
+
+    #[cfg(feature = "bundle")]
+    pub fn update(&self) -> &Arc<UpdateState> {
+        &self.resources.update
     }
 }
 
@@ -172,6 +179,12 @@ struct OpenExternalPayload {
     url: String,
 }
 
+#[cfg(feature = "bundle")]
+#[derive(Debug, Deserialize)]
+struct IgnoreUpdatePayload {
+    version: Option<String>,
+}
+
 #[derive(Embed)]
 #[folder = "$CARGO_WORKSPACE_DIR/ui/out"]
 #[allow_missing = true]
@@ -232,7 +245,7 @@ fn content_type_for(path: &str) -> Option<HeaderValue> {
 }
 
 fn build_router(state: ApiState) -> Router {
-    Router::new()
+    let router = Router::new()
         .route("/api/app_version", get(app_version).post(app_version))
         .route("/api/open_external", post(open_external))
         .route("/api/get_documents", get(get_documents).post(get_documents))
@@ -260,7 +273,18 @@ fn build_router(state: ApiState) -> Router {
         .route(
             "/translate/with-form/image/stream",
             post(api_crs::translate_with_form_image_stream),
+        );
+
+    #[cfg(feature = "bundle")]
+    let router = router
+        .route(
+            "/api/get_available_update",
+            get(get_available_update).post(get_available_update),
         )
+        .route("/api/apply_available_update", post(apply_available_update))
+        .route("/api/ignore_update", post(ignore_update));
+
+    router
         .with_state(state)
         .layer(DefaultBodyLimit::max(1024 * 1024 * 1024))
         .layer(CorsLayer::permissive())
@@ -503,6 +527,31 @@ async fn llm_generate(
     .await
     .map_err(ApiError::from)?;
     Ok(Json(doc))
+}
+
+#[cfg(feature = "bundle")]
+async fn get_available_update(
+    State(state): State<ApiState>,
+) -> ApiResult<Json<Option<UpdateSummary>>> {
+    let summary = update::get_available_update(state.update()).await;
+    Ok(Json(summary))
+}
+
+#[cfg(feature = "bundle")]
+async fn apply_available_update(State(state): State<ApiState>) -> ApiResult<StatusCode> {
+    update::apply_available_update(state.update(), None).await;
+    Ok(StatusCode::NO_CONTENT)
+}
+
+#[cfg(feature = "bundle")]
+async fn ignore_update(
+    State(state): State<ApiState>,
+    Json(payload): Json<IgnoreUpdatePayload>,
+) -> ApiResult<StatusCode> {
+    update::ignore_update(state.update(), payload.version)
+        .await
+        .map_err(ApiError::from)?;
+    Ok(StatusCode::NO_CONTENT)
 }
 
 fn attachment_response(filename: &str, bytes: Vec<u8>, content_type: &str) -> ApiResult<Response> {

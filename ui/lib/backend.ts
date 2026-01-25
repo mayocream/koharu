@@ -82,18 +82,8 @@ export async function invoke<T>(
 ): Promise<T> {
   await ensureInitialized()
 
-  // Commands that must use Tauri invoke (not available via HTTP)
-  if (isTauriEnv()) {
-    switch (cmd) {
-      case 'get_available_update':
-      case 'apply_available_update':
-      case 'ignore_update': {
-        const { invoke: tauriInvoke } = await import('@tauri-apps/api/core')
-        return tauriInvoke<T>(cmd, args)
-      }
-    }
-  } else {
-    // Browser-only implementations
+  // Browser-only implementations (no Tauri available)
+  if (!isTauriEnv()) {
     switch (cmd) {
       case 'open_external': {
         const url = typeof args?.url === 'string' ? args.url : undefined
@@ -102,11 +92,6 @@ export async function invoke<T>(
         }
         return undefined as T
       }
-      case 'get_available_update':
-        return null as T
-      case 'apply_available_update':
-      case 'ignore_update':
-        return undefined as T
     }
   }
 
@@ -122,6 +107,13 @@ export async function invoke<T>(
       return undefined as T
     case 'export_all_documents':
       await downloadBinary(`${apiBase}/export_all_documents`)
+      return undefined as T
+    // Update commands may not be available (bundle feature disabled)
+    case 'get_available_update':
+      return (await invokeHttpOptional<T>(cmd, args)) ?? (null as T)
+    case 'apply_available_update':
+    case 'ignore_update':
+      await invokeHttpOptional(cmd, args)
       return undefined as T
     default:
       return invokeHttp<T>(cmd, args)
@@ -152,6 +144,36 @@ async function invokeHttp<T>(
 
   const buffer = await res.arrayBuffer()
   return buffer as unknown as T
+}
+
+// Like invokeHttp but returns null if endpoint returns 404
+async function invokeHttpOptional<T>(
+  cmd: string,
+  args?: Record<string, any>,
+): Promise<T | null> {
+  const body = args ?? {}
+  const res = await fetch(`${apiBase}/${cmd}`, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+    },
+    body: JSON.stringify(body),
+  })
+
+  if (res.status === 404) {
+    return null
+  }
+
+  if (!res.ok) {
+    throw new Error(await readError(res))
+  }
+
+  const contentType = res.headers.get('content-type') ?? ''
+  if (contentType.includes('application/json')) {
+    return (await res.json()) as T
+  }
+
+  return null
 }
 
 async function openDocumentsHttp<T>(): Promise<T> {

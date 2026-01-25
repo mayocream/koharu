@@ -10,6 +10,7 @@ pub mod operations;
 pub mod renderer;
 pub mod result;
 pub mod state;
+#[cfg(feature = "bundle")]
 pub mod update;
 pub mod version;
 #[cfg(target_os = "windows")]
