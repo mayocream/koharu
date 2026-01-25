@@ -60,15 +60,14 @@ pub struct AppResources {
     pub renderer: Arc<Renderer>,
 }
 
+#[derive(Default)]
 pub struct HttpServerState {
     port: AtomicU16,
 }
 
 impl HttpServerState {
     pub fn new() -> Self {
-        Self {
-            port: AtomicU16::new(0),
-        }
+        Self::default()
     }
 
     pub fn set_port(&self, port: u16) {

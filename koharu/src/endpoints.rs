@@ -536,7 +536,7 @@ pub async fn update_text_blocks(
 
 #[endpoint(path = "/api/list_font_families", method = "get,post")]
 pub async fn list_font_families(state: ApiState) -> Result<Vec<String>> {
-    Ok(state.renderer().available_fonts()?)
+    state.renderer().available_fonts()
 }
 
 #[endpoint(path = "/api/llm_list", method = "get,post")]
@@ -683,7 +683,7 @@ pub fn load_documents(inputs: Vec<(PathBuf, Vec<u8>)>) -> Result<Vec<Document>> 
     if inputs.len() == 1 {
         let (_, ref bytes) = inputs[0];
         if has_khr_magic(bytes) {
-            return Ok(deserialize_khr(bytes)?);
+            return deserialize_khr(bytes);
         }
     }
 

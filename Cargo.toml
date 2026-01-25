@@ -115,6 +115,10 @@ rust-embed = { version = "8.11", features = [
 ] }
 criterion = { version = "0.8", features = ["html_reports"] }
 git-version = "0.3"
+darling = "0.20"
+proc-macro2 = "1.0"
+quote = "1.0"
+syn = { version = "2.0", features = ["full", "parsing", "extra-traits"] }
 
 [patch.crates-io]
 candle-transformers = { git = "https://github.com/mayocream/candle", branch = "cuda-dynamic-loading" }
