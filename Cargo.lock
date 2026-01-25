@@ -8109,8 +8109,7 @@ dependencies = [
 [[package]]
 name = "ug"
 version = "0.5.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "76b761acf8af3494640d826a8609e2265e19778fb43306c7f15379c78c9b05b0"
+source = "git+https://github.com/mayocream/ug?branch=cuda-dynamic-loading#bce254b909c02f687d9587d90b8bdacb8d2fbd60"
 dependencies = [
  "gemm 0.18.2",
  "half",
@@ -8130,8 +8129,7 @@ dependencies = [
 [[package]]
 name = "ug-cuda"
 version = "0.5.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "9f0a1fa748f26166778c33b8498255ebb7c6bffb472bcc0a72839e07ebb1d9b5"
+source = "git+https://github.com/mayocream/ug?branch=cuda-dynamic-loading#bce254b909c02f687d9587d90b8bdacb8d2fbd60"
 dependencies = [
  "cudarc 0.17.8",
  "half",

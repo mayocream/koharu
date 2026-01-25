@@ -128,6 +128,8 @@ candle-transformers = { git = "https://github.com/mayocream/candle", branch = "c
 candle-core = { git = "https://github.com/mayocream/candle", branch = "cuda-dynamic-loading" }
 candle-nn = { git = "https://github.com/mayocream/candle", branch = "cuda-dynamic-loading" }
 float8 = { git = "https://github.com/mayocream/float8", branch = "cuda-dynamic-loading" }
+ug = { git = "https://github.com/mayocream/ug", branch = "cuda-dynamic-loading" }
+ug-cuda = { git = "https://github.com/mayocream/ug", branch = "cuda-dynamic-loading" }
 
 [profile.dev.package."*"]
 opt-level = 3
