@@ -1,12 +1,13 @@
-pub mod api;
 pub mod app;
 pub mod command;
+pub mod endpoints;
 pub mod image;
 pub mod khr;
 pub mod llm;
 pub mod ml;
 pub mod renderer;
 pub mod result;
+pub mod server;
 pub mod state;
 pub mod version;
 #[cfg(target_os = "windows")]

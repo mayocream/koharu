@@ -17,8 +17,9 @@ use tokio::{net::TcpListener, sync::RwLock};
 use tracing_subscriber::fmt::format::FmtSpan;
 
 use crate::{
-    api, command, llm, ml,
+    command, llm, ml,
     renderer::Renderer,
+    server,
     state::{AppState, State},
 };
 
@@ -222,7 +223,7 @@ async fn setup(app: tauri::AppHandle, cpu: bool) -> Result<()> {
     // Spawn HTTP server in background
     let server_resources = resources.clone();
     tokio::spawn(async move {
-        if let Err(err) = api::serve_with_listener(listener, server_resources).await {
+        if let Err(err) = server::serve_with_listener(listener, server_resources).await {
             tracing::error!("HTTP server error: {err:#}");
         }
     });
@@ -247,7 +248,7 @@ pub async fn run() -> Result<()> {
     if let Some(bind_addr) = bind {
         let resources = build_resources(cpu, false).await?;
 
-        api::serve(bind_addr, resources).await?;
+        server::serve(bind_addr, resources).await?;
         return Ok(());
     }
 

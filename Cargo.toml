@@ -111,6 +111,7 @@ tower-http = { version = "0.6", features = ["fs", "cors"] }
 rust-embed = { version = "8.11", features = [
     "interpolate-folder-path",
     "debug-embed",
+    "mime-guess",
 ] }
 criterion = { version = "0.8", features = ["html_reports"] }
 git-version = "0.3"
