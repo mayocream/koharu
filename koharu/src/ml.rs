@@ -1,9 +1,9 @@
 use anyhow::Result;
 use image::DynamicImage;
-use koharu_ml::comic_text_detector::{self, ComicTextDetector};
+use koharu_ml::comic_text_detector::ComicTextDetector;
 use koharu_ml::font_detector::{self, FontDetector};
-use koharu_ml::lama::{self, Lama};
-use koharu_ml::manga_ocr::{self, MangaOcr};
+use koharu_ml::lama::Lama;
+use koharu_ml::manga_ocr::MangaOcr;
 
 use crate::image::SerializableDynamicImage;
 use crate::state::TextBlock;
@@ -181,13 +181,4 @@ impl Model {
         }
         Ok(predictions)
     }
-}
-
-pub async fn prefetch() -> Result<()> {
-    comic_text_detector::prefetch().await?;
-    manga_ocr::prefetch().await?;
-    lama::prefetch().await?;
-    font_detector::prefetch().await?;
-
-    Ok(())
 }

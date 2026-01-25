@@ -85,21 +85,6 @@ macro_rules! define_llms {
                 }
             }
         }
-
-        pub async fn prefetch() -> anyhow::Result<()> {
-            use futures::stream::{self, StreamExt, TryStreamExt};
-            let models = [
-                $(ModelId::$name),*
-            ];
-            stream::iter(models)
-                .map(|manifest| async move {
-                    manifest.get().await
-                })
-                .buffer_unordered(num_cpus::get())
-                .try_collect::<Vec<_>>()
-                .await?;
-            Ok(())
-        }
     };
 }
 

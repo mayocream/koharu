@@ -59,13 +59,6 @@ pub struct AppResources {
 #[command(version = crate::version::APP_VERSION, about)]
 struct Cli {
     #[arg(
-        short,
-        long,
-        help = "Download dynamic libraries and exit",
-        default_value_t = false
-    )]
-    download: bool,
-    #[arg(
         long,
         help = "Force using CPU even if GPU is available",
         default_value_t = false
@@ -134,15 +127,6 @@ fn initialize(headless: bool, _debug_flag: bool) -> Result<()> {
     Ok(())
 }
 
-async fn prefetch() -> Result<()> {
-    ensure_dylibs(LIB_ROOT.to_path_buf()).await?;
-    ml::prefetch().await?;
-    // Skip for now as it's too big
-    // llm::prefetch().await?;
-
-    Ok(())
-}
-
 async fn build_resources(use_cpu: bool, _register_file_assoc: bool) -> Result<AppResources> {
     if cuda_is_available() {
         ensure_dylibs(LIB_ROOT.to_path_buf()).await?;
@@ -193,19 +177,9 @@ async fn setup(app: tauri::AppHandle, cpu: bool) -> Result<()> {
 }
 
 pub async fn run() -> Result<()> {
-    let Cli {
-        download,
-        cpu,
-        bind,
-        debug,
-    } = Cli::parse();
+    let Cli { cpu, bind, debug } = Cli::parse();
 
     initialize(bind.is_some(), debug)?;
-
-    if download {
-        prefetch().await?;
-        return Ok(());
-    }
 
     if let Some(bind_addr) = bind {
         let resources = build_resources(cpu, false).await?;
