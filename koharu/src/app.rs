@@ -1,20 +1,20 @@
 use std::{path::PathBuf, sync::Arc};
 
 use anyhow::Result;
-use clap::{Parser, ValueHint};
+use clap::Parser;
 use koharu_ml::cuda_is_available;
 use koharu_runtime::{ensure_dylibs, preload_dylibs};
 use once_cell::sync::Lazy;
 use rfd::MessageDialog;
-use tauri::{Emitter, Manager};
+use tauri::Manager;
 use tokio::sync::RwLock;
 use tracing::warn;
 use tracing_subscriber::fmt::format::FmtSpan;
 
 use crate::{
-    api, command, llm, ml, operations,
+    api, command, llm, ml,
     renderer::Renderer,
-    state::{AppState, Document, State},
+    state::{AppState, State},
     update,
 };
 
@@ -84,24 +84,6 @@ struct Cli {
         default_value_t = false
     )]
     debug: bool,
-    #[arg(
-        value_name = "PATH",
-        value_hint = ValueHint::FilePath,
-        help = "Open file on startup"
-    )]
-    path: Option<PathBuf>,
-}
-
-fn load_documents_from_path(path: PathBuf) -> Result<Vec<Document>> {
-    if !path.exists() {
-        return Err(anyhow::anyhow!("File not found: {}", path.display()));
-    }
-
-    let bytes = std::fs::read(&path)?;
-    let inputs = vec![operations::DocumentInput { path, bytes }];
-    let docs =
-        operations::load_documents(inputs).map_err(|err| anyhow::anyhow!(err.to_string()))?;
-    Ok(docs)
 }
 
 fn initialize(headless: bool, _debug_flag: bool) -> Result<()> {
@@ -194,12 +176,8 @@ async fn build_resources(use_cpu: bool, _register_file_assoc: bool) -> Result<Ap
     })
 }
 
-async fn setup(
-    app: tauri::AppHandle,
-    use_cpu: bool,
-    startup_document: Option<PathBuf>,
-) -> Result<()> {
-    let resources = build_resources(use_cpu, true).await?;
+async fn setup(app: tauri::AppHandle, cpu: bool) -> Result<()> {
+    let resources = build_resources(cpu, true).await?;
     let state = resources.state.clone();
 
     app.manage(resources.ml);
@@ -207,27 +185,7 @@ async fn setup(
     app.manage(resources.renderer);
 
     app.get_webview_window("splashscreen").unwrap().close()?;
-    let main_window = app.get_webview_window("main").unwrap();
-    main_window.show()?;
-
-    if let Some(path) = startup_document {
-        match load_documents_from_path(path) {
-            Ok(documents) => {
-                let _ = operations::set_documents(&state, documents.clone()).await;
-                if let Err(err) = main_window.emit("documents:opened", &documents) {
-                    warn!(?err, "Failed to emit documents:opened event");
-                }
-            }
-            Err(err) => {
-                warn!(?err, "Failed to open startup document");
-                MessageDialog::new()
-                    .set_level(rfd::MessageLevel::Error)
-                    .set_title("Failed to open file")
-                    .set_description(format!("{err:#}"))
-                    .show();
-            }
-        }
-    }
+    app.get_webview_window("main").unwrap().show()?;
 
     app.manage(state);
 
@@ -238,7 +196,6 @@ pub async fn run() -> Result<()> {
     let Cli {
         download,
         cpu,
-        path,
         bind,
         debug,
     } = Cli::parse();
@@ -252,17 +209,6 @@ pub async fn run() -> Result<()> {
 
     if let Some(bind_addr) = bind {
         let resources = build_resources(cpu, false).await?;
-
-        if let Some(path) = path {
-            match load_documents_from_path(path.clone()) {
-                Ok(documents) => {
-                    if let Err(err) = operations::set_documents(&resources.state, documents).await {
-                        warn!(?err, "Failed to store startup documents");
-                    }
-                }
-                Err(err) => warn!(?err, "Failed to open startup document"),
-            }
-        }
 
         api::serve(bind_addr, resources).await?;
         return Ok(());
@@ -300,9 +246,8 @@ pub async fn run() -> Result<()> {
             update::spawn_background_update_check(app.handle().clone());
 
             let handle = app.handle().clone();
-            let startup_path = path.clone();
             tauri::async_runtime::spawn(async move {
-                if let Err(err) = setup(handle, cpu, startup_path).await {
+                if let Err(err) = setup(handle, cpu).await {
                     panic!("application setup failed: {err:#}");
                 }
             });
