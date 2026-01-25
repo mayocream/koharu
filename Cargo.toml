@@ -15,7 +15,10 @@ version = "0.26.2"
 edition = "2024"
 description = "Manga translation tools"
 license = "Apache-2.0"
-authors = ["Mayo Takanashi <mayo@linux.com>"]
+authors = [
+    "Mayo Takanashi <mayo@linux.com>",
+    "Wangchong Zhou <fffonion@gmail.com>",
+]
 readme = "README.md"
 homepage = "https://koharu.rs"
 repository = "https://github.com/mayocream/koharu"
