@@ -9,16 +9,15 @@ use axum::{
     Json, Router,
     body::Body,
     extract::{DefaultBodyLimit, Multipart, State},
-    http::{HeaderValue, StatusCode, header},
+    http::{HeaderValue, StatusCode, Uri, header},
     response::{IntoResponse, Response},
     routing::{get, post},
 };
 use koharu_renderer::renderer::TextShaderEffect;
+use rust_embed::Embed;
 use serde::{Deserialize, Serialize};
 use tokio::net::TcpListener;
 use tower_http::cors::CorsLayer;
-#[cfg(debug_assertions)]
-use tower_http::services::{ServeDir, ServeFile};
 
 use crate::{
     api_crs,
@@ -168,76 +167,64 @@ struct LlmGeneratePayload {
     language: Option<String>,
 }
 
-#[cfg(not(debug_assertions))]
-mod embed_ui {
-    use axum::{
-        body::Body,
-        http::{HeaderValue, StatusCode, Uri, header},
-        response::{IntoResponse, Response},
+#[derive(Embed)]
+#[folder = "$CARGO_WORKSPACE_DIR/ui/out"]
+#[allow_missing = true]
+struct EmbeddedUi;
+
+pub async fn serve_embedded(uri: Uri) -> impl IntoResponse {
+    let path = uri.path();
+    let target = match path {
+        "/" => "index.html",
+        _ => path.trim_start_matches('/'),
     };
 
-    use rust_embed::RustEmbed;
-
-    #[derive(RustEmbed)]
-    #[folder = "../ui/out"]
-    struct EmbeddedUi;
-
-    pub async fn serve_embedded(uri: Uri) -> impl IntoResponse {
-        let path = uri.path();
-        let target = match path {
-            "/" => "index.html",
-            _ => path.trim_start_matches('/'),
-        };
-
-        if let Some(resp) = embedded_response(target) {
-            return resp;
-        }
-
-        if let Some(resp) = embedded_response("index.html") {
-            return resp;
-        }
-
-        (StatusCode::NOT_FOUND, "Not Found").into_response()
+    if let Some(resp) = embedded_response(target) {
+        return resp;
     }
 
-    fn embedded_response(path: &str) -> Option<Response> {
-        let asset = EmbeddedUi::get(path)?;
-        let mut response = Response::new(Body::from(asset.data.into_owned()));
-        if let Some(ct) = content_type_for(path) {
-            response.headers_mut().insert(header::CONTENT_TYPE, ct);
-        }
-        Some(response)
+    if let Some(resp) = embedded_response("index.html") {
+        return resp;
     }
 
-    fn content_type_for(path: &str) -> Option<HeaderValue> {
-        let ext = std::path::Path::new(path)
-            .extension()
-            .and_then(|e| e.to_str())
-            .unwrap_or("")
-            .to_ascii_lowercase();
-
-        let mime = match ext.as_str() {
-            "html" => "text/html; charset=utf-8",
-            "js" => "application/javascript",
-            "mjs" => "application/javascript",
-            "css" => "text/css",
-            "json" => "application/json",
-            "wasm" => "application/wasm",
-            "png" => "image/png",
-            "jpg" | "jpeg" => "image/jpeg",
-            "gif" => "image/gif",
-            "svg" => "image/svg+xml",
-            "webp" => "image/webp",
-            "woff" => "font/woff",
-            "woff2" => "font/woff2",
-            _ => "application/octet-stream",
-        };
-
-        HeaderValue::from_str(mime).ok()
-    }
+    (StatusCode::NOT_FOUND, "Not Found").into_response()
 }
-#[cfg(not(debug_assertions))]
-use embed_ui::serve_embedded;
+
+fn embedded_response(path: &str) -> Option<Response> {
+    let asset = EmbeddedUi::get(path)?;
+    let mut response = Response::new(Body::from(asset.data.into_owned()));
+    if let Some(ct) = content_type_for(path) {
+        response.headers_mut().insert(header::CONTENT_TYPE, ct);
+    }
+    Some(response)
+}
+
+fn content_type_for(path: &str) -> Option<HeaderValue> {
+    let ext = std::path::Path::new(path)
+        .extension()
+        .and_then(|e| e.to_str())
+        .unwrap_or("")
+        .to_ascii_lowercase();
+
+    let mime = match ext.as_str() {
+        "html" => "text/html; charset=utf-8",
+        "js" => "application/javascript",
+        "mjs" => "application/javascript",
+        "css" => "text/css",
+        "json" => "application/json",
+        "wasm" => "application/wasm",
+        "png" => "image/png",
+        "jpg" | "jpeg" => "image/jpeg",
+        "gif" => "image/gif",
+        "svg" => "image/svg+xml",
+        "webp" => "image/webp",
+        "woff" => "font/woff",
+        "woff2" => "font/woff2",
+        _ => "application/octet-stream",
+    };
+
+    HeaderValue::from_str(mime).ok()
+}
 
 pub async fn serve(bind: String, resources: AppResources) -> Result<()> {
     let state = ApiState { resources };
@@ -274,18 +261,7 @@ pub async fn serve(bind: String, resources: AppResources) -> Result<()> {
         .layer(DefaultBodyLimit::max(1024 * 1024 * 1024))
         .layer(CorsLayer::permissive());
 
-    router = {
-        #[cfg(debug_assertions)]
-        {
-            router.nest_service(
-                "/",
-                ServeDir::new("../ui/out")
-                    .not_found_service(ServeFile::new("../ui/out/index.html")),
-            )
-        }
-        #[cfg(not(debug_assertions))]
-        router.fallback(serve_embedded)
-    };
+    router = router.fallback(serve_embedded);
 
     let listener = TcpListener::bind(&bind).await?;
     tracing::info!("Headless server listening on http://{}", bind);
