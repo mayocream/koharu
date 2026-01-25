@@ -108,6 +108,7 @@ axum = { version = "0.8", features = ["json", "multipart"] }
 tower-http = { version = "0.6", features = ["fs", "cors"] }
 rust-embed = "8.5"
 criterion = { version = "0.8", features = ["html_reports"] }
+git-version = "0.3"
 
 [patch.crates-io]
 candle-transformers = { git = "https://github.com/mayocream/candle", branch = "cuda-dynamic-loading" }

@@ -1,7 +1,7 @@
-pub const APP_VERSION: &str = match option_env!("KOHARU_BUILD_VERSION") {
-    Some(version) => version,
-    None => env!("CARGO_PKG_VERSION"),
-};
+pub const APP_VERSION: &str = git_version::git_version!(
+    args = ["--always", "--dirty=-dirty", "--tags"],
+    fallback = "unknown"
+);
 
 pub fn current() -> &'static str {
     APP_VERSION
