@@ -51,7 +51,7 @@ function Button({
   const Comp = asChild ? Slot : 'button'
 
   return (
-    // @ts-expect-error - Slot component has different ref typing than button in React 19
+    // @ts-ignore
     <Comp
       data-slot='button'
       data-variant={variant}
