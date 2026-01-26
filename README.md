@@ -35,7 +35,7 @@ Under the hood, Koharu uses [candle](https://github.com/huggingface/candle) for 
 
 ### Headless Mode
 
-Koharu can be run in headless mode via command line, if you want to access it remotely or integrate it with [ComicReadScript](https://github.com/hymbz/ComicReadScript).
+Koharu can be run in headless mode via command line.
 
 ```bash
 # macOS / Linux
@@ -44,7 +44,7 @@ koharu -b 0.0.0.0:5003
 koharu.exe -b 0.0.0.0:5003
 ```
 
-You can now access Koharu Web UI at `http://<your-server-ip>:5003`, or use directly in ComicReadScript.
+You can now access Koharu Web UI at `http://<your-server-ip>:5003`.
 
 ### File association
 
