@@ -1,11 +1,22 @@
 'use client'
 
 import { useEffect, useState } from 'react'
-import { Select } from 'radix-ui'
 import { useTranslation } from 'react-i18next'
 import { OPENAI_COMPATIBLE_MODEL_ID } from '@/lib/openai'
 import { useAppStore } from '@/lib/store'
-import { TooltipButton } from '@/components/ui/form-controls'
+import { Button } from '@/components/ui/button'
+import {
+  Tooltip,
+  TooltipContent,
+  TooltipTrigger,
+} from '@/components/ui/tooltip'
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from '@/components/ui/select'
 
 export function LlmControls() {
   const {
@@ -58,62 +69,41 @@ export function LlmControls() {
           <div className='text-[11px] font-semibold tracking-wide text-neutral-500 uppercase'>
             {t('llm.modelLabel')}
           </div>
-          <Select.Root
-            value={llmSelectedModel}
-            onValueChange={llmSetSelectedModel}
-          >
-            <Select.Trigger className='inline-flex w-full items-center justify-between gap-2 rounded border border-neutral-200 bg-white px-2 py-1 text-sm hover:bg-neutral-50'>
-              <Select.Value placeholder={t('llm.selectPlaceholder')} />
-            </Select.Trigger>
-            <Select.Portal>
-              <Select.Content className='min-w-56 rounded-md bg-white p-1 shadow-sm'>
-                <Select.Viewport>
-                  {llmModels.map((model) => (
-                    <Select.Item
-                      key={model.id}
-                      value={model.id}
-                      className='rounded px-3 py-1.5 text-sm outline-none select-none hover:bg-black/5 data-[state=checked]:bg-black/5'
-                    >
-                      <Select.ItemText>
-                        {model.id === OPENAI_COMPATIBLE_MODEL_ID
-                          ? t('llm.openaiCompatible')
-                          : model.id}
-                      </Select.ItemText>
-                    </Select.Item>
-                  ))}
-                </Select.Viewport>
-              </Select.Content>
-            </Select.Portal>
-          </Select.Root>
+          <Select value={llmSelectedModel} onValueChange={llmSetSelectedModel}>
+            <SelectTrigger className='w-full'>
+              <SelectValue placeholder={t('llm.selectPlaceholder')} />
+            </SelectTrigger>
+            <SelectContent>
+              {llmModels.map((model) => (
+                <SelectItem key={model.id} value={model.id}>
+                  {model.id === OPENAI_COMPATIBLE_MODEL_ID
+                    ? t('llm.openaiCompatible')
+                    : model.id}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
         </div>
         {activeLanguages.length > 0 ? (
           <div className='space-y-1'>
             <div className='text-[11px] font-semibold tracking-wide text-neutral-500 uppercase'>
               {t('llm.languageLabel')}
             </div>
-            <Select.Root
+            <Select
               value={llmSelectedLanguage ?? activeLanguages[0]}
               onValueChange={llmSetSelectedLanguage}
             >
-              <Select.Trigger className='inline-flex w-full items-center justify-between gap-2 rounded border border-neutral-200 bg-white px-2 py-1 text-sm hover:bg-neutral-50'>
-                <Select.Value placeholder={t('llm.languagePlaceholder')} />
-              </Select.Trigger>
-              <Select.Portal>
-                <Select.Content className='min-w-56 rounded-md bg-white p-1 shadow-sm'>
-                  <Select.Viewport>
-                    {activeLanguages.map((language) => (
-                      <Select.Item
-                        key={language}
-                        value={language}
-                        className='rounded px-3 py-1.5 text-sm outline-none select-none hover:bg-black/5 data-[state=checked]:bg-black/5'
-                      >
-                        <Select.ItemText>{language}</Select.ItemText>
-                      </Select.Item>
-                    ))}
-                  </Select.Viewport>
-                </Select.Content>
-              </Select.Portal>
-            </Select.Root>
+              <SelectTrigger className='w-full'>
+                <SelectValue placeholder={t('llm.languagePlaceholder')} />
+              </SelectTrigger>
+              <SelectContent>
+                {activeLanguages.map((language) => (
+                  <SelectItem key={language} value={language}>
+                    {language}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
           </div>
         ) : null}
       </div>
@@ -170,30 +160,46 @@ export function LlmControls() {
       ) : null}
       <div className='flex gap-2'>
         {!isOpenAICompatible && (
-          <TooltipButton
-            label={!llmReady ? t('llm.load') : t('llm.unload')}
-            tooltip={!llmReady ? t('llm.loadTooltip') : t('llm.unloadTooltip')}
-            widthClass='w-full'
-            onClick={llmToggleLoadUnload}
-            disabled={!llmSelectedModel || llmLoading || isOpenAICompatible}
-          />
+          <Tooltip delayDuration={1000}>
+            <TooltipTrigger asChild>
+              <Button
+                variant='outline'
+                onClick={llmToggleLoadUnload}
+                disabled={!llmSelectedModel || llmLoading || isOpenAICompatible}
+                className='w-full font-semibold'
+              >
+                {!llmReady ? t('llm.load') : t('llm.unload')}
+              </Button>
+            </TooltipTrigger>
+            <TooltipContent side='bottom' sideOffset={6}>
+              {!llmReady ? t('llm.loadTooltip') : t('llm.unloadTooltip')}
+            </TooltipContent>
+          </Tooltip>
         )}
-        <TooltipButton
-          label={generating ? t('llm.generating') : t('llm.generate')}
-          tooltip={t('llm.generateTooltip')}
-          disabled={!llmReady || generating}
-          onClick={async () => {
-            setGenerating(true)
-            try {
-              await llmGenerate(null)
-            } catch (error) {
-              console.error(error)
-            } finally {
-              setGenerating(false)
-            }
-          }}
-          widthClass='w-full'
-        />
+        <Tooltip delayDuration={1000}>
+          <TooltipTrigger asChild>
+            <Button
+              variant='outline'
+              disabled={!llmReady || generating}
+              onClick={async () => {
+                setGenerating(true)
+                try {
+                  await llmGenerate(null)
+                } catch (error) {
+                  console.error(error)
+                } finally {
+                  setGenerating(false)
+                }
+              }}
+              className='w-full font-semibold'
+            >
+              {generating ? t('llm.generating') : t('llm.generate')}
+            </Button>
+          </TooltipTrigger>
+          <TooltipContent side='bottom' sideOffset={6}>
+            {t('llm.generateTooltip')}
+          </TooltipContent>
+        </Tooltip>
       </div>
     </div>
   )

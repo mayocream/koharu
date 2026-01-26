@@ -1,8 +1,8 @@
 'use client'
 
-import { Toolbar, Slider } from 'radix-ui'
 import { useTranslation } from 'react-i18next'
 import { useAppStore, useConfigStore } from '@/lib/store'
+import { Slider } from '@/components/ui/slider'
 
 export function CanvasToolbar() {
   const llmReady = useAppStore((state) => state.llmReady)
@@ -14,26 +14,19 @@ export function CanvasToolbar() {
   const { t } = useTranslation()
 
   return (
-    <Toolbar.Root className='flex items-center gap-4 border-b border-neutral-200 bg-white px-3 py-1.5 text-xs text-neutral-900'>
+    <div className='flex items-center gap-4 border-b border-neutral-200 bg-white px-3 py-1.5 text-xs text-neutral-900'>
       <div className='flex items-center gap-3'>
         <span className='text-neutral-600'>{t('toolbar.brushSize')}</span>
-        <div className='w-40'>
-          <Slider.Root
-            className='relative flex h-4 w-full touch-none items-center select-none'
-            min={8}
-            max={128}
-            step={4}
-            value={[brushSize]}
-            onValueChange={(vals) =>
-              setBrushConfig({ size: vals[0] ?? brushSize })
-            }
-          >
-            <Slider.Track className='relative h-1 flex-1 rounded bg-rose-100'>
-              <Slider.Range className='absolute h-full rounded bg-rose-400' />
-            </Slider.Track>
-            <Slider.Thumb className='block h-2.5 w-2.5 rounded-full bg-rose-500' />
-          </Slider.Root>
-        </div>
+        <Slider
+          className='w-40 [&_[data-slot=slider-range]]:bg-rose-400 [&_[data-slot=slider-thumb]]:size-2.5 [&_[data-slot=slider-thumb]]:border-rose-500 [&_[data-slot=slider-thumb]]:bg-rose-500 [&_[data-slot=slider-track]]:bg-rose-100'
+          min={8}
+          max={128}
+          step={4}
+          value={[brushSize]}
+          onValueChange={(vals) =>
+            setBrushConfig({ size: vals[0] ?? brushSize })
+          }
+        />
         <span className='w-14 text-right tabular-nums'>{brushSize}px</span>
         {mode === 'brush' && (
           <label className='flex items-center gap-2'>
@@ -57,6 +50,6 @@ export function CanvasToolbar() {
       >
         {llmReady ? t('llm.statusReady') : t('llm.statusIdle')}
       </span>
-    </Toolbar.Root>
+    </div>
   )
 }

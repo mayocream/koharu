@@ -2,7 +2,7 @@
 
 import { useEffect, type ReactNode } from 'react'
 import { I18nextProvider } from 'react-i18next'
-import { Tooltip } from 'radix-ui'
+import { TooltipProvider } from '@/components/ui/tooltip'
 import { invoke, listen } from '@/lib/backend'
 import i18n, {
   getPreferredLocale,
@@ -60,7 +60,7 @@ export function Providers({ children }: { children: ReactNode }) {
 
   return (
     <I18nextProvider i18n={i18n}>
-      <Tooltip.Provider delayDuration={300}>{children}</Tooltip.Provider>
+      <TooltipProvider delayDuration={300}>{children}</TooltipProvider>
     </I18nextProvider>
   )
 }

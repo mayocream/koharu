@@ -1,10 +1,15 @@
 'use client'
 
 import { useEffect, useState, useCallback } from 'react'
-import { ScrollArea, Tooltip } from 'radix-ui'
 import { useTranslation } from 'react-i18next'
 import { useAppStore } from '@/lib/store'
 import { ResizableSidebar } from '@/components/ResizableSidebar'
+import { ScrollArea } from '@/components/ui/scroll-area'
+import {
+  Tooltip,
+  TooltipContent,
+  TooltipTrigger,
+} from '@/components/ui/tooltip'
 
 export function Navigator() {
   const { totalPages, currentDocumentIndex, setCurrentDocumentIndex } =
@@ -41,8 +46,8 @@ export function Navigator() {
           )}
         </div>
 
-        <ScrollArea.Root className='min-h-0 flex-1'>
-          <ScrollArea.Viewport className='size-full p-2'>
+        <ScrollArea className='min-h-0 flex-1'>
+          <div className='p-2'>
             <div className='flex flex-col gap-1.5'>
               {Array.from({ length: totalPages }, (_, idx) => (
                 <PagePreview
@@ -53,14 +58,8 @@ export function Navigator() {
                 />
               ))}
             </div>
-          </ScrollArea.Viewport>
-          <ScrollArea.Scrollbar
-            orientation='vertical'
-            className='flex w-2 touch-none p-px select-none'
-          >
-            <ScrollArea.Thumb className='flex-1 rounded bg-neutral-300' />
-          </ScrollArea.Scrollbar>
-        </ScrollArea.Root>
+          </div>
+        </ScrollArea>
       </div>
     </ResizableSidebar>
   )
@@ -108,8 +107,8 @@ function PagePreview({ index, selected, onSelect }: PagePreviewProps) {
   }, [fetchThumbnail])
 
   return (
-    <Tooltip.Root>
-      <Tooltip.Trigger asChild>
+    <Tooltip>
+      <TooltipTrigger asChild>
         <button
           onClick={onSelect}
           data-selected={selected}
@@ -137,13 +136,8 @@ function PagePreview({ index, selected, onSelect }: PagePreviewProps) {
             </div>
           </div>
         </button>
-      </Tooltip.Trigger>
-      <Tooltip.Content
-        className='z-10 rounded bg-black px-2 py-1 text-xs text-white'
-        sideOffset={4}
-      >
-        Page {index + 1}
-      </Tooltip.Content>
-    </Tooltip.Root>
+      </TooltipTrigger>
+      <TooltipContent sideOffset={4}>Page {index + 1}</TooltipContent>
+    </Tooltip>
   )
 }

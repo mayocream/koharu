@@ -1,12 +1,24 @@
 'use client'
 
 import { useEffect } from 'react'
-import { Select } from 'radix-ui'
-import { ToggleField, TooltipButton } from '@/components/ui/form-controls'
 import { useTranslation } from 'react-i18next'
 import { useAppStore } from '@/lib/store'
 import { useTextBlocks } from '@/hooks/useTextBlocks'
 import { RenderEffect, RgbaColor, TextStyle } from '@/types'
+import { Switch } from '@/components/ui/switch'
+import { Button } from '@/components/ui/button'
+import {
+  Tooltip,
+  TooltipContent,
+  TooltipTrigger,
+} from '@/components/ui/tooltip'
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from '@/components/ui/select'
 
 const DEFAULT_COLOR: RgbaColor = [0, 0, 0, 255]
 const DEFAULT_FONT_FAMILIES = ['Arial']
@@ -136,11 +148,15 @@ export function RenderControls() {
 
   return (
     <div className='space-y-2 text-xs text-neutral-600'>
-      <ToggleField
-        label={t('mask.showRendered')}
-        checked={showRenderedImage}
-        onChange={setShowRenderedImage}
-      />
+      <label className='flex items-center gap-2 text-sm'>
+        <Switch
+          size='sm'
+          checked={showRenderedImage}
+          onCheckedChange={setShowRenderedImage}
+          className='data-[state=checked]:bg-rose-200 data-[state=unchecked]:bg-neutral-300 [&_[data-slot=switch-thumb]]:data-[state=checked]:bg-rose-500'
+        />
+        <span>{t('mask.showRendered')}</span>
+      </label>
       <div className='space-y-1'>
         <div className='flex items-center justify-between gap-2'>
           <span className='text-[11px] font-semibold tracking-wide text-neutral-500 uppercase'>
@@ -154,7 +170,7 @@ export function RenderControls() {
               : t('render.fontScopeGlobal')}
           </span>
         </div>
-        <Select.Root
+        <Select
           value={currentFont}
           onValueChange={(value) => {
             const nextFamilies = mergeFontFamilies(
@@ -176,37 +192,26 @@ export function RenderControls() {
           }}
           disabled={!hasBlocks || fontOptions.length === 0}
         >
-          <Select.Trigger
-            className='inline-flex w-full items-center justify-between gap-2 rounded border border-neutral-200 bg-white px-2 py-1 text-sm hover:bg-neutral-50'
+          <SelectTrigger
+            className='w-full'
             style={currentFont ? { fontFamily: currentFont } : undefined}
           >
-            <Select.Value placeholder={t('render.fontPlaceholder')} />
-          </Select.Trigger>
-          <Select.Portal>
-            <Select.Content className='min-w-56 rounded-md bg-white p-1 shadow-sm'>
-              <Select.Viewport>
-                {fontOptions.map((font) => (
-                  <Select.Item
-                    key={font}
-                    value={font}
-                    style={{ fontFamily: font }}
-                    className='rounded px-3 py-1.5 text-sm outline-none select-none hover:bg-black/5 data-[state=checked]:bg-black/5'
-                  >
-                    <Select.ItemText style={{ fontFamily: font }}>
-                      {font}
-                    </Select.ItemText>
-                  </Select.Item>
-                ))}
-              </Select.Viewport>
-            </Select.Content>
-          </Select.Portal>
-        </Select.Root>
+            <SelectValue placeholder={t('render.fontPlaceholder')} />
+          </SelectTrigger>
+          <SelectContent>
+            {fontOptions.map((font) => (
+              <SelectItem key={font} value={font} style={{ fontFamily: font }}>
+                {font}
+              </SelectItem>
+            ))}
+          </SelectContent>
+        </Select>
       </div>
       <div className='space-y-1'>
         <div className='text-[11px] font-semibold tracking-wide text-neutral-500 uppercase'>
           {t('render.effectLabel')}
         </div>
-        <Select.Root
+        <Select
           value={currentEffect}
           onValueChange={(value) => {
             const nextEffect = value as RenderEffect
@@ -214,25 +219,17 @@ export function RenderControls() {
             setRenderEffect(nextEffect)
           }}
         >
-          <Select.Trigger className='inline-flex w-full items-center justify-between gap-2 rounded border border-neutral-200 bg-white px-2 py-1 text-sm hover:bg-neutral-50'>
-            <Select.Value />
-          </Select.Trigger>
-          <Select.Portal>
-            <Select.Content className='min-w-56 rounded-md bg-white p-1 shadow-sm'>
-              <Select.Viewport>
-                {effects.map((effect) => (
-                  <Select.Item
-                    key={effect.value}
-                    value={effect.value}
-                    className='rounded px-3 py-1.5 text-sm outline-none select-none hover:bg-black/5 data-[state=checked]:bg-black/5'
-                  >
-                    <Select.ItemText>{effect.label}</Select.ItemText>
-                  </Select.Item>
-                ))}
-              </Select.Viewport>
-            </Select.Content>
-          </Select.Portal>
-        </Select.Root>
+          <SelectTrigger className='w-full'>
+            <SelectValue />
+          </SelectTrigger>
+          <SelectContent>
+            {effects.map((effect) => (
+              <SelectItem key={effect.value} value={effect.value}>
+                {effect.label}
+              </SelectItem>
+            ))}
+          </SelectContent>
+        </Select>
       </div>
       <div className='space-y-1'>
         <div className='text-[11px] font-semibold tracking-wide text-neutral-500 uppercase'>
@@ -259,12 +256,20 @@ export function RenderControls() {
         </div>
       </div>
       <div className='col flex'>
-        <TooltipButton
-          label={t('llm.render')}
-          tooltip={t('llm.renderTooltip')}
-          onClick={render}
-          widthClass='w-full'
-        />
+        <Tooltip delayDuration={1000}>
+          <TooltipTrigger asChild>
+            <Button
+              variant='outline'
+              onClick={render}
+              className='w-full font-semibold'
+            >
+              {t('llm.render')}
+            </Button>
+          </TooltipTrigger>
+          <TooltipContent side='bottom' sideOffset={6}>
+            {t('llm.renderTooltip')}
+          </TooltipContent>
+        </Tooltip>
       </div>
     </div>
   )

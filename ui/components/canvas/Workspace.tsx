@@ -2,7 +2,13 @@
 
 import { useEffect, useRef, useState } from 'react'
 import type React from 'react'
-import { ScrollArea, ContextMenu } from 'radix-ui'
+import * as ScrollAreaPrimitive from '@radix-ui/react-scroll-area'
+import {
+  ContextMenu,
+  ContextMenuContent,
+  ContextMenuItem,
+  ContextMenuTrigger,
+} from '@/components/ui/context-menu'
 import { useTranslation } from 'react-i18next'
 import { listen } from '@/lib/backend'
 import { Image } from '@/components/Image'
@@ -285,8 +291,8 @@ export function Workspace() {
       <ToolRail />
       <div className='flex min-h-0 min-w-0 flex-1 flex-col'>
         <CanvasToolbar />
-        <ScrollArea.Root className='flex min-h-0 min-w-0 flex-1'>
-          <ScrollArea.Viewport
+        <ScrollAreaPrimitive.Root className='flex min-h-0 min-w-0 flex-1'>
+          <ScrollAreaPrimitive.Viewport
             ref={(el) => {
               viewportRef.current = el
               setCanvasViewport(el)
@@ -301,14 +307,14 @@ export function Workspace() {
             style={panCursor ? { cursor: panCursor } : undefined}
           >
             {currentDocument ? (
-              <ContextMenu.Root
+              <ContextMenu
                 onOpenChange={(open) => {
                   if (!open) {
                     clearContextMenu()
                   }
                 }}
               >
-                <ContextMenu.Trigger asChild>
+                <ContextMenuTrigger asChild>
                   <div className='grid place-items-center'>
                     <div
                       ref={canvasRef}
@@ -412,38 +418,35 @@ export function Workspace() {
                       )}
                     </div>
                   </div>
-                </ContextMenu.Trigger>
-                <ContextMenu.Portal>
-                  <ContextMenu.Content className='min-w-32 rounded-md border border-neutral-200 bg-white p-1 text-sm shadow-lg'>
-                    <ContextMenu.Item
-                      disabled={contextMenuBlockIndex === undefined}
-                      onSelect={handleDeleteBlock}
-                      className='flex cursor-pointer items-center rounded px-3 py-1.5 text-sm text-neutral-800 outline-none select-none hover:bg-neutral-100 data-disabled:cursor-default data-disabled:opacity-40'
-                    >
-                      {t('workspace.deleteBlock')}
-                    </ContextMenu.Item>
-                  </ContextMenu.Content>
-                </ContextMenu.Portal>
-              </ContextMenu.Root>
+                </ContextMenuTrigger>
+                <ContextMenuContent className='min-w-32'>
+                  <ContextMenuItem
+                    disabled={contextMenuBlockIndex === undefined}
+                    onSelect={handleDeleteBlock}
+                  >
+                    {t('workspace.deleteBlock')}
+                  </ContextMenuItem>
+                </ContextMenuContent>
+              </ContextMenu>
             ) : (
               <div className='flex h-full w-full items-center justify-center text-sm text-neutral-500'>
                 {t('workspace.importPrompt')}
               </div>
             )}
-          </ScrollArea.Viewport>
-          <ScrollArea.Scrollbar
+          </ScrollAreaPrimitive.Viewport>
+          <ScrollAreaPrimitive.Scrollbar
             orientation='vertical'
             className='flex w-2 touch-none p-px select-none'
           >
-            <ScrollArea.Thumb className='flex-1 rounded bg-neutral-300' />
-          </ScrollArea.Scrollbar>
-          <ScrollArea.Scrollbar
+            <ScrollAreaPrimitive.Thumb className='flex-1 rounded bg-neutral-300' />
+          </ScrollAreaPrimitive.Scrollbar>
+          <ScrollAreaPrimitive.Scrollbar
             orientation='horizontal'
             className='flex h-2 touch-none p-px select-none'
           >
-            <ScrollArea.Thumb className='rounded bg-neutral-300' />
-          </ScrollArea.Scrollbar>
-        </ScrollArea.Root>
+            <ScrollAreaPrimitive.Thumb className='rounded bg-neutral-300' />
+          </ScrollAreaPrimitive.Scrollbar>
+        </ScrollAreaPrimitive.Root>
       </div>
     </div>
   )
