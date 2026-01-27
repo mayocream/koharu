@@ -9,7 +9,7 @@ export function StatusBar() {
   const { t } = useTranslation()
 
   return (
-    <div className='border-border bg-card text-foreground flex items-center justify-end gap-3 border-t px-2 py-1 text-xs'>
+    <div className='border-border bg-card text-foreground flex shrink-0 items-center justify-end gap-3 border-t px-2 py-1 text-xs'>
       <div className='flex items-center gap-1.5'>
         <span className='text-muted-foreground'>{t('statusBar.zoom')}</span>
         <Slider
