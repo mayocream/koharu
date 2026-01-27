@@ -95,7 +95,7 @@ Koharu uses several pre-trained models for different tasks:
 - [AnimeMangaInpainting](https://huggingface.co/dreMaz/AnimeMangaInpainting)
 - [YuzuMarker.FontDetection](https://github.com/JeffersonQin/YuzuMarker.FontDetection)
 
-The models will be automatically downloaded when you run Koharu for the first time.
+The models will be automatically downloaded when you run Koharu for the first time. Windows user can download the `Koharu-win-CUDA-bundled.7z` release package to get those models pre-bundled.
 
 We convert the original models to safetensors format for better performance and compatibility with Rust. The converted models are hosted on [Hugging Face](https://huggingface.co/mayocream).
 
