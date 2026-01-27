@@ -1,3 +1,13 @@
+## [0.27.1] - 2026-01-27
+
+### 🐛 Bug Fixes
+
+- Use tauri based http
+
+### ⚙️ Miscellaneous Tasks
+
+- Change window size to 1024x768
+- Release 0.27.1
 ## [0.27.0] - 2026-01-27
 
 ### 🚀 Features
