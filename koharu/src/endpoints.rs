@@ -11,7 +11,7 @@ use axum::{
 use image::{GenericImageView, ImageFormat, RgbaImage};
 use koharu_macros::endpoint;
 use koharu_ml::llm::ModelId;
-use koharu_renderer::renderer::TextShaderEffect;
+use koharu_renderer::renderer::{TextShaderEffect, WgpuDeviceInfo};
 use rayon::iter::{IntoParallelIterator, ParallelIterator};
 use serde::{Deserialize, Serialize};
 use strum::IntoEnumIterator;
@@ -30,6 +30,21 @@ use crate::{
 #[endpoint(path = "/api/app_version", method = "get,post")]
 pub async fn app_version(state: ApiState) -> Result<String> {
     Ok(version::current().to_string())
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct DeviceInfo {
+    pub ml_device: String,
+    pub wgpu: WgpuDeviceInfo,
+}
+
+#[endpoint(path = "/api/device", method = "get,post")]
+pub async fn device(state: ApiState) -> Result<DeviceInfo> {
+    Ok(DeviceInfo {
+        ml_device: state.ml_device().to_string(),
+        wgpu: state.renderer().wgpu_device_info(),
+    })
 }
 
 #[endpoint(path = "/api/open_external", method = "post")]

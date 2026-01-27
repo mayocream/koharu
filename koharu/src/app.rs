@@ -8,7 +8,7 @@ use std::{
 
 use anyhow::Result;
 use clap::Parser;
-use koharu_ml::cuda_is_available;
+use koharu_ml::{DeviceName, cuda_is_available, device_name};
 use koharu_runtime::{ensure_dylibs, preload_dylibs};
 use once_cell::sync::Lazy;
 use rfd::MessageDialog;
@@ -58,6 +58,7 @@ pub struct AppResources {
     pub ml: Arc<ml::Model>,
     pub llm: Arc<llm::Model>,
     pub renderer: Arc<Renderer>,
+    pub ml_device: DeviceName,
 }
 
 #[derive(Default)]
@@ -202,6 +203,7 @@ async fn build_resources(use_cpu: bool, _register_file_assoc: bool) -> Result<Ap
         );
     }
 
+    let ml_device = device_name(use_cpu);
     let ml = Arc::new(ml::Model::new(use_cpu).await?);
     let llm = Arc::new(llm::Model::new(use_cpu));
     let renderer = Arc::new(Renderer::new()?);
@@ -212,6 +214,7 @@ async fn build_resources(use_cpu: bool, _register_file_assoc: bool) -> Result<Ap
         ml,
         llm,
         renderer,
+        ml_device,
     })
 }
 

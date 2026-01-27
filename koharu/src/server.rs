@@ -14,6 +14,8 @@ use serde::Serialize;
 use tokio::net::TcpListener;
 use tower_http::cors::CorsLayer;
 
+use koharu_ml::DeviceName;
+
 use crate::{app::AppResources, endpoints::*, llm, ml, renderer::Renderer, state::AppState};
 
 #[derive(Clone)]
@@ -36,6 +38,10 @@ impl ApiState {
 
     pub fn renderer(&self) -> &Arc<Renderer> {
         &self.resources.renderer
+    }
+
+    pub fn ml_device(&self) -> &DeviceName {
+        &self.resources.ml_device
     }
 }
 
@@ -129,6 +135,7 @@ fn embedded_response(path: &str) -> Option<Response> {
 fn build_router(state: ApiState) -> Router {
     routes!(
         app_version,
+        device,
         open_external,
         get_documents,
         get_document,

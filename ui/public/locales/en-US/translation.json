@@ -163,6 +163,11 @@
     "aboutLatest": "Latest",
     "aboutUpdate": "Update available ({{version}})",
     "aboutAuthor": "Author",
-    "aboutRepository": "Repository"
+    "aboutRepository": "Repository",
+    "device": "Device",
+    "deviceDescription": "Hardware acceleration information.",
+    "deviceMl": "ML Compute",
+    "deviceWgpu": "GPU Renderer",
+    "deviceBackend": "Backend"
   }
 }

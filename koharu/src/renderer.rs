@@ -6,7 +6,7 @@ use image::{DynamicImage, imageops};
 use koharu_renderer::{
     font::{FamilyName, Font, FontBook, Properties},
     layout::{LayoutRun, TextLayout, WritingMode},
-    renderer::{RenderOptions, TextShaderEffect, WgpuRenderer},
+    renderer::{RenderOptions, TextShaderEffect, WgpuDeviceInfo, WgpuRenderer},
 };
 use rayon::iter::{IntoParallelRefMutIterator, ParallelIterator};
 
@@ -40,6 +40,10 @@ impl Renderer {
         let mut families = fontbook.all_families();
         families.sort();
         Ok(families)
+    }
+
+    pub fn wgpu_device_info(&self) -> WgpuDeviceInfo {
+        self.renderer.device_info()
     }
 
     pub fn render(

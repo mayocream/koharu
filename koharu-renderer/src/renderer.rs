@@ -72,6 +72,11 @@ impl WgpuRenderer {
         })
     }
 
+    /// Returns information about the wgpu adapter/device.
+    pub fn device_info(&self) -> WgpuDeviceInfo {
+        WgpuDeviceInfo::from(&self.context.adapter_info)
+    }
+
     /// Renders the given layout run to an RGBA image.
     pub fn render(
         &self,
@@ -312,12 +317,36 @@ impl WgpuRenderer {
     }
 }
 
+/// Information about the wgpu adapter/device.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct WgpuDeviceInfo {
+    pub name: String,
+    pub backend: String,
+    pub device_type: String,
+    pub driver: String,
+    pub driver_info: String,
+}
+
+impl From<&wgpu::AdapterInfo> for WgpuDeviceInfo {
+    fn from(info: &wgpu::AdapterInfo) -> Self {
+        Self {
+            name: info.name.clone(),
+            backend: format!("{:?}", info.backend),
+            device_type: format!("{:?}", info.device_type),
+            driver: info.driver.clone(),
+            driver_info: info.driver_info.clone(),
+        }
+    }
+}
+
 struct WgpuContext {
     device: wgpu::Device,
     queue: wgpu::Queue,
     pipeline: wgpu::RenderPipeline,
     bind_group_layout: wgpu::BindGroupLayout,
     sampler: wgpu::Sampler,
+    adapter_info: wgpu::AdapterInfo,
 }
 
 impl WgpuContext {
@@ -427,12 +456,15 @@ impl WgpuContext {
             cache: None,
         });
 
+        let adapter_info = adapter.get_info();
+
         Ok(Self {
             device,
             queue,
             pipeline,
             bind_group_layout,
             sampler,
+            adapter_info,
         })
     }
 }

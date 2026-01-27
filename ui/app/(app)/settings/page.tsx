@@ -1,6 +1,6 @@
 'use client'
 
-import { useMemo } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import { useTheme } from 'next-themes'
 import { useTranslation } from 'react-i18next'
 import { useRouter } from 'next/navigation'
@@ -19,6 +19,20 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select'
+import { invoke, isTauri } from '@/lib/backend'
+
+interface WgpuDeviceInfo {
+  name: string
+  backend: string
+  deviceType: string
+  driver: string
+  driverInfo: string
+}
+
+interface DeviceInfo {
+  mlDevice: string
+  wgpu: WgpuDeviceInfo
+}
 
 const THEME_OPTIONS = [
   { value: 'light', icon: SunIcon, labelKey: 'settings.themeLight' },
@@ -34,6 +48,22 @@ export default function SettingsPage() {
     () => Object.keys(i18n.options.resources || {}),
     [i18n.options.resources],
   )
+  const [deviceInfo, setDeviceInfo] = useState<DeviceInfo>()
+
+  useEffect(() => {
+    if (!isTauri()) return
+
+    const loadDeviceInfo = async () => {
+      try {
+        const info = await invoke<DeviceInfo>('device')
+        setDeviceInfo(info)
+      } catch (error) {
+        console.error('Failed to load device info', error)
+      }
+    }
+
+    void loadDeviceInfo()
+  }, [])
 
   return (
     <div className='bg-muted flex flex-1 flex-col overflow-hidden'>
@@ -108,6 +138,47 @@ export default function SettingsPage() {
                 </SelectContent>
               </Select>
             </section>
+
+            {/* Device Section */}
+            {deviceInfo && (
+              <section className='mb-8'>
+                <h2 className='text-foreground mb-1 text-sm font-bold'>
+                  {t('settings.device')}
+                </h2>
+                <p className='text-muted-foreground mb-4 text-sm'>
+                  {t('settings.deviceDescription')}
+                </p>
+
+                <div className='bg-card border-border rounded-lg border p-4'>
+                  <div className='space-y-3 text-sm'>
+                    <div className='flex items-center justify-between'>
+                      <span className='text-muted-foreground'>
+                        {t('settings.deviceMl')}
+                      </span>
+                      <span className='text-foreground font-medium'>
+                        {deviceInfo.mlDevice}
+                      </span>
+                    </div>
+                    <div className='flex items-center justify-between'>
+                      <span className='text-muted-foreground'>
+                        {t('settings.deviceWgpu')}
+                      </span>
+                      <span className='text-foreground font-medium'>
+                        {deviceInfo.wgpu.name}
+                      </span>
+                    </div>
+                    <div className='flex items-center justify-between'>
+                      <span className='text-muted-foreground'>
+                        {t('settings.deviceBackend')}
+                      </span>
+                      <span className='text-foreground font-medium'>
+                        {deviceInfo.wgpu.backend}
+                      </span>
+                    </div>
+                  </div>
+                </div>
+              </section>
+            )}
 
             {/* Divider */}
             <div className='border-border mb-8 border-t' />

@@ -163,6 +163,11 @@
     "aboutLatest": "最新",
     "aboutUpdate": "アップデートあり ({{version}})",
     "aboutAuthor": "作者",
-    "aboutRepository": "リポジトリ"
+    "aboutRepository": "リポジトリ",
+    "device": "デバイス",
+    "deviceDescription": "ハードウェアアクセラレーション情報",
+    "deviceMl": "ML 演算",
+    "deviceWgpu": "GPU レンダラー",
+    "deviceBackend": "バックエンド"
   }
 }

@@ -163,6 +163,11 @@
     "aboutLatest": "最新",
     "aboutUpdate": "有更新可用 ({{version}})",
     "aboutAuthor": "作者",
-    "aboutRepository": "代码仓库"
+    "aboutRepository": "代码仓库",
+    "device": "设备",
+    "deviceDescription": "硬件加速信息",
+    "deviceMl": "ML 计算",
+    "deviceWgpu": "GPU 渲染器",
+    "deviceBackend": "后端"
   }
 }
