@@ -1,3 +1,58 @@
+## [0.27.0] - 2026-01-27
+
+### 🚀 Features
+
+- Use shadcn ui components
+- Settings page & dark mode
+- About page
+- Device info
+- Redesign interface
+- Add motion
+
+### 🐛 Bug Fixes
+
+- Patch ug
+- Revert moe changes for candle
+- Types mismatch
+- Type error
+- Preview is stale
+- Status bar being hidden
+
+### 🚜 Refactor
+
+- Clean up embed
+- Create windows.rs
+- Remove startup documents
+- Remove prefetch
+- Use HTTP based API instead of Tauri commands
+- Update API
+- Introduce koharu-macros
+- Separate api.rs into endpoints.rs and server.rs
+- Use single document view
+- I18n
+
+### 📚 Documentation
+
+- Remove mentioning 7z
+- Add CONTRIBUTING.md
+- Do not mention crs since it's buggy
+
+### ⚙️ Miscellaneous Tasks
+
+- Add git-version
+- Make clippy happy
+- Make clippy happy
+- Update to candle 0.9.2
+- Add author fffonion
+- Remove unused deps
+- Update cudarc to 0.19.0
+- Add AGENTS.md
+- Make clippy happy
+- Update frontend deps
+- Update deps
+- Remove unused dep
+- Remove unused deps
+- Release 0.27.0
 ## [0.26.2] - 2026-01-21
 
 ### ⚙️ Miscellaneous Tasks
