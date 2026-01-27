@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from 'react'
 import { useTranslation } from 'react-i18next'
+import { motion } from 'motion/react'
 import {
   ScanIcon,
   ScanTextIcon,
@@ -351,10 +352,16 @@ function LlmStatusPopover() {
               : 'bg-muted text-muted-foreground'
           }`}
         >
-          <span
+          <motion.span
             className={`size-1.5 rounded-full ${
               llmReady ? 'bg-white' : 'bg-muted-foreground/40'
             }`}
+            animate={llmReady ? { opacity: [1, 0.5, 1] } : { opacity: 1 }}
+            transition={
+              llmReady
+                ? { duration: 2, repeat: Infinity, ease: 'easeInOut' }
+                : {}
+            }
           />
           LLM
         </button>

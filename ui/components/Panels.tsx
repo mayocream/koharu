@@ -2,6 +2,7 @@
 
 import { useState } from 'react'
 import { useTranslation } from 'react-i18next'
+import { motion, AnimatePresence } from 'motion/react'
 import { ChevronDownIcon, LayersIcon, ALargeSmallIcon } from 'lucide-react'
 import { LayersPanel } from '@/components/panels/LayersPanel'
 import { TextBlocksPanel } from '@/components/panels/TextBlocksPanel'
@@ -17,7 +18,6 @@ import {
   TooltipContent,
   TooltipTrigger,
 } from '@/components/ui/tooltip'
-import { cn } from '@/lib/utils'
 
 export function PanelsToolbar() {
   const { t } = useTranslation()
@@ -64,22 +64,30 @@ export function Panels() {
             onClick={() => setLayersExpanded(!layersExpanded)}
             className='hover:bg-accent/50 border-border flex w-full items-center gap-1.5 border-b px-2 py-1.5 text-left'
           >
-            <ChevronDownIcon
-              className={cn(
-                'text-muted-foreground size-3.5 transition-transform',
-                !layersExpanded && '-rotate-90',
-              )}
-            />
+            <motion.div
+              animate={{ rotate: layersExpanded ? 0 : -90 }}
+              transition={{ duration: 0.15, ease: 'easeOut' }}
+            >
+              <ChevronDownIcon className='text-muted-foreground size-3.5' />
+            </motion.div>
             <LayersIcon className='size-3.5' />
             <span className='text-xs font-semibold tracking-wide uppercase'>
               {t('layers.title')}
             </span>
           </button>
-          {layersExpanded && (
-            <div className='border-border border-b'>
-              <LayersPanel />
-            </div>
-          )}
+          <AnimatePresence initial={false}>
+            {layersExpanded && (
+              <motion.div
+                initial={{ height: 0, opacity: 0 }}
+                animate={{ height: 'auto', opacity: 1 }}
+                exit={{ height: 0, opacity: 0 }}
+                transition={{ duration: 0.2, ease: 'easeOut' }}
+                className='border-border overflow-hidden border-b'
+              >
+                <LayersPanel />
+              </motion.div>
+            )}
+          </AnimatePresence>
         </div>
 
         {/* Text Blocks Section - takes remaining space */}

@@ -1,6 +1,7 @@
 'use client'
 
 import { useTranslation } from 'react-i18next'
+import { motion } from 'motion/react'
 import {
   EyeIcon,
   EyeOffIcon,
@@ -108,11 +109,13 @@ function LayerItem({ layer }: { layer: Layer }) {
   const isActive = layer.hasContent && layer.visible
 
   return (
-    <div
+    <motion.div
       className={cn(
         'group flex items-center gap-2 px-2 py-1.5',
         !layer.hasContent && !isLocked && 'opacity-40',
       )}
+      whileHover={{ backgroundColor: 'rgba(0,0,0,0.03)' }}
+      transition={{ duration: 0.15 }}
     >
       {/* Visibility toggle */}
       <button
@@ -179,6 +182,6 @@ function LayerItem({ layer }: { layer: Layer }) {
           layer.hasContent ? 'bg-rose-500' : 'bg-muted-foreground/20',
         )}
       />
-    </div>
+    </motion.div>
   )
 }
