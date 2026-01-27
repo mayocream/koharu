@@ -89,5 +89,21 @@ macro_rules! define_models {
                 hf_download(repo, filename).await
             }
         }
+
+        #[allow(unused)]
+        pub async fn prefetch() -> anyhow::Result<()> {
+            use futures::stream::{self, StreamExt, TryStreamExt};
+            let manifests = [
+                $(Manifest::$variant),*
+            ];
+            stream::iter(manifests)
+                .map(|manifest| async move {
+                    manifest.get().await
+                })
+                .buffer_unordered(num_cpus::get())
+                .try_collect::<Vec<_>>()
+                .await?;
+            Ok(())
+        }
     };
 }

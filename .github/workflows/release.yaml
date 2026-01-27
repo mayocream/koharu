@@ -55,10 +55,23 @@ jobs:
             --token ${{ secrets.GITHUB_TOKEN }} \
             --merge
 
+      - name: Prepare bundled artifacts
+        shell: bash
+        run: |
+          7z x Releases/Koharu-win-Portable.zip -obundled-artifacts
+          cd bundled-artifacts
+          cp ../scripts/start_headless.bat ./start_headless.bat
+          ./current/koharu.exe -d
+          echo "Creating archive, check back in 20 years later"
+          # skip blobs, let 7z copy the resolved symlink instead; and use spf to strip leading folder
+          7z a ../Releases/Koharu-win-CUDA-Bundled.7z -x!models/*/blobs '-x!*.log' * .portable
+
+      # upload Releases/Koharu-win-Bundled.zip to release artifacts
       # windows build step always finishes at the end, so we assume everything is ready at this point
       - name: Upload Bundled Artifacts
         uses: softprops/action-gh-release@v2
         with:
+          files: Releases/Koharu-win-CUDA-Bundled.7z
           body_path: RELEASE_NOTES.md
         env:
           token: ${{ secrets.GITHUB_TOKEN }}

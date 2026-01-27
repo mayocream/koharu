@@ -6,6 +6,8 @@ use tokio::sync::RwLock;
 
 use crate::state::{Document, TextBlock};
 
+pub use koharu_ml::llm::prefetch;
+
 #[derive(Debug, Clone, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct ModelInfo {
