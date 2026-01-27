@@ -61,9 +61,9 @@ impl Renderer {
             None => document.text_blocks.iter_mut().collect(),
         };
 
-        text_blocks
-            .par_iter_mut()
-            .try_for_each(|text_block| self.render_text_block(text_block, effect))?;
+        text_blocks.par_iter_mut().for_each(|text_block| {
+            let _ = self.render_text_block(text_block, effect);
+        });
 
         if let Some(inpainted) = &document.inpainted
             && text_block_index.is_none()
