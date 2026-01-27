@@ -2,6 +2,7 @@
 
 import { useEffect, useState, type ReactNode } from 'react'
 import { I18nextProvider } from 'react-i18next'
+import { ThemeProvider } from 'next-themes'
 import { TooltipProvider } from '@/components/ui/tooltip'
 import { invoke, listen } from '@/lib/backend'
 import i18n from '@/lib/i18n'
@@ -51,7 +52,9 @@ export function Providers({ children }: { children: ReactNode }) {
 
   return (
     <I18nextProvider i18n={i18n}>
-      <TooltipProvider delayDuration={300}>{children}</TooltipProvider>
+      <ThemeProvider attribute='class' defaultTheme='system' enableSystem>
+        <TooltipProvider delayDuration={300}>{children}</TooltipProvider>
+      </ThemeProvider>
     </I18nextProvider>
   )
 }

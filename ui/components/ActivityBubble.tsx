@@ -14,7 +14,7 @@ const clampProgress = (value?: number) => {
 
 function BubbleCard({ children }: { children: ReactNode }) {
   return (
-    <div className='rounded-2xl border border-neutral-200 bg-white/95 p-4 shadow-[0_15px_60px_rgba(0,0,0,0.12)] backdrop-blur'>
+    <div className='border-border bg-card/95 rounded-2xl border p-4 shadow-[0_15px_60px_rgba(0,0,0,0.12)] backdrop-blur'>
       {children}
     </div>
   )
@@ -95,19 +95,19 @@ function OperationCard({
   return (
     <BubbleCard>
       <div className='flex items-start gap-3'>
-        <div className='mt-1 h-2.5 w-2.5 rounded-full bg-rose-500 shadow-[0_0_0_6px_rgba(244,63,94,0.16)]' />
+        <div className='bg-primary mt-1 h-2.5 w-2.5 rounded-full shadow-[0_0_0_6px_hsl(var(--primary)/0.16)]' />
         <div className='flex-1'>
           <div className='flex items-start justify-between gap-2'>
             <div className='flex flex-col gap-1'>
-              <div className='text-sm font-semibold text-neutral-900'>
+              <div className='text-foreground text-sm font-semibold'>
                 {titles[operation.type] ?? t('operations.title')}
               </div>
-              <div className='text-xs text-neutral-600'>
+              <div className='text-muted-foreground text-xs'>
                 {subtitle || t('operations.inProgress')}
               </div>
             </div>
             {isProcessAll && total && typeof displayCurrent === 'number' ? (
-              <span className='rounded-full bg-neutral-100 px-2 py-0.5 text-[11px] font-medium text-neutral-600'>
+              <span className='bg-muted text-muted-foreground rounded-full px-2 py-0.5 text-[11px] font-medium'>
                 {t('operations.imageProgress', {
                   current: displayCurrent,
                   total,
@@ -116,18 +116,18 @@ function OperationCard({
             ) : null}
           </div>
           <div className='mt-3 flex items-center gap-2'>
-            <div className='relative h-1.5 flex-1 overflow-hidden rounded-full bg-neutral-100'>
+            <div className='bg-muted relative h-1.5 flex-1 overflow-hidden rounded-full'>
               {typeof progress === 'number' ? (
                 <div
-                  className='h-full rounded-full bg-rose-500 transition-[width] duration-300'
+                  className='bg-primary h-full rounded-full transition-[width] duration-300'
                   style={{ width: `${progress}%` }}
                 />
               ) : (
-                <div className='activity-progress-indeterminate absolute inset-0 w-1/2 rounded-full bg-linear-to-r from-rose-200 via-rose-500 to-rose-200' />
+                <div className='activity-progress-indeterminate from-primary/40 via-primary to-primary/40 absolute inset-0 w-1/2 rounded-full bg-linear-to-r' />
               )}
             </div>
             {typeof progress === 'number' && (
-              <span className='w-12 text-right text-[11px] font-semibold text-neutral-600 tabular-nums'>
+              <span className='text-muted-foreground w-12 text-right text-[11px] font-semibold tabular-nums'>
                 {progress}%
               </span>
             )}
@@ -138,7 +138,7 @@ function OperationCard({
                 type='button'
                 onClick={onCancel}
                 disabled={operation.cancelRequested}
-                className='rounded-lg border border-neutral-200 px-3 py-1.5 text-xs font-semibold text-neutral-700 transition hover:bg-neutral-100 disabled:opacity-60'
+                className='border-border text-foreground hover:bg-muted rounded-lg border px-3 py-1.5 text-xs font-semibold transition disabled:opacity-60'
               >
                 {operation.cancelRequested
                   ? t('operations.cancelling')

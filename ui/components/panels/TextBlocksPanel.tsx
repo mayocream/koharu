@@ -45,7 +45,7 @@ export function TextBlocksPanel() {
 
   if (!document) {
     return (
-      <div className='flex flex-1 items-center justify-center text-sm text-neutral-500'>
+      <div className='text-muted-foreground flex flex-1 items-center justify-center text-sm'>
         {t('textBlocks.emptyPrompt')}
       </div>
     )
@@ -67,13 +67,13 @@ export function TextBlocksPanel() {
 
   return (
     <div className='flex min-h-0 flex-1 flex-col'>
-      <div className='border-b border-neutral-200 px-2.5 py-1.5 text-xs font-semibold tracking-wide text-neutral-600 uppercase'>
+      <div className='border-border text-muted-foreground border-b px-2.5 py-1.5 text-xs font-semibold tracking-wide uppercase'>
         {t('textBlocks.title', { count: textBlocks.length })}
       </div>
       <ScrollArea className='min-h-0 flex-1'>
         <div className='size-full p-2'>
           {textBlocks.length === 0 ? (
-            <p className='rounded border border-dashed border-neutral-300 p-4 text-sm text-neutral-500'>
+            <p className='border-border text-muted-foreground rounded border border-dashed p-4 text-sm'>
               {t('textBlocks.none')}
             </p>
           ) : (
@@ -139,12 +139,12 @@ function BlockCard({
     <AccordionItem
       value={index.toString()}
       data-selected={selected}
-      className='overflow-hidden rounded border border-neutral-200 bg-white/90 text-sm transition data-[selected=true]:border-rose-400 data-[state=open]:shadow-sm'
+      className='border-border bg-card/90 data-[selected=true]:border-primary overflow-hidden rounded border text-sm transition data-[state=open]:shadow-sm'
     >
-      <AccordionTrigger className='flex w-full cursor-pointer flex-col gap-1 px-3 py-2 text-left transition outline-none hover:no-underline data-[state=open]:bg-rose-50 [&>svg]:hidden'>
-        <div className='flex items-center justify-between text-xs text-neutral-500'>
+      <AccordionTrigger className='data-[state=open]:bg-accent flex w-full cursor-pointer flex-col gap-1 px-3 py-2 text-left transition outline-none hover:no-underline [&>svg]:hidden'>
+        <div className='text-muted-foreground flex items-center justify-between text-xs'>
           <span className='inline-flex items-center gap-2'>
-            <span className='rounded-full bg-rose-100 px-2 py-0.5 text-[11px] font-semibold text-rose-700'>
+            <span className='bg-accent text-accent-foreground rounded-full px-2 py-0.5 text-[11px] font-semibold'>
               #{index + 1}
             </span>
           </span>
@@ -152,16 +152,16 @@ function BlockCard({
         {!selected && (
           <p
             className={`line-clamp-2 text-sm ${
-              isEmpty ? 'text-neutral-400 italic' : 'text-neutral-700'
+              isEmpty ? 'text-muted-foreground italic' : 'text-foreground'
             }`}
           >
             {summary}
           </p>
         )}
       </AccordionTrigger>
-      <AccordionContent className='border-t border-neutral-100 px-3 pt-2 pb-3'>
+      <AccordionContent className='border-border border-t px-3 pt-2 pb-3'>
         <div className='space-y-3'>
-          <label className='flex w-full flex-col gap-1 text-xs text-neutral-500'>
+          <label className='text-muted-foreground flex w-full flex-col gap-1 text-xs'>
             <span className='text-[11px] tracking-wide uppercase'>
               {t('textBlocks.ocrLabel')}
             </span>
@@ -170,10 +170,10 @@ function BlockCard({
               placeholder={t('textBlocks.addOcrPlaceholder')}
               rows={4}
               onChange={(event) => onChange({ text: event.target.value })}
-              className='min-h-[72px] w-full rounded border border-neutral-200 bg-white px-2 py-2 text-sm text-neutral-800 outline-none focus:border-rose-400'
+              className='border-border bg-card text-foreground focus:border-primary min-h-[72px] w-full rounded border px-2 py-2 text-sm outline-none'
             />
           </label>
-          <label className='flex w-full flex-col gap-1 text-xs text-neutral-500'>
+          <label className='text-muted-foreground flex w-full flex-col gap-1 text-xs'>
             <div className='flex items-center justify-between gap-2'>
               <span className='text-[11px] tracking-wide uppercase'>
                 {t('textBlocks.translationLabel')}
@@ -201,7 +201,7 @@ function BlockCard({
               onChange={(event) =>
                 onChange({ translation: event.target.value })
               }
-              className='min-h-[72px] w-full rounded border border-neutral-200 bg-white px-2 py-2 text-sm text-neutral-800 outline-none focus:border-rose-400'
+              className='border-border bg-card text-foreground focus:border-primary min-h-[72px] w-full rounded border px-2 py-2 text-sm outline-none'
             />
           </label>
         </div>

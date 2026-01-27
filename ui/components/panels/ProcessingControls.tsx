@@ -29,7 +29,7 @@ export function ProcessingControls() {
   const { t } = useTranslation()
 
   return (
-    <div className='space-y-2 text-xs text-neutral-600'>
+    <div className='text-muted-foreground space-y-2 text-xs'>
       <Separator className='my-1' />
       <label className='flex items-center gap-2 text-sm'>
         <Switch
@@ -37,7 +37,7 @@ export function ProcessingControls() {
           checked={showInpaintedImage}
           onCheckedChange={setShowInpaintedImage}
           disabled={currentDocument?.inpainted === undefined}
-          className='data-[state=checked]:bg-rose-200 data-[state=unchecked]:bg-neutral-300 [&_[data-slot=switch-thumb]]:data-[state=checked]:bg-rose-500'
+          className='data-[state=checked]:bg-primary/30 data-[state=unchecked]:bg-muted-foreground/30 [&_[data-slot=switch-thumb]]:data-[state=checked]:bg-primary'
         />
         <span>{t('mask.showInpainted')}</span>
       </label>
@@ -47,7 +47,7 @@ export function ProcessingControls() {
           checked={showSegmentationMask}
           onCheckedChange={setShowSegmentationMask}
           disabled={currentDocument?.segment === undefined}
-          className='data-[state=checked]:bg-rose-200 data-[state=unchecked]:bg-neutral-300 [&_[data-slot=switch-thumb]]:data-[state=checked]:bg-rose-500'
+          className='data-[state=checked]:bg-primary/30 data-[state=unchecked]:bg-muted-foreground/30 [&_[data-slot=switch-thumb]]:data-[state=checked]:bg-primary'
         />
         <span>{t('mask.showSegmentationMask')}</span>
       </label>
@@ -57,7 +57,7 @@ export function ProcessingControls() {
           checked={showBrushLayer}
           onCheckedChange={setShowBrushLayer}
           disabled={currentDocument?.inpainted === undefined}
-          className='data-[state=checked]:bg-rose-200 data-[state=unchecked]:bg-neutral-300 [&_[data-slot=switch-thumb]]:data-[state=checked]:bg-rose-500'
+          className='data-[state=checked]:bg-primary/30 data-[state=unchecked]:bg-muted-foreground/30 [&_[data-slot=switch-thumb]]:data-[state=checked]:bg-primary'
         />
         <span>{t('mask.showBrushLayer')}</span>
       </label>
@@ -67,7 +67,7 @@ export function ProcessingControls() {
           checked={showTextBlocksOverlay}
           onCheckedChange={setShowTextBlocksOverlay}
           disabled={currentDocument?.textBlocks === undefined}
-          className='data-[state=checked]:bg-rose-200 data-[state=unchecked]:bg-neutral-300 [&_[data-slot=switch-thumb]]:data-[state=checked]:bg-rose-500'
+          className='data-[state=checked]:bg-primary/30 data-[state=unchecked]:bg-muted-foreground/30 [&_[data-slot=switch-thumb]]:data-[state=checked]:bg-primary'
         />
         <span>{t('mask.showTextBlocks')}</span>
       </label>

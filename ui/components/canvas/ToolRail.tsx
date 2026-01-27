@@ -37,7 +37,7 @@ export function ToolRail() {
   const { t } = useTranslation()
 
   return (
-    <div className='flex w-12 flex-col border-r border-neutral-200 bg-white'>
+    <div className='border-border bg-card flex w-12 flex-col border-r'>
       <div className='flex flex-1 flex-col items-center gap-1.5 py-3'>
         {MODES.map((item) => {
           const label = t(item.labelKey)
@@ -47,7 +47,7 @@ export function ToolRail() {
                 <button
                   data-active={item.value === mode}
                   onClick={() => setMode(item.value)}
-                  className='flex h-8 w-8 items-center justify-center rounded border border-transparent text-neutral-600 hover:border-neutral-300 data-[active=true]:border-rose-400 data-[active=true]:bg-rose-50 data-[active=true]:text-rose-600'
+                  className='text-muted-foreground hover:border-border data-[active=true]:border-primary data-[active=true]:bg-accent data-[active=true]:text-primary flex h-8 w-8 items-center justify-center rounded border border-transparent'
                   aria-label={label}
                 >
                   <item.icon className='h-4 w-4' />

@@ -15,6 +15,7 @@
     "redoInpaintRender": "重新修補並渲染",
     "processAll": "處理所有圖片",
     "help": "說明",
+    "settings": "設定",
     "discord": "Discord",
     "github": "GitHub",
     "version": "版本：{{version}}",
@@ -143,5 +144,12 @@
     "brush": "筆刷",
     "repairBrush": "修復筆",
     "eraser": "橡皮擦"
+  },
+  "settings": {
+    "title": "設定",
+    "theme": "主題",
+    "themeLight": "淺色",
+    "themeDark": "深色",
+    "themeSystem": "跟隨系統"
   }
 }

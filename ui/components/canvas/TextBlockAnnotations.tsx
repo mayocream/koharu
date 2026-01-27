@@ -152,19 +152,15 @@ function TextBlockAnnotation({
     >
       <div className='relative h-full w-full select-none'>
         <div
-          className={`absolute inset-0 rounded border ${
-            selected ? 'border-sky-500' : 'border-rose-500/70'
+          className={`absolute inset-0 rounded border-2 ${
+            selected
+              ? 'border-ring bg-ring/10'
+              : 'border-primary/70 bg-primary/10'
           }`}
-          style={{
-            borderWidth: 2,
-            backgroundColor: selected
-              ? 'rgba(59, 130, 246, 0.08)'
-              : 'rgba(244, 63, 94, 0.08)',
-          }}
         />
         <div
           className={`pointer-events-none absolute -top-1.5 -left-1.5 flex h-4 w-4 items-center justify-center rounded-full text-[9px] font-semibold text-white shadow ${
-            selected ? 'bg-sky-500' : 'bg-rose-500'
+            selected ? 'bg-ring' : 'bg-primary'
           }`}
         >
           {index + 1}

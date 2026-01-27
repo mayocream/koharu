@@ -103,7 +103,7 @@ export function ResizableSidebar({
         aria-orientation='vertical'
         data-dragging={dragging}
         onPointerDown={handlePointerDown}
-        className={`absolute top-0 h-full w-1.5 cursor-col-resize touch-none transition-colors select-none ${handlePosition} hover:bg-neutral-200 data-[dragging=true]:bg-neutral-300`}
+        className={`absolute top-0 h-full w-1.5 cursor-col-resize touch-none transition-colors select-none ${handlePosition} hover:bg-border data-[dragging=true]:bg-muted-foreground/30`}
       />
     </div>
   )

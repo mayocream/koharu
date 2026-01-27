@@ -15,6 +15,7 @@
     "redoInpaintRender": "Redo inpaint and render",
     "processAll": "Process all images",
     "help": "Help",
+    "settings": "Settings",
     "discord": "Discord",
     "github": "GitHub",
     "version": "Version: {{version}}",
@@ -143,5 +144,12 @@
     "brush": "Brush",
     "repairBrush": "Repair brush",
     "eraser": "Eraser"
+  },
+  "settings": {
+    "title": "Settings",
+    "theme": "Theme",
+    "themeLight": "Light",
+    "themeDark": "Dark",
+    "themeSystem": "System"
   }
 }

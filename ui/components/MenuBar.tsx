@@ -1,6 +1,7 @@
 'use client'
 
 import { useEffect, useState, useMemo } from 'react'
+import { useRouter } from 'next/navigation'
 import { invoke } from '@/lib/backend'
 import { useTranslation } from 'react-i18next'
 import { useAppStore } from '@/lib/store'
@@ -12,6 +13,7 @@ import {
   MenubarMenu,
   MenubarRadioGroup,
   MenubarRadioItem,
+  MenubarSeparator,
   MenubarTrigger,
 } from '@/components/ui/menubar'
 
@@ -23,6 +25,7 @@ type MenuItem = {
 
 export function MenuBar() {
   const { t, i18n } = useTranslation()
+  const router = useRouter()
   const locales = useMemo(
     () => Object.keys(i18n.options.resources || {}),
     [i18n.options.resources],
@@ -51,15 +54,13 @@ export function MenuBar() {
     void loadVersion()
   }, [])
 
+  const fileMenuItems: MenuItem[] = [
+    { label: t('menu.openFile'), onSelect: openDocuments },
+    { label: t('menu.save'), onSelect: saveDocuments },
+    { label: t('menu.export'), onSelect: exportDocument },
+  ]
+
   const menus: { label: string; items: MenuItem[] }[] = [
-    {
-      label: t('menu.file'),
-      items: [
-        { label: t('menu.openFile'), onSelect: openDocuments },
-        { label: t('menu.save'), onSelect: saveDocuments },
-        { label: t('menu.export'), onSelect: exportDocument },
-      ],
-    },
     {
       label: t('menu.view'),
       items: [
@@ -97,11 +98,46 @@ export function MenuBar() {
   ]
 
   return (
-    <div className='flex h-8 items-center gap-1 border-b border-black/10 bg-white px-1.5 text-[13px] text-black/95'>
+    <div className='border-border bg-background text-foreground flex h-8 items-center gap-1 border-b px-1.5 text-[13px]'>
       <Menubar className='h-auto gap-1 border-none bg-transparent p-0 shadow-none'>
+        <MenubarMenu>
+          <MenubarTrigger className='hover:bg-accent data-[state=open]:bg-accent rounded px-3 py-1.5 font-medium'>
+            {t('menu.file')}
+          </MenubarTrigger>
+          <MenubarContent
+            className='min-w-36'
+            align='start'
+            sideOffset={5}
+            alignOffset={-3}
+          >
+            {fileMenuItems.map((item) => (
+              <MenubarItem
+                key={item.label}
+                className='text-[13px]'
+                disabled={item.disabled}
+                onSelect={
+                  item.onSelect
+                    ? () => {
+                        void item.onSelect?.()
+                      }
+                    : undefined
+                }
+              >
+                {item.label}
+              </MenubarItem>
+            ))}
+            <MenubarSeparator />
+            <MenubarItem
+              className='text-[13px]'
+              onSelect={() => router.push('/settings')}
+            >
+              {t('menu.settings')}
+            </MenubarItem>
+          </MenubarContent>
+        </MenubarMenu>
         {menus.map(({ label, items }) => (
           <MenubarMenu key={label}>
-            <MenubarTrigger className='rounded px-3 py-1.5 font-medium hover:bg-black/10 data-[state=open]:bg-black/10'>
+            <MenubarTrigger className='hover:bg-accent data-[state=open]:bg-accent rounded px-3 py-1.5 font-medium'>
               {label}
             </MenubarTrigger>
             <MenubarContent
@@ -130,7 +166,7 @@ export function MenuBar() {
           </MenubarMenu>
         ))}
         <MenubarMenu>
-          <MenubarTrigger className='rounded px-3 py-1.5 font-medium hover:bg-black/10 data-[state=open]:bg-black/10'>
+          <MenubarTrigger className='hover:bg-accent data-[state=open]:bg-accent rounded px-3 py-1.5 font-medium'>
             {t('menu.language')}
           </MenubarTrigger>
           <MenubarContent

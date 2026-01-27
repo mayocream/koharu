@@ -15,6 +15,7 @@
     "redoInpaintRender": "再インペイントしてレンダー",
     "processAll": "すべての画像を処理",
     "help": "ヘルプ",
+    "settings": "設定",
     "discord": "Discord",
     "github": "GitHub",
     "version": "バージョン: {{version}}",
@@ -143,5 +144,12 @@
     "brush": "ブラシ",
     "repairBrush": "リペアブラシ",
     "eraser": "消しゴム"
+  },
+  "settings": {
+    "title": "設定",
+    "theme": "テーマ",
+    "themeLight": "ライト",
+    "themeDark": "ダーク",
+    "themeSystem": "システム"
   }
 }

@@ -27,16 +27,16 @@ export function Panels() {
       initialWidth={256}
       minWidth={220}
       maxWidth={420}
-      className='border-l border-neutral-200 bg-neutral-50'
+      className='border-border bg-muted border-l'
     >
       <div className='flex h-full w-full flex-col'>
-        <Tabs defaultValue='processing' className='border-b border-neutral-200'>
-          <TabsList className='grid w-full grid-cols-3 bg-white text-[11px] font-semibold tracking-wide text-neutral-600 uppercase'>
+        <Tabs defaultValue='processing' className='border-border border-b'>
+          <TabsList className='bg-card text-muted-foreground grid w-full grid-cols-3 text-[11px] font-semibold tracking-wide uppercase'>
             {PANEL_TABS.map((tab) => (
               <TabsTrigger
                 key={tab.value}
                 value={tab.value}
-                className='rounded-none px-2.5 py-1.5 data-[state=active]:bg-neutral-100'
+                className='data-[state=active]:bg-accent rounded-none px-2.5 py-1.5'
               >
                 {t(tab.labelKey)}
               </TabsTrigger>

@@ -55,8 +55,8 @@ export function LlmControls() {
   }, [llmList, llmCheckReady])
 
   return (
-    <div className='space-y-2 text-xs text-neutral-600'>
-      <div className='flex items-center gap-2 text-sm font-semibold text-neutral-900'>
+    <div className='text-muted-foreground space-y-2 text-xs'>
+      <div className='text-foreground flex items-center gap-2 text-sm font-semibold'>
         {t('llm.title')}{' '}
         <StatusBadge
           ready={llmReady}
@@ -66,7 +66,7 @@ export function LlmControls() {
       </div>
       <div className='space-y-2'>
         <div className='space-y-1'>
-          <div className='text-[11px] font-semibold tracking-wide text-neutral-500 uppercase'>
+          <div className='text-muted-foreground text-[11px] font-semibold tracking-wide uppercase'>
             {t('llm.modelLabel')}
           </div>
           <Select value={llmSelectedModel} onValueChange={llmSetSelectedModel}>
@@ -86,7 +86,7 @@ export function LlmControls() {
         </div>
         {activeLanguages.length > 0 ? (
           <div className='space-y-1'>
-            <div className='text-[11px] font-semibold tracking-wide text-neutral-500 uppercase'>
+            <div className='text-muted-foreground text-[11px] font-semibold tracking-wide uppercase'>
               {t('llm.languageLabel')}
             </div>
             <Select
@@ -108,9 +108,9 @@ export function LlmControls() {
         ) : null}
       </div>
       {isOpenAICompatible ? (
-        <div className='space-y-2 rounded border border-neutral-200 bg-white p-2'>
+        <div className='border-border bg-card space-y-2 rounded border p-2'>
           <div className='space-y-1'>
-            <div className='text-[11px] font-semibold tracking-wide text-neutral-500 uppercase'>
+            <div className='text-muted-foreground text-[11px] font-semibold tracking-wide uppercase'>
               {t('llm.openaiEndpointLabel')}
             </div>
             <input
@@ -118,11 +118,11 @@ export function LlmControls() {
               value={llmOpenAIEndpoint}
               placeholder={t('llm.openaiEndpointPlaceholder')}
               onChange={(event) => setLlmOpenAIEndpoint(event.target.value)}
-              className='w-full rounded border border-neutral-200 bg-white px-2 py-1.5 text-sm text-neutral-800 outline-none focus:border-rose-400'
+              className='border-border bg-card text-foreground focus:border-primary w-full rounded border px-2 py-1.5 text-sm outline-none'
             />
           </div>
           <div className='space-y-1'>
-            <div className='text-[11px] font-semibold tracking-wide text-neutral-500 uppercase'>
+            <div className='text-muted-foreground text-[11px] font-semibold tracking-wide uppercase'>
               {t('llm.openaiApiKeyLabel')}
             </div>
             <input
@@ -131,29 +131,29 @@ export function LlmControls() {
               placeholder={t('llm.openaiApiKeyPlaceholder')}
               autoComplete='off'
               onChange={(event) => setLlmOpenAIApiKey(event.target.value)}
-              className='w-full rounded border border-neutral-200 bg-white px-2 py-1.5 text-sm text-neutral-800 outline-none focus:border-rose-400'
+              className='border-border bg-card text-foreground focus:border-primary w-full rounded border px-2 py-1.5 text-sm outline-none'
             />
           </div>
           <div className='space-y-1'>
-            <div className='text-[11px] font-semibold tracking-wide text-neutral-500 uppercase'>
+            <div className='text-muted-foreground text-[11px] font-semibold tracking-wide uppercase'>
               {t('llm.openaiModelLabel')}
             </div>
             <input
               value={llmOpenAIModel}
               placeholder={t('llm.openaiModelPlaceholder')}
               onChange={(event) => setLlmOpenAIModel(event.target.value)}
-              className='w-full rounded border border-neutral-200 bg-white px-2 py-1.5 text-sm text-neutral-800 outline-none focus:border-rose-400'
+              className='border-border bg-card text-foreground focus:border-primary w-full rounded border px-2 py-1.5 text-sm outline-none'
             />
           </div>
           <div className='space-y-1'>
-            <div className='text-[11px] font-semibold tracking-wide text-neutral-500 uppercase'>
+            <div className='text-muted-foreground text-[11px] font-semibold tracking-wide uppercase'>
               {t('llm.openaiPromptLabel')}
             </div>
             <textarea
               value={llmOpenAIPrompt}
               rows={3}
               onChange={(event) => setLlmOpenAIPrompt(event.target.value)}
-              className='w-full rounded border border-neutral-200 bg-white px-2 py-2 text-sm text-neutral-800 outline-none focus:border-rose-400'
+              className='border-border bg-card text-foreground focus:border-primary w-full rounded border px-2 py-2 text-sm outline-none'
             />
           </div>
         </div>
@@ -215,13 +215,13 @@ function StatusBadge({
   idleLabel: string
 }) {
   return (
-    <span className='inline-flex items-center gap-1 rounded border border-neutral-200 px-2 py-0.5 text-[11px]'>
+    <span className='border-border inline-flex items-center gap-1 rounded border px-2 py-0.5 text-[11px]'>
       <span
         className={`h-2 w-2 rounded-full ${
-          ready ? 'bg-rose-500' : 'bg-neutral-300'
+          ready ? 'bg-primary' : 'bg-muted-foreground/30'
         }`}
       />
-      <span className={ready ? 'text-rose-600' : 'text-neutral-500'}>
+      <span className={ready ? 'text-primary' : 'text-muted-foreground'}>
         {ready ? readyLabel : idleLabel}
       </span>
     </span>

@@ -147,22 +147,22 @@ export function RenderControls() {
   }
 
   return (
-    <div className='space-y-2 text-xs text-neutral-600'>
+    <div className='text-muted-foreground space-y-2 text-xs'>
       <label className='flex items-center gap-2 text-sm'>
         <Switch
           size='sm'
           checked={showRenderedImage}
           onCheckedChange={setShowRenderedImage}
-          className='data-[state=checked]:bg-rose-200 data-[state=unchecked]:bg-neutral-300 [&_[data-slot=switch-thumb]]:data-[state=checked]:bg-rose-500'
+          className='data-[state=checked]:bg-primary/30 data-[state=unchecked]:bg-muted-foreground/30 [&_[data-slot=switch-thumb]]:data-[state=checked]:bg-primary'
         />
         <span>{t('mask.showRendered')}</span>
       </label>
       <div className='space-y-1'>
         <div className='flex items-center justify-between gap-2'>
-          <span className='text-[11px] font-semibold tracking-wide text-neutral-500 uppercase'>
+          <span className='text-muted-foreground text-[11px] font-semibold tracking-wide uppercase'>
             {t('render.fontLabel')}
           </span>
-          <span className='rounded border border-neutral-200 bg-white px-1.5 py-0.5 text-[10px] font-semibold text-neutral-500'>
+          <span className='border-border bg-card text-muted-foreground rounded border px-1.5 py-0.5 text-[10px] font-semibold'>
             {selectedBlockIndex !== undefined
               ? t('render.fontScopeBlockIndex', {
                   index: selectedBlockIndex + 1,
@@ -208,7 +208,7 @@ export function RenderControls() {
         </Select>
       </div>
       <div className='space-y-1'>
-        <div className='text-[11px] font-semibold tracking-wide text-neutral-500 uppercase'>
+        <div className='text-muted-foreground text-[11px] font-semibold tracking-wide uppercase'>
           {t('render.effectLabel')}
         </div>
         <Select
@@ -232,10 +232,10 @@ export function RenderControls() {
         </Select>
       </div>
       <div className='space-y-1'>
-        <div className='text-[11px] font-semibold tracking-wide text-neutral-500 uppercase'>
+        <div className='text-muted-foreground text-[11px] font-semibold tracking-wide uppercase'>
           {t('render.fontColorLabel')}
         </div>
-        <div className='inline-flex w-full items-center justify-between gap-3 rounded border border-neutral-200 bg-white px-2 py-1 text-sm'>
+        <div className='border-border bg-card inline-flex w-full items-center justify-between gap-3 rounded border px-2 py-1 text-sm'>
           <input
             type='color'
             value={currentColorHex}
@@ -250,7 +250,7 @@ export function RenderControls() {
             }}
             className='h-6 w-6 cursor-pointer appearance-none border-none p-0 disabled:cursor-not-allowed disabled:opacity-60'
           />
-          <span className='font-mono text-[11px] text-neutral-500'>
+          <span className='text-muted-foreground font-mono text-[11px]'>
             {currentColorHex.toUpperCase()}
           </span>
         </div>

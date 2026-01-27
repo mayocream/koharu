@@ -9,11 +9,11 @@ export function StatusBar() {
   const { t } = useTranslation()
 
   return (
-    <div className='flex items-center justify-end gap-3 border-t border-neutral-300 px-2 py-1 text-xs'>
+    <div className='border-border bg-card text-foreground flex items-center justify-end gap-3 border-t px-2 py-1 text-xs'>
       <div className='flex items-center gap-1.5'>
-        <span className='text-neutral-500'>{t('statusBar.zoom')}</span>
+        <span className='text-muted-foreground'>{t('statusBar.zoom')}</span>
         <Slider
-          className='w-44 [&_[data-slot=slider-range]]:bg-rose-400 [&_[data-slot=slider-thumb]]:size-2.5 [&_[data-slot=slider-thumb]]:border-rose-500 [&_[data-slot=slider-thumb]]:bg-rose-500 [&_[data-slot=slider-track]]:bg-rose-100'
+          className='[&_[data-slot=slider-range]]:bg-primary [&_[data-slot=slider-thumb]]:border-primary [&_[data-slot=slider-thumb]]:bg-primary [&_[data-slot=slider-track]]:bg-primary/20 w-44 [&_[data-slot=slider-thumb]]:size-2.5'
           min={10}
           max={100}
           step={5}
@@ -22,7 +22,7 @@ export function StatusBar() {
         />
         <span className='w-10 text-right tabular-nums'>{scale}%</span>
       </div>
-      <span className='ml-auto text-[11px] text-neutral-600'>
+      <span className='text-muted-foreground ml-auto text-[11px]'>
         {t('statusBar.canvas')}: {summary}
       </span>
     </div>

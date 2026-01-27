@@ -8,7 +8,7 @@ import { ActivityBubble } from '@/components/ActivityBubble'
 
 export default function Page() {
   return (
-    <main className='relative flex h-screen w-screen flex-col overflow-hidden bg-neutral-50'>
+    <main className='bg-background relative flex h-screen w-screen flex-col overflow-hidden'>
       <MenuBar />
       <ActivityBubble />
       <div className='flex min-h-0 flex-1'>

@@ -22,23 +22,23 @@ export function Navigator() {
       initialWidth={128}
       minWidth={120}
       maxWidth={320}
-      className='border-r border-neutral-200 bg-neutral-50'
+      className='border-border bg-muted border-r'
     >
       <div className='flex h-full min-h-0 w-full flex-col'>
-        <div className='border-b border-neutral-200 px-2.5 py-1.5'>
-          <p className='text-[11px] tracking-wide text-neutral-500 uppercase'>
+        <div className='border-border border-b px-2.5 py-1.5'>
+          <p className='text-muted-foreground text-[11px] tracking-wide uppercase'>
             {t('navigator.title')}
           </p>
-          <p className='text-xs font-semibold text-neutral-900'>
+          <p className='text-foreground text-xs font-semibold'>
             {totalPages
               ? t('navigator.pages', { count: totalPages })
               : t('navigator.empty')}
           </p>
         </div>
 
-        <div className='flex items-center gap-1.5 px-2.5 py-1.5 text-[11px] text-neutral-600'>
+        <div className='text-muted-foreground flex items-center gap-1.5 px-2.5 py-1.5 text-[11px]'>
           {totalPages > 0 ? (
-            <span className='bg-neutral-100 px-2 py-0.5 font-mono text-[10px] text-neutral-700'>
+            <span className='bg-secondary text-secondary-foreground px-2 py-0.5 font-mono text-[10px]'>
               #{currentDocumentIndex + 1}
             </span>
           ) : (
@@ -112,13 +112,13 @@ function PagePreview({ index, selected, onSelect }: PagePreviewProps) {
         <button
           onClick={onSelect}
           data-selected={selected}
-          className='flex flex-col gap-0.5 rounded border border-transparent bg-white p-1.5 text-left shadow-sm transition hover:border-neutral-200 data-[selected=true]:border-pink-500'
+          className='bg-card hover:border-border data-[selected=true]:border-primary flex flex-col gap-0.5 rounded border border-transparent p-1.5 text-left shadow-sm transition'
         >
           {loading ? (
-            <div className='aspect-3/4 w-full animate-pulse rounded bg-neutral-200' />
+            <div className='bg-muted aspect-3/4 w-full animate-pulse rounded' />
           ) : error ? (
-            <div className='flex aspect-3/4 w-full items-center justify-center rounded bg-neutral-200'>
-              <span className='text-[10px] text-neutral-400'>?</span>
+            <div className='bg-muted flex aspect-3/4 w-full items-center justify-center rounded'>
+              <span className='text-muted-foreground text-[10px]'>?</span>
             </div>
           ) : preview ? (
             <img
@@ -128,10 +128,10 @@ function PagePreview({ index, selected, onSelect }: PagePreviewProps) {
               className='aspect-3/4 w-full rounded object-cover'
             />
           ) : (
-            <div className='aspect-3/4 w-full rounded bg-neutral-200' />
+            <div className='bg-muted aspect-3/4 w-full rounded' />
           )}
-          <div className='flex flex-1 items-center text-[11px] text-neutral-600'>
-            <div className='mx-auto flex text-center font-semibold text-neutral-900'>
+          <div className='text-muted-foreground flex flex-1 items-center text-[11px]'>
+            <div className='text-foreground mx-auto flex text-center font-semibold'>
               {index + 1}
             </div>
           </div>

@@ -287,7 +287,7 @@ export function Workspace() {
     : { width: 0, height: 0 }
 
   return (
-    <div className='flex min-h-0 min-w-0 flex-1 bg-neutral-100'>
+    <div className='bg-muted flex min-h-0 min-w-0 flex-1'>
       <ToolRail />
       <div className='flex min-h-0 min-w-0 flex-1 flex-col'>
         <CanvasToolbar />
@@ -318,7 +318,7 @@ export function Workspace() {
                   <div className='grid place-items-center'>
                     <div
                       ref={canvasRef}
-                      className='relative rounded border border-neutral-200 bg-white shadow-sm'
+                      className='border-border bg-card relative rounded border shadow-sm'
                       style={{ ...canvasDimensions, cursor: canvasCursor }}
                       onPointerDown={handleCanvasPointerDown}
                       onPointerMove={handleMouseMove}
@@ -407,7 +407,7 @@ export function Workspace() {
                       </div>
                       {draftBlock && (
                         <div
-                          className='pointer-events-none absolute rounded border-2 border-dashed border-rose-500 bg-rose-500/10'
+                          className='border-primary bg-primary/10 pointer-events-none absolute rounded border-2 border-dashed'
                           style={{
                             left: draftBlock.x * scaleRatio,
                             top: draftBlock.y * scaleRatio,
@@ -429,7 +429,7 @@ export function Workspace() {
                 </ContextMenuContent>
               </ContextMenu>
             ) : (
-              <div className='flex h-full w-full items-center justify-center text-sm text-neutral-500'>
+              <div className='text-muted-foreground flex h-full w-full items-center justify-center text-sm'>
                 {t('workspace.importPrompt')}
               </div>
             )}
@@ -438,13 +438,13 @@ export function Workspace() {
             orientation='vertical'
             className='flex w-2 touch-none p-px select-none'
           >
-            <ScrollAreaPrimitive.Thumb className='flex-1 rounded bg-neutral-300' />
+            <ScrollAreaPrimitive.Thumb className='bg-muted-foreground/40 flex-1 rounded' />
           </ScrollAreaPrimitive.Scrollbar>
           <ScrollAreaPrimitive.Scrollbar
             orientation='horizontal'
             className='flex h-2 touch-none p-px select-none'
           >
-            <ScrollAreaPrimitive.Thumb className='rounded bg-neutral-300' />
+            <ScrollAreaPrimitive.Thumb className='bg-muted-foreground/40 rounded' />
           </ScrollAreaPrimitive.Scrollbar>
         </ScrollAreaPrimitive.Root>
       </div>
