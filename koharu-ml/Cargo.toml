@@ -33,6 +33,8 @@ reqwest = { workspace = true }
 once_cell = { workspace = true }
 rayon = { workspace = true }
 dirs = { workspace = true }
+futures = { workspace = true }
+num_cpus = { workspace = true }
 libloading = { workspace = true }
 minijinja = { workspace = true }
 sys-locale = { workspace = true }
