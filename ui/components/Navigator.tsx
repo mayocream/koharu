@@ -12,8 +12,12 @@ import {
 } from '@/components/ui/tooltip'
 
 export function Navigator() {
-  const { totalPages, currentDocumentIndex, setCurrentDocumentIndex } =
-    useAppStore()
+  const {
+    totalPages,
+    documentsVersion,
+    currentDocumentIndex,
+    setCurrentDocumentIndex,
+  } = useAppStore()
   const { t } = useTranslation()
 
   return (
@@ -51,7 +55,7 @@ export function Navigator() {
             <div className='flex flex-col gap-1.5'>
               {Array.from({ length: totalPages }, (_, idx) => (
                 <PagePreview
-                  key={idx}
+                  key={`${documentsVersion}-${idx}`}
                   index={idx}
                   selected={idx === currentDocumentIndex}
                   onSelect={() => void setCurrentDocumentIndex(idx)}

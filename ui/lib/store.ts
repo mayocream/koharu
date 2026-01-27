@@ -145,6 +145,7 @@ let llmReadyCheckInFlight: Promise<boolean> | null = null
 // A mixin of application state, ui state and actions.
 type AppState = OperationSlice & {
   totalPages: number
+  documentsVersion: number
   currentDocumentIndex: number
   currentDocument: Document | null
   currentDocumentLoading: boolean
@@ -301,6 +302,7 @@ export const useAppStore = create<AppState>((set, get) => {
   return {
     ...createOperationSlice(set),
     totalPages: 0,
+    documentsVersion: 0,
     currentDocumentIndex: 0,
     currentDocument: null,
     currentDocumentLoading: false,
@@ -326,12 +328,13 @@ export const useAppStore = create<AppState>((set, get) => {
     llmOpenAIModel: OPENAI_DEFAULT_MODEL,
     operation: undefined,
     setTotalPages: (count: number) => {
-      set({
+      set((state) => ({
         totalPages: count,
+        documentsVersion: state.documentsVersion + 1,
         currentDocumentIndex: 0,
         currentDocument: null,
         selectedBlockIndex: undefined,
-      })
+      }))
       if (count > 0) {
         void get().fetchCurrentDocument()
       }
