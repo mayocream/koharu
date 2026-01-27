@@ -12,7 +12,7 @@ use koharu_macros::routes;
 use rust_embed::Embed;
 use serde::Serialize;
 use tokio::net::TcpListener;
-use tower_http::cors::CorsLayer;
+use tower_http::cors::{Any, CorsLayer};
 
 use koharu_ml::DeviceName;
 
@@ -160,7 +160,14 @@ fn build_router(state: ApiState) -> Router {
     )
     .with_state(state)
     .layer(DefaultBodyLimit::max(1024 * 1024 * 1024))
-    .layer(CorsLayer::permissive())
+    .layer(
+        CorsLayer::new()
+            .allow_origin(Any)
+            .allow_methods(Any)
+            .allow_headers(Any)
+            .expose_headers(Any)
+            .allow_private_network(true),
+    )
     .fallback(serve_embedded)
 }
 

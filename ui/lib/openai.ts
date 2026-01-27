@@ -1,3 +1,5 @@
+import { fetch } from '@/lib/fetch'
+
 export type LlmModelInfo = {
   id: string
   languages: string[]
