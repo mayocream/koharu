@@ -23,14 +23,14 @@ export function Navigator() {
   return (
     <ResizableSidebar
       side='left'
-      initialWidth={128}
+      initialWidth={160}
       minWidth={120}
       maxWidth={320}
-      className='border-border bg-muted border-r'
+      className='border-border bg-muted/50 border-r'
     >
       <div className='flex h-full min-h-0 w-full flex-col'>
-        <div className='border-border border-b px-2.5 py-1.5'>
-          <p className='text-muted-foreground text-[11px] tracking-wide uppercase'>
+        <div className='border-border border-b px-2 py-1.5'>
+          <p className='text-muted-foreground text-xs tracking-wide uppercase'>
             {t('navigator.title')}
           </p>
           <p className='text-foreground text-xs font-semibold'>
@@ -40,7 +40,7 @@ export function Navigator() {
           </p>
         </div>
 
-        <div className='text-muted-foreground flex items-center gap-1.5 px-2.5 py-1.5 text-[11px]'>
+        <div className='text-muted-foreground flex items-center gap-1.5 px-2 py-1.5 text-xs'>
           {totalPages > 0 ? (
             <span className='bg-secondary text-secondary-foreground px-2 py-0.5 font-mono text-[10px]'>
               #{currentDocumentIndex + 1}
@@ -134,7 +134,7 @@ function PagePreview({ index, selected, onSelect }: PagePreviewProps) {
           ) : (
             <div className='bg-muted aspect-3/4 w-full rounded' />
           )}
-          <div className='text-muted-foreground flex flex-1 items-center text-[11px]'>
+          <div className='text-muted-foreground flex flex-1 items-center text-xs'>
             <div className='text-foreground mx-auto flex text-center font-semibold'>
               {index + 1}
             </div>

@@ -54,6 +54,15 @@
     "llm": "LLM",
     "render": "渲染"
   },
+  "layers": {
+    "title": "圖層",
+    "rendered": "渲染文字",
+    "textBlocks": "文字框",
+    "brush": "筆刷圖層",
+    "inpainted": "修補影像",
+    "mask": "分割遮罩",
+    "base": "原始影像"
+  },
   "processing": {
     "detect": "偵測",
     "detectTooltip": "在目前頁面執行文字偵測",
@@ -94,7 +103,7 @@
     "generate": "產生",
     "generating": "產生中...",
     "generateTooltip": "為偵測到的文字區塊產生翻譯",
-    "render": "渲染文字",
+    "render": "渲染",
     "renderTooltip": "將翻譯渲染到頁面",
     "loadingModel": "正在載入 LLM 模型",
     "statusReady": "LLM 已就緒",
@@ -120,7 +129,9 @@
     "none": "尚無文字區塊。請執行偵測以產生列表。",
     "emptySummary": "<空>",
     "ocrLabel": "OCR 文字",
+    "ocrBadge": "OCR",
     "translationLabel": "翻譯",
+    "translationBadge": "TL",
     "addOcrPlaceholder": "新增 OCR 文字",
     "addTranslationPlaceholder": "新增翻譯"
   },

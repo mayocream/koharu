@@ -3,7 +3,7 @@
 import { useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import { TextBlock } from '@/types'
-import { Languages } from 'lucide-react'
+import { Languages, LoaderCircleIcon } from 'lucide-react'
 import { useTextBlocks } from '@/hooks/useTextBlocks'
 import { isOpenAIConfigured, OPENAI_COMPATIBLE_MODEL_ID } from '@/lib/openai'
 import { useAppStore } from '@/lib/store'
@@ -14,7 +14,6 @@ import {
   AccordionTrigger,
 } from '@/components/ui/accordion'
 import { ScrollArea } from '@/components/ui/scroll-area'
-import { Button } from '@/components/ui/button'
 import {
   Tooltip,
   TooltipContent,
@@ -45,7 +44,7 @@ export function TextBlocksPanel() {
 
   if (!document) {
     return (
-      <div className='text-muted-foreground flex flex-1 items-center justify-center text-sm'>
+      <div className='text-muted-foreground flex flex-1 items-center justify-center text-xs'>
         {t('textBlocks.emptyPrompt')}
       </div>
     )
@@ -67,13 +66,13 @@ export function TextBlocksPanel() {
 
   return (
     <div className='flex min-h-0 flex-1 flex-col'>
-      <div className='border-border text-muted-foreground border-b px-2.5 py-1.5 text-xs font-semibold tracking-wide uppercase'>
-        {t('textBlocks.title', { count: textBlocks.length })}
+      <div className='border-border text-muted-foreground flex items-center justify-between border-b px-2 py-1.5 text-xs font-semibold tracking-wide uppercase'>
+        <span>{t('textBlocks.title', { count: textBlocks.length })}</span>
       </div>
-      <ScrollArea className='min-h-0 flex-1'>
-        <div className='size-full p-2'>
+      <ScrollArea className='min-h-0 flex-1' viewportClassName='pb-1'>
+        <div className='p-2'>
           {textBlocks.length === 0 ? (
-            <p className='border-border text-muted-foreground rounded border border-dashed p-4 text-sm'>
+            <p className='border-border text-muted-foreground rounded border border-dashed p-2 text-xs'>
               {t('textBlocks.none')}
             </p>
           ) : (
@@ -88,7 +87,7 @@ export function TextBlocksPanel() {
                 }
                 setSelectedBlockIndex(Number(value))
               }}
-              className='flex flex-col gap-2'
+              className='flex flex-col gap-1'
             >
               {textBlocks.map((block, index) => (
                 <BlockCard
@@ -130,66 +129,84 @@ function BlockCard({
   llmReady,
 }: BlockCardProps) {
   const { t } = useTranslation()
-  const emptySummary = t('textBlocks.emptySummary')
-  const summary =
-    block.translation?.trim() || block.text?.trim() || emptySummary
-  const isEmpty = summary === emptySummary
+  const hasOcr = !!block.text?.trim()
+  const hasTranslation = !!block.translation?.trim()
+  const preview = block.translation?.trim() || block.text?.trim()
 
   return (
     <AccordionItem
       value={index.toString()}
       data-selected={selected}
-      className='border-border bg-card/90 data-[selected=true]:border-primary overflow-hidden rounded border text-sm transition data-[state=open]:shadow-sm'
+      className='bg-card/90 ring-border data-[selected=true]:ring-primary overflow-hidden rounded text-xs ring-1'
     >
-      <AccordionTrigger className='data-[state=open]:bg-accent flex w-full cursor-pointer flex-col gap-1 px-3 py-2 text-left transition outline-none hover:no-underline [&>svg]:hidden'>
-        <div className='text-muted-foreground flex items-center justify-between text-xs'>
-          <span className='inline-flex items-center gap-2'>
-            <span className='bg-accent text-accent-foreground rounded-full px-2 py-0.5 text-[11px] font-semibold'>
-              #{index + 1}
-            </span>
-          </span>
-        </div>
-        {!selected && (
-          <p
-            className={`line-clamp-2 text-sm ${
-              isEmpty ? 'text-muted-foreground italic' : 'text-foreground'
+      <AccordionTrigger className='data-[state=open]:bg-accent flex w-full cursor-pointer items-center gap-1.5 px-2 py-1.5 text-left transition outline-none hover:no-underline [&>svg]:hidden'>
+        <span
+          className={`shrink-0 rounded px-1.5 py-0.5 text-[10px] font-medium text-white ${
+            selected ? 'bg-primary' : 'bg-muted-foreground/60'
+          }`}
+        >
+          {index + 1}
+        </span>
+        <div className='flex min-w-0 flex-1 items-center gap-1'>
+          <span
+            className={`shrink-0 rounded px-1 py-0.5 text-[9px] font-medium uppercase ${
+              hasOcr
+                ? 'bg-rose-400/80 text-white'
+                : 'bg-muted text-muted-foreground/50'
             }`}
           >
-            {summary}
-          </p>
-        )}
+            {t('textBlocks.ocrBadge')}
+          </span>
+          <span
+            className={`shrink-0 rounded px-1 py-0.5 text-[9px] font-medium uppercase ${
+              hasTranslation
+                ? 'bg-rose-400/80 text-white'
+                : 'bg-muted text-muted-foreground/50'
+            }`}
+          >
+            {t('textBlocks.translationBadge')}
+          </span>
+          {preview && (
+            <p className='text-muted-foreground line-clamp-1 min-w-0 flex-1 text-xs'>
+              {preview}
+            </p>
+          )}
+        </div>
       </AccordionTrigger>
-      <AccordionContent className='border-border border-t px-3 pt-2 pb-3'>
-        <div className='space-y-3'>
-          <label className='text-muted-foreground flex w-full flex-col gap-1 text-xs'>
-            <span className='text-[11px] tracking-wide uppercase'>
+      <AccordionContent className='px-2 pt-1.5 pb-2 shadow-[inset_0_1px_0_0_var(--color-border)]'>
+        <div className='space-y-1.5'>
+          <div className='flex flex-col gap-0.5'>
+            <span className='text-muted-foreground text-[10px] uppercase'>
               {t('textBlocks.ocrLabel')}
             </span>
             <textarea
               value={block.text ?? ''}
               placeholder={t('textBlocks.addOcrPlaceholder')}
-              rows={4}
+              rows={2}
               onChange={(event) => onChange({ text: event.target.value })}
-              className='border-border bg-card text-foreground focus:border-primary min-h-[72px] w-full rounded border px-2 py-2 text-sm outline-none'
+              className='border-border bg-card text-foreground focus:border-primary w-full resize-none rounded border px-1.5 py-1 text-xs outline-none'
             />
-          </label>
-          <label className='text-muted-foreground flex w-full flex-col gap-1 text-xs'>
-            <div className='flex items-center justify-between gap-2'>
-              <span className='text-[11px] tracking-wide uppercase'>
+          </div>
+          <div className='flex flex-col gap-0.5'>
+            <div className='flex items-center justify-between'>
+              <span className='text-muted-foreground text-[10px] uppercase'>
                 {t('textBlocks.translationLabel')}
               </span>
-              <Tooltip delayDuration={1000}>
+              <Tooltip>
                 <TooltipTrigger asChild>
-                  <Button
-                    variant='outline'
-                    size='xs'
+                  <button
                     disabled={!llmReady || generating}
                     onClick={onGenerate}
+                    className='text-muted-foreground hover:text-foreground disabled:hover:text-muted-foreground flex size-5 items-center justify-center rounded transition disabled:opacity-40'
                   >
-                    <Languages className='h-4 w-4' />
-                  </Button>
+                    {generating ? (
+                      <LoaderCircleIcon className='size-3 animate-spin' />
+                    ) : (
+                      <Languages className='size-3' />
+                    )}
+                  </button>
                 </TooltipTrigger>
-                <TooltipContent side='bottom' sideOffset={6}>
+                <TooltipContent side='left' sideOffset={4}>
                   {t('llm.generateTooltip')}
                 </TooltipContent>
               </Tooltip>
@@ -197,13 +214,13 @@ function BlockCard({
             <textarea
               value={block.translation ?? ''}
               placeholder={t('textBlocks.addTranslationPlaceholder')}
-              rows={4}
+              rows={2}
               onChange={(event) =>
                 onChange({ translation: event.target.value })
               }
-              className='border-border bg-card text-foreground focus:border-primary min-h-[72px] w-full rounded border px-2 py-2 text-sm outline-none'
+              className='border-border bg-card text-foreground focus:border-primary w-full resize-none rounded border px-1.5 py-1 text-xs outline-none'
             />
-          </label>
+          </div>
         </div>
       </AccordionContent>
     </AccordionItem>

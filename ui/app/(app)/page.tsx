@@ -1,6 +1,6 @@
 'use client'
 
-import { Panels } from '@/components/Panels'
+import { Panels, PanelsToolbar } from '@/components/Panels'
 import { Workspace, StatusBar } from '@/components/Canvas'
 import { Navigator } from '@/components/Navigator'
 import { ActivityBubble } from '@/components/ActivityBubble'
@@ -15,6 +15,7 @@ export default function Page() {
           <Workspace />
           <StatusBar />
         </div>
+        <PanelsToolbar />
         <Panels />
       </div>
     </div>

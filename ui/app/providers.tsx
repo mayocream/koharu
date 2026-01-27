@@ -53,7 +53,7 @@ export function Providers({ children }: { children: ReactNode }) {
   return (
     <I18nextProvider i18n={i18n}>
       <ThemeProvider attribute='class' defaultTheme='system' enableSystem>
-        <TooltipProvider delayDuration={300}>{children}</TooltipProvider>
+        <TooltipProvider delayDuration={0}>{children}</TooltipProvider>
       </ThemeProvider>
     </I18nextProvider>
   )

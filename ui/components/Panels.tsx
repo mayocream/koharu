@@ -1,55 +1,88 @@
 'use client'
 
+import { useState } from 'react'
 import { useTranslation } from 'react-i18next'
-import { ProcessingControls } from '@/components/panels/ProcessingControls'
-import { LlmControls } from '@/components/panels/LlmControls'
-import { RenderControls } from '@/components/panels/RenderControls'
+import { ChevronDownIcon, LayersIcon, ALargeSmallIcon } from 'lucide-react'
+import { LayersPanel } from '@/components/panels/LayersPanel'
 import { TextBlocksPanel } from '@/components/panels/TextBlocksPanel'
+import { RenderControls } from '@/components/canvas/CanvasToolbar'
 import { ResizableSidebar } from '@/components/ResizableSidebar'
-import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
+import {
+  Popover,
+  PopoverContent,
+  PopoverTrigger,
+} from '@/components/ui/popover'
+import {
+  Tooltip,
+  TooltipContent,
+  TooltipTrigger,
+} from '@/components/ui/tooltip'
+import { cn } from '@/lib/utils'
 
-const PANEL_TABS = [
-  {
-    value: 'processing',
-    labelKey: 'panels.processing',
-    Component: ProcessingControls,
-  },
-  { value: 'llm', labelKey: 'panels.llm', Component: LlmControls },
-  { value: 'render', labelKey: 'panels.render', Component: RenderControls },
-] as const
+export function PanelsToolbar() {
+  const { t } = useTranslation()
+
+  return (
+    <div className='border-border bg-card flex w-11 shrink-0 flex-col items-center gap-1 border-l py-2'>
+      <Popover>
+        <Tooltip>
+          <TooltipTrigger asChild>
+            <PopoverTrigger asChild>
+              <button className='text-muted-foreground hover:text-foreground hover:bg-accent flex h-8 w-8 items-center justify-center rounded'>
+                <ALargeSmallIcon className='size-4' />
+              </button>
+            </PopoverTrigger>
+          </TooltipTrigger>
+          <TooltipContent side='left' sideOffset={8}>
+            {t('render.fontLabel')}
+          </TooltipContent>
+        </Tooltip>
+        <PopoverContent side='left' align='start' className='w-auto p-3'>
+          <RenderControls />
+        </PopoverContent>
+      </Popover>
+    </div>
+  )
+}
 
 export function Panels() {
   const { t } = useTranslation()
+  const [layersExpanded, setLayersExpanded] = useState(true)
 
   return (
     <ResizableSidebar
       side='right'
-      initialWidth={256}
-      minWidth={220}
-      maxWidth={420}
-      className='border-border bg-muted border-l'
+      initialWidth={280}
+      minWidth={200}
+      maxWidth={400}
+      className='border-border bg-muted/50 border-l'
     >
       <div className='flex h-full w-full flex-col'>
-        <Tabs defaultValue='processing' className='border-border border-b'>
-          <TabsList className='bg-card text-muted-foreground grid w-full grid-cols-3 text-[11px] font-semibold tracking-wide uppercase'>
-            {PANEL_TABS.map((tab) => (
-              <TabsTrigger
-                key={tab.value}
-                value={tab.value}
-                className='data-[state=active]:bg-accent rounded-none px-2.5 py-1.5'
-              >
-                {t(tab.labelKey)}
-              </TabsTrigger>
-            ))}
-          </TabsList>
-          <div className='px-2.5 py-2'>
-            {PANEL_TABS.map(({ value, Component }) => (
-              <TabsContent key={value} value={value}>
-                <Component />
-              </TabsContent>
-            ))}
-          </div>
-        </Tabs>
+        {/* Layers Section */}
+        <div className='flex flex-col'>
+          <button
+            onClick={() => setLayersExpanded(!layersExpanded)}
+            className='hover:bg-accent/50 border-border flex w-full items-center gap-1.5 border-b px-2 py-1.5 text-left'
+          >
+            <ChevronDownIcon
+              className={cn(
+                'text-muted-foreground size-3.5 transition-transform',
+                !layersExpanded && '-rotate-90',
+              )}
+            />
+            <LayersIcon className='size-3.5' />
+            <span className='text-xs font-semibold tracking-wide uppercase'>
+              {t('layers.title')}
+            </span>
+          </button>
+          {layersExpanded && (
+            <div className='border-border border-b'>
+              <LayersPanel />
+            </div>
+          )}
+        </div>
+
+        {/* Text Blocks Section - takes remaining space */}
         <TextBlocksPanel />
       </div>
     </ResizableSidebar>

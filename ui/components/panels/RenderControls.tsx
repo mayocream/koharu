@@ -2,10 +2,10 @@
 
 import { useEffect } from 'react'
 import { useTranslation } from 'react-i18next'
+import { PaletteIcon } from 'lucide-react'
 import { useAppStore } from '@/lib/store'
 import { useTextBlocks } from '@/hooks/useTextBlocks'
 import { RenderEffect, RgbaColor, TextStyle } from '@/types'
-import { Switch } from '@/components/ui/switch'
 import { Button } from '@/components/ui/button'
 import {
   Tooltip,
@@ -60,8 +60,6 @@ const uniqueStrings = (values: string[]) => {
 
 export function RenderControls() {
   const {
-    showRenderedImage,
-    setShowRenderedImage,
     render,
     renderEffect,
     setRenderEffect,
@@ -147,29 +145,9 @@ export function RenderControls() {
   }
 
   return (
-    <div className='text-muted-foreground space-y-2 text-xs'>
-      <label className='flex items-center gap-2 text-sm'>
-        <Switch
-          size='sm'
-          checked={showRenderedImage}
-          onCheckedChange={setShowRenderedImage}
-          className='data-[state=checked]:bg-primary/30 data-[state=unchecked]:bg-muted-foreground/30 [&_[data-slot=switch-thumb]]:data-[state=checked]:bg-primary'
-        />
-        <span>{t('mask.showRendered')}</span>
-      </label>
-      <div className='space-y-1'>
-        <div className='flex items-center justify-between gap-2'>
-          <span className='text-muted-foreground text-[11px] font-semibold tracking-wide uppercase'>
-            {t('render.fontLabel')}
-          </span>
-          <span className='border-border bg-card text-muted-foreground rounded border px-1.5 py-0.5 text-[10px] font-semibold'>
-            {selectedBlockIndex !== undefined
-              ? t('render.fontScopeBlockIndex', {
-                  index: selectedBlockIndex + 1,
-                })
-              : t('render.fontScopeGlobal')}
-          </span>
-        </div>
+    <div className='space-y-2 text-xs'>
+      {/* Font selector */}
+      <div className='flex items-center gap-1.5'>
         <Select
           value={currentFont}
           onValueChange={(value) => {
@@ -193,7 +171,7 @@ export function RenderControls() {
           disabled={!hasBlocks || fontOptions.length === 0}
         >
           <SelectTrigger
-            className='w-full'
+            className='flex-1'
             style={currentFont ? { fontFamily: currentFont } : undefined}
           >
             <SelectValue placeholder={t('render.fontPlaceholder')} />
@@ -206,71 +184,77 @@ export function RenderControls() {
             ))}
           </SelectContent>
         </Select>
-      </div>
-      <div className='space-y-1'>
-        <div className='text-muted-foreground text-[11px] font-semibold tracking-wide uppercase'>
-          {t('render.effectLabel')}
-        </div>
-        <Select
-          value={currentEffect}
-          onValueChange={(value) => {
-            const nextEffect = value as RenderEffect
-            if (applyStyleToSelected({ effect: nextEffect })) return
-            setRenderEffect(nextEffect)
-          }}
-        >
-          <SelectTrigger className='w-full'>
-            <SelectValue />
-          </SelectTrigger>
-          <SelectContent>
-            {effects.map((effect) => (
-              <SelectItem key={effect.value} value={effect.value}>
-                {effect.label}
-              </SelectItem>
-            ))}
-          </SelectContent>
-        </Select>
-      </div>
-      <div className='space-y-1'>
-        <div className='text-muted-foreground text-[11px] font-semibold tracking-wide uppercase'>
-          {t('render.fontColorLabel')}
-        </div>
-        <div className='border-border bg-card inline-flex w-full items-center justify-between gap-3 rounded border px-2 py-1 text-sm'>
-          <input
-            type='color'
-            value={currentColorHex}
-            disabled={!hasBlocks}
-            onChange={(event) => {
-              const nextColor = hexToColor(
-                event.target.value,
-                currentColor[3] ?? 255,
-              )
-              if (applyStyleToSelected({ color: nextColor })) return
-              applyStyleToAll({ color: nextColor })
-            }}
-            className='h-6 w-6 cursor-pointer appearance-none border-none p-0 disabled:cursor-not-allowed disabled:opacity-60'
-          />
-          <span className='text-muted-foreground font-mono text-[11px]'>
-            {currentColorHex.toUpperCase()}
-          </span>
-        </div>
-      </div>
-      <div className='col flex'>
-        <Tooltip delayDuration={1000}>
+        {/* Color picker */}
+        <Tooltip>
           <TooltipTrigger asChild>
-            <Button
-              variant='outline'
-              onClick={render}
-              className='w-full font-semibold'
-            >
-              {t('llm.render')}
-            </Button>
+            <label className='border-input flex h-7 w-7 cursor-pointer items-center justify-center rounded-md border'>
+              <input
+                type='color'
+                value={currentColorHex}
+                disabled={!hasBlocks}
+                onChange={(event) => {
+                  const nextColor = hexToColor(
+                    event.target.value,
+                    currentColor[3] ?? 255,
+                  )
+                  if (applyStyleToSelected({ color: nextColor })) return
+                  applyStyleToAll({ color: nextColor })
+                }}
+                className='size-4 cursor-pointer appearance-none border-none p-0 disabled:cursor-not-allowed disabled:opacity-60'
+              />
+            </label>
           </TooltipTrigger>
-          <TooltipContent side='bottom' sideOffset={6}>
-            {t('llm.renderTooltip')}
+          <TooltipContent side='left' sideOffset={4}>
+            {t('render.fontColorLabel')}
           </TooltipContent>
         </Tooltip>
       </div>
+
+      {/* Effect selector */}
+      <Select
+        value={currentEffect}
+        onValueChange={(value) => {
+          const nextEffect = value as RenderEffect
+          if (applyStyleToSelected({ effect: nextEffect })) return
+          setRenderEffect(nextEffect)
+        }}
+      >
+        <SelectTrigger className='w-full'>
+          <SelectValue />
+        </SelectTrigger>
+        <SelectContent>
+          {effects.map((effect) => (
+            <SelectItem key={effect.value} value={effect.value}>
+              {effect.label}
+            </SelectItem>
+          ))}
+        </SelectContent>
+      </Select>
+
+      {/* Render button */}
+      <Tooltip>
+        <TooltipTrigger asChild>
+          <Button
+            variant='outline'
+            size='sm'
+            onClick={render}
+            className='w-full gap-1.5 text-xs'
+          >
+            <PaletteIcon className='size-3.5' />
+            {t('llm.render')}
+          </Button>
+        </TooltipTrigger>
+        <TooltipContent side='bottom' sideOffset={4}>
+          {t('llm.renderTooltip')}
+        </TooltipContent>
+      </Tooltip>
+
+      {/* Scope indicator */}
+      {selectedBlockIndex !== undefined && (
+        <p className='text-muted-foreground text-center text-[10px]'>
+          {t('render.fontScopeBlockIndex', { index: selectedBlockIndex + 1 })}
+        </p>
+      )}
     </div>
   )
 }

@@ -15,8 +15,10 @@
       {
         "label": "main",
         "visible": false,
-        "width": 1024,
+        "width": 1280,
         "height": 768,
+        "minWidth": 900,
+        "minHeight": 600,
         "center": true,
         "title": "Koharu",
         "decorations": false

@@ -54,6 +54,15 @@
     "llm": "LLM",
     "render": "渲染"
   },
+  "layers": {
+    "title": "图层",
+    "rendered": "渲染文本",
+    "textBlocks": "文本框",
+    "brush": "笔刷图层",
+    "inpainted": "修补图像",
+    "mask": "分割遮罩",
+    "base": "原始图像"
+  },
   "processing": {
     "detect": "检测",
     "detectTooltip": "对当前页面运行文本检测",
@@ -94,7 +103,7 @@
     "generate": "生成",
     "generating": "生成中...",
     "generateTooltip": "为检测到的文本块生成翻译",
-    "render": "渲染文本",
+    "render": "渲染",
     "renderTooltip": "将翻译渲染到页面",
     "loadingModel": "正在加载 LLM 模型",
     "statusReady": "LLM 已就绪",
@@ -120,7 +129,9 @@
     "none": "尚无文本块。运行检测以填充列表。",
     "emptySummary": "<空>",
     "ocrLabel": "OCR 文本",
+    "ocrBadge": "OCR",
     "translationLabel": "翻译",
+    "translationBadge": "TL",
     "addOcrPlaceholder": "添加 OCR 文本",
     "addTranslationPlaceholder": "添加翻译"
   },

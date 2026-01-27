@@ -154,13 +154,13 @@ function TextBlockAnnotation({
         <div
           className={`absolute inset-0 rounded border-2 ${
             selected
-              ? 'border-ring bg-ring/10'
-              : 'border-primary/70 bg-primary/10'
+              ? 'border-primary bg-primary/15 border-dashed'
+              : 'border-rose-400/60 bg-rose-400/5'
           }`}
         />
         <div
           className={`pointer-events-none absolute -top-1.5 -left-1.5 flex h-4 w-4 items-center justify-center rounded-full text-[9px] font-semibold text-white shadow ${
-            selected ? 'bg-ring' : 'bg-primary'
+            selected ? 'bg-primary' : 'bg-rose-400'
           }`}
         >
           {index + 1}

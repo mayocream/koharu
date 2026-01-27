@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from 'react'
 import { useTranslation } from 'react-i18next'
+import { LoaderCircleIcon, SparklesIcon } from 'lucide-react'
 import { OPENAI_COMPATIBLE_MODEL_ID } from '@/lib/openai'
 import { useAppStore } from '@/lib/store'
 import { Button } from '@/components/ui/button'
@@ -55,131 +56,107 @@ export function LlmControls() {
   }, [llmList, llmCheckReady])
 
   return (
-    <div className='text-muted-foreground space-y-2 text-xs'>
-      <div className='text-foreground flex items-center gap-2 text-sm font-semibold'>
-        {t('llm.title')}{' '}
-        <StatusBadge
-          ready={llmReady}
-          readyLabel={t('llm.ready')}
-          idleLabel={t('llm.idle')}
-        />
+    <div className='space-y-2 text-xs'>
+      {/* Model selector with status */}
+      <div className='flex items-center gap-1.5'>
+        <Select value={llmSelectedModel} onValueChange={llmSetSelectedModel}>
+          <SelectTrigger className='flex-1'>
+            <SelectValue placeholder={t('llm.selectPlaceholder')} />
+          </SelectTrigger>
+          <SelectContent>
+            {llmModels.map((model) => (
+              <SelectItem key={model.id} value={model.id}>
+                {model.id === OPENAI_COMPATIBLE_MODEL_ID
+                  ? t('llm.openaiCompatible')
+                  : model.id}
+              </SelectItem>
+            ))}
+          </SelectContent>
+        </Select>
+        <StatusDot ready={llmReady} />
       </div>
-      <div className='space-y-2'>
-        <div className='space-y-1'>
-          <div className='text-muted-foreground text-[11px] font-semibold tracking-wide uppercase'>
-            {t('llm.modelLabel')}
-          </div>
-          <Select value={llmSelectedModel} onValueChange={llmSetSelectedModel}>
-            <SelectTrigger className='w-full'>
-              <SelectValue placeholder={t('llm.selectPlaceholder')} />
-            </SelectTrigger>
-            <SelectContent>
-              {llmModels.map((model) => (
-                <SelectItem key={model.id} value={model.id}>
-                  {model.id === OPENAI_COMPATIBLE_MODEL_ID
-                    ? t('llm.openaiCompatible')
-                    : model.id}
-                </SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
+
+      {/* Language selector */}
+      {activeLanguages.length > 0 && (
+        <Select
+          value={llmSelectedLanguage ?? activeLanguages[0]}
+          onValueChange={llmSetSelectedLanguage}
+        >
+          <SelectTrigger className='w-full'>
+            <SelectValue placeholder={t('llm.languagePlaceholder')} />
+          </SelectTrigger>
+          <SelectContent>
+            {activeLanguages.map((language) => (
+              <SelectItem key={language} value={language}>
+                {language}
+              </SelectItem>
+            ))}
+          </SelectContent>
+        </Select>
+      )}
+
+      {/* OpenAI compatible settings */}
+      {isOpenAICompatible && (
+        <div className='bg-card/50 space-y-1.5 rounded p-1.5'>
+          <input
+            type='text'
+            value={llmOpenAIEndpoint}
+            placeholder={t('llm.openaiEndpointPlaceholder')}
+            onChange={(event) => setLlmOpenAIEndpoint(event.target.value)}
+            className='border-input bg-card text-foreground focus:border-primary h-7 w-full rounded-md border px-2 text-xs outline-none'
+          />
+          <input
+            type='password'
+            value={llmOpenAIApiKey}
+            placeholder={t('llm.openaiApiKeyPlaceholder')}
+            autoComplete='off'
+            onChange={(event) => setLlmOpenAIApiKey(event.target.value)}
+            className='border-input bg-card text-foreground focus:border-primary h-7 w-full rounded-md border px-2 text-xs outline-none'
+          />
+          <input
+            value={llmOpenAIModel}
+            placeholder={t('llm.openaiModelPlaceholder')}
+            onChange={(event) => setLlmOpenAIModel(event.target.value)}
+            className='border-input bg-card text-foreground focus:border-primary h-7 w-full rounded-md border px-2 text-xs outline-none'
+          />
+          <textarea
+            value={llmOpenAIPrompt}
+            placeholder={t('llm.openaiPromptLabel')}
+            rows={2}
+            onChange={(event) => setLlmOpenAIPrompt(event.target.value)}
+            className='border-input bg-card text-foreground focus:border-primary w-full rounded-md border px-2 py-1.5 text-xs outline-none'
+          />
         </div>
-        {activeLanguages.length > 0 ? (
-          <div className='space-y-1'>
-            <div className='text-muted-foreground text-[11px] font-semibold tracking-wide uppercase'>
-              {t('llm.languageLabel')}
-            </div>
-            <Select
-              value={llmSelectedLanguage ?? activeLanguages[0]}
-              onValueChange={llmSetSelectedLanguage}
-            >
-              <SelectTrigger className='w-full'>
-                <SelectValue placeholder={t('llm.languagePlaceholder')} />
-              </SelectTrigger>
-              <SelectContent>
-                {activeLanguages.map((language) => (
-                  <SelectItem key={language} value={language}>
-                    {language}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-          </div>
-        ) : null}
-      </div>
-      {isOpenAICompatible ? (
-        <div className='border-border bg-card space-y-2 rounded border p-2'>
-          <div className='space-y-1'>
-            <div className='text-muted-foreground text-[11px] font-semibold tracking-wide uppercase'>
-              {t('llm.openaiEndpointLabel')}
-            </div>
-            <input
-              type='text'
-              value={llmOpenAIEndpoint}
-              placeholder={t('llm.openaiEndpointPlaceholder')}
-              onChange={(event) => setLlmOpenAIEndpoint(event.target.value)}
-              className='border-border bg-card text-foreground focus:border-primary w-full rounded border px-2 py-1.5 text-sm outline-none'
-            />
-          </div>
-          <div className='space-y-1'>
-            <div className='text-muted-foreground text-[11px] font-semibold tracking-wide uppercase'>
-              {t('llm.openaiApiKeyLabel')}
-            </div>
-            <input
-              type='password'
-              value={llmOpenAIApiKey}
-              placeholder={t('llm.openaiApiKeyPlaceholder')}
-              autoComplete='off'
-              onChange={(event) => setLlmOpenAIApiKey(event.target.value)}
-              className='border-border bg-card text-foreground focus:border-primary w-full rounded border px-2 py-1.5 text-sm outline-none'
-            />
-          </div>
-          <div className='space-y-1'>
-            <div className='text-muted-foreground text-[11px] font-semibold tracking-wide uppercase'>
-              {t('llm.openaiModelLabel')}
-            </div>
-            <input
-              value={llmOpenAIModel}
-              placeholder={t('llm.openaiModelPlaceholder')}
-              onChange={(event) => setLlmOpenAIModel(event.target.value)}
-              className='border-border bg-card text-foreground focus:border-primary w-full rounded border px-2 py-1.5 text-sm outline-none'
-            />
-          </div>
-          <div className='space-y-1'>
-            <div className='text-muted-foreground text-[11px] font-semibold tracking-wide uppercase'>
-              {t('llm.openaiPromptLabel')}
-            </div>
-            <textarea
-              value={llmOpenAIPrompt}
-              rows={3}
-              onChange={(event) => setLlmOpenAIPrompt(event.target.value)}
-              className='border-border bg-card text-foreground focus:border-primary w-full rounded border px-2 py-2 text-sm outline-none'
-            />
-          </div>
-        </div>
-      ) : null}
-      <div className='flex gap-2'>
+      )}
+
+      {/* Action buttons */}
+      <div className='flex gap-1'>
         {!isOpenAICompatible && (
-          <Tooltip delayDuration={1000}>
+          <Tooltip>
             <TooltipTrigger asChild>
               <Button
                 variant='outline'
+                size='sm'
                 onClick={llmToggleLoadUnload}
-                disabled={!llmSelectedModel || llmLoading || isOpenAICompatible}
-                className='w-full font-semibold'
+                disabled={!llmSelectedModel || llmLoading}
+                className='flex-1 gap-1.5 text-xs'
               >
+                {llmLoading && (
+                  <LoaderCircleIcon className='size-3.5 animate-spin' />
+                )}
                 {!llmReady ? t('llm.load') : t('llm.unload')}
               </Button>
             </TooltipTrigger>
-            <TooltipContent side='bottom' sideOffset={6}>
+            <TooltipContent side='bottom' sideOffset={4}>
               {!llmReady ? t('llm.loadTooltip') : t('llm.unloadTooltip')}
             </TooltipContent>
           </Tooltip>
         )}
-        <Tooltip delayDuration={1000}>
+        <Tooltip>
           <TooltipTrigger asChild>
             <Button
               variant='outline'
+              size='sm'
               disabled={!llmReady || generating}
               onClick={async () => {
                 setGenerating(true)
@@ -191,12 +168,17 @@ export function LlmControls() {
                   setGenerating(false)
                 }
               }}
-              className='w-full font-semibold'
+              className='flex-1 gap-1.5 text-xs'
             >
+              {generating ? (
+                <LoaderCircleIcon className='size-3.5 animate-spin' />
+              ) : (
+                <SparklesIcon className='size-3.5' />
+              )}
               {generating ? t('llm.generating') : t('llm.generate')}
             </Button>
           </TooltipTrigger>
-          <TooltipContent side='bottom' sideOffset={6}>
+          <TooltipContent side='bottom' sideOffset={4}>
             {t('llm.generateTooltip')}
           </TooltipContent>
         </Tooltip>
@@ -205,25 +187,20 @@ export function LlmControls() {
   )
 }
 
-function StatusBadge({
-  ready,
-  readyLabel,
-  idleLabel,
-}: {
-  ready: boolean
-  readyLabel: string
-  idleLabel: string
-}) {
+function StatusDot({ ready }: { ready: boolean }) {
+  const { t } = useTranslation()
   return (
-    <span className='border-border inline-flex items-center gap-1 rounded border px-2 py-0.5 text-[11px]'>
-      <span
-        className={`h-2 w-2 rounded-full ${
-          ready ? 'bg-primary' : 'bg-muted-foreground/30'
-        }`}
-      />
-      <span className={ready ? 'text-primary' : 'text-muted-foreground'}>
-        {ready ? readyLabel : idleLabel}
-      </span>
-    </span>
+    <Tooltip>
+      <TooltipTrigger asChild>
+        <span
+          className={`size-2.5 shrink-0 rounded-full ${
+            ready ? 'bg-green-500' : 'bg-muted-foreground/30'
+          }`}
+        />
+      </TooltipTrigger>
+      <TooltipContent side='left' sideOffset={4}>
+        {ready ? t('llm.statusReady') : t('llm.statusIdle')}
+      </TooltipContent>
+    </Tooltip>
   )
 }

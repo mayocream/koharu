@@ -54,6 +54,15 @@
     "llm": "LLM",
     "render": "Render"
   },
+  "layers": {
+    "title": "Layers",
+    "rendered": "Rendered Text",
+    "textBlocks": "Text Blocks",
+    "brush": "Brush Layer",
+    "inpainted": "Inpainted",
+    "mask": "Segmentation Mask",
+    "base": "Original Image"
+  },
   "processing": {
     "detect": "Detect",
     "detectTooltip": "Run text detection on current page",
@@ -120,7 +129,9 @@
     "none": "No text blocks yet. Run detection to populate the list.",
     "emptySummary": "<empty>",
     "ocrLabel": "OCR text",
+    "ocrBadge": "OCR",
     "translationLabel": "Translation",
+    "translationBadge": "TL",
     "addOcrPlaceholder": "Add OCR text",
     "addTranslationPlaceholder": "Add translation"
   },

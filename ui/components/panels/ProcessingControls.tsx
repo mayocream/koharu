@@ -2,8 +2,7 @@
 
 import { useAppStore } from '@/lib/store'
 import { useTranslation } from 'react-i18next'
-import { Separator } from '@/components/ui/separator'
-import { Switch } from '@/components/ui/switch'
+import { ScanSearchIcon, TextIcon, EraserIcon } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import {
   Tooltip,
@@ -12,112 +11,59 @@ import {
 } from '@/components/ui/tooltip'
 
 export function ProcessingControls() {
-  const {
-    showSegmentationMask,
-    setShowSegmentationMask,
-    showInpaintedImage,
-    setShowInpaintedImage,
-    showBrushLayer,
-    setShowBrushLayer,
-    showTextBlocksOverlay,
-    setShowTextBlocksOverlay,
-    currentDocument,
-    inpaint,
-    detect,
-    ocr,
-  } = useAppStore()
+  const { inpaint, detect, ocr } = useAppStore()
   const { t } = useTranslation()
 
   return (
-    <div className='text-muted-foreground space-y-2 text-xs'>
-      <Separator className='my-1' />
-      <label className='flex items-center gap-2 text-sm'>
-        <Switch
-          size='sm'
-          checked={showInpaintedImage}
-          onCheckedChange={setShowInpaintedImage}
-          disabled={currentDocument?.inpainted === undefined}
-          className='data-[state=checked]:bg-primary/30 data-[state=unchecked]:bg-muted-foreground/30 [&_[data-slot=switch-thumb]]:data-[state=checked]:bg-primary'
-        />
-        <span>{t('mask.showInpainted')}</span>
-      </label>
-      <label className='flex items-center gap-2 text-sm'>
-        <Switch
-          size='sm'
-          checked={showSegmentationMask}
-          onCheckedChange={setShowSegmentationMask}
-          disabled={currentDocument?.segment === undefined}
-          className='data-[state=checked]:bg-primary/30 data-[state=unchecked]:bg-muted-foreground/30 [&_[data-slot=switch-thumb]]:data-[state=checked]:bg-primary'
-        />
-        <span>{t('mask.showSegmentationMask')}</span>
-      </label>
-      <label className='flex items-center gap-2 text-sm'>
-        <Switch
-          size='sm'
-          checked={showBrushLayer}
-          onCheckedChange={setShowBrushLayer}
-          disabled={currentDocument?.inpainted === undefined}
-          className='data-[state=checked]:bg-primary/30 data-[state=unchecked]:bg-muted-foreground/30 [&_[data-slot=switch-thumb]]:data-[state=checked]:bg-primary'
-        />
-        <span>{t('mask.showBrushLayer')}</span>
-      </label>
-      <label className='flex items-center gap-2 text-sm'>
-        <Switch
-          size='sm'
-          checked={showTextBlocksOverlay}
-          onCheckedChange={setShowTextBlocksOverlay}
-          disabled={currentDocument?.textBlocks === undefined}
-          className='data-[state=checked]:bg-primary/30 data-[state=unchecked]:bg-muted-foreground/30 [&_[data-slot=switch-thumb]]:data-[state=checked]:bg-primary'
-        />
-        <span>{t('mask.showTextBlocks')}</span>
-      </label>
-      <Separator className='my-1' />
-      <div className='flex gap-2'>
-        <Tooltip delayDuration={1000}>
-          <TooltipTrigger asChild>
-            <Button
-              variant='outline'
-              onClick={detect}
-              className='w-full font-semibold'
-            >
-              {t('processing.detect')}
-            </Button>
-          </TooltipTrigger>
-          <TooltipContent side='bottom' sideOffset={6}>
-            {t('processing.detectTooltip')}
-          </TooltipContent>
-        </Tooltip>
-        <Tooltip delayDuration={1000}>
-          <TooltipTrigger asChild>
-            <Button
-              variant='outline'
-              onClick={ocr}
-              className='w-full font-semibold'
-            >
-              {t('processing.ocr')}
-            </Button>
-          </TooltipTrigger>
-          <TooltipContent side='bottom' sideOffset={6}>
-            {t('processing.ocrTooltip')}
-          </TooltipContent>
-        </Tooltip>
-      </div>
-      <div className='flex'>
-        <Tooltip delayDuration={1000}>
-          <TooltipTrigger asChild>
-            <Button
-              variant='outline'
-              onClick={inpaint}
-              className='w-full font-semibold'
-            >
-              {t('mask.inpaint')}
-            </Button>
-          </TooltipTrigger>
-          <TooltipContent side='bottom' sideOffset={6}>
-            {t('mask.inpaintTooltip')}
-          </TooltipContent>
-        </Tooltip>
-      </div>
+    <div className='flex gap-1'>
+      <Tooltip>
+        <TooltipTrigger asChild>
+          <Button
+            variant='outline'
+            size='sm'
+            onClick={detect}
+            className='flex-1 gap-1.5 text-xs'
+          >
+            <ScanSearchIcon className='size-3.5' />
+            {t('processing.detect')}
+          </Button>
+        </TooltipTrigger>
+        <TooltipContent side='bottom' sideOffset={4}>
+          {t('processing.detectTooltip')}
+        </TooltipContent>
+      </Tooltip>
+      <Tooltip>
+        <TooltipTrigger asChild>
+          <Button
+            variant='outline'
+            size='sm'
+            onClick={ocr}
+            className='flex-1 gap-1.5 text-xs'
+          >
+            <TextIcon className='size-3.5' />
+            {t('processing.ocr')}
+          </Button>
+        </TooltipTrigger>
+        <TooltipContent side='bottom' sideOffset={4}>
+          {t('processing.ocrTooltip')}
+        </TooltipContent>
+      </Tooltip>
+      <Tooltip>
+        <TooltipTrigger asChild>
+          <Button
+            variant='outline'
+            size='sm'
+            onClick={inpaint}
+            className='flex-1 gap-1.5 text-xs'
+          >
+            <EraserIcon className='size-3.5' />
+            {t('mask.inpaint')}
+          </Button>
+        </TooltipTrigger>
+        <TooltipContent side='bottom' sideOffset={4}>
+          {t('mask.inpaintTooltip')}
+        </TooltipContent>
+      </Tooltip>
     </div>
   )
 }

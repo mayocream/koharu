@@ -54,6 +54,15 @@
     "llm": "LLM",
     "render": "レンダー"
   },
+  "layers": {
+    "title": "レイヤー",
+    "rendered": "レンダー済みテキスト",
+    "textBlocks": "テキスト枠",
+    "brush": "ブラシレイヤー",
+    "inpainted": "インペイント",
+    "mask": "セグメンテーションマスク",
+    "base": "元画像"
+  },
   "processing": {
     "detect": "検出",
     "detectTooltip": "現在のページでテキスト検出を実行",
@@ -120,7 +129,9 @@
     "none": "まだテキストブロックがありません。検出を実行してください。",
     "emptySummary": "<空>",
     "ocrLabel": "OCR テキスト",
+    "ocrBadge": "OCR",
     "translationLabel": "翻訳",
+    "translationBadge": "TL",
     "addOcrPlaceholder": "OCR テキストを追加",
     "addTranslationPlaceholder": "翻訳を追加"
   },
