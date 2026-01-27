@@ -12,7 +12,8 @@
     "dev": "bun run setup tauri dev",
     "build": "bun run setup tauri build",
     "cargo": "bun run setup cargo",
-    "prepare": "husky"
+    "prepare": "husky",
+    "format": "prettier --write ui/ --ignore-path ui/.gitignore"
   },
   "workspaces": [
     "ui/"

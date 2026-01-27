@@ -2,7 +2,6 @@ import type { Metadata } from 'next'
 import { Noto_Sans_JP } from 'next/font/google'
 import './globals.css'
 import Providers from '@/app/providers'
-import { defaultLocale } from '@/lib/i18n'
 
 const notoSansJP = Noto_Sans_JP({
   subsets: ['latin'],
@@ -18,7 +17,7 @@ function RootLayout({
   children: React.ReactNode
 }>) {
   return (
-    <html lang={defaultLocale}>
+    <html lang='en-US'>
       <body
         className={`${notoSansJP.className} antialiased`}
         suppressHydrationWarning

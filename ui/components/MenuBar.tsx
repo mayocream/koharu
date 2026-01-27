@@ -1,10 +1,9 @@
 'use client'
 
-import { useEffect, useState } from 'react'
+import { useEffect, useState, useMemo } from 'react'
 import { invoke } from '@/lib/backend'
 import { useTranslation } from 'react-i18next'
 import { useAppStore } from '@/lib/store'
-import { locales } from '@/lib/i18n'
 import { fitCanvasToViewport, resetCanvasScale } from '@/components/Canvas'
 import {
   Menubar,
@@ -24,6 +23,10 @@ type MenuItem = {
 
 export function MenuBar() {
   const { t, i18n } = useTranslation()
+  const locales = useMemo(
+    () => Object.keys(i18n.options.resources || {}),
+    [i18n.options.resources],
+  )
   const [appVersion, setAppVersion] = useState<string>()
   const {
     openDocuments,
@@ -144,7 +147,7 @@ export function MenuBar() {
                 }
               }}
             >
-              {locales.map((code: string) => (
+              {locales.map((code) => (
                 <MenubarRadioItem
                   key={code}
                   value={code}

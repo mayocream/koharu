@@ -1,3 +1,5 @@
+'use client'
+
 import { MenuBar } from '@/components/MenuBar'
 import { Panels } from '@/components/Panels'
 import { Workspace, StatusBar } from '@/components/Canvas'
