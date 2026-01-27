@@ -147,9 +147,22 @@
   },
   "settings": {
     "title": "Settings",
+    "appearance": "Appearance",
+    "appearanceDescription": "Customize how Koharu looks on your device.",
     "theme": "Theme",
+    "themeDescription": "Select your preferred color scheme.",
     "themeLight": "Light",
     "themeDark": "Dark",
-    "themeSystem": "System"
+    "themeSystem": "System",
+    "language": "Language",
+    "languageDescription": "Select your preferred language.",
+    "about": "About",
+    "aboutDescription": "Information about this application.",
+    "aboutTagline": "Manga translation tool",
+    "aboutVersion": "Version",
+    "aboutLatest": "Latest",
+    "aboutUpdate": "Update available ({{version}})",
+    "aboutAuthor": "Author",
+    "aboutRepository": "Repository"
   }
 }

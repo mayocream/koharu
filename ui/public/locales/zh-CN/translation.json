@@ -147,9 +147,22 @@
   },
   "settings": {
     "title": "设置",
+    "appearance": "外观",
+    "appearanceDescription": "自定义 Koharu 在您设备上的外观。",
     "theme": "主题",
+    "themeDescription": "选择您偏好的配色方案。",
     "themeLight": "浅色",
     "themeDark": "深色",
-    "themeSystem": "跟随系统"
+    "themeSystem": "跟随系统",
+    "language": "语言",
+    "languageDescription": "选择您偏好的语言。",
+    "about": "关于",
+    "aboutDescription": "关于此应用程序的信息。",
+    "aboutTagline": "漫画翻译工具",
+    "aboutVersion": "版本",
+    "aboutLatest": "最新",
+    "aboutUpdate": "有更新可用 ({{version}})",
+    "aboutAuthor": "作者",
+    "aboutRepository": "代码仓库"
   }
 }

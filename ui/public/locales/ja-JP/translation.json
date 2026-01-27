@@ -147,9 +147,22 @@
   },
   "settings": {
     "title": "設定",
+    "appearance": "外観",
+    "appearanceDescription": "Koharu の外観をカスタマイズします。",
     "theme": "テーマ",
+    "themeDescription": "お好みの配色を選択してください。",
     "themeLight": "ライト",
     "themeDark": "ダーク",
-    "themeSystem": "システム"
+    "themeSystem": "システム",
+    "language": "言語",
+    "languageDescription": "お好みの言語を選択してください。",
+    "about": "このアプリについて",
+    "aboutDescription": "このアプリケーションに関する情報。",
+    "aboutTagline": "漫画翻訳ツール",
+    "aboutVersion": "バージョン",
+    "aboutLatest": "最新",
+    "aboutUpdate": "アップデートあり ({{version}})",
+    "aboutAuthor": "作者",
+    "aboutRepository": "リポジトリ"
   }
 }

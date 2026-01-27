@@ -1,6 +1,5 @@
 'use client'
 
-import { MenuBar } from '@/components/MenuBar'
 import { Panels } from '@/components/Panels'
 import { Workspace, StatusBar } from '@/components/Canvas'
 import { Navigator } from '@/components/Navigator'
@@ -8,8 +7,7 @@ import { ActivityBubble } from '@/components/ActivityBubble'
 
 export default function Page() {
   return (
-    <main className='bg-background relative flex h-screen w-screen flex-col overflow-hidden'>
-      <MenuBar />
+    <div className='flex flex-1 flex-col'>
       <ActivityBubble />
       <div className='flex min-h-0 flex-1'>
         <Navigator />
@@ -19,6 +17,6 @@ export default function Page() {
         </div>
         <Panels />
       </div>
-    </main>
+    </div>
   )
 }

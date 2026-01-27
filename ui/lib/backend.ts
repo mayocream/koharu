@@ -249,3 +249,31 @@ export async function fetchThumbnail(index: number): Promise<Blob> {
 }
 
 export const isTauri = isTauriEnv
+
+export const windowControls = {
+  async minimize() {
+    if (isTauriEnv()) {
+      const { getCurrentWindow } = await import('@tauri-apps/api/window')
+      return getCurrentWindow().minimize()
+    }
+  },
+  async toggleMaximize() {
+    if (isTauriEnv()) {
+      const { getCurrentWindow } = await import('@tauri-apps/api/window')
+      return getCurrentWindow().toggleMaximize()
+    }
+  },
+  async close() {
+    if (isTauriEnv()) {
+      const { getCurrentWindow } = await import('@tauri-apps/api/window')
+      return getCurrentWindow().close()
+    }
+  },
+  async isMaximized(): Promise<boolean> {
+    if (isTauriEnv()) {
+      const { getCurrentWindow } = await import('@tauri-apps/api/window')
+      return getCurrentWindow().isMaximized()
+    }
+    return false
+  },
+}

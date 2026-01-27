@@ -1,18 +1,18 @@
 'use client'
 
-import { useEffect, useState, useMemo } from 'react'
+import { useEffect, useState, useCallback } from 'react'
 import { useRouter } from 'next/navigation'
-import { invoke } from '@/lib/backend'
+import { windowControls, isTauri, listen } from '@/lib/backend'
 import { useTranslation } from 'react-i18next'
 import { useAppStore } from '@/lib/store'
 import { fitCanvasToViewport, resetCanvasScale } from '@/components/Canvas'
+import { Minus, Square, X, Copy } from 'lucide-react'
+import Image from 'next/image'
 import {
   Menubar,
   MenubarContent,
   MenubarItem,
   MenubarMenu,
-  MenubarRadioGroup,
-  MenubarRadioItem,
   MenubarSeparator,
   MenubarTrigger,
 } from '@/components/ui/menubar'
@@ -24,13 +24,9 @@ type MenuItem = {
 }
 
 export function MenuBar() {
-  const { t, i18n } = useTranslation()
+  const { t } = useTranslation()
   const router = useRouter()
-  const locales = useMemo(
-    () => Object.keys(i18n.options.resources || {}),
-    [i18n.options.resources],
-  )
-  const [appVersion, setAppVersion] = useState<string>()
+  const [isMaximized, setIsMaximized] = useState(false)
   const {
     openDocuments,
     openExternal,
@@ -40,19 +36,33 @@ export function MenuBar() {
     exportDocument,
     saveDocuments,
   } = useAppStore()
-  useEffect(() => {
-    const loadVersion = async () => {
-      try {
-        const version = await invoke<string>('app_version')
-        setAppVersion(version)
-      } catch (error) {
-        console.error('Failed to load app version', error)
-        setAppVersion(undefined)
-      }
-    }
 
-    void loadVersion()
+  const updateMaximizedState = useCallback(async () => {
+    const maximized = await windowControls.isMaximized()
+    setIsMaximized(maximized)
   }, [])
+
+  useEffect(() => {
+    // Prefetch pages for smoother navigation
+    router.prefetch('/settings')
+    router.prefetch('/about')
+  }, [router])
+
+  useEffect(() => {
+    if (!isTauri()) return
+
+    void updateMaximizedState()
+
+    let unlisten: (() => void) | undefined
+    const setup = async () => {
+      unlisten = await listen('tauri://resize', () => {
+        void updateMaximizedState()
+      })
+    }
+    void setup()
+
+    return () => unlisten?.()
+  }, [updateMaximizedState])
 
   const fileMenuItems: MenuItem[] = [
     { label: t('menu.openFile'), onSelect: openDocuments },
@@ -76,30 +86,34 @@ export function MenuBar() {
         { label: t('menu.processAll'), onSelect: processAllImages },
       ],
     },
+  ]
+
+  const helpMenuItems: MenuItem[] = [
     {
-      label: t('menu.help'),
-      items: [
-        {
-          label: appVersion
-            ? t('menu.version', { version: appVersion })
-            : t('menu.versionUnknown'),
-          disabled: true,
-        },
-        {
-          label: t('menu.discord'),
-          onSelect: () => openExternal('https://discord.gg/mHvHkxGnUY'),
-        },
-        {
-          label: t('menu.github'),
-          onSelect: () => openExternal('https://github.com/mayocream/koharu'),
-        },
-      ],
+      label: t('menu.discord'),
+      onSelect: () => openExternal('https://discord.gg/mHvHkxGnUY'),
+    },
+    {
+      label: t('menu.github'),
+      onSelect: () => openExternal('https://github.com/mayocream/koharu'),
     },
   ]
 
   return (
-    <div className='border-border bg-background text-foreground flex h-8 items-center gap-1 border-b px-1.5 text-[13px]'>
-      <Menubar className='h-auto gap-1 border-none bg-transparent p-0 shadow-none'>
+    <div className='border-border bg-background text-foreground flex h-8 items-center border-b text-[13px]'>
+      {/* Logo */}
+      <div className='flex h-full items-center pl-2 select-none'>
+        <Image
+          src='/icon.png'
+          alt='Koharu'
+          width={18}
+          height={18}
+          draggable={false}
+        />
+      </div>
+
+      {/* Menu items */}
+      <Menubar className='h-auto gap-1 border-none bg-transparent p-0 px-1.5 shadow-none'>
         <MenubarMenu>
           <MenubarTrigger className='hover:bg-accent data-[state=open]:bg-accent rounded px-3 py-1.5 font-medium'>
             {t('menu.file')}
@@ -167,7 +181,7 @@ export function MenuBar() {
         ))}
         <MenubarMenu>
           <MenubarTrigger className='hover:bg-accent data-[state=open]:bg-accent rounded px-3 py-1.5 font-medium'>
-            {t('menu.language')}
+            {t('menu.help')}
           </MenubarTrigger>
           <MenubarContent
             className='min-w-36'
@@ -175,27 +189,72 @@ export function MenuBar() {
             sideOffset={5}
             alignOffset={-3}
           >
-            <MenubarRadioGroup
-              value={i18n.language}
-              onValueChange={(value) => {
-                if (value !== i18n.language) {
-                  void i18n.changeLanguage(value)
+            {helpMenuItems.map((item) => (
+              <MenubarItem
+                key={item.label}
+                className='text-[13px]'
+                disabled={item.disabled}
+                onSelect={
+                  item.onSelect
+                    ? () => {
+                        void item.onSelect?.()
+                      }
+                    : undefined
                 }
-              }}
+              >
+                {item.label}
+              </MenubarItem>
+            ))}
+            <MenubarSeparator />
+            <MenubarItem
+              className='text-[13px]'
+              onSelect={() => router.push('/about')}
             >
-              {locales.map((code) => (
-                <MenubarRadioItem
-                  key={code}
-                  value={code}
-                  className='text-[13px]'
-                >
-                  {t(`menu.languages.${code}`)}
-                </MenubarRadioItem>
-              ))}
-            </MenubarRadioGroup>
+              {t('settings.about')}
+            </MenubarItem>
           </MenubarContent>
         </MenubarMenu>
       </Menubar>
+
+      {/* Draggable region */}
+      <div
+        data-tauri-drag-region
+        className='flex h-full flex-1 items-center justify-center'
+      />
+
+      {/* Window controls */}
+      {isTauri() && (
+        <div className='flex h-full items-center'>
+          <button
+            type='button'
+            onClick={() => void windowControls.minimize()}
+            className='hover:bg-accent flex h-full w-12 items-center justify-center transition-colors'
+            aria-label='Minimize'
+          >
+            <Minus className='size-4' />
+          </button>
+          <button
+            type='button'
+            onClick={() => void windowControls.toggleMaximize()}
+            className='hover:bg-accent flex h-full w-12 items-center justify-center transition-colors'
+            aria-label={isMaximized ? 'Restore' : 'Maximize'}
+          >
+            {isMaximized ? (
+              <Copy className='size-3.5' />
+            ) : (
+              <Square className='size-3.5' />
+            )}
+          </button>
+          <button
+            type='button'
+            onClick={() => void windowControls.close()}
+            className='flex h-full w-12 items-center justify-center transition-colors hover:bg-red-500 hover:text-white'
+            aria-label='Close'
+          >
+            <X className='size-4' />
+          </button>
+        </div>
+      )}
     </div>
   )
 }

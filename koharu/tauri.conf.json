@@ -18,7 +18,8 @@
         "width": 1024,
         "height": 768,
         "center": true,
-        "title": "Koharu"
+        "title": "Koharu",
+        "decorations": false
       },
       {
         "label": "splashscreen",
