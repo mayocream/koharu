@@ -51,9 +51,8 @@ rfd = "0.16"
 postcard = { version = "1.0", features = ["use-std"] }
 velopack = { version = "0.0", features = ["async"] }
 thiserror = "2.0"
-tauri = { version = "2.9", features = ["devtools"] }
-tauri-build = "2.5"
-tauri-plugin-http = "2.3"
+wry = "0.48"
+tao = "0.31"
 blake3 = "1.8"
 rayon = "1.11"
 # disables `esaxx_fast` feature which is conflicting with `ort`

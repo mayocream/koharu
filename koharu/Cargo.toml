@@ -13,10 +13,6 @@ license = "GPL-3.0"
 include = [
     "src/**",
     "icons/**",
-    "gen/**",
-    "tauri.conf.json",
-    "tauri.*.conf.json",
-    "capabilities/**",
     "build.rs",
     "../ui/out/**",
 ]
@@ -36,7 +32,8 @@ tracing = { workspace = true }
 tracing-subscriber = { workspace = true }
 postcard = { workspace = true }
 thiserror = { workspace = true }
-tauri = { workspace = true }
+wry = { workspace = true }
+tao = { workspace = true }
 blake3 = { workspace = true }
 tokio = { workspace = true }
 rayon = { workspace = true }
@@ -51,7 +48,6 @@ axum = { workspace = true }
 tower-http = { workspace = true }
 rust-embed = { workspace = true }
 git-version = { workspace = true }
-tauri-plugin-http = { workspace = true }
 
 [target.'cfg(target_os = "windows")'.dependencies]
 windows = { workspace = true }
@@ -65,4 +61,3 @@ metal = ["koharu-ml/metal"]
 bundle = ["velopack"]
 
 [build-dependencies]
-tauri-build = { workspace = true }

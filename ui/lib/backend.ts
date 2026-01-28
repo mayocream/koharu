@@ -1,112 +1,60 @@
 'use client'
 
-import { fetch, initFetch } from '@/lib/fetch'
+/**
+ * Get the API base URL by parsing the port from the URL query parameter.
+ * - In dev mode: frontend at http://localhost:3000?port=XXXX, API at http://127.0.0.1:XXXX/api
+ * - In release mode: frontend at koharu://localhost/?port=XXXX, API at http://127.0.0.1:XXXX/api
+ */
+function getApiBase(): string {
+  if (typeof window === 'undefined') return '/api'
 
-let apiBase = '/api'
-let _initPromise: Promise<void> | null = null
+  const params = new URLSearchParams(window.location.search)
+  const port = params.get('port')
 
-const isTauriEnv = (): boolean =>
-  typeof window !== 'undefined' && !!(window as any).__TAURI_INTERNALS__
-
-async function ensureInitialized(): Promise<void> {
-  if (!isTauriEnv()) {
-    // In browser/headless mode, use relative URLs
-    return
+  if (port) {
+    return `http://127.0.0.1:${port}/api`
   }
 
-  if (_initPromise) {
-    return _initPromise
-  }
-
-  _initPromise = (async () => {
-    const { invoke } = await import('@tauri-apps/api/core')
-    const port = await invoke<number>('initialize')
-    apiBase = `http://127.0.0.1:${port}/api`
-    await initFetch()
-  })()
-
-  return _initPromise
+  // Fallback for relative API calls (e.g., when served directly by the backend)
+  return '/api'
 }
 
-export enum ProgressBarStatus {
-  None = 'none',
-  Normal = 'normal',
-  Indeterminate = 'indeterminate',
-  Paused = 'paused',
-  Error = 'error',
+// Cached API base URL
+let apiBase: string | null = null
+
+function getApi(): string {
+  if (apiBase === null) {
+    apiBase = getApiBase()
+  }
+  return apiBase
 }
 
-type ProgressTarget = {
-  setProgressBar: (options: {
-    status?: ProgressBarStatus
-    progress?: number
-  }) => Promise<void>
-}
-
-export function getCurrentWindow(): ProgressTarget {
-  if (isTauriEnv()) {
-    return {
-      async setProgressBar(options) {
-        const { getCurrentWindow } = await import('@tauri-apps/api/window')
-        return getCurrentWindow().setProgressBar(options)
-      },
-    }
-  }
-
-  return {
-    async setProgressBar() {
-      // no-op in headless mode
-      return
-    },
-  }
-}
-
-export async function listen<T>(
-  event: string,
-  handler: (event: { payload: T }) => void,
-): Promise<() => void> {
-  if (isTauriEnv()) {
-    const { listen } = await import('@tauri-apps/api/event')
-    return listen<T>(event, handler)
-  }
-
-  if (typeof window !== 'undefined' && event === 'tauri://resize') {
-    const listener = () => handler({ payload: undefined as T })
-    window.addEventListener('resize', listener)
-    return async () => window.removeEventListener('resize', listener)
-  }
-
-  return async () => {}
+// Check if running in desktop app (custom protocol or 127.0.0.1)
+export const isDesktop = (): boolean => {
+  if (typeof window === 'undefined') return false
+  const { protocol, hostname } = window.location
+  return protocol === 'koharu:' || hostname === '127.0.0.1'
 }
 
 export async function invoke<T>(
   cmd: string,
-  args?: Record<string, any>,
+  args?: Record<string, unknown>,
 ): Promise<T> {
-  await ensureInitialized()
-
-  // Browser-only implementations (no Tauri available)
-  if (!isTauriEnv()) {
-    switch (cmd) {
-      case 'open_external': {
-        const url = typeof args?.url === 'string' ? args.url : undefined
-        if (url) {
-          window.open(url, '_blank', 'noopener,noreferrer')
-        }
-        return undefined as T
-      }
-    }
-  }
-
-  // File operations with special handling
   switch (cmd) {
+    case 'open_external': {
+      const url = typeof args?.url === 'string' ? args.url : undefined
+      if (url) {
+        window.open(url, '_blank', 'noopener,noreferrer')
+      }
+      return undefined as T
+    }
     case 'open_documents':
       return (await openDocumentsHttp()) as T
     case 'save_documents':
-      await downloadBinary(`${apiBase}/save_documents`)
+      await downloadBinary(`${getApi()}/save_documents`)
       return undefined as T
     case 'export_document':
-      await downloadBinary(`${apiBase}/export_document`, args)
+      await downloadBinary(`${getApi()}/export_document`, args)
       return undefined as T
     default:
       return invokeHttp<T>(cmd, args)
@@ -115,14 +63,12 @@ export async function invoke<T>(
 
 async function invokeHttp<T>(
   cmd: string,
-  args?: Record<string, any>,
+  args?: Record<string, unknown>,
 ): Promise<T> {
   const body = args ?? {}
-  const res = await fetch(`${apiBase}/${cmd}`, {
+  const res = await fetch(`${getApi()}/${cmd}`, {
     method: 'POST',
-    headers: {
-      'Content-Type': 'application/json',
-    },
+    headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(body),
   })
 
@@ -135,8 +81,7 @@ async function invokeHttp<T>(
     return (await res.json()) as T
   }
 
-  const buffer = await res.arrayBuffer()
-  return buffer as unknown as T
+  return (await res.arrayBuffer()) as unknown as T
 }
 
 async function openDocumentsHttp<T>(): Promise<T> {
@@ -153,7 +98,7 @@ async function openDocumentsHttp<T>(): Promise<T> {
     formData.append('files', file, file.name)
   }
 
-  const res = await fetch(`${apiBase}/open_documents`, {
+  const res = await fetch(`${getApi()}/open_documents`, {
     method: 'POST',
     body: formData,
   })
@@ -165,7 +110,7 @@ async function openDocumentsHttp<T>(): Promise<T> {
 }
 
 async function pickFiles(accept: string, multiple = false): Promise<File[]> {
-  return await new Promise<File[]>((resolve) => {
+  return new Promise<File[]>((resolve) => {
     const input = document.createElement('input')
     input.type = 'file'
     input.accept = accept
@@ -185,7 +130,7 @@ async function pickFiles(accept: string, multiple = false): Promise<File[]> {
 
 async function downloadBinary(
   endpoint: string,
-  args?: Record<string, any>,
+  args?: Record<string, unknown>,
 ): Promise<void> {
   const hasBody = args && Object.keys(args).length > 0
   const res = await fetch(endpoint, {
@@ -218,11 +163,13 @@ async function readError(res: Response): Promise<string> {
     try {
       const body = (await res.json()) as { error?: string }
       if (body?.error) return body.error
-    } catch (_) {}
+    } catch {
+      // Ignore JSON parse errors
+    }
   }
   try {
     return await res.text()
-  } catch (_) {
+  } catch {
     return res.statusText || 'Request failed'
   }
 }
@@ -239,8 +186,7 @@ function triggerDownload(blob: Blob, filename: string) {
 }
 
 export async function fetchThumbnail(index: number): Promise<Blob> {
-  await ensureInitialized()
-  const res = await fetch(`${apiBase}/get_thumbnail`, {
+  const res = await fetch(`${getApi()}/get_thumbnail`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ index }),
@@ -251,37 +197,23 @@ export async function fetchThumbnail(index: number): Promise<Blob> {
   return res.blob()
 }
 
-export const isTauri = isTauriEnv
+// Listen for events (resize only, native window events)
+export async function listen<T>(
+  event: string,
+  handler: (event: { payload: T }) => void,
+): Promise<() => void> {
+  if (typeof window !== 'undefined' && event === 'tauri://resize') {
+    const listener = () => handler({ payload: undefined as T })
+    window.addEventListener('resize', listener)
+    return () => window.removeEventListener('resize', listener)
+  }
+  return () => {}
+}
+
+// Backward compatibility
+export const isTauri = isDesktop
 
 export const isMacOS = (): boolean => {
   if (typeof window === 'undefined') return false
   return /Mac|iPhone|iPad|iPod/.test(navigator.userAgent)
-}
-
-export const windowControls = {
-  async minimize() {
-    if (isTauriEnv()) {
-      const { getCurrentWindow } = await import('@tauri-apps/api/window')
-      return getCurrentWindow().minimize()
-    }
-  },
-  async toggleMaximize() {
-    if (isTauriEnv()) {
-      const { getCurrentWindow } = await import('@tauri-apps/api/window')
-      return getCurrentWindow().toggleMaximize()
-    }
-  },
-  async close() {
-    if (isTauriEnv()) {
-      const { getCurrentWindow } = await import('@tauri-apps/api/window')
-      return getCurrentWindow().close()
-    }
-  },
-  async isMaximized(): Promise<boolean> {
-    if (isTauriEnv()) {
-      const { getCurrentWindow } = await import('@tauri-apps/api/window')
-      return getCurrentWindow().isMaximized()
-    }
-    return false
-  },
 }

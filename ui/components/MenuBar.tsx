@@ -2,7 +2,7 @@
 
 import { useEffect } from 'react'
 import { useRouter } from 'next/navigation'
-import { isTauri, isMacOS } from '@/lib/backend'
+import { isDesktop, isMacOS } from '@/lib/backend'
 import { useTranslation } from 'react-i18next'
 import { useAppStore } from '@/lib/store'
 import { fitCanvasToViewport, resetCanvasScale } from '@/components/Canvas'
@@ -76,7 +76,7 @@ export function MenuBar() {
     },
   ]
 
-  const isNativeMacOS = isTauri() && isMacOS()
+  const isNativeMacOS = isDesktop() && isMacOS()
 
   return (
     <div className='border-border bg-background text-foreground flex h-8 items-center border-b text-[13px]'>
@@ -197,11 +197,8 @@ export function MenuBar() {
         </MenubarMenu>
       </Menubar>
 
-      {/* Draggable region */}
-      <div
-        data-tauri-drag-region
-        className='flex h-full flex-1 items-center justify-center'
-      />
+      {/* Spacer */}
+      <div className='flex-1' />
 
       {/* Window controls - hidden since we use native decorations on all platforms */}
     </div>
