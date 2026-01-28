@@ -9,14 +9,16 @@ use axum::{
     response::{IntoResponse, Response},
 };
 use koharu_macros::routes;
-use rust_embed::Embed;
 use serde::Serialize;
 use tokio::net::TcpListener;
 use tower_http::cors::{Any, CorsLayer};
 
 use koharu_ml::DeviceName;
 
-use crate::{app::AppResources, endpoints::*, llm, ml, renderer::Renderer, state::AppState};
+use crate::{
+    app::AppResources, assets::EmbeddedUi, endpoints::*, llm, ml, renderer::Renderer,
+    state::AppState,
+};
 
 #[derive(Clone)]
 pub struct ApiState {
@@ -104,11 +106,6 @@ impl IntoResponse for ApiError {
 
 pub type ApiResult<T> = std::result::Result<T, ApiError>;
 
-#[derive(Embed)]
-#[folder = "$CARGO_WORKSPACE_DIR/ui/out"]
-#[allow_missing = true]
-struct EmbeddedUi;
-
 async fn serve_embedded(uri: Uri) -> impl IntoResponse {
     let path = uri.path();
     let target = if path == "/" {
@@ -132,7 +129,17 @@ fn embedded_response(path: &str) -> Option<Response> {
     Some(response)
 }
 
-fn build_router(state: ApiState) -> Router {
+fn build_router(state: ApiState, dev_url: Option<String>) -> Router {
+    let cors = if let Some(ref origin) = dev_url {
+        CorsLayer::permissive()
+            .allow_origin(origin.parse::<HeaderValue>().unwrap())
+            .allow_private_network(true)
+    } else {
+        CorsLayer::permissive()
+            .allow_origin(Any)
+            .allow_private_network(true)
+    };
+
     routes!(
         app_version,
         device,
@@ -160,22 +167,17 @@ fn build_router(state: ApiState) -> Router {
     )
     .with_state(state)
     .layer(DefaultBodyLimit::max(1024 * 1024 * 1024))
-    .layer(
-        CorsLayer::permissive()
-            .allow_origin(Any)
-            .allow_private_network(true),
-    )
+    .layer(cors)
     .fallback(serve_embedded)
 }
 
-pub async fn serve_with_listener(listener: TcpListener, resources: AppResources) -> Result<()> {
-    let router = build_router(ApiState { resources });
+pub async fn serve(
+    listener: TcpListener,
+    resources: AppResources,
+    dev_url: Option<String>,
+) -> Result<()> {
+    let router = build_router(ApiState { resources }, dev_url);
     tracing::info!("HTTP server listening on http://{}", listener.local_addr()?);
     axum::serve(listener, router.into_make_service()).await?;
     Ok(())
-}
-
-pub async fn serve(bind: String, resources: AppResources) -> Result<()> {
-    let listener = TcpListener::bind(&bind).await?;
-    serve_with_listener(listener, resources).await
 }

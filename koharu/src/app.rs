@@ -20,15 +20,12 @@ use crate::{
     renderer::Renderer,
     server,
     state::{AppState, State},
-    window::{AppEvent, create_main_window, create_splashscreen},
+    window::{AppEvent, build_url, create_main_window, create_splashscreen},
 };
 
 static APP_ROOT: Lazy<PathBuf> = Lazy::new(resolve_app_root);
 static LIB_ROOT: Lazy<PathBuf> = Lazy::new(|| APP_ROOT.join("libs"));
 static MODEL_ROOT: Lazy<PathBuf> = Lazy::new(|| APP_ROOT.join("models"));
-
-const DEV_HOST: &str = "http://localhost:3000";
-const DEFAULT_PORT: u16 = 8080;
 
 #[cfg(not(target_os = "windows"))]
 fn resolve_app_root() -> PathBuf {
@@ -73,6 +70,9 @@ struct Cli {
     /// Enable debug mode with console output
     #[arg(long)]
     debug: bool,
+    /// Dev url (internal use only)
+    #[arg(long, hide = true)]
+    dev_url: Option<String>,
 }
 
 #[derive(Clone)]
@@ -167,53 +167,47 @@ async fn check_for_updates() {
     }
 }
 
-fn base_url(port: u16) -> String {
-    if cfg!(debug_assertions) {
-        DEV_HOST.to_string()
-    } else {
-        format!("http://127.0.0.1:{port}")
-    }
-}
-
-async fn run_server(cpu: bool, port: u16, proxy: EventLoopProxy<AppEvent>) -> Result<()> {
+async fn run_server(
+    cpu: bool,
+    port: u16,
+    dev_url: Option<String>,
+    proxy: EventLoopProxy<AppEvent>,
+) -> Result<()> {
     #[cfg(feature = "bundle")]
     tokio::spawn(check_for_updates());
 
-    // 1. Bind listener first
     let listener = TcpListener::bind(format!("127.0.0.1:{port}")).await?;
     let actual_port = listener.local_addr()?.port();
     tracing::info!("HTTP server bound to port {actual_port}");
 
-    // 2. Show splashscreen immediately (server will serve static files)
-    let _ = proxy.send_event(AppEvent::ShowSplash { port: actual_port });
-
-    // 3. Build resources (this takes time)
+    // Build resources (splashscreen is already showing via custom protocol)
     let resources = build_resources(cpu, true).await?;
 
-    // 4. Resources ready, show main window
+    // Resources ready, show main window
     let _ = proxy.send_event(AppEvent::ShowMain { port: actual_port });
 
-    // 5. Serve forever
-    server::serve_with_listener(listener, resources).await
+    server::serve(listener, resources, dev_url).await
 }
 
-fn run_gui(cpu: bool, port: u16) -> Result<()> {
+fn run_gui(cpu: bool, port: u16, dev_url: Option<String>) -> Result<()> {
     let event_loop = EventLoopBuilder::<AppEvent>::with_user_event().build();
     let proxy = event_loop.create_proxy();
 
     // Start server in background thread
     let proxy_clone = proxy.clone();
+    let dev_url_clone = dev_url.clone();
     std::thread::spawn(move || {
         tokio::runtime::Runtime::new()
             .expect("Failed to create runtime")
             .block_on(async {
-                if let Err(e) = run_server(cpu, port, proxy_clone).await {
+                if let Err(e) = run_server(cpu, port, dev_url_clone, proxy_clone).await {
                     panic!("Server failed: {e:#}");
                 }
             });
     });
 
-    let (mut _main_win, mut _main_wv, mut _splash_win, mut _splash_wv) = (
+    let splash_url = build_url("/splashscreen", None, dev_url.as_deref());
+    let (mut _main_win, mut _main_wv, mut splash_win, mut splash_wv) = (
         None::<Arc<Window>>,
         None::<WebView>,
         None::<Arc<Window>>,
@@ -224,16 +218,16 @@ fn run_gui(cpu: bool, port: u16) -> Result<()> {
     event_loop.run(move |event, elwt, flow| {
         *flow = ControlFlow::Wait;
         match event {
-            Event::UserEvent(AppEvent::ShowSplash { port }) => {
-                let url = format!("{}/splashscreen", base_url(port));
-                let (w, v) = create_splashscreen(elwt, &url);
-                (_splash_win, _splash_wv) = (Some(w), Some(v));
+            Event::NewEvents(tao::event::StartCause::Init) => {
+                let (w, v) = create_splashscreen(elwt, &splash_url);
+                (splash_win, splash_wv) = (Some(w), Some(v));
             }
             Event::UserEvent(AppEvent::ShowMain { port }) => {
-                _splash_win.take();
-                _splash_wv.take();
+                // Close splashscreen
+                drop(splash_wv.take());
+                drop(splash_win.take());
 
-                let url = base_url(port);
+                let url = build_url("/", Some(port), dev_url.as_deref());
                 let (w, v) = create_main_window(elwt, &url);
                 w.set_visible(true);
                 (_main_win, _main_wv) = (Some(w), Some(v));
@@ -259,14 +253,13 @@ pub async fn run() -> Result<()> {
         return ml::prefetch().await;
     }
 
-    let port = cli
-        .port
-        .unwrap_or(if cli.headless { DEFAULT_PORT } else { 0 });
+    let port = cli.port.unwrap_or(0);
 
     if cli.headless {
+        let listener = TcpListener::bind(format!("127.0.0.1:{port}")).await?;
         let resources = build_resources(cli.cpu, false).await?;
-        return server::serve(format!("127.0.0.1:{port}"), resources).await;
+        return server::serve(listener, resources, cli.dev_url).await;
     }
 
-    run_gui(cli.cpu, port)
+    run_gui(cli.cpu, port, cli.dev_url)
 }

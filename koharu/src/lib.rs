@@ -1,4 +1,5 @@
 pub mod app;
+pub mod assets;
 pub mod endpoints;
 pub mod image;
 pub mod khr;

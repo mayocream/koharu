@@ -1,17 +1,44 @@
 'use client'
 
-const apiBase = '/api'
+/**
+ * Get the API base URL by parsing the port from the URL query parameter.
+ * - In dev mode: frontend at http://localhost:3000?port=XXXX, API at http://127.0.0.1:XXXX/api
+ * - In release mode: frontend at koharu://localhost/?port=XXXX, API at http://127.0.0.1:XXXX/api
+ */
+function getApiBase(): string {
+  if (typeof window === 'undefined') return '/api'
 
-// Check if running in desktop app (WRY window) vs browser
+  const params = new URLSearchParams(window.location.search)
+  const port = params.get('port')
+
+  if (port) {
+    return `http://127.0.0.1:${port}/api`
+  }
+
+  // Fallback for relative API calls (e.g., when served directly by the backend)
+  return '/api'
+}
+
+// Cached API base URL
+let apiBase: string | null = null
+
+function getApi(): string {
+  if (apiBase === null) {
+    apiBase = getApiBase()
+  }
+  return apiBase
+}
+
+// Check if running in desktop app (custom protocol or 127.0.0.1)
 export const isDesktop = (): boolean => {
   if (typeof window === 'undefined') return false
-  // In desktop mode, we're served from 127.0.0.1 (not localhost)
-  return window.location.hostname === '127.0.0.1'
+  const { protocol, hostname } = window.location
+  return protocol === 'koharu:' || hostname === '127.0.0.1'
 }
 
 export async function invoke<T>(
   cmd: string,
-  args?: Record<string, any>,
+  args?: Record<string, unknown>,
 ): Promise<T> {
   switch (cmd) {
     case 'open_external': {
@@ -24,10 +51,10 @@ export async function invoke<T>(
     case 'open_documents':
       return (await openDocumentsHttp()) as T
     case 'save_documents':
-      await downloadBinary(`${apiBase}/save_documents`)
+      await downloadBinary(`${getApi()}/save_documents`)
       return undefined as T
     case 'export_document':
-      await downloadBinary(`${apiBase}/export_document`, args)
+      await downloadBinary(`${getApi()}/export_document`, args)
       return undefined as T
     default:
       return invokeHttp<T>(cmd, args)
@@ -36,14 +63,12 @@ export async function invoke<T>(
 
 async function invokeHttp<T>(
   cmd: string,
-  args?: Record<string, any>,
+  args?: Record<string, unknown>,
 ): Promise<T> {
   const body = args ?? {}
-  const res = await fetch(`${apiBase}/${cmd}`, {
+  const res = await fetch(`${getApi()}/${cmd}`, {
     method: 'POST',
-    headers: {
-      'Content-Type': 'application/json',
-    },
+    headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(body),
   })
 
@@ -56,8 +81,7 @@ async function invokeHttp<T>(
     return (await res.json()) as T
   }
 
-  const buffer = await res.arrayBuffer()
-  return buffer as unknown as T
+  return (await res.arrayBuffer()) as unknown as T
 }
 
 async function openDocumentsHttp<T>(): Promise<T> {
@@ -74,7 +98,7 @@ async function openDocumentsHttp<T>(): Promise<T> {
     formData.append('files', file, file.name)
   }
 
-  const res = await fetch(`${apiBase}/open_documents`, {
+  const res = await fetch(`${getApi()}/open_documents`, {
     method: 'POST',
     body: formData,
   })
@@ -86,7 +110,7 @@ async function openDocumentsHttp<T>(): Promise<T> {
 }
 
 async function pickFiles(accept: string, multiple = false): Promise<File[]> {
-  return await new Promise<File[]>((resolve) => {
+  return new Promise<File[]>((resolve) => {
     const input = document.createElement('input')
     input.type = 'file'
     input.accept = accept
@@ -106,7 +130,7 @@ async function pickFiles(accept: string, multiple = false): Promise<File[]> {
 
 async function downloadBinary(
   endpoint: string,
-  args?: Record<string, any>,
+  args?: Record<string, unknown>,
 ): Promise<void> {
   const hasBody = args && Object.keys(args).length > 0
   const res = await fetch(endpoint, {
@@ -139,11 +163,13 @@ async function readError(res: Response): Promise<string> {
     try {
       const body = (await res.json()) as { error?: string }
       if (body?.error) return body.error
-    } catch (_) {}
+    } catch {
+      // Ignore JSON parse errors
+    }
   }
   try {
     return await res.text()
-  } catch (_) {
+  } catch {
     return res.statusText || 'Request failed'
   }
 }
@@ -160,7 +186,7 @@ function triggerDownload(blob: Blob, filename: string) {
 }
 
 export async function fetchThumbnail(index: number): Promise<Blob> {
-  const res = await fetch(`${apiBase}/get_thumbnail`, {
+  const res = await fetch(`${getApi()}/get_thumbnail`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ index }),

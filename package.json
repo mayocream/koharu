@@ -10,7 +10,7 @@
   "scripts": {
     "dev": "concurrently --raw 'bun run dev:ui' 'bun run dev:rust'",
     "dev:ui": "bun --cwd ui dev",
-    "dev:rust": "bun scripts/dev.ts cargo run -- --port=8080",
+    "dev:rust": "bun scripts/dev.ts cargo run -- --port=8080 --dev-url=http://localhost:3000",
     "build": "bun --cwd ui build && bun scripts/dev.ts cargo build --release",
     "cargo": "bun scripts/dev.ts cargo",
     "prepare": "husky",
