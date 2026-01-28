@@ -1,6 +1,6 @@
 {
   "devDependencies": {
-    "@tauri-apps/cli": "^2.9.6",
+    "concurrently": "^9.1.2",
     "git-cliff": "^2.12.0",
     "husky": "^9.1.7",
     "lint-staged": "^16.2.7",
@@ -8,10 +8,11 @@
     "prettier-plugin-tailwindcss": "^0.7.2"
   },
   "scripts": {
-    "setup": "bun scripts/dev.ts",
-    "dev": "bun run setup tauri dev",
-    "build": "bun run setup tauri build",
-    "cargo": "bun run setup cargo",
+    "dev": "concurrently --raw 'bun run dev:ui' 'bun run dev:rust'",
+    "dev:ui": "bun --cwd ui dev",
+    "dev:rust": "bun scripts/dev.ts cargo run -- --port=8080",
+    "build": "bun --cwd ui build && bun scripts/dev.ts cargo build --release",
+    "cargo": "bun scripts/dev.ts cargo",
     "prepare": "husky",
     "format": "prettier --write ui/ --ignore-path ui/.gitignore"
   },

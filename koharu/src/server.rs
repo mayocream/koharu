@@ -161,11 +161,8 @@ fn build_router(state: ApiState) -> Router {
     .with_state(state)
     .layer(DefaultBodyLimit::max(1024 * 1024 * 1024))
     .layer(
-        CorsLayer::new()
+        CorsLayer::permissive()
             .allow_origin(Any)
-            .allow_methods(Any)
-            .allow_headers(Any)
-            .expose_headers(Any)
             .allow_private_network(true),
     )
     .fallback(serve_embedded)

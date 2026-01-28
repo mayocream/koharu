@@ -1,10 +1,4 @@
-use std::{
-    path::PathBuf,
-    sync::{
-        Arc,
-        atomic::{AtomicU16, Ordering},
-    },
-};
+use std::{path::PathBuf, sync::Arc};
 
 use anyhow::Result;
 use clap::Parser;
@@ -12,22 +6,35 @@ use koharu_ml::{DeviceName, cuda_is_available, device_name};
 use koharu_runtime::{ensure_dylibs, preload_dylibs};
 use once_cell::sync::Lazy;
 use rfd::MessageDialog;
-use tauri::Manager;
+use tao::{
+    event::{Event, WindowEvent},
+    event_loop::{ControlFlow, EventLoopBuilder, EventLoopProxy},
+    window::Window,
+};
 use tokio::{net::TcpListener, sync::RwLock};
 use tracing_subscriber::fmt::format::FmtSpan;
+use wry::WebView;
 
 use crate::{
-    command, llm, ml,
+    llm, ml,
     renderer::Renderer,
     server,
     state::{AppState, State},
+    window::{AppEvent, create_main_window, create_splashscreen},
 };
+
+static APP_ROOT: Lazy<PathBuf> = Lazy::new(resolve_app_root);
+static LIB_ROOT: Lazy<PathBuf> = Lazy::new(|| APP_ROOT.join("libs"));
+static MODEL_ROOT: Lazy<PathBuf> = Lazy::new(|| APP_ROOT.join("models"));
+
+const DEV_HOST: &str = "http://localhost:3000";
+const DEFAULT_PORT: u16 = 8080;
 
 #[cfg(not(target_os = "windows"))]
 fn resolve_app_root() -> PathBuf {
     dirs::data_local_dir()
-        .map(|path| path.join("Koharu"))
-        .unwrap_or(PathBuf::from("."))
+        .map(|p| p.join("Koharu"))
+        .unwrap_or_else(|| ".".into())
 }
 
 #[cfg(target_os = "windows")]
@@ -36,21 +43,37 @@ fn resolve_app_root() -> PathBuf {
         .ok()
         .and_then(|p| p.parent().map(|p| p.to_path_buf()));
 
-    if let Some(parent_dir) = exe_dir.as_ref().and_then(|dir| dir.parent())
-        && parent_dir.join(".portable").is_file()
-    {
-        return parent_dir.to_path_buf();
+    if let Some(parent) = exe_dir.as_ref().and_then(|d| d.parent()) {
+        if parent.join(".portable").is_file() {
+            return parent.to_path_buf();
+        }
     }
 
     dirs::data_local_dir()
-        .map(|path| path.join("Koharu"))
+        .map(|p| p.join("Koharu"))
         .or(exe_dir)
-        .unwrap_or(PathBuf::from("."))
+        .unwrap_or_else(|| ".".into())
 }
 
-static APP_ROOT: Lazy<PathBuf> = Lazy::new(resolve_app_root);
-static LIB_ROOT: Lazy<PathBuf> = Lazy::new(|| APP_ROOT.join("libs"));
-static MODEL_ROOT: Lazy<PathBuf> = Lazy::new(|| APP_ROOT.join("models"));
+#[derive(Parser)]
+#[command(version = crate::version::APP_VERSION, about)]
+struct Cli {
+    /// Download dynamic libraries and exit
+    #[arg(short, long)]
+    download: bool,
+    /// Force using CPU even if GPU is available
+    #[arg(long)]
+    cpu: bool,
+    /// HTTP server port
+    #[arg(short = 'p', long)]
+    port: Option<u16>,
+    /// Run in headless mode without GUI
+    #[arg(long)]
+    headless: bool,
+    /// Enable debug mode with console output
+    #[arg(long)]
+    debug: bool,
+}
 
 #[derive(Clone)]
 pub struct AppResources {
@@ -61,64 +84,12 @@ pub struct AppResources {
     pub ml_device: DeviceName,
 }
 
-#[derive(Default)]
-pub struct HttpServerState {
-    port: AtomicU16,
-}
-
-impl HttpServerState {
-    pub fn new() -> Self {
-        Self::default()
-    }
-
-    pub fn set_port(&self, port: u16) {
-        self.port.store(port, Ordering::SeqCst);
-    }
-
-    pub fn port(&self) -> u16 {
-        self.port.load(Ordering::SeqCst)
-    }
-}
-
-#[derive(Parser)]
-#[command(version = crate::version::APP_VERSION, about)]
-struct Cli {
-    #[arg(
-        short,
-        long,
-        help = "Download dynamic libraries and exit",
-        default_value_t = false
-    )]
-    download: bool,
-    #[arg(
-        long,
-        help = "Force using CPU even if GPU is available",
-        default_value_t = false
-    )]
-    cpu: bool,
-    #[arg(
-        short = 'b',
-        long = "bind",
-        value_name = "BIND",
-        help = "Run in headless mode and bind the HTTP server to this address, e.g. 127.0.0.1:23333"
-    )]
-    bind: Option<String>,
-    #[arg(
-        long,
-        help = "Enable debug mode with console output",
-        default_value_t = false
-    )]
-    debug: bool,
-}
-
-fn initialize(headless: bool, _debug_flag: bool) -> Result<()> {
+fn initialize(headless: bool, debug: bool) -> Result<()> {
     #[cfg(target_os = "windows")]
     {
-        // hide console window in release mode and not headless
-        if headless || _debug_flag {
+        if headless || debug {
             crate::windows::create_console_window();
         }
-
         crate::windows::enable_ansi_support().ok();
     }
 
@@ -131,170 +102,171 @@ fn initialize(headless: bool, _debug_flag: bool) -> Result<()> {
         )
         .init();
 
-    // hook model cache dir
     koharu_ml::set_cache_dir(MODEL_ROOT.to_path_buf())?;
 
-    if headless {
-        std::panic::set_hook(Box::new(|info| {
+    std::panic::set_hook(Box::new(move |info| {
+        if headless {
             eprintln!("panic: {info}");
-        }));
-    } else {
-        std::panic::set_hook(Box::new(|info| {
-            let msg = info.to_string();
+        } else {
             MessageDialog::new()
                 .set_level(rfd::MessageLevel::Error)
                 .set_title("Panic")
-                .set_description(&msg)
+                .set_description(&info.to_string())
                 .show();
             std::process::exit(1);
-        }));
-    }
+        }
+    }));
 
     #[cfg(feature = "bundle")]
-    {
-        // https://docs.velopack.io/integrating/overview#application-startup
-        velopack::VelopackApp::build().run();
-    }
+    velopack::VelopackApp::build().run();
 
     Ok(())
 }
 
-#[cfg(feature = "bundle")]
-async fn update_app() -> Result<()> {
-    use velopack::{UpdateCheck, UpdateManager, sources::HttpSource};
-
-    let source = HttpSource::new("https://github.com/mayocream/koharu/releases/latest/download");
-    let um = UpdateManager::new(source, None, None)?;
-
-    if let UpdateCheck::UpdateAvailable(updates) = um.check_for_updates()? {
-        um.download_updates(&updates, None)?;
-        um.apply_updates_and_restart(&updates)?;
-    }
-
-    Ok(())
-}
-
-async fn prefetch() -> Result<()> {
-    ensure_dylibs(LIB_ROOT.to_path_buf()).await?;
-    ml::prefetch().await?;
-    // Skip for now as it's too big
-    // llm::prefetch().await?;
-
-    Ok(())
-}
-
-async fn build_resources(use_cpu: bool, _register_file_assoc: bool) -> Result<AppResources> {
+async fn build_resources(cpu: bool, register_assoc: bool) -> Result<AppResources> {
     if cuda_is_available() {
         ensure_dylibs(LIB_ROOT.to_path_buf()).await?;
         preload_dylibs(LIB_ROOT.to_path_buf())?;
 
         #[cfg(target_os = "windows")]
         {
-            if _register_file_assoc && let Err(err) = crate::windows::register_khr() {
-                tracing::warn!(?err, "Failed to register .khr file association");
+            if register_assoc {
+                crate::windows::register_khr().ok();
             }
-
             crate::windows::add_dll_directory(&LIB_ROOT)?;
         }
 
-        tracing::info!(
-            "CUDA is available, loaded dynamic libraries from {:?}",
-            *LIB_ROOT
-        );
+        tracing::info!("CUDA available, loaded libraries from {:?}", *LIB_ROOT);
     }
 
-    let ml_device = device_name(use_cpu);
-    let ml = Arc::new(ml::Model::new(use_cpu).await?);
-    let llm = Arc::new(llm::Model::new(use_cpu));
-    let renderer = Arc::new(Renderer::new()?);
-    let state = Arc::new(RwLock::new(State::default()));
-
     Ok(AppResources {
-        state,
-        ml,
-        llm,
-        renderer,
-        ml_device,
+        ml_device: device_name(cpu),
+        ml: Arc::new(ml::Model::new(cpu).await?),
+        llm: Arc::new(llm::Model::new(cpu)),
+        renderer: Arc::new(Renderer::new()?),
+        state: Arc::new(RwLock::new(State::default())),
     })
 }
 
-async fn setup(app: tauri::AppHandle, cpu: bool) -> Result<()> {
-    // Spawn background update check and auto-apply
+#[cfg(feature = "bundle")]
+async fn check_for_updates() {
+    use velopack::{UpdateCheck, UpdateManager, sources::HttpSource};
+    let result: Result<()> = (|| async {
+        let source =
+            HttpSource::new("https://github.com/mayocream/koharu/releases/latest/download");
+        let um = UpdateManager::new(source, None, None)?;
+        if let UpdateCheck::UpdateAvailable(u) = um.check_for_updates()? {
+            um.download_updates(&u, None)?;
+            um.apply_updates_and_restart(&u)?;
+        }
+        Ok(())
+    })()
+    .await;
+    if let Err(e) = result {
+        tracing::error!("Auto-update failed: {e:#}");
+    }
+}
+
+fn base_url(port: u16) -> String {
+    if cfg!(debug_assertions) {
+        DEV_HOST.to_string()
+    } else {
+        format!("http://127.0.0.1:{port}")
+    }
+}
+
+async fn run_server(cpu: bool, port: u16, proxy: EventLoopProxy<AppEvent>) -> Result<()> {
     #[cfg(feature = "bundle")]
-    tokio::spawn(async move {
-        if let Err(err) = update_app().await {
-            tracing::error!("Auto-update failed: {err:#}");
-        }
-    });
+    tokio::spawn(check_for_updates());
 
+    // 1. Bind listener first
+    let listener = TcpListener::bind(format!("127.0.0.1:{port}")).await?;
+    let actual_port = listener.local_addr()?.port();
+    tracing::info!("HTTP server bound to port {actual_port}");
+
+    // 2. Show splashscreen immediately (server will serve static files)
+    let _ = proxy.send_event(AppEvent::ShowSplash { port: actual_port });
+
+    // 3. Build resources (this takes time)
     let resources = build_resources(cpu, true).await?;
-    let state = resources.state.clone();
 
-    // Start HTTP server on a random available port
-    let listener = TcpListener::bind("127.0.0.1:0").await?;
-    let port = listener.local_addr()?.port();
+    // 4. Resources ready, show main window
+    let _ = proxy.send_event(AppEvent::ShowMain { port: actual_port });
 
-    // Store port in managed state
-    let http_state = app.state::<HttpServerState>();
-    http_state.set_port(port);
+    // 5. Serve forever
+    server::serve_with_listener(listener, resources).await
+}
 
-    // Spawn HTTP server in background
-    let server_resources = resources.clone();
-    tokio::spawn(async move {
-        if let Err(err) = server::serve_with_listener(listener, server_resources).await {
-            tracing::error!("HTTP server error: {err:#}");
-        }
+fn run_gui(cpu: bool, port: u16) -> Result<()> {
+    let event_loop = EventLoopBuilder::<AppEvent>::with_user_event().build();
+    let proxy = event_loop.create_proxy();
+
+    // Start server in background thread
+    let proxy_clone = proxy.clone();
+    std::thread::spawn(move || {
+        tokio::runtime::Runtime::new()
+            .expect("Failed to create runtime")
+            .block_on(async {
+                if let Err(e) = run_server(cpu, port, proxy_clone).await {
+                    panic!("Server failed: {e:#}");
+                }
+            });
     });
 
-    app.manage(resources.ml);
-    app.manage(resources.llm);
-    app.manage(resources.renderer);
+    let (mut _main_win, mut _main_wv, mut _splash_win, mut _splash_wv) = (
+        None::<Arc<Window>>,
+        None::<WebView>,
+        None::<Arc<Window>>,
+        None::<WebView>,
+    );
 
-    app.get_webview_window("splashscreen").unwrap().close()?;
-    app.get_webview_window("main").unwrap().show()?;
+    #[allow(unused_assignments)]
+    event_loop.run(move |event, elwt, flow| {
+        *flow = ControlFlow::Wait;
+        match event {
+            Event::UserEvent(AppEvent::ShowSplash { port }) => {
+                let url = format!("{}/splashscreen", base_url(port));
+                let (w, v) = create_splashscreen(elwt, &url);
+                (_splash_win, _splash_wv) = (Some(w), Some(v));
+            }
+            Event::UserEvent(AppEvent::ShowMain { port }) => {
+                _splash_win.take();
+                _splash_wv.take();
 
-    app.manage(state);
-
-    Ok(())
+                let url = base_url(port);
+                let (w, v) = create_main_window(elwt, &url);
+                w.set_visible(true);
+                (_main_win, _main_wv) = (Some(w), Some(v));
+            }
+            Event::UserEvent(AppEvent::Exit)
+            | Event::WindowEvent {
+                event: WindowEvent::CloseRequested,
+                ..
+            } => {
+                *flow = ControlFlow::Exit;
+            }
+            _ => {}
+        }
+    })
 }
 
 pub async fn run() -> Result<()> {
-    let Cli {
-        download,
-        cpu,
-        bind,
-        debug,
-    } = Cli::parse();
+    let cli = Cli::parse();
+    initialize(cli.headless, cli.debug)?;
 
-    initialize(bind.is_some(), debug)?;
-
-    if download {
-        prefetch().await?;
-        return Ok(());
+    if cli.download {
+        ensure_dylibs(LIB_ROOT.to_path_buf()).await?;
+        return ml::prefetch().await;
     }
 
-    if let Some(bind_addr) = bind {
-        let resources = build_resources(cpu, false).await?;
+    let port = cli
+        .port
+        .unwrap_or(if cli.headless { DEFAULT_PORT } else { 0 });
 
-        server::serve(bind_addr, resources).await?;
-        return Ok(());
+    if cli.headless {
+        let resources = build_resources(cli.cpu, false).await?;
+        return server::serve(format!("127.0.0.1:{port}"), resources).await;
     }
 
-    tauri::Builder::default()
-        .plugin(tauri_plugin_http::init())
-        .invoke_handler(tauri::generate_handler![command::initialize])
-        .setup(move |app| {
-            app.manage(HttpServerState::new());
-
-            let handle = app.handle().clone();
-            tauri::async_runtime::spawn(async move {
-                if let Err(err) = setup(handle, cpu).await {
-                    panic!("application setup failed: {err:#}");
-                }
-            });
-            Ok(())
-        })
-        .run(tauri::generate_context!())?;
-
-    Ok(())
+    run_gui(cli.cpu, port)
 }

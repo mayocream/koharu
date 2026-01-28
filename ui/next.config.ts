@@ -1,17 +1,26 @@
 import type { NextConfig } from 'next'
 
 const isProd = process.env.NODE_ENV === 'production'
-const internalHost = process.env.TAURI_DEV_HOST || 'localhost'
+const backendPort = process.env.BACKEND_PORT || '8080'
 
 const nextConfig: NextConfig = {
   reactCompiler: true,
   devIndicators: false,
-  output: 'export',
+  // Static export only for production build
+  output: isProd ? 'export' : undefined,
   images: {
     unoptimized: true,
   },
-  // https://v2.tauri.app/start/frontend/nextjs/#update-nextjs-configuration
-  assetPrefix: isProd ? undefined : `http://${internalHost}:3000`,
+  // Proxy API requests to backend in dev mode
+  async rewrites() {
+    if (isProd) return []
+    return [
+      {
+        source: '/api/:path*',
+        destination: `http://127.0.0.1:${backendPort}/api/:path*`,
+      },
+    ]
+  },
 }
 
 export default nextConfig

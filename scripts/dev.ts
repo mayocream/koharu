@@ -118,6 +118,42 @@ async function setupCl() {
   )
 }
 
+function getCargoFeatures(): string[] {
+  const platform = os.type()
+  if (platform === 'Windows_NT' || platform === 'Linux') {
+    return ['cuda', 'cudnn']
+  } else if (platform === 'Darwin') {
+    return ['metal']
+  }
+  return []
+}
+
+function injectCargoFeatures(args: string[]): string[] {
+  // Check if this is a cargo command
+  if (args[0] !== 'cargo') {
+    return args
+  }
+
+  // Don't add features if --features is already specified
+  if (args.includes('--features')) {
+    return args
+  }
+
+  const features = getCargoFeatures()
+  if (features.length === 0) {
+    return args
+  }
+
+  // Insert --features after cargo subcommand (run, build, etc.)
+  const result = [...args]
+  // Find position after subcommand (cargo run, cargo build, etc.)
+  if (result.length >= 2) {
+    result.splice(2, 0, '--features', features.join(','))
+  }
+
+  return result
+}
+
 async function dev() {
   if (os.type() === 'Windows_NT') {
     // First, try to check if nvcc is available
@@ -136,10 +172,15 @@ async function dev() {
     await setupCl()
   }
 
-  const args = process.argv.slice(2)
+  let args = process.argv.slice(2)
   if (args.length === 0) {
     throw new Error('No command provided')
   }
+
+  // Inject cargo features based on platform
+  args = injectCargoFeatures(args)
+
+  console.log(`Running: ${args.join(' ')}`)
 
   const proc = spawn(args.join(' '), {
     stdio: 'inherit',
@@ -152,7 +193,7 @@ async function dev() {
   })
 
   proc.on('exit', (code) => {
-    process.exit(code)
+    process.exit(code ?? 0)
   })
 }
 

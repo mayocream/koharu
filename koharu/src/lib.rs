@@ -1,5 +1,4 @@
 pub mod app;
-pub mod command;
 pub mod endpoints;
 pub mod image;
 pub mod khr;
@@ -10,5 +9,6 @@ pub mod result;
 pub mod server;
 pub mod state;
 pub mod version;
+pub mod window;
 #[cfg(target_os = "windows")]
 pub mod windows;

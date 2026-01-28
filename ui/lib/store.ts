@@ -1,7 +1,7 @@
 'use client'
 
 import { create } from 'zustand'
-import { invoke, getCurrentWindow, ProgressBarStatus } from '@/lib/backend'
+import { invoke } from '@/lib/backend'
 import {
   Document,
   InpaintRegion,
@@ -204,7 +204,7 @@ type AppState = OperationSlice & {
     options?: { index?: number },
   ) => Promise<void>
   flushMaskSync: () => Promise<void>
-  setProgress: (progress?: number, status?: ProgressBarStatus) => Promise<void>
+  setProgress: (progress?: number) => Promise<void>
   clearProgress: () => Promise<void>
   // Processing actions
   detect: (_?: any, index?: number) => Promise<void>
@@ -634,7 +634,7 @@ export const useAppStore = create<AppState>((set, get) => {
       try {
         await invoke('llm_load', { id })
 
-        await get().setProgress(100, ProgressBarStatus.Paused)
+        await get().setProgress(100)
 
         set({ llmLoading: true })
         // poll for llmCheckReady and set llmLoading false
@@ -913,18 +913,12 @@ export const useAppStore = create<AppState>((set, get) => {
       await invoke('export_document', { index })
     },
 
-    setProgress: async (progress?: number, state?: ProgressBarStatus) => {
-      await getCurrentWindow().setProgressBar({
-        status: state ?? ProgressBarStatus.Normal,
-        progress: progress,
-      })
+    setProgress: async (_progress?: number) => {
+      // No-op: progress bar removed (native window controls only)
     },
 
     clearProgress: async () => {
-      await getCurrentWindow().setProgressBar({
-        status: ProgressBarStatus.None,
-        progress: 0,
-      })
+      // No-op: progress bar removed (native window controls only)
     },
   }
 })
