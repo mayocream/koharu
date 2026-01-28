@@ -253,6 +253,11 @@ export async function fetchThumbnail(index: number): Promise<Blob> {
 
 export const isTauri = isTauriEnv
 
+export const isMacOS = (): boolean => {
+  if (typeof window === 'undefined') return false
+  return /Mac|iPhone|iPad|iPod/.test(navigator.userAgent)
+}
+
 export const windowControls = {
   async minimize() {
     if (isTauriEnv()) {

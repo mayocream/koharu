@@ -1,12 +1,11 @@
 'use client'
 
-import { useEffect, useState, useCallback } from 'react'
+import { useEffect } from 'react'
 import { useRouter } from 'next/navigation'
-import { windowControls, isTauri, listen } from '@/lib/backend'
+import { isTauri, isMacOS } from '@/lib/backend'
 import { useTranslation } from 'react-i18next'
 import { useAppStore } from '@/lib/store'
 import { fitCanvasToViewport, resetCanvasScale } from '@/components/Canvas'
-import { Minus, Square, X, Copy } from 'lucide-react'
 import Image from 'next/image'
 import {
   Menubar,
@@ -26,7 +25,6 @@ type MenuItem = {
 export function MenuBar() {
   const { t } = useTranslation()
   const router = useRouter()
-  const [isMaximized, setIsMaximized] = useState(false)
   const {
     openDocuments,
     openExternal,
@@ -37,32 +35,11 @@ export function MenuBar() {
     saveDocuments,
   } = useAppStore()
 
-  const updateMaximizedState = useCallback(async () => {
-    const maximized = await windowControls.isMaximized()
-    setIsMaximized(maximized)
-  }, [])
-
   useEffect(() => {
     // Prefetch pages for smoother navigation
     router.prefetch('/settings')
     router.prefetch('/about')
   }, [router])
-
-  useEffect(() => {
-    if (!isTauri()) return
-
-    void updateMaximizedState()
-
-    let unlisten: (() => void) | undefined
-    const setup = async () => {
-      unlisten = await listen('tauri://resize', () => {
-        void updateMaximizedState()
-      })
-    }
-    void setup()
-
-    return () => unlisten?.()
-  }, [updateMaximizedState])
 
   const fileMenuItems: MenuItem[] = [
     { label: t('menu.openFile'), onSelect: openDocuments },
@@ -99,10 +76,14 @@ export function MenuBar() {
     },
   ]
 
+  const isNativeMacOS = isTauri() && isMacOS()
+
   return (
     <div className='border-border bg-background text-foreground flex h-8 items-center border-b text-[13px]'>
       {/* Logo */}
-      <div className='flex h-full items-center pl-2 select-none'>
+      <div
+        className={`flex h-full items-center select-none ${isNativeMacOS ? 'pl-20' : 'pl-2'}`}
+      >
         <Image
           src='/icon.png'
           alt='Koharu'
@@ -222,39 +203,7 @@ export function MenuBar() {
         className='flex h-full flex-1 items-center justify-center'
       />
 
-      {/* Window controls */}
-      {isTauri() && (
-        <div className='flex h-full items-center'>
-          <button
-            type='button'
-            onClick={() => void windowControls.minimize()}
-            className='hover:bg-accent flex h-full w-12 items-center justify-center transition-colors'
-            aria-label='Minimize'
-          >
-            <Minus className='size-4' />
-          </button>
-          <button
-            type='button'
-            onClick={() => void windowControls.toggleMaximize()}
-            className='hover:bg-accent flex h-full w-12 items-center justify-center transition-colors'
-            aria-label={isMaximized ? 'Restore' : 'Maximize'}
-          >
-            {isMaximized ? (
-              <Copy className='size-3.5' />
-            ) : (
-              <Square className='size-3.5' />
-            )}
-          </button>
-          <button
-            type='button'
-            onClick={() => void windowControls.close()}
-            className='flex h-full w-12 items-center justify-center transition-colors hover:bg-red-500 hover:text-white'
-            aria-label='Close'
-          >
-            <X className='size-4' />
-          </button>
-        </div>
-      )}
+      {/* Window controls - hidden since we use native decorations on all platforms */}
     </div>
   )
 }
