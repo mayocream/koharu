@@ -4,7 +4,7 @@ import { useEffect, useState, type ReactNode } from 'react'
 import { I18nextProvider } from 'react-i18next'
 import { ThemeProvider } from 'next-themes'
 import { TooltipProvider } from '@/components/ui/tooltip'
-import { invoke, listen } from '@/lib/backend'
+import { invoke } from '@/lib/backend'
 import i18n from '@/lib/i18n'
 import { useAppStore } from '@/lib/store'
 
@@ -13,7 +13,6 @@ export function Providers({ children }: { children: ReactNode }) {
   const setTotalPages = useAppStore((state) => state.setTotalPages)
 
   useEffect(() => {
-    let unlisten: (() => void) | undefined
     ;(async () => {
       try {
         const count = await invoke<number>('get_documents')
@@ -21,17 +20,7 @@ export function Providers({ children }: { children: ReactNode }) {
           setTotalPages(count)
         }
       } catch (_) {}
-
-      try {
-        unlisten = await listen<number>('documents:opened', (event) => {
-          setTotalPages(event.payload ?? 0)
-        })
-      } catch (_) {}
     })()
-
-    return () => {
-      unlisten?.()
-    }
   }, [setTotalPages])
 
   useEffect(() => {

@@ -18,14 +18,10 @@ pub enum AppEvent {
 }
 
 /// Builds a URL for the custom protocol or dev server.
-pub fn build_url(path: &str, port: Option<u16>, dev_url: Option<&str>) -> String {
+pub fn build_url(path: &str, dev_url: Option<&str>) -> String {
     let default_base = format!("{CUSTOM_PROTOCOL}://localhost");
     let base = dev_url.unwrap_or(&default_base);
-    let url = format!("{base}{path}");
-    match port {
-        Some(p) => format!("{url}?port={p}"),
-        None => url,
-    }
+    format!("{base}{path}")
 }
 
 fn handle_custom_protocol(

@@ -19,7 +19,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select'
-import { invoke, isTauri } from '@/lib/backend'
+import { invoke, isDesktop } from '@/lib/backend'
 
 interface WgpuDeviceInfo {
   name: string
@@ -51,7 +51,7 @@ export default function SettingsPage() {
   const [deviceInfo, setDeviceInfo] = useState<DeviceInfo>()
 
   useEffect(() => {
-    if (!isTauri()) return
+    if (!isDesktop()) return
 
     const loadDeviceInfo = async () => {
       try {

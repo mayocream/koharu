@@ -206,7 +206,7 @@ fn run_gui(cpu: bool, port: u16, dev_url: Option<String>) -> Result<()> {
             });
     });
 
-    let splash_url = build_url("/splashscreen", None, dev_url.as_deref());
+    let splash_url = build_url("/splashscreen", dev_url.as_deref());
     let (mut _main_win, mut _main_wv, mut splash_win, mut splash_wv) = (
         None::<Arc<Window>>,
         None::<WebView>,
@@ -222,12 +222,12 @@ fn run_gui(cpu: bool, port: u16, dev_url: Option<String>) -> Result<()> {
                 let (w, v) = create_splashscreen(elwt, &splash_url);
                 (splash_win, splash_wv) = (Some(w), Some(v));
             }
-            Event::UserEvent(AppEvent::ShowMain { port }) => {
+            Event::UserEvent(AppEvent::ShowMain { port: _ }) => {
                 // Close splashscreen
                 drop(splash_wv.take());
                 drop(splash_win.take());
 
-                let url = build_url("/", Some(port), dev_url.as_deref());
+                let url = build_url("/", dev_url.as_deref());
                 let (w, v) = create_main_window(elwt, &url);
                 w.set_visible(true);
                 (_main_win, _main_wv) = (Some(w), Some(v));

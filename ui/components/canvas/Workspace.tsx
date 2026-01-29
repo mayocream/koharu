@@ -10,7 +10,7 @@ import {
   ContextMenuTrigger,
 } from '@/components/ui/context-menu'
 import { useTranslation } from 'react-i18next'
-import { listen } from '@/lib/backend'
+
 import { Image } from '@/components/Image'
 import { useAppStore } from '@/lib/store'
 import {
@@ -133,24 +133,18 @@ export function Workspace() {
   })
   const { t } = useTranslation()
 
-  // Listen for Tauri resize events
+  // Listen for window resize events
   useEffect(() => {
-    let unlisten: (() => void) | undefined
-
-    const setupListener = async () => {
-      unlisten = await listen('tauri://resize', () => {
-        if (currentDocument && autoFitEnabled) {
-          fitCanvasToViewport()
-        }
-      })
+    const handleResize = () => {
+      if (currentDocument && autoFitEnabled) {
+        fitCanvasToViewport()
+      }
     }
 
-    void setupListener()
+    window.addEventListener('resize', handleResize)
 
     return () => {
-      if (unlisten) {
-        unlisten()
-      }
+      window.removeEventListener('resize', handleResize)
     }
   }, [currentDocument])
 

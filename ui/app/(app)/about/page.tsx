@@ -11,7 +11,7 @@ import {
 } from 'lucide-react'
 import { ScrollArea } from '@/components/ui/scroll-area'
 import { fetch } from '@/lib/fetch'
-import { invoke, isTauri } from '@/lib/backend'
+import { invoke, isDesktop } from '@/lib/backend'
 import { useAppStore } from '@/lib/store'
 import Image from 'next/image'
 
@@ -31,7 +31,7 @@ export default function AboutPage() {
   useEffect(() => {
     const checkVersion = async () => {
       try {
-        if (isTauri()) {
+        if (isDesktop()) {
           const version = await invoke<string>('app_version')
           setAppVersion(version)
 

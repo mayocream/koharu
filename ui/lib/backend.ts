@@ -1,34 +1,5 @@
 'use client'
 
-/**
- * Get the API base URL by parsing the port from the URL query parameter.
- * - In dev mode: frontend at http://localhost:3000?port=XXXX, API at http://127.0.0.1:XXXX/api
- * - In release mode: frontend at koharu://localhost/?port=XXXX, API at http://127.0.0.1:XXXX/api
- */
-function getApiBase(): string {
-  if (typeof window === 'undefined') return '/api'
-
-  const params = new URLSearchParams(window.location.search)
-  const port = params.get('port')
-
-  if (port) {
-    return `http://127.0.0.1:${port}/api`
-  }
-
-  // Fallback for relative API calls (e.g., when served directly by the backend)
-  return '/api'
-}
-
-// Cached API base URL
-let apiBase: string | null = null
-
-function getApi(): string {
-  if (apiBase === null) {
-    apiBase = getApiBase()
-  }
-  return apiBase
-}
-
 // Check if running in desktop app (custom protocol or 127.0.0.1)
 export const isDesktop = (): boolean => {
   if (typeof window === 'undefined') return false
@@ -51,10 +22,10 @@ export async function invoke<T>(
     case 'open_documents':
       return (await openDocumentsHttp()) as T
     case 'save_documents':
-      await downloadBinary(`${getApi()}/save_documents`)
+      await downloadBinary(`/api/save_documents`)
       return undefined as T
     case 'export_document':
-      await downloadBinary(`${getApi()}/export_document`, args)
+      await downloadBinary(`/api/export_document`, args)
       return undefined as T
     default:
       return invokeHttp<T>(cmd, args)
@@ -66,7 +37,7 @@ async function invokeHttp<T>(
   args?: Record<string, unknown>,
 ): Promise<T> {
   const body = args ?? {}
-  const res = await fetch(`${getApi()}/${cmd}`, {
+  const res = await fetch(`/api/${cmd}`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(body),
@@ -98,7 +69,7 @@ async function openDocumentsHttp<T>(): Promise<T> {
     formData.append('files', file, file.name)
   }
 
-  const res = await fetch(`${getApi()}/open_documents`, {
+  const res = await fetch(`/api/open_documents`, {
     method: 'POST',
     body: formData,
   })
@@ -186,7 +157,7 @@ function triggerDownload(blob: Blob, filename: string) {
 }
 
 export async function fetchThumbnail(index: number): Promise<Blob> {
-  const res = await fetch(`${getApi()}/get_thumbnail`, {
+  const res = await fetch(`/api/get_thumbnail`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ index }),
@@ -196,22 +167,6 @@ export async function fetchThumbnail(index: number): Promise<Blob> {
   }
   return res.blob()
 }
-
-// Listen for events (resize only, native window events)
-export async function listen<T>(
-  event: string,
-  handler: (event: { payload: T }) => void,
-): Promise<() => void> {
-  if (typeof window !== 'undefined' && event === 'tauri://resize') {
-    const listener = () => handler({ payload: undefined as T })
-    window.addEventListener('resize', listener)
-    return () => window.removeEventListener('resize', listener)
-  }
-  return () => {}
-}
-
-// Backward compatibility
-export const isTauri = isDesktop
 
 export const isMacOS = (): boolean => {
   if (typeof window === 'undefined') return false
