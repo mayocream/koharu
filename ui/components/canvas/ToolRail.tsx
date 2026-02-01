@@ -23,6 +23,7 @@ import {
 } from '@/components/ui/popover'
 import { Slider } from '@/components/ui/slider'
 import { Button } from '@/components/ui/button'
+import { ColorPicker } from '@/components/ui/color-picker'
 
 type ModeDefinition = {
   value: ToolMode
@@ -152,17 +153,11 @@ function BrushToolWithPopover({
               {t('toolbar.brushColor')}
             </p>
             <div className='flex items-center gap-2'>
-              <label className='border-input flex h-8 w-8 cursor-pointer items-center justify-center rounded border'>
-                <input
-                  type='color'
-                  value={brushColor}
-                  onChange={(event) =>
-                    setBrushConfig({ color: event.target.value })
-                  }
-                  className='size-5 cursor-pointer appearance-none border-none p-0'
-                  aria-label={t('toolbar.brushColor')}
-                />
-              </label>
+              <ColorPicker
+                value={brushColor}
+                onChange={(color) => setBrushConfig({ color })}
+                className='h-8 w-8'
+              />
               <span className='text-muted-foreground text-xs'>
                 {brushColor}
               </span>

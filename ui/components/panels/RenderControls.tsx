@@ -3,6 +3,7 @@
 import { useEffect } from 'react'
 import { useTranslation } from 'react-i18next'
 import { PaletteIcon } from 'lucide-react'
+import { ColorPicker } from '@/components/ui/color-picker'
 import { useAppStore } from '@/lib/store'
 import { useTextBlocks } from '@/hooks/useTextBlocks'
 import { RenderEffect, RgbaColor, TextStyle } from '@/types'
@@ -187,22 +188,17 @@ export function RenderControls() {
         {/* Color picker */}
         <Tooltip>
           <TooltipTrigger asChild>
-            <label className='border-input flex h-7 w-7 cursor-pointer items-center justify-center rounded-md border'>
-              <input
-                type='color'
+            <div>
+              <ColorPicker
                 value={currentColorHex}
                 disabled={!hasBlocks}
-                onChange={(event) => {
-                  const nextColor = hexToColor(
-                    event.target.value,
-                    currentColor[3] ?? 255,
-                  )
+                onChange={(hex) => {
+                  const nextColor = hexToColor(hex, currentColor[3] ?? 255)
                   if (applyStyleToSelected({ color: nextColor })) return
                   applyStyleToAll({ color: nextColor })
                 }}
-                className='size-4 cursor-pointer appearance-none border-none p-0 disabled:cursor-not-allowed disabled:opacity-60'
               />
-            </label>
+            </div>
           </TooltipTrigger>
           <TooltipContent side='left' sideOffset={4}>
             {t('render.fontColorLabel')}

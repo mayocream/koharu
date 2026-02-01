@@ -19,6 +19,7 @@ import { RenderEffect, RgbaColor, TextStyle } from '@/types'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Textarea } from '@/components/ui/textarea'
+import { ColorPicker } from '@/components/ui/color-picker'
 import {
   Tooltip,
   TooltipContent,
@@ -272,22 +273,18 @@ export function RenderControls() {
 
       <Tooltip>
         <TooltipTrigger asChild>
-          <label className='border-input hover:border-border flex h-8 w-8 cursor-pointer items-center justify-center rounded border transition'>
-            <input
-              type='color'
+          <div>
+            <ColorPicker
               value={currentColorHex}
               disabled={!hasBlocks}
-              onChange={(event) => {
-                const nextColor = hexToColor(
-                  event.target.value,
-                  currentColor[3] ?? 255,
-                )
+              onChange={(hex) => {
+                const nextColor = hexToColor(hex, currentColor[3] ?? 255)
                 if (applyStyleToSelected({ color: nextColor })) return
                 applyStyleToAll({ color: nextColor })
               }}
-              className='size-5 cursor-pointer appearance-none border-none p-0 disabled:cursor-not-allowed disabled:opacity-60'
+              className='h-8 w-8'
             />
-          </label>
+          </div>
         </TooltipTrigger>
         <TooltipContent side='bottom' sideOffset={4}>
           {t('render.fontColorLabel')}
