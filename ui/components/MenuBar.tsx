@@ -1,7 +1,9 @@
 'use client'
 
+import { useCallback, useEffect, useState } from 'react'
 import Link from 'next/link'
-import { isTauri, isMacOS } from '@/lib/backend'
+import { MinusIcon, SquareIcon, XIcon, CopyIcon } from 'lucide-react'
+import { isTauri, isMacOS, windowControls } from '@/lib/backend'
 import { useTranslation } from 'react-i18next'
 import { useAppStore } from '@/lib/store'
 import { fitCanvasToViewport, resetCanvasScale } from '@/components/Canvas'
@@ -69,13 +71,15 @@ export function MenuBar() {
   ]
 
   const isNativeMacOS = isTauri() && isMacOS()
+  const isWindowsTauri = isTauri() && !isMacOS()
 
   return (
     <div className='border-border bg-background text-foreground flex h-8 items-center border-b text-[13px]'>
+      {/* macOS traffic lights */}
+      {isNativeMacOS && <MacOSControls />}
+
       {/* Logo */}
-      <div
-        className={`flex h-full items-center select-none ${isNativeMacOS ? 'pl-20' : 'pl-2'}`}
-      >
+      <div className='flex h-full items-center pl-2 select-none'>
         <Image
           src='/icon.png'
           alt='Koharu'
@@ -193,7 +197,87 @@ export function MenuBar() {
         className='flex h-full flex-1 items-center justify-center'
       />
 
-      {/* Window controls - hidden since we use native decorations on all platforms */}
+      {/* Window controls for Windows */}
+      {isWindowsTauri && <WindowControls />}
+    </div>
+  )
+}
+
+function MacOSControls() {
+  return (
+    <div className='flex h-full items-center gap-2 pr-2 pl-4'>
+      <button
+        onClick={() => void windowControls.close()}
+        className='group flex size-3 items-center justify-center rounded-full bg-[#FF5F57] active:bg-[#bf4942]'
+      >
+        <XIcon
+          className='size-2 text-[#4a0002] opacity-0 group-hover:opacity-100'
+          strokeWidth={3}
+        />
+      </button>
+      <button
+        onClick={() => void windowControls.minimize()}
+        className='group flex size-3 items-center justify-center rounded-full bg-[#FEBC2E] active:bg-[#bf8d22]'
+      >
+        <MinusIcon
+          className='size-2 text-[#5f4a00] opacity-0 group-hover:opacity-100'
+          strokeWidth={3}
+        />
+      </button>
+      <button
+        onClick={() => void windowControls.toggleMaximize()}
+        className='group flex size-3 items-center justify-center rounded-full bg-[#28C840] active:bg-[#1e9630]'
+      >
+        <SquareIcon
+          className='size-1.5 text-[#006500] opacity-0 group-hover:opacity-100'
+          strokeWidth={3}
+        />
+      </button>
+    </div>
+  )
+}
+
+function WindowControls() {
+  const [maximized, setMaximized] = useState(false)
+
+  const updateMaximized = useCallback(async () => {
+    setMaximized(await windowControls.isMaximized())
+  }, [])
+
+  useEffect(() => {
+    void updateMaximized()
+    // Sync maximize state on window resize (snap, double-click titlebar, etc.)
+    const onResize = () => void updateMaximized()
+    window.addEventListener('resize', onResize)
+    return () => window.removeEventListener('resize', onResize)
+  }, [updateMaximized])
+
+  return (
+    <div className='flex h-full'>
+      <button
+        onClick={() => void windowControls.minimize()}
+        className='hover:bg-accent flex h-full w-11 items-center justify-center'
+      >
+        <MinusIcon className='size-4' />
+      </button>
+      <button
+        onClick={() => {
+          void windowControls.toggleMaximize().then(updateMaximized)
+        }}
+        className='hover:bg-accent flex h-full w-11 items-center justify-center'
+      >
+        {maximized ? (
+          <CopyIcon className='size-3.5' />
+        ) : (
+          <SquareIcon className='size-3.5' />
+        )}
+      </button>
+      <button
+        onClick={() => void windowControls.close()}
+        className='flex h-full w-11 items-center justify-center hover:bg-red-500 hover:text-white'
+      >
+        <XIcon className='size-4' />
+      </button>
     </div>
   )
 }

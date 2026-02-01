@@ -21,9 +21,7 @@
         "minHeight": 600,
         "center": true,
         "title": "Koharu",
-        "decorations": true,
-        "titleBarStyle": "Overlay",
-        "hiddenTitle": true
+        "decorations": false
       },
       {
         "label": "splashscreen",
