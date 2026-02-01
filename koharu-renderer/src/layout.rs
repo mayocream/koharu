@@ -238,8 +238,8 @@ impl<'a> TextLayout<'a> {
                 // Vertical-rl: first column is on the right, subsequent columns shift left.
                 // Place the baseline at the center of each column. This avoids depending on
                 // ascent/descent for X extents (which are Y metrics) and prevents right-edge clipping.
-                let x = (line_count.saturating_sub(1) as f32 - i as f32) * line_height
-                    + line_height * 0.5;
+                let x =
+                    (line_count.saturating_sub(1) as f32 - i as f32) * font_size + font_size * 0.5;
                 (x, ascent)
             } else {
                 (0.0, ascent + i as f32 * line_height)
@@ -249,16 +249,21 @@ impl<'a> TextLayout<'a> {
         // Compute a tight ink bounding box using per-glyph bounds from the font tables (via skrifa),
         // then translate baselines so the top-left ink origin is (0, 0). This avoids clipping without
         // having to measure Skia paths in the renderer.
-        let (mut width, mut height) = self.compute_bounds(&lines, line_height, descent);
+        let (mut width, mut height) = self.compute_bounds(&lines, line_height, font_size, descent);
         if let Some((mut min_x, mut min_y, mut max_x, mut max_y)) =
             self.ink_bounds(font_size, &lines)
         {
-            // Keep a tiny safety pad for hinting/AA differences.
-            const PAD: f32 = 1.0;
-            min_x -= PAD;
-            min_y -= PAD;
-            max_x += PAD;
-            max_y += PAD;
+            // Keep a small safety pad for hinting/AA differences. Use a smaller pad
+            // for vertical layout to avoid inflating column width.
+            let pad = if self.writing_mode.is_vertical() {
+                0.0
+            } else {
+                1.0
+            };
+            min_x -= pad;
+            min_y -= pad;
+            max_x += pad;
+            max_y += pad;
 
             for line in &mut lines {
                 line.baseline.0 -= min_x;
@@ -280,6 +285,7 @@ impl<'a> TextLayout<'a> {
         &self,
         lines: &[LayoutLine<'a>],
         line_height: f32,
+        font_size: f32,
         descent: f32,
     ) -> (f32, f32) {
         if lines.is_empty() {
@@ -293,8 +299,8 @@ impl<'a> TextLayout<'a> {
                 (w, h)
             }
             WritingMode::VerticalRl => {
-                // Each line is a column; `line_height` is used as the column pitch (width).
-                let w = lines.len() as f32 * line_height;
+                // Each line is a column; use `font_size` as the column pitch (width).
+                let w = lines.len() as f32 * font_size;
                 // Like horizontal layout, account for the baseline offset (top padding via ascent)
                 // and the descent so glyphs don't get clipped after converting to a Y-down canvas.
                 let h = lines.iter().map(|l| l.advance.abs()).fold(0.0f32, f32::max)
@@ -426,8 +432,9 @@ mod tests {
         ];
 
         let line_height = 20.0;
+        let font_size = 16.0;
         let descent = 5.0;
-        let (w, h) = layout.compute_bounds(&lines, line_height, descent);
+        let (w, h) = layout.compute_bounds(&lines, line_height, font_size, descent);
 
         assert_approx_eq(w, 250.0);
         // (len-1)*line_height + first_baseline_y + descent
@@ -459,10 +466,11 @@ mod tests {
         ];
 
         let line_height = 20.0;
+        let font_size = 16.0;
         let descent = 5.0;
-        let (w, h) = layout.compute_bounds(&lines, line_height, descent);
+        let (w, h) = layout.compute_bounds(&lines, line_height, font_size, descent);
 
-        assert_approx_eq(w, 3.0 * line_height);
+        assert_approx_eq(w, 3.0 * font_size);
         // max(|advance|) + first_baseline_y + descent
         assert_approx_eq(h, 100.0 + 12.0 + descent);
     }
@@ -511,7 +519,7 @@ mod tests {
             .metrics(Size::new(font_size), LocationRef::default());
         let ascent = metrics.ascent;
         let descent = -metrics.descent;
-        let line_height = (ascent + descent + metrics.leading).max(font_size);
+        let _line_height = (ascent + descent + metrics.leading).max(font_size);
         let base_y = layout.lines[0].baseline.1;
         for line in &layout.lines {
             assert_approx_eq(line.baseline.1, base_y);
@@ -519,7 +527,7 @@ mod tests {
 
         for i in 1..layout.lines.len() {
             let dx = layout.lines[i - 1].baseline.0 - layout.lines[i].baseline.0;
-            assert_approx_eq(dx, line_height);
+            assert_approx_eq(dx, font_size);
         }
 
         Ok(())
