@@ -1,3 +1,12 @@
+## [0.28.0] - 2026-02-01
+
+### 🚀 Features
+
+- Custom titlebar
+
+### ⚙️ Miscellaneous Tasks
+
+- Release 0.28.0
 ## [0.27.2] - 2026-02-01
 
 ### 🐛 Bug Fixes
