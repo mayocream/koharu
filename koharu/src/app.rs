@@ -215,18 +215,6 @@ pub async fn run() -> Result<()> {
         return Ok(());
     }
 
-    let resources = build_resources(cpu, !headless).await?;
-    let listener = TcpListener::bind(format!("127.0.0.1:{}", port.unwrap_or(0))).await?;
-    let port = listener.local_addr()?.port();
-
-    // Start HTTP server
-    let server_resources = resources.clone();
-    tokio::spawn(async move {
-        if let Err(err) = server::serve_with_listener(listener, server_resources).await {
-            tracing::error!("HTTP server error: {err:#}");
-        }
-    });
-
     // Spawn background update check and auto-apply
     #[cfg(feature = "bundle")]
     tokio::spawn(async move {
@@ -236,6 +224,16 @@ pub async fn run() -> Result<()> {
     });
 
     if headless {
+        let resources = build_resources(cpu, false).await?;
+        let listener = TcpListener::bind(format!("127.0.0.1:{}", port.unwrap_or(0))).await?;
+
+        let server_resources = resources.clone();
+        tokio::spawn(async move {
+            if let Err(err) = server::serve_with_listener(listener, server_resources).await {
+                tracing::error!("HTTP server error: {err:#}");
+            }
+        });
+
         tokio::signal::ctrl_c().await?;
         return Ok(());
     }
@@ -243,11 +241,38 @@ pub async fn run() -> Result<()> {
     tauri::Builder::default()
         .invoke_handler(tauri::generate_handler![command::initialize])
         .setup(move |app| {
-            app.manage(port);
+            let handle = app.handle().clone();
+            tauri::async_runtime::spawn(async move {
+                let resources = build_resources(cpu, true)
+                    .await
+                    .expect("failed to build app resources");
+                let listener = TcpListener::bind(format!("127.0.0.1:{}", port.unwrap_or(0)))
+                    .await
+                    .expect("failed to bind HTTP server");
+                let port = listener
+                    .local_addr()
+                    .expect("failed to get listener address")
+                    .port();
+                let server_resources = resources.clone();
+                tokio::spawn(async move {
+                    server::serve_with_listener(listener, server_resources)
+                        .await
+                        .expect("failed to run HTTP server");
+                });
 
-            app.get_webview_window("splashscreen").unwrap().close().ok();
-            app.get_webview_window("main").unwrap().show().ok();
+                handle.manage(port);
 
+                handle
+                    .get_webview_window("splashscreen")
+                    .expect("splashscreen window not found")
+                    .close()
+                    .ok();
+                handle
+                    .get_webview_window("main")
+                    .expect("main window not found")
+                    .show()
+                    .ok();
+            });
             Ok(())
         })
         .run(tauri::generate_context!())?;

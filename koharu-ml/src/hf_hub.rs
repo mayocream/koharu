@@ -1,40 +1,23 @@
 use std::path::PathBuf;
 
+use anyhow::Context;
 use hf_hub::{
     Cache, Repo,
     api::tokio::{Api, ApiBuilder},
 };
 use koharu_core::progress::progress_bar;
 use once_cell::sync::{Lazy, OnceCell};
-use rayon::iter::{IntoParallelRefIterator, ParallelIterator};
 
 static CACHE_DIR: OnceCell<PathBuf> = OnceCell::new();
 
 static HF_API: Lazy<Api> = Lazy::new(|| {
     ApiBuilder::new()
-        .with_endpoint(HF_ENDPOINT.to_string())
         .with_cache_dir(get_cache_dir().to_path_buf())
         .high()
         .build()
         .expect("build HF API client")
 });
 static HF_CACHE: Lazy<Cache> = Lazy::new(|| Cache::new(get_cache_dir().to_path_buf()));
-
-// maybe we need to place hf-hub logic separately
-const HF_MIRRORS: &[&str] = &["https://huggingface.co", "https://hf-mirror.com"];
-static HF_ENDPOINT: once_cell::sync::Lazy<String> = once_cell::sync::Lazy::new(|| {
-    HF_MIRRORS
-        .par_iter()
-        .filter_map(|endpoint| {
-            reqwest::blocking::get(*endpoint)
-                .ok()
-                .filter(|resp| resp.status().is_success())
-                .map(|_| *endpoint)
-        })
-        .max_by_key(|endpoint| *endpoint == HF_MIRRORS[0]) // prefer the official one
-        .unwrap_or(HF_MIRRORS[0])
-        .to_string()
-});
 
 fn get_cache_dir() -> &'static PathBuf {
     CACHE_DIR.get_or_init(|| {
@@ -64,7 +47,8 @@ pub async fn hf_download(repo: &str, filename: &str) -> anyhow::Result<PathBuf> 
     let path = HF_API
         .repo(hf_repo)
         .download_with_progress(filename, pb)
-        .await?;
+        .await
+        .context("failed to download from HF Hub")?;
 
     Ok(path)
 }
