@@ -11,6 +11,7 @@ import {
   LoaderCircleIcon,
   LanguagesIcon,
 } from 'lucide-react'
+import { Separator } from '@/components/ui/separator'
 import { useAppStore } from '@/lib/store'
 import { useTextBlocks } from '@/hooks/useTextBlocks'
 import { OPENAI_COMPATIBLE_MODEL_ID } from '@/lib/openai'
@@ -74,7 +75,7 @@ const uniqueStrings = (values: string[]) => {
 
 export function CanvasToolbar() {
   return (
-    <div className='border-border bg-card text-foreground flex items-center gap-2 border-b px-2 py-1.5 text-xs'>
+    <div className='border-border/60 bg-card text-foreground flex items-center gap-2 border-b px-3 py-2 text-xs'>
       <WorkflowButtons />
       <div className='flex-1' />
       <LlmStatusPopover />
@@ -98,43 +99,49 @@ function WorkflowButtons() {
     }
   }
 
-  const buttonClass =
-    'text-foreground/70 hover:text-foreground hover:bg-accent flex h-7 items-center gap-1.5 rounded px-2 text-xs transition'
-
   return (
-    <div className='flex items-center'>
-      <button onClick={detect} className={buttonClass}>
-        <ScanIcon className='size-3.5' />
+    <div className='flex items-center gap-0.5'>
+      <Button variant='ghost' size='xs' onClick={detect}>
+        <ScanIcon className='size-4' />
         {t('processing.detect')}
-      </button>
+      </Button>
 
-      <button onClick={ocr} className={buttonClass}>
-        <ScanTextIcon className='size-3.5' />
+      <Separator orientation='vertical' className='mx-0.5 h-4' />
+
+      <Button variant='ghost' size='xs' onClick={ocr}>
+        <ScanTextIcon className='size-4' />
         {t('processing.ocr')}
-      </button>
+      </Button>
 
-      <button
+      <Separator orientation='vertical' className='mx-0.5 h-4' />
+
+      <Button
+        variant='ghost'
+        size='xs'
         onClick={handleTranslate}
         disabled={!llmReady || generating}
-        className={`${buttonClass} disabled:cursor-not-allowed disabled:opacity-40`}
       >
         {generating ? (
-          <LoaderCircleIcon className='size-3.5 animate-spin' />
+          <LoaderCircleIcon className='size-4 animate-spin' />
         ) : (
-          <LanguagesIcon className='size-3.5' />
+          <LanguagesIcon className='size-4' />
         )}
         {t('llm.generate')}
-      </button>
+      </Button>
 
-      <button onClick={inpaint} className={buttonClass}>
-        <Wand2Icon className='size-3.5' />
+      <Separator orientation='vertical' className='mx-0.5 h-4' />
+
+      <Button variant='ghost' size='xs' onClick={inpaint}>
+        <Wand2Icon className='size-4' />
         {t('mask.inpaint')}
-      </button>
+      </Button>
 
-      <button onClick={render} className={buttonClass}>
-        <TypeIcon className='size-3.5' />
+      <Separator orientation='vertical' className='mx-0.5 h-4' />
+
+      <Button variant='ghost' size='xs' onClick={render}>
+        <TypeIcon className='size-4' />
         {t('llm.render')}
-      </button>
+      </Button>
     </div>
   )
 }
@@ -346,10 +353,10 @@ function LlmStatusPopover() {
     <Popover>
       <PopoverTrigger asChild>
         <button
-          className={`flex h-6 cursor-pointer items-center gap-1 rounded-full px-2 text-[11px] font-medium transition hover:opacity-80 ${
+          className={`flex h-6 cursor-pointer items-center gap-1.5 rounded-full px-2.5 text-[11px] font-medium shadow-sm transition hover:opacity-80 ${
             llmReady
-              ? 'bg-rose-400 text-white'
-              : 'bg-muted text-muted-foreground'
+              ? 'bg-rose-400 text-white ring-1 ring-rose-400/30'
+              : 'bg-muted text-muted-foreground ring-border/50 ring-1'
           }`}
         >
           <motion.span
