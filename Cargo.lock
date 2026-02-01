@@ -4112,7 +4112,6 @@ dependencies = [
  "git-version",
  "icu",
  "image",
- "koharu-macros",
  "koharu-ml",
  "koharu-renderer",
  "koharu-runtime",
@@ -4152,16 +4151,6 @@ dependencies = [
  "reqwest-middleware",
  "reqwest-retry",
  "tracing",
-]
-
-[[package]]
-name = "koharu-macros"
-version = "0.27.1"
-dependencies = [
- "darling 0.20.11",
- "proc-macro2",
- "quote",
- "syn 2.0.114",
 ]
 
 [[package]]

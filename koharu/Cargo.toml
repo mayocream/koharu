@@ -22,7 +22,6 @@ include = [
 ]
 
 [dependencies]
-koharu-macros = { workspace = true }
 koharu-ml = { workspace = true }
 koharu-renderer = { workspace = true }
 koharu-runtime = { workspace = true }

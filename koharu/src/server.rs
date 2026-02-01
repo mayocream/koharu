@@ -1,108 +1,23 @@
-use std::sync::Arc;
-
 use anyhow::Result;
 use axum::{
-    Json, Router,
+    Router,
     body::Body,
     extract::DefaultBodyLimit,
     http::{HeaderValue, StatusCode, Uri, header},
     response::{IntoResponse, Response},
+    routing::{get, post},
 };
-use koharu_macros::routes;
 use rust_embed::Embed;
-use serde::Serialize;
 use tokio::net::TcpListener;
 use tower_http::cors::{Any, CorsLayer};
 
-use koharu_ml::DeviceName;
+use crate::{app::AppResources, endpoints::*};
 
-use crate::{app::AppResources, endpoints::*, llm, ml, renderer::Renderer, state::AppState};
-
-#[derive(Clone)]
-pub struct ApiState {
-    pub resources: AppResources,
-}
-
-impl ApiState {
-    pub fn app_state(&self) -> &AppState {
-        &self.resources.state
-    }
-
-    pub fn ml(&self) -> &Arc<ml::Model> {
-        &self.resources.ml
-    }
-
-    pub fn llm(&self) -> &Arc<llm::Model> {
-        &self.resources.llm
-    }
-
-    pub fn renderer(&self) -> &Arc<Renderer> {
-        &self.resources.renderer
-    }
-
-    pub fn ml_device(&self) -> &DeviceName {
-        &self.resources.ml_device
-    }
-}
-
-#[derive(Debug, Serialize)]
-struct ErrorResponse {
-    error: String,
-}
-
-#[derive(Debug)]
-pub struct ApiError {
-    pub status: StatusCode,
-    pub message: String,
-}
-
-impl ApiError {
-    pub fn bad_request(message: impl Into<String>) -> Self {
-        Self {
-            status: StatusCode::BAD_REQUEST,
-            message: message.into(),
-        }
-    }
-
-    pub fn internal(message: impl Into<String>) -> Self {
-        Self {
-            status: StatusCode::INTERNAL_SERVER_ERROR,
-            message: message.into(),
-        }
-    }
-}
-
-impl From<crate::result::CommandError> for ApiError {
-    fn from(err: crate::result::CommandError) -> Self {
-        Self::bad_request(err.to_string())
-    }
-}
-
-impl From<anyhow::Error> for ApiError {
-    fn from(err: anyhow::Error) -> Self {
-        Self::internal(err.to_string())
-    }
-}
-
-impl From<axum::extract::multipart::MultipartError> for ApiError {
-    fn from(err: axum::extract::multipart::MultipartError) -> Self {
-        Self::bad_request(err.to_string())
-    }
-}
-
-impl IntoResponse for ApiError {
+impl IntoResponse for crate::result::CommandError {
     fn into_response(self) -> Response {
-        (
-            self.status,
-            Json(ErrorResponse {
-                error: self.message,
-            }),
-        )
-            .into_response()
+        (StatusCode::INTERNAL_SERVER_ERROR, self.to_string()).into_response()
     }
 }
-
-pub type ApiResult<T> = std::result::Result<T, ApiError>;
 
 #[derive(Embed)]
 #[folder = "$CARGO_WORKSPACE_DIR/ui/out"]
@@ -132,47 +47,49 @@ fn embedded_response(path: &str) -> Option<Response> {
     Some(response)
 }
 
-fn build_router(state: ApiState) -> Router {
-    routes!(
-        app_version,
-        device,
-        open_external,
-        get_documents,
-        get_document,
-        get_thumbnail,
-        open_documents,
-        save_documents,
-        export_document,
-        detect,
-        ocr,
-        inpaint,
-        update_inpaint_mask,
-        update_brush_layer,
-        inpaint_partial,
-        render,
-        update_text_blocks,
-        list_font_families,
-        llm_list,
-        llm_load,
-        llm_offload,
-        llm_ready,
-        llm_generate,
-    )
-    .with_state(state)
-    .layer(DefaultBodyLimit::max(1024 * 1024 * 1024))
-    .layer(
-        CorsLayer::new()
-            .allow_origin(Any)
-            .allow_methods(Any)
-            .allow_headers(Any)
-            .expose_headers(Any)
-            .allow_private_network(true),
-    )
-    .fallback(serve_embedded)
+fn build_router(state: AppResources) -> Router {
+    Router::new()
+        .route("/api/app_version", get(app_version).post(app_version))
+        .route("/api/device", get(device).post(device))
+        .route("/api/open_external", post(open_external))
+        .route("/api/get_documents", get(get_documents).post(get_documents))
+        .route("/api/get_document", get(get_document).post(get_document))
+        .route("/api/get_thumbnail", get(get_thumbnail).post(get_thumbnail))
+        .route("/api/open_documents", post(open_documents))
+        .route("/api/save_documents", post(save_documents))
+        .route("/api/export_document", post(export_document))
+        .route("/api/detect", post(detect))
+        .route("/api/ocr", post(ocr))
+        .route("/api/inpaint", post(inpaint))
+        .route("/api/update_inpaint_mask", post(update_inpaint_mask))
+        .route("/api/update_brush_layer", post(update_brush_layer))
+        .route("/api/inpaint_partial", post(inpaint_partial))
+        .route("/api/render", post(render))
+        .route("/api/update_text_blocks", post(update_text_blocks))
+        .route(
+            "/api/list_font_families",
+            get(list_font_families).post(list_font_families),
+        )
+        .route("/api/llm_list", get(llm_list).post(llm_list))
+        .route("/api/llm_load", post(llm_load))
+        .route("/api/llm_offload", post(llm_offload))
+        .route("/api/llm_ready", get(llm_ready).post(llm_ready))
+        .route("/api/llm_generate", post(llm_generate))
+        .with_state(state)
+        .layer(DefaultBodyLimit::max(1024 * 1024 * 1024))
+        .layer(
+            CorsLayer::new()
+                .allow_origin(Any)
+                .allow_methods(Any)
+                .allow_headers(Any)
+                .expose_headers(Any)
+                .allow_private_network(true),
+        )
+        .fallback(serve_embedded)
 }
 
 pub async fn serve_with_listener(listener: TcpListener, resources: AppResources) -> Result<()> {
-    let router = build_router(ApiState { resources });
+    let router = build_router(resources);
     tracing::info!("HTTP server listening on http://{}", listener.local_addr()?);
     axum::serve(listener, router.into_make_service()).await?;
     Ok(())
