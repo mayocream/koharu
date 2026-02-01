@@ -8,10 +8,9 @@
     "prettier-plugin-tailwindcss": "^0.7.2"
   },
   "scripts": {
-    "setup": "bun scripts/dev.ts",
-    "dev": "bun run setup tauri dev",
-    "build": "bun run setup tauri build",
-    "cargo": "bun run setup cargo",
+    "dev": "bun run scripts/dev.ts tauri dev",
+    "build": "bun run scripts/dev.ts tauri build",
+    "cargo": "bun run scripts/dev.ts cargo",
     "prepare": "husky",
     "format": "prettier --write ui/ --ignore-path ui/.gitignore"
   },
