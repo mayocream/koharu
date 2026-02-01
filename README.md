@@ -1,5 +1,3 @@
-<img src="assets/Koharu_Halo.png" alt="Koharu Logo" height="96" align="right" />
-
 # Koharu
 
 ML-powered manga translator, written in **Rust**.
