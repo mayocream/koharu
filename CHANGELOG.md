@@ -1,3 +1,23 @@
+## [0.27.2] - 2026-02-01
+
+### 🐛 Bug Fixes
+
+- Macos titlebar
+- Listen port lazy
+- Disable prefetch to make navigation work
+
+### 🚜 Refactor
+
+- Remove macros
+- Remove tauri http plugin
+- Simplify app.rs
+- Remove hf mirror
+
+### ⚙️ Miscellaneous Tasks
+
+- Rename scripts
+- Add more context info
+- Release 0.27.2
 ## [0.27.1] - 2026-01-27
 
 ### 🐛 Bug Fixes
