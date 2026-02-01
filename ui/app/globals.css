@@ -135,9 +135,13 @@
     @apply border-border outline-ring/50;
   }
   body {
-    @apply bg-background text-foreground;
+    @apply bg-background text-foreground select-none;
     font-family:
       var(--font-inter), var(--font-noto-sc), var(--font-noto-tc),
       var(--font-noto-jp), ui-sans-serif, system-ui, sans-serif;
+  }
+  input,
+  textarea {
+    @apply select-text;
   }
 }
