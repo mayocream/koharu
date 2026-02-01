@@ -87,8 +87,3 @@ pub async fn serve_with_listener(listener: TcpListener, resources: AppResources)
     axum::serve(listener, router.into_make_service()).await?;
     Ok(())
 }
-
-pub async fn serve(bind: String, resources: AppResources) -> Result<()> {
-    let listener = TcpListener::bind(&bind).await?;
-    serve_with_listener(listener, resources).await
-}

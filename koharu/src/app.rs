@@ -1,10 +1,4 @@
-use std::{
-    path::PathBuf,
-    sync::{
-        Arc,
-        atomic::{AtomicU16, Ordering},
-    },
-};
+use std::{path::PathBuf, sync::Arc};
 
 use anyhow::Result;
 use clap::Parser;
@@ -61,25 +55,6 @@ pub struct AppResources {
     pub ml_device: DeviceName,
 }
 
-#[derive(Default)]
-pub struct HttpServerState {
-    port: AtomicU16,
-}
-
-impl HttpServerState {
-    pub fn new() -> Self {
-        Self::default()
-    }
-
-    pub fn set_port(&self, port: u16) {
-        self.port.store(port, Ordering::SeqCst);
-    }
-
-    pub fn port(&self) -> u16 {
-        self.port.load(Ordering::SeqCst)
-    }
-}
-
 #[derive(Parser)]
 #[command(version = crate::version::APP_VERSION, about)]
 struct Cli {
@@ -97,12 +72,18 @@ struct Cli {
     )]
     cpu: bool,
     #[arg(
-        short = 'b',
-        long = "bind",
-        value_name = "BIND",
-        help = "Run in headless mode and bind the HTTP server to this address, e.g. 127.0.0.1:23333"
+        short,
+        long,
+        value_name = "PORT",
+        help = "Bind the HTTP server to a specific port instead of a random port"
     )]
-    bind: Option<String>,
+    port: Option<u16>,
+    #[arg(
+        long,
+        help = "Run in headless mode without starting the GUI",
+        default_value_t = false
+    )]
+    headless: bool,
     #[arg(
         long,
         help = "Enable debug mode with console output",
@@ -111,11 +92,11 @@ struct Cli {
     debug: bool,
 }
 
-fn initialize(headless: bool, _debug_flag: bool) -> Result<()> {
+fn initialize(headless: bool, _debug: bool) -> Result<()> {
     #[cfg(target_os = "windows")]
     {
         // hide console window in release mode and not headless
-        if headless || _debug_flag {
+        if headless || _debug {
             crate::windows::create_console_window();
         }
 
@@ -218,7 +199,34 @@ async fn build_resources(use_cpu: bool, _register_file_assoc: bool) -> Result<Ap
     })
 }
 
-async fn setup(app: tauri::AppHandle, cpu: bool) -> Result<()> {
+pub async fn run() -> Result<()> {
+    let Cli {
+        download,
+        cpu,
+        port,
+        headless,
+        debug,
+    } = Cli::parse();
+
+    initialize(headless, debug)?;
+
+    if download {
+        prefetch().await?;
+        return Ok(());
+    }
+
+    let resources = build_resources(cpu, !headless).await?;
+    let listener = TcpListener::bind(format!("127.0.0.1:{}", port.unwrap_or(0))).await?;
+    let port = listener.local_addr()?.port();
+
+    // Start HTTP server
+    let server_resources = resources.clone();
+    tokio::spawn(async move {
+        if let Err(err) = server::serve_with_listener(listener, server_resources).await {
+            tracing::error!("HTTP server error: {err:#}");
+        }
+    });
+
     // Spawn background update check and auto-apply
     #[cfg(feature = "bundle")]
     tokio::spawn(async move {
@@ -227,70 +235,19 @@ async fn setup(app: tauri::AppHandle, cpu: bool) -> Result<()> {
         }
     });
 
-    let resources = build_resources(cpu, true).await?;
-    let state = resources.state.clone();
-
-    // Start HTTP server on a random available port
-    let listener = TcpListener::bind("127.0.0.1:0").await?;
-    let port = listener.local_addr()?.port();
-
-    // Store port in managed state
-    let http_state = app.state::<HttpServerState>();
-    http_state.set_port(port);
-
-    // Spawn HTTP server in background
-    let server_resources = resources.clone();
-    tokio::spawn(async move {
-        if let Err(err) = server::serve_with_listener(listener, server_resources).await {
-            tracing::error!("HTTP server error: {err:#}");
-        }
-    });
-
-    app.manage(resources.ml);
-    app.manage(resources.llm);
-    app.manage(resources.renderer);
-
-    app.get_webview_window("splashscreen").unwrap().close()?;
-    app.get_webview_window("main").unwrap().show()?;
-
-    app.manage(state);
-
-    Ok(())
-}
-
-pub async fn run() -> Result<()> {
-    let Cli {
-        download,
-        cpu,
-        bind,
-        debug,
-    } = Cli::parse();
-
-    initialize(bind.is_some(), debug)?;
-
-    if download {
-        prefetch().await?;
-        return Ok(());
-    }
-
-    if let Some(bind_addr) = bind {
-        let resources = build_resources(cpu, false).await?;
-
-        server::serve(bind_addr, resources).await?;
+    if headless {
+        tokio::signal::ctrl_c().await?;
         return Ok(());
     }
 
     tauri::Builder::default()
         .invoke_handler(tauri::generate_handler![command::initialize])
         .setup(move |app| {
-            app.manage(HttpServerState::new());
+            app.manage(port);
 
-            let handle = app.handle().clone();
-            tauri::async_runtime::spawn(async move {
-                if let Err(err) = setup(handle, cpu).await {
-                    panic!("application setup failed: {err:#}");
-                }
-            });
+            app.get_webview_window("splashscreen").unwrap().close().ok();
+            app.get_webview_window("main").unwrap().show().ok();
+
             Ok(())
         })
         .run(tauri::generate_context!())?;
