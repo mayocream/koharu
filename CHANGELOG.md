@@ -1,3 +1,33 @@
+## [0.29.0] - 2026-02-01
+
+### 🚀 Features
+
+- Unify components usage
+- Add color-picker component
+
+### 🐛 Bug Fixes
+
+- Make ui text not selectable
+- Use file system api
+
+### 🚜 Refactor
+
+- Remove openai-compatible feature
+
+### 📚 Documentation
+
+- Add logo
+
+### ⚙️ Miscellaneous Tasks
+
+- Remove unused types
+- Remove AGENTS.md
+- Make toolbar more attractive
+- Better i18n
+- Update deps
+- Make indicator vertically align
+- Remove logo
+- Release 0.29.0
 ## [0.28.0] - 2026-02-01
 
 ### 🚀 Features
