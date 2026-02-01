@@ -10,15 +10,10 @@ import {
   ToolMode,
 } from '@/types'
 import { createOperationSlice, type OperationSlice } from '@/lib/operations'
-import {
-  callOpenAICompletion,
-  isOpenAIConfigured,
-  isOpenAIModel,
-  OPENAI_COMPATIBLE_MODEL,
-  OPENAI_DEFAULT_MODEL,
-  type LlmModelInfo,
-} from '@/lib/openai'
-import { t } from 'i18next'
+type LlmModelInfo = {
+  id: string
+  languages: string[]
+}
 
 type ProcessAction = 'detect' | 'ocr' | 'inpaint' | 'llmGenerate' | 'render'
 
@@ -166,10 +161,6 @@ type AppState = OperationSlice & {
   llmSelectedLanguage?: string
   llmReady: boolean
   llmLoading: boolean
-  llmOpenAIEndpoint: string
-  llmOpenAIApiKey: string
-  llmOpenAIPrompt: string
-  llmOpenAIModel: string
   // ui + actions
   setTotalPages: (count: number) => void
   fetchCurrentDocument: () => Promise<void>
@@ -239,66 +230,9 @@ type AppState = OperationSlice & {
     index?: number,
     text_block_index?: number,
   ) => Promise<void>
-  setLlmOpenAIEndpoint: (endpoint: string) => void
-  setLlmOpenAIApiKey: (apiKey: string) => void
-  setLlmOpenAIPrompt: (prompt: string) => void
-  setLlmOpenAIModel: (model: string) => void
 }
 
 export const useAppStore = create<AppState>((set, get) => {
-  const isOpenAICompatible = () => isOpenAIModel(get().llmSelectedModel)
-
-  const syncOpenAIReady = () => {
-    if (!isOpenAICompatible()) return false
-    const { llmOpenAIEndpoint, llmOpenAIApiKey } = get()
-    const ready = isOpenAIConfigured(llmOpenAIEndpoint, llmOpenAIApiKey)
-    set({ llmReady: ready, llmLoading: false })
-    return true
-  }
-
-  const generateWithOpenAI = async (
-    textBlockIndex?: number,
-  ): Promise<TextBlock[] | void> => {
-    const {
-      currentDocument,
-      llmOpenAIEndpoint,
-      llmOpenAIApiKey,
-      llmOpenAIPrompt,
-      llmOpenAIModel,
-    } = get()
-    if (!currentDocument) return
-    await textBlockSyncer.flush()
-
-    const blocks = currentDocument.textBlocks ?? []
-    const hasSingle = typeof textBlockIndex === 'number' && textBlockIndex >= 0
-    const sourceText = hasSingle
-      ? (blocks[textBlockIndex!]?.text ?? '')
-      : blocks.map((block) => block.text ?? '').join('\n')
-    if (!sourceText.trim()) return
-
-    const completion = await callOpenAICompletion({
-      endpoint: llmOpenAIEndpoint,
-      apiKey: llmOpenAIApiKey,
-      prompt: llmOpenAIPrompt.trim(),
-      content: sourceText,
-      model: llmOpenAIModel,
-    })
-
-    const translatedLines = hasSingle ? null : completion.split(/\r?\n/)
-    const updatedBlocks = blocks.map((block, i) => {
-      if (hasSingle) {
-        return i === textBlockIndex
-          ? { ...block, translation: completion }
-          : block
-      }
-      const translated = translatedLines?.[i]
-      if (translated === undefined) return block
-      return { ...block, translation: translated }
-    })
-
-    return updatedBlocks
-  }
-
   return {
     ...createOperationSlice(set),
     totalPages: 0,
@@ -322,10 +256,6 @@ export const useAppStore = create<AppState>((set, get) => {
     llmSelectedLanguage: undefined,
     llmReady: false,
     llmLoading: false,
-    llmOpenAIEndpoint: '',
-    llmOpenAIApiKey: '',
-    llmOpenAIPrompt: t('llm.openaiPromptPlaceholder'),
-    llmOpenAIModel: OPENAI_DEFAULT_MODEL,
     operation: undefined,
     setTotalPages: (count: number) => {
       set((state) => ({
@@ -564,10 +494,7 @@ export const useAppStore = create<AppState>((set, get) => {
     },
     llmList: async () => {
       try {
-        const models = [
-          ...(await invoke<LlmModelInfo[]>('llm_list')),
-          OPENAI_COMPATIBLE_MODEL,
-        ]
+        const models = await invoke<LlmModelInfo[]>('llm_list')
         set({ llmModels: models })
         const currentModel = get().llmSelectedModel
         const currentLanguage = get().llmSelectedLanguage
@@ -584,7 +511,6 @@ export const useAppStore = create<AppState>((set, get) => {
           llmSelectedModel: nextModel,
           llmSelectedLanguage: nextLanguage,
         })
-        syncOpenAIReady()
       } catch (_) {}
     },
     llmSetSelectedModel: async (id: string) => {
@@ -600,7 +526,6 @@ export const useAppStore = create<AppState>((set, get) => {
         llmLoading: false,
         llmReady: false,
       })
-      syncOpenAIReady()
     },
     llmSetSelectedLanguage: (language: string) => {
       const languages = findModelLanguages(
@@ -611,11 +536,6 @@ export const useAppStore = create<AppState>((set, get) => {
       set({ llmSelectedLanguage: language })
     },
     llmToggleLoadUnload: async () => {
-      if (isOpenAICompatible()) {
-        syncOpenAIReady()
-        return
-      }
-
       // unload
       if (get().llmReady) {
         await invoke('llm_offload')
@@ -658,7 +578,6 @@ export const useAppStore = create<AppState>((set, get) => {
       }
     },
     llmCheckReady: async () => {
-      if (syncOpenAIReady()) return
       if (get().llmReady) return
       if (llmReadyCheckInFlight) {
         await llmReadyCheckInFlight
@@ -685,27 +604,11 @@ export const useAppStore = create<AppState>((set, get) => {
             : languages[0]
           : undefined
 
-      if (isOpenAICompatible()) {
-        if (!syncOpenAIReady()) {
-          throw new Error(
-            'Provide an OpenAI compatible endpoint and API key to generate translations.',
-          )
-        }
-        const updatedBlocks = await generateWithOpenAI(textBlockIndex)
-        if (updatedBlocks) {
-          // Save the updated blocks to the server
-          await invoke('update_text_blocks', {
-            index,
-            textBlocks: updatedBlocks,
-          })
-        }
-      } else {
-        await invoke('llm_generate', {
-          index,
-          textBlockIndex,
-          language,
-        })
-      }
+      await invoke('llm_generate', {
+        index,
+        textBlockIndex,
+        language,
+      })
 
       if (index === get().currentDocumentIndex) {
         await get().refreshCurrentDocument()
@@ -716,26 +619,8 @@ export const useAppStore = create<AppState>((set, get) => {
         void get().renderTextBlock(undefined, index, textBlockIndex)
       }
     },
-    setLlmOpenAIEndpoint: (endpoint: string) => {
-      set({ llmOpenAIEndpoint: endpoint })
-      syncOpenAIReady()
-    },
-    setLlmOpenAIApiKey: (apiKey: string) => {
-      set({ llmOpenAIApiKey: apiKey })
-      syncOpenAIReady()
-    },
-    setLlmOpenAIPrompt: (prompt: string) => {
-      set({ llmOpenAIPrompt: prompt })
-      syncOpenAIReady()
-    },
-    setLlmOpenAIModel: (model: string) => {
-      set({ llmOpenAIModel: model })
-      syncOpenAIReady()
-    },
-
     // batch proceeses
     processImage: async (_, index, options) => {
-      const openAISelected = isOpenAICompatible()
       const normalizedOptions: ProcessImageOptionsObject =
         typeof options === 'function'
           ? { onProgress: options, skipOperationTracking: false }
@@ -746,16 +631,9 @@ export const useAppStore = create<AppState>((set, get) => {
       const operation = get().operation
       const isBatchRun = operation?.type === 'process-all'
 
-      if (!get().llmReady && !openAISelected) {
+      if (!get().llmReady) {
         await get().llmList()
         await get().llmToggleLoadUnload()
-      } else if (openAISelected) {
-        syncOpenAIReady()
-        if (!get().llmReady) {
-          throw new Error(
-            'OpenAI compatible endpoint and API key are required before processing.',
-          )
-        }
       }
 
       index = index ?? get().currentDocumentIndex
@@ -844,18 +722,10 @@ export const useAppStore = create<AppState>((set, get) => {
     processAllImages: async () => {
       const total = get().totalPages
       if (!total) return
-      const openAISelected = isOpenAICompatible()
 
-      if (!get().llmReady && !openAISelected) {
+      if (!get().llmReady) {
         await get().llmList()
         await get().llmToggleLoadUnload()
-      } else if (openAISelected) {
-        syncOpenAIReady()
-        if (!get().llmReady) {
-          throw new Error(
-            'OpenAI compatible endpoint and API key are required before processing.',
-          )
-        }
       }
 
       get().startOperation({

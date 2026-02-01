@@ -3,11 +3,8 @@
 import { useEffect, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import { LoaderCircleIcon, SparklesIcon } from 'lucide-react'
-import { OPENAI_COMPATIBLE_MODEL_ID } from '@/lib/openai'
 import { useAppStore } from '@/lib/store'
 import { Button } from '@/components/ui/button'
-import { Input } from '@/components/ui/input'
-import { Textarea } from '@/components/ui/textarea'
 import {
   Tooltip,
   TooltipContent,
@@ -34,21 +31,12 @@ export function LlmControls() {
     llmToggleLoadUnload,
     llmGenerate,
     llmCheckReady,
-    llmOpenAIEndpoint,
-    llmOpenAIApiKey,
-    llmOpenAIPrompt,
-    llmOpenAIModel,
-    setLlmOpenAIEndpoint,
-    setLlmOpenAIApiKey,
-    setLlmOpenAIPrompt,
-    setLlmOpenAIModel,
   } = useAppStore()
   const [generating, setGenerating] = useState(false)
   const { t } = useTranslation()
 
   const activeLanguages =
     llmModels.find((model) => model.id === llmSelectedModel)?.languages ?? []
-  const isOpenAICompatible = llmSelectedModel === OPENAI_COMPATIBLE_MODEL_ID
 
   useEffect(() => {
     llmList()
@@ -68,9 +56,7 @@ export function LlmControls() {
           <SelectContent>
             {llmModels.map((model) => (
               <SelectItem key={model.id} value={model.id}>
-                {model.id === OPENAI_COMPATIBLE_MODEL_ID
-                  ? t('llm.openaiCompatible')
-                  : model.id}
+                {model.id}
               </SelectItem>
             ))}
           </SelectContent>
@@ -97,63 +83,27 @@ export function LlmControls() {
         </Select>
       )}
 
-      {/* OpenAI compatible settings */}
-      {isOpenAICompatible && (
-        <div className='bg-card/50 space-y-1.5 rounded p-1.5'>
-          <Input
-            type='text'
-            value={llmOpenAIEndpoint}
-            placeholder={t('llm.openaiEndpointPlaceholder')}
-            onChange={(event) => setLlmOpenAIEndpoint(event.target.value)}
-            className='h-7 text-xs'
-          />
-          <Input
-            type='password'
-            value={llmOpenAIApiKey}
-            placeholder={t('llm.openaiApiKeyPlaceholder')}
-            autoComplete='off'
-            onChange={(event) => setLlmOpenAIApiKey(event.target.value)}
-            className='h-7 text-xs'
-          />
-          <Input
-            value={llmOpenAIModel}
-            placeholder={t('llm.openaiModelPlaceholder')}
-            onChange={(event) => setLlmOpenAIModel(event.target.value)}
-            className='h-7 text-xs'
-          />
-          <Textarea
-            value={llmOpenAIPrompt}
-            placeholder={t('llm.openaiPromptLabel')}
-            rows={2}
-            onChange={(event) => setLlmOpenAIPrompt(event.target.value)}
-            className='min-h-0 px-2 py-1.5 text-xs'
-          />
-        </div>
-      )}
-
       {/* Action buttons */}
       <div className='flex gap-1'>
-        {!isOpenAICompatible && (
-          <Tooltip>
-            <TooltipTrigger asChild>
-              <Button
-                variant='outline'
-                size='sm'
-                onClick={llmToggleLoadUnload}
-                disabled={!llmSelectedModel || llmLoading}
-                className='flex-1 gap-1.5 text-xs'
-              >
-                {llmLoading && (
-                  <LoaderCircleIcon className='size-3.5 animate-spin' />
-                )}
-                {!llmReady ? t('llm.load') : t('llm.unload')}
-              </Button>
-            </TooltipTrigger>
-            <TooltipContent side='bottom' sideOffset={4}>
-              {!llmReady ? t('llm.loadTooltip') : t('llm.unloadTooltip')}
-            </TooltipContent>
-          </Tooltip>
-        )}
+        <Tooltip>
+          <TooltipTrigger asChild>
+            <Button
+              variant='outline'
+              size='sm'
+              onClick={llmToggleLoadUnload}
+              disabled={!llmSelectedModel || llmLoading}
+              className='flex-1 gap-1.5 text-xs'
+            >
+              {llmLoading && (
+                <LoaderCircleIcon className='size-3.5 animate-spin' />
+              )}
+              {!llmReady ? t('llm.load') : t('llm.unload')}
+            </Button>
+          </TooltipTrigger>
+          <TooltipContent side='bottom' sideOffset={4}>
+            {!llmReady ? t('llm.loadTooltip') : t('llm.unloadTooltip')}
+          </TooltipContent>
+        </Tooltip>
         <Tooltip>
           <TooltipTrigger asChild>
             <Button

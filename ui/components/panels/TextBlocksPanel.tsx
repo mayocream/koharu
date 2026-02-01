@@ -6,7 +6,6 @@ import { motion } from 'motion/react'
 import { TextBlock } from '@/types'
 import { Languages, LoaderCircleIcon } from 'lucide-react'
 import { useTextBlocks } from '@/hooks/useTextBlocks'
-import { isOpenAIConfigured, OPENAI_COMPATIBLE_MODEL_ID } from '@/lib/openai'
 import { useAppStore } from '@/lib/store'
 import {
   Accordion,
@@ -32,18 +31,8 @@ export function TextBlocksPanel() {
     replaceBlock,
   } = useTextBlocks()
   const { t } = useTranslation()
-  const {
-    llmGenerate,
-    llmReady,
-    llmSelectedModel,
-    llmOpenAIEndpoint,
-    llmOpenAIApiKey,
-  } = useAppStore()
+  const { llmGenerate, llmReady } = useAppStore()
   const [generatingIndex, setGeneratingIndex] = useState<number | null>(null)
-  const llmAvailable =
-    llmSelectedModel === OPENAI_COMPATIBLE_MODEL_ID
-      ? isOpenAIConfigured(llmOpenAIEndpoint, llmOpenAIApiKey)
-      : llmReady
 
   if (!document) {
     return (
@@ -101,7 +90,7 @@ export function TextBlocksPanel() {
                   onChange={(updates) => void replaceBlock(index, updates)}
                   onGenerate={() => void handleGenerate(index)}
                   generating={generatingIndex === index}
-                  llmReady={llmAvailable}
+                  llmReady={llmReady}
                 />
               ))}
             </Accordion>

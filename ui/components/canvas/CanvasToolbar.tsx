@@ -14,11 +14,8 @@ import {
 import { Separator } from '@/components/ui/separator'
 import { useAppStore } from '@/lib/store'
 import { useTextBlocks } from '@/hooks/useTextBlocks'
-import { OPENAI_COMPATIBLE_MODEL_ID } from '@/lib/openai'
 import { RenderEffect, RgbaColor, TextStyle } from '@/types'
 import { Button } from '@/components/ui/button'
-import { Input } from '@/components/ui/input'
-import { Textarea } from '@/components/ui/textarea'
 import { ColorPicker } from '@/components/ui/color-picker'
 import {
   Tooltip,
@@ -326,20 +323,11 @@ function LlmStatusPopover() {
     llmSetSelectedLanguage,
     llmToggleLoadUnload,
     llmCheckReady,
-    llmOpenAIEndpoint,
-    llmOpenAIApiKey,
-    llmOpenAIPrompt,
-    llmOpenAIModel,
-    setLlmOpenAIEndpoint,
-    setLlmOpenAIApiKey,
-    setLlmOpenAIPrompt,
-    setLlmOpenAIModel,
   } = useAppStore()
   const { t } = useTranslation()
 
   const activeLanguages =
     llmModels.find((model) => model.id === llmSelectedModel)?.languages ?? []
-  const isOpenAICompatible = llmSelectedModel === OPENAI_COMPATIBLE_MODEL_ID
 
   useEffect(() => {
     llmList()
@@ -386,9 +374,7 @@ function LlmStatusPopover() {
             <SelectContent>
               {llmModels.map((model) => (
                 <SelectItem key={model.id} value={model.id}>
-                  {model.id === OPENAI_COMPATIBLE_MODEL_ID
-                    ? t('llm.openaiCompatible')
-                    : model.id}
+                  {model.id}
                 </SelectItem>
               ))}
             </SelectContent>
@@ -413,55 +399,19 @@ function LlmStatusPopover() {
             </Select>
           )}
 
-          {/* OpenAI compatible settings */}
-          {isOpenAICompatible && (
-            <div className='space-y-1.5 rounded border p-1.5'>
-              <Input
-                type='text'
-                value={llmOpenAIEndpoint}
-                placeholder={t('llm.openaiEndpointPlaceholder')}
-                onChange={(event) => setLlmOpenAIEndpoint(event.target.value)}
-                className='h-6 text-xs'
-              />
-              <Input
-                type='password'
-                value={llmOpenAIApiKey}
-                placeholder={t('llm.openaiApiKeyPlaceholder')}
-                autoComplete='off'
-                onChange={(event) => setLlmOpenAIApiKey(event.target.value)}
-                className='h-6 text-xs'
-              />
-              <Input
-                value={llmOpenAIModel}
-                placeholder={t('llm.openaiModelPlaceholder')}
-                onChange={(event) => setLlmOpenAIModel(event.target.value)}
-                className='h-6 text-xs'
-              />
-              <Textarea
-                value={llmOpenAIPrompt}
-                placeholder={t('llm.openaiPromptLabel')}
-                rows={2}
-                onChange={(event) => setLlmOpenAIPrompt(event.target.value)}
-                className='min-h-0 px-2 py-1 text-xs'
-              />
-            </div>
-          )}
-
           {/* Load/Unload button */}
-          {!isOpenAICompatible && (
-            <Button
-              variant='outline'
-              size='sm'
-              onClick={llmToggleLoadUnload}
-              disabled={!llmSelectedModel || llmLoading}
-              className='w-full gap-1.5 text-xs'
-            >
-              {llmLoading && (
-                <LoaderCircleIcon className='size-3.5 animate-spin' />
-              )}
-              {!llmReady ? t('llm.load') : t('llm.unload')}
-            </Button>
-          )}
+          <Button
+            variant='outline'
+            size='sm'
+            onClick={llmToggleLoadUnload}
+            disabled={!llmSelectedModel || llmLoading}
+            className='w-full gap-1.5 text-xs'
+          >
+            {llmLoading && (
+              <LoaderCircleIcon className='size-3.5 animate-spin' />
+            )}
+            {!llmReady ? t('llm.load') : t('llm.unload')}
+          </Button>
         </div>
       </PopoverContent>
     </Popover>
