@@ -34,7 +34,7 @@
     "react": "^19.2.3",
     "react-colorful": "^5.6.1",
     "react-dom": "^19.2.3",
-    "react-i18next": "^16.5.3",
+    "react-i18next": "^16.5.4",
     "react-markdown": "^9.1.0",
     "react-rnd": "^10.5.2",
     "remark-gfm": "^4.0.1",
