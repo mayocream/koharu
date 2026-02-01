@@ -94,7 +94,7 @@
     "generate": "生成",
     "generating": "生成中...",
     "generateTooltip": "検出されたテキストブロックを翻訳する",
-    "render": "テキストをレンダー",
+    "render": "レンダー",
     "renderTooltip": "翻訳をページにレンダー",
     "loadingModel": "LLM モデルを読み込み中",
     "statusReady": "LLM 準備完了",

@@ -94,7 +94,7 @@
     "generate": "Generate",
     "generating": "Generating...",
     "generateTooltip": "Generate translations for detected text blocks",
-    "render": "Render text",
+    "render": "Render",
     "renderTooltip": "Render translations onto the page",
     "loadingModel": "Loading LLM model",
     "statusReady": "LLM Ready",
