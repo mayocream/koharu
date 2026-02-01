@@ -29,9 +29,7 @@ tracing = { workspace = true }
 tracing-subscriber = { workspace = true }
 tokio = { workspace = true }
 rustfft = { workspace = true }
-reqwest = { workspace = true }
 once_cell = { workspace = true }
-rayon = { workspace = true }
 dirs = { workspace = true }
 futures = { workspace = true }
 num_cpus = { workspace = true }

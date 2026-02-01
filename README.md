@@ -39,12 +39,12 @@ Koharu can be run in headless mode via command line.
 
 ```bash
 # macOS / Linux
-koharu -b 0.0.0.0:5003
+koharu --port 4000 --headless
 # Windows
-koharu.exe -b 0.0.0.0:5003
+koharu.exe --port 4000 --headless
 ```
 
-You can now access Koharu Web UI at `http://<your-server-ip>:5003`.
+You can now access Koharu Web UI at `http://<your-server-ip>:4000`.
 
 ### File association
 

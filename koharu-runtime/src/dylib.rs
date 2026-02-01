@@ -5,7 +5,7 @@ use std::{
     sync::Arc,
 };
 
-use anyhow::Result;
+use anyhow::{Context, Result};
 use futures::stream::{self, StreamExt, TryStreamExt};
 use koharu_core::http::{http_client, http_download};
 use once_cell::sync::OnceCell;
@@ -13,7 +13,7 @@ use rayon::iter::{IntoParallelRefIterator, ParallelIterator};
 use tokio::task;
 use tracing::debug;
 
-use crate::{pypi::PYPI_ENDPOINT, zip::fetch_record};
+use crate::zip::fetch_record;
 
 /// Keep handles to loaded dynamic libraries alive for process lifetime
 static DYLIB_HANDLES: OnceCell<Vec<libloading::Library>> = OnceCell::new();
@@ -226,9 +226,16 @@ fn current_platform_tags() -> Result<&'static [&'static str]> {
 
 async fn fetch_and_extract(pkg: &str, platform_tags: &[&str], out_dir: Arc<PathBuf>) -> Result<()> {
     // 1) Query PyPI JSON
-    let meta_url = format!("{}/pypi/{pkg}/json", *PYPI_ENDPOINT);
-    let resp = http_client().get(&meta_url).send().await?;
-    let json: serde_json::Value = resp.json().await?;
+    let meta_url = format!("https://pypi.org/pypi/{pkg}/json");
+    let resp = http_client()
+        .get(&meta_url)
+        .send()
+        .await
+        .context("failed to fetch package metadata")?;
+    let json: serde_json::Value = resp
+        .json()
+        .await
+        .context("failed to parse package metadata")?;
 
     // 2) Choose a wheel
     let files = json
@@ -239,7 +246,6 @@ async fn fetch_and_extract(pkg: &str, platform_tags: &[&str], out_dir: Arc<PathB
     for f in files {
         let filename = f.get("filename").and_then(|v| v.as_str()).unwrap_or("");
         let file_url = f.get("url").and_then(|v| v.as_str()).unwrap_or("");
-        let file_url = PYPI_ENDPOINT.refine_url(file_url);
 
         if !filename.ends_with(".whl") {
             continue;
@@ -253,7 +259,9 @@ async fn fetch_and_extract(pkg: &str, platform_tags: &[&str], out_dir: Arc<PathB
     debug!("{pkg}: selected wheel {wheel_name}");
 
     // 3) Use RECORD to check local dylibs; download only if needed
-    let entries = fetch_record(&wheel_url).await?;
+    let entries = fetch_record(&wheel_url)
+        .await
+        .context("failed to fetch RECORD")?;
 
     // Fast path: existence + size-only check; no hashing.
     // If size is None and file exists, treat as OK (no further verification).
@@ -273,10 +281,14 @@ async fn fetch_and_extract(pkg: &str, platform_tags: &[&str], out_dir: Arc<PathB
 
     if needs_download {
         debug!("{pkg}: downloading {wheel_name}...");
-        let bytes = http_download(&wheel_url).await?;
+        let bytes = http_download(&wheel_url)
+            .await
+            .context("failed to download wheel")?;
         let out = Arc::clone(&out_dir);
 
-        task::spawn_blocking(move || extract_from_wheel(&bytes, out.as_ref())).await??;
+        task::spawn_blocking(move || extract_from_wheel(&bytes, out.as_ref()))
+            .await?
+            .context("failed to extract dylibs")?;
         debug!("{pkg}: download and extract complete");
         Ok(())
     } else {

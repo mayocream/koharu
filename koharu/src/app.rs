@@ -6,7 +6,7 @@ use std::{
     },
 };
 
-use anyhow::Result;
+use anyhow::{Context, Result};
 use clap::Parser;
 use koharu_ml::{DeviceName, cuda_is_available, device_name};
 use koharu_runtime::{ensure_dylibs, preload_dylibs};
@@ -170,10 +170,12 @@ async fn prefetch() -> Result<()> {
     Ok(())
 }
 
-async fn build_resources(use_cpu: bool, _register_file_assoc: bool) -> Result<AppResources> {
+async fn build_resources(cpu: bool, _register_file_assoc: bool) -> Result<AppResources> {
     if cuda_is_available() {
-        ensure_dylibs(LIB_ROOT.to_path_buf()).await?;
-        preload_dylibs(LIB_ROOT.to_path_buf())?;
+        ensure_dylibs(LIB_ROOT.to_path_buf())
+            .await
+            .context("Failed to ensure dynamic libraries")?;
+        preload_dylibs(LIB_ROOT.to_path_buf()).context("Failed to preload dynamic libraries")?;
 
         #[cfg(target_os = "windows")]
         {
@@ -181,7 +183,7 @@ async fn build_resources(use_cpu: bool, _register_file_assoc: bool) -> Result<Ap
                 tracing::warn!(?err, "Failed to register .khr file association");
             }
 
-            crate::windows::add_dll_directory(&LIB_ROOT)?;
+            crate::windows::add_dll_directory(&LIB_ROOT).context("Failed to add DLL directory")?;
         }
 
         tracing::info!(
@@ -190,10 +192,14 @@ async fn build_resources(use_cpu: bool, _register_file_assoc: bool) -> Result<Ap
         );
     }
 
-    let ml_device = device_name(use_cpu);
-    let ml = Arc::new(ml::Model::new(use_cpu).await?);
-    let llm = Arc::new(llm::Model::new(use_cpu));
-    let renderer = Arc::new(Renderer::new()?);
+    let ml_device = device_name(cpu);
+    let ml = Arc::new(
+        ml::Model::new(cpu)
+            .await
+            .context("Failed to initialize ML model")?,
+    );
+    let llm = Arc::new(llm::Model::new(cpu));
+    let renderer = Arc::new(Renderer::new().context("Failed to initialize renderer")?);
     let state = Arc::new(RwLock::new(State::default()));
 
     Ok(AppResources {
