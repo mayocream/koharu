@@ -1,4 +1,10 @@
-use std::{path::PathBuf, sync::Arc};
+use std::{
+    path::PathBuf,
+    sync::{
+        Arc,
+        atomic::{AtomicU16, Ordering},
+    },
+};
 
 use anyhow::Result;
 use clap::Parser;
@@ -240,6 +246,7 @@ pub async fn run() -> Result<()> {
 
     tauri::Builder::default()
         .invoke_handler(tauri::generate_handler![command::initialize])
+        .manage(AtomicU16::new(0))
         .setup(move |app| {
             let handle = app.handle().clone();
             tauri::async_runtime::spawn(async move {
@@ -253,14 +260,15 @@ pub async fn run() -> Result<()> {
                     .local_addr()
                     .expect("failed to get listener address")
                     .port();
+
+                handle.state::<AtomicU16>().store(port, Ordering::SeqCst);
+
                 let server_resources = resources.clone();
                 tokio::spawn(async move {
                     server::serve_with_listener(listener, server_resources)
                         .await
                         .expect("failed to run HTTP server");
                 });
-
-                handle.manage(port);
 
                 handle
                     .get_webview_window("splashscreen")
