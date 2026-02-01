@@ -17,6 +17,8 @@ import { useTextBlocks } from '@/hooks/useTextBlocks'
 import { OPENAI_COMPATIBLE_MODEL_ID } from '@/lib/openai'
 import { RenderEffect, RgbaColor, TextStyle } from '@/types'
 import { Button } from '@/components/ui/button'
+import { Input } from '@/components/ui/input'
+import { Textarea } from '@/components/ui/textarea'
 import {
   Tooltip,
   TooltipContent,
@@ -417,33 +419,33 @@ function LlmStatusPopover() {
           {/* OpenAI compatible settings */}
           {isOpenAICompatible && (
             <div className='space-y-1.5 rounded border p-1.5'>
-              <input
+              <Input
                 type='text'
                 value={llmOpenAIEndpoint}
                 placeholder={t('llm.openaiEndpointPlaceholder')}
                 onChange={(event) => setLlmOpenAIEndpoint(event.target.value)}
-                className='border-input bg-background text-foreground focus:border-primary h-6 w-full rounded border px-2 text-xs outline-none'
+                className='h-6 text-xs'
               />
-              <input
+              <Input
                 type='password'
                 value={llmOpenAIApiKey}
                 placeholder={t('llm.openaiApiKeyPlaceholder')}
                 autoComplete='off'
                 onChange={(event) => setLlmOpenAIApiKey(event.target.value)}
-                className='border-input bg-background text-foreground focus:border-primary h-6 w-full rounded border px-2 text-xs outline-none'
+                className='h-6 text-xs'
               />
-              <input
+              <Input
                 value={llmOpenAIModel}
                 placeholder={t('llm.openaiModelPlaceholder')}
                 onChange={(event) => setLlmOpenAIModel(event.target.value)}
-                className='border-input bg-background text-foreground focus:border-primary h-6 w-full rounded border px-2 text-xs outline-none'
+                className='h-6 text-xs'
               />
-              <textarea
+              <Textarea
                 value={llmOpenAIPrompt}
                 placeholder={t('llm.openaiPromptLabel')}
                 rows={2}
                 onChange={(event) => setLlmOpenAIPrompt(event.target.value)}
-                className='border-input bg-background text-foreground focus:border-primary w-full rounded border px-2 py-1 text-xs outline-none'
+                className='min-h-0 px-2 py-1 text-xs'
               />
             </div>
           )}

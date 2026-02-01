@@ -3,6 +3,7 @@
 import { type ReactNode } from 'react'
 import { useTranslation } from 'react-i18next'
 import { useAppStore } from '@/lib/store'
+import { Button } from '@/components/ui/button'
 import { type OperationState } from '@/lib/operations'
 
 type TranslateFunc = ReturnType<typeof useTranslation>['t']
@@ -134,16 +135,17 @@ function OperationCard({
           </div>
           {operation.cancellable && (
             <div className='mt-3 flex justify-end'>
-              <button
-                type='button'
+              <Button
+                variant='outline'
+                size='sm'
                 onClick={onCancel}
                 disabled={operation.cancelRequested}
-                className='border-border text-foreground hover:bg-muted rounded-lg border px-3 py-1.5 text-xs font-semibold transition disabled:opacity-60'
+                className='text-xs font-semibold'
               >
                 {operation.cancelRequested
                   ? t('operations.cancelling')
                   : t('operations.cancel')}
-              </button>
+              </Button>
             </div>
           )}
         </div>

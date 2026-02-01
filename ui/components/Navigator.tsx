@@ -10,6 +10,7 @@ import {
   TooltipContent,
   TooltipTrigger,
 } from '@/components/ui/tooltip'
+import { Button } from '@/components/ui/button'
 
 export function Navigator() {
   const {
@@ -113,10 +114,11 @@ function PagePreview({ index, selected, onSelect }: PagePreviewProps) {
   return (
     <Tooltip>
       <TooltipTrigger asChild>
-        <button
+        <Button
+          variant='ghost'
           onClick={onSelect}
           data-selected={selected}
-          className='bg-card hover:border-border data-[selected=true]:border-primary flex flex-col gap-0.5 rounded border border-transparent p-1.5 text-left shadow-sm transition'
+          className='bg-card data-[selected=true]:border-primary flex h-auto flex-col gap-0.5 rounded border border-transparent p-1.5 text-left shadow-sm'
         >
           {loading ? (
             <div className='bg-muted aspect-3/4 w-full animate-pulse rounded' />
@@ -139,7 +141,7 @@ function PagePreview({ index, selected, onSelect }: PagePreviewProps) {
               {index + 1}
             </div>
           </div>
-        </button>
+        </Button>
       </TooltipTrigger>
       <TooltipContent sideOffset={4}>Page {index + 1}</TooltipContent>
     </Tooltip>

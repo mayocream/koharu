@@ -22,6 +22,7 @@ import {
   PopoverTrigger,
 } from '@/components/ui/popover'
 import { Slider } from '@/components/ui/slider'
+import { Button } from '@/components/ui/button'
 
 type ModeDefinition = {
   value: ToolMode
@@ -64,14 +65,16 @@ export function ToolRail() {
           return (
             <Tooltip key={item.value}>
               <TooltipTrigger asChild>
-                <button
+                <Button
+                  variant='ghost'
+                  size='icon-sm'
                   data-active={item.value === mode}
                   onClick={() => setMode(item.value)}
-                  className='text-muted-foreground hover:border-border data-[active=true]:border-primary data-[active=true]:bg-accent data-[active=true]:text-primary flex h-8 w-8 items-center justify-center rounded border border-transparent'
+                  className='text-muted-foreground data-[active=true]:border-primary data-[active=true]:bg-accent data-[active=true]:text-primary border border-transparent'
                   aria-label={label}
                 >
                   <item.icon className='h-4 w-4' />
-                </button>
+                </Button>
               </TooltipTrigger>
               <TooltipContent side='right' sideOffset={8}>
                 {label}
@@ -106,14 +109,16 @@ function BrushToolWithPopover({
       <Tooltip>
         <TooltipTrigger asChild>
           <PopoverTrigger asChild>
-            <button
+            <Button
+              variant='ghost'
+              size='icon-sm'
               data-active={isActive}
               onClick={onSelect}
-              className='text-muted-foreground hover:border-border data-[active=true]:border-primary data-[active=true]:bg-accent data-[active=true]:text-primary flex h-8 w-8 items-center justify-center rounded border border-transparent'
+              className='text-muted-foreground data-[active=true]:border-primary data-[active=true]:bg-accent data-[active=true]:text-primary border border-transparent'
               aria-label={label}
             >
               <item.icon className='h-4 w-4' />
-            </button>
+            </Button>
           </PopoverTrigger>
         </TooltipTrigger>
         <TooltipContent side='right' sideOffset={8}>

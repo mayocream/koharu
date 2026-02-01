@@ -18,6 +18,7 @@ import {
   TooltipContent,
   TooltipTrigger,
 } from '@/components/ui/tooltip'
+import { Button } from '@/components/ui/button'
 
 export function PanelsToolbar() {
   const { t } = useTranslation()
@@ -28,9 +29,13 @@ export function PanelsToolbar() {
         <Tooltip>
           <TooltipTrigger asChild>
             <PopoverTrigger asChild>
-              <button className='text-muted-foreground hover:text-foreground hover:bg-accent flex h-8 w-8 items-center justify-center rounded'>
+              <Button
+                variant='ghost'
+                size='icon-sm'
+                className='text-muted-foreground'
+              >
                 <ALargeSmallIcon className='size-4' />
-              </button>
+              </Button>
             </PopoverTrigger>
           </TooltipTrigger>
           <TooltipContent side='left' sideOffset={8}>
@@ -60,9 +65,10 @@ export function Panels() {
       <div className='flex h-full w-full flex-col'>
         {/* Layers Section */}
         <div className='flex flex-col'>
-          <button
+          <Button
+            variant='ghost'
             onClick={() => setLayersExpanded(!layersExpanded)}
-            className='hover:bg-accent/50 border-border flex w-full items-center gap-1.5 border-b px-2 py-1.5 text-left'
+            className='hover:bg-accent/50 border-border flex h-auto w-full justify-start gap-1.5 rounded-none border-b px-2 py-1.5 text-left'
           >
             <motion.div
               animate={{ rotate: layersExpanded ? 0 : -90 }}
@@ -74,7 +80,7 @@ export function Panels() {
             <span className='text-xs font-semibold tracking-wide uppercase'>
               {t('layers.title')}
             </span>
-          </button>
+          </Button>
           <AnimatePresence initial={false}>
             {layersExpanded && (
               <motion.div

@@ -20,6 +20,8 @@ import {
   TooltipContent,
   TooltipTrigger,
 } from '@/components/ui/tooltip'
+import { Button } from '@/components/ui/button'
+import { Textarea } from '@/components/ui/textarea'
 
 export function TextBlocksPanel() {
   const {
@@ -185,12 +187,12 @@ function BlockCard({
               <span className='text-muted-foreground text-[10px] uppercase'>
                 {t('textBlocks.ocrLabel')}
               </span>
-              <textarea
+              <Textarea
                 value={block.text ?? ''}
                 placeholder={t('textBlocks.addOcrPlaceholder')}
                 rows={2}
                 onChange={(event) => onChange({ text: event.target.value })}
-                className='border-border bg-card text-foreground focus:border-primary w-full resize-none rounded border px-1.5 py-1 text-xs outline-none'
+                className='min-h-0 resize-none px-1.5 py-1 text-xs'
               />
             </div>
             <div className='flex flex-col gap-0.5'>
@@ -200,31 +202,33 @@ function BlockCard({
                 </span>
                 <Tooltip>
                   <TooltipTrigger asChild>
-                    <button
+                    <Button
+                      variant='ghost'
+                      size='icon-xs'
                       disabled={!llmReady || generating}
                       onClick={onGenerate}
-                      className='text-muted-foreground hover:text-foreground disabled:hover:text-muted-foreground flex size-5 items-center justify-center rounded transition disabled:opacity-40'
+                      className='size-5'
                     >
                       {generating ? (
                         <LoaderCircleIcon className='size-3 animate-spin' />
                       ) : (
                         <Languages className='size-3' />
                       )}
-                    </button>
+                    </Button>
                   </TooltipTrigger>
                   <TooltipContent side='left' sideOffset={4}>
                     {t('llm.generateTooltip')}
                   </TooltipContent>
                 </Tooltip>
               </div>
-              <textarea
+              <Textarea
                 value={block.translation ?? ''}
                 placeholder={t('textBlocks.addTranslationPlaceholder')}
                 rows={2}
                 onChange={(event) =>
                   onChange({ translation: event.target.value })
                 }
-                className='border-border bg-card text-foreground focus:border-primary w-full resize-none rounded border px-1.5 py-1 text-xs outline-none'
+                className='min-h-0 resize-none px-1.5 py-1 text-xs'
               />
             </div>
           </div>

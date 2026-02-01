@@ -13,6 +13,7 @@ import {
 } from 'lucide-react'
 import { useAppStore } from '@/lib/store'
 import { cn } from '@/lib/utils'
+import { Button } from '@/components/ui/button'
 
 type Layer = {
   id: string
@@ -118,8 +119,9 @@ function LayerItem({ layer }: { layer: Layer }) {
       transition={{ duration: 0.15 }}
     >
       {/* Visibility toggle */}
-      <button
-        type='button'
+      <Button
+        variant='ghost'
+        size='icon-xs'
         onClick={(e) => {
           e.stopPropagation()
           if (canToggle) {
@@ -128,8 +130,7 @@ function LayerItem({ layer }: { layer: Layer }) {
         }}
         disabled={!canToggle}
         className={cn(
-          'flex size-5 shrink-0 items-center justify-center rounded transition',
-          canToggle && 'hover:bg-accent',
+          'size-5',
           canToggle ? 'cursor-pointer' : 'cursor-default',
         )}
       >
@@ -143,7 +144,7 @@ function LayerItem({ layer }: { layer: Layer }) {
         ) : (
           <EyeOffIcon className='text-muted-foreground/40 size-3.5' />
         )}
-      </button>
+      </Button>
 
       {/* Layer type indicator */}
       <div
