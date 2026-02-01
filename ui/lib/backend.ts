@@ -1,5 +1,7 @@
 'use client'
 
+import { pickFiles, saveFile } from './fs'
+
 let apiBase = '/api'
 let _initPromise: Promise<void> | null = null
 
@@ -100,11 +102,9 @@ export async function invoke<T>(
     case 'open_documents':
       return (await openDocumentsHttp()) as T
     case 'save_documents':
-      await downloadBinary(`${apiBase}/save_documents`)
-      return undefined as T
+      return (await saveBinary(`${apiBase}/save_documents`)) as T
     case 'export_document':
-      await downloadBinary(`${apiBase}/export_document`, args)
-      return undefined as T
+      return (await saveBinary(`${apiBase}/export_document`, args)) as T
     default:
       return invokeHttp<T>(cmd, args)
   }
@@ -138,7 +138,15 @@ async function invokeHttp<T>(
 
 async function openDocumentsHttp<T>(): Promise<T> {
   const files = await pickFiles(
-    '.khr,.png,.jpg,.jpeg,.webp,.PNG,.JPG,.JPEG,.WEBP',
+    [
+      {
+        description: 'Documents',
+        accept: {
+          // 'application/octet-stream': ['.khr'],
+          'image/*': ['.png', '.jpg', '.jpeg', '.webp'],
+        },
+      },
+    ],
     true,
   )
   if (!files.length) {
@@ -161,26 +169,7 @@ async function openDocumentsHttp<T>(): Promise<T> {
   return (await res.json()) as T
 }
 
-async function pickFiles(accept: string, multiple = false): Promise<File[]> {
-  return await new Promise<File[]>((resolve) => {
-    const input = document.createElement('input')
-    input.type = 'file'
-    input.accept = accept
-    input.multiple = multiple
-    input.style.display = 'none'
-    document.body.appendChild(input)
-
-    input.onchange = () => {
-      const files = Array.from(input.files ?? [])
-      document.body.removeChild(input)
-      resolve(files)
-    }
-
-    input.click()
-  })
-}
-
-async function downloadBinary(
+async function saveBinary(
   endpoint: string,
   args?: Record<string, any>,
 ): Promise<void> {
@@ -196,11 +185,9 @@ async function downloadBinary(
   }
 
   const blob = await res.blob()
-  const filename =
-    parseFilename(res.headers.get('content-disposition')) ??
-    endpoint.split('/').pop() ??
-    'download.bin'
-  triggerDownload(blob, filename)
+  const suggestedName =
+    parseFilename(res.headers.get('content-disposition')) ?? 'download.bin'
+  await saveFile(blob, suggestedName)
 }
 
 function parseFilename(disposition?: string | null): string | undefined {
@@ -222,17 +209,6 @@ async function readError(res: Response): Promise<string> {
   } catch (_) {
     return res.statusText || 'Request failed'
   }
-}
-
-function triggerDownload(blob: Blob, filename: string) {
-  const url = URL.createObjectURL(blob)
-  const link = document.createElement('a')
-  link.href = url
-  link.download = filename
-  document.body.appendChild(link)
-  link.click()
-  document.body.removeChild(link)
-  URL.revokeObjectURL(url)
 }
 
 export async function fetchThumbnail(index: number): Promise<Blob> {
