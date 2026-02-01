@@ -1,3 +1,5 @@
+<img src="assets/Koharu_Halo.png" alt="Koharu Logo" height="96" align="right" />
+
 # Koharu
 
 ML-powered manga translator, written in **Rust**.
@@ -11,7 +13,6 @@ Under the hood, Koharu uses [candle](https://github.com/huggingface/candle) for 
 
 ---
 
-![screenshot-1](assets/koharu-screenshot-1.png)
 ![screenshot-2](assets/koharu-screenshot-2.png)
 
 > [!NOTE]
