@@ -1,7 +1,6 @@
 'use client'
 
-import { useEffect } from 'react'
-import { useRouter } from 'next/navigation'
+import Link from 'next/link'
 import { isTauri, isMacOS } from '@/lib/backend'
 import { useTranslation } from 'react-i18next'
 import { useAppStore } from '@/lib/store'
@@ -24,7 +23,6 @@ type MenuItem = {
 
 export function MenuBar() {
   const { t } = useTranslation()
-  const router = useRouter()
   const {
     openDocuments,
     openExternal,
@@ -34,12 +32,6 @@ export function MenuBar() {
     exportDocument,
     saveDocuments,
   } = useAppStore()
-
-  useEffect(() => {
-    // Prefetch pages for smoother navigation
-    router.prefetch('/settings')
-    router.prefetch('/about')
-  }, [router])
 
   const fileMenuItems: MenuItem[] = [
     { label: t('menu.openFile'), onSelect: openDocuments },
@@ -122,11 +114,10 @@ export function MenuBar() {
               </MenubarItem>
             ))}
             <MenubarSeparator />
-            <MenubarItem
-              className='text-[13px]'
-              onSelect={() => router.push('/settings')}
-            >
-              {t('menu.settings')}
+            <MenubarItem className='text-[13px]' asChild>
+              <Link href='/settings' prefetch={false}>
+                {t('menu.settings')}
+              </Link>
             </MenubarItem>
           </MenubarContent>
         </MenubarMenu>
@@ -187,11 +178,10 @@ export function MenuBar() {
               </MenubarItem>
             ))}
             <MenubarSeparator />
-            <MenubarItem
-              className='text-[13px]'
-              onSelect={() => router.push('/about')}
-            >
-              {t('settings.about')}
+            <MenubarItem className='text-[13px]' asChild>
+              <Link href='/about' prefetch={false}>
+                {t('settings.about')}
+              </Link>
             </MenubarItem>
           </MenubarContent>
         </MenubarMenu>

@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from 'react'
 import { useTranslation } from 'react-i18next'
-import { useRouter } from 'next/navigation'
+import Link from 'next/link'
 import {
   ChevronLeftIcon,
   CheckCircleIcon,
@@ -20,7 +20,6 @@ type VersionStatus = 'loading' | 'latest' | 'outdated' | 'error'
 
 export default function AboutPage() {
   const { t } = useTranslation()
-  const router = useRouter()
   const { openExternal } = useAppStore()
 
   const [appVersion, setAppVersion] = useState<string>()
@@ -64,12 +63,13 @@ export default function AboutPage() {
           <div className='relative mx-auto max-w-xl'>
             {/* Header with back button */}
             <div className='mb-8 flex items-center'>
-              <button
-                onClick={() => router.push('/')}
+              <Link
+                href='/'
+                prefetch={false}
                 className='text-muted-foreground hover:bg-accent hover:text-foreground absolute -left-14 flex size-10 items-center justify-center rounded-full transition'
               >
                 <ChevronLeftIcon className='size-6' />
-              </button>
+              </Link>
               <h1 className='text-foreground text-2xl font-bold'>
                 {t('settings.about')}
               </h1>

@@ -3,7 +3,7 @@
 import { useEffect, useMemo, useState } from 'react'
 import { useTheme } from 'next-themes'
 import { useTranslation } from 'react-i18next'
-import { useRouter } from 'next/navigation'
+import Link from 'next/link'
 import {
   SunIcon,
   MoonIcon,
@@ -43,7 +43,6 @@ const THEME_OPTIONS = [
 export default function SettingsPage() {
   const { t, i18n } = useTranslation()
   const { theme, setTheme } = useTheme()
-  const router = useRouter()
   const locales = useMemo(
     () => Object.keys(i18n.options.resources || {}),
     [i18n.options.resources],
@@ -73,12 +72,13 @@ export default function SettingsPage() {
           <div className='relative mx-auto max-w-xl'>
             {/* Header with back button */}
             <div className='mb-8 flex items-center'>
-              <button
-                onClick={() => router.push('/')}
+              <Link
+                href='/'
+                prefetch={false}
                 className='text-muted-foreground hover:bg-accent hover:text-foreground absolute -left-14 flex size-10 items-center justify-center rounded-full transition'
               >
                 <ChevronLeftIcon className='size-6' />
-              </button>
+              </Link>
               <h1 className='text-foreground text-2xl font-bold'>
                 {t('settings.title')}
               </h1>
@@ -184,15 +184,16 @@ export default function SettingsPage() {
             <div className='border-border mb-8 border-t' />
 
             {/* About Link */}
-            <button
-              onClick={() => router.push('/about')}
+            <Link
+              href='/about'
+              prefetch={false}
               className='hover:bg-accent flex w-full items-center justify-between rounded-lg px-3 py-3 text-left transition'
             >
               <span className='text-foreground text-sm font-medium'>
                 {t('settings.about')}
               </span>
               <ChevronRightIcon className='text-muted-foreground size-5' />
-            </button>
+            </Link>
           </div>
         </div>
       </ScrollArea>
