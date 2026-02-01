@@ -138,9 +138,10 @@ function BlockCard({
       >
         <AccordionTrigger className='data-[state=open]:bg-accent flex w-full cursor-pointer items-center gap-1.5 px-2 py-1.5 text-left transition outline-none hover:no-underline [&>svg]:hidden'>
           <span
-            className={`shrink-0 rounded px-1.5 py-0.5 text-[10px] font-medium text-white ${
+            className={`shrink-0 rounded px-1.5 py-0.5 text-center text-[10px] font-medium text-white tabular-nums ${
               selected ? 'bg-primary' : 'bg-muted-foreground/60'
             }`}
+            style={{ minWidth: '1.5rem' }}
           >
             {index + 1}
           </span>
