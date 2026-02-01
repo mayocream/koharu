@@ -281,7 +281,6 @@ pub async fn run() -> Result<()> {
     }
 
     tauri::Builder::default()
-        .plugin(tauri_plugin_http::init())
         .invoke_handler(tauri::generate_handler![command::initialize])
         .setup(move |app| {
             app.manage(HttpServerState::new());

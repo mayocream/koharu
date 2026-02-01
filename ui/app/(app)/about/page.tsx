@@ -10,7 +10,6 @@ import {
   LoaderIcon,
 } from 'lucide-react'
 import { ScrollArea } from '@/components/ui/scroll-area'
-import { fetch } from '@/lib/fetch'
 import { invoke, isTauri } from '@/lib/backend'
 import { useAppStore } from '@/lib/store'
 import Image from 'next/image'

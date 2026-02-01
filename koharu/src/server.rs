@@ -9,7 +9,7 @@ use axum::{
 };
 use rust_embed::Embed;
 use tokio::net::TcpListener;
-use tower_http::cors::{Any, CorsLayer};
+use tower_http::cors::CorsLayer;
 
 use crate::{app::AppResources, endpoints::*};
 
@@ -77,14 +77,7 @@ fn build_router(state: AppResources) -> Router {
         .route("/api/llm_generate", post(llm_generate))
         .with_state(state)
         .layer(DefaultBodyLimit::max(1024 * 1024 * 1024))
-        .layer(
-            CorsLayer::new()
-                .allow_origin(Any)
-                .allow_methods(Any)
-                .allow_headers(Any)
-                .expose_headers(Any)
-                .allow_private_network(true),
-        )
+        .layer(CorsLayer::very_permissive())
         .fallback(serve_embedded)
 }
 

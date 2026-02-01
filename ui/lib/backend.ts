@@ -1,7 +1,5 @@
 'use client'
 
-import { fetch, initFetch } from '@/lib/fetch'
-
 let apiBase = '/api'
 let _initPromise: Promise<void> | null = null
 
@@ -22,7 +20,6 @@ async function ensureInitialized(): Promise<void> {
     const { invoke } = await import('@tauri-apps/api/core')
     const port = await invoke<number>('initialize')
     apiBase = `http://127.0.0.1:${port}/api`
-    await initFetch()
   })()
 
   return _initPromise
