@@ -75,13 +75,37 @@ pub struct Model {
     font_detector: FontDetector,
 }
 
+#[derive(Debug, Clone, Copy)]
+pub enum InitStage {
+    ComicTextDetector,
+    MangaOcr,
+    Lama,
+    FontDetector,
+}
+
 impl Model {
     pub async fn new(use_cpu: bool) -> Result<Self> {
+        Self::new_with_progress(use_cpu, |_| {}).await
+    }
+
+    pub async fn new_with_progress<F>(use_cpu: bool, mut on_stage: F) -> Result<Self>
+    where
+        F: FnMut(InitStage),
+    {
+        on_stage(InitStage::ComicTextDetector);
+        let dialog_detector = ComicTextDetector::load(use_cpu).await?;
+        on_stage(InitStage::MangaOcr);
+        let ocr = MangaOcr::load(use_cpu).await?;
+        on_stage(InitStage::Lama);
+        let lama = Lama::load(use_cpu).await?;
+        on_stage(InitStage::FontDetector);
+        let font_detector = FontDetector::load(use_cpu).await?;
+
         Ok(Self {
-            dialog_detector: ComicTextDetector::load(use_cpu).await?,
-            ocr: MangaOcr::load(use_cpu).await?,
-            lama: Lama::load(use_cpu).await?,
-            font_detector: FontDetector::load(use_cpu).await?,
+            dialog_detector,
+            ocr,
+            lama,
+            font_detector,
         })
     }
 

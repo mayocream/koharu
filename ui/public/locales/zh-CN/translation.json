@@ -2,6 +2,28 @@
   "common": {
     "initializing": "初始化中..."
   },
+  "startup": {
+    "progressStep": "步骤 {{current}} / {{total}}",
+    "progress": {
+      "preparing": "正在准备启动...",
+      "checkingRuntime": "正在检查 ML 运行时...",
+      "loadingComicTextDetector": "正在加载模型：漫画文本检测",
+      "loadingMangaOcr": "正在加载模型：Manga OCR",
+      "loadingLama": "正在加载模型：LaMa 修补",
+      "loadingFontDetector": "正在加载模型：字体检测",
+      "loadingRenderer": "正在初始化渲染器...",
+      "startingServer": "正在启动本地后端..."
+    },
+    "errors": {
+      "network_hf_download": "网络错误：无法从 Hugging Face 拉取模型。",
+      "hf_download": "无法从 Hugging Face 下载必需模型。",
+      "ml_init": "ML 模型初始化失败。",
+      "runtime_init": "ML 运行时依赖初始化失败。",
+      "server_start": "本地后端服务启动失败。",
+      "unknown": "初始化失败：未知错误。",
+      "help": "请检查网络/代理设置后重启 Koharu。"
+    }
+  },
   "menu": {
     "file": "文件",
     "openFile": "打开文件...",
