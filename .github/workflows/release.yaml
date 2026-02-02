@@ -79,6 +79,8 @@ jobs:
   build-macos:
     name: macOS
     runs-on: macos-latest
+    outputs:
+      dmg_name: ${{ steps.create_dmg.outputs.dmg_name }}
     steps:
       - uses: actions/checkout@v6
       - uses: oven-sh/setup-bun@v2
@@ -139,3 +141,61 @@ jobs:
             --tag ${{ github.ref_name }} \
             --token ${{ secrets.GITHUB_TOKEN }} \
             --merge
+      - name: Create DMG from portable package
+        id: create_dmg
+        run: |
+          rm -rf dmg-root
+          mkdir -p dmg-root
+          ditto -x -k Releases/Koharu-osx-Portable.zip dmg-root
+          ln -s /Applications dmg-root/Applications
+
+          case "${RUNNER_ARCH}" in
+            ARM64) ARCH_SUFFIX="arm64" ;;
+            X64) ARCH_SUFFIX="x64" ;;
+            *) ARCH_SUFFIX="$(echo "${RUNNER_ARCH}" | tr '[:upper:]' '[:lower:]')" ;;
+          esac
+
+          DMG_NAME="Koharu-osx-${ARCH_SUFFIX}.dmg"
+          hdiutil create -volname "Koharu" -srcfolder dmg-root -ov -format UDZO "Releases/${DMG_NAME}"
+          echo "dmg_name=${DMG_NAME}" >> "$GITHUB_OUTPUT"
+
+      - name: Upload DMG Artifact
+        uses: softprops/action-gh-release@v2
+        with:
+          files: Releases/${{ steps.create_dmg.outputs.dmg_name }}
+        env:
+          token: ${{ secrets.GITHUB_TOKEN }}
+
+  update-release-body:
+    name: Update Release Body
+    needs: [build-windows, build-macos]
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+      - uses: oven-sh/setup-bun@v2
+      - run: bun install
+      - name: Generate release notes
+        run: bun git-cliff --current -o RELEASE_NOTES.md
+      - name: Append download matrix
+        env:
+          RELEASE_TAG: ${{ github.ref_name }}
+          REPO: ${{ github.repository }}
+          MACOS_DMG: ${{ needs.build-macos.outputs.dmg_name }}
+        run: |
+          BASE_URL="https://github.com/${REPO}/releases/download/${RELEASE_TAG}"
+          cat <<EOF >> RELEASE_NOTES.md
+
+          ## Download based on your OS
+
+          | OS | Download |
+          | --- | --- |
+          | Windows | [Setup x64](${BASE_URL}/Koharu-win-Setup.exe) · [Portable x64](${BASE_URL}/Koharu-win-Portable.zip) · [CUDA Bundled x64](${BASE_URL}/Koharu-win-CUDA-Bundled.7z) |
+          | macOS | [DMG](${BASE_URL}/${MACOS_DMG}) · [Setup PKG](${BASE_URL}/Koharu-osx-Setup.pkg) · [Portable ZIP](${BASE_URL}/Koharu-osx-Portable.zip) |
+          | Linux | Build from source ([README](https://github.com/${REPO}/blob/main/README.md#development)) |
+          EOF
+      - name: Publish merged release notes
+        uses: softprops/action-gh-release@v2
+        with:
+          body_path: RELEASE_NOTES.md
+        env:
+          token: ${{ secrets.GITHUB_TOKEN }}
