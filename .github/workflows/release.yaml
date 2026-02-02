@@ -79,8 +79,6 @@ jobs:
   build-macos:
     name: macOS
     runs-on: macos-latest
-    outputs:
-      dmg_name: ${{ steps.create_dmg.outputs.dmg_name }}
     steps:
       - uses: actions/checkout@v6
       - uses: oven-sh/setup-bun@v2
@@ -166,9 +164,53 @@ jobs:
         env:
           token: ${{ secrets.GITHUB_TOKEN }}
 
+  build-linux:
+    name: Linux (${{ matrix.arch }})
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - arch: x64
+            runner: ubuntu-latest
+          - arch: arm64
+            runner: ubuntu-24.04-arm
+    runs-on: ${{ matrix.runner }}
+    steps:
+      # refer: https://v2.tauri.app/start/prerequisites/#linux
+      - name: Install dependencies
+        run: |
+          sudo apt update
+          sudo apt install -y \
+            libwebkit2gtk-4.1-dev \
+            build-essential \
+            curl \
+            wget \
+            file \
+            libxdo-dev \
+            libssl-dev \
+            libayatana-appindicator3-dev \
+            librsvg2-dev \
+            patchelf \
+            libfuse2 \
+            rpm
+      - uses: actions/checkout@v6
+      - uses: oven-sh/setup-bun@v2
+      - uses: Swatinem/rust-cache@v2
+      - run: bun install
+      - run: bun tauri build --features=bundle --bundles appimage,deb,rpm
+      - name: Upload Linux Artifacts
+        uses: softprops/action-gh-release@v2
+        with:
+          files: |
+            target/release/bundle/appimage/*.AppImage
+            target/release/bundle/deb/*.deb
+            target/release/bundle/rpm/*.rpm
+        env:
+          token: ${{ secrets.GITHUB_TOKEN }}
+
   update-release-body:
     name: Update Release Body
-    needs: [build-windows, build-macos]
+    needs: [build-windows, build-macos, build-linux]
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v6
@@ -180,18 +222,70 @@ jobs:
         env:
           RELEASE_TAG: ${{ github.ref_name }}
           REPO: ${{ github.repository }}
-          MACOS_DMG: ${{ needs.build-macos.outputs.dmg_name }}
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
-          BASE_URL="https://github.com/${REPO}/releases/download/${RELEASE_TAG}"
+          if ! command -v jq >/dev/null 2>&1; then
+            sudo apt update
+            sudo apt install -y jq
+          fi
+
+          gh api "repos/${REPO}/releases/tags/${RELEASE_TAG}" > release.json
+
+          first_link() {
+            local regex="$1"
+            jq -r --arg re "$regex" '
+              .assets[]
+              | select(.name | test($re; "i"))
+              | "[\(.name)](\(.browser_download_url))"
+            ' release.json | head -n1
+          }
+
+          first_arch_link() {
+            local ext_regex="$1"
+            local arch_regex="$2"
+            jq -r --arg ext "$ext_regex" --arg arch "$arch_regex" '
+              .assets[]
+              | select((.name | test($ext; "i")) and (.name | test($arch; "i")))
+              | "[\(.name)](\(.browser_download_url))"
+            ' release.json | head -n1
+          }
+
+          value_or_dash() {
+            local value="$1"
+            if [ -n "$value" ]; then
+              echo "$value"
+            else
+              echo "—"
+            fi
+          }
+
+          WIN_SETUP="$(value_or_dash "$(first_link '^Koharu-win-Setup.*[.]exe$')")"
+          WIN_PORTABLE="$(value_or_dash "$(first_link '^Koharu-win-Portable[.]zip$')")"
+          WIN_CUDA="$(value_or_dash "$(first_link '^Koharu-win-CUDA-Bundled[.](7z|zip)$')")"
+
+          MAC_DMG_ARM="$(value_or_dash "$(first_link '^Koharu-osx-arm64[.]dmg$')")"
+          MAC_DMG_X64="$(value_or_dash "$(first_link '^Koharu-osx-x64[.]dmg$')")"
+          MAC_PKG="$(value_or_dash "$(first_link '^Koharu-osx-Setup[.]pkg$')")"
+          MAC_PORTABLE="$(value_or_dash "$(first_link '^Koharu-osx-Portable[.]zip$')")"
+
+          LINUX_APPIMAGE_X64="$(value_or_dash "$(first_arch_link '[.]appimage$' 'amd64|x86_64|x64')")"
+          LINUX_DEB_X64="$(value_or_dash "$(first_arch_link '[.]deb$' 'amd64|x86_64|x64')")"
+          LINUX_RPM_X64="$(value_or_dash "$(first_arch_link '[.]rpm$' 'amd64|x86_64|x64')")"
+
+          LINUX_APPIMAGE_ARM64="$(value_or_dash "$(first_arch_link '[.]appimage$' 'arm64|aarch64')")"
+          LINUX_DEB_ARM64="$(value_or_dash "$(first_arch_link '[.]deb$' 'arm64|aarch64')")"
+          LINUX_RPM_ARM64="$(value_or_dash "$(first_arch_link '[.]rpm$' 'arm64|aarch64')")"
           cat <<EOF >> RELEASE_NOTES.md
 
           ## Download based on your OS
 
-          | OS | Download |
+          | Platform | Packages |
           | --- | --- |
-          | Windows | [Setup x64](${BASE_URL}/Koharu-win-Setup.exe) · [Portable x64](${BASE_URL}/Koharu-win-Portable.zip) · [CUDA Bundled x64](${BASE_URL}/Koharu-win-CUDA-Bundled.7z) |
-          | macOS | [DMG](${BASE_URL}/${MACOS_DMG}) · [Setup PKG](${BASE_URL}/Koharu-osx-Setup.pkg) · [Portable ZIP](${BASE_URL}/Koharu-osx-Portable.zip) |
-          | Linux | Build from source ([README](https://github.com/${REPO}/blob/main/README.md#development)) |
+          | Windows | Setup: ${WIN_SETUP} · Portable: ${WIN_PORTABLE} · CUDA bundled: ${WIN_CUDA} |
+          | macOS | DMG (Apple Silicon): ${MAC_DMG_ARM} · DMG (Intel x64): ${MAC_DMG_X64} · Setup PKG: ${MAC_PKG} · Portable ZIP: ${MAC_PORTABLE} |
+          | Linux x64 | AppImage: ${LINUX_APPIMAGE_X64} · Deb: ${LINUX_DEB_X64} · RPM: ${LINUX_RPM_X64} |
+          | Linux arm64 | AppImage: ${LINUX_APPIMAGE_ARM64} · Deb: ${LINUX_DEB_ARM64} · RPM: ${LINUX_RPM_ARM64} |
+          | Source | [Build from source guide](https://github.com/${REPO}/blob/main/README.md#development) |
           EOF
       - name: Publish merged release notes
         uses: softprops/action-gh-release@v2
