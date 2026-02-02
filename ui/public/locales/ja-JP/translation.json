@@ -2,6 +2,28 @@
   "common": {
     "initializing": "初期化中..."
   },
+  "startup": {
+    "progressStep": "ステップ {{current}} / {{total}}",
+    "progress": {
+      "preparing": "起動準備中...",
+      "checkingRuntime": "ML ランタイムを確認中...",
+      "loadingComicTextDetector": "モデルを読み込み中: Comic Text Detector",
+      "loadingMangaOcr": "モデルを読み込み中: Manga OCR",
+      "loadingLama": "モデルを読み込み中: LaMa Inpaint",
+      "loadingFontDetector": "モデルを読み込み中: Font Detector",
+      "loadingRenderer": "レンダラーを初期化中...",
+      "startingServer": "ローカルバックエンドを起動中..."
+    },
+    "errors": {
+      "network_hf_download": "ネットワークエラー: Hugging Face からモデルを取得できません。",
+      "hf_download": "Hugging Face から必要なモデルをダウンロードできません。",
+      "ml_init": "ML モデルの初期化に失敗しました。",
+      "runtime_init": "ML ランタイム依存関係の初期化に失敗しました。",
+      "server_start": "ローカルバックエンドサービスの起動に失敗しました。",
+      "unknown": "不明なエラーで初期化に失敗しました。",
+      "help": "ネットワーク/プロキシ設定を確認して、Koharu を再起動してください。"
+    }
+  },
   "menu": {
     "file": "ファイル",
     "openFile": "ファイルを開く...",

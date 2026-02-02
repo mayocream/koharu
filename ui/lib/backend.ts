@@ -22,7 +22,10 @@ async function ensureInitialized(): Promise<void> {
     const { invoke } = await import('@tauri-apps/api/core')
     const port = await invoke<number>('initialize')
     apiBase = `http://127.0.0.1:${port}/api`
-  })()
+  })().catch((error) => {
+    _initPromise = null
+    throw error
+  })
 
   return _initPromise
 }

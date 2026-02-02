@@ -2,6 +2,28 @@
   "common": {
     "initializing": "Initializing..."
   },
+  "startup": {
+    "progressStep": "Step {{current}} / {{total}}",
+    "progress": {
+      "preparing": "Preparing startup...",
+      "checkingRuntime": "Checking ML runtime...",
+      "loadingComicTextDetector": "Loading model: Comic Text Detector",
+      "loadingMangaOcr": "Loading model: Manga OCR",
+      "loadingLama": "Loading model: LaMa Inpaint",
+      "loadingFontDetector": "Loading model: Font Detector",
+      "loadingRenderer": "Initializing renderer...",
+      "startingServer": "Starting local backend..."
+    },
+    "errors": {
+      "network_hf_download": "Network error: unable to download models from Hugging Face.",
+      "hf_download": "Failed to download required models from Hugging Face.",
+      "ml_init": "Failed to initialize ML models.",
+      "runtime_init": "Failed to initialize ML runtime dependencies.",
+      "server_start": "Failed to start local backend service.",
+      "unknown": "Initialization failed due to an unknown error.",
+      "help": "Please check your network/proxy settings and restart Koharu."
+    }
+  },
   "menu": {
     "file": "File",
     "openFile": "Open File...",

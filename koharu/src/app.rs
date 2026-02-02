@@ -12,7 +12,8 @@ use koharu_ml::{DeviceName, cuda_is_available, device_name};
 use koharu_runtime::{ensure_dylibs, preload_dylibs};
 use once_cell::sync::Lazy;
 use rfd::MessageDialog;
-use tauri::Manager;
+use serde::Serialize;
+use tauri::{Emitter, Manager};
 use tokio::{net::TcpListener, sync::RwLock};
 use tracing_subscriber::fmt::format::FmtSpan;
 
@@ -51,6 +52,32 @@ fn resolve_app_root() -> PathBuf {
 static APP_ROOT: Lazy<PathBuf> = Lazy::new(resolve_app_root);
 static LIB_ROOT: Lazy<PathBuf> = Lazy::new(|| APP_ROOT.join("libs"));
 static MODEL_ROOT: Lazy<PathBuf> = Lazy::new(|| APP_ROOT.join("models"));
+
+const STARTUP_PROGRESS_EVENT: &str = "startup:progress";
+const STARTUP_ERROR_EVENT: &str = "startup:error";
+const STARTUP_TOTAL_STEPS: u8 = 8;
+const STEP_PREPARING: u8 = 1;
+const STEP_RUNTIME: u8 = 2;
+const STEP_COMIC_TEXT_DETECTOR: u8 = 3;
+const STEP_MANGA_OCR: u8 = 4;
+const STEP_LAMA: u8 = 5;
+const STEP_FONT_DETECTOR: u8 = 6;
+const STEP_RENDERER: u8 = 7;
+const STEP_SERVER: u8 = 8;
+
+#[derive(Debug, Clone, Serialize)]
+#[serde(rename_all = "camelCase")]
+struct StartupProgressPayload {
+    stage: &'static str,
+    current: u8,
+    total: u8,
+}
+
+#[derive(Debug, Clone, Serialize)]
+#[serde(rename_all = "camelCase")]
+struct StartupErrorPayload {
+    code: &'static str,
+}
 
 #[derive(Clone)]
 pub struct AppResources {
@@ -170,7 +197,189 @@ async fn prefetch() -> Result<()> {
     Ok(())
 }
 
-async fn build_resources(cpu: bool, _register_file_assoc: bool) -> Result<AppResources> {
+fn emit_startup_progress(app: &tauri::AppHandle, payload: StartupProgressPayload) {
+    if let Some(splashscreen) = app.get_webview_window("splashscreen")
+        && let Err(err) = splashscreen.emit(STARTUP_PROGRESS_EVENT, payload)
+    {
+        tracing::debug!(?err, "Failed to emit startup progress");
+    }
+}
+
+fn emit_startup_error(app: &tauri::AppHandle, code: &'static str) {
+    if let Some(splashscreen) = app.get_webview_window("splashscreen")
+        && let Err(err) = splashscreen.emit(STARTUP_ERROR_EVENT, StartupErrorPayload { code })
+    {
+        tracing::error!(?err, "Failed to emit startup error");
+    }
+}
+
+#[derive(Debug, Clone, Copy)]
+enum AppLocale {
+    EnUs,
+    ZhCn,
+    ZhTw,
+    JaJp,
+}
+
+fn detect_app_locale() -> AppLocale {
+    let locale = sys_locale::get_locale()
+        .unwrap_or_default()
+        .to_ascii_lowercase();
+
+    if locale.starts_with("zh")
+        && (locale.contains("tw")
+            || locale.contains("hk")
+            || locale.contains("mo")
+            || locale.contains("hant"))
+    {
+        return AppLocale::ZhTw;
+    }
+
+    if locale.starts_with("zh") {
+        return AppLocale::ZhCn;
+    }
+
+    if locale.starts_with("ja") {
+        return AppLocale::JaJp;
+    }
+
+    AppLocale::EnUs
+}
+
+fn startup_error_title(locale: AppLocale) -> &'static str {
+    match locale {
+        AppLocale::EnUs => "Initialization Failed",
+        AppLocale::ZhCn => "初始化失败",
+        AppLocale::ZhTw => "初始化失敗",
+        AppLocale::JaJp => "初期化に失敗しました",
+    }
+}
+
+fn startup_error_message(locale: AppLocale, code: &'static str) -> &'static str {
+    match locale {
+        AppLocale::EnUs => match code {
+            "network_hf_download" => "Network error: unable to download models from Hugging Face.",
+            "hf_download" => "Failed to download required models from Hugging Face.",
+            "ml_init" => "Failed to initialize ML models.",
+            "runtime_init" => "Failed to initialize ML runtime dependencies.",
+            "server_start" => "Failed to start local backend service.",
+            _ => "Initialization failed due to an unknown error.",
+        },
+        AppLocale::ZhCn => match code {
+            "network_hf_download" => "网络错误：无法从 Hugging Face 拉取模型。",
+            "hf_download" => "无法从 Hugging Face 下载必需模型。",
+            "ml_init" => "ML 模型初始化失败。",
+            "runtime_init" => "ML 运行时依赖初始化失败。",
+            "server_start" => "本地后端服务启动失败。",
+            _ => "初始化失败：未知错误。",
+        },
+        AppLocale::ZhTw => match code {
+            "network_hf_download" => "網路錯誤：無法從 Hugging Face 下載模型。",
+            "hf_download" => "無法從 Hugging Face 下載必要模型。",
+            "ml_init" => "ML 模型初始化失敗。",
+            "runtime_init" => "ML 執行階段依賴初始化失敗。",
+            "server_start" => "本機後端服務啟動失敗。",
+            _ => "初始化失敗：未知錯誤。",
+        },
+        AppLocale::JaJp => match code {
+            "network_hf_download" => {
+                "ネットワークエラー: Hugging Face からモデルを取得できません。"
+            }
+            "hf_download" => "Hugging Face から必要なモデルをダウンロードできません。",
+            "ml_init" => "ML モデルの初期化に失敗しました。",
+            "runtime_init" => "ML ランタイム依存関係の初期化に失敗しました。",
+            "server_start" => "ローカルバックエンドサービスの起動に失敗しました。",
+            _ => "不明なエラーで初期化に失敗しました。",
+        },
+    }
+}
+
+fn show_startup_error_dialog(code: &'static str) {
+    let locale = detect_app_locale();
+    MessageDialog::new()
+        .set_level(rfd::MessageLevel::Error)
+        .set_title(startup_error_title(locale))
+        .set_description(startup_error_message(locale, code))
+        .show();
+}
+
+fn classify_startup_error(err: &anyhow::Error) -> &'static str {
+    let message = format!("{err:#}").to_ascii_lowercase();
+
+    let hf_download = message.contains("failed to download from hf hub")
+        || message.contains("huggingface.co")
+        || message.contains("resolve/main");
+    let network_related = message.contains("request error")
+        || message.contains("connect")
+        || message.contains("connection")
+        || message.contains("timed out")
+        || message.contains("timeout")
+        || message.contains("dns")
+        || message.contains("network")
+        || message.contains("socket");
+
+    if hf_download && network_related {
+        return "network_hf_download";
+    }
+    if hf_download {
+        return "hf_download";
+    }
+    if message.contains("failed to initialize ml model") {
+        return "ml_init";
+    }
+    if message.contains("failed to ensure dynamic libraries")
+        || message.contains("failed to preload dynamic libraries")
+        || message.contains("failed to add dll directory")
+    {
+        return "runtime_init";
+    }
+    if message.contains("failed to bind http server") || message.contains("address already in use")
+    {
+        return "server_start";
+    }
+
+    "unknown"
+}
+
+fn model_stage_progress(stage: ml::InitStage) -> StartupProgressPayload {
+    match stage {
+        ml::InitStage::ComicTextDetector => StartupProgressPayload {
+            stage: "loadingComicTextDetector",
+            current: STEP_COMIC_TEXT_DETECTOR,
+            total: STARTUP_TOTAL_STEPS,
+        },
+        ml::InitStage::MangaOcr => StartupProgressPayload {
+            stage: "loadingMangaOcr",
+            current: STEP_MANGA_OCR,
+            total: STARTUP_TOTAL_STEPS,
+        },
+        ml::InitStage::Lama => StartupProgressPayload {
+            stage: "loadingLama",
+            current: STEP_LAMA,
+            total: STARTUP_TOTAL_STEPS,
+        },
+        ml::InitStage::FontDetector => StartupProgressPayload {
+            stage: "loadingFontDetector",
+            current: STEP_FONT_DETECTOR,
+            total: STARTUP_TOTAL_STEPS,
+        },
+    }
+}
+
+async fn build_resources<F>(
+    cpu: bool,
+    _register_file_assoc: bool,
+    mut report: F,
+) -> Result<AppResources>
+where
+    F: FnMut(StartupProgressPayload),
+{
+    report(StartupProgressPayload {
+        stage: "checkingRuntime",
+        current: STEP_RUNTIME,
+        total: STARTUP_TOTAL_STEPS,
+    });
+
     if cuda_is_available() {
         ensure_dylibs(LIB_ROOT.to_path_buf())
             .await
@@ -194,11 +403,18 @@ async fn build_resources(cpu: bool, _register_file_assoc: bool) -> Result<AppRes
 
     let ml_device = device_name(cpu);
     let ml = Arc::new(
-        ml::Model::new(cpu)
-            .await
-            .context("Failed to initialize ML model")?,
+        ml::Model::new_with_progress(cpu, |stage| {
+            report(model_stage_progress(stage));
+        })
+        .await
+        .context("Failed to initialize ML model")?,
     );
     let llm = Arc::new(llm::Model::new(cpu));
+    report(StartupProgressPayload {
+        stage: "loadingRenderer",
+        current: STEP_RENDERER,
+        total: STARTUP_TOTAL_STEPS,
+    });
     let renderer = Arc::new(Renderer::new().context("Failed to initialize renderer")?);
     let state = Arc::new(RwLock::new(State::default()));
 
@@ -236,7 +452,7 @@ pub async fn run() -> Result<()> {
     });
 
     if headless {
-        let resources = build_resources(cpu, false).await?;
+        let resources = build_resources(cpu, false, |_| {}).await?;
         let listener = TcpListener::bind(format!("127.0.0.1:{}", port.unwrap_or(0))).await?;
 
         let server_resources = resources.clone();
@@ -256,36 +472,82 @@ pub async fn run() -> Result<()> {
         .setup(move |app| {
             let handle = app.handle().clone();
             tauri::async_runtime::spawn(async move {
-                let resources = build_resources(cpu, true)
+                emit_startup_progress(
+                    &handle,
+                    StartupProgressPayload {
+                        stage: "preparing",
+                        current: STEP_PREPARING,
+                        total: STARTUP_TOTAL_STEPS,
+                    },
+                );
+
+                let progress_handle = handle.clone();
+                let resources = match build_resources(cpu, true, move |payload| {
+                    emit_startup_progress(&progress_handle, payload);
+                })
+                .await
+                {
+                    Ok(resources) => resources,
+                    Err(err) => {
+                        let code = classify_startup_error(&err);
+                        tracing::error!(?err, code, "Failed to build app resources");
+                        emit_startup_error(&handle, code);
+                        show_startup_error_dialog(code);
+                        return;
+                    }
+                };
+
+                emit_startup_progress(
+                    &handle,
+                    StartupProgressPayload {
+                        stage: "startingServer",
+                        current: STEP_SERVER,
+                        total: STARTUP_TOTAL_STEPS,
+                    },
+                );
+
+                let listener = match TcpListener::bind(format!("127.0.0.1:{}", port.unwrap_or(0)))
                     .await
-                    .expect("failed to build app resources");
-                let listener = TcpListener::bind(format!("127.0.0.1:{}", port.unwrap_or(0)))
-                    .await
-                    .expect("failed to bind HTTP server");
-                let port = listener
-                    .local_addr()
-                    .expect("failed to get listener address")
-                    .port();
+                {
+                    Ok(listener) => listener,
+                    Err(err) => {
+                        let err = anyhow::Error::from(err).context("Failed to bind HTTP server");
+                        let code = classify_startup_error(&err);
+                        tracing::error!(?err, code, "Failed to start HTTP server");
+                        emit_startup_error(&handle, code);
+                        show_startup_error_dialog(code);
+                        return;
+                    }
+                };
+
+                let port = match listener.local_addr() {
+                    Ok(addr) => addr.port(),
+                    Err(err) => {
+                        let err = anyhow::Error::from(err)
+                            .context("Failed to get HTTP server listener address");
+                        tracing::error!(?err, "Failed to read listener address");
+                        emit_startup_error(&handle, "server_start");
+                        show_startup_error_dialog("server_start");
+                        return;
+                    }
+                };
 
                 handle.state::<AtomicU16>().store(port, Ordering::SeqCst);
 
                 let server_resources = resources.clone();
                 tokio::spawn(async move {
-                    server::serve_with_listener(listener, server_resources)
-                        .await
-                        .expect("failed to run HTTP server");
+                    if let Err(err) = server::serve_with_listener(listener, server_resources).await
+                    {
+                        tracing::error!("HTTP server error: {err:#}");
+                    }
                 });
 
-                handle
-                    .get_webview_window("splashscreen")
-                    .expect("splashscreen window not found")
-                    .close()
-                    .ok();
-                handle
-                    .get_webview_window("main")
-                    .expect("main window not found")
-                    .show()
-                    .ok();
+                if let Some(splashscreen) = handle.get_webview_window("splashscreen") {
+                    splashscreen.close().ok();
+                }
+                if let Some(main) = handle.get_webview_window("main") {
+                    main.show().ok();
+                }
             });
             Ok(())
         })
