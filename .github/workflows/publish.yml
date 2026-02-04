@@ -19,7 +19,7 @@ jobs:
       - uses: Swatinem/rust-cache@v2
       - uses: Jimver/cuda-toolkit@master
         with:
-          cuda: '12.9.1'
+          cuda: '13.1.0'
       - uses: ilammy/msvc-dev-cmd@v1
       - run: bun install
       - working-directory: ./ui
