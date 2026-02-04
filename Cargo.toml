@@ -60,7 +60,7 @@ dirs = "6.0"
 futures = "0.3"
 reqwest = { version = "0.12", features = ["stream", "json", "blocking"] }
 reqwest-middleware = "0.4"
-reqwest-retry = "0.8"
+reqwest-retry = "0.9"
 flate2 = { version = "1.0", default-features = false, features = [
     "zlib-ng-compat",
 ] }
