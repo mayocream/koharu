@@ -147,6 +147,9 @@
     "repairBrush": "修复笔",
     "eraser": "橡皮擦"
   },
+  "download": {
+    "title": "下载中"
+  },
   "settings": {
     "title": "设置",
     "appearance": "外观",

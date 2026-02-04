@@ -251,7 +251,10 @@ pub async fn run() -> Result<()> {
     }
 
     tauri::Builder::default()
-        .invoke_handler(tauri::generate_handler![command::initialize])
+        .invoke_handler(tauri::generate_handler![
+            command::initialize,
+            command::download_progress,
+        ])
         .manage(AtomicU16::new(0))
         .setup(move |app| {
             let handle = app.handle().clone();

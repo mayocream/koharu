@@ -1,8 +1,9 @@
 'use client'
 
-import { type ReactNode } from 'react'
+import { type ReactNode, useEffect } from 'react'
 import { useTranslation } from 'react-i18next'
 import { useAppStore } from '@/lib/store'
+import { useDownloadStore } from '@/lib/downloads'
 import { Button } from '@/components/ui/button'
 import { type OperationState } from '@/lib/operations'
 
@@ -18,6 +19,55 @@ function BubbleCard({ children }: { children: ReactNode }) {
     <div className='border-border bg-card/95 rounded-2xl border p-4 shadow-[0_15px_60px_rgba(0,0,0,0.12)] backdrop-blur'>
       {children}
     </div>
+  )
+}
+
+function ProgressBar({ percent }: { percent?: number }) {
+  return (
+    <div className='mt-3 flex items-center gap-2'>
+      <div className='bg-muted relative h-1.5 flex-1 overflow-hidden rounded-full'>
+        {typeof percent === 'number' ? (
+          <div
+            className='bg-primary h-full rounded-full transition-[width] duration-300'
+            style={{ width: `${percent}%` }}
+          />
+        ) : (
+          <div className='activity-progress-indeterminate from-primary/40 via-primary to-primary/40 absolute inset-0 w-1/2 rounded-full bg-linear-to-r' />
+        )}
+      </div>
+      {typeof percent === 'number' && (
+        <span className='text-muted-foreground w-12 text-right text-[11px] font-semibold tabular-nums'>
+          {percent}%
+        </span>
+      )}
+    </div>
+  )
+}
+
+function DownloadCard({
+  filename,
+  percent,
+  t,
+}: {
+  filename: string
+  percent?: number
+  t: TranslateFunc
+}) {
+  return (
+    <BubbleCard>
+      <div className='flex items-start gap-3'>
+        <div className='bg-primary mt-1 h-2.5 w-2.5 animate-pulse rounded-full shadow-[0_0_0_6px_hsl(var(--primary)/0.16)]' />
+        <div className='flex-1'>
+          <div className='text-foreground text-sm font-semibold'>
+            {t('download.title')}
+          </div>
+          <div className='text-muted-foreground truncate text-xs'>
+            {filename}
+          </div>
+          <ProgressBar percent={percent} />
+        </div>
+      </div>
+    </BubbleCard>
   )
 }
 
@@ -116,23 +166,7 @@ function OperationCard({
               </span>
             ) : null}
           </div>
-          <div className='mt-3 flex items-center gap-2'>
-            <div className='bg-muted relative h-1.5 flex-1 overflow-hidden rounded-full'>
-              {typeof progress === 'number' ? (
-                <div
-                  className='bg-primary h-full rounded-full transition-[width] duration-300'
-                  style={{ width: `${progress}%` }}
-                />
-              ) : (
-                <div className='activity-progress-indeterminate from-primary/40 via-primary to-primary/40 absolute inset-0 w-1/2 rounded-full bg-linear-to-r' />
-              )}
-            </div>
-            {typeof progress === 'number' && (
-              <span className='text-muted-foreground w-12 text-right text-[11px] font-semibold tabular-nums'>
-                {progress}%
-              </span>
-            )}
-          </div>
+          <ProgressBar percent={progress} />
           {operation.cancellable && (
             <div className='mt-3 flex justify-end'>
               <Button
@@ -158,12 +192,32 @@ export function ActivityBubble() {
   const { t } = useTranslation()
   const operation = useAppStore((state) => state.operation)
   const cancelOperation = useAppStore((state) => state.cancelOperation)
+  const downloads = useDownloadStore((s) => s.downloads)
+  const ensureSubscribed = useDownloadStore((s) => s.ensureSubscribed)
 
-  if (!operation) return null
+  useEffect(() => {
+    ensureSubscribed()
+  }, [ensureSubscribed])
+
+  const activeDownloads = Array.from(downloads.values()).filter(
+    (d) => d.status === 'Started' || d.status === 'Downloading',
+  )
+
+  if (!operation && activeDownloads.length === 0) return null
 
   return (
     <div className='pointer-events-auto fixed right-6 bottom-6 z-100 flex w-80 max-w-[calc(100%-1.5rem)] flex-col gap-3'>
-      <OperationCard operation={operation} onCancel={cancelOperation} t={t} />
+      {operation && (
+        <OperationCard operation={operation} onCancel={cancelOperation} t={t} />
+      )}
+      {activeDownloads.map((d) => (
+        <DownloadCard
+          key={d.filename}
+          filename={d.filename}
+          percent={d.percent}
+          t={t}
+        />
+      ))}
     </div>
   )
 }

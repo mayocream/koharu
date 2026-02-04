@@ -224,6 +224,45 @@ export async function fetchThumbnail(index: number): Promise<Blob> {
   return res.blob()
 }
 
+export type DownloadProgress = {
+  filename: string
+  downloaded: number
+  total?: number
+  status: 'Started' | 'Downloading' | 'Completed' | { Failed: string }
+}
+
+export function subscribeDownloadProgress(
+  callback: (progress: DownloadProgress) => void,
+): () => void {
+  let stopped = false
+
+  ;(async () => {
+    await ensureInitialized()
+    const es = new EventSource(`${apiBase}/download_progress`)
+    es.onmessage = (event) => {
+      if (stopped) {
+        es.close()
+        return
+      }
+      try {
+        callback(JSON.parse(event.data) as DownloadProgress)
+      } catch (_) {}
+    }
+    const check = () => {
+      if (stopped) es.close()
+    }
+    const id = setInterval(check, 1000)
+    es.onerror = () => {
+      clearInterval(id)
+      es.close()
+    }
+  })()
+
+  return () => {
+    stopped = true
+  }
+}
+
 export const isTauri = isTauriEnv
 
 export const isMacOS = (): boolean => {

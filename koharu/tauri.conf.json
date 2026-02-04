@@ -28,8 +28,8 @@
         "url": "/splashscreen",
         "decorations": false,
         "resizable": false,
-        "height": 150,
-        "width": 200,
+        "height": 200,
+        "width": 300,
         "center": true
       }
     ]

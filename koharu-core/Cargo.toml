@@ -13,10 +13,14 @@ publish.workspace = true
 
 [dependencies]
 anyhow = { workspace = true }
+dirs = { workspace = true }
+futures = { workspace = true }
+hf-hub = { workspace = true }
+indicatif = { workspace = true }
+once_cell = { workspace = true }
 reqwest = { workspace = true }
 reqwest-middleware = { workspace = true }
 reqwest-retry = { workspace = true }
-once_cell = { workspace = true }
-futures = { workspace = true }
-indicatif = { workspace = true }
+serde = { workspace = true }
+tokio = { workspace = true }
 tracing = { workspace = true }

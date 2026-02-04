@@ -147,6 +147,9 @@
     "repairBrush": "リペアブラシ",
     "eraser": "消しゴム"
   },
+  "download": {
+    "title": "ダウンロード中"
+  },
   "settings": {
     "title": "設定",
     "appearance": "外観",

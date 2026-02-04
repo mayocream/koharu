@@ -7,7 +7,8 @@ use std::{
 
 use anyhow::{Context, Result};
 use futures::stream::{self, StreamExt, TryStreamExt};
-use koharu_core::http::{http_client, http_download};
+use koharu_core::download;
+use koharu_core::http::http_client;
 use once_cell::sync::OnceCell;
 use rayon::iter::{IntoParallelRefIterator, ParallelIterator};
 use tokio::task;
@@ -281,7 +282,7 @@ async fn fetch_and_extract(pkg: &str, platform_tags: &[&str], out_dir: Arc<PathB
 
     if needs_download {
         debug!("{pkg}: downloading {wheel_name}...");
-        let bytes = http_download(&wheel_url)
+        let bytes = download::bytes(&wheel_url)
             .await
             .context("failed to download wheel")?;
         let out = Arc::clone(&out_dir);

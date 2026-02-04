@@ -22,10 +22,12 @@ include = [
 ]
 
 [dependencies]
+koharu-core = { workspace = true }
 koharu-ml = { workspace = true }
 koharu-renderer = { workspace = true }
 koharu-runtime = { workspace = true }
 anyhow = { workspace = true }
+futures = { workspace = true }
 rfd = { workspace = true }
 open = { workspace = true }
 serde = { workspace = true }

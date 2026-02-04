@@ -1,11 +1,16 @@
 use std::{io::Cursor, path::PathBuf, str::FromStr};
 
+use std::convert::Infallible;
+
 use axum::{
     Json,
     body::Body,
     extract::{Multipart, State},
     http::{HeaderValue, StatusCode, header},
-    response::Response,
+    response::{
+        Response,
+        sse::{Event, KeepAlive, Sse},
+    },
 };
 use image::{GenericImageView, ImageFormat, RgbaImage};
 use koharu_ml::llm::ModelId;
@@ -828,4 +833,19 @@ fn mime_from_ext(ext: &str) -> &'static str {
 fn blank_rgba(width: u32, height: u32, color: image::Rgba<u8>) -> SerializableDynamicImage {
     let blank = RgbaImage::from_pixel(width, height, color);
     image::DynamicImage::ImageRgba8(blank).into()
+}
+
+pub async fn download_progress()
+-> Sse<impl futures::Stream<Item = std::result::Result<Event, Infallible>>> {
+    let rx = koharu_core::download::subscribe();
+    let stream = futures::stream::unfold(rx, |mut rx| async {
+        loop {
+            match rx.recv().await {
+                Ok(p) => return Some((Ok(Event::default().json_data(p).unwrap()), rx)),
+                Err(tokio::sync::broadcast::error::RecvError::Lagged(_)) => continue,
+                Err(tokio::sync::broadcast::error::RecvError::Closed) => return None,
+            }
+        }
+    });
+    Sse::new(stream).keep_alive(KeepAlive::default())
 }

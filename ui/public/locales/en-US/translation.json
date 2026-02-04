@@ -147,6 +147,9 @@
     "repairBrush": "Repair brush",
     "eraser": "Eraser"
   },
+  "download": {
+    "title": "Downloading"
+  },
   "settings": {
     "title": "Settings",
     "appearance": "Appearance",

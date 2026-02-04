@@ -17,7 +17,6 @@ anyhow = { workspace = true }
 clap = { workspace = true }
 image = { workspace = true }
 imageproc = { workspace = true }
-hf-hub = { workspace = true }
 candle-core = { workspace = true }
 candle-transformers = { workspace = true }
 candle-nn = { workspace = true }
@@ -30,7 +29,6 @@ tracing-subscriber = { workspace = true }
 tokio = { workspace = true }
 rustfft = { workspace = true }
 once_cell = { workspace = true }
-dirs = { workspace = true }
 futures = { workspace = true }
 num_cpus = { workspace = true }
 libloading = { workspace = true }
@@ -61,6 +59,9 @@ metal = [
     "objc2-metal-performance-shaders",
     "objc2-metal-performance-shaders-graph",
 ]
+
+[dev-dependencies]
+dirs = { workspace = true }
 
 [[bin]]
 name = "comic-text-detector"
