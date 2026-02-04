@@ -57,7 +57,9 @@ CUDA と Metal による GPU アクセラレーションに対応しており、
 
 Koharu は CUDA 対応ビルドが用意されており、NVIDIA GPU を活用してより高速に処理できます。
 
-Koharu には CUDA toolkit 12.x と cuDNN 9.x が同梱されており、dylib は初回起動時にアプリケーションデータディレクトリへ自動的に展開されます。
+Koharu には CUDA toolkit 13.1 と cuDNN 9.19 が同梱されており、dylib は初回起動時にアプリケーションデータディレクトリへ自動的に展開されます。
+
+最新の NVIDIA ドライバーがインストールされていることを確認してください。最新のドライバーは [NVIDIA App](https://www.nvidia.com/en-us/software/nvidia-app/) からダウンロードできます。
 
 #### 対応する NVIDIA GPU
 

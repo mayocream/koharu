@@ -61,15 +61,15 @@ const fn skip_preload(spec: DylibSpec) -> DylibSpec {
 /// CUDA packages to pull wheels for
 pub const PACKAGES: &[&str] = &[
     #[cfg(feature = "cuda")]
-    "nvidia-cuda-runtime-cu12",
+    "nvidia-cuda-runtime/13.1.80",
     #[cfg(feature = "cuda")]
-    "nvidia-cublas-cu12",
+    "nvidia-cublas/13.2.1.1",
     #[cfg(feature = "cuda")]
-    "nvidia-cufft-cu12",
+    "nvidia-cufft/12.1.0.78",
     #[cfg(feature = "cuda")]
-    "nvidia-curand-cu12",
+    "nvidia-curand/10.4.1.81",
     #[cfg(feature = "cudnn")]
-    "nvidia-cudnn-cu12/9.17.1.4",
+    "nvidia-cudnn-cu13/9.19.0.56",
 ];
 
 /// Hard-coded load list by platform
@@ -77,13 +77,13 @@ pub const PACKAGES: &[&str] = &[
 const DYLIBS: &[DylibSpec] = &[
     // Core CUDA runtime and BLAS/FFT
     #[cfg(feature = "cuda")]
-    dylib("cudart64_12.dll"),
+    dylib("cudart64_13.dll"),
     #[cfg(feature = "cuda")]
-    dylib("cublasLt64_12.dll"),
+    dylib("cublasLt64_13.dll"),
     #[cfg(feature = "cuda")]
-    dylib("cublas64_12.dll"),
+    dylib("cublas64_13.dll"),
     #[cfg(feature = "cuda")]
-    dylib("cufft64_11.dll"),
+    dylib("cufft64_12.dll"),
     #[cfg(feature = "cuda")]
     dylib("curand64_10.dll"),
     // cuDNN core and dependency chain (graph -> ops -> adv/cnn)
@@ -113,13 +113,13 @@ const DYLIBS: &[DylibSpec] = &[];
 const DYLIBS: &[DylibSpec] = &[
     // Core CUDA runtime and BLAS/FFT (sonames)
     #[cfg(feature = "cuda")]
-    dylib("libcudart.so.12"),
+    dylib("libcudart.so.13"),
     #[cfg(feature = "cuda")]
-    dylib("libcublasLt.so.12"),
+    dylib("libcublasLt.so.13"),
     #[cfg(feature = "cuda")]
-    dylib("libcublas.so.12"),
+    dylib("libcublas.so.13"),
     #[cfg(feature = "cuda")]
-    dylib("libcufft.so.11"),
+    dylib("libcufft.so.12"),
     #[cfg(feature = "cuda")]
     dylib("libcurand.so.10"),
     // cuDNN core and dependency chain
