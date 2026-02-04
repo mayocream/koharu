@@ -1,3 +1,21 @@
+## [0.30.0] - 2026-02-04
+
+### 🚀 Features
+
+- Download progress indicator
+- CUDA 13.1
+- Rust-based processing
+
+### 📚 Documentation
+
+- Add ja README
+- Add contributors
+
+### ⚙️ Miscellaneous Tasks
+
+- Remove unused settings
+- Make clippy happy
+- Release 0.30.0
 ## [0.29.0] - 2026-02-01
 
 ### 🚀 Features
