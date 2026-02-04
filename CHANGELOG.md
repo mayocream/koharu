@@ -1,3 +1,12 @@
+## [0.30.1] - 2026-02-04
+
+### 🐛 Bug Fixes
+
+- Cuda missing header
+
+### ⚙️ Miscellaneous Tasks
+
+- Release 0.30.1
 ## [0.30.0] - 2026-02-04
 
 ### 🚀 Features
