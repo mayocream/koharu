@@ -1,5 +1,7 @@
 # Koharu
 
+[日本語](./README.ja.md)
+
 ML-powered manga translator, written in **Rust**.
 
 Koharu introduces a new workflow for manga translation, utilizing the power of ML to automate the process. It combines the capabilities of object detection, OCR, inpainting, and LLMs to create a seamless translation experience.
@@ -115,8 +117,6 @@ For translating to Chinese:
 For other languages, you may use:
 
 - [hunyuan-7b-mt-v1.0](https://huggingface.co/Mungert/Hunyuan-MT-7B-GGUF): ~6.3GB and fits on 8 GB VRAM, decent multi-language translation quality.
-
-Also, OpenAI compatible endpoints are supported if you have access to those services.
 
 LLMs will be automatically downloaded on demand when you select a model in the settings. Choose the smallest model that meets your quality needs if you are memory-bound; prefer the 7B/8B variants when you have sufficient VRAM/RAM for better translations.
 
