@@ -1,7 +1,13 @@
 'use client'
 
 import { create } from 'zustand'
-import { invoke, getCurrentWindow, ProgressBarStatus } from '@/lib/backend'
+import {
+  invoke,
+  subscribeProcessProgress,
+  getCurrentWindow,
+  ProgressBarStatus,
+  type ProcessProgress,
+} from '@/lib/backend'
 import {
   Document,
   InpaintRegion,
@@ -14,18 +20,6 @@ type LlmModelInfo = {
   id: string
   languages: string[]
 }
-
-type ProcessAction = 'detect' | 'ocr' | 'inpaint' | 'llmGenerate' | 'render'
-
-type ProcessImageOptionsObject = {
-  onProgress?: (progress: number) => Promise<void>
-  onStepChange?: (step: ProcessAction) => Promise<void> | void
-  skipOperationTracking?: boolean
-}
-
-type ProcessImageOptions =
-  | ((progress: number) => Promise<void>)
-  | ProcessImageOptionsObject
 
 const createTextBlockSyncer = () => {
   let pending: {
@@ -211,11 +205,7 @@ type AppState = OperationSlice & {
     index?: number,
     textBlockIndex?: number,
   ) => Promise<void>
-  processImage: (
-    _?: any,
-    index?: number,
-    options?: ProcessImageOptions,
-  ) => Promise<void>
+  processImage: (_?: any, index?: number) => Promise<void>
   inpaintAndRenderImage: (_?: any, index?: number) => Promise<void>
   processAllImages: () => Promise<void>
   exportDocument: () => Promise<void>
@@ -619,97 +609,26 @@ export const useAppStore = create<AppState>((set, get) => {
         void get().renderTextBlock(undefined, index, textBlockIndex)
       }
     },
-    // batch proceeses
-    processImage: async (_, index, options) => {
-      const normalizedOptions: ProcessImageOptionsObject =
-        typeof options === 'function'
-          ? { onProgress: options, skipOperationTracking: false }
-          : (options ?? {})
-
-      const { onProgress, onStepChange, skipOperationTracking } =
-        normalizedOptions
-      const operation = get().operation
-      const isBatchRun = operation?.type === 'process-all'
-
-      if (!get().llmReady) {
-        await get().llmList()
-        await get().llmToggleLoadUnload()
-      }
-
+    // Auto-processing: delegates to the backend pipeline; progress via SSE
+    processImage: async (_, index) => {
       index = index ?? get().currentDocumentIndex
-      console.log('Processing image at index', index)
-      const setProgres = onProgress ?? get().setProgress
-      const shouldTrackOperation = skipOperationTracking !== true && !isBatchRun
-      const ownsOperation = shouldTrackOperation && !isBatchRun
-
-      const actions: ProcessAction[] = [
-        'detect',
-        'ocr',
-        'inpaint',
-        'llmGenerate',
-        'render',
-      ]
-      const totalSteps = actions.length
-
-      if (shouldTrackOperation) {
-        const firstStep = actions[0] ?? 'detect'
-        if (ownsOperation) {
-          get().startOperation({
-            type: 'process-current',
-            step: firstStep,
-            current: 0,
-            total: totalSteps,
-            cancellable: true,
-          })
-        } else {
-          get().updateOperation({
-            step: firstStep,
-            current: 0,
-            total: totalSteps,
-          })
-        }
-      }
-
-      await setProgres(0)
-      for (let i = 0; i < actions.length; i++) {
-        if (get().operation?.cancelRequested) {
-          break
-        }
-
-        const action = actions[i]
-
-        if (onStepChange) {
-          await onStepChange(action)
-        }
-
-        if (shouldTrackOperation) {
-          get().updateOperation({
-            step: action,
-            current: i,
-            total: totalSteps,
-          })
-        }
-
-        await (get() as any)[actions[i]](_, index)
-        await setProgres(Math.floor(((i + 1) / totalSteps) * 100))
-      }
-
-      const cancelled = get().operation?.cancelRequested
-
-      if (shouldTrackOperation && ownsOperation && !cancelled) {
-        get().updateOperation({ current: totalSteps, total: totalSteps })
-      }
-
-      if (shouldTrackOperation && ownsOperation) {
+      get().startOperation({
+        type: 'process-current',
+        cancellable: true,
+        current: 0,
+        total: 5,
+      })
+      try {
+        await invoke('process', {
+          index,
+          llmModelId: get().llmSelectedModel,
+          language: get().llmSelectedLanguage,
+          shaderEffect: get().renderEffect,
+        })
+      } catch (err) {
+        console.error('Failed to start processing:', err)
         get().finishOperation()
-      }
-
-      if (!onProgress) {
         await get().clearProgress()
-      }
-
-      if (cancelled) {
-        return
       }
     },
 
@@ -723,59 +642,23 @@ export const useAppStore = create<AppState>((set, get) => {
       const total = get().totalPages
       if (!total) return
 
-      if (!get().llmReady) {
-        await get().llmList()
-        await get().llmToggleLoadUnload()
-      }
-
       get().startOperation({
         type: 'process-all',
         cancellable: true,
         current: 0,
         total,
       })
-
-      for (let index = 0; index < total; index++) {
-        if (get().operation?.cancelRequested) break
-
-        // Switch to this document
-        await get().setCurrentDocumentIndex(index)
-        get().updateOperation({
-          current: index,
-          total,
+      try {
+        await invoke('process', {
+          llmModelId: get().llmSelectedModel,
+          language: get().llmSelectedLanguage,
+          shaderEffect: get().renderEffect,
         })
-
-        await get().processImage(null, index, {
-          onProgress: async (progress) => {
-            if (get().operation?.cancelRequested) return
-            const currentValue = index + progress / 100
-            const overall = Math.min(
-              100,
-              Math.round((currentValue / total) * 100),
-            )
-            await get().setProgress(overall)
-            get().updateOperation({ current: currentValue, total })
-          },
-          onStepChange: (step) => {
-            if (get().operation?.cancelRequested) return
-            get().updateOperation({ step })
-          },
-          skipOperationTracking: true,
-        })
-
-        if (get().operation?.cancelRequested) {
-          break
-        }
-
-        get().updateOperation({ current: index + 1, total })
+      } catch (err) {
+        console.error('Failed to start processing:', err)
+        get().finishOperation()
+        await get().clearProgress()
       }
-
-      if (!get().operation?.cancelRequested) {
-        get().updateOperation({ current: total, total })
-      }
-
-      await get().clearProgress()
-      get().finishOperation()
     },
 
     exportDocument: async () => {
@@ -805,6 +688,51 @@ type ConfigState = {
     color: string
   }
   setBrushConfig: (config: Partial<ConfigState['brushConfig']>) => void
+}
+
+// Subscribe to pipeline progress at module level so the EventSource is
+// connected before any pipeline is started (avoids race with lazy component mount).
+if (typeof window !== 'undefined') {
+  subscribeProcessProgress((progress: ProcessProgress) => {
+    const s = useAppStore.getState()
+    if (progress.status === 'running') {
+      const isSingleDoc = progress.totalDocuments <= 1
+      s.updateOperation({
+        step: progress.step ?? undefined,
+        current: isSingleDoc
+          ? progress.currentStepIndex
+          : progress.currentDocument +
+            (progress.totalSteps > 0
+              ? progress.currentStepIndex / progress.totalSteps
+              : 0),
+        total: isSingleDoc ? progress.totalSteps : progress.totalDocuments,
+      })
+      getCurrentWindow()
+        .setProgressBar({
+          status: ProgressBarStatus.Normal,
+          progress: progress.overallPercent,
+        })
+        .catch(() => {})
+      s.refreshCurrentDocument()
+    } else {
+      // Set to 100% first, then wait for the CSS transition to finish
+      // before removing the bubble.
+      s.updateOperation({
+        current: s.operation?.total,
+        total: s.operation?.total,
+      })
+      getCurrentWindow()
+        .setProgressBar({ status: ProgressBarStatus.Normal, progress: 100 })
+        .catch(() => {})
+      s.refreshCurrentDocument()
+      setTimeout(() => {
+        useAppStore.getState().finishOperation()
+        getCurrentWindow()
+          .setProgressBar({ status: ProgressBarStatus.None, progress: 0 })
+          .catch(() => {})
+      }, 1000)
+    }
+  })
 }
 
 export const useConfigStore = create<ConfigState>((set) => ({

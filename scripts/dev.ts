@@ -58,7 +58,7 @@ async function setupCuda() {
   }
 
   throw new Error(
-    'NVCC not found. Please install the CUDA Toolkit from https://developer.nvidia.com/cuda-12-9-1-download-archive',
+    'NVCC not found. Please install the CUDA Toolkit from https://developer.nvidia.com/cuda-downloads',
   )
 }
 

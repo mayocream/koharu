@@ -27,7 +27,7 @@ use crate::{
     khr::{deserialize_khr, has_khr_magic, serialize_khr},
     llm,
     result::Result,
-    state::{Document, TextBlock, TextStyle},
+    state::{Document, TextBlock},
     version,
 };
 
@@ -194,7 +194,7 @@ pub async fn detect(
     State(state): State<AppResources>,
     Json(payload): Json<IndexPayload>,
 ) -> Result<Json<()>> {
-    let snapshot = {
+    let mut snapshot = {
         let guard = state.state.read().await;
         guard
             .documents
@@ -203,44 +203,14 @@ pub async fn detect(
             .ok_or_else(|| anyhow::anyhow!("Document not found"))?
     };
 
-    let (text_blocks, segment) = state.ml.detect_dialog(&snapshot.image).await?;
-    let mut updated = snapshot.clone();
-    updated.text_blocks = text_blocks;
-    updated.segment = Some(segment);
-
-    if !updated.text_blocks.is_empty() {
-        let images: Vec<image::DynamicImage> = updated
-            .text_blocks
-            .iter()
-            .map(|block| {
-                updated.image.crop_imm(
-                    block.x as u32,
-                    block.y as u32,
-                    block.width as u32,
-                    block.height as u32,
-                )
-            })
-            .collect();
-
-        let font_predictions = state.ml.detect_fonts(&images, 1).await?;
-        for (block, prediction) in updated.text_blocks.iter_mut().zip(font_predictions) {
-            let color = prediction.text_color;
-            let font_size = (prediction.font_size_px > 0.0).then_some(prediction.font_size_px);
-            block.font_prediction = Some(prediction);
-            block.style = Some(TextStyle {
-                font_size,
-                color: [color[0], color[1], color[2], 255],
-                ..Default::default()
-            });
-        }
-    }
+    state.ml.detect(&mut snapshot).await?;
 
     let mut guard = state.state.write().await;
     let document = guard
         .documents
         .get_mut(payload.index)
         .ok_or_else(|| anyhow::anyhow!("Document not found"))?;
-    *document = updated;
+    *document = snapshot;
     Ok(Json(()))
 }
 
@@ -249,7 +219,7 @@ pub async fn ocr(
     State(state): State<AppResources>,
     Json(payload): Json<IndexPayload>,
 ) -> Result<Json<()>> {
-    let snapshot = {
+    let mut snapshot = {
         let guard = state.state.read().await;
         guard
             .documents
@@ -258,16 +228,14 @@ pub async fn ocr(
             .ok_or_else(|| anyhow::anyhow!("Document not found"))?
     };
 
-    let text_blocks = state.ml.ocr(&snapshot.image, &snapshot.text_blocks).await?;
-    let mut updated = snapshot;
-    updated.text_blocks = text_blocks;
+    state.ml.ocr(&mut snapshot).await?;
 
     let mut guard = state.state.write().await;
     let document = guard
         .documents
         .get_mut(payload.index)
         .ok_or_else(|| anyhow::anyhow!("Document not found"))?;
-    *document = updated;
+    *document = snapshot;
     Ok(Json(()))
 }
 
@@ -276,7 +244,7 @@ pub async fn inpaint(
     State(state): State<AppResources>,
     Json(payload): Json<IndexPayload>,
 ) -> Result<Json<()>> {
-    let snapshot = {
+    let mut snapshot = {
         let guard = state.state.read().await;
         guard
             .documents
@@ -285,43 +253,14 @@ pub async fn inpaint(
             .ok_or_else(|| anyhow::anyhow!("Document not found"))?
     };
 
-    let segment = snapshot
-        .segment
-        .as_ref()
-        .ok_or_else(|| anyhow::anyhow!("Segment image not found"))?;
-    let text_blocks = &snapshot.text_blocks;
-    let mut segment_data = segment.to_rgba8();
-    let (seg_width, seg_height) = segment_data.dimensions();
-
-    for y in 0..seg_height {
-        for x in 0..seg_width {
-            let pixel = segment_data.get_pixel_mut(x, y);
-            if pixel.0 != [0, 0, 0, 255] {
-                let inside_any_block = text_blocks.iter().any(|block| {
-                    x >= block.x as u32
-                        && x < (block.x + block.width) as u32
-                        && y >= block.y as u32
-                        && y < (block.y + block.height) as u32
-                });
-                if !inside_any_block {
-                    *pixel = image::Rgba([0, 0, 0, 255]);
-                }
-            }
-        }
-    }
-
-    let mask = SerializableDynamicImage::from(image::DynamicImage::ImageRgba8(segment_data));
-    let inpainted = state.ml.inpaint(&snapshot.image, &mask).await?;
-
-    let mut updated = snapshot;
-    updated.inpainted = Some(inpainted);
+    state.ml.inpaint(&mut snapshot).await?;
 
     let mut guard = state.state.write().await;
     let document = guard
         .documents
         .get_mut(payload.index)
         .ok_or_else(|| anyhow::anyhow!("Document not found"))?;
-    *document = updated;
+    *document = snapshot;
     Ok(Json(()))
 }
 
@@ -544,7 +483,7 @@ pub async fn inpaint_partial(
         SerializableDynamicImage(snapshot.image.crop_imm(x0, y0, crop_width, crop_height));
     let mask_crop = SerializableDynamicImage(mask_image.crop_imm(x0, y0, crop_width, crop_height));
 
-    let inpainted_crop = state.ml.inpaint(&image_crop, &mask_crop).await?;
+    let inpainted_crop = state.ml.inpaint_raw(&image_crop, &mask_crop).await?;
 
     let mut stitched = snapshot
         .inpainted
@@ -848,4 +787,60 @@ pub async fn download_progress()
         }
     });
     Sse::new(stream).keep_alive(KeepAlive::default())
+}
+
+// --- Auto-processing pipeline endpoints ---
+
+/// Start the processing pipeline. Returns immediately; progress is available
+/// via the `process_progress` SSE endpoint.
+pub async fn process(
+    State(state): State<AppResources>,
+    Json(payload): Json<crate::pipeline::ProcessRequest>,
+) -> Result<Json<()>> {
+    {
+        let guard = state.pipeline.read().await;
+        if guard.is_some() {
+            Err(anyhow::anyhow!("A processing pipeline is already running"))?;
+        }
+    }
+
+    let cancel = std::sync::Arc::new(std::sync::atomic::AtomicBool::new(false));
+    {
+        let mut guard = state.pipeline.write().await;
+        *guard = Some(crate::pipeline::PipelineHandle {
+            cancel: cancel.clone(),
+        });
+    }
+
+    let resources = state.clone();
+    tokio::spawn(async move {
+        crate::pipeline::run_pipeline(resources, payload, cancel).await;
+    });
+
+    Ok(Json(()))
+}
+
+pub async fn process_progress()
+-> Sse<impl futures::Stream<Item = std::result::Result<Event, Infallible>>> {
+    let rx = crate::pipeline::subscribe();
+    let stream = futures::stream::unfold(rx, |mut rx| async {
+        loop {
+            match rx.recv().await {
+                Ok(p) => return Some((Ok(Event::default().json_data(p).unwrap()), rx)),
+                Err(tokio::sync::broadcast::error::RecvError::Lagged(_)) => continue,
+                Err(tokio::sync::broadcast::error::RecvError::Closed) => return None,
+            }
+        }
+    });
+    Sse::new(stream).keep_alive(KeepAlive::default())
+}
+
+pub async fn process_cancel(State(state): State<AppResources>) -> Result<Json<()>> {
+    let guard = state.pipeline.read().await;
+    if let Some(handle) = guard.as_ref() {
+        handle
+            .cancel
+            .store(true, std::sync::atomic::Ordering::Relaxed);
+    }
+    Ok(Json(()))
 }

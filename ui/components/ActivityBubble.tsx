@@ -28,7 +28,7 @@ function ProgressBar({ percent }: { percent?: number }) {
       <div className='bg-muted relative h-1.5 flex-1 overflow-hidden rounded-full'>
         {typeof percent === 'number' ? (
           <div
-            className='bg-primary h-full rounded-full transition-[width] duration-300'
+            className='bg-primary h-full rounded-full transition-[width] duration-700 ease-out'
             style={{ width: `${percent}%` }}
           />
         ) : (

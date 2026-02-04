@@ -5,6 +5,7 @@ pub mod image;
 pub mod khr;
 pub mod llm;
 pub mod ml;
+pub mod pipeline;
 pub mod renderer;
 pub mod result;
 pub mod server;

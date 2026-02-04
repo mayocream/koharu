@@ -41,10 +41,15 @@ export const createOperationSlice = (set: any): OperationSlice => ({
         : { operation: undefined },
     ),
   finishOperation: () => set({ operation: undefined }),
-  cancelOperation: () =>
+  cancelOperation: () => {
     set((state: OperationSlice) =>
       state.operation
         ? { operation: { ...state.operation, cancelRequested: true } }
         : { operation: undefined },
-    ),
+    )
+    // Also cancel backend pipeline if running
+    import('@/lib/backend').then(({ invoke }) => {
+      invoke('process_cancel').catch(() => {})
+    })
+  },
 })

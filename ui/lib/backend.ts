@@ -231,37 +231,42 @@ export type DownloadProgress = {
   status: 'Started' | 'Downloading' | 'Completed' | { Failed: string }
 }
 
-export function subscribeDownloadProgress(
-  callback: (progress: DownloadProgress) => void,
+export type ProcessProgress = {
+  status: 'running' | 'completed' | 'cancelled' | { failed: string }
+  step: string | null
+  currentDocument: number
+  totalDocuments: number
+  currentStepIndex: number
+  totalSteps: number
+  overallPercent: number
+}
+
+function subscribeSSE<T>(
+  endpoint: string,
+  callback: (data: T) => void,
 ): () => void {
-  let stopped = false
+  let es: EventSource | null = null
 
   ;(async () => {
     await ensureInitialized()
-    const es = new EventSource(`${apiBase}/download_progress`)
+    es = new EventSource(`${apiBase}/${endpoint}`)
     es.onmessage = (event) => {
-      if (stopped) {
-        es.close()
-        return
-      }
       try {
-        callback(JSON.parse(event.data) as DownloadProgress)
+        callback(JSON.parse(event.data) as T)
       } catch (_) {}
-    }
-    const check = () => {
-      if (stopped) es.close()
-    }
-    const id = setInterval(check, 1000)
-    es.onerror = () => {
-      clearInterval(id)
-      es.close()
     }
   })()
 
   return () => {
-    stopped = true
+    es?.close()
   }
 }
+
+export const subscribeDownloadProgress = (cb: (p: DownloadProgress) => void) =>
+  subscribeSSE<DownloadProgress>('download_progress', cb)
+
+export const subscribeProcessProgress = (cb: (p: ProcessProgress) => void) =>
+  subscribeSSE<ProcessProgress>('process_progress', cb)
 
 export const isTauri = isTauriEnv
 

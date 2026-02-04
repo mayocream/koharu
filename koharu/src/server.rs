@@ -76,6 +76,9 @@ fn build_router(state: AppResources) -> Router {
         .route("/api/llm_ready", get(llm_ready).post(llm_ready))
         .route("/api/llm_generate", post(llm_generate))
         .route("/api/download_progress", get(download_progress))
+        .route("/api/process", post(process))
+        .route("/api/process_cancel", post(process_cancel))
+        .route("/api/process_progress", get(process_progress))
         .with_state(state)
         .layer(DefaultBodyLimit::max(1024 * 1024 * 1024))
         .layer(

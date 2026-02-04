@@ -59,6 +59,7 @@ pub struct AppResources {
     pub llm: Arc<llm::Model>,
     pub renderer: Arc<Renderer>,
     pub ml_device: DeviceName,
+    pub pipeline: Arc<RwLock<Option<crate::pipeline::PipelineHandle>>>,
 }
 
 #[derive(Parser)]
@@ -208,6 +209,7 @@ async fn build_resources(cpu: bool, _register_file_assoc: bool) -> Result<AppRes
         llm,
         renderer,
         ml_device,
+        pipeline: Arc::new(RwLock::new(None)),
     })
 }
 
