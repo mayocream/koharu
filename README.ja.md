@@ -7,7 +7,7 @@ Koharu は、ML の力を活用して翻訳工程を自動化する、新しい�
 内部では、高性能推論のために [candle](https://github.com/huggingface/candle) を使用し、GUI には [Tauri](https://github.com/tauri-apps/tauri) を採用しています。すべてのコンポーネントが Rust で書かれており、安全性と高速性を両立しています。
 
 > [!NOTE]
-> Koharu は ML モデルを**ローカル（お使いの端末上）**で実行するため、データのプライバシーが保たれます。外部サーバーへデータは送信されません。Koharu はユーザーデータを一切収集しないことを保証します。
+> Koharu は ML モデルを **ローカル（お使いの端末上）** で実行するため、データのプライバシーが保たれます。外部サーバーへデータは送信されません。Koharu はユーザーデータを一切収集しないことを保証します。
 
 ---
 
@@ -152,6 +152,12 @@ Koharu が役に立った場合は、開発支援のためにスポンサーを�
 
 - [GitHub Sponsors](https://github.com/sponsors/mayocream)
 - [Patreon](https://www.patreon.com/mayocream)
+
+## 貢献者
+
+<a href="https://github.com/mayocream/koharu/graphs/contributors">
+  <img src="https://contrib.rocks/image?repo=mayocream/koharu" />
+</a>
 
 ## ライセンス
 

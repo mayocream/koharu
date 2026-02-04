@@ -156,6 +156,12 @@ If you find Koharu useful, consider sponsoring the project to support its develo
 - [GitHub Sponsors](https://github.com/sponsors/mayocream)
 - [Patreon](https://www.patreon.com/mayocream)
 
+## Contributors
+
+<a href="https://github.com/mayocream/koharu/graphs/contributors">
+  <img src="https://contrib.rocks/image?repo=mayocream/koharu" />
+</a>
+
 ## License
 
 Koharu application is licensed under the [GNU General Public License v3.0](LICENSE-GPL).
