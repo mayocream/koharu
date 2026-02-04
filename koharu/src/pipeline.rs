@@ -174,23 +174,23 @@ async fn run_pipeline_inner(
     }
 
     // Ensure LLM is loaded
-    if let Some(model_id) = &req.llm_model_id {
+    if let Some(model_id) = &req.llm_model_id
+        && !res.llm.ready().await
+    {
+        let id = ModelId::from_str(model_id)?;
+        res.llm.load(id).await;
+        // Poll until ready (with timeout)
+        for _ in 0..300 {
+            if res.llm.ready().await {
+                break;
+            }
+            tokio::time::sleep(Duration::from_millis(100)).await;
+            if cancel.load(Ordering::Relaxed) {
+                return Ok(());
+            }
+        }
         if !res.llm.ready().await {
-            let id = ModelId::from_str(model_id)?;
-            res.llm.load(id).await;
-            // Poll until ready (with timeout)
-            for _ in 0..300 {
-                if res.llm.ready().await {
-                    break;
-                }
-                tokio::time::sleep(Duration::from_millis(100)).await;
-                if cancel.load(Ordering::Relaxed) {
-                    return Ok(());
-                }
-            }
-            if !res.llm.ready().await {
-                anyhow::bail!("LLM failed to load within timeout");
-            }
+            anyhow::bail!("LLM failed to load within timeout");
         }
     }
 
