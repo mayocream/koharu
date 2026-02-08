@@ -1,3 +1,13 @@
+## [0.31.0] - 2026-02-08
+
+### 🚀 Features
+
+- Websocket-based rpc
+
+### ⚙️ Miscellaneous Tasks
+
+- Remove unused tower-http
+- Release 0.31.0
 ## [0.30.1] - 2026-02-04
 
 ### 🐛 Bug Fixes
