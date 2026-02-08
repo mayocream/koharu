@@ -107,7 +107,6 @@ wgpu = "28.0"
 etagere = "0.2"
 bytemuck = { version = "1.21", features = ["derive"] }
 axum = { version = "0.8", features = ["ws"] }
-tower-http = { version = "0.6", features = ["fs"] }
 tower = { version = "0.5", features = ["timeout", "util"] }
 rmp-serde = "1"
 rmpv = { version = "1", features = ["with-serde"] }

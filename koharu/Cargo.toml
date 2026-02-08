@@ -49,7 +49,6 @@ once_cell = { workspace = true }
 sys-locale = { workspace = true }
 icu = { workspace = true }
 axum = { workspace = true }
-tower-http = { workspace = true }
 tower = { workspace = true }
 rmp-serde = { workspace = true }
 rmpv = { workspace = true }
