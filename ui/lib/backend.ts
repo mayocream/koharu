@@ -1,31 +1,49 @@
 'use client'
 
+import { WsRpcClient } from './ws'
 import { pickFiles, saveFile } from './fs'
+import { toArrayBuffer } from './util'
+import type { RpcMethodMap, RpcNotificationMap, FileResult } from './rpc-types'
 
-let apiBase = '/api'
-let _initPromise: Promise<void> | null = null
+// --- Singleton client ---
+
+let client: WsRpcClient | null = null
+
+function getClient(): WsRpcClient {
+  if (client) return client
+
+  let url: string
+  if (typeof window !== 'undefined' && (window as any).__KOHARU_WS_PORT__) {
+    const port = (window as any).__KOHARU_WS_PORT__ as number
+    url = `ws://127.0.0.1:${port}/ws`
+  } else {
+    // Browser / headless mode: derive from current location
+    const proto =
+      typeof location !== 'undefined' && location.protocol === 'https:'
+        ? 'wss:'
+        : 'ws:'
+    const host = typeof location !== 'undefined' ? location.host : '127.0.0.1'
+    url = `${proto}//${host}/ws`
+  }
+
+  client = new WsRpcClient(url)
+  client.connect()
+  return client
+}
+
+// --- Environment helpers ---
 
 const isTauriEnv = (): boolean =>
   typeof window !== 'undefined' && !!(window as any).__TAURI_INTERNALS__
 
-async function ensureInitialized(): Promise<void> {
-  if (!isTauriEnv()) {
-    // In browser/headless mode, use relative URLs
-    return
-  }
+export const isTauri = isTauriEnv
 
-  if (_initPromise) {
-    return _initPromise
-  }
-
-  _initPromise = (async () => {
-    const { invoke } = await import('@tauri-apps/api/core')
-    const port = await invoke<number>('initialize')
-    apiBase = `http://127.0.0.1:${port}/api`
-  })()
-
-  return _initPromise
+export const isMacOS = (): boolean => {
+  if (typeof window === 'undefined') return false
+  return /Mac|iPhone|iPad|iPod/.test(navigator.userAgent)
 }
+
+// --- Progress bar ---
 
 export enum ProgressBarStatus {
   None = 'none',
@@ -54,11 +72,12 @@ export function getCurrentWindow(): ProgressTarget {
 
   return {
     async setProgressBar() {
-      // no-op in headless mode
       return
     },
   }
 }
+
+// --- Window resize listener ---
 
 export async function listen<T>(
   event: string,
@@ -78,202 +97,7 @@ export async function listen<T>(
   return async () => {}
 }
 
-export async function invoke<T>(
-  cmd: string,
-  args?: Record<string, any>,
-): Promise<T> {
-  await ensureInitialized()
-
-  // Browser-only implementations (no Tauri available)
-  if (!isTauriEnv()) {
-    switch (cmd) {
-      case 'open_external': {
-        const url = typeof args?.url === 'string' ? args.url : undefined
-        if (url) {
-          window.open(url, '_blank', 'noopener,noreferrer')
-        }
-        return undefined as T
-      }
-    }
-  }
-
-  // File operations with special handling
-  switch (cmd) {
-    case 'open_documents':
-      return (await openDocumentsHttp()) as T
-    case 'save_documents':
-      return (await saveBinary(`${apiBase}/save_documents`)) as T
-    case 'export_document':
-      return (await saveBinary(`${apiBase}/export_document`, args)) as T
-    default:
-      return invokeHttp<T>(cmd, args)
-  }
-}
-
-async function invokeHttp<T>(
-  cmd: string,
-  args?: Record<string, any>,
-): Promise<T> {
-  const body = args ?? {}
-  const res = await fetch(`${apiBase}/${cmd}`, {
-    method: 'POST',
-    headers: {
-      'Content-Type': 'application/json',
-    },
-    body: JSON.stringify(body),
-  })
-
-  if (!res.ok) {
-    throw new Error(await readError(res))
-  }
-
-  const contentType = res.headers.get('content-type') ?? ''
-  if (contentType.includes('application/json')) {
-    return (await res.json()) as T
-  }
-
-  const buffer = await res.arrayBuffer()
-  return buffer as unknown as T
-}
-
-async function openDocumentsHttp<T>(): Promise<T> {
-  const files = await pickFiles(
-    [
-      {
-        description: 'Documents',
-        accept: {
-          // 'application/octet-stream': ['.khr'],
-          'image/*': ['.png', '.jpg', '.jpeg', '.webp'],
-        },
-      },
-    ],
-    true,
-  )
-  if (!files.length) {
-    return 0 as unknown as T
-  }
-
-  const formData = new FormData()
-  for (const file of files) {
-    formData.append('files', file, file.name)
-  }
-
-  const res = await fetch(`${apiBase}/open_documents`, {
-    method: 'POST',
-    body: formData,
-  })
-  if (!res.ok) {
-    throw new Error(await readError(res))
-  }
-
-  return (await res.json()) as T
-}
-
-async function saveBinary(
-  endpoint: string,
-  args?: Record<string, any>,
-): Promise<void> {
-  const hasBody = args && Object.keys(args).length > 0
-  const res = await fetch(endpoint, {
-    method: 'POST',
-    headers: hasBody ? { 'Content-Type': 'application/json' } : undefined,
-    body: hasBody ? JSON.stringify(args) : undefined,
-  })
-
-  if (!res.ok) {
-    throw new Error(await readError(res))
-  }
-
-  const blob = await res.blob()
-  const suggestedName =
-    parseFilename(res.headers.get('content-disposition')) ?? 'download.bin'
-  await saveFile(blob, suggestedName)
-}
-
-function parseFilename(disposition?: string | null): string | undefined {
-  if (!disposition) return undefined
-  const match = /filename="?([^\";]+)"?/i.exec(disposition)
-  return match?.[1]
-}
-
-async function readError(res: Response): Promise<string> {
-  const contentType = res.headers.get('content-type') ?? ''
-  if (contentType.includes('application/json')) {
-    try {
-      const body = (await res.json()) as { error?: string }
-      if (body?.error) return body.error
-    } catch (_) {}
-  }
-  try {
-    return await res.text()
-  } catch (_) {
-    return res.statusText || 'Request failed'
-  }
-}
-
-export async function fetchThumbnail(index: number): Promise<Blob> {
-  await ensureInitialized()
-  const res = await fetch(`${apiBase}/get_thumbnail`, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ index }),
-  })
-  if (!res.ok) {
-    throw new Error(await readError(res))
-  }
-  return res.blob()
-}
-
-export type DownloadProgress = {
-  filename: string
-  downloaded: number
-  total?: number
-  status: 'Started' | 'Downloading' | 'Completed' | { Failed: string }
-}
-
-export type ProcessProgress = {
-  status: 'running' | 'completed' | 'cancelled' | { failed: string }
-  step: string | null
-  currentDocument: number
-  totalDocuments: number
-  currentStepIndex: number
-  totalSteps: number
-  overallPercent: number
-}
-
-function subscribeSSE<T>(
-  endpoint: string,
-  callback: (data: T) => void,
-): () => void {
-  let es: EventSource | null = null
-
-  ;(async () => {
-    await ensureInitialized()
-    es = new EventSource(`${apiBase}/${endpoint}`)
-    es.onmessage = (event) => {
-      try {
-        callback(JSON.parse(event.data) as T)
-      } catch (_) {}
-    }
-  })()
-
-  return () => {
-    es?.close()
-  }
-}
-
-export const subscribeDownloadProgress = (cb: (p: DownloadProgress) => void) =>
-  subscribeSSE<DownloadProgress>('download_progress', cb)
-
-export const subscribeProcessProgress = (cb: (p: ProcessProgress) => void) =>
-  subscribeSSE<ProcessProgress>('process_progress', cb)
-
-export const isTauri = isTauriEnv
-
-export const isMacOS = (): boolean => {
-  if (typeof window === 'undefined') return false
-  return /Mac|iPhone|iPad|iPod/.test(navigator.userAgent)
-}
+// --- Window controls ---
 
 export const windowControls = {
   async minimize() {
@@ -301,4 +125,95 @@ export const windowControls = {
     }
     return false
   },
+}
+
+// --- Typed RPC invoke ---
+
+export async function invoke<M extends keyof RpcMethodMap>(
+  method: M,
+  ...args: RpcMethodMap[M][0] extends void ? [] : [RpcMethodMap[M][0]]
+): Promise<RpcMethodMap[M][1]> {
+  const params = args[0]
+
+  // Browser-only: open_external in a new tab
+  if (!isTauriEnv() && method === 'open_external') {
+    const p = params as { url: string }
+    if (p?.url) {
+      window.open(p.url, '_blank', 'noopener,noreferrer')
+    }
+    return undefined as RpcMethodMap[M][1]
+  }
+
+  // Special file-pick flow for open_documents
+  if (method === 'open_documents') {
+    return (await openDocumentsRpc()) as RpcMethodMap[M][1]
+  }
+
+  // Special file-save flow for save_documents / export_document
+  if (method === 'save_documents' || method === 'export_document') {
+    const result = await getClient().invoke<FileResult>(method, params)
+    const blob = new Blob([toArrayBuffer(result.data)])
+    await saveFile(blob, result.filename)
+    return undefined as RpcMethodMap[M][1]
+  }
+
+  return getClient().invoke<RpcMethodMap[M][1]>(method, params)
+}
+
+async function openDocumentsRpc(): Promise<number> {
+  const files = await pickFiles(
+    [
+      {
+        description: 'Documents',
+        accept: {
+          'image/*': ['.png', '.jpg', '.jpeg', '.webp'],
+        },
+      },
+    ],
+    true,
+  )
+  if (!files.length) return 0
+
+  const entries = await Promise.all(
+    files.map(async (file) => ({
+      name: file.name,
+      data: new Uint8Array(await file.arrayBuffer()),
+    })),
+  )
+
+  return getClient().invoke<number>('open_documents', { files: entries })
+}
+
+// --- Thumbnail fetch ---
+
+export async function fetchThumbnail(index: number): Promise<Blob> {
+  const result = await getClient().invoke<{
+    data: Uint8Array
+    contentType: string
+  }>('get_thumbnail', { index })
+  return new Blob([toArrayBuffer(result.data)], {
+    type: result.contentType,
+  })
+}
+
+// --- Notification subscriptions ---
+
+export type { DownloadProgress, ProcessProgress } from './rpc-types'
+
+export function subscribeDownloadProgress(
+  cb: (p: RpcNotificationMap['download_progress']) => void,
+): () => void {
+  return getClient().onNotification<RpcNotificationMap['download_progress']>(
+    'download_progress',
+    cb,
+  )
+}
+
+export function subscribeProcessProgress(
+  cb: (p: RpcNotificationMap['process_progress']) => void,
+): () => void {
+  return getClient().onNotification<RpcNotificationMap['process_progress']>(
+    'process_progress',
+    cb,
+  )
 }

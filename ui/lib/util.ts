@@ -1,13 +1,21 @@
-export function convertToBlob(bytes: number[]): Blob {
-  return new Blob([new Uint8Array(bytes)], { type: 'image/*' })
+/** Extract a standalone ArrayBuffer from a Uint8Array view (msgpack may return views into a shared decode buffer). */
+export function toArrayBuffer(bytes: Uint8Array): ArrayBuffer {
+  return bytes.buffer.slice(
+    bytes.byteOffset,
+    bytes.byteOffset + bytes.byteLength,
+  ) as ArrayBuffer
 }
 
-export function convertToImageBitmap(bytes: number[]): Promise<ImageBitmap> {
+export function convertToBlob(bytes: Uint8Array): Blob {
+  return new Blob([toArrayBuffer(bytes)])
+}
+
+export function convertToImageBitmap(bytes: Uint8Array): Promise<ImageBitmap> {
   const blob = convertToBlob(bytes)
   return createImageBitmap(blob)
 }
 
-export async function blobToUint8Array(blob: Blob): Promise<number[]> {
+export async function blobToUint8Array(blob: Blob): Promise<Uint8Array> {
   const buffer = await blob.arrayBuffer()
-  return Array.from(new Uint8Array(buffer))
+  return new Uint8Array(buffer)
 }

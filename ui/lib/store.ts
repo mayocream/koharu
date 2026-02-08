@@ -60,7 +60,7 @@ const textBlockSyncer = createTextBlockSyncer()
 const createMaskSyncer = () => {
   type MaskUpdate = {
     index: number
-    mask: number[]
+    mask: Uint8Array
     region?: InpaintRegion
   }
   let pending: MaskUpdate[] = []
@@ -176,15 +176,15 @@ type AppState = OperationSlice & {
   fetchAvailableFonts: () => Promise<void>
   updateTextBlocks: (textBlocks: TextBlock[]) => Promise<void>
   updateMask: (
-    mask: number[],
+    mask: Uint8Array,
     options?: {
       sync?: boolean
-      patch?: number[]
+      patch?: Uint8Array
       patchRegion?: InpaintRegion
     },
   ) => Promise<void>
   paintRendered: (
-    patch: number[],
+    patch: Uint8Array,
     region: InpaintRegion,
     options?: { index?: number },
   ) => Promise<void>
@@ -265,7 +265,7 @@ export const useAppStore = create<AppState>((set, get) => {
 
       set({ currentDocumentLoading: true })
       try {
-        const doc = await invoke<Document>('get_document', { index })
+        const doc = await invoke('get_document', { index })
         // Only update if we're still on the same index
         if (get().currentDocumentIndex === index) {
           set({ currentDocument: doc, currentDocumentLoading: false })
@@ -283,7 +283,7 @@ export const useAppStore = create<AppState>((set, get) => {
     openDocuments: async () => {
       get().startOperation({ type: 'load-khr', cancellable: false })
       try {
-        const count = await invoke<number>('open_documents')
+        const count = await invoke('open_documents')
         get().setTotalPages(count)
       } finally {
         get().finishOperation()
@@ -364,7 +364,7 @@ export const useAppStore = create<AppState>((set, get) => {
     setRenderEffect: (effect: RenderEffect) => set({ renderEffect: effect }),
     fetchAvailableFonts: async () => {
       try {
-        const fonts = await invoke<string[]>('list_font_families')
+        const fonts = await invoke('list_font_families')
         set({ availableFonts: fonts })
       } catch (_) {}
     },
@@ -484,7 +484,7 @@ export const useAppStore = create<AppState>((set, get) => {
     },
     llmList: async () => {
       try {
-        const models = await invoke<LlmModelInfo[]>('llm_list')
+        const models = await invoke('llm_list')
         set({ llmModels: models })
         const currentModel = get().llmSelectedModel
         const currentLanguage = get().llmSelectedLanguage
@@ -574,7 +574,7 @@ export const useAppStore = create<AppState>((set, get) => {
         return
       }
       try {
-        llmReadyCheckInFlight = invoke<boolean>('llm_ready')
+        llmReadyCheckInFlight = invoke('llm_ready')
         const ready = await llmReadyCheckInFlight
         set({ llmReady: ready })
       } catch (_) {}

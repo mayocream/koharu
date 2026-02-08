@@ -1,20 +1,8 @@
 use std::{io::Cursor, path::PathBuf, str::FromStr};
 
-use std::convert::Infallible;
-
-use axum::{
-    Json,
-    body::Body,
-    extract::{Multipart, State},
-    http::{HeaderValue, StatusCode, header},
-    response::{
-        Response,
-        sse::{Event, KeepAlive, Sse},
-    },
-};
 use image::{GenericImageView, ImageFormat, RgbaImage};
 use koharu_ml::llm::ModelId;
-use koharu_renderer::renderer::{TextShaderEffect, WgpuDeviceInfo};
+use koharu_renderer::renderer::TextShaderEffect;
 use rayon::iter::{IntoParallelIterator, ParallelIterator};
 use serde::{Deserialize, Serialize};
 use strum::IntoEnumIterator;
@@ -26,27 +14,26 @@ use crate::{
     image::SerializableDynamicImage,
     khr::{deserialize_khr, has_khr_magic, serialize_khr},
     llm,
-    result::Result,
     state::{Document, TextBlock},
     version,
 };
 
-pub async fn app_version(State(_state): State<AppResources>) -> Result<Json<String>> {
-    Ok(Json(version::current().to_string()))
+pub async fn app_version(_state: AppResources) -> anyhow::Result<String> {
+    Ok(version::current().to_string())
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct DeviceInfo {
     pub ml_device: String,
-    pub wgpu: WgpuDeviceInfo,
+    pub wgpu: koharu_renderer::renderer::WgpuDeviceInfo,
 }
 
-pub async fn device(State(state): State<AppResources>) -> Result<Json<DeviceInfo>> {
-    Ok(Json(DeviceInfo {
+pub async fn device(state: AppResources) -> anyhow::Result<DeviceInfo> {
+    Ok(DeviceInfo {
         ml_device: state.ml_device.to_string(),
         wgpu: state.renderer.wgpu_device_info(),
-    }))
+    })
 }
 
 #[derive(Debug, Deserialize)]
@@ -55,14 +42,14 @@ pub struct OpenExternalPayload {
     pub url: String,
 }
 
-pub async fn open_external(Json(payload): Json<OpenExternalPayload>) -> Result<Json<()>> {
+pub fn open_external(payload: OpenExternalPayload) -> anyhow::Result<()> {
     open::that(&payload.url)?;
-    Ok(Json(()))
+    Ok(())
 }
 
-pub async fn get_documents(State(state): State<AppResources>) -> Result<Json<usize>> {
+pub async fn get_documents(state: AppResources) -> anyhow::Result<usize> {
     let guard = state.state.read().await;
-    Ok(Json(guard.documents.len()))
+    Ok(guard.documents.len())
 }
 
 #[derive(Debug, Deserialize)]
@@ -71,23 +58,28 @@ pub struct IndexPayload {
     pub index: usize,
 }
 
-pub async fn get_document(
-    State(state): State<AppResources>,
-    Json(payload): Json<IndexPayload>,
-) -> Result<Json<Document>> {
+pub async fn get_document(state: AppResources, payload: IndexPayload) -> anyhow::Result<Document> {
     let guard = state.state.read().await;
-    let doc = guard
+    guard
         .documents
         .get(payload.index)
         .cloned()
-        .ok_or_else(|| anyhow::anyhow!("Document not found at index {}", payload.index))?;
-    Ok(Json(doc))
+        .ok_or_else(|| anyhow::anyhow!("Document not found at index {}", payload.index))
+}
+
+/// Returns WebP-encoded thumbnail bytes.
+#[derive(Debug, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ThumbnailResult {
+    #[serde(with = "serde_bytes")]
+    pub data: Vec<u8>,
+    pub content_type: String,
 }
 
 pub async fn get_thumbnail(
-    State(state): State<AppResources>,
-    Json(payload): Json<IndexPayload>,
-) -> Result<Response> {
+    state: AppResources,
+    payload: IndexPayload,
+) -> anyhow::Result<ThumbnailResult> {
     let guard = state.state.read().await;
     let doc = guard
         .documents
@@ -100,43 +92,60 @@ pub async fn get_thumbnail(
     let mut buf = Cursor::new(Vec::new());
     thumbnail.write_to(&mut buf, ImageFormat::WebP)?;
 
-    let mut response = Response::new(Body::from(buf.into_inner()));
-    response
-        .headers_mut()
-        .insert(header::CONTENT_TYPE, HeaderValue::from_static("image/webp"));
-    Ok(response)
+    Ok(ThumbnailResult {
+        data: buf.into_inner(),
+        content_type: "image/webp".to_string(),
+    })
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct FileEntry {
+    pub name: String,
+    #[serde(with = "serde_bytes")]
+    pub data: Vec<u8>,
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct OpenDocumentsPayload {
+    pub files: Vec<FileEntry>,
 }
 
 pub async fn open_documents(
-    State(state): State<AppResources>,
-    mut multipart: Multipart,
-) -> Result<Json<usize>> {
-    let mut inputs: Vec<(PathBuf, Vec<u8>)> = Vec::new();
-
-    while let Some(field) = multipart.next_field().await? {
-        let name = field
-            .file_name()
-            .map(|s| s.to_string())
-            .unwrap_or_else(|| "unknown".to_string());
-        let bytes = field.bytes().await?.to_vec();
-        inputs.push((PathBuf::from(name), bytes));
-    }
+    state: AppResources,
+    payload: OpenDocumentsPayload,
+) -> anyhow::Result<usize> {
+    let inputs: Vec<(PathBuf, Vec<u8>)> = payload
+        .files
+        .into_iter()
+        .map(|f| (PathBuf::from(f.name), f.data))
+        .collect();
 
     if inputs.is_empty() {
-        Err(anyhow::anyhow!("No files uploaded"))?;
+        anyhow::bail!("No files uploaded");
     }
 
     let docs = load_documents(inputs)?;
     let count = docs.len();
     let mut guard = state.state.write().await;
     guard.documents = docs;
-    Ok(Json(count))
+    Ok(count)
 }
 
-pub async fn save_documents(State(state): State<AppResources>) -> Result<Response> {
+#[derive(Debug, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct FileResult {
+    pub filename: String,
+    #[serde(with = "serde_bytes")]
+    pub data: Vec<u8>,
+    pub content_type: String,
+}
+
+pub async fn save_documents(state: AppResources) -> anyhow::Result<FileResult> {
     let guard = state.state.read().await;
     if guard.documents.is_empty() {
-        Err(anyhow::anyhow!("No documents to save"))?;
+        anyhow::bail!("No documents to save");
     }
 
     let filename = if guard.documents.len() == 1 {
@@ -153,17 +162,17 @@ pub async fn save_documents(State(state): State<AppResources>) -> Result<Respons
     let bytes = serialize_khr(&guard.documents)?;
     drop(guard);
 
-    Ok(attachment_response(
-        &filename,
-        bytes,
-        "application/octet-stream",
-    )?)
+    Ok(FileResult {
+        filename,
+        data: bytes,
+        content_type: "application/octet-stream".to_string(),
+    })
 }
 
 pub async fn export_document(
-    State(state): State<AppResources>,
-    Json(payload): Json<IndexPayload>,
-) -> Result<Response> {
+    state: AppResources,
+    payload: IndexPayload,
+) -> anyhow::Result<FileResult> {
     let guard = state.state.read().await;
     let document = guard
         .documents
@@ -184,16 +193,18 @@ pub async fn export_document(
 
     let bytes = encode_image(rendered, &ext)?;
     let filename = format!("{}_koharu.{}", document.name, ext);
+    let content_type = mime_from_ext(&ext).to_string();
     drop(guard);
 
-    Ok(attachment_response(&filename, bytes, mime_from_ext(&ext))?)
+    Ok(FileResult {
+        filename,
+        data: bytes,
+        content_type,
+    })
 }
 
 #[instrument(level = "info", skip_all)]
-pub async fn detect(
-    State(state): State<AppResources>,
-    Json(payload): Json<IndexPayload>,
-) -> Result<Json<()>> {
+pub async fn detect(state: AppResources, payload: IndexPayload) -> anyhow::Result<()> {
     let mut snapshot = {
         let guard = state.state.read().await;
         guard
@@ -211,14 +222,11 @@ pub async fn detect(
         .get_mut(payload.index)
         .ok_or_else(|| anyhow::anyhow!("Document not found"))?;
     *document = snapshot;
-    Ok(Json(()))
+    Ok(())
 }
 
 #[instrument(level = "info", skip_all)]
-pub async fn ocr(
-    State(state): State<AppResources>,
-    Json(payload): Json<IndexPayload>,
-) -> Result<Json<()>> {
+pub async fn ocr(state: AppResources, payload: IndexPayload) -> anyhow::Result<()> {
     let mut snapshot = {
         let guard = state.state.read().await;
         guard
@@ -236,14 +244,11 @@ pub async fn ocr(
         .get_mut(payload.index)
         .ok_or_else(|| anyhow::anyhow!("Document not found"))?;
     *document = snapshot;
-    Ok(Json(()))
+    Ok(())
 }
 
 #[instrument(level = "info", skip_all)]
-pub async fn inpaint(
-    State(state): State<AppResources>,
-    Json(payload): Json<IndexPayload>,
-) -> Result<Json<()>> {
+pub async fn inpaint(state: AppResources, payload: IndexPayload) -> anyhow::Result<()> {
     let mut snapshot = {
         let guard = state.state.read().await;
         guard
@@ -261,21 +266,22 @@ pub async fn inpaint(
         .get_mut(payload.index)
         .ok_or_else(|| anyhow::anyhow!("Document not found"))?;
     *document = snapshot;
-    Ok(Json(()))
+    Ok(())
 }
 
 #[derive(Debug, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct UpdateInpaintMaskPayload {
     pub index: usize,
+    #[serde(with = "serde_bytes")]
     pub mask: Vec<u8>,
     pub region: Option<InpaintRegion>,
 }
 
 pub async fn update_inpaint_mask(
-    State(state): State<AppResources>,
-    Json(payload): Json<UpdateInpaintMaskPayload>,
-) -> Result<Json<()>> {
+    state: AppResources,
+    payload: UpdateInpaintMaskPayload,
+) -> anyhow::Result<()> {
     let snapshot = {
         let guard = state.state.read().await;
         guard
@@ -298,13 +304,13 @@ pub async fn update_inpaint_mask(
         Some(region) => {
             let (patch_width, patch_height) = update_image.dimensions();
             if patch_width != region.width || patch_height != region.height {
-                Err(anyhow::anyhow!(
+                anyhow::bail!(
                     "Mask patch size mismatch: expected {}x{}, got {}x{}",
                     region.width,
                     region.height,
                     patch_width,
                     patch_height
-                ))?;
+                );
             }
 
             let x0 = region.x.min(doc_width.saturating_sub(1));
@@ -313,7 +319,7 @@ pub async fn update_inpaint_mask(
             let y1 = region.y.saturating_add(region.height).min(doc_height);
 
             if x1 <= x0 || y1 <= y0 {
-                return Ok(Json(()));
+                return Ok(());
             }
 
             let patch_rgba = update_image.to_rgba8();
@@ -326,13 +332,13 @@ pub async fn update_inpaint_mask(
         None => {
             let (mask_width, mask_height) = update_image.dimensions();
             if mask_width != doc_width || mask_height != doc_height {
-                Err(anyhow::anyhow!(
+                anyhow::bail!(
                     "Mask size mismatch: expected {}x{}, got {}x{}",
                     doc_width,
                     doc_height,
                     mask_width,
                     mask_height
-                ))?;
+                );
             }
             base_mask = update_image.to_rgba8();
         }
@@ -347,21 +353,22 @@ pub async fn update_inpaint_mask(
         .get_mut(payload.index)
         .ok_or_else(|| anyhow::anyhow!("Document not found"))?;
     *document = updated;
-    Ok(Json(()))
+    Ok(())
 }
 
 #[derive(Debug, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct UpdateBrushLayerPayload {
     pub index: usize,
+    #[serde(with = "serde_bytes")]
     pub patch: Vec<u8>,
     pub region: InpaintRegion,
 }
 
 pub async fn update_brush_layer(
-    State(state): State<AppResources>,
-    Json(payload): Json<UpdateBrushLayerPayload>,
-) -> Result<Json<()>> {
+    state: AppResources,
+    payload: UpdateBrushLayerPayload,
+) -> anyhow::Result<()> {
     let snapshot = {
         let guard = state.state.read().await;
         guard
@@ -373,20 +380,20 @@ pub async fn update_brush_layer(
 
     let (img_width, img_height) = (snapshot.width, snapshot.height);
     let Some((x0, y0, width, height)) = clamp_region(&payload.region, img_width, img_height) else {
-        return Ok(Json(()));
+        return Ok(());
     };
 
     let patch_image = image::load_from_memory(&payload.patch)?;
     let (patch_width, patch_height) = patch_image.dimensions();
 
     if patch_width != payload.region.width || patch_height != payload.region.height {
-        Err(anyhow::anyhow!(
+        anyhow::bail!(
             "Brush patch size mismatch: expected {}x{}, got {}x{}",
             payload.region.width,
             payload.region.height,
             patch_width,
             patch_height
-        ))?;
+        );
     }
 
     let brush_rgba = patch_image.to_rgba8();
@@ -411,7 +418,7 @@ pub async fn update_brush_layer(
         .get_mut(payload.index)
         .ok_or_else(|| anyhow::anyhow!("Document not found"))?;
     *document = updated;
-    Ok(Json(()))
+    Ok(())
 }
 
 #[derive(Debug, Deserialize)]
@@ -423,9 +430,9 @@ pub struct InpaintPartialPayload {
 
 #[instrument(level = "info", skip_all)]
 pub async fn inpaint_partial(
-    State(state): State<AppResources>,
-    Json(payload): Json<InpaintPartialPayload>,
-) -> Result<Json<()>> {
+    state: AppResources,
+    payload: InpaintPartialPayload,
+) -> anyhow::Result<()> {
     let snapshot = {
         let guard = state.state.read().await;
         guard
@@ -441,7 +448,7 @@ pub async fn inpaint_partial(
         .ok_or_else(|| anyhow::anyhow!("Segment image not found"))?;
 
     if payload.region.width == 0 || payload.region.height == 0 {
-        return Ok(Json(()));
+        return Ok(());
     }
 
     let (img_width, img_height) = (snapshot.width, snapshot.height);
@@ -461,7 +468,7 @@ pub async fn inpaint_partial(
     let crop_height = y1.saturating_sub(y0);
 
     if crop_width == 0 || crop_height == 0 {
-        return Ok(Json(()));
+        return Ok(());
     }
 
     let patch_x1 = x0 + crop_width;
@@ -476,7 +483,7 @@ pub async fn inpaint_partial(
     });
 
     if !overlaps_text {
-        return Ok(Json(()));
+        return Ok(());
     }
 
     let image_crop =
@@ -517,7 +524,7 @@ pub async fn inpaint_partial(
         .get_mut(payload.index)
         .ok_or_else(|| anyhow::anyhow!("Document not found"))?;
     *document = updated;
-    Ok(Json(()))
+    Ok(())
 }
 
 #[derive(Debug, Deserialize)]
@@ -529,10 +536,7 @@ pub struct RenderPayload {
 }
 
 #[instrument(level = "info", skip_all)]
-pub async fn render(
-    State(state): State<AppResources>,
-    Json(payload): Json<RenderPayload>,
-) -> Result<Json<()>> {
+pub async fn render(state: AppResources, payload: RenderPayload) -> anyhow::Result<()> {
     let snapshot = {
         let guard = state.state.read().await;
         guard
@@ -555,7 +559,7 @@ pub async fn render(
         .get_mut(payload.index)
         .ok_or_else(|| anyhow::anyhow!("Document not found"))?;
     *document = updated;
-    Ok(Json(()))
+    Ok(())
 }
 
 #[derive(Debug, Deserialize)]
@@ -566,23 +570,23 @@ pub struct UpdateTextBlocksPayload {
 }
 
 pub async fn update_text_blocks(
-    State(state): State<AppResources>,
-    Json(payload): Json<UpdateTextBlocksPayload>,
-) -> Result<Json<()>> {
+    state: AppResources,
+    payload: UpdateTextBlocksPayload,
+) -> anyhow::Result<()> {
     let mut guard = state.state.write().await;
     let document = guard
         .documents
         .get_mut(payload.index)
         .ok_or_else(|| anyhow::anyhow!("Document not found"))?;
     document.text_blocks = payload.text_blocks;
-    Ok(Json(()))
+    Ok(())
 }
 
-pub async fn list_font_families(State(state): State<AppResources>) -> Result<Json<Vec<String>>> {
-    Ok(Json(state.renderer.available_fonts()?))
+pub async fn list_font_families(state: AppResources) -> anyhow::Result<Vec<String>> {
+    state.renderer.available_fonts()
 }
 
-pub async fn llm_list(State(state): State<AppResources>) -> Result<Json<Vec<llm::ModelInfo>>> {
+pub async fn llm_list(state: AppResources) -> anyhow::Result<Vec<llm::ModelInfo>> {
     let mut models: Vec<ModelId> = ModelId::iter().collect();
     let cpu_factor = if state.llm.is_cpu() { 10 } else { 1 };
     let zh_locale_factor = match get_locale().unwrap_or_default() {
@@ -602,7 +606,7 @@ pub async fn llm_list(State(state): State<AppResources>) -> Result<Json<Vec<llm:
         ModelId::HunyuanMT7B => 500 / non_zh_en_locale_factor,
     });
 
-    Ok(Json(models.into_iter().map(llm::ModelInfo::new).collect()))
+    Ok(models.into_iter().map(llm::ModelInfo::new).collect())
 }
 
 #[derive(Debug, Deserialize)]
@@ -612,22 +616,19 @@ pub struct LlmLoadPayload {
 }
 
 #[instrument(level = "info", skip_all)]
-pub async fn llm_load(
-    State(state): State<AppResources>,
-    Json(payload): Json<LlmLoadPayload>,
-) -> Result<Json<()>> {
+pub async fn llm_load(state: AppResources, payload: LlmLoadPayload) -> anyhow::Result<()> {
     let id = ModelId::from_str(&payload.id)?;
     state.llm.load(id).await;
-    Ok(Json(()))
+    Ok(())
 }
 
-pub async fn llm_offload(State(state): State<AppResources>) -> Result<Json<()>> {
+pub async fn llm_offload(state: AppResources) -> anyhow::Result<()> {
     state.llm.offload().await;
-    Ok(Json(()))
+    Ok(())
 }
 
-pub async fn llm_ready(State(state): State<AppResources>) -> Result<Json<bool>> {
-    Ok(Json(state.llm.ready().await))
+pub async fn llm_ready(state: AppResources) -> anyhow::Result<bool> {
+    Ok(state.llm.ready().await)
 }
 
 #[derive(Debug, Deserialize)]
@@ -639,10 +640,7 @@ pub struct LlmGeneratePayload {
 }
 
 #[instrument(level = "info", skip_all)]
-pub async fn llm_generate(
-    State(state): State<AppResources>,
-    Json(payload): Json<LlmGeneratePayload>,
-) -> Result<Json<()>> {
+pub async fn llm_generate(state: AppResources, payload: LlmGeneratePayload) -> anyhow::Result<()> {
     let snapshot = {
         let guard = state.state.read().await;
         guard
@@ -677,10 +675,49 @@ pub async fn llm_generate(
         .get_mut(payload.index)
         .ok_or_else(|| anyhow::anyhow!("Document not found"))?;
     *document = updated;
-    Ok(Json(()))
+    Ok(())
 }
 
-// Helpers
+// --- Auto-processing pipeline endpoints ---
+
+pub async fn process(
+    state: AppResources,
+    payload: crate::pipeline::ProcessRequest,
+) -> anyhow::Result<()> {
+    {
+        let guard = state.pipeline.read().await;
+        if guard.is_some() {
+            anyhow::bail!("A processing pipeline is already running");
+        }
+    }
+
+    let cancel = std::sync::Arc::new(std::sync::atomic::AtomicBool::new(false));
+    {
+        let mut guard = state.pipeline.write().await;
+        *guard = Some(crate::pipeline::PipelineHandle {
+            cancel: cancel.clone(),
+        });
+    }
+
+    let resources = state.clone();
+    tokio::spawn(async move {
+        crate::pipeline::run_pipeline(resources, payload, cancel).await;
+    });
+
+    Ok(())
+}
+
+pub async fn process_cancel(state: AppResources) -> anyhow::Result<()> {
+    let guard = state.pipeline.read().await;
+    if let Some(handle) = guard.as_ref() {
+        handle
+            .cancel
+            .store(true, std::sync::atomic::Ordering::Relaxed);
+    }
+    Ok(())
+}
+
+// --- Helpers ---
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
@@ -715,21 +752,13 @@ fn encode_image(image: &SerializableDynamicImage, ext: &str) -> anyhow::Result<V
     Ok(buf)
 }
 
-fn attachment_response(
-    filename: &str,
-    bytes: Vec<u8>,
-    content_type: &str,
-) -> anyhow::Result<Response> {
-    let mut response = Response::new(Body::from(bytes));
-    *response.status_mut() = StatusCode::OK;
-    response
-        .headers_mut()
-        .insert(header::CONTENT_TYPE, HeaderValue::from_str(content_type)?);
-    response.headers_mut().insert(
-        header::CONTENT_DISPOSITION,
-        HeaderValue::from_str(&format!("attachment; filename=\"{filename}\""))?,
-    );
-    Ok(response)
+fn mime_from_ext(ext: &str) -> &'static str {
+    match ext {
+        "png" => "image/png",
+        "jpg" | "jpeg" => "image/jpeg",
+        "webp" => "image/webp",
+        _ => "application/octet-stream",
+    }
 }
 
 pub fn load_documents(inputs: Vec<(PathBuf, Vec<u8>)>) -> anyhow::Result<Vec<Document>> {
@@ -760,87 +789,7 @@ pub fn load_documents(inputs: Vec<(PathBuf, Vec<u8>)>) -> anyhow::Result<Vec<Doc
     Ok(documents)
 }
 
-fn mime_from_ext(ext: &str) -> &'static str {
-    match ext {
-        "png" => "image/png",
-        "jpg" | "jpeg" => "image/jpeg",
-        "webp" => "image/webp",
-        _ => "application/octet-stream",
-    }
-}
-
 fn blank_rgba(width: u32, height: u32, color: image::Rgba<u8>) -> SerializableDynamicImage {
     let blank = RgbaImage::from_pixel(width, height, color);
     image::DynamicImage::ImageRgba8(blank).into()
-}
-
-pub async fn download_progress()
--> Sse<impl futures::Stream<Item = std::result::Result<Event, Infallible>>> {
-    let rx = koharu_core::download::subscribe();
-    let stream = futures::stream::unfold(rx, |mut rx| async {
-        loop {
-            match rx.recv().await {
-                Ok(p) => return Some((Ok(Event::default().json_data(p).unwrap()), rx)),
-                Err(tokio::sync::broadcast::error::RecvError::Lagged(_)) => continue,
-                Err(tokio::sync::broadcast::error::RecvError::Closed) => return None,
-            }
-        }
-    });
-    Sse::new(stream).keep_alive(KeepAlive::default())
-}
-
-// --- Auto-processing pipeline endpoints ---
-
-/// Start the processing pipeline. Returns immediately; progress is available
-/// via the `process_progress` SSE endpoint.
-pub async fn process(
-    State(state): State<AppResources>,
-    Json(payload): Json<crate::pipeline::ProcessRequest>,
-) -> Result<Json<()>> {
-    {
-        let guard = state.pipeline.read().await;
-        if guard.is_some() {
-            Err(anyhow::anyhow!("A processing pipeline is already running"))?;
-        }
-    }
-
-    let cancel = std::sync::Arc::new(std::sync::atomic::AtomicBool::new(false));
-    {
-        let mut guard = state.pipeline.write().await;
-        *guard = Some(crate::pipeline::PipelineHandle {
-            cancel: cancel.clone(),
-        });
-    }
-
-    let resources = state.clone();
-    tokio::spawn(async move {
-        crate::pipeline::run_pipeline(resources, payload, cancel).await;
-    });
-
-    Ok(Json(()))
-}
-
-pub async fn process_progress()
--> Sse<impl futures::Stream<Item = std::result::Result<Event, Infallible>>> {
-    let rx = crate::pipeline::subscribe();
-    let stream = futures::stream::unfold(rx, |mut rx| async {
-        loop {
-            match rx.recv().await {
-                Ok(p) => return Some((Ok(Event::default().json_data(p).unwrap()), rx)),
-                Err(tokio::sync::broadcast::error::RecvError::Lagged(_)) => continue,
-                Err(tokio::sync::broadcast::error::RecvError::Closed) => return None,
-            }
-        }
-    });
-    Sse::new(stream).keep_alive(KeepAlive::default())
-}
-
-pub async fn process_cancel(State(state): State<AppResources>) -> Result<Json<()>> {
-    let guard = state.pipeline.read().await;
-    if let Some(handle) = guard.as_ref() {
-        handle
-            .cancel
-            .store(true, std::sync::atomic::Ordering::Relaxed);
-    }
-    Ok(Json(()))
 }

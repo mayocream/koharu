@@ -201,7 +201,7 @@ export function useMaskDrawing({
     ctx.restore()
   }
 
-  const exportMaskBytes = async (): Promise<number[] | null> => {
+  const exportMaskBytes = async (): Promise<Uint8Array | null> => {
     const canvas = canvasRef.current
     if (!canvas) return null
     const blob = await new Promise<Blob | null>((resolve) => {
@@ -213,7 +213,7 @@ export function useMaskDrawing({
 
   const exportMaskPatch = async (
     region: InpaintRegion,
-  ): Promise<number[] | null> => {
+  ): Promise<Uint8Array | null> => {
     const canvas = canvasRef.current
     if (!canvas || region.width <= 0 || region.height <= 0) return null
 

@@ -2,7 +2,7 @@
 
 import { useEffect, useRef, useState } from 'react'
 import { useTranslation } from 'react-i18next'
-import { isTauri, type DownloadProgress } from '@/lib/backend'
+import { subscribeDownloadProgress, type DownloadProgress } from '@/lib/backend'
 
 type AggregateProgress = {
   filename: string
@@ -12,71 +12,65 @@ type AggregateProgress = {
 export default function SplashScreen() {
   const { t } = useTranslation()
   const [progress, setProgress] = useState<AggregateProgress | null>(null)
-  const channelRef = useRef<unknown>(null)
   const filesRef = useRef<Map<string, { downloaded: number; total: number }>>(
     new Map(),
   )
 
   useEffect(() => {
-    if (!isTauri()) return
-    ;(async () => {
-      const { Channel, invoke } = await import('@tauri-apps/api/core')
-      const channel = new Channel<DownloadProgress>()
-      channelRef.current = channel
-      channel.onmessage = (msg) => {
-        const files = filesRef.current
+    const unsub = subscribeDownloadProgress((msg: DownloadProgress) => {
+      const files = filesRef.current
 
-        if (msg.status === 'Started') {
-          files.set(msg.filename, { downloaded: 0, total: msg.total ?? 0 })
-        } else if (msg.status === 'Downloading') {
-          const entry = files.get(msg.filename)
-          if (entry) {
-            entry.downloaded = msg.downloaded
-            if (msg.total) entry.total = msg.total
-          } else {
-            files.set(msg.filename, {
-              downloaded: msg.downloaded,
-              total: msg.total ?? 0,
-            })
-          }
+      if (msg.status === 'Started') {
+        files.set(msg.filename, { downloaded: 0, total: msg.total ?? 0 })
+      } else if (msg.status === 'Downloading') {
+        const entry = files.get(msg.filename)
+        if (entry) {
+          entry.downloaded = msg.downloaded
+          if (msg.total) entry.total = msg.total
         } else {
-          // Completed or Failed — lock this file at 100%
-          const entry = files.get(msg.filename)
-          if (entry) {
-            entry.downloaded = entry.total
-          }
+          files.set(msg.filename, {
+            downloaded: msg.downloaded,
+            total: msg.total ?? 0,
+          })
         }
-
-        // Compute aggregate
-        let totalBytes = 0
-        let downloadedBytes = 0
-        for (const entry of files.values()) {
-          totalBytes += entry.total
-          downloadedBytes += entry.downloaded
-        }
-
-        // Find current active file (last non-completed)
-        const activeFilename =
-          msg.status === 'Started' || msg.status === 'Downloading'
-            ? msg.filename
-            : null
-
-        const percent =
-          totalBytes > 0
-            ? Math.min(100, Math.round((downloadedBytes / totalBytes) * 100))
-            : undefined
-
-        if (activeFilename) {
-          setProgress({ filename: activeFilename, percent })
-        } else {
-          // All done — keep showing 100% briefly
-          setProgress((prev) =>
-            prev ? { ...prev, percent: percent ?? 100 } : null,
-          )
+      } else {
+        // Completed or Failed — lock this file at 100%
+        const entry = files.get(msg.filename)
+        if (entry) {
+          entry.downloaded = entry.total
         }
       }
-      await invoke('download_progress', { channel })
-    })()
+
+      // Compute aggregate
+      let totalBytes = 0
+      let downloadedBytes = 0
+      for (const entry of files.values()) {
+        totalBytes += entry.total
+        downloadedBytes += entry.downloaded
+      }
+
+      // Find current active file (last non-completed)
+      const activeFilename =
+        msg.status === 'Started' || msg.status === 'Downloading'
+          ? msg.filename
+          : null
+
+      const percent =
+        totalBytes > 0
+          ? Math.min(100, Math.round((downloadedBytes / totalBytes) * 100))
+          : undefined
+
+      if (activeFilename) {
+        setProgress({ filename: activeFilename, percent })
+      } else {
+        // All done — keep showing 100% briefly
+        setProgress((prev) =>
+          prev ? { ...prev, percent: percent ?? 100 } : null,
+        )
+      }
+    })
+
+    return () => unsub()
   }, [])
 
   return (

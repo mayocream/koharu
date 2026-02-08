@@ -20,19 +20,7 @@ import {
   SelectValue,
 } from '@/components/ui/select'
 import { invoke, isTauri } from '@/lib/backend'
-
-interface WgpuDeviceInfo {
-  name: string
-  backend: string
-  deviceType: string
-  driver: string
-  driverInfo: string
-}
-
-interface DeviceInfo {
-  mlDevice: string
-  wgpu: WgpuDeviceInfo
-}
+import type { DeviceInfo } from '@/lib/rpc-types'
 
 const THEME_OPTIONS = [
   { value: 'light', icon: SunIcon, labelKey: 'settings.themeLight' },
@@ -54,7 +42,7 @@ export default function SettingsPage() {
 
     const loadDeviceInfo = async () => {
       try {
-        const info = await invoke<DeviceInfo>('device')
+        const info = await invoke('device')
         setDeviceInfo(info)
       } catch (error) {
         console.error('Failed to load device info', error)

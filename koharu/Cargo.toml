@@ -50,7 +50,11 @@ sys-locale = { workspace = true }
 icu = { workspace = true }
 axum = { workspace = true }
 tower-http = { workspace = true }
-rust-embed = { workspace = true }
+tower = { workspace = true }
+rmp-serde = { workspace = true }
+rmpv = { workspace = true }
+enum_dispatch = { workspace = true }
+async-trait = { workspace = true }
 git-version = { workspace = true }
 
 [target.'cfg(target_os = "windows")'.dependencies]

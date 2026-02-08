@@ -152,7 +152,7 @@ export function useRenderBrushDrawing({
 
   const exportPatch = async (
     region: InpaintRegion,
-  ): Promise<number[] | null> => {
+  ): Promise<Uint8Array | null> => {
     const canvas = targetCanvasRef?.current ?? canvasRef.current
     if (!canvas || region.width <= 0 || region.height <= 0) return null
 

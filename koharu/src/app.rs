@@ -1,10 +1,4 @@
-use std::{
-    path::PathBuf,
-    sync::{
-        Arc,
-        atomic::{AtomicU16, Ordering},
-    },
-};
+use std::{path::PathBuf, sync::Arc};
 
 use anyhow::{Context, Result};
 use clap::Parser;
@@ -17,8 +11,9 @@ use tokio::{net::TcpListener, sync::RwLock};
 use tracing_subscriber::fmt::format::FmtSpan;
 
 use crate::{
-    command, llm, ml,
+    llm, ml,
     renderer::Renderer,
+    rpc::SharedResources,
     server,
     state::{AppState, State},
 };
@@ -165,13 +160,11 @@ async fn update_app() -> Result<()> {
 async fn prefetch() -> Result<()> {
     ensure_dylibs(LIB_ROOT.to_path_buf()).await?;
     ml::prefetch().await?;
-    // Skip for now as it's too big
-    // llm::prefetch().await?;
 
     Ok(())
 }
 
-async fn build_resources(cpu: bool, _register_file_assoc: bool) -> Result<AppResources> {
+async fn build_resources(cpu: bool) -> Result<AppResources> {
     if cuda_is_available() {
         ensure_dylibs(LIB_ROOT.to_path_buf())
             .await
@@ -180,7 +173,7 @@ async fn build_resources(cpu: bool, _register_file_assoc: bool) -> Result<AppRes
 
         #[cfg(target_os = "windows")]
         {
-            if _register_file_assoc && let Err(err) = crate::windows::register_khr() {
+            if let Err(err) = crate::windows::register_khr() {
                 tracing::warn!(?err, "Failed to register .khr file association");
             }
 
@@ -237,64 +230,49 @@ pub async fn run() -> Result<()> {
         }
     });
 
-    if headless {
-        let resources = build_resources(cpu, false).await?;
-        let listener = TcpListener::bind(format!("127.0.0.1:{}", port.unwrap_or(0))).await?;
+    let listener = TcpListener::bind(format!("127.0.0.1:{}", port.unwrap_or(0))).await?;
+    let ws_port = listener.local_addr()?.port();
+    let shared: SharedResources = Arc::new(tokio::sync::OnceCell::new());
 
-        let server_resources = resources.clone();
-        tokio::spawn(async move {
-            if let Err(err) = server::serve_with_listener(listener, server_resources).await {
-                tracing::error!("HTTP server error: {err:#}");
+    let app = tauri::Builder::default()
+        .append_invoke_initialization_script(format!("window.__KOHARU_WS_PORT__ = {};", ws_port))
+        .build(tauri::generate_context!())?;
+
+    let resolver = Arc::new(app.asset_resolver());
+    tokio::spawn({
+        let shared = shared.clone();
+        async move {
+            if let Err(err) = server::serve_with_listener(listener, shared, resolver).await {
+                tracing::error!("Server error: {err:#}");
             }
-        });
+        }
+    });
 
+    if headless {
+        let resources = build_resources(cpu).await?;
+        shared.set(resources).ok();
         tokio::signal::ctrl_c().await?;
-        return Ok(());
+    } else {
+        let handle = app.handle().clone();
+        tokio::spawn(async move {
+            let resources = build_resources(cpu)
+                .await
+                .expect("failed to build app resources");
+            shared.set(resources).ok();
+
+            handle
+                .get_webview_window("splashscreen")
+                .expect("splashscreen window not found")
+                .close()
+                .ok();
+            handle
+                .get_webview_window("main")
+                .expect("main window not found")
+                .show()
+                .ok();
+        });
+        app.run(|_, _| {});
     }
-
-    tauri::Builder::default()
-        .invoke_handler(tauri::generate_handler![
-            command::initialize,
-            command::download_progress,
-        ])
-        .manage(AtomicU16::new(0))
-        .setup(move |app| {
-            let handle = app.handle().clone();
-            tauri::async_runtime::spawn(async move {
-                let resources = build_resources(cpu, true)
-                    .await
-                    .expect("failed to build app resources");
-                let listener = TcpListener::bind(format!("127.0.0.1:{}", port.unwrap_or(0)))
-                    .await
-                    .expect("failed to bind HTTP server");
-                let port = listener
-                    .local_addr()
-                    .expect("failed to get listener address")
-                    .port();
-
-                handle.state::<AtomicU16>().store(port, Ordering::SeqCst);
-
-                let server_resources = resources.clone();
-                tokio::spawn(async move {
-                    server::serve_with_listener(listener, server_resources)
-                        .await
-                        .expect("failed to run HTTP server");
-                });
-
-                handle
-                    .get_webview_window("splashscreen")
-                    .expect("splashscreen window not found")
-                    .close()
-                    .ok();
-                handle
-                    .get_webview_window("main")
-                    .expect("main window not found")
-                    .show()
-                    .ok();
-            });
-            Ok(())
-        })
-        .run(tauri::generate_context!())?;
 
     Ok(())
 }

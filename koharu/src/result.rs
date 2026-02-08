@@ -14,9 +14,6 @@ pub enum CommandError {
 
     #[error(transparent)]
     Image(#[from] image::ImageError),
-
-    #[error(transparent)]
-    Multipart(#[from] axum::extract::multipart::MultipartError),
 }
 
 impl serde::Serialize for CommandError {

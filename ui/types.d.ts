@@ -36,7 +36,7 @@ export type TextBlock = {
   translation?: string
   style?: TextStyle
   fontPrediction?: FontPrediction
-  rendered?: number[]
+  rendered?: Uint8Array
 }
 
 export type ToolMode = 'select' | 'block' | 'brush' | 'repairBrush' | 'eraser'
@@ -52,12 +52,12 @@ export type Document = {
   id: string
   path: string
   name: string
-  image: number[]
+  image: Uint8Array
   width: number
   height: number
   textBlocks: TextBlock[]
-  segment?: number[]
-  inpainted?: number[]
-  brushLayer?: number[]
-  rendered?: number[]
+  segment?: Uint8Array
+  inpainted?: Uint8Array
+  brushLayer?: Uint8Array
+  rendered?: Uint8Array
 }

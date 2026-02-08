@@ -16,7 +16,7 @@ export function Providers({ children }: { children: ReactNode }) {
     let unlisten: (() => void) | undefined
     ;(async () => {
       try {
-        const count = await invoke<number>('get_documents')
+        const count = await invoke('get_documents')
         if (count > 0) {
           setTotalPages(count)
         }

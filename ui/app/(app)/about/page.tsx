@@ -30,7 +30,7 @@ export default function AboutPage() {
     const checkVersion = async () => {
       try {
         if (isTauri()) {
-          const version = await invoke<string>('app_version')
+          const version = await invoke('app_version')
           setAppVersion(version)
 
           const res = await fetch(

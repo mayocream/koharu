@@ -5,7 +5,7 @@ import { useCallback, useEffect, useRef, useState } from 'react'
 import { convertToBlob } from '@/lib/util'
 
 type ImageProps = {
-  data?: number[]
+  data?: Uint8Array
   visible?: boolean
   opacity?: number
   transition?: boolean
