@@ -51,7 +51,7 @@
   },
   "plugins": {
     "updater": {
-      "pubkey": "dW50cnVzdGVkIGNvbW1lbnQ6IG1pbmlzaWduIHB1YmxpYyBrZXk6IDFFMjZENTA0MzI4QzYwRTMKUldUallJd3lCTlVtSHRlYzlMSnBiT09vTWoydXViV1JpQkd1OTBRa0RvZ05rNURnT0JiSkpnMSsK",
+      "pubkey": "dW50cnVzdGVkIGNvbW1lbnQ6IG1pbmlzaWduIHB1YmxpYyBrZXk6IEUzRjhCMEYzNDg1NzM0M0QKUldROU5GZEk4N0Q0NDdRTDZTY2N0Zkc4RjRRK2Jza1lFOGFRNVc2SnY2ZWhFM3ZjdE9NMlo3QWwK",
       "endpoints": [
         "https://github.com/mayocream/koharu/releases/latest/download/latest.json"
       ]
