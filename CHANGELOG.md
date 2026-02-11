@@ -1,3 +1,13 @@
+## [0.32.0] - 2026-02-11
+
+### 🚀 Features
+
+- Tauri updater
+
+### ⚙️ Miscellaneous Tasks
+
+- Fix lint & build
+- Release 0.32.0
 ## [0.31.6] - 2026-02-11
 
 ### 🐛 Bug Fixes
