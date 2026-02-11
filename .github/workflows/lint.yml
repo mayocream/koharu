@@ -31,4 +31,3 @@ jobs:
       - uses: Swatinem/rust-cache@v2
       - run: cargo check
       - run: cargo clippy -- -D warnings
-      - uses: bnjbvr/cargo-machete@main

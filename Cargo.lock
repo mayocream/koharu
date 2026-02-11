@@ -4025,6 +4025,7 @@ dependencies = [
  "rmpv",
  "serde",
  "serde_bytes",
+ "serde_json",
  "strum",
  "sys-locale",
  "tauri",
