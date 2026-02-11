@@ -2,8 +2,6 @@
   "devDependencies": {
     "@tauri-apps/cli": "^2.10.0",
     "git-cliff": "^2.12.0",
-    "husky": "^9.1.7",
-    "lint-staged": "^16.2.7",
     "prettier": "^3.8.1",
     "prettier-plugin-tailwindcss": "^0.7.2"
   },
@@ -11,14 +9,9 @@
     "dev": "bun run scripts/dev.ts tauri dev",
     "build": "bun run scripts/dev.ts tauri build",
     "cargo": "bun run scripts/dev.ts cargo",
-    "prepare": "husky",
     "format": "prettier --write ui/ --ignore-path ui/.gitignore"
   },
   "workspaces": [
     "ui/"
-  ],
-  "lint-staged": {
-    "*.{js,ts,tsx,css}": "prettier --write",
-    "*.rs": "cargo fmt -- --check"
-  }
+  ]
 }
