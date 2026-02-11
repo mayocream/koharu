@@ -501,7 +501,12 @@ export const useAppStore = create<AppState>((set, get) => {
           llmSelectedModel: nextModel,
           llmSelectedLanguage: nextLanguage,
         })
-      } catch (_) {}
+      } catch (_) {
+        // Resources may not be initialized yet; retry until loaded
+        if (get().llmModels.length === 0) {
+          setTimeout(() => get().llmList(), 1000)
+        }
+      }
     },
     llmSetSelectedModel: async (id: string) => {
       await invoke('llm_offload')
