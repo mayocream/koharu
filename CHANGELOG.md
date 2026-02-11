@@ -1,3 +1,9 @@
+## [0.32.8] - 2026-02-11
+
+### ⚙️ Miscellaneous Tasks
+
+- Remove lint-stage & husky
+- Release 0.32.8
 ## [0.32.7] - 2026-02-11
 
 ### 🐛 Bug Fixes
