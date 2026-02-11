@@ -1,3 +1,9 @@
+## [0.32.6] - 2026-02-11
+
+### ⚙️ Miscellaneous Tasks
+
+- Update deps
+- Release 0.32.6
 ## [0.32.5] - 2026-02-11
 
 ### 🐛 Bug Fixes
