@@ -1,3 +1,12 @@
+## [0.31.4] - 2026-02-11
+
+### 🐛 Bug Fixes
+
+- Apple certificate
+
+### ⚙️ Miscellaneous Tasks
+
+- Release 0.31.4
 ## [0.31.3] - 2026-02-11
 
 ### 🚜 Refactor
