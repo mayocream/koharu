@@ -1,3 +1,12 @@
+## [0.31.3] - 2026-02-11
+
+### 🚜 Refactor
+
+- Remove auto-update
+
+### ⚙️ Miscellaneous Tasks
+
+- Release 0.31.3
 ## [0.31.2] - 2026-02-11
 
 ### 🐛 Bug Fixes
