@@ -1,3 +1,13 @@
+## [0.31.1] - 2026-02-11
+
+### 🐛 Bug Fixes
+
+- Linux release build
+
+### ⚙️ Miscellaneous Tasks
+
+- Support linux
+- Release 0.31.1
 ## [0.31.0] - 2026-02-08
 
 ### 🚀 Features
