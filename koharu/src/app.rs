@@ -226,6 +226,10 @@ pub async fn run() -> Result<()> {
     } else {
         let handle = app.handle().clone();
         tokio::spawn(async move {
+            handle
+                .plugin(tauri_plugin_updater::Builder::new().build())
+                .ok();
+
             let resources = build_resources(cpu)
                 .await
                 .expect("failed to build app resources");

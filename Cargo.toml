@@ -49,6 +49,7 @@ postcard = { version = "1.0", features = ["use-std"] }
 thiserror = "2.0"
 tauri = { version = "2.9", features = ["devtools"] }
 tauri-build = "2.5"
+tauri-plugin-updater = "2.10"
 blake3 = "1.8"
 rayon = "1.11"
 # disables `esaxx_fast` feature which is conflicting with `ort`

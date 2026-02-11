@@ -90,10 +90,13 @@ jobs:
           AZURE_CLIENT_ID: ${{ secrets.AZURE_CLIENT_ID }}
           AZURE_CLIENT_SECRET: ${{ secrets.AZURE_CLIENT_SECRET }}
           AZURE_TENANT_ID: ${{ secrets.AZURE_TENANT_ID }}
+          TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
         with:
           tagName: ${{ github.ref_name }}
           releaseName: ${{ github.ref_name }}
-          releaseBody: 'See the assets to download this version and install.'
           releaseDraft: false
           prerelease: false
           args: ${{ matrix.args }}
+          generateReleaseNotes: true
+          uploadUpdaterJson: true
+          uploadUpdaterSignatures: true

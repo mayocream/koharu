@@ -38,6 +38,7 @@ tracing-subscriber = { workspace = true }
 postcard = { workspace = true }
 thiserror = { workspace = true }
 tauri = { workspace = true }
+tauri-plugin-updater = { workspace = true }
 blake3 = { workspace = true }
 tokio = { workspace = true }
 rayon = { workspace = true }

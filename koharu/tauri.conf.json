@@ -46,6 +46,15 @@
     ],
     "windows": {
       "signCommand": "trusted-signing-cli -e https://eus.codesigning.azure.net -a Mayo -c Hawaii -d Koharu %1"
+    },
+    "createUpdaterArtifacts": true
+  },
+  "plugins": {
+    "updater": {
+      "pubkey": "dW50cnVzdGVkIGNvbW1lbnQ6IG1pbmlzaWduIHB1YmxpYyBrZXk6IDFFMjZENTA0MzI4QzYwRTMKUldUallJd3lCTlVtSHRlYzlMSnBiT09vTWoydXViV1JpQkd1OTBRa0RvZ05rNURnT0JiSkpnMSsK",
+      "endpoints": [
+        "https://github.com/mayocream/koharu/releases/latest/download/latest.json"
+      ]
     }
   }
 }
