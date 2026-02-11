@@ -1,3 +1,12 @@
+## [0.31.2] - 2026-02-11
+
+### 🐛 Bug Fixes
+
+- Linux release bundle
+
+### ⚙️ Miscellaneous Tasks
+
+- Release 0.31.2
 ## [0.31.1] - 2026-02-11
 
 ### 🐛 Bug Fixes
