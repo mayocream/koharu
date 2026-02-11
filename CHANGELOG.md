@@ -1,3 +1,12 @@
+## [0.32.7] - 2026-02-11
+
+### 🐛 Bug Fixes
+
+- Add polyfill for file system api
+
+### ⚙️ Miscellaneous Tasks
+
+- Release 0.32.7
 ## [0.32.6] - 2026-02-11
 
 ### ⚙️ Miscellaneous Tasks
