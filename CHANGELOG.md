@@ -1,3 +1,12 @@
+## [0.32.1] - 2026-02-11
+
+### 🐛 Bug Fixes
+
+- Add serde_json
+
+### ⚙️ Miscellaneous Tasks
+
+- Release 0.32.1
 ## [0.32.0] - 2026-02-11
 
 ### 🚀 Features
