@@ -33,5 +33,10 @@
         "center": true
       }
     ]
+  },
+  "bundle": {
+    "windows": {
+      "signCommand": "trusted-signing-cli -e https://eus.codesigning.azure.net -a Mayo -c Hawaii -d Koharu %1"
+    }
   }
 }

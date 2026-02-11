@@ -14,165 +14,80 @@ env:
   CUDA_COMPUTE_CAP: 75
 
 jobs:
-  build-windows:
-    name: Windows
-    runs-on: windows-latest
+  release:
+    strategy:
+      matrix:
+        include:
+          - platform: 'macos-latest' # for Arm based macs (M1 and above).
+            args: '--target aarch64-apple-darwin'
+          - platform: 'ubuntu-latest'
+            args: ''
+          - platform: 'windows-latest'
+            args: ''
+
+    runs-on: ${{ matrix.platform }}
     steps:
       - uses: actions/checkout@v6
+
       - uses: oven-sh/setup-bun@v2
-      - uses: Jimver/cuda-toolkit@master
+
+      - name: install dependencies (ubuntu only)
+        if: matrix.platform == 'ubuntu-latest'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y libwebkit2gtk-4.1-dev libappindicator3-dev librsvg2-dev patchelf
+
+      - name: Install CUDA Toolkit
+        uses: Jimver/cuda-toolkit@master
+        if: matrix.platform != 'macos-latest'
         with:
           cuda: '13.1.0'
-      - uses: ilammy/msvc-dev-cmd@v1
-      - run: bun install
-      - run: bun tauri build --features=cuda,cudnn,bundle
-      - name: Prepare distribution folder
-        shell: bash
-        run: |
-          mkdir dist
-          cp target/release/koharu.exe dist/
 
-      - name: Generate release notes
-        run: bun git-cliff --current -o RELEASE_NOTES.md
+      - name: Install dependencies
+        run: bun install
 
-      - name: Package
-        shell: bash
+      - name: Install trusted-signing-cli (windows only)
+        if: matrix.platform == 'windows-latest'
+        run: cargo install trusted-signing-cli
+
+      - name: Import Apple Developer Certificate
         env:
+          APPLE_CERTIFICATE: ${{ secrets.BUILD_CERTIFICATE_BASE64 }}
+          APPLE_CERTIFICATE_PASSWORD: ""
+          KEYCHAIN_PASSWORD: ${{ secrets.KEYCHAIN_PASSWORD }}
+        run: |
+          echo $APPLE_CERTIFICATE | base64 --decode > certificate.p12
+          security create-keychain -p "$KEYCHAIN_PASSWORD" build.keychain
+          security default-keychain -s build.keychain
+          security unlock-keychain -p "$KEYCHAIN_PASSWORD" build.keychain
+          security set-keychain-settings -t 3600 -u build.keychain
+          security import certificate.p12 -k build.keychain -P "$APPLE_CERTIFICATE_PASSWORD" -T /usr/bin/codesign
+          security set-key-partition-list -S apple-tool:,apple:,codesign: -s -k "$KEYCHAIN_PASSWORD" build.keychain
+          security find-identity -v -p codesigning build.keychain
+
+      - name: Verify Certificate
+        run: |
+          CERT_INFO=$(security find-identity -v -p codesigning build.keychain | grep "Apple Development")
+          CERT_ID=$(echo "$CERT_INFO" | awk -F'"' '{print $2}')
+          echo "CERT_ID=$CERT_ID" >> $GITHUB_ENV
+          echo "Certificate imported."
+
+      - uses: tauri-apps/tauri-action@v0
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          APPLE_ID: ${{ secrets.APPLE_ID }}
+          APPLE_PASSWORD: ${{ secrets.APPLE_PASSWORD }}
+          APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM }}
+          APPLE_CERTIFICATE: ${{ secrets.BUILD_CERTIFICATE_BASE64 }}
+          APPLE_CERTIFICATE_PASSWORD: ""
+          APPLE_SIGNING_IDENTITY: ${{ env.CERT_ID }}
           AZURE_CLIENT_ID: ${{ secrets.AZURE_CLIENT_ID }}
           AZURE_CLIENT_SECRET: ${{ secrets.AZURE_CLIENT_SECRET }}
           AZURE_TENANT_ID: ${{ secrets.AZURE_TENANT_ID }}
-        run: |
-          dotnet tool update -g vpk
-          vpk pack -u Koharu -v ${{ github.ref_name }} -p dist -e koharu.exe -i koharu/icons/icon.ico \
-            --releaseNotes RELEASE_NOTES.md \
-            --azureTrustedSignFile .github/signing/metadata.json
-          vpk upload github \
-            --repoUrl https://github.com/${{ github.repository }} \
-            --releaseName ${{ github.ref_name }} \
-            --tag ${{ github.ref_name }} \
-            --token ${{ secrets.GITHUB_TOKEN }} \
-            --merge
-
-  build-macos:
-    name: macOS
-    runs-on: macos-latest
-    steps:
-      - uses: actions/checkout@v6
-      - uses: oven-sh/setup-bun@v2
-      - run: bun install
-      - run: bun tauri build --features=metal,bundle
-      - name: Prepare distribution folder
-        run: |
-          mkdir dist
-          cp target/release/koharu dist/
-      - name: Generate release notes
-        run: bun git-cliff --current -o RELEASE_NOTES.md
-      - name: Install Apple certificates and notary profile
-        env:
-          BUILD_CERTIFICATE_BASE64: ${{ secrets.BUILD_CERTIFICATE_BASE64 }}
-          INSTALLER_CERTIFICATE_BASE64: ${{ secrets.INSTALLER_CERTIFICATE_BASE64 }}
-          P12_PASSWORD: ""
-          APPLE_ID: ${{ secrets.APPLE_ID }}
-          APPLE_PASSWORD: ${{ secrets.APPLE_PASSWORD }}
-          APPLE_TEAM: ${{ secrets.APPLE_TEAM }}
-          KEYCHAIN_PASSWORD: ${{ secrets.KEYCHAIN_PASSWORD }}
-        run: |
-          # create variables for file paths
-          CERT_BUILD_PATH=$RUNNER_TEMP/build_certificate.p12
-          CERT_INSTALLER_PATH=$RUNNER_TEMP/installer_certificate.p12
-          KEYCHAIN_PATH=$RUNNER_TEMP/app-signing.keychain-db
-
-          # import certificates from secrets
-          echo -n "$BUILD_CERTIFICATE_BASE64" | base64 --decode -o $CERT_BUILD_PATH
-          echo -n "$INSTALLER_CERTIFICATE_BASE64" | base64 --decode -o $CERT_INSTALLER_PATH
-
-          # create temporary keychain
-          security create-keychain -p "$KEYCHAIN_PASSWORD" $KEYCHAIN_PATH
-          security set-keychain-settings -lut 21600 $KEYCHAIN_PATH
-          security unlock-keychain -p "$KEYCHAIN_PASSWORD" $KEYCHAIN_PATH
-
-          # import certificates to keychain
-          security import $CERT_BUILD_PATH -P "$P12_PASSWORD" -A -t cert -f pkcs12 -k $KEYCHAIN_PATH
-          security import $CERT_INSTALLER_PATH -P "$P12_PASSWORD" -A -t cert -f pkcs12 -k $KEYCHAIN_PATH
-          security list-keychain -d user -s $KEYCHAIN_PATH
-
-          # create notarytool profile
-          xcrun notarytool store-credentials --keychain $KEYCHAIN_PATH --apple-id "$APPLE_ID" --team-id "$APPLE_TEAM" --password "$APPLE_PASSWORD" velopack-profile
-      - uses: actions/setup-dotnet@v5
         with:
-          dotnet-version: '9.0.x'
-      - name: Package
-        run: |
-          dotnet tool update -g vpk
-          vpk pack -u Koharu -v ${{ github.ref_name }} -p dist -e koharu -i koharu/icons/icon.icns \
-            --releaseNotes RELEASE_NOTES.md \
-            --signAppIdentity "Developer ID Application: Mayo Takanashi" \
-            --signInstallIdentity "Developer ID Installer: Mayo Takanashi" \
-            --notaryProfile "velopack-profile" \
-            --keychain $RUNNER_TEMP/app-signing.keychain-db
-          vpk upload github \
-            --repoUrl https://github.com/${{ github.repository }} \
-            --releaseName ${{ github.ref_name }} \
-            --tag ${{ github.ref_name }} \
-            --token ${{ secrets.GITHUB_TOKEN }} \
-            --merge
-
-  build-linux:
-    name: Linux
-    runs-on: ubuntu-latest
-    steps:
-      - name: Install dependencies
-        run: |
-          sudo apt update
-          sudo apt install libwebkit2gtk-4.1-dev \
-            build-essential \
-            curl \
-            wget \
-            file \
-            libxdo-dev \
-            libssl-dev \
-            libayatana-appindicator3-dev \
-            librsvg2-dev
-      - uses: actions/checkout@v6
-      - uses: Jimver/cuda-toolkit@master
-        with:
-          cuda: '13.1.0'
-      - uses: oven-sh/setup-bun@v2
-      - run: bun install
-      - run: bun tauri build --features=cuda,cudnn,bundle
-      - name: Prepare distribution folder
-        run: |
-          mkdir dist
-          cp target/release/koharu dist/
-      - name: Generate release notes
-        run: bun git-cliff --current -o RELEASE_NOTES.md
-      - uses: actions/setup-dotnet@v5
-        with:
-          dotnet-version: '9.0.x'
-      - name: Package
-        run: |
-          dotnet tool update -g vpk
-          vpk pack -u Koharu -v ${{ github.ref_name }} -p dist -e koharu -i koharu/icons/icon.ico \
-            --releaseNotes RELEASE_NOTES.md
-          vpk upload github \
-            --repoUrl https://github.com/${{ github.repository }} \
-            --releaseName ${{ github.ref_name }} \
-            --tag ${{ github.ref_name }} \
-            --token ${{ secrets.GITHUB_TOKEN }} \
-            --merge
-
-  publish:
-    needs: [build-windows, build-macos, build-linux]
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v6
-      - uses: oven-sh/setup-bun@v2
-      - run: bun install
-      - name: Generate release notes
-        run: bun git-cliff --current -o RELEASE_NOTES.md
-      - name: Upload Bundled Artifacts
-        uses: softprops/action-gh-release@v2
-        with:
-          body_path: RELEASE_NOTES.md
-        env:
-          token: ${{ secrets.GITHUB_TOKEN }}
+          tagName: ${{ github.ref_name }}
+          releaseName: ${{ github.ref_name }}
+          releaseBody: 'See the assets to download this version and install.'
+          releaseDraft: false
+          prerelease: false
+          args: ${{ matrix.args }}

@@ -133,27 +133,6 @@ fn initialize(headless: bool, _debug: bool) -> Result<()> {
         }));
     }
 
-    #[cfg(feature = "bundle")]
-    {
-        // https://docs.velopack.io/integrating/overview#application-startup
-        velopack::VelopackApp::build().run();
-    }
-
-    Ok(())
-}
-
-#[cfg(feature = "bundle")]
-async fn update_app() -> Result<()> {
-    use velopack::{UpdateCheck, UpdateManager, sources::HttpSource};
-
-    let source = HttpSource::new("https://github.com/mayocream/koharu/releases/latest/download");
-    let um = UpdateManager::new(source, None, None)?;
-
-    if let UpdateCheck::UpdateAvailable(updates) = um.check_for_updates()? {
-        um.download_updates(&updates, None)?;
-        um.apply_updates_and_restart(&updates)?;
-    }
-
     Ok(())
 }
 
@@ -221,14 +200,6 @@ pub async fn run() -> Result<()> {
         prefetch().await?;
         return Ok(());
     }
-
-    // Spawn background update check and auto-apply
-    #[cfg(feature = "bundle")]
-    tokio::spawn(async move {
-        if let Err(err) = update_app().await {
-            tracing::error!("Auto-update failed: {err:#}");
-        }
-    });
 
     let listener = TcpListener::bind(format!("127.0.0.1:{}", port.unwrap_or(0))).await?;
     let ws_port = listener.local_addr()?.port();

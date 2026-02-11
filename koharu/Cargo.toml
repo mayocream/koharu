@@ -42,7 +42,6 @@ blake3 = { workspace = true }
 tokio = { workspace = true }
 rayon = { workspace = true }
 strum = { workspace = true }
-velopack = { workspace = true, optional = true }
 dirs = { workspace = true }
 clap = { workspace = true }
 once_cell = { workspace = true }
@@ -65,7 +64,6 @@ winreg = { workspace = true }
 cuda = ["koharu-runtime/cuda", "koharu-ml/cuda"]
 cudnn = ["koharu-runtime/cudnn", "koharu-ml/cudnn"]
 metal = ["koharu-ml/metal"]
-bundle = ["velopack"]
 
 [build-dependencies]
 tauri-build = { workspace = true }
