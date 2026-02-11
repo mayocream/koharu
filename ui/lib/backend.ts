@@ -1,7 +1,7 @@
 'use client'
 
 import { WsRpcClient } from './ws'
-import { pickFiles, saveFile } from './fs'
+import { fileOpen, fileSave } from 'browser-fs-access'
 import { toArrayBuffer } from './util'
 import type { RpcMethodMap, RpcNotificationMap, FileResult } from './rpc-types'
 
@@ -153,7 +153,9 @@ export async function invoke<M extends keyof RpcMethodMap>(
   if (method === 'save_documents' || method === 'export_document') {
     const result = await getClient().invoke<FileResult>(method, params)
     const blob = new Blob([toArrayBuffer(result.data)])
-    await saveFile(blob, result.filename)
+    try {
+      await fileSave(blob, { fileName: result.filename })
+    } catch {}
     return undefined as RpcMethodMap[M][1]
   }
 
@@ -161,21 +163,21 @@ export async function invoke<M extends keyof RpcMethodMap>(
 }
 
 async function openDocumentsRpc(): Promise<number> {
-  const files = await pickFiles(
-    [
-      {
-        description: 'Documents',
-        accept: {
-          'image/*': ['.png', '.jpg', '.jpeg', '.webp'],
-        },
-      },
-    ],
-    true,
-  )
+  let files: File[]
+  try {
+    files = await fileOpen({
+      description: 'Documents',
+      mimeTypes: ['image/*'],
+      extensions: ['.png', '.jpg', '.jpeg', '.webp'],
+      multiple: true,
+    })
+  } catch {
+    return 0
+  }
   if (!files.length) return 0
 
   const entries = await Promise.all(
-    files.map(async (file) => ({
+    files.map(async (file: File) => ({
       name: file.name,
       data: new Uint8Array(await file.arrayBuffer()),
     })),
