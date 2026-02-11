@@ -1,3 +1,12 @@
+## [0.32.2] - 2026-02-11
+
+### 🐛 Bug Fixes
+
+- Tauri updater password
+
+### ⚙️ Miscellaneous Tasks
+
+- Release 0.32.2
 ## [0.32.1] - 2026-02-11
 
 ### 🐛 Bug Fixes
