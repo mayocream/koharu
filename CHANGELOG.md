@@ -1,3 +1,12 @@
+## [0.31.5] - 2026-02-11
+
+### 🐛 Bug Fixes
+
+- Tauri bundle config
+
+### ⚙️ Miscellaneous Tasks
+
+- Release 0.31.5
 ## [0.31.4] - 2026-02-11
 
 ### 🐛 Bug Fixes
