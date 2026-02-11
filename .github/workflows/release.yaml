@@ -51,6 +51,7 @@ jobs:
         run: cargo install trusted-signing-cli
 
       - name: Import Apple Developer Certificate
+        if: matrix.platform == 'macos-latest'
         env:
           APPLE_CERTIFICATE: ${{ secrets.BUILD_CERTIFICATE_BASE64 }}
           APPLE_CERTIFICATE_PASSWORD: ""
@@ -66,8 +67,9 @@ jobs:
           security find-identity -v -p codesigning build.keychain
 
       - name: Verify Certificate
+        if: matrix.platform == 'macos-latest'
         run: |
-          CERT_INFO=$(security find-identity -v -p codesigning build.keychain | grep "Apple Development")
+          CERT_INFO=$(security find-identity -v -p codesigning build.keychain | grep "Developer ID Application")
           CERT_ID=$(echo "$CERT_INFO" | awk -F'"' '{print $2}')
           echo "CERT_ID=$CERT_ID" >> $GITHUB_ENV
           echo "Certificate imported."
