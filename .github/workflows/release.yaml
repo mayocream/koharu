@@ -53,27 +53,6 @@ jobs:
             --token ${{ secrets.GITHUB_TOKEN }} \
             --merge
 
-      - name: Prepare bundled artifacts
-        shell: bash
-        run: |
-          7z x Releases/Koharu-win-Portable.zip -obundled-artifacts
-          cd bundled-artifacts
-          cp ../scripts/start_headless.bat ./start_headless.bat
-          ./current/koharu.exe -d
-          echo "Creating archive, check back in 20 years later"
-          # skip blobs, let 7z copy the resolved symlink instead; and use spf to strip leading folder
-          7z a ../Releases/Koharu-win-CUDA-Bundled.7z -x!models/*/blobs '-x!*.log' * .portable
-
-      # upload Releases/Koharu-win-Bundled.zip to release artifacts
-      # windows build step always finishes at the end, so we assume everything is ready at this point
-      - name: Upload Bundled Artifacts
-        uses: softprops/action-gh-release@v2
-        with:
-          files: Releases/Koharu-win-CUDA-Bundled.7z
-          body_path: RELEASE_NOTES.md
-        env:
-          token: ${{ secrets.GITHUB_TOKEN }}
-
   build-macos:
     name: macOS
     runs-on: macos-latest
@@ -137,3 +116,60 @@ jobs:
             --tag ${{ github.ref_name }} \
             --token ${{ secrets.GITHUB_TOKEN }} \
             --merge
+
+  build-linux:
+    name: Linux
+    runs-on: ubuntu-latest
+    steps:
+      - name: Install dependencies
+        run: |
+          sudo apt update
+          sudo apt install libwebkit2gtk-4.1-dev \
+            build-essential \
+            curl \
+            wget \
+            file \
+            libxdo-dev \
+            libssl-dev \
+            libayatana-appindicator3-dev \
+            librsvg2-dev
+      - uses: actions/checkout@v6
+      - uses: oven-sh/setup-bun@v2
+      - run: bun install
+      - run: bun tauri build --features=metal,bundle
+      - name: Prepare distribution folder
+        run: |
+          mkdir dist
+          cp target/release/koharu dist/
+      - name: Generate release notes
+        run: bun git-cliff --current -o RELEASE_NOTES.md
+      - uses: actions/setup-dotnet@v5
+        with:
+          dotnet-version: '9.0.x'
+      - name: Package
+        run: |
+          dotnet tool update -g vpk
+          vpk pack -u Koharu -v ${{ github.ref_name }} -p dist -e koharu -i koharu/icons/icon.ico \
+            --releaseNotes RELEASE_NOTES.md
+          vpk upload github \
+            --repoUrl https://github.com/${{ github.repository }} \
+            --releaseName ${{ github.ref_name }} \
+            --tag ${{ github.ref_name }} \
+            --token ${{ secrets.GITHUB_TOKEN }} \
+            --merge
+
+  publish:
+    needs: [build-windows, build-macos, build-linux]
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+      - uses: oven-sh/setup-bun@v2
+      - run: bun install
+      - name: Generate release notes
+        run: bun git-cliff --current -o RELEASE_NOTES.md
+      - name: Upload Bundled Artifacts
+        uses: softprops/action-gh-release@v2
+        with:
+          body_path: RELEASE_NOTES.md
+        env:
+          token: ${{ secrets.GITHUB_TOKEN }}
