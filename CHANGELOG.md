@@ -1,3 +1,12 @@
+## [0.32.3] - 2026-02-11
+
+### 🐛 Bug Fixes
+
+- Update tauri key
+
+### ⚙️ Miscellaneous Tasks
+
+- Release 0.32.3
 ## [0.32.2] - 2026-02-11
 
 ### 🐛 Bug Fixes
