@@ -41,7 +41,7 @@ jobs:
       - uses: ilammy/msvc-dev-cmd@v1
         if: matrix.os == 'windows-latest'
       - run: bun install
-      - run: bun tauri build
+      - run: bun tauri build --no-bundle
       - name: Upload Artifact
         uses: actions/upload-artifact@v4
         with:
