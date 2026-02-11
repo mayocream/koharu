@@ -1,3 +1,12 @@
+## [0.31.6] - 2026-02-11
+
+### 🐛 Bug Fixes
+
+- Windows release build
+
+### ⚙️ Miscellaneous Tasks
+
+- Release 0.31.6
 ## [0.31.5] - 2026-02-11
 
 ### 🐛 Bug Fixes
