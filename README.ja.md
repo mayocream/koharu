@@ -95,7 +95,7 @@ Koharu は用途ごとに複数の学習済みモデルを使用します。
 - [AnimeMangaInpainting](https://huggingface.co/dreMaz/AnimeMangaInpainting)
 - [YuzuMarker.FontDetection](https://github.com/JeffersonQin/YuzuMarker.FontDetection)
 
-モデルは Koharu を初めて実行した際に自動的にダウンロードされます。Windows ユーザーは、モデルがあらかじめ同梱された `Koharu-win-CUDA-bundled.7z` のリリースパッケージをダウンロードすることもできます。
+モデルは Koharu を初めて実行した際に自動的にダウンロードされます。
 
 Koharu では、性能と Rust との互換性を高めるため、元のモデルを safetensors 形式へ変換しています。変換済みモデルは [Hugging Face](https://huggingface.co/mayocream) 上でホストしています。
 
