@@ -6,7 +6,6 @@ pub mod ml;
 pub mod operations;
 pub mod pipeline;
 pub mod renderer;
-pub mod result;
 pub mod rpc;
 pub mod server;
 pub mod state;
