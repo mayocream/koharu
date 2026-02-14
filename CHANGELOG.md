@@ -1,3 +1,22 @@
+## [0.33.0] - 2026-02-14
+
+### 🚀 Features
+
+- Mcp server
+
+### 🚜 Refactor
+
+- Remove unused result wrapper
+- Split modules
+
+### 📚 Documentation
+
+- Do not mention 7z
+
+### ⚙️ Miscellaneous Tasks
+
+- Remove portable path
+- Release 0.33.0
 ## [0.32.8] - 2026-02-11
 
 ### ⚙️ Miscellaneous Tasks
