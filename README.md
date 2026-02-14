@@ -140,7 +140,7 @@ LLMs will be automatically downloaded on demand when you select a model in the s
 
 You can download the latest release of Koharu from the [releases page](https://github.com/mayocream/koharu/releases/latest).
 
-We provide pre-built binaries for Windows and macOS, for other platforms, you may need to build from source, see the [Development](#development) section below.
+We provide pre-built binaries for Windows, macOS, and Linux. For other platforms, you may need to build from source, see the [Development](#development) section below.
 
 ## Development
 
