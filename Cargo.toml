@@ -115,12 +115,12 @@ wgpu = "28.0"
 etagere = "0.2"
 bytemuck = { version = "1.21", features = ["derive"] }
 axum = { version = "0.8", features = ["ws"] }
-tower = { version = "0.5", features = ["timeout", "util"] }
 rmp-serde = "1"
 rmpv = { version = "1", features = ["with-serde"] }
-enum_dispatch = "0.3"
-async-trait = "0.1"
-rmcp = { version = "0.15", features = ["server", "transport-streamable-http-server"] }
+rmcp = { version = "0.15", features = [
+    "server",
+    "transport-streamable-http-server",
+] }
 schemars = "1.2"
 base64 = "0.22"
 criterion = { version = "0.8", features = ["html_reports"] }

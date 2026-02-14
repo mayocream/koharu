@@ -4031,7 +4031,6 @@ dependencies = [
 name = "koharu-mcp"
 version = "0.33.0"
 dependencies = [
- "anyhow",
  "base64 0.22.1",
  "image",
  "imageproc",
@@ -4042,7 +4041,6 @@ dependencies = [
  "serde",
  "serde_json",
  "tokio",
- "tracing",
 ]
 
 [[package]]
