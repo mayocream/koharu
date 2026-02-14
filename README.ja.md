@@ -23,6 +23,7 @@ Koharu は、ML の力を活用して翻訳工程を自動化する、新しい�
 - 画像から元の文字を消すためのインペインティング
 - LLM による翻訳
 - CJK（中国語・日本語・韓国語）向けの縦書きレイアウト
+- AI エージェントとの連携のための MCP サーバー
 
 ## 使い方
 
@@ -31,6 +32,19 @@ Koharu は、ML の力を活用して翻訳工程を自動化する、新しい�
 - <kbd>Ctrl</kbd> + マウスホイール: 拡大／縮小
 - <kbd>Ctrl</kbd> + ドラッグ: キャンバスのパン（移動）
 - <kbd>Del</kbd>: 選択したテキストブロックを削除
+
+### MCP サーバー
+
+Koharu には MCP サーバーが内蔵されており、AI エージェントとの連携に使用できます。デフォルトでは、MCP サーバーはランダムなポートでリッスンしますが、`--port` フラグを使用してポートを指定できます。
+
+```bash
+# macOS / Linux
+koharu --port 9999
+# Windows
+koharu.exe --port 9999
+```
+
+AI エージェントの MCP サーバー URL フィールドに `http://localhost:9999/mcp` と入力してください。
 
 ### ヘッドレスモード
 
@@ -43,7 +57,7 @@ koharu --port 4000 --headless
 koharu.exe --port 4000 --headless
 ```
 
-これで、`http://<your-server-ip>:4000` から Koharu Web UI にアクセスできます。
+これで、`http://localhost:4000` から Koharu Web UI にアクセスできます。
 
 ### ファイルの関連付け
 

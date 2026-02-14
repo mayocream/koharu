@@ -8,6 +8,10 @@ use axum::{
     response::{IntoResponse, Response},
     routing::get,
 };
+use koharu_mcp::KoharuMcp;
+use rmcp::transport::streamable_http_server::{
+    StreamableHttpService, session::local::LocalSessionManager, tower::StreamableHttpServerConfig,
+};
 use tokio::net::TcpListener;
 
 use crate::rpc::{self, SharedResources, WsState};
@@ -22,11 +26,26 @@ pub struct Asset {
 pub type SharedAssetResolver = Arc<dyn Fn(&str) -> Option<Asset> + Send + Sync>;
 
 fn build_router(shared: SharedResources, resolver: SharedAssetResolver) -> Router {
-    let ws_state = WsState { resources: shared };
+    let ws_state = WsState {
+        resources: shared.clone(),
+    };
+
+    let mcp_service = StreamableHttpService::new(
+        {
+            let shared = shared.clone();
+            move || Ok(KoharuMcp::new(shared.clone()))
+        },
+        LocalSessionManager::default().into(),
+        StreamableHttpServerConfig {
+            sse_retry: None,
+            ..Default::default()
+        },
+    );
 
     Router::new()
         .route("/ws", get(rpc::ws_handler))
         .with_state(ws_state)
+        .nest_service("/mcp", mcp_service)
         .fallback(move |uri: Uri| {
             let resolver = resolver.clone();
             async move { serve_asset(&resolver, uri) }

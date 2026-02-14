@@ -25,6 +25,7 @@ Under the hood, Koharu uses [candle](https://github.com/huggingface/candle) for 
 - Inpainting to remove original text from images
 - LLM-powered translation
 - Vertical text layout for CJK languages
+- MCP server for AI agents
 
 ## Usage
 
@@ -33,6 +34,19 @@ Under the hood, Koharu uses [candle](https://github.com/huggingface/candle) for 
 - <kbd>Ctrl</kbd> + Mouse Wheel: Zoom in/out
 - <kbd>Ctrl</kbd> + Drag: Pan the canvas
 - <kbd>Del</kbd>: Delete selected text block
+
+### MCP Server
+
+Koharu has a built-in MCP server that can be used to integrate with AI agents. By default, the MCP server will listen on a random port, but you can specify the port using the `--port` flag.
+
+```bash
+# macOS / Linux
+koharu --port 9999
+# Windows
+koharu.exe --port 9999
+```
+
+You can input `http://localhost:9999/mcp` into the MCP server URL field in your AI agent.
 
 ### Headless Mode
 
@@ -45,7 +59,7 @@ koharu --port 4000 --headless
 koharu.exe --port 4000 --headless
 ```
 
-You can now access Koharu Web UI at `http://<your-server-ip>:4000`.
+You can now access Koharu Web UI at `http://localhost:4000`.
 
 ### File association
 
