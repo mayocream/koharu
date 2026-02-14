@@ -7,8 +7,8 @@ use std::{
 
 use anyhow::{Context, Result};
 use futures::stream::{self, StreamExt, TryStreamExt};
-use koharu_core::download;
-use koharu_core::http::http_client;
+use koharu_http::download;
+use koharu_http::http::http_client;
 use once_cell::sync::OnceCell;
 use rayon::iter::{IntoParallelRefIterator, ParallelIterator};
 use tokio::task;

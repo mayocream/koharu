@@ -11,7 +11,7 @@ use serde::{Deserialize, Serialize};
 use std::str::FromStr;
 use tokio::sync::broadcast;
 
-use crate::app::AppResources;
+use crate::AppResources;
 
 /// Steps in the processing pipeline.
 #[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq)]

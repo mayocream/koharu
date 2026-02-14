@@ -1,12 +1,11 @@
 use anyhow::Result;
 use image::{DynamicImage, Rgba};
-use koharu_ml::comic_text_detector::{self, ComicTextDetector};
-use koharu_ml::font_detector::{self, FontDetector};
-use koharu_ml::lama::{self, Lama};
-use koharu_ml::manga_ocr::{self, MangaOcr};
+use koharu_types::{Document, FontPrediction, SerializableDynamicImage, TextBlock, TextStyle};
 
-use crate::image::SerializableDynamicImage;
-use crate::state::{Document, TextBlock, TextStyle};
+use crate::comic_text_detector::{self, ComicTextDetector};
+use crate::font_detector::{self, FontDetector};
+use crate::lama::{self, Lama};
+use crate::manga_ocr::{self, MangaOcr};
 
 const NEAR_BLACK_THRESHOLD: u8 = 12;
 const GRAY_NEAR_BLACK_THRESHOLD: u8 = 60;
@@ -56,7 +55,7 @@ fn colors_similar(a: [u8; 3], b: [u8; 3]) -> bool {
         && a[2].abs_diff(b[2]) <= SIMILAR_COLOR_MAX_DIFF
 }
 
-fn normalize_font_prediction(prediction: &mut font_detector::FontPrediction) {
+fn normalize_font_prediction(prediction: &mut FontPrediction) {
     prediction.text_color = clamp_near_white(clamp_near_black(prediction.text_color));
     prediction.stroke_color = clamp_near_white(clamp_near_black(prediction.stroke_color));
 
@@ -213,11 +212,7 @@ impl Model {
         Ok(result.into())
     }
 
-    pub async fn detect_font(
-        &self,
-        image: &DynamicImage,
-        top_k: usize,
-    ) -> Result<font_detector::FontPrediction> {
+    pub async fn detect_font(&self, image: &DynamicImage, top_k: usize) -> Result<FontPrediction> {
         let mut results = self
             .detect_fonts(std::slice::from_ref(image), top_k)
             .await?;
@@ -228,7 +223,7 @@ impl Model {
         &self,
         images: &[DynamicImage],
         top_k: usize,
-    ) -> Result<Vec<font_detector::FontPrediction>> {
+    ) -> Result<Vec<FontPrediction>> {
         if images.is_empty() {
             return Ok(Vec::new());
         }

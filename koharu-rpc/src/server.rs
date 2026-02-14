@@ -8,12 +8,20 @@ use axum::{
     response::{IntoResponse, Response},
     routing::get,
 };
-use tauri::AssetResolver;
 use tokio::net::TcpListener;
 
 use crate::rpc::{self, SharedResources, WsState};
 
-fn build_router(shared: SharedResources, resolver: Arc<AssetResolver<tauri::Wry>>) -> Router {
+/// An asset returned by the resolver: raw bytes + MIME type.
+pub struct Asset {
+    pub bytes: Vec<u8>,
+    pub mime_type: String,
+}
+
+/// A function that resolves a path to an asset.
+pub type SharedAssetResolver = Arc<dyn Fn(&str) -> Option<Asset> + Send + Sync>;
+
+fn build_router(shared: SharedResources, resolver: SharedAssetResolver) -> Router {
     let ws_state = WsState { resources: shared };
 
     Router::new()
@@ -25,7 +33,7 @@ fn build_router(shared: SharedResources, resolver: Arc<AssetResolver<tauri::Wry>
         })
 }
 
-fn serve_asset(resolver: &AssetResolver<tauri::Wry>, uri: Uri) -> Response {
+fn serve_asset(resolver: &SharedAssetResolver, uri: Uri) -> Response {
     let path = uri.path();
     let target = if path == "/" {
         "index.html"
@@ -38,8 +46,8 @@ fn serve_asset(resolver: &AssetResolver<tauri::Wry>, uri: Uri) -> Response {
         .unwrap_or_else(|| (StatusCode::NOT_FOUND, "Not Found").into_response())
 }
 
-fn resolve_asset(resolver: &AssetResolver<tauri::Wry>, path: &str) -> Option<Response> {
-    let asset = resolver.get(path.to_string())?;
+fn resolve_asset(resolver: &SharedAssetResolver, path: &str) -> Option<Response> {
+    let asset = resolver(path)?;
     let mut response = Response::new(Body::from(asset.bytes));
     if let Ok(ct) = HeaderValue::from_str(&asset.mime_type) {
         response.headers_mut().insert(header::CONTENT_TYPE, ct);
@@ -50,7 +58,7 @@ fn resolve_asset(resolver: &AssetResolver<tauri::Wry>, path: &str) -> Option<Res
 pub async fn serve_with_listener(
     listener: TcpListener,
     shared: SharedResources,
-    resolver: Arc<AssetResolver<tauri::Wry>>,
+    resolver: SharedAssetResolver,
 ) -> Result<()> {
     let router = build_router(shared, resolver);
     tracing::info!("HTTP server listening on http://{}", listener.local_addr()?);

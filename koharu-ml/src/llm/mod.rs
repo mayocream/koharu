@@ -1,3 +1,4 @@
+pub mod facade;
 mod model;
 pub mod prompt;
 mod quantized_hunyuan_dense;

@@ -2,21 +2,18 @@ use std::{path::PathBuf, sync::Arc};
 
 use anyhow::{Context, Result};
 use clap::Parser;
-use koharu_ml::{DeviceName, cuda_is_available, device_name};
-use koharu_runtime::{ensure_dylibs, preload_dylibs};
 use once_cell::sync::Lazy;
 use rfd::MessageDialog;
 use tauri::Manager;
 use tokio::{net::TcpListener, sync::RwLock};
 use tracing_subscriber::fmt::format::FmtSpan;
 
-use crate::{
-    llm, ml,
-    renderer::Renderer,
-    rpc::SharedResources,
-    server,
-    state::{AppState, State},
-};
+use koharu_ml::{cuda_is_available, device_name};
+use koharu_pipeline::AppResources;
+use koharu_renderer::facade::Renderer;
+use koharu_rpc::{SharedResources, server};
+use koharu_runtime::{ensure_dylibs, preload_dylibs};
+use koharu_types::State;
 
 static APP_ROOT: Lazy<PathBuf> = Lazy::new(|| {
     dirs::data_local_dir()
@@ -25,16 +22,6 @@ static APP_ROOT: Lazy<PathBuf> = Lazy::new(|| {
 });
 static LIB_ROOT: Lazy<PathBuf> = Lazy::new(|| APP_ROOT.join("libs"));
 static MODEL_ROOT: Lazy<PathBuf> = Lazy::new(|| APP_ROOT.join("models"));
-
-#[derive(Clone)]
-pub struct AppResources {
-    pub state: AppState,
-    pub ml: Arc<ml::Model>,
-    pub llm: Arc<llm::Model>,
-    pub renderer: Arc<Renderer>,
-    pub ml_device: DeviceName,
-    pub pipeline: Arc<RwLock<Option<crate::pipeline::PipelineHandle>>>,
-}
 
 #[derive(Parser)]
 #[command(version = crate::version::APP_VERSION, about)]
@@ -117,7 +104,7 @@ fn initialize(headless: bool, _debug: bool) -> Result<()> {
 
 async fn prefetch() -> Result<()> {
     ensure_dylibs(LIB_ROOT.to_path_buf()).await?;
-    ml::prefetch().await?;
+    koharu_ml::facade::prefetch().await?;
 
     Ok(())
 }
@@ -146,11 +133,11 @@ async fn build_resources(cpu: bool) -> Result<AppResources> {
 
     let ml_device = device_name(cpu);
     let ml = Arc::new(
-        ml::Model::new(cpu)
+        koharu_ml::facade::Model::new(cpu)
             .await
             .context("Failed to initialize ML model")?,
     );
-    let llm = Arc::new(llm::Model::new(cpu));
+    let llm = Arc::new(koharu_ml::llm::facade::Model::new(cpu));
     let renderer = Arc::new(Renderer::new().context("Failed to initialize renderer")?);
     let state = Arc::new(RwLock::new(State::default()));
 
@@ -161,6 +148,7 @@ async fn build_resources(cpu: bool) -> Result<AppResources> {
         renderer,
         ml_device,
         pipeline: Arc::new(RwLock::new(None)),
+        version: crate::version::current(),
     })
 }
 
@@ -188,7 +176,14 @@ pub async fn run() -> Result<()> {
         .append_invoke_initialization_script(format!("window.__KOHARU_WS_PORT__ = {};", ws_port))
         .build(tauri::generate_context!())?;
 
-    let resolver = Arc::new(app.asset_resolver());
+    let tauri_resolver = Arc::new(app.asset_resolver());
+    let resolver: server::SharedAssetResolver = Arc::new(move |path: &str| {
+        let asset = tauri_resolver.get(path.to_string())?;
+        Some(server::Asset {
+            bytes: asset.bytes.to_vec(),
+            mime_type: asset.mime_type.clone(),
+        })
+    });
     tokio::spawn({
         let shared = shared.clone();
         async move {

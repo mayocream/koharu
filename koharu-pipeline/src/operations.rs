@@ -9,17 +9,14 @@ use strum::IntoEnumIterator;
 use sys_locale::get_locale;
 use tracing::instrument;
 
-use crate::{
-    app::AppResources,
-    image::SerializableDynamicImage,
-    khr::{deserialize_khr, has_khr_magic, serialize_khr},
-    llm,
-    state::{Document, TextBlock},
-    version,
-};
+use koharu_types::{Document, SerializableDynamicImage, TextBlock};
 
-pub async fn app_version(_state: AppResources) -> anyhow::Result<String> {
-    Ok(version::current().to_string())
+use koharu_ml::llm::facade as llm;
+
+use crate::AppResources;
+
+pub async fn app_version(state: AppResources) -> anyhow::Result<String> {
+    Ok(state.version.to_string())
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -42,7 +39,10 @@ pub struct OpenExternalPayload {
     pub url: String,
 }
 
-pub fn open_external(payload: OpenExternalPayload) -> anyhow::Result<()> {
+pub async fn open_external(
+    _state: AppResources,
+    payload: OpenExternalPayload,
+) -> anyhow::Result<()> {
     open::that(&payload.url)?;
     Ok(())
 }
@@ -140,33 +140,6 @@ pub struct FileResult {
     #[serde(with = "serde_bytes")]
     pub data: Vec<u8>,
     pub content_type: String,
-}
-
-pub async fn save_documents(state: AppResources) -> anyhow::Result<FileResult> {
-    let guard = state.state.read().await;
-    if guard.documents.is_empty() {
-        anyhow::bail!("No documents to save");
-    }
-
-    let filename = if guard.documents.len() == 1 {
-        let stem = guard.documents[0]
-            .path
-            .file_stem()
-            .and_then(|s| s.to_str())
-            .unwrap_or("project");
-        format!("{}.khr", stem)
-    } else {
-        "project.khr".to_string()
-    };
-
-    let bytes = serialize_khr(&guard.documents)?;
-    drop(guard);
-
-    Ok(FileResult {
-        filename,
-        data: bytes,
-        content_type: "application/octet-stream".to_string(),
-    })
 }
 
 pub async fn export_document(
@@ -764,13 +737,6 @@ fn mime_from_ext(ext: &str) -> &'static str {
 pub fn load_documents(inputs: Vec<(PathBuf, Vec<u8>)>) -> anyhow::Result<Vec<Document>> {
     if inputs.is_empty() {
         return Ok(vec![]);
-    }
-
-    if inputs.len() == 1 {
-        let (_, ref bytes) = inputs[0];
-        if has_khr_magic(bytes) {
-            return deserialize_khr(bytes);
-        }
     }
 
     let mut documents: Vec<_> = inputs

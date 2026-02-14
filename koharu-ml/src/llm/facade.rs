@@ -1,12 +1,14 @@
-use koharu_ml::llm::{GenerateOptions, Llm, ModelId};
-use serde::Serialize;
 use std::sync::Arc;
+
+use serde::Serialize;
 use strum::Display;
 use tokio::sync::RwLock;
 
-use crate::state::{Document, TextBlock};
+use koharu_types::{Document, TextBlock};
 
-pub use koharu_ml::llm::prefetch;
+use super::{GenerateOptions, Llm, ModelId};
+
+pub use super::prefetch;
 
 #[derive(Debug, Clone, Serialize)]
 #[serde(rename_all = "camelCase")]
@@ -128,13 +130,11 @@ impl Model {
     }
 
     /// Returns a read guard to the internal state.
-    /// Callers can inspect `State` directly while holding the guard.
     pub async fn get(&self) -> tokio::sync::RwLockReadGuard<'_, State> {
         self.state.read().await
     }
 
     /// Returns a write guard to the internal state.
-    /// Needed for operations that mutate the loaded LLM instance.
     pub async fn get_mut(&self) -> tokio::sync::RwLockWriteGuard<'_, State> {
         self.state.write().await
     }

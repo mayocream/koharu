@@ -22,40 +22,24 @@ include = [
 ]
 
 [dependencies]
-koharu-core = { workspace = true }
 koharu-ml = { workspace = true }
+koharu-pipeline = { workspace = true }
 koharu-renderer = { workspace = true }
+koharu-rpc = { workspace = true }
 koharu-runtime = { workspace = true }
+koharu-types = { workspace = true }
 anyhow = { workspace = true }
-futures = { workspace = true }
-rfd = { workspace = true }
-open = { workspace = true }
-serde = { workspace = true }
-serde_bytes = { workspace = true }
-image = { workspace = true }
-tracing = { workspace = true }
-tracing-subscriber = { workspace = true }
-postcard = { workspace = true }
-thiserror = { workspace = true }
-tauri = { workspace = true }
-tauri-plugin-updater = { workspace = true }
-blake3 = { workspace = true }
-tokio = { workspace = true }
-rayon = { workspace = true }
-strum = { workspace = true }
-dirs = { workspace = true }
 clap = { workspace = true }
-once_cell = { workspace = true }
-sys-locale = { workspace = true }
-icu = { workspace = true }
-axum = { workspace = true }
-tower = { workspace = true }
-rmp-serde = { workspace = true }
-rmpv = { workspace = true }
-enum_dispatch = { workspace = true }
-async-trait = { workspace = true }
+dirs = { workspace = true }
 git-version = { workspace = true }
 serde_json = { workspace = true }
+once_cell = { workspace = true }
+rfd = { workspace = true }
+tauri = { workspace = true }
+tauri-plugin-updater = { workspace = true }
+tokio = { workspace = true }
+tracing = { workspace = true }
+tracing-subscriber = { workspace = true }
 
 [target.'cfg(target_os = "windows")'.dependencies]
 windows = { workspace = true }

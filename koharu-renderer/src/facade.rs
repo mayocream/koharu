@@ -3,16 +3,14 @@ use std::sync::{Arc, Mutex};
 use anyhow::Result;
 use icu::properties::{CodePointMapData, props::Script};
 use image::{DynamicImage, imageops};
-use koharu_renderer::{
-    font::{FamilyName, Font, FontBook, Properties},
-    layout::{LayoutRun, TextLayout, WritingMode},
-    renderer::{RenderOptions, TextShaderEffect, WgpuDeviceInfo, WgpuRenderer},
-};
 use rayon::iter::{IntoParallelRefMutIterator, ParallelIterator};
 
+use koharu_types::{Document, SerializableDynamicImage, TextBlock, TextShaderEffect, TextStyle};
+
 use crate::{
-    image::SerializableDynamicImage,
-    state::{Document, TextBlock, TextStyle},
+    font::{FamilyName, Font, FontBook, Properties},
+    layout::{LayoutRun, TextLayout, WritingMode},
+    renderer::{RenderOptions, WgpuDeviceInfo, WgpuRenderer},
 };
 
 pub struct Renderer {

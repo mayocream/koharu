@@ -12,7 +12,7 @@ keywords.workspace = true
 publish.workspace = true
 
 [dependencies]
-koharu-core = { workspace = true }
+koharu-http = { workspace = true }
 anyhow = { workspace = true }
 serde_json = { workspace = true }
 zip = { workspace = true }

@@ -1,6 +1,7 @@
 mod hf_hub;
 
 pub mod comic_text_detector;
+pub mod facade;
 pub mod font_detector;
 pub mod lama;
 pub mod llm;
@@ -9,7 +10,7 @@ pub mod manga_ocr;
 use anyhow::Result;
 use candle_core::{Device, utils::metal_is_available};
 
-pub use koharu_core::hf_hub::set_cache_dir;
+pub use koharu_http::hf_hub::set_cache_dir;
 pub use llm::{language_from_tag, set_default_locale, set_locale, supported_locales};
 
 /// Name of the compute device being used.

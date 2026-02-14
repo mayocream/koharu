@@ -1,6 +1,6 @@
 use std::ops::Deref;
 
-use image::{ColorType, DynamicImage, codecs::webp::WebPEncoder};
+use ::image::{ColorType, DynamicImage, codecs::webp::WebPEncoder};
 use serde::{Deserialize, Serialize, Serializer};
 
 #[derive(Debug, Default, Clone)]
@@ -30,7 +30,7 @@ impl<'de> Deserialize<'de> for SerializableDynamicImage {
         D: serde::Deserializer<'de>,
     {
         let bytes: Vec<u8> = serde_bytes::deserialize(deserializer)?;
-        let img = image::load_from_memory(&bytes).map_err(serde::de::Error::custom)?;
+        let img = ::image::load_from_memory(&bytes).map_err(serde::de::Error::custom)?;
         Ok(SerializableDynamicImage(img))
     }
 }

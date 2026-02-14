@@ -12,6 +12,7 @@ keywords.workspace = true
 publish.workspace = true
 
 [dependencies]
+koharu-types = { workspace = true }
 anyhow = { workspace = true }
 image = { workspace = true }
 once_cell = { workspace = true }
@@ -26,6 +27,7 @@ wgpu = { workspace = true }
 etagere = { workspace = true }
 bytemuck = { workspace = true }
 tracing = { workspace = true }
+rayon = { workspace = true }
 
 [dev-dependencies]
 tokio = { workspace = true }

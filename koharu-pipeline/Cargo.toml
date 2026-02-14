@@ -1,0 +1,23 @@
+[package]
+name = "koharu-pipeline"
+version.workspace = true
+edition.workspace = true
+description.workspace = true
+authors.workspace = true
+publish.workspace = true
+
+[dependencies]
+koharu-types = { workspace = true }
+koharu-ml = { workspace = true }
+koharu-renderer = { workspace = true }
+anyhow = { workspace = true }
+image = { workspace = true }
+once_cell = { workspace = true }
+open = { workspace = true }
+rayon = { workspace = true }
+serde = { workspace = true }
+serde_bytes = { workspace = true }
+strum = { workspace = true }
+sys-locale = { workspace = true }
+tokio = { workspace = true }
+tracing = { workspace = true }

@@ -1,14 +1,4 @@
 pub mod app;
-pub mod image;
-pub mod khr;
-pub mod llm;
-pub mod ml;
-pub mod operations;
-pub mod pipeline;
-pub mod renderer;
-pub mod rpc;
-pub mod server;
-pub mod state;
 pub mod version;
 #[cfg(target_os = "windows")]
 pub mod windows;

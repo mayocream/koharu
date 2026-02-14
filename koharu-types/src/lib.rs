@@ -1,17 +1,17 @@
+mod effect;
+mod font;
+mod image;
+
+pub use effect::TextShaderEffect;
+pub use font::{FontPrediction, NamedFontPrediction, TextDirection};
+pub use image::SerializableDynamicImage;
+
 use std::{collections::HashSet, path::PathBuf, sync::Arc};
 
-use anyhow::anyhow;
-use image::GenericImageView;
-use koharu_ml::font_detector::FontPrediction;
-use koharu_renderer::renderer::TextShaderEffect;
+use ::image::GenericImageView;
 use serde::{Deserialize, Serialize};
 use sys_locale::get_locale;
 use tokio::sync::RwLock;
-
-use crate::{
-    image::SerializableDynamicImage,
-    khr::{deserialize_khr, has_khr_magic},
-};
 
 #[derive(Default, Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
@@ -188,22 +188,16 @@ impl Document {
         documents
             .into_iter()
             .next()
-            .ok_or_else(|| anyhow!("No document found in file"))
+            .ok_or_else(|| anyhow::anyhow!("No document found in file"))
     }
 
     pub fn from_bytes(path: impl Into<PathBuf>, bytes: Vec<u8>) -> anyhow::Result<Vec<Self>> {
         let path = path.into();
-
-        if has_khr_magic(&bytes) {
-            return deserialize_khr(&bytes)
-                .map_err(|err| anyhow!("Failed to load documents: {err}"));
-        }
-
         Ok(vec![Self::image(path, bytes)?])
     }
 
     fn image(path: PathBuf, bytes: Vec<u8>) -> anyhow::Result<Self> {
-        let img = image::load_from_memory(&bytes)?;
+        let img = ::image::load_from_memory(&bytes)?;
         let (width, height) = img.dimensions();
         let id = blake3::hash(&bytes).to_hex().to_string();
         let name = path
