@@ -28,7 +28,11 @@ pub struct DeviceInfo {
 
 pub async fn device(state: AppResources) -> anyhow::Result<DeviceInfo> {
     Ok(DeviceInfo {
-        ml_device: state.ml_device.to_string(),
+        ml_device: match state.device {
+            koharu_ml::Device::Cpu => "CPU".to_string(),
+            koharu_ml::Device::Cuda(_) => "CUDA".to_string(),
+            koharu_ml::Device::Metal(_) => "Metal".to_string(),
+        },
         wgpu: state.renderer.wgpu_device_info(),
     })
 }

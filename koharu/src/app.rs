@@ -8,7 +8,7 @@ use tauri::Manager;
 use tokio::{net::TcpListener, sync::RwLock};
 use tracing_subscriber::fmt::format::FmtSpan;
 
-use koharu_ml::{cuda_is_available, device_name};
+use koharu_ml::{cuda_is_available, device};
 use koharu_pipeline::AppResources;
 use koharu_renderer::facade::Renderer;
 use koharu_rpc::{SharedResources, server};
@@ -131,7 +131,6 @@ async fn build_resources(cpu: bool) -> Result<AppResources> {
         );
     }
 
-    let ml_device = device_name(cpu);
     let ml = Arc::new(
         koharu_ml::facade::Model::new(cpu)
             .await
@@ -146,7 +145,7 @@ async fn build_resources(cpu: bool) -> Result<AppResources> {
         ml,
         llm,
         renderer,
-        ml_device,
+        device: device(cpu)?,
         pipeline: Arc::new(RwLock::new(None)),
         version: crate::version::current(),
     })

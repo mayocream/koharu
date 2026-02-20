@@ -3,7 +3,7 @@ pub mod pipeline;
 
 use std::sync::Arc;
 
-use koharu_ml::DeviceName;
+use koharu_ml::Device;
 use koharu_renderer::facade::Renderer;
 use koharu_types::AppState;
 use tokio::sync::RwLock;
@@ -14,7 +14,7 @@ pub struct AppResources {
     pub ml: Arc<koharu_ml::facade::Model>,
     pub llm: Arc<koharu_ml::llm::facade::Model>,
     pub renderer: Arc<Renderer>,
-    pub ml_device: DeviceName,
+    pub device: Device,
     pub pipeline: Arc<RwLock<Option<pipeline::PipelineHandle>>>,
     pub version: &'static str,
 }
