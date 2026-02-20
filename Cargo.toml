@@ -52,7 +52,7 @@ tokio = { version = "1.44", features = ["full"] }
 tracing = "0.1"
 tracing-subscriber = { version = "0.3", features = ["env-filter", "fmt"] }
 open = "5.3"
-rfd = "0.16"
+rfd = "0.17"
 postcard = { version = "1.0", features = ["use-std"] }
 thiserror = "2.0"
 tauri = { version = "2.9", features = ["devtools"] }
