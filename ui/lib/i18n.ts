@@ -23,15 +23,14 @@ i18n
   .use(initReactI18next)
   .init({
     resources,
-
     fallbackLng: 'en-US',
     interpolation: {
       escapeValue: false, // not needed for react as it escapes by default
     },
-
     react: {
       useSuspense: false,
     },
+    showSupportNotice: false,
   })
 
 export default i18n
