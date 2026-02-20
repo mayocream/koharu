@@ -149,13 +149,17 @@ impl Model {
         matches!(*self.state.read().await, State::Ready(_))
     }
 
-    /// Generate text from the loaded model.
-    pub async fn generate(&self, doc: &mut impl Translatable) -> anyhow::Result<()> {
+    /// Translate text using the loaded model.
+    pub async fn translate(
+        &self,
+        doc: &mut impl Translatable,
+        target_language: Option<&str>,
+    ) -> anyhow::Result<()> {
         let mut guard = self.state.write().await;
         match &mut *guard {
             State::Ready(llm) => {
                 let text = doc.get_source()?;
-                let response = llm.generate(&text, &GenerateOptions::default())?;
+                let response = llm.generate(&text, &GenerateOptions::default(), target_language)?;
                 let response = response.trim().to_string();
                 doc.set_translation(response)
             }

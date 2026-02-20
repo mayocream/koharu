@@ -29,12 +29,10 @@ tracing = { workspace = true }
 tracing-subscriber = { workspace = true }
 tokio = { workspace = true }
 rustfft = { workspace = true }
-once_cell = { workspace = true }
 futures = { workspace = true }
 num_cpus = { workspace = true }
 libloading = { workspace = true }
 minijinja = { workspace = true }
-sys-locale = { workspace = true }
 cudarc = { workspace = true, optional = true }
 objc2 = { workspace = true, optional = true }
 objc2-metal = { workspace = true, optional = true }

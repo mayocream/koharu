@@ -6,7 +6,6 @@ use koharu_renderer::renderer::TextShaderEffect;
 use rayon::iter::{IntoParallelIterator, ParallelIterator};
 use serde::{Deserialize, Serialize};
 use strum::IntoEnumIterator;
-use sys_locale::get_locale;
 use tracing::instrument;
 
 use koharu_types::{Document, SerializableDynamicImage, TextBlock};
@@ -563,16 +562,24 @@ pub async fn list_font_families(state: AppResources) -> anyhow::Result<Vec<Strin
     state.renderer.available_fonts()
 }
 
-pub async fn llm_list(state: AppResources) -> anyhow::Result<Vec<llm::ModelInfo>> {
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct LlmListPayload {
+    pub language: Option<String>,
+}
+
+pub async fn llm_list(
+    state: AppResources,
+    payload: LlmListPayload,
+) -> anyhow::Result<Vec<llm::ModelInfo>> {
     let mut models: Vec<ModelId> = ModelId::iter().collect();
     let cpu_factor = if state.llm.is_cpu() { 10 } else { 1 };
-    let zh_locale_factor = match get_locale().unwrap_or_default() {
-        locale if locale.starts_with("zh") => 10,
-        _ => 1,
-    };
-    let non_zh_en_locale_factor = match get_locale().unwrap_or_default() {
-        locale if locale.starts_with("zh") || locale.starts_with("en") => 1,
-        _ => 100,
+    let lang = payload.language.as_deref().unwrap_or("en");
+    let zh_locale_factor = if lang.starts_with("zh") { 10 } else { 1 };
+    let non_zh_en_locale_factor = if lang.starts_with("zh") || lang.starts_with("en") {
+        1
+    } else {
+        100
     };
 
     models.sort_by_key(|m| match m {
@@ -627,11 +634,8 @@ pub async fn llm_generate(state: AppResources, payload: LlmGeneratePayload) -> a
             .ok_or_else(|| anyhow::anyhow!("Document not found"))?
     };
 
-    if let Some(locale) = payload.language.as_ref() {
-        koharu_ml::set_locale(locale.clone());
-    }
-
     let mut updated = snapshot;
+    let target_language = payload.language.as_deref();
 
     match payload.text_block_index {
         Some(bi) => {
@@ -639,10 +643,10 @@ pub async fn llm_generate(state: AppResources, payload: LlmGeneratePayload) -> a
                 .text_blocks
                 .get_mut(bi)
                 .ok_or_else(|| anyhow::anyhow!("Text block not found"))?;
-            state.llm.generate(text_block).await?;
+            state.llm.translate(text_block, target_language).await?;
         }
         None => {
-            state.llm.generate(&mut updated).await?;
+            state.llm.translate(&mut updated, target_language).await?;
         }
     }
 

@@ -136,10 +136,15 @@ impl Llm {
 
     /// Generate up to `max_tokens` following `prompt` using temperature/top-k/p settings.
     /// Logs simple performance metrics via `tracing`.
-    pub fn generate(&mut self, prompt: &str, opts: &GenerateOptions) -> Result<String> {
+    pub fn generate(
+        &mut self,
+        prompt: &str,
+        opts: &GenerateOptions,
+        target_language: Option<&str>,
+    ) -> Result<String> {
         let prompt = self
             .prompt_renderer
-            .format_chat_prompt(prompt.to_string())?;
+            .format_chat_prompt(prompt.to_string(), target_language)?;
         tracing::info!("Generating with prompt:\n{}", prompt);
 
         // Encode prompt

@@ -1,6 +1,7 @@
 'use client'
 
 import { create } from 'zustand'
+import i18n from '@/lib/i18n'
 import {
   invoke,
   subscribeProcessProgress,
@@ -484,7 +485,7 @@ export const useAppStore = create<AppState>((set, get) => {
     },
     llmList: async () => {
       try {
-        const models = await invoke('llm_list')
+        const models = await invoke('llm_list', { language: i18n.language })
         set({ llmModels: models })
         const currentModel = get().llmSelectedModel
         const currentLanguage = get().llmSelectedLanguage

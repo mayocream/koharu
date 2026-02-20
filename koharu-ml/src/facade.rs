@@ -1,6 +1,6 @@
 use anyhow::Result;
 use image::{DynamicImage, Rgba};
-use koharu_types::{Document, FontPrediction, SerializableDynamicImage, TextBlock, TextStyle};
+use koharu_types::{Document, FontPrediction, SerializableDynamicImage, TextBlock};
 
 use crate::comic_text_detector::{self, ComicTextDetector};
 use crate::font_detector::{self, FontDetector};
@@ -126,14 +126,8 @@ impl Model {
 
             let font_predictions = self.detect_fonts(&images, 1).await?;
             for (block, prediction) in doc.text_blocks.iter_mut().zip(font_predictions) {
-                let color = prediction.text_color;
-                let font_size = (prediction.font_size_px > 0.0).then_some(prediction.font_size_px);
                 block.font_prediction = Some(prediction);
-                block.style = Some(TextStyle {
-                    font_size,
-                    color: [color[0], color[1], color[2], 255],
-                    ..Default::default()
-                });
+                block.style = None;
             }
         }
 

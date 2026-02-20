@@ -17,5 +17,4 @@ blake3 = { workspace = true }
 image = { workspace = true }
 serde = { workspace = true }
 serde_bytes = { workspace = true }
-sys-locale = { workspace = true }
 tokio = { workspace = true }

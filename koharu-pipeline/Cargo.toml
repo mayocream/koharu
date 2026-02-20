@@ -18,6 +18,5 @@ rayon = { workspace = true }
 serde = { workspace = true }
 serde_bytes = { workspace = true }
 strum = { workspace = true }
-sys-locale = { workspace = true }
 tokio = { workspace = true }
 tracing = { workspace = true }

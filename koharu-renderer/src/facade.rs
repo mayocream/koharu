@@ -101,7 +101,12 @@ impl Renderer {
             return Ok(());
         };
 
-        let style = text_block.style.clone().unwrap_or_default();
+        let style = text_block.style.clone().unwrap_or_else(|| TextStyle {
+            font_families: fonts_for_script(translation),
+            font_size: None,
+            color: [0, 0, 0, 255],
+            effect: None,
+        });
         let font = self.select_font(&style)?;
         let block_effect = style.effect.unwrap_or(effect);
         let color = text_block
@@ -194,6 +199,63 @@ fn is_latin_only(text: &str) -> bool {
             Script::Latin | Script::Common | Script::Inherited
         )
     })
+}
+
+/// Returns OS-appropriate font family names based on the dominant script in the text.
+fn fonts_for_script(text: &str) -> Vec<String> {
+    let script_map = CodePointMapData::<Script>::new();
+    let has_cjk = text.chars().any(|c| {
+        matches!(
+            script_map.get(c),
+            Script::Han | Script::Hiragana | Script::Katakana | Script::Hangul | Script::Bopomofo
+        )
+    });
+    let has_arabic = text
+        .chars()
+        .any(|c| matches!(script_map.get(c), Script::Arabic | Script::Hebrew));
+
+    let names: &[&str] = if has_cjk {
+        #[cfg(target_os = "windows")]
+        {
+            &["Microsoft YaHei"]
+        }
+        #[cfg(target_os = "macos")]
+        {
+            &["PingFang SC"]
+        }
+        #[cfg(not(any(target_os = "windows", target_os = "macos")))]
+        {
+            &["Noto Sans CJK SC"]
+        }
+    } else if has_arabic {
+        #[cfg(target_os = "windows")]
+        {
+            &["Segoe UI"]
+        }
+        #[cfg(target_os = "macos")]
+        {
+            &["SF Pro"]
+        }
+        #[cfg(not(any(target_os = "windows", target_os = "macos")))]
+        {
+            &["Noto Sans"]
+        }
+    } else {
+        #[cfg(target_os = "windows")]
+        {
+            &["Segoe UI", "Arial"]
+        }
+        #[cfg(target_os = "macos")]
+        {
+            &["SF Pro", "Helvetica"]
+        }
+        #[cfg(not(any(target_os = "windows", target_os = "macos")))]
+        {
+            &["Noto Sans", "DejaVu Sans"]
+        }
+    };
+
+    names.iter().map(|s| s.to_string()).collect()
 }
 
 fn center_layout_horizontally(layout: &mut LayoutRun<'_>, container_width: f32) {

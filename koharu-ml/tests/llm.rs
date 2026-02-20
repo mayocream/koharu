@@ -30,7 +30,7 @@ async fn llm_generates_text_for_all_models() -> anyhow::Result<()> {
             repeat_last_n: 64,
         };
 
-        let generated = llm.generate(prompt, &opts)?;
+        let generated = llm.generate(prompt, &opts, None)?;
         assert!(
             !generated.trim().is_empty(),
             "model {model:?} should return some text"

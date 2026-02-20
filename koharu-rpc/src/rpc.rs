@@ -92,7 +92,7 @@ async fn dispatch(method: &str, params: rmpv::Value, state: AppResources) -> Res
         "device" => call0(operations::device, state).await,
         "get_documents" => call0(operations::get_documents, state).await,
         "list_font_families" => call0(operations::list_font_families, state).await,
-        "llm_list" => call0(operations::llm_list, state).await,
+        "llm_list" => call(operations::llm_list, state, params).await,
         "llm_ready" => call0(operations::llm_ready, state).await,
         "llm_offload" => call0(operations::llm_offload, state).await,
         "process_cancel" => call0(operations::process_cancel, state).await,

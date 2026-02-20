@@ -194,10 +194,6 @@ async fn run_pipeline_inner(
         }
     }
 
-    if let Some(locale) = req.language.as_ref() {
-        koharu_ml::set_locale(locale.clone());
-    }
-
     let start_index = req.index.unwrap_or(0);
     let end_index = req.index.map(|i| i + 1).unwrap_or(total_docs);
     let total_steps = PipelineStep::ALL.len();
@@ -237,7 +233,9 @@ async fn run_pipeline_inner(
                 PipelineStep::Ocr => res.ml.ocr(&mut snapshot).await?,
                 PipelineStep::Inpaint => res.ml.inpaint(&mut snapshot).await?,
                 PipelineStep::LlmGenerate => {
-                    res.llm.generate(&mut snapshot).await?;
+                    res.llm
+                        .translate(&mut snapshot, req.language.as_deref())
+                        .await?;
                 }
                 PipelineStep::Render => {
                     res.renderer.render(

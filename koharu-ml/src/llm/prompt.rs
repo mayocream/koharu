@@ -1,36 +1,8 @@
 use minijinja::{Environment, context};
-use once_cell::sync::Lazy;
 use serde::Serialize;
-use std::sync::RwLock;
 use strum::{Display, EnumString};
-use sys_locale::get_locale;
 
-use crate::llm::{ModelId, language_from_tag};
-
-static LOCALE: Lazy<RwLock<String>> = Lazy::new(|| RwLock::new(system_locale_name()));
-
-fn system_locale_name() -> String {
-    get_locale()
-        .map(|locale| language_from_tag(&locale).to_string())
-        .unwrap_or_else(|| "English".to_string())
-}
-
-fn get_default_locale() -> String {
-    LOCALE
-        .read()
-        .map(|locale| locale.clone())
-        .unwrap_or_else(|_| system_locale_name())
-}
-
-pub fn set_default_locale(locale: String) {
-    set_locale(locale);
-}
-
-pub fn set_locale(locale: String) {
-    if let Ok(mut guard) = LOCALE.write() {
-        *guard = locale;
-    }
-}
+use crate::llm::ModelId;
 
 #[derive(Debug, Clone, PartialEq, Eq, Display, EnumString)]
 #[strum(serialize_all = "lowercase")]
@@ -99,7 +71,7 @@ impl PromptRenderer {
         }
     }
 
-    fn messages(&self, text: impl Into<String>) -> Vec<ChatMessage> {
+    fn messages(&self, text: impl Into<String>, target_language: Option<&str>) -> Vec<ChatMessage> {
         match self.model_id {
             // refer: https://huggingface.co/lmg-anon/vntl-llama3-8b-v2-gguf#translation-prompt
             ModelId::VntlLlama3_8Bv2 => vec![
@@ -124,15 +96,19 @@ impl PromptRenderer {
                 ChatRole::User,
                 format!(
                     "Translate the following light novel dialog into {}, without additional explanation.\n\n{}",
-                    get_default_locale(),
+                    target_language.unwrap_or("English"),
                     text.into(),
                 ),
             )],
         }
     }
 
-    pub fn format_chat_prompt(&self, prompt: String) -> anyhow::Result<String> {
-        let messages = self.messages(prompt);
+    pub fn format_chat_prompt(
+        &self,
+        prompt: String,
+        target_language: Option<&str>,
+    ) -> anyhow::Result<String> {
+        let messages = self.messages(prompt, target_language);
         let tmpl = self.env.template_from_str(&self.template)?;
 
         let prompt = tmpl
@@ -166,7 +142,7 @@ mod tests {
             "<|begin_of_text|>".to_string(),
             "<|end_of_text|>".to_string(),
         );
-        let formatted = renderer.format_chat_prompt("こんにちは".to_string())?;
+        let formatted = renderer.format_chat_prompt("こんにちは".to_string(), None)?;
         let expected = "<|begin_of_text|><|start_header_id|>Metadata<|end_header_id|>\n\n<|eot_id|><|start_header_id|>Japanese<|end_header_id|>\n\nこんにちは<|eot_id|><|start_header_id|>English<|end_header_id|>\n\n";
         assert_eq!(formatted, expected);
 
@@ -182,7 +158,7 @@ mod tests {
             "<|begin_of_text|>".to_string(),
             "<|end_of_text|>".to_string(),
         );
-        let formatted = renderer.format_chat_prompt("こんにちは".to_string())?;
+        let formatted = renderer.format_chat_prompt("こんにちは".to_string(), None)?;
         let expected = "<|begin_of_text|><|im_start|>system Translate to English, do not add any explanations, do not add or delete line breaks.<|im_end|> <|im_start|>user こんにちは<|im_end|> <|im_start|>assistant ";
         assert_eq!(formatted, expected);
 
@@ -198,7 +174,7 @@ mod tests {
             "<s>".to_string(),
             "</s>".to_string(),
         );
-        let formatted = renderer.format_chat_prompt("こんにちは".to_string())?;
+        let formatted = renderer.format_chat_prompt("こんにちは".to_string(), None)?;
         let expected = "<|im_start|>system 你是一个视觉小说翻译模型，可以通顺地使用给定的术语表以指定的风格将日文翻译成简体中文，并联系上下文正确使用人称代词，注意不要混淆使役态和被动态的主语和宾语，不要擅自添加原文中没有的特殊符号，也不要擅自增加或减少换行。<|im_end|> <|im_start|>user こんにちは<|im_end|> <|im_start|>assistant ";
         assert_eq!(formatted, expected);
 

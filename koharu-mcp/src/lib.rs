@@ -112,7 +112,9 @@ impl KoharuMcp {
     #[tool(description = "List available LLM translation models with supported languages")]
     async fn llm_list(&self) -> Result<String, String> {
         let res = self.resources()?;
-        let models = operations::llm_list(res).await.map_err(|e| e.to_string())?;
+        let models = operations::llm_list(res, operations::LlmListPayload { language: None })
+            .await
+            .map_err(|e| e.to_string())?;
         serde_json::to_string_pretty(&models).map_err(|e| e.to_string())
     }
 
@@ -500,7 +502,12 @@ impl KoharuMcp {
             || p.color.is_some()
             || p.shader_effect.is_some()
         {
-            let style = block.style.get_or_insert_with(TextStyle::default);
+            let style = block.style.get_or_insert_with(|| TextStyle {
+                font_families: Vec::new(),
+                font_size: None,
+                color: [0, 0, 0, 255],
+                effect: None,
+            });
 
             if let Some(families) = p.font_families {
                 style.font_families = families;

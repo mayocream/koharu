@@ -1,8 +1,5 @@
 use clap::Parser;
-use koharu_ml::{
-    llm::{GenerateOptions, Llm, ModelId},
-    set_default_locale,
-};
+use koharu_ml::llm::{GenerateOptions, Llm, ModelId, language_from_tag};
 use tracing_subscriber::fmt::format::FmtSpan;
 
 #[derive(Parser, Debug)]
@@ -74,9 +71,8 @@ async fn main() -> anyhow::Result<()> {
 
     let args = Args::parse();
 
-    set_default_locale(args.locale.clone());
-
     let mut llm = Llm::load(args.model, args.cpu).await?;
+    let target_language = language_from_tag(&args.locale);
 
     let opts = GenerateOptions {
         max_tokens: args.max_tokens,
@@ -89,7 +85,7 @@ async fn main() -> anyhow::Result<()> {
         repeat_last_n: args.repeat_last_n,
     };
 
-    let out = llm.generate(&args.prompt, &opts)?;
+    let out = llm.generate(&args.prompt, &opts, Some(target_language))?;
 
     println!("{}", out);
     println!(

@@ -3993,12 +3993,10 @@ dependencies = [
  "objc2-metal",
  "objc2-metal-performance-shaders",
  "objc2-metal-performance-shaders-graph",
- "once_cell",
  "rustfft",
  "serde",
  "serde_json",
  "strum",
- "sys-locale",
  "tokenizers",
  "tokio",
  "tracing",
@@ -4020,7 +4018,6 @@ dependencies = [
  "serde",
  "serde_bytes",
  "strum",
- "sys-locale",
  "tokio",
  "tracing",
 ]
@@ -4097,7 +4094,6 @@ dependencies = [
  "image",
  "serde",
  "serde_bytes",
- "sys-locale",
  "tokio",
 ]
 
@@ -7343,15 +7339,6 @@ dependencies = [
  "proc-macro2",
  "quote",
  "syn 2.0.117",
-]
-
-[[package]]
-name = "sys-locale"
-version = "0.3.2"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "8eab9a99a024a169fe8a903cf9d4a3b3601109bcc13bd9e3c6fff259138626c4"
-dependencies = [
- "libc",
 ]
 
 [[package]]

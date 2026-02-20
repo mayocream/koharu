@@ -6,7 +6,7 @@ mod quantized_lfm2;
 mod tokenizer;
 
 pub use model::{GenerateOptions, Llm};
-pub use prompt::{ChatMessage, ChatRole, set_default_locale, set_locale};
+pub use prompt::{ChatMessage, ChatRole};
 
 macro_rules! define_languages {
     ( $( $code:literal => $name:literal ),* $(,)? ) => {

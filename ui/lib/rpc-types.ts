@@ -68,7 +68,7 @@ export type RpcMethodMap = {
   ]
   update_text_blocks: [{ index: number; textBlocks: TextBlock[] }, void]
   list_font_families: [void, string[]]
-  llm_list: [void, LlmModelInfo[]]
+  llm_list: [{ language?: string }, LlmModelInfo[]]
   llm_load: [{ id: string }, void]
   llm_offload: [void, void]
   llm_ready: [void, boolean]
