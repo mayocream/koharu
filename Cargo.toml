@@ -117,7 +117,7 @@ bytemuck = { version = "1.21", features = ["derive"] }
 axum = { version = "0.8", features = ["ws"] }
 rmp-serde = "1"
 rmpv = { version = "1", features = ["with-serde"] }
-rmcp = { version = "0.15", features = [
+rmcp = { version = "0.16", features = [
     "server",
     "transport-streamable-http-server",
 ] }
