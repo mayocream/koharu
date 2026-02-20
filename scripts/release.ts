@@ -38,7 +38,7 @@ async function main() {
   console.log('Updated Cargo.lock')
 
   await exec('git add Cargo.toml Cargo.lock', execOpts)
-  await exec(`git commit -m "chore: release ${bumpedVersion}"`, execOpts)
+  await exec(`git commit -m "chore(release): ${bumpedVersion}"`, execOpts)
   console.log('Created release commit')
 
   await exec(`git tag ${bumpedVersion}`, execOpts)
