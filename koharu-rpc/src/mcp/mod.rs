@@ -1,12 +1,8 @@
 mod helpers;
-mod params;
-mod types;
 
 use std::path::PathBuf;
-use std::sync::Arc;
 
 use image::DynamicImage;
-use imageproc::distance_transform::Norm;
 use rmcp::handler::server::router::tool::ToolRouter;
 use rmcp::handler::server::wrapper::Parameters;
 use rmcp::model::{
@@ -14,25 +10,21 @@ use rmcp::model::{
     ToolsCapability,
 };
 use rmcp::{ServerHandler, tool, tool_handler, tool_router};
-use tokio::sync::OnceCell;
 
+use koharu_api::commands::{
+    AddTextBlockPayload, ExportDocumentParams, FileEntry, IndexPayload, InpaintPartialPayload,
+    InpaintRegion, InpaintRegionParams, LlmGenerateParams, LlmGeneratePayload, LlmListPayload,
+    LlmLoadParams, LlmLoadPayload, MaskMorphPayload, OpenDocumentsParams, OpenDocumentsPayload,
+    ProcessParams, ProcessRequest, RemoveTextBlockPayload, RenderParams, RenderPayload,
+    UpdateTextBlockPayload, ViewImageParams, ViewTextBlockParams,
+};
+use koharu_api::views::to_doc_info;
 use koharu_pipeline::AppResources;
-use koharu_pipeline::operations::{self, IndexPayload, InpaintRegion};
-use koharu_types::{SerializableDynamicImage, TextBlock, TextStyle};
+use koharu_pipeline::operations;
 
-use helpers::{encode_png_base64, parse_hex_color, parse_shader_effect};
-use params::*;
-use types::{to_block_info, to_doc_info};
+use crate::shared::SharedResources;
 
-// ---------------------------------------------------------------------------
-// Shared resources type (same as koharu-rpc)
-// ---------------------------------------------------------------------------
-
-pub type SharedResources = Arc<OnceCell<AppResources>>;
-
-// ---------------------------------------------------------------------------
-// MCP server struct
-// ---------------------------------------------------------------------------
+use helpers::encode_png_base64;
 
 #[derive(Clone)]
 pub struct KoharuMcp {
@@ -56,14 +48,8 @@ impl KoharuMcp {
     }
 }
 
-// ---------------------------------------------------------------------------
-// Tool implementations
-// ---------------------------------------------------------------------------
-
 #[tool_router]
 impl KoharuMcp {
-    // === Query tools ===
-
     #[tool(description = "Get the application version")]
     async fn app_version(&self) -> Result<String, String> {
         let res = self.resources()?;
@@ -91,9 +77,12 @@ impl KoharuMcp {
     #[tool(
         description = "Get document metadata and text blocks (no images). Returns name, dimensions, processing state, and all text block details."
     )]
-    async fn get_document(&self, Parameters(p): Parameters<IndexParam>) -> Result<String, String> {
+    async fn get_document(
+        &self,
+        Parameters(p): Parameters<IndexPayload>,
+    ) -> Result<String, String> {
         let res = self.resources()?;
-        let doc = operations::get_document(res, IndexPayload { index: p.index })
+        let doc = operations::get_document(res, p)
             .await
             .map_err(|e| e.to_string())?;
         let info = to_doc_info(&doc);
@@ -112,7 +101,7 @@ impl KoharuMcp {
     #[tool(description = "List available LLM translation models with supported languages")]
     async fn llm_list(&self) -> Result<String, String> {
         let res = self.resources()?;
-        let models = operations::llm_list(res, operations::LlmListPayload { language: None })
+        let models = operations::llm_list(res, LlmListPayload { language: None })
             .await
             .map_err(|e| e.to_string())?;
         serde_json::to_string_pretty(&models).map_err(|e| e.to_string())
@@ -130,8 +119,6 @@ impl KoharuMcp {
             "LLM is not loaded".to_string()
         })
     }
-
-    // === Image viewing tools ===
 
     #[tool(
         description = "View a document image layer. Returns the image so you can see the manga page, detection mask, inpainted result, or final rendered output."
@@ -244,8 +231,6 @@ impl KoharuMcp {
         ]))
     }
 
-    // === Document I/O tools ===
-
     #[tool(
         description = "Open image files from disk paths. Replaces any currently loaded documents."
     )]
@@ -255,7 +240,7 @@ impl KoharuMcp {
     ) -> Result<String, String> {
         let res = self.resources()?;
 
-        let files: Result<Vec<operations::FileEntry>, String> = p
+        let files: Result<Vec<FileEntry>, String> = p
             .paths
             .iter()
             .map(|path| {
@@ -266,18 +251,14 @@ impl KoharuMcp {
                     .unwrap_or_default()
                     .to_string_lossy()
                     .to_string();
-                Ok(operations::FileEntry { name, data })
+                Ok(FileEntry { name, data })
             })
             .collect();
 
-        let count = operations::open_documents(
-            res.clone(),
-            operations::OpenDocumentsPayload { files: files? },
-        )
-        .await
-        .map_err(|e| e.to_string())?;
+        let count = operations::open_documents(res.clone(), OpenDocumentsPayload { files: files? })
+            .await
+            .map_err(|e| e.to_string())?;
 
-        // Read back names
         let guard = res.state.read().await;
         let names: Vec<&str> = guard.documents.iter().map(|d| d.name.as_str()).collect();
         Ok(format!("Loaded {count} document(s): {}", names.join(", ")))
@@ -299,18 +280,16 @@ impl KoharuMcp {
         Ok(format!("Exported to {}", p.output_path))
     }
 
-    // === Pipeline tools ===
-
     #[tool(
         description = "Detect text blocks and fonts in a manga page. Finds speech bubbles, text regions, and predicts font properties."
     )]
-    async fn detect(&self, Parameters(p): Parameters<IndexParam>) -> Result<String, String> {
+    async fn detect(&self, Parameters(p): Parameters<IndexPayload>) -> Result<String, String> {
         let res = self.resources()?;
-        operations::detect(res.clone(), IndexPayload { index: p.index })
+        operations::detect(res.clone(), p)
             .await
             .map_err(|e| e.to_string())?;
 
-        let doc = operations::get_document(res, IndexPayload { index: p.index })
+        let doc = operations::get_document(res, p)
             .await
             .map_err(|e| e.to_string())?;
 
@@ -327,13 +306,13 @@ impl KoharuMcp {
     #[tool(
         description = "Run OCR (optical character recognition) on detected text blocks to extract the original text."
     )]
-    async fn ocr(&self, Parameters(p): Parameters<IndexParam>) -> Result<String, String> {
+    async fn ocr(&self, Parameters(p): Parameters<IndexPayload>) -> Result<String, String> {
         let res = self.resources()?;
-        operations::ocr(res.clone(), IndexPayload { index: p.index })
+        operations::ocr(res.clone(), p)
             .await
             .map_err(|e| e.to_string())?;
 
-        let doc = operations::get_document(res, IndexPayload { index: p.index })
+        let doc = operations::get_document(res, p)
             .await
             .map_err(|e| e.to_string())?;
 
@@ -348,9 +327,9 @@ impl KoharuMcp {
     #[tool(
         description = "Inpaint (remove) text from the image using the detection mask. Fills text regions with surrounding background."
     )]
-    async fn inpaint(&self, Parameters(p): Parameters<IndexParam>) -> Result<String, String> {
+    async fn inpaint(&self, Parameters(p): Parameters<IndexPayload>) -> Result<String, String> {
         let res = self.resources()?;
-        operations::inpaint(res, IndexPayload { index: p.index })
+        operations::inpaint(res, p)
             .await
             .map_err(|e| e.to_string())?;
         Ok("Inpainting complete".to_string())
@@ -364,12 +343,13 @@ impl KoharuMcp {
         let effect = p
             .shader_effect
             .as_deref()
-            .map(parse_shader_effect)
-            .transpose()?;
+            .map(str::parse)
+            .transpose()
+            .map_err(|e: anyhow::Error| e.to_string())?;
 
         operations::render(
             res,
-            operations::RenderPayload {
+            RenderPayload {
                 index: p.index,
                 text_block_index: p.text_block_index,
                 shader_effect: effect,
@@ -387,7 +367,7 @@ impl KoharuMcp {
     )]
     async fn llm_load(&self, Parameters(p): Parameters<LlmLoadParams>) -> Result<String, String> {
         let res = self.resources()?;
-        operations::llm_load(res, operations::LlmLoadPayload { id: p.id.clone() })
+        operations::llm_load(res, LlmLoadPayload { id: p.id.clone() })
             .await
             .map_err(|e| e.to_string())?;
         Ok(format!("Loading model '{}'...", p.id))
@@ -412,7 +392,7 @@ impl KoharuMcp {
         let res = self.resources()?;
         operations::llm_generate(
             res.clone(),
-            operations::LlmGeneratePayload {
+            LlmGeneratePayload {
                 index: p.index,
                 text_block_index: p.text_block_index,
                 language: p.language,
@@ -429,25 +409,26 @@ impl KoharuMcp {
         for (i, b) in doc.text_blocks.iter().enumerate() {
             let src = b.text.as_deref().unwrap_or("?");
             let tr = b.translation.as_deref().unwrap_or("(none)");
-            lines.push(format!("  [{i}] {src} → {tr}"));
+            lines.push(format!("  [{i}] {src} -> {tr}"));
         }
         Ok(lines.join("\n"))
     }
 
     #[tool(
-        description = "Run the full processing pipeline: detect → OCR → inpaint → translate → render. Processes all steps automatically."
+        description = "Run the full processing pipeline: detect -> OCR -> inpaint -> translate -> render. Processes all steps automatically."
     )]
     async fn process(&self, Parameters(p): Parameters<ProcessParams>) -> Result<String, String> {
         let res = self.resources()?;
         let effect = p
             .shader_effect
             .as_deref()
-            .map(parse_shader_effect)
-            .transpose()?;
+            .map(str::parse)
+            .transpose()
+            .map_err(|e: anyhow::Error| e.to_string())?;
 
         operations::process(
             res,
-            koharu_pipeline::pipeline::ProcessRequest {
+            ProcessRequest {
                 index: p.index,
                 llm_model_id: p.llm_model_id,
                 language: p.language,
@@ -461,200 +442,69 @@ impl KoharuMcp {
         Ok("Pipeline started".to_string())
     }
 
-    // === Text editing tools ===
-
     #[tool(
-        description = "Update a text block's properties. Only the fields you provide will be changed. Use this to fix translations, adjust positioning, change fonts, colors, or effects."
+        description = "Update a text block's properties. Only the fields you provide will be changed."
     )]
     async fn update_text_block(
         &self,
-        Parameters(p): Parameters<UpdateTextBlockParams>,
+        Parameters(p): Parameters<UpdateTextBlockPayload>,
     ) -> Result<String, String> {
         let res = self.resources()?;
-
-        let mut guard = res.state.write().await;
-        let doc = guard
-            .documents
-            .get_mut(p.index)
-            .ok_or_else(|| format!("Document {} not found", p.index))?;
-        let block = doc
-            .text_blocks
-            .get_mut(p.text_block_index)
-            .ok_or_else(|| format!("Text block {} not found", p.text_block_index))?;
-
-        if let Some(translation) = p.translation {
-            block.translation = Some(translation);
-        }
-        if let Some(x) = p.x {
-            block.x = x;
-        }
-        if let Some(y) = p.y {
-            block.y = y;
-        }
-        if let Some(w) = p.width {
-            block.width = w;
-        }
-        if let Some(h) = p.height {
-            block.height = h;
-        }
-
-        // Style updates
-        if p.font_families.is_some()
-            || p.font_size.is_some()
-            || p.color.is_some()
-            || p.shader_effect.is_some()
-        {
-            let style = block.style.get_or_insert_with(|| TextStyle {
-                font_families: Vec::new(),
-                font_size: None,
-                color: [0, 0, 0, 255],
-                effect: None,
-            });
-
-            if let Some(families) = p.font_families {
-                style.font_families = families;
-            }
-            if let Some(size) = p.font_size {
-                style.font_size = Some(size);
-            }
-            if let Some(hex) = &p.color {
-                style.color = parse_hex_color(hex)?;
-            }
-            if let Some(eff) = &p.shader_effect {
-                style.effect = Some(parse_shader_effect(eff)?);
-            }
-        }
-
-        // Clear the rendered cache for this block since we changed it
-        block.rendered = None;
-
-        let info = to_block_info(p.text_block_index, block);
-        drop(guard);
+        let info = operations::update_text_block(res, p)
+            .await
+            .map_err(|e| e.to_string())?;
         serde_json::to_string_pretty(&info).map_err(|e| e.to_string())
     }
 
-    #[tool(
-        description = "Add a new empty text block at the specified position. Useful when detection missed a speech bubble."
-    )]
+    #[tool(description = "Add a new empty text block at the specified position")]
     async fn add_text_block(
         &self,
-        Parameters(p): Parameters<AddTextBlockParams>,
+        Parameters(p): Parameters<AddTextBlockPayload>,
     ) -> Result<String, String> {
         let res = self.resources()?;
-
-        let mut guard = res.state.write().await;
-        let doc = guard
-            .documents
-            .get_mut(p.index)
-            .ok_or_else(|| format!("Document {} not found", p.index))?;
-
-        let block = TextBlock {
-            x: p.x,
-            y: p.y,
-            width: p.width,
-            height: p.height,
-            confidence: 1.0,
-            ..Default::default()
-        };
-        doc.text_blocks.push(block);
-        let new_index = doc.text_blocks.len() - 1;
-        Ok(format!("Added text block at index {new_index}"))
+        let index = operations::add_text_block(res, p)
+            .await
+            .map_err(|e| e.to_string())?;
+        Ok(format!("Added text block at index {index}"))
     }
 
-    #[tool(
-        description = "Remove a text block by index. Use when detection produced a false positive."
-    )]
+    #[tool(description = "Remove a text block by index")]
     async fn remove_text_block(
         &self,
-        Parameters(p): Parameters<RemoveTextBlockParams>,
+        Parameters(p): Parameters<RemoveTextBlockPayload>,
     ) -> Result<String, String> {
         let res = self.resources()?;
-
-        let mut guard = res.state.write().await;
-        let doc = guard
-            .documents
-            .get_mut(p.index)
-            .ok_or_else(|| format!("Document {} not found", p.index))?;
-
-        if p.text_block_index >= doc.text_blocks.len() {
-            return Err(format!("Text block {} not found", p.text_block_index));
-        }
-
-        doc.text_blocks.remove(p.text_block_index);
-        Ok(format!(
-            "Removed text block {}. {} remaining.",
-            p.text_block_index,
-            doc.text_blocks.len()
-        ))
+        let remaining = operations::remove_text_block(res, p)
+            .await
+            .map_err(|e| e.to_string())?;
+        Ok(format!("Removed text block. {remaining} remaining."))
     }
 
-    // === Mask editing tools ===
-
-    #[tool(
-        description = "Dilate (expand) the text detection mask by the given radius in pixels. Use when the mask is too tight and inpainting leaves text artifacts."
-    )]
+    #[tool(description = "Dilate the text detection mask by radius")]
     async fn dilate_mask(
         &self,
-        Parameters(p): Parameters<MaskMorphParams>,
+        Parameters(p): Parameters<MaskMorphPayload>,
     ) -> Result<String, String> {
         let res = self.resources()?;
-
-        if p.radius == 0 || p.radius > 50 {
-            return Err("Radius must be 1-50".to_string());
-        }
-
-        let mut guard = res.state.write().await;
-        let doc = guard
-            .documents
-            .get_mut(p.index)
-            .ok_or_else(|| format!("Document {} not found", p.index))?;
-
-        let segment = doc
-            .segment
-            .as_ref()
-            .ok_or("No segment mask. Run detect first.")?;
-
-        let gray = segment.to_luma8();
-        let dilated = imageproc::morphology::dilate(&gray, Norm::LInf, p.radius);
-        doc.segment = Some(SerializableDynamicImage(DynamicImage::ImageLuma8(dilated)));
-
-        Ok(format!("Dilated mask by {} px", p.radius))
+        operations::dilate_mask(res, p)
+            .await
+            .map_err(|e| e.to_string())?;
+        Ok("Dilated mask".to_string())
     }
 
-    #[tool(
-        description = "Erode (shrink) the text detection mask by the given radius in pixels. Use when the mask is too aggressive and eating into artwork."
-    )]
+    #[tool(description = "Erode the text detection mask by radius")]
     async fn erode_mask(
         &self,
-        Parameters(p): Parameters<MaskMorphParams>,
+        Parameters(p): Parameters<MaskMorphPayload>,
     ) -> Result<String, String> {
         let res = self.resources()?;
-
-        if p.radius == 0 || p.radius > 50 {
-            return Err("Radius must be 1-50".to_string());
-        }
-
-        let mut guard = res.state.write().await;
-        let doc = guard
-            .documents
-            .get_mut(p.index)
-            .ok_or_else(|| format!("Document {} not found", p.index))?;
-
-        let segment = doc
-            .segment
-            .as_ref()
-            .ok_or("No segment mask. Run detect first.")?;
-
-        let gray = segment.to_luma8();
-        let eroded = imageproc::morphology::erode(&gray, Norm::LInf, p.radius);
-        doc.segment = Some(SerializableDynamicImage(DynamicImage::ImageLuma8(eroded)));
-
-        Ok(format!("Eroded mask by {} px", p.radius))
+        operations::erode_mask(res, p)
+            .await
+            .map_err(|e| e.to_string())?;
+        Ok("Eroded mask".to_string())
     }
 
-    #[tool(
-        description = "Re-inpaint a specific rectangular region. Use after editing the mask to fix a specific area without re-inpainting the entire image."
-    )]
+    #[tool(description = "Re-inpaint a specific rectangular region")]
     async fn inpaint_region(
         &self,
         Parameters(p): Parameters<InpaintRegionParams>,
@@ -662,7 +512,7 @@ impl KoharuMcp {
         let res = self.resources()?;
         operations::inpaint_partial(
             res,
-            operations::InpaintPartialPayload {
+            InpaintPartialPayload {
                 index: p.index,
                 region: InpaintRegion {
                     x: p.x,
@@ -682,10 +532,6 @@ impl KoharuMcp {
     }
 }
 
-// ---------------------------------------------------------------------------
-// ServerHandler impl
-// ---------------------------------------------------------------------------
-
 #[tool_handler]
 impl ServerHandler for KoharuMcp {
     fn get_info(&self) -> ServerInfo {
@@ -700,9 +546,7 @@ impl ServerHandler for KoharuMcp {
                 ..Default::default()
             },
             instructions: Some(
-                "Koharu manga translation tools. Use open_documents to load images, \
-                 then detect → ocr → inpaint → llm_generate → render to translate."
-                    .to_string(),
+                "Koharu manga translation tools. Use open_documents to load images, then detect -> ocr -> inpaint -> llm_generate -> render to translate.".to_string(),
             ),
             ..Default::default()
         }

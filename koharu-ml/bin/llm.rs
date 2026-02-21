@@ -1,6 +1,8 @@
 use clap::Parser;
 use koharu_ml::llm::{GenerateOptions, Llm, ModelId, language_from_tag};
-use tracing_subscriber::fmt::format::FmtSpan;
+
+#[path = "common.rs"]
+mod common;
 
 #[derive(Parser, Debug)]
 #[command(author, version, about)]
@@ -65,9 +67,7 @@ struct Args {
 
 #[tokio::main]
 async fn main() -> anyhow::Result<()> {
-    tracing_subscriber::fmt()
-        .with_span_events(FmtSpan::CLOSE)
-        .init();
+    common::init_tracing();
 
     let args = Args::parse();
 

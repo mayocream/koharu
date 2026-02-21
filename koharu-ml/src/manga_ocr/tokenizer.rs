@@ -3,7 +3,7 @@ use std::path::Path;
 use anyhow::{Result, anyhow};
 use tokenizers::{AddedToken, Tokenizer, models::wordpiece::WordPiece};
 
-use super::load_json;
+use crate::loading::read_json;
 
 pub fn load_tokenizer(
     tokenizer_json: Option<&Path>,
@@ -22,7 +22,7 @@ pub fn load_tokenizer(
         .map_err(|e| anyhow!(e))?;
     let mut tokenizer = Tokenizer::new(model);
 
-    let specials: serde_json::Value = load_json(special_tokens_path)?;
+    let specials: serde_json::Value = read_json(special_tokens_path)?;
     let mut added = Vec::new();
     if let Some(obj) = specials.as_object() {
         for value in obj.values() {

@@ -2,7 +2,9 @@ use std::io;
 
 use anyhow::Result;
 use flate2::read::DeflateDecoder;
+#[cfg(test)]
 use koharu_http::http::http_client;
+use koharu_http::range;
 
 // ZIP signatures and constants
 const SIG_EOCD: [u8; 4] = [0x50, 0x4b, 0x05, 0x06]; // End Of Central Directory
@@ -49,11 +51,11 @@ pub struct RecordEntry {
 pub async fn fetch_record(url: &str) -> Result<Vec<RecordEntry>> {
     // 1) Locate EOCD and central directory
     let (cd_offset, cd_size) = http_zip_eocd_and_cd(url).await?;
-    let cd_bytes = http_get_range(url, cd_offset, cd_offset + cd_size - 1).await?;
+    let cd_bytes = range::get_range(url, cd_offset, cd_offset + cd_size - 1).await?;
     let (lh_off, comp_size, comp_method) = parse_central_directory_for_record(&cd_bytes)?;
 
     // 2) Read local header to compute exact data offset
-    let lh_fixed = http_get_range(url, lh_off, lh_off + LFH_FIXED_LEN - 1).await?;
+    let lh_fixed = range::get_range(url, lh_off, lh_off + LFH_FIXED_LEN - 1).await?;
     if lh_fixed.len() < LFH_FIXED_LEN as usize || lh_fixed[0..4] != SIG_LFH {
         anyhow::bail!("bad local file header");
     }
@@ -63,7 +65,7 @@ pub async fn fetch_record(url: &str) -> Result<Vec<RecordEntry>> {
     let data_end = data_off + comp_size as u64 - 1;
 
     // 3) Fetch and decode RECORD (deflate only, method 8)
-    let comp = http_get_range(url, data_off, data_end).await?;
+    let comp = range::get_range(url, data_off, data_end).await?;
     if comp_method != 8 {
         anyhow::bail!("RECORD compression method unsupported: {comp_method}");
     }
@@ -111,7 +113,7 @@ fn parse_central_directory_for_record(cd: &[u8]) -> Result<(u64, u32, u16)> {
 
 async fn http_zip_eocd_and_cd(url: &str) -> Result<(u64, u64)> {
     // Fetch last ~70KiB to find EOCD (max comment is 64KiB; add slack)
-    let tail = http_get_tail(url, 70 * 1024).await?;
+    let tail = range::get_tail(url, 70 * 1024).await?;
     let mut found = None;
     for i in (0..=tail.len().saturating_sub(EOCD_MIN_LEN)).rev() {
         if tail[i..i + 4] == SIG_EOCD {
@@ -127,42 +129,6 @@ async fn http_zip_eocd_and_cd(url: &str) -> Result<(u64, u64)> {
     let cd_size = le_u32(eocd, EOCD_OFF_CD_SIZE) as u64;
     let cd_off = le_u32(eocd, EOCD_OFF_CD_OFFSET) as u64;
     Ok((cd_off, cd_size))
-}
-
-async fn http_get_tail(url: &str, nbytes: usize) -> Result<Vec<u8>> {
-    // Use HEAD to get content length, then request [len-n .. len-1]
-    let len = head_content_length(url).await?;
-    let start = len.saturating_sub(nbytes as u64);
-    http_get_range(url, start, len.saturating_sub(1)).await
-}
-
-async fn http_get_range(url: &str, start: u64, end_inclusive: u64) -> Result<Vec<u8>> {
-    let resp = http_client()
-        .get(url)
-        .header(
-            reqwest::header::RANGE,
-            format!("bytes={start}-{end_inclusive}"),
-        )
-        .send()
-        .await?;
-    if resp.status() != reqwest::StatusCode::PARTIAL_CONTENT {
-        anyhow::bail!("server did not honor range: {}", resp.status());
-    }
-    Ok(resp.bytes().await?.to_vec())
-}
-
-async fn head_content_length(url: &str) -> Result<u64> {
-    let resp = http_client().head(url).send().await?;
-    if !resp.status().is_success() {
-        anyhow::bail!("HEAD failed: {} with url {}", resp.status(), url);
-    }
-    let len = resp
-        .headers()
-        .get(reqwest::header::CONTENT_LENGTH)
-        .and_then(|v| v.to_str().ok())
-        .and_then(|s| s.parse::<u64>().ok())
-        .ok_or_else(|| anyhow::anyhow!("missing Content-Length"))?;
-    Ok(len)
 }
 
 fn parse_record_csv(csv_bytes: &[u8]) -> Result<Vec<RecordEntry>> {

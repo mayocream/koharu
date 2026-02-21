@@ -1,12 +1,9 @@
 use std::{fs, path::PathBuf};
 
-use crate::{define_models, device};
+use crate::{define_models, device, loading};
 use anyhow::{Context, Result};
 use candle_core::{DType, Device, IndexOp, Tensor};
-use candle_nn::{
-    VarBuilder,
-    ops::{sigmoid, softmax},
-};
+use candle_nn::ops::{sigmoid, softmax};
 use image::{DynamicImage, GenericImageView, imageops::FilterType};
 
 mod models;
@@ -36,12 +33,11 @@ impl FontDetector {
 
     pub async fn load_with_kind(use_cpu: bool, kind: ModelKind) -> Result<Self> {
         let device = device(use_cpu)?;
-        let weights = Manifest::FontWeights.get().await?;
-        let vb = unsafe {
-            VarBuilder::from_mmaped_safetensors(&[weights], DType::F32, &device)?
-                .pp("model._orig_mod.model")
-        };
-        let model = models::Model::load(vb, kind)?;
+        let model =
+            loading::load_mmaped_safetensors(Manifest::FontWeights.get(), &device, move |vb| {
+                models::Model::load(vb.pp("model._orig_mod.model"), kind)
+            })
+            .await?;
         let labels = FontLabels::load().await?;
 
         Ok(Self {
@@ -155,7 +151,7 @@ pub struct FontLabels {
 
 impl FontLabels {
     pub async fn load() -> Result<Self> {
-        let path = Manifest::FontNames.get().await?;
+        let path = loading::resolve_manifest_path(Manifest::FontNames.get()).await?;
         Self::from_path(&path)
     }
 

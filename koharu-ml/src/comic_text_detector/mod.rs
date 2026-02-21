@@ -6,12 +6,11 @@ use std::cmp;
 
 use anyhow::bail;
 use candle_core::{DType, Device, IndexOp, Tensor};
-use candle_nn::VarBuilder;
 use candle_transformers::object_detection::{Bbox, non_maximum_suppression};
 use image::{DynamicImage, GenericImageView, GrayImage};
 use tracing::instrument;
 
-use crate::{define_models, device};
+use crate::{define_models, device, loading};
 
 const CONFIDENCE_THRESHOLD: f32 = 0.4;
 const NMS_THRESHOLD: f32 = 0.35;
@@ -37,24 +36,16 @@ pub struct ComicTextDetector {
 impl ComicTextDetector {
     pub async fn load(use_cpu: bool) -> anyhow::Result<Self> {
         let device = device(use_cpu)?;
-        let yolo = {
-            let weights = Manifest::Yolov5.get().await?;
-            let vb =
-                unsafe { VarBuilder::from_mmaped_safetensors(&[weights], DType::F32, &device)? };
-            yolo_v5::YoloV5::load(vb, 2, 3)?
-        };
-        let unet = {
-            let weights = Manifest::Unet.get().await?;
-            let vb =
-                unsafe { VarBuilder::from_mmaped_safetensors(&[weights], DType::F32, &device)? };
-            unet::UNet::load(vb)?
-        };
-        let dbnet = {
-            let weights = Manifest::DbNet.get().await?;
-            let vb =
-                unsafe { VarBuilder::from_mmaped_safetensors(&[weights], DType::F32, &device)? };
-            dbnet::DbNet::load(vb)?
-        };
+        let yolo = loading::load_mmaped_safetensors(Manifest::Yolov5.get(), &device, |vb| {
+            yolo_v5::YoloV5::load(vb, 2, 3)
+        })
+        .await?;
+        let unet =
+            loading::load_mmaped_safetensors(Manifest::Unet.get(), &device, unet::UNet::load)
+                .await?;
+        let dbnet =
+            loading::load_mmaped_safetensors(Manifest::DbNet.get(), &device, dbnet::DbNet::load)
+                .await?;
 
         Ok(Self {
             yolo,

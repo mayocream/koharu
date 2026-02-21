@@ -2,20 +2,16 @@ mod bert;
 mod model;
 mod tokenizer;
 
-use std::path::Path;
-
 use anyhow::{Context, Result};
 use candle_core::{DType, Device, Tensor};
-use candle_nn::VarBuilder;
 use image::GenericImageView;
-use serde::de::DeserializeOwned;
 use tokenizers::Tokenizer;
 use tracing::instrument;
 
 use model::{PreprocessorConfig, VisionEncoderDecoder, VisionEncoderDecoderConfig};
 use tokenizer::load_tokenizer;
 
-use crate::{define_models, device};
+use crate::{define_models, device, loading};
 
 define_models! {
     Config => ("mayocream/manga-ocr", "config.json"),
@@ -35,20 +31,23 @@ pub struct MangaOcr {
 impl MangaOcr {
     pub async fn load(use_cpu: bool) -> Result<Self> {
         let device = device(use_cpu)?;
-        let config_path = Manifest::Config.get().await?;
-        let preprocessor_path = Manifest::PreprocessorConfig.get().await?;
-        let vocab_path = Manifest::Vocab.get().await?;
-        let special_tokens_path = Manifest::SpecialTokensMap.get().await?;
-        let weights_path = Manifest::Model.get().await?;
+        let config_path = loading::resolve_manifest_path(Manifest::Config.get()).await?;
+        let preprocessor_path =
+            loading::resolve_manifest_path(Manifest::PreprocessorConfig.get()).await?;
+        let vocab_path = loading::resolve_manifest_path(Manifest::Vocab.get()).await?;
+        let special_tokens_path =
+            loading::resolve_manifest_path(Manifest::SpecialTokensMap.get()).await?;
 
         let config: VisionEncoderDecoderConfig =
-            load_json(&config_path).context("failed to parse model config")?;
-        let preprocessor: PreprocessorConfig =
-            load_json(&preprocessor_path).context("failed to parse preprocessor config")?;
+            loading::read_json(&config_path).context("failed to parse model config")?;
+        let preprocessor: PreprocessorConfig = loading::read_json(&preprocessor_path)
+            .context("failed to parse preprocessor config")?;
         let tokenizer = load_tokenizer(None, &vocab_path, &special_tokens_path)?;
-        let vb =
-            unsafe { VarBuilder::from_mmaped_safetensors(&[weights_path], DType::F32, &device)? };
-        let model = VisionEncoderDecoder::from_config(config, vb, device.clone())?;
+        let model_device = device.clone();
+        let model = loading::load_mmaped_safetensors(Manifest::Model.get(), &device, move |vb| {
+            VisionEncoderDecoder::from_config(config, vb, model_device.clone())
+        })
+        .await?;
 
         Ok(Self {
             model,
@@ -88,14 +87,6 @@ impl MangaOcr {
     fn forward(&self, pixel_values: &Tensor) -> Result<Vec<Vec<u32>>> {
         self.model.forward(pixel_values)
     }
-}
-
-fn load_json<T: DeserializeOwned>(path: &Path) -> Result<T> {
-    let data = std::fs::read_to_string(path)
-        .with_context(|| format!("failed to read {}", path.display()))?;
-    let parsed = serde_json::from_str(&data)
-        .with_context(|| format!("failed to parse {}", path.display()))?;
-    Ok(parsed)
 }
 
 #[instrument(level = "debug", skip_all)]

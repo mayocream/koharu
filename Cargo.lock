@@ -3936,14 +3936,28 @@ dependencies = [
 ]
 
 [[package]]
+name = "koharu-api"
+version = "0.34.0"
+dependencies = [
+ "anyhow",
+ "koharu-types",
+ "schemars 1.2.1",
+ "serde",
+ "serde_bytes",
+ "serde_json",
+]
+
+[[package]]
 name = "koharu-http"
 version = "0.34.0"
 dependencies = [
  "anyhow",
+ "axum",
  "dirs",
  "futures",
  "hf-hub",
  "indicatif",
+ "koharu-api",
  "once_cell",
  "reqwest 0.13.2",
  "reqwest-middleware",
@@ -3951,22 +3965,6 @@ dependencies = [
  "serde",
  "tokio",
  "tracing",
-]
-
-[[package]]
-name = "koharu-mcp"
-version = "0.34.0"
-dependencies = [
- "base64 0.22.1",
- "image",
- "imageproc",
- "koharu-pipeline",
- "koharu-types",
- "rmcp",
- "schemars 1.2.1",
- "serde",
- "serde_json",
- "tokio",
 ]
 
 [[package]]
@@ -4009,6 +4007,8 @@ version = "0.34.0"
 dependencies = [
  "anyhow",
  "image",
+ "imageproc",
+ "koharu-api",
  "koharu-ml",
  "koharu-renderer",
  "koharu-types",
@@ -4052,14 +4052,20 @@ version = "0.34.0"
 dependencies = [
  "anyhow",
  "axum",
+ "base64 0.22.1",
  "futures",
+ "image",
+ "imageproc",
+ "koharu-api",
  "koharu-http",
- "koharu-mcp",
  "koharu-pipeline",
+ "koharu-types",
  "rmcp",
  "rmp-serde",
  "rmpv",
+ "schemars 1.2.1",
  "serde",
+ "serde_json",
  "tokio",
  "tracing",
 ]

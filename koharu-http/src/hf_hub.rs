@@ -7,9 +7,10 @@ use hf_hub::{
     api::tokio::{Api, ApiBuilder, Progress},
 };
 use indicatif::ProgressBar;
+use koharu_api::events::{DownloadProgress, DownloadStatus};
 use once_cell::sync::{Lazy, OnceCell};
 
-use crate::download::{DownloadProgress, Status, emit};
+use crate::download::emit;
 use crate::progress::progress_bar;
 
 static CACHE_DIR: OnceCell<PathBuf> = OnceCell::new();
@@ -80,7 +81,7 @@ impl Progress for Reporter {
             filename: self.filename.clone(),
             downloaded: 0,
             total: Some(self.total),
-            status: Status::Started,
+            status: DownloadStatus::Started,
         });
     }
 
@@ -91,7 +92,7 @@ impl Progress for Reporter {
             filename: self.filename.clone(),
             downloaded: current,
             total: Some(self.total),
-            status: Status::Downloading,
+            status: DownloadStatus::Downloading,
         });
     }
 
@@ -101,7 +102,7 @@ impl Progress for Reporter {
             filename: self.filename.clone(),
             downloaded: self.downloaded.load(Ordering::Relaxed),
             total: Some(self.total),
-            status: Status::Completed,
+            status: DownloadStatus::Completed,
         });
     }
 }

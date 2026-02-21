@@ -5,6 +5,7 @@ pub mod facade;
 pub mod font_detector;
 pub mod lama;
 pub mod llm;
+pub mod loading;
 pub mod manga_ocr;
 
 use anyhow::Result;

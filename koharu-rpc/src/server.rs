@@ -8,13 +8,14 @@ use axum::{
     response::{IntoResponse, Response},
     routing::get,
 };
-use koharu_mcp::KoharuMcp;
 use rmcp::transport::streamable_http_server::{
     StreamableHttpService, session::local::LocalSessionManager, tower::StreamableHttpServerConfig,
 };
 use tokio::net::TcpListener;
 
-use crate::rpc::{self, SharedResources, WsState};
+use crate::mcp::KoharuMcp;
+use crate::rpc::{self, WsState};
+use crate::shared::SharedResources;
 
 /// An asset returned by the resolver: raw bytes + MIME type.
 pub struct Asset {

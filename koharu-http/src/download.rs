@@ -3,33 +3,16 @@ use std::sync::Arc;
 
 use anyhow::Context;
 use futures::{StreamExt, TryStreamExt, stream};
+use koharu_api::events::{DownloadProgress, DownloadStatus};
 use once_cell::sync::Lazy;
-use reqwest::header::{ACCEPT_RANGES, CONTENT_LENGTH};
-use serde::Serialize;
 use tokio::sync::broadcast;
 use tracing::Instrument;
 
 use crate::hf_hub;
-use crate::http::{http_chunk, http_client};
 use crate::progress::progress_bar;
+use crate::range;
 
 const RANGE_CHUNK_SIZE_BYTES: usize = 16 * 1024 * 1024;
-
-#[derive(Clone, Debug, Serialize)]
-pub struct DownloadProgress {
-    pub filename: String,
-    pub downloaded: u64,
-    pub total: Option<u64>,
-    pub status: Status,
-}
-
-#[derive(Clone, Debug, Serialize, PartialEq)]
-pub enum Status {
-    Started,
-    Downloading,
-    Completed,
-    Failed(String),
-}
 
 static TX: Lazy<broadcast::Sender<DownloadProgress>> = Lazy::new(|| broadcast::channel(256).0);
 
@@ -62,29 +45,14 @@ pub async fn model(repo: &str, filename: &str) -> anyhow::Result<PathBuf> {
 
 #[tracing::instrument(level = "info")]
 pub async fn bytes(url: &str) -> anyhow::Result<Vec<u8>> {
-    let client = http_client();
-
-    let head = client
-        .head(url)
-        .send()
-        .await?
-        .error_for_status()
+    let head = range::head(url)
+        .await
         .context(format!("cannot download {url}"))?;
-
-    let headers = head.headers();
-    let total_bytes = headers
-        .get(CONTENT_LENGTH)
-        .and_then(|v| v.to_str().ok())
-        .and_then(|v| v.parse::<u64>().ok())
-        .context("missing Content-Length header")?;
+    let total_bytes = head.content_length;
 
     anyhow::ensure!(total_bytes > 0, "resource reports zero Content-Length");
 
-    let supports_ranges = headers
-        .get(ACCEPT_RANGES)
-        .and_then(|v| v.to_str().ok())
-        .map(|v| v.eq_ignore_ascii_case("bytes"))
-        .unwrap_or(false);
+    let supports_ranges = head.supports_ranges;
 
     anyhow::ensure!(
         supports_ranges,
@@ -105,7 +73,7 @@ pub async fn bytes(url: &str) -> anyhow::Result<Vec<u8>> {
         filename: filename.clone(),
         downloaded: 0,
         total: Some(total_bytes),
-        status: Status::Started,
+        status: DownloadStatus::Started,
     });
 
     tracing::debug!(
@@ -131,7 +99,7 @@ pub async fn bytes(url: &str) -> anyhow::Result<Vec<u8>> {
             let downloaded = Arc::clone(&downloaded);
             let filename = filename.clone();
             async move {
-                let chunk = http_chunk(&url, start, end).await?;
+                let chunk = range::get_range(&url, start, end).await?;
                 pb.inc(len as u64);
                 let current = downloaded
                     .fetch_add(len as u64, std::sync::atomic::Ordering::Relaxed)
@@ -140,7 +108,7 @@ pub async fn bytes(url: &str) -> anyhow::Result<Vec<u8>> {
                     filename,
                     downloaded: current,
                     total: Some(total_bytes),
-                    status: Status::Downloading,
+                    status: DownloadStatus::Downloading,
                 });
                 Ok::<_, anyhow::Error>((start, chunk))
             }
@@ -157,7 +125,7 @@ pub async fn bytes(url: &str) -> anyhow::Result<Vec<u8>> {
                 filename,
                 downloaded: downloaded.load(std::sync::atomic::Ordering::Relaxed),
                 total: Some(total_bytes),
-                status: Status::Failed(e.to_string()),
+                status: DownloadStatus::Failed(e.to_string()),
             });
             return Err(e);
         }
@@ -184,7 +152,7 @@ pub async fn bytes(url: &str) -> anyhow::Result<Vec<u8>> {
         filename,
         downloaded: total_bytes,
         total: Some(total_bytes),
-        status: Status::Completed,
+        status: DownloadStatus::Completed,
     });
 
     Ok(buffer)

@@ -1,84 +1,22 @@
+use std::str::FromStr;
 use std::sync::{
     Arc,
     atomic::{AtomicBool, Ordering},
 };
 use std::time::Duration;
 
+use koharu_api::commands::ProcessRequest;
+use koharu_api::events::{PipelineProgress, PipelineStatus, PipelineStep};
 use koharu_ml::llm::ModelId;
-use koharu_renderer::renderer::TextShaderEffect;
 use once_cell::sync::Lazy;
-use serde::{Deserialize, Serialize};
-use std::str::FromStr;
 use tokio::sync::broadcast;
 
-use crate::AppResources;
+use crate::{AppResources, state_tx};
 
-/// Steps in the processing pipeline.
-#[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq)]
-#[serde(rename_all = "camelCase")]
-pub enum PipelineStep {
-    Detect,
-    Ocr,
-    Inpaint,
-    LlmGenerate,
-    Render,
-}
-
-impl PipelineStep {
-    pub const ALL: &[PipelineStep] = &[
-        PipelineStep::Detect,
-        PipelineStep::Ocr,
-        PipelineStep::Inpaint,
-        PipelineStep::LlmGenerate,
-        PipelineStep::Render,
-    ];
-}
-
-/// Status of the pipeline.
-#[derive(Debug, Clone, Serialize, PartialEq)]
-#[serde(rename_all = "camelCase")]
-pub enum PipelineStatus {
-    Running,
-    Completed,
-    Cancelled,
-    Failed(String),
-}
-
-/// SSE event payload sent to the frontend.
-#[derive(Debug, Clone, Serialize)]
-#[serde(rename_all = "camelCase")]
-pub struct PipelineProgress {
-    pub status: PipelineStatus,
-    pub step: Option<PipelineStep>,
-    pub current_document: usize,
-    pub total_documents: usize,
-    pub current_step_index: usize,
-    pub total_steps: usize,
-    pub overall_percent: u8,
-}
-
-/// Request payload for the auto-process endpoint.
-#[derive(Debug, Deserialize)]
-#[serde(rename_all = "camelCase")]
-pub struct ProcessRequest {
-    /// None means all documents; Some(i) means single document.
-    pub index: Option<usize>,
-    /// LLM model id to use (will load if not already loaded).
-    pub llm_model_id: Option<String>,
-    /// Target language for translation.
-    pub language: Option<String>,
-    /// Shader effect for rendering.
-    pub shader_effect: Option<TextShaderEffect>,
-    /// Selected font family for rendering.
-    pub font_family: Option<String>,
-}
-
-/// Handle to a running pipeline, used for cancellation.
 pub struct PipelineHandle {
     pub cancel: Arc<AtomicBool>,
 }
 
-// Global broadcast channel for pipeline progress (mirrors download.rs pattern).
 static PIPELINE_TX: Lazy<broadcast::Sender<PipelineProgress>> =
     Lazy::new(|| broadcast::channel(256).0);
 
@@ -99,7 +37,6 @@ fn compute_percent(doc: usize, step: usize, total_docs: usize, total_steps: usiz
     ((done_units as f64 / total_units as f64) * 100.0).round() as u8
 }
 
-/// Run the processing pipeline. Called from a spawned task.
 pub async fn run_pipeline(
     resources: AppResources,
     request: ProcessRequest,
@@ -107,7 +44,7 @@ pub async fn run_pipeline(
 ) {
     let result = run_pipeline_inner(&resources, &request, &cancel).await;
 
-    let total_docs = match &request.index {
+    let total_docs = match request.index {
         Some(_) => 1,
         None => resources.state.read().await.documents.len(),
     };
@@ -135,10 +72,10 @@ pub async fn run_pipeline(
                 overall_percent: 100,
             });
         }
-        Err(e) => {
-            tracing::error!("Pipeline failed: {e:#}");
+        Err(err) => {
+            tracing::error!("Pipeline failed: {err:#}");
             emit(PipelineProgress {
-                status: PipelineStatus::Failed(e.to_string()),
+                status: PipelineStatus::Failed(err.to_string()),
                 step: None,
                 current_document: 0,
                 total_documents: total_docs,
@@ -149,7 +86,6 @@ pub async fn run_pipeline(
         }
     }
 
-    // Clear the pipeline handle
     let mut guard = resources.pipeline.write().await;
     *guard = None;
 }
@@ -163,9 +99,7 @@ async fn run_pipeline_inner(
         let guard = res.state.read().await;
         let len = guard.documents.len();
         match req.index {
-            Some(i) if i >= len => {
-                anyhow::bail!("Document index {} out of range (have {})", i, len);
-            }
+            Some(i) if i >= len => anyhow::bail!("Document index {i} out of range (have {len})"),
             Some(_) => 1,
             None => len,
         }
@@ -175,13 +109,11 @@ async fn run_pipeline_inner(
         return Ok(());
     }
 
-    // Ensure LLM is loaded
     if let Some(model_id) = &req.llm_model_id
         && !res.llm.ready().await
     {
         let id = ModelId::from_str(model_id)?;
         res.llm.load(id).await;
-        // Poll until ready (with timeout)
         for _ in 0..300 {
             if res.llm.ready().await {
                 break;
@@ -217,18 +149,10 @@ async fn run_pipeline_inner(
                 overall_percent: overall,
             });
 
-            // Give the runtime a chance to flush the SSE event before blocking ML work
             tokio::task::yield_now().await;
             tokio::time::sleep(Duration::from_millis(1)).await;
 
-            // Snapshot → process → write back
-            let mut snapshot =
-                {
-                    let guard = res.state.read().await;
-                    guard.documents.get(doc_index).cloned().ok_or_else(|| {
-                        anyhow::anyhow!("Document not found at index {}", doc_index)
-                    })?
-                };
+            let mut snapshot = state_tx::read_doc(&res.state, doc_index).await?;
 
             match step {
                 PipelineStep::Detect => res.ml.detect(&mut snapshot).await?,
@@ -249,14 +173,32 @@ async fn run_pipeline_inner(
                 }
             }
 
-            let mut guard = res.state.write().await;
-            let document = guard
-                .documents
-                .get_mut(doc_index)
-                .ok_or_else(|| anyhow::anyhow!("Document not found at index {}", doc_index))?;
-            *document = snapshot;
+            state_tx::update_doc(&res.state, doc_index, snapshot).await?;
         }
     }
 
     Ok(())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::compute_percent;
+
+    #[test]
+    fn compute_percent_handles_zero_units() {
+        assert_eq!(compute_percent(0, 0, 0, 5), 0);
+        assert_eq!(compute_percent(0, 0, 2, 0), 0);
+    }
+
+    #[test]
+    fn compute_percent_progresses_monotonically() {
+        let total_docs = 2;
+        let total_steps = 5;
+        let first = compute_percent(0, 0, total_docs, total_steps);
+        let middle = compute_percent(0, 3, total_docs, total_steps);
+        let last = compute_percent(1, 4, total_docs, total_steps);
+        assert!(first < middle);
+        assert!(middle < last);
+        assert_eq!(last, 90);
+    }
 }

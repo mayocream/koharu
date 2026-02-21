@@ -1,6 +1,8 @@
 use clap::Parser;
 use koharu_ml::lama::Lama;
-use tracing_subscriber::fmt::format::FmtSpan;
+
+#[path = "common.rs"]
+mod common;
 
 #[derive(Parser)]
 struct Cli {
@@ -19,9 +21,7 @@ struct Cli {
 
 #[tokio::main]
 async fn main() -> anyhow::Result<()> {
-    tracing_subscriber::fmt()
-        .with_span_events(FmtSpan::CLOSE)
-        .init();
+    common::init_tracing();
 
     let cli = Cli::parse();
 

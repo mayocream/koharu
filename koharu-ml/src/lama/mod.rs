@@ -3,11 +3,10 @@ mod model;
 
 use anyhow::{Result, bail};
 use candle_core::{DType, Device, Tensor};
-use candle_nn::VarBuilder;
 use image::{DynamicImage, GenericImageView, RgbImage};
 use tracing::instrument;
 
-use crate::{define_models, device};
+use crate::{define_models, device, loading};
 
 define_models! {
     Lama => ("mayocream/lama-manga", "lama-manga.safetensors"),
@@ -21,10 +20,10 @@ pub struct Lama {
 impl Lama {
     pub async fn load(use_cpu: bool) -> Result<Self> {
         let device = device(use_cpu)?;
-        let weights = Manifest::Lama.get().await?;
-        let data = std::fs::read(&weights)?;
-        let vb = VarBuilder::from_buffered_safetensors(data, DType::F32, &device)?;
-        let model = model::Lama::load(&vb)?;
+        let model = loading::load_buffered_safetensors(Manifest::Lama.get(), &device, |vb| {
+            model::Lama::load(&vb)
+        })
+        .await?;
 
         Ok(Self { model, device })
     }

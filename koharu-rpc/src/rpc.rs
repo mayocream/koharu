@@ -1,5 +1,4 @@
 use std::future::Future;
-use std::sync::Arc;
 use std::time::Duration;
 
 use anyhow::Result;
@@ -11,13 +10,13 @@ use axum::{
     response::IntoResponse,
 };
 use futures::{SinkExt, StreamExt};
+use koharu_api::Method;
+use koharu_pipeline::AppResources;
+use koharu_pipeline::operations;
 use serde::{Deserialize, Serialize, de::DeserializeOwned};
 use tokio::sync::{broadcast, mpsc};
 
-use koharu_pipeline::AppResources;
-use koharu_pipeline::operations;
-
-pub type SharedResources = Arc<tokio::sync::OnceCell<AppResources>>;
+use crate::shared::{SharedResources, get_resources};
 
 #[derive(Debug, Deserialize)]
 struct RawIncoming {
@@ -86,33 +85,32 @@ where
     to_value(&f(state).await?)
 }
 
-async fn dispatch(method: &str, params: rmpv::Value, state: AppResources) -> Result<rmpv::Value> {
+async fn dispatch(method: Method, params: rmpv::Value, state: AppResources) -> Result<rmpv::Value> {
     match method {
-        "app_version" => call0(operations::app_version, state).await,
-        "device" => call0(operations::device, state).await,
-        "get_documents" => call0(operations::get_documents, state).await,
-        "list_font_families" => call0(operations::list_font_families, state).await,
-        "llm_list" => call(operations::llm_list, state, params).await,
-        "llm_ready" => call0(operations::llm_ready, state).await,
-        "llm_offload" => call0(operations::llm_offload, state).await,
-        "process_cancel" => call0(operations::process_cancel, state).await,
-        "get_document" => call(operations::get_document, state, params).await,
-        "get_thumbnail" => call(operations::get_thumbnail, state, params).await,
-        "export_document" => call(operations::export_document, state, params).await,
-        "open_documents" => call(operations::open_documents, state, params).await,
-        "open_external" => call(operations::open_external, state, params).await,
-        "detect" => call(operations::detect, state, params).await,
-        "ocr" => call(operations::ocr, state, params).await,
-        "inpaint" => call(operations::inpaint, state, params).await,
-        "update_inpaint_mask" => call(operations::update_inpaint_mask, state, params).await,
-        "update_brush_layer" => call(operations::update_brush_layer, state, params).await,
-        "inpaint_partial" => call(operations::inpaint_partial, state, params).await,
-        "render" => call(operations::render, state, params).await,
-        "update_text_blocks" => call(operations::update_text_blocks, state, params).await,
-        "llm_load" => call(operations::llm_load, state, params).await,
-        "llm_generate" => call(operations::llm_generate, state, params).await,
-        "process" => call(operations::process, state, params).await,
-        _ => Err(anyhow::anyhow!("Unknown method: {}", method)),
+        Method::AppVersion => call0(operations::app_version, state).await,
+        Method::Device => call0(operations::device, state).await,
+        Method::GetDocuments => call0(operations::get_documents, state).await,
+        Method::ListFontFamilies => call0(operations::list_font_families, state).await,
+        Method::LlmList => call(operations::llm_list, state, params).await,
+        Method::LlmReady => call0(operations::llm_ready, state).await,
+        Method::LlmOffload => call0(operations::llm_offload, state).await,
+        Method::ProcessCancel => call0(operations::process_cancel, state).await,
+        Method::GetDocument => call(operations::get_document, state, params).await,
+        Method::GetThumbnail => call(operations::get_thumbnail, state, params).await,
+        Method::ExportDocument => call(operations::export_document, state, params).await,
+        Method::OpenDocuments => call(operations::open_documents, state, params).await,
+        Method::OpenExternal => call(operations::open_external, state, params).await,
+        Method::Detect => call(operations::detect, state, params).await,
+        Method::Ocr => call(operations::ocr, state, params).await,
+        Method::Inpaint => call(operations::inpaint, state, params).await,
+        Method::UpdateInpaintMask => call(operations::update_inpaint_mask, state, params).await,
+        Method::UpdateBrushLayer => call(operations::update_brush_layer, state, params).await,
+        Method::InpaintPartial => call(operations::inpaint_partial, state, params).await,
+        Method::Render => call(operations::render, state, params).await,
+        Method::UpdateTextBlocks => call(operations::update_text_blocks, state, params).await,
+        Method::LlmLoad => call(operations::llm_load, state, params).await,
+        Method::LlmGenerate => call(operations::llm_generate, state, params).await,
+        Method::Process => call(operations::process, state, params).await,
     }
 }
 
@@ -130,7 +128,6 @@ async fn handle_socket(socket: WebSocket, state: WsState) {
     let (mut ws_sender, mut ws_receiver) = socket.split();
     let (tx, mut send_rx) = mpsc::channel::<OutgoingMessage>(256);
 
-    // Notification forwarders
     spawn_notification_forwarder(
         "download_progress",
         koharu_http::download::subscribe(),
@@ -142,7 +139,6 @@ async fn handle_socket(socket: WebSocket, state: WsState) {
         tx.clone(),
     );
 
-    // Sender task: drain mpsc → WebSocket binary frames
     let send_task = tokio::spawn(async move {
         while let Some(msg) = send_rx.recv().await {
             let Ok(bytes) = rmp_serde::to_vec_named(&msg) else {
@@ -154,7 +150,6 @@ async fn handle_socket(socket: WebSocket, state: WsState) {
         }
     });
 
-    // Receive loop
     while let Some(Ok(msg)) = ws_receiver.next().await {
         let data = match msg {
             Message::Binary(data) => data,
@@ -163,10 +158,10 @@ async fn handle_socket(socket: WebSocket, state: WsState) {
         };
 
         let raw: RawIncoming = match rmp_serde::from_slice(&data) {
-            Ok(r) => r,
-            Err(e) => {
+            Ok(value) => value,
+            Err(err) => {
                 let _ = tx
-                    .send(err_response(0, &format!("Decode error: {e}")))
+                    .send(err_response(0, &format!("Decode error: {err}")))
                     .await;
                 continue;
             }
@@ -177,21 +172,30 @@ async fn handle_socket(socket: WebSocket, state: WsState) {
         let resources = state.resources.clone();
 
         tokio::spawn(async move {
-            let response = match resources.get() {
-                Some(res) => {
+            let response = match get_resources(&resources) {
+                Ok(res) => {
+                    let parsed_method: Result<Method> = raw.method.parse();
+                    let method = match parsed_method {
+                        Ok(method) => method,
+                        Err(err) => {
+                            let _ = tx.send(err_response(id, &format!("{err:#}"))).await;
+                            return;
+                        }
+                    };
+
                     let params = raw.params.unwrap_or(rmpv::Value::Nil);
                     match tokio::time::timeout(
                         Duration::from_secs(300),
-                        dispatch(&raw.method, params, res.clone()),
+                        dispatch(method, params, res),
                     )
                     .await
                     {
                         Ok(Ok(result)) => ok_response(id, result),
-                        Ok(Err(e)) => err_response(id, &format!("{e:#}")),
+                        Ok(Err(err)) => err_response(id, &format!("{err:#}")),
                         Err(_) => err_response(id, "Request timed out"),
                     }
                 }
-                None => err_response(id, "Resources not initialized"),
+                Err(err) => err_response(id, &format!("{err:#}")),
             };
             let _ = tx.send(response).await;
         });
@@ -223,4 +227,25 @@ fn spawn_notification_forwarder<T: Serialize + Clone + Send + 'static>(
             }
         }
     });
+}
+
+#[cfg(test)]
+mod tests {
+    use koharu_api::Method;
+
+    #[test]
+    fn method_registry_supports_all_dispatched_methods() {
+        for method in Method::ALL {
+            let parsed: Method = method.as_str().parse().expect("method should parse");
+            assert_eq!(*method, parsed);
+        }
+    }
+
+    #[test]
+    fn unknown_method_returns_stable_error() {
+        let err = "unknown_method_name"
+            .parse::<Method>()
+            .expect_err("unknown method should fail");
+        assert_eq!(err.to_string(), "Unknown method: unknown_method_name");
+    }
 }
