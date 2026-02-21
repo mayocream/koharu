@@ -1,6 +1,7 @@
 'use client'
 
 import { create } from 'zustand'
+import { persist } from 'zustand/middleware'
 import i18n from '@/lib/i18n'
 import {
   invoke,
@@ -463,6 +464,7 @@ export const useAppStore = create<AppState>((set, get) => {
       await invoke('render', {
         index,
         shaderEffect: get().renderEffect,
+        fontFamily: useConfigStore.getState().fontFamily,
       })
       if (index === get().currentDocumentIndex) {
         await get().refreshCurrentDocument()
@@ -478,6 +480,7 @@ export const useAppStore = create<AppState>((set, get) => {
         index,
         textBlockIndex,
         shaderEffect: get().renderEffect,
+        fontFamily: useConfigStore.getState().fontFamily,
       })
       if (index === get().currentDocumentIndex) {
         await get().refreshCurrentDocument()
@@ -630,6 +633,7 @@ export const useAppStore = create<AppState>((set, get) => {
           llmModelId: get().llmSelectedModel,
           language: get().llmSelectedLanguage,
           shaderEffect: get().renderEffect,
+          fontFamily: useConfigStore.getState().fontFamily,
         })
       } catch (err) {
         console.error('Failed to start processing:', err)
@@ -659,6 +663,7 @@ export const useAppStore = create<AppState>((set, get) => {
           llmModelId: get().llmSelectedModel,
           language: get().llmSelectedLanguage,
           shaderEffect: get().renderEffect,
+          fontFamily: useConfigStore.getState().fontFamily,
         })
       } catch (err) {
         console.error('Failed to start processing:', err)
@@ -694,6 +699,8 @@ type ConfigState = {
     color: string
   }
   setBrushConfig: (config: Partial<ConfigState['brushConfig']>) => void
+  fontFamily?: string
+  setFontFamily: (font: string) => void
 }
 
 // Subscribe to pipeline progress at module level so the EventSource is
@@ -741,13 +748,22 @@ if (typeof window !== 'undefined') {
   })
 }
 
-export const useConfigStore = create<ConfigState>((set) => ({
-  brushConfig: {
-    size: 36,
-    color: '#ffffff',
-  },
-  setBrushConfig: (config) =>
-    set((state) => ({
-      brushConfig: { ...state.brushConfig, ...config },
-    })),
-}))
+export const useConfigStore = create<ConfigState>()(
+  persist(
+    (set) => ({
+      brushConfig: {
+        size: 36,
+        color: '#ffffff',
+      },
+      setBrushConfig: (config) =>
+        set((state) => ({
+          brushConfig: { ...state.brushConfig, ...config },
+        })),
+      fontFamily: undefined,
+      setFontFamily: (font) => set({ fontFamily: font }),
+    }),
+    {
+      name: 'koharu-config',
+    },
+  ),
+)

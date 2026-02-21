@@ -49,6 +49,8 @@ pub(crate) struct RenderParams {
     pub text_block_index: Option<usize>,
     /// Shader effect: "normal", "antique", "metal", "manga", "motionblur"
     pub shader_effect: Option<String>,
+    /// Selected font family for rendering
+    pub font_family: Option<String>,
 }
 
 #[derive(Deserialize, JsonSchema)]
@@ -77,6 +79,8 @@ pub(crate) struct ProcessParams {
     pub language: Option<String>,
     /// Shader effect
     pub shader_effect: Option<String>,
+    /// Selected font family for rendering
+    pub font_family: Option<String>,
 }
 
 #[derive(Deserialize, JsonSchema)]

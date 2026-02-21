@@ -63,6 +63,7 @@ export type RpcMethodMap = {
       index: number
       textBlockIndex?: number
       shaderEffect?: RenderEffect
+      fontFamily?: string
     },
     void,
   ]
@@ -82,6 +83,7 @@ export type RpcMethodMap = {
       llmModelId?: string
       language?: string
       shaderEffect?: RenderEffect
+      fontFamily?: string
     },
     void,
   ]

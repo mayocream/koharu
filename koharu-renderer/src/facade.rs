@@ -49,6 +49,7 @@ impl Renderer {
         document: &mut Document,
         text_block_index: Option<usize>,
         effect: TextShaderEffect,
+        font_family: Option<&str>,
     ) -> Result<()> {
         let mut text_blocks = match text_block_index {
             Some(index) => document
@@ -60,7 +61,7 @@ impl Renderer {
         };
 
         text_blocks.par_iter_mut().for_each(|text_block| {
-            let _ = self.render_text_block(text_block, effect);
+            let _ = self.render_text_block(text_block, effect, font_family);
         });
 
         if let Some(inpainted) = &document.inpainted
@@ -93,6 +94,7 @@ impl Renderer {
         &self,
         text_block: &mut TextBlock,
         effect: TextShaderEffect,
+        font_family: Option<&str>,
     ) -> Result<()> {
         let Some(translation) = &text_block.translation else {
             return Ok(());
@@ -101,12 +103,21 @@ impl Renderer {
             return Ok(());
         };
 
-        let style = text_block.style.clone().unwrap_or_else(|| TextStyle {
+        let mut style = text_block.style.clone().unwrap_or_else(|| TextStyle {
             font_families: fonts_for_script(translation),
             font_size: None,
             color: [0, 0, 0, 255],
             effect: None,
         });
+
+        if let Some(ff) = font_family {
+            if !style.font_families.contains(&ff.to_string()) {
+                style.font_families.insert(0, ff.to_string());
+            } else {
+                style.font_families.retain(|x| x != ff);
+                style.font_families.insert(0, ff.to_string());
+            }
+        }
         let font = self.select_font(&style)?;
         let block_effect = style.effect.unwrap_or(effect);
         let color = text_block

@@ -69,6 +69,8 @@ pub struct ProcessRequest {
     pub language: Option<String>,
     /// Shader effect for rendering.
     pub shader_effect: Option<TextShaderEffect>,
+    /// Selected font family for rendering.
+    pub font_family: Option<String>,
 }
 
 /// Handle to a running pipeline, used for cancellation.
@@ -242,6 +244,7 @@ async fn run_pipeline_inner(
                         &mut snapshot,
                         None,
                         req.shader_effect.unwrap_or_default(),
+                        req.font_family.as_deref(),
                     )?;
                 }
             }

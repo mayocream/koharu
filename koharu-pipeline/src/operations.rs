@@ -509,6 +509,7 @@ pub struct RenderPayload {
     pub index: usize,
     pub text_block_index: Option<usize>,
     pub shader_effect: Option<TextShaderEffect>,
+    pub font_family: Option<String>,
 }
 
 #[instrument(level = "info", skip_all)]
@@ -527,6 +528,7 @@ pub async fn render(state: AppResources, payload: RenderPayload) -> anyhow::Resu
         &mut updated,
         payload.text_block_index,
         payload.shader_effect.unwrap_or_default(),
+        payload.font_family.as_deref(),
     )?;
 
     let mut guard = state.state.write().await;

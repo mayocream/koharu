@@ -12,7 +12,7 @@ import {
   LanguagesIcon,
 } from 'lucide-react'
 import { Separator } from '@/components/ui/separator'
-import { useAppStore } from '@/lib/store'
+import { useAppStore, useConfigStore } from '@/lib/store'
 import { useTextBlocks } from '@/hooks/useTextBlocks'
 import { RenderEffect, RgbaColor, TextStyle } from '@/types'
 import { Button } from '@/components/ui/button'
@@ -154,6 +154,7 @@ export function RenderControls() {
     availableFonts,
     fetchAvailableFonts,
   } = useAppStore()
+  const { fontFamily, setFontFamily } = useConfigStore()
   const { textBlocks, selectedBlockIndex, replaceBlock } = useTextBlocks()
   const { t } = useTranslation()
   const selectedBlock =
@@ -169,11 +170,13 @@ export function RenderControls() {
     availableFonts.length > 0
       ? availableFonts
       : [
+          ...(fontFamily ? [fontFamily] : []),
           ...(selectedBlock?.style?.fontFamilies?.slice(0, 1) ?? []),
           ...DEFAULT_FONT_FAMILIES,
         ]
   const fontOptions = uniqueStrings(fontCandidates)
   const currentFont =
+    fontFamily ??
     selectedBlock?.style?.fontFamilies?.[0] ??
     firstBlock?.style?.fontFamilies?.[0] ??
     (hasBlocks ? fallbackFontFamilies[0] : '')
@@ -236,6 +239,7 @@ export function RenderControls() {
       <Select
         value={currentFont}
         onValueChange={(value) => {
+          setFontFamily(value)
           const nextFamilies = mergeFontFamilies(
             value,
             selectedBlock?.style?.fontFamilies,
@@ -250,7 +254,7 @@ export function RenderControls() {
           }))
           void updateTextBlocks(nextBlocks)
         }}
-        disabled={!hasBlocks || fontOptions.length === 0}
+        disabled={fontOptions.length === 0}
       >
         <SelectTrigger
           size='sm'
@@ -259,7 +263,7 @@ export function RenderControls() {
         >
           <SelectValue placeholder={t('render.fontPlaceholder')} />
         </SelectTrigger>
-        <SelectContent>
+        <SelectContent position='popper'>
           {fontOptions.map((font) => (
             <SelectItem key={font} value={font} style={{ fontFamily: font }}>
               {font}
@@ -299,7 +303,7 @@ export function RenderControls() {
         <SelectTrigger size='sm' className='h-8 w-28 text-sm'>
           <SelectValue />
         </SelectTrigger>
-        <SelectContent>
+        <SelectContent position='popper'>
           {effects.map((effect) => (
             <SelectItem key={effect.value} value={effect.value}>
               {effect.label}
@@ -371,7 +375,7 @@ function LlmStatusPopover() {
             <SelectTrigger className='w-full'>
               <SelectValue placeholder={t('llm.selectPlaceholder')} />
             </SelectTrigger>
-            <SelectContent>
+            <SelectContent position='popper'>
               {llmModels.map((model) => (
                 <SelectItem key={model.id} value={model.id}>
                   {model.id}
@@ -389,7 +393,7 @@ function LlmStatusPopover() {
               <SelectTrigger className='w-full'>
                 <SelectValue placeholder={t('llm.languagePlaceholder')} />
               </SelectTrigger>
-              <SelectContent>
+              <SelectContent position='popper'>
                 {activeLanguages.map((language) => (
                   <SelectItem key={language} value={language}>
                     {language}
