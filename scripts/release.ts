@@ -8,14 +8,21 @@ const root = path.resolve(__dirname, '..')
 const execOpts = { cwd: root, maxBuffer: 10 * 1024 * 1024 }
 
 async function main() {
-  console.log('Calculating bumped version with git-cliff...')
-  const bumpedVersion = (
-    await exec('bun git-cliff --unreleased --bumped-version', execOpts)
-  ).stdout.trim()
+  let bumpedVersion = process.argv[2]?.trim()
+
+  if (bumpedVersion) {
+    console.log(`Using provided version: ${bumpedVersion}`)
+  } else {
+    console.log('Calculating bumped version with git-cliff...')
+    bumpedVersion = (
+      await exec('bun git-cliff --unreleased --bumped-version', execOpts)
+    ).stdout.trim()
+  }
 
   if (!bumpedVersion) {
     throw new Error('git-cliff did not return a bumped version')
   }
+
   console.log(`Bumped version: ${bumpedVersion}`)
 
   const cargoTomlPath = path.join(root, 'Cargo.toml')
