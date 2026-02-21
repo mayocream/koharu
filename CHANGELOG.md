@@ -1,7 +1,18 @@
-## [unreleased]
+## [0.34.0](https://github.com/mayocream/koharu/compare/0.33.0..0.34.0) - 2026-02-21
+
+### ⛰️  Features
+
+- Feat: persist font family
+close #176 - ([3837499](https://github.com/mayocream/koharu/commit/3837499196bb218e14e973cdc4cfb4901003ef12))
+
+### 🚜 Refactor
+
+- Remove sys-locale - ([e3f180b](https://github.com/mayocream/koharu/commit/e3f180bdf479eeca9fe6cbb7c5682153220ae2d0))
+- Simplify device name logic - ([cd0eb2f](https://github.com/mayocream/koharu/commit/cd0eb2fa41f1f841e9553f3218ae810ac797db8d))
 
 ### 📚 Documentation
 
+- Tidy changelog - ([c24e00c](https://github.com/mayocream/koharu/commit/c24e00c28140c31e91d3fe89168b829efff0d440))
 - Update copyright year to 2026 and owner to Mayo Takanashi in license files. - ([85ddf52](https://github.com/mayocream/koharu/commit/85ddf52832fafacf1dc1d585bc1cacc90ab7dd6e))
 - Update READMEs to include Linux in the list of supported pre-built binary platforms. - ([0a4ba70](https://github.com/mayocream/koharu/commit/0a4ba70e518b69d641692ef28f60facc2b0133de))
 
