@@ -2,7 +2,7 @@
 
 import { useEffect, useRef } from 'react'
 import { convertToImageBitmap } from '@/lib/util'
-import type { Document } from '@/types'
+import { Document } from '@/types'
 
 type BrushLayerDisplayOptions = {
   currentDocument: Document | null

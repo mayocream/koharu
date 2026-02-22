@@ -1,12 +1,11 @@
 'use client'
 
 import { create } from 'zustand'
-import { subscribeDownloadProgress } from '@/lib/backend'
-import {
-  getDownloadPercent,
-  isDownloadTerminalStatus,
-  type DownloadEntry,
-} from '@/lib/download-progress'
+import { subscribeDownloadProgress, type DownloadProgress } from '@/lib/backend'
+
+type DownloadEntry = DownloadProgress & {
+  percent?: number
+}
 
 type DownloadStore = {
   downloads: Map<string, DownloadEntry>
@@ -24,24 +23,29 @@ export const useDownloadStore = create<DownloadStore>((set, get) => ({
 
     subscribeDownloadProgress((progress) => {
       const next = new Map(get().downloads)
-      const percent = getDownloadPercent(progress.downloaded, progress.total)
-      const entry: DownloadEntry = {
-        ...progress,
-        percent,
-        updatedAt: Date.now(),
-      }
+      const percent =
+        progress.total && progress.total > 0
+          ? Math.round((progress.downloaded / progress.total) * 100)
+          : undefined
 
-      next.set(progress.filename, entry)
-      set({ downloads: next })
-
-      if (isDownloadTerminalStatus(progress.status)) {
+      const status = progress.status
+      if (
+        status === 'Completed' ||
+        (typeof status === 'object' && 'Failed' in status)
+      ) {
+        next.set(progress.filename, { ...progress, percent })
+        set({ downloads: next })
         setTimeout(() => {
           const current = get().downloads
-          if (!current.has(progress.filename)) return
-          const updated = new Map(current)
-          updated.delete(progress.filename)
-          set({ downloads: updated })
+          if (current.has(progress.filename)) {
+            const updated = new Map(current)
+            updated.delete(progress.filename)
+            set({ downloads: updated })
+          }
         }, 3000)
+      } else {
+        next.set(progress.filename, { ...progress, percent })
+        set({ downloads: next })
       }
     })
   },

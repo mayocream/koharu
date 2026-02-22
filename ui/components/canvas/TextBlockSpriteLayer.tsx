@@ -1,7 +1,7 @@
 'use client'
 
 import { useEffect, useState } from 'react'
-import type { TextBlock } from '@/types'
+import { TextBlock } from '@/types'
 import { convertToBlob } from '@/lib/util'
 
 type TextBlockSpriteLayerProps = {

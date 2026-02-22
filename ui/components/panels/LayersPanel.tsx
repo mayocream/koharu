@@ -11,9 +11,9 @@ import {
   BandageIcon,
   PaintbrushIcon,
 } from 'lucide-react'
+import { useAppStore } from '@/lib/store'
 import { cn } from '@/lib/utils'
 import { Button } from '@/components/ui/button'
-import { useAppShallow } from '@/lib/store-selectors'
 
 type Layer = {
   id: string
@@ -38,19 +38,7 @@ export function LayersPanel() {
     setShowTextBlocksOverlay,
     showRenderedImage,
     setShowRenderedImage,
-  } = useAppShallow((state) => ({
-    currentDocument: state.currentDocument,
-    showInpaintedImage: state.showInpaintedImage,
-    setShowInpaintedImage: state.setShowInpaintedImage,
-    showSegmentationMask: state.showSegmentationMask,
-    setShowSegmentationMask: state.setShowSegmentationMask,
-    showBrushLayer: state.showBrushLayer,
-    setShowBrushLayer: state.setShowBrushLayer,
-    showTextBlocksOverlay: state.showTextBlocksOverlay,
-    setShowTextBlocksOverlay: state.setShowTextBlocksOverlay,
-    showRenderedImage: state.showRenderedImage,
-    setShowRenderedImage: state.setShowRenderedImage,
-  }))
+  } = useAppStore()
 
   const layers: Layer[] = [
     {

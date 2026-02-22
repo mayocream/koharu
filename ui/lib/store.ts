@@ -10,7 +10,7 @@ import {
   ProgressBarStatus,
   type ProcessProgress,
 } from '@/lib/backend'
-import type {
+import {
   Document,
   InpaintRegion,
   RenderEffect,

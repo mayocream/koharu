@@ -6,7 +6,7 @@ import { motion, AnimatePresence } from 'motion/react'
 import { ChevronDownIcon, LayersIcon, ALargeSmallIcon } from 'lucide-react'
 import { LayersPanel } from '@/components/panels/LayersPanel'
 import { TextBlocksPanel } from '@/components/panels/TextBlocksPanel'
-import { RenderStyleControls } from '@/features/editor-controls/RenderStyleControls'
+import { RenderControls } from '@/components/canvas/CanvasToolbar'
 import { ResizableSidebar } from '@/components/ResizableSidebar'
 import {
   Popover,
@@ -43,7 +43,7 @@ export function PanelsToolbar() {
           </TooltipContent>
         </Tooltip>
         <PopoverContent side='left' align='start' className='w-auto p-3'>
-          <RenderStyleControls variant='popover' />
+          <RenderControls />
         </PopoverContent>
       </Popover>
     </div>

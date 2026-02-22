@@ -2,6 +2,7 @@
 
 import { useEffect, useState, useCallback } from 'react'
 import { useTranslation } from 'react-i18next'
+import { useAppStore } from '@/lib/store'
 import { ResizableSidebar } from '@/components/ResizableSidebar'
 import { ScrollArea } from '@/components/ui/scroll-area'
 import {
@@ -10,7 +11,6 @@ import {
   TooltipTrigger,
 } from '@/components/ui/tooltip'
 import { Button } from '@/components/ui/button'
-import { useAppShallow } from '@/lib/store-selectors'
 
 export function Navigator() {
   const {
@@ -18,12 +18,7 @@ export function Navigator() {
     documentsVersion,
     currentDocumentIndex,
     setCurrentDocumentIndex,
-  } = useAppShallow((state) => ({
-    totalPages: state.totalPages,
-    documentsVersion: state.documentsVersion,
-    currentDocumentIndex: state.currentDocumentIndex,
-    setCurrentDocumentIndex: state.setCurrentDocumentIndex,
-  }))
+  } = useAppStore()
   const { t } = useTranslation()
 
   return (

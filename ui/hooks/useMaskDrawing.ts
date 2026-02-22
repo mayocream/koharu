@@ -4,24 +4,11 @@ import type React from 'react'
 import { useEffect, useRef } from 'react'
 import { useAppStore, useConfigStore } from '@/lib/store'
 import { blobToUint8Array, convertToImageBitmap } from '@/lib/util'
-import type { Document, InpaintRegion, ToolMode } from '@/types'
+import { Document, InpaintRegion, ToolMode } from '@/types'
 import {
   PointerToDocumentFn,
   type DocumentPointer,
 } from '@/hooks/usePointerToDocument'
-import {
-  boundsToRegion,
-  clampToDocument,
-  expandBounds,
-  type Bounds,
-} from '@/hooks/drawing/geometry'
-import { createSerialQueue } from '@/hooks/drawing/serialQueue'
-import {
-  selectBrushConfig,
-  selectCurrentDocumentIndex,
-  selectInpaintPartial,
-  selectUpdateMask,
-} from '@/lib/store-selectors'
 
 type MaskDrawingOptions = {
   mode: ToolMode
@@ -30,6 +17,32 @@ type MaskDrawingOptions = {
   showMask: boolean
   enabled: boolean
 }
+
+type Bounds = {
+  minX: number
+  minY: number
+  maxX: number
+  maxY: number
+}
+
+const clampToDocument = (
+  point: DocumentPointer,
+  doc?: Document,
+): DocumentPointer => {
+  if (!doc) return point
+  return {
+    x: Math.max(0, Math.min(doc.width, point.x)),
+    y: Math.max(0, Math.min(doc.height, point.y)),
+  }
+}
+
+const expandBounds = (bounds: Bounds, point: DocumentPointer, radius: number) =>
+  ({
+    minX: Math.min(bounds.minX, point.x - radius),
+    minY: Math.min(bounds.minY, point.y - radius),
+    maxX: Math.max(bounds.maxX, point.x + radius),
+    maxY: Math.max(bounds.maxY, point.y + radius),
+  }) satisfies Bounds
 
 const withMargin = (
   bounds: Bounds,
@@ -53,6 +66,20 @@ const withMargin = (
   }
 }
 
+const boundsToRegion = (bounds: Bounds, doc: Document): InpaintRegion => {
+  const x0 = Math.max(0, Math.floor(bounds.minX))
+  const y0 = Math.max(0, Math.floor(bounds.minY))
+  const x1 = Math.min(doc.width, Math.ceil(bounds.maxX))
+  const y1 = Math.min(doc.height, Math.ceil(bounds.maxY))
+
+  return {
+    x: x0,
+    y: y0,
+    width: Math.max(1, x1 - x0),
+    height: Math.max(1, y1 - y0),
+  }
+}
+
 export function useMaskDrawing({
   mode,
   currentDocument,
@@ -60,16 +87,20 @@ export function useMaskDrawing({
   showMask,
   enabled,
 }: MaskDrawingOptions) {
-  const brushSize = useConfigStore(selectBrushConfig).size
-  const updateMask = useAppStore(selectUpdateMask)
-  const inpaintPartial = useAppStore(selectInpaintPartial)
-  const currentDocumentIndex = useAppStore(selectCurrentDocumentIndex)
+  const {
+    brushConfig: { size: brushSize },
+  } = useConfigStore()
+  const updateMask = useAppStore((state) => state.updateMask)
+  const inpaintPartial = useAppStore((state) => state.inpaintPartial)
+  const currentDocumentIndex = useAppStore(
+    (state) => state.currentDocumentIndex,
+  )
   const canvasRef = useRef<HTMLCanvasElement | null>(null)
   const ctxRef = useRef<CanvasRenderingContext2D | null>(null)
   const drawingRef = useRef(false)
   const lastPointRef = useRef<DocumentPointer | null>(null)
   const boundsRef = useRef<Bounds | null>(null)
-  const inpaintQueueRef = useRef(createSerialQueue())
+  const inpaintQueueRef = useRef<Promise<void>>(Promise.resolve())
   const isRepairMode = mode === 'repairBrush'
   const isEraseMode = mode === 'eraser'
   const isActive = enabled && (isRepairMode || isEraseMode)
@@ -80,7 +111,7 @@ export function useMaskDrawing({
     drawingRef.current = false
     lastPointRef.current = null
     boundsRef.current = null
-    inpaintQueueRef.current.reset()
+    inpaintQueueRef.current = Promise.resolve()
   }, [enabled, mode])
 
   useEffect(() => {
@@ -143,7 +174,7 @@ export function useMaskDrawing({
       drawingRef.current = false
       lastPointRef.current = null
       boundsRef.current = null
-      inpaintQueueRef.current.reset()
+      inpaintQueueRef.current = Promise.resolve()
     }
   }, [
     currentDocument?.id,
@@ -211,6 +242,10 @@ export function useMaskDrawing({
     return blobToUint8Array(blob)
   }
 
+  const queueInpaint = (task: () => Promise<void>) => {
+    inpaintQueueRef.current = inpaintQueueRef.current.catch(() => {}).then(task)
+  }
+
   const finalizeStroke = () => {
     if (!isActive) return
     const strokeBounds = boundsRef.current
@@ -235,7 +270,7 @@ export function useMaskDrawing({
       } catch (error) {
         console.error(error)
       }
-      void inpaintQueueRef.current.push(async () => {
+      queueInpaint(async () => {
         try {
           await inpaintPartial(region, {
             index: currentDocumentIndex,

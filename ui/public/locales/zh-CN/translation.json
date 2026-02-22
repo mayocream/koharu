@@ -65,7 +65,9 @@
   },
   "processing": {
     "detect": "检测",
+    "detectTooltip": "对当前页面运行文本检测",
     "ocr": "识别",
+    "ocrTooltip": "识别已检测区域中的文本",
     "render": "渲染"
   },
   "mask": {
@@ -74,7 +76,8 @@
     "showBrushLayer": "显示笔刷图层",
     "showRendered": "显示渲染文本",
     "showTextBlocks": "显示文本框",
-    "inpaint": "修补"
+    "inpaint": "修补",
+    "inpaintTooltip": "执行图像修补"
   },
   "llm": {
     "title": "LLM",
@@ -92,6 +95,7 @@
     "generating": "生成中...",
     "generateTooltip": "为检测到的文本块生成翻译",
     "render": "渲染",
+    "renderTooltip": "将翻译渲染到页面",
     "loadingModel": "正在加载 LLM 模型",
     "statusReady": "LLM 已就绪",
     "statusIdle": "LLM 未加载"

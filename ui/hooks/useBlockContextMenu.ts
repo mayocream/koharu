@@ -2,7 +2,7 @@
 
 import { useState } from 'react'
 import type React from 'react'
-import type { Document } from '@/types'
+import { Document } from '@/types'
 import type { PointerToDocumentFn } from '@/hooks/usePointerToDocument'
 
 type BlockContextMenuOptions = {

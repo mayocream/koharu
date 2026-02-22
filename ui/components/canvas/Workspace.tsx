@@ -12,6 +12,7 @@ import {
 import { useTranslation } from 'react-i18next'
 import { listen } from '@/lib/backend'
 import { Image } from '@/components/Image'
+import { useAppStore } from '@/lib/store'
 import {
   setCanvasViewport,
   fitCanvasToViewport,
@@ -28,7 +29,6 @@ import { useTextBlocks } from '@/hooks/useTextBlocks'
 import { useMaskDrawing } from '@/hooks/useMaskDrawing'
 import { useRenderBrushDrawing } from '@/hooks/useRenderBrushDrawing'
 import { useBrushLayerDisplay } from '@/hooks/useBrushLayerDisplay'
-import { useAppShallow } from '@/lib/store-selectors'
 
 const BRUSH_CURSOR =
   'url(\'data:image/svg+xml,%3Csvg xmlns="http://www.w3.org/2000/svg" width="16" height="16"%3E%3Ccircle cx="8" cy="8" r="4" stroke="black" stroke-width="1.5" fill="white"/%3E%3C/svg%3E\') 8 8, crosshair'
@@ -49,16 +49,7 @@ export function Workspace() {
     showTextBlocksOverlay,
     mode,
     autoFitEnabled,
-  } = useAppShallow((state) => ({
-    scale: state.scale,
-    showSegmentationMask: state.showSegmentationMask,
-    showInpaintedImage: state.showInpaintedImage,
-    showBrushLayer: state.showBrushLayer,
-    showRenderedImage: state.showRenderedImage,
-    showTextBlocksOverlay: state.showTextBlocksOverlay,
-    mode: state.mode,
-    autoFitEnabled: state.autoFitEnabled,
-  }))
+  } = useAppStore()
   const {
     document: currentDocument,
     selectedBlockIndex,
