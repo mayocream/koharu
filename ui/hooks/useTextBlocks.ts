@@ -1,6 +1,8 @@
 'use client'
 
-import { useAppStore } from '@/lib/store'
+import { useCurrentDocumentState } from '@/lib/query/hooks'
+import { useMaskMutations, useTextBlockMutations } from '@/lib/query/mutations'
+import { useEditorUiStore } from '@/lib/stores/editorUiStore'
 import { Document, InpaintRegion, TextBlock } from '@/types'
 
 const TEXT_BLOCK_INPAINT_RADIUS = 12
@@ -41,25 +43,26 @@ const shouldInpaint = (updates: Partial<TextBlock>) =>
   Object.prototype.hasOwnProperty.call(updates, 'height')
 
 export function useTextBlocks() {
-  const document = useAppStore((state) => state.currentDocument)
+  const { currentDocument: document, currentDocumentIndex } =
+    useCurrentDocumentState()
   const textBlocks = document?.textBlocks ?? []
-  const selectedBlockIndex = useAppStore((state) => state.selectedBlockIndex)
-  const setSelectedBlockIndex = useAppStore(
+  const selectedBlockIndex = useEditorUiStore(
+    (state) => state.selectedBlockIndex,
+  )
+  const setSelectedBlockIndex = useEditorUiStore(
     (state) => state.setSelectedBlockIndex,
   )
-  const updateTextBlocks = useAppStore((state) => state.updateTextBlocks)
-  const renderTextBlock = useAppStore((state) => state.renderTextBlock)
-  const inpaintPartial = useAppStore((state) => state.inpaintPartial)
+  const { updateTextBlocks, renderTextBlock } = useTextBlockMutations()
+  const { inpaintPartial } = useMaskMutations()
 
   const replaceBlock = async (index: number, updates: Partial<TextBlock>) => {
-    const { currentDocument, currentDocumentIndex } = useAppStore.getState()
-    const currentBlocks = currentDocument?.textBlocks ?? []
+    const currentBlocks = document?.textBlocks ?? []
     const nextBlocks = currentBlocks.map((block, idx) =>
       idx === index ? { ...block, ...updates } : block,
     )
     await updateTextBlocks(nextBlocks)
 
-    const doc = currentDocument
+    const doc = document
 
     if (shouldRenderSprite(updates)) {
       void renderTextBlock(undefined, currentDocumentIndex, index)
@@ -80,16 +83,14 @@ export function useTextBlocks() {
   }
 
   const appendBlock = async (block: TextBlock) => {
-    const { currentDocument } = useAppStore.getState()
-    const currentBlocks = currentDocument?.textBlocks ?? []
+    const currentBlocks = document?.textBlocks ?? []
     const nextBlocks = [...currentBlocks, block]
     await updateTextBlocks(nextBlocks)
     setSelectedBlockIndex(nextBlocks.length - 1)
   }
 
   const removeBlock = async (index: number) => {
-    const { currentDocument } = useAppStore.getState()
-    const currentBlocks = currentDocument?.textBlocks ?? []
+    const currentBlocks = document?.textBlocks ?? []
     const nextBlocks = currentBlocks.filter((_, idx) => idx !== index)
     await updateTextBlocks(nextBlocks)
     setSelectedBlockIndex(undefined)

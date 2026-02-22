@@ -6,20 +6,21 @@ import { motion } from 'motion/react'
 import { TextBlock } from '@/types'
 import { Languages, LoaderCircleIcon } from 'lucide-react'
 import { useTextBlocks } from '@/hooks/useTextBlocks'
-import { useAppStore } from '@/lib/store'
+import { useLlmReadyQuery } from '@/lib/query/hooks'
+import { useLlmMutations } from '@/lib/query/mutations'
 import {
   Accordion,
   AccordionContent,
   AccordionItem,
   AccordionTrigger,
 } from '@/components/ui/accordion'
-import { ScrollArea } from '@/components/ui/scroll-area'
 import {
   Tooltip,
   TooltipContent,
   TooltipTrigger,
 } from '@/components/ui/tooltip'
 import { Button } from '@/components/ui/button'
+import { ScrollArea } from '@/components/ui/scroll-area'
 import { Textarea } from '@/components/ui/textarea'
 
 export function TextBlocksPanel() {
@@ -31,7 +32,8 @@ export function TextBlocksPanel() {
     replaceBlock,
   } = useTextBlocks()
   const { t } = useTranslation()
-  const { llmGenerate, llmReady } = useAppStore()
+  const { llmGenerate } = useLlmMutations()
+  const { data: llmReady = false } = useLlmReadyQuery()
   const [generatingIndex, setGeneratingIndex] = useState<number | null>(null)
 
   if (!document) {
@@ -83,7 +85,7 @@ export function TextBlocksPanel() {
             >
               {textBlocks.map((block, index) => (
                 <BlockCard
-                  key={`${block.x}-${block.y}-${index}`}
+                  key={`${document.id}-${index}`}
                   block={block}
                   index={index}
                   selected={index === selectedBlockIndex}

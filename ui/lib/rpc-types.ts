@@ -93,8 +93,8 @@ export type RpcMethodMap = {
 export type DownloadProgress = {
   filename: string
   downloaded: number
-  total?: number
-  status: 'Started' | 'Downloading' | 'Completed' | { Failed: string }
+  total?: number | null
+  status: 'started' | 'downloading' | 'completed' | { failed: string }
 }
 
 export type ProcessProgress = {

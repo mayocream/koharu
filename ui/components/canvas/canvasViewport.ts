@@ -1,6 +1,9 @@
 'use client'
 
-import { useAppStore } from '@/lib/store'
+import { queryKeys } from '@/lib/query/keys'
+import { getQueryClient } from '@/lib/query/client'
+import { useEditorUiStore } from '@/lib/stores/editorUiStore'
+import type { Document } from '@/types'
 
 const canvasViewportRef: { current: HTMLDivElement | null } = { current: null }
 
@@ -9,9 +12,11 @@ export function setCanvasViewport(element: HTMLDivElement | null) {
 }
 
 export function fitCanvasToViewport() {
-  const { currentDocument, setScale, setAutoFitEnabled } =
-    useAppStore.getState()
-  const doc = currentDocument
+  const { setScale, setAutoFitEnabled, currentDocumentIndex } =
+    useEditorUiStore.getState()
+  const doc = getQueryClient().getQueryData<Document>(
+    queryKeys.documents.current(currentDocumentIndex),
+  )
   const viewport = canvasViewportRef.current
   if (!doc || !viewport) return
   const rect = viewport.getBoundingClientRect()
@@ -24,7 +29,7 @@ export function fitCanvasToViewport() {
 }
 
 export function resetCanvasScale() {
-  const { setScale, setAutoFitEnabled } = useAppStore.getState()
+  const { setScale, setAutoFitEnabled } = useEditorUiStore.getState()
   setAutoFitEnabled(false)
   setScale(100)
 }

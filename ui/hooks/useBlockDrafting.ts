@@ -1,7 +1,7 @@
 'use client'
 
 import { useRef, useState } from 'react'
-import type React from 'react'
+import { useDrag } from '@use-gesture/react'
 import { Document, TextBlock, ToolMode } from '@/types'
 import type {
   PointerToDocumentFn,
@@ -24,55 +24,23 @@ export function useBlockDrafting({
   onCreateBlock,
 }: BlockDraftingOptions) {
   const dragStartRef = useRef<DocumentPointer | null>(null)
+  const draftBlockRef = useRef<TextBlock | null>(null)
   const [draftBlock, setDraftBlock] = useState<TextBlock | null>(null)
 
   const resetDraft = () => {
     dragStartRef.current = null
+    draftBlockRef.current = null
     setDraftBlock(null)
   }
 
-  const handleMouseDown = (event: React.PointerEvent<HTMLElement>) => {
-    if (!currentDocument || mode !== 'block') return
-    const point = pointerToDocument(event)
-    if (!point) return
-    event.preventDefault()
-    dragStartRef.current = point
-    setDraftBlock({
-      x: point.x,
-      y: point.y,
-      width: 0,
-      height: 0,
-      confidence: 1,
-    })
-    clearSelection()
-  }
-
-  const handleMouseMove = (event: React.PointerEvent<HTMLElement>) => {
-    if (mode !== 'block') return
-    const start = dragStartRef.current
-    if (!start) return
-    const point = pointerToDocument(event)
-    if (!point) return
-    const x = Math.min(start.x, point.x)
-    const y = Math.min(start.y, point.y)
-    const width = Math.abs(point.x - start.x)
-    const height = Math.abs(point.y - start.y)
-    setDraftBlock({
-      x,
-      y,
-      width,
-      height,
-      confidence: 1,
-    })
-  }
-
-  const handleMouseUp = () => {
+  const finalizeDraft = () => {
     if (mode !== 'block') {
       resetDraft()
       return
     }
-    const block = draftBlock
+    const block = draftBlockRef.current
     dragStartRef.current = null
+    draftBlockRef.current = null
     setDraftBlock(null)
     if (!block || !currentDocument) return
     const minSize = 4
@@ -89,18 +57,64 @@ export function useBlockDrafting({
     onCreateBlock(normalized)
   }
 
-  const handleMouseLeave = () => {
-    if (mode === 'block') {
-      resetDraft()
-    }
-  }
+  const bind = useDrag(
+    ({ first, last, event, active }) => {
+      if (!currentDocument || mode !== 'block') return
+      const sourceEvent = event as MouseEvent
+      const point = pointerToDocument(sourceEvent)
+      if (!point) {
+        if ((last || !active) && draftBlockRef.current) {
+          finalizeDraft()
+        }
+        return
+      }
+
+      if (first) {
+        dragStartRef.current = point
+        const nextDraft: TextBlock = {
+          x: point.x,
+          y: point.y,
+          width: 0,
+          height: 0,
+          confidence: 1,
+        }
+        draftBlockRef.current = nextDraft
+        setDraftBlock(nextDraft)
+        clearSelection()
+        return
+      }
+
+      const start = dragStartRef.current
+      if (!start) return
+      const x = Math.min(start.x, point.x)
+      const y = Math.min(start.y, point.y)
+      const width = Math.abs(point.x - start.x)
+      const height = Math.abs(point.y - start.y)
+      const nextDraft: TextBlock = {
+        x,
+        y,
+        width,
+        height,
+        confidence: 1,
+      }
+      draftBlockRef.current = nextDraft
+      setDraftBlock(nextDraft)
+
+      if (last || !active) {
+        finalizeDraft()
+      }
+    },
+    {
+      pointer: { buttons: 1, touch: true },
+      preventDefault: true,
+      filterTaps: true,
+      eventOptions: { passive: false },
+    },
+  )
 
   return {
     draftBlock,
-    handleMouseDown,
-    handleMouseMove,
-    handleMouseUp,
-    handleMouseLeave,
+    bind,
     resetDraft,
   }
 }

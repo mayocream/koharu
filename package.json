@@ -1,5 +1,6 @@
 {
   "devDependencies": {
+    "@playwright/test": "^1.56.1",
     "@tauri-apps/cli": "^2.10.0",
     "git-cliff": "^2.12.0",
     "prettier": "^3.8.1",
@@ -9,7 +10,8 @@
     "dev": "bun run scripts/dev.ts tauri dev -- -- --port=9999",
     "build": "bun run scripts/dev.ts tauri build",
     "cargo": "bun run scripts/dev.ts cargo",
-    "format": "prettier --write ui/ --ignore-path ui/.gitignore"
+    "format": "prettier --write ui/ --ignore-path ui/.gitignore",
+    "test:e2e": "playwright test"
   },
   "workspaces": [
     "ui/"

@@ -47,3 +47,5 @@ gen/
 # Temporary files
 temp/
 tmp/
+playwright-report/
+test-results/

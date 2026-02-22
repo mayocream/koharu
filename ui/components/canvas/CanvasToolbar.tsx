@@ -1,6 +1,6 @@
 'use client'
 
-import { useEffect, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import { motion } from 'motion/react'
 import {
@@ -12,7 +12,6 @@ import {
   LanguagesIcon,
 } from 'lucide-react'
 import { Separator } from '@/components/ui/separator'
-import { useAppStore, useConfigStore } from '@/lib/store'
 import { useTextBlocks } from '@/hooks/useTextBlocks'
 import { RenderEffect, RgbaColor, TextStyle } from '@/types'
 import { Button } from '@/components/ui/button'
@@ -34,6 +33,19 @@ import {
   PopoverContent,
   PopoverTrigger,
 } from '@/components/ui/popover'
+import { useEditorUiStore } from '@/lib/stores/editorUiStore'
+import { usePreferencesStore } from '@/lib/stores/preferencesStore'
+import { useLlmUiStore } from '@/lib/stores/llmUiStore'
+import {
+  useFontsQuery,
+  useLlmModelsQuery,
+  useLlmReadyQuery,
+} from '@/lib/query/hooks'
+import {
+  useDocumentMutations,
+  useLlmMutations,
+  useTextBlockMutations,
+} from '@/lib/query/mutations'
 
 const DEFAULT_COLOR: RgbaColor = [0, 0, 0, 255]
 const DEFAULT_FONT_FAMILIES = ['Arial']
@@ -84,7 +96,9 @@ export function CanvasToolbar() {
 }
 
 function WorkflowButtons() {
-  const { inpaint, detect, ocr, render, llmReady, llmGenerate } = useAppStore()
+  const { inpaint, detect, ocr, render } = useDocumentMutations()
+  const { llmGenerate } = useLlmMutations()
+  const { data: llmReady = false } = useLlmReadyQuery()
   const [generating, setGenerating] = useState(false)
   const { t } = useTranslation()
 
@@ -147,14 +161,12 @@ function WorkflowButtons() {
 }
 
 export function RenderControls() {
-  const {
-    renderEffect,
-    setRenderEffect,
-    updateTextBlocks,
-    availableFonts,
-    fetchAvailableFonts,
-  } = useAppStore()
-  const { fontFamily, setFontFamily } = useConfigStore()
+  const renderEffect = useEditorUiStore((state) => state.renderEffect)
+  const setRenderEffect = useEditorUiStore((state) => state.setRenderEffect)
+  const { updateTextBlocks } = useTextBlockMutations()
+  const { data: availableFonts = [] } = useFontsQuery()
+  const fontFamily = usePreferencesStore((state) => state.fontFamily)
+  const setFontFamily = usePreferencesStore((state) => state.setFontFamily)
   const { textBlocks, selectedBlockIndex, replaceBlock } = useTextBlocks()
   const { t } = useTranslation()
   const selectedBlock =
@@ -184,12 +196,6 @@ export function RenderControls() {
   const currentColor =
     selectedBlock?.style?.color ?? (hasBlocks ? fallbackColor : DEFAULT_COLOR)
   const currentColorHex = colorToHex(currentColor)
-
-  useEffect(() => {
-    if (availableFonts.length === 0) {
-      fetchAvailableFonts()
-    }
-  }, [availableFonts.length, fetchAvailableFonts])
 
   const effects: { value: RenderEffect; label: string }[] = [
     { value: 'normal', label: t('render.effectNormal') },
@@ -316,29 +322,45 @@ export function RenderControls() {
 }
 
 function LlmStatusPopover() {
-  const {
-    llmModels,
-    llmSelectedModel,
-    llmSelectedLanguage,
-    llmReady,
-    llmLoading,
-    llmList,
-    llmSetSelectedModel,
-    llmSetSelectedLanguage,
-    llmToggleLoadUnload,
-    llmCheckReady,
-  } = useAppStore()
+  const { data: llmModels = [] } = useLlmModelsQuery()
+  const llmSelectedModel = useLlmUiStore((state) => state.selectedModel)
+  const llmSelectedLanguage = useLlmUiStore((state) => state.selectedLanguage)
+  const llmLoading = useLlmUiStore((state) => state.loading)
+  const { data: llmReady = false } = useLlmReadyQuery()
+  const { llmSetSelectedModel, llmSetSelectedLanguage, llmToggleLoadUnload } =
+    useLlmMutations()
   const { t } = useTranslation()
 
-  const activeLanguages =
-    llmModels.find((model) => model.id === llmSelectedModel)?.languages ?? []
+  const activeLanguages = useMemo(
+    () =>
+      llmModels.find((model) => model.id === llmSelectedModel)?.languages ?? [],
+    [llmModels, llmSelectedModel],
+  )
 
   useEffect(() => {
-    llmList()
-    llmCheckReady()
-    const interval = setInterval(llmCheckReady, 1500)
-    return () => clearInterval(interval)
-  }, [llmList, llmCheckReady])
+    if (llmModels.length === 0) return
+    const hasCurrent = llmModels.some((model) => model.id === llmSelectedModel)
+    const nextModel = hasCurrent ? llmSelectedModel : llmModels[0]?.id
+    if (!nextModel) return
+    const languages =
+      llmModels.find((model) => model.id === nextModel)?.languages ?? []
+    const nextLanguage =
+      llmSelectedLanguage && languages.includes(llmSelectedLanguage)
+        ? llmSelectedLanguage
+        : languages[0]
+    const currentState = useLlmUiStore.getState()
+    if (
+      currentState.selectedModel === nextModel &&
+      currentState.selectedLanguage === nextLanguage
+    ) {
+      return
+    }
+    useLlmUiStore.setState((state) => ({
+      selectedModel: nextModel,
+      selectedLanguage: nextLanguage,
+      loading: state.loading,
+    }))
+  }, [llmModels, llmSelectedLanguage, llmSelectedModel])
 
   return (
     <Popover>

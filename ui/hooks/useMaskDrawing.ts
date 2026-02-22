@@ -1,8 +1,10 @@
 'use client'
 
-import type React from 'react'
 import { useEffect, useRef } from 'react'
-import { useAppStore, useConfigStore } from '@/lib/store'
+import { useDrag } from '@use-gesture/react'
+import { usePreferencesStore } from '@/lib/stores/preferencesStore'
+import { useEditorUiStore } from '@/lib/stores/editorUiStore'
+import { useMaskMutations } from '@/lib/query/mutations'
 import { blobToUint8Array, convertToImageBitmap } from '@/lib/util'
 import { Document, InpaintRegion, ToolMode } from '@/types'
 import {
@@ -89,10 +91,9 @@ export function useMaskDrawing({
 }: MaskDrawingOptions) {
   const {
     brushConfig: { size: brushSize },
-  } = useConfigStore()
-  const updateMask = useAppStore((state) => state.updateMask)
-  const inpaintPartial = useAppStore((state) => state.inpaintPartial)
-  const currentDocumentIndex = useAppStore(
+  } = usePreferencesStore()
+  const { updateMask, inpaintPartial } = useMaskMutations()
+  const currentDocumentIndex = useEditorUiStore(
     (state) => state.currentDocumentIndex,
   )
   const canvasRef = useRef<HTMLCanvasElement | null>(null)
@@ -282,61 +283,60 @@ export function useMaskDrawing({
     })()
   }
 
-  const handlePointerDown = (event: React.PointerEvent<HTMLCanvasElement>) => {
-    if (!isActive || !currentDocument) return
-    if (event.button !== 0) return
-    const point = pointerToDocument(event)
-    if (!point) return
-    const clamped = clampToDocument(point, currentDocument)
-    event.preventDefault()
-    event.stopPropagation()
-    drawingRef.current = true
-    lastPointRef.current = clamped
-    boundsRef.current = {
-      minX: clamped.x - brushSize / 2,
-      minY: clamped.y - brushSize / 2,
-      maxX: clamped.x + brushSize / 2,
-      maxY: clamped.y + brushSize / 2,
-    }
-    drawStroke(clamped, clamped)
-  }
+  const bind = useDrag(
+    ({ first, last, event, active }) => {
+      if (!isActive || !currentDocument) return
+      const sourceEvent = event as MouseEvent
+      const point = pointerToDocument(sourceEvent)
+      if (!point) {
+        if ((last || !active) && drawingRef.current) {
+          finalizeStroke()
+        }
+        return
+      }
+      const clamped = clampToDocument(point, currentDocument)
 
-  const handlePointerMove = (event: React.PointerEvent<HTMLCanvasElement>) => {
-    if (!drawingRef.current || !isActive || !currentDocument) return
-    const point = pointerToDocument(event)
-    if (!point) return
-    const clamped = clampToDocument(point, currentDocument)
-    event.stopPropagation()
-    const last = lastPointRef.current ?? clamped
-    drawStroke(last, clamped)
-    lastPointRef.current = clamped
-    boundsRef.current = boundsRef.current
-      ? expandBounds(boundsRef.current, clamped, brushSize / 2)
-      : {
+      if (first) {
+        drawingRef.current = true
+        lastPointRef.current = clamped
+        boundsRef.current = {
           minX: clamped.x - brushSize / 2,
           minY: clamped.y - brushSize / 2,
           maxX: clamped.x + brushSize / 2,
           maxY: clamped.y + brushSize / 2,
         }
-  }
+        drawStroke(clamped, clamped)
+        return
+      }
 
-  const handlePointerUp = (event: React.PointerEvent<HTMLCanvasElement>) => {
-    if (!drawingRef.current) return
-    event.stopPropagation()
-    finalizeStroke()
-  }
+      if (!drawingRef.current) return
+      const lastPoint = lastPointRef.current ?? clamped
+      drawStroke(lastPoint, clamped)
+      lastPointRef.current = clamped
+      boundsRef.current = boundsRef.current
+        ? expandBounds(boundsRef.current, clamped, brushSize / 2)
+        : {
+            minX: clamped.x - brushSize / 2,
+            minY: clamped.y - brushSize / 2,
+            maxX: clamped.x + brushSize / 2,
+            maxY: clamped.y + brushSize / 2,
+          }
 
-  const handlePointerLeave = () => {
-    if (!drawingRef.current) return
-    finalizeStroke()
-  }
+      if (last || !active) {
+        finalizeStroke()
+      }
+    },
+    {
+      pointer: { buttons: 1, touch: true },
+      preventDefault: true,
+      filterTaps: true,
+      eventOptions: { passive: false },
+    },
+  )
 
   return {
     canvasRef,
     visible: showMask,
-    handlePointerDown,
-    handlePointerMove,
-    handlePointerUp,
-    handlePointerLeave,
+    bind,
   }
 }

@@ -11,9 +11,10 @@ import {
   BandageIcon,
   PaintbrushIcon,
 } from 'lucide-react'
-import { useAppStore } from '@/lib/store'
 import { cn } from '@/lib/utils'
 import { Button } from '@/components/ui/button'
+import { useEditorUiStore } from '@/lib/stores/editorUiStore'
+import { useCurrentDocumentState } from '@/lib/query/hooks'
 
 type Layer = {
   id: string
@@ -26,19 +27,31 @@ type Layer = {
 }
 
 export function LayersPanel() {
-  const {
-    currentDocument,
-    showInpaintedImage,
-    setShowInpaintedImage,
-    showSegmentationMask,
-    setShowSegmentationMask,
-    showBrushLayer,
-    setShowBrushLayer,
-    showTextBlocksOverlay,
-    setShowTextBlocksOverlay,
-    showRenderedImage,
-    setShowRenderedImage,
-  } = useAppStore()
+  const { currentDocument } = useCurrentDocumentState()
+  const showInpaintedImage = useEditorUiStore(
+    (state) => state.showInpaintedImage,
+  )
+  const setShowInpaintedImage = useEditorUiStore(
+    (state) => state.setShowInpaintedImage,
+  )
+  const showSegmentationMask = useEditorUiStore(
+    (state) => state.showSegmentationMask,
+  )
+  const setShowSegmentationMask = useEditorUiStore(
+    (state) => state.setShowSegmentationMask,
+  )
+  const showBrushLayer = useEditorUiStore((state) => state.showBrushLayer)
+  const setShowBrushLayer = useEditorUiStore((state) => state.setShowBrushLayer)
+  const showTextBlocksOverlay = useEditorUiStore(
+    (state) => state.showTextBlocksOverlay,
+  )
+  const setShowTextBlocksOverlay = useEditorUiStore(
+    (state) => state.setShowTextBlocksOverlay,
+  )
+  const showRenderedImage = useEditorUiStore((state) => state.showRenderedImage)
+  const setShowRenderedImage = useEditorUiStore(
+    (state) => state.setShowRenderedImage,
+  )
 
   const layers: Layer[] = [
     {

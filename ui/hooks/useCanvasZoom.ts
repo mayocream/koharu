@@ -1,9 +1,13 @@
 'use client'
 
-import { useAppStore } from '@/lib/store'
+import { useEditorUiStore } from '@/lib/stores/editorUiStore'
+import { useCurrentDocumentState } from '@/lib/query/hooks'
 
 export function useCanvasZoom() {
-  const { scale, setScale, currentDocument, setAutoFitEnabled } = useAppStore()
+  const scale = useEditorUiStore((state) => state.scale)
+  const setScaleRaw = useEditorUiStore((state) => state.setScale)
+  const setAutoFitEnabled = useEditorUiStore((state) => state.setAutoFitEnabled)
+  const { currentDocument } = useCurrentDocumentState()
 
   const summary = currentDocument
     ? `${currentDocument.width} x ${currentDocument.height}`
@@ -11,7 +15,7 @@ export function useCanvasZoom() {
 
   const applyScale = (value: number) => {
     setAutoFitEnabled(false)
-    setScale(value)
+    setScaleRaw(value)
   }
 
   return {

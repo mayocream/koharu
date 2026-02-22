@@ -5,7 +5,6 @@ import Link from 'next/link'
 import { MinusIcon, SquareIcon, XIcon, CopyIcon } from 'lucide-react'
 import { isTauri, isMacOS, windowControls } from '@/lib/backend'
 import { useTranslation } from 'react-i18next'
-import { useAppStore } from '@/lib/store'
 import { fitCanvasToViewport, resetCanvasScale } from '@/components/Canvas'
 import Image from 'next/image'
 import {
@@ -16,11 +15,13 @@ import {
   MenubarSeparator,
   MenubarTrigger,
 } from '@/components/ui/menubar'
+import { useDocumentMutations } from '@/lib/query/mutations'
 
 type MenuItem = {
   label: string
   onSelect?: () => void | Promise<void>
   disabled?: boolean
+  testId?: string
 }
 
 export function MenuBar() {
@@ -32,12 +33,20 @@ export function MenuBar() {
     inpaintAndRenderImage,
     processAllImages,
     exportDocument,
-  } = useAppStore()
+  } = useDocumentMutations()
 
   const fileMenuItems: MenuItem[] = [
-    { label: t('menu.openFile'), onSelect: openDocuments },
+    {
+      label: t('menu.openFile'),
+      onSelect: openDocuments,
+      testId: 'menu-file-open',
+    },
     // TODO: { label: t('menu.save'), onSelect: saveDocuments },
-    { label: t('menu.export'), onSelect: exportDocument },
+    {
+      label: t('menu.export'),
+      onSelect: exportDocument,
+      testId: 'menu-file-export',
+    },
   ]
 
   const menus: { label: string; items: MenuItem[] }[] = [
@@ -91,7 +100,10 @@ export function MenuBar() {
       {/* Menu items */}
       <Menubar className='h-auto gap-1 border-none bg-transparent p-0 px-1.5 shadow-none'>
         <MenubarMenu>
-          <MenubarTrigger className='hover:bg-accent data-[state=open]:bg-accent rounded px-3 py-1.5 font-medium'>
+          <MenubarTrigger
+            data-testid='menu-file-trigger'
+            className='hover:bg-accent data-[state=open]:bg-accent rounded px-3 py-1.5 font-medium'
+          >
             {t('menu.file')}
           </MenubarTrigger>
           <MenubarContent
@@ -103,6 +115,7 @@ export function MenuBar() {
             {fileMenuItems.map((item) => (
               <MenubarItem
                 key={item.label}
+                data-testid={item.testId}
                 className='text-[13px]'
                 disabled={item.disabled}
                 onSelect={

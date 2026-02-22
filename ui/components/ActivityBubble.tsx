@@ -2,10 +2,11 @@
 
 import { type ReactNode, useEffect } from 'react'
 import { useTranslation } from 'react-i18next'
-import { useAppStore } from '@/lib/store'
 import { useDownloadStore } from '@/lib/downloads'
 import { Button } from '@/components/ui/button'
 import { type OperationState } from '@/lib/operations'
+import { useOperationStore } from '@/lib/stores/operationStore'
+import { useDocumentMutations } from '@/lib/query/mutations'
 
 type TranslateFunc = ReturnType<typeof useTranslation>['t']
 
@@ -190,8 +191,8 @@ function OperationCard({
 
 export function ActivityBubble() {
   const { t } = useTranslation()
-  const operation = useAppStore((state) => state.operation)
-  const cancelOperation = useAppStore((state) => state.cancelOperation)
+  const operation = useOperationStore((state) => state.operation)
+  const { cancelOperation } = useDocumentMutations()
   const downloads = useDownloadStore((s) => s.downloads)
   const ensureSubscribed = useDownloadStore((s) => s.ensureSubscribed)
 
@@ -200,7 +201,7 @@ export function ActivityBubble() {
   }, [ensureSubscribed])
 
   const activeDownloads = Array.from(downloads.values()).filter(
-    (d) => d.status === 'Started' || d.status === 'Downloading',
+    (d) => d.status === 'started' || d.status === 'downloading',
   )
 
   if (!operation && activeDownloads.length === 0) return null

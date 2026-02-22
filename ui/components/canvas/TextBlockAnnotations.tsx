@@ -1,8 +1,8 @@
 'use client'
 
-import { useEffect } from 'react'
 import { Rnd, type RndResizeCallback, type RndDragCallback } from 'react-rnd'
-import { useAppStore } from '@/lib/store'
+import { useHotkeys } from 'react-hotkeys-hook'
+import { useEditorUiStore } from '@/lib/stores/editorUiStore'
 import { TextBlock } from '@/types'
 import { useTextBlocks } from '@/hooks/useTextBlocks'
 
@@ -18,30 +18,26 @@ export function TextBlockAnnotations({
   style,
 }: TextBlockAnnotationsProps) {
   const { textBlocks, replaceBlock, removeBlock } = useTextBlocks()
-  const mode = useAppStore((state) => state.mode)
+  const mode = useEditorUiStore((state) => state.mode)
   const interactive = mode === 'select'
 
-  useEffect(() => {
-    if (!interactive) return
-
-    const handleKeyDown = (event: KeyboardEvent) => {
-      const isDeleteKey = event.key === 'Delete' || event.key === 'Backspace'
-      if (!isDeleteKey) return
-
+  useHotkeys(
+    'backspace,delete',
+    (event) => {
+      if (!interactive || selectedIndex === undefined) return
       const target = event.target as HTMLElement | null
       const isEditable = target?.closest('input, textarea, [contenteditable]')
       if (isEditable) return
-      if (selectedIndex === undefined) return
-
       event.preventDefault()
       void removeBlock(selectedIndex)
-    }
-
-    window.addEventListener('keydown', handleKeyDown)
-    return () => {
-      window.removeEventListener('keydown', handleKeyDown)
-    }
-  }, [interactive, removeBlock, selectedIndex])
+    },
+    {
+      enabled: interactive,
+      preventDefault: true,
+      enableOnFormTags: false,
+    },
+    [interactive, removeBlock, selectedIndex],
+  )
 
   return (
     <div
@@ -84,7 +80,7 @@ function TextBlockAnnotation({
   onSelect,
   onUpdate,
 }: TextBlockAnnotationProps) {
-  const scale = useAppStore((state) => state.scale)
+  const scale = useEditorUiStore((state) => state.scale)
   const scaleRatio = scale / 100
 
   const size = {

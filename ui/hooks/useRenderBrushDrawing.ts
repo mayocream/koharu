@@ -1,7 +1,10 @@
 'use client'
 
 import { useEffect, useRef, type RefObject } from 'react'
-import { useAppStore, useConfigStore } from '@/lib/store'
+import { useDrag } from '@use-gesture/react'
+import { usePreferencesStore } from '@/lib/stores/preferencesStore'
+import { useEditorUiStore } from '@/lib/stores/editorUiStore'
+import { useMaskMutations } from '@/lib/query/mutations'
 import { Document, InpaintRegion, ToolMode } from '@/types'
 import { blobToUint8Array } from '@/lib/util'
 import {
@@ -68,9 +71,9 @@ export function useRenderBrushDrawing({
 }: RenderBrushOptions) {
   const {
     brushConfig: { size: brushSize, color: brushColor },
-  } = useConfigStore()
-  const paintRendered = useAppStore((state) => state.paintRendered)
-  const currentDocumentIndex = useAppStore(
+  } = usePreferencesStore()
+  const { paintRendered } = useMaskMutations()
+  const currentDocumentIndex = useEditorUiStore(
     (state) => state.currentDocumentIndex,
   )
   const canvasRef = useRef<HTMLCanvasElement | null>(null)
@@ -78,7 +81,6 @@ export function useRenderBrushDrawing({
   const drawingRef = useRef(false)
   const lastPointRef = useRef<DocumentPointer | null>(null)
   const boundsRef = useRef<Bounds | null>(null)
-  const paintQueueRef = useRef<Promise<void>>(Promise.resolve())
 
   useEffect(() => {
     const canvas = canvasRef.current
@@ -94,7 +96,6 @@ export function useRenderBrushDrawing({
         drawingRef.current = false
         lastPointRef.current = null
         boundsRef.current = null
-        paintQueueRef.current = Promise.resolve()
       }
     }
 
@@ -112,7 +113,6 @@ export function useRenderBrushDrawing({
       drawingRef.current = false
       lastPointRef.current = null
       boundsRef.current = null
-      paintQueueRef.current = Promise.resolve()
     }
   }, [
     currentDocument?.id,
@@ -181,10 +181,6 @@ export function useRenderBrushDrawing({
     return blobToUint8Array(blob)
   }
 
-  const queuePaint = (task: () => Promise<void>) => {
-    paintQueueRef.current = paintQueueRef.current.catch(() => {}).then(task)
-  }
-
   const finalizeStroke = () => {
     if (!enabled) return
     const strokeBounds = boundsRef.current
@@ -204,78 +200,75 @@ export function useRenderBrushDrawing({
         }
         return
       }
-      queuePaint(async () => {
-        try {
-          await paintRendered(patchBytes, patchRegion, {
-            index: currentDocumentIndex,
-          })
-        } catch (error) {
-          console.error(error)
-        }
-        const canvas = canvasRef.current
-        const ctx = ctxRef.current
-        if (canvas && ctx) {
-          ctx.clearRect(0, 0, canvas.width, canvas.height)
-        }
-      })
+      try {
+        await paintRendered(patchBytes, patchRegion, {
+          index: currentDocumentIndex,
+        })
+      } catch (error) {
+        console.error(error)
+      }
+      const canvas = canvasRef.current
+      const ctx = ctxRef.current
+      if (canvas && ctx) {
+        ctx.clearRect(0, 0, canvas.width, canvas.height)
+      }
     })()
   }
 
-  const handlePointerDown = (event: React.PointerEvent<HTMLCanvasElement>) => {
-    if (!enabled || !currentDocument) return
-    if (event.button !== 0) return
-    const point = pointerToDocument(event)
-    if (!point) return
-    const clamped = clampToDocument(point, currentDocument)
-    event.preventDefault()
-    event.stopPropagation()
-    drawingRef.current = true
-    lastPointRef.current = clamped
-    boundsRef.current = {
-      minX: clamped.x - brushSize / 2,
-      minY: clamped.y - brushSize / 2,
-      maxX: clamped.x + brushSize / 2,
-      maxY: clamped.y + brushSize / 2,
-    }
-    drawStroke(clamped, clamped)
-  }
+  const bind = useDrag(
+    ({ first, last, event, active }) => {
+      if (!enabled || !currentDocument) return
+      const sourceEvent = event as MouseEvent
+      const point = pointerToDocument(sourceEvent)
+      if (!point) {
+        if ((last || !active) && drawingRef.current) {
+          finalizeStroke()
+        }
+        return
+      }
+      const clamped = clampToDocument(point, currentDocument)
 
-  const handlePointerMove = (event: React.PointerEvent<HTMLCanvasElement>) => {
-    if (!enabled || !drawingRef.current || !currentDocument) return
-    const point = pointerToDocument(event)
-    if (!point) return
-    const clamped = clampToDocument(point, currentDocument)
-    event.stopPropagation()
-    const last = lastPointRef.current ?? clamped
-    drawStroke(last, clamped)
-    lastPointRef.current = clamped
-    boundsRef.current = boundsRef.current
-      ? expandBounds(boundsRef.current, clamped, brushSize / 2)
-      : {
+      if (first) {
+        drawingRef.current = true
+        lastPointRef.current = clamped
+        boundsRef.current = {
           minX: clamped.x - brushSize / 2,
           minY: clamped.y - brushSize / 2,
           maxX: clamped.x + brushSize / 2,
           maxY: clamped.y + brushSize / 2,
         }
-  }
+        drawStroke(clamped, clamped)
+        return
+      }
 
-  const handlePointerUp = (event: React.PointerEvent<HTMLCanvasElement>) => {
-    if (!drawingRef.current || !enabled) return
-    event.stopPropagation()
-    finalizeStroke()
-  }
+      if (!drawingRef.current) return
+      const lastPoint = lastPointRef.current ?? clamped
+      drawStroke(lastPoint, clamped)
+      lastPointRef.current = clamped
+      boundsRef.current = boundsRef.current
+        ? expandBounds(boundsRef.current, clamped, brushSize / 2)
+        : {
+            minX: clamped.x - brushSize / 2,
+            minY: clamped.y - brushSize / 2,
+            maxX: clamped.x + brushSize / 2,
+            maxY: clamped.y + brushSize / 2,
+          }
 
-  const handlePointerLeave = () => {
-    if (!drawingRef.current || !enabled) return
-    finalizeStroke()
-  }
+      if (last || !active) {
+        finalizeStroke()
+      }
+    },
+    {
+      pointer: { buttons: 1, touch: true },
+      preventDefault: true,
+      filterTaps: true,
+      eventOptions: { passive: false },
+    },
+  )
 
   return {
     canvasRef,
     visible: enabled,
-    handlePointerDown,
-    handlePointerMove,
-    handlePointerUp,
-    handlePointerLeave,
+    bind,
   }
 }

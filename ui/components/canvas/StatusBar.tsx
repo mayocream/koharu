@@ -13,6 +13,7 @@ export function StatusBar() {
       <div className='flex items-center gap-1.5'>
         <span className='text-muted-foreground'>{t('statusBar.zoom')}</span>
         <Slider
+          data-testid='zoom-slider'
           className='[&_[data-slot=slider-range]]:bg-primary [&_[data-slot=slider-thumb]]:border-primary [&_[data-slot=slider-thumb]]:bg-primary [&_[data-slot=slider-track]]:bg-primary/20 w-44 [&_[data-slot=slider-thumb]]:size-2.5'
           min={10}
           max={100}

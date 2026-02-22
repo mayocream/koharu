@@ -7,7 +7,6 @@ import { ChevronDownIcon, LayersIcon, ALargeSmallIcon } from 'lucide-react'
 import { LayersPanel } from '@/components/panels/LayersPanel'
 import { TextBlocksPanel } from '@/components/panels/TextBlocksPanel'
 import { RenderControls } from '@/components/canvas/CanvasToolbar'
-import { ResizableSidebar } from '@/components/ResizableSidebar'
 import {
   Popover,
   PopoverContent,
@@ -55,50 +54,42 @@ export function Panels() {
   const [layersExpanded, setLayersExpanded] = useState(true)
 
   return (
-    <ResizableSidebar
-      side='right'
-      initialWidth={280}
-      minWidth={200}
-      maxWidth={400}
-      className='border-border bg-muted/50 border-l'
-    >
-      <div className='flex h-full w-full flex-col'>
-        {/* Layers Section */}
-        <div className='flex flex-col'>
-          <Button
-            variant='ghost'
-            onClick={() => setLayersExpanded(!layersExpanded)}
-            className='hover:bg-accent/50 border-border flex h-auto w-full justify-start gap-1.5 rounded-none border-b px-2 py-1.5 text-left'
+    <div className='bg-muted/50 flex h-full w-full flex-col border-l'>
+      {/* Layers Section */}
+      <div className='flex flex-col'>
+        <Button
+          variant='ghost'
+          onClick={() => setLayersExpanded(!layersExpanded)}
+          className='hover:bg-accent/50 border-border flex h-auto w-full justify-start gap-1.5 rounded-none border-b px-2 py-1.5 text-left'
+        >
+          <motion.div
+            animate={{ rotate: layersExpanded ? 0 : -90 }}
+            transition={{ duration: 0.15, ease: 'easeOut' }}
           >
+            <ChevronDownIcon className='text-muted-foreground size-3.5' />
+          </motion.div>
+          <LayersIcon className='size-3.5' />
+          <span className='text-xs font-semibold tracking-wide uppercase'>
+            {t('layers.title')}
+          </span>
+        </Button>
+        <AnimatePresence initial={false}>
+          {layersExpanded && (
             <motion.div
-              animate={{ rotate: layersExpanded ? 0 : -90 }}
-              transition={{ duration: 0.15, ease: 'easeOut' }}
+              initial={{ height: 0, opacity: 0 }}
+              animate={{ height: 'auto', opacity: 1 }}
+              exit={{ height: 0, opacity: 0 }}
+              transition={{ duration: 0.2, ease: 'easeOut' }}
+              className='border-border overflow-hidden border-b'
             >
-              <ChevronDownIcon className='text-muted-foreground size-3.5' />
+              <LayersPanel />
             </motion.div>
-            <LayersIcon className='size-3.5' />
-            <span className='text-xs font-semibold tracking-wide uppercase'>
-              {t('layers.title')}
-            </span>
-          </Button>
-          <AnimatePresence initial={false}>
-            {layersExpanded && (
-              <motion.div
-                initial={{ height: 0, opacity: 0 }}
-                animate={{ height: 'auto', opacity: 1 }}
-                exit={{ height: 0, opacity: 0 }}
-                transition={{ duration: 0.2, ease: 'easeOut' }}
-                className='border-border overflow-hidden border-b'
-              >
-                <LayersPanel />
-              </motion.div>
-            )}
-          </AnimatePresence>
-        </div>
-
-        {/* Text Blocks Section - takes remaining space */}
-        <TextBlocksPanel />
+          )}
+        </AnimatePresence>
       </div>
-    </ResizableSidebar>
+
+      {/* Text Blocks Section - takes remaining space */}
+      <TextBlocksPanel />
+    </div>
   )
 }

@@ -1,8 +1,9 @@
 'use client'
 
-import { useEffect, useRef, useState } from 'react'
+import { useEffect, useRef } from 'react'
 import type React from 'react'
 import * as ScrollAreaPrimitive from '@radix-ui/react-scroll-area'
+import { useGesture } from '@use-gesture/react'
 import {
   ContextMenu,
   ContextMenuContent,
@@ -12,7 +13,6 @@ import {
 import { useTranslation } from 'react-i18next'
 import { listen } from '@/lib/backend'
 import { Image } from '@/components/Image'
-import { useAppStore } from '@/lib/store'
 import {
   setCanvasViewport,
   fitCanvasToViewport,
@@ -29,27 +29,30 @@ import { useTextBlocks } from '@/hooks/useTextBlocks'
 import { useMaskDrawing } from '@/hooks/useMaskDrawing'
 import { useRenderBrushDrawing } from '@/hooks/useRenderBrushDrawing'
 import { useBrushLayerDisplay } from '@/hooks/useBrushLayerDisplay'
+import { useEditorUiStore } from '@/lib/stores/editorUiStore'
+import {
+  resolvePinchMemoScaleRatio,
+  resolvePinchNextScaleRatio,
+} from '@/components/canvas/zoomGestures'
 
 const BRUSH_CURSOR =
   'url(\'data:image/svg+xml,%3Csvg xmlns="http://www.w3.org/2000/svg" width="16" height="16"%3E%3Ccircle cx="8" cy="8" r="4" stroke="black" stroke-width="1.5" fill="white"/%3E%3C/svg%3E\') 8 8, crosshair'
-const HAND_CURSOR_SVG =
-  '<svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="white" stroke="#111" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M18 11V6a2 2 0 0 0-2-2a2 2 0 0 0-2 2"/><path d="M14 10V4a2 2 0 0 0-2-2a2 2 0 0 0-2 2v2"/><path d="M10 10.5V6a2 2 0 0 0-2-2a2 2 0 0 0-2 2v8"/><path d="M18 8a2 2 0 1 1 4 0v6a8 8 0 0 1-8 8h-2c-2.8 0-4.5-.86-5.99-2.34l-3.6-3.6a2 2 0 0 1 2.83-2.82L7 15"/></svg>'
-const HAND_GRAB_CURSOR_SVG =
-  '<svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="white" stroke="#111" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M18 11.5V9a2 2 0 0 0-2-2a2 2 0 0 0-2 2v1.4"/><path d="M14 10V8a2 2 0 0 0-2-2a2 2 0 0 0-2 2v2"/><path d="M10 9.9V9a2 2 0 0 0-2-2a2 2 0 0 0-2 2v5"/><path d="M6 14a2 2 0 0 0-2-2a2 2 0 0 0-2 2"/><path d="M18 11a2 2 0 1 1 4 0v3a8 8 0 0 1-8 8h-4a8 8 0 0 1-8-8 2 2 0 1 1 4 0"/></svg>'
-const HAND_CURSOR = `url("data:image/svg+xml;utf8,${encodeURIComponent(HAND_CURSOR_SVG)}") 12 12, grab`
-const HAND_GRAB_CURSOR = `url("data:image/svg+xml;utf8,${encodeURIComponent(HAND_GRAB_CURSOR_SVG)}") 12 12, grabbing`
 
 export function Workspace() {
-  const {
-    scale,
-    showSegmentationMask,
-    showInpaintedImage,
-    showBrushLayer,
-    showRenderedImage,
-    showTextBlocksOverlay,
-    mode,
-    autoFitEnabled,
-  } = useAppStore()
+  const scale = useEditorUiStore((state) => state.scale)
+  const showSegmentationMask = useEditorUiStore(
+    (state) => state.showSegmentationMask,
+  )
+  const showInpaintedImage = useEditorUiStore(
+    (state) => state.showInpaintedImage,
+  )
+  const showBrushLayer = useEditorUiStore((state) => state.showBrushLayer)
+  const showRenderedImage = useEditorUiStore((state) => state.showRenderedImage)
+  const showTextBlocksOverlay = useEditorUiStore(
+    (state) => state.showTextBlocksOverlay,
+  )
+  const mode = useEditorUiStore((state) => state.mode)
+  const autoFitEnabled = useEditorUiStore((state) => state.autoFitEnabled)
   const {
     document: currentDocument,
     selectedBlockIndex,
@@ -58,27 +61,12 @@ export function Workspace() {
     appendBlock,
     removeBlock,
   } = useTextBlocks()
-  const [ctrlKeyHeld, setCtrlKeyHeld] = useState(false)
-  const [isCtrlPanning, setIsCtrlPanning] = useState(false)
   const viewportRef = useRef<HTMLDivElement | null>(null)
-  const panState = useRef<{
-    pointerId: number
-    startX: number
-    startY: number
-    scrollLeft: number
-    scrollTop: number
-  } | null>(null)
   const { setScale: applyScale } = useCanvasZoom()
   const scaleRatio = scale / 100
   const canvasRef = useRef<HTMLDivElement | null>(null)
   const pointerToDocument = usePointerToDocument(scaleRatio, canvasRef)
-  const {
-    draftBlock,
-    handleMouseDown,
-    handleMouseMove,
-    handleMouseUp,
-    handleMouseLeave,
-  } = useBlockDrafting({
+  const { draftBlock, bind: bindBlockDraft } = useBlockDrafting({
     mode,
     currentDocument,
     pointerToDocument,
@@ -112,6 +100,9 @@ export function Workspace() {
     action: mode === 'eraser' ? 'erase' : 'paint',
     targetCanvasRef: brushLayerDisplay.canvasRef,
   })
+  const blockDraftBindings = bindBlockDraft()
+  const maskBindings = maskDrawing.bind()
+  const brushBindings = brushDrawing.bind()
 
   useEffect(() => {
     if (currentDocument && autoFitEnabled) {
@@ -154,130 +145,95 @@ export function Workspace() {
     }
   }, [currentDocument])
 
-  useEffect(() => {
-    const handleKeyDown = (event: KeyboardEvent) => {
-      if (event.key === 'Control') {
-        setCtrlKeyHeld(true)
-      }
-    }
-    const handleKeyUp = (event: KeyboardEvent) => {
-      if (event.key === 'Control') {
-        setCtrlKeyHeld(false)
-        if (panState.current) {
-          endPan()
+  useGesture(
+    {
+      onDrag: ({ first, movement: [mx, my], memo, cancel, ctrlKey }) => {
+        if (!currentDocument) return memo
+        if (!ctrlKey) {
+          if (first && cancel) cancel()
+          return memo
         }
-      }
-    }
-    window.addEventListener('keydown', handleKeyDown)
-    window.addEventListener('keyup', handleKeyUp)
-    return () => {
-      window.removeEventListener('keydown', handleKeyDown)
-      window.removeEventListener('keyup', handleKeyUp)
-    }
-  }, [])
 
-  const handleCanvasPointerDown = (
+        const viewport = viewportRef.current
+        if (!viewport) return memo
+
+        if (first) {
+          return {
+            scrollLeft: viewport.scrollLeft,
+            scrollTop: viewport.scrollTop,
+          }
+        }
+
+        if (!memo) return memo
+        viewport.scrollLeft = memo.scrollLeft - mx
+        viewport.scrollTop = memo.scrollTop - my
+        return memo
+      },
+      onWheel: ({ ctrlKey, delta: [, dy], event }) => {
+        if (!currentDocument || !ctrlKey) return
+
+        if (event.cancelable) {
+          event.preventDefault()
+        }
+
+        const direction = Math.sign(dy)
+        if (!direction) return
+        const currentScale = useEditorUiStore.getState().scale
+        applyScale(currentScale - direction)
+      },
+      onPinch: ({ canceled, movement: [movementScale], memo }) => {
+        if (!currentDocument || canceled) return memo
+        const memoScaleRatio = resolvePinchMemoScaleRatio(
+          memo,
+          useEditorUiStore.getState().scale / 100,
+        )
+        const nextScaleRatio = resolvePinchNextScaleRatio(
+          memoScaleRatio,
+          movementScale,
+        )
+        applyScale(nextScaleRatio * 100)
+        return memoScaleRatio
+      },
+    },
+    {
+      target: viewportRef,
+      eventOptions: { passive: false },
+      drag: {
+        filterTaps: true,
+      },
+      wheel: {
+        preventDefault: true,
+      },
+      pinch: {
+        threshold: 0.1,
+        enabled: true,
+        pinchOnWheel: false,
+        preventDefault: true,
+        scaleBounds: { min: 0.1, max: 1 },
+        from: () => [useEditorUiStore.getState().scale / 100, 0],
+      },
+    },
+  )
+
+  const handleCanvasPointerDownCapture = (
     event: React.PointerEvent<HTMLDivElement>,
   ) => {
     if (mode !== 'block' && event.target === event.currentTarget) {
       clearSelection()
     }
-    handleMouseDown(event)
   }
 
   const handleCanvasContextMenu = (event: React.MouseEvent<HTMLDivElement>) => {
     handleContextMenu(event)
   }
 
-  const handleWheel = (event: React.WheelEvent<HTMLDivElement>) => {
-    if (!event.ctrlKey || !currentDocument) return
-    event.preventDefault()
-    const direction = Math.sign(event.deltaY)
-    if (!direction) return
-    const step = 5
-    applyScale(scale - direction * step)
-  }
-
-  const startPan = (event: React.PointerEvent<HTMLDivElement>) => {
-    if (!event.ctrlKey || !currentDocument) return false
-    const viewport = viewportRef.current
-    if (!viewport) return false
-    event.preventDefault()
-    event.stopPropagation()
-    panState.current = {
-      pointerId: event.pointerId,
-      startX: event.clientX,
-      startY: event.clientY,
-      scrollLeft: viewport.scrollLeft,
-      scrollTop: viewport.scrollTop,
-    }
-    setIsCtrlPanning(true)
-    viewport.setPointerCapture(event.pointerId)
-    return true
-  }
-
-  const endPan = (pointerId?: number) => {
-    const viewport = viewportRef.current
-    const pan = panState.current
-    const id = pan?.pointerId ?? pointerId
-    if (viewport && id !== undefined && viewport.hasPointerCapture(id)) {
-      viewport.releasePointerCapture(id)
-    }
-    panState.current = null
-    setIsCtrlPanning(false)
-  }
-
-  const handleViewportPointerDown = (
-    event: React.PointerEvent<HTMLDivElement>,
-  ) => {
-    if (startPan(event)) return
-  }
-
-  const handleViewportPointerMove = (
-    event: React.PointerEvent<HTMLDivElement>,
-  ) => {
-    const pan = panState.current
-    const viewport = viewportRef.current
-    if (!pan || pan.pointerId !== event.pointerId || !viewport) return
-    if (!event.ctrlKey) {
-      endPan(event.pointerId)
-      return
-    }
-    event.preventDefault()
-    event.stopPropagation()
-    const deltaX = event.clientX - pan.startX
-    const deltaY = event.clientY - pan.startY
-    viewport.scrollLeft = pan.scrollLeft - deltaX
-    viewport.scrollTop = pan.scrollTop - deltaY
-  }
-
-  const handleViewportPointerUp = (
-    event: React.PointerEvent<HTMLDivElement>,
-  ) => {
-    if (panState.current?.pointerId !== event.pointerId) return
-    event.preventDefault()
-    event.stopPropagation()
-    endPan(event.pointerId)
-  }
-
-  const handleViewportPointerLeave = (
-    event: React.PointerEvent<HTMLDivElement>,
-  ) => {
-    if (panState.current?.pointerId !== event.pointerId) return
-    endPan(event.pointerId)
-  }
-
   const isBrushMode =
     mode === 'brush' || mode === 'repairBrush' || mode === 'eraser'
-  const panCursor =
-    ctrlKeyHeld && currentDocument
-      ? isCtrlPanning
-        ? HAND_GRAB_CURSOR
-        : HAND_CURSOR
-      : undefined
-  const canvasCursor =
-    panCursor ??
-    (isBrushMode ? BRUSH_CURSOR : mode === 'block' ? 'cell' : 'default')
+  const canvasCursor = isBrushMode
+    ? BRUSH_CURSOR
+    : mode === 'block'
+      ? 'cell'
+      : 'default'
 
   const canvasDimensions = currentDocument
     ? {
@@ -297,14 +253,8 @@ export function Workspace() {
               viewportRef.current = el
               setCanvasViewport(el)
             }}
+            data-testid='workspace-viewport'
             className='grid size-full place-content-center-safe'
-            onWheel={handleWheel}
-            onPointerDownCapture={handleViewportPointerDown}
-            onPointerMove={handleViewportPointerMove}
-            onPointerUp={handleViewportPointerUp}
-            onPointerCancel={handleViewportPointerUp}
-            onPointerLeave={handleViewportPointerLeave}
-            style={panCursor ? { cursor: panCursor } : undefined}
           >
             {currentDocument ? (
               <ContextMenu
@@ -318,13 +268,12 @@ export function Workspace() {
                   <div className='grid place-items-center'>
                     <div
                       ref={canvasRef}
+                      data-testid='workspace-canvas'
                       className='border-border bg-card relative rounded border shadow-sm'
                       style={{ ...canvasDimensions, cursor: canvasCursor }}
-                      onPointerDown={handleCanvasPointerDown}
-                      onPointerMove={handleMouseMove}
-                      onPointerUp={handleMouseUp}
-                      onPointerLeave={handleMouseLeave}
+                      onPointerDownCapture={handleCanvasPointerDownCapture}
                       onContextMenuCapture={handleCanvasContextMenu}
+                      {...blockDraftBindings}
                     >
                       <div className='absolute inset-0'>
                         <Image
@@ -342,10 +291,7 @@ export function Workspace() {
                             pointerEvents: maskPointerEnabled ? 'auto' : 'none',
                             transition: 'opacity 120ms ease',
                           }}
-                          onPointerDown={maskDrawing.handlePointerDown}
-                          onPointerMove={maskDrawing.handlePointerMove}
-                          onPointerUp={maskDrawing.handlePointerUp}
-                          onPointerLeave={maskDrawing.handlePointerLeave}
+                          {...maskBindings}
                         />
                         {currentDocument?.inpainted && (
                           <Image
@@ -378,10 +324,7 @@ export function Workspace() {
                             zIndex: 20,
                             transition: 'opacity 120ms ease',
                           }}
-                          onPointerDown={brushDrawing.handlePointerDown}
-                          onPointerMove={brushDrawing.handlePointerMove}
-                          onPointerUp={brushDrawing.handlePointerUp}
-                          onPointerLeave={brushDrawing.handlePointerLeave}
+                          {...brushBindings}
                         />
                         {showTextBlocksOverlay && (
                           <TextBlockSpriteLayer

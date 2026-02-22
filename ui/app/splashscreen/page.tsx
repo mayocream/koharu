@@ -20,9 +20,9 @@ export default function SplashScreen() {
     const unsub = subscribeDownloadProgress((msg: DownloadProgress) => {
       const files = filesRef.current
 
-      if (msg.status === 'Started') {
+      if (msg.status === 'started') {
         files.set(msg.filename, { downloaded: 0, total: msg.total ?? 0 })
-      } else if (msg.status === 'Downloading') {
+      } else if (msg.status === 'downloading') {
         const entry = files.get(msg.filename)
         if (entry) {
           entry.downloaded = msg.downloaded
@@ -51,7 +51,7 @@ export default function SplashScreen() {
 
       // Find current active file (last non-completed)
       const activeFilename =
-        msg.status === 'Started' || msg.status === 'Downloading'
+        msg.status === 'started' || msg.status === 'downloading'
           ? msg.filename
           : null
 

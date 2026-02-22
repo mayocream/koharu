@@ -13,7 +13,18 @@ function getClient(): WsRpcClient {
   if (client) return client
 
   let url: string
-  if (typeof window !== 'undefined' && (window as any).__KOHARU_WS_PORT__) {
+  const isDev = process.env.NODE_ENV === 'development'
+
+  if (isDev) {
+    const proto =
+      typeof location !== 'undefined' && location.protocol === 'https:'
+        ? 'wss:'
+        : 'ws:'
+    url = `${proto}//127.0.0.1:9999/ws`
+  } else if (
+    typeof window !== 'undefined' &&
+    (window as any).__KOHARU_WS_PORT__
+  ) {
     const port = (window as any).__KOHARU_WS_PORT__ as number
     url = `ws://127.0.0.1:${port}/ws`
   } else {

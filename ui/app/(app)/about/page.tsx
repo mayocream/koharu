@@ -11,7 +11,7 @@ import {
 } from 'lucide-react'
 import { ScrollArea } from '@/components/ui/scroll-area'
 import { invoke, isTauri } from '@/lib/backend'
-import { useAppStore } from '@/lib/store'
+import { useDocumentMutations } from '@/lib/query/mutations'
 import Image from 'next/image'
 
 const GITHUB_REPO = 'mayocream/koharu'
@@ -20,7 +20,7 @@ type VersionStatus = 'loading' | 'latest' | 'outdated' | 'error'
 
 export default function AboutPage() {
   const { t } = useTranslation()
-  const { openExternal } = useAppStore()
+  const { openExternal } = useDocumentMutations()
 
   const [appVersion, setAppVersion] = useState<string>()
   const [latestVersion, setLatestVersion] = useState<string>()
