@@ -9,8 +9,8 @@ import {
   Bandage,
   Eraser,
 } from 'lucide-react'
-import { useAppStore, useConfigStore } from '@/lib/store'
-import { ToolMode } from '@/types'
+import { useConfigStore } from '@/lib/store'
+import type { ToolMode } from '@/types'
 import {
   Tooltip,
   TooltipContent,
@@ -24,6 +24,11 @@ import {
 import { Slider } from '@/components/ui/slider'
 import { Button } from '@/components/ui/button'
 import { ColorPicker } from '@/components/ui/color-picker'
+import {
+  selectBrushConfig,
+  selectSetBrushConfig,
+  useAppShallow,
+} from '@/lib/store-selectors'
 
 type ModeDefinition = {
   value: ToolMode
@@ -40,8 +45,10 @@ const MODES: ModeDefinition[] = [
 ]
 
 export function ToolRail() {
-  const mode = useAppStore((state) => state.mode)
-  const setMode = useAppStore((state) => state.setMode)
+  const { mode, setMode } = useAppShallow((state) => ({
+    mode: state.mode,
+    setMode: state.setMode,
+  }))
   const { t } = useTranslation()
 
   return (
@@ -99,10 +106,9 @@ function BrushToolWithPopover({
   isActive: boolean
   onSelect: () => void
 }) {
-  const {
-    brushConfig: { size: brushSize, color: brushColor },
-    setBrushConfig,
-  } = useConfigStore()
+  const { size: brushSize, color: brushColor } =
+    useConfigStore(selectBrushConfig)
+  const setBrushConfig = useConfigStore(selectSetBrushConfig)
   const { t } = useTranslation()
 
   return (

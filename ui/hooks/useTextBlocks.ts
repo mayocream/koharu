@@ -1,7 +1,7 @@
 'use client'
 
 import { useAppStore } from '@/lib/store'
-import { Document, InpaintRegion, TextBlock } from '@/types'
+import type { Document, InpaintRegion, TextBlock } from '@/types'
 
 const TEXT_BLOCK_INPAINT_RADIUS = 12
 

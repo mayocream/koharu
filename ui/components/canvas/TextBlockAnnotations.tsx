@@ -3,7 +3,7 @@
 import { useEffect } from 'react'
 import { Rnd, type RndResizeCallback, type RndDragCallback } from 'react-rnd'
 import { useAppStore } from '@/lib/store'
-import { TextBlock } from '@/types'
+import type { TextBlock } from '@/types'
 import { useTextBlocks } from '@/hooks/useTextBlocks'
 
 type TextBlockAnnotationsProps = {

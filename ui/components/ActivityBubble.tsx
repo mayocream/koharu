@@ -2,44 +2,20 @@
 
 import { type ReactNode, useEffect } from 'react'
 import { useTranslation } from 'react-i18next'
-import { useAppStore } from '@/lib/store'
 import { useDownloadStore } from '@/lib/downloads'
-import { Button } from '@/components/ui/button'
 import { type OperationState } from '@/lib/operations'
+import { Button } from '@/components/ui/button'
+import { ProgressTrack } from '@/components/progress/ProgressTrack'
+import { clampPercent, getActiveDownloads } from '@/lib/download-progress'
+import { selectCancelOperation, selectOperation } from '@/lib/store-selectors'
+import { useAppStore } from '@/lib/store'
 
 type TranslateFunc = ReturnType<typeof useTranslation>['t']
-
-const clampProgress = (value?: number) => {
-  if (typeof value !== 'number' || Number.isNaN(value)) return undefined
-  return Math.max(0, Math.min(100, Math.round(value)))
-}
 
 function BubbleCard({ children }: { children: ReactNode }) {
   return (
     <div className='border-border bg-card/95 rounded-2xl border p-4 shadow-[0_15px_60px_rgba(0,0,0,0.12)] backdrop-blur'>
       {children}
-    </div>
-  )
-}
-
-function ProgressBar({ percent }: { percent?: number }) {
-  return (
-    <div className='mt-3 flex items-center gap-2'>
-      <div className='bg-muted relative h-1.5 flex-1 overflow-hidden rounded-full'>
-        {typeof percent === 'number' ? (
-          <div
-            className='bg-primary h-full rounded-full transition-[width] duration-700 ease-out'
-            style={{ width: `${percent}%` }}
-          />
-        ) : (
-          <div className='activity-progress-indeterminate from-primary/40 via-primary to-primary/40 absolute inset-0 w-1/2 rounded-full bg-linear-to-r' />
-        )}
-      </div>
-      {typeof percent === 'number' && (
-        <span className='text-muted-foreground w-12 text-right text-[11px] font-semibold tabular-nums'>
-          {percent}%
-        </span>
-      )}
     </div>
   )
 }
@@ -64,7 +40,7 @@ function DownloadCard({
           <div className='text-muted-foreground truncate text-xs'>
             {filename}
           </div>
-          <ProgressBar percent={percent} />
+          <ProgressTrack className='mt-3' percent={percent} showPercent />
         </div>
       </div>
     </BubbleCard>
@@ -87,7 +63,7 @@ function OperationCard({
     operation.total > 0
   const currentValue = hasProgressNumbers ? operation.current : undefined
   const total = hasProgressNumbers ? operation.total : undefined
-  const progress = clampProgress(
+  const progress = clampPercent(
     total && typeof currentValue === 'number'
       ? (currentValue / total) * 100
       : undefined,
@@ -99,6 +75,7 @@ function OperationCard({
           Math.floor(currentValue) + (currentValue >= total ? 0 : 1),
         )
       : undefined
+
   const titles: Record<OperationState['type'], string> = {
     'load-khr': t('operations.loadKhr'),
     'save-khr': t('operations.saveKhr'),
@@ -106,6 +83,7 @@ function OperationCard({
     'process-all': t('operations.processAll'),
     'llm-load': t('operations.loadModel'),
   }
+
   const stepLabels: Record<string, string> = {
     detect: t('processing.detect'),
     ocr: t('processing.ocr'),
@@ -117,6 +95,7 @@ function OperationCard({
   const stepLabel = operation.step
     ? (stepLabels[operation.step] ?? operation.step)
     : undefined
+
   const stepText =
     stepLabel && total && typeof displayCurrent === 'number'
       ? t('operations.stepProgress', {
@@ -140,6 +119,7 @@ function OperationCard({
     operation.type === 'process-all'
       ? [stepLabel]
       : [imageText, stepText ?? stepLabel].filter(Boolean)
+
   const subtitle =
     subtitleParts.filter(Boolean).join(' \u00b7 ') || t('operations.inProgress')
 
@@ -166,7 +146,9 @@ function OperationCard({
               </span>
             ) : null}
           </div>
-          <ProgressBar percent={progress} />
+
+          <ProgressTrack className='mt-3' percent={progress} showPercent />
+
           {operation.cancellable && (
             <div className='mt-3 flex justify-end'>
               <Button
@@ -190,18 +172,16 @@ function OperationCard({
 
 export function ActivityBubble() {
   const { t } = useTranslation()
-  const operation = useAppStore((state) => state.operation)
-  const cancelOperation = useAppStore((state) => state.cancelOperation)
-  const downloads = useDownloadStore((s) => s.downloads)
-  const ensureSubscribed = useDownloadStore((s) => s.ensureSubscribed)
+  const operation = useAppStore(selectOperation)
+  const cancelOperation = useAppStore(selectCancelOperation)
+  const downloads = useDownloadStore((state) => state.downloads)
+  const ensureSubscribed = useDownloadStore((state) => state.ensureSubscribed)
 
   useEffect(() => {
     ensureSubscribed()
   }, [ensureSubscribed])
 
-  const activeDownloads = Array.from(downloads.values()).filter(
-    (d) => d.status === 'Started' || d.status === 'Downloading',
-  )
+  const activeDownloads = getActiveDownloads(downloads.values())
 
   if (!operation && activeDownloads.length === 0) return null
 
@@ -210,11 +190,11 @@ export function ActivityBubble() {
       {operation && (
         <OperationCard operation={operation} onCancel={cancelOperation} t={t} />
       )}
-      {activeDownloads.map((d) => (
+      {activeDownloads.map((download) => (
         <DownloadCard
-          key={d.filename}
-          filename={d.filename}
-          percent={d.percent}
+          key={download.filename}
+          filename={download.filename}
+          percent={download.percent}
           t={t}
         />
       ))}

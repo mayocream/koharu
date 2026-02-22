@@ -2,12 +2,24 @@
 
 import { useEffect, useRef, type RefObject } from 'react'
 import { useAppStore, useConfigStore } from '@/lib/store'
-import { Document, InpaintRegion, ToolMode } from '@/types'
+import type { Document, InpaintRegion, ToolMode } from '@/types'
 import { blobToUint8Array } from '@/lib/util'
 import {
   PointerToDocumentFn,
   type DocumentPointer,
 } from '@/hooks/usePointerToDocument'
+import {
+  boundsToRegion,
+  clampToDocument,
+  expandBounds,
+  type Bounds,
+} from '@/hooks/drawing/geometry'
+import { createSerialQueue } from '@/hooks/drawing/serialQueue'
+import {
+  selectBrushConfig,
+  selectCurrentDocumentIndex,
+  selectPaintRendered,
+} from '@/lib/store-selectors'
 
 type RenderBrushOptions = {
   mode: ToolMode
@@ -18,46 +30,6 @@ type RenderBrushOptions = {
   targetCanvasRef?: RefObject<HTMLCanvasElement | null>
 }
 
-type Bounds = {
-  minX: number
-  minY: number
-  maxX: number
-  maxY: number
-}
-
-const clampToDocument = (
-  point: DocumentPointer,
-  doc?: Document,
-): DocumentPointer => {
-  if (!doc) return point
-  return {
-    x: Math.max(0, Math.min(doc.width, point.x)),
-    y: Math.max(0, Math.min(doc.height, point.y)),
-  }
-}
-
-const expandBounds = (bounds: Bounds, point: DocumentPointer, radius: number) =>
-  ({
-    minX: Math.min(bounds.minX, point.x - radius),
-    minY: Math.min(bounds.minY, point.y - radius),
-    maxX: Math.max(bounds.maxX, point.x + radius),
-    maxY: Math.max(bounds.maxY, point.y + radius),
-  }) satisfies Bounds
-
-const boundsToRegion = (bounds: Bounds, doc: Document): InpaintRegion => {
-  const x0 = Math.max(0, Math.floor(bounds.minX))
-  const y0 = Math.max(0, Math.floor(bounds.minY))
-  const x1 = Math.min(doc.width, Math.ceil(bounds.maxX))
-  const y1 = Math.min(doc.height, Math.ceil(bounds.maxY))
-
-  return {
-    x: x0,
-    y: y0,
-    width: Math.max(1, x1 - x0),
-    height: Math.max(1, y1 - y0),
-  }
-}
-
 export function useRenderBrushDrawing({
   mode,
   currentDocument,
@@ -66,19 +38,16 @@ export function useRenderBrushDrawing({
   action,
   targetCanvasRef,
 }: RenderBrushOptions) {
-  const {
-    brushConfig: { size: brushSize, color: brushColor },
-  } = useConfigStore()
-  const paintRendered = useAppStore((state) => state.paintRendered)
-  const currentDocumentIndex = useAppStore(
-    (state) => state.currentDocumentIndex,
-  )
+  const { size: brushSize, color: brushColor } =
+    useConfigStore(selectBrushConfig)
+  const paintRendered = useAppStore(selectPaintRendered)
+  const currentDocumentIndex = useAppStore(selectCurrentDocumentIndex)
   const canvasRef = useRef<HTMLCanvasElement | null>(null)
   const ctxRef = useRef<CanvasRenderingContext2D | null>(null)
   const drawingRef = useRef(false)
   const lastPointRef = useRef<DocumentPointer | null>(null)
   const boundsRef = useRef<Bounds | null>(null)
-  const paintQueueRef = useRef<Promise<void>>(Promise.resolve())
+  const paintQueueRef = useRef(createSerialQueue())
 
   useEffect(() => {
     const canvas = canvasRef.current
@@ -94,7 +63,7 @@ export function useRenderBrushDrawing({
         drawingRef.current = false
         lastPointRef.current = null
         boundsRef.current = null
-        paintQueueRef.current = Promise.resolve()
+        paintQueueRef.current.reset()
       }
     }
 
@@ -112,7 +81,7 @@ export function useRenderBrushDrawing({
       drawingRef.current = false
       lastPointRef.current = null
       boundsRef.current = null
-      paintQueueRef.current = Promise.resolve()
+      paintQueueRef.current.reset()
     }
   }, [
     currentDocument?.id,
@@ -181,10 +150,6 @@ export function useRenderBrushDrawing({
     return blobToUint8Array(blob)
   }
 
-  const queuePaint = (task: () => Promise<void>) => {
-    paintQueueRef.current = paintQueueRef.current.catch(() => {}).then(task)
-  }
-
   const finalizeStroke = () => {
     if (!enabled) return
     const strokeBounds = boundsRef.current
@@ -204,7 +169,7 @@ export function useRenderBrushDrawing({
         }
         return
       }
-      queuePaint(async () => {
+      void paintQueueRef.current.push(async () => {
         try {
           await paintRendered(patchBytes, patchRegion, {
             index: currentDocumentIndex,

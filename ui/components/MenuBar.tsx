@@ -2,12 +2,11 @@
 
 import { useCallback, useEffect, useState } from 'react'
 import Link from 'next/link'
-import { MinusIcon, SquareIcon, XIcon, CopyIcon } from 'lucide-react'
-import { isTauri, isMacOS, windowControls } from '@/lib/backend'
-import { useTranslation } from 'react-i18next'
-import { useAppStore } from '@/lib/store'
-import { fitCanvasToViewport, resetCanvasScale } from '@/components/Canvas'
 import Image from 'next/image'
+import { MinusIcon, SquareIcon, XIcon, CopyIcon } from 'lucide-react'
+import { useTranslation } from 'react-i18next'
+import { isTauri, isMacOS, windowControls } from '@/lib/backend'
+import { fitCanvasToViewport, resetCanvasScale } from '@/components/Canvas'
 import {
   Menubar,
   MenubarContent,
@@ -16,11 +15,31 @@ import {
   MenubarSeparator,
   MenubarTrigger,
 } from '@/components/ui/menubar'
+import { useAppShallow } from '@/lib/store-selectors'
 
 type MenuItem = {
   label: string
   onSelect?: () => void | Promise<void>
   disabled?: boolean
+}
+
+function renderMenuItems(items: MenuItem[]) {
+  return items.map((item) => (
+    <MenubarItem
+      key={item.label}
+      className='text-[13px]'
+      disabled={item.disabled}
+      onSelect={
+        item.onSelect
+          ? () => {
+              void item.onSelect?.()
+            }
+          : undefined
+      }
+    >
+      {item.label}
+    </MenubarItem>
+  ))
 }
 
 export function MenuBar() {
@@ -32,7 +51,14 @@ export function MenuBar() {
     inpaintAndRenderImage,
     processAllImages,
     exportDocument,
-  } = useAppStore()
+  } = useAppShallow((state) => ({
+    openDocuments: state.openDocuments,
+    openExternal: state.openExternal,
+    processImage: state.processImage,
+    inpaintAndRenderImage: state.inpaintAndRenderImage,
+    processAllImages: state.processAllImages,
+    exportDocument: state.exportDocument,
+  }))
 
   const fileMenuItems: MenuItem[] = [
     { label: t('menu.openFile'), onSelect: openDocuments },
@@ -74,10 +100,8 @@ export function MenuBar() {
 
   return (
     <div className='border-border bg-background text-foreground flex h-8 items-center border-b text-[13px]'>
-      {/* macOS traffic lights */}
       {isNativeMacOS && <MacOSControls />}
 
-      {/* Logo */}
       <div className='flex h-full items-center pl-2 select-none'>
         <Image
           src='/icon.png'
@@ -88,7 +112,6 @@ export function MenuBar() {
         />
       </div>
 
-      {/* Menu items */}
       <Menubar className='h-auto gap-1 border-none bg-transparent p-0 px-1.5 shadow-none'>
         <MenubarMenu>
           <MenubarTrigger className='hover:bg-accent data-[state=open]:bg-accent rounded px-3 py-1.5 font-medium'>
@@ -100,22 +123,7 @@ export function MenuBar() {
             sideOffset={5}
             alignOffset={-3}
           >
-            {fileMenuItems.map((item) => (
-              <MenubarItem
-                key={item.label}
-                className='text-[13px]'
-                disabled={item.disabled}
-                onSelect={
-                  item.onSelect
-                    ? () => {
-                        void item.onSelect?.()
-                      }
-                    : undefined
-                }
-              >
-                {item.label}
-              </MenubarItem>
-            ))}
+            {renderMenuItems(fileMenuItems)}
             <MenubarSeparator />
             <MenubarItem className='text-[13px]' asChild>
               <Link href='/settings' prefetch={false}>
@@ -124,6 +132,7 @@ export function MenuBar() {
             </MenubarItem>
           </MenubarContent>
         </MenubarMenu>
+
         {menus.map(({ label, items }) => (
           <MenubarMenu key={label}>
             <MenubarTrigger className='hover:bg-accent data-[state=open]:bg-accent rounded px-3 py-1.5 font-medium'>
@@ -135,25 +144,11 @@ export function MenuBar() {
               sideOffset={5}
               alignOffset={-3}
             >
-              {items.map((item) => (
-                <MenubarItem
-                  key={item.label}
-                  className='text-[13px]'
-                  disabled={item.disabled}
-                  onSelect={
-                    item.onSelect
-                      ? () => {
-                          void item.onSelect?.()
-                        }
-                      : undefined
-                  }
-                >
-                  {item.label}
-                </MenubarItem>
-              ))}
+              {renderMenuItems(items)}
             </MenubarContent>
           </MenubarMenu>
         ))}
+
         <MenubarMenu>
           <MenubarTrigger className='hover:bg-accent data-[state=open]:bg-accent rounded px-3 py-1.5 font-medium'>
             {t('menu.help')}
@@ -164,22 +159,7 @@ export function MenuBar() {
             sideOffset={5}
             alignOffset={-3}
           >
-            {helpMenuItems.map((item) => (
-              <MenubarItem
-                key={item.label}
-                className='text-[13px]'
-                disabled={item.disabled}
-                onSelect={
-                  item.onSelect
-                    ? () => {
-                        void item.onSelect?.()
-                      }
-                    : undefined
-                }
-              >
-                {item.label}
-              </MenubarItem>
-            ))}
+            {renderMenuItems(helpMenuItems)}
             <MenubarSeparator />
             <MenubarItem className='text-[13px]' asChild>
               <Link href='/about' prefetch={false}>
@@ -190,13 +170,11 @@ export function MenuBar() {
         </MenubarMenu>
       </Menubar>
 
-      {/* Draggable region */}
       <div
         data-tauri-drag-region
         className='flex h-full flex-1 items-center justify-center'
       />
 
-      {/* Window controls for Windows */}
       {isWindowsTauri && <WindowControls />}
     </div>
   )
@@ -245,7 +223,6 @@ function WindowControls() {
 
   useEffect(() => {
     void updateMaximized()
-    // Sync maximize state on window resize (snap, double-click titlebar, etc.)
     const onResize = () => void updateMaximized()
     window.addEventListener('resize', onResize)
     return () => window.removeEventListener('resize', onResize)

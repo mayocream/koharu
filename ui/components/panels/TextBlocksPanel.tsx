@@ -3,7 +3,7 @@
 import { useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import { motion } from 'motion/react'
-import { TextBlock } from '@/types'
+import type { TextBlock } from '@/types'
 import { Languages, LoaderCircleIcon } from 'lucide-react'
 import { useTextBlocks } from '@/hooks/useTextBlocks'
 import { useAppStore } from '@/lib/store'
@@ -21,6 +21,7 @@ import {
 } from '@/components/ui/tooltip'
 import { Button } from '@/components/ui/button'
 import { Textarea } from '@/components/ui/textarea'
+import { selectLlmGenerate, selectLlmReady } from '@/lib/store-selectors'
 
 export function TextBlocksPanel() {
   const {
@@ -31,7 +32,8 @@ export function TextBlocksPanel() {
     replaceBlock,
   } = useTextBlocks()
   const { t } = useTranslation()
-  const { llmGenerate, llmReady } = useAppStore()
+  const llmGenerate = useAppStore(selectLlmGenerate)
+  const llmReady = useAppStore(selectLlmReady)
   const [generatingIndex, setGeneratingIndex] = useState<number | null>(null)
 
   if (!document) {

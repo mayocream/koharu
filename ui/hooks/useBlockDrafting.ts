@@ -2,7 +2,7 @@
 
 import { useRef, useState } from 'react'
 import type React from 'react'
-import { Document, TextBlock, ToolMode } from '@/types'
+import type { Document, TextBlock, ToolMode } from '@/types'
 import type {
   PointerToDocumentFn,
   DocumentPointer,

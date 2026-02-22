@@ -65,9 +65,7 @@
   },
   "processing": {
     "detect": "検出",
-    "detectTooltip": "現在のページでテキスト検出を実行",
     "ocr": "OCR",
-    "ocrTooltip": "検出された領域のテキストを認識",
     "render": "レンダー"
   },
   "mask": {
@@ -76,8 +74,7 @@
     "showBrushLayer": "ブラシレイヤーを表示",
     "showRendered": "レンダー済みテキストを表示",
     "showTextBlocks": "テキスト枠を表示",
-    "inpaint": "インペイント",
-    "inpaintTooltip": "インペイントを適用"
+    "inpaint": "インペイント"
   },
   "llm": {
     "title": "LLM",
@@ -95,7 +92,6 @@
     "generating": "生成中...",
     "generateTooltip": "検出されたテキストブロックを翻訳する",
     "render": "レンダー",
-    "renderTooltip": "翻訳をページにレンダー",
     "loadingModel": "LLM モデルを読み込み中",
     "statusReady": "LLM 準備完了",
     "statusIdle": "LLM 未読み込み"

@@ -65,9 +65,7 @@
   },
   "processing": {
     "detect": "Detect",
-    "detectTooltip": "Run text detection on current page",
     "ocr": "OCR",
-    "ocrTooltip": "Recognize text for detected regions",
     "render": "Render"
   },
   "mask": {
@@ -76,8 +74,7 @@
     "showBrushLayer": "Show brush layer",
     "showRendered": "Show rendered text",
     "showTextBlocks": "Show text blocks",
-    "inpaint": "Inpaint",
-    "inpaintTooltip": "Apply inpainting"
+    "inpaint": "Inpaint"
   },
   "llm": {
     "title": "LLM",
@@ -95,7 +92,6 @@
     "generating": "Generating...",
     "generateTooltip": "Generate translations for detected text blocks",
     "render": "Render",
-    "renderTooltip": "Render translations onto the page",
     "loadingModel": "Loading LLM model",
     "statusReady": "LLM Ready",
     "statusIdle": "LLM Not Loaded"
