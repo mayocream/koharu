@@ -24,6 +24,12 @@ type MenuItem = {
   testId?: string
 }
 
+type MenuSection = {
+  label: string
+  items: MenuItem[]
+  triggerTestId?: string
+}
+
 export function MenuBar() {
   const { t } = useTranslation()
   const {
@@ -49,7 +55,7 @@ export function MenuBar() {
     },
   ]
 
-  const menus: { label: string; items: MenuItem[] }[] = [
+  const menus: MenuSection[] = [
     {
       label: t('menu.view'),
       items: [
@@ -59,10 +65,23 @@ export function MenuBar() {
     },
     {
       label: t('menu.process'),
+      triggerTestId: 'menu-process-trigger',
       items: [
-        { label: t('menu.processCurrent'), onSelect: processImage },
-        { label: t('menu.redoInpaintRender'), onSelect: inpaintAndRenderImage },
-        { label: t('menu.processAll'), onSelect: processAllImages },
+        {
+          label: t('menu.processCurrent'),
+          onSelect: processImage,
+          testId: 'menu-process-current',
+        },
+        {
+          label: t('menu.redoInpaintRender'),
+          onSelect: inpaintAndRenderImage,
+          testId: 'menu-process-rerender',
+        },
+        {
+          label: t('menu.processAll'),
+          onSelect: processAllImages,
+          testId: 'menu-process-all',
+        },
       ],
     },
   ]
@@ -137,9 +156,12 @@ export function MenuBar() {
             </MenubarItem>
           </MenubarContent>
         </MenubarMenu>
-        {menus.map(({ label, items }) => (
+        {menus.map(({ label, items, triggerTestId }) => (
           <MenubarMenu key={label}>
-            <MenubarTrigger className='hover:bg-accent data-[state=open]:bg-accent rounded px-3 py-1.5 font-medium'>
+            <MenubarTrigger
+              data-testid={triggerTestId}
+              className='hover:bg-accent data-[state=open]:bg-accent rounded px-3 py-1.5 font-medium'
+            >
               {label}
             </MenubarTrigger>
             <MenubarContent
@@ -151,6 +173,7 @@ export function MenuBar() {
               {items.map((item) => (
                 <MenubarItem
                   key={item.label}
+                  data-testid={item.testId}
                   className='text-[13px]'
                   disabled={item.disabled}
                   onSelect={

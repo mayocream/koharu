@@ -15,8 +15,18 @@ export type NamedFontPrediction = {
   serif: boolean
 }
 
+export type TextDirection = 'Horizontal' | 'Vertical'
+
 export type FontPrediction = {
+  top_fonts: [number, number][]
   named_fonts: NamedFontPrediction[]
+  direction: TextDirection
+  text_color: [number, number, number]
+  stroke_color: [number, number, number]
+  font_size_px: number
+  stroke_width_px: number
+  line_height: number
+  angle_deg: number
 }
 
 export type TextStyle = {

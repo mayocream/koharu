@@ -146,7 +146,18 @@ function OperationCard({
 
   return (
     <BubbleCard>
-      <div className='flex items-start gap-3'>
+      <div
+        data-testid='operation-card'
+        data-operation-type={operation.type}
+        data-cancel-requested={operation.cancelRequested ? 'true' : 'false'}
+        data-current={
+          typeof operation.current === 'number' ? String(operation.current) : ''
+        }
+        data-total={
+          typeof operation.total === 'number' ? String(operation.total) : ''
+        }
+        className='flex items-start gap-3'
+      >
         <div className='bg-primary mt-1 h-2.5 w-2.5 rounded-full shadow-[0_0_0_6px_hsl(var(--primary)/0.16)]' />
         <div className='flex-1'>
           <div className='flex items-start justify-between gap-2'>
@@ -171,6 +182,7 @@ function OperationCard({
           {operation.cancellable && (
             <div className='mt-3 flex justify-end'>
               <Button
+                data-testid='operation-cancel'
                 variant='outline'
                 size='sm'
                 onClick={onCancel}

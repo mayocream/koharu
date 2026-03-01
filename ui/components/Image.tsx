@@ -2,7 +2,11 @@
 
 import type { CSSProperties } from 'react'
 import { useCallback, useEffect, useRef, useState } from 'react'
-import { convertToBlob } from '@/lib/util'
+import {
+  cancelObjectUrlRevoke,
+  convertToBlob,
+  revokeObjectUrlLater,
+} from '@/lib/util'
 
 type ImageProps = {
   data?: Uint8Array
@@ -38,8 +42,9 @@ export function Image({
       }
       const blob = convertToBlob(data)
       const url = URL.createObjectURL(blob)
+      cancelObjectUrlRevoke(url)
       setPlainSrc(url)
-      return () => URL.revokeObjectURL(url)
+      return () => revokeObjectUrlLater(url)
     }
     setPlainSrc(null)
     return
@@ -76,7 +81,7 @@ export function Image({
   const nextSrcRef = useRef<string | null>(null)
 
   const cleanupUrl = useCallback((url: string | null) => {
-    if (url) URL.revokeObjectURL(url)
+    revokeObjectUrlLater(url)
   }, [])
 
   useEffect(() => {
@@ -123,6 +128,7 @@ export function Image({
 
     const blob = convertToBlob(data)
     const objectUrl = URL.createObjectURL(blob)
+    cancelObjectUrlRevoke(objectUrl)
     let cancelled = false
 
     const preload = new window.Image()

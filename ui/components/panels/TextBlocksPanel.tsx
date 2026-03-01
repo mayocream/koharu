@@ -59,11 +59,20 @@ export function TextBlocksPanel() {
   }
 
   return (
-    <div className='flex min-h-0 flex-1 flex-col'>
+    <div
+      className='flex min-h-0 flex-1 flex-col'
+      data-testid='panels-textblocks'
+    >
       <div className='border-border text-muted-foreground flex items-center justify-between border-b px-2 py-1.5 text-xs font-semibold tracking-wide uppercase'>
-        <span>{t('textBlocks.title', { count: textBlocks.length })}</span>
+        <span data-testid='textblocks-count' data-count={textBlocks.length}>
+          {t('textBlocks.title', { count: textBlocks.length })}
+        </span>
       </div>
-      <ScrollArea className='min-h-0 flex-1' viewportClassName='pb-1'>
+      <ScrollArea
+        className='min-h-0 flex-1'
+        viewportClassName='pb-1'
+        data-testid='textblocks-scroll'
+      >
         <div className='p-2'>
           {textBlocks.length === 0 ? (
             <p className='border-border text-muted-foreground rounded border border-dashed p-2 text-xs'>
@@ -71,6 +80,7 @@ export function TextBlocksPanel() {
             </p>
           ) : (
             <Accordion
+              data-testid='textblocks-accordion'
               type='single'
               collapsible
               value={accordionValue}
@@ -129,6 +139,7 @@ function BlockCard({
 
   return (
     <motion.div
+      data-testid={`textblock-card-${index}`}
       initial={{ opacity: 0, y: 8 }}
       animate={{ opacity: 1, y: 0 }}
       transition={{ duration: 0.2, delay: index * 0.03 }}
@@ -180,6 +191,7 @@ function BlockCard({
                 {t('textBlocks.ocrLabel')}
               </span>
               <Textarea
+                data-testid={`textblock-ocr-${index}`}
                 value={block.text ?? ''}
                 placeholder={t('textBlocks.addOcrPlaceholder')}
                 rows={2}
@@ -195,6 +207,7 @@ function BlockCard({
                 <Tooltip>
                   <TooltipTrigger asChild>
                     <Button
+                      data-testid={`textblock-generate-${index}`}
                       variant='ghost'
                       size='icon-xs'
                       disabled={!llmReady || generating}
@@ -214,6 +227,7 @@ function BlockCard({
                 </Tooltip>
               </div>
               <Textarea
+                data-testid={`textblock-translation-${index}`}
                 value={block.translation ?? ''}
                 placeholder={t('textBlocks.addTranslationPlaceholder')}
                 rows={2}

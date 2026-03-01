@@ -21,7 +21,9 @@ export function StatusBar() {
           value={[scale]}
           onValueChange={(v) => setScale(v[0] ?? scale)}
         />
-        <span className='w-10 text-right tabular-nums'>{scale}%</span>
+        <span data-testid='zoom-value' className='w-10 text-right tabular-nums'>
+          {scale}%
+        </span>
       </div>
       <span className='text-muted-foreground ml-auto text-[11px]'>
         {t('statusBar.canvas')}: {summary}

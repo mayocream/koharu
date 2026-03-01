@@ -283,6 +283,7 @@ export function Workspace() {
                         />
                         <canvas
                           ref={maskDrawing.canvasRef}
+                          data-testid='workspace-mask-canvas'
                           className='absolute inset-0 z-20'
                           style={{
                             width: '100%',
@@ -295,12 +296,14 @@ export function Workspace() {
                         />
                         {currentDocument?.inpainted && (
                           <Image
+                            data-testid='workspace-inpainted-image'
                             data={currentDocument.inpainted}
                             visible={showInpaintedImage}
                           />
                         )}
                         <canvas
                           ref={brushLayerDisplay.canvasRef}
+                          data-testid='workspace-brush-display-canvas'
                           className='absolute inset-0'
                           style={{
                             width: '100%',
@@ -313,6 +316,7 @@ export function Workspace() {
                         />
                         <canvas
                           ref={brushDrawing.canvasRef}
+                          data-testid='workspace-brush-canvas'
                           className='absolute inset-0'
                           style={{
                             width: '100%',
@@ -343,6 +347,7 @@ export function Workspace() {
                         )}
                         {currentDocument?.rendered && showRenderedImage && (
                           <Image
+                            data-testid='workspace-rendered-image'
                             data={currentDocument?.rendered}
                             style={{ zIndex: 40 }}
                           />

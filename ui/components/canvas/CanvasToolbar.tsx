@@ -115,14 +115,19 @@ function WorkflowButtons() {
 
   return (
     <div className='flex items-center gap-0.5'>
-      <Button variant='ghost' size='xs' onClick={detect}>
+      <Button
+        variant='ghost'
+        size='xs'
+        onClick={detect}
+        data-testid='toolbar-detect'
+      >
         <ScanIcon className='size-4' />
         {t('processing.detect')}
       </Button>
 
       <Separator orientation='vertical' className='mx-0.5 h-4' />
 
-      <Button variant='ghost' size='xs' onClick={ocr}>
+      <Button variant='ghost' size='xs' onClick={ocr} data-testid='toolbar-ocr'>
         <ScanTextIcon className='size-4' />
         {t('processing.ocr')}
       </Button>
@@ -134,6 +139,7 @@ function WorkflowButtons() {
         size='xs'
         onClick={handleTranslate}
         disabled={!llmReady || generating}
+        data-testid='toolbar-translate'
       >
         {generating ? (
           <LoaderCircleIcon className='size-4 animate-spin' />
@@ -145,14 +151,24 @@ function WorkflowButtons() {
 
       <Separator orientation='vertical' className='mx-0.5 h-4' />
 
-      <Button variant='ghost' size='xs' onClick={inpaint}>
+      <Button
+        variant='ghost'
+        size='xs'
+        onClick={inpaint}
+        data-testid='toolbar-inpaint'
+      >
         <Wand2Icon className='size-4' />
         {t('mask.inpaint')}
       </Button>
 
       <Separator orientation='vertical' className='mx-0.5 h-4' />
 
-      <Button variant='ghost' size='xs' onClick={render}>
+      <Button
+        variant='ghost'
+        size='xs'
+        onClick={render}
+        data-testid='toolbar-render'
+      >
         <TypeIcon className='size-4' />
         {t('llm.render')}
       </Button>
@@ -263,6 +279,7 @@ export function RenderControls() {
         disabled={fontOptions.length === 0}
       >
         <SelectTrigger
+          data-testid='render-font-select'
           size='sm'
           className='h-8 w-32 text-sm'
           style={currentFont ? { fontFamily: currentFont } : undefined}
@@ -270,8 +287,13 @@ export function RenderControls() {
           <SelectValue placeholder={t('render.fontPlaceholder')} />
         </SelectTrigger>
         <SelectContent position='popper'>
-          {fontOptions.map((font) => (
-            <SelectItem key={font} value={font} style={{ fontFamily: font }}>
+          {fontOptions.map((font, index) => (
+            <SelectItem
+              key={font}
+              value={font}
+              style={{ fontFamily: font }}
+              data-testid={`render-font-option-${index}`}
+            >
               {font}
             </SelectItem>
           ))}
@@ -284,6 +306,9 @@ export function RenderControls() {
             <ColorPicker
               value={currentColorHex}
               disabled={!hasBlocks}
+              triggerTestId='render-color-trigger'
+              pickerTestId='render-color-picker'
+              swatchTestId='render-color-swatch'
               onChange={(hex) => {
                 const nextColor = hexToColor(hex, currentColor[3] ?? 255)
                 if (applyStyleToSelected({ color: nextColor })) return
@@ -306,12 +331,20 @@ export function RenderControls() {
           setRenderEffect(nextEffect)
         }}
       >
-        <SelectTrigger size='sm' className='h-8 w-28 text-sm'>
+        <SelectTrigger
+          data-testid='render-effect-select'
+          size='sm'
+          className='h-8 w-28 text-sm'
+        >
           <SelectValue />
         </SelectTrigger>
         <SelectContent position='popper'>
-          {effects.map((effect) => (
-            <SelectItem key={effect.value} value={effect.value}>
+          {effects.map((effect, index) => (
+            <SelectItem
+              key={effect.value}
+              value={effect.value}
+              data-testid={`render-effect-option-${index}`}
+            >
               {effect.label}
             </SelectItem>
           ))}
@@ -366,6 +399,9 @@ function LlmStatusPopover() {
     <Popover>
       <PopoverTrigger asChild>
         <button
+          data-testid='llm-trigger'
+          data-llm-ready={llmReady ? 'true' : 'false'}
+          data-llm-loading={llmLoading ? 'true' : 'false'}
           className={`flex h-6 cursor-pointer items-center gap-1.5 rounded-full px-2.5 text-[11px] font-medium shadow-sm transition hover:opacity-80 ${
             llmReady
               ? 'bg-rose-400 text-white ring-1 ring-rose-400/30'
@@ -386,7 +422,7 @@ function LlmStatusPopover() {
           LLM
         </button>
       </PopoverTrigger>
-      <PopoverContent align='end' className='w-72'>
+      <PopoverContent align='end' className='w-72' data-testid='llm-popover'>
         <div className='space-y-3 text-sm'>
           <p className='text-muted-foreground text-xs font-medium uppercase'>
             {t('panels.llm')}
@@ -394,12 +430,16 @@ function LlmStatusPopover() {
 
           {/* Model selector */}
           <Select value={llmSelectedModel} onValueChange={llmSetSelectedModel}>
-            <SelectTrigger className='w-full'>
+            <SelectTrigger data-testid='llm-model-select' className='w-full'>
               <SelectValue placeholder={t('llm.selectPlaceholder')} />
             </SelectTrigger>
             <SelectContent position='popper'>
-              {llmModels.map((model) => (
-                <SelectItem key={model.id} value={model.id}>
+              {llmModels.map((model, index) => (
+                <SelectItem
+                  key={model.id}
+                  value={model.id}
+                  data-testid={`llm-model-option-${index}`}
+                >
                   {model.id}
                 </SelectItem>
               ))}
@@ -412,12 +452,19 @@ function LlmStatusPopover() {
               value={llmSelectedLanguage ?? activeLanguages[0]}
               onValueChange={llmSetSelectedLanguage}
             >
-              <SelectTrigger className='w-full'>
+              <SelectTrigger
+                data-testid='llm-language-select'
+                className='w-full'
+              >
                 <SelectValue placeholder={t('llm.languagePlaceholder')} />
               </SelectTrigger>
               <SelectContent position='popper'>
-                {activeLanguages.map((language) => (
-                  <SelectItem key={language} value={language}>
+                {activeLanguages.map((language, index) => (
+                  <SelectItem
+                    key={language}
+                    value={language}
+                    data-testid={`llm-language-option-${index}`}
+                  >
                     {language}
                   </SelectItem>
                 ))}
@@ -427,6 +474,9 @@ function LlmStatusPopover() {
 
           {/* Load/Unload button */}
           <Button
+            data-testid='llm-load-toggle'
+            data-llm-ready={llmReady ? 'true' : 'false'}
+            data-llm-loading={llmLoading ? 'true' : 'false'}
             variant='outline'
             size='sm'
             onClick={llmToggleLoadUnload}

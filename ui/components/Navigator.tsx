@@ -7,6 +7,8 @@ import { useDocumentsCountQuery, useThumbnailQuery } from '@/lib/query/hooks'
 import { useEditorUiStore } from '@/lib/stores/editorUiStore'
 import { Button } from '@/components/ui/button'
 import { ScrollArea } from '@/components/ui/scroll-area'
+import { flushTextBlockSync } from '@/lib/services/syncQueues'
+import { cancelObjectUrlRevoke, revokeObjectUrlLater } from '@/lib/util'
 
 export function Navigator() {
   const { data: totalPagesData = 0 } = useDocumentsCountQuery()
@@ -93,7 +95,13 @@ export function Navigator() {
                     index={idx}
                     documentsVersion={documentsVersion}
                     selected={idx === currentDocumentIndex}
-                    onSelect={() => setCurrentDocumentIndex(idx)}
+                    onSelect={() => {
+                      void flushTextBlockSync()
+                        .catch(() => {})
+                        .finally(() => {
+                          setCurrentDocumentIndex(idx)
+                        })
+                    }}
                   />
                 </div>
               )
@@ -131,9 +139,10 @@ function PagePreview({
       return
     }
     const url = URL.createObjectURL(thumbnailBlob)
+    cancelObjectUrlRevoke(url)
     setPreview(url)
     return () => {
-      URL.revokeObjectURL(url)
+      revokeObjectUrlLater(url)
     }
   }, [thumbnailBlob])
 

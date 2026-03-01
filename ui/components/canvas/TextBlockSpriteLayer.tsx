@@ -2,7 +2,11 @@
 
 import { useEffect, useState } from 'react'
 import { TextBlock } from '@/types'
-import { convertToBlob } from '@/lib/util'
+import {
+  cancelObjectUrlRevoke,
+  convertToBlob,
+  revokeObjectUrlLater,
+} from '@/lib/util'
 
 type TextBlockSpriteLayerProps = {
   blocks?: TextBlock[]
@@ -61,9 +65,10 @@ function TextBlockSprite({
     }
     const blob = convertToBlob(sprite)
     const objectUrl = URL.createObjectURL(blob)
+    cancelObjectUrlRevoke(objectUrl)
     setSrc(objectUrl)
     return () => {
-      URL.revokeObjectURL(objectUrl)
+      revokeObjectUrlLater(objectUrl)
     }
   }, [sprite])
 

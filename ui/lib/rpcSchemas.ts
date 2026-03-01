@@ -75,6 +75,36 @@ export const textStyleSchema = z.object({
   effect: fromRustOption(renderEffectSchema),
 })
 
+const namedFontPredictionSchema = z.object({
+  index: z.number(),
+  name: z.string(),
+  language: fromRustOption(z.string()),
+  probability: z.number(),
+  serif: z.boolean(),
+})
+
+const fontPredictionSchema = z
+  .object({
+    top_fonts: z.array(z.tuple([z.number(), z.number()])),
+    named_fonts: z.array(namedFontPredictionSchema),
+    direction: z.enum(['Horizontal', 'Vertical']),
+    text_color: z.tuple([
+      z.number().int().min(0).max(255),
+      z.number().int().min(0).max(255),
+      z.number().int().min(0).max(255),
+    ]),
+    stroke_color: z.tuple([
+      z.number().int().min(0).max(255),
+      z.number().int().min(0).max(255),
+      z.number().int().min(0).max(255),
+    ]),
+    font_size_px: z.number(),
+    stroke_width_px: z.number(),
+    line_height: z.number(),
+    angle_deg: z.number(),
+  })
+  .passthrough()
+
 export const textBlockSchema = z.object({
   x: z.number(),
   y: z.number(),
@@ -84,19 +114,7 @@ export const textBlockSchema = z.object({
   text: fromRustOption(z.string()),
   translation: fromRustOption(z.string()),
   style: fromRustOption(textStyleSchema),
-  fontPrediction: fromRustOption(
-    z.object({
-      named_fonts: z.array(
-        z.object({
-          index: z.number(),
-          name: z.string(),
-          language: fromRustOption(z.string()),
-          probability: z.number(),
-          serif: z.boolean(),
-        }),
-      ),
-    }),
-  ),
+  fontPrediction: fromRustOption(fontPredictionSchema),
   rendered: fromRustOption(uint8ArraySchema),
 })
 

@@ -124,6 +124,9 @@ function LayerItem({ layer }: { layer: Layer }) {
 
   return (
     <motion.div
+      data-testid={`layer-${layer.id}`}
+      data-has-content={layer.hasContent ? 'true' : 'false'}
+      data-visible={layer.visible ? 'true' : 'false'}
       className={cn(
         'group flex items-center gap-2 px-2 py-1.5',
         !layer.hasContent && !isLocked && 'opacity-40',

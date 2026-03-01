@@ -30,14 +30,40 @@ type ModeDefinition = {
   value: ToolMode
   icon: ComponentType<{ className?: string }>
   labelKey: string
+  testId: string
 }
 
 const MODES: ModeDefinition[] = [
-  { labelKey: 'toolRail.select', value: 'select', icon: MousePointer },
-  { labelKey: 'toolRail.block', value: 'block', icon: VectorSquare },
-  { labelKey: 'toolRail.brush', value: 'brush', icon: Brush },
-  { labelKey: 'toolRail.eraser', value: 'eraser', icon: Eraser },
-  { labelKey: 'toolRail.repairBrush', value: 'repairBrush', icon: Bandage },
+  {
+    labelKey: 'toolRail.select',
+    value: 'select',
+    icon: MousePointer,
+    testId: 'tool-select',
+  },
+  {
+    labelKey: 'toolRail.block',
+    value: 'block',
+    icon: VectorSquare,
+    testId: 'tool-block',
+  },
+  {
+    labelKey: 'toolRail.brush',
+    value: 'brush',
+    icon: Brush,
+    testId: 'tool-brush',
+  },
+  {
+    labelKey: 'toolRail.eraser',
+    value: 'eraser',
+    icon: Eraser,
+    testId: 'tool-eraser',
+  },
+  {
+    labelKey: 'toolRail.repairBrush',
+    value: 'repairBrush',
+    icon: Bandage,
+    testId: 'tool-repairBrush',
+  },
 ]
 
 export function ToolRail() {
@@ -70,6 +96,7 @@ export function ToolRail() {
                 <Button
                   variant='ghost'
                   size='icon-sm'
+                  data-testid={item.testId}
                   data-active={item.value === mode}
                   onClick={() => setMode(item.value)}
                   className='text-muted-foreground data-[active=true]:border-primary data-[active=true]:bg-accent data-[active=true]:text-primary border border-transparent'
@@ -114,6 +141,7 @@ function BrushToolWithPopover({
             <Button
               variant='ghost'
               size='icon-sm'
+              data-testid={item.testId}
               data-active={isActive}
               onClick={onSelect}
               className='text-muted-foreground data-[active=true]:border-primary data-[active=true]:bg-accent data-[active=true]:text-primary border border-transparent'
@@ -135,6 +163,7 @@ function BrushToolWithPopover({
             </p>
             <div className='flex items-center gap-2'>
               <Slider
+                data-testid='brush-size-slider'
                 className='[&_[data-slot=slider-range]]:bg-primary [&_[data-slot=slider-thumb]]:border-primary [&_[data-slot=slider-thumb]]:bg-primary [&_[data-slot=slider-track]]:bg-primary/20 flex-1 [&_[data-slot=slider-thumb]]:size-3'
                 min={8}
                 max={128}
@@ -158,6 +187,9 @@ function BrushToolWithPopover({
                 value={brushColor}
                 onChange={(color) => setBrushConfig({ color })}
                 className='h-8 w-8'
+                triggerTestId='brush-color-trigger'
+                pickerTestId='brush-color-picker'
+                swatchTestId='brush-color-swatch'
               />
               <span className='text-muted-foreground text-xs'>
                 {brushColor}

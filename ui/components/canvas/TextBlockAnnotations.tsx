@@ -41,6 +41,7 @@ export function TextBlockAnnotations({
 
   return (
     <div
+      data-testid='workspace-annotations'
       className='absolute inset-0'
       data-annotation-layer
       style={{

@@ -31,6 +31,7 @@ export function PanelsToolbar() {
               <Button
                 variant='ghost'
                 size='icon-sm'
+                data-testid='render-controls-trigger'
                 className='text-muted-foreground'
               >
                 <ALargeSmallIcon className='size-4' />
@@ -41,7 +42,12 @@ export function PanelsToolbar() {
             {t('render.fontLabel')}
           </TooltipContent>
         </Tooltip>
-        <PopoverContent side='left' align='start' className='w-auto p-3'>
+        <PopoverContent
+          side='left'
+          align='start'
+          className='w-auto p-3'
+          data-testid='render-controls-popover'
+        >
           <RenderControls />
         </PopoverContent>
       </Popover>
@@ -56,7 +62,7 @@ export function Panels() {
   return (
     <div className='bg-muted/50 flex h-full w-full flex-col border-l'>
       {/* Layers Section */}
-      <div className='flex flex-col'>
+      <div className='flex flex-col' data-testid='panels-layers'>
         <Button
           variant='ghost'
           onClick={() => setLayersExpanded(!layersExpanded)}
@@ -76,6 +82,7 @@ export function Panels() {
         <AnimatePresence initial={false}>
           {layersExpanded && (
             <motion.div
+              data-testid='panels-layers-content'
               initial={{ height: 0, opacity: 0 }}
               animate={{ height: 'auto', opacity: 1 }}
               exit={{ height: 0, opacity: 0 }}
