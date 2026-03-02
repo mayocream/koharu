@@ -73,7 +73,7 @@ flate2 = { version = "1.0", default-features = false, features = [
     "zlib-ng-compat",
 ] }
 csv = "1.3"
-tempfile = "3.24"
+tempfile = "3.26"
 once_cell = "1.21"
 libloading = "0.9"
 num_cpus = "1.17"
