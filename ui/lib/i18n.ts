@@ -11,7 +11,6 @@ import zhTW from '@/public/locales/zh-TW/translation.json'
 import jaJP from '@/public/locales/ja-JP/translation.json'
 import ruRU from '@/public/locales/ru-RU/translation.json'
 
-
 const resources = {
   'en-US': { translation: enUS },
   'zh-CN': { translation: zhCN },
