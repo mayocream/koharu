@@ -636,7 +636,7 @@ dependencies = [
  "candle-kernels",
  "candle-metal-kernels",
  "candle-ug",
- "cudarc 0.19.2",
+ "cudarc 0.19.3",
  "float8 0.6.0",
  "gemm 0.19.0",
  "half",
@@ -1285,9 +1285,9 @@ dependencies = [
 
 [[package]]
 name = "cudarc"
-version = "0.19.2"
+version = "0.19.3"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "aed81f178e780f3d5d354d12b4c5c5a484c4a9c329ecd037ac57f2a0e0648397"
+checksum = "6468cb7fa330840f3ebcd8df51edc0e7bf5c18df524792ce6004c6821851cdf3"
 dependencies = [
  "float8 0.7.0",
  "half",
@@ -1888,7 +1888,7 @@ name = "float8"
 version = "0.6.0"
 source = "git+https://github.com/mayocream/float8?branch=cuda-dynamic-loading#9353498bb3fcf9b5de6fdb9c79e4e23521496bc1"
 dependencies = [
- "cudarc 0.19.2",
+ "cudarc 0.19.3",
  "half",
  "num-traits",
  "rand 0.9.2",
@@ -3976,7 +3976,7 @@ dependencies = [
  "candle-nn",
  "candle-transformers",
  "clap",
- "cudarc 0.19.2",
+ "cudarc 0.19.3",
  "dirs",
  "futures",
  "image",
