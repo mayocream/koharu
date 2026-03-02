@@ -1,0 +1,179 @@
+{
+  "common": {
+    "initializing": "Инициализация..."
+  },
+  "menu": {
+    "file": "Файл",
+    "openFile": "Открыть файл...",
+    "save": "Сохранить...",
+    "export": "Экспортировать...",
+    "view": "Вид",
+    "fitWindow": "По размеру окна",
+    "originalSize": "Исходный размер",
+    "process": "Обработка",
+    "processCurrent": "Обработать текущее изображение",
+    "redoInpaintRender": "Повторить инпейнтинг и рендер",
+    "processAll": "Обработать все изображения",
+    "help": "Справка",
+    "settings": "Настройки",
+    "discord": "Discord",
+    "github": "GitHub",
+    "version": "Версия: {{version}}",
+    "versionUnknown": "Версия: Неизвестно",
+    "language": "Язык",
+    "languages": {
+      "en-US": "Английский",
+      "zh-CN": "Китайский (упр.)",
+      "zh-TW": "Китайский (трад.)",
+      "ja-JP": "Японский",
+      "ru-RU": "Русский"
+    }
+  },
+  "operations": {
+    "title": "Выполняется операция",
+    "inProgress": "Подождите, пока мы закончим.",
+    "loadKhr": "Загрузка проекта",
+    "saveKhr": "Сохранение проекта",
+    "loadModel": "Загрузка LLM модели",
+    "processCurrent": "Обработка текущего изображения",
+    "processAll": "Обработка всех изображений",
+    "imageProgress": "Изображение {{current}} / {{total}}",
+    "stepProgress": "Шаг {{current}} / {{total}}: {{step}}",
+    "cancel": "Остановить",
+    "cancelling": "Остановка..."
+  },
+  "navigator": {
+    "title": "Навигатор",
+    "pages_one": "{{count}} стр.",
+    "pages_other": "{{count}} стр.",
+    "empty": "Нет документов",
+    "prompt": "Выберите или импортируйте страницу для начала"
+  },
+  "panels": {
+    "processing": "Обработка",
+    "mask": "Маска",
+    "llm": "LLM",
+    "render": "Рендер"
+  },
+  "layers": {
+    "title": "Слои",
+    "rendered": "Отрендеренный текст",
+    "textBlocks": "Текстовые блоки",
+    "brush": "Слой кисти",
+    "inpainted": "Инпейнтинг",
+    "mask": "Маска сегментации",
+    "base": "Исходное изображение"
+  },
+  "processing": {
+    "detect": "Детекция",
+    "detectTooltip": "Запустить детекцию текста на текущей странице",
+    "ocr": "OCR",
+    "ocrTooltip": "Распознать текст в обнаруженных областях",
+    "render": "Рендер"
+  },
+  "mask": {
+    "showSegmentationMask": "Показать маску сегментации",
+    "showInpainted": "Показать изображение после инпейнтинга",
+    "showBrushLayer": "Показать слой кисти",
+    "showRendered": "Показать отрендеренный текст",
+    "showTextBlocks": "Показать текстовые блоки",
+    "inpaint": "Инпейнтинг",
+    "inpaintTooltip": "Применить инпейнтинг"
+  },
+  "llm": {
+    "title": "LLM",
+    "ready": "Готова",
+    "idle": "Неактивна",
+    "selectPlaceholder": "Выберите модель",
+    "modelLabel": "Модель",
+    "languageLabel": "Язык перевода",
+    "languagePlaceholder": "Выберите язык",
+    "load": "Загрузить",
+    "unload": "Выгрузить",
+    "loadTooltip": "Загрузить выбранную модель",
+    "unloadTooltip": "Выгрузить модель",
+    "generate": "Генерировать",
+    "generating": "Генерация...",
+    "generateTooltip": "Сгенерировать перевод для обнаруженных текстовых блоков",
+    "render": "Рендер",
+    "renderTooltip": "Отрендерить перевод на странице",
+    "loadingModel": "Загрузка LLM модели",
+    "statusReady": "LLM готова",
+    "statusIdle": "LLM не загружена"
+  },
+  "render": {
+    "effectLabel": "Эффект текста",
+    "effectNormal": "Обычный",
+    "effectAntique": "Старинная книга",
+    "effectMetal": "Металл",
+    "effectManga": "Тон манги",
+    "effectMotionBlur": "Смазывание",
+    "fontLabel": "Шрифт",
+    "fontPlaceholder": "Выберите шрифт",
+    "fontColorLabel": "Цвет шрифта",
+    "fontScopeGlobal": "Глобально",
+    "fontScopeBlock": "Для блока",
+    "fontScopeBlockIndex": "Блок {{index}}"
+  },
+  "textBlocks": {
+    "emptyPrompt": "Откройте изображение, чтобы увидеть текстовые блоки.",
+    "title": "Текстовые блоки ({{count}})",
+    "none": "Текстовых блоков пока нет. Запустите обнаружение, чтобы заполнить список.",
+    "emptySummary": "<пусто>",
+    "ocrLabel": "Текст OCR",
+    "ocrBadge": "OCR",
+    "translationLabel": "Перевод",
+    "translationBadge": "Пер.",
+    "addOcrPlaceholder": "Добавить текст OCR",
+    "addTranslationPlaceholder": "Добавить перевод"
+  },
+  "workspace": {
+    "importPrompt": "Импортируйте страницу, чтобы начать редактирование.",
+    "deleteBlock": "Удалить блок"
+  },
+  "statusBar": {
+    "zoom": "Масштаб",
+    "canvas": "Холст"
+  },
+  "toolbar": {
+    "brush": "Кисть",
+    "eraser": "Ластик",
+    "brushSize": "Размер кисти",
+    "brushColor": "Цвет кисти"
+  },
+  "toolRail": {
+    "select": "Выделение",
+    "block": "Блок",
+    "brush": "Кисть",
+    "repairBrush": "Кисть восстановления",
+    "eraser": "Ластик"
+  },
+  "download": {
+    "title": "Загрузка"
+  },
+  "settings": {
+    "title": "Настройки",
+    "appearance": "Внешний вид",
+    "appearanceDescription": "Настройте внешний вид Koharu.",
+    "theme": "Тема",
+    "themeDescription": "Выберите предпочтительную цветовую схему.",
+    "themeLight": "Светлая",
+    "themeDark": "Тёмная",
+    "themeSystem": "Как в системе",
+    "language": "Язык",
+    "languageDescription": "Выберите предпочтительный язык интерфейса.",
+    "about": "О программе",
+    "aboutDescription": "Информация о приложении.",
+    "aboutTagline": "Инструмент для перевода манги",
+    "aboutVersion": "Версия",
+    "aboutLatest": "Последняя",
+    "aboutUpdate": "Доступно обновление ({{version}})",
+    "aboutAuthor": "Автор",
+    "aboutRepository": "Репозиторий",
+    "device": "Устройство",
+    "deviceDescription": "Информация об аппаратном ускорении.",
+    "deviceMl": "ML Compute",
+    "deviceWgpu": "GPU Renderer",
+    "deviceBackend": "Backend"
+  }
+}
