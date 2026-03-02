@@ -9,8 +9,7 @@ import enUS from '@/public/locales/en-US/translation.json'
 import zhCN from '@/public/locales/zh-CN/translation.json'
 import zhTW from '@/public/locales/zh-TW/translation.json'
 import jaJP from '@/public/locales/ja-JP/translation.json'
-import ruRU from
-'@/public/locales/ru-RU/translation.json'
+import ruRU from '@/public/locales/ru-RU/translation.json'
 
 
 const resources = {
