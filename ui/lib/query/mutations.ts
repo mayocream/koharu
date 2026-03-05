@@ -64,7 +64,6 @@ const getCachedLlmModels = (queryClient: QueryClient) =>
   (queryClient.getQueryData(queryKeys.llm.models(i18n.language)) ?? []) as {
     id: string
     languages: string[]
-    source: string
   }[]
 
 export const useProgressActions = () => {
@@ -351,16 +350,9 @@ export const useDocumentMutations = () => {
         total: 5,
       })
       try {
-        const models = getCachedLlmModels(queryClient)
-        const modelInfo = models.find((m) => m.id === selectedModel)
-        const llmApiKey =
-          modelInfo && modelInfo.source !== 'local'
-            ? usePreferencesStore.getState().apiKeys[modelInfo.source]
-            : undefined
         await api.process({
           index: resolvedIndex,
           llmModelId: selectedModel,
-          llmApiKey,
           language: selectedLanguage,
           shaderEffect: renderEffect,
           fontFamily,
@@ -387,15 +379,8 @@ export const useDocumentMutations = () => {
       total: totalPages,
     })
     try {
-      const models = getCachedLlmModels(queryClient)
-      const modelInfo = models.find((m) => m.id === selectedModel)
-      const llmApiKey =
-        modelInfo && modelInfo.source !== 'local'
-          ? usePreferencesStore.getState().apiKeys[modelInfo.source]
-          : undefined
       await api.process({
         llmModelId: selectedModel,
-        llmApiKey,
         language: selectedLanguage,
         shaderEffect: renderEffect,
         fontFamily,
@@ -494,13 +479,7 @@ export const useLlmMutations = () => {
     let loaded = false
     useLlmUiStore.getState().setLoading(true)
     try {
-      const models = getCachedLlmModels(queryClient)
-      const modelInfo = models.find((m) => m.id === selectedModel)
-      const apiKey =
-        modelInfo && modelInfo.source !== 'local'
-          ? usePreferencesStore.getState().apiKeys[modelInfo.source]
-          : undefined
-      await api.llmLoad(selectedModel, apiKey)
+      await api.llmLoad(selectedModel)
       await setProgress(100, ProgressBarStatus.Paused)
 
       let attempts = 0

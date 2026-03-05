@@ -363,18 +363,11 @@ function LlmStatusPopover() {
   const { llmSetSelectedModel, llmSetSelectedLanguage, llmToggleLoadUnload } =
     useLlmMutations()
   const { t } = useTranslation()
-  const apiKeys = usePreferencesStore((state) => state.apiKeys)
-
-  const selectedModelInfo = useMemo(
-    () => llmModels.find((m) => m.id === llmSelectedModel),
-    [llmModels, llmSelectedModel],
-  )
-  const isApiModel = selectedModelInfo?.source !== 'local' && selectedModelInfo?.source !== undefined
-  const apiKeyMissing = isApiModel && !apiKeys[selectedModelInfo!.source]
 
   const activeLanguages = useMemo(
-    () => selectedModelInfo?.languages ?? [],
-    [selectedModelInfo],
+    () =>
+      llmModels.find((model) => model.id === llmSelectedModel)?.languages ?? [],
+    [llmModels, llmSelectedModel],
   )
 
   useEffect(() => {
@@ -447,28 +440,14 @@ function LlmStatusPopover() {
                   value={model.id}
                   data-testid={`llm-model-option-${index}`}
                 >
-                  <span className='flex items-center gap-2'>
-                    {model.source !== 'local' && (
-                      <span className='bg-primary/10 text-primary rounded px-1 py-0.5 text-[10px] font-semibold uppercase leading-none'>
-                        {model.source}
-                      </span>
-                    )}
-                    {model.id.includes(':') ? model.id.split(':')[1] : model.id}
-                  </span>
+                  {model.id}
                 </SelectItem>
               ))}
             </SelectContent>
           </Select>
 
-          {/* API key warning */}
-          {apiKeyMissing && (
-            <p className='text-amber-500 text-xs'>
-              {t('llm.apiKeyMissing', { provider: selectedModelInfo!.source })}
-            </p>
-          )}
-
-          {/* Language selector — local models only */}
-          {!isApiModel && activeLanguages.length > 0 && (
+          {/* Language selector */}
+          {activeLanguages.length > 0 && (
             <Select
               value={llmSelectedLanguage ?? activeLanguages[0]}
               onValueChange={llmSetSelectedLanguage}

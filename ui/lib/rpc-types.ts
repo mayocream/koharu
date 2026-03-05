@@ -34,7 +34,6 @@ export type DeviceInfo = {
 export type LlmModelInfo = {
   id: string
   languages: string[]
-  source: string
 }
 
 export type RpcMethodMap = {
@@ -71,7 +70,7 @@ export type RpcMethodMap = {
   update_text_blocks: [{ index: number; textBlocks: TextBlock[] }, void]
   list_font_families: [void, string[]]
   llm_list: [{ language?: string }, LlmModelInfo[]]
-  llm_load: [{ id: string; apiKey?: string }, void]
+  llm_load: [{ id: string }, void]
   llm_offload: [void, void]
   llm_ready: [void, boolean]
   llm_generate: [
@@ -82,7 +81,6 @@ export type RpcMethodMap = {
     {
       index?: number
       llmModelId?: string
-      llmApiKey?: string
       language?: string
       shaderEffect?: RenderEffect
       fontFamily?: string
