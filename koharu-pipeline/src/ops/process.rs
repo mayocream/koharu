@@ -8,6 +8,17 @@ use koharu_api::commands::ProcessRequest;
 use crate::AppResources;
 
 pub async fn process(state: AppResources, payload: ProcessRequest) -> anyhow::Result<()> {
+    let mut payload = payload;
+    if let Some(model_id) = payload.llm_model_id.as_deref()
+        && payload.llm_api_key.is_none()
+        && model_id.contains(':')
+    {
+        let (provider_id, _) = model_id
+            .split_once(':')
+            .ok_or_else(|| anyhow::anyhow!("invalid api model id"))?;
+        payload.llm_api_key = crate::ops::llm::get_saved_api_key(provider_id)?;
+    }
+
     {
         let guard = state.pipeline.read().await;
         if guard.is_some() {

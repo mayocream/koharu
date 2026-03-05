@@ -1,12 +1,56 @@
 use std::str::FromStr;
 
-use koharu_api::commands::{IndexPayload, LlmGeneratePayload, LlmListPayload, LlmLoadPayload};
+use keyring::Entry;
+use koharu_api::commands::{
+    ApiKeyGetPayload, ApiKeyResult, ApiKeySetPayload, IndexPayload, LlmGeneratePayload,
+    LlmListPayload, LlmLoadPayload,
+};
 use koharu_ml::llm::ModelId;
+use koharu_ml::llm::api::ALL_API_PROVIDERS;
 use koharu_ml::llm::facade as llm;
 use strum::IntoEnumIterator;
 use tracing::instrument;
 
 use crate::{AppResources, state_tx};
+
+const API_KEY_SERVICE: &str = "koharu";
+
+fn provider_key_entry(provider: &str) -> anyhow::Result<Entry> {
+    let username = format!("llm-provider-api-key:{provider}");
+    Ok(Entry::new(API_KEY_SERVICE, &username)?)
+}
+
+pub(crate) fn get_saved_api_key(provider: &str) -> anyhow::Result<Option<String>> {
+    let entry = provider_key_entry(provider)?;
+    match entry.get_password() {
+        Ok(value) => Ok(Some(value)),
+        Err(keyring::Error::NoEntry) => Ok(None),
+        Err(err) => Err(err.into()),
+    }
+}
+
+fn set_saved_api_key(provider: &str, api_key: &str) -> anyhow::Result<()> {
+    let entry = provider_key_entry(provider)?;
+    if api_key.trim().is_empty() {
+        match entry.delete_password() {
+            Ok(()) | Err(keyring::Error::NoEntry) => Ok(()),
+            Err(err) => Err(err.into()),
+        }
+    } else {
+        entry.set_password(api_key)?;
+        Ok(())
+    }
+}
+
+pub async fn get_api_key(_state: AppResources, payload: ApiKeyGetPayload) -> anyhow::Result<ApiKeyResult> {
+    Ok(ApiKeyResult {
+        api_key: get_saved_api_key(&payload.provider)?,
+    })
+}
+
+pub async fn set_api_key(_state: AppResources, payload: ApiKeySetPayload) -> anyhow::Result<()> {
+    set_saved_api_key(&payload.provider, &payload.api_key)
+}
 
 pub async fn llm_list(
     state: AppResources,
@@ -30,13 +74,31 @@ pub async fn llm_list(
         ModelId::HunyuanMT7B => 500 / non_zh_en_locale_factor,
     });
 
-    Ok(models.into_iter().map(llm::ModelInfo::new).collect())
+    let mut result: Vec<llm::ModelInfo> = models.into_iter().map(llm::ModelInfo::new).collect();
+
+    for provider in ALL_API_PROVIDERS {
+        for model in provider.models {
+            result.push(llm::ModelInfo::api(provider.id, model.id));
+        }
+    }
+
+    Ok(result)
 }
 
 #[instrument(level = "info", skip_all)]
 pub async fn llm_load(state: AppResources, payload: LlmLoadPayload) -> anyhow::Result<()> {
-    let id = ModelId::from_str(&payload.id)?;
-    state.llm.load(id).await;
+    if payload.id.contains(':') {
+        let (provider_id, model_id) = payload.id.split_once(':').unwrap();
+        let api_key = match payload.api_key {
+            Some(key) => key,
+            None => get_saved_api_key(provider_id)?
+                .ok_or_else(|| anyhow::anyhow!("api_key is required for API models"))?,
+        };
+        state.llm.load_api(provider_id, model_id, api_key).await?;
+    } else {
+        let id = ModelId::from_str(&payload.id)?;
+        state.llm.load(id).await;
+    }
     Ok(())
 }
 

@@ -163,13 +163,22 @@ export const api = {
     return invoke('list_font_families')
   },
 
+  async getApiKey(provider: string): Promise<string | undefined> {
+    const { apiKey } = await invoke('get_api_key', { provider })
+    return apiKey
+  },
+
+  async setApiKey(provider: string, apiKey: string): Promise<void> {
+    await invoke('set_api_key', { provider, apiKey })
+  },
+
   async llmList(language?: string) {
     const payload = await invoke('llm_list', { language })
     return parseOrLogAndThrow(llmModelInfoListSchema, payload, 'llm_list')
   },
 
-  async llmLoad(id: string): Promise<void> {
-    await invoke('llm_load', { id })
+  async llmLoad(id: string, apiKey?: string): Promise<void> {
+    await invoke('llm_load', { id, apiKey })
   },
 
   async llmOffload(): Promise<void> {
@@ -195,6 +204,7 @@ export const api = {
   async process(options: {
     index?: number
     llmModelId?: string
+    llmApiKey?: string
     language?: string
     shaderEffect?: RenderEffect
     shaderStroke?: RenderStroke
