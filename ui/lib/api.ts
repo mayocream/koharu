@@ -149,8 +149,8 @@ export const api = {
     return parseOrLogAndThrow(llmModelInfoListSchema, payload, 'llm_list')
   },
 
-  async llmLoad(id: string): Promise<void> {
-    await invoke('llm_load', { id })
+  async llmLoad(id: string, apiKey?: string): Promise<void> {
+    await invoke('llm_load', { id, apiKey })
   },
 
   async llmOffload(): Promise<void> {
@@ -176,6 +176,7 @@ export const api = {
   async process(options: {
     index?: number
     llmModelId?: string
+    llmApiKey?: string
     language?: string
     shaderEffect?: RenderEffect
     fontFamily?: string

@@ -2,6 +2,7 @@ use std::str::FromStr;
 
 use koharu_api::commands::{IndexPayload, LlmGeneratePayload, LlmListPayload, LlmLoadPayload};
 use koharu_ml::llm::ModelId;
+use koharu_ml::llm::api::ALL_API_PROVIDERS;
 use koharu_ml::llm::facade as llm;
 use strum::IntoEnumIterator;
 use tracing::instrument;
@@ -30,13 +31,29 @@ pub async fn llm_list(
         ModelId::HunyuanMT7B => 500 / non_zh_en_locale_factor,
     });
 
-    Ok(models.into_iter().map(llm::ModelInfo::new).collect())
+    let mut result: Vec<llm::ModelInfo> = models.into_iter().map(llm::ModelInfo::new).collect();
+
+    for provider in ALL_API_PROVIDERS {
+        for model in provider.models {
+            result.push(llm::ModelInfo::api(provider.id, model.id));
+        }
+    }
+
+    Ok(result)
 }
 
 #[instrument(level = "info", skip_all)]
 pub async fn llm_load(state: AppResources, payload: LlmLoadPayload) -> anyhow::Result<()> {
-    let id = ModelId::from_str(&payload.id)?;
-    state.llm.load(id).await;
+    if payload.id.contains(':') {
+        let api_key = payload
+            .api_key
+            .ok_or_else(|| anyhow::anyhow!("api_key is required for API models"))?;
+        let (provider_id, model_id) = payload.id.split_once(':').unwrap();
+        state.llm.load_api(provider_id, model_id, api_key).await?;
+    } else {
+        let id = ModelId::from_str(&payload.id)?;
+        state.llm.load(id).await;
+    }
     Ok(())
 }
 

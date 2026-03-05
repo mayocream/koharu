@@ -367,7 +367,7 @@ impl KoharuMcp {
     )]
     async fn llm_load(&self, Parameters(p): Parameters<LlmLoadParams>) -> Result<String, String> {
         let res = self.resources()?;
-        operations::llm_load(res, LlmLoadPayload { id: p.id.clone() })
+        operations::llm_load(res, LlmLoadPayload { id: p.id.clone(), api_key: None })
             .await
             .map_err(|e| e.to_string())?;
         Ok(format!("Loading model '{}'...", p.id))
@@ -431,6 +431,7 @@ impl KoharuMcp {
             ProcessRequest {
                 index: p.index,
                 llm_model_id: p.llm_model_id,
+                llm_api_key: None,
                 language: p.language,
                 shader_effect: effect,
                 font_family: p.font_family,

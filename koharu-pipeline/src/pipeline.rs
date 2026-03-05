@@ -112,19 +112,28 @@ async fn run_pipeline_inner(
     if let Some(model_id) = &req.llm_model_id
         && !res.llm.ready().await
     {
-        let id = ModelId::from_str(model_id)?;
-        res.llm.load(id).await;
-        for _ in 0..300 {
-            if res.llm.ready().await {
-                break;
+        if model_id.contains(':') {
+            let api_key = req
+                .llm_api_key
+                .clone()
+                .ok_or_else(|| anyhow::anyhow!("llm_api_key is required for API models"))?;
+            let (provider_id, model_part) = model_id.split_once(':').unwrap();
+            res.llm.load_api(provider_id, model_part, api_key).await?;
+        } else {
+            let id = ModelId::from_str(model_id)?;
+            res.llm.load(id).await;
+            for _ in 0..300 {
+                if res.llm.ready().await {
+                    break;
+                }
+                tokio::time::sleep(Duration::from_millis(100)).await;
+                if cancel.load(Ordering::Relaxed) {
+                    return Ok(());
+                }
             }
-            tokio::time::sleep(Duration::from_millis(100)).await;
-            if cancel.load(Ordering::Relaxed) {
-                return Ok(());
+            if !res.llm.ready().await {
+                anyhow::bail!("LLM failed to load within timeout");
             }
-        }
-        if !res.llm.ready().await {
-            anyhow::bail!("LLM failed to load within timeout");
         }
     }
 

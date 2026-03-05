@@ -1,7 +1,6 @@
 use std::sync::Arc;
 
 use serde::Serialize;
-use strum::Display;
 use tokio::sync::RwLock;
 
 use koharu_types::{Document, TextBlock};
@@ -15,6 +14,7 @@ pub use super::prefetch;
 pub struct ModelInfo {
     pub id: String,
     pub languages: Vec<String>,
+    pub source: &'static str,
 }
 
 impl ModelInfo {
@@ -22,20 +22,41 @@ impl ModelInfo {
         Self {
             id: id.to_string(),
             languages: id.languages(),
+            source: "local",
+        }
+    }
+
+    pub fn api(provider_id: &'static str, model_id: &str) -> Self {
+        Self {
+            id: format!("{provider_id}:{model_id}"),
+            languages: vec![],
+            source: provider_id,
         }
     }
 }
 
 /// Load state of the LLM
 #[allow(clippy::large_enum_variant)]
-#[derive(Display)]
-#[strum(serialize_all = "lowercase")]
 pub enum State {
     Empty,
     Loading,
-    #[strum(serialize = "ready")]
     Ready(Llm),
+    ApiReady {
+        provider: Box<dyn super::provider::AnyProvider>,
+        model: String,
+    },
     Failed(String),
+}
+
+impl std::fmt::Display for State {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            State::Empty => write!(f, "empty"),
+            State::Loading => write!(f, "loading"),
+            State::Ready(_) | State::ApiReady { .. } => write!(f, "ready"),
+            State::Failed(_) => write!(f, "failed"),
+        }
+    }
 }
 
 /// Minimal owner for the LLM with non-blocking initialization.
@@ -103,6 +124,27 @@ impl Model {
         self.use_cpu
     }
 
+    /// Start loading an API-backed provider and return immediately.
+    pub async fn load_api(
+        &self,
+        provider_id: &str,
+        model_id: &str,
+        api_key: String,
+    ) -> anyhow::Result<()> {
+        use super::provider::AnyProvider;
+        let provider: Box<dyn AnyProvider> = match provider_id {
+            "openai" => Box::new(super::provider::openai::OpenAiProvider { api_key }),
+            "gemini" => Box::new(super::provider::gemini::GeminiProvider { api_key }),
+            "claude" => Box::new(super::provider::claude::ClaudeProvider { api_key }),
+            other => anyhow::bail!("Unknown API provider: {other}"),
+        };
+        *self.state.write().await = State::ApiReady {
+            provider,
+            model: model_id.to_string(),
+        };
+        Ok(())
+    }
+
     /// Start loading the model on a blocking thread and return immediately.
     pub async fn load(&self, id: ModelId) {
         // mark as loading
@@ -146,7 +188,10 @@ impl Model {
 
     /// Ready if the model is loaded into memory.
     pub async fn ready(&self) -> bool {
-        matches!(*self.state.read().await, State::Ready(_))
+        matches!(
+            *self.state.read().await,
+            State::Ready(_) | State::ApiReady { .. }
+        )
     }
 
     /// Translate text using the loaded model.
@@ -155,11 +200,19 @@ impl Model {
         doc: &mut impl Translatable,
         target_language: Option<&str>,
     ) -> anyhow::Result<()> {
+        let lang = target_language.unwrap_or("English");
         let mut guard = self.state.write().await;
         match &mut *guard {
             State::Ready(llm) => {
                 let text = doc.get_source()?;
                 let response = llm.generate(&text, &GenerateOptions::default(), target_language)?;
+                let response = response.trim().to_string();
+                doc.set_translation(response)
+            }
+            State::ApiReady { provider, model } => {
+                let text = doc.get_source()?;
+                let model = model.clone();
+                let response = provider.translate(&text, lang, &model).await?;
                 let response = response.trim().to_string();
                 doc.set_translation(response)
             }
