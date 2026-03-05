@@ -153,6 +153,7 @@ export const documentSchema = z.object({
 export const llmModelInfoSchema = z.object({
   id: z.string(),
   languages: z.array(z.string()),
+  source: z.string().default('local'),
 })
 
 export const llmModelInfoListSchema = z.array(llmModelInfoSchema)

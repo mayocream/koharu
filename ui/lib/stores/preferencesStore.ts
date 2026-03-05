@@ -11,6 +11,8 @@ type PreferencesState = {
   setBrushConfig: (config: Partial<PreferencesState['brushConfig']>) => void
   fontFamily?: string
   setFontFamily: (font?: string) => void
+  apiKeys: Record<string, string>
+  setApiKey: (provider: string, key: string) => void
   resetPreferences: () => void
 }
 
@@ -20,6 +22,7 @@ const initialPreferences = {
     color: '#ffffff',
   },
   fontFamily: undefined as string | undefined,
+  apiKeys: {} as Record<string, string>,
 }
 
 export const usePreferencesStore = create<PreferencesState>()(
@@ -34,10 +37,18 @@ export const usePreferencesStore = create<PreferencesState>()(
           },
         })),
       setFontFamily: (font) => set({ fontFamily: font }),
+      setApiKey: (provider, key) =>
+        set((state) => ({
+          apiKeys: { ...state.apiKeys, [provider]: key },
+        })),
       resetPreferences: () => set({ ...initialPreferences }),
     }),
     {
       name: 'koharu-config',
+      partialize: (state) => ({
+        brushConfig: state.brushConfig,
+        fontFamily: state.fontFamily,
+      }),
     },
   ),
 )

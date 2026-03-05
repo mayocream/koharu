@@ -1,6 +1,8 @@
+pub mod api;
 pub mod facade;
 mod model;
 pub mod prompt;
+pub mod provider;
 mod quantized_hunyuan_dense;
 mod quantized_lfm2;
 mod tokenizer;

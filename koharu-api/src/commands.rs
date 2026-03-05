@@ -76,8 +76,28 @@ pub struct LlmListPayload {
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
+pub struct ApiKeyGetPayload {
+    pub provider: String,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ApiKeySetPayload {
+    pub provider: String,
+    pub api_key: String,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ApiKeyResult {
+    pub api_key: Option<String>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
 pub struct LlmLoadPayload {
     pub id: String,
+    pub api_key: Option<String>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -92,6 +112,7 @@ pub struct LlmGeneratePayload {
 #[serde(rename_all = "camelCase")]
 pub struct LlmLoadParams {
     pub id: String,
+    pub api_key: Option<String>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, JsonSchema)]
@@ -107,6 +128,7 @@ pub struct LlmGenerateParams {
 pub struct ProcessRequest {
     pub index: Option<usize>,
     pub llm_model_id: Option<String>,
+    pub llm_api_key: Option<String>,
     pub language: Option<String>,
     pub shader_effect: Option<TextShaderEffect>,
     pub shader_stroke: Option<TextStrokeStyle>,

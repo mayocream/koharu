@@ -122,6 +122,7 @@ schemars = "1.2"
 base64 = "0.22"
 criterion = { version = "0.8", features = ["html_reports"] }
 git-version = "0.3"
+keyring = "3.6"
 
 [patch.crates-io]
 candle-transformers = { git = "https://github.com/mayocream/candle", branch = "cuda-dynamic-loading" }

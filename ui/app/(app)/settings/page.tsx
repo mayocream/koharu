@@ -10,6 +10,8 @@ import {
   MonitorIcon,
   ChevronLeftIcon,
   ChevronRightIcon,
+  EyeIcon,
+  EyeOffIcon,
 } from 'lucide-react'
 import { ScrollArea } from '@/components/ui/scroll-area'
 import {
@@ -20,12 +22,20 @@ import {
   SelectValue,
 } from '@/components/ui/select'
 import { invoke, isTauri } from '@/lib/backend'
+import { api } from '@/lib/api'
 import type { DeviceInfo } from '@/lib/rpc-types'
+import { usePreferencesStore } from '@/lib/stores/preferencesStore'
 
 const THEME_OPTIONS = [
   { value: 'light', icon: SunIcon, labelKey: 'settings.themeLight' },
   { value: 'dark', icon: MoonIcon, labelKey: 'settings.themeDark' },
   { value: 'system', icon: MonitorIcon, labelKey: 'settings.themeSystem' },
+] as const
+
+const API_PROVIDERS = [
+  { id: 'openai', name: 'OpenAI' },
+  { id: 'gemini', name: 'Gemini' },
+  { id: 'claude', name: 'Claude' },
 ] as const
 
 export default function SettingsPage() {
@@ -36,6 +46,9 @@ export default function SettingsPage() {
     [i18n.options.resources],
   )
   const [deviceInfo, setDeviceInfo] = useState<DeviceInfo>()
+  const apiKeys = usePreferencesStore((state) => state.apiKeys)
+  const setApiKey = usePreferencesStore((state) => state.setApiKey)
+  const [visibleKeys, setVisibleKeys] = useState<Record<string, boolean>>({})
 
   useEffect(() => {
     if (!isTauri()) return
@@ -51,6 +64,28 @@ export default function SettingsPage() {
 
     void loadDeviceInfo()
   }, [])
+
+  useEffect(() => {
+    if (!isTauri()) return
+
+    const loadApiKeys = async () => {
+      for (const { id } of API_PROVIDERS) {
+        try {
+          const key = await api.getApiKey(id)
+          setApiKey(id, key ?? '')
+        } catch (error) {
+          console.error(`Failed to load API key for ${id}`, error)
+        }
+      }
+    }
+
+    void loadApiKeys()
+  }, [setApiKey])
+
+  const handleApiKeyChange = (provider: string, value: string) => {
+    setApiKey(provider, value)
+    void api.setApiKey(provider, value)
+  }
 
   return (
     <div className='bg-muted flex flex-1 flex-col overflow-hidden'>
@@ -151,6 +186,45 @@ export default function SettingsPage() {
                 </div>
               </section>
             )}
+
+            {/* API Keys Section */}
+            <section className='mb-8'>
+              <h2 className='text-foreground mb-1 text-sm font-bold'>
+                Provider Api Keys
+              </h2>
+              <p className='text-muted-foreground mb-4 text-sm'>
+                Manage your API keys for different providers. Your keys are stored securely on your device and are never shared with anyone.
+              </p>
+              <div className='space-y-3'>
+                {API_PROVIDERS.map(({ id, name }) => (
+                  <div key={id} className='space-y-1'>
+                    <label className='text-foreground text-sm'>{name}</label>
+                    <div className='relative'>
+                      <input
+                        type={visibleKeys[id] ? 'text' : 'password'}
+                        value={apiKeys[id] ?? ''}
+                        onChange={(e) => handleApiKeyChange(id, e.target.value)}
+                        placeholder='Enter API key'
+                        className='border-border bg-card text-foreground placeholder:text-muted-foreground focus:ring-primary w-full rounded-md border px-3 py-1.5 pr-9 text-sm focus:ring-1 focus:outline-none'
+                      />
+                      <button
+                        type='button'
+                        onClick={() =>
+                          setVisibleKeys((v) => ({ ...v, [id]: !v[id] }))
+                        }
+                        className='text-muted-foreground hover:text-foreground absolute top-1/2 right-2.5 -translate-y-1/2 transition'
+                      >
+                        {visibleKeys[id] ? (
+                          <EyeOffIcon className='size-4' />
+                        ) : (
+                          <EyeIcon className='size-4' />
+                        )}
+                      </button>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </section>
 
             {/* Divider */}
             <div className='border-border mb-8 border-t' />

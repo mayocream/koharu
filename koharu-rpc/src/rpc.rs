@@ -91,6 +91,8 @@ async fn dispatch(method: Method, params: rmpv::Value, state: AppResources) -> R
         Method::Device => call0(operations::device, state).await,
         Method::GetDocuments => call0(operations::get_documents, state).await,
         Method::ListFontFamilies => call0(operations::list_font_families, state).await,
+        Method::GetApiKey => call(operations::get_api_key, state, params).await,
+        Method::SetApiKey => call(operations::set_api_key, state, params).await,
         Method::LlmList => call(operations::llm_list, state, params).await,
         Method::LlmReady => call0(operations::llm_ready, state).await,
         Method::LlmOffload => call0(operations::llm_offload, state).await,

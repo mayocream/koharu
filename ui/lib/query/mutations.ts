@@ -64,6 +64,7 @@ const getCachedLlmModels = (queryClient: QueryClient) =>
   (queryClient.getQueryData(queryKeys.llm.models(i18n.language)) ?? []) as {
     id: string
     languages: string[]
+    source: string
   }[]
 
 export const useProgressActions = () => {
@@ -429,9 +430,16 @@ export const useDocumentMutations = () => {
         total: 5,
       })
       try {
+        const models = getCachedLlmModels(queryClient)
+        const modelInfo = models.find((m) => m.id === selectedModel)
+        const llmApiKey =
+          modelInfo && modelInfo.source !== 'local'
+            ? usePreferencesStore.getState().apiKeys[modelInfo.source]
+            : undefined
         await api.process({
           index: resolvedIndex,
           llmModelId: selectedModel,
+          llmApiKey,
           language: selectedLanguage,
           shaderEffect: renderEffect,
           shaderStroke: renderStroke,
@@ -460,8 +468,15 @@ export const useDocumentMutations = () => {
       total: totalPages,
     })
     try {
+      const models = getCachedLlmModels(queryClient)
+      const modelInfo = models.find((m) => m.id === selectedModel)
+      const llmApiKey =
+        modelInfo && modelInfo.source !== 'local'
+          ? usePreferencesStore.getState().apiKeys[modelInfo.source]
+          : undefined
       await api.process({
         llmModelId: selectedModel,
+        llmApiKey,
         language: selectedLanguage,
         shaderEffect: renderEffect,
         shaderStroke: renderStroke,
@@ -562,7 +577,13 @@ export const useLlmMutations = () => {
     let loaded = false
     useLlmUiStore.getState().setLoading(true)
     try {
-      await api.llmLoad(selectedModel)
+      const models = getCachedLlmModels(queryClient)
+      const modelInfo = models.find((m) => m.id === selectedModel)
+      const apiKey =
+        modelInfo && modelInfo.source !== 'local'
+          ? usePreferencesStore.getState().apiKeys[modelInfo.source]
+          : undefined
+      await api.llmLoad(selectedModel, apiKey)
       await setProgress(100, ProgressBarStatus.Paused)
 
       let attempts = 0
@@ -615,6 +636,22 @@ export const useLlmMutations = () => {
 
   const llmList = useCallback(async () => {
     const models = await api.llmList(i18n.language)
+    const providers = Array.from(
+      new Set(
+        models
+          .map((model) => model.source)
+          .filter((source) => source && source !== 'local'),
+      ),
+    )
+    for (const provider of providers) {
+      try {
+        const key = await api.getApiKey(provider)
+        usePreferencesStore.getState().setApiKey(provider, key ?? '')
+      } catch (error) {
+        console.error(`Failed to hydrate API key for ${provider}`, error)
+      }
+    }
+
     queryClient.setQueryData(queryKeys.llm.models(i18n.language), models)
     const currentModel = useLlmUiStore.getState().selectedModel
     const currentLanguage = useLlmUiStore.getState().selectedLanguage
