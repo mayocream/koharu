@@ -1,0 +1,180 @@
+{
+  "common": {
+    "initializing": "Inicializando..."
+  },
+  "menu": {
+    "file": "Archivo",
+    "openFile": "Abrir archivo...",
+    "save": "Guardar...",
+    "export": "Exportar...",
+    "view": "Ver",
+    "fitWindow": "Ajustar a la ventana",
+    "originalSize": "Tamaño original",
+    "process": "Procesar",
+    "processCurrent": "Procesar imagen actual",
+    "redoInpaintRender": "Rehacer relleno y renderizado",
+    "processAll": "Procesar todas las imágenes",
+    "help": "Ayuda",
+    "settings": "Configuración",
+    "discord": "Discord",
+    "github": "GitHub",
+    "version": "Versión: {{version}}",
+    "versionUnknown": "Versión: Desconocida",
+    "language": "Idioma",
+    "languages": {
+      "en-US": "Inglés",
+      "zh-CN": "Chino simplificado",
+      "zh-TW": "Chino tradicional",
+      "ja-JP": "Japonés",
+      "ru-RU": "Ruso",
+      "es-ES": "Español"
+    }
+  },
+  "operations": {
+    "title": "Trabajando",
+    "inProgress": "Por favor espera mientras terminamos.",
+    "loadKhr": "Cargando proyecto",
+    "saveKhr": "Guardando proyecto",
+    "loadModel": "Cargando modelo LLM",
+    "processCurrent": "Procesando imagen actual",
+    "processAll": "Procesando todas las imágenes",
+    "imageProgress": "Imagen {{current}} / {{total}}",
+    "stepProgress": "Paso {{current}} / {{total}}: {{step}}",
+    "cancel": "Detener",
+    "cancelling": "Deteniendo..."
+  },
+  "navigator": {
+    "title": "Navegador",
+    "pages_one": "{{count}} página",
+    "pages_other": "{{count}} páginas",
+    "empty": "No hay documentos",
+    "prompt": "Selecciona o importa una página para comenzar"
+  },
+  "panels": {
+    "processing": "Procesamiento",
+    "mask": "Máscara",
+    "llm": "LLM",
+    "render": "Renderizado"
+  },
+  "layers": {
+    "title": "Capas",
+    "rendered": "Texto renderizado",
+    "textBlocks": "Bloques de texto",
+    "brush": "Capa de pincel",
+    "inpainted": "Rellenado",
+    "mask": "Máscara de segmentación",
+    "base": "Imagen original"
+  },
+  "processing": {
+    "detect": "Detectar",
+    "detectTooltip": "Ejecutar detección de texto en la página actual",
+    "ocr": "OCR",
+    "ocrTooltip": "Reconocer texto en las regiones detectadas",
+    "render": "Renderizar"
+  },
+  "mask": {
+    "showSegmentationMask": "Mostrar máscara de segmentación",
+    "showInpainted": "Mostrar imagen rellenada",
+    "showBrushLayer": "Mostrar capa de pincel",
+    "showRendered": "Mostrar texto renderizado",
+    "showTextBlocks": "Mostrar bloques de texto",
+    "inpaint": "Rellenar",
+    "inpaintTooltip": "Aplicar relleno"
+  },
+  "llm": {
+    "title": "LLM",
+    "ready": "Listo",
+    "idle": "Inactivo",
+    "selectPlaceholder": "Seleccionar modelo",
+    "modelLabel": "Modelo",
+    "languageLabel": "Idioma de destino",
+    "languagePlaceholder": "Seleccionar idioma",
+    "load": "Cargar",
+    "unload": "Descargar",
+    "loadTooltip": "Cargar el modelo seleccionado",
+    "unloadTooltip": "Descargar el modelo",
+    "generate": "Generar",
+    "generating": "Generando...",
+    "generateTooltip": "Generar traducciones para los bloques de texto detectados",
+    "render": "Renderizar",
+    "renderTooltip": "Renderizar traducciones en la página",
+    "loadingModel": "Cargando modelo LLM",
+    "statusReady": "LLM listo",
+    "statusIdle": "LLM no cargado"
+  },
+  "render": {
+    "effectLabel": "Efecto de texto",
+    "effectNormal": "Normal",
+    "effectAntique": "Libro antiguo",
+    "effectMetal": "Metal",
+    "effectManga": "Trama manga",
+    "effectMotionBlur": "Desenfoque de movimiento",
+    "fontLabel": "Fuente",
+    "fontPlaceholder": "Seleccionar fuente",
+    "fontColorLabel": "Color de fuente",
+    "fontScopeGlobal": "Global",
+    "fontScopeBlock": "Por bloque",
+    "fontScopeBlockIndex": "Bloque {{index}}"
+  },
+  "textBlocks": {
+    "emptyPrompt": "Abre una imagen para ver los bloques de texto.",
+    "title": "Bloques de texto ({{count}})",
+    "none": "Aún no hay bloques de texto. Ejecuta la detección para llenar la lista.",
+    "emptySummary": "<vacío>",
+    "ocrLabel": "Texto OCR",
+    "ocrBadge": "OCR",
+    "translationLabel": "Traducción",
+    "translationBadge": "TL",
+    "addOcrPlaceholder": "Agregar texto OCR",
+    "addTranslationPlaceholder": "Agregar traducción"
+  },
+  "workspace": {
+    "importPrompt": "Importa una página para comenzar a editar.",
+    "deleteBlock": "Eliminar bloque"
+  },
+  "statusBar": {
+    "zoom": "Zoom",
+    "canvas": "Lienzo"
+  },
+  "toolbar": {
+    "brush": "Pincel",
+    "eraser": "Borrador",
+    "brushSize": "Tamaño del pincel",
+    "brushColor": "Color del pincel"
+  },
+  "toolRail": {
+    "select": "Seleccionar",
+    "block": "Bloque",
+    "brush": "Pincel",
+    "repairBrush": "Pincel de reparación",
+    "eraser": "Borrador"
+  },
+  "download": {
+    "title": "Descargando"
+  },
+  "settings": {
+    "title": "Configuración",
+    "appearance": "Apariencia",
+    "appearanceDescription": "Personaliza cómo se ve Koharu en tu dispositivo.",
+    "theme": "Tema",
+    "themeDescription": "Selecciona tu esquema de colores preferido.",
+    "themeLight": "Claro",
+    "themeDark": "Oscuro",
+    "themeSystem": "Sistema",
+    "language": "Idioma",
+    "languageDescription": "Selecciona tu idioma preferido.",
+    "about": "Acerca de",
+    "aboutDescription": "Información sobre esta aplicación.",
+    "aboutTagline": "Herramienta de traducción de manga",
+    "aboutVersion": "Versión",
+    "aboutLatest": "Última",
+    "aboutUpdate": "Actualización disponible ({{version}})",
+    "aboutAuthor": "Autor",
+    "aboutRepository": "Repositorio",
+    "device": "Dispositivo",
+    "deviceDescription": "Información sobre aceleración por hardware.",
+    "deviceMl": "Cómputo ML",
+    "deviceWgpu": "Renderizador GPU",
+    "deviceBackend": "Backend"
+  }
+}
