@@ -311,59 +311,81 @@ export const useDocumentMutations = () => {
     await api.openExternal(url)
   }, [])
 
+  const { startOperation, finishOperation } = useOperationStore.getState()
+
   const detect = useCallback(
     async (_?: any, index?: number) => {
       const resolvedIndex =
         index ?? useEditorUiStore.getState().currentDocumentIndex
-      await api.detect(resolvedIndex)
-      await invalidateCurrentDocument(queryClient, resolvedIndex)
-      await invalidateThumbnailAtIndex(queryClient, resolvedIndex)
-      useEditorUiStore.getState().setShowRenderedImage(false)
+      startOperation({ type: 'process-current', step: 'detect', cancellable: true })
+      try {
+        await api.detect(resolvedIndex)
+        await invalidateCurrentDocument(queryClient, resolvedIndex)
+        await invalidateThumbnailAtIndex(queryClient, resolvedIndex)
+        useEditorUiStore.getState().setShowRenderedImage(false)
+      } finally {
+        finishOperation()
+      }
     },
-    [queryClient],
+    [queryClient, startOperation, finishOperation],
   )
 
   const ocr = useCallback(
     async (_?: any, index?: number) => {
       const resolvedIndex =
         index ?? useEditorUiStore.getState().currentDocumentIndex
-      await api.ocr(resolvedIndex)
-      await invalidateCurrentDocument(queryClient, resolvedIndex)
-      await invalidateThumbnailAtIndex(queryClient, resolvedIndex)
+      startOperation({ type: 'process-current', step: 'ocr', cancellable: true })
+      try {
+        await api.ocr(resolvedIndex)
+        await invalidateCurrentDocument(queryClient, resolvedIndex)
+        await invalidateThumbnailAtIndex(queryClient, resolvedIndex)
+      } finally {
+        finishOperation()
+      }
     },
-    [queryClient],
+    [queryClient, startOperation, finishOperation],
   )
 
   const inpaint = useCallback(
     async (_?: any, index?: number) => {
       const resolvedIndex =
         index ?? useEditorUiStore.getState().currentDocumentIndex
-      await flushTextBlockSync()
-      await flushMaskSyncQueue()
-      await api.inpaint(resolvedIndex)
-      await invalidateCurrentDocument(queryClient, resolvedIndex)
-      await invalidateThumbnailAtIndex(queryClient, resolvedIndex)
-      useEditorUiStore.getState().setShowInpaintedImage(true)
+      startOperation({ type: 'process-current', step: 'inpaint', cancellable: true })
+      try {
+        await flushTextBlockSync()
+        await flushMaskSyncQueue()
+        await api.inpaint(resolvedIndex)
+        await invalidateCurrentDocument(queryClient, resolvedIndex)
+        await invalidateThumbnailAtIndex(queryClient, resolvedIndex)
+        useEditorUiStore.getState().setShowInpaintedImage(true)
+      } finally {
+        finishOperation()
+      }
     },
-    [queryClient],
+    [queryClient, startOperation, finishOperation],
   )
 
   const render = useCallback(
     async (_?: any, index?: number) => {
       const resolvedIndex =
         index ?? useEditorUiStore.getState().currentDocumentIndex
-      const { renderEffect } = useEditorUiStore.getState()
-      const { fontFamily } = usePreferencesStore.getState()
-      await flushTextBlockSync()
-      await api.render(resolvedIndex, {
-        shaderEffect: renderEffect,
-        fontFamily,
-      })
-      await invalidateCurrentDocument(queryClient, resolvedIndex)
-      await invalidateThumbnailAtIndex(queryClient, resolvedIndex)
-      useEditorUiStore.getState().setShowRenderedImage(true)
+      startOperation({ type: 'process-current', step: 'render', cancellable: true })
+      try {
+        const { renderEffect } = useEditorUiStore.getState()
+        const { fontFamily } = usePreferencesStore.getState()
+        await flushTextBlockSync()
+        await api.render(resolvedIndex, {
+          shaderEffect: renderEffect,
+          fontFamily,
+        })
+        await invalidateCurrentDocument(queryClient, resolvedIndex)
+        await invalidateThumbnailAtIndex(queryClient, resolvedIndex)
+        useEditorUiStore.getState().setShowRenderedImage(true)
+      } finally {
+        finishOperation()
+      }
     },
-    [queryClient],
+    [queryClient, startOperation, finishOperation],
   )
 
   const inpaintAndRenderImage = useCallback(

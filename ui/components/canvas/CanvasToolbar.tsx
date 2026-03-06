@@ -46,6 +46,7 @@ import {
   useLlmMutations,
   useTextBlockMutations,
 } from '@/lib/query/mutations'
+import { useOperationStore } from '@/lib/stores/operationStore'
 
 const DEFAULT_COLOR: RgbaColor = [0, 0, 0, 255]
 const DEFAULT_FONT_FAMILIES = ['Arial']
@@ -101,6 +102,12 @@ function WorkflowButtons() {
   const { data: llmReady = false } = useLlmReadyQuery()
   const [generating, setGenerating] = useState(false)
   const { t } = useTranslation()
+  const operation = useOperationStore((state) => state.operation)
+
+  const isDetecting = operation?.type === 'process-current' && operation?.step === 'detect'
+  const isOcr = operation?.type === 'process-current' && operation?.step === 'ocr'
+  const isInpainting = operation?.type === 'process-current' && operation?.step === 'inpaint'
+  const isRendering = operation?.type === 'process-current' && operation?.step === 'render'
 
   const handleTranslate = async () => {
     setGenerating(true)
@@ -120,15 +127,30 @@ function WorkflowButtons() {
         size='xs'
         onClick={detect}
         data-testid='toolbar-detect'
+        disabled={isDetecting}
       >
-        <ScanIcon className='size-4' />
+        {isDetecting ? (
+          <LoaderCircleIcon className='size-4 animate-spin' />
+        ) : (
+          <ScanIcon className='size-4' />
+        )}
         {t('processing.detect')}
       </Button>
 
       <Separator orientation='vertical' className='mx-0.5 h-4' />
 
-      <Button variant='ghost' size='xs' onClick={ocr} data-testid='toolbar-ocr'>
-        <ScanTextIcon className='size-4' />
+      <Button
+        variant='ghost'
+        size='xs'
+        onClick={ocr}
+        data-testid='toolbar-ocr'
+        disabled={isOcr}
+      >
+        {isOcr ? (
+          <LoaderCircleIcon className='size-4 animate-spin' />
+        ) : (
+          <ScanTextIcon className='size-4' />
+        )}
         {t('processing.ocr')}
       </Button>
 
@@ -156,8 +178,13 @@ function WorkflowButtons() {
         size='xs'
         onClick={inpaint}
         data-testid='toolbar-inpaint'
+        disabled={isInpainting}
       >
-        <Wand2Icon className='size-4' />
+        {isInpainting ? (
+          <LoaderCircleIcon className='size-4 animate-spin' />
+        ) : (
+          <Wand2Icon className='size-4' />
+        )}
         {t('mask.inpaint')}
       </Button>
 
@@ -168,8 +195,13 @@ function WorkflowButtons() {
         size='xs'
         onClick={render}
         data-testid='toolbar-render'
+        disabled={isRendering}
       >
-        <TypeIcon className='size-4' />
+        {isRendering ? (
+          <LoaderCircleIcon className='size-4 animate-spin' />
+        ) : (
+          <TypeIcon className='size-4' />
+        )}
         {t('llm.render')}
       </Button>
     </div>
@@ -493,3 +525,4 @@ function LlmStatusPopover() {
     </Popover>
   )
 }
+
