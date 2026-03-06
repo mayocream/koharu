@@ -153,6 +153,10 @@
   "download": {
     "title": "ダウンロード中"
   },
+  "errors": {
+    "title": "エラー",
+    "dismiss": "閉じる"
+  },
   "settings": {
     "title": "設定",
     "appearance": "外観",

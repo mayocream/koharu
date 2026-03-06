@@ -3,6 +3,7 @@
 import { WsRpcClient } from './ws'
 import { fileOpen, fileSave } from 'browser-fs-access'
 import { toArrayBuffer } from './util'
+import { reportRpcError } from './errors'
 import type { RpcMethodMap, RpcNotificationMap, FileResult } from './rpc-types'
 
 // --- Singleton client ---
@@ -162,15 +163,25 @@ export async function invoke<M extends keyof RpcMethodMap>(
 
   // Special file-save flow for save_documents / export_document
   if (method === 'save_documents' || method === 'export_document') {
-    const result = await getClient().invoke<FileResult>(method, params)
-    const blob = new Blob([toArrayBuffer(result.data)])
     try {
-      await fileSave(blob, { fileName: result.filename })
-    } catch {}
-    return undefined as RpcMethodMap[M][1]
+      const result = await getClient().invoke<FileResult>(method, params)
+      const blob = new Blob([toArrayBuffer(result.data)])
+      try {
+        await fileSave(blob, { fileName: result.filename })
+      } catch {}
+      return undefined as RpcMethodMap[M][1]
+    } catch (error) {
+      reportRpcError(method, error)
+      throw error
+    }
   }
 
-  return getClient().invoke<RpcMethodMap[M][1]>(method, params)
+  try {
+    return await getClient().invoke<RpcMethodMap[M][1]>(method, params)
+  } catch (error) {
+    reportRpcError(method, error)
+    throw error
+  }
 }
 
 async function openDocumentsRpc(

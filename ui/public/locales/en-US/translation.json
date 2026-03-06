@@ -153,6 +153,10 @@
   "download": {
     "title": "Downloading"
   },
+  "errors": {
+    "title": "Error",
+    "dismiss": "Dismiss"
+  },
   "settings": {
     "title": "Settings",
     "appearance": "Appearance",

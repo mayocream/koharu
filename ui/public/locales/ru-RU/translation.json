@@ -153,6 +153,10 @@
   "download": {
     "title": "Загрузка"
   },
+  "errors": {
+    "title": "Ошибка",
+    "dismiss": "Закрыть"
+  },
   "settings": {
     "title": "Настройки",
     "appearance": "Внешний вид",
