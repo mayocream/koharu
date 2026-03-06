@@ -91,6 +91,27 @@ pub async fn open_documents(
     Ok(count)
 }
 
+pub async fn add_documents(
+    state: AppResources,
+    payload: OpenDocumentsPayload,
+) -> anyhow::Result<usize> {
+    let inputs: Vec<(PathBuf, Vec<u8>)> = payload
+        .files
+        .into_iter()
+        .map(|f| (PathBuf::from(f.name), f.data))
+        .collect();
+
+    if inputs.is_empty() {
+        anyhow::bail!("No files uploaded");
+    }
+
+    let docs = load_documents(inputs)?;
+    let appended = docs.len();
+    let mut guard = state.state.write().await;
+    guard.documents.extend(docs);
+    Ok(guard.documents.len())
+}
+
 pub async fn export_document(
     state: AppResources,
     payload: IndexPayload,
