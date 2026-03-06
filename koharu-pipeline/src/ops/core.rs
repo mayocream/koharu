@@ -106,7 +106,6 @@ pub async fn add_documents(
     }
 
     let docs = load_documents(inputs)?;
-    let appended = docs.len();
     let mut guard = state.state.write().await;
     guard.documents.extend(docs);
     Ok(guard.documents.len())
