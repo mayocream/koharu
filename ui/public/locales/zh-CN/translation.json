@@ -153,6 +153,10 @@
   "download": {
     "title": "下载中"
   },
+  "errors": {
+    "title": "错误",
+    "dismiss": "关闭"
+  },
   "settings": {
     "title": "设置",
     "appearance": "外观",

@@ -2,10 +2,12 @@
 
 import { type ReactNode, useEffect } from 'react'
 import { useTranslation } from 'react-i18next'
+import { CircleXIcon } from 'lucide-react'
 import { useDownloadStore } from '@/lib/downloads'
 import { Button } from '@/components/ui/button'
 import { type OperationState } from '@/lib/operations'
 import { useOperationStore } from '@/lib/stores/operationStore'
+import { useUiErrorStore } from '@/lib/stores/uiErrorStore'
 import { useDocumentMutations } from '@/lib/query/mutations'
 
 type TranslateFunc = ReturnType<typeof useTranslation>['t']
@@ -69,6 +71,47 @@ function DownloadCard({
         </div>
       </div>
     </BubbleCard>
+  )
+}
+
+function ErrorCard({
+  message,
+  onDismiss,
+  t,
+}: {
+  message: string
+  onDismiss: () => void
+  t: TranslateFunc
+}) {
+  return (
+    <div className='bg-card/95 rounded-2xl border border-red-200/80 p-4 shadow-[0_15px_60px_rgba(0,0,0,0.12)] backdrop-blur dark:border-red-900/80'>
+      <div className='flex items-start gap-3'>
+        <div className='mt-0.5 flex h-8 w-8 items-center justify-center rounded-full bg-red-100 text-red-600 dark:bg-red-950/70 dark:text-red-400'>
+          <CircleXIcon className='size-4' />
+        </div>
+        <div className='min-w-0 flex-1'>
+          <div className='flex items-start justify-between gap-3'>
+            <div className='min-w-0'>
+              <div className='text-sm font-semibold text-red-700 dark:text-red-300'>
+                {t('errors.title')}
+              </div>
+              <div className='mt-1 break-words border-l-2 border-red-500 pl-3 text-xs text-red-700/90 dark:text-red-200/90'>
+                {message}
+              </div>
+            </div>
+            <Button
+              variant='ghost'
+              size='icon-xs'
+              onClick={onDismiss}
+              className='text-red-700 hover:bg-red-50 hover:text-red-800 dark:text-red-300 dark:hover:bg-red-950/60'
+              aria-label={t('errors.dismiss')}
+            >
+              <CircleXIcon className='size-3.5' />
+            </Button>
+          </div>
+        </div>
+      </div>
+    </div>
   )
 }
 
@@ -204,6 +247,8 @@ function OperationCard({
 export function ActivityBubble() {
   const { t } = useTranslation()
   const operation = useOperationStore((state) => state.operation)
+  const error = useUiErrorStore((state) => state.error)
+  const clearError = useUiErrorStore((state) => state.clearError)
   const { cancelOperation } = useDocumentMutations()
   const downloads = useDownloadStore((s) => s.downloads)
   const ensureSubscribed = useDownloadStore((s) => s.ensureSubscribed)
@@ -216,10 +261,11 @@ export function ActivityBubble() {
     (d) => d.status === 'started' || d.status === 'downloading',
   )
 
-  if (!operation && activeDownloads.length === 0) return null
+  if (!error && !operation && activeDownloads.length === 0) return null
 
   return (
     <div className='pointer-events-auto fixed right-6 bottom-6 z-100 flex w-80 max-w-[calc(100%-1.5rem)] flex-col gap-3'>
+      {error && <ErrorCard message={error.message} onDismiss={clearError} t={t} />}
       {operation && (
         <OperationCard operation={operation} onCancel={cancelOperation} t={t} />
       )}
