@@ -33,6 +33,7 @@ type MenuSection = {
 export function MenuBar() {
   const { t } = useTranslation()
   const {
+    addDocuments,
     openDocuments,
     openExternal,
     processImage,
@@ -46,6 +47,11 @@ export function MenuBar() {
       label: t('menu.openFile'),
       onSelect: openDocuments,
       testId: 'menu-file-open',
+    },
+    {
+      label: t('menu.addFile'),
+      onSelect: addDocuments,
+      testId: 'menu-file-add',
     },
     // TODO: { label: t('menu.save'), onSelect: saveDocuments },
     {

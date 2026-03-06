@@ -75,6 +75,10 @@ export const api = {
     return fetchThumbnailBlob(index)
   },
 
+  async addDocuments(): Promise<number> {
+    return invoke('add_documents')
+  },
+
   async openDocuments(): Promise<number> {
     return invoke('open_documents')
   },

@@ -43,6 +43,7 @@ export type RpcMethodMap = {
   get_documents: [void, number]
   get_document: [{ index: number }, Document]
   get_thumbnail: [{ index: number }, ThumbnailResult]
+  add_documents: [void, number]
   open_documents: [void, number]
   save_documents: [void, void]
   export_document: [{ index: number }, void]

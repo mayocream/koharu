@@ -5,6 +5,7 @@
   "menu": {
     "file": "文件",
     "openFile": "打开文件...",
+    "addFile": "添加文件...",
     "save": "保存...",
     "export": "导出...",
     "view": "视图",

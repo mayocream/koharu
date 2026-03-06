@@ -222,6 +222,15 @@ export const useDocumentMutations = () => {
   const queryClient = useQueryClient()
   const { setProgress, clearProgress } = useProgressActions()
 
+  const refreshDocuments = useCallback(async () => {
+    await queryClient.invalidateQueries({
+      queryKey: queryKeys.documents.currentRoot,
+    })
+    await queryClient.invalidateQueries({
+      queryKey: queryKeys.documents.thumbnailRoot,
+    })
+  }, [queryClient])
+
   const refreshCurrentDocument = useCallback(async () => {
     const { currentDocumentIndex } = useEditorUiStore.getState()
     await invalidateCurrentDocument(queryClient, currentDocumentIndex)
@@ -238,12 +247,7 @@ export const useDocumentMutations = () => {
       useEditorUiStore.getState().setTotalPages(count)
       clearMaskSync()
       queryClient.setQueryData(queryKeys.documents.count, count)
-      await queryClient.invalidateQueries({
-        queryKey: queryKeys.documents.currentRoot,
-      })
-      await queryClient.invalidateQueries({
-        queryKey: queryKeys.documents.thumbnailRoot,
-      })
+      await refreshDocuments()
       if (count > 0) {
         await queryClient.prefetchQuery({
           queryKey: queryKeys.documents.current(0),
@@ -253,7 +257,42 @@ export const useDocumentMutations = () => {
     } finally {
       finishOperation()
     }
-  }, [queryClient])
+  }, [clearMaskSync, queryClient, refreshDocuments])
+
+  const addDocuments = useCallback(async () => {
+    const { startOperation, finishOperation } = useOperationStore.getState()
+    startOperation({
+      type: 'load-khr',
+      cancellable: false,
+    })
+    try {
+      const editorUi = useEditorUiStore.getState()
+      const previousCount = editorUi.totalPages
+      const count = await api.addDocuments()
+      if (count === previousCount) {
+        return
+      }
+
+      clearMaskSync()
+      queryClient.setQueryData(queryKeys.documents.count, count)
+      await refreshDocuments()
+      useEditorUiStore.setState((state) => ({
+        totalPages: count,
+        documentsVersion: state.documentsVersion + 1,
+        currentDocumentIndex: previousCount > 0 ? previousCount : 0,
+        selectedBlockIndex: undefined,
+      }))
+
+      if (count > previousCount) {
+        await queryClient.prefetchQuery({
+          queryKey: queryKeys.documents.current(previousCount),
+          queryFn: () => api.getDocument(previousCount),
+        })
+      }
+    } finally {
+      finishOperation()
+    }
+  }, [queryClient, refreshDocuments])
 
   const saveDocuments = useCallback(async () => {
     const { startOperation, finishOperation } = useOperationStore.getState()
@@ -404,6 +443,7 @@ export const useDocumentMutations = () => {
 
   return {
     refreshCurrentDocument,
+    addDocuments,
     openDocuments,
     saveDocuments,
     openExternal,

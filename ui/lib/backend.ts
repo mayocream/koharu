@@ -155,9 +155,9 @@ export async function invoke<M extends keyof RpcMethodMap>(
     return undefined as RpcMethodMap[M][1]
   }
 
-  // Special file-pick flow for open_documents
-  if (method === 'open_documents') {
-    return (await openDocumentsRpc()) as RpcMethodMap[M][1]
+  // Special file-pick flow for open_documents / add_documents
+  if (method === 'open_documents' || method === 'add_documents') {
+    return (await openDocumentsRpc(method)) as RpcMethodMap[M][1]
   }
 
   // Special file-save flow for save_documents / export_document
@@ -173,7 +173,9 @@ export async function invoke<M extends keyof RpcMethodMap>(
   return getClient().invoke<RpcMethodMap[M][1]>(method, params)
 }
 
-async function openDocumentsRpc(): Promise<number> {
+async function openDocumentsRpc(
+  method: 'open_documents' | 'add_documents',
+): Promise<number> {
   let files: File[]
   try {
     files = await fileOpen({
@@ -194,7 +196,7 @@ async function openDocumentsRpc(): Promise<number> {
     })),
   )
 
-  return getClient().invoke<number>('open_documents', { files: entries })
+  return getClient().invoke<number>(method, { files: entries })
 }
 
 // --- Thumbnail fetch ---

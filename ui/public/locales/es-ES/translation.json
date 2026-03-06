@@ -5,6 +5,7 @@
   "menu": {
     "file": "Archivo",
     "openFile": "Abrir archivo...",
+    "addFile": "Agregar archivo...",
     "save": "Guardar...",
     "export": "Exportar...",
     "view": "Ver",
