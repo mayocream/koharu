@@ -1,11 +1,13 @@
 'use client'
 
+import { useEffect, useRef } from 'react'
 import { useCurrentDocumentState } from '@/lib/query/hooks'
 import { useMaskMutations, useTextBlockMutations } from '@/lib/query/mutations'
 import { useEditorUiStore } from '@/lib/stores/editorUiStore'
 import { Document, InpaintRegion, TextBlock } from '@/types'
 
 const TEXT_BLOCK_INPAINT_RADIUS = 12
+const TEXT_BLOCK_RENDER_DEBOUNCE_MS = 250
 
 const buildInpaintRegion = (block: TextBlock, doc: Document): InpaintRegion => {
   const x0 = Math.max(0, Math.floor(block.x - TEXT_BLOCK_INPAINT_RADIUS))
@@ -38,6 +40,10 @@ const shouldRenderSprite = (updates: Partial<TextBlock>) =>
   Object.prototype.hasOwnProperty.call(updates, 'translation') ||
   Object.prototype.hasOwnProperty.call(updates, 'style')
 
+const shouldRenderSpriteImmediately = (updates: Partial<TextBlock>) =>
+  Object.prototype.hasOwnProperty.call(updates, 'width') ||
+  Object.prototype.hasOwnProperty.call(updates, 'height')
+
 const shouldInpaint = (updates: Partial<TextBlock>) =>
   Object.prototype.hasOwnProperty.call(updates, 'width') ||
   Object.prototype.hasOwnProperty.call(updates, 'height')
@@ -54,6 +60,33 @@ export function useTextBlocks() {
   )
   const { updateTextBlocks, renderTextBlock } = useTextBlockMutations()
   const { inpaintPartial } = useMaskMutations()
+  const renderTimersRef = useRef<Map<number, ReturnType<typeof setTimeout>>>(
+    new Map(),
+  )
+
+  useEffect(() => {
+    const timers = renderTimersRef.current
+    return () => {
+      timers.forEach((timer) => clearTimeout(timer))
+      timers.clear()
+    }
+  }, [])
+
+  const clearScheduledRender = (index: number) => {
+    const timer = renderTimersRef.current.get(index)
+    if (!timer) return
+    clearTimeout(timer)
+    renderTimersRef.current.delete(index)
+  }
+
+  const scheduleRender = (index: number) => {
+    clearScheduledRender(index)
+    const timer = setTimeout(() => {
+      renderTimersRef.current.delete(index)
+      void renderTextBlock(undefined, currentDocumentIndex, index)
+    }, TEXT_BLOCK_RENDER_DEBOUNCE_MS)
+    renderTimersRef.current.set(index, timer)
+  }
 
   const replaceBlock = async (index: number, updates: Partial<TextBlock>) => {
     const currentBlocks = document?.textBlocks ?? []
@@ -65,7 +98,12 @@ export function useTextBlocks() {
     const doc = document
 
     if (shouldRenderSprite(updates)) {
-      void renderTextBlock(undefined, currentDocumentIndex, index)
+      if (shouldRenderSpriteImmediately(updates)) {
+        clearScheduledRender(index)
+        void renderTextBlock(undefined, currentDocumentIndex, index)
+      } else {
+        scheduleRender(index)
+      }
     }
 
     if (doc?.segment && shouldInpaint(updates)) {
@@ -90,6 +128,7 @@ export function useTextBlocks() {
   }
 
   const removeBlock = async (index: number) => {
+    clearScheduledRender(index)
     const currentBlocks = document?.textBlocks ?? []
     const nextBlocks = currentBlocks.filter((_, idx) => idx !== index)
     await updateTextBlocks(nextBlocks)
