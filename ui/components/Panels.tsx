@@ -1,99 +1,68 @@
 'use client'
 
-import { useState } from 'react'
 import { useTranslation } from 'react-i18next'
-import { motion, AnimatePresence } from 'motion/react'
-import { ChevronDownIcon, LayersIcon, ALargeSmallIcon } from 'lucide-react'
+import { LayersIcon, SlidersHorizontalIcon } from 'lucide-react'
 import { LayersPanel } from '@/components/panels/LayersPanel'
 import { TextBlocksPanel } from '@/components/panels/TextBlocksPanel'
 import { RenderControls } from '@/components/canvas/CanvasToolbar'
-import {
-  Popover,
-  PopoverContent,
-  PopoverTrigger,
-} from '@/components/ui/popover'
-import {
-  Tooltip,
-  TooltipContent,
-  TooltipTrigger,
-} from '@/components/ui/tooltip'
-import { Button } from '@/components/ui/button'
-
-export function PanelsToolbar() {
-  const { t } = useTranslation()
-
-  return (
-    <div className='border-border bg-card flex w-11 shrink-0 flex-col items-center gap-1 border-l py-2'>
-      <Popover>
-        <Tooltip>
-          <TooltipTrigger asChild>
-            <PopoverTrigger asChild>
-              <Button
-                variant='ghost'
-                size='icon-sm'
-                data-testid='render-controls-trigger'
-                className='text-muted-foreground'
-              >
-                <ALargeSmallIcon className='size-4' />
-              </Button>
-            </PopoverTrigger>
-          </TooltipTrigger>
-          <TooltipContent side='left' sideOffset={8}>
-            {t('render.fontLabel')}
-          </TooltipContent>
-        </Tooltip>
-        <PopoverContent
-          side='left'
-          align='start'
-          className='w-auto p-3'
-          data-testid='render-controls-popover'
-        >
-          <RenderControls />
-        </PopoverContent>
-      </Popover>
-    </div>
-  )
-}
+import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
+import { ScrollArea } from '@/components/ui/scroll-area'
 
 export function Panels() {
   const { t } = useTranslation()
-  const [layersExpanded, setLayersExpanded] = useState(true)
 
   return (
-    <div className='bg-muted/50 flex h-full w-full flex-col border-l'>
-      {/* Layers Section */}
-      <div className='flex flex-col' data-testid='panels-layers'>
-        <Button
-          variant='ghost'
-          onClick={() => setLayersExpanded(!layersExpanded)}
-          className='hover:bg-accent/50 border-border flex h-auto w-full justify-start gap-1.5 rounded-none border-b px-2 py-1.5 text-left'
-        >
-          <motion.div
-            animate={{ rotate: layersExpanded ? 0 : -90 }}
-            transition={{ duration: 0.15, ease: 'easeOut' }}
+    <div className='bg-muted/50 flex h-full min-h-0 w-full flex-col border-l'>
+      <Tabs
+        defaultValue='layers'
+        className='border-border h-60 shrink-0 gap-0 border-b'
+        data-testid='panels-settings-tabs'
+      >
+        <TabsList className='bg-muted/70 m-2 mb-0 grid w-[calc(100%-1rem)] grid-cols-2'>
+          <TabsTrigger
+            value='layers'
+            data-testid='panels-tab-layers'
+            className='gap-1'
           >
-            <ChevronDownIcon className='text-muted-foreground size-3.5' />
-          </motion.div>
-          <LayersIcon className='size-3.5' />
-          <span className='text-xs font-semibold tracking-wide uppercase'>
-            {t('layers.title')}
-          </span>
-        </Button>
-        <AnimatePresence initial={false}>
-          {layersExpanded && (
-            <motion.div
-              data-testid='panels-layers-content'
-              initial={{ height: 0, opacity: 0 }}
-              animate={{ height: 'auto', opacity: 1 }}
-              exit={{ height: 0, opacity: 0 }}
-              transition={{ duration: 0.2, ease: 'easeOut' }}
-              className='border-border overflow-hidden border-b'
-            >
-              <LayersPanel />
-            </motion.div>
-          )}
-        </AnimatePresence>
-      </div>
+            <LayersIcon className='size-3.5' />
+            <span className='text-xs font-semibold tracking-wide uppercase'>
+              {t('layers.title')}
+            </span>
+          </TabsTrigger>
+          <TabsTrigger
+            value='layout'
+            data-testid='panels-tab-layout'
+            className='gap-1'
+          >
+            <SlidersHorizontalIcon className='size-3.5' />
+            <span className='text-xs font-semibold tracking-wide uppercase'>
+              {t('panels.render')}
+            </span>
+          </TabsTrigger>
+        </TabsList>
+
+        <TabsContent
+          value='layers'
+          className='min-h-0 flex-1 px-1 pb-2 data-[state=inactive]:hidden'
+          data-testid='panels-layers'
+        >
+          <ScrollArea className='h-full' viewportClassName='pr-1'>
+            <LayersPanel />
+          </ScrollArea>
+        </TabsContent>
+
+        <TabsContent
+          value='layout'
+          className='min-h-0 flex-1 px-2 pb-2 data-[state=inactive]:hidden'
+          data-testid='panels-layout'
+        >
+          <ScrollArea className='h-full' viewportClassName='pr-1'>
+            <div className='pt-1'>
+              <RenderControls />
+            </div>
+          </ScrollArea>
+        </TabsContent>
+      </Tabs>
 
       {/* Text Blocks Section - takes remaining space */}
       <TextBlocksPanel />

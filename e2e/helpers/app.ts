@@ -151,12 +151,20 @@ export function getLayerLocator(page: Page, layerId: LayerId): Locator {
   return page.getByTestId(selectors.layers[layerId])
 }
 
+async function ensureLayersTabActive(page: Page) {
+  const layersTab = page.getByTestId(selectors.panels.tabLayers)
+  if ((await layersTab.count()) === 0) return
+  await layersTab.click()
+  await expect(page.getByTestId(selectors.panels.layers)).toBeVisible()
+}
+
 export async function waitForLayerHasContent(
   page: Page,
   layerId: LayerId,
   hasContent = true,
   timeout = 45_000,
 ) {
+  await ensureLayersTabActive(page)
   const layer = getLayerLocator(page, layerId)
   await expect(layer).toHaveAttribute(
     'data-has-content',
@@ -171,6 +179,7 @@ export async function waitForLayerVisible(
   visible = true,
   timeout = 30_000,
 ) {
+  await ensureLayersTabActive(page)
   const layer = getLayerLocator(page, layerId)
   await expect(layer).toHaveAttribute('data-visible', visible ? 'true' : 'false', {
     timeout,

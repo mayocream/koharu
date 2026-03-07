@@ -1,6 +1,6 @@
 'use client'
 
-import { Panels, PanelsToolbar } from '@/components/Panels'
+import { Panels } from '@/components/Panels'
 import { Workspace, StatusBar } from '@/components/Canvas'
 import { Navigator } from '@/components/Navigator'
 import { ActivityBubble } from '@/components/ActivityBubble'
@@ -45,10 +45,7 @@ export default function Page() {
         <Separator className='bg-border/40 hover:bg-border w-1 transition-colors' />
         <Panel id='right' defaultSize={320} minSize={320} maxSize={460}>
           <AppErrorBoundary>
-            <div className='flex h-full min-h-0'>
-              <PanelsToolbar />
-              <Panels />
-            </div>
+            <Panels />
           </AppErrorBoundary>
         </Panel>
       </Group>

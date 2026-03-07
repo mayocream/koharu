@@ -149,10 +149,10 @@ function TextBlockAnnotation({
     >
       <div className='relative h-full w-full select-none'>
         <div
-          className={`absolute inset-0 rounded border-2 ${
+          className={`absolute inset-0 rounded ${
             selected
-              ? 'border-primary bg-primary/15 border-dashed'
-              : 'border-rose-400/60 bg-rose-400/5'
+              ? 'border-primary bg-primary/15 border-[3px]'
+              : 'border-2 border-rose-400/60 bg-rose-400/5'
           }`}
         />
         <div

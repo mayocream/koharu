@@ -55,6 +55,9 @@ export const selectors = {
   },
   panels: {
     layers: 'panels-layers',
+    layout: 'panels-layout',
+    tabLayers: 'panels-tab-layers',
+    tabLayout: 'panels-tab-layout',
     textBlocks: 'panels-textblocks',
     textBlocksCount: 'textblocks-count',
     textBlocksScroll: 'textblocks-scroll',
@@ -62,8 +65,6 @@ export const selectors = {
     textBlockOcr: (index: number) => `textblock-ocr-${index}`,
     textBlockTranslation: (index: number) => `textblock-translation-${index}`,
     textBlockGenerate: (index: number) => `textblock-generate-${index}`,
-    renderControlsTrigger: 'render-controls-trigger',
-    renderControlsPopover: 'render-controls-popover',
     renderFontSelect: 'render-font-select',
     renderFontOption: (index: number) => `render-font-option-${index}`,
     renderEffectSelect: 'render-effect-select',

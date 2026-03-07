@@ -17,8 +17,8 @@ test('changes style controls and re-renders', async ({ page }) => {
   await importAndOpenPage(page, PIPELINE_SINGLE)
   await prepareDetectAndOcr(page)
 
-  await page.getByTestId(selectors.panels.renderControlsTrigger).click()
-  await expect(page.getByTestId(selectors.panels.renderControlsPopover)).toBeVisible()
+  await page.getByTestId(selectors.panels.tabLayout).click()
+  await expect(page.getByTestId(selectors.panels.layout)).toBeVisible()
 
   await page.getByTestId(selectors.panels.renderFontSelect).click()
   await expect(page.getByTestId(selectors.panels.renderFontOption(1))).toBeVisible()
@@ -57,8 +57,8 @@ test('changes style controls and re-renders', async ({ page }) => {
   await expect(renderedImage).toBeVisible()
   const firstRenderedSrc = await readImageSrc(renderedImage)
 
-  await page.getByTestId(selectors.panels.renderControlsTrigger).click()
-  await expect(page.getByTestId(selectors.panels.renderControlsPopover)).toBeVisible()
+  await page.getByTestId(selectors.panels.tabLayout).click()
+  await expect(page.getByTestId(selectors.panels.layout)).toBeVisible()
   await page.getByTestId(selectors.panels.renderEffectSelect).click()
   await expect(page.getByTestId(selectors.panels.renderEffectOption(1))).toBeVisible()
   await page.getByTestId(selectors.panels.renderEffectOption(1)).click()

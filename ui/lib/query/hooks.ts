@@ -21,6 +21,7 @@ export const useCurrentDocumentQuery = (index: number, enabled = true) =>
     enabled,
     placeholderData: keepPreviousData,
     structuralSharing: false,
+    refetchOnMount: false,
   })
 
 export const useCurrentDocumentState = () => {

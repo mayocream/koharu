@@ -317,7 +317,11 @@ export const useDocumentMutations = () => {
     async (_?: any, index?: number) => {
       const resolvedIndex =
         index ?? useEditorUiStore.getState().currentDocumentIndex
-      startOperation({ type: 'process-current', step: 'detect', cancellable: true })
+      startOperation({
+        type: 'process-current',
+        step: 'detect',
+        cancellable: true,
+      })
       try {
         await api.detect(resolvedIndex)
         await invalidateCurrentDocument(queryClient, resolvedIndex)
@@ -334,7 +338,11 @@ export const useDocumentMutations = () => {
     async (_?: any, index?: number) => {
       const resolvedIndex =
         index ?? useEditorUiStore.getState().currentDocumentIndex
-      startOperation({ type: 'process-current', step: 'ocr', cancellable: true })
+      startOperation({
+        type: 'process-current',
+        step: 'ocr',
+        cancellable: true,
+      })
       try {
         await api.ocr(resolvedIndex)
         await invalidateCurrentDocument(queryClient, resolvedIndex)
@@ -350,7 +358,11 @@ export const useDocumentMutations = () => {
     async (_?: any, index?: number) => {
       const resolvedIndex =
         index ?? useEditorUiStore.getState().currentDocumentIndex
-      startOperation({ type: 'process-current', step: 'inpaint', cancellable: true })
+      startOperation({
+        type: 'process-current',
+        step: 'inpaint',
+        cancellable: true,
+      })
       try {
         await flushTextBlockSync()
         await flushMaskSyncQueue()
@@ -369,7 +381,11 @@ export const useDocumentMutations = () => {
     async (_?: any, index?: number) => {
       const resolvedIndex =
         index ?? useEditorUiStore.getState().currentDocumentIndex
-      startOperation({ type: 'process-current', step: 'render', cancellable: true })
+      startOperation({
+        type: 'process-current',
+        step: 'render',
+        cancellable: true,
+      })
       try {
         const { renderEffect } = useEditorUiStore.getState()
         const { fontFamily } = usePreferencesStore.getState()

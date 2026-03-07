@@ -104,10 +104,14 @@ function WorkflowButtons() {
   const { t } = useTranslation()
   const operation = useOperationStore((state) => state.operation)
 
-  const isDetecting = operation?.type === 'process-current' && operation?.step === 'detect'
-  const isOcr = operation?.type === 'process-current' && operation?.step === 'ocr'
-  const isInpainting = operation?.type === 'process-current' && operation?.step === 'inpaint'
-  const isRendering = operation?.type === 'process-current' && operation?.step === 'render'
+  const isDetecting =
+    operation?.type === 'process-current' && operation?.step === 'detect'
+  const isOcr =
+    operation?.type === 'process-current' && operation?.step === 'ocr'
+  const isInpainting =
+    operation?.type === 'process-current' && operation?.step === 'inpaint'
+  const isRendering =
+    operation?.type === 'process-current' && operation?.step === 'render'
 
   const handleTranslate = async () => {
     setGenerating(true)
@@ -525,4 +529,3 @@ function LlmStatusPopover() {
     </Popover>
   )
 }
-

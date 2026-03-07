@@ -95,7 +95,7 @@ function ErrorCard({
               <div className='text-sm font-semibold text-red-700 dark:text-red-300'>
                 {t('errors.title')}
               </div>
-              <div className='mt-1 break-words border-l-2 border-red-500 pl-3 text-xs text-red-700/90 dark:text-red-200/90'>
+              <div className='mt-1 border-l-2 border-red-500 pl-3 text-xs break-words text-red-700/90 dark:text-red-200/90'>
                 {message}
               </div>
             </div>
@@ -265,7 +265,9 @@ export function ActivityBubble() {
 
   return (
     <div className='pointer-events-auto fixed right-6 bottom-6 z-100 flex w-80 max-w-[calc(100%-1.5rem)] flex-col gap-3'>
-      {error && <ErrorCard message={error.message} onDismiss={clearError} t={t} />}
+      {error && (
+        <ErrorCard message={error.message} onDismiss={clearError} t={t} />
+      )}
       {operation && (
         <OperationCard operation={operation} onCancel={cancelOperation} t={t} />
       )}
