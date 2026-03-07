@@ -3903,7 +3903,7 @@ checksum = "e2db585e1d738fc771bf08a151420d3ed193d9d895a36df7f6f8a9456b911ddc"
 
 [[package]]
 name = "koharu"
-version = "0.34.0"
+version = "0.35.0"
 dependencies = [
  "anyhow",
  "clap",
@@ -3931,7 +3931,7 @@ dependencies = [
 
 [[package]]
 name = "koharu-api"
-version = "0.34.0"
+version = "0.35.0"
 dependencies = [
  "anyhow",
  "koharu-types",
@@ -3943,7 +3943,7 @@ dependencies = [
 
 [[package]]
 name = "koharu-http"
-version = "0.34.0"
+version = "0.35.0"
 dependencies = [
  "anyhow",
  "axum",
@@ -3963,7 +3963,7 @@ dependencies = [
 
 [[package]]
 name = "koharu-ml"
-version = "0.34.0"
+version = "0.35.0"
 dependencies = [
  "anyhow",
  "candle-core",
@@ -3997,7 +3997,7 @@ dependencies = [
 
 [[package]]
 name = "koharu-pipeline"
-version = "0.34.0"
+version = "0.35.0"
 dependencies = [
  "anyhow",
  "image",
@@ -4018,7 +4018,7 @@ dependencies = [
 
 [[package]]
 name = "koharu-renderer"
-version = "0.34.0"
+version = "0.35.0"
 dependencies = [
  "anyhow",
  "bytemuck",
@@ -4042,7 +4042,7 @@ dependencies = [
 
 [[package]]
 name = "koharu-rpc"
-version = "0.34.0"
+version = "0.35.0"
 dependencies = [
  "anyhow",
  "axum",
@@ -4066,7 +4066,7 @@ dependencies = [
 
 [[package]]
 name = "koharu-runtime"
-version = "0.34.0"
+version = "0.35.0"
 dependencies = [
  "anyhow",
  "csv",
@@ -4087,7 +4087,7 @@ dependencies = [
 
 [[package]]
 name = "koharu-types"
-version = "0.34.0"
+version = "0.35.0"
 dependencies = [
  "anyhow",
  "blake3",

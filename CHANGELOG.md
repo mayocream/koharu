@@ -1,3 +1,36 @@
+## [0.35.0](https://github.com/mayocream/koharu/compare/0.34.0..0.35.0) - 2026-03-07
+
+### ⛰️  Features
+
+- Implement error handling and UI for RPC errors - ([64e762c](https://github.com/mayocream/koharu/commit/64e762c9d0787c9782036462c455c13e280d1ee7))
+- Add loading indicators for pipeline step buttons - ([b50aac1](https://github.com/mayocream/koharu/commit/b50aac1748a60e1364879136e3442382c5e0ce5a))
+- Add 'Add Documents' functionality - ([8083949](https://github.com/mayocream/koharu/commit/80839494c94d8f643737b6bd633bdb9205781081))
+- Add Spanish translations and update language options ([#198](https://github.com/mayocream/koharu/issues/198)) - ([a9b0091](https://github.com/mayocream/koharu/commit/a9b00912391b8ebcf68d6220d1cd8659e95f915f))
+- Add `ru-RU` translations ([#195](https://github.com/mayocream/koharu/issues/195)) - ([bbde259](https://github.com/mayocream/koharu/commit/bbde259e416c4d6abd716a8878e4265cc97c24ec))
+
+### 🐛 Bug Fixes
+
+- For issue https://github.com/mayocream/koharu/issues/197 - ([760eccd](https://github.com/mayocream/koharu/commit/760eccd1b6548d8ba04a15565c2b10a3067b99d4))
+
+### 🚜 Refactor
+
+- Testable ui - ([ae044ce](https://github.com/mayocream/koharu/commit/ae044ce8b765ea978775d90f757ed5bcb6ab56de))
+- Reduce duplicates in ui - ([e6244fb](https://github.com/mayocream/koharu/commit/e6244fbd3214d1f9cfbbdfe6f0a95397436ef522))
+- Reduce duplicates - ([06ef2f7](https://github.com/mayocream/koharu/commit/06ef2f76cb9726370a08dedfbadf21e681c91bf7))
+
+### 🧪 Testing
+
+- E2e - ([383b777](https://github.com/mayocream/koharu/commit/383b77733d05da64ae3895e29340690923a4401c))
+
+### ⚙️ Miscellaneous Tasks
+
+- Update deps - ([211ae37](https://github.com/mayocream/koharu/commit/211ae376ac9a5293f05cf6921bd345b9251c9d19))
+
+## New Contributors ❤️
+
+* @karrot0 made their first contribution in [#199](https://github.com/mayocream/koharu/pull/199)
+* @vanja-san made their first contribution in [#195](https://github.com/mayocream/koharu/pull/195)
+
 ## [0.34.0](https://github.com/mayocream/koharu/compare/0.33.0..0.34.0) - 2026-02-21
 
 ### ⛰️  Features
