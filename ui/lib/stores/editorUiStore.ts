@@ -45,7 +45,11 @@ const initialState = {
   mode: 'select' as ToolMode,
   selectedBlockIndex: undefined,
   autoFitEnabled: true,
-  renderEffect: 'normal' as RenderEffect,
+  renderEffect: {
+    italic: false,
+    bold: false,
+    border: false,
+  } as RenderEffect,
 }
 
 export const useEditorUiStore = create<EditorUiState>((set, get) => ({

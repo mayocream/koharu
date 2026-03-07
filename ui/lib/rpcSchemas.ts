@@ -60,13 +60,17 @@ export const rgbaColorSchema = z.tuple([
   z.number().int().min(0).max(255),
 ])
 
-export const renderEffectSchema = z.enum([
-  'normal',
-  'antique',
-  'metal',
-  'manga',
-  'motionBlur',
-])
+export const renderEffectSchema = z
+  .object({
+    italic: z.boolean().optional(),
+    bold: z.boolean().optional(),
+    border: z.boolean().optional(),
+  })
+  .transform((value) => ({
+    italic: value.italic ?? false,
+    bold: value.bold ?? false,
+    border: value.border ?? false,
+  }))
 
 export const textStyleSchema = z.object({
   fontFamilies: z.array(z.string()),

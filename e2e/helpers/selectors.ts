@@ -67,8 +67,8 @@ export const selectors = {
     textBlockGenerate: (index: number) => `textblock-generate-${index}`,
     renderFontSelect: 'render-font-select',
     renderFontOption: (index: number) => `render-font-option-${index}`,
-    renderEffectSelect: 'render-effect-select',
-    renderEffectOption: (index: number) => `render-effect-option-${index}`,
+    renderEffectToggle: (effect: 'italic' | 'bold' | 'border') =>
+      `render-effect-toggle-${effect}`,
     renderColorTrigger: 'render-color-trigger',
     renderColorPicker: 'render-color-picker',
     renderColorSwatch: 'render-color-swatch',

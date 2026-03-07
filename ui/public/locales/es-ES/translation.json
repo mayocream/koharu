@@ -105,17 +105,15 @@
   },
   "render": {
     "effectLabel": "Efecto de texto",
-    "effectNormal": "Normal",
-    "effectAntique": "Libro antiguo",
-    "effectMetal": "Metal",
-    "effectManga": "Trama manga",
-    "effectMotionBlur": "Desenfoque de movimiento",
     "fontLabel": "Fuente",
     "fontPlaceholder": "Seleccionar fuente",
     "fontColorLabel": "Color de fuente",
     "fontScopeGlobal": "Global",
     "fontScopeBlock": "Por bloque",
-    "fontScopeBlockIndex": "Bloque {{index}}"
+    "fontScopeBlockIndex": "Bloque {{index}}",
+    "effectItalic": "Cursiva",
+    "effectBold": "Negrita",
+    "effectBorder": "Borde"
   },
   "textBlocks": {
     "emptyPrompt": "Abre una imagen para ver los bloques de texto.",

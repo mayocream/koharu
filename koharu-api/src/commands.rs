@@ -287,7 +287,11 @@ mod tests {
                 font_families: vec!["Noto Sans".to_string()],
                 font_size: Some(18.0),
                 color: [255, 255, 255, 255],
-                effect: Some(TextShaderEffect::Manga),
+                effect: Some(TextShaderEffect {
+                    italic: true,
+                    bold: false,
+                    border: true,
+                }),
             }),
             ..Default::default()
         };
@@ -335,7 +339,11 @@ mod tests {
         round_trip(&RenderPayload {
             index: 1,
             text_block_index: Some(3),
-            shader_effect: Some(TextShaderEffect::Manga),
+            shader_effect: Some(TextShaderEffect {
+                italic: false,
+                bold: true,
+                border: true,
+            }),
             font_family: Some("Noto Sans".to_string()),
         });
         round_trip(&UpdateTextBlocksPayload {
@@ -365,7 +373,11 @@ mod tests {
             index: Some(1),
             llm_model_id: Some("sakura".to_string()),
             language: Some("zh-CN".to_string()),
-            shader_effect: Some(TextShaderEffect::Manga),
+            shader_effect: Some(TextShaderEffect {
+                italic: true,
+                bold: true,
+                border: false,
+            }),
             font_family: Some("Noto Sans".to_string()),
         });
         round_trip(&InpaintRegion {
@@ -423,14 +435,14 @@ mod tests {
         round_trip(&RenderParams {
             index: 1,
             text_block_index: Some(0),
-            shader_effect: Some("manga".to_string()),
+            shader_effect: Some("bold,border".to_string()),
             font_family: Some("Noto Sans".to_string()),
         });
         round_trip(&ProcessParams {
             index: Some(1),
             llm_model_id: Some("sakura".to_string()),
             language: Some("zh-CN".to_string()),
-            shader_effect: Some("manga".to_string()),
+            shader_effect: Some("italic,bold".to_string()),
             font_family: Some("Noto Sans".to_string()),
         });
         round_trip(&UpdateTextBlockPayload {
@@ -444,7 +456,7 @@ mod tests {
             font_families: Some(vec!["Noto Sans".to_string()]),
             font_size: Some(16.0),
             color: Some("#ffffff".to_string()),
-            shader_effect: Some("manga".to_string()),
+            shader_effect: Some("italic,border".to_string()),
         });
         round_trip(&AddTextBlockPayload {
             index: 1,

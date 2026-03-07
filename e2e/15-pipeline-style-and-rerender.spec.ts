@@ -59,9 +59,7 @@ test('changes style controls and re-renders', async ({ page }) => {
 
   await page.getByTestId(selectors.panels.tabLayout).click()
   await expect(page.getByTestId(selectors.panels.layout)).toBeVisible()
-  await page.getByTestId(selectors.panels.renderEffectSelect).click()
-  await expect(page.getByTestId(selectors.panels.renderEffectOption(1))).toBeVisible()
-  await page.getByTestId(selectors.panels.renderEffectOption(1)).click()
+  await page.getByTestId(selectors.panels.renderEffectToggle('bold')).click()
 
   await runRender(page)
   await waitForImageSrcChange(renderedImage, firstRenderedSrc, 180_000)

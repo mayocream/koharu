@@ -105,17 +105,15 @@
   },
   "render": {
     "effectLabel": "文字効果",
-    "effectNormal": "標準",
-    "effectAntique": "古書風",
-    "effectMetal": "メタル",
-    "effectManga": "漫画トーン",
-    "effectMotionBlur": "モーションブラー",
     "fontLabel": "フォント",
     "fontPlaceholder": "フォントを選択",
     "fontColorLabel": "フォントカラー",
     "fontScopeGlobal": "Global",
     "fontScopeBlock": "Per block",
-    "fontScopeBlockIndex": "Block {{index}}"
+    "fontScopeBlockIndex": "Block {{index}}",
+    "effectItalic": "斜体",
+    "effectBold": "太字",
+    "effectBorder": "縁取り"
   },
   "textBlocks": {
     "emptyPrompt": "画像を開くとテキストブロックが表示されます。",

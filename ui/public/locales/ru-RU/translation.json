@@ -105,17 +105,15 @@
   },
   "render": {
     "effectLabel": "Эффект текста",
-    "effectNormal": "Обычный",
-    "effectAntique": "Старинная книга",
-    "effectMetal": "Металл",
-    "effectManga": "Тон манги",
-    "effectMotionBlur": "Смазывание",
     "fontLabel": "Шрифт",
     "fontPlaceholder": "Выберите шрифт",
     "fontColorLabel": "Цвет шрифта",
     "fontScopeGlobal": "Глобально",
     "fontScopeBlock": "Для блока",
-    "fontScopeBlockIndex": "Блок {{index}}"
+    "fontScopeBlockIndex": "Блок {{index}}",
+    "effectItalic": "Курсив",
+    "effectBold": "Жирный",
+    "effectBorder": "Обводка"
   },
   "textBlocks": {
     "emptyPrompt": "Откройте изображение, чтобы увидеть текстовые блоки.",

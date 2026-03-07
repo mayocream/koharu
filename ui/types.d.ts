@@ -1,11 +1,10 @@
 export type RgbaColor = [number, number, number, number]
 
-export type RenderEffect =
-  | 'normal'
-  | 'antique'
-  | 'metal'
-  | 'manga'
-  | 'motionBlur'
+export type RenderEffect = {
+  italic: boolean
+  bold: boolean
+  border: boolean
+}
 
 export type NamedFontPrediction = {
   index: number

@@ -33,7 +33,7 @@ impl Default for RenderOptions {
             anti_alias: true,
             padding: 0.0,
             font_size: 16.0,
-            effect: TextShaderEffect::Normal,
+            effect: TextShaderEffect::default(),
         }
     }
 }
@@ -118,7 +118,7 @@ impl WgpuRenderer {
         ];
         let render_uniform = RenderUniform {
             color,
-            effect: [opts.effect.id(), opts.font_size, 0.0, 0.0],
+            effect: [opts.effect.flags() as f32, opts.font_size, 0.0, 0.0],
         };
         let render_buffer =
             self.context
@@ -155,6 +155,7 @@ impl WgpuRenderer {
             layout,
             writing_mode,
             &atlas,
+            opts.effect.italic,
             opts.padding,
             width as f32,
             height as f32,
@@ -288,6 +289,7 @@ impl WgpuRenderer {
         }
         drop(mapped);
         output_buffer.unmap();
+        unpremultiply_rgba(&mut pixels);
 
         let img =
             RgbaImage::from_raw(width, height, pixels).context("failed to build RgbaImage")?;
@@ -654,6 +656,7 @@ fn build_vertices(
     layout: &LayoutRun<'_>,
     writing_mode: WritingMode,
     atlas: &GlyphAtlas,
+    italic: bool,
     padding: f32,
     width: f32,
     height: f32,
@@ -665,7 +668,15 @@ fn build_vertices(
             WritingMode::Horizontal => (padding + line.baseline.0, padding + line.baseline.1),
             WritingMode::VerticalRl => (padding + line.baseline.0, padding + line.baseline.1),
         };
-        append_line_vertices(&mut vertices, atlas, &line.glyphs, origin, width, height);
+        append_line_vertices(
+            &mut vertices,
+            atlas,
+            &line.glyphs,
+            origin,
+            italic,
+            width,
+            height,
+        );
     }
 
     vertices
@@ -676,6 +687,7 @@ fn append_line_vertices(
     atlas: &GlyphAtlas,
     glyphs: &[PositionedGlyph<'_>],
     origin: (f32, f32),
+    italic: bool,
     width: f32,
     height: f32,
 ) {
@@ -711,9 +723,16 @@ fn append_line_vertices(
             let baseline_y = origin_y + pen_y - g.y_offset;
             let x = baseline_x + metrics.xmin as f32;
             let y = baseline_y - metrics.ymin as f32 - h;
+            let slant = if italic {
+                (w.min(h) * 0.22).max(1.0)
+            } else {
+                0.0
+            };
 
-            let (x0, y0) = to_ndc(x, y, width, height);
-            let (x1, y1) = to_ndc(x + w, y + h, width, height);
+            let (x0_top, y0_top) = to_ndc(x + slant, y, width, height);
+            let (x1_top, y1_top) = to_ndc(x + w + slant, y, width, height);
+            let (x0_bottom, y0_bottom) = to_ndc(x, y + h, width, height);
+            let (x1_bottom, y1_bottom) = to_ndc(x + w, y + h, width, height);
 
             let u0 = entry.uv_min[0];
             let v0 = entry.uv_min[1];
@@ -722,27 +741,27 @@ fn append_line_vertices(
 
             vertices.extend_from_slice(&[
                 Vertex {
-                    position: [x0, y0],
+                    position: [x0_top, y0_top],
                     tex_coord: [u0, v0],
                 },
                 Vertex {
-                    position: [x1, y0],
+                    position: [x1_top, y1_top],
                     tex_coord: [u1, v0],
                 },
                 Vertex {
-                    position: [x1, y1],
+                    position: [x1_bottom, y1_bottom],
                     tex_coord: [u1, v1],
                 },
                 Vertex {
-                    position: [x0, y0],
+                    position: [x0_top, y0_top],
                     tex_coord: [u0, v0],
                 },
                 Vertex {
-                    position: [x1, y1],
+                    position: [x1_bottom, y1_bottom],
                     tex_coord: [u1, v1],
                 },
                 Vertex {
-                    position: [x0, y1],
+                    position: [x0_bottom, y0_bottom],
                     tex_coord: [u0, v1],
                 },
             ]);
@@ -765,6 +784,19 @@ fn align_to(value: u32, alignment: u32) -> u32 {
         return value;
     }
     value.div_ceil(alignment) * alignment
+}
+
+fn unpremultiply_rgba(pixels: &mut [u8]) {
+    for px in pixels.chunks_exact_mut(4) {
+        let a = px[3];
+        if a == 0 || a == 255 {
+            continue;
+        }
+        let alpha = a as u32;
+        px[0] = ((px[0] as u32 * 255 + alpha / 2) / alpha).min(255) as u8;
+        px[1] = ((px[1] as u32 * 255 + alpha / 2) / alpha).min(255) as u8;
+        px[2] = ((px[2] as u32 * 255 + alpha / 2) / alpha).min(255) as u8;
+    }
 }
 
 const GLYPH_SHADER: &str = r#"
@@ -795,90 +827,63 @@ struct RenderUniform {
 
 @group(0) @binding(2) var<uniform> render: RenderUniform;
 
-const EFFECT_NORMAL: f32 = 0.0;
-const EFFECT_ANTIQUE: f32 = 1.0;
-const EFFECT_METAL: f32 = 2.0;
-const EFFECT_MANGA: f32 = 3.0;
-const EFFECT_MOTION_BLUR: f32 = 4.0;
-
-fn hash(p: vec2<f32>) -> f32 {
-    return fract(sin(dot(p, vec2<f32>(127.1, 311.7))) * 43758.5453123);
-}
+const EFFECT_BOLD: u32 = 2u;
+const EFFECT_BORDER: u32 = 4u;
 
 fn sample_coverage(uv: vec2<f32>) -> f32 {
     return textureSample(glyph_tex, glyph_sampler, uv).r;
 }
 
+fn has_flag(flags: u32, effect_flag: u32) -> bool {
+    return (flags & effect_flag) != 0u;
+}
+
+fn max_coverage_around(uv: vec2<f32>, texel: vec2<f32>, radius: f32) -> f32 {
+    let dx = texel.x * radius;
+    let dy = texel.y * radius;
+    var cov = sample_coverage(uv);
+    cov = max(cov, sample_coverage(uv + vec2<f32>( dx,  0.0)));
+    cov = max(cov, sample_coverage(uv + vec2<f32>(-dx,  0.0)));
+    cov = max(cov, sample_coverage(uv + vec2<f32>( 0.0,  dy)));
+    cov = max(cov, sample_coverage(uv + vec2<f32>( 0.0, -dy)));
+    cov = max(cov, sample_coverage(uv + vec2<f32>( dx,  dy)));
+    cov = max(cov, sample_coverage(uv + vec2<f32>(-dx,  dy)));
+    cov = max(cov, sample_coverage(uv + vec2<f32>( dx, -dy)));
+    cov = max(cov, sample_coverage(uv + vec2<f32>(-dx, -dy)));
+    return cov;
+}
+
 @fragment
 fn fs_main(input: VertexOutput) -> @location(0) vec4<f32> {
-    let coverage = sample_coverage(input.tex_coord);
-    let base_alpha = coverage * render.color.a;
-    let base_color = render.color.rgb;
-    let effect_id = render.effect.x;
-    let frag_pos = input.position.xy;
+    let texel = 1.0 / vec2<f32>(textureDimensions(glyph_tex, 0));
+    let flags = u32(render.effect.x + 0.5);
+    let bold = has_flag(flags, EFFECT_BOLD);
+    let border = has_flag(flags, EFFECT_BORDER);
 
-    var alpha = base_alpha;
-    var rgb = base_color;
+    let uv = input.tex_coord;
+    var text_coverage = sample_coverage(uv);
+    if (bold) {
+        text_coverage = max_coverage_around(uv, texel, 1.0);
+    }
+    let text_fill_coverage = clamp(text_coverage, 0.0, 1.0);
 
-    if (effect_id < (EFFECT_NORMAL + 0.5)) {
-        rgb = base_color;
-        alpha = base_alpha;
-    } else if (effect_id < (EFFECT_ANTIQUE + 0.5)) {
-        let grain = hash(frag_pos * 0.75 + vec2<f32>(render.effect.y * 1.3));
-        let blotch = hash(frag_pos * 0.08 + vec2<f32>(11.7, 3.9));
-        let fibers = sin(frag_pos.x * 0.045 + frag_pos.y * 0.02) * 0.5 + 0.5;
-        let wrinkles = sin(frag_pos.y * 0.03 + grain * 6.0) * 0.5 + 0.5;
-        let fade = mix(0.45, 1.0, grain);
-        let speckle = step(0.88, grain);
-        let stain = smoothstep(0.55, 0.92, blotch);
-        let texture = mix(0.75, 1.0, fibers) * mix(0.8, 1.0, wrinkles);
-        rgb = base_color * vec3<f32>(1.22, 0.92, 0.62);
-        rgb = mix(rgb, rgb * 0.65, stain);
-        alpha = base_alpha * fade * texture * (1.0 - speckle * 0.75);
-    } else if (effect_id < (EFFECT_METAL + 0.5)) {
-        let curve = sin(frag_pos.x * 0.03 + frag_pos.y * 0.008) * 0.5 + 0.5;
-        let highlight = pow(smoothstep(0.6, 0.95, curve), 2.4);
-        let shadow = mix(0.55, 1.0, curve);
-        let brushed = sin(frag_pos.y * 0.25 + frag_pos.x * 0.06) * 0.5 + 0.5;
-        let brush = mix(0.9, 1.05, brushed);
-        let metallic_base = mix(base_color, vec3<f32>(0.75, 0.78, 0.82), 0.6);
-        rgb = metallic_base * shadow * brush;
-        rgb = rgb + vec3<f32>(0.95, 0.97, 1.0) * highlight * 0.35;
-        alpha = base_alpha;
-    } else if (effect_id < (EFFECT_MANGA + 0.5)) {
-        let size = clamp(render.effect.y * 0.2, 2.5, 6.0);
-        let angle = 0.35;
-        let rot = vec2<f32>(
-            frag_pos.x * cos(angle) - frag_pos.y * sin(angle),
-            frag_pos.x * sin(angle) + frag_pos.y * cos(angle),
-        );
-        let cell = fract(rot / size) - vec2<f32>(0.5);
-        let dist = length(cell);
-        let edge = 0.1;
-        let aa = fwidth(dist) * 1.5;
-        let dot_mask = smoothstep(edge + aa, edge - aa, dist);
-        let tone = mix(0.6, 1.0, dot_mask);
-        rgb = base_color;
-        alpha = base_alpha * tone;
-    } else if (effect_id < (EFFECT_MOTION_BLUR + 0.5)) {
-        let texel = 1.0 / vec2<f32>(textureDimensions(glyph_tex, 0));
-        let dir = normalize(vec2<f32>(1.0, 0.35));
-        let spread = texel * 6.0;
-        var blur = 0.0;
-        blur += sample_coverage(input.tex_coord - dir * spread * 1.5);
-        blur += sample_coverage(input.tex_coord - dir * spread * 0.75);
-        blur += coverage;
-        blur += sample_coverage(input.tex_coord + dir * spread * 0.75);
-        blur += sample_coverage(input.tex_coord + dir * spread * 1.5);
-        let blurred = blur / 5.0;
-        let blur_alpha = blurred * render.color.a;
-        rgb = base_color;
-        alpha = blur_alpha;
-    } else {
-        rgb = base_color;
-        alpha = base_alpha;
+    var outline_coverage = 0.0;
+    if (border) {
+        let border_coverage = max_coverage_around(uv, texel, 2.0);
+        // Build a soft ring from outer dilation minus current glyph coverage.
+        let border_ring = clamp(border_coverage - text_fill_coverage, 0.0, 1.0);
+        outline_coverage = smoothstep(0.0, 0.85, border_ring);
     }
 
-    return vec4<f32>(rgb * alpha, alpha);
+    let text_alpha = clamp(text_fill_coverage * render.color.a, 0.0, 1.0);
+    let outline_alpha = clamp(outline_coverage * render.color.a, 0.0, 1.0);
+
+    // Output premultiplied alpha to match pipeline blending.
+    let text_rgb = render.color.rgb * text_alpha;
+    let outline_rgb = vec3<f32>(1.0, 1.0, 1.0) * outline_alpha;
+    let alpha = clamp(text_alpha + outline_alpha, 0.0, 1.0);
+    let rgb = clamp(text_rgb + outline_rgb, vec3<f32>(0.0), vec3<f32>(1.0));
+
+    return vec4<f32>(rgb, alpha);
 }
 "#;

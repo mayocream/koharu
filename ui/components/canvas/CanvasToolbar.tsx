@@ -4,8 +4,11 @@ import { useEffect, useMemo, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import { motion } from 'motion/react'
 import {
+  BoldIcon,
+  ItalicIcon,
   ScanIcon,
   ScanTextIcon,
+  SquareIcon,
   Wand2Icon,
   TypeIcon,
   LoaderCircleIcon,
@@ -47,9 +50,15 @@ import {
   useTextBlockMutations,
 } from '@/lib/query/mutations'
 import { useOperationStore } from '@/lib/stores/operationStore'
+import { cn } from '@/lib/utils'
 
 const DEFAULT_COLOR: RgbaColor = [0, 0, 0, 255]
 const DEFAULT_FONT_FAMILIES = ['Arial']
+const DEFAULT_EFFECT: RenderEffect = {
+  italic: false,
+  bold: false,
+  border: false,
+}
 
 const clampByte = (value: number) =>
   Math.max(0, Math.min(255, Math.round(value)))
@@ -85,6 +94,12 @@ const uniqueStrings = (values: string[]) => {
     return true
   })
 }
+
+const normalizeEffect = (effect?: Partial<RenderEffect>): RenderEffect => ({
+  italic: effect?.italic ?? false,
+  bold: effect?.bold ?? false,
+  border: effect?.border ?? false,
+})
 
 export function CanvasToolbar() {
   return (
@@ -244,18 +259,12 @@ export function RenderControls() {
     selectedBlock?.style?.fontFamilies?.[0] ??
     firstBlock?.style?.fontFamilies?.[0] ??
     (hasBlocks ? fallbackFontFamilies[0] : '')
-  const currentEffect = selectedBlock?.style?.effect ?? renderEffect
+  const currentEffect = normalizeEffect(
+    selectedBlock?.style?.effect ?? renderEffect,
+  )
   const currentColor =
     selectedBlock?.style?.color ?? (hasBlocks ? fallbackColor : DEFAULT_COLOR)
   const currentColorHex = colorToHex(currentColor)
-
-  const effects: { value: RenderEffect; label: string }[] = [
-    { value: 'normal', label: t('render.effectNormal') },
-    { value: 'antique', label: t('render.effectAntique') },
-    { value: 'metal', label: t('render.effectMetal') },
-    { value: 'manga', label: t('render.effectManga') },
-    { value: 'motionBlur', label: t('render.effectMotionBlur') },
-  ]
 
   const buildStyle = (
     style: TextStyle | undefined,
@@ -291,6 +300,16 @@ export function RenderControls() {
     const base = current?.length ? current : fallbackFontFamilies
     return [nextFont, ...base.filter((family) => family !== nextFont)]
   }
+
+  const effectItems: {
+    key: keyof RenderEffect
+    label: string
+    Icon: React.ComponentType<{ className?: string }>
+  }[] = [
+    { key: 'italic', label: t('render.effectItalic'), Icon: ItalicIcon },
+    { key: 'bold', label: t('render.effectBold'), Icon: BoldIcon },
+    { key: 'border', label: t('render.effectBorder'), Icon: SquareIcon },
+  ]
 
   return (
     <div className='flex items-center gap-2'>
@@ -359,33 +378,43 @@ export function RenderControls() {
         </TooltipContent>
       </Tooltip>
 
-      <Select
-        value={currentEffect}
-        onValueChange={(value) => {
-          const nextEffect = value as RenderEffect
-          if (applyStyleToSelected({ effect: nextEffect })) return
-          setRenderEffect(nextEffect)
-        }}
-      >
-        <SelectTrigger
-          data-testid='render-effect-select'
-          size='sm'
-          className='h-8 w-28 text-sm'
-        >
-          <SelectValue />
-        </SelectTrigger>
-        <SelectContent position='popper'>
-          {effects.map((effect, index) => (
-            <SelectItem
-              key={effect.value}
-              value={effect.value}
-              data-testid={`render-effect-option-${index}`}
-            >
-              {effect.label}
-            </SelectItem>
-          ))}
-        </SelectContent>
-      </Select>
+      <div className='flex items-center gap-1.5'>
+        {effectItems.map((item) => {
+          const active = currentEffect[item.key]
+          const Icon = item.Icon
+          return (
+            <Tooltip key={item.key}>
+              <TooltipTrigger asChild>
+                <Button
+                  variant='outline'
+                  size='icon-sm'
+                  aria-label={item.label}
+                  data-testid={`render-effect-toggle-${item.key}`}
+                  className={cn(
+                    'size-8',
+                    active &&
+                      'bg-primary text-primary-foreground border-primary hover:bg-primary/90',
+                  )}
+                  onClick={() => {
+                    const nextEffect = {
+                      ...DEFAULT_EFFECT,
+                      ...currentEffect,
+                      [item.key]: !active,
+                    }
+                    if (applyStyleToSelected({ effect: nextEffect })) return
+                    setRenderEffect(nextEffect)
+                  }}
+                >
+                  <Icon className='size-3.5' />
+                </Button>
+              </TooltipTrigger>
+              <TooltipContent side='bottom' sideOffset={4}>
+                {item.label}
+              </TooltipContent>
+            </Tooltip>
+          )
+        })}
+      </div>
     </div>
   )
 }
