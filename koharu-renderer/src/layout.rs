@@ -67,6 +67,7 @@ pub struct LayoutRun<'a> {
 
 pub struct TextLayout<'a> {
     writing_mode: WritingMode,
+    center_vertical_punctuation: bool,
     font: &'a Font,
     fallback_fonts: &'a [Font],
     font_size: Option<f32>,
@@ -78,6 +79,7 @@ impl<'a> TextLayout<'a> {
     pub fn new(font: &'a Font, font_size: Option<f32>) -> Self {
         Self {
             writing_mode: WritingMode::Horizontal,
+            center_vertical_punctuation: true,
             font,
             fallback_fonts: &[],
             font_size,
@@ -93,6 +95,11 @@ impl<'a> TextLayout<'a> {
 
     pub fn with_writing_mode(mut self, mode: WritingMode) -> Self {
         self.writing_mode = mode;
+        self
+    }
+
+    pub fn with_center_vertical_punctuation(mut self, enabled: bool) -> Self {
+        self.center_vertical_punctuation = enabled;
         self
     }
 
@@ -186,11 +193,14 @@ impl<'a> TextLayout<'a> {
             let (start, end) = (window[0].offset, window[1].offset);
             let segment = &text[start..end];
 
-            let shaped = if fonts.len() == 1 {
+            let mut shaped = if fonts.len() == 1 {
                 shaper.shape(segment, self.font, &opts)?
             } else {
                 shape_segment_with_fallbacks(&shaper, segment, &fonts, &opts)?
             };
+            if self.writing_mode.is_vertical() && self.center_vertical_punctuation {
+                self.center_vertical_fullwidth_punctuation(font_size, segment, &mut shaped.glyphs);
+            }
             let advance = if self.writing_mode.is_vertical() {
                 shaped.y_advance
             } else {
@@ -358,6 +368,67 @@ impl<'a> TextLayout<'a> {
             None
         }
     }
+
+    fn center_vertical_fullwidth_punctuation(
+        &self,
+        font_size: f32,
+        segment: &str,
+        glyphs: &mut [PositionedGlyph<'a>],
+    ) {
+        if segment.is_empty() || glyphs.is_empty() {
+            return;
+        }
+
+        let mut metrics_cache = HashMap::new();
+        for glyph in glyphs {
+            let cluster = glyph.cluster as usize;
+            let Some(ch) = segment.get(cluster..).and_then(|tail| tail.chars().next()) else {
+                continue;
+            };
+            if !is_fullwidth_punctuation(ch) {
+                continue;
+            }
+
+            let key = font_key(glyph.font);
+            let glyph_metrics = match metrics_cache.entry(key) {
+                std::collections::hash_map::Entry::Occupied(entry) => entry.into_mut(),
+                std::collections::hash_map::Entry::Vacant(entry) => {
+                    let Ok(font_ref) = glyph.font.skrifa() else {
+                        continue;
+                    };
+                    entry.insert(
+                        font_ref.glyph_metrics(Size::new(font_size), LocationRef::default()),
+                    )
+                }
+            };
+
+            let gid = skrifa::GlyphId::new(glyph.glyph_id);
+            let Some(bounds) = glyph_metrics.bounds(gid) else {
+                continue;
+            };
+            glyph.x_offset = centered_x_offset(bounds.x_min, bounds.x_max);
+        }
+    }
+}
+
+fn centered_x_offset(x_min: f32, x_max: f32) -> f32 {
+    -((x_min + x_max) * 0.5)
+}
+
+fn is_fullwidth_punctuation(ch: char) -> bool {
+    matches!(
+        ch,
+        '\u{3001}' // Ideographic comma
+            | '\u{3002}' // Ideographic full stop
+            | '\u{3008}'..='\u{3011}' // Angle/corner brackets
+            | '\u{3014}'..='\u{301F}' // Tortoise shell/white brackets and marks
+            | '\u{3030}' // Wavy dash
+            | '\u{30FB}' // Katakana middle dot
+            | '\u{FF01}'..='\u{FF0F}' // Fullwidth punctuation block 1
+            | '\u{FF1A}'..='\u{FF20}' // Fullwidth punctuation block 2
+            | '\u{FF3B}'..='\u{FF40}' // Fullwidth punctuation block 3
+            | '\u{FF5B}'..='\u{FF65}' // Fullwidth punctuation block 4
+    )
 }
 
 #[cfg(test)]
@@ -523,5 +594,27 @@ mod tests {
         }
 
         Ok(())
+    }
+
+    #[test]
+    fn fullwidth_punctuation_detection_works() {
+        assert!(is_fullwidth_punctuation('。'));
+        assert!(is_fullwidth_punctuation('（'));
+        assert!(is_fullwidth_punctuation('！'));
+        assert!(!is_fullwidth_punctuation('A'));
+        assert!(!is_fullwidth_punctuation('中'));
+    }
+
+    #[test]
+    fn vertical_punctuation_centering_enabled_by_default() {
+        let font = any_system_font();
+        let layout = TextLayout::new(&font, Some(16.0));
+        assert!(layout.center_vertical_punctuation);
+    }
+
+    #[test]
+    fn centered_x_offset_uses_absolute_center() {
+        assert_approx_eq(centered_x_offset(2.0, 6.0), -4.0);
+        assert_approx_eq(centered_x_offset(-3.0, 1.0), 1.0);
     }
 }
