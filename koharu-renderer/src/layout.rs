@@ -475,14 +475,13 @@ fn normalize_vertical_emphasis_punctuation(text: &str) -> String {
             continue;
         }
 
-        if i + 2 < chars.len() {
-            if let Some(lookahead_kind) = emphasis_mark_kind(chars[i + 2]) {
-                if next_kind == lookahead_kind {
-                    out.push(chars[i]);
-                    i += 1;
-                    continue;
-                }
-            }
+        if i + 2 < chars.len()
+            && let Some(lookahead_kind) = emphasis_mark_kind(chars[i + 2])
+            && next_kind == lookahead_kind
+        {
+            out.push(chars[i]);
+            i += 1;
+            continue;
         }
 
         out.push(emphasis_pair_symbol(kind, next_kind));
