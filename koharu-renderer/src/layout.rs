@@ -152,6 +152,13 @@ impl<'a> TextLayout<'a> {
     fn run_with_size(&self, text: &str, font_size: f32) -> Result<LayoutRun<'a>> {
         let shaper = TextShaper::new();
         let line_breaker = LineBreaker::new();
+        let normalized_punctuation;
+        let text = if self.writing_mode.is_vertical() {
+            normalized_punctuation = normalize_vertical_emphasis_punctuation(text);
+            normalized_punctuation.as_str()
+        } else {
+            text
+        };
 
         // Use real font metrics for consistent line sizing across modes.
         let font_ref = self.font.skrifa()?;
@@ -415,6 +422,76 @@ fn centered_x_offset(x_min: f32, x_max: f32) -> f32 {
     -((x_min + x_max) * 0.5)
 }
 
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+enum EmphasisMark {
+    Bang,
+    Question,
+}
+
+fn emphasis_mark_kind(ch: char) -> Option<EmphasisMark> {
+    match ch {
+        '!' | '！' => Some(EmphasisMark::Bang),
+        '?' | '？' => Some(EmphasisMark::Question),
+        _ => None,
+    }
+}
+
+fn emphasis_pair_symbol(left: EmphasisMark, right: EmphasisMark) -> char {
+    match (left, right) {
+        (EmphasisMark::Bang, EmphasisMark::Bang) => '‼',
+        (EmphasisMark::Question, EmphasisMark::Question) => '⁇',
+        (EmphasisMark::Bang, EmphasisMark::Question) => '⁉',
+        (EmphasisMark::Question, EmphasisMark::Bang) => '⁈',
+    }
+}
+
+fn normalize_vertical_emphasis_punctuation(text: &str) -> String {
+    let chars: Vec<char> = text.chars().collect();
+    let mut out = String::with_capacity(text.len());
+    let mut i = 0usize;
+
+    while i < chars.len() {
+        let Some(kind) = emphasis_mark_kind(chars[i]) else {
+            out.push(chars[i]);
+            i += 1;
+            continue;
+        };
+
+        if i + 1 >= chars.len() {
+            out.push(chars[i]);
+            i += 1;
+            continue;
+        }
+
+        let Some(next_kind) = emphasis_mark_kind(chars[i + 1]) else {
+            out.push(chars[i]);
+            i += 1;
+            continue;
+        };
+
+        if kind == next_kind {
+            out.push(emphasis_pair_symbol(kind, next_kind));
+            i += 2;
+            continue;
+        }
+
+        if i + 2 < chars.len() {
+            if let Some(lookahead_kind) = emphasis_mark_kind(chars[i + 2]) {
+                if next_kind == lookahead_kind {
+                    out.push(chars[i]);
+                    i += 1;
+                    continue;
+                }
+            }
+        }
+
+        out.push(emphasis_pair_symbol(kind, next_kind));
+        i += 2;
+    }
+
+    out
+}
+
 fn is_fullwidth_punctuation(ch: char) -> bool {
     matches!(
         ch,
@@ -616,5 +693,20 @@ mod tests {
     fn centered_x_offset_uses_absolute_center() {
         assert_approx_eq(centered_x_offset(2.0, 6.0), -4.0);
         assert_approx_eq(centered_x_offset(-3.0, 1.0), 1.0);
+    }
+
+    #[test]
+    fn normalize_vertical_emphasis_punctuation_collapses_pairs() {
+        assert_eq!(normalize_vertical_emphasis_punctuation("！！"), "‼");
+        assert_eq!(normalize_vertical_emphasis_punctuation("!!"), "‼");
+        assert_eq!(normalize_vertical_emphasis_punctuation("!!?"), "‼?");
+        assert_eq!(normalize_vertical_emphasis_punctuation("?!!"), "?‼");
+        assert_eq!(normalize_vertical_emphasis_punctuation("!?!"), "⁉!");
+        assert_eq!(normalize_vertical_emphasis_punctuation("！？"), "⁉");
+        assert_eq!(normalize_vertical_emphasis_punctuation("？！"), "⁈");
+        assert_eq!(
+            normalize_vertical_emphasis_punctuation("Hello!?!"),
+            "Hello⁉!"
+        );
     }
 }
