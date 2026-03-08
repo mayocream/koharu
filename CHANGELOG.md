@@ -1,3 +1,33 @@
+## [0.36.0](https://github.com/mayocream/koharu/compare/0.35.0..0.36.0) - 2026-03-08
+
+### ⛰️  Features
+
+- *(ui)* Move font settings to tabs - ([5de019c](https://github.com/mayocream/koharu/commit/5de019c677d8de0a1559daa98a6444e8b0cea5b9))
+- Structured prompt - ([6882aae](https://github.com/mayocream/koharu/commit/6882aae16e53c11b3d70961482d214200a3f94e8))
+- Text align options - ([1f2ee01](https://github.com/mayocream/koharu/commit/1f2ee0162e0c2b19fa812780e812f007e10ad50c))
+- Improve english text rendering & layout - ([62c2556](https://github.com/mayocream/koharu/commit/62c255602f4bb63fd83cfc6be9bcff6a562a975d))
+- Punctuation normalization in vertical mode - ([62fc37a](https://github.com/mayocream/koharu/commit/62fc37ab574597241d6b666ed270861fda01cbc2))
+- Centering full-width punctuation in vertical layout - ([3b87b49](https://github.com/mayocream/koharu/commit/3b87b492709fd36197405327dd934db293cadcf9))
+- Add italic, bold, border - ([24894d4](https://github.com/mayocream/koharu/commit/24894d48094f24e6b600b0d3677662f08543a606))
+
+### 🐛 Bug Fixes
+
+- Global font family & disable image transition - ([42ca4e8](https://github.com/mayocream/koharu/commit/42ca4e8695077414270dda95854f891d1456404d))
+- Fix: smooth text editing
+Fixes #197 - ([8de0019](https://github.com/mayocream/koharu/commit/8de00194dd20a1a742099926de8145739ddc18ec))
+
+### 📚 Documentation
+
+- New screenshots - ([1a980ec](https://github.com/mayocream/koharu/commit/1a980ecce805e508852f9cff566739632b5568bb))
+- Add zh-CN readme - ([77f01ab](https://github.com/mayocream/koharu/commit/77f01abada35a17f29711df9e436b12827b71832))
+- Add note for cuda driver - ([cfdacfb](https://github.com/mayocream/koharu/commit/cfdacfbb073420dc16fca11a10d712a3774c57bb))
+
+### ⚙️ Miscellaneous Tasks
+
+- Strip quotes from translated text - ([0501c54](https://github.com/mayocream/koharu/commit/0501c546772cf332a7525aff53e8a515b46d044e))
+- Make clippy happy - ([8464b17](https://github.com/mayocream/koharu/commit/8464b1775fbe710491065681af85ed33e391f6f4))
+
+
 ## [0.35.0](https://github.com/mayocream/koharu/compare/0.34.0..0.35.0) - 2026-03-07
 
 ### ⛰️  Features
