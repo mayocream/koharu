@@ -4,7 +4,6 @@ import { useEffect, useState, type ReactNode } from 'react'
 import { I18nextProvider } from 'react-i18next'
 import { ThemeProvider } from 'next-themes'
 import { QueryClientProvider } from '@tanstack/react-query'
-import { ReactQueryDevtools } from '@tanstack/react-query-devtools'
 import { TooltipProvider } from '@/components/ui/tooltip'
 import {
   ProgressBarStatus,
@@ -157,13 +156,6 @@ export function Providers({ children }: { children: ReactNode }) {
           <TooltipProvider delayDuration={0}>{children}</TooltipProvider>
         </ThemeProvider>
       </I18nextProvider>
-      {process.env.NODE_ENV !== 'production' && (
-        <ReactQueryDevtools
-          initialIsOpen={false}
-          buttonPosition='bottom-left'
-          position='left'
-        />
-      )}
     </QueryClientProvider>
   )
 }
