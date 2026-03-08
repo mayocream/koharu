@@ -26,6 +26,8 @@ pub struct TextBlock {
     pub font_prediction: Option<FontPrediction>,
     pub rendered: Option<SerializableDynamicImage>,
     #[serde(skip)]
+    pub lock_layout_box: bool,
+    #[serde(skip)]
     pub layout_seed_x: Option<f32>,
     #[serde(skip)]
     pub layout_seed_y: Option<f32>,

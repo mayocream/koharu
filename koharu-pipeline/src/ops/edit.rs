@@ -27,6 +27,11 @@ fn geometry_changed(a: &TextBlock, b: &TextBlock) -> bool {
     geometry_delta(a, b) > MATCH_GEOMETRY_EPS
 }
 
+fn size_changed(a: &TextBlock, b: &TextBlock) -> bool {
+    (a.width - b.width).abs() > MATCH_GEOMETRY_EPS
+        || (a.height - b.height).abs() > MATCH_GEOMETRY_EPS
+}
+
 fn seed_from_block(block: &TextBlock) -> Option<(f32, f32, f32, f32)> {
     match (
         block.layout_seed_x,
@@ -77,6 +82,28 @@ fn find_matching_previous(
     None
 }
 
+fn rehydrate_runtime_text_block_state(current: &mut TextBlock, previous: Option<&TextBlock>) {
+    let Some(prev) = previous else {
+        current.lock_layout_box = false;
+        current.set_layout_seed(current.x, current.y, current.width, current.height);
+        return;
+    };
+
+    current.lock_layout_box = if size_changed(current, prev) {
+        true
+    } else {
+        prev.lock_layout_box
+    };
+
+    if geometry_changed(current, prev) {
+        current.set_layout_seed(current.x, current.y, current.width, current.height);
+    } else if let Some((x, y, width, height)) = seed_from_block(prev) {
+        current.set_layout_seed(x, y, width, height);
+    } else {
+        current.set_layout_seed(current.x, current.y, current.width, current.height);
+    }
+}
+
 pub async fn update_text_blocks(
     state: AppResources,
     payload: UpdateTextBlocksPayload,
@@ -90,16 +117,9 @@ pub async fn update_text_blocks(
             let matched_idx = find_matching_previous(block, &previous, &used_previous);
             if let Some(idx) = matched_idx {
                 used_previous[idx] = true;
-                let prev = &previous[idx];
-                if geometry_changed(block, prev) {
-                    block.set_layout_seed(block.x, block.y, block.width, block.height);
-                } else if let Some((x, y, width, height)) = seed_from_block(prev) {
-                    block.set_layout_seed(x, y, width, height);
-                } else {
-                    block.set_layout_seed(block.x, block.y, block.width, block.height);
-                }
+                rehydrate_runtime_text_block_state(block, Some(&previous[idx]));
             } else {
-                block.set_layout_seed(block.x, block.y, block.width, block.height);
+                rehydrate_runtime_text_block_state(block, None);
             }
         }
         Ok(())
@@ -132,10 +152,12 @@ pub async fn update_text_block(
         if let Some(width) = payload.width {
             block.width = width;
             geometry_changed = true;
+            block.lock_layout_box = true;
         }
         if let Some(height) = payload.height {
             block.height = height;
             geometry_changed = true;
+            block.lock_layout_box = true;
         }
         if geometry_changed {
             block.set_layout_seed(block.x, block.y, block.width, block.height);
@@ -173,6 +195,61 @@ pub async fn update_text_block(
         Ok(to_block_info(payload.text_block_index, block))
     })
     .await
+}
+
+#[cfg(test)]
+mod tests {
+    use super::rehydrate_runtime_text_block_state;
+    use koharu_types::TextBlock;
+
+    #[test]
+    fn resized_block_locks_layout_box() {
+        let previous = TextBlock {
+            x: 10.0,
+            y: 20.0,
+            width: 100.0,
+            height: 80.0,
+            ..Default::default()
+        };
+        let mut current = TextBlock {
+            x: 10.0,
+            y: 20.0,
+            width: 72.0,
+            height: 80.0,
+            ..Default::default()
+        };
+
+        rehydrate_runtime_text_block_state(&mut current, Some(&previous));
+
+        assert!(current.lock_layout_box);
+        assert_eq!(current.seed_layout_box(), (10.0, 20.0, 72.0, 80.0));
+    }
+
+    #[test]
+    fn unchanged_block_preserves_layout_box_lock_and_seed() {
+        let mut previous = TextBlock {
+            x: 10.0,
+            y: 20.0,
+            width: 100.0,
+            height: 80.0,
+            lock_layout_box: true,
+            ..Default::default()
+        };
+        previous.set_layout_seed(5.0, 6.0, 70.0, 60.0);
+
+        let mut current = TextBlock {
+            x: 10.0,
+            y: 20.0,
+            width: 100.0,
+            height: 80.0,
+            ..Default::default()
+        };
+
+        rehydrate_runtime_text_block_state(&mut current, Some(&previous));
+
+        assert!(current.lock_layout_box);
+        assert_eq!(current.seed_layout_box(), (5.0, 6.0, 70.0, 60.0));
+    }
 }
 
 pub async fn add_text_block(

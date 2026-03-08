@@ -168,6 +168,7 @@ impl Renderer {
         let writing_mode = writing_mode_for_block(&layout_source_block);
         let english_horizontal_layout =
             writing_mode == WritingMode::Horizontal && is_latin_only(&normalized_translation);
+        let auto_expand_english_layout = english_horizontal_layout && !text_block.lock_layout_box;
         let text_align = style.text_align.unwrap_or({
             if english_horizontal_layout {
                 TextAlign::Center
@@ -176,7 +177,7 @@ impl Renderer {
             }
         });
         let original_layout_box = layout_box_from_block(&layout_source_block);
-        let mut layout_box = if english_horizontal_layout {
+        let mut layout_box = if auto_expand_english_layout {
             bubble_map
                 .map(|map| expand_latin_layout_box_strict(&layout_source_block, map))
                 .unwrap_or(original_layout_box)
@@ -210,7 +211,7 @@ impl Renderer {
         };
 
         let mut layout = build_layout(layout_box, false)?;
-        if english_horizontal_layout {
+        if auto_expand_english_layout {
             let underfilled = latin_layout_underfilled(&layout, layout_box.height);
             if underfilled {
                 let relaxed_box = bubble_map
