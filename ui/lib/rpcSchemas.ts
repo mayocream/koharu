@@ -82,12 +82,15 @@ export const renderStrokeSchema = z
     widthPx: value.widthPx,
   }))
 
+export const textAlignSchema = z.enum(['left', 'center', 'right'])
+
 export const textStyleSchema = z.object({
   fontFamilies: z.array(z.string()),
   fontSize: fromRustOption(z.number()),
   color: rgbaColorSchema,
   effect: fromRustOption(renderEffectSchema),
   stroke: fromRustOption(renderStrokeSchema),
+  textAlign: fromRustOption(textAlignSchema),
 })
 
 const namedFontPredictionSchema = z.object({

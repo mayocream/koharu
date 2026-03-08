@@ -247,7 +247,7 @@ pub struct InpaintRegionParams {
 
 #[cfg(test)]
 mod tests {
-    use koharu_types::TextStyle;
+    use koharu_types::{TextAlign, TextStyle};
     use serde::Serialize;
     use serde::de::DeserializeOwned;
 
@@ -287,6 +287,7 @@ mod tests {
                     color: [255, 255, 255, 255],
                     width_px: Some(2.0),
                 }),
+                text_align: Some(TextAlign::Right),
             }),
             ..Default::default()
         };

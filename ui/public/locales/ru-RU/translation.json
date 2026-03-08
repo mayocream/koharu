@@ -105,6 +105,10 @@
   },
   "render": {
     "effectLabel": "Эффект текста",
+    "alignLabel": "Выравнивание",
+    "alignLeft": "По левому краю",
+    "alignCenter": "По центру",
+    "alignRight": "По правому краю",
     "fontLabel": "Шрифт",
     "fontPlaceholder": "Выберите шрифт",
     "fontColorLabel": "Цвет шрифта",

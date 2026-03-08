@@ -105,6 +105,10 @@
   },
   "render": {
     "effectLabel": "文字効果",
+    "alignLabel": "配置",
+    "alignLeft": "左揃え",
+    "alignCenter": "中央揃え",
+    "alignRight": "右揃え",
     "fontLabel": "フォント",
     "fontPlaceholder": "フォントを選択",
     "fontColorLabel": "フォントカラー",

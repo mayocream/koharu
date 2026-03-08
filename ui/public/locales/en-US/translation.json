@@ -105,6 +105,10 @@
   },
   "render": {
     "effectLabel": "Text effect",
+    "alignLabel": "Align",
+    "alignLeft": "Align left",
+    "alignCenter": "Align center",
+    "alignRight": "Align right",
     "effectItalic": "Italic",
     "effectBold": "Bold",
     "effectBorder": "Border",

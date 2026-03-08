@@ -3,6 +3,9 @@
 import type { ComponentType } from 'react'
 import { useTranslation } from 'react-i18next'
 import {
+  AlignCenterIcon,
+  AlignLeftIcon,
+  AlignRightIcon,
   BoldIcon,
   ItalicIcon,
   MinusIcon,
@@ -10,7 +13,13 @@ import {
   SquareIcon,
 } from 'lucide-react'
 import { useTextBlocks } from '@/hooks/useTextBlocks'
-import { RenderEffect, RenderStroke, RgbaColor, TextStyle } from '@/types'
+import {
+  RenderEffect,
+  RenderStroke,
+  RgbaColor,
+  TextAlign,
+  TextStyle,
+} from '@/types'
 import { Button } from '@/components/ui/button'
 import { ColorPicker } from '@/components/ui/color-picker'
 import { Input } from '@/components/ui/input'
@@ -47,6 +56,8 @@ const DEFAULT_STROKE_WIDTH = 1.6
 const MIN_STROKE_WIDTH = 0.2
 const MAX_STROKE_WIDTH = 24
 const STROKE_WIDTH_STEP = 0.1
+const LATIN_ONLY_PATTERN =
+  /^[\p{Script=Latin}\p{Script=Common}\p{Script=Inherited}]*$/u
 
 const clampByte = (value: number) =>
   Math.max(0, Math.min(255, Math.round(value)))
@@ -98,6 +109,25 @@ const normalizeStroke = (stroke?: Partial<RenderStroke>): RenderStroke => ({
   color: stroke?.color ?? DEFAULT_STROKE.color,
   widthPx: stroke?.widthPx,
 })
+
+const resolveEffectiveTextAlign = (
+  block:
+    | {
+        style?: TextStyle
+        translation?: string
+      }
+    | undefined,
+): TextAlign => {
+  if (block?.style?.textAlign) {
+    return block.style.textAlign
+  }
+
+  if (block?.translation && LATIN_ONLY_PATTERN.test(block.translation)) {
+    return 'center'
+  }
+
+  return 'left'
+}
 
 export function RenderControlsPanel() {
   const renderEffect = useEditorUiStore((state) => state.renderEffect)
@@ -153,6 +183,12 @@ export function RenderControlsPanel() {
   const strokeWidthLabel = t('render.strokeWidthLabel', {
     defaultValue: 'Stroke width',
   })
+  const alignLabel = t('render.alignLabel', {
+    defaultValue: 'Align',
+  })
+  const currentTextAlign = resolveEffectiveTextAlign(
+    selectedBlock ?? firstBlock,
+  )
 
   const buildStyle = (
     style: TextStyle | undefined,
@@ -164,6 +200,7 @@ export function RenderControlsPanel() {
     color: updates.color ?? style?.color ?? fallbackColor,
     effect: updates.effect ?? style?.effect,
     stroke: updates.stroke ?? style?.stroke,
+    textAlign: updates.textAlign ?? style?.textAlign,
   })
 
   const applyStyleToSelected = (updates: Partial<TextStyle>) => {
@@ -210,6 +247,28 @@ export function RenderControlsPanel() {
   }[] = [
     { key: 'italic', label: t('render.effectItalic'), Icon: ItalicIcon },
     { key: 'bold', label: t('render.effectBold'), Icon: BoldIcon },
+  ]
+
+  const textAlignItems: {
+    value: TextAlign
+    label: string
+    Icon: ComponentType<{ className?: string }>
+  }[] = [
+    {
+      value: 'left',
+      label: t('render.alignLeft', { defaultValue: 'Align left' }),
+      Icon: AlignLeftIcon,
+    },
+    {
+      value: 'center',
+      label: t('render.alignCenter', { defaultValue: 'Align center' }),
+      Icon: AlignCenterIcon,
+    },
+    {
+      value: 'right',
+      label: t('render.alignRight', { defaultValue: 'Align right' }),
+      Icon: AlignRightIcon,
+    },
   ]
 
   return (
@@ -338,10 +397,51 @@ export function RenderControlsPanel() {
 
       <div className='grid w-full min-w-0 grid-cols-[3.5rem_minmax(0,1fr)] items-center gap-1.5'>
         <span className='text-muted-foreground text-[10px] font-medium tracking-wide uppercase'>
+          {alignLabel}
+        </span>
+
+        <div className='flex min-w-0 flex-wrap items-center gap-1'>
+          {textAlignItems.map((item) => {
+            const active = currentTextAlign === item.value
+            const Icon = item.Icon
+            return (
+              <Tooltip key={item.value}>
+                <TooltipTrigger asChild>
+                  <Button
+                    variant='outline'
+                    size='icon-sm'
+                    aria-label={item.label}
+                    data-testid={`render-align-${item.value}`}
+                    disabled={!hasBlocks}
+                    className={cn(
+                      'size-7',
+                      active &&
+                        'bg-primary text-primary-foreground border-primary hover:bg-primary/90',
+                    )}
+                    onClick={() => {
+                      if (applyStyleToSelected({ textAlign: item.value }))
+                        return
+                      applyStyleToAll({ textAlign: item.value })
+                    }}
+                  >
+                    <Icon className='size-3.5' />
+                  </Button>
+                </TooltipTrigger>
+                <TooltipContent side='bottom' sideOffset={4}>
+                  {item.label}
+                </TooltipContent>
+              </Tooltip>
+            )
+          })}
+        </div>
+      </div>
+
+      <div className='grid w-full min-w-0 grid-cols-[3.5rem_minmax(0,1fr)] items-center gap-1.5'>
+        <span className='text-muted-foreground text-[10px] font-medium tracking-wide uppercase'>
           {strokeLabel}
         </span>
 
-        <div className='border-border/60 bg-muted/30 flex min-w-0 flex-wrap items-center gap-1 rounded-lg border px-1 py-1'>
+        <div className='flex min-w-0 flex-wrap items-center gap-1'>
           <Tooltip>
             <TooltipTrigger asChild>
               <Button
@@ -395,7 +495,7 @@ export function RenderControlsPanel() {
 
           <Tooltip>
             <TooltipTrigger asChild>
-              <div className='border-input bg-background flex min-w-[8rem] flex-1 items-center rounded-md border shadow-xs'>
+              <div className='border-input bg-background flex w-auto min-w-0 shrink-0 items-center rounded-md border shadow-xs'>
                 <Button
                   type='button'
                   variant='ghost'
@@ -415,7 +515,7 @@ export function RenderControlsPanel() {
                   min={String(MIN_STROKE_WIDTH)}
                   max={String(MAX_STROKE_WIDTH)}
                   inputMode='decimal'
-                  className='h-7 min-w-0 flex-1 [appearance:textfield] rounded-none border-0 px-1.5 text-center text-[11px] shadow-none focus-visible:ring-0 [&::-webkit-inner-spin-button]:appearance-none [&::-webkit-outer-spin-button]:appearance-none'
+                  className='h-7 w-14 min-w-0 [appearance:textfield] rounded-none border-0 px-1.5 text-center text-[11px] shadow-none focus-visible:ring-0 [&::-webkit-inner-spin-button]:appearance-none [&::-webkit-outer-spin-button]:appearance-none'
                   data-testid='render-stroke-width'
                   value={
                     Number.isFinite(currentStrokeWidth)

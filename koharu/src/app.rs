@@ -173,6 +173,34 @@ pub async fn run() -> Result<()> {
 
     let app = tauri::Builder::default()
         .append_invoke_initialization_script(format!("window.__KOHARU_WS_PORT__ = {};", ws_port))
+        .setup({
+            let shared = shared.clone();
+            move |app| {
+                let handle = app.handle().clone();
+                tauri::async_runtime::spawn(async move {
+                    handle
+                        .plugin(tauri_plugin_updater::Builder::new().build())
+                        .ok();
+
+                    shared
+                        .get_or_try_init(|| async { build_resources(cpu).await })
+                        .await
+                        .expect("failed to build app resources");
+
+                    handle
+                        .get_webview_window("splashscreen")
+                        .expect("splashscreen window not found")
+                        .close()
+                        .ok();
+                    handle
+                        .get_webview_window("main")
+                        .expect("main window not found")
+                        .show()
+                        .ok();
+                });
+                Ok(())
+            }
+        })
         .build(tauri::generate_context!())?;
 
     let tauri_resolver = Arc::new(app.asset_resolver());
@@ -193,32 +221,11 @@ pub async fn run() -> Result<()> {
     });
 
     if headless {
-        let resources = build_resources(cpu).await?;
-        shared.set(resources).ok();
+        shared
+            .get_or_try_init(|| async { build_resources(cpu).await })
+            .await?;
         tokio::signal::ctrl_c().await?;
     } else {
-        let handle = app.handle().clone();
-        tokio::spawn(async move {
-            handle
-                .plugin(tauri_plugin_updater::Builder::new().build())
-                .ok();
-
-            let resources = build_resources(cpu)
-                .await
-                .expect("failed to build app resources");
-            shared.set(resources).ok();
-
-            handle
-                .get_webview_window("splashscreen")
-                .expect("splashscreen window not found")
-                .close()
-                .ok();
-            handle
-                .get_webview_window("main")
-                .expect("main window not found")
-                .show()
-                .ok();
-        });
         app.run(|_, _| {});
     }
 

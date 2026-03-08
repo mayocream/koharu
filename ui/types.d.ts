@@ -11,6 +11,8 @@ export type RenderStroke = {
   widthPx?: number
 }
 
+export type TextAlign = 'left' | 'center' | 'right'
+
 export type NamedFontPrediction = {
   index: number
   name: string
@@ -39,6 +41,7 @@ export type TextStyle = {
   color: RgbaColor
   effect?: RenderEffect
   stroke?: RenderStroke
+  textAlign?: TextAlign
 }
 
 export type TextBlock = {

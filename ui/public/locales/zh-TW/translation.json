@@ -105,6 +105,10 @@
   },
   "render": {
     "effectLabel": "文字效果",
+    "alignLabel": "對齊",
+    "alignLeft": "靠左對齊",
+    "alignCenter": "置中對齊",
+    "alignRight": "靠右對齊",
     "fontLabel": "字體",
     "fontPlaceholder": "選擇字體",
     "fontColorLabel": "字體顏色",

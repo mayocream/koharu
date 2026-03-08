@@ -5,7 +5,8 @@ use image::{DynamicImage, GrayImage, imageops};
 use rayon::iter::{IntoParallelRefMutIterator, ParallelIterator};
 
 use koharu_types::{
-    Document, SerializableDynamicImage, TextBlock, TextShaderEffect, TextStrokeStyle, TextStyle,
+    Document, SerializableDynamicImage, TextAlign, TextBlock, TextShaderEffect, TextStrokeStyle,
+    TextStyle,
 };
 
 use crate::{
@@ -142,6 +143,7 @@ impl Renderer {
             color: [0, 0, 0, 255],
             effect: None,
             stroke: None,
+            text_align: None,
         });
 
         if let Some(ff) = font_family {
@@ -172,6 +174,13 @@ impl Renderer {
         let writing_mode = writing_mode_for_block(&layout_source_block);
         let english_horizontal_layout =
             writing_mode == WritingMode::Horizontal && is_latin_only(&normalized_translation);
+        let text_align = style.text_align.unwrap_or({
+            if english_horizontal_layout {
+                TextAlign::Center
+            } else {
+                TextAlign::Left
+            }
+        });
         let original_layout_box = layout_box_from_block(&layout_source_block);
         let mut layout_box = if english_horizontal_layout {
             bubble_map
@@ -233,9 +242,9 @@ impl Renderer {
                 }
             }
 
-            center_layout_horizontally(&mut layout, layout_box.width);
             center_layout_vertically(&mut layout, layout_box.height);
         }
+        align_layout_horizontally(&mut layout, writing_mode, layout_box.width, text_align);
 
         let resolved_stroke = resolve_stroke_style(
             text_block,
@@ -335,17 +344,43 @@ fn resolve_stroke_style(
     })
 }
 
-fn center_layout_horizontally(layout: &mut LayoutRun<'_>, container_width: f32) {
+fn align_layout_horizontally(
+    layout: &mut LayoutRun<'_>,
+    writing_mode: WritingMode,
+    container_width: f32,
+    text_align: TextAlign,
+) {
     if !container_width.is_finite() || container_width <= 0.0 {
         return;
     }
 
     let target_width = layout.width.max(container_width);
+    if writing_mode.is_vertical() {
+        let remaining = (container_width - layout.width).max(0.0);
+        let offset = match text_align {
+            TextAlign::Left => 0.0,
+            TextAlign::Center => remaining * 0.5,
+            TextAlign::Right => remaining,
+        };
+        if offset > 0.0 {
+            for line in &mut layout.lines {
+                line.baseline.0 += offset;
+            }
+        }
+        layout.width = target_width;
+        return;
+    }
+
     for line in &mut layout.lines {
         if line.advance <= 0.0 {
             continue;
         }
-        let offset = ((container_width - line.advance) * 0.5).max(0.0);
+        let remaining = (container_width - line.advance).max(0.0);
+        let offset = match text_align {
+            TextAlign::Left => 0.0,
+            TextAlign::Center => remaining * 0.5,
+            TextAlign::Right => remaining,
+        };
         if offset > 0.0 {
             line.baseline.0 += offset;
         }
@@ -388,4 +423,115 @@ fn load_symbol_fallbacks(fontbook: &mut FontBook) -> Vec<Font> {
         }
     }
     fonts
+}
+
+#[cfg(test)]
+mod tests {
+    use super::{align_layout_horizontally, center_layout_vertically};
+    use crate::layout::{LayoutLine, LayoutRun, WritingMode};
+    use koharu_types::TextAlign;
+
+    #[test]
+    fn horizontal_alignment_offsets_each_line() {
+        let mut layout = LayoutRun {
+            lines: vec![
+                LayoutLine {
+                    advance: 40.0,
+                    baseline: (0.0, 10.0),
+                    ..Default::default()
+                },
+                LayoutLine {
+                    advance: 80.0,
+                    baseline: (0.0, 30.0),
+                    ..Default::default()
+                },
+            ],
+            width: 80.0,
+            height: 40.0,
+            font_size: 16.0,
+        };
+
+        align_layout_horizontally(
+            &mut layout,
+            WritingMode::Horizontal,
+            100.0,
+            TextAlign::Center,
+        );
+
+        assert_eq!(layout.lines[0].baseline.0, 30.0);
+        assert_eq!(layout.lines[1].baseline.0, 10.0);
+        assert_eq!(layout.width, 100.0);
+    }
+
+    #[test]
+    fn right_alignment_uses_full_remaining_width() {
+        let mut layout = LayoutRun {
+            lines: vec![LayoutLine {
+                advance: 40.0,
+                baseline: (0.0, 10.0),
+                ..Default::default()
+            }],
+            width: 40.0,
+            height: 20.0,
+            font_size: 16.0,
+        };
+
+        align_layout_horizontally(
+            &mut layout,
+            WritingMode::Horizontal,
+            100.0,
+            TextAlign::Right,
+        );
+
+        assert_eq!(layout.lines[0].baseline.0, 60.0);
+    }
+
+    #[test]
+    fn vertical_alignment_offsets_all_columns_as_a_group() {
+        let mut layout = LayoutRun {
+            lines: vec![
+                LayoutLine {
+                    baseline: (10.0, 12.0),
+                    ..Default::default()
+                },
+                LayoutLine {
+                    baseline: (30.0, 12.0),
+                    ..Default::default()
+                },
+            ],
+            width: 40.0,
+            height: 80.0,
+            font_size: 16.0,
+        };
+
+        align_layout_horizontally(
+            &mut layout,
+            WritingMode::VerticalRl,
+            100.0,
+            TextAlign::Center,
+        );
+
+        assert_eq!(layout.lines[0].baseline.0, 40.0);
+        assert_eq!(layout.lines[1].baseline.0, 60.0);
+        assert_eq!(layout.width, 100.0);
+    }
+
+    #[test]
+    fn vertical_centering_preserves_existing_behavior() {
+        let mut layout = LayoutRun {
+            lines: vec![LayoutLine {
+                advance: 40.0,
+                baseline: (0.0, 12.0),
+                ..Default::default()
+            }],
+            width: 40.0,
+            height: 20.0,
+            font_size: 16.0,
+        };
+
+        center_layout_vertically(&mut layout, 60.0);
+
+        assert_eq!(layout.lines[0].baseline.1, 32.0);
+        assert_eq!(layout.height, 60.0);
+    }
 }

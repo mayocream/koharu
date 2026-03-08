@@ -92,6 +92,15 @@ const fn default_stroke_color() -> [u8; 4] {
     [255, 255, 255, 255]
 }
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, Default)]
+#[serde(rename_all = "camelCase")]
+pub enum TextAlign {
+    #[default]
+    Left,
+    Center,
+    Right,
+}
+
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct TextStyle {
@@ -100,6 +109,8 @@ pub struct TextStyle {
     pub color: [u8; 4],
     pub effect: Option<TextShaderEffect>,
     pub stroke: Option<TextStrokeStyle>,
+    #[serde(default)]
+    pub text_align: Option<TextAlign>,
 }
 
 #[derive(Default, Debug, Clone, Serialize, Deserialize)]

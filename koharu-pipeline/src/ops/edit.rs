@@ -152,6 +152,7 @@ pub async fn update_text_block(
                 color: [0, 0, 0, 255],
                 effect: None,
                 stroke: None,
+                text_align: None,
             });
 
             if let Some(families) = payload.font_families {

@@ -38,6 +38,7 @@ pub struct TextStyleInfo {
     pub color: [u8; 4],
     pub effect: Option<String>,
     pub stroke: Option<TextStrokeInfo>,
+    pub text_align: Option<String>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -74,6 +75,7 @@ pub fn to_block_info(i: usize, block: &TextBlock) -> TextBlockInfo {
                 color: stroke.color,
                 width_px: stroke.width_px,
             }),
+            text_align: s.text_align.map(|align| format!("{align:?}")),
         }),
     }
 }
