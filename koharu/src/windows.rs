@@ -67,9 +67,13 @@ pub fn enable_ansi_support() -> Result<()> {
     }
 }
 
+pub fn attach_parent_console() -> bool {
+    unsafe { AttachConsole(ATTACH_PARENT_PROCESS).is_ok() }
+}
+
 pub fn create_console_window() {
     unsafe {
-        if AttachConsole(ATTACH_PARENT_PROCESS).is_err() {
+        if !attach_parent_console() {
             let _ = AllocConsole();
         }
     }

@@ -63,8 +63,11 @@ struct Cli {
 fn initialize(headless: bool, _debug: bool) -> Result<()> {
     #[cfg(target_os = "windows")]
     {
-        // hide console window in release mode and not headless
-        if headless || _debug {
+        let attached_to_parent = crate::windows::attach_parent_console();
+
+        // In GUI release builds, prefer the parent terminal if one exists.
+        // Only allocate a new console window for explicit console-oriented runs.
+        if !attached_to_parent && (headless || _debug) {
             crate::windows::create_console_window();
         }
 

@@ -82,6 +82,34 @@ fn unescape_block_text(text: &str) -> String {
         .replace("&amp;", "&")
 }
 
+fn strip_wrapping_quotes(text: &str) -> String {
+    let mut current = text.trim();
+
+    loop {
+        let next = match current {
+            _ if current.starts_with('"') && current.ends_with('"') => {
+                current.strip_prefix('"').and_then(|s| s.strip_suffix('"'))
+            }
+            _ if current.starts_with('\'') && current.ends_with('\'') => current
+                .strip_prefix('\'')
+                .and_then(|s| s.strip_suffix('\'')),
+            _ if current.starts_with('“') && current.ends_with('”') => {
+                current.strip_prefix('“').and_then(|s| s.strip_suffix('”'))
+            }
+            _ if current.starts_with('‘') && current.ends_with('’') => {
+                current.strip_prefix('‘').and_then(|s| s.strip_suffix('’'))
+            }
+            _ => break,
+        };
+        let Some(next) = next else {
+            break;
+        };
+        current = next.trim();
+    }
+
+    current.to_string()
+}
+
 fn format_document_blocks(blocks: &[TextBlock]) -> String {
     blocks
         .iter()
@@ -212,7 +240,7 @@ impl Translatable for Document {
         };
 
         for (block, translation) in self.text_blocks.iter_mut().zip(translations) {
-            block.translation = Some(translation);
+            block.translation = Some(strip_wrapping_quotes(&translation));
         }
         Ok(())
     }
@@ -239,7 +267,7 @@ impl Translatable for TextBlock {
     }
 
     fn set_translation(&mut self, translation: String) -> anyhow::Result<()> {
-        self.translation = Some(translation);
+        self.translation = Some(strip_wrapping_quotes(&translation));
         Ok(())
     }
 }
@@ -258,7 +286,6 @@ impl Model {
 
     /// Start loading the model on a blocking thread and return immediately.
     pub async fn load(&self, id: ModelId) {
-        // mark as loading
         {
             let mut guard = self.state.write().await;
             *guard = State::Loading;
@@ -282,27 +309,22 @@ impl Model {
         });
     }
 
-    /// Returns a read guard to the internal state.
     pub async fn get(&self) -> tokio::sync::RwLockReadGuard<'_, State> {
         self.state.read().await
     }
 
-    /// Returns a write guard to the internal state.
     pub async fn get_mut(&self) -> tokio::sync::RwLockWriteGuard<'_, State> {
         self.state.write().await
     }
 
-    /// Drop the loaded model from memory.
     pub async fn offload(&self) {
         *self.state.write().await = State::Empty;
     }
 
-    /// Ready if the model is loaded into memory.
     pub async fn ready(&self) -> bool {
         matches!(*self.state.read().await, State::Ready(_))
     }
 
-    /// Translate text using the loaded model.
     pub async fn translate(
         &self,
         doc: &mut impl Translatable,
@@ -368,6 +390,24 @@ mod tests {
             doc.text_blocks[1].translation.as_deref(),
             Some("Second line\nnext")
         );
+
+        Ok(())
+    }
+
+    #[test]
+    fn document_translation_strips_wrapping_quotes() -> anyhow::Result<()> {
+        let mut doc = Document {
+            text_blocks: vec![TextBlock::default(), TextBlock::default()],
+            ..Default::default()
+        };
+
+        doc.set_translation(
+            "<block id=\"0\">\n\"Hello\"\n</block>\n<block id=\"1\">\n“World”\n</block>"
+                .to_string(),
+        )?;
+
+        assert_eq!(doc.text_blocks[0].translation.as_deref(), Some("Hello"));
+        assert_eq!(doc.text_blocks[1].translation.as_deref(), Some("World"));
 
         Ok(())
     }
@@ -470,5 +510,21 @@ mod tests {
         let opts = GenerateOptions::default();
         assert_eq!(opts.temperature, 0.0);
         assert_eq!(opts.repeat_penalty, 1.0);
+    }
+
+    #[test]
+    fn text_block_translation_strips_wrapping_quotes() -> anyhow::Result<()> {
+        let mut block = TextBlock::default();
+        block.set_translation("“quoted”".to_string())?;
+        assert_eq!(block.translation.as_deref(), Some("quoted"));
+        Ok(())
+    }
+
+    #[test]
+    fn text_block_translation_keeps_japanese_dialogue_quotes() -> anyhow::Result<()> {
+        let mut block = TextBlock::default();
+        block.set_translation("「quoted」".to_string())?;
+        assert_eq!(block.translation.as_deref(), Some("「quoted」"));
+        Ok(())
     }
 }
