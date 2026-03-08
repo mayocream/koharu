@@ -1,3 +1,10 @@
+## [0.36.1](https://github.com/mayocream/koharu/compare/0.36.0..0.36.1) - 2026-03-08
+
+### 🐛 Bug Fixes
+
+- Unable to resize text box on latin text box - ([c3eb3af](https://github.com/mayocream/koharu/commit/c3eb3afa01de3557379fef860d22d4cec777699b))
+
+
 ## [0.36.0](https://github.com/mayocream/koharu/compare/0.35.0..0.36.0) - 2026-03-08
 
 ### ⛰️  Features
