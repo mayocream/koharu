@@ -10,6 +10,10 @@ use super::{GenerateOptions, Llm, ModelId};
 
 pub use super::prefetch;
 
+const BLOCK_START_PREFIX: &str = r#"<block id=""#;
+const BLOCK_START_SUFFIX: &str = r#"">"#;
+const BLOCK_END: &str = "</block>";
+
 #[derive(Debug, Clone, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct ModelInfo {
@@ -53,26 +57,175 @@ impl Default for Model {
 pub trait Translatable {
     fn get_source(&self) -> anyhow::Result<String>;
     fn set_translation(&mut self, translation: String) -> anyhow::Result<()>;
+
+    fn translate_with_llm(
+        &mut self,
+        llm: &mut Llm,
+        target_language: Option<&str>,
+    ) -> anyhow::Result<()> {
+        let text = self.get_source()?;
+        let response = llm.generate(&text, &GenerateOptions::default(), target_language)?;
+        let response = response.trim().to_string();
+        self.set_translation(response)
+    }
+}
+
+fn escape_block_text(text: &str) -> String {
+    text.replace('&', "&amp;")
+        .replace('<', "&lt;")
+        .replace('>', "&gt;")
+}
+
+fn unescape_block_text(text: &str) -> String {
+    text.replace("&lt;", "<")
+        .replace("&gt;", ">")
+        .replace("&amp;", "&")
+}
+
+fn format_document_blocks(blocks: &[TextBlock]) -> String {
+    blocks
+        .iter()
+        .enumerate()
+        .map(|(idx, block)| {
+            let text = block.text.as_deref().unwrap_or("<empty>");
+            format!(
+                r#"<block id="{idx}">
+{}
+</block>"#,
+                escape_block_text(text)
+            )
+        })
+        .collect::<Vec<_>>()
+        .join("\n")
+}
+
+fn parse_tagged_blocks(
+    translation: &str,
+    expected_blocks: usize,
+) -> anyhow::Result<Option<Vec<String>>> {
+    if !translation.contains(BLOCK_START_PREFIX) {
+        return Ok(None);
+    }
+
+    let mut blocks = vec![String::new(); expected_blocks];
+    let mut cursor = translation;
+    let mut found_any = false;
+    let mut parsed_count = 0usize;
+    let mut ignored_count = 0usize;
+
+    while let Some(start_idx) = cursor.find(BLOCK_START_PREFIX) {
+        found_any = true;
+        cursor = &cursor[start_idx + BLOCK_START_PREFIX.len()..];
+
+        let id_end = cursor
+            .find(BLOCK_START_SUFFIX)
+            .ok_or_else(|| anyhow::anyhow!("Malformed translated block: missing block header"))?;
+        let id = cursor[..id_end]
+            .parse::<usize>()
+            .map_err(|_| anyhow::anyhow!("Malformed translated block id"))?;
+        if id >= expected_blocks {
+            ignored_count += 1;
+            tracing::warn!("Ignoring translated block id {id} for {expected_blocks} source blocks");
+            cursor = &cursor[id_end + BLOCK_START_SUFFIX.len()..];
+            let boundary = block_boundary(cursor, cursor.find(BLOCK_END));
+            cursor = if cursor.find(BLOCK_END) == Some(boundary) {
+                &cursor[boundary + BLOCK_END.len()..]
+            } else {
+                &cursor[boundary..]
+            };
+            continue;
+        }
+
+        cursor = &cursor[id_end + BLOCK_START_SUFFIX.len()..];
+
+        let closing_tag = cursor.find(BLOCK_END);
+        let block_end = block_boundary(cursor, closing_tag);
+        let content = unescape_block_text(cursor[..block_end].trim());
+
+        if blocks[id].is_empty() {
+            parsed_count += 1;
+        } else {
+            tracing::warn!("Translated block id {id} appeared more than once, keeping latest");
+        }
+        blocks[id] = content;
+
+        cursor = if closing_tag == Some(block_end) {
+            &cursor[block_end + BLOCK_END.len()..]
+        } else {
+            &cursor[block_end..]
+        };
+    }
+
+    if !found_any {
+        return Ok(None);
+    }
+
+    if parsed_count != expected_blocks || ignored_count != 0 {
+        tracing::warn!(
+            "Translated block count mismatch: expected {expected_blocks}, got {parsed_count}, ignored {ignored_count}"
+        );
+    }
+
+    Ok(Some(blocks))
+}
+
+fn split_legacy_lines(translation: &str, expected_blocks: usize) -> anyhow::Result<Vec<String>> {
+    let mut translations = translation
+        .lines()
+        .map(|line| line.trim_end_matches('\r').to_string())
+        .collect::<Vec<_>>();
+
+    if translations.len() != expected_blocks {
+        tracing::warn!(
+            "Translated line count mismatch: expected {expected_blocks}, got {}",
+            translations.len()
+        );
+    }
+
+    translations.truncate(expected_blocks);
+    while translations.len() < expected_blocks {
+        translations.push(String::new());
+    }
+
+    Ok(translations)
+}
+
+fn block_boundary(cursor: &str, closing_tag: Option<usize>) -> usize {
+    let next_block_start = cursor.find(BLOCK_START_PREFIX);
+    match (closing_tag, next_block_start) {
+        (Some(close), Some(next)) => close.min(next),
+        (Some(close), None) => close,
+        (None, Some(next)) => next,
+        (None, None) => cursor.len(),
+    }
 }
 
 impl Translatable for Document {
     fn get_source(&self) -> anyhow::Result<String> {
-        let source = self
-            .text_blocks
-            .clone()
-            .into_iter()
-            .map(|block| block.text.unwrap_or_else(|| "<empty>".to_string()))
-            .collect::<Vec<_>>()
-            .join("\n");
-        Ok(source)
+        Ok(format_document_blocks(&self.text_blocks))
     }
 
     fn set_translation(&mut self, translation: String) -> anyhow::Result<()> {
-        let translations = translation.split("\n").collect::<Vec<_>>();
+        let translations = match parse_tagged_blocks(&translation, self.text_blocks.len())? {
+            Some(blocks) => blocks,
+            None => split_legacy_lines(&translation, self.text_blocks.len())?,
+        };
+
         for (block, translation) in self.text_blocks.iter_mut().zip(translations) {
-            block.translation = Some(translation.to_string());
+            block.translation = Some(translation);
         }
         Ok(())
+    }
+
+    fn translate_with_llm(
+        &mut self,
+        llm: &mut Llm,
+        target_language: Option<&str>,
+    ) -> anyhow::Result<()> {
+        let text = self.get_source()?;
+        let response = llm.generate(&text, &GenerateOptions::default(), target_language)?;
+        let response = response.trim().to_string();
+        self.set_translation(response)
     }
 }
 
@@ -157,15 +310,165 @@ impl Model {
     ) -> anyhow::Result<()> {
         let mut guard = self.state.write().await;
         match &mut *guard {
-            State::Ready(llm) => {
-                let text = doc.get_source()?;
-                let response = llm.generate(&text, &GenerateOptions::default(), target_language)?;
-                let response = response.trim().to_string();
-                doc.set_translation(response)
-            }
+            State::Ready(llm) => doc.translate_with_llm(llm, target_language),
             State::Loading => Err(anyhow::anyhow!("Model is still loading")),
             State::Failed(e) => Err(anyhow::anyhow!("Model failed to load: {e}")),
             State::Empty => Err(anyhow::anyhow!("No model is loaded")),
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use koharu_types::Document;
+
+    use super::*;
+
+    #[test]
+    fn document_source_uses_tagged_blocks() -> anyhow::Result<()> {
+        let doc = Document {
+            text_blocks: vec![
+                TextBlock {
+                    text: Some("Hello".to_string()),
+                    ..Default::default()
+                },
+                TextBlock {
+                    text: Some("1 < 2\nA & B".to_string()),
+                    ..Default::default()
+                },
+            ],
+            ..Default::default()
+        };
+
+        let source = doc.get_source()?;
+        assert_eq!(
+            source,
+            "<block id=\"0\">\nHello\n</block>\n<block id=\"1\">\n1 &lt; 2\nA &amp; B\n</block>"
+        );
+
+        Ok(())
+    }
+
+    #[test]
+    fn document_translation_parses_tagged_blocks_by_id() -> anyhow::Result<()> {
+        let mut doc = Document {
+            text_blocks: vec![TextBlock::default(), TextBlock::default()],
+            ..Default::default()
+        };
+
+        doc.set_translation(
+            "<block id=\"1\">\nSecond line\nnext\n</block>\n<block id=\"0\">\nFirst &lt;done&gt;\n</block>".to_string(),
+        )?;
+
+        assert_eq!(
+            doc.text_blocks[0].translation.as_deref(),
+            Some("First <done>")
+        );
+        assert_eq!(
+            doc.text_blocks[1].translation.as_deref(),
+            Some("Second line\nnext")
+        );
+
+        Ok(())
+    }
+
+    #[test]
+    fn document_translation_pads_mismatched_legacy_lines() -> anyhow::Result<()> {
+        let mut doc = Document {
+            text_blocks: vec![TextBlock::default(), TextBlock::default()],
+            ..Default::default()
+        };
+
+        doc.set_translation("only one line".to_string())?;
+
+        assert_eq!(
+            doc.text_blocks[0].translation.as_deref(),
+            Some("only one line")
+        );
+        assert_eq!(doc.text_blocks[1].translation.as_deref(), Some(""));
+
+        Ok(())
+    }
+
+    #[test]
+    fn document_translation_allows_missing_closing_tags() -> anyhow::Result<()> {
+        let mut doc = Document {
+            text_blocks: vec![TextBlock::default(), TextBlock::default()],
+            ..Default::default()
+        };
+
+        doc.set_translation(
+            "<block id=\"0\">\nFirst line\n<block id=\"1\">\nSecond line".to_string(),
+        )?;
+
+        assert_eq!(
+            doc.text_blocks[0].translation.as_deref(),
+            Some("First line")
+        );
+        assert_eq!(
+            doc.text_blocks[1].translation.as_deref(),
+            Some("Second line")
+        );
+
+        Ok(())
+    }
+
+    #[test]
+    fn document_translation_uses_end_of_text_when_last_closing_tag_is_missing() -> anyhow::Result<()>
+    {
+        let mut doc = Document {
+            text_blocks: vec![TextBlock::default()],
+            ..Default::default()
+        };
+
+        doc.set_translation("<block id=\"0\">\nFinal line".to_string())?;
+
+        assert_eq!(
+            doc.text_blocks[0].translation.as_deref(),
+            Some("Final line")
+        );
+
+        Ok(())
+    }
+
+    #[test]
+    fn document_translation_ignores_out_of_range_tagged_blocks() -> anyhow::Result<()> {
+        let mut doc = Document {
+            text_blocks: vec![TextBlock::default()],
+            ..Default::default()
+        };
+
+        doc.set_translation(
+            "<block id=\"0\">\nKept\n</block>\n<block id=\"1\">\nIgnored\n</block>".to_string(),
+        )?;
+
+        assert_eq!(doc.text_blocks[0].translation.as_deref(), Some("Kept"));
+
+        Ok(())
+    }
+
+    #[test]
+    fn document_translation_pads_missing_tagged_blocks() -> anyhow::Result<()> {
+        let mut doc = Document {
+            text_blocks: vec![TextBlock::default(), TextBlock::default()],
+            ..Default::default()
+        };
+
+        doc.set_translation("<block id=\"0\">\nOnly first\n</block>".to_string())?;
+
+        assert_eq!(
+            doc.text_blocks[0].translation.as_deref(),
+            Some("Only first")
+        );
+        assert_eq!(doc.text_blocks[1].translation.as_deref(), Some(""));
+
+        Ok(())
+    }
+
+    #[test]
+    fn default_generate_options_are_strict() {
+        let opts = GenerateOptions::default();
+        assert_eq!(opts.temperature, 0.0);
+        assert_eq!(opts.repeat_penalty, 1.0);
     }
 }

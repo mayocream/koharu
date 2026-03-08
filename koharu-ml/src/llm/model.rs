@@ -32,6 +32,7 @@ impl Model {
 
 /// Minimal quantized LLM wrapper
 pub struct Llm {
+    model_id: ModelId,
     device: Device,
     model: Model,
     tokenizer: Tokenizer,
@@ -55,13 +56,13 @@ pub struct GenerateOptions {
 impl Default for GenerateOptions {
     fn default() -> Self {
         Self {
-            max_tokens: 1000,
-            temperature: 0.8,
+            max_tokens: 5000,
+            temperature: 0.0,
             top_k: None,
             top_p: None,
             seed: 299792458,
             split_prompt: false,
-            repeat_penalty: 1.1,
+            repeat_penalty: 1.0,
             repeat_last_n: 64,
         }
     }
@@ -126,12 +127,17 @@ impl Llm {
         };
 
         Ok(Self {
+            model_id: id,
             device,
             model,
             tokenizer,
             prompt_renderer,
             eos_token_id,
         })
+    }
+
+    pub fn id(&self) -> ModelId {
+        self.model_id
     }
 
     /// Generate up to `max_tokens` following `prompt` using temperature/top-k/p settings.

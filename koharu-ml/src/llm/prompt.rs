@@ -55,6 +55,8 @@ pub struct PromptRenderer {
     eos_token: String,
 }
 
+const ENGLISH_BLOCK_TAG_INSTRUCTIONS: &str = r#"If the input contains <block id="N">...</block>, translate only the content inside each block. Preserve every block tag, id, order, and block count exactly. Do not merge blocks, split blocks, or add explanations outside the blocks."#;
+
 impl PromptRenderer {
     pub fn new(model_id: ModelId, template: String, bos_token: String, eos_token: String) -> Self {
         let mut env = Environment::new();
@@ -72,32 +74,43 @@ impl PromptRenderer {
     }
 
     fn messages(&self, text: impl Into<String>, target_language: Option<&str>) -> Vec<ChatMessage> {
+        let text = text.into();
+
         match self.model_id {
             // refer: https://huggingface.co/lmg-anon/vntl-llama3-8b-v2-gguf#translation-prompt
             ModelId::VntlLlama3_8Bv2 => vec![
+                ChatMessage::new(
+                    ChatRole::System,
+                    format!(
+                        "Translate Japanese manga dialogue into natural English for speech bubbles. Keep character voice, emotional tone, and relationship nuances clear. Keep the wording concise enough to fit manga bubbles. Preserve emphasis and sound effects naturally when they appear. Do not add notes, explanations, or romanization. {ENGLISH_BLOCK_TAG_INSTRUCTIONS}"
+                    ),
+                ),
                 ChatMessage::new(ChatRole::Name("Japanese".to_string()), text),
                 ChatMessage::new(ChatRole::Name("English".to_string()), String::new()),
             ],
             ModelId::Lfm2_350mEnjpMt => vec![
                 ChatMessage::new(
                     ChatRole::System,
-                    "Translate to English, do not add any explanations, do not add or delete line breaks.",
+                    format!(
+                        "Translate Japanese manga dialogue into natural English for speech bubbles. Keep character voice, emotional tone, and relationship nuances clear. Keep the wording concise enough to fit manga bubbles. Preserve emphasis and sound effects naturally when they appear. Do not add notes or explanations, and do not add or delete line breaks inside a block. {ENGLISH_BLOCK_TAG_INSTRUCTIONS}"
+                    ),
                 ),
                 ChatMessage::new(ChatRole::User, text),
             ],
             ModelId::SakuraGalTransl7Bv3_7 | ModelId::Sakura1_5bQwen2_5v1_0 => vec![
                 ChatMessage::new(
                     ChatRole::System,
-                    "你是一个视觉小说翻译模型，可以通顺地使用给定的术语表以指定的风格将日文翻译成简体中文，并联系上下文正确使用人称代词，注意不要混淆使役态和被动态的主语和宾语，不要擅自添加原文中没有的特殊符号，也不要擅自增加或减少换行。",
+                    r#"你是一个漫画翻译模型。请把日文漫画对白翻译成自然、简洁、适合放进对话气泡的简体中文。保留人物语气、情绪、关系和说话风格，正确处理人称，不要误解使役态和被动态。拟声词、强调和语气词要自然处理；不要添加注释、解释、罗马音或原文里没有的特殊符号，也不要擅自增加或减少换行。如果输入中包含 <block id="N">...</block>，只翻译每个 block 标签内部的内容。必须完整保留所有 block 标签、id、顺序和 block 数量，不要合并 block，不要拆分 block，也不要在 block 之外添加任何内容。"#,
                 ),
                 ChatMessage::new(ChatRole::User, text),
             ],
             ModelId::HunyuanMT7B => vec![ChatMessage::new(
                 ChatRole::User,
                 format!(
-                    "Translate the following light novel dialog into {}, without additional explanation.\n\n{}",
+                    "Translate the following Japanese manga dialogue into {}. Make it read naturally inside manga speech bubbles. Keep character voice, emotional tone, and relationship nuances. Keep the wording concise, and preserve emphasis and sound effects naturally when they appear. Do not add notes or explanations. {}\n\n{}",
                     target_language.unwrap_or("English"),
-                    text.into(),
+                    ENGLISH_BLOCK_TAG_INSTRUCTIONS,
+                    text,
                 ),
             )],
         }
@@ -143,7 +156,7 @@ mod tests {
             "<|end_of_text|>".to_string(),
         );
         let formatted = renderer.format_chat_prompt("こんにちは".to_string(), None)?;
-        let expected = "<|begin_of_text|><|start_header_id|>Metadata<|end_header_id|>\n\n<|eot_id|><|start_header_id|>Japanese<|end_header_id|>\n\nこんにちは<|eot_id|><|start_header_id|>English<|end_header_id|>\n\n";
+        let expected = "<|begin_of_text|><|start_header_id|>Metadata<|end_header_id|>\n\nTranslate Japanese manga dialogue into natural English for speech bubbles. Keep character voice, emotional tone, and relationship nuances clear. Keep the wording concise enough to fit manga bubbles. Preserve emphasis and sound effects naturally when they appear. Do not add notes, explanations, or romanization. If the input contains <block id=\"N\">...</block>, translate only the content inside each block. Preserve every block tag, id, order, and block count exactly. Do not merge blocks, split blocks, or add explanations outside the blocks.<|eot_id|><|start_header_id|>Japanese<|end_header_id|>\n\nこんにちは<|eot_id|><|start_header_id|>English<|end_header_id|>\n\n";
         assert_eq!(formatted, expected);
 
         Ok(())
@@ -159,7 +172,7 @@ mod tests {
             "<|end_of_text|>".to_string(),
         );
         let formatted = renderer.format_chat_prompt("こんにちは".to_string(), None)?;
-        let expected = "<|begin_of_text|><|im_start|>system Translate to English, do not add any explanations, do not add or delete line breaks.<|im_end|> <|im_start|>user こんにちは<|im_end|> <|im_start|>assistant ";
+        let expected = "<|begin_of_text|><|im_start|>system Translate Japanese manga dialogue into natural English for speech bubbles. Keep character voice, emotional tone, and relationship nuances clear. Keep the wording concise enough to fit manga bubbles. Preserve emphasis and sound effects naturally when they appear. Do not add notes or explanations, and do not add or delete line breaks inside a block. If the input contains <block id=\"N\">...</block>, translate only the content inside each block. Preserve every block tag, id, order, and block count exactly. Do not merge blocks, split blocks, or add explanations outside the blocks.<|im_end|> <|im_start|>user こんにちは<|im_end|> <|im_start|>assistant ";
         assert_eq!(formatted, expected);
 
         Ok(())
@@ -175,7 +188,7 @@ mod tests {
             "</s>".to_string(),
         );
         let formatted = renderer.format_chat_prompt("こんにちは".to_string(), None)?;
-        let expected = "<|im_start|>system 你是一个视觉小说翻译模型，可以通顺地使用给定的术语表以指定的风格将日文翻译成简体中文，并联系上下文正确使用人称代词，注意不要混淆使役态和被动态的主语和宾语，不要擅自添加原文中没有的特殊符号，也不要擅自增加或减少换行。<|im_end|> <|im_start|>user こんにちは<|im_end|> <|im_start|>assistant ";
+        let expected = "<|im_start|>system 你是一个漫画翻译模型。请把日文漫画对白翻译成自然、简洁、适合放进对话气泡的简体中文。保留人物语气、情绪、关系和说话风格，正确处理人称，不要误解使役态和被动态。拟声词、强调和语气词要自然处理；不要添加注释、解释、罗马音或原文里没有的特殊符号，也不要擅自增加或减少换行。如果输入中包含 <block id=\"N\">...</block>，只翻译每个 block 标签内部的内容。必须完整保留所有 block 标签、id、顺序和 block 数量，不要合并 block，不要拆分 block，也不要在 block 之外添加任何内容。<|im_end|> <|im_start|>user こんにちは<|im_end|> <|im_start|>assistant ";
         assert_eq!(formatted, expected);
 
         Ok(())
