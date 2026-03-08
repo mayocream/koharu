@@ -110,6 +110,27 @@ const normalizeStroke = (stroke?: Partial<RenderStroke>): RenderStroke => ({
   widthPx: stroke?.widthPx,
 })
 
+const resolveStyleColor = (
+  style: TextStyle | undefined,
+  block:
+    | {
+        fontPrediction?: {
+          text_color: [number, number, number]
+        }
+      }
+    | undefined,
+  fallbackColor: RgbaColor,
+): RgbaColor =>
+  style?.color ??
+  (block?.fontPrediction?.text_color
+    ? [
+        block.fontPrediction.text_color[0],
+        block.fontPrediction.text_color[1],
+        block.fontPrediction.text_color[2],
+        255,
+      ]
+    : fallbackColor)
+
 const resolveEffectiveTextAlign = (
   block:
     | {
@@ -159,8 +180,8 @@ export function RenderControlsPanel() {
         ]
   const fontOptions = uniqueStrings(fontCandidates)
   const currentFont =
-    fontFamily ??
     selectedBlock?.style?.fontFamilies?.[0] ??
+    fontFamily ??
     firstBlock?.style?.fontFamilies?.[0] ??
     (hasBlocks ? fallbackFontFamilies[0] : '')
   const currentEffect = normalizeEffect(
@@ -189,15 +210,35 @@ export function RenderControlsPanel() {
   const currentTextAlign = resolveEffectiveTextAlign(
     selectedBlock ?? firstBlock,
   )
+  const scopeLabel =
+    selectedBlockIndex !== undefined
+      ? t('render.fontScopeBlockIndex', {
+          index: selectedBlockIndex + 1,
+          defaultValue: `Block ${selectedBlockIndex + 1}`,
+        })
+      : t('render.fontScopeGlobal', {
+          defaultValue: 'Global',
+        })
+  const scopeToneClass =
+    selectedBlockIndex !== undefined
+      ? 'border-primary/20 bg-primary/10 text-primary'
+      : 'border-border/60 bg-muted text-muted-foreground'
 
   const buildStyle = (
+    block:
+      | {
+          style?: TextStyle
+          fontPrediction?: {
+            text_color: [number, number, number]
+          }
+        }
+      | undefined,
     style: TextStyle | undefined,
     updates: Partial<TextStyle>,
   ): TextStyle => ({
-    fontFamilies:
-      updates.fontFamilies ?? style?.fontFamilies ?? fallbackFontFamilies,
+    fontFamilies: updates.fontFamilies ?? style?.fontFamilies ?? [],
     fontSize: updates.fontSize ?? style?.fontSize,
-    color: updates.color ?? style?.color ?? fallbackColor,
+    color: updates.color ?? resolveStyleColor(style, block, fallbackColor),
     effect: updates.effect ?? style?.effect,
     stroke: updates.stroke ?? style?.stroke,
     textAlign: updates.textAlign ?? style?.textAlign,
@@ -205,7 +246,7 @@ export function RenderControlsPanel() {
 
   const applyStyleToSelected = (updates: Partial<TextStyle>) => {
     if (selectedBlockIndex === undefined) return false
-    const nextStyle = buildStyle(selectedBlock?.style, updates)
+    const nextStyle = buildStyle(selectedBlock, selectedBlock?.style, updates)
     void replaceBlock(selectedBlockIndex, { style: nextStyle })
     return true
   }
@@ -214,7 +255,7 @@ export function RenderControlsPanel() {
     if (!hasBlocks) return
     const nextBlocks = textBlocks.map((block) => ({
       ...block,
-      style: buildStyle(block.style, updates),
+      style: buildStyle(block, block.style, updates),
     }))
     void updateTextBlocks(nextBlocks)
   }
@@ -273,6 +314,18 @@ export function RenderControlsPanel() {
 
   return (
     <div className='flex w-full min-w-0 flex-col gap-1.5'>
+      <div className='flex items-center justify-end'>
+        <span
+          data-testid='render-scope-indicator'
+          className={cn(
+            'rounded-full border px-2 py-0.5 text-[10px] font-medium tracking-wide uppercase',
+            scopeToneClass,
+          )}
+        >
+          {scopeLabel}
+        </span>
+      </div>
+
       <div className='grid w-full min-w-0 grid-cols-[3.5rem_minmax(0,1fr)] items-center gap-1.5'>
         <span className='text-muted-foreground text-[10px] font-medium tracking-wide uppercase'>
           {fontLabel}
@@ -283,16 +336,16 @@ export function RenderControlsPanel() {
             <Select
               value={currentFont}
               onValueChange={(value) => {
-                setFontFamily(value)
                 const nextFamilies = mergeFontFamilies(
                   value,
                   selectedBlock?.style?.fontFamilies,
                 )
                 if (applyStyleToSelected({ fontFamilies: nextFamilies })) return
+                setFontFamily(value)
                 if (!hasBlocks) return
                 const nextBlocks = textBlocks.map((block) => ({
                   ...block,
-                  style: buildStyle(block.style, {
+                  style: buildStyle(block, block.style, {
                     fontFamilies: mergeFontFamilies(
                       value,
                       block.style?.fontFamilies,

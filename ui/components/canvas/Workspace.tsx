@@ -299,6 +299,7 @@ export function Workspace() {
                             data-testid='workspace-inpainted-image'
                             data={currentDocument.inpainted}
                             visible={showInpaintedImage}
+                            transition={false}
                           />
                         )}
                         <canvas
@@ -345,10 +346,11 @@ export function Workspace() {
                             style={{ zIndex: 30 }}
                           />
                         )}
-                        {currentDocument?.rendered && showRenderedImage && (
+                        {currentDocument.rendered && showRenderedImage && (
                           <Image
                             data-testid='workspace-rendered-image'
-                            data={currentDocument?.rendered}
+                            data={currentDocument.rendered}
+                            transition={false}
                             style={{ zIndex: 40 }}
                           />
                         )}

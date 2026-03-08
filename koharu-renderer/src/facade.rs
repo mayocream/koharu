@@ -146,14 +146,8 @@ impl Renderer {
             text_align: None,
         });
 
-        if let Some(ff) = font_family {
-            if !style.font_families.contains(&ff.to_string()) {
-                style.font_families.insert(0, ff.to_string());
-            } else {
-                style.font_families.retain(|x| x != ff);
-                style.font_families.insert(0, ff.to_string());
-            }
-        }
+        apply_global_font_family(&mut style.font_families, font_family);
+        apply_default_font_families(&mut style.font_families, &normalized_translation);
         let font = self.select_font(&style)?;
         let block_effect = style.effect.unwrap_or(effect);
         let color = text_block
@@ -294,6 +288,20 @@ fn default_stroke_width(font_size: f32) -> f32 {
     (font_size * 0.10).clamp(1.2, 8.0)
 }
 
+fn apply_global_font_family(font_families: &mut Vec<String>, font_family: Option<&str>) {
+    if font_families.is_empty()
+        && let Some(font_family) = font_family
+    {
+        font_families.push(font_family.to_string());
+    }
+}
+
+fn apply_default_font_families(font_families: &mut Vec<String>, text: &str) {
+    if font_families.is_empty() {
+        *font_families = font_families_for_text(text);
+    }
+}
+
 fn resolve_stroke_style(
     block: &TextBlock,
     block_stroke: Option<&TextStrokeStyle>,
@@ -427,7 +435,10 @@ fn load_symbol_fallbacks(fontbook: &mut FontBook) -> Vec<Font> {
 
 #[cfg(test)]
 mod tests {
-    use super::{align_layout_horizontally, center_layout_vertically};
+    use super::{
+        align_layout_horizontally, apply_default_font_families, apply_global_font_family,
+        center_layout_vertically,
+    };
     use crate::layout::{LayoutLine, LayoutRun, WritingMode};
     use koharu_types::TextAlign;
 
@@ -533,5 +544,27 @@ mod tests {
 
         assert_eq!(layout.lines[0].baseline.1, 32.0);
         assert_eq!(layout.height, 60.0);
+    }
+
+    #[test]
+    fn explicit_block_font_should_not_be_overridden_by_global_font() {
+        let mut font_families = vec!["Block Font".to_string()];
+        apply_global_font_family(&mut font_families, Some("Global Font"));
+
+        assert_eq!(font_families, vec!["Block Font".to_string()]);
+    }
+
+    #[test]
+    fn global_font_should_fill_empty_block_font_list() {
+        let mut font_families = Vec::new();
+        apply_global_font_family(&mut font_families, Some("Global Font"));
+        assert_eq!(font_families, vec!["Global Font".to_string()]);
+    }
+
+    #[test]
+    fn default_font_families_should_fill_empty_list() {
+        let mut font_families = Vec::new();
+        apply_default_font_families(&mut font_families, "hello");
+        assert!(!font_families.is_empty());
     }
 }
