@@ -8,7 +8,13 @@ import {
   type DownloadProgress,
 } from '@/lib/backend'
 import type { DeviceInfo } from '@/lib/rpc-types'
-import { Document, InpaintRegion, RenderEffect, TextBlock } from '@/types'
+import {
+  Document,
+  InpaintRegion,
+  RenderEffect,
+  RenderStroke,
+  TextBlock,
+} from '@/types'
 import {
   deviceInfoSchema,
   documentSchema,
@@ -128,6 +134,7 @@ export const api = {
     options?: {
       textBlockIndex?: number
       shaderEffect?: RenderEffect
+      shaderStroke?: RenderStroke
       fontFamily?: string
     },
   ): Promise<void> {
@@ -182,6 +189,7 @@ export const api = {
     llmModelId?: string
     language?: string
     shaderEffect?: RenderEffect
+    shaderStroke?: RenderStroke
     fontFamily?: string
   }): Promise<void> {
     await invoke('process', options)

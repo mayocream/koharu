@@ -353,6 +353,7 @@ impl KoharuMcp {
                 index: p.index,
                 text_block_index: p.text_block_index,
                 shader_effect: effect,
+                shader_stroke: None,
                 font_family: p.font_family,
             },
         )
@@ -433,6 +434,7 @@ impl KoharuMcp {
                 llm_model_id: p.llm_model_id,
                 language: p.language,
                 shader_effect: effect,
+                shader_stroke: None,
                 font_family: p.font_family,
             },
         )

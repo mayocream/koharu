@@ -1,7 +1,7 @@
 'use client'
 
 import { create } from 'zustand'
-import { RenderEffect, ToolMode } from '@/types'
+import { RenderEffect, RenderStroke, ToolMode } from '@/types'
 
 type EditorUiState = {
   totalPages: number
@@ -17,6 +17,7 @@ type EditorUiState = {
   selectedBlockIndex?: number
   autoFitEnabled: boolean
   renderEffect: RenderEffect
+  renderStroke: RenderStroke
   setTotalPages: (count: number) => void
   setCurrentDocumentIndex: (index: number) => void
   setScale: (scale: number) => void
@@ -29,6 +30,7 @@ type EditorUiState = {
   setSelectedBlockIndex: (index?: number) => void
   setAutoFitEnabled: (enabled: boolean) => void
   setRenderEffect: (effect: RenderEffect) => void
+  setRenderStroke: (stroke: RenderStroke) => void
   resetUiState: () => void
 }
 
@@ -48,8 +50,12 @@ const initialState = {
   renderEffect: {
     italic: false,
     bold: false,
-    border: false,
   } as RenderEffect,
+  renderStroke: {
+    enabled: true,
+    color: [255, 255, 255, 255],
+    widthPx: undefined,
+  } as RenderStroke,
 }
 
 export const useEditorUiStore = create<EditorUiState>((set, get) => ({
@@ -113,6 +119,7 @@ export const useEditorUiStore = create<EditorUiState>((set, get) => ({
   setSelectedBlockIndex: (index) => set({ selectedBlockIndex: index }),
   setAutoFitEnabled: (enabled) => set({ autoFitEnabled: enabled }),
   setRenderEffect: (effect) => set({ renderEffect: effect }),
+  setRenderStroke: (stroke) => set({ renderStroke: stroke }),
   resetUiState: () =>
     set(() => ({
       ...initialState,

@@ -15,12 +15,93 @@ use crate::{AppResources, state_tx};
 
 use super::utils::{InpaintRegionExt, blank_rgba};
 
+const MATCH_GEOMETRY_EPS: f32 = 0.01;
+const MATCH_NEAR_GEOMETRY_DELTA: f32 = 4.0;
+const MATCH_TEXT_GEOMETRY_DELTA: f32 = 64.0;
+
+fn geometry_delta(a: &TextBlock, b: &TextBlock) -> f32 {
+    (a.x - b.x).abs() + (a.y - b.y).abs() + (a.width - b.width).abs() + (a.height - b.height).abs()
+}
+
+fn geometry_changed(a: &TextBlock, b: &TextBlock) -> bool {
+    geometry_delta(a, b) > MATCH_GEOMETRY_EPS
+}
+
+fn seed_from_block(block: &TextBlock) -> Option<(f32, f32, f32, f32)> {
+    match (
+        block.layout_seed_x,
+        block.layout_seed_y,
+        block.layout_seed_width,
+        block.layout_seed_height,
+    ) {
+        (Some(x), Some(y), Some(width), Some(height))
+            if width.is_finite() && height.is_finite() && width > 0.0 && height > 0.0 =>
+        {
+            Some((x, y, width, height))
+        }
+        _ => None,
+    }
+}
+
+fn find_matching_previous(
+    current: &TextBlock,
+    previous: &[TextBlock],
+    used_previous: &[bool],
+) -> Option<usize> {
+    let mut best_idx = None;
+    let mut best_delta = f32::INFINITY;
+
+    for (idx, prev) in previous.iter().enumerate() {
+        if used_previous[idx] {
+            continue;
+        }
+        let delta = geometry_delta(current, prev);
+        if delta < best_delta {
+            best_idx = Some(idx);
+            best_delta = delta;
+        }
+    }
+
+    let candidate_idx = best_idx?;
+    let candidate = &previous[candidate_idx];
+    if best_delta <= MATCH_NEAR_GEOMETRY_DELTA {
+        return Some(candidate_idx);
+    }
+
+    let same_text = current.text == candidate.text;
+    let same_translation = current.translation == candidate.translation;
+    if same_text && same_translation && best_delta <= MATCH_TEXT_GEOMETRY_DELTA {
+        return Some(candidate_idx);
+    }
+
+    None
+}
+
 pub async fn update_text_blocks(
     state: AppResources,
     payload: UpdateTextBlocksPayload,
 ) -> anyhow::Result<()> {
     state_tx::mutate_doc(&state.state, payload.index, |document| {
+        let previous = std::mem::take(&mut document.text_blocks);
         document.text_blocks = payload.text_blocks;
+
+        let mut used_previous = vec![false; previous.len()];
+        for block in &mut document.text_blocks {
+            let matched_idx = find_matching_previous(block, &previous, &used_previous);
+            if let Some(idx) = matched_idx {
+                used_previous[idx] = true;
+                let prev = &previous[idx];
+                if geometry_changed(block, prev) {
+                    block.set_layout_seed(block.x, block.y, block.width, block.height);
+                } else if let Some((x, y, width, height)) = seed_from_block(prev) {
+                    block.set_layout_seed(x, y, width, height);
+                } else {
+                    block.set_layout_seed(block.x, block.y, block.width, block.height);
+                }
+            } else {
+                block.set_layout_seed(block.x, block.y, block.width, block.height);
+            }
+        }
         Ok(())
     })
     .await
@@ -35,21 +116,29 @@ pub async fn update_text_block(
             .text_blocks
             .get_mut(payload.text_block_index)
             .ok_or_else(|| anyhow::anyhow!("Text block {} not found", payload.text_block_index))?;
+        let mut geometry_changed = false;
 
         if let Some(translation) = payload.translation {
             block.translation = Some(translation);
         }
         if let Some(x) = payload.x {
             block.x = x;
+            geometry_changed = true;
         }
         if let Some(y) = payload.y {
             block.y = y;
+            geometry_changed = true;
         }
         if let Some(width) = payload.width {
             block.width = width;
+            geometry_changed = true;
         }
         if let Some(height) = payload.height {
             block.height = height;
+            geometry_changed = true;
+        }
+        if geometry_changed {
+            block.set_layout_seed(block.x, block.y, block.width, block.height);
         }
 
         if payload.font_families.is_some()
@@ -62,6 +151,7 @@ pub async fn update_text_block(
                 font_size: None,
                 color: [0, 0, 0, 255],
                 effect: None,
+                stroke: None,
             });
 
             if let Some(families) = payload.font_families {
@@ -89,7 +179,7 @@ pub async fn add_text_block(
     payload: AddTextBlockPayload,
 ) -> anyhow::Result<usize> {
     state_tx::mutate_doc(&state.state, payload.index, |document| {
-        let block = TextBlock {
+        let mut block = TextBlock {
             x: payload.x,
             y: payload.y,
             width: payload.width,
@@ -97,6 +187,7 @@ pub async fn add_text_block(
             confidence: 1.0,
             ..Default::default()
         };
+        block.set_layout_seed(block.x, block.y, block.width, block.height);
         document.text_blocks.push(block);
         Ok(document.text_blocks.len() - 1)
     })

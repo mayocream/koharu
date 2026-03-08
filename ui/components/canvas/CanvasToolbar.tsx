@@ -4,26 +4,15 @@ import { useEffect, useMemo, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import { motion } from 'motion/react'
 import {
-  BoldIcon,
-  ItalicIcon,
   ScanIcon,
   ScanTextIcon,
-  SquareIcon,
   Wand2Icon,
   TypeIcon,
   LoaderCircleIcon,
   LanguagesIcon,
 } from 'lucide-react'
 import { Separator } from '@/components/ui/separator'
-import { useTextBlocks } from '@/hooks/useTextBlocks'
-import { RenderEffect, RgbaColor, TextStyle } from '@/types'
 import { Button } from '@/components/ui/button'
-import { ColorPicker } from '@/components/ui/color-picker'
-import {
-  Tooltip,
-  TooltipContent,
-  TooltipTrigger,
-} from '@/components/ui/tooltip'
 import {
   Select,
   SelectContent,
@@ -36,70 +25,10 @@ import {
   PopoverContent,
   PopoverTrigger,
 } from '@/components/ui/popover'
-import { useEditorUiStore } from '@/lib/stores/editorUiStore'
-import { usePreferencesStore } from '@/lib/stores/preferencesStore'
 import { useLlmUiStore } from '@/lib/stores/llmUiStore'
-import {
-  useFontsQuery,
-  useLlmModelsQuery,
-  useLlmReadyQuery,
-} from '@/lib/query/hooks'
-import {
-  useDocumentMutations,
-  useLlmMutations,
-  useTextBlockMutations,
-} from '@/lib/query/mutations'
+import { useLlmModelsQuery, useLlmReadyQuery } from '@/lib/query/hooks'
+import { useDocumentMutations, useLlmMutations } from '@/lib/query/mutations'
 import { useOperationStore } from '@/lib/stores/operationStore'
-import { cn } from '@/lib/utils'
-
-const DEFAULT_COLOR: RgbaColor = [0, 0, 0, 255]
-const DEFAULT_FONT_FAMILIES = ['Arial']
-const DEFAULT_EFFECT: RenderEffect = {
-  italic: false,
-  bold: false,
-  border: false,
-}
-
-const clampByte = (value: number) =>
-  Math.max(0, Math.min(255, Math.round(value)))
-
-const colorToHex = (color: RgbaColor) =>
-  `#${color
-    .slice(0, 3)
-    .map((value) => value.toString(16).padStart(2, '0'))
-    .join('')}`
-
-const hexToColor = (value: string, alpha: number): RgbaColor => {
-  const normalized = value.replace('#', '')
-  if (normalized.length !== 6) {
-    return [0, 0, 0, clampByte(alpha)]
-  }
-
-  const r = Number.parseInt(normalized.slice(0, 2), 16)
-  const g = Number.parseInt(normalized.slice(2, 4), 16)
-  const b = Number.parseInt(normalized.slice(4, 6), 16)
-
-  if ([r, g, b].some((channel) => Number.isNaN(channel))) {
-    return [0, 0, 0, clampByte(alpha)]
-  }
-
-  return [r, g, b, clampByte(alpha)]
-}
-
-const uniqueStrings = (values: string[]) => {
-  const seen = new Set<string>()
-  return values.filter((value) => {
-    if (!value || seen.has(value)) return false
-    seen.add(value)
-    return true
-  })
-}
-
-const normalizeEffect = (effect?: Partial<RenderEffect>): RenderEffect => ({
-  italic: effect?.italic ?? false,
-  bold: effect?.bold ?? false,
-  border: effect?.border ?? false,
-})
 
 export function CanvasToolbar() {
   return (
@@ -227,198 +156,6 @@ function WorkflowButtons() {
   )
 }
 
-export function RenderControls() {
-  const renderEffect = useEditorUiStore((state) => state.renderEffect)
-  const setRenderEffect = useEditorUiStore((state) => state.setRenderEffect)
-  const { updateTextBlocks } = useTextBlockMutations()
-  const { data: availableFonts = [] } = useFontsQuery()
-  const fontFamily = usePreferencesStore((state) => state.fontFamily)
-  const setFontFamily = usePreferencesStore((state) => state.setFontFamily)
-  const { textBlocks, selectedBlockIndex, replaceBlock } = useTextBlocks()
-  const { t } = useTranslation()
-  const selectedBlock =
-    selectedBlockIndex !== undefined
-      ? textBlocks[selectedBlockIndex]
-      : undefined
-  const firstBlock = textBlocks[0]
-  const hasBlocks = textBlocks.length > 0
-  const fallbackFontFamilies =
-    availableFonts.length > 0 ? [availableFonts[0]] : DEFAULT_FONT_FAMILIES
-  const fallbackColor = firstBlock?.style?.color ?? DEFAULT_COLOR
-  const fontCandidates =
-    availableFonts.length > 0
-      ? availableFonts
-      : [
-          ...(fontFamily ? [fontFamily] : []),
-          ...(selectedBlock?.style?.fontFamilies?.slice(0, 1) ?? []),
-          ...DEFAULT_FONT_FAMILIES,
-        ]
-  const fontOptions = uniqueStrings(fontCandidates)
-  const currentFont =
-    fontFamily ??
-    selectedBlock?.style?.fontFamilies?.[0] ??
-    firstBlock?.style?.fontFamilies?.[0] ??
-    (hasBlocks ? fallbackFontFamilies[0] : '')
-  const currentEffect = normalizeEffect(
-    selectedBlock?.style?.effect ?? renderEffect,
-  )
-  const currentColor =
-    selectedBlock?.style?.color ?? (hasBlocks ? fallbackColor : DEFAULT_COLOR)
-  const currentColorHex = colorToHex(currentColor)
-
-  const buildStyle = (
-    style: TextStyle | undefined,
-    updates: Partial<TextStyle>,
-  ): TextStyle => ({
-    fontFamilies:
-      updates.fontFamilies ?? style?.fontFamilies ?? fallbackFontFamilies,
-    fontSize: updates.fontSize ?? style?.fontSize,
-    color: updates.color ?? style?.color ?? fallbackColor,
-    effect: updates.effect ?? style?.effect,
-  })
-
-  const applyStyleToSelected = (updates: Partial<TextStyle>) => {
-    if (selectedBlockIndex === undefined) return false
-    const nextStyle = buildStyle(selectedBlock?.style, updates)
-    void replaceBlock(selectedBlockIndex, { style: nextStyle })
-    return true
-  }
-
-  const applyStyleToAll = (updates: Partial<TextStyle>) => {
-    if (!hasBlocks) return
-    const nextBlocks = textBlocks.map((block) => ({
-      ...block,
-      style: buildStyle(block.style, updates),
-    }))
-    void updateTextBlocks(nextBlocks)
-  }
-
-  const mergeFontFamilies = (
-    nextFont: string,
-    current: string[] | undefined,
-  ) => {
-    const base = current?.length ? current : fallbackFontFamilies
-    return [nextFont, ...base.filter((family) => family !== nextFont)]
-  }
-
-  const effectItems: {
-    key: keyof RenderEffect
-    label: string
-    Icon: React.ComponentType<{ className?: string }>
-  }[] = [
-    { key: 'italic', label: t('render.effectItalic'), Icon: ItalicIcon },
-    { key: 'bold', label: t('render.effectBold'), Icon: BoldIcon },
-    { key: 'border', label: t('render.effectBorder'), Icon: SquareIcon },
-  ]
-
-  return (
-    <div className='flex items-center gap-2'>
-      <Select
-        value={currentFont}
-        onValueChange={(value) => {
-          setFontFamily(value)
-          const nextFamilies = mergeFontFamilies(
-            value,
-            selectedBlock?.style?.fontFamilies,
-          )
-          if (applyStyleToSelected({ fontFamilies: nextFamilies })) return
-          if (!hasBlocks) return
-          const nextBlocks = textBlocks.map((block) => ({
-            ...block,
-            style: buildStyle(block.style, {
-              fontFamilies: mergeFontFamilies(value, block.style?.fontFamilies),
-            }),
-          }))
-          void updateTextBlocks(nextBlocks)
-        }}
-        disabled={fontOptions.length === 0}
-      >
-        <SelectTrigger
-          data-testid='render-font-select'
-          size='sm'
-          className='h-8 w-32 text-sm'
-          style={currentFont ? { fontFamily: currentFont } : undefined}
-        >
-          <SelectValue placeholder={t('render.fontPlaceholder')} />
-        </SelectTrigger>
-        <SelectContent position='popper'>
-          {fontOptions.map((font, index) => (
-            <SelectItem
-              key={font}
-              value={font}
-              style={{ fontFamily: font }}
-              data-testid={`render-font-option-${index}`}
-            >
-              {font}
-            </SelectItem>
-          ))}
-        </SelectContent>
-      </Select>
-
-      <Tooltip>
-        <TooltipTrigger asChild>
-          <div>
-            <ColorPicker
-              value={currentColorHex}
-              disabled={!hasBlocks}
-              triggerTestId='render-color-trigger'
-              pickerTestId='render-color-picker'
-              swatchTestId='render-color-swatch'
-              onChange={(hex) => {
-                const nextColor = hexToColor(hex, currentColor[3] ?? 255)
-                if (applyStyleToSelected({ color: nextColor })) return
-                applyStyleToAll({ color: nextColor })
-              }}
-              className='h-8 w-8'
-            />
-          </div>
-        </TooltipTrigger>
-        <TooltipContent side='bottom' sideOffset={4}>
-          {t('render.fontColorLabel')}
-        </TooltipContent>
-      </Tooltip>
-
-      <div className='flex items-center gap-1.5'>
-        {effectItems.map((item) => {
-          const active = currentEffect[item.key]
-          const Icon = item.Icon
-          return (
-            <Tooltip key={item.key}>
-              <TooltipTrigger asChild>
-                <Button
-                  variant='outline'
-                  size='icon-sm'
-                  aria-label={item.label}
-                  data-testid={`render-effect-toggle-${item.key}`}
-                  className={cn(
-                    'size-8',
-                    active &&
-                      'bg-primary text-primary-foreground border-primary hover:bg-primary/90',
-                  )}
-                  onClick={() => {
-                    const nextEffect = {
-                      ...DEFAULT_EFFECT,
-                      ...currentEffect,
-                      [item.key]: !active,
-                    }
-                    if (applyStyleToSelected({ effect: nextEffect })) return
-                    setRenderEffect(nextEffect)
-                  }}
-                >
-                  <Icon className='size-3.5' />
-                </Button>
-              </TooltipTrigger>
-              <TooltipContent side='bottom' sideOffset={4}>
-                {item.label}
-              </TooltipContent>
-            </Tooltip>
-          )
-        })}
-      </div>
-    </div>
-  )
-}
-
 function LlmStatusPopover() {
   const { data: llmModels = [] } = useLlmModelsQuery()
   const llmSelectedModel = useLlmUiStore((state) => state.selectedModel)
@@ -493,7 +230,6 @@ function LlmStatusPopover() {
             {t('panels.llm')}
           </p>
 
-          {/* Model selector */}
           <Select value={llmSelectedModel} onValueChange={llmSetSelectedModel}>
             <SelectTrigger data-testid='llm-model-select' className='w-full'>
               <SelectValue placeholder={t('llm.selectPlaceholder')} />
@@ -511,7 +247,6 @@ function LlmStatusPopover() {
             </SelectContent>
           </Select>
 
-          {/* Language selector */}
           {activeLanguages.length > 0 && (
             <Select
               value={llmSelectedLanguage ?? activeLanguages[0]}
@@ -537,7 +272,6 @@ function LlmStatusPopover() {
             </Select>
           )}
 
-          {/* Load/Unload button */}
           <Button
             data-testid='llm-load-toggle'
             data-llm-ready={llmReady ? 'true' : 'false'}

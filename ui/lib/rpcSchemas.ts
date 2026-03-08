@@ -64,12 +64,22 @@ export const renderEffectSchema = z
   .object({
     italic: z.boolean().optional(),
     bold: z.boolean().optional(),
-    border: z.boolean().optional(),
   })
   .transform((value) => ({
     italic: value.italic ?? false,
     bold: value.bold ?? false,
-    border: value.border ?? false,
+  }))
+
+export const renderStrokeSchema = z
+  .object({
+    enabled: z.boolean().optional(),
+    color: rgbaColorSchema.optional(),
+    widthPx: z.number().optional(),
+  })
+  .transform((value) => ({
+    enabled: value.enabled ?? true,
+    color: value.color ?? ([255, 255, 255, 255] as const),
+    widthPx: value.widthPx,
   }))
 
 export const textStyleSchema = z.object({
@@ -77,6 +87,7 @@ export const textStyleSchema = z.object({
   fontSize: fromRustOption(z.number()),
   color: rgbaColorSchema,
   effect: fromRustOption(renderEffectSchema),
+  stroke: fromRustOption(renderStrokeSchema),
 })
 
 const namedFontPredictionSchema = z.object({
@@ -190,11 +201,4 @@ export const processProgressSchema = z.object({
 
 export const deviceInfoSchema = z.object({
   mlDevice: z.string(),
-  wgpu: z.object({
-    name: z.string(),
-    backend: z.string(),
-    deviceType: z.string(),
-    driver: z.string(),
-    driverInfo: z.string(),
-  }),
 })

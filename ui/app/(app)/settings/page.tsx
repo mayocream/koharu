@@ -147,22 +147,6 @@ export default function SettingsPage() {
                         {deviceInfo.mlDevice}
                       </span>
                     </div>
-                    <div className='flex items-center justify-between'>
-                      <span className='text-muted-foreground'>
-                        {t('settings.deviceWgpu')}
-                      </span>
-                      <span className='text-foreground font-medium'>
-                        {deviceInfo.wgpu.name}
-                      </span>
-                    </div>
-                    <div className='flex items-center justify-between'>
-                      <span className='text-muted-foreground'>
-                        {t('settings.deviceBackend')}
-                      </span>
-                      <span className='text-foreground font-medium'>
-                        {deviceInfo.wgpu.backend}
-                      </span>
-                    </div>
                   </div>
                 </div>
               </section>

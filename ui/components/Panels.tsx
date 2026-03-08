@@ -3,8 +3,8 @@
 import { useTranslation } from 'react-i18next'
 import { LayersIcon, SlidersHorizontalIcon } from 'lucide-react'
 import { LayersPanel } from '@/components/panels/LayersPanel'
+import { RenderControlsPanel } from '@/components/panels/RenderControlsPanel'
 import { TextBlocksPanel } from '@/components/panels/TextBlocksPanel'
-import { RenderControls } from '@/components/canvas/CanvasToolbar'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { ScrollArea } from '@/components/ui/scroll-area'
 
@@ -58,7 +58,7 @@ export function Panels() {
         >
           <ScrollArea className='h-full' viewportClassName='pr-1'>
             <div className='pt-1'>
-              <RenderControls />
+              <RenderControlsPanel />
             </div>
           </ScrollArea>
         </TabsContent>

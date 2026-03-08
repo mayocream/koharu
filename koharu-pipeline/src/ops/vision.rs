@@ -32,6 +32,7 @@ pub async fn render(state: AppResources, payload: RenderPayload) -> anyhow::Resu
         &mut updated,
         payload.text_block_index,
         payload.shader_effect.unwrap_or_default(),
+        payload.shader_stroke,
         payload.font_family.as_deref(),
     )?;
 

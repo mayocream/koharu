@@ -37,6 +37,15 @@ pub struct TextStyleInfo {
     pub font_size: Option<f32>,
     pub color: [u8; 4],
     pub effect: Option<String>,
+    pub stroke: Option<TextStrokeInfo>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct TextStrokeInfo {
+    pub enabled: bool,
+    pub color: [u8; 4],
+    pub width_px: Option<f32>,
 }
 
 pub fn to_block_info(i: usize, block: &TextBlock) -> TextBlockInfo {
@@ -60,6 +69,11 @@ pub fn to_block_info(i: usize, block: &TextBlock) -> TextBlockInfo {
             font_size: s.font_size,
             color: s.color,
             effect: s.effect.map(|e| e.to_string()),
+            stroke: s.stroke.as_ref().map(|stroke| TextStrokeInfo {
+                enabled: stroke.enabled,
+                color: stroke.color,
+                width_px: stroke.width_px,
+            }),
         }),
     }
 }

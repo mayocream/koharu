@@ -176,8 +176,6 @@
     "aboutRepository": "Репозиторий",
     "device": "Устройство",
     "deviceDescription": "Информация об аппаратном ускорении.",
-    "deviceMl": "ML Compute",
-    "deviceWgpu": "GPU Renderer",
-    "deviceBackend": "Backend"
+    "deviceMl": "ML Compute"
   }
 }

@@ -114,11 +114,12 @@ export const useTextBlockMutations = () => {
         index ?? useEditorUiStore.getState().currentDocumentIndex
       if (typeof textBlockIndex !== 'number') return
       await flushTextBlockSync()
-      const { renderEffect } = useEditorUiStore.getState()
+      const { renderEffect, renderStroke } = useEditorUiStore.getState()
       const { fontFamily } = usePreferencesStore.getState()
       await api.render(resolvedIndex, {
         textBlockIndex,
         shaderEffect: renderEffect,
+        shaderStroke: renderStroke,
         fontFamily,
       })
       await invalidateCurrentDocument(queryClient, resolvedIndex)
@@ -387,11 +388,12 @@ export const useDocumentMutations = () => {
         cancellable: true,
       })
       try {
-        const { renderEffect } = useEditorUiStore.getState()
+        const { renderEffect, renderStroke } = useEditorUiStore.getState()
         const { fontFamily } = usePreferencesStore.getState()
         await flushTextBlockSync()
         await api.render(resolvedIndex, {
           shaderEffect: renderEffect,
+          shaderStroke: renderStroke,
           fontFamily,
         })
         await invalidateCurrentDocument(queryClient, resolvedIndex)
@@ -417,7 +419,7 @@ export const useDocumentMutations = () => {
       const resolvedIndex =
         index ?? useEditorUiStore.getState().currentDocumentIndex
       const { selectedModel, selectedLanguage } = useLlmUiStore.getState()
-      const { renderEffect } = useEditorUiStore.getState()
+      const { renderEffect, renderStroke } = useEditorUiStore.getState()
       const { fontFamily } = usePreferencesStore.getState()
       const { startOperation, finishOperation } = useOperationStore.getState()
       startOperation({
@@ -432,6 +434,7 @@ export const useDocumentMutations = () => {
           llmModelId: selectedModel,
           language: selectedLanguage,
           shaderEffect: renderEffect,
+          shaderStroke: renderStroke,
           fontFamily,
         })
       } catch (error) {
@@ -445,7 +448,8 @@ export const useDocumentMutations = () => {
 
   const processAllImages = useCallback(async () => {
     const { selectedModel, selectedLanguage } = useLlmUiStore.getState()
-    const { renderEffect, totalPages } = useEditorUiStore.getState()
+    const { renderEffect, renderStroke, totalPages } =
+      useEditorUiStore.getState()
     const { fontFamily } = usePreferencesStore.getState()
     const { startOperation, finishOperation } = useOperationStore.getState()
     if (!totalPages) return
@@ -460,6 +464,7 @@ export const useDocumentMutations = () => {
         llmModelId: selectedModel,
         language: selectedLanguage,
         shaderEffect: renderEffect,
+        shaderStroke: renderStroke,
         fontFamily,
       })
     } catch (error) {

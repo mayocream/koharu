@@ -1,21 +1,33 @@
 use std::sync::{Arc, Mutex};
 
 use anyhow::Result;
-use icu::properties::{CodePointMapData, props::Script};
-use image::{DynamicImage, imageops};
+use image::{DynamicImage, GrayImage, imageops};
 use rayon::iter::{IntoParallelRefMutIterator, ParallelIterator};
 
-use koharu_types::{Document, SerializableDynamicImage, TextBlock, TextShaderEffect, TextStyle};
+use koharu_types::{
+    Document, SerializableDynamicImage, TextBlock, TextShaderEffect, TextStrokeStyle, TextStyle,
+};
 
 use crate::{
     font::{FamilyName, Font, FontBook, Properties},
     layout::{LayoutRun, TextLayout, WritingMode},
-    renderer::{RenderOptions, WgpuDeviceInfo, WgpuRenderer},
+    renderer::{RenderOptions, RenderStrokeOptions, TinySkiaRenderer},
+    text::{
+        latin::{
+            LayoutBox, expand_latin_layout_box_relaxed, expand_latin_layout_box_strict,
+            is_expanded_layout_box, latin_layout_underfilled, latin_width_overflow_factor,
+            layout_box_area, layout_box_from_block, pick_better_latin_candidate,
+        },
+        script::{
+            font_families_for_text, is_latin_only, normalize_translation_for_layout,
+            writing_mode_for_block,
+        },
+    },
 };
 
 pub struct Renderer {
     fontbook: Arc<Mutex<FontBook>>,
-    renderer: WgpuRenderer,
+    renderer: TinySkiaRenderer,
     symbol_fallbacks: Vec<Font>,
 }
 
@@ -25,7 +37,7 @@ impl Renderer {
         let symbol_fallbacks = load_symbol_fallbacks(&mut fontbook);
         Ok(Self {
             fontbook: Arc::new(Mutex::new(fontbook)),
-            renderer: WgpuRenderer::new()?,
+            renderer: TinySkiaRenderer::new()?,
             symbol_fallbacks,
         })
     }
@@ -40,17 +52,20 @@ impl Renderer {
         Ok(families)
     }
 
-    pub fn wgpu_device_info(&self) -> WgpuDeviceInfo {
-        self.renderer.device_info()
-    }
-
     pub fn render(
         &self,
         document: &mut Document,
         text_block_index: Option<usize>,
         effect: TextShaderEffect,
+        stroke: Option<TextStrokeStyle>,
         font_family: Option<&str>,
     ) -> Result<()> {
+        let bubble_map = if let Some(inpainted) = &document.inpainted {
+            inpainted.to_luma8()
+        } else {
+            document.image.to_luma8()
+        };
+
         let mut text_blocks = match text_block_index {
             Some(index) => document
                 .text_blocks
@@ -61,7 +76,13 @@ impl Renderer {
         };
 
         text_blocks.par_iter_mut().for_each(|text_block| {
-            let _ = self.render_text_block(text_block, effect, font_family);
+            let _ = self.render_text_block(
+                text_block,
+                effect,
+                stroke.clone(),
+                font_family,
+                Some(&bubble_map),
+            );
         });
 
         if let Some(inpainted) = &document.inpainted
@@ -94,20 +115,33 @@ impl Renderer {
         &self,
         text_block: &mut TextBlock,
         effect: TextShaderEffect,
+        global_stroke: Option<TextStrokeStyle>,
         font_family: Option<&str>,
+        bubble_map: Option<&GrayImage>,
     ) -> Result<()> {
-        let Some(translation) = &text_block.translation else {
+        let Some(translation) = text_block.translation.as_ref().cloned() else {
             return Ok(());
         };
         if translation.is_empty() {
             return Ok(());
         };
+        let normalized_translation = normalize_translation_for_layout(&translation);
+        let (seed_x, seed_y, seed_width, seed_height) = text_block.seed_layout_box();
+        let layout_source_block = TextBlock {
+            x: seed_x,
+            y: seed_y,
+            width: seed_width,
+            height: seed_height,
+            translation: Some(translation.clone()),
+            ..Default::default()
+        };
 
         let mut style = text_block.style.clone().unwrap_or_else(|| TextStyle {
-            font_families: fonts_for_script(translation),
+            font_families: font_families_for_text(&normalized_translation),
             font_size: None,
             color: [0, 0, 0, 255],
             effect: None,
+            stroke: None,
         });
 
         if let Some(ff) = font_family {
@@ -135,17 +169,80 @@ impl Renderer {
                 })
             })
             .unwrap_or([0, 0, 0, 255]);
-        let writing_mode = writing_mode(text_block);
-        let mut layout = TextLayout::new(&font, None)
-            .with_fallback_fonts(&self.symbol_fallbacks)
-            .with_max_height(text_block.height)
-            .with_max_width(text_block.width)
-            .with_writing_mode(writing_mode)
-            .run(translation)?;
-        if writing_mode == WritingMode::Horizontal && is_latin_only(translation) {
-            center_layout_horizontally(&mut layout, text_block.width);
+        let writing_mode = writing_mode_for_block(&layout_source_block);
+        let english_horizontal_layout =
+            writing_mode == WritingMode::Horizontal && is_latin_only(&normalized_translation);
+        let original_layout_box = layout_box_from_block(&layout_source_block);
+        let mut layout_box = if english_horizontal_layout {
+            bubble_map
+                .map(|map| expand_latin_layout_box_strict(&layout_source_block, map))
+                .unwrap_or(original_layout_box)
+        } else {
+            original_layout_box
+        };
+
+        let build_layout = |box_for_layout: LayoutBox, allow_expanded_overflow: bool| {
+            let expanded_box = is_expanded_layout_box(box_for_layout, original_layout_box);
+            let overflow = if english_horizontal_layout {
+                if expanded_box {
+                    latin_width_overflow_factor(true, allow_expanded_overflow)
+                } else {
+                    latin_width_overflow_factor(false, allow_expanded_overflow)
+                }
+            } else {
+                1.0
+            };
+            let max_width = if box_for_layout.width.is_finite() && box_for_layout.width > 0.0 {
+                box_for_layout.width * overflow
+            } else {
+                box_for_layout.width
+            };
+
+            TextLayout::new(&font, None)
+                .with_fallback_fonts(&self.symbol_fallbacks)
+                .with_max_height(box_for_layout.height)
+                .with_max_width(max_width)
+                .with_writing_mode(writing_mode)
+                .run(&normalized_translation)
+        };
+
+        let mut layout = build_layout(layout_box, false)?;
+        if english_horizontal_layout {
+            let underfilled = latin_layout_underfilled(&layout, layout_box.height);
+            if underfilled {
+                let relaxed_box = bubble_map
+                    .map(|map| expand_latin_layout_box_relaxed(&layout_source_block, map))
+                    .unwrap_or(layout_box);
+                let relaxed_candidate =
+                    if layout_box_area(relaxed_box) > layout_box_area(layout_box) * 1.06 {
+                        build_layout(relaxed_box, true)
+                            .ok()
+                            .map(|layout| (layout, relaxed_box))
+                    } else {
+                        None
+                    };
+
+                let overflow_candidate = build_layout(layout_box, true)
+                    .ok()
+                    .map(|layout| (layout, layout_box));
+                if let Some((candidate_layout, candidate_box)) =
+                    pick_better_latin_candidate(&layout, relaxed_candidate, overflow_candidate)
+                {
+                    layout = candidate_layout;
+                    layout_box = candidate_box;
+                }
+            }
+
+            center_layout_horizontally(&mut layout, layout_box.width);
+            center_layout_vertically(&mut layout, layout_box.height);
         }
 
+        let resolved_stroke = resolve_stroke_style(
+            text_block,
+            style.stroke.as_ref(),
+            global_stroke.as_ref(),
+            layout.font_size,
+        );
         let rendered = self.renderer.render(
             &layout,
             writing_mode,
@@ -153,10 +250,15 @@ impl Renderer {
                 font_size: layout.font_size,
                 color,
                 effect: block_effect,
+                stroke: resolved_stroke,
                 ..Default::default()
             },
         )?;
 
+        text_block.x = layout_box.x;
+        text_block.y = layout_box.y;
+        text_block.width = layout_box.width;
+        text_block.height = layout_box.height;
         text_block.rendered = Some(SerializableDynamicImage(DynamicImage::ImageRgba8(rendered)));
         Ok(())
     }
@@ -179,94 +281,58 @@ impl Renderer {
     }
 }
 
-fn writing_mode(text_block: &TextBlock) -> WritingMode {
-    let text = match &text_block.translation {
-        Some(t) => t,
-        None => return WritingMode::Horizontal,
-    };
+fn default_stroke_width(font_size: f32) -> f32 {
+    (font_size * 0.10).clamp(1.2, 8.0)
+}
 
-    if !is_cjk(text) || text_block.width >= text_block.height {
-        WritingMode::Horizontal
-    } else {
-        WritingMode::VerticalRl
+fn resolve_stroke_style(
+    block: &TextBlock,
+    block_stroke: Option<&TextStrokeStyle>,
+    global_stroke: Option<&TextStrokeStyle>,
+    font_size: f32,
+) -> Option<RenderStrokeOptions> {
+    if let Some(stroke) = block_stroke {
+        if !stroke.enabled {
+            return None;
+        }
+        return Some(RenderStrokeOptions {
+            color: stroke.color,
+            width_px: stroke
+                .width_px
+                .unwrap_or_else(|| default_stroke_width(font_size)),
+        });
     }
-}
 
-fn is_cjk(text: &str) -> bool {
-    let script_map = CodePointMapData::<Script>::new();
-    text.chars().any(|c| {
-        matches!(
-            script_map.get(c),
-            Script::Han | Script::Hiragana | Script::Katakana | Script::Hangul | Script::Bopomofo
-        )
+    if let Some(stroke) = global_stroke {
+        if !stroke.enabled {
+            return None;
+        }
+        return Some(RenderStrokeOptions {
+            color: stroke.color,
+            width_px: stroke
+                .width_px
+                .unwrap_or_else(|| default_stroke_width(font_size)),
+        });
+    }
+
+    if let Some(pred) = &block.font_prediction
+        && pred.stroke_width_px > 0.0
+    {
+        return Some(RenderStrokeOptions {
+            color: [
+                pred.stroke_color[0],
+                pred.stroke_color[1],
+                pred.stroke_color[2],
+                255,
+            ],
+            width_px: pred.stroke_width_px,
+        });
+    }
+
+    Some(RenderStrokeOptions {
+        color: [255, 255, 255, 255],
+        width_px: default_stroke_width(font_size),
     })
-}
-
-fn is_latin_only(text: &str) -> bool {
-    let script_map = CodePointMapData::<Script>::new();
-    text.chars().all(|c| {
-        matches!(
-            script_map.get(c),
-            Script::Latin | Script::Common | Script::Inherited
-        )
-    })
-}
-
-/// Returns OS-appropriate font family names based on the dominant script in the text.
-fn fonts_for_script(text: &str) -> Vec<String> {
-    let script_map = CodePointMapData::<Script>::new();
-    let has_cjk = text.chars().any(|c| {
-        matches!(
-            script_map.get(c),
-            Script::Han | Script::Hiragana | Script::Katakana | Script::Hangul | Script::Bopomofo
-        )
-    });
-    let has_arabic = text
-        .chars()
-        .any(|c| matches!(script_map.get(c), Script::Arabic | Script::Hebrew));
-
-    let names: &[&str] = if has_cjk {
-        #[cfg(target_os = "windows")]
-        {
-            &["Microsoft YaHei"]
-        }
-        #[cfg(target_os = "macos")]
-        {
-            &["PingFang SC"]
-        }
-        #[cfg(not(any(target_os = "windows", target_os = "macos")))]
-        {
-            &["Noto Sans CJK SC"]
-        }
-    } else if has_arabic {
-        #[cfg(target_os = "windows")]
-        {
-            &["Segoe UI"]
-        }
-        #[cfg(target_os = "macos")]
-        {
-            &["SF Pro"]
-        }
-        #[cfg(not(any(target_os = "windows", target_os = "macos")))]
-        {
-            &["Noto Sans"]
-        }
-    } else {
-        #[cfg(target_os = "windows")]
-        {
-            &["Segoe UI", "Arial"]
-        }
-        #[cfg(target_os = "macos")]
-        {
-            &["SF Pro", "Helvetica"]
-        }
-        #[cfg(not(any(target_os = "windows", target_os = "macos")))]
-        {
-            &["Noto Sans", "DejaVu Sans"]
-        }
-    };
-
-    names.iter().map(|s| s.to_string()).collect()
 }
 
 fn center_layout_horizontally(layout: &mut LayoutRun<'_>, container_width: f32) {
@@ -285,6 +351,21 @@ fn center_layout_horizontally(layout: &mut LayoutRun<'_>, container_width: f32) 
         }
     }
     layout.width = target_width;
+}
+
+fn center_layout_vertically(layout: &mut LayoutRun<'_>, container_height: f32) {
+    if !container_height.is_finite() || container_height <= 0.0 || layout.lines.is_empty() {
+        return;
+    }
+    let offset = ((container_height - layout.height) * 0.5).max(0.0);
+    if offset <= 0.0 {
+        return;
+    }
+
+    for line in &mut layout.lines {
+        line.baseline.1 += offset;
+    }
+    layout.height = layout.height.max(container_height);
 }
 
 fn load_symbol_fallbacks(fontbook: &mut FontBook) -> Vec<Font> {

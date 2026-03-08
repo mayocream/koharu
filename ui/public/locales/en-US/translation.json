@@ -176,8 +176,6 @@
     "aboutRepository": "Repository",
     "device": "Device",
     "deviceDescription": "Hardware acceleration information.",
-    "deviceMl": "ML Compute",
-    "deviceWgpu": "GPU Renderer",
-    "deviceBackend": "Backend"
+    "deviceMl": "ML Compute"
   }
 }

@@ -9,14 +9,11 @@ pub struct TextShaderEffect {
     pub italic: bool,
     #[serde(default)]
     pub bold: bool,
-    #[serde(default)]
-    pub border: bool,
 }
 
 impl TextShaderEffect {
     pub const ITALIC_FLAG: u32 = 1 << 0;
     pub const BOLD_FLAG: u32 = 1 << 1;
-    pub const BORDER_FLAG: u32 = 1 << 2;
 
     pub fn flags(self) -> u32 {
         let mut flags = 0u32;
@@ -26,14 +23,18 @@ impl TextShaderEffect {
         if self.bold {
             flags |= Self::BOLD_FLAG;
         }
-        if self.border {
-            flags |= Self::BORDER_FLAG;
-        }
         flags
     }
 
     pub fn is_empty(self) -> bool {
         self.flags() == 0
+    }
+
+    pub fn none() -> Self {
+        Self {
+            italic: false,
+            bold: false,
+        }
     }
 }
 
@@ -45,9 +46,6 @@ impl fmt::Display for TextShaderEffect {
         }
         if self.bold {
             parts.push("bold");
-        }
-        if self.border {
-            parts.push("border");
         }
 
         if parts.is_empty() {
@@ -64,15 +62,10 @@ impl FromStr for TextShaderEffect {
     fn from_str(s: &str) -> Result<Self, Self::Err> {
         let normalized = s.trim().to_lowercase();
         if normalized.is_empty() || normalized == "none" || normalized == "normal" {
-            return Ok(Self::default());
+            return Ok(Self::none());
         }
 
-        let legacy = ["antique", "metal", "manga", "motionblur", "motion_blur"];
-        if legacy.contains(&normalized.as_str()) {
-            return Ok(Self::default());
-        }
-
-        let mut effect = Self::default();
+        let mut effect = Self::none();
         for token in normalized
             .split(|c: char| c == ',' || c == '|' || c == '+' || c.is_whitespace())
             .filter(|token| !token.is_empty())
@@ -80,11 +73,8 @@ impl FromStr for TextShaderEffect {
             match token {
                 "italic" => effect.italic = true,
                 "bold" => effect.bold = true,
-                "border" | "outline" | "stroke" => effect.border = true,
-                // Legacy aliases map to no effect for compatibility with old projects/configs.
-                "antique" | "metal" | "manga" | "motionblur" | "motion_blur" | "normal"
-                | "none" => {}
-                _ => anyhow::bail!("Unknown shader effect: {token}. Valid: italic, bold, border"),
+                "normal" | "none" => {}
+                _ => anyhow::bail!("Unknown shader effect: {token}. Valid: italic, bold"),
             }
         }
 
@@ -98,28 +88,23 @@ impl<'de> Deserialize<'de> for TextShaderEffect {
         D: Deserializer<'de>,
     {
         #[derive(Deserialize)]
+        #[serde(deny_unknown_fields)]
+        struct FlagsRepr {
+            italic: Option<bool>,
+            bold: Option<bool>,
+        }
+
+        #[derive(Deserialize)]
         #[serde(untagged)]
         enum Repr {
-            Flags {
-                #[serde(default)]
-                italic: bool,
-                #[serde(default)]
-                bold: bool,
-                #[serde(default)]
-                border: bool,
-            },
+            Flags(FlagsRepr),
             Legacy(String),
         }
 
         match Repr::deserialize(deserializer)? {
-            Repr::Flags {
-                italic,
-                bold,
-                border,
-            } => Ok(Self {
-                italic,
-                bold,
-                border,
+            Repr::Flags(FlagsRepr { italic, bold }) => Ok(Self {
+                italic: italic.unwrap_or(false),
+                bold: bold.unwrap_or(false),
             }),
             Repr::Legacy(value) => value.parse().map_err(serde::de::Error::custom),
         }
@@ -132,21 +117,32 @@ mod tests {
 
     #[test]
     fn parse_combined_effects() {
-        let effect: TextShaderEffect = "italic,bold,border".parse().expect("parse");
+        let effect: TextShaderEffect = "italic,bold".parse().expect("parse");
         assert!(effect.italic);
         assert!(effect.bold);
-        assert!(effect.border);
     }
 
     #[test]
-    fn parse_legacy_effects_to_none() {
-        let effect: TextShaderEffect = "manga".parse().expect("parse");
-        assert!(effect.is_empty());
+    fn parse_legacy_effects_fail() {
+        assert!("manga".parse::<TextShaderEffect>().is_err());
+        assert!("motionblur".parse::<TextShaderEffect>().is_err());
     }
 
     #[test]
-    fn display_none() {
+    fn default_has_no_effects() {
         let effect = TextShaderEffect::default();
+        assert!(!effect.italic);
+        assert!(!effect.bold);
+    }
+
+    #[test]
+    fn parse_border_token_fails() {
+        assert!("border".parse::<TextShaderEffect>().is_err());
+    }
+
+    #[test]
+    fn parse_none_disables_all_effects() {
+        let effect: TextShaderEffect = "none".parse().expect("parse");
         assert_eq!(effect.to_string(), "none");
     }
 }

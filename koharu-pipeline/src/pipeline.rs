@@ -168,6 +168,7 @@ async fn run_pipeline_inner(
                         &mut snapshot,
                         None,
                         req.shader_effect.unwrap_or_default(),
+                        req.shader_stroke.clone(),
                         req.font_family.as_deref(),
                     )?;
                 }

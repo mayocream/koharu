@@ -110,9 +110,7 @@ harfrust = "0.5"
 icu = "2.1"
 fontique = "0.7"
 fontdue = "0.9"
-wgpu = "28.0"
-etagere = "0.2"
-bytemuck = { version = "1.21", features = ["derive"] }
+tiny-skia = "0.12"
 axum = { version = "0.8", features = ["ws"] }
 rmp-serde = "1"
 rmpv = { version = "1", features = ["with-serde"] }

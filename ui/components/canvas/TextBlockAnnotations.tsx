@@ -1,5 +1,6 @@
 'use client'
 
+import { useEffect, useState } from 'react'
 import { Rnd, type RndResizeCallback, type RndDragCallback } from 'react-rnd'
 import { useHotkeys } from 'react-hotkeys-hook'
 import { useEditorUiStore } from '@/lib/stores/editorUiStore'
@@ -19,7 +20,7 @@ export function TextBlockAnnotations({
 }: TextBlockAnnotationsProps) {
   const { textBlocks, replaceBlock, removeBlock } = useTextBlocks()
   const mode = useEditorUiStore((state) => state.mode)
-  const interactive = mode === 'select'
+  const interactive = mode === 'select' || mode === 'block'
 
   useHotkeys(
     'backspace,delete',
@@ -46,7 +47,7 @@ export function TextBlockAnnotations({
       data-annotation-layer
       style={{
         ...style,
-        pointerEvents: interactive ? 'auto' : 'none',
+        pointerEvents: 'none',
       }}
     >
       {textBlocks.map((block, index) => (
@@ -84,33 +85,63 @@ function TextBlockAnnotation({
   const scale = useEditorUiStore((state) => state.scale)
   const scaleRatio = scale / 100
 
-  const size = {
+  const scaledSize = {
     width: Math.max(0, block.width * scaleRatio),
     height: Math.max(0, block.height * scaleRatio),
   }
 
-  const position = {
+  const scaledPosition = {
     x: block.x * scaleRatio,
     y: block.y * scaleRatio,
   }
 
+  const [size, setSize] = useState(scaledSize)
+  const [position, setPosition] = useState(scaledPosition)
+
+  useEffect(() => {
+    setSize(scaledSize)
+    setPosition(scaledPosition)
+  }, [scaledPosition.x, scaledPosition.y, scaledSize.width, scaledSize.height])
+
+  const handleDrag: RndDragCallback = (_, data) => {
+    if (!interactive) return
+    setPosition({ x: data.x, y: data.y })
+  }
+
   const handleDragStop: RndDragCallback = (_, data) => {
-    if (!interactive || !selected) return
+    if (!interactive) return
+    const nextPosition = { x: data.x, y: data.y }
+    setPosition(nextPosition)
     onUpdate({
-      x: Math.round(data.x / scaleRatio),
-      y: Math.round(data.y / scaleRatio),
+      x: Math.round(nextPosition.x / scaleRatio),
+      y: Math.round(nextPosition.y / scaleRatio),
     })
+  }
+
+  const handleResize: RndResizeCallback = (_, __, ref, ___, nextPosition) => {
+    if (!interactive || !selected) return
+    setSize({
+      width: parseFloat(ref.style.width),
+      height: parseFloat(ref.style.height),
+    })
+    setPosition(nextPosition)
   }
 
   const handleResizeStop: RndResizeCallback = (_, __, ref, ___, position) => {
     if (!interactive || !selected) return
     const widthPx = parseFloat(ref.style.width)
     const heightPx = parseFloat(ref.style.height)
+    const nextSize = {
+      width: widthPx,
+      height: heightPx,
+    }
+    setSize(nextSize)
+    setPosition(position)
     onUpdate({
       x: Math.round(position.x / scaleRatio),
       y: Math.round(position.y / scaleRatio),
-      width: Math.max(4, Math.round(widthPx / scaleRatio)),
-      height: Math.max(4, Math.round(heightPx / scaleRatio)),
+      width: Math.max(4, Math.round(nextSize.width / scaleRatio)),
+      height: Math.max(4, Math.round(nextSize.height / scaleRatio)),
     })
   }
 
@@ -119,7 +150,7 @@ function TextBlockAnnotation({
       size={size}
       position={position}
       bounds='parent'
-      disableDragging={!selected || !interactive}
+      disableDragging={!interactive}
       enableResizing={
         selected && interactive
           ? {
@@ -134,9 +165,24 @@ function TextBlockAnnotation({
             }
           : false
       }
+      onDragStart={() => {
+        if (!interactive) return
+        onSelect(index)
+      }}
+      onDrag={handleDrag}
       onDragStop={handleDragStop}
+      onResizeStart={() => {
+        if (!interactive) return
+        onSelect(index)
+      }}
+      onResize={handleResize}
       onResizeStop={handleResizeStop}
       onMouseDown={(event) => {
+        if (!interactive) return
+        event.stopPropagation()
+        onSelect(index)
+      }}
+      onPointerDown={(event) => {
         if (!interactive) return
         event.stopPropagation()
         onSelect(index)

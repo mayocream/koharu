@@ -176,8 +176,6 @@
     "aboutRepository": "リポジトリ",
     "device": "デバイス",
     "deviceDescription": "ハードウェアアクセラレーション情報",
-    "deviceMl": "ML 演算",
-    "deviceWgpu": "GPU レンダラー",
-    "deviceBackend": "バックエンド"
+    "deviceMl": "ML 演算"
   }
 }

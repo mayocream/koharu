@@ -3,7 +3,12 @@ export type RgbaColor = [number, number, number, number]
 export type RenderEffect = {
   italic: boolean
   bold: boolean
-  border: boolean
+}
+
+export type RenderStroke = {
+  enabled: boolean
+  color: RgbaColor
+  widthPx?: number
 }
 
 export type NamedFontPrediction = {
@@ -33,6 +38,7 @@ export type TextStyle = {
   fontSize?: number
   color: RgbaColor
   effect?: RenderEffect
+  stroke?: RenderStroke
 }
 
 export type TextBlock = {

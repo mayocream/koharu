@@ -3,7 +3,7 @@ use std::path::PathBuf;
 use image::ImageFormat;
 use koharu_api::commands::{
     DeviceInfo, FileResult, IndexPayload, OpenDocumentsPayload, OpenExternalPayload,
-    ThumbnailResult, WgpuDeviceInfo,
+    ThumbnailResult,
 };
 
 use crate::{AppResources, state_tx};
@@ -15,19 +15,11 @@ pub async fn app_version(state: AppResources) -> anyhow::Result<String> {
 }
 
 pub async fn device(state: AppResources) -> anyhow::Result<DeviceInfo> {
-    let wgpu = state.renderer.wgpu_device_info();
     Ok(DeviceInfo {
         ml_device: match state.device {
             koharu_ml::Device::Cpu => "CPU".to_string(),
             koharu_ml::Device::Cuda(_) => "CUDA".to_string(),
             koharu_ml::Device::Metal(_) => "Metal".to_string(),
-        },
-        wgpu: WgpuDeviceInfo {
-            name: wgpu.name,
-            backend: wgpu.backend,
-            device_type: wgpu.device_type,
-            driver: wgpu.driver,
-            driver_info: wgpu.driver_info,
         },
     })
 }

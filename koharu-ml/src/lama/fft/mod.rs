@@ -100,9 +100,7 @@ mod tests {
     #[test]
     fn cpu_rfft2_roundtrip_matches_input() -> Result<()> {
         let device = Device::Cpu;
-        let data: Vec<f32> = (0..(1 * 2 * 4 * 6))
-            .map(|i| (i as f32).sin() * 0.25)
-            .collect();
+        let data: Vec<f32> = (0..(2 * 4 * 6)).map(|i| (i as f32).sin() * 0.25).collect();
         let input = Tensor::from_vec(data.clone(), (1, 2, 4, 6), &device)?;
         let reconstructed = irfft2(&rfft2(&input)?, 6)?;
         let diffs: Vec<f32> = (reconstructed - &input)?

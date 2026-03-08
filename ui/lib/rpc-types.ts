@@ -1,4 +1,10 @@
-import type { Document, InpaintRegion, RenderEffect, TextBlock } from '@/types'
+import type {
+  Document,
+  InpaintRegion,
+  RenderEffect,
+  RenderStroke,
+  TextBlock,
+} from '@/types'
 
 // Params → Result type map for all RPC methods
 
@@ -18,17 +24,8 @@ export type FileResult = {
   contentType: string
 }
 
-export type WgpuDeviceInfo = {
-  name: string
-  backend: string
-  deviceType: string
-  driver: string
-  driverInfo: string
-}
-
 export type DeviceInfo = {
   mlDevice: string
-  wgpu: WgpuDeviceInfo
 }
 
 export type LlmModelInfo = {
@@ -64,6 +61,7 @@ export type RpcMethodMap = {
       index: number
       textBlockIndex?: number
       shaderEffect?: RenderEffect
+      shaderStroke?: RenderStroke
       fontFamily?: string
     },
     void,
@@ -84,6 +82,7 @@ export type RpcMethodMap = {
       llmModelId?: string
       language?: string
       shaderEffect?: RenderEffect
+      shaderStroke?: RenderStroke
       fontFamily?: string
     },
     void,

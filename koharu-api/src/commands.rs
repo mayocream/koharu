@@ -1,22 +1,11 @@
-use koharu_types::{TextBlock, TextShaderEffect};
+use koharu_types::{TextBlock, TextShaderEffect, TextStrokeStyle};
 use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
-pub struct WgpuDeviceInfo {
-    pub name: String,
-    pub backend: String,
-    pub device_type: String,
-    pub driver: String,
-    pub driver_info: String,
-}
-
-#[derive(Debug, Clone, Serialize, Deserialize)]
-#[serde(rename_all = "camelCase")]
 pub struct DeviceInfo {
     pub ml_device: String,
-    pub wgpu: WgpuDeviceInfo,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, JsonSchema)]
@@ -68,6 +57,7 @@ pub struct RenderPayload {
     pub index: usize,
     pub text_block_index: Option<usize>,
     pub shader_effect: Option<TextShaderEffect>,
+    pub shader_stroke: Option<TextStrokeStyle>,
     pub font_family: Option<String>,
 }
 
@@ -119,6 +109,7 @@ pub struct ProcessRequest {
     pub llm_model_id: Option<String>,
     pub language: Option<String>,
     pub shader_effect: Option<TextShaderEffect>,
+    pub shader_stroke: Option<TextStrokeStyle>,
     pub font_family: Option<String>,
 }
 
@@ -290,28 +281,18 @@ mod tests {
                 effect: Some(TextShaderEffect {
                     italic: true,
                     bold: false,
-                    border: true,
+                }),
+                stroke: Some(TextStrokeStyle {
+                    enabled: true,
+                    color: [255, 255, 255, 255],
+                    width_px: Some(2.0),
                 }),
             }),
             ..Default::default()
         };
 
-        round_trip(&WgpuDeviceInfo {
-            name: "Test".to_string(),
-            backend: "Vulkan".to_string(),
-            device_type: "DiscreteGpu".to_string(),
-            driver: "test".to_string(),
-            driver_info: "1.0".to_string(),
-        });
         round_trip(&DeviceInfo {
             ml_device: "CPU".to_string(),
-            wgpu: WgpuDeviceInfo {
-                name: "Test".to_string(),
-                backend: "Vulkan".to_string(),
-                device_type: "DiscreteGpu".to_string(),
-                driver: "test".to_string(),
-                driver_info: "1.0".to_string(),
-            },
         });
         round_trip(&OpenExternalPayload {
             url: "https://example.com".to_string(),
@@ -342,7 +323,11 @@ mod tests {
             shader_effect: Some(TextShaderEffect {
                 italic: false,
                 bold: true,
-                border: true,
+            }),
+            shader_stroke: Some(TextStrokeStyle {
+                enabled: true,
+                color: [255, 255, 255, 255],
+                width_px: Some(1.6),
             }),
             font_family: Some("Noto Sans".to_string()),
         });
@@ -376,7 +361,11 @@ mod tests {
             shader_effect: Some(TextShaderEffect {
                 italic: true,
                 bold: true,
-                border: false,
+            }),
+            shader_stroke: Some(TextStrokeStyle {
+                enabled: false,
+                color: [255, 255, 255, 255],
+                width_px: Some(2.0),
             }),
             font_family: Some("Noto Sans".to_string()),
         });
@@ -435,7 +424,7 @@ mod tests {
         round_trip(&RenderParams {
             index: 1,
             text_block_index: Some(0),
-            shader_effect: Some("bold,border".to_string()),
+            shader_effect: Some("bold".to_string()),
             font_family: Some("Noto Sans".to_string()),
         });
         round_trip(&ProcessParams {
@@ -456,7 +445,7 @@ mod tests {
             font_families: Some(vec!["Noto Sans".to_string()]),
             font_size: Some(16.0),
             color: Some("#ffffff".to_string()),
-            shader_effect: Some("italic,border".to_string()),
+            shader_effect: Some("italic,bold".to_string()),
         });
         round_trip(&AddTextBlockPayload {
             index: 1,

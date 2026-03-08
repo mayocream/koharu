@@ -48,6 +48,12 @@ const shouldInpaint = (updates: Partial<TextBlock>) =>
   Object.prototype.hasOwnProperty.call(updates, 'width') ||
   Object.prototype.hasOwnProperty.call(updates, 'height')
 
+const hasGeometryChange = (updates: Partial<TextBlock>) =>
+  Object.prototype.hasOwnProperty.call(updates, 'x') ||
+  Object.prototype.hasOwnProperty.call(updates, 'y') ||
+  Object.prototype.hasOwnProperty.call(updates, 'width') ||
+  Object.prototype.hasOwnProperty.call(updates, 'height')
+
 export function useTextBlocks() {
   const { currentDocument: document, currentDocumentIndex } =
     useCurrentDocumentState()
@@ -94,6 +100,12 @@ export function useTextBlocks() {
       idx === index ? { ...block, ...updates } : block,
     )
     await updateTextBlocks(nextBlocks)
+
+    if (hasGeometryChange(updates)) {
+      const ui = useEditorUiStore.getState()
+      ui.setShowRenderedImage(false)
+      ui.setShowTextBlocksOverlay(true)
+    }
 
     const doc = document
 

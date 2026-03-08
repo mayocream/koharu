@@ -4,7 +4,7 @@ use anyhow::Result;
 use koharu_renderer::{
     font::{FamilyName, Font, FontBook, Properties},
     layout::{TextLayout, WritingMode},
-    renderer::{RenderOptions, WgpuRenderer},
+    renderer::{RenderOptions, TinySkiaRenderer},
 };
 use once_cell::sync::OnceCell;
 
@@ -31,10 +31,10 @@ fn font(family_name: &str) -> Result<Font> {
     Ok(font)
 }
 
-fn wgpu_renderer() -> Result<&'static WgpuRenderer> {
-    static INSTANCE: OnceCell<WgpuRenderer> = OnceCell::new();
-    let wgpu = INSTANCE.get_or_try_init(|| WgpuRenderer::new())?;
-    Ok(wgpu)
+fn tiny_skia_renderer() -> Result<&'static TinySkiaRenderer> {
+    static INSTANCE: OnceCell<TinySkiaRenderer> = OnceCell::new();
+    let renderer = INSTANCE.get_or_try_init(TinySkiaRenderer::new)?;
+    Ok(renderer)
 }
 
 fn non_bg_y_bounds(img: &image::RgbaImage, bg: [u8; 4]) -> Option<(u32, u32)> {
@@ -62,7 +62,7 @@ fn render_horizontal() -> Result<()> {
         .with_max_width(1000.0)
         .run(SAMPLE_TEXT)?;
 
-    let img = wgpu_renderer()?.render(
+    let img = tiny_skia_renderer()?.render(
         &lines,
         WritingMode::Horizontal,
         &RenderOptions {
@@ -87,7 +87,7 @@ fn render_vertical() -> Result<()> {
         .with_max_height(1000.0)
         .run(SAMPLE_TEXT)?;
 
-    let img = wgpu_renderer()?.render(
+    let img = tiny_skia_renderer()?.render(
         &lines,
         WritingMode::VerticalRl,
         &RenderOptions {
@@ -116,7 +116,7 @@ fn vertical_flows_top_to_bottom() -> Result<()> {
         .with_max_height(10_000.0)
         .run(&text)?;
 
-    let img = wgpu_renderer()?.render(
+    let img = tiny_skia_renderer()?.render(
         &layout,
         WritingMode::VerticalRl,
         &RenderOptions {
@@ -154,7 +154,7 @@ fn render_horizontal_simplified_chinese() -> Result<()> {
         .with_max_width(1000.0)
         .run(SAMPLE_TEXT_ZH_CN)?;
 
-    let img = wgpu_renderer()?.render(
+    let img = tiny_skia_renderer()?.render(
         &lines,
         WritingMode::Horizontal,
         &RenderOptions {
@@ -179,7 +179,7 @@ fn render_vertical_simplified_chinese() -> Result<()> {
         .with_max_height(1000.0)
         .run(SAMPLE_TEXT_ZH_CN)?;
 
-    let img = wgpu_renderer()?.render(
+    let img = tiny_skia_renderer()?.render(
         &lines,
         WritingMode::VerticalRl,
         &RenderOptions {
@@ -203,7 +203,7 @@ fn render_rgba_text() -> Result<()> {
         .with_max_width(1000.0)
         .run(SAMPLE_TEXT)?;
 
-    let img = wgpu_renderer()?.render(
+    let img = tiny_skia_renderer()?.render(
         &lines,
         WritingMode::Horizontal,
         &RenderOptions {
@@ -230,7 +230,7 @@ fn render_with_fallback_fonts() -> Result<()> {
         .with_fallback_fonts(&fallback_fonts)
         .run("Here is a smiley: 😊 and a star: ★ and a heart: ♥")?;
 
-    let img = wgpu_renderer()?.render(
+    let img = tiny_skia_renderer()?.render(
         &lines,
         WritingMode::Horizontal,
         &RenderOptions {

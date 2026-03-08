@@ -176,8 +176,6 @@
     "aboutRepository": "原始碼",
     "device": "裝置",
     "deviceDescription": "硬體加速資訊",
-    "deviceMl": "ML 運算",
-    "deviceWgpu": "GPU 渲染器",
-    "deviceBackend": "後端"
+    "deviceMl": "ML 運算"
   }
 }

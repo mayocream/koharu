@@ -6,7 +6,7 @@ use criterion::{Criterion, criterion_group, criterion_main};
 use koharu_renderer::{
     font::{FamilyName, FontBook, Properties},
     layout::{TextLayout, WritingMode},
-    renderer::{RenderOptions, WgpuRenderer},
+    renderer::{RenderOptions, TinySkiaRenderer},
 };
 
 const FONT_SIZE: f32 = 24.0;
@@ -14,7 +14,7 @@ const SAMPLE_TEXT: &str = "The quick brown fox jumps over the lazy dog.";
 
 fn rendering_benchmark(c: &mut Criterion) {
     let mut fontbook = FontBook::new();
-    let renderer = WgpuRenderer::new().expect("Failed to create renderer");
+    let renderer = TinySkiaRenderer::new().expect("Failed to create renderer");
     let font = fontbook
         .query(&[FamilyName::SansSerif], &Properties::default())
         .expect("Failed to find font");
