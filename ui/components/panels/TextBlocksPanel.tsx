@@ -20,8 +20,8 @@ import {
   TooltipTrigger,
 } from '@/components/ui/tooltip'
 import { Button } from '@/components/ui/button'
+import { DraftTextarea } from '@/components/ui/draft-textarea'
 import { ScrollArea } from '@/components/ui/scroll-area'
-import { Textarea } from '@/components/ui/textarea'
 
 export function TextBlocksPanel() {
   const {
@@ -190,12 +190,12 @@ function BlockCard({
               <span className='text-muted-foreground text-[10px] uppercase'>
                 {t('textBlocks.ocrLabel')}
               </span>
-              <Textarea
+              <DraftTextarea
                 data-testid={`textblock-ocr-${index}`}
                 value={block.text ?? ''}
                 placeholder={t('textBlocks.addOcrPlaceholder')}
                 rows={2}
-                onChange={(event) => onChange({ text: event.target.value })}
+                onValueChange={(value) => onChange({ text: value })}
                 className='min-h-0 resize-none px-1.5 py-1 text-xs'
               />
             </div>
@@ -226,14 +226,12 @@ function BlockCard({
                   </TooltipContent>
                 </Tooltip>
               </div>
-              <Textarea
+              <DraftTextarea
                 data-testid={`textblock-translation-${index}`}
                 value={block.translation ?? ''}
                 placeholder={t('textBlocks.addTranslationPlaceholder')}
                 rows={2}
-                onChange={(event) =>
-                  onChange({ translation: event.target.value })
-                }
+                onValueChange={(value) => onChange({ translation: value })}
                 className='min-h-0 resize-none px-1.5 py-1 text-xs'
               />
             </div>

@@ -15,22 +15,25 @@ test.beforeEach(async ({ page }) => {
   await bootstrapApp(page)
 })
 
-test('drafts a block and edits OCR/translation fields', async ({
-  page,
-}) => {
+test('drafts a block and edits OCR/translation fields', async ({ page }) => {
   await importAndOpenPage(page, SMOKE_SET.slice(0, 2))
   await prepareDetectAndOcr(page)
 
   const countBefore = await readTextBlocksCount(page)
 
   await page.getByTestId(selectors.tools.block).click()
-  await drawStrokeOnCanvas(page, page.getByTestId(selectors.workspace.canvas), {
-    x: 0.15,
-    y: 0.15,
-  }, {
-    x: 0.32,
-    y: 0.22,
-  })
+  await drawStrokeOnCanvas(
+    page,
+    page.getByTestId(selectors.workspace.canvas),
+    {
+      x: 0.15,
+      y: 0.15,
+    },
+    {
+      x: 0.32,
+      y: 0.22,
+    },
+  )
 
   await expect
     .poll(async () => readTextBlocksCount(page), { timeout: 45_000 })
@@ -38,19 +41,54 @@ test('drafts a block and edits OCR/translation fields', async ({
 
   const ocrValue = 'E2E OCR Edited'
   const translationValue = 'E2E Translation Edited'
+  const ocrField = page.getByTestId(selectors.panels.textBlockOcr(0))
+  const translationField = page.getByTestId(
+    selectors.panels.textBlockTranslation(0),
+  )
 
   await page.getByTestId(selectors.panels.textBlockCard(0)).click()
-  await expect(page.getByTestId(selectors.panels.textBlockOcr(0))).toBeVisible()
-  await page.getByTestId(selectors.panels.textBlockOcr(0)).fill(ocrValue)
-  await page
-    .getByTestId(selectors.panels.textBlockTranslation(0))
-    .fill(translationValue)
-  await expect(page.getByTestId(selectors.panels.textBlockOcr(0))).toHaveValue(
-    ocrValue,
-  )
-  await expect(
-    page.getByTestId(selectors.panels.textBlockTranslation(0)),
-  ).toHaveValue(translationValue)
+  await expect(ocrField).toBeVisible()
+  await ocrField.fill(ocrValue)
+  await translationField.fill(translationValue)
+  await expect(ocrField).toHaveValue(ocrValue)
+  await expect(translationField).toHaveValue(translationValue)
+
+  await ocrField.press('Home')
+  await ocrField.type('X')
+  await expect
+    .poll(
+      () =>
+        ocrField.evaluate((element: HTMLTextAreaElement) => ({
+          value: element.value,
+          start: element.selectionStart,
+          end: element.selectionEnd,
+        })),
+      { timeout: 5_000 },
+    )
+    .toEqual({
+      value: `X${ocrValue}`,
+      start: 1,
+      end: 1,
+    })
+
+  await translationField.press('Home')
+  await translationField.type('Y')
+  await expect
+    .poll(
+      () =>
+        translationField.evaluate((element: HTMLTextAreaElement) => ({
+          value: element.value,
+          start: element.selectionStart,
+          end: element.selectionEnd,
+        })),
+      { timeout: 5_000 },
+    )
+    .toEqual({
+      value: `Y${translationValue}`,
+      start: 1,
+      end: 1,
+    })
+
   await page.getByTestId(selectors.toolbar.inpaint).click()
   await waitForLayerHasContent(page, 'inpainted', true)
 
