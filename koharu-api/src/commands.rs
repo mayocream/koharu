@@ -363,6 +363,7 @@ mod tests {
         });
         round_trip(&LlmLoadPayload {
             id: "sakura".to_string(),
+            api_key: None,
         });
         round_trip(&LlmGeneratePayload {
             index: 1,
@@ -371,6 +372,7 @@ mod tests {
         });
         round_trip(&LlmLoadParams {
             id: "sakura".to_string(),
+            api_key: None,
         });
         round_trip(&LlmGenerateParams {
             index: 1,
@@ -380,6 +382,7 @@ mod tests {
         round_trip(&ProcessRequest {
             index: Some(1),
             llm_model_id: Some("sakura".to_string()),
+            llm_api_key: None,
             language: Some("zh-CN".to_string()),
             shader_effect: Some(TextShaderEffect {
                 italic: true,
