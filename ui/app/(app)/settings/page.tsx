@@ -1,6 +1,6 @@
 'use client'
 
-import { useEffect, useMemo, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import { useTheme } from 'next-themes'
 import { useTranslation } from 'react-i18next'
 import Link from 'next/link'
@@ -33,9 +33,9 @@ const THEME_OPTIONS = [
 ] as const
 
 const API_PROVIDERS = [
-  { id: 'openai', name: 'OpenAI' },
-  { id: 'gemini', name: 'Gemini' },
-  { id: 'claude', name: 'Claude' },
+  { id: 'openai', name: 'OpenAI', free_tier: false},
+  { id: 'gemini', name: 'Gemini', free_tier: true},
+  { id: 'claude', name: 'Claude', free_tier: false},
 ] as const
 
 export default function SettingsPage() {
@@ -49,6 +49,8 @@ export default function SettingsPage() {
   const apiKeys = usePreferencesStore((state) => state.apiKeys)
   const setApiKey = usePreferencesStore((state) => state.setApiKey)
   const [visibleKeys, setVisibleKeys] = useState<Record<string, boolean>>({})
+  const saveTimersRef = useRef<Record<string, ReturnType<typeof setTimeout>>>({})
+  const pendingApiKeysRef = useRef<Record<string, string>>({})
 
   useEffect(() => {
     if (!isTauri()) return
@@ -72,7 +74,9 @@ export default function SettingsPage() {
       for (const { id } of API_PROVIDERS) {
         try {
           const key = await api.getApiKey(id)
-          setApiKey(id, key ?? '')
+          if (pendingApiKeysRef.current[id] === undefined) {
+            setApiKey(id, key ?? '')
+          }
         } catch (error) {
           console.error(`Failed to load API key for ${id}`, error)
         }
@@ -82,9 +86,51 @@ export default function SettingsPage() {
     void loadApiKeys()
   }, [setApiKey])
 
+  const persistApiKey = async (provider: string, value: string) => {
+    try {
+      await api.setApiKey(provider, value)
+    } catch (error) {
+      console.error(`Failed to save API key for ${provider}`, error)
+    }
+  }
+
+  const flushApiKeySave = (provider: string) => {
+    const existingTimer = saveTimersRef.current[provider]
+    if (existingTimer) {
+      clearTimeout(existingTimer)
+      delete saveTimersRef.current[provider]
+    }
+
+    const pendingValue = pendingApiKeysRef.current[provider]
+    if (pendingValue === undefined) {
+      return
+    }
+
+    delete pendingApiKeysRef.current[provider]
+    void persistApiKey(provider, pendingValue)
+  }
+
+  useEffect(() => {
+    return () => {
+      Object.keys(saveTimersRef.current).forEach((provider) => {
+        flushApiKeySave(provider)
+      })
+    }
+  }, [])
+
   const handleApiKeyChange = (provider: string, value: string) => {
     setApiKey(provider, value)
-    void api.setApiKey(provider, value)
+    pendingApiKeysRef.current[provider] = value
+
+    const existingTimer = saveTimersRef.current[provider]
+    if (existingTimer) {
+      clearTimeout(existingTimer)
+    }
+
+    saveTimersRef.current[provider] = setTimeout(() => {
+      delete saveTimersRef.current[provider]
+      flushApiKeySave(provider)
+    }, 300)
   }
 
   return (
@@ -190,10 +236,10 @@ export default function SettingsPage() {
             {/* API Keys Section */}
             <section className='mb-8'>
               <h2 className='text-foreground mb-1 text-sm font-bold'>
-                Provider Api Keys
+                {t('settings.apiKeys')}
               </h2>
               <p className='text-muted-foreground mb-4 text-sm'>
-                Manage your API keys for different providers. Your keys are stored securely on your device and are never shared with anyone.
+                {t('settings.apiKeysDescription')}
               </p>
               <div className='space-y-3'>
                 {API_PROVIDERS.map(({ id, name }) => (
@@ -204,6 +250,7 @@ export default function SettingsPage() {
                         type={visibleKeys[id] ? 'text' : 'password'}
                         value={apiKeys[id] ?? ''}
                         onChange={(e) => handleApiKeyChange(id, e.target.value)}
+                        onBlur={() => flushApiKeySave(id)}
                         placeholder='Enter API key'
                         className='border-border bg-card text-foreground placeholder:text-muted-foreground focus:ring-primary w-full rounded-md border px-3 py-1.5 pr-9 text-sm focus:ring-1 focus:outline-none'
                       />
@@ -220,6 +267,12 @@ export default function SettingsPage() {
                           <EyeIcon className='size-4' />
                         )}
                       </button>
+
+                      {API_PROVIDERS.find((provider) => provider.id === id)?.free_tier && (
+                        <span className='text-green-500 text-xs ml-2'>
+                          {t('settings.freeTier')}
+                        </span>
+                      )}
                     </div>
                   </div>
                 ))}

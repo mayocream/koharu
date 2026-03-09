@@ -157,7 +157,8 @@
   },
   "errors": {
     "title": "エラー",
-    "dismiss": "閉じる"
+    "dismiss": "閉じる",
+    "providerQuotaExceeded": "{{provider}} の API クォータを超過しました。課金状況を確認するか、クォータのリセットを待ってください。"
   },
   "settings": {
     "title": "設定",
@@ -180,6 +181,9 @@
     "aboutRepository": "リポジトリ",
     "device": "デバイス",
     "deviceDescription": "ハードウェアアクセラレーション情報",
-    "deviceMl": "ML 演算"
+    "deviceMl": "ML 演算",
+    "apiKeys": "API キー",
+    "apiKeysDescription": "異なるプロバイダーの API キーを管理します。キーはデバイスのキーチェーンに安全に保存され、他人と共有されることはありません。",
+    "freeTier": "無料プラン"
   }
 }

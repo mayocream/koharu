@@ -157,7 +157,8 @@
   },
   "errors": {
     "title": "Error",
-    "dismiss": "Cerrar"
+    "dismiss": "Cerrar",
+    "providerQuotaExceeded": "Se agotó la cuota de API de {{provider}}. Revisa la facturación o espera a que se restablezca la cuota."
   },
   "settings": {
     "title": "Configuración",
@@ -180,6 +181,9 @@
     "aboutRepository": "Repositorio",
     "device": "Dispositivo",
     "deviceDescription": "Información sobre aceleración por hardware.",
-    "deviceMl": "Cómputo ML"
+    "deviceMl": "Cómputo ML",
+    "apiKeys": "Claves API",
+    "apiKeysDescription": "Gestiona tus claves API para diferentes proveedores. Tus claves se almacenan de forma segura en el llavero de tu dispositivo y nunca se comparten con nadie.",
+    "freeTier": "Nivel gratuito"
   }
 }

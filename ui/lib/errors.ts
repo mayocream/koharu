@@ -1,6 +1,7 @@
 'use client'
 
 import { useUiErrorStore } from '@/lib/stores/uiErrorStore'
+import i18n from '@/lib/i18n'
 
 const SURFACED_RPC_METHODS = new Set([
   'open_documents',
@@ -22,13 +23,19 @@ const SURFACED_RPC_METHODS = new Set([
 ])
 
 export const normalizeErrorMessage = (error: unknown) => {
-  if (error instanceof Error) {
-    return error.message
+  const rawMessage =
+    error instanceof Error
+      ? error.message
+      : typeof error === 'string'
+        ? error
+        : 'Unexpected error'
+
+  if (rawMessage.startsWith('provider_quota_exceeded:')) {
+    const provider = rawMessage.split(':', 2)[1] ?? 'provider'
+    return i18n.t('errors.providerQuotaExceeded', { provider })
   }
-  if (typeof error === 'string') {
-    return error
-  }
-  return 'Unexpected error'
+
+  return rawMessage
 }
 
 export const reportRpcError = (method: string, error: unknown) => {

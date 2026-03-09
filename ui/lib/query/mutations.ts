@@ -49,6 +49,25 @@ const findModelLanguages = (
   modelId?: string,
 ) => models.find((model) => model.id === modelId)?.languages ?? []
 
+const apiLanguageToBackendName = (language?: string) => {
+  switch (language) {
+    case 'en-US':
+      return 'English'
+    case 'zh-CN':
+      return '简体中文'
+    case 'zh-TW':
+      return '繁體中文'
+    case 'ja-JP':
+      return '日本語'
+    case 'ru-RU':
+      return 'Русский'
+    case 'es-ES':
+      return 'Español'
+    default:
+      return language
+  }
+}
+
 const pickLanguage = (
   models: { id: string; languages: string[] }[],
   modelId?: string,
@@ -432,6 +451,7 @@ export const useDocumentMutations = () => {
       try {
         const models = getCachedLlmModels(queryClient)
         const modelInfo = models.find((m) => m.id === selectedModel)
+        const language = apiLanguageToBackendName(selectedLanguage)
         const llmApiKey =
           modelInfo && modelInfo.source !== 'local'
             ? usePreferencesStore.getState().apiKeys[modelInfo.source]
@@ -440,7 +460,7 @@ export const useDocumentMutations = () => {
           index: resolvedIndex,
           llmModelId: selectedModel,
           llmApiKey,
-          language: selectedLanguage,
+          language,
           shaderEffect: renderEffect,
           shaderStroke: renderStroke,
           fontFamily,
@@ -470,6 +490,7 @@ export const useDocumentMutations = () => {
     try {
       const models = getCachedLlmModels(queryClient)
       const modelInfo = models.find((m) => m.id === selectedModel)
+      const language = apiLanguageToBackendName(selectedLanguage)
       const llmApiKey =
         modelInfo && modelInfo.source !== 'local'
           ? usePreferencesStore.getState().apiKeys[modelInfo.source]
@@ -477,7 +498,7 @@ export const useDocumentMutations = () => {
       await api.process({
         llmModelId: selectedModel,
         llmApiKey,
-        language: selectedLanguage,
+        language,
         shaderEffect: renderEffect,
         shaderStroke: renderStroke,
         fontFamily,
@@ -624,7 +645,11 @@ export const useLlmMutations = () => {
             : languages[0]
           : undefined
 
-      await api.llmGenerate(resolvedIndex, textBlockIndex, language)
+      await api.llmGenerate(
+        resolvedIndex,
+        textBlockIndex,
+        apiLanguageToBackendName(language),
+      )
       await invalidateCurrentDocument(queryClient, resolvedIndex)
       useEditorUiStore.getState().setShowTextBlocksOverlay(true)
       if (typeof textBlockIndex === 'number') {

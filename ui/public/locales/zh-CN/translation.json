@@ -157,7 +157,8 @@
   },
   "errors": {
     "title": "错误",
-    "dismiss": "关闭"
+    "dismiss": "关闭",
+    "providerQuotaExceeded": "{{provider}} API 配额已用尽。请检查计费状态或等待配额重置。"
   },
   "settings": {
     "title": "设置",
@@ -180,6 +181,9 @@
     "aboutRepository": "代码仓库",
     "device": "设备",
     "deviceDescription": "硬件加速信息",
-    "deviceMl": "ML 计算"
+    "deviceMl": "ML 计算",
+    "apiKeys": "API 密钥",
+    "apiKeysDescription": "管理您在不同提供商的 API 密钥。您的密钥会安全地存储在设备的密钥链中，绝不会与他人共享。",
+    "freeTier": "免费等级"
   }
 }

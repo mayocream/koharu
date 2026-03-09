@@ -157,7 +157,8 @@
   },
   "errors": {
     "title": "Error",
-    "dismiss": "Dismiss"
+    "dismiss": "Dismiss",
+    "providerQuotaExceeded": "{{provider}} API quota exceeded. Check your billing or wait for your quota to reset."
   },
   "settings": {
     "title": "Settings",
@@ -180,6 +181,9 @@
     "aboutRepository": "Repository",
     "device": "Device",
     "deviceDescription": "Hardware acceleration information.",
-    "deviceMl": "ML Compute"
+    "deviceMl": "ML Compute",
+    "apiKeys": "API Keys",
+    "apiKeysDescription": "Manage your API keys for different providers. Your keys are stored securely on your device keychain and are never shared with anyone.",
+    "freeTier": "Free Tier"
   }
 }
