@@ -5,7 +5,7 @@ use serde::Serialize;
 
 use koharu_http::http::http_client;
 
-use super::{AnyProvider, system_prompt};
+use super::{AnyProvider, ensure_provider_success, system_prompt};
 
 pub struct GeminiProvider {
     pub api_key: String,
@@ -58,13 +58,15 @@ impl AnyProvider for GeminiProvider {
                 }],
             };
 
-            let resp: serde_json::Value = http_client()
+            let response = http_client()
                 .post(&url)
                 .header("content-type", "application/json")
                 .body(serde_json::to_vec(&body)?)
                 .send()
+                .await?;
+
+            let resp: serde_json::Value = ensure_provider_success("gemini", response)
                 .await?
-                .error_for_status()?
                 .json()
                 .await?;
 

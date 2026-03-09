@@ -16,6 +16,11 @@ use crate::{AppResources, state_tx};
 const API_KEY_SERVICE: &str = "koharu";
 
 fn provider_key_entry(provider: &str) -> anyhow::Result<Entry> {
+    let username = format!("llm_provider_api_key_{provider}");
+    Ok(Entry::new(API_KEY_SERVICE, &username)?)
+}
+
+fn legacy_provider_key_entry(provider: &str) -> anyhow::Result<Entry> {
     let username = format!("llm-provider-api-key:{provider}");
     Ok(Entry::new(API_KEY_SERVICE, &username)?)
 }
@@ -24,32 +29,76 @@ pub(crate) fn get_saved_api_key(provider: &str) -> anyhow::Result<Option<String>
     let entry = provider_key_entry(provider)?;
     match entry.get_password() {
         Ok(value) => Ok(Some(value)),
-        Err(keyring::Error::NoEntry) => Ok(None),
+        Err(keyring::Error::NoEntry) => {
+            let legacy_entry = legacy_provider_key_entry(provider)?;
+            match legacy_entry.get_password() {
+                Ok(value) => {
+                    let _ = entry.set_password(&value);
+                    let _ = legacy_entry.delete_credential();
+                    Ok(Some(value))
+                }
+                Err(keyring::Error::NoEntry) => Ok(None),
+                Err(err) => Err(err.into()),
+            }
+        }
         Err(err) => Err(err.into()),
     }
 }
 
 fn set_saved_api_key(provider: &str, api_key: &str) -> anyhow::Result<()> {
     let entry = provider_key_entry(provider)?;
+    let legacy_entry = legacy_provider_key_entry(provider)?;
     if api_key.trim().is_empty() {
-        match entry.delete_password() {
-            Ok(()) | Err(keyring::Error::NoEntry) => Ok(()),
-            Err(err) => Err(err.into()),
+        match entry.delete_credential() {
+            Ok(()) | Err(keyring::Error::NoEntry) => {}
+            Err(err) => return Err(anyhow::Error::from(err)),
         }
+        let _ = legacy_entry.delete_credential();
+        Ok(())
     } else {
         entry.set_password(api_key)?;
+        let _ = legacy_entry.delete_credential();
         Ok(())
     }
 }
 
+#[instrument(level = "info", skip_all, fields(provider = %payload.provider))]
 pub async fn get_api_key(_state: AppResources, payload: ApiKeyGetPayload) -> anyhow::Result<ApiKeyResult> {
-    Ok(ApiKeyResult {
-        api_key: get_saved_api_key(&payload.provider)?,
-    })
+    tracing::info!("loading API key from keyring");
+    match get_saved_api_key(&payload.provider) {
+        Ok(Some(key)) => {
+            tracing::info!(len = key.len(), "API key found in keyring");
+            Ok(ApiKeyResult { api_key: Some(key) })
+        }
+        Ok(None) => {
+            tracing::info!("no API key found in keyring");
+            Ok(ApiKeyResult { api_key: None })
+        }
+        Err(err) => {
+            tracing::error!(%err, "keyring read failed");
+            Err(err)
+        }
+    }
 }
 
+#[instrument(level = "info", skip_all, fields(provider = %payload.provider))]
 pub async fn set_api_key(_state: AppResources, payload: ApiKeySetPayload) -> anyhow::Result<()> {
-    set_saved_api_key(&payload.provider, &payload.api_key)
+    let is_empty = payload.api_key.trim().is_empty();
+    tracing::info!(is_empty, "saving API key to keyring");
+    match set_saved_api_key(&payload.provider, &payload.api_key) {
+        Ok(()) => {
+            if is_empty {
+                tracing::info!("API key deleted from keyring");
+            } else {
+                tracing::info!("API key saved to keyring");
+            }
+            Ok(())
+        }
+        Err(err) => {
+            tracing::error!(%err, "keyring write failed");
+            Err(err)
+        }
+    }
 }
 
 pub async fn llm_list(

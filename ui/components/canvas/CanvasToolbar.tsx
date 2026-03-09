@@ -269,8 +269,7 @@ function LlmStatusPopover() {
             </p>
           )}
 
-          {/* Language selector — local models only */}
-          {!isApiModel && activeLanguages.length > 0 && (
+          {activeLanguages.length > 0 && (
             <Select
               value={llmSelectedLanguage ?? activeLanguages[0]}
               onValueChange={llmSetSelectedLanguage}
@@ -288,7 +287,9 @@ function LlmStatusPopover() {
                     value={language}
                     data-testid={`llm-language-option-${index}`}
                   >
-                    {language}
+                    {language.includes('-')
+                      ? t(`menu.languages.${language}`)
+                      : language}
                   </SelectItem>
                 ))}
               </SelectContent>

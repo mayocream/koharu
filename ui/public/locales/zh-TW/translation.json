@@ -159,7 +159,8 @@
   },
   "errors": {
     "title": "錯誤",
-    "dismiss": "關閉"
+    "dismiss": "關閉",
+    "providerQuotaExceeded": "{{provider}} API 配額已用盡。請檢查計費狀態或等待配額重置。"
   },
   "settings": {
     "title": "設定",
@@ -182,6 +183,9 @@
     "aboutRepository": "原始碼",
     "device": "裝置",
     "deviceDescription": "硬體加速資訊",
-    "deviceMl": "ML 運算"
+    "deviceMl": "ML 運算",
+    "apiKeys": "API 密鑰",
+    "apiKeysDescription": "管理您在不同提供商的 API 密鑰。您的密鑰會安全地存儲在設備的密鑰鏈中，絕不會與他人共享。",
+    "freeTier": "免費等級"
   }
 }

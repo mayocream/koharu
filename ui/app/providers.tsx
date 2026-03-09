@@ -18,6 +18,8 @@ import { api, parseProcessProgress } from '@/lib/api'
 import { useDownloadStore } from '@/lib/downloads'
 import { useEditorUiStore } from '@/lib/stores/editorUiStore'
 import { useOperationStore } from '@/lib/stores/operationStore'
+import { usePreferencesStore } from '@/lib/stores/preferencesStore'
+import { isTauri } from '@/lib/backend'
 
 export function Providers({ children }: { children: ReactNode }) {
   const [mounted, setMounted] = useState(false)
@@ -30,6 +32,22 @@ export function Providers({ children }: { children: ReactNode }) {
   useEffect(() => {
     ensureDownloadSubscribed()
   }, [ensureDownloadSubscribed])
+
+  useEffect(() => {
+    if (!isTauri()) return
+    const setApiKey = usePreferencesStore.getState().setApiKey
+    void (async () => {
+      const providers = ['openai', 'gemini', 'claude']
+      for (const provider of providers) {
+        try {
+          const key = await api.getApiKey(provider)
+          setApiKey(provider, key ?? '')
+        } catch (error) {
+          console.error(`[providers] Failed to load API key for ${provider}`, error)
+        }
+      }
+    })()
+  }, [])
 
   useEffect(() => {
     let unlisten: (() => void) | undefined

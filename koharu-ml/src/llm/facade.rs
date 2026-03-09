@@ -42,7 +42,10 @@ impl ModelInfo {
     pub fn api(provider_id: &'static str, model_id: &str) -> Self {
         Self {
             id: format!("{provider_id}:{model_id}"),
-            languages: vec![],
+            languages: ["en-US", "zh-CN", "zh-TW", "ja-JP", "ru-RU", "es-ES"]
+                .into_iter()
+                .map(str::to_string)
+                .collect(),
             source: provider_id,
         }
     }
