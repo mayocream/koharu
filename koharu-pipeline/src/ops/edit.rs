@@ -32,6 +32,25 @@ fn size_changed(a: &TextBlock, b: &TextBlock) -> bool {
         || (a.height - b.height).abs() > MATCH_GEOMETRY_EPS
 }
 
+fn geometry_overlaps(a: &TextBlock, b: &TextBlock) -> bool {
+    let ax0 = a.x;
+    let ay0 = a.y;
+    let ax1 = a.x + a.width;
+    let ay1 = a.y + a.height;
+    let bx0 = b.x;
+    let by0 = b.y;
+    let bx1 = b.x + b.width;
+    let by1 = b.y + b.height;
+
+    ax0 < bx1 && ay0 < by1 && ax1 > bx0 && ay1 > by0
+}
+
+fn has_stable_content_identity(a: &TextBlock, b: &TextBlock) -> bool {
+    let has_content =
+        a.text.is_some() || a.translation.is_some() || b.text.is_some() || b.translation.is_some();
+    has_content && a.text == b.text && a.translation == b.translation
+}
+
 fn seed_from_block(block: &TextBlock) -> Option<(f32, f32, f32, f32)> {
     match (
         block.layout_seed_x,
@@ -50,9 +69,21 @@ fn seed_from_block(block: &TextBlock) -> Option<(f32, f32, f32, f32)> {
 
 fn find_matching_previous(
     current: &TextBlock,
+    current_index: usize,
     previous: &[TextBlock],
     used_previous: &[bool],
 ) -> Option<usize> {
+    if current_index < previous.len() && !used_previous[current_index] {
+        let indexed = &previous[current_index];
+        let delta = geometry_delta(current, indexed);
+        if delta <= MATCH_NEAR_GEOMETRY_DELTA
+            || geometry_overlaps(current, indexed)
+            || has_stable_content_identity(current, indexed)
+        {
+            return Some(current_index);
+        }
+    }
+
     let mut best_idx = None;
     let mut best_delta = f32::INFINITY;
 
@@ -73,9 +104,7 @@ fn find_matching_previous(
         return Some(candidate_idx);
     }
 
-    let same_text = current.text == candidate.text;
-    let same_translation = current.translation == candidate.translation;
-    if same_text && same_translation && best_delta <= MATCH_TEXT_GEOMETRY_DELTA {
+    if has_stable_content_identity(current, candidate) && best_delta <= MATCH_TEXT_GEOMETRY_DELTA {
         return Some(candidate_idx);
     }
 
@@ -181,8 +210,8 @@ pub async fn update_text_blocks(
         document.text_blocks = payload.text_blocks;
 
         let mut used_previous = vec![false; previous.len()];
-        for block in &mut document.text_blocks {
-            let matched_idx = find_matching_previous(block, &previous, &used_previous);
+        for (block_index, block) in document.text_blocks.iter_mut().enumerate() {
+            let matched_idx = find_matching_previous(block, block_index, &previous, &used_previous);
             if let Some(idx) = matched_idx {
                 used_previous[idx] = true;
                 rehydrate_runtime_text_block_state(block, Some(&previous[idx]));
@@ -512,7 +541,10 @@ pub async fn inpaint_partial(
 
 #[cfg(test)]
 mod tests {
-    use super::{localize_inpaint_text_blocks, paste_crop, rehydrate_runtime_text_block_state};
+    use super::{
+        find_matching_previous, localize_inpaint_text_blocks, paste_crop,
+        rehydrate_runtime_text_block_state,
+    };
     use image::{Rgba, RgbaImage};
     use koharu_types::TextBlock;
 
@@ -617,5 +649,70 @@ mod tests {
         assert_eq!(stitched.get_pixel(2, 2).0, [255, 0, 0, 255]);
         assert_eq!(stitched.get_pixel(4, 4).0, [255, 0, 0, 255]);
         assert_eq!(stitched.get_pixel(1, 1).0, [0, 0, 0, 255]);
+    }
+
+    #[test]
+    fn matching_previous_prefers_same_index_for_large_manual_resize() {
+        let previous = vec![
+            TextBlock {
+                x: 10.0,
+                y: 10.0,
+                width: 40.0,
+                height: 20.0,
+                translation: Some("HELLO".to_string()),
+                ..Default::default()
+            },
+            TextBlock {
+                x: 100.0,
+                y: 10.0,
+                width: 40.0,
+                height: 20.0,
+                translation: Some("WORLD".to_string()),
+                ..Default::default()
+            },
+        ];
+
+        let current = TextBlock {
+            x: 10.0,
+            y: 10.0,
+            width: 140.0,
+            height: 80.0,
+            translation: Some("HELLO".to_string()),
+            ..Default::default()
+        };
+
+        let matched = find_matching_previous(&current, 0, &previous, &[false, false]);
+        assert_eq!(matched, Some(0));
+    }
+
+    #[test]
+    fn non_overlapping_same_index_without_identity_does_not_force_match() {
+        let previous = vec![
+            TextBlock {
+                x: 10.0,
+                y: 10.0,
+                width: 20.0,
+                height: 20.0,
+                ..Default::default()
+            },
+            TextBlock {
+                x: 80.0,
+                y: 10.0,
+                width: 20.0,
+                height: 20.0,
+                ..Default::default()
+            },
+        ];
+
+        let current = TextBlock {
+            x: 82.0,
+            y: 12.0,
+            width: 20.0,
+            height: 20.0,
+            ..Default::default()
+        };
+
+        let matched = find_matching_previous(&current, 0, &previous, &[false, false]);
+        assert_eq!(matched, Some(1));
     }
 }
