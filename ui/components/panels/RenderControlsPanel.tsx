@@ -388,6 +388,8 @@ export function RenderControlsPanel() {
                   triggerTestId='render-color-trigger'
                   pickerTestId='render-color-picker'
                   swatchTestId='render-color-swatch'
+                  inputTestId='render-color-input'
+                  pickButtonTestId='render-color-pick'
                   onChange={(hex) => {
                     const nextColor = hexToColor(hex, currentColor[3] ?? 255)
                     if (applyStyleToSelected({ color: nextColor })) return
@@ -531,6 +533,8 @@ export function RenderControlsPanel() {
                   triggerTestId='render-stroke-color-trigger'
                   pickerTestId='render-stroke-color-picker'
                   swatchTestId='render-stroke-color-swatch'
+                  inputTestId='render-stroke-color-input'
+                  pickButtonTestId='render-stroke-color-pick'
                   onChange={(hex) => {
                     applyStrokeSetting({
                       ...currentStroke,
