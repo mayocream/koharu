@@ -128,7 +128,10 @@ export function useTextBlocks() {
           )
         : buildInpaintRegion(nextBlock, doc)
       console.log('Inpainting region for text block update:', region)
-      void inpaintPartial(region, { index: currentDocumentIndex })
+      void inpaintPartial(region, {
+        index: currentDocumentIndex,
+        autoShowInpaintedImage: false,
+      })
     }
   }
 
