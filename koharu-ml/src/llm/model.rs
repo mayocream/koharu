@@ -56,13 +56,13 @@ pub struct GenerateOptions {
 impl Default for GenerateOptions {
     fn default() -> Self {
         Self {
-            max_tokens: 5000,
-            temperature: 0.0,
+            max_tokens: 1000,
+            temperature: 0.1,
             top_k: None,
             top_p: None,
             seed: 299792458,
             split_prompt: false,
-            repeat_penalty: 1.0,
+            repeat_penalty: 1.1,
             repeat_last_n: 64,
         }
     }
