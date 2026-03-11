@@ -97,6 +97,14 @@ export const api = {
     await invoke('export_document', { index })
   },
 
+  async exportAllInpainted(): Promise<number> {
+    return invoke('export_all_inpainted')
+  },
+
+  async exportAllRendered(): Promise<number> {
+    return invoke('export_all_rendered')
+  },
+
   async detect(index: number): Promise<void> {
     await invoke('detect', { index })
   },

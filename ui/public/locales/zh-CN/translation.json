@@ -8,6 +8,8 @@
     "addFile": "添加文件...",
     "save": "保存...",
     "export": "导出...",
+    "exportAllInpainted": "导出所有修复后的图像...",
+    "exportAllRendered": "导出所有渲染后的图像...",
     "view": "视图",
     "fitWindow": "适应窗口",
     "originalSize": "原始大小",

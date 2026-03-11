@@ -1,14 +1,64 @@
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 
 use image::ImageFormat;
 use koharu_api::commands::{
     DeviceInfo, FileResult, IndexPayload, OpenDocumentsPayload, OpenExternalPayload,
     ThumbnailResult,
 };
+use rfd::FileDialog;
 
 use crate::{AppResources, state_tx};
 
 use super::utils::{encode_image, load_documents, mime_from_ext};
+
+fn next_available_path(output_dir: &Path, stem: &str, ext: &str) -> PathBuf {
+    let mut candidate = output_dir.join(format!("{stem}.{ext}"));
+    let mut suffix = 2usize;
+    while candidate.exists() {
+        candidate = output_dir.join(format!("{stem}_{suffix}.{ext}"));
+        suffix += 1;
+    }
+    candidate
+}
+
+async fn pick_output_dir() -> anyhow::Result<Option<PathBuf>> {
+    Ok(tokio::task::spawn_blocking(|| FileDialog::new().pick_folder()).await?)
+}
+
+fn document_ext(document: &koharu_types::Document) -> String {
+    document
+        .path
+        .extension()
+        .and_then(|value| value.to_str())
+        .unwrap_or("jpg")
+        .to_string()
+}
+
+fn export_documents_matching(
+    documents: &[koharu_types::Document],
+    output_dir: &Path,
+    suffix: &str,
+    missing_error: &str,
+    image: impl Fn(&koharu_types::Document) -> Option<&koharu_types::SerializableDynamicImage>,
+) -> anyhow::Result<usize> {
+    let mut exported = 0usize;
+
+    for document in documents {
+        let Some(image) = image(document) else {
+            continue;
+        };
+
+        let ext = document_ext(document);
+        let output_path =
+            next_available_path(output_dir, &format!("{}_{}", document.name, suffix), &ext);
+        let bytes = encode_image(image, &ext)?;
+        std::fs::write(&output_path, bytes)?;
+        exported += 1;
+    }
+
+    anyhow::ensure!(exported > 0, "{missing_error}");
+    Ok(exported)
+}
 
 pub async fn app_version(state: AppResources) -> anyhow::Result<String> {
     Ok(state.version.to_string())
@@ -130,4 +180,34 @@ pub async fn export_document(
         data: bytes,
         content_type,
     })
+}
+
+pub async fn export_all_inpainted(state: AppResources) -> anyhow::Result<usize> {
+    let Some(output_dir) = pick_output_dir().await? else {
+        return Ok(0);
+    };
+
+    let guard = state.state.read().await;
+    export_documents_matching(
+        &guard.documents,
+        &output_dir,
+        "inpainted",
+        "No inpainted images found to export",
+        |document| document.inpainted.as_ref(),
+    )
+}
+
+pub async fn export_all_rendered(state: AppResources) -> anyhow::Result<usize> {
+    let Some(output_dir) = pick_output_dir().await? else {
+        return Ok(0);
+    };
+
+    let guard = state.state.read().await;
+    export_documents_matching(
+        &guard.documents,
+        &output_dir,
+        "rendered",
+        "No rendered images found to export",
+        |document| document.rendered.as_ref(),
+    )
 }

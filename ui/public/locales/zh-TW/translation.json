@@ -8,6 +8,8 @@
     "addFile": "新增檔案...",
     "save": "儲存...",
     "export": "匯出...",
+    "exportAllInpainted": "匯出所有修補後的影像...",
+    "exportAllRendered": "匯出所有渲染後的影像...",
     "view": "檢視",
     "fitWindow": "符合視窗",
     "originalSize": "原始大小",

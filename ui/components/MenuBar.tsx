@@ -40,6 +40,8 @@ export function MenuBar() {
     inpaintAndRenderImage,
     processAllImages,
     exportDocument,
+    exportAllInpainted,
+    exportAllRendered,
   } = useDocumentMutations()
 
   const fileMenuItems: MenuItem[] = [
@@ -58,6 +60,16 @@ export function MenuBar() {
       label: t('menu.export'),
       onSelect: exportDocument,
       testId: 'menu-file-export',
+    },
+    {
+      label: t('menu.exportAllInpainted'),
+      onSelect: exportAllInpainted,
+      testId: 'menu-file-export-all-inpainted',
+    },
+    {
+      label: t('menu.exportAllRendered'),
+      onSelect: exportAllRendered,
+      testId: 'menu-file-export-all-rendered',
     },
   ]
 

@@ -8,6 +8,8 @@
     "addFile": "ファイルを追加...",
     "save": "保存...",
     "export": "エクスポート...",
+    "exportAllInpainted": "インペイント画像をすべてエクスポート...",
+    "exportAllRendered": "レンダリング画像をすべてエクスポート...",
     "view": "表示",
     "fitWindow": "ウィンドウに合わせる",
     "originalSize": "原寸",

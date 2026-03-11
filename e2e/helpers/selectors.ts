@@ -3,6 +3,8 @@ export const selectors = {
     fileTrigger: 'menu-file-trigger',
     fileOpen: 'menu-file-open',
     fileExport: 'menu-file-export',
+    fileExportAllInpainted: 'menu-file-export-all-inpainted',
+    fileExportAllRendered: 'menu-file-export-all-rendered',
     processTrigger: 'menu-process-trigger',
     processCurrent: 'menu-process-current',
     processRerender: 'menu-process-rerender',

@@ -8,6 +8,8 @@
     "addFile": "Add File...",
     "save": "Save...",
     "export": "Export...",
+    "exportAllInpainted": "Export All Inpainted...",
+    "exportAllRendered": "Export All Rendered...",
     "view": "View",
     "fitWindow": "Fit Window",
     "originalSize": "Original Size",
