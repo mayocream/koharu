@@ -56,6 +56,7 @@ pub struct PromptRenderer {
 }
 
 const ENGLISH_BLOCK_TAG_INSTRUCTIONS: &str = r#"If the input contains <block id="N">...</block>, translate only the content inside each block. Preserve every block tag, id, order, and block count exactly. Do not merge blocks, split blocks, or add explanations outside the blocks."#;
+const HUNYUAN_BLOCK_TAG_INSTRUCTIONS: &str = r#"The input may contain XML-like block tags. Translate only the text inside each block. Keep every tag exactly unchanged, including `<block id="N">` and `</block>`, and preserve the same ids, order, and block count. Output only the translated blocks, with no code fences, labels, or extra text outside the blocks."#;
 
 impl PromptRenderer {
     pub fn new(model_id: ModelId, template: String, bos_token: String, eos_token: String) -> Self {
@@ -109,7 +110,7 @@ impl PromptRenderer {
                 format!(
                     "Translate the following Japanese manga dialogue into {}. Make it read naturally inside manga speech bubbles. Keep character voice, emotional tone, and relationship nuances. Keep the wording concise, and preserve emphasis and sound effects naturally when they appear. Do not add notes or explanations. {}\n\n{}",
                     target_language.unwrap_or("English"),
-                    ENGLISH_BLOCK_TAG_INSTRUCTIONS,
+                    HUNYUAN_BLOCK_TAG_INSTRUCTIONS,
                     text,
                 ),
             )],
@@ -189,6 +190,25 @@ mod tests {
         );
         let formatted = renderer.format_chat_prompt("こんにちは".to_string(), None)?;
         let expected = "<|im_start|>system 你是一个漫画翻译模型。请把日文漫画对白翻译成自然、简洁、适合放进对话气泡的简体中文。保留人物语气、情绪、关系和说话风格，正确处理人称，不要误解使役态和被动态。拟声词、强调和语气词要自然处理；不要添加注释、解释、罗马音或原文里没有的特殊符号，也不要擅自增加或减少换行。如果输入中包含 <block id=\"N\">...</block>，只翻译每个 block 标签内部的内容。必须完整保留所有 block 标签、id、顺序和 block 数量，不要合并 block，不要拆分 block，也不要在 block 之外添加任何内容。<|im_end|> <|im_start|>user こんにちは<|im_end|> <|im_start|>assistant ";
+        assert_eq!(formatted, expected);
+
+        Ok(())
+    }
+
+    #[test]
+    fn hunyuan_prompt_uses_strict_block_tag_output_instructions() -> anyhow::Result<()> {
+        let model_id = ModelId::HunyuanMT7B;
+        let renderer = PromptRenderer::new(
+            model_id,
+            "{{ messages[0]['content'] }}".to_string(),
+            "<s>".to_string(),
+            "</s>".to_string(),
+        );
+        let formatted = renderer.format_chat_prompt(
+            "<block id=\"0\">\nこんにちは\n</block>".to_string(),
+            Some("Korean"),
+        )?;
+        let expected = "Translate the following Japanese manga dialogue into Korean. Make it read naturally inside manga speech bubbles. Keep character voice, emotional tone, and relationship nuances. Keep the wording concise, and preserve emphasis and sound effects naturally when they appear. Do not add notes or explanations. The input may contain XML-like block tags. Translate only the text inside each block. Keep every tag exactly unchanged, including `<block id=\"N\">` and `</block>`, and preserve the same ids, order, and block count. Output only the translated blocks, with no code fences, labels, or extra text outside the blocks.\n\n<block id=\"0\">\nこんにちは\n</block>";
         assert_eq!(formatted, expected);
 
         Ok(())
