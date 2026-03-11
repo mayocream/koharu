@@ -104,6 +104,74 @@ fn rehydrate_runtime_text_block_state(current: &mut TextBlock, previous: Option<
     }
 }
 
+fn block_bounds(block: &TextBlock) -> Option<(f32, f32, f32, f32)> {
+    let bx0 = block.x.max(0.0);
+    let by0 = block.y.max(0.0);
+    let bx1 = (block.x + block.width).max(bx0);
+    let by1 = (block.y + block.height).max(by0);
+    (bx1 > bx0 && by1 > by0).then_some((bx0, by0, bx1, by1))
+}
+
+fn localize_line_polygons(
+    polygons: &Option<Vec<[[f32; 2]; 4]>>,
+    x0: u32,
+    y0: u32,
+    crop_width: u32,
+    crop_height: u32,
+) -> Option<Vec<[[f32; 2]; 4]>> {
+    polygons.as_ref().map(|polygons| {
+        polygons
+            .iter()
+            .map(|polygon| {
+                let mut localized = *polygon;
+                for point in &mut localized {
+                    point[0] = (point[0] - x0 as f32).clamp(0.0, crop_width as f32);
+                    point[1] = (point[1] - y0 as f32).clamp(0.0, crop_height as f32);
+                }
+                localized
+            })
+            .collect()
+    })
+}
+
+fn localize_inpaint_text_blocks(
+    text_blocks: &[TextBlock],
+    x0: u32,
+    y0: u32,
+    crop_width: u32,
+    crop_height: u32,
+) -> Vec<TextBlock> {
+    let crop_x1 = x0 + crop_width;
+    let crop_y1 = y0 + crop_height;
+
+    text_blocks
+        .iter()
+        .filter_map(|block| {
+            let (bx0, by0, bx1, by1) = block_bounds(block)?;
+            let ix0 = bx0.max(x0 as f32);
+            let iy0 = by0.max(y0 as f32);
+            let ix1 = bx1.min(crop_x1 as f32);
+            let iy1 = by1.min(crop_y1 as f32);
+            if ix1 <= ix0 || iy1 <= iy0 {
+                return None;
+            }
+
+            let mut localized = block.clone();
+            localized.x = ix0 - x0 as f32;
+            localized.y = iy0 - y0 as f32;
+            localized.width = ix1 - ix0;
+            localized.height = iy1 - iy0;
+            localized.line_polygons =
+                localize_line_polygons(&block.line_polygons, x0, y0, crop_width, crop_height);
+            Some(localized)
+        })
+        .collect()
+}
+
+fn paste_crop(stitched: &mut image::RgbaImage, patch: &image::RgbaImage, x0: u32, y0: u32) {
+    image::imageops::replace(stitched, patch, i64::from(x0), i64::from(y0));
+}
+
 pub async fn update_text_blocks(
     state: AppResources,
     payload: UpdateTextBlocksPayload,
@@ -195,61 +263,6 @@ pub async fn update_text_block(
         Ok(to_block_info(payload.text_block_index, block))
     })
     .await
-}
-
-#[cfg(test)]
-mod tests {
-    use super::rehydrate_runtime_text_block_state;
-    use koharu_types::TextBlock;
-
-    #[test]
-    fn resized_block_locks_layout_box() {
-        let previous = TextBlock {
-            x: 10.0,
-            y: 20.0,
-            width: 100.0,
-            height: 80.0,
-            ..Default::default()
-        };
-        let mut current = TextBlock {
-            x: 10.0,
-            y: 20.0,
-            width: 72.0,
-            height: 80.0,
-            ..Default::default()
-        };
-
-        rehydrate_runtime_text_block_state(&mut current, Some(&previous));
-
-        assert!(current.lock_layout_box);
-        assert_eq!(current.seed_layout_box(), (10.0, 20.0, 72.0, 80.0));
-    }
-
-    #[test]
-    fn unchanged_block_preserves_layout_box_lock_and_seed() {
-        let mut previous = TextBlock {
-            x: 10.0,
-            y: 20.0,
-            width: 100.0,
-            height: 80.0,
-            lock_layout_box: true,
-            ..Default::default()
-        };
-        previous.set_layout_seed(5.0, 6.0, 70.0, 60.0);
-
-        let mut current = TextBlock {
-            x: 10.0,
-            y: 20.0,
-            width: 100.0,
-            height: 80.0,
-            ..Default::default()
-        };
-
-        rehydrate_runtime_text_block_state(&mut current, Some(&previous));
-
-        assert!(current.lock_layout_box);
-        assert_eq!(current.seed_layout_box(), (5.0, 6.0, 70.0, 60.0));
-    }
 }
 
 pub async fn add_text_block(
@@ -467,18 +480,9 @@ pub async fn inpaint_partial(
         return Ok(());
     }
 
-    let patch_x1 = x0 + crop_width;
-    let patch_y1 = y0 + crop_height;
-
-    let overlaps_text = snapshot.text_blocks.iter().any(|block| {
-        let bx0 = block.x.max(0.0);
-        let by0 = block.y.max(0.0);
-        let bx1 = (block.x + block.width).max(bx0);
-        let by1 = (block.y + block.height).max(by0);
-        bx0 < patch_x1 as f32 && by0 < patch_y1 as f32 && bx1 > x0 as f32 && by1 > y0 as f32
-    });
-
-    if !overlaps_text {
+    let localized_blocks =
+        localize_inpaint_text_blocks(&snapshot.text_blocks, x0, y0, crop_width, crop_height);
+    if localized_blocks.is_empty() {
         return Ok(());
     }
 
@@ -486,7 +490,10 @@ pub async fn inpaint_partial(
         SerializableDynamicImage(snapshot.image.crop_imm(x0, y0, crop_width, crop_height));
     let mask_crop = SerializableDynamicImage(mask_image.crop_imm(x0, y0, crop_width, crop_height));
 
-    let inpainted_crop = state.ml.inpaint_raw(&image_crop, &mask_crop).await?;
+    let inpainted_crop = state
+        .ml
+        .inpaint_raw(&image_crop, &mask_crop, Some(&localized_blocks))
+        .await?;
 
     let mut stitched = snapshot
         .inpainted
@@ -495,24 +502,120 @@ pub async fn inpaint_partial(
         .to_rgba8();
 
     let patch = inpainted_crop.to_rgba8();
-    let original = image_crop.to_rgba8();
-    let mask_rgba = mask_crop.to_rgba8();
-
-    for y in 0..crop_height {
-        for x in 0..crop_width {
-            let mask_pixel = mask_rgba.get_pixel(x, y);
-            let is_masked = mask_pixel.0[0] > 0 || mask_pixel.0[1] > 0 || mask_pixel.0[2] > 0;
-            let pixel = if is_masked {
-                patch.get_pixel(x, y)
-            } else {
-                original.get_pixel(x, y)
-            };
-            stitched.put_pixel(x0 + x, y0 + y, *pixel);
-        }
-    }
+    paste_crop(&mut stitched, &patch, x0, y0);
 
     let mut updated = snapshot;
     updated.inpainted = Some(image::DynamicImage::ImageRgba8(stitched).into());
 
     state_tx::update_doc(&state.state, payload.index, updated).await
+}
+
+#[cfg(test)]
+mod tests {
+    use super::{localize_inpaint_text_blocks, paste_crop, rehydrate_runtime_text_block_state};
+    use image::{Rgba, RgbaImage};
+    use koharu_types::TextBlock;
+
+    #[test]
+    fn resized_block_locks_layout_box() {
+        let previous = TextBlock {
+            x: 10.0,
+            y: 20.0,
+            width: 100.0,
+            height: 80.0,
+            ..Default::default()
+        };
+        let mut current = TextBlock {
+            x: 10.0,
+            y: 20.0,
+            width: 72.0,
+            height: 80.0,
+            ..Default::default()
+        };
+
+        rehydrate_runtime_text_block_state(&mut current, Some(&previous));
+
+        assert!(current.lock_layout_box);
+        assert_eq!(current.seed_layout_box(), (10.0, 20.0, 72.0, 80.0));
+    }
+
+    #[test]
+    fn unchanged_block_preserves_layout_box_lock_and_seed() {
+        let mut previous = TextBlock {
+            x: 10.0,
+            y: 20.0,
+            width: 100.0,
+            height: 80.0,
+            lock_layout_box: true,
+            ..Default::default()
+        };
+        previous.set_layout_seed(5.0, 6.0, 70.0, 60.0);
+
+        let mut current = TextBlock {
+            x: 10.0,
+            y: 20.0,
+            width: 100.0,
+            height: 80.0,
+            ..Default::default()
+        };
+
+        rehydrate_runtime_text_block_state(&mut current, Some(&previous));
+
+        assert!(current.lock_layout_box);
+        assert_eq!(current.seed_layout_box(), (5.0, 6.0, 70.0, 60.0));
+    }
+
+    #[test]
+    fn partial_inpaint_blocks_are_localized_to_crop() {
+        let block = TextBlock {
+            x: 40.0,
+            y: 30.0,
+            width: 40.0,
+            height: 30.0,
+            line_polygons: Some(vec![[
+                [42.0, 32.0],
+                [78.0, 32.0],
+                [78.0, 40.0],
+                [42.0, 40.0],
+            ]]),
+            ..Default::default()
+        };
+
+        let localized = localize_inpaint_text_blocks(&[block], 50, 20, 40, 30);
+        assert_eq!(localized.len(), 1);
+        assert_eq!(localized[0].x, 0.0);
+        assert_eq!(localized[0].y, 10.0);
+        assert_eq!(localized[0].width, 30.0);
+        assert_eq!(localized[0].height, 20.0);
+        assert_eq!(
+            localized[0].line_polygons,
+            Some(vec![[[0.0, 12.0], [28.0, 12.0], [28.0, 20.0], [0.0, 20.0]]])
+        );
+    }
+
+    #[test]
+    fn partial_inpaint_with_no_overlapping_blocks_returns_empty_list() {
+        let block = TextBlock {
+            x: 0.0,
+            y: 0.0,
+            width: 10.0,
+            height: 10.0,
+            ..Default::default()
+        };
+
+        let localized = localize_inpaint_text_blocks(&[block], 50, 20, 40, 30);
+        assert!(localized.is_empty());
+    }
+
+    #[test]
+    fn crop_paste_replaces_entire_returned_patch() {
+        let mut stitched = RgbaImage::from_pixel(8, 8, Rgba([0, 0, 0, 255]));
+        let patch = RgbaImage::from_pixel(3, 3, Rgba([255, 0, 0, 255]));
+
+        paste_crop(&mut stitched, &patch, 2, 2);
+
+        assert_eq!(stitched.get_pixel(2, 2).0, [255, 0, 0, 255]);
+        assert_eq!(stitched.get_pixel(4, 4).0, [255, 0, 0, 255]);
+        assert_eq!(stitched.get_pixel(1, 1).0, [0, 0, 0, 255]);
+    }
 }

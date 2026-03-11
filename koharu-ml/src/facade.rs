@@ -142,7 +142,9 @@ impl Model {
             .segment
             .as_ref()
             .ok_or_else(|| anyhow::anyhow!("Segment image not found"))?;
-        let result = self.lama.inference(&doc.image, mask)?;
+        let result = self
+            .lama
+            .inference_with_blocks(&doc.image, mask, Some(&doc.text_blocks))?;
         doc.inpainted = Some(result.into());
 
         Ok(())
@@ -153,8 +155,9 @@ impl Model {
         &self,
         image: &SerializableDynamicImage,
         mask: &SerializableDynamicImage,
+        text_blocks: Option<&[koharu_types::TextBlock]>,
     ) -> Result<SerializableDynamicImage> {
-        let result = self.lama.inference(image, mask)?;
+        let result = self.lama.inference_with_blocks(image, mask, text_blocks)?;
         Ok(result.into())
     }
 
