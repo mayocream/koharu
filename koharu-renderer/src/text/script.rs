@@ -119,7 +119,7 @@ fn is_cjk_text(text: &str) -> bool {
     text.chars().any(|c| {
         matches!(
             script_map.get(c),
-            Script::Han | Script::Hiragana | Script::Katakana | Script::Hangul | Script::Bopomofo
+            Script::Han | Script::Hiragana | Script::Katakana | Script::Bopomofo
         )
     })
 }
