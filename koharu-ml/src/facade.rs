@@ -5,7 +5,7 @@ use koharu_types::{Document, FontPrediction, SerializableDynamicImage};
 use crate::comic_text_detector::{self, ComicTextDetector};
 use crate::font_detector::{self, FontDetector};
 use crate::lama::{self, Lama};
-use crate::manga_ocr::{self, MangaOcr};
+use crate::mit48px_ocr::{self, Mit48pxOcr};
 
 const NEAR_BLACK_THRESHOLD: u8 = 12;
 const GRAY_NEAR_BLACK_THRESHOLD: u8 = 60;
@@ -69,7 +69,7 @@ fn normalize_font_prediction(prediction: &mut FontPrediction) {
 
 pub struct Model {
     dialog_detector: ComicTextDetector,
-    ocr: MangaOcr,
+    ocr: Mit48pxOcr,
     lama: Lama,
     font_detector: FontDetector,
 }
@@ -78,7 +78,7 @@ impl Model {
     pub async fn new(use_cpu: bool) -> Result<Self> {
         Ok(Self {
             dialog_detector: ComicTextDetector::load(use_cpu).await?,
-            ocr: MangaOcr::load(use_cpu).await?,
+            ocr: Mit48pxOcr::load(use_cpu).await?,
             lama: Lama::load(use_cpu).await?,
             font_detector: FontDetector::load(use_cpu).await?,
         })
@@ -122,22 +122,14 @@ impl Model {
             return Ok(());
         }
 
-        let crops: Vec<DynamicImage> = doc
-            .text_blocks
-            .iter()
-            .map(|block| {
-                doc.image.crop_imm(
-                    block.x as u32,
-                    block.y as u32,
-                    block.width as u32,
-                    block.height as u32,
-                )
-            })
-            .collect();
-        let texts = self.ocr.inference(&crops)?;
+        let predictions = self
+            .ocr
+            .inference_text_blocks(&doc.image, &doc.text_blocks)?;
 
-        for (block, text) in doc.text_blocks.iter_mut().zip(texts) {
-            block.text = text.into();
+        for prediction in predictions {
+            if let Some(block) = doc.text_blocks.get_mut(prediction.block_index) {
+                block.text = Some(prediction.text);
+            }
         }
 
         Ok(())
@@ -192,7 +184,7 @@ impl Model {
 
 pub async fn prefetch() -> Result<()> {
     comic_text_detector::prefetch().await?;
-    manga_ocr::prefetch().await?;
+    mit48px_ocr::prefetch().await?;
     lama::prefetch().await?;
     font_detector::prefetch().await?;
 
