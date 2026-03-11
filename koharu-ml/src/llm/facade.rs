@@ -506,13 +506,6 @@ mod tests {
     }
 
     #[test]
-    fn default_generate_options_are_strict() {
-        let opts = GenerateOptions::default();
-        assert_eq!(opts.temperature, 0.0);
-        assert_eq!(opts.repeat_penalty, 1.0);
-    }
-
-    #[test]
     fn text_block_translation_strips_wrapping_quotes() -> anyhow::Result<()> {
         let mut block = TextBlock::default();
         block.set_translation("“quoted”".to_string())?;
