@@ -116,6 +116,29 @@ fn strip_wrapping_quotes(text: &str) -> String {
         current = next.trim();
     }
 
+    strip_incomplete_corner_quotes(current)
+}
+
+fn strip_incomplete_corner_quotes(text: &str) -> String {
+    let mut current = text.trim();
+
+    loop {
+        let open_count = current.chars().filter(|&c| c == '「').count();
+        let close_count = current.chars().filter(|&c| c == '」').count();
+
+        if open_count > close_count && current.starts_with('「') {
+            current = current.trim_start_matches('「').trim_start();
+            continue;
+        }
+
+        if close_count > open_count && current.ends_with('」') {
+            current = current.trim_end_matches('」').trim_end();
+            continue;
+        }
+
+        break;
+    }
+
     current.to_string()
 }
 

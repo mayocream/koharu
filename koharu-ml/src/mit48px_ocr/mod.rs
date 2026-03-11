@@ -170,9 +170,9 @@ impl Mit48pxOcr {
 
             let text = lines
                 .iter()
-                .map(|line| line.text.as_str())
+                .map(|line| normalize_ocr_text(&line.text))
                 .collect::<Vec<_>>()
-                .join("\n");
+                .join("");
             let confidence =
                 lines.iter().map(|line| line.confidence).sum::<f32>() / lines.len() as f32;
             let text_color = average_rgb(lines.iter().map(|line| line.text_color));
@@ -249,7 +249,7 @@ impl Mit48pxOcr {
         }
 
         Mit48pxPrediction {
-            text,
+            text: normalize_ocr_text(&text),
             confidence: prediction.confidence,
             text_color: finish_rgb(fg_sum, fg_count),
             stroke_color: finish_rgb(bg_sum, bg_count),
@@ -257,6 +257,12 @@ impl Mit48pxOcr {
             has_stroke_color,
         }
     }
+}
+
+fn normalize_ocr_text(text: &str) -> String {
+    text.chars()
+        .filter(|&ch| ch != '\n' && ch != '\r')
+        .collect()
 }
 
 fn read_dictionary(path: &Path) -> Result<Vec<String>> {
@@ -365,7 +371,9 @@ mod tests {
 
     use image::{DynamicImage, RgbImage};
 
-    use super::{Mit48pxConfig, Mit48pxPrediction, finish_rgb, preprocess_regions};
+    use super::{
+        Mit48pxConfig, Mit48pxPrediction, finish_rgb, normalize_ocr_text, preprocess_regions,
+    };
 
     fn test_config() -> Mit48pxConfig {
         Mit48pxConfig {
@@ -413,6 +421,11 @@ mod tests {
         let json = serde_json::to_string(&prediction)?;
         assert!(json.contains("\"hasTextColor\":true"));
         Ok(())
+    }
+
+    #[test]
+    fn normalize_ocr_text_removes_newlines() {
+        assert_eq!(normalize_ocr_text("ab\ncd\r\nef"), "abcdef");
     }
 
     #[test]
