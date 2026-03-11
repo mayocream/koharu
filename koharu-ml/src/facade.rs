@@ -1,6 +1,6 @@
 use anyhow::Result;
-use image::{DynamicImage, Rgba};
-use koharu_types::{Document, FontPrediction, SerializableDynamicImage, TextBlock};
+use image::DynamicImage;
+use koharu_types::{Document, FontPrediction, SerializableDynamicImage};
 
 use crate::comic_text_detector::{self, ComicTextDetector};
 use crate::font_detector::{self, FontDetector};
@@ -87,28 +87,9 @@ impl Model {
     /// Detect text blocks and fonts in a document.
     /// Sets `doc.text_blocks` (with font predictions/styles) and `doc.segment`.
     pub async fn detect(&self, doc: &mut Document) -> Result<()> {
-        let (bboxes, segment) = self.dialog_detector.inference(&doc.image)?;
-
-        let mut text_blocks: Vec<TextBlock> = bboxes
-            .into_iter()
-            .map(|bbox| TextBlock {
-                x: bbox.xmin,
-                y: bbox.ymin,
-                width: bbox.xmax - bbox.xmin,
-                height: bbox.ymax - bbox.ymin,
-                confidence: bbox.confidence,
-                ..Default::default()
-            })
-            .collect();
-
-        text_blocks.sort_unstable_by(|a, b| {
-            (a.y + a.height / 2.0)
-                .partial_cmp(&(b.y + b.height / 2.0))
-                .unwrap_or(std::cmp::Ordering::Equal)
-        });
-
-        doc.text_blocks = text_blocks;
-        doc.segment = Some(DynamicImage::ImageLuma8(segment).into());
+        let detection = self.dialog_detector.inference(&doc.image)?;
+        doc.text_blocks = detection.text_blocks;
+        doc.segment = Some(DynamicImage::ImageLuma8(detection.mask).into());
 
         if !doc.text_blocks.is_empty() {
             let images: Vec<DynamicImage> = doc
@@ -163,34 +144,13 @@ impl Model {
     }
 
     /// Inpaint text regions in the document.
-    /// Builds mask from `doc.segment` + `doc.text_blocks`, sets `doc.inpainted`.
+    /// Uses the current `doc.segment` mask as the inpaint source, sets `doc.inpainted`.
     pub async fn inpaint(&self, doc: &mut Document) -> Result<()> {
-        let segment = doc
+        let mask = doc
             .segment
             .as_ref()
             .ok_or_else(|| anyhow::anyhow!("Segment image not found"))?;
-        let mut segment_data = segment.to_rgba8();
-        let (seg_width, seg_height) = segment_data.dimensions();
-
-        for y in 0..seg_height {
-            for x in 0..seg_width {
-                let pixel = segment_data.get_pixel_mut(x, y);
-                if pixel.0 != [0, 0, 0, 255] {
-                    let inside_any_block = doc.text_blocks.iter().any(|block| {
-                        x >= block.x as u32
-                            && x < (block.x + block.width) as u32
-                            && y >= block.y as u32
-                            && y < (block.y + block.height) as u32
-                    });
-                    if !inside_any_block {
-                        *pixel = Rgba([0, 0, 0, 255]);
-                    }
-                }
-            }
-        }
-
-        let mask = SerializableDynamicImage::from(DynamicImage::ImageRgba8(segment_data));
-        let result = self.lama.inference(&doc.image, &mask)?;
+        let result = self.lama.inference(&doc.image, mask)?;
         doc.inpainted = Some(result.into());
 
         Ok(())
