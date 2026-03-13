@@ -72,16 +72,7 @@ pub const PACKAGES: &[&str] = &[
     "nvidia-cudnn-cu13/9.19.0.56",
 ];
 
-/// cudarc only searches for CUDA 12-era DLL names
-#[cfg(target_os = "windows")]
-const COMPAT_ALIASES: &[(&str, &str)] = &[
-    #[cfg(feature = "cuda")]
-    ("cudart64_13.dll", "cudart64_12.dll"),
-    #[cfg(feature = "cuda")]
-    ("cublasLt64_13.dll", "cublasLt64_12.dll"),
-    #[cfg(feature = "cuda")]
-    ("cublas64_13.dll", "cublas64_12.dll"),
-];
+
 
 /// Hard-coded load list by platform
 #[cfg(target_os = "windows")]
@@ -174,37 +165,13 @@ pub async fn ensure_dylibs(path: impl AsRef<Path>) -> Result<()> {
         .try_collect::<Vec<_>>()
         .await?;
 
-    create_compat_aliases(&out_dir)?;
+
 
     debug!("ensure_dylibs: done");
     Ok(())
 }
 
-fn create_compat_aliases(dir: &Path) -> Result<()> {
-    #[cfg(target_os = "windows")]
-    for (src, alias) in COMPAT_ALIASES {
-        let src_path = dir.join(src);
-        let alias_path = dir.join(alias);
-        if !src_path.exists() {
-            continue;
-        }
-        let needs_copy = if alias_path.exists() {
-            // Refresh if sizes differ (source was re-downloaded)
-            src_path.metadata().ok().map(|m| m.len())
-                != alias_path.metadata().ok().map(|m| m.len())
-        } else {
-            true
-        };
-        if needs_copy {
-            fs::copy(&src_path, &alias_path)
-                .with_context(|| format!("failed to create compat alias {alias} from {src}"))?;
-            debug!("create_compat_aliases: {} -> {}", src, alias);
-        }
-    }
-    #[cfg(not(target_os = "windows"))]
-    let _ = dir;
-    Ok(())
-}
+
 
 /// Preload runtime dynamic libraries with a dependency-friendly order.
 /// Keeps the library handles alive for the process lifetime.
