@@ -34,7 +34,6 @@ export function Providers({ children }: { children: ReactNode }) {
   }, [ensureDownloadSubscribed])
 
   useEffect(() => {
-    if (!isTauri()) return
     const setApiKey = usePreferencesStore.getState().setApiKey
     void (async () => {
       const providers = ['openai', 'gemini', 'claude']
