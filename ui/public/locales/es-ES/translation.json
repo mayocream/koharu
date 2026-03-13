@@ -8,6 +8,8 @@
     "addFile": "Agregar archivo...",
     "save": "Guardar...",
     "export": "Exportar...",
+    "exportAllInpainted": "Exportar todo lo rellenado...",
+    "exportAllRendered": "Exportar todo lo renderizado...",
     "view": "Ver",
     "fitWindow": "Ajustar a la ventana",
     "originalSize": "Tamaño original",

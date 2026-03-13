@@ -1,3 +1,5 @@
+use std::ops::Range;
+
 use icu::{
     properties::{CodePointMapData, props::LineBreak},
     segmenter::{LineSegmenter, LineSegmenterBorrowed, options::LineBreakOptions},
@@ -10,9 +12,34 @@ pub struct LineBreakOpportunity {
     pub is_mandatory: bool,
 }
 
+/// A trimmed line segment ready for shaping.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct LineSegment {
+    /// Range of visible text for this segment, excluding trailing mandatory break chars.
+    pub range: Range<usize>,
+    /// Byte offset where the next segment begins in the original string.
+    pub next_offset: usize,
+    /// Whether this segment ends with a mandatory break in the original text.
+    pub is_mandatory: bool,
+}
+
 /// Line breaker using ICU4X.
 pub struct LineBreaker {
     segmenter: LineSegmenterBorrowed<'static>,
+}
+
+fn trim_mandatory_break_suffix(text: &str, start: usize, end: usize) -> usize {
+    let mut trimmed_end = end;
+    while trimmed_end > start {
+        let Some(ch) = text[..trimmed_end].chars().next_back() else {
+            break;
+        };
+        if !matches!(ch, '\n' | '\r' | '\u{0085}' | '\u{2028}' | '\u{2029}') {
+            break;
+        }
+        trimmed_end -= ch.len_utf8();
+    }
+    trimmed_end
 }
 
 impl LineBreaker {
@@ -40,6 +67,29 @@ impl LineBreaker {
                             | LineBreak::NextLine
                     )
                 }),
+            })
+            .collect()
+    }
+
+    /// Returns shaped-text segments where mandatory break characters are excluded
+    /// from the segment range but preserved in `next_offset`.
+    pub fn line_segments(&self, text: &str) -> Vec<LineSegment> {
+        self.line_break_opportunities(text)
+            .windows(2)
+            .map(|window| {
+                let start = window[0].offset;
+                let end = window[1].offset;
+                let is_mandatory = window[1].is_mandatory;
+                let segment_end = if is_mandatory {
+                    trim_mandatory_break_suffix(text, start, end)
+                } else {
+                    end
+                };
+                LineSegment {
+                    range: start..segment_end,
+                    next_offset: end,
+                    is_mandatory,
+                }
             })
             .collect()
     }
@@ -90,6 +140,21 @@ mod tests {
             },
         ];
         assert_eq!(breaks, expected);
+    }
+
+    #[test]
+    fn line_segments_trim_newline_suffixes() {
+        let text = "Hello, \nWorld!";
+        let linebreaker = LineBreaker::new();
+        let segments = linebreaker.line_segments(text);
+
+        assert_eq!(segments.len(), 2);
+        assert_eq!(&text[segments[0].range.clone()], "Hello, ");
+        assert_eq!(segments[0].next_offset, 8);
+        assert!(segments[0].is_mandatory);
+        assert_eq!(&text[segments[1].range.clone()], "World!");
+        assert_eq!(segments[1].next_offset, text.len());
+        assert!(!segments[1].is_mandatory);
     }
 
     #[test]

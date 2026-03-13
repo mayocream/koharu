@@ -100,6 +100,8 @@ async fn dispatch(method: Method, params: rmpv::Value, state: AppResources) -> R
         Method::GetDocument => call(operations::get_document, state, params).await,
         Method::GetThumbnail => call(operations::get_thumbnail, state, params).await,
         Method::ExportDocument => call(operations::export_document, state, params).await,
+        Method::ExportAllInpainted => call0(operations::export_all_inpainted, state).await,
+        Method::ExportAllRendered => call0(operations::export_all_rendered, state).await,
         Method::AddDocuments => call(operations::add_documents, state, params).await,
         Method::OpenDocuments => call(operations::open_documents, state, params).await,
         Method::OpenExternal => call(operations::open_external, state, params).await,

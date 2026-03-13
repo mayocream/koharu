@@ -8,6 +8,8 @@ const SURFACED_RPC_METHODS = new Set([
   'add_documents',
   'save_documents',
   'export_document',
+  'export_all_inpainted',
+  'export_all_rendered',
   'detect',
   'ocr',
   'inpaint',

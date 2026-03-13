@@ -78,7 +78,7 @@ async function setupCudnn() {
         sortVersionsDesc(versions)
 
         for (const version of versions) {
-          const fullPath = path.join(binPath, version)
+          const fullPath = path.join(binPath, version, 'x64')
           process.env.PATH = `${fullPath}${path.delimiter}${process.env.PATH}`
 
           console.log(`Added cuDNN to PATH: ${fullPath}`)

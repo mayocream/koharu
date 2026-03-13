@@ -111,7 +111,6 @@ export const useEditorUiStore = create<EditorUiState>((set, get) => ({
       } else if (mode === 'block') {
         set({
           showTextBlocksOverlay: true,
-          showInpaintedImage: true,
         })
       }
     }

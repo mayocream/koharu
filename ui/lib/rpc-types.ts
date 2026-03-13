@@ -45,6 +45,8 @@ export type RpcMethodMap = {
   open_documents: [void, number]
   save_documents: [void, void]
   export_document: [{ index: number }, void]
+  export_all_inpainted: [void, number]
+  export_all_rendered: [void, number]
   detect: [{ index: number }, void]
   ocr: [{ index: number }, void]
   inpaint: [{ index: number }, void]

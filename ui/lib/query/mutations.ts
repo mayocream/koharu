@@ -198,7 +198,10 @@ export const useMaskMutations = () => {
   }, [])
 
   const inpaintPartial = useCallback(
-    async (region: InpaintRegion, options?: { index?: number }) => {
+    async (
+      region: InpaintRegion,
+      options?: { index?: number; autoShowInpaintedImage?: boolean },
+    ) => {
       const resolvedIndex =
         options?.index ?? useEditorUiStore.getState().currentDocumentIndex
       if (!region) return
@@ -206,7 +209,9 @@ export const useMaskMutations = () => {
       await api.inpaintPartial(resolvedIndex, region)
       await invalidateCurrentDocument(queryClient, resolvedIndex)
       await invalidateThumbnailAtIndex(queryClient, resolvedIndex)
-      useEditorUiStore.getState().setShowInpaintedImage(true)
+      if (options?.autoShowInpaintedImage !== false) {
+        useEditorUiStore.getState().setShowInpaintedImage(true)
+      }
     },
     [queryClient],
   )
@@ -515,6 +520,14 @@ export const useDocumentMutations = () => {
     await api.exportDocument(currentDocumentIndex)
   }, [])
 
+  const exportAllInpainted = useCallback(async () => {
+    await api.exportAllInpainted()
+  }, [])
+
+  const exportAllRendered = useCallback(async () => {
+    await api.exportAllRendered()
+  }, [])
+
   const cancelOperation = useCallback(async () => {
     useOperationStore.getState().cancelOperation()
     await api.processCancel().catch(() => {})
@@ -534,6 +547,8 @@ export const useDocumentMutations = () => {
     processAllImages,
     inpaintAndRenderImage,
     exportDocument,
+    exportAllInpainted,
+    exportAllRendered,
     cancelOperation,
     setProgress,
     clearProgress,

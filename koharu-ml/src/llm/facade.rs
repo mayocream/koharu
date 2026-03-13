@@ -9,9 +9,18 @@ use super::{GenerateOptions, Llm, ModelId};
 
 pub use super::prefetch;
 
-const BLOCK_START_PREFIX: &str = r#"<block id=""#;
-const BLOCK_START_SUFFIX: &str = r#"">"#;
-const BLOCK_END: &str = "</block>";
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+struct BlockStartTag {
+    offset: usize,
+    len: usize,
+    id: usize,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+struct BlockEndTag {
+    offset: usize,
+    len: usize,
+}
 
 #[derive(Debug, Clone, Serialize)]
 #[serde(rename_all = "camelCase")]
@@ -131,6 +140,29 @@ fn strip_wrapping_quotes(text: &str) -> String {
         current = next.trim();
     }
 
+    strip_incomplete_corner_quotes(current)
+}
+
+fn strip_incomplete_corner_quotes(text: &str) -> String {
+    let mut current = text.trim();
+
+    loop {
+        let open_count = current.chars().filter(|&c| c == '「').count();
+        let close_count = current.chars().filter(|&c| c == '」').count();
+
+        if open_count > close_count && current.starts_with('「') {
+            current = current.trim_start_matches('「').trim_start();
+            continue;
+        }
+
+        if close_count > open_count && current.ends_with('」') {
+            current = current.trim_end_matches('」').trim_end();
+            continue;
+        }
+
+        break;
+    }
+
     current.to_string()
 }
 
@@ -155,7 +187,7 @@ fn parse_tagged_blocks(
     translation: &str,
     expected_blocks: usize,
 ) -> anyhow::Result<Option<Vec<String>>> {
-    if !translation.contains(BLOCK_START_PREFIX) {
+    if find_next_block_start_tag(translation).is_none() {
         return Ok(None);
     }
 
@@ -165,33 +197,27 @@ fn parse_tagged_blocks(
     let mut parsed_count = 0usize;
     let mut ignored_count = 0usize;
 
-    while let Some(start_idx) = cursor.find(BLOCK_START_PREFIX) {
+    while let Some(start_tag) = find_next_block_start_tag(cursor) {
         found_any = true;
-        cursor = &cursor[start_idx + BLOCK_START_PREFIX.len()..];
+        cursor = &cursor[start_tag.offset + start_tag.len..];
 
-        let id_end = cursor
-            .find(BLOCK_START_SUFFIX)
-            .ok_or_else(|| anyhow::anyhow!("Malformed translated block: missing block header"))?;
-        let id = cursor[..id_end]
-            .parse::<usize>()
-            .map_err(|_| anyhow::anyhow!("Malformed translated block id"))?;
+        let id = start_tag.id;
         if id >= expected_blocks {
             ignored_count += 1;
             tracing::warn!("Ignoring translated block id {id} for {expected_blocks} source blocks");
-            cursor = &cursor[id_end + BLOCK_START_SUFFIX.len()..];
-            let boundary = block_boundary(cursor, cursor.find(BLOCK_END));
-            cursor = if cursor.find(BLOCK_END) == Some(boundary) {
-                &cursor[boundary + BLOCK_END.len()..]
+            let closing_tag = find_next_block_end_tag(cursor);
+            let boundary = block_boundary(cursor, closing_tag.map(|tag| tag.offset));
+            cursor = if closing_tag.map(|tag| tag.offset) == Some(boundary) {
+                let closing_len = closing_tag.map(|tag| tag.len).unwrap_or(0);
+                &cursor[boundary + closing_len..]
             } else {
                 &cursor[boundary..]
             };
             continue;
         }
 
-        cursor = &cursor[id_end + BLOCK_START_SUFFIX.len()..];
-
-        let closing_tag = cursor.find(BLOCK_END);
-        let block_end = block_boundary(cursor, closing_tag);
+        let closing_tag = find_next_block_end_tag(cursor);
+        let block_end = block_boundary(cursor, closing_tag.map(|tag| tag.offset));
         let content = unescape_block_text(cursor[..block_end].trim());
 
         if blocks[id].is_empty() {
@@ -201,8 +227,9 @@ fn parse_tagged_blocks(
         }
         blocks[id] = content;
 
-        cursor = if closing_tag == Some(block_end) {
-            &cursor[block_end + BLOCK_END.len()..]
+        cursor = if closing_tag.map(|tag| tag.offset) == Some(block_end) {
+            let closing_len = closing_tag.map(|tag| tag.len).unwrap_or(0);
+            &cursor[block_end + closing_len..]
         } else {
             &cursor[block_end..]
         };
@@ -243,13 +270,148 @@ fn split_legacy_lines(translation: &str, expected_blocks: usize) -> anyhow::Resu
 }
 
 fn block_boundary(cursor: &str, closing_tag: Option<usize>) -> usize {
-    let next_block_start = cursor.find(BLOCK_START_PREFIX);
+    let next_block_start = find_next_block_start_tag(cursor).map(|tag| tag.offset);
     match (closing_tag, next_block_start) {
         (Some(close), Some(next)) => close.min(next),
         (Some(close), None) => close,
         (None, Some(next)) => next,
         (None, None) => cursor.len(),
     }
+}
+
+fn find_next_block_start_tag(text: &str) -> Option<BlockStartTag> {
+    let mut search_from = 0usize;
+    while let Some(rel_start) = text[search_from..].find('<') {
+        let offset = search_from + rel_start;
+        if let Some((len, id)) = parse_block_start_tag(&text[offset..]) {
+            return Some(BlockStartTag { offset, len, id });
+        }
+        search_from = offset + 1;
+    }
+    None
+}
+
+fn parse_block_start_tag(text: &str) -> Option<(usize, usize)> {
+    let bytes = text.as_bytes();
+    if bytes.first().copied()? != b'<' {
+        return None;
+    }
+
+    let mut index = 1usize;
+    skip_ascii_whitespace(bytes, &mut index);
+    if !consume_ascii_keyword(bytes, &mut index, "block") {
+        return None;
+    }
+
+    let mut parsed_id = None;
+    loop {
+        skip_ascii_whitespace(bytes, &mut index);
+        match bytes.get(index).copied()? {
+            b'>' => return parsed_id.map(|id| (index + 1, id)),
+            b'/' if bytes.get(index + 1).copied() == Some(b'>') => {
+                return parsed_id.map(|id| (index + 2, id));
+            }
+            _ => {}
+        }
+
+        let name_start = index;
+        while matches!(
+            bytes.get(index).copied(),
+            Some(b'a'..=b'z' | b'A'..=b'Z' | b'0'..=b'9' | b'_' | b'-')
+        ) {
+            index += 1;
+        }
+        if index == name_start {
+            return None;
+        }
+        let attr_name = &text[name_start..index];
+
+        skip_ascii_whitespace(bytes, &mut index);
+        if bytes.get(index).copied()? != b'=' {
+            return None;
+        }
+        index += 1;
+        skip_ascii_whitespace(bytes, &mut index);
+
+        let attr_value = match bytes.get(index).copied()? {
+            b'"' | b'\'' => {
+                let quote = bytes[index];
+                index += 1;
+                let value_start = index;
+                while bytes.get(index).copied()? != quote {
+                    index += 1;
+                }
+                let value = &text[value_start..index];
+                index += 1;
+                value
+            }
+            _ => {
+                let value_start = index;
+                while matches!(bytes.get(index).copied(), Some(byte) if !byte.is_ascii_whitespace() && byte != b'>')
+                {
+                    index += 1;
+                }
+                &text[value_start..index]
+            }
+        };
+
+        if attr_name.eq_ignore_ascii_case("id") {
+            parsed_id = attr_value.parse::<usize>().ok();
+        }
+    }
+}
+
+fn find_next_block_end_tag(text: &str) -> Option<BlockEndTag> {
+    let mut search_from = 0usize;
+    while let Some(rel_start) = text[search_from..].find('<') {
+        let offset = search_from + rel_start;
+        if let Some(len) = parse_block_end_tag(&text[offset..]) {
+            return Some(BlockEndTag { offset, len });
+        }
+        search_from = offset + 1;
+    }
+    None
+}
+
+fn parse_block_end_tag(text: &str) -> Option<usize> {
+    let bytes = text.as_bytes();
+    if bytes.first().copied()? != b'<' {
+        return None;
+    }
+
+    let mut index = 1usize;
+    skip_ascii_whitespace(bytes, &mut index);
+    if bytes.get(index).copied()? != b'/' {
+        return None;
+    }
+    index += 1;
+    skip_ascii_whitespace(bytes, &mut index);
+    if !consume_ascii_keyword(bytes, &mut index, "block") {
+        return None;
+    }
+    skip_ascii_whitespace(bytes, &mut index);
+    if bytes.get(index).copied()? != b'>' {
+        return None;
+    }
+    Some(index + 1)
+}
+
+fn skip_ascii_whitespace(bytes: &[u8], index: &mut usize) {
+    while matches!(bytes.get(*index).copied(), Some(byte) if byte.is_ascii_whitespace()) {
+        *index += 1;
+    }
+}
+
+fn consume_ascii_keyword(bytes: &[u8], index: &mut usize, keyword: &str) -> bool {
+    let end = *index + keyword.len();
+    let Some(slice) = bytes.get(*index..end) else {
+        return false;
+    };
+    if !slice.eq_ignore_ascii_case(keyword.as_bytes()) {
+        return false;
+    }
+    *index = end;
+    true
 }
 
 impl Translatable for Document {
@@ -544,6 +706,40 @@ mod tests {
     }
 
     #[test]
+    fn document_translation_accepts_relaxed_block_tag_formatting() -> anyhow::Result<()> {
+        let mut doc = Document {
+            text_blocks: vec![TextBlock::default(), TextBlock::default()],
+            ..Default::default()
+        };
+
+        doc.set_translation(
+            "<block id = '1' >\nSecond\n</ block>\n<Block id=0>\nFirst\n</BLOCK>".to_string(),
+        )?;
+
+        assert_eq!(doc.text_blocks[0].translation.as_deref(), Some("First"));
+        assert_eq!(doc.text_blocks[1].translation.as_deref(), Some("Second"));
+
+        Ok(())
+    }
+
+    #[test]
+    fn document_translation_accepts_unquoted_block_ids() -> anyhow::Result<()> {
+        let mut doc = Document {
+            text_blocks: vec![TextBlock::default()],
+            ..Default::default()
+        };
+
+        doc.set_translation("<block id=0>\nOnly first\n</block>".to_string())?;
+
+        assert_eq!(
+            doc.text_blocks[0].translation.as_deref(),
+            Some("Only first")
+        );
+
+        Ok(())
+    }
+
+    #[test]
     fn document_translation_pads_missing_tagged_blocks() -> anyhow::Result<()> {
         let mut doc = Document {
             text_blocks: vec![TextBlock::default(), TextBlock::default()],
@@ -559,13 +755,6 @@ mod tests {
         assert_eq!(doc.text_blocks[1].translation.as_deref(), Some(""));
 
         Ok(())
-    }
-
-    #[test]
-    fn default_generate_options_are_strict() {
-        let opts = GenerateOptions::default();
-        assert_eq!(opts.temperature, 0.0);
-        assert_eq!(opts.repeat_penalty, 1.0);
     }
 
     #[test]

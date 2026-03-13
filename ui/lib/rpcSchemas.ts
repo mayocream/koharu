@@ -123,12 +123,25 @@ const fontPredictionSchema = z
   })
   .passthrough()
 
+const linePolygonSchema = z.tuple([
+  z.tuple([z.number(), z.number()]),
+  z.tuple([z.number(), z.number()]),
+  z.tuple([z.number(), z.number()]),
+  z.tuple([z.number(), z.number()]),
+])
+
 export const textBlockSchema = z.object({
   x: z.number(),
   y: z.number(),
   width: z.number(),
   height: z.number(),
   confidence: z.number(),
+  linePolygons: fromRustOption(z.array(linePolygonSchema)),
+  sourceDirection: fromRustOption(z.enum(['Horizontal', 'Vertical'])),
+  sourceLanguage: fromRustOption(z.string()),
+  rotationDeg: fromRustOption(z.number()),
+  detectedFontSizePx: fromRustOption(z.number()),
+  detector: fromRustOption(z.string()),
   text: fromRustOption(z.string()),
   translation: fromRustOption(z.string()),
   style: fromRustOption(textStyleSchema),

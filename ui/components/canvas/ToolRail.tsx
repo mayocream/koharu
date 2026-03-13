@@ -190,6 +190,8 @@ function BrushToolWithPopover({
                 triggerTestId='brush-color-trigger'
                 pickerTestId='brush-color-picker'
                 swatchTestId='brush-color-swatch'
+                inputTestId='brush-color-input'
+                pickButtonTestId='brush-color-pick'
               />
               <span className='text-muted-foreground text-xs'>
                 {brushColor}

@@ -1,3 +1,34 @@
+## [0.37.0](https://github.com/mayocream/koharu/compare/0.36.1..0.37.0) - 2026-03-11
+
+### ⛰️  Features
+
+- Add bulk export - ([1398b03](https://github.com/mayocream/koharu/commit/1398b0355cc9822adbd751e8db3beef4679e6eec))
+- Enhance color picker - ([baed0b0](https://github.com/mayocream/koharu/commit/baed0b00aafbf756f895dfdb20a7ebf1621a6232))
+- Block-aware inpainting - ([b292ea4](https://github.com/mayocream/koharu/commit/b292ea40635770701dbe14b3c63475826615709c))
+- Add mit48px OCR backend - ([fbab2ef](https://github.com/mayocream/koharu/commit/fbab2efdd0e276b916465ab7d01ee7629cf17e2e))
+- Overhaul comic text detector pipeline - ([bdcb933](https://github.com/mayocream/koharu/commit/bdcb933035c107aefa5432841cedb15c73f73d3d))
+
+### 🐛 Bug Fixes
+
+- *(renderer)* Manual size, do not auto-expand. - ([e9a26f1](https://github.com/mayocream/koharu/commit/e9a26f1b1c3076b830f0752a02a48f5111859312))
+- *(renderer)* Handle new line break - ([bb18ba9](https://github.com/mayocream/koharu/commit/bb18ba9748377599c5348f640e48ebb09b7ec86a))
+- *(ui)* Do not automatically display Inpainted Layer when creating new text box or adjusting text box size - ([c235dd1](https://github.com/mayocream/koharu/commit/c235dd18ee0f7e0691b6a1bb932ab134bd858fef))
+- Normalize ocr text - ([17fa5f6](https://github.com/mayocream/koharu/commit/17fa5f62c729086b855d8849b22a697d44099527))
+- Improve hunyuan result - ([f4962ab](https://github.com/mayocream/koharu/commit/f4962ab3a978bcde81f7ba0151e63602d69d5947))
+- Korean text (Hangul) incorrectly rendered vertically in tall text blocks - ([0d55c6c](https://github.com/mayocream/koharu/commit/0d55c6cb160be6a1a856769524a6f0fb9ef262e2))
+- Do not automatically apply Repair Brush in boxes at the "Detect" step - ([556442a](https://github.com/mayocream/koharu/commit/556442a70a64d6f4fde6983c50cd4a0edcf280e5))
+- Adjust LLM generate options - ([704d858](https://github.com/mayocream/koharu/commit/704d858ea0e67d9f41db0089f55403a9330640d6))
+
+### 🧪 Testing
+
+- Remove unless test - ([6c38a75](https://github.com/mayocream/koharu/commit/6c38a75be5f10af3bcd7d264f79d642d6d385103))
+
+### ⚙️ Miscellaneous Tasks
+
+- *(dev)* Fix cudnn path - ([19d67d8](https://github.com/mayocream/koharu/commit/19d67d83ec3e1efe30a4585423315d911e2787d2))
+- Upload portable exe - ([8f5eb50](https://github.com/mayocream/koharu/commit/8f5eb503f4cfeb404075520c1141e4144166600a))
+
+
 ## [0.36.1](https://github.com/mayocream/koharu/compare/0.36.0..0.36.1) - 2026-03-08
 
 ### 🐛 Bug Fixes

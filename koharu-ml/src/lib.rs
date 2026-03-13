@@ -7,6 +7,7 @@ pub mod lama;
 pub mod llm;
 pub mod loading;
 pub mod manga_ocr;
+pub mod mit48px_ocr;
 
 use anyhow::Result;
 use candle_core::utils::metal_is_available;

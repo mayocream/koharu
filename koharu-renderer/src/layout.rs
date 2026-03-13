@@ -10,7 +10,7 @@ use skrifa::{
 use crate::font::{Font, font_key};
 use crate::shape::shape_segment_with_fallbacks;
 
-pub use crate::segment::{LineBreakOpportunity, LineBreaker};
+pub use crate::segment::{LineBreakOpportunity, LineBreaker, LineSegment};
 pub use crate::shape::{PositionedGlyph, ShapedRun, ShapingOptions, TextShaper};
 
 /// Writing mode for text layout.
@@ -187,7 +187,7 @@ impl<'a> TextLayout<'a> {
         }
         .unwrap_or(f32::INFINITY);
 
-        let breaks = line_breaker.line_break_opportunities(text);
+        let segments = line_breaker.line_segments(text);
 
         let mut fonts: Vec<&Font> = Vec::with_capacity(1 + self.fallback_fonts.len());
         fonts.push(self.font);
@@ -196,17 +196,27 @@ impl<'a> TextLayout<'a> {
         let mut current = LayoutLine::default();
         let mut line_offset = 0usize;
 
-        for window in breaks.windows(2) {
-            let (start, end) = (window[0].offset, window[1].offset);
-            let segment = &text[start..end];
+        for segment in segments {
+            let start = segment.range.start;
+            let segment_text = &text[segment.range.clone()];
 
-            let mut shaped = if fonts.len() == 1 {
-                shaper.shape(segment, self.font, &opts)?
+            let mut shaped = if segment_text.is_empty() {
+                ShapedRun {
+                    glyphs: Vec::new(),
+                    x_advance: 0.0,
+                    y_advance: 0.0,
+                }
+            } else if fonts.len() == 1 {
+                shaper.shape(segment_text, self.font, &opts)?
             } else {
-                shape_segment_with_fallbacks(&shaper, segment, &fonts, &opts)?
+                shape_segment_with_fallbacks(&shaper, segment_text, &fonts, &opts)?
             };
             if self.writing_mode.is_vertical() && self.center_vertical_punctuation {
-                self.center_vertical_fullwidth_punctuation(font_size, segment, &mut shaped.glyphs);
+                self.center_vertical_fullwidth_punctuation(
+                    font_size,
+                    segment_text,
+                    &mut shaped.glyphs,
+                );
             }
             let advance = if self.writing_mode.is_vertical() {
                 shaped.y_advance
@@ -221,9 +231,8 @@ impl<'a> TextLayout<'a> {
                 current.advance + advance > max_extent
             };
             let has_content = !current.glyphs.is_empty();
-            let is_mandatory = window[1].is_mandatory; // Check if the END of segment is mandatory
 
-            if (is_mandatory || would_overflow) && has_content {
+            if would_overflow && has_content {
                 // Finalize current line
                 current.range = line_offset..start;
                 lines.push(current);
@@ -239,6 +248,13 @@ impl<'a> TextLayout<'a> {
                 current.glyphs.push(glyph);
             }
             current.advance += advance;
+
+            if segment.is_mandatory {
+                current.range = line_offset..segment.range.end;
+                lines.push(current);
+                current = LayoutLine::default();
+                line_offset = segment.next_offset;
+            }
         }
 
         // Finalize last line
@@ -638,6 +654,23 @@ mod tests {
         for i in 1..layout.lines.len() {
             let dy = layout.lines[i].baseline.1 - layout.lines[i - 1].baseline.1;
             assert_approx_eq(dy, line_height);
+        }
+
+        Ok(())
+    }
+
+    #[test]
+    fn mandatory_newlines_are_not_shaped_as_glyphs() -> anyhow::Result<()> {
+        let font = any_system_font();
+        let text = "A\nB\nC";
+        let layout = TextLayout::new(&font, Some(16.0))
+            .with_writing_mode(WritingMode::Horizontal)
+            .run(text)?;
+
+        assert_eq!(layout.lines.len(), 3);
+        for (line, expected) in layout.lines.iter().zip(["A", "B", "C"]) {
+            assert_eq!(&text[line.range.clone()], expected);
+            assert_eq!(line.glyphs.len(), 1);
         }
 
         Ok(())

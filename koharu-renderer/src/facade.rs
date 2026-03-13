@@ -166,9 +166,10 @@ impl Renderer {
             })
             .unwrap_or([0, 0, 0, 255]);
         let writing_mode = writing_mode_for_block(&layout_source_block);
-        let english_horizontal_layout =
-            writing_mode == WritingMode::Horizontal && is_latin_only(&normalized_translation);
-        let auto_expand_english_layout = english_horizontal_layout && !text_block.lock_layout_box;
+        let english_layout =
+            english_layout_behavior(text_block, &normalized_translation, writing_mode);
+        let english_horizontal_layout = english_layout != EnglishLayoutBehavior::Disabled;
+        let auto_expand_english_layout = english_layout == EnglishLayoutBehavior::AutoExpand;
         let text_align = style.text_align.unwrap_or({
             if english_horizontal_layout {
                 TextAlign::Center
@@ -282,6 +283,31 @@ impl Renderer {
             &Properties::default(),
         )?;
         Ok(font)
+    }
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum EnglishLayoutBehavior {
+    Disabled,
+    AutoExpand,
+    LockedToManualSize,
+}
+
+fn english_layout_behavior(
+    text_block: &TextBlock,
+    normalized_translation: &str,
+    writing_mode: WritingMode,
+) -> EnglishLayoutBehavior {
+    let is_english_horizontal =
+        writing_mode == WritingMode::Horizontal && is_latin_only(normalized_translation);
+    if !is_english_horizontal {
+        return EnglishLayoutBehavior::Disabled;
+    }
+
+    if text_block.lock_layout_box {
+        EnglishLayoutBehavior::LockedToManualSize
+    } else {
+        EnglishLayoutBehavior::AutoExpand
     }
 }
 
@@ -437,11 +463,11 @@ fn load_symbol_fallbacks(fontbook: &mut FontBook) -> Vec<Font> {
 #[cfg(test)]
 mod tests {
     use super::{
-        align_layout_horizontally, apply_default_font_families, apply_global_font_family,
-        center_layout_vertically,
+        EnglishLayoutBehavior, align_layout_horizontally, apply_default_font_families,
+        apply_global_font_family, center_layout_vertically, english_layout_behavior,
     };
     use crate::layout::{LayoutLine, LayoutRun, WritingMode};
-    use koharu_types::TextAlign;
+    use koharu_types::{TextAlign, TextBlock};
 
     #[test]
     fn horizontal_alignment_offsets_each_line() {
@@ -567,5 +593,29 @@ mod tests {
         let mut font_families = Vec::new();
         apply_default_font_families(&mut font_families, "hello");
         assert!(!font_families.is_empty());
+    }
+
+    #[test]
+    fn english_layout_auto_expands_by_default() {
+        let block = TextBlock::default();
+        let behavior = english_layout_behavior(&block, "HELLO WORLD", WritingMode::Horizontal);
+        assert_eq!(behavior, EnglishLayoutBehavior::AutoExpand);
+    }
+
+    #[test]
+    fn english_layout_stops_auto_expand_after_manual_resize() {
+        let block = TextBlock {
+            lock_layout_box: true,
+            ..Default::default()
+        };
+        let behavior = english_layout_behavior(&block, "HELLO WORLD", WritingMode::Horizontal);
+        assert_eq!(behavior, EnglishLayoutBehavior::LockedToManualSize);
+    }
+
+    #[test]
+    fn non_english_layout_never_uses_english_expansion_logic() {
+        let block = TextBlock::default();
+        let behavior = english_layout_behavior(&block, "こんにちは", WritingMode::Horizontal);
+        assert_eq!(behavior, EnglishLayoutBehavior::Disabled);
     }
 }

@@ -80,5 +80,9 @@ name = "manga-ocr"
 path = "bin/manga-ocr.rs"
 
 [[bin]]
+name = "mit48px-ocr"
+path = "bin/mit48px-ocr.rs"
+
+[[bin]]
 name = "font-detect"
 path = "bin/font-detect.rs"

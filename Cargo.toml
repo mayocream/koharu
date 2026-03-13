@@ -14,7 +14,7 @@ default-members = ["koharu"]
 resolver = "3"
 
 [workspace.package]
-version = "0.36.1"
+version = "0.37.0"
 edition = "2024"
 description = "Manga translation tools"
 license = "Apache-2.0"
@@ -131,3 +131,9 @@ candle-nn = { git = "https://github.com/mayocream/candle", branch = "cuda-dynami
 float8 = { git = "https://github.com/mayocream/float8", branch = "cuda-dynamic-loading" }
 ug = { git = "https://github.com/mayocream/ug", branch = "cuda-dynamic-loading" }
 ug-cuda = { git = "https://github.com/mayocream/ug", branch = "cuda-dynamic-loading" }
+
+[profile.dev.package.image]
+opt-level = 3
+
+[profile.dev.package.imageproc]
+opt-level = 3

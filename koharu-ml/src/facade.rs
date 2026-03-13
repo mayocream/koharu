@@ -1,11 +1,11 @@
 use anyhow::Result;
-use image::{DynamicImage, Rgba};
-use koharu_types::{Document, FontPrediction, SerializableDynamicImage, TextBlock};
+use image::DynamicImage;
+use koharu_types::{Document, FontPrediction, SerializableDynamicImage};
 
 use crate::comic_text_detector::{self, ComicTextDetector};
 use crate::font_detector::{self, FontDetector};
 use crate::lama::{self, Lama};
-use crate::manga_ocr::{self, MangaOcr};
+use crate::mit48px_ocr::{self, Mit48pxOcr};
 
 const NEAR_BLACK_THRESHOLD: u8 = 12;
 const GRAY_NEAR_BLACK_THRESHOLD: u8 = 60;
@@ -69,7 +69,7 @@ fn normalize_font_prediction(prediction: &mut FontPrediction) {
 
 pub struct Model {
     dialog_detector: ComicTextDetector,
-    ocr: MangaOcr,
+    ocr: Mit48pxOcr,
     lama: Lama,
     font_detector: FontDetector,
 }
@@ -78,7 +78,7 @@ impl Model {
     pub async fn new(use_cpu: bool) -> Result<Self> {
         Ok(Self {
             dialog_detector: ComicTextDetector::load(use_cpu).await?,
-            ocr: MangaOcr::load(use_cpu).await?,
+            ocr: Mit48pxOcr::load(use_cpu).await?,
             lama: Lama::load(use_cpu).await?,
             font_detector: FontDetector::load(use_cpu).await?,
         })
@@ -87,28 +87,9 @@ impl Model {
     /// Detect text blocks and fonts in a document.
     /// Sets `doc.text_blocks` (with font predictions/styles) and `doc.segment`.
     pub async fn detect(&self, doc: &mut Document) -> Result<()> {
-        let (bboxes, segment) = self.dialog_detector.inference(&doc.image)?;
-
-        let mut text_blocks: Vec<TextBlock> = bboxes
-            .into_iter()
-            .map(|bbox| TextBlock {
-                x: bbox.xmin,
-                y: bbox.ymin,
-                width: bbox.xmax - bbox.xmin,
-                height: bbox.ymax - bbox.ymin,
-                confidence: bbox.confidence,
-                ..Default::default()
-            })
-            .collect();
-
-        text_blocks.sort_unstable_by(|a, b| {
-            (a.y + a.height / 2.0)
-                .partial_cmp(&(b.y + b.height / 2.0))
-                .unwrap_or(std::cmp::Ordering::Equal)
-        });
-
-        doc.text_blocks = text_blocks;
-        doc.segment = Some(DynamicImage::ImageLuma8(segment).into());
+        let detection = self.dialog_detector.inference(&doc.image)?;
+        doc.text_blocks = detection.text_blocks;
+        doc.segment = Some(DynamicImage::ImageLuma8(detection.mask).into());
 
         if !doc.text_blocks.is_empty() {
             let images: Vec<DynamicImage> = doc
@@ -141,56 +122,29 @@ impl Model {
             return Ok(());
         }
 
-        let crops: Vec<DynamicImage> = doc
-            .text_blocks
-            .iter()
-            .map(|block| {
-                doc.image.crop_imm(
-                    block.x as u32,
-                    block.y as u32,
-                    block.width as u32,
-                    block.height as u32,
-                )
-            })
-            .collect();
-        let texts = self.ocr.inference(&crops)?;
+        let predictions = self
+            .ocr
+            .inference_text_blocks(&doc.image, &doc.text_blocks)?;
 
-        for (block, text) in doc.text_blocks.iter_mut().zip(texts) {
-            block.text = text.into();
+        for prediction in predictions {
+            if let Some(block) = doc.text_blocks.get_mut(prediction.block_index) {
+                block.text = Some(prediction.text);
+            }
         }
 
         Ok(())
     }
 
     /// Inpaint text regions in the document.
-    /// Builds mask from `doc.segment` + `doc.text_blocks`, sets `doc.inpainted`.
+    /// Uses the current `doc.segment` mask as the inpaint source, sets `doc.inpainted`.
     pub async fn inpaint(&self, doc: &mut Document) -> Result<()> {
-        let segment = doc
+        let mask = doc
             .segment
             .as_ref()
             .ok_or_else(|| anyhow::anyhow!("Segment image not found"))?;
-        let mut segment_data = segment.to_rgba8();
-        let (seg_width, seg_height) = segment_data.dimensions();
-
-        for y in 0..seg_height {
-            for x in 0..seg_width {
-                let pixel = segment_data.get_pixel_mut(x, y);
-                if pixel.0 != [0, 0, 0, 255] {
-                    let inside_any_block = doc.text_blocks.iter().any(|block| {
-                        x >= block.x as u32
-                            && x < (block.x + block.width) as u32
-                            && y >= block.y as u32
-                            && y < (block.y + block.height) as u32
-                    });
-                    if !inside_any_block {
-                        *pixel = Rgba([0, 0, 0, 255]);
-                    }
-                }
-            }
-        }
-
-        let mask = SerializableDynamicImage::from(DynamicImage::ImageRgba8(segment_data));
-        let result = self.lama.inference(&doc.image, &mask)?;
+        let result = self
+            .lama
+            .inference_with_blocks(&doc.image, mask, Some(&doc.text_blocks))?;
         doc.inpainted = Some(result.into());
 
         Ok(())
@@ -201,8 +155,9 @@ impl Model {
         &self,
         image: &SerializableDynamicImage,
         mask: &SerializableDynamicImage,
+        text_blocks: Option<&[koharu_types::TextBlock]>,
     ) -> Result<SerializableDynamicImage> {
-        let result = self.lama.inference(image, mask)?;
+        let result = self.lama.inference_with_blocks(image, mask, text_blocks)?;
         Ok(result.into())
     }
 
@@ -232,7 +187,7 @@ impl Model {
 
 pub async fn prefetch() -> Result<()> {
     comic_text_detector::prefetch().await?;
-    manga_ocr::prefetch().await?;
+    mit48px_ocr::prefetch().await?;
     lama::prefetch().await?;
     font_detector::prefetch().await?;
 
