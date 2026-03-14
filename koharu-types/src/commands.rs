@@ -1,4 +1,4 @@
-use koharu_types::{TextBlock, TextShaderEffect, TextStrokeStyle};
+use crate::{TextBlock, TextShaderEffect, TextStrokeStyle};
 use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
 
@@ -269,7 +269,7 @@ pub struct InpaintRegionParams {
 
 #[cfg(test)]
 mod tests {
-    use koharu_types::{TextAlign, TextStyle};
+    use crate::{TextAlign, TextStyle};
     use serde::Serialize;
     use serde::de::DeserializeOwned;
 

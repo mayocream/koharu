@@ -10,9 +10,9 @@ use axum::{
     response::IntoResponse,
 };
 use futures::{SinkExt, StreamExt};
-use koharu_api::Method;
 use koharu_pipeline::AppResources;
 use koharu_pipeline::operations;
+use koharu_types::Method;
 use serde::{Deserialize, Serialize, de::DeserializeOwned};
 use tokio::sync::{broadcast, mpsc};
 
@@ -236,7 +236,7 @@ fn spawn_notification_forwarder<T: Serialize + Clone + Send + 'static>(
 
 #[cfg(test)]
 mod tests {
-    use koharu_api::Method;
+    use koharu_types::Method;
 
     #[test]
     fn method_registry_supports_all_dispatched_methods() {

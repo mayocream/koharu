@@ -1,13 +1,13 @@
 use std::str::FromStr;
 
 use keyring::Entry;
-use koharu_api::commands::{
-    ApiKeyGetPayload, ApiKeyResult, ApiKeySetPayload, IndexPayload, LlmGeneratePayload,
-    LlmListPayload, LlmLoadPayload,
-};
 use koharu_ml::llm::ModelId;
 use koharu_ml::llm::api::ALL_API_PROVIDERS;
 use koharu_ml::llm::facade as llm;
+use koharu_types::commands::{
+    ApiKeyGetPayload, ApiKeyResult, ApiKeySetPayload, IndexPayload, LlmGeneratePayload,
+    LlmListPayload, LlmLoadPayload,
+};
 use strum::IntoEnumIterator;
 use tracing::instrument;
 

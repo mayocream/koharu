@@ -1,4 +1,4 @@
-use koharu_api::commands::{IndexPayload, RenderPayload};
+use koharu_types::commands::{IndexPayload, RenderPayload};
 use tracing::instrument;
 
 use crate::{AppResources, state_tx};

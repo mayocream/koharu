@@ -1,7 +1,6 @@
 [workspace]
 members = [
     "koharu",
-    "koharu-api",
     "koharu-http",
     "koharu-ml",
     "koharu-runtime",
@@ -29,7 +28,6 @@ keywords = ["manga", "ocr", "translation", "deep_learning", "computer_vision"]
 publish = false
 
 [workspace.dependencies]
-koharu-api = { path = "koharu-api", default-features = false }
 koharu-http = { path = "koharu-http", default-features = false }
 koharu-runtime = { path = "koharu-runtime", default-features = false }
 koharu-ml = { path = "koharu-ml", default-features = false }

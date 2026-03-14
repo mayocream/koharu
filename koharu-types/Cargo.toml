@@ -15,6 +15,10 @@ publish.workspace = true
 anyhow = { workspace = true }
 blake3 = { workspace = true }
 image = { workspace = true }
+schemars = { workspace = true }
 serde = { workspace = true }
 serde_bytes = { workspace = true }
 tokio = { workspace = true }
+
+[dev-dependencies]
+serde_json = { workspace = true }

@@ -3,7 +3,7 @@ use std::sync::Arc;
 
 use anyhow::Context;
 use futures::{StreamExt, TryStreamExt, stream};
-use koharu_api::events::{DownloadProgress, DownloadStatus};
+use koharu_types::events::{DownloadProgress, DownloadStatus};
 use once_cell::sync::Lazy;
 use tokio::sync::broadcast;
 use tracing::Instrument;

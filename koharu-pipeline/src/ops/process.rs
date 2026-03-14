@@ -3,7 +3,7 @@ use std::sync::{
     atomic::{AtomicBool, Ordering},
 };
 
-use koharu_api::commands::ProcessRequest;
+use koharu_types::commands::ProcessRequest;
 
 use crate::AppResources;
 

@@ -1,13 +1,13 @@
 use image::DynamicImage;
 use image::GenericImageView;
 use imageproc::distance_transform::Norm;
-use koharu_api::commands::{
+use koharu_types::commands::{
     AddTextBlockPayload, InpaintPartialPayload, MaskMorphPayload, RemoveTextBlockPayload,
     UpdateBrushLayerPayload, UpdateInpaintMaskPayload, UpdateTextBlockPayload,
     UpdateTextBlocksPayload,
 };
-use koharu_api::parse::parse_hex_color;
-use koharu_api::views::{TextBlockInfo, to_block_info};
+use koharu_types::parse::parse_hex_color;
+use koharu_types::views::{TextBlockInfo, to_block_info};
 use koharu_types::{SerializableDynamicImage, TextBlock, TextStyle};
 use tracing::instrument;
 

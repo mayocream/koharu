@@ -1,7 +1,7 @@
 use std::{io::Cursor, path::PathBuf};
 
 use image::{ImageFormat, RgbaImage};
-use koharu_api::commands::InpaintRegion;
+use koharu_types::commands::InpaintRegion;
 use koharu_types::{Document, SerializableDynamicImage};
 use rayon::iter::{IntoParallelIterator, ParallelIterator};
 

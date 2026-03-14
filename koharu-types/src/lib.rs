@@ -1,10 +1,19 @@
+pub mod commands;
+pub mod events;
+pub mod method;
+pub mod parse;
+pub mod views;
+
 mod effect;
 mod font;
 mod image;
 
+pub use commands::*;
 pub use effect::TextShaderEffect;
+pub use events::*;
 pub use font::{FontPrediction, NamedFontPrediction, TextDirection};
 pub use image::SerializableDynamicImage;
+pub use method::Method;
 
 use std::{path::PathBuf, sync::Arc};
 

@@ -1,7 +1,7 @@
 use std::path::{Path, PathBuf};
 
 use image::ImageFormat;
-use koharu_api::commands::{
+use koharu_types::commands::{
     DeviceInfo, FileResult, IndexPayload, OpenDocumentsPayload, OpenExternalPayload,
     ThumbnailResult,
 };

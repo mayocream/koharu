@@ -12,7 +12,6 @@ keywords.workspace = true
 publish.workspace = true
 
 [dependencies]
-koharu-api = { workspace = true }
 koharu-types = { workspace = true }
 koharu-ml = { workspace = true }
 koharu-renderer = { workspace = true }

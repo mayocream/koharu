@@ -1,4 +1,4 @@
-use koharu_types::{Document, TextBlock};
+use crate::{Document, TextBlock};
 use serde::{Deserialize, Serialize};
 
 #[derive(Debug, Clone, Serialize, Deserialize)]

@@ -7,7 +7,7 @@ use hf_hub::{
     api::tokio::{Api, ApiBuilder, Progress},
 };
 use indicatif::ProgressBar;
-use koharu_api::events::{DownloadProgress, DownloadStatus};
+use koharu_types::events::{DownloadProgress, DownloadStatus};
 use once_cell::sync::{Lazy, OnceCell};
 
 use crate::download::emit;
