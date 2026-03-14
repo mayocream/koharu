@@ -1,5 +1,7 @@
 # Koharu
 
+[日本語](./README.ja.md) | [简体中文](./README.zh-CN.md)
+
 ML-powered manga translator, written in **Rust**.
 
 Koharu introduces a new workflow for manga translation, utilizing the power of ML to automate the process. It combines the capabilities of object detection, OCR, inpainting, and LLMs to create a seamless translation experience.
@@ -12,7 +14,6 @@ Under the hood, Koharu uses [candle](https://github.com/huggingface/candle) for 
 ---
 
 ![screenshot](assets/koharu-screenshot-en.png)
-![screenshot](assets/koharu-screenshot-zh-CN.png)
 
 > [!NOTE]
 > For help and support, please join our [Discord server](https://discord.gg/mHvHkxGnUY).
