@@ -180,4 +180,4 @@ If you find Koharu useful, consider sponsoring the project to support its develo
 
 ## License
 
-Koharu is licensed under the [GNU General Public License v3.0](LICENSE-GPL).
+Koharu is licensed under the [GNU General Public License v3.0](LICENSE).
