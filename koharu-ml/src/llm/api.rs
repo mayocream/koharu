@@ -47,9 +47,6 @@ pub fn find_api_model(id: &str) -> Option<(&'static ApiProviderInfo, &'static st
         .iter()
         .copied()
         .find(|p| p.id == provider_id)?;
-    let model = provider
-        .models
-        .iter()
-        .find(|m| m.id == model_id)?;
+    let model = provider.models.iter().find(|m| m.id == model_id)?;
     Some((provider, model.id))
 }

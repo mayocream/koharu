@@ -7,8 +7,7 @@ pub mod claude;
 pub mod gemini;
 pub mod openai;
 
-pub const SYSTEM_PROMPT_TEMPLATE: &str =
-    "You are a professional manga/comic translator. \
+pub const SYSTEM_PROMPT_TEMPLATE: &str = "You are a professional manga/comic translator. \
      Translate the following text to {target_language}. \
      Preserve line breaks. Output only the translation, no explanations.";
 

@@ -63,7 +63,10 @@ fn set_saved_api_key(provider: &str, api_key: &str) -> anyhow::Result<()> {
 }
 
 #[instrument(level = "info", skip_all, fields(provider = %payload.provider))]
-pub async fn get_api_key(_state: AppResources, payload: ApiKeyGetPayload) -> anyhow::Result<ApiKeyResult> {
+pub async fn get_api_key(
+    _state: AppResources,
+    payload: ApiKeyGetPayload,
+) -> anyhow::Result<ApiKeyResult> {
     tracing::info!("loading API key from keyring");
     match get_saved_api_key(&payload.provider) {
         Ok(Some(key)) => {
