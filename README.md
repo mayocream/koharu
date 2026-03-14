@@ -181,6 +181,4 @@ If you find Koharu useful, consider sponsoring the project to support its develo
 
 ## License
 
-Koharu application is licensed under the [GNU General Public License v3.0](LICENSE-GPL).
-
-The sub-crates of Koharu are licensed under the [Apache License 2.0](LICENSE-APACHE).
+Koharu is licensed under the [GNU General Public License v3.0](LICENSE-GPL).

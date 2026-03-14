@@ -4,4 +4,4 @@ Runtime dynamic library loader.
 
 ## License
 
-Licensed under Apache-2.0.
+Licensed under GPL-3.0-only.

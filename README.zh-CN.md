@@ -178,6 +178,4 @@ bun run build
 
 ## 许可证
 
-Koharu 应用本体使用 [GNU General Public License v3.0](LICENSE-GPL) 授权。
-
-Koharu 各子 crate 使用 [Apache License 2.0](LICENSE-APACHE) 授权。
+Koharu 使用 [GNU General Public License v3.0](LICENSE-GPL) 授权。

@@ -24,4 +24,4 @@ cargo run -p koharu-models --bin font-detect -- --input bubble.png --top-k 5 --m
 
 ## License
 
-Licensed under Apache-2.0.
+Licensed under GPL-3.0-only.

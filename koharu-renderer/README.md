@@ -4,4 +4,4 @@ Text rendering engine.
 
 ## License
 
-Licensed under Apache-2.0.
+Licensed under GPL-3.0-only.
