@@ -243,3 +243,9 @@ export function subscribeProcessProgress(
     cb,
   )
 }
+
+export function subscribeRpcConnection(
+  cb: (connected: boolean) => void,
+): () => void {
+  return getClient().onConnectionChange(cb)
+}

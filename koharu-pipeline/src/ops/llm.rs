@@ -62,21 +62,14 @@ fn set_saved_api_key(provider: &str, api_key: &str) -> anyhow::Result<()> {
     }
 }
 
-#[instrument(level = "info", skip_all, fields(provider = %payload.provider))]
+#[instrument(level = "debug", skip_all, fields(provider = %payload.provider))]
 pub async fn get_api_key(
     _state: AppResources,
     payload: ApiKeyGetPayload,
 ) -> anyhow::Result<ApiKeyResult> {
-    tracing::info!("loading API key from keyring");
     match get_saved_api_key(&payload.provider) {
-        Ok(Some(key)) => {
-            tracing::info!(len = key.len(), "API key found in keyring");
-            Ok(ApiKeyResult { api_key: Some(key) })
-        }
-        Ok(None) => {
-            tracing::info!("no API key found in keyring");
-            Ok(ApiKeyResult { api_key: None })
-        }
+        Ok(Some(key)) => Ok(ApiKeyResult { api_key: Some(key) }),
+        Ok(None) => Ok(ApiKeyResult { api_key: None }),
         Err(err) => {
             tracing::error!(%err, "keyring read failed");
             Err(err)
@@ -84,19 +77,10 @@ pub async fn get_api_key(
     }
 }
 
-#[instrument(level = "info", skip_all, fields(provider = %payload.provider))]
+#[instrument(level = "debug", skip_all, fields(provider = %payload.provider))]
 pub async fn set_api_key(_state: AppResources, payload: ApiKeySetPayload) -> anyhow::Result<()> {
-    let is_empty = payload.api_key.trim().is_empty();
-    tracing::info!(is_empty, "saving API key to keyring");
     match set_saved_api_key(&payload.provider, &payload.api_key) {
-        Ok(()) => {
-            if is_empty {
-                tracing::info!("API key deleted from keyring");
-            } else {
-                tracing::info!("API key saved to keyring");
-            }
-            Ok(())
-        }
+        Ok(()) => Ok(()),
         Err(err) => {
             tracing::error!(%err, "keyring write failed");
             Err(err)

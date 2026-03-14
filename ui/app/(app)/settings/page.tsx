@@ -69,25 +69,6 @@ export default function SettingsPage() {
     void loadDeviceInfo()
   }, [])
 
-  useEffect(() => {
-    if (!isTauri()) return
-
-    const loadApiKeys = async () => {
-      for (const { id } of API_PROVIDERS) {
-        try {
-          const key = await api.getApiKey(id)
-          if (pendingApiKeysRef.current[id] === undefined) {
-            setApiKey(id, key ?? '')
-          }
-        } catch (error) {
-          console.error(`Failed to load API key for ${id}`, error)
-        }
-      }
-    }
-
-    void loadApiKeys()
-  }, [setApiKey])
-
   const persistApiKey = async (provider: string, value: string) => {
     try {
       await api.setApiKey(provider, value)

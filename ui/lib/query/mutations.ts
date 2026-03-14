@@ -685,7 +685,11 @@ export const useLlmMutations = () => {
     )
     for (const provider of providers) {
       try {
-        const key = await api.getApiKey(provider)
+        const key = await queryClient.fetchQuery({
+          queryKey: queryKeys.llm.apiKey(provider),
+          queryFn: () => api.getApiKey(provider),
+          staleTime: 10 * 60 * 1000,
+        })
         usePreferencesStore.getState().setApiKey(provider, key ?? '')
       } catch (error) {
         console.error(`Failed to hydrate API key for ${provider}`, error)

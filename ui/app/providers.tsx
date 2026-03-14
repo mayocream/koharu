@@ -3,7 +3,7 @@
 import { useEffect, useState, type ReactNode } from 'react'
 import { I18nextProvider } from 'react-i18next'
 import { ThemeProvider } from 'next-themes'
-import { QueryClientProvider } from '@tanstack/react-query'
+import { QueryClientProvider, useQueryClient } from '@tanstack/react-query'
 import { TooltipProvider } from '@/components/ui/tooltip'
 import {
   ProgressBarStatus,
@@ -15,53 +15,52 @@ import i18n from '@/lib/i18n'
 import { getQueryClient } from '@/lib/query/client'
 import { queryKeys } from '@/lib/query/keys'
 import { api, parseProcessProgress } from '@/lib/api'
+import { useApiKeyQuery, useDocumentsCountQuery } from '@/lib/query/hooks'
 import { useDownloadStore } from '@/lib/downloads'
 import { useEditorUiStore } from '@/lib/stores/editorUiStore'
 import { useOperationStore } from '@/lib/stores/operationStore'
 import { usePreferencesStore } from '@/lib/stores/preferencesStore'
 import { isTauri } from '@/lib/backend'
+import { useRpcConnection } from '@/hooks/useRpcConnection'
 
-export function Providers({ children }: { children: ReactNode }) {
-  const [mounted, setMounted] = useState(false)
-  const queryClient = getQueryClient()
+function ProvidersBootstrap({ children }: { children: ReactNode }) {
+  const queryClient = useQueryClient()
   const setTotalPages = useEditorUiStore((state) => state.setTotalPages)
-  const ensureDownloadSubscribed = useDownloadStore(
-    (state) => state.ensureSubscribed,
-  )
+  const setApiKey = usePreferencesStore((state) => state.setApiKey)
+  const rpcConnected = useRpcConnection()
+  const shouldQueryApiKeys = rpcConnected && isTauri()
+  const { data: documentsCount } = useDocumentsCountQuery(rpcConnected)
+  const openAiApiKeyQuery = useApiKeyQuery('openai', shouldQueryApiKeys)
+  const geminiApiKeyQuery = useApiKeyQuery('gemini', shouldQueryApiKeys)
+  const claudeApiKeyQuery = useApiKeyQuery('claude', shouldQueryApiKeys)
 
   useEffect(() => {
-    ensureDownloadSubscribed()
-  }, [ensureDownloadSubscribed])
+    if (typeof documentsCount === 'number') {
+      setTotalPages(documentsCount)
+    }
+  }, [documentsCount, setTotalPages])
 
   useEffect(() => {
-    const setApiKey = usePreferencesStore.getState().setApiKey
-    void (async () => {
-      const providers = ['openai', 'gemini', 'claude']
-      for (const provider of providers) {
-        try {
-          const key = await api.getApiKey(provider)
-          setApiKey(provider, key ?? '')
-        } catch (error) {
-          console.error(
-            `[providers] Failed to load API key for ${provider}`,
-            error,
-          )
-        }
-      }
-    })()
-  }, [])
+    if (openAiApiKeyQuery.status === 'success') {
+      setApiKey('openai', openAiApiKeyQuery.data ?? '')
+    }
+  }, [openAiApiKeyQuery.data, openAiApiKeyQuery.status, setApiKey])
+
+  useEffect(() => {
+    if (geminiApiKeyQuery.status === 'success') {
+      setApiKey('gemini', geminiApiKeyQuery.data ?? '')
+    }
+  }, [geminiApiKeyQuery.data, geminiApiKeyQuery.status, setApiKey])
+
+  useEffect(() => {
+    if (claudeApiKeyQuery.status === 'success') {
+      setApiKey('claude', claudeApiKeyQuery.data ?? '')
+    }
+  }, [claudeApiKeyQuery.data, claudeApiKeyQuery.status, setApiKey])
 
   useEffect(() => {
     let unlisten: (() => void) | undefined
     ;(async () => {
-      try {
-        const count = await queryClient.fetchQuery({
-          queryKey: queryKeys.documents.count,
-          queryFn: () => api.getDocumentsCount(),
-        })
-        setTotalPages(count)
-      } catch (_) {}
-
       try {
         unlisten = await listen<number>('documents:opened', (event) => {
           const count = event.payload ?? 0
@@ -153,6 +152,20 @@ export function Providers({ children }: { children: ReactNode }) {
     }
   }, [queryClient])
 
+  return children
+}
+
+export function Providers({ children }: { children: ReactNode }) {
+  const [mounted, setMounted] = useState(false)
+  const queryClient = getQueryClient()
+  const ensureDownloadSubscribed = useDownloadStore(
+    (state) => state.ensureSubscribed,
+  )
+
+  useEffect(() => {
+    ensureDownloadSubscribed()
+  }, [ensureDownloadSubscribed])
+
   useEffect(() => {
     setMounted(true)
 
@@ -171,11 +184,13 @@ export function Providers({ children }: { children: ReactNode }) {
 
   return (
     <QueryClientProvider client={queryClient}>
-      <I18nextProvider i18n={i18n}>
-        <ThemeProvider attribute='class' defaultTheme='system' enableSystem>
-          <TooltipProvider delayDuration={0}>{children}</TooltipProvider>
-        </ThemeProvider>
-      </I18nextProvider>
+      <ProvidersBootstrap>
+        <I18nextProvider i18n={i18n}>
+          <ThemeProvider attribute='class' defaultTheme='system' enableSystem>
+            <TooltipProvider delayDuration={0}>{children}</TooltipProvider>
+          </ThemeProvider>
+        </I18nextProvider>
+      </ProvidersBootstrap>
     </QueryClientProvider>
   )
 }

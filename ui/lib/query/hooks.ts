@@ -7,11 +7,13 @@ import { queryKeys } from '@/lib/query/keys'
 import { useEditorUiStore } from '@/lib/stores/editorUiStore'
 import { useLlmUiStore } from '@/lib/stores/llmUiStore'
 import i18n from '@/lib/i18n'
+import { useRpcConnection } from '@/hooks/useRpcConnection'
 
-export const useDocumentsCountQuery = () =>
+export const useDocumentsCountQuery = (enabled = true) =>
   useQuery({
     queryKey: queryKeys.documents.count,
     queryFn: () => api.getDocumentsCount(),
+    enabled,
   })
 
 export const useCurrentDocumentQuery = (index: number, enabled = true) =>
@@ -60,6 +62,7 @@ export const useFontsQuery = () =>
 
 export const useLlmModelsQuery = () => {
   const [language, setLanguage] = useState(i18n.language)
+  const rpcConnected = useRpcConnection()
 
   useEffect(() => {
     const handleLanguageChange = (nextLanguage: string) => {
@@ -74,9 +77,18 @@ export const useLlmModelsQuery = () => {
   return useQuery({
     queryKey: queryKeys.llm.models(language ?? 'default'),
     queryFn: () => api.llmList(language),
+    enabled: rpcConnected,
     staleTime: 5 * 60 * 1000,
   })
 }
+
+export const useApiKeyQuery = (provider: string, enabled = true) =>
+  useQuery({
+    queryKey: queryKeys.llm.apiKey(provider),
+    queryFn: () => api.getApiKey(provider),
+    enabled,
+    staleTime: 10 * 60 * 1000,
+  })
 
 export const useLlmReadyQuery = () => {
   const selectedModel = useLlmUiStore((state) => state.selectedModel)

@@ -37,6 +37,7 @@ export class WsRpcClient {
     string,
     Set<(params: unknown) => void>
   >()
+  private connectionHandlers = new Set<(connected: boolean) => void>()
   private url: string
   private reconnectTimer: ReturnType<typeof setTimeout> | null = null
   private closed = false
@@ -58,6 +59,7 @@ export class WsRpcClient {
         clearTimeout(this.reconnectTimer)
         this.reconnectTimer = null
       }
+      this.notifyConnectionHandlers(true)
       const queue = this.readyQueue.splice(0)
       for (const fn of queue) fn()
     }
@@ -95,6 +97,7 @@ export class WsRpcClient {
 
     ws.onclose = () => {
       this.ws = null
+      this.notifyConnectionHandlers(false)
       // Reject queued and pending requests
       const queue = this.readyQueue.splice(0)
       for (const fn of queue) fn()
@@ -175,8 +178,24 @@ export class WsRpcClient {
     }
   }
 
+  onConnectionChange(handler: (connected: boolean) => void): () => void {
+    this.connectionHandlers.add(handler)
+    handler(this.connected)
+    return () => {
+      this.connectionHandlers.delete(handler)
+    }
+  }
+
   get connected(): boolean {
     return this.ws?.readyState === WebSocket.OPEN
+  }
+
+  private notifyConnectionHandlers(connected: boolean): void {
+    for (const handler of this.connectionHandlers) {
+      try {
+        handler(connected)
+      } catch {}
+    }
   }
 
   private scheduleReconnect(): void {
