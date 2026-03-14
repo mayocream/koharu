@@ -97,7 +97,7 @@ export function ColorPicker({
               spellCheck={false}
               disabled={disabled}
               aria-label='Hex color code'
-              className='border-input bg-background focus-visible:border-ring focus-visible:ring-ring/50 h-8 min-w-0 flex-1 rounded-md border px-2 font-mono text-xs uppercase shadow-xs outline-none transition focus-visible:ring-[3px]'
+              className='border-input bg-background focus-visible:border-ring focus-visible:ring-ring/50 h-8 min-w-0 flex-1 rounded-md border px-2 font-mono text-xs uppercase shadow-xs transition outline-none focus-visible:ring-[3px]'
               onChange={(color) => onChange(normalizeHex(color))}
             />
 

@@ -42,7 +42,10 @@ export function Providers({ children }: { children: ReactNode }) {
           const key = await api.getApiKey(provider)
           setApiKey(provider, key ?? '')
         } catch (error) {
-          console.error(`[providers] Failed to load API key for ${provider}`, error)
+          console.error(
+            `[providers] Failed to load API key for ${provider}`,
+            error,
+          )
         }
       }
     })()

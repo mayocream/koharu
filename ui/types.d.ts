@@ -50,7 +50,12 @@ export type TextBlock = {
   width: number
   height: number
   confidence: number
-  linePolygons?: [[number, number], [number, number], [number, number], [number, number]][]
+  linePolygons?: [
+    [number, number],
+    [number, number],
+    [number, number],
+    [number, number],
+  ][]
   sourceDirection?: TextDirection
   sourceLanguage?: string
   rotationDeg?: number

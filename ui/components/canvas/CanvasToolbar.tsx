@@ -172,7 +172,9 @@ function LlmStatusPopover() {
     () => llmModels.find((m) => m.id === llmSelectedModel),
     [llmModels, llmSelectedModel],
   )
-  const isApiModel = selectedModelInfo?.source !== 'local' && selectedModelInfo?.source !== undefined
+  const isApiModel =
+    selectedModelInfo?.source !== 'local' &&
+    selectedModelInfo?.source !== undefined
   const apiKeyMissing = isApiModel && !apiKeys[selectedModelInfo!.source]
 
   const activeLanguages = useMemo(
@@ -251,7 +253,7 @@ function LlmStatusPopover() {
                 >
                   <span className='flex items-center gap-2'>
                     {model.source !== 'local' && (
-                      <span className='bg-primary/10 text-primary rounded px-1 py-0.5 text-[10px] font-semibold uppercase leading-none'>
+                      <span className='bg-primary/10 text-primary rounded px-1 py-0.5 text-[10px] leading-none font-semibold uppercase'>
                         {model.source}
                       </span>
                     )}
@@ -264,7 +266,7 @@ function LlmStatusPopover() {
 
           {/* API key warning */}
           {apiKeyMissing && (
-            <p className='text-amber-500 text-xs'>
+            <p className='text-xs text-amber-500'>
               {t('llm.apiKeyMissing', { provider: selectedModelInfo!.source })}
             </p>
           )}

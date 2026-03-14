@@ -33,9 +33,9 @@ const THEME_OPTIONS = [
 ] as const
 
 const API_PROVIDERS = [
-  { id: 'openai', name: 'OpenAI', free_tier: false},
-  { id: 'gemini', name: 'Gemini', free_tier: true},
-  { id: 'claude', name: 'Claude', free_tier: false},
+  { id: 'openai', name: 'OpenAI', free_tier: false },
+  { id: 'gemini', name: 'Gemini', free_tier: true },
+  { id: 'claude', name: 'Claude', free_tier: false },
 ] as const
 
 export default function SettingsPage() {
@@ -49,7 +49,9 @@ export default function SettingsPage() {
   const apiKeys = usePreferencesStore((state) => state.apiKeys)
   const setApiKey = usePreferencesStore((state) => state.setApiKey)
   const [visibleKeys, setVisibleKeys] = useState<Record<string, boolean>>({})
-  const saveTimersRef = useRef<Record<string, ReturnType<typeof setTimeout>>>({})
+  const saveTimersRef = useRef<Record<string, ReturnType<typeof setTimeout>>>(
+    {},
+  )
   const pendingApiKeysRef = useRef<Record<string, string>>({})
 
   useEffect(() => {
@@ -268,8 +270,9 @@ export default function SettingsPage() {
                         )}
                       </button>
 
-                      {API_PROVIDERS.find((provider) => provider.id === id)?.free_tier && (
-                        <span className='text-green-500 text-xs ml-2'>
+                      {API_PROVIDERS.find((provider) => provider.id === id)
+                        ?.free_tier && (
+                        <span className='ml-2 text-xs text-green-500'>
                           {t('settings.freeTier')}
                         </span>
                       )}
