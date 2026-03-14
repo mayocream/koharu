@@ -77,7 +77,7 @@ Koharu is built with CUDA support, allowing it to leverage the power of NVIDIA G
 Koharu bundles CUDA toolkit 13.1 and cuDNN 9.19, dylibs will be automatically extracted to the application data directory on first run.
 
 > [!NOTE]
-> Please ensure that your system has the latest NVIDIA drivers installed. You can download the latest drivers from via [NVIDIA App](https://www.nvidia.com/en-us/software/nvidia-app/).
+> Please ensure that your system has the latest NVIDIA drivers installed. You can download the latest drivers via [NVIDIA App](https://www.nvidia.com/en-us/software/nvidia-app/).
 
 #### Supported NVIDIA GPUs
 
