@@ -49,3 +49,4 @@ temp/
 tmp/
 playwright-report/
 test-results/
+docs/LOCAL_BUILD_NOTES.md
