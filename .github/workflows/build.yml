@@ -41,11 +41,32 @@ jobs:
       - uses: ilammy/msvc-dev-cmd@v1
         if: matrix.os == 'windows-latest'
       - run: bun install
-      - run: bun tauri build --no-bundle
-      - name: Upload Artifact
+      - uses: tauri-apps/tauri-action@v0
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        with:
+          args: ${{ matrix.os == 'macos-latest' && '--target aarch64-apple-darwin' || '' }}
+
+      - name: Upload Artifact (macOS)
+        if: matrix.os == 'macos-latest'
         uses: actions/upload-artifact@v4
         with:
-          name: koharu-${{ matrix.os }}
-          path: |
-            target/release/koharu*
-          retention-days: 3
+          name: koharu-macos-dmg
+          path: koharu/target/aarch64-apple-darwin/release/bundle/dmg/*.dmg
+          retention-days: 7
+
+      - name: Upload Artifact (Windows)
+        if: matrix.os == 'windows-latest'
+        uses: actions/upload-artifact@v4
+        with:
+          name: koharu-windows-exe
+          path: koharu/target/release/bundle/nsis/*.exe
+          retention-days: 7
+
+      - name: Upload Artifact (Linux)
+        if: matrix.os == 'ubuntu-latest'
+        uses: actions/upload-artifact@v4
+        with:
+          name: koharu-linux-deb
+          path: koharu/target/release/bundle/deb/*.deb
+          retention-days: 7
