@@ -140,67 +140,28 @@ export function MenuBar() {
   return (
     <>
       <div className='border-border bg-background text-foreground flex h-8 items-center border-b text-[13px]'>
-      {/* macOS traffic lights */}
-      {isNativeMacOS && <MacOSControls />}
+        {/* macOS traffic lights */}
+        {isNativeMacOS && <MacOSControls />}
 
-      {/* Logo */}
-      <div className='flex h-full items-center pl-2 select-none'>
-        <Image
-          src='/icon.png'
-          alt='Koharu'
-          width={18}
-          height={18}
-          draggable={false}
-        />
-      </div>
+        {/* Logo */}
+        <div className='flex h-full items-center pl-2 select-none'>
+          <Image
+            src='/icon.png'
+            alt='Koharu'
+            width={18}
+            height={18}
+            draggable={false}
+          />
+        </div>
 
-      {/* Menu items */}
-      <Menubar className='h-auto gap-1 border-none bg-transparent p-0 px-1.5 shadow-none'>
-        <MenubarMenu>
-          <MenubarTrigger
-            data-testid='menu-file-trigger'
-            className='hover:bg-accent data-[state=open]:bg-accent rounded px-3 py-1.5 font-medium'
-          >
-            {t('menu.file')}
-          </MenubarTrigger>
-          <MenubarContent
-            className='min-w-36'
-            align='start'
-            sideOffset={5}
-            alignOffset={-3}
-          >
-            {fileMenuItems.map((item) => (
-              <MenubarItem
-                key={item.label}
-                data-testid={item.testId}
-                className='text-[13px]'
-                disabled={item.disabled}
-                onSelect={
-                  item.onSelect
-                    ? () => {
-                        void item.onSelect?.()
-                      }
-                    : undefined
-                }
-              >
-                {item.label}
-              </MenubarItem>
-            ))}
-            <MenubarSeparator />
-            <MenubarItem className='text-[13px]' asChild>
-              <Link href='/settings' prefetch={false}>
-                {t('menu.settings')}
-              </Link>
-            </MenubarItem>
-          </MenubarContent>
-        </MenubarMenu>
-        {menus.map(({ label, items, triggerTestId }) => (
-          <MenubarMenu key={label}>
+        {/* Menu items */}
+        <Menubar className='h-auto gap-1 border-none bg-transparent p-0 px-1.5 shadow-none'>
+          <MenubarMenu>
             <MenubarTrigger
-              data-testid={triggerTestId}
+              data-testid='menu-file-trigger'
               className='hover:bg-accent data-[state=open]:bg-accent rounded px-3 py-1.5 font-medium'
             >
-              {label}
+              {t('menu.file')}
             </MenubarTrigger>
             <MenubarContent
               className='min-w-36'
@@ -208,7 +169,7 @@ export function MenuBar() {
               sideOffset={5}
               alignOffset={-3}
             >
-              {items.map((item) => (
+              {fileMenuItems.map((item) => (
                 <MenubarItem
                   key={item.label}
                   data-testid={item.testId}
@@ -225,55 +186,94 @@ export function MenuBar() {
                   {item.label}
                 </MenubarItem>
               ))}
+              <MenubarSeparator />
+              <MenubarItem className='text-[13px]' asChild>
+                <Link href='/settings' prefetch={false}>
+                  {t('menu.settings')}
+                </Link>
+              </MenubarItem>
             </MenubarContent>
           </MenubarMenu>
-        ))}
-        <MenubarMenu>
-          <MenubarTrigger className='hover:bg-accent data-[state=open]:bg-accent rounded px-3 py-1.5 font-medium'>
-            {t('menu.help')}
-          </MenubarTrigger>
-          <MenubarContent
-            className='min-w-36'
-            align='start'
-            sideOffset={5}
-            alignOffset={-3}
-          >
-            {helpMenuItems.map((item) => (
-              <MenubarItem
-                key={item.label}
-                className='text-[13px]'
-                disabled={item.disabled}
-                onSelect={
-                  item.onSelect
-                    ? () => {
-                        void item.onSelect?.()
-                      }
-                    : undefined
-                }
+          {menus.map(({ label, items, triggerTestId }) => (
+            <MenubarMenu key={label}>
+              <MenubarTrigger
+                data-testid={triggerTestId}
+                className='hover:bg-accent data-[state=open]:bg-accent rounded px-3 py-1.5 font-medium'
               >
-                {item.label}
+                {label}
+              </MenubarTrigger>
+              <MenubarContent
+                className='min-w-36'
+                align='start'
+                sideOffset={5}
+                alignOffset={-3}
+              >
+                {items.map((item) => (
+                  <MenubarItem
+                    key={item.label}
+                    data-testid={item.testId}
+                    className='text-[13px]'
+                    disabled={item.disabled}
+                    onSelect={
+                      item.onSelect
+                        ? () => {
+                            void item.onSelect?.()
+                          }
+                        : undefined
+                    }
+                  >
+                    {item.label}
+                  </MenubarItem>
+                ))}
+              </MenubarContent>
+            </MenubarMenu>
+          ))}
+          <MenubarMenu>
+            <MenubarTrigger className='hover:bg-accent data-[state=open]:bg-accent rounded px-3 py-1.5 font-medium'>
+              {t('menu.help')}
+            </MenubarTrigger>
+            <MenubarContent
+              className='min-w-36'
+              align='start'
+              sideOffset={5}
+              alignOffset={-3}
+            >
+              {helpMenuItems.map((item) => (
+                <MenubarItem
+                  key={item.label}
+                  className='text-[13px]'
+                  disabled={item.disabled}
+                  onSelect={
+                    item.onSelect
+                      ? () => {
+                          void item.onSelect?.()
+                        }
+                      : undefined
+                  }
+                >
+                  {item.label}
+                </MenubarItem>
+              ))}
+              <MenubarSeparator />
+              <MenubarItem className='text-[13px]' asChild>
+                <Link href='/about' prefetch={false}>
+                  {t('settings.about')}
+                </Link>
               </MenubarItem>
-            ))}
-            <MenubarSeparator />
-            <MenubarItem className='text-[13px]' asChild>
-              <Link href='/about' prefetch={false}>
-                {t('settings.about')}
-              </Link>
-            </MenubarItem>
-          </MenubarContent>
-        </MenubarMenu>
-      </Menubar>
+            </MenubarContent>
+          </MenubarMenu>
+        </Menubar>
 
-      {/* Draggable region */}
-      <div
-        data-tauri-drag-region
-        className='flex h-full flex-1 items-center justify-center'
-      />
+        {/* Draggable region */}
+        <div
+          data-tauri-drag-region
+          className='flex h-full flex-1 items-center justify-center'
+        />
 
-      {/* Window controls for Windows */}
-      {isWindowsTauri && <WindowControls />}
-    </div>
-    <CbzExportDialog open={cbzOpen} onOpenChange={setCbzOpen} />
+        {/* Window controls for Windows */}
+        {isWindowsTauri && <WindowControls />}
+      </div>
+      <CbzExportDialog open={cbzOpen} onOpenChange={setCbzOpen} />
     </>
   )
 }

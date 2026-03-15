@@ -4,7 +4,11 @@ import { useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react'
 import { useHotkeys } from 'react-hotkeys-hook'
 import { useVirtualizer } from '@tanstack/react-virtual'
 import { useTranslation } from 'react-i18next'
-import { useDocumentsCountQuery, useDocumentNamesQuery, useThumbnailQuery } from '@/lib/query/hooks'
+import {
+  useDocumentsCountQuery,
+  useDocumentNamesQuery,
+  useThumbnailQuery,
+} from '@/lib/query/hooks'
 import { useEditorUiStore } from '@/lib/stores/editorUiStore'
 import { Button } from '@/components/ui/button'
 import { ScrollArea } from '@/components/ui/scroll-area'
@@ -12,7 +16,11 @@ import { flushTextBlockSync } from '@/lib/services/syncQueues'
 import { cancelObjectUrlRevoke, revokeObjectUrlLater } from '@/lib/util'
 import { useDocumentMutations } from '@/lib/query/mutations'
 import { Trash2 } from 'lucide-react'
-import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip'
+import {
+  Tooltip,
+  TooltipContent,
+  TooltipTrigger,
+} from '@/components/ui/tooltip'
 
 export function Navigator() {
   const { data: totalPagesData = 0 } = useDocumentsCountQuery()
@@ -59,7 +67,7 @@ export function Navigator() {
       }
     },
     { enableOnFormTags: false },
-    [currentDocumentIndex]
+    [currentDocumentIndex],
   )
 
   useHotkeys(
@@ -76,7 +84,7 @@ export function Navigator() {
       }
     },
     { enableOnFormTags: false },
-    [currentDocumentIndex, totalPages]
+    [currentDocumentIndex, totalPages],
   )
 
   return (

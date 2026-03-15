@@ -22,10 +22,10 @@ async function convertImage(
   settings: CbzExportSettings,
 ): Promise<Blob> {
   const mimeType = settings.imageFormat === 'webp' ? 'image/webp' : 'image/jpeg'
-  
+
   // If backend already handled conversion/resizing, these should match
-  // We check if it's already the right mime type. 
-  // We can't easily check resolution here without loading it, 
+  // We check if it's already the right mime type.
+  // We can't easily check resolution here without loading it,
   // but if we trust the backend call in exportAsCbz, we can skip.
   if (source.type === mimeType) {
     return source

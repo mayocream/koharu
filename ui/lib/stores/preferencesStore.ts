@@ -17,17 +17,29 @@ type PreferencesState = {
   renderStroke?: RenderStroke
   renderColor?: RgbaColor
   renderTextAlign?: TextAlign
-  setRenderSettings: (settings: Partial<Pick<PreferencesState, 'renderEffect' | 'renderStroke' | 'renderColor' | 'renderTextAlign'>>) => void
+  setRenderSettings: (
+    settings: Partial<
+      Pick<
+        PreferencesState,
+        'renderEffect' | 'renderStroke' | 'renderColor' | 'renderTextAlign'
+      >
+    >,
+  ) => void
   llmModel?: string
   llmLanguage?: string
-  setLlmSettings: (settings: { llmModel?: string; llmLanguage?: string }) => void
+  setLlmSettings: (settings: {
+    llmModel?: string
+    llmLanguage?: string
+  }) => void
   cbzExportSettings: {
     maxSize: number | null
     imageFormat: 'jpg' | 'webp'
     archiveFormat: 'cbz' | 'zip'
     quality: number
   }
-  setCbzExportSettings: (settings: Partial<Omit<CbzExportSettings, 'outputFileName'>>) => void
+  setCbzExportSettings: (
+    settings: Partial<Omit<CbzExportSettings, 'outputFileName'>>,
+  ) => void
   apiKeys: Record<string, string>
   setApiKey: (provider: string, key: string) => void
   resetPreferences: () => void
@@ -69,7 +81,8 @@ export const usePreferencesStore = create<PreferencesState>()(
           },
         })),
       setFontFamily: (font) => set({ fontFamily: font }),
-      setRenderSettings: (settings) => set((state) => ({ ...state, ...settings })),
+      setRenderSettings: (settings) =>
+        set((state) => ({ ...state, ...settings })),
       setLlmSettings: (settings) => set((state) => ({ ...state, ...settings })),
       setCbzExportSettings: (settings) =>
         set((state) => ({

@@ -670,10 +670,12 @@ export const useDocumentMutations = () => {
           ),
         )
       }
-      
+
       const settingsToUse = {
         ...cbzExportSettings,
-        outputFileName: loadedFolderName ? `${loadedFolderName}_v2` : 'koharu_export_v2'
+        outputFileName: loadedFolderName
+          ? `${loadedFolderName}_v2`
+          : 'koharu_export_v2',
       }
 
       await exportAsCbz(blobs, settingsToUse)

@@ -189,15 +189,21 @@ function LlmStatusPopover() {
     const cachedLanguage = prefs.llmLanguage
 
     const hasCurrent = llmModels.some((model) => model.id === llmSelectedModel)
-    const hasCached = cachedModel ? llmModels.some((model) => model.id === cachedModel) : false
-    
+    const hasCached = cachedModel
+      ? llmModels.some((model) => model.id === cachedModel)
+      : false
+
     // Priority: 1. Current selection, 2. Cached preference, 3. First available model
-    const nextModel = hasCurrent ? llmSelectedModel : hasCached ? cachedModel : llmModels[0]?.id
+    const nextModel = hasCurrent
+      ? llmSelectedModel
+      : hasCached
+        ? cachedModel
+        : llmModels[0]?.id
     if (!nextModel) return
 
     const languages =
       llmModels.find((model) => model.id === nextModel)?.languages ?? []
-    
+
     // Priority: 1. Current language, 2. Cached language, 3. First available language
     const nextLanguage =
       llmSelectedLanguage && languages.includes(llmSelectedLanguage)

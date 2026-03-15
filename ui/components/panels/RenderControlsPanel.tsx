@@ -45,11 +45,7 @@ import {
   CommandItem,
   CommandList,
 } from '@/components/ui/command'
-import {
-  Tabs,
-  TabsList,
-  TabsTrigger,
-} from '@/components/ui/tabs'
+import { Tabs, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { useEditorUiStore } from '@/lib/stores/editorUiStore'
 import { usePreferencesStore } from '@/lib/stores/preferencesStore'
 import { useLlmUiStore } from '@/lib/stores/llmUiStore'
@@ -118,7 +114,12 @@ const uniqueStrings = (values: string[]) => {
 
 const getFontLanguage = (font: string) => {
   const lower = font.toLowerCase()
-  if (/(hei|song|ming|kai|fangsong|yuan|tc|sc|pingfang|yanti|yahei|jhenghei|zh)/.test(lower)) return 'zh'
+  if (
+    /(hei|song|ming|kai|fangsong|yuan|tc|sc|pingfang|yanti|yahei|jhenghei|zh)/.test(
+      lower,
+    )
+  )
+    return 'zh'
   if (/(gothic|mincho|meiryo|hiragino|yu|osaka|jp)/.test(lower)) return 'ja'
   if (/(batang|dotum|gulim|gungsuh|malgun|kr)/.test(lower)) return 'ko'
   return 'general'
@@ -183,12 +184,16 @@ export function RenderControlsPanel() {
   const renderColor = useEditorUiStore((state) => state.renderColor)
   const renderTextAlign = useEditorUiStore((state) => state.renderTextAlign)
   const setRenderColor = useEditorUiStore((state) => state.setRenderColor)
-  const setRenderTextAlign = useEditorUiStore((state) => state.setRenderTextAlign)
+  const setRenderTextAlign = useEditorUiStore(
+    (state) => state.setRenderTextAlign,
+  )
   const { updateTextBlocks } = useTextBlockMutations()
   const { data: availableFonts = [] } = useFontsQuery()
   const fontFamily = usePreferencesStore((state) => state.fontFamily)
   const setFontFamily = usePreferencesStore((state) => state.setFontFamily)
-  const setRenderSettings = usePreferencesStore((state) => state.setRenderSettings)
+  const setRenderSettings = usePreferencesStore(
+    (state) => state.setRenderSettings,
+  )
   const setLlmSettings = usePreferencesStore((state) => state.setLlmSettings)
   const llmSelectedModel = useLlmUiStore((state) => state.selectedModel)
   const llmSelectedLanguage = useLlmUiStore((state) => state.selectedLanguage)
@@ -196,7 +201,9 @@ export function RenderControlsPanel() {
   const { textBlocks, selectedBlockIndex, replaceBlock } = useTextBlocks()
   const { t } = useTranslation()
   const [fontOpen, setFontOpen] = useState(false)
-  const [fontTab, setFontTab] = useState<'all' | 'zh' | 'ja' | 'ko' | 'general'>('all')
+  const [fontTab, setFontTab] = useState<
+    'all' | 'zh' | 'ja' | 'ko' | 'general'
+  >('all')
 
   const selectedBlock =
     selectedBlockIndex !== undefined
@@ -218,7 +225,7 @@ export function RenderControlsPanel() {
   const fontOptions = uniqueStrings(fontCandidates)
   const filteredFontOptions = useMemo(() => {
     if (fontTab === 'all') return fontOptions
-    return fontOptions.filter(font => getFontLanguage(font) === fontTab)
+    return fontOptions.filter((font) => getFontLanguage(font) === fontTab)
   }, [fontOptions, fontTab])
 
   const currentFont =
@@ -250,7 +257,8 @@ export function RenderControlsPanel() {
     defaultValue: 'Align',
   })
   const currentTextAlign =
-    selectedBlock?.style?.textAlign ?? (hasBlocks ? resolveEffectiveTextAlign(firstBlock) : renderTextAlign)
+    selectedBlock?.style?.textAlign ??
+    (hasBlocks ? resolveEffectiveTextAlign(firstBlock) : renderTextAlign)
   const scopeLabel =
     selectedBlockIndex !== undefined
       ? t('render.fontScopeBlockIndex', {
@@ -336,7 +344,7 @@ export function RenderControlsPanel() {
       llmModel: llmSelectedModel,
       llmLanguage: llmSelectedLanguage,
     })
-    
+
     if (llmSelectedModel) {
       void llmForceLoad()
     }
@@ -402,17 +410,21 @@ export function RenderControlsPanel() {
         <Tooltip>
           <TooltipTrigger asChild>
             <Button
-              variant="secondary"
-              size="icon-sm"
-              className="h-6 w-6 shrink-0 bg-transparent hover:bg-muted"
+              variant='secondary'
+              size='icon-sm'
+              className='hover:bg-muted h-6 w-6 shrink-0 bg-transparent'
               onClick={handleSaveSettings}
-              aria-label={t('render.saveSettings', { defaultValue: 'Save default settings' })}
+              aria-label={t('render.saveSettings', {
+                defaultValue: 'Save default settings',
+              })}
             >
-              <Save className="size-3.5" />
+              <Save className='size-3.5' />
             </Button>
           </TooltipTrigger>
           <TooltipContent side='bottom' sideOffset={4}>
-            {t('render.saveSettingsTooltip', { defaultValue: 'Save text settings as default for future sessions' })}
+            {t('render.saveSettingsTooltip', {
+              defaultValue: 'Save text settings as default for future sessions',
+            })}
           </TooltipContent>
         </Tooltip>
 
@@ -437,31 +449,65 @@ export function RenderControlsPanel() {
             <Popover open={fontOpen} onOpenChange={setFontOpen}>
               <PopoverTrigger asChild>
                 <Button
-                  variant="outline"
-                  role="combobox"
+                  variant='outline'
+                  role='combobox'
                   aria-expanded={fontOpen}
-                  className="h-7 w-full justify-between text-xs px-2 truncate min-w-0"
+                  className='h-7 w-full min-w-0 justify-between truncate px-2 text-xs'
                   style={currentFont ? { fontFamily: currentFont } : undefined}
                 >
-                  <span className="truncate min-w-0">
+                  <span className='min-w-0 truncate'>
                     {currentFont || t('render.fontPlaceholder')}
                   </span>
-                  <ChevronsUpDownIcon className="ml-2 h-4 w-4 shrink-0 opacity-50" />
+                  <ChevronsUpDownIcon className='ml-2 h-4 w-4 shrink-0 opacity-50' />
                 </Button>
               </PopoverTrigger>
-              <PopoverContent className="w-[260px] p-0" align="start">
+              <PopoverContent className='w-[260px] p-0' align='start'>
                 <Command>
-                  <CommandInput placeholder={t('render.fontSearch', { defaultValue: 'Search fonts...' })} className="h-9" />
-                  <Tabs value={fontTab} onValueChange={(v: any) => setFontTab(v)} className="w-full">
-                    <TabsList className="flex w-full h-8 justify-start rounded-none border-b bg-transparent p-0 overflow-x-auto">
-                      <TabsTrigger value="all" className="rounded-none text-xs data-[state=active]:border-b-2 data-[state=active]:border-primary data-[state=active]:shadow-none">All</TabsTrigger>
-                      <TabsTrigger value="zh" className="rounded-none text-xs data-[state=active]:border-b-2 data-[state=active]:border-primary data-[state=active]:shadow-none">ZH</TabsTrigger>
-                      <TabsTrigger value="ja" className="rounded-none text-xs data-[state=active]:border-b-2 data-[state=active]:border-primary data-[state=active]:shadow-none">JA</TabsTrigger>
-                      <TabsTrigger value="ko" className="rounded-none text-xs data-[state=active]:border-b-2 data-[state=active]:border-primary data-[state=active]:shadow-none">KO</TabsTrigger>
-                      <TabsTrigger value="general" className="rounded-none text-xs data-[state=active]:border-b-2 data-[state=active]:border-primary data-[state=active]:shadow-none">Other</TabsTrigger>
+                  <CommandInput
+                    placeholder={t('render.fontSearch', {
+                      defaultValue: 'Search fonts...',
+                    })}
+                    className='h-9'
+                  />
+                  <Tabs
+                    value={fontTab}
+                    onValueChange={(v: any) => setFontTab(v)}
+                    className='w-full'
+                  >
+                    <TabsList className='flex h-8 w-full justify-start overflow-x-auto rounded-none border-b bg-transparent p-0'>
+                      <TabsTrigger
+                        value='all'
+                        className='data-[state=active]:border-primary rounded-none text-xs data-[state=active]:border-b-2 data-[state=active]:shadow-none'
+                      >
+                        All
+                      </TabsTrigger>
+                      <TabsTrigger
+                        value='zh'
+                        className='data-[state=active]:border-primary rounded-none text-xs data-[state=active]:border-b-2 data-[state=active]:shadow-none'
+                      >
+                        ZH
+                      </TabsTrigger>
+                      <TabsTrigger
+                        value='ja'
+                        className='data-[state=active]:border-primary rounded-none text-xs data-[state=active]:border-b-2 data-[state=active]:shadow-none'
+                      >
+                        JA
+                      </TabsTrigger>
+                      <TabsTrigger
+                        value='ko'
+                        className='data-[state=active]:border-primary rounded-none text-xs data-[state=active]:border-b-2 data-[state=active]:shadow-none'
+                      >
+                        KO
+                      </TabsTrigger>
+                      <TabsTrigger
+                        value='general'
+                        className='data-[state=active]:border-primary rounded-none text-xs data-[state=active]:border-b-2 data-[state=active]:shadow-none'
+                      >
+                        Other
+                      </TabsTrigger>
                     </TabsList>
                   </Tabs>
-                  <CommandList className="max-h-[220px]">
+                  <CommandList className='max-h-[220px]'>
                     <CommandEmpty>No font found.</CommandEmpty>
                     <CommandGroup>
                       {filteredFontOptions.map((font) => (
@@ -475,7 +521,11 @@ export function RenderControlsPanel() {
                               value,
                               selectedBlock?.style?.fontFamilies,
                             )
-                            if (!applyStyleToSelected({ fontFamilies: nextFamilies })) {
+                            if (
+                              !applyStyleToSelected({
+                                fontFamilies: nextFamilies,
+                              })
+                            ) {
                               setFontFamily(value)
                               if (hasBlocks) {
                                 const nextBlocks = textBlocks.map((block) => ({
@@ -496,8 +546,10 @@ export function RenderControlsPanel() {
                           {font}
                           <CheckIcon
                             className={cn(
-                              "ml-auto h-4 w-4",
-                              currentFont === font ? "opacity-100" : "opacity-0"
+                              'ml-auto h-4 w-4',
+                              currentFont === font
+                                ? 'opacity-100'
+                                : 'opacity-0',
                             )}
                           />
                         </CommandItem>
@@ -734,15 +786,17 @@ export function RenderControlsPanel() {
         </div>
       </div>
 
-      <div className='flex items-center pt-2 gap-2'>
+      <div className='flex items-center gap-2 pt-2'>
         <Button
-          variant="secondary"
-          size="sm"
-          className="flex-1 text-xs font-medium bg-muted/50 hover:bg-muted"
+          variant='secondary'
+          size='sm'
+          className='bg-muted/50 hover:bg-muted flex-1 text-xs font-medium'
           onClick={handleApplyToAllClick}
           disabled={!hasBlocks}
         >
-          {t('render.applyToAll', { defaultValue: 'Apply styling to all images' })}
+          {t('render.applyToAll', {
+            defaultValue: 'Apply styling to all images',
+          })}
         </Button>
       </div>
     </div>

@@ -2,11 +2,7 @@
 
 import { useState, useEffect } from 'react'
 import { usePreferencesStore } from '@/lib/stores/preferencesStore'
-import {
-  FileArchive,
-  Loader2,
-  Sparkles,
-} from 'lucide-react'
+import { FileArchive, Loader2, Sparkles } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import {
@@ -18,7 +14,11 @@ import {
   DialogFooter,
 } from '@/components/ui/dialog'
 import { Slider } from '@/components/ui/slider'
-import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip'
+import {
+  Tooltip,
+  TooltipContent,
+  TooltipTrigger,
+} from '@/components/ui/tooltip'
 import { cn } from '@/lib/utils'
 import { api } from '@/lib/api'
 import { type CbzExportSettings, exportAsCbz } from '@/lib/cbz-export'
@@ -110,27 +110,30 @@ export function CbzExportDialog({ open, onOpenChange }: Props) {
       <DialogContent className='sm:max-w-md'>
         <DialogHeader>
           <DialogTitle className='flex items-center gap-2'>
-            <FileArchive className='size-4 text-primary' />
+            <FileArchive className='text-primary size-4' />
             Export as CBZ
           </DialogTitle>
           <DialogDescription>
-            Package all {totalPages} rendered image{totalPages !== 1 ? 's' : ''} into a CBZ archive.
+            Package all {totalPages} rendered image{totalPages !== 1 ? 's' : ''}{' '}
+            into a CBZ archive.
           </DialogDescription>
         </DialogHeader>
 
         <div className='space-y-5 py-2'>
           {/* Resolution */}
           <div className='space-y-2'>
-            <label className='text-xs font-medium text-muted-foreground uppercase tracking-wide'>
+            <label className='text-muted-foreground text-xs font-medium tracking-wide uppercase'>
               Resolution
             </label>
             <div className='flex flex-wrap gap-1.5'>
               {RESOLUTIONS.map((res) => (
                 <button
                   key={String(res.value)}
-                  onClick={() => setSettings((s) => ({ ...s, maxSize: res.value }))}
+                  onClick={() =>
+                    setSettings((s) => ({ ...s, maxSize: res.value }))
+                  }
                   className={cn(
-                    'px-3 py-1.5 rounded-md text-xs font-medium transition-all',
+                    'rounded-md px-3 py-1.5 text-xs font-medium transition-all',
                     settings.maxSize === res.value
                       ? 'bg-primary text-primary-foreground'
                       : 'bg-muted text-muted-foreground hover:bg-muted/80',
@@ -144,16 +147,16 @@ export function CbzExportDialog({ open, onOpenChange }: Props) {
 
           {/* Image Format */}
           <div className='space-y-2'>
-            <label className='text-xs font-medium text-muted-foreground uppercase tracking-wide'>
+            <label className='text-muted-foreground text-xs font-medium tracking-wide uppercase'>
               Image Format
             </label>
-            <div className='grid grid-cols-2 gap-1.5 p-1 bg-muted rounded-lg'>
+            <div className='bg-muted grid grid-cols-2 gap-1.5 rounded-lg p-1'>
               {(['jpg', 'webp'] as const).map((f) => (
                 <button
                   key={f}
                   onClick={() => setSettings((s) => ({ ...s, imageFormat: f }))}
                   className={cn(
-                    'py-1.5 rounded-md text-xs font-medium uppercase transition-all',
+                    'rounded-md py-1.5 text-xs font-medium uppercase transition-all',
                     settings.imageFormat === f
                       ? 'bg-background text-foreground shadow-sm'
                       : 'text-muted-foreground hover:text-foreground',
@@ -167,16 +170,18 @@ export function CbzExportDialog({ open, onOpenChange }: Props) {
 
           {/* Archive Format */}
           <div className='space-y-2'>
-            <label className='text-xs font-medium text-muted-foreground uppercase tracking-wide'>
+            <label className='text-muted-foreground text-xs font-medium tracking-wide uppercase'>
               Archive Format
             </label>
-            <div className='grid grid-cols-2 gap-1.5 p-1 bg-muted rounded-lg'>
+            <div className='bg-muted grid grid-cols-2 gap-1.5 rounded-lg p-1'>
               {(['cbz', 'zip'] as const).map((f) => (
                 <button
                   key={f}
-                  onClick={() => setSettings((s) => ({ ...s, archiveFormat: f }))}
+                  onClick={() =>
+                    setSettings((s) => ({ ...s, archiveFormat: f }))
+                  }
                   className={cn(
-                    'py-1.5 rounded-md text-xs font-medium uppercase transition-all',
+                    'rounded-md py-1.5 text-xs font-medium uppercase transition-all',
                     settings.archiveFormat === f
                       ? 'bg-background text-foreground shadow-sm'
                       : 'text-muted-foreground hover:text-foreground',
@@ -191,7 +196,7 @@ export function CbzExportDialog({ open, onOpenChange }: Props) {
           {/* Quality */}
           <div className='space-y-2'>
             <div className='flex items-center justify-between'>
-              <label className='text-xs font-medium text-muted-foreground uppercase tracking-wide'>
+              <label className='text-muted-foreground text-xs font-medium tracking-wide uppercase'>
                 Export Quality
               </label>
               <span className='text-xs font-medium tabular-nums'>
@@ -208,7 +213,7 @@ export function CbzExportDialog({ open, onOpenChange }: Props) {
               }
               className='py-2'
             />
-            <p className='text-[10px] italic text-muted-foreground'>
+            <p className='text-muted-foreground text-[10px] italic'>
               Higher quality results in larger file sizes. 75% is recommended
               for WebP.
             </p>
@@ -216,30 +221,34 @@ export function CbzExportDialog({ open, onOpenChange }: Props) {
 
           {/* Output filename */}
           <div className='space-y-2'>
-            <label className='text-xs font-medium text-muted-foreground uppercase tracking-wide'>
+            <label className='text-muted-foreground text-xs font-medium tracking-wide uppercase'>
               Output Filename
             </label>
             <div className='flex items-center gap-2'>
               <Input
                 value={settings.outputFileName}
-                onChange={(e) => setSettings((s) => ({ ...s, outputFileName: e.target.value }))}
+                onChange={(e) =>
+                  setSettings((s) => ({ ...s, outputFileName: e.target.value }))
+                }
                 placeholder='koharu_export'
                 className='h-8 text-sm'
               />
-              <span className='text-xs text-muted-foreground shrink-0'>.{settings.archiveFormat}</span>
+              <span className='text-muted-foreground shrink-0 text-xs'>
+                .{settings.archiveFormat}
+              </span>
             </div>
           </div>
 
           {/* Progress */}
           {isExporting && (
             <div className='space-y-1.5'>
-              <div className='flex items-center justify-between text-xs text-muted-foreground'>
+              <div className='text-muted-foreground flex items-center justify-between text-xs'>
                 <span>Exporting…</span>
                 <span>{Math.round(progress)}%</span>
               </div>
-              <div className='h-1.5 w-full rounded-full bg-muted overflow-hidden'>
+              <div className='bg-muted h-1.5 w-full overflow-hidden rounded-full'>
                 <div
-                  className='h-full bg-primary transition-all duration-300 rounded-full'
+                  className='bg-primary h-full rounded-full transition-all duration-300'
                   style={{ width: `${progress}%` }}
                 />
               </div>
@@ -248,17 +257,22 @@ export function CbzExportDialog({ open, onOpenChange }: Props) {
 
           {/* Done / Error */}
           {done && !isExporting && (
-            <p className='text-xs text-green-600 dark:text-green-400 font-medium'>
+            <p className='text-xs font-medium text-green-600 dark:text-green-400'>
               ✓ CBZ exported successfully!
             </p>
           )}
           {error && (
-            <p className='text-xs text-destructive font-medium'>{error}</p>
+            <p className='text-destructive text-xs font-medium'>{error}</p>
           )}
         </div>
 
         <DialogFooter>
-          <Button variant='ghost' size='sm' onClick={handleClose} disabled={isExporting}>
+          <Button
+            variant='ghost'
+            size='sm'
+            onClick={handleClose}
+            disabled={isExporting}
+          >
             Cancel
           </Button>
           <Tooltip>
@@ -270,12 +284,12 @@ export function CbzExportDialog({ open, onOpenChange }: Props) {
               >
                 {isExporting ? (
                   <>
-                    <Loader2 className='size-3.5 mr-1.5 animate-spin' />
+                    <Loader2 className='mr-1.5 size-3.5 animate-spin' />
                     Exporting…
                   </>
                 ) : (
                   <>
-                    <Sparkles className='size-3.5 mr-1.5' />
+                    <Sparkles className='mr-1.5 size-3.5' />
                     Export
                   </>
                 )}

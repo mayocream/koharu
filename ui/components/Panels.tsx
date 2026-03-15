@@ -15,7 +15,7 @@ export function Panels() {
     <div className='bg-muted/50 flex h-full min-h-0 w-full flex-col border-l'>
       <Tabs
         defaultValue='layers'
-        className='border-border flex-1 shrink-0 gap-0 border-b flex flex-col min-h-0'
+        className='border-border flex min-h-0 flex-1 shrink-0 flex-col gap-0 border-b'
         style={{ height: '45%' }}
         data-testid='panels-settings-tabs'
       >

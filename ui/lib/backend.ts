@@ -212,8 +212,13 @@ async function openDocumentsRpc(
     // If we want to open multiple one-by-one, we should use 'open' for first, 'add' for rest.
     // Simpler: use 'add' then 'open' logic if needed, but the current backend
     // 'add_documents' appended.
-    const methodToUse = (method === 'open_documents' && totalCount === 0) ? 'open_documents' : 'add_documents'
-    totalCount = await getClient().invoke<number>(methodToUse, { files: [entry] })
+    const methodToUse =
+      method === 'open_documents' && totalCount === 0
+        ? 'open_documents'
+        : 'add_documents'
+    totalCount = await getClient().invoke<number>(methodToUse, {
+      files: [entry],
+    })
   }
 
   return totalCount
@@ -229,7 +234,7 @@ export async function openDirectoryRpc(
     const allFiles = await directoryOpen({
       recursive: false,
     })
-    
+
     // Extract folder name from the first file's relative path, if available
     if (allFiles.length > 0) {
       const parts = allFiles[0].webkitRelativePath?.split('/')
@@ -253,8 +258,13 @@ export async function openDirectoryRpc(
       name: file.name,
       data: new Uint8Array(await file.arrayBuffer()),
     }
-    const methodToUse = (method === 'open_documents' && totalCount === 0) ? 'open_documents' : 'add_documents'
-    totalCount = await getClient().invoke<number>(methodToUse, { files: [entry] })
+    const methodToUse =
+      method === 'open_documents' && totalCount === 0
+        ? 'open_documents'
+        : 'add_documents'
+    totalCount = await getClient().invoke<number>(methodToUse, {
+      files: [entry],
+    })
   }
 
   if (method === 'open_documents') {

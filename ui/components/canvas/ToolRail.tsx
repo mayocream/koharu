@@ -72,7 +72,12 @@ export function ToolRail() {
   const mode = useEditorUiStore((state) => state.mode)
   const setMode = useEditorUiStore((state) => state.setMode)
   const { t } = useTranslation()
-  const { processImage, processAllImages, applyStyleToAllDocuments, runAllToCbz } = useDocumentMutations()
+  const {
+    processImage,
+    processAllImages,
+    applyStyleToAllDocuments,
+    runAllToCbz,
+  } = useDocumentMutations()
 
   return (
     <div className='border-border bg-card flex w-11 flex-col border-r'>
@@ -116,14 +121,14 @@ export function ToolRail() {
         })}
       </div>
       {/* RUN and RUN ALL action buttons */}
-      <div className='flex flex-col items-center gap-1.5 border-t border-border px-1 py-2'>
+      <div className='border-border flex flex-col items-center gap-1.5 border-t px-1 py-2'>
         <Tooltip>
           <TooltipTrigger asChild>
             <Button
               size='icon-sm'
               variant='default'
               data-testid='tool-run'
-              className='w-9 h-9 bg-primary text-primary-foreground shadow-sm'
+              className='bg-primary text-primary-foreground h-9 w-9 shadow-sm'
               onClick={() => void processImage?.()}
               aria-label='Run'
             >
@@ -140,7 +145,7 @@ export function ToolRail() {
               size='icon-sm'
               variant='secondary'
               data-testid='tool-run-all'
-              className='w-9 h-9 shadow-sm'
+              className='h-9 w-9 shadow-sm'
               onClick={() => void processAllImages?.()}
               aria-label='Run All'
             >
@@ -157,7 +162,7 @@ export function ToolRail() {
               size='icon-sm'
               variant='outline'
               data-testid='tool-apply-all'
-              className='w-9 h-9 shadow-sm'
+              className='h-9 w-9 shadow-sm'
               onClick={() => void applyStyleToAllDocuments?.()}
               aria-label='Apply Styling to All'
             >
@@ -174,7 +179,7 @@ export function ToolRail() {
               size='icon-sm'
               variant='outline'
               data-testid='tool-run-cbz'
-              className='w-9 h-9 shadow-sm'
+              className='h-9 w-9 shadow-sm'
               onClick={() => void runAllToCbz?.()}
               aria-label='Run ALL to CBZ'
             >

@@ -58,8 +58,12 @@ export default function SettingsPage() {
   const [deviceInfo, setDeviceInfo] = useState<DeviceInfo>()
   const apiKeys = usePreferencesStore((state) => state.apiKeys)
   const setApiKey = usePreferencesStore((state) => state.setApiKey)
-  const cbzExportSettings = usePreferencesStore((state) => state.cbzExportSettings)
-  const setCbzExportSettings = usePreferencesStore((state) => state.setCbzExportSettings)
+  const cbzExportSettings = usePreferencesStore(
+    (state) => state.cbzExportSettings,
+  )
+  const setCbzExportSettings = usePreferencesStore(
+    (state) => state.setCbzExportSettings,
+  )
   const [visibleKeys, setVisibleKeys] = useState<Record<string, boolean>>({})
   const saveTimersRef = useRef<Record<string, ReturnType<typeof setTimeout>>>(
     {},
@@ -231,24 +235,31 @@ export default function SettingsPage() {
             {/* CBZ Export Defaults Section */}
             <section className='mb-8'>
               <h2 className='text-foreground mb-1 text-sm font-bold'>
-                {t('settings.cbzDefaults', { defaultValue: 'Default CBZ Export Rules' })}
+                {t('settings.cbzDefaults', {
+                  defaultValue: 'Default CBZ Export Rules',
+                })}
               </h2>
               <p className='text-muted-foreground mb-4 text-sm'>
-                {t('settings.cbzDefaultsDescription', { defaultValue: 'Configure your preferred settings for archive exports.' })}
+                {t('settings.cbzDefaultsDescription', {
+                  defaultValue:
+                    'Configure your preferred settings for archive exports.',
+                })}
               </p>
-              
-              <div className='bg-card border-border rounded-lg border p-4 space-y-5'>
+
+              <div className='bg-card border-border space-y-5 rounded-lg border p-4'>
                 <div className='space-y-2'>
-                  <label className='text-xs font-medium text-muted-foreground uppercase tracking-wide'>
+                  <label className='text-muted-foreground text-xs font-medium tracking-wide uppercase'>
                     {t('settings.resolution', { defaultValue: 'Resolution' })}
                   </label>
                   <div className='flex flex-wrap gap-1.5'>
                     {RESOLUTIONS.map((res) => (
                       <button
                         key={String(res.value)}
-                        onClick={() => setCbzExportSettings({ maxSize: res.value })}
+                        onClick={() =>
+                          setCbzExportSettings({ maxSize: res.value })
+                        }
                         className={cn(
-                          'px-3 py-1.5 rounded-md text-xs font-medium transition-all',
+                          'rounded-md px-3 py-1.5 text-xs font-medium transition-all',
                           cbzExportSettings.maxSize === res.value
                             ? 'bg-primary text-primary-foreground'
                             : 'bg-muted text-muted-foreground hover:bg-muted/80',
@@ -261,16 +272,18 @@ export default function SettingsPage() {
                 </div>
 
                 <div className='space-y-2'>
-                  <label className='text-xs font-medium text-muted-foreground uppercase tracking-wide'>
-                    {t('settings.imageFormat', { defaultValue: 'Image Format' })}
+                  <label className='text-muted-foreground text-xs font-medium tracking-wide uppercase'>
+                    {t('settings.imageFormat', {
+                      defaultValue: 'Image Format',
+                    })}
                   </label>
-                  <div className='grid grid-cols-2 gap-1.5 p-1 bg-muted rounded-lg max-w-[200px]'>
+                  <div className='bg-muted grid max-w-[200px] grid-cols-2 gap-1.5 rounded-lg p-1'>
                     {(['jpg', 'webp'] as const).map((f) => (
                       <button
                         key={f}
                         onClick={() => setCbzExportSettings({ imageFormat: f })}
                         className={cn(
-                          'py-1.5 rounded-md text-xs font-medium uppercase transition-all',
+                          'rounded-md py-1.5 text-xs font-medium uppercase transition-all',
                           cbzExportSettings.imageFormat === f
                             ? 'bg-background text-foreground shadow-sm'
                             : 'text-muted-foreground hover:text-foreground',
@@ -283,16 +296,20 @@ export default function SettingsPage() {
                 </div>
 
                 <div className='space-y-2'>
-                  <label className='text-xs font-medium text-muted-foreground uppercase tracking-wide'>
-                    {t('settings.archiveFormat', { defaultValue: 'Archive Format' })}
+                  <label className='text-muted-foreground text-xs font-medium tracking-wide uppercase'>
+                    {t('settings.archiveFormat', {
+                      defaultValue: 'Archive Format',
+                    })}
                   </label>
-                  <div className='grid grid-cols-2 gap-1.5 p-1 bg-muted rounded-lg max-w-[200px]'>
+                  <div className='bg-muted grid max-w-[200px] grid-cols-2 gap-1.5 rounded-lg p-1'>
                     {(['cbz', 'zip'] as const).map((f) => (
                       <button
                         key={f}
-                        onClick={() => setCbzExportSettings({ archiveFormat: f })}
+                        onClick={() =>
+                          setCbzExportSettings({ archiveFormat: f })
+                        }
                         className={cn(
-                          'py-1.5 rounded-md text-xs font-medium uppercase transition-all',
+                          'rounded-md py-1.5 text-xs font-medium uppercase transition-all',
                           cbzExportSettings.archiveFormat === f
                             ? 'bg-background text-foreground shadow-sm'
                             : 'text-muted-foreground hover:text-foreground',
@@ -306,8 +323,10 @@ export default function SettingsPage() {
 
                 <div className='space-y-2'>
                   <div className='flex items-center justify-between'>
-                    <label className='text-xs font-medium text-muted-foreground uppercase tracking-wide'>
-                      {t('settings.quality', { defaultValue: 'Export Quality' })}
+                    <label className='text-muted-foreground text-xs font-medium tracking-wide uppercase'>
+                      {t('settings.quality', {
+                        defaultValue: 'Export Quality',
+                      })}
                     </label>
                     <span className='text-xs font-medium tabular-nums'>
                       {cbzExportSettings.quality}%
@@ -323,7 +342,7 @@ export default function SettingsPage() {
                     }
                     className='py-2'
                   />
-                  <p className='text-[10px] italic text-muted-foreground'>
+                  <p className='text-muted-foreground text-[10px] italic'>
                     {t('settings.qualityHint', {
                       defaultValue:
                         'Higher quality results in larger file sizes. 75% is recommended for WebP.',
