@@ -56,6 +56,7 @@ import { useLlmUiStore } from '@/lib/stores/llmUiStore'
 import { useFontsQuery } from '@/lib/query/hooks'
 import { useLlmMutations, useTextBlockMutations } from '@/lib/query/mutations'
 import { cn } from '@/lib/utils'
+import { playDingDing } from '@/lib/notification'
 
 const DEFAULT_COLOR: RgbaColor = [0, 0, 0, 255]
 const DEFAULT_FONT_FAMILIES = ['Arial']
@@ -339,6 +340,8 @@ export function RenderControlsPanel() {
     if (llmSelectedModel) {
       void llmForceLoad()
     }
+
+    playDingDing()
   }
 
   const mergeFontFamilies = (

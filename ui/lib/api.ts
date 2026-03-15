@@ -89,8 +89,18 @@ export const api = {
     return fetchThumbnailBlob(index)
   },
 
-  async getRenderedImage(index: number, quality?: number): Promise<Blob> {
-    const result = await invoke('get_rendered_image' as any, { index, quality })
+  async getRenderedImage(
+    index: number,
+    quality?: number,
+    format?: string,
+    maxSize?: number,
+  ): Promise<Blob> {
+    const result = await invoke('get_rendered_image' as any, {
+      index,
+      quality,
+      format,
+      maxSize,
+    })
     const r = result as { data: Uint8Array; contentType: string }
     const { toArrayBuffer } = await import('@/lib/util')
     return new Blob([toArrayBuffer(r.data)], { type: r.contentType })

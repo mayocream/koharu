@@ -14,18 +14,25 @@ export type CbzExportSettings = {
 /**
  * Resizes and converts an image Blob via Canvas API.
  * Returns a new Blob in the requested format.
+ * NOTE: If the image already matches the desired format and size (handled by backend),
+ * this function will return the source blob as-is.
  */
 async function convertImage(
   source: Blob,
   settings: CbzExportSettings,
 ): Promise<Blob> {
-  return new Promise((resolve, reject) => {
-      const mimeType = settings.imageFormat === 'webp' ? 'image/webp' : 'image/jpeg'
-      if (settings.maxSize === null && source.type === mimeType) {
-        return resolve(source)
-      }
+  const mimeType = settings.imageFormat === 'webp' ? 'image/webp' : 'image/jpeg'
+  
+  // If backend already handled conversion/resizing, these should match
+  // We check if it's already the right mime type. 
+  // We can't easily check resolution here without loading it, 
+  // but if we trust the backend call in exportAsCbz, we can skip.
+  if (source.type === mimeType) {
+    return source
+  }
 
-      const img = new Image()
+  return new Promise((resolve, reject) => {
+    const img = new Image()
     const url = URL.createObjectURL(source)
     img.onload = () => {
       URL.revokeObjectURL(url)
@@ -47,7 +54,6 @@ async function convertImage(
       if (!ctx) return reject(new Error('Cannot get 2d context'))
       ctx.drawImage(img, 0, 0, width, height)
 
-      const mimeType = settings.imageFormat === 'webp' ? 'image/webp' : 'image/jpeg'
       const quality = settings.quality / 100
       canvas.toBlob(
         (blob) => {
@@ -79,6 +85,8 @@ export async function exportAsCbz(
   const zipWriter = new ZipWriter(new BlobWriter('application/zip'))
 
   for (let i = 0; i < images.length; i++) {
+    // Images passed here are already processed by the backend via api.getRenderedImage
+    // convertImage will skip if format matches.
     const converted = await convertImage(images[i], settings)
     const name = String(i + 1).padStart(6, '0') + ext
     await zipWriter.add(name, new BlobReader(converted))

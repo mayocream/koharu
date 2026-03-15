@@ -31,6 +31,8 @@ type PreferencesState = {
   apiKeys: Record<string, string>
   setApiKey: (provider: string, key: string) => void
   resetPreferences: () => void
+  hasHydrated: boolean
+  setHasHydrated: (val: boolean) => void
 }
 
 const initialPreferences = {
@@ -52,6 +54,7 @@ const initialPreferences = {
     quality: 78,
   },
   apiKeys: {} as Record<string, string>,
+  hasHydrated: false,
 }
 
 export const usePreferencesStore = create<PreferencesState>()(
@@ -77,9 +80,15 @@ export const usePreferencesStore = create<PreferencesState>()(
           apiKeys: { ...state.apiKeys, [provider]: key },
         })),
       resetPreferences: () => set({ ...initialPreferences }),
+      setHasHydrated: (val) => set({ hasHydrated: val }),
     }),
     {
       name: 'koharu-config',
+      onRehydrateStorage: (state) => {
+        return () => {
+          state.setHasHydrated(true)
+        }
+      },
       partialize: (state) => ({
         brushConfig: state.brushConfig,
         fontFamily: state.fontFamily,

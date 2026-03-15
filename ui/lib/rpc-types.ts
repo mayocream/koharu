@@ -42,7 +42,10 @@ export type RpcMethodMap = {
   get_document_names: [void, string[]]
   get_document: [{ index: number }, Document]
   get_thumbnail: [{ index: number }, ThumbnailResult]
-  get_rendered_image: [{ index: number }, ThumbnailResult]
+  get_rendered_image: [
+    { index: number; quality?: number; format?: string; maxSize?: number },
+    ThumbnailResult,
+  ]
   add_documents: [void, number]
   open_documents: [void, number]
   clear_documents: [void, void]

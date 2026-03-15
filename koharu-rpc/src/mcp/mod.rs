@@ -130,7 +130,7 @@ impl KoharuMcp {
         let res = self
             .resources()
             .map_err(|e| ErrorData::internal_error(e, None))?;
-        let doc = operations::get_document(res, IndexPayload { index: p.index, quality: None })
+        let doc = operations::get_document(res, IndexPayload { index: p.index, quality: None, format: None, max_size: None })
             .await
             .map_err(|e| ErrorData::internal_error(e.to_string(), None))?;
 
@@ -177,7 +177,7 @@ impl KoharuMcp {
         let res = self
             .resources()
             .map_err(|e| ErrorData::internal_error(e, None))?;
-        let doc = operations::get_document(res, IndexPayload { index: p.index, quality: None })
+        let doc = operations::get_document(res, IndexPayload { index: p.index, quality: None, format: None, max_size: None })
             .await
             .map_err(|e| ErrorData::internal_error(e.to_string(), None))?;
 
@@ -270,7 +270,7 @@ impl KoharuMcp {
         Parameters(p): Parameters<ExportDocumentParams>,
     ) -> Result<String, String> {
         let res = self.resources()?;
-        let result = operations::export_document(res, IndexPayload { index: p.index, quality: None })
+        let result = operations::export_document(res, IndexPayload { index: p.index, quality: None, format: None, max_size: None })
             .await
             .map_err(|e| e.to_string())?;
 
@@ -285,7 +285,7 @@ impl KoharuMcp {
     )]
     async fn detect(&self, Parameters(p): Parameters<IndexPayload>) -> Result<String, String> {
         let res = self.resources()?;
-        operations::detect(res.clone(), p)
+        operations::detect(res.clone(), p.clone())
             .await
             .map_err(|e| e.to_string())?;
 
@@ -308,7 +308,7 @@ impl KoharuMcp {
     )]
     async fn ocr(&self, Parameters(p): Parameters<IndexPayload>) -> Result<String, String> {
         let res = self.resources()?;
-        operations::ocr(res.clone(), p)
+        operations::ocr(res.clone(), p.clone())
             .await
             .map_err(|e| e.to_string())?;
 
@@ -408,7 +408,7 @@ impl KoharuMcp {
         .await
         .map_err(|e| e.to_string())?;
 
-        let doc = operations::get_document(res, IndexPayload { index: p.index, quality: None })
+        let doc = operations::get_document(res, IndexPayload { index: p.index, quality: None, format: None, max_size: None })
             .await
             .map_err(|e| e.to_string())?;
 

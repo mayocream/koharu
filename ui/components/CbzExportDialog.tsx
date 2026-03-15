@@ -22,6 +22,7 @@ import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip
 import { cn } from '@/lib/utils'
 import { api } from '@/lib/api'
 import { type CbzExportSettings, exportAsCbz } from '@/lib/cbz-export'
+import { playDingDing } from '@/lib/notification'
 import { useEditorUiStore } from '@/lib/stores/editorUiStore'
 
 const RESOLUTIONS: { label: string; value: number | null }[] = [
@@ -69,7 +70,12 @@ export function CbzExportDialog({ open, onOpenChange }: Props) {
     try {
       const blobs: Blob[] = []
       for (let i = 0; i < totalPages; i++) {
-        const blob = await api.getRenderedImage(i, settings.quality)
+        const blob = await api.getRenderedImage(
+          i,
+          settings.quality,
+          settings.imageFormat,
+          settings.maxSize ?? undefined,
+        )
         blobs.push(blob)
         setProgress(((i + 1) / totalPages) * 50) // first 50% = fetching
       }
@@ -79,6 +85,7 @@ export function CbzExportDialog({ open, onOpenChange }: Props) {
       })
 
       setDone(true)
+      playDingDing()
     } catch (err) {
       console.error('CBZ export failed:', err)
       setError('Export failed. Please try again.')

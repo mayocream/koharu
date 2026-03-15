@@ -129,12 +129,27 @@ pub async fn get_rendered_image(
 ) -> anyhow::Result<ThumbnailResult> {
     let doc = state_tx::read_doc(&state.state, payload.index).await?;
 
-    let source = doc.rendered.as_ref().unwrap_or(&doc.image);
-    let ext = document_ext(&doc);
+    let mut source = doc.rendered.as_ref().unwrap_or(&doc.image).0.clone();
+    
+    // Perform resizing if max_size is provided and image is larger
+    if let Some(max_size) = payload.max_size {
+        let (w, h) = (source.width(), source.height());
+        let shortest = w.min(h);
+        if shortest > max_size {
+            let scale = max_size as f32 / shortest as f32;
+            let nw = (w as f32 * scale).round() as u32;
+            let nh = (h as f32 * scale).round() as u32;
+            source = source.resize(nw, nh, image::imageops::FilterType::Lanczos3);
+        }
+    }
+
+    let serializable_source = koharu_types::SerializableDynamicImage(source);
+    
+    let ext = payload.format.unwrap_or_else(|| document_ext(&doc));
     let bytes = if let Some(q) = payload.quality {
-        encode_image_with_quality(source, &ext, q)?
+        encode_image_with_quality(&serializable_source, &ext, q)?
     } else {
-        encode_image(source, &ext)?
+        encode_image(&serializable_source, &ext)?
     };
     let content_type = mime_from_ext(&ext).to_string();
 

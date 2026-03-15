@@ -15,6 +15,7 @@ import i18n from '@/lib/i18n'
 import { getQueryClient } from '@/lib/query/client'
 import { queryKeys } from '@/lib/query/keys'
 import { api, parseProcessProgress } from '@/lib/api'
+import { playDingDing } from '@/lib/notification'
 import { useApiKeyQuery, useDocumentsCountQuery } from '@/lib/query/hooks'
 import { useDownloadStore } from '@/lib/downloads'
 import { useEditorUiStore } from '@/lib/stores/editorUiStore'
@@ -22,6 +23,8 @@ import { useOperationStore } from '@/lib/stores/operationStore'
 import { usePreferencesStore } from '@/lib/stores/preferencesStore'
 import { isTauri } from '@/lib/backend'
 import { useRpcConnection } from '@/hooks/useRpcConnection'
+import { useLlmUiStore } from '@/lib/stores/llmUiStore'
+import { useLlmMutations } from '@/lib/query/mutations'
 
 function ProvidersBootstrap({ children }: { children: ReactNode }) {
   const queryClient = useQueryClient()
@@ -121,6 +124,7 @@ function ProvidersBootstrap({ children }: { children: ReactNode }) {
       } else {
         if (progress.status === 'completed') {
           useEditorUiStore.getState().setShowRenderedImage(true)
+          playDingDing()
         }
 
         operationStore.updateOperation({
@@ -155,6 +159,33 @@ function ProvidersBootstrap({ children }: { children: ReactNode }) {
       unsubscribe()
     }
   }, [queryClient])
+
+  // Hydrate LLM settings from preferences when hydrated
+  const hasHydrated = usePreferencesStore((state) => state.hasHydrated)
+  const llmModel = usePreferencesStore((state) => state.llmModel)
+  const llmLanguage = usePreferencesStore((state) => state.llmLanguage)
+  const { llmList, llmForceLoad } = useLlmMutations()
+
+  useEffect(() => {
+    if (!hasHydrated || !rpcConnected) return
+
+    const hydrateLlm = async () => {
+      // Hydrate models list first
+      await llmList()
+
+      // Restore selected model/language if they exist in prefs
+      if (llmModel) {
+        useLlmUiStore.setState({
+          selectedModel: llmModel,
+          selectedLanguage: llmLanguage,
+        })
+        // Auto load if model is set
+        void llmForceLoad()
+      }
+    }
+
+    void hydrateLlm()
+  }, [hasHydrated, rpcConnected, llmModel, llmLanguage, llmList, llmForceLoad])
 
   return children
 }

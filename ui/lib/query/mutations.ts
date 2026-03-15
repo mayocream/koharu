@@ -11,6 +11,7 @@ import { useOperationStore } from '@/lib/stores/operationStore'
 import { exportAsCbz } from '@/lib/cbz-export'
 import { usePreferencesStore } from '@/lib/stores/preferencesStore'
 import { queryKeys } from '@/lib/query/keys'
+import { playDingDing } from '@/lib/notification'
 import {
   clearMaskSync,
   enqueueBrushPatch,
@@ -620,6 +621,8 @@ export const useDocumentMutations = () => {
         shaderStroke: renderStroke,
         fontFamily,
       })
+      // Note: api.process for 'all' is asynchronous but often we want a ding when the operation state clears.
+      // However, for single image 'processImage' below we can ding easily.
     } catch (error) {
       console.error('Failed to start processing:', error)
       finishOperation()
@@ -658,7 +661,14 @@ export const useDocumentMutations = () => {
       const blobs: Blob[] = []
       const { cbzExportSettings } = usePreferencesStore.getState()
       for (let i = 0; i < totalPages; i++) {
-        blobs.push(await api.getRenderedImage(i, cbzExportSettings.quality))
+        blobs.push(
+          await api.getRenderedImage(
+            i,
+            cbzExportSettings.quality,
+            cbzExportSettings.imageFormat,
+            cbzExportSettings.maxSize ?? undefined,
+          ),
+        )
       }
       
       const settingsToUse = {
@@ -667,6 +677,7 @@ export const useDocumentMutations = () => {
       }
 
       await exportAsCbz(blobs, settingsToUse)
+      playDingDing()
     } catch (error) {
       console.error('Failed to export CBZ auto-run:', error)
     } finally {
