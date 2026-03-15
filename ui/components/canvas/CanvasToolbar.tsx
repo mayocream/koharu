@@ -184,15 +184,34 @@ function LlmStatusPopover() {
 
   useEffect(() => {
     if (llmModels.length === 0) return
+    const prefs = usePreferencesStore.getState()
+    const cachedModel = prefs.llmModel
+    const cachedLanguage = prefs.llmLanguage
+
     const hasCurrent = llmModels.some((model) => model.id === llmSelectedModel)
-    const nextModel = hasCurrent ? llmSelectedModel : llmModels[0]?.id
+    const hasCached = cachedModel
+      ? llmModels.some((model) => model.id === cachedModel)
+      : false
+
+    // Priority: 1. Current selection, 2. Cached preference, 3. First available model
+    const nextModel = hasCurrent
+      ? llmSelectedModel
+      : hasCached
+        ? cachedModel
+        : llmModels[0]?.id
     if (!nextModel) return
+
     const languages =
       llmModels.find((model) => model.id === nextModel)?.languages ?? []
+
+    // Priority: 1. Current language, 2. Cached language, 3. First available language
     const nextLanguage =
       llmSelectedLanguage && languages.includes(llmSelectedLanguage)
         ? llmSelectedLanguage
-        : languages[0]
+        : cachedLanguage && languages.includes(cachedLanguage)
+          ? cachedLanguage
+          : languages[0]
+
     const currentState = useLlmUiStore.getState()
     if (
       currentState.selectedModel === nextModel &&

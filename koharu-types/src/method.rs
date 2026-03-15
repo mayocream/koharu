@@ -9,6 +9,8 @@ pub enum Method {
     AppVersion,
     Device,
     GetDocuments,
+    GetDocumentNames,
+    ClearDocuments,
     ListFontFamilies,
     GetApiKey,
     SetApiKey,
@@ -35,6 +37,7 @@ pub enum Method {
     LlmLoad,
     LlmGenerate,
     Process,
+    GetRenderedImage,
 }
 
 impl Method {
@@ -42,6 +45,8 @@ impl Method {
         Method::AppVersion,
         Method::Device,
         Method::GetDocuments,
+        Method::GetDocumentNames,
+        Method::ClearDocuments,
         Method::ListFontFamilies,
         Method::GetApiKey,
         Method::SetApiKey,
@@ -68,6 +73,7 @@ impl Method {
         Method::LlmLoad,
         Method::LlmGenerate,
         Method::Process,
+        Method::GetRenderedImage,
     ];
 
     pub fn as_str(self) -> &'static str {
@@ -75,6 +81,8 @@ impl Method {
             Method::AppVersion => "app_version",
             Method::Device => "device",
             Method::GetDocuments => "get_documents",
+            Method::GetDocumentNames => "get_document_names",
+            Method::ClearDocuments => "clear_documents",
             Method::ListFontFamilies => "list_font_families",
             Method::GetApiKey => "get_api_key",
             Method::SetApiKey => "set_api_key",
@@ -101,6 +109,7 @@ impl Method {
             Method::LlmLoad => "llm_load",
             Method::LlmGenerate => "llm_generate",
             Method::Process => "process",
+            Method::GetRenderedImage => "get_rendered_image",
         }
     }
 }
@@ -119,6 +128,8 @@ impl FromStr for Method {
             "app_version" => Method::AppVersion,
             "device" => Method::Device,
             "get_documents" => Method::GetDocuments,
+            "get_document_names" => Method::GetDocumentNames,
+            "clear_documents" => Method::ClearDocuments,
             "list_font_families" => Method::ListFontFamilies,
             "get_api_key" => Method::GetApiKey,
             "set_api_key" => Method::SetApiKey,
@@ -145,6 +156,7 @@ impl FromStr for Method {
             "llm_load" => Method::LlmLoad,
             "llm_generate" => Method::LlmGenerate,
             "process" => Method::Process,
+            "get_rendered_image" => Method::GetRenderedImage,
             _ => anyhow::bail!("Unknown method: {s}"),
         };
         Ok(method)

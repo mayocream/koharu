@@ -14,10 +14,13 @@ pub struct OpenExternalPayload {
     pub url: String,
 }
 
-#[derive(Debug, Clone, Copy, Serialize, Deserialize, JsonSchema)]
+#[derive(Debug, Clone, Serialize, Deserialize, JsonSchema)]
 #[serde(rename_all = "camelCase")]
 pub struct IndexPayload {
     pub index: usize,
+    pub quality: Option<u8>,
+    pub format: Option<String>,
+    pub max_size: Option<u32>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -320,7 +323,12 @@ mod tests {
         round_trip(&OpenExternalPayload {
             url: "https://example.com".to_string(),
         });
-        round_trip(&IndexPayload { index: 2 });
+        round_trip(&IndexPayload {
+            index: 2,
+            quality: None,
+            format: None,
+            max_size: None,
+        });
         round_trip(&ThumbnailResult {
             data: vec![1, 2, 3],
             content_type: "image/webp".to_string(),

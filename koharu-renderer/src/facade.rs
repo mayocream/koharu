@@ -86,10 +86,12 @@ impl Renderer {
             );
         });
 
-        if let Some(inpainted) = &document.inpainted
-            && text_block_index.is_none()
-        {
-            let mut rendered = inpainted.to_rgba8();
+        if text_block_index.is_none() {
+            let mut rendered = if let Some(inpainted) = &document.inpainted {
+                inpainted.to_rgba8()
+            } else {
+                document.image.to_rgba8()
+            };
 
             if let Some(brush_layer) = &document.brush_layer {
                 let brush = brush_layer.to_rgba8();
@@ -138,7 +140,7 @@ impl Renderer {
         };
 
         let mut style = text_block.style.clone().unwrap_or_else(|| TextStyle {
-            font_families: font_families_for_text(&normalized_translation),
+            font_families: Vec::new(),
             font_size: None,
             color: [0, 0, 0, 255],
             effect: None,

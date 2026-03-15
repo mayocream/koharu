@@ -15,7 +15,8 @@ export function Panels() {
     <div className='bg-muted/50 flex h-full min-h-0 w-full flex-col border-l'>
       <Tabs
         defaultValue='layers'
-        className='border-border h-60 shrink-0 gap-0 border-b'
+        className='border-border flex min-h-0 flex-1 shrink-0 flex-col gap-0 border-b'
+        style={{ height: '45%' }}
         data-testid='panels-settings-tabs'
       >
         <TabsList className='bg-muted/70 m-2 mb-0 grid w-[calc(100%-1rem)] grid-cols-2'>

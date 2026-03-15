@@ -9,7 +9,7 @@ use rfd::FileDialog;
 
 use crate::{AppResources, state_tx};
 
-use super::utils::{encode_image, load_documents, mime_from_ext};
+use super::utils::{encode_image, encode_image_with_quality, load_documents, mime_from_ext};
 
 fn next_available_path(output_dir: &Path, stem: &str, ext: &str) -> PathBuf {
     let mut candidate = output_dir.join(format!("{stem}.{ext}"));
@@ -87,6 +87,17 @@ pub async fn get_documents(state: AppResources) -> anyhow::Result<usize> {
     Ok(guard.documents.len())
 }
 
+pub async fn get_document_names(state: AppResources) -> anyhow::Result<Vec<String>> {
+    let guard = state.state.read().await;
+    Ok(guard.documents.iter().map(|d| d.name.clone()).collect())
+}
+
+pub async fn clear_documents(state: AppResources) -> anyhow::Result<()> {
+    let mut guard = state.state.write().await;
+    guard.documents.clear();
+    Ok(())
+}
+
 pub async fn get_document(
     state: AppResources,
     payload: IndexPayload,
@@ -109,6 +120,42 @@ pub async fn get_thumbnail(
     Ok(ThumbnailResult {
         data: buf.into_inner(),
         content_type: "image/webp".to_string(),
+    })
+}
+
+pub async fn get_rendered_image(
+    state: AppResources,
+    payload: IndexPayload,
+) -> anyhow::Result<ThumbnailResult> {
+    let doc = state_tx::read_doc(&state.state, payload.index).await?;
+
+    let mut source = doc.rendered.as_ref().unwrap_or(&doc.image).0.clone();
+
+    // Perform resizing if max_size is provided and image is larger
+    if let Some(max_size) = payload.max_size {
+        let (w, h) = (source.width(), source.height());
+        let shortest = w.min(h);
+        if shortest > max_size {
+            let scale = max_size as f32 / shortest as f32;
+            let nw = (w as f32 * scale).round() as u32;
+            let nh = (h as f32 * scale).round() as u32;
+            source = source.resize(nw, nh, image::imageops::FilterType::Lanczos3);
+        }
+    }
+
+    let serializable_source = koharu_types::SerializableDynamicImage(source);
+
+    let ext = payload.format.unwrap_or_else(|| document_ext(&doc));
+    let bytes = if let Some(q) = payload.quality {
+        encode_image_with_quality(&serializable_source, &ext, q)?
+    } else {
+        encode_image(&serializable_source, &ext)?
+    };
+    let content_type = mime_from_ext(&ext).to_string();
+
+    Ok(ThumbnailResult {
+        data: bytes,
+        content_type,
     })
 }
 
@@ -150,6 +197,9 @@ pub async fn add_documents(
     let docs = load_documents(inputs)?;
     let mut guard = state.state.write().await;
     guard.documents.extend(docs);
+    guard
+        .documents
+        .sort_by(|a, b| natord::compare(&a.name, &b.name));
     Ok(guard.documents.len())
 }
 

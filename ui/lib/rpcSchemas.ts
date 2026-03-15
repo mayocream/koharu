@@ -216,6 +216,13 @@ export const processProgressSchema = z.object({
   overallPercent: z.number(),
 })
 
+export const indexPayloadSchema = z.object({
+  index: z.number(),
+  quality: fromRustOption(z.number()),
+  format: fromRustOption(z.string()),
+  maxSize: fromRustOption(z.number()),
+})
+
 export const deviceInfoSchema = z.object({
   mlDevice: z.string(),
 })

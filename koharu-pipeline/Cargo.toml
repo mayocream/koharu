@@ -20,6 +20,7 @@ image = { workspace = true }
 imageproc = { workspace = true }
 once_cell = { workspace = true }
 open = { workspace = true }
+natord = { workspace = true }
 rayon = { workspace = true }
 rfd = { workspace = true }
 serde = { workspace = true }
@@ -28,6 +29,7 @@ strum = { workspace = true }
 tokio = { workspace = true }
 tracing = { workspace = true }
 keyring = { workspace = true }
+webp = { workspace = true }
 
 [target.'cfg(windows)'.dependencies]
 keyring = { workspace = true, features = ["windows-native"] }

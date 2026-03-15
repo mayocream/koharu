@@ -11,6 +11,9 @@ import {
   MinusIcon,
   PlusIcon,
   SquareIcon,
+  CheckIcon,
+  ChevronsUpDownIcon,
+  Save,
 } from 'lucide-react'
 import { useTextBlocks } from '@/hooks/useTextBlocks'
 import {
@@ -28,18 +31,28 @@ import {
   TooltipContent,
   TooltipTrigger,
 } from '@/components/ui/tooltip'
+import { useMemo, useState } from 'react'
 import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from '@/components/ui/select'
+  Popover,
+  PopoverContent,
+  PopoverTrigger,
+} from '@/components/ui/popover'
+import {
+  Command,
+  CommandEmpty,
+  CommandGroup,
+  CommandInput,
+  CommandItem,
+  CommandList,
+} from '@/components/ui/command'
+import { Tabs, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { useEditorUiStore } from '@/lib/stores/editorUiStore'
 import { usePreferencesStore } from '@/lib/stores/preferencesStore'
+import { useLlmUiStore } from '@/lib/stores/llmUiStore'
 import { useFontsQuery } from '@/lib/query/hooks'
-import { useTextBlockMutations } from '@/lib/query/mutations'
+import { useLlmMutations, useTextBlockMutations } from '@/lib/query/mutations'
 import { cn } from '@/lib/utils'
+import { playDingDing } from '@/lib/notification'
 
 const DEFAULT_COLOR: RgbaColor = [0, 0, 0, 255]
 const DEFAULT_FONT_FAMILIES = ['Arial']
@@ -99,6 +112,19 @@ const uniqueStrings = (values: string[]) => {
   })
 }
 
+const getFontLanguage = (font: string) => {
+  const lower = font.toLowerCase()
+  if (
+    /(hei|song|ming|kai|fangsong|yuan|tc|sc|pingfang|yanti|yahei|jhenghei|zh)/.test(
+      lower,
+    )
+  )
+    return 'zh'
+  if (/(gothic|mincho|meiryo|hiragino|yu|osaka|jp)/.test(lower)) return 'ja'
+  if (/(batang|dotum|gulim|gungsuh|malgun|kr)/.test(lower)) return 'ko'
+  return 'general'
+}
+
 const normalizeEffect = (effect?: Partial<RenderEffect>): RenderEffect => ({
   italic: effect?.italic ?? false,
   bold: effect?.bold ?? false,
@@ -155,12 +181,30 @@ export function RenderControlsPanel() {
   const renderStroke = useEditorUiStore((state) => state.renderStroke)
   const setRenderEffect = useEditorUiStore((state) => state.setRenderEffect)
   const setRenderStroke = useEditorUiStore((state) => state.setRenderStroke)
+  const renderColor = useEditorUiStore((state) => state.renderColor)
+  const renderTextAlign = useEditorUiStore((state) => state.renderTextAlign)
+  const setRenderColor = useEditorUiStore((state) => state.setRenderColor)
+  const setRenderTextAlign = useEditorUiStore(
+    (state) => state.setRenderTextAlign,
+  )
   const { updateTextBlocks } = useTextBlockMutations()
   const { data: availableFonts = [] } = useFontsQuery()
   const fontFamily = usePreferencesStore((state) => state.fontFamily)
   const setFontFamily = usePreferencesStore((state) => state.setFontFamily)
+  const setRenderSettings = usePreferencesStore(
+    (state) => state.setRenderSettings,
+  )
+  const setLlmSettings = usePreferencesStore((state) => state.setLlmSettings)
+  const llmSelectedModel = useLlmUiStore((state) => state.selectedModel)
+  const llmSelectedLanguage = useLlmUiStore((state) => state.selectedLanguage)
+  const { llmForceLoad } = useLlmMutations()
   const { textBlocks, selectedBlockIndex, replaceBlock } = useTextBlocks()
   const { t } = useTranslation()
+  const [fontOpen, setFontOpen] = useState(false)
+  const [fontTab, setFontTab] = useState<
+    'all' | 'zh' | 'ja' | 'ko' | 'general'
+  >('all')
+
   const selectedBlock =
     selectedBlockIndex !== undefined
       ? textBlocks[selectedBlockIndex]
@@ -179,6 +223,11 @@ export function RenderControlsPanel() {
           ...DEFAULT_FONT_FAMILIES,
         ]
   const fontOptions = uniqueStrings(fontCandidates)
+  const filteredFontOptions = useMemo(() => {
+    if (fontTab === 'all') return fontOptions
+    return fontOptions.filter((font) => getFontLanguage(font) === fontTab)
+  }, [fontOptions, fontTab])
+
   const currentFont =
     selectedBlock?.style?.fontFamilies?.[0] ??
     fontFamily ??
@@ -191,7 +240,7 @@ export function RenderControlsPanel() {
     selectedBlock?.style?.stroke ?? renderStroke,
   )
   const currentColor =
-    selectedBlock?.style?.color ?? (hasBlocks ? fallbackColor : DEFAULT_COLOR)
+    selectedBlock?.style?.color ?? (hasBlocks ? fallbackColor : renderColor)
   const currentColorHex = colorToHex(currentColor)
   const currentStrokeColorHex = colorToHex(currentStroke.color)
   const currentStrokeWidth = currentStroke.widthPx ?? DEFAULT_STROKE_WIDTH
@@ -207,9 +256,9 @@ export function RenderControlsPanel() {
   const alignLabel = t('render.alignLabel', {
     defaultValue: 'Align',
   })
-  const currentTextAlign = resolveEffectiveTextAlign(
-    selectedBlock ?? firstBlock,
-  )
+  const currentTextAlign =
+    selectedBlock?.style?.textAlign ??
+    (hasBlocks ? resolveEffectiveTextAlign(firstBlock) : renderTextAlign)
   const scopeLabel =
     selectedBlockIndex !== undefined
       ? t('render.fontScopeBlockIndex', {
@@ -252,12 +301,55 @@ export function RenderControlsPanel() {
   }
 
   const applyStyleToAll = (updates: Partial<TextStyle>) => {
+    if (updates.color) setRenderColor(updates.color)
+    if (updates.textAlign) setRenderTextAlign(updates.textAlign)
+    if (updates.effect) setRenderEffect(updates.effect)
+    if (updates.stroke) setRenderStroke(updates.stroke)
+
     if (!hasBlocks) return
     const nextBlocks = textBlocks.map((block) => ({
       ...block,
       style: buildStyle(block, block.style, updates),
     }))
     void updateTextBlocks(nextBlocks)
+  }
+
+  const handleApplyToAllClick = () => {
+    if (!hasBlocks) return
+    const nextEffect = normalizeEffect(currentEffect)
+
+    // Only apply font, effect & alignment — NOT color or stroke (those remain per-image)
+    const updates: Partial<TextStyle> = {
+      effect: nextEffect,
+      textAlign: currentTextAlign,
+      fontFamilies: mergeFontFamilies(currentFont, undefined),
+    }
+
+    const nextBlocks = textBlocks.map((block) => ({
+      ...block,
+      style: buildStyle(block, block.style, updates),
+    }))
+    void updateTextBlocks(nextBlocks)
+  }
+
+  const handleSaveSettings = () => {
+    setRenderSettings({
+      renderColor: currentColor,
+      renderStroke: currentStroke,
+      renderEffect: normalizeEffect(currentEffect),
+      renderTextAlign: currentTextAlign,
+    })
+    setFontFamily(currentFont || undefined)
+    setLlmSettings({
+      llmModel: llmSelectedModel,
+      llmLanguage: llmSelectedLanguage,
+    })
+
+    if (llmSelectedModel) {
+      void llmForceLoad()
+    }
+
+    playDingDing()
   }
 
   const mergeFontFamilies = (
@@ -314,7 +406,28 @@ export function RenderControlsPanel() {
 
   return (
     <div className='flex w-full min-w-0 flex-col gap-1.5'>
-      <div className='flex items-center justify-end'>
+      <div className='flex items-center justify-between'>
+        <Tooltip>
+          <TooltipTrigger asChild>
+            <Button
+              variant='secondary'
+              size='icon-sm'
+              className='hover:bg-muted h-6 w-6 shrink-0 bg-transparent'
+              onClick={handleSaveSettings}
+              aria-label={t('render.saveSettings', {
+                defaultValue: 'Save default settings',
+              })}
+            >
+              <Save className='size-3.5' />
+            </Button>
+          </TooltipTrigger>
+          <TooltipContent side='bottom' sideOffset={4}>
+            {t('render.saveSettingsTooltip', {
+              defaultValue: 'Save text settings as default for future sessions',
+            })}
+          </TooltipContent>
+        </Tooltip>
+
         <span
           data-testid='render-scope-indicator'
           className={cn(
@@ -333,50 +446,119 @@ export function RenderControlsPanel() {
 
         <div className='flex min-w-0 items-center gap-1.5'>
           <div className='min-w-0 flex-1'>
-            <Select
-              value={currentFont}
-              onValueChange={(value) => {
-                const nextFamilies = mergeFontFamilies(
-                  value,
-                  selectedBlock?.style?.fontFamilies,
-                )
-                if (applyStyleToSelected({ fontFamilies: nextFamilies })) return
-                setFontFamily(value)
-                if (!hasBlocks) return
-                const nextBlocks = textBlocks.map((block) => ({
-                  ...block,
-                  style: buildStyle(block, block.style, {
-                    fontFamilies: mergeFontFamilies(
-                      value,
-                      block.style?.fontFamilies,
-                    ),
-                  }),
-                }))
-                void updateTextBlocks(nextBlocks)
-              }}
-              disabled={fontOptions.length === 0}
-            >
-              <SelectTrigger
-                data-testid='render-font-select'
-                size='sm'
-                className='h-7 w-full min-w-0 text-xs'
-                style={currentFont ? { fontFamily: currentFont } : undefined}
-              >
-                <SelectValue placeholder={t('render.fontPlaceholder')} />
-              </SelectTrigger>
-              <SelectContent position='popper'>
-                {fontOptions.map((font, index) => (
-                  <SelectItem
-                    key={font}
-                    value={font}
-                    style={{ fontFamily: font }}
-                    data-testid={`render-font-option-${index}`}
+            <Popover open={fontOpen} onOpenChange={setFontOpen}>
+              <PopoverTrigger asChild>
+                <Button
+                  variant='outline'
+                  role='combobox'
+                  aria-expanded={fontOpen}
+                  className='h-7 w-full min-w-0 justify-between truncate px-2 text-xs'
+                  style={currentFont ? { fontFamily: currentFont } : undefined}
+                >
+                  <span className='min-w-0 truncate'>
+                    {currentFont || t('render.fontPlaceholder')}
+                  </span>
+                  <ChevronsUpDownIcon className='ml-2 h-4 w-4 shrink-0 opacity-50' />
+                </Button>
+              </PopoverTrigger>
+              <PopoverContent className='w-[260px] p-0' align='start'>
+                <Command>
+                  <CommandInput
+                    placeholder={t('render.fontSearch', {
+                      defaultValue: 'Search fonts...',
+                    })}
+                    className='h-9'
+                  />
+                  <Tabs
+                    value={fontTab}
+                    onValueChange={(v: any) => setFontTab(v)}
+                    className='w-full'
                   >
-                    {font}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
+                    <TabsList className='flex h-8 w-full justify-start overflow-x-auto rounded-none border-b bg-transparent p-0'>
+                      <TabsTrigger
+                        value='all'
+                        className='data-[state=active]:border-primary rounded-none text-xs data-[state=active]:border-b-2 data-[state=active]:shadow-none'
+                      >
+                        All
+                      </TabsTrigger>
+                      <TabsTrigger
+                        value='zh'
+                        className='data-[state=active]:border-primary rounded-none text-xs data-[state=active]:border-b-2 data-[state=active]:shadow-none'
+                      >
+                        ZH
+                      </TabsTrigger>
+                      <TabsTrigger
+                        value='ja'
+                        className='data-[state=active]:border-primary rounded-none text-xs data-[state=active]:border-b-2 data-[state=active]:shadow-none'
+                      >
+                        JA
+                      </TabsTrigger>
+                      <TabsTrigger
+                        value='ko'
+                        className='data-[state=active]:border-primary rounded-none text-xs data-[state=active]:border-b-2 data-[state=active]:shadow-none'
+                      >
+                        KO
+                      </TabsTrigger>
+                      <TabsTrigger
+                        value='general'
+                        className='data-[state=active]:border-primary rounded-none text-xs data-[state=active]:border-b-2 data-[state=active]:shadow-none'
+                      >
+                        Other
+                      </TabsTrigger>
+                    </TabsList>
+                  </Tabs>
+                  <CommandList className='max-h-[220px]'>
+                    <CommandEmpty>No font found.</CommandEmpty>
+                    <CommandGroup>
+                      {filteredFontOptions.map((font) => (
+                        <CommandItem
+                          key={font}
+                          value={font}
+                          style={{ fontFamily: font }}
+                          onSelect={(currentValue) => {
+                            const value = font
+                            const nextFamilies = mergeFontFamilies(
+                              value,
+                              selectedBlock?.style?.fontFamilies,
+                            )
+                            if (
+                              !applyStyleToSelected({
+                                fontFamilies: nextFamilies,
+                              })
+                            ) {
+                              setFontFamily(value)
+                              if (hasBlocks) {
+                                const nextBlocks = textBlocks.map((block) => ({
+                                  ...block,
+                                  style: buildStyle(block, block.style, {
+                                    fontFamilies: mergeFontFamilies(
+                                      value,
+                                      block.style?.fontFamilies,
+                                    ),
+                                  }),
+                                }))
+                                void updateTextBlocks(nextBlocks)
+                              }
+                            }
+                            setFontOpen(false)
+                          }}
+                        >
+                          {font}
+                          <CheckIcon
+                            className={cn(
+                              'ml-auto h-4 w-4',
+                              currentFont === font
+                                ? 'opacity-100'
+                                : 'opacity-0',
+                            )}
+                          />
+                        </CommandItem>
+                      ))}
+                    </CommandGroup>
+                  </CommandList>
+                </Command>
+              </PopoverContent>
+            </Popover>
           </div>
 
           <Tooltip>
@@ -384,7 +566,6 @@ export function RenderControlsPanel() {
               <div>
                 <ColorPicker
                   value={currentColorHex}
-                  disabled={!hasBlocks}
                   triggerTestId='render-color-trigger'
                   pickerTestId='render-color-picker'
                   swatchTestId='render-color-swatch'
@@ -467,7 +648,6 @@ export function RenderControlsPanel() {
                     size='icon-sm'
                     aria-label={item.label}
                     data-testid={`render-align-${item.value}`}
-                    disabled={!hasBlocks}
                     className={cn(
                       'size-7',
                       active &&
@@ -529,7 +709,6 @@ export function RenderControlsPanel() {
               <div>
                 <ColorPicker
                   value={currentStrokeColorHex}
-                  disabled={!hasBlocks}
                   triggerTestId='render-stroke-color-trigger'
                   pickerTestId='render-stroke-color-picker'
                   swatchTestId='render-stroke-color-swatch'
@@ -605,6 +784,20 @@ export function RenderControlsPanel() {
             </TooltipContent>
           </Tooltip>
         </div>
+      </div>
+
+      <div className='flex items-center gap-2 pt-2'>
+        <Button
+          variant='secondary'
+          size='sm'
+          className='bg-muted/50 hover:bg-muted flex-1 text-xs font-medium'
+          onClick={handleApplyToAllClick}
+          disabled={!hasBlocks}
+        >
+          {t('render.applyToAll', {
+            defaultValue: 'Apply styling to all images',
+          })}
+        </Button>
       </div>
     </div>
   )

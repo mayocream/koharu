@@ -35,6 +35,37 @@ pub(crate) fn encode_image(image: &SerializableDynamicImage, ext: &str) -> anyho
     Ok(buf)
 }
 
+pub(crate) fn encode_image_with_quality(
+    image: &SerializableDynamicImage,
+    ext: &str,
+    quality: u8,
+) -> anyhow::Result<Vec<u8>> {
+    let mut buf = Vec::new();
+    let format = ImageFormat::from_extension(ext).unwrap_or(ImageFormat::Jpeg);
+
+    match format {
+        ImageFormat::WebP => {
+            let rgba = image.0.to_rgba8();
+            let (width, height) = rgba.dimensions();
+            let encoder = webp::Encoder::from_rgba(&rgba, width, height);
+            let memory = encoder.encode(quality as f32);
+            buf.extend_from_slice(&memory);
+        }
+        ImageFormat::Jpeg => {
+            let mut cursor = Cursor::new(&mut buf);
+            let mut enc =
+                ::image::codecs::jpeg::JpegEncoder::new_with_quality(&mut cursor, quality);
+            enc.encode_image(&image.0)?;
+        }
+        _ => {
+            let mut cursor = Cursor::new(&mut buf);
+            image.0.write_to(&mut cursor, format)?;
+        }
+    }
+
+    Ok(buf)
+}
+
 pub(crate) fn mime_from_ext(ext: &str) -> &'static str {
     match ext {
         "png" => "image/png",
@@ -70,6 +101,6 @@ pub fn load_documents(inputs: Vec<(PathBuf, Vec<u8>)>) -> anyhow::Result<Vec<Doc
         .flatten()
         .collect();
 
-    documents.sort_by_key(|doc| doc.name.clone());
+    documents.sort_by(|a, b| natord::compare(&a.name, &b.name));
     Ok(documents)
 }
