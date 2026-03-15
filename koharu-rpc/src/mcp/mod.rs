@@ -130,9 +130,17 @@ impl KoharuMcp {
         let res = self
             .resources()
             .map_err(|e| ErrorData::internal_error(e, None))?;
-        let doc = operations::get_document(res, IndexPayload { index: p.index, quality: None, format: None, max_size: None })
-            .await
-            .map_err(|e| ErrorData::internal_error(e.to_string(), None))?;
+        let doc = operations::get_document(
+            res,
+            IndexPayload {
+                index: p.index,
+                quality: None,
+                format: None,
+                max_size: None,
+            },
+        )
+        .await
+        .map_err(|e| ErrorData::internal_error(e.to_string(), None))?;
 
         let max_size = p.max_size.unwrap_or(1024);
 
@@ -177,9 +185,17 @@ impl KoharuMcp {
         let res = self
             .resources()
             .map_err(|e| ErrorData::internal_error(e, None))?;
-        let doc = operations::get_document(res, IndexPayload { index: p.index, quality: None, format: None, max_size: None })
-            .await
-            .map_err(|e| ErrorData::internal_error(e.to_string(), None))?;
+        let doc = operations::get_document(
+            res,
+            IndexPayload {
+                index: p.index,
+                quality: None,
+                format: None,
+                max_size: None,
+            },
+        )
+        .await
+        .map_err(|e| ErrorData::internal_error(e.to_string(), None))?;
 
         let block = doc.text_blocks.get(p.text_block_index).ok_or_else(|| {
             ErrorData::internal_error(format!("Text block {} not found", p.text_block_index), None)
@@ -270,9 +286,17 @@ impl KoharuMcp {
         Parameters(p): Parameters<ExportDocumentParams>,
     ) -> Result<String, String> {
         let res = self.resources()?;
-        let result = operations::export_document(res, IndexPayload { index: p.index, quality: None, format: None, max_size: None })
-            .await
-            .map_err(|e| e.to_string())?;
+        let result = operations::export_document(
+            res,
+            IndexPayload {
+                index: p.index,
+                quality: None,
+                format: None,
+                max_size: None,
+            },
+        )
+        .await
+        .map_err(|e| e.to_string())?;
 
         std::fs::write(&p.output_path, &result.data)
             .map_err(|e| format!("Failed to write {}: {e}", p.output_path))?;
@@ -408,9 +432,17 @@ impl KoharuMcp {
         .await
         .map_err(|e| e.to_string())?;
 
-        let doc = operations::get_document(res, IndexPayload { index: p.index, quality: None, format: None, max_size: None })
-            .await
-            .map_err(|e| e.to_string())?;
+        let doc = operations::get_document(
+            res,
+            IndexPayload {
+                index: p.index,
+                quality: None,
+                format: None,
+                max_size: None,
+            },
+        )
+        .await
+        .map_err(|e| e.to_string())?;
 
         let mut lines = vec!["Translations:".to_string()];
         for (i, b) in doc.text_blocks.iter().enumerate() {

@@ -130,7 +130,7 @@ pub async fn get_rendered_image(
     let doc = state_tx::read_doc(&state.state, payload.index).await?;
 
     let mut source = doc.rendered.as_ref().unwrap_or(&doc.image).0.clone();
-    
+
     // Perform resizing if max_size is provided and image is larger
     if let Some(max_size) = payload.max_size {
         let (w, h) = (source.width(), source.height());
@@ -144,7 +144,7 @@ pub async fn get_rendered_image(
     }
 
     let serializable_source = koharu_types::SerializableDynamicImage(source);
-    
+
     let ext = payload.format.unwrap_or_else(|| document_ext(&doc));
     let bytes = if let Some(q) = payload.quality {
         encode_image_with_quality(&serializable_source, &ext, q)?
@@ -197,7 +197,9 @@ pub async fn add_documents(
     let docs = load_documents(inputs)?;
     let mut guard = state.state.write().await;
     guard.documents.extend(docs);
-    guard.documents.sort_by(|a, b| natord::compare(&a.name, &b.name));
+    guard
+        .documents
+        .sort_by(|a, b| natord::compare(&a.name, &b.name));
     Ok(guard.documents.len())
 }
 

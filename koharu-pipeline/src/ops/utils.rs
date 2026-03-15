@@ -53,7 +53,8 @@ pub(crate) fn encode_image_with_quality(
         }
         ImageFormat::Jpeg => {
             let mut cursor = Cursor::new(&mut buf);
-            let mut enc = ::image::codecs::jpeg::JpegEncoder::new_with_quality(&mut cursor, quality);
+            let mut enc =
+                ::image::codecs::jpeg::JpegEncoder::new_with_quality(&mut cursor, quality);
             enc.encode_image(&image.0)?;
         }
         _ => {
