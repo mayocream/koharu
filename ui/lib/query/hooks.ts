@@ -16,6 +16,13 @@ export const useDocumentsCountQuery = (enabled = true) =>
     enabled,
   })
 
+export const useDocumentNamesQuery = (enabled = true) =>
+  useQuery({
+    queryKey: queryKeys.documents.names,
+    queryFn: () => api.getDocumentNames(),
+    enabled,
+  })
+
 export const useCurrentDocumentQuery = (index: number, enabled = true) =>
   useQuery({
     queryKey: queryKeys.documents.current(index),

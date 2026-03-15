@@ -130,7 +130,7 @@ impl KoharuMcp {
         let res = self
             .resources()
             .map_err(|e| ErrorData::internal_error(e, None))?;
-        let doc = operations::get_document(res, IndexPayload { index: p.index })
+        let doc = operations::get_document(res, IndexPayload { index: p.index, quality: None })
             .await
             .map_err(|e| ErrorData::internal_error(e.to_string(), None))?;
 
@@ -177,7 +177,7 @@ impl KoharuMcp {
         let res = self
             .resources()
             .map_err(|e| ErrorData::internal_error(e, None))?;
-        let doc = operations::get_document(res, IndexPayload { index: p.index })
+        let doc = operations::get_document(res, IndexPayload { index: p.index, quality: None })
             .await
             .map_err(|e| ErrorData::internal_error(e.to_string(), None))?;
 
@@ -270,7 +270,7 @@ impl KoharuMcp {
         Parameters(p): Parameters<ExportDocumentParams>,
     ) -> Result<String, String> {
         let res = self.resources()?;
-        let result = operations::export_document(res, IndexPayload { index: p.index })
+        let result = operations::export_document(res, IndexPayload { index: p.index, quality: None })
             .await
             .map_err(|e| e.to_string())?;
 
@@ -408,7 +408,7 @@ impl KoharuMcp {
         .await
         .map_err(|e| e.to_string())?;
 
-        let doc = operations::get_document(res, IndexPayload { index: p.index })
+        let doc = operations::get_document(res, IndexPayload { index: p.index, quality: None })
             .await
             .map_err(|e| e.to_string())?;
 

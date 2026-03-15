@@ -1,7 +1,8 @@
 'use client'
 
 import { WsRpcClient } from './ws'
-import { fileOpen, fileSave } from 'browser-fs-access'
+import { fileOpen, fileSave, directoryOpen } from 'browser-fs-access'
+import { useEditorUiStore } from '@/lib/stores/editorUiStore'
 import { toArrayBuffer } from './util'
 import { reportRpcError } from './errors'
 import type { RpcMethodMap, RpcNotificationMap, FileResult } from './rpc-types'
@@ -200,14 +201,67 @@ async function openDocumentsRpc(
   }
   if (!files.length) return 0
 
-  const entries = await Promise.all(
-    files.map(async (file: File) => ({
+  let totalCount = 0
+  for (const file of files) {
+    const entry = {
       name: file.name,
       data: new Uint8Array(await file.arrayBuffer()),
-    })),
-  )
+    }
+    // For 'open_documents', we clear first then add.
+    // However, the backend 'open_documents' clears by default.
+    // If we want to open multiple one-by-one, we should use 'open' for first, 'add' for rest.
+    // Simpler: use 'add' then 'open' logic if needed, but the current backend
+    // 'add_documents' appended.
+    const methodToUse = (method === 'open_documents' && totalCount === 0) ? 'open_documents' : 'add_documents'
+    totalCount = await getClient().invoke<number>(methodToUse, { files: [entry] })
+  }
 
-  return getClient().invoke<number>(method, { files: entries })
+  return totalCount
+}
+
+export async function openDirectoryRpc(
+  method: 'open_documents' | 'add_documents',
+): Promise<number> {
+  let files: File[] = []
+  let folderName: string | undefined = undefined
+
+  try {
+    const allFiles = await directoryOpen({
+      recursive: false,
+    })
+    
+    // Extract folder name from the first file's relative path, if available
+    if (allFiles.length > 0) {
+      const parts = allFiles[0].webkitRelativePath?.split('/')
+      if (parts && parts.length > 1) {
+        folderName = parts[0]
+      }
+    }
+
+    files = allFiles.filter((file) => {
+      const name = file.name.toLowerCase()
+      return name.match(/\.(png|jpe?g|webp)$/i)
+    })
+  } catch {
+    return 0
+  }
+  if (!files.length) return 0
+
+  let totalCount = 0
+  for (const file of files) {
+    const entry = {
+      name: file.name,
+      data: new Uint8Array(await file.arrayBuffer()),
+    }
+    const methodToUse = (method === 'open_documents' && totalCount === 0) ? 'open_documents' : 'add_documents'
+    totalCount = await getClient().invoke<number>(methodToUse, { files: [entry] })
+  }
+
+  if (method === 'open_documents') {
+    useEditorUiStore.getState().setLoadedFolderName(folderName)
+  }
+
+  return totalCount
 }
 
 // --- Thumbnail fetch ---

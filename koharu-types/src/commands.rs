@@ -18,6 +18,7 @@ pub struct OpenExternalPayload {
 #[serde(rename_all = "camelCase")]
 pub struct IndexPayload {
     pub index: usize,
+    pub quality: Option<u8>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]

@@ -8,6 +8,7 @@ import { InpaintRegion, TextBlock } from '@/types'
 import { useEditorUiStore } from '@/lib/stores/editorUiStore'
 import { useLlmUiStore } from '@/lib/stores/llmUiStore'
 import { useOperationStore } from '@/lib/stores/operationStore'
+import { exportAsCbz } from '@/lib/cbz-export'
 import { usePreferencesStore } from '@/lib/stores/preferencesStore'
 import { queryKeys } from '@/lib/query/keys'
 import {
@@ -255,11 +256,64 @@ export const useDocumentMutations = () => {
     await queryClient.invalidateQueries({
       queryKey: queryKeys.documents.thumbnailRoot,
     })
+    await queryClient.invalidateQueries({
+      queryKey: queryKeys.documents.names,
+    })
   }, [queryClient])
 
   const refreshCurrentDocument = useCallback(async () => {
     const { currentDocumentIndex } = useEditorUiStore.getState()
     await invalidateCurrentDocument(queryClient, currentDocumentIndex)
+  }, [queryClient])
+
+  const clearDocuments = useCallback(async () => {
+    await api.clearDocuments()
+    clearMaskSync()
+    queryClient.setQueryData(queryKeys.documents.count, 0)
+    await refreshDocuments()
+    useEditorUiStore.setState({
+      totalPages: 0,
+      documentsVersion: 0,
+      currentDocumentIndex: 0,
+      selectedBlockIndex: undefined,
+    })
+  }, [clearMaskSync, queryClient, refreshDocuments])
+
+  const applyStyleToAllDocuments = useCallback(async () => {
+    const { totalPages, renderEffect, renderTextAlign } =
+      useEditorUiStore.getState()
+    const { fontFamily } = usePreferencesStore.getState()
+    if (totalPages === 0) return
+
+    for (let i = 0; i < totalPages; i++) {
+      const queryKey = queryKeys.documents.current(i)
+      const doc = queryClient.getQueryData<any>(queryKey)
+      if (!doc?.textBlocks) continue
+
+      const nextBlocks = doc.textBlocks.map((block: any) => {
+        const style = block.style || {}
+        return {
+          ...block,
+          style: {
+            ...style,
+            effect: renderEffect,
+            textAlign: renderTextAlign,
+            fontFamilies: [
+              fontFamily,
+              ...(style.fontFamilies || []).filter(
+                (f: string) => f !== fontFamily,
+              ),
+            ].filter(Boolean),
+          },
+        }
+      })
+
+      queryClient.setQueryData(queryKey, {
+        ...doc,
+        textBlocks: nextBlocks,
+      })
+      await enqueueTextBlockSync(i, nextBlocks)
+    }
   }, [queryClient])
 
   const openDocuments = useCallback(async () => {
@@ -285,6 +339,29 @@ export const useDocumentMutations = () => {
     }
   }, [clearMaskSync, queryClient, refreshDocuments])
 
+  const openDocumentsFromFolder = useCallback(async () => {
+    const { startOperation, finishOperation } = useOperationStore.getState()
+    startOperation({
+      type: 'load-khr',
+      cancellable: false,
+    })
+    try {
+      const count = await api.openDocumentsFromFolder()
+      useEditorUiStore.getState().setTotalPages(count)
+      clearMaskSync()
+      queryClient.setQueryData(queryKeys.documents.count, count)
+      await refreshDocuments()
+      if (count > 0) {
+        await queryClient.prefetchQuery({
+          queryKey: queryKeys.documents.current(0),
+          queryFn: () => api.getDocument(0),
+        })
+      }
+    } finally {
+      finishOperation()
+    }
+  }, [clearMaskSync, queryClient, refreshDocuments])
+
   const addDocuments = useCallback(async () => {
     const { startOperation, finishOperation } = useOperationStore.getState()
     startOperation({
@@ -295,6 +372,41 @@ export const useDocumentMutations = () => {
       const editorUi = useEditorUiStore.getState()
       const previousCount = editorUi.totalPages
       const count = await api.addDocuments()
+      if (count === previousCount) {
+        return
+      }
+
+      clearMaskSync()
+      queryClient.setQueryData(queryKeys.documents.count, count)
+      await refreshDocuments()
+      useEditorUiStore.setState((state) => ({
+        totalPages: count,
+        documentsVersion: state.documentsVersion + 1,
+        currentDocumentIndex: previousCount > 0 ? previousCount : 0,
+        selectedBlockIndex: undefined,
+      }))
+
+      if (count > previousCount) {
+        await queryClient.prefetchQuery({
+          queryKey: queryKeys.documents.current(previousCount),
+          queryFn: () => api.getDocument(previousCount),
+        })
+      }
+    } finally {
+      finishOperation()
+    }
+  }, [queryClient, refreshDocuments])
+
+  const addDocumentsFromFolder = useCallback(async () => {
+    const { startOperation, finishOperation } = useOperationStore.getState()
+    startOperation({
+      type: 'load-khr',
+      cancellable: false,
+    })
+    try {
+      const editorUi = useEditorUiStore.getState()
+      const previousCount = editorUi.totalPages
+      const count = await api.addDocumentsFromFolder()
       if (count === previousCount) {
         return
       }
@@ -515,6 +627,53 @@ export const useDocumentMutations = () => {
     }
   }, [clearProgress])
 
+  const runAllToCbz = useCallback(async () => {
+    // Start processing all images
+    await processAllImages()
+
+    // Wait until the operation completes
+    await new Promise<void>((resolve) => {
+      const unsub = useOperationStore.subscribe((state) => {
+        if (!state.operation) {
+          unsub()
+          resolve()
+        }
+      })
+      if (!useOperationStore.getState().operation) {
+        unsub()
+        resolve()
+      }
+    })
+
+    const { totalPages, loadedFolderName } = useEditorUiStore.getState()
+    if (!totalPages) return
+
+    const { startOperation, finishOperation } = useOperationStore.getState()
+    startOperation({
+      type: 'export-cbz',
+      cancellable: false,
+    })
+
+    try {
+      const blobs: Blob[] = []
+      const { cbzExportSettings } = usePreferencesStore.getState()
+      for (let i = 0; i < totalPages; i++) {
+        blobs.push(await api.getRenderedImage(i, cbzExportSettings.quality))
+      }
+      
+      const settingsToUse = {
+        ...cbzExportSettings,
+        outputFileName: loadedFolderName ? `${loadedFolderName}_v2` : 'koharu_export_v2'
+      }
+
+      await exportAsCbz(blobs, settingsToUse)
+    } catch (error) {
+      console.error('Failed to export CBZ auto-run:', error)
+    } finally {
+      finishOperation()
+    }
+  }, [processAllImages])
+
   const exportDocument = useCallback(async () => {
     const { currentDocumentIndex } = useEditorUiStore.getState()
     await api.exportDocument(currentDocumentIndex)
@@ -535,8 +694,12 @@ export const useDocumentMutations = () => {
 
   return {
     refreshCurrentDocument,
+    clearDocuments,
+    applyStyleToAllDocuments,
     addDocuments,
+    addDocumentsFromFolder,
     openDocuments,
+    openDocumentsFromFolder,
     saveDocuments,
     openExternal,
     detect,
@@ -545,6 +708,7 @@ export const useDocumentMutations = () => {
     render,
     processImage,
     processAllImages,
+    runAllToCbz,
     inpaintAndRenderImage,
     exportDocument,
     exportAllInpainted,
@@ -589,6 +753,55 @@ export const useLlmMutations = () => {
     },
     [queryClient],
   )
+
+  const llmForceLoad = useCallback(async () => {
+    const { selectedModel } = useLlmUiStore.getState()
+    if (!selectedModel) return
+
+    const readyKey = queryKeys.llm.ready(selectedModel)
+    const ready = queryClient.getQueryData<boolean>(readyKey) === true
+
+    if (ready) return // Already loaded
+
+    const { startOperation, finishOperation } = useOperationStore.getState()
+    startOperation({
+      type: 'llm-load',
+      cancellable: false,
+    })
+
+    let loaded = false
+    useLlmUiStore.getState().setLoading(true)
+    try {
+      const models = getCachedLlmModels(queryClient)
+      const modelInfo = models.find((m) => m.id === selectedModel)
+      const apiKey =
+        modelInfo && modelInfo.source !== 'local'
+          ? usePreferencesStore.getState().apiKeys[modelInfo.source]
+          : undefined
+      await api.llmLoad(selectedModel, apiKey)
+      await setProgress(100, ProgressBarStatus.Paused)
+
+      let attempts = 0
+      while (attempts++ < 300) {
+        const readyNow = await queryClient.fetchQuery({
+          queryKey: readyKey,
+          queryFn: () => api.llmReady(),
+        })
+        if (readyNow) {
+          loaded = true
+          break
+        }
+        await sleep(100)
+      }
+    } finally {
+      useLlmUiStore.getState().setLoading(false)
+      if (!loaded) {
+        queryClient.setQueryData(readyKey, false)
+      }
+      await clearProgress()
+      finishOperation()
+    }
+  }, [clearProgress, queryClient, setProgress])
 
   const llmToggleLoadUnload = useCallback(async () => {
     const { selectedModel } = useLlmUiStore.getState()
@@ -719,6 +932,7 @@ export const useLlmMutations = () => {
     llmSetSelectedModel,
     llmSetSelectedLanguage,
     llmToggleLoadUnload,
+    llmForceLoad,
     llmGenerate,
   }
 }

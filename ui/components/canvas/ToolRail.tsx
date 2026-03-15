@@ -25,6 +25,8 @@ import {
 import { Slider } from '@/components/ui/slider'
 import { Button } from '@/components/ui/button'
 import { ColorPicker } from '@/components/ui/color-picker'
+import { useDocumentMutations } from '@/lib/query/mutations'
+import { Play, Layers, Wand2, FileArchive } from 'lucide-react'
 
 type ModeDefinition = {
   value: ToolMode
@@ -70,6 +72,7 @@ export function ToolRail() {
   const mode = useEditorUiStore((state) => state.mode)
   const setMode = useEditorUiStore((state) => state.setMode)
   const { t } = useTranslation()
+  const { processImage, processAllImages, applyStyleToAllDocuments, runAllToCbz } = useDocumentMutations()
 
   return (
     <div className='border-border bg-card flex w-11 flex-col border-r'>
@@ -111,6 +114,77 @@ export function ToolRail() {
             </Tooltip>
           )
         })}
+      </div>
+      {/* RUN and RUN ALL action buttons */}
+      <div className='flex flex-col items-center gap-1.5 border-t border-border px-1 py-2'>
+        <Tooltip>
+          <TooltipTrigger asChild>
+            <Button
+              size='icon-sm'
+              variant='default'
+              data-testid='tool-run'
+              className='w-9 h-9 bg-primary text-primary-foreground shadow-sm'
+              onClick={() => void processImage?.()}
+              aria-label='Run'
+            >
+              <Play className='h-4 w-4' />
+            </Button>
+          </TooltipTrigger>
+          <TooltipContent side='right' sideOffset={8}>
+            Run (this image)
+          </TooltipContent>
+        </Tooltip>
+        <Tooltip>
+          <TooltipTrigger asChild>
+            <Button
+              size='icon-sm'
+              variant='secondary'
+              data-testid='tool-run-all'
+              className='w-9 h-9 shadow-sm'
+              onClick={() => void processAllImages?.()}
+              aria-label='Run All'
+            >
+              <Layers className='h-4 w-4' />
+            </Button>
+          </TooltipTrigger>
+          <TooltipContent side='right' sideOffset={8}>
+            Run All (all images)
+          </TooltipContent>
+        </Tooltip>
+        <Tooltip>
+          <TooltipTrigger asChild>
+            <Button
+              size='icon-sm'
+              variant='outline'
+              data-testid='tool-apply-all'
+              className='w-9 h-9 shadow-sm'
+              onClick={() => void applyStyleToAllDocuments?.()}
+              aria-label='Apply Styling to All'
+            >
+              <Wand2 className='h-4 w-4' />
+            </Button>
+          </TooltipTrigger>
+          <TooltipContent side='right' sideOffset={8}>
+            Apply Styling to All
+          </TooltipContent>
+        </Tooltip>
+        <Tooltip>
+          <TooltipTrigger asChild>
+            <Button
+              size='icon-sm'
+              variant='outline'
+              data-testid='tool-run-cbz'
+              className='w-9 h-9 shadow-sm'
+              onClick={() => void runAllToCbz?.()}
+              aria-label='Run ALL to CBZ'
+            >
+              <FileArchive className='h-4 w-4' />
+            </Button>
+          </TooltipTrigger>
+          <TooltipContent side='right' sideOffset={8}>
+            Run ALL to CBZ
+          </TooltipContent>
+        </Tooltip>
       </div>
     </div>
   )

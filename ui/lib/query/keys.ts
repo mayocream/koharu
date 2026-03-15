@@ -2,6 +2,7 @@ export const queryKeys = {
   documents: {
     all: ['documents'] as const,
     count: ['documents', 'count'] as const,
+    names: ['documents', 'names'] as const,
     currentRoot: ['documents', 'current'] as const,
     current: (index: number) => ['documents', 'current', index] as const,
     thumbnailRoot: ['documents', 'thumbnail'] as const,

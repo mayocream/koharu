@@ -72,6 +72,14 @@ export const api = {
     return invoke('get_documents')
   },
 
+  async getDocumentNames(): Promise<string[]> {
+    return invoke('get_document_names')
+  },
+
+  async clearDocuments(): Promise<void> {
+    await invoke('clear_documents')
+  },
+
   async getDocument(index: number): Promise<Document> {
     const payload = await invoke('get_document', { index })
     return parseOrLogAndThrow(documentSchema, payload, 'document')
@@ -81,12 +89,29 @@ export const api = {
     return fetchThumbnailBlob(index)
   },
 
+  async getRenderedImage(index: number, quality?: number): Promise<Blob> {
+    const result = await invoke('get_rendered_image' as any, { index, quality })
+    const r = result as { data: Uint8Array; contentType: string }
+    const { toArrayBuffer } = await import('@/lib/util')
+    return new Blob([toArrayBuffer(r.data)], { type: r.contentType })
+  },
+
   async addDocuments(): Promise<number> {
     return invoke('add_documents')
   },
 
   async openDocuments(): Promise<number> {
     return invoke('open_documents')
+  },
+
+  async addDocumentsFromFolder(): Promise<number> {
+    const { openDirectoryRpc } = await import('@/lib/backend')
+    return openDirectoryRpc('add_documents')
+  },
+
+  async openDocumentsFromFolder(): Promise<number> {
+    const { openDirectoryRpc } = await import('@/lib/backend')
+    return openDirectoryRpc('open_documents')
   },
 
   async saveDocuments(): Promise<void> {

@@ -9,7 +9,7 @@ use rfd::FileDialog;
 
 use crate::{AppResources, state_tx};
 
-use super::utils::{encode_image, load_documents, mime_from_ext};
+use super::utils::{encode_image, encode_image_with_quality, load_documents, mime_from_ext};
 
 fn next_available_path(output_dir: &Path, stem: &str, ext: &str) -> PathBuf {
     let mut candidate = output_dir.join(format!("{stem}.{ext}"));
@@ -87,6 +87,17 @@ pub async fn get_documents(state: AppResources) -> anyhow::Result<usize> {
     Ok(guard.documents.len())
 }
 
+pub async fn get_document_names(state: AppResources) -> anyhow::Result<Vec<String>> {
+    let guard = state.state.read().await;
+    Ok(guard.documents.iter().map(|d| d.name.clone()).collect())
+}
+
+pub async fn clear_documents(state: AppResources) -> anyhow::Result<()> {
+    let mut guard = state.state.write().await;
+    guard.documents.clear();
+    Ok(())
+}
+
 pub async fn get_document(
     state: AppResources,
     payload: IndexPayload,
@@ -109,6 +120,27 @@ pub async fn get_thumbnail(
     Ok(ThumbnailResult {
         data: buf.into_inner(),
         content_type: "image/webp".to_string(),
+    })
+}
+
+pub async fn get_rendered_image(
+    state: AppResources,
+    payload: IndexPayload,
+) -> anyhow::Result<ThumbnailResult> {
+    let doc = state_tx::read_doc(&state.state, payload.index).await?;
+
+    let source = doc.rendered.as_ref().unwrap_or(&doc.image);
+    let ext = document_ext(&doc);
+    let bytes = if let Some(q) = payload.quality {
+        encode_image_with_quality(source, &ext, q)?
+    } else {
+        encode_image(source, &ext)?
+    };
+    let content_type = mime_from_ext(&ext).to_string();
+
+    Ok(ThumbnailResult {
+        data: bytes,
+        content_type,
     })
 }
 
@@ -150,6 +182,7 @@ pub async fn add_documents(
     let docs = load_documents(inputs)?;
     let mut guard = state.state.write().await;
     guard.documents.extend(docs);
+    guard.documents.sort_by(|a, b| natord::compare(&a.name, &b.name));
     Ok(guard.documents.len())
 }
 

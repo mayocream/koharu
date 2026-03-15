@@ -5,6 +5,7 @@ export type OperationType =
   | 'save-khr'
   | 'process-current'
   | 'process-all'
+  | 'export-cbz'
   | 'llm-load'
 
 export type OperationState = {

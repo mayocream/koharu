@@ -16,6 +16,7 @@ import {
   MenubarTrigger,
 } from '@/components/ui/menubar'
 import { useDocumentMutations } from '@/lib/query/mutations'
+import { CbzExportDialog } from '@/components/CbzExportDialog'
 
 type MenuItem = {
   label: string
@@ -32,9 +33,12 @@ type MenuSection = {
 
 export function MenuBar() {
   const { t } = useTranslation()
+  const [cbzOpen, setCbzOpen] = useState(false)
   const {
     addDocuments,
+    addDocumentsFromFolder,
     openDocuments,
+    openDocumentsFromFolder,
     openExternal,
     processImage,
     inpaintAndRenderImage,
@@ -51,9 +55,19 @@ export function MenuBar() {
       testId: 'menu-file-open',
     },
     {
+      label: t('menu.openFolder', { defaultValue: 'Open Folder...' }),
+      onSelect: openDocumentsFromFolder,
+      testId: 'menu-file-open-folder',
+    },
+    {
       label: t('menu.addFile'),
       onSelect: addDocuments,
       testId: 'menu-file-add',
+    },
+    {
+      label: t('menu.addFolder', { defaultValue: 'Add from Folder...' }),
+      onSelect: addDocumentsFromFolder,
+      testId: 'menu-file-add-folder',
     },
     // TODO: { label: t('menu.save'), onSelect: saveDocuments },
     {
@@ -70,6 +84,11 @@ export function MenuBar() {
       label: t('menu.exportAllRendered'),
       onSelect: exportAllRendered,
       testId: 'menu-file-export-all-rendered',
+    },
+    {
+      label: t('menu.exportCbz', { defaultValue: 'Export as CBZ...' }),
+      onSelect: () => setCbzOpen(true),
+      testId: 'menu-file-export-cbz',
     },
   ]
 
@@ -119,7 +138,8 @@ export function MenuBar() {
   const isWindowsTauri = isTauri() && !isMacOS()
 
   return (
-    <div className='border-border bg-background text-foreground flex h-8 items-center border-b text-[13px]'>
+    <>
+      <div className='border-border bg-background text-foreground flex h-8 items-center border-b text-[13px]'>
       {/* macOS traffic lights */}
       {isNativeMacOS && <MacOSControls />}
 
@@ -253,6 +273,8 @@ export function MenuBar() {
       {/* Window controls for Windows */}
       {isWindowsTauri && <WindowControls />}
     </div>
+    <CbzExportDialog open={cbzOpen} onOpenChange={setCbzOpen} />
+    </>
   )
 }
 

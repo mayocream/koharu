@@ -119,6 +119,10 @@ function ProvidersBootstrap({ children }: { children: ReactNode }) {
           queryKey: queryKeys.documents.current(currentDocumentIndex),
         })
       } else {
+        if (progress.status === 'completed') {
+          useEditorUiStore.getState().setShowRenderedImage(true)
+        }
+
         operationStore.updateOperation({
           current: operationStore.operation?.total,
           total: operationStore.operation?.total,

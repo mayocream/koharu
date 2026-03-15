@@ -146,9 +146,10 @@ function OperationCard({
   const titles: Record<OperationState['type'], string> = {
     'load-khr': t('operations.loadKhr'),
     'save-khr': t('operations.saveKhr'),
-    'process-current': t('operations.processCurrent'),
+    'process-current': t('operations.process'),
     'process-all': t('operations.processAll'),
-    'llm-load': t('operations.loadModel'),
+    'export-cbz': t('operations.exportCbz', 'Exporting CBZ'),
+    'llm-load': t('operations.llmLoad'),
   }
   const stepLabels: Record<string, string> = {
     detect: t('processing.detect'),
