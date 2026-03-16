@@ -117,9 +117,9 @@ export default function SettingsPage() {
   }
 
   return (
-    <div className='bg-muted flex flex-1 flex-col overflow-hidden'>
-      <ScrollArea className='flex-1'>
-        <div className='px-4 py-6'>
+    <div className='bg-muted flex min-h-0 flex-1 flex-col overflow-hidden'>
+      <ScrollArea className='min-h-0 flex-1' viewportClassName='h-full'>
+        <div className='min-h-full px-4 py-6'>
           {/* Content column */}
           <div className='relative mx-auto max-w-xl'>
             {/* Header with back button */}
@@ -228,28 +228,30 @@ export default function SettingsPage() {
                 {API_PROVIDERS.map(({ id, name }) => (
                   <div key={id} className='space-y-1'>
                     <label className='text-foreground text-sm'>{name}</label>
-                    <div className='relative'>
-                      <input
-                        type={visibleKeys[id] ? 'text' : 'password'}
-                        value={apiKeys[id] ?? ''}
-                        onChange={(e) => handleApiKeyChange(id, e.target.value)}
-                        onBlur={() => flushApiKeySave(id)}
-                        placeholder='Enter API key'
-                        className='border-border bg-card text-foreground placeholder:text-muted-foreground focus:ring-primary w-full rounded-md border px-3 py-1.5 pr-9 text-sm focus:ring-1 focus:outline-none'
-                      />
-                      <button
-                        type='button'
-                        onClick={() =>
-                          setVisibleKeys((v) => ({ ...v, [id]: !v[id] }))
-                        }
-                        className='text-muted-foreground hover:text-foreground absolute top-1/2 right-2.5 -translate-y-1/2 transition'
-                      >
-                        {visibleKeys[id] ? (
-                          <EyeOffIcon className='size-4' />
-                        ) : (
-                          <EyeIcon className='size-4' />
-                        )}
-                      </button>
+                    <div className='space-y-1'>
+                      <div className='relative'>
+                        <input
+                          type={visibleKeys[id] ? 'text' : 'password'}
+                          value={apiKeys[id] ?? ''}
+                          onChange={(e) => handleApiKeyChange(id, e.target.value)}
+                          onBlur={() => flushApiKeySave(id)}
+                          placeholder='Enter API key'
+                          className='border-border bg-card text-foreground placeholder:text-muted-foreground focus:ring-primary w-full rounded-md border px-3 py-1.5 pr-9 text-sm focus:ring-1 focus:outline-none'
+                        />
+                        <button
+                          type='button'
+                          onClick={() =>
+                            setVisibleKeys((v) => ({ ...v, [id]: !v[id] }))
+                          }
+                          className='text-muted-foreground hover:text-foreground absolute top-1/2 right-2.5 -translate-y-1/2 transition'
+                        >
+                          {visibleKeys[id] ? (
+                            <EyeOffIcon className='size-4' />
+                          ) : (
+                            <EyeIcon className='size-4' />
+                          )}
+                        </button>
+                      </div>
 
                       {API_PROVIDERS.find((provider) => provider.id === id)
                         ?.free_tier && (
