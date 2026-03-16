@@ -1,3 +1,42 @@
+## [0.38.0](https://github.com/mayocream/koharu/compare/0.37.0..0.38.0) - 2026-03-16
+
+### ⛰️  Features
+
+- OpenAi Compatible - ([9570a45](https://github.com/mayocream/koharu/commit/9570a4590f7dae26852186dbf49e2656c42ec622))
+- Add Deepseek provider ([#235](https://github.com/mayocream/koharu/issues/235)) - ([69d9421](https://github.com/mayocream/koharu/commit/69d94211ce2a1e5ea3d4074a8ba6b1d0177fd73e))
+- Implement API provider support with OpenAI, Gemini, and Claude integration - ([c6a47ce](https://github.com/mayocream/koharu/commit/c6a47cee2b7faa3dbd61d44bac4c2c3970fcc7b1))
+
+### 🐛 Bug Fixes
+
+- Settings page scrollarea - ([19d0f4f](https://github.com/mayocream/koharu/commit/19d0f4fb981cd6b957ebd104a1be5f6d16f2ffb3))
+- Remove unnecessary check for Tauri in Providers component - ([7c08c2a](https://github.com/mayocream/koharu/commit/7c08c2af8d37bd720fa61f4774cb3fc2179d881f))
+- Integrations test - ([44b4162](https://github.com/mayocream/koharu/commit/44b416216da6e09de18beafc55fef992d5dcf4dd))
+- Use keyring credential deletion API - ([c78a021](https://github.com/mayocream/koharu/commit/c78a021d12b7ac7014e6560ad227d805f230cefe))
+
+### 🚜 Refactor
+
+- Switch ws to http - ([32ef47c](https://github.com/mayocream/koharu/commit/32ef47c6c97a2a5a0c411f2369137b3348e817d1))
+- Avoid race condition - ([23f7d9f](https://github.com/mayocream/koharu/commit/23f7d9fb9b4e9fcbab16ce317660cb91576ce15f))
+- Merge koharu-api into koharu-types - ([b499c50](https://github.com/mayocream/koharu/commit/b499c50f333fdeb8bfa92843ff01141080dffdaf))
+
+### 📚 Documentation
+
+- Add openai-compatible - ([550014a](https://github.com/mayocream/koharu/commit/550014a80e91b8f02d7de62658f67cefc32af789))
+- Fix broken links - ([23b2063](https://github.com/mayocream/koharu/commit/23b2063fa6430d9f80d4b8079f59e1c1f091877e))
+- Add ja & zh README - ([926dc02](https://github.com/mayocream/koharu/commit/926dc02e18617d7c210949128bd3a5b39cb1aba2))
+- Fix typo - ([7ccbc9b](https://github.com/mayocream/koharu/commit/7ccbc9bbcc355fc7bb233fb4f0d0cc56b9ace244))
+- Remove ja and zh-CN readme - ([b39a150](https://github.com/mayocream/koharu/commit/b39a1507ec25f4fe0b6d572a4ad70f61738c0b65))
+- Fix typo - ([e481ae5](https://github.com/mayocream/koharu/commit/e481ae50e88337fc7fa948f1d8c40b4e520ec63d))
+
+### ⚙️ Miscellaneous Tasks
+
+- Update deps - ([9cdec47](https://github.com/mayocream/koharu/commit/9cdec475fb901fbefce0e62dc9ec05de454d2f6c))
+- Format ui - ([cf466b6](https://github.com/mayocream/koharu/commit/cf466b6d00be814d27170d70a4bf99475de715bc))
+- Rename LICENSE - ([fd0ad72](https://github.com/mayocream/koharu/commit/fd0ad7278121cfa85cb9b57b9778cdc48bb85a1d))
+- Remove APACHE license - ([375c880](https://github.com/mayocream/koharu/commit/375c8800ead93cfbfa6ae7a854b34020d83439a1))
+- Add cargo fmt - ([58fc0e8](https://github.com/mayocream/koharu/commit/58fc0e84a4ecb24d8f2382c54e5258af2fafe68d))
+
+
 ## [0.37.0](https://github.com/mayocream/koharu/compare/0.36.1..0.37.0) - 2026-03-11
 
 ### ⛰️  Features
@@ -96,7 +135,6 @@ Fixes #197 - ([8de0019](https://github.com/mayocream/koharu/commit/8de00194dd20a
 
 ## New Contributors ❤️
 
-* @karrot0 made their first contribution in [#199](https://github.com/mayocream/koharu/pull/199)
 * @vanja-san made their first contribution in [#195](https://github.com/mayocream/koharu/pull/195)
 
 ## [0.34.0](https://github.com/mayocream/koharu/compare/0.33.0..0.34.0) - 2026-02-21
