@@ -172,6 +172,7 @@ struct LayerQuery {
 #[serde(rename_all = "camelCase")]
 struct LlmModelsQuery {
     language: Option<String>,
+    openai_compatible_base_url: Option<String>,
 }
 
 async fn get_meta(State(state): State<ApiState>) -> ApiResult<Json<MetaInfo>> {
@@ -508,6 +509,7 @@ async fn list_llm_models(
         resources,
         koharu_types::LlmListPayload {
             language: query.language,
+            openai_compatible_base_url: query.openai_compatible_base_url,
         },
     )
     .await?
@@ -536,6 +538,7 @@ async fn load_llm(
         LlmLoadPayload {
             id: request.id,
             api_key: request.api_key,
+            base_url: request.base_url,
         },
     )
     .await?;
@@ -597,6 +600,7 @@ async fn start_pipeline_job(
             index,
             llm_model_id: request.llm_model_id,
             llm_api_key: request.llm_api_key,
+            llm_base_url: request.llm_base_url,
             language: request.language,
             shader_effect: request.shader_effect,
             shader_stroke: request.shader_stroke,

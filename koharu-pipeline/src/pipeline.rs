@@ -119,12 +119,15 @@ async fn run_pipeline_inner(
         && !res.llm.ready().await
     {
         if model_id.contains(':') {
-            let api_key = req
-                .llm_api_key
-                .clone()
-                .ok_or_else(|| anyhow::anyhow!("llm_api_key is required for API models"))?;
             let (provider_id, model_part) = model_id.split_once(':').unwrap();
-            res.llm.load_api(provider_id, model_part, api_key).await?;
+            res.llm
+                .load_api(
+                    provider_id,
+                    model_part,
+                    req.llm_api_key.clone(),
+                    req.llm_base_url.clone(),
+                )
+                .await?;
         } else {
             let id = ModelId::from_str(model_id)?;
             res.llm.load(id).await;

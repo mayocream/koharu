@@ -101,6 +101,7 @@
     "generateTooltip": "Сгенерировать перевод для обнаруженных текстовых блоков",
     "render": "Рендер",
     "renderTooltip": "Отрендерить перевод на странице",
+    "apiKeyMissing": "Требуется API-ключ для {{provider}}.",
     "loadingModel": "Загрузка LLM модели",
     "statusReady": "LLM готова",
     "statusIdle": "LLM не загружена"
@@ -160,7 +161,19 @@
   "errors": {
     "title": "Ошибка",
     "dismiss": "Закрыть",
-    "providerQuotaExceeded": "Квота API для {{provider}} исчерпана. Проверьте биллинг или дождитесь сброса квоты."
+    "providerQuotaExceeded": "Квота API для {{provider}} исчерпана. Проверьте биллинг или дождитесь сброса квоты.",
+    "providerApiKeyRequired": "Требуется API-ключ для {{provider}}.",
+    "providerBaseUrlRequired": "Требуется Base URL для {{provider}}.",
+    "providerNoContent": "{{provider}} не вернул контент.",
+    "providerRequestFailed": "Запрос API к {{provider}} завершился ошибкой ({{status}}): {{details}}"
+  },
+  "providers": {
+    "openai": "OpenAI",
+    "openaiCompatible": "Совместимый с OpenAI",
+    "gemini": "Gemini",
+    "claude": "Claude",
+    "deepseek": "DeepSeek",
+    "unknown": "Провайдер"
   },
   "settings": {
     "title": "Настройки",

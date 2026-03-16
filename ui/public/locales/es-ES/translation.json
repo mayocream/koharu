@@ -101,6 +101,7 @@
     "generateTooltip": "Generar traducciones para los bloques de texto detectados",
     "render": "Renderizar",
     "renderTooltip": "Renderizar traducciones en la página",
+    "apiKeyMissing": "Se requiere una API key de {{provider}}.",
     "loadingModel": "Cargando modelo LLM",
     "statusReady": "LLM listo",
     "statusIdle": "LLM no cargado"
@@ -160,7 +161,19 @@
   "errors": {
     "title": "Error",
     "dismiss": "Cerrar",
-    "providerQuotaExceeded": "Se agotó la cuota de API de {{provider}}. Revisa la facturación o espera a que se restablezca la cuota."
+    "providerQuotaExceeded": "Se agotó la cuota de API de {{provider}}. Revisa la facturación o espera a que se restablezca la cuota.",
+    "providerApiKeyRequired": "Se requiere una API key de {{provider}}.",
+    "providerBaseUrlRequired": "Se requiere la base URL de {{provider}}.",
+    "providerNoContent": "{{provider}} no devolvió contenido.",
+    "providerRequestFailed": "La solicitud a la API de {{provider}} falló ({{status}}): {{details}}"
+  },
+  "providers": {
+    "openai": "OpenAI",
+    "openaiCompatible": "Compatible con OpenAI",
+    "gemini": "Gemini",
+    "claude": "Claude",
+    "deepseek": "DeepSeek",
+    "unknown": "Proveedor"
   },
   "settings": {
     "title": "Configuración",

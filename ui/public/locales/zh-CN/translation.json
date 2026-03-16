@@ -101,6 +101,7 @@
     "generateTooltip": "为检测到的文本块生成翻译",
     "render": "渲染",
     "renderTooltip": "将翻译渲染到页面",
+    "apiKeyMissing": "{{provider}} API 密钥为必填项。",
     "loadingModel": "正在加载 LLM 模型",
     "statusReady": "LLM 已就绪",
     "statusIdle": "LLM 未加载"
@@ -160,7 +161,19 @@
   "errors": {
     "title": "错误",
     "dismiss": "关闭",
-    "providerQuotaExceeded": "{{provider}} API 配额已用尽。请检查计费状态或等待配额重置。"
+    "providerQuotaExceeded": "{{provider}} API 配额已用尽。请检查计费状态或等待配额重置。",
+    "providerApiKeyRequired": "{{provider}} API 密钥为必填项。",
+    "providerBaseUrlRequired": "{{provider}} 的 Base URL 为必填项。",
+    "providerNoContent": "{{provider}} 未返回内容。",
+    "providerRequestFailed": "{{provider}} API 请求失败 ({{status}}): {{details}}"
+  },
+  "providers": {
+    "openai": "OpenAI",
+    "openaiCompatible": "OpenAI 兼容",
+    "gemini": "Gemini",
+    "claude": "Claude",
+    "deepseek": "DeepSeek",
+    "unknown": "提供商"
   },
   "settings": {
     "title": "设置",

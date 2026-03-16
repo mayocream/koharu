@@ -3,6 +3,7 @@ use std::sync::{
     atomic::{AtomicBool, Ordering},
 };
 
+use koharu_ml::llm::providers::get_saved_api_key;
 use koharu_types::commands::ProcessRequest;
 use uuid::Uuid;
 
@@ -17,7 +18,7 @@ pub async fn process(state: AppResources, payload: ProcessRequest) -> anyhow::Re
         let (provider_id, _) = model_id
             .split_once(':')
             .ok_or_else(|| anyhow::anyhow!("invalid api model id"))?;
-        payload.llm_api_key = crate::ops::llm::get_saved_api_key(provider_id)?;
+        payload.llm_api_key = get_saved_api_key(provider_id)?;
     }
 
     {

@@ -42,6 +42,10 @@ function ProvidersBootstrap({ children }: { children: ReactNode }) {
   const shouldQueryApiKeys = rpcConnected && isTauri()
   const { data: documentsCount } = useDocumentsCountQuery(rpcConnected)
   const openAiApiKeyQuery = useApiKeyQuery('openai', shouldQueryApiKeys)
+  const openAiCompatibleApiKeyQuery = useApiKeyQuery(
+    'openai-compatible',
+    shouldQueryApiKeys,
+  )
   const geminiApiKeyQuery = useApiKeyQuery('gemini', shouldQueryApiKeys)
   const claudeApiKeyQuery = useApiKeyQuery('claude', shouldQueryApiKeys)
   const deepSeekApiKeyQuery = useApiKeyQuery('deepseek', shouldQueryApiKeys)
@@ -162,6 +166,16 @@ function ProvidersBootstrap({ children }: { children: ReactNode }) {
       setApiKey('openai', openAiApiKeyQuery.data ?? '')
     }
   }, [openAiApiKeyQuery.data, openAiApiKeyQuery.status, setApiKey])
+
+  useEffect(() => {
+    if (openAiCompatibleApiKeyQuery.status === 'success') {
+      setApiKey('openai-compatible', openAiCompatibleApiKeyQuery.data ?? '')
+    }
+  }, [
+    openAiCompatibleApiKeyQuery.data,
+    openAiCompatibleApiKeyQuery.status,
+    setApiKey,
+  ])
 
   useEffect(() => {
     if (geminiApiKeyQuery.status === 'success') {

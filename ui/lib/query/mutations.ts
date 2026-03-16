@@ -75,11 +75,14 @@ const pickLanguage = (
 }
 
 const getCachedLlmModels = (queryClient: QueryClient) =>
-  (queryClient.getQueryData(queryKeys.llm.models(i18n.language)) ?? []) as {
-    id: string
-    languages: string[]
-    source: string
-  }[]
+  (queryClient.getQueryData(
+    queryKeys.llm.models(
+      i18n.language,
+      usePreferencesStore
+        .getState()
+        .providerBaseUrls['openai-compatible']?.trim() || undefined,
+    ),
+  ) ?? []) as { id: string; languages: string[]; source: string }[]
 
 export const useProgressActions = () => {
   const setProgress = useCallback(
@@ -443,10 +446,17 @@ export const useDocumentMutations = () => {
           modelInfo && modelInfo.source !== 'local'
             ? usePreferencesStore.getState().apiKeys[modelInfo.source]
             : undefined
+        const llmBaseUrl =
+          modelInfo?.source === 'openai-compatible'
+            ? usePreferencesStore
+                .getState()
+                .providerBaseUrls['openai-compatible']?.trim() || undefined
+            : undefined
         await api.process({
           index: resolvedIndex,
           llmModelId: selectedModel,
           llmApiKey,
+          llmBaseUrl,
           language,
           shaderEffect: renderEffect,
           shaderStroke: renderStroke,
@@ -482,9 +492,16 @@ export const useDocumentMutations = () => {
         modelInfo && modelInfo.source !== 'local'
           ? usePreferencesStore.getState().apiKeys[modelInfo.source]
           : undefined
+      const llmBaseUrl =
+        modelInfo?.source === 'openai-compatible'
+          ? usePreferencesStore
+              .getState()
+              .providerBaseUrls['openai-compatible']?.trim() || undefined
+          : undefined
       await api.process({
         llmModelId: selectedModel,
         llmApiKey,
+        llmBaseUrl,
         language,
         shaderEffect: renderEffect,
         shaderStroke: renderStroke,
@@ -592,18 +609,25 @@ export const useLlmMutations = () => {
     })
 
     useLlmUiStore.getState().setLoading(true)
-    try {
-      const models = getCachedLlmModels(queryClient)
-      const modelInfo = models.find((m) => m.id === selectedModel)
-      const apiKey =
-        modelInfo && modelInfo.source !== 'local'
-          ? usePreferencesStore.getState().apiKeys[modelInfo.source]
-          : undefined
-      await api.llmLoad(selectedModel, apiKey)
-      await setProgress(100, ProgressBarStatus.Paused)
-    } finally {
-      queryClient.setQueryData(readyKey, false)
-    }
+    queryClient.setQueryData(readyKey, false)
+    const models = getCachedLlmModels(queryClient)
+    const modelInfo = models.find((m) => m.id === selectedModel)
+    const apiKey =
+      modelInfo && modelInfo.source !== 'local'
+        ? usePreferencesStore.getState().apiKeys[modelInfo.source]
+        : undefined
+    const baseUrl =
+      modelInfo?.source === 'openai-compatible'
+        ? usePreferencesStore
+            .getState()
+            .providerBaseUrls['openai-compatible']?.trim() || undefined
+        : undefined
+    await api.llmLoad(selectedModel, apiKey, baseUrl)
+    queryClient.setQueryData(
+      readyKey,
+      await api.llmReady(selectedModel).catch(() => false),
+    )
+    await setProgress(100, ProgressBarStatus.Paused)
   }, [queryClient, setProgress])
 
   const llmGenerate = useCallback(
@@ -637,7 +661,11 @@ export const useLlmMutations = () => {
   )
 
   const llmList = useCallback(async () => {
-    const models = await api.llmList(i18n.language)
+    const compatibleBaseUrl =
+      usePreferencesStore
+        .getState()
+        .providerBaseUrls['openai-compatible']?.trim() || undefined
+    const models = await api.llmList(i18n.language, compatibleBaseUrl)
     const providers = Array.from(
       new Set(
         models
@@ -658,7 +686,10 @@ export const useLlmMutations = () => {
       }
     }
 
-    queryClient.setQueryData(queryKeys.llm.models(i18n.language), models)
+    queryClient.setQueryData(
+      queryKeys.llm.models(i18n.language, compatibleBaseUrl),
+      models,
+    )
     const currentModel = useLlmUiStore.getState().selectedModel
     const currentLanguage = useLlmUiStore.getState().selectedLanguage
     const hasCurrent = models.some((model) => model.id === currentModel)

@@ -101,6 +101,7 @@
     "generateTooltip": "Generate translations for detected text blocks",
     "render": "Render",
     "renderTooltip": "Render translations onto the page",
+    "apiKeyMissing": "{{provider}} API key is required.",
     "loadingModel": "Loading LLM model",
     "statusReady": "LLM Ready",
     "statusIdle": "LLM Not Loaded"
@@ -160,7 +161,19 @@
   "errors": {
     "title": "Error",
     "dismiss": "Dismiss",
-    "providerQuotaExceeded": "{{provider}} API quota exceeded. Check your billing or wait for your quota to reset."
+    "providerQuotaExceeded": "{{provider}} API quota exceeded. Check your billing or wait for your quota to reset.",
+    "providerApiKeyRequired": "{{provider}} API key is required.",
+    "providerBaseUrlRequired": "{{provider}} Base URL is required.",
+    "providerNoContent": "{{provider}} returned no content.",
+    "providerRequestFailed": "{{provider}} API request failed ({{status}}): {{details}}"
+  },
+  "providers": {
+    "openai": "OpenAI",
+    "openaiCompatible": "OpenAI Compatible",
+    "gemini": "Gemini",
+    "claude": "Claude",
+    "deepseek": "DeepSeek",
+    "unknown": "Provider"
   },
   "settings": {
     "title": "Settings",

@@ -9,6 +9,8 @@ pub struct ApiProviderInfo {
     pub models: &'static [ApiModelInfo],
 }
 
+pub const OPENAI_COMPATIBLE_ID: &str = "openai-compatible";
+
 pub const OPENAI: ApiProviderInfo = ApiProviderInfo {
     id: "openai",
     name: "OpenAI",

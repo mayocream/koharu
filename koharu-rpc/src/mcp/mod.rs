@@ -101,9 +101,15 @@ impl KoharuMcp {
     #[tool(description = "List available LLM translation models with supported languages")]
     async fn llm_list(&self) -> Result<String, String> {
         let res = self.resources()?;
-        let models = operations::llm_list(res, LlmListPayload { language: None })
-            .await
-            .map_err(|e| e.to_string())?;
+        let models = operations::llm_list(
+            res,
+            LlmListPayload {
+                language: None,
+                openai_compatible_base_url: None,
+            },
+        )
+        .await
+        .map_err(|e| e.to_string())?;
         serde_json::to_string_pretty(&models).map_err(|e| e.to_string())
     }
 
@@ -373,6 +379,7 @@ impl KoharuMcp {
             LlmLoadPayload {
                 id: p.id.clone(),
                 api_key: None,
+                base_url: None,
             },
         )
         .await
@@ -439,6 +446,7 @@ impl KoharuMcp {
                 index: p.index,
                 llm_model_id: p.llm_model_id,
                 llm_api_key: None,
+                llm_base_url: None,
                 language: p.language,
                 shader_effect: effect,
                 shader_stroke: None,

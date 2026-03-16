@@ -11,7 +11,8 @@ export const queryKeys = {
   fonts: ['fonts'] as const,
   llm: {
     all: ['llm'] as const,
-    models: (language: string) => ['llm', 'models', language] as const,
+    models: (language: string, openAiCompatibleBaseUrl?: string) =>
+      ['llm', 'models', language, openAiCompatibleBaseUrl ?? ''] as const,
     apiKey: (provider: string) => ['llm', 'api-key', provider] as const,
     ready: (selectedModel?: string) =>
       ['llm', 'ready', selectedModel ?? 'none'] as const,

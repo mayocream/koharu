@@ -13,6 +13,8 @@ type PreferencesState = {
   setFontFamily: (font?: string) => void
   apiKeys: Record<string, string>
   setApiKey: (provider: string, key: string) => void
+  providerBaseUrls: Record<string, string>
+  setProviderBaseUrl: (provider: string, url: string) => void
   resetPreferences: () => void
 }
 
@@ -23,6 +25,7 @@ const initialPreferences = {
   },
   fontFamily: undefined as string | undefined,
   apiKeys: {} as Record<string, string>,
+  providerBaseUrls: {} as Record<string, string>,
 }
 
 export const usePreferencesStore = create<PreferencesState>()(
@@ -41,6 +44,13 @@ export const usePreferencesStore = create<PreferencesState>()(
         set((state) => ({
           apiKeys: { ...state.apiKeys, [provider]: key },
         })),
+      setProviderBaseUrl: (provider, url) =>
+        set((state) => ({
+          providerBaseUrls: {
+            ...state.providerBaseUrls,
+            [provider]: url,
+          },
+        })),
       resetPreferences: () => set({ ...initialPreferences }),
     }),
     {
@@ -48,6 +58,7 @@ export const usePreferencesStore = create<PreferencesState>()(
       partialize: (state) => ({
         brushConfig: state.brushConfig,
         fontFamily: state.fontFamily,
+        providerBaseUrls: state.providerBaseUrls,
       }),
     },
   ),

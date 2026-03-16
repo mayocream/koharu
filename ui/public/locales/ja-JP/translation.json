@@ -101,6 +101,7 @@
     "generateTooltip": "検出されたテキストブロックを翻訳する",
     "render": "レンダー",
     "renderTooltip": "翻訳をページにレンダー",
+    "apiKeyMissing": "{{provider}} の API キーが必要です。",
     "loadingModel": "LLM モデルを読み込み中",
     "statusReady": "LLM 準備完了",
     "statusIdle": "LLM 未読み込み"
@@ -160,7 +161,19 @@
   "errors": {
     "title": "エラー",
     "dismiss": "閉じる",
-    "providerQuotaExceeded": "{{provider}} の API クォータを超過しました。課金状況を確認するか、クォータのリセットを待ってください。"
+    "providerQuotaExceeded": "{{provider}} の API クォータを超過しました。課金状況を確認するか、クォータのリセットを待ってください。",
+    "providerApiKeyRequired": "{{provider}} の API キーが必要です。",
+    "providerBaseUrlRequired": "{{provider}} の Base URL が必要です。",
+    "providerNoContent": "{{provider}} から応答が返されませんでした。",
+    "providerRequestFailed": "{{provider}} の API リクエストに失敗しました ({{status}}): {{details}}"
+  },
+  "providers": {
+    "openai": "OpenAI",
+    "openaiCompatible": "OpenAI互換",
+    "gemini": "Gemini",
+    "claude": "Claude",
+    "deepseek": "DeepSeek",
+    "unknown": "プロバイダー"
   },
   "settings": {
     "title": "設定",

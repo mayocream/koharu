@@ -2,6 +2,7 @@
 
 import { useUiErrorStore } from '@/lib/stores/uiErrorStore'
 import i18n from '@/lib/i18n'
+import { getProviderDisplayName, normalizeProviderId } from '@/lib/providers'
 
 const SURFACED_RPC_METHODS = new Set([
   'open_documents',
@@ -32,8 +33,44 @@ export const normalizeErrorMessage = (error: unknown) => {
         : 'Unexpected error'
 
   if (rawMessage.startsWith('provider_quota_exceeded:')) {
-    const provider = rawMessage.split(':', 2)[1] ?? 'provider'
+    const provider = getProviderDisplayName(rawMessage.split(':', 2)[1])
     return i18n.t('errors.providerQuotaExceeded', { provider })
+  }
+
+  const apiKeyRequiredMatch = rawMessage.match(
+    /^api_key is required for (.+)$/i,
+  )
+  if (apiKeyRequiredMatch) {
+    const provider = getProviderDisplayName(apiKeyRequiredMatch[1])
+    return i18n.t('errors.providerApiKeyRequired', { provider })
+  }
+
+  if (
+    rawMessage.trim().toLowerCase() ===
+    'base_url is required for the openai-compatible provider'
+  ) {
+    return i18n.t('errors.providerBaseUrlRequired', {
+      provider: getProviderDisplayName('openai-compatible'),
+    })
+  }
+
+  const noContentMatch = rawMessage.match(/^(.+?) returned no content$/i)
+  if (noContentMatch) {
+    const provider = getProviderDisplayName(noContentMatch[1])
+    return i18n.t('errors.providerNoContent', { provider })
+  }
+
+  const requestFailedMatch = rawMessage.match(
+    /^(.+?) API request failed \(([^)]+)\):\s*([\s\S]+)$/i,
+  )
+  if (requestFailedMatch) {
+    const [, providerId, status, details] = requestFailedMatch
+    const provider = getProviderDisplayName(normalizeProviderId(providerId))
+    return i18n.t('errors.providerRequestFailed', {
+      provider,
+      status,
+      details,
+    })
   }
 
   return rawMessage

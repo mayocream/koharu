@@ -31,12 +31,30 @@ const THEME_OPTIONS = [
   { value: 'system', icon: MonitorIcon, labelKey: 'settings.themeSystem' },
 ] as const
 
-const API_PROVIDERS = [
+type ApiProvider = {
+  id: string
+  name: string
+  free_tier: boolean
+  supportsBaseUrl?: boolean
+  baseUrlPlaceholder?: string
+  helperText?: string
+}
+
+const API_PROVIDERS: ApiProvider[] = [
   { id: 'openai', name: 'OpenAI', free_tier: false },
+  {
+    id: 'openai-compatible',
+    name: 'OpenAI Compatible',
+    free_tier: false,
+    supportsBaseUrl: true,
+    baseUrlPlaceholder: 'http://127.0.0.1:1234/v1',
+    helperText:
+      'Use LM Studio, OpenRouter, or another OpenAI-compatible endpoint.',
+  },
   { id: 'gemini', name: 'Gemini', free_tier: true },
   { id: 'claude', name: 'Claude', free_tier: false },
   { id: 'deepseek', name: 'DeepSeek', free_tier: false },
-] as const
+]
 
 export default function SettingsPage() {
   const { t, i18n } = useTranslation()
@@ -47,7 +65,13 @@ export default function SettingsPage() {
   )
   const [deviceInfo, setDeviceInfo] = useState<{ mlDevice: string }>()
   const apiKeys = usePreferencesStore((state) => state.apiKeys)
+  const providerBaseUrls = usePreferencesStore(
+    (state) => state.providerBaseUrls,
+  )
   const setApiKey = usePreferencesStore((state) => state.setApiKey)
+  const setProviderBaseUrl = usePreferencesStore(
+    (state) => state.setProviderBaseUrl,
+  )
   const [visibleKeys, setVisibleKeys] = useState<Record<string, boolean>>({})
   const saveTimersRef = useRef<Record<string, ReturnType<typeof setTimeout>>>(
     {},
@@ -225,43 +249,70 @@ export default function SettingsPage() {
                 {t('settings.apiKeysDescription')}
               </p>
               <div className='space-y-3'>
-                {API_PROVIDERS.map(({ id, name }) => (
-                  <div key={id} className='space-y-1'>
-                    <label className='text-foreground text-sm'>{name}</label>
-                    <div className='space-y-1'>
-                      <div className='relative'>
-                        <input
-                          type={visibleKeys[id] ? 'text' : 'password'}
-                          value={apiKeys[id] ?? ''}
-                          onChange={(e) => handleApiKeyChange(id, e.target.value)}
-                          onBlur={() => flushApiKeySave(id)}
-                          placeholder='Enter API key'
-                          className='border-border bg-card text-foreground placeholder:text-muted-foreground focus:ring-primary w-full rounded-md border px-3 py-1.5 pr-9 text-sm focus:ring-1 focus:outline-none'
-                        />
-                        <button
-                          type='button'
-                          onClick={() =>
-                            setVisibleKeys((v) => ({ ...v, [id]: !v[id] }))
-                          }
-                          className='text-muted-foreground hover:text-foreground absolute top-1/2 right-2.5 -translate-y-1/2 transition'
-                        >
-                          {visibleKeys[id] ? (
-                            <EyeOffIcon className='size-4' />
-                          ) : (
-                            <EyeIcon className='size-4' />
-                          )}
-                        </button>
-                      </div>
+                {API_PROVIDERS.map(
+                  ({
+                    id,
+                    name,
+                    free_tier,
+                    supportsBaseUrl,
+                    baseUrlPlaceholder,
+                    helperText,
+                  }) => (
+                    <div key={id} className='space-y-1'>
+                      <label className='text-foreground text-sm'>{name}</label>
+                      <div className='space-y-1'>
+                        {supportsBaseUrl && (
+                          <input
+                            type='url'
+                            value={providerBaseUrls[id] ?? ''}
+                            onChange={(e) =>
+                              setProviderBaseUrl(id, e.target.value)
+                            }
+                            placeholder={baseUrlPlaceholder}
+                            className='border-border bg-card text-foreground placeholder:text-muted-foreground focus:ring-primary w-full rounded-md border px-3 py-1.5 text-sm focus:ring-1 focus:outline-none'
+                          />
+                        )}
+                        <div className='relative'>
+                          <input
+                            type={visibleKeys[id] ? 'text' : 'password'}
+                            value={apiKeys[id] ?? ''}
+                            onChange={(e) =>
+                              handleApiKeyChange(id, e.target.value)
+                            }
+                            onBlur={() => flushApiKeySave(id)}
+                            placeholder='Enter API key'
+                            className='border-border bg-card text-foreground placeholder:text-muted-foreground focus:ring-primary w-full rounded-md border px-3 py-1.5 pr-9 text-sm focus:ring-1 focus:outline-none'
+                          />
+                          <button
+                            type='button'
+                            onClick={() =>
+                              setVisibleKeys((v) => ({ ...v, [id]: !v[id] }))
+                            }
+                            className='text-muted-foreground hover:text-foreground absolute top-1/2 right-2.5 -translate-y-1/2 transition'
+                          >
+                            {visibleKeys[id] ? (
+                              <EyeOffIcon className='size-4' />
+                            ) : (
+                              <EyeIcon className='size-4' />
+                            )}
+                          </button>
+                        </div>
 
-                      {API_PROVIDERS.find((provider) => provider.id === id)
-                        ?.free_tier && (
-                        <span className='ml-2 text-xs text-green-500'>
-                          {t('settings.freeTier')}
-                        </span>
-                      )}
+                        {helperText && (
+                          <span className='ml-2 text-xs text-slate-500'>
+                            {helperText}
+                          </span>
+                        )}
+
+                        {free_tier && (
+                          <span className='ml-2 text-xs text-green-500'>
+                            {t('settings.freeTier')}
+                          </span>
+                        )}
+                      </div>
                     </div>
-                  </div>
-                ))}
+                  ),
+                )}
               </div>
             </section>
 

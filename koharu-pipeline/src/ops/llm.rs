@@ -1,9 +1,9 @@
 use std::str::FromStr;
 
-use keyring::Entry;
 use koharu_ml::llm::ModelId;
-use koharu_ml::llm::api::ALL_API_PROVIDERS;
+use koharu_ml::llm::api::{ALL_API_PROVIDERS, OPENAI_COMPATIBLE_ID};
 use koharu_ml::llm::facade as llm;
+use koharu_ml::llm::providers::{get_saved_api_key, openai_compatible, set_saved_api_key};
 use koharu_types::commands::{
     ApiKeyGetPayload, ApiKeyResult, ApiKeySetPayload, IndexPayload, LlmGeneratePayload,
     LlmListPayload, LlmLoadPayload,
@@ -12,55 +12,6 @@ use strum::IntoEnumIterator;
 use tracing::instrument;
 
 use crate::{AppResources, state_tx};
-
-const API_KEY_SERVICE: &str = "koharu";
-
-fn provider_key_entry(provider: &str) -> anyhow::Result<Entry> {
-    let username = format!("llm_provider_api_key_{provider}");
-    Ok(Entry::new(API_KEY_SERVICE, &username)?)
-}
-
-fn legacy_provider_key_entry(provider: &str) -> anyhow::Result<Entry> {
-    let username = format!("llm-provider-api-key:{provider}");
-    Ok(Entry::new(API_KEY_SERVICE, &username)?)
-}
-
-pub(crate) fn get_saved_api_key(provider: &str) -> anyhow::Result<Option<String>> {
-    let entry = provider_key_entry(provider)?;
-    match entry.get_password() {
-        Ok(value) => Ok(Some(value)),
-        Err(keyring::Error::NoEntry) => {
-            let legacy_entry = legacy_provider_key_entry(provider)?;
-            match legacy_entry.get_password() {
-                Ok(value) => {
-                    let _ = entry.set_password(&value);
-                    let _ = legacy_entry.delete_credential();
-                    Ok(Some(value))
-                }
-                Err(keyring::Error::NoEntry) => Ok(None),
-                Err(err) => Err(err.into()),
-            }
-        }
-        Err(err) => Err(err.into()),
-    }
-}
-
-fn set_saved_api_key(provider: &str, api_key: &str) -> anyhow::Result<()> {
-    let entry = provider_key_entry(provider)?;
-    let legacy_entry = legacy_provider_key_entry(provider)?;
-    if api_key.trim().is_empty() {
-        match entry.delete_credential() {
-            Ok(()) | Err(keyring::Error::NoEntry) => {}
-            Err(err) => return Err(anyhow::Error::from(err)),
-        }
-        let _ = legacy_entry.delete_credential();
-        Ok(())
-    } else {
-        entry.set_password(api_key)?;
-        let _ = legacy_entry.delete_credential();
-        Ok(())
-    }
-}
 
 #[instrument(level = "debug", skip_all, fields(provider = %payload.provider))]
 pub async fn get_api_key(
@@ -118,6 +69,32 @@ pub async fn llm_list(
         }
     }
 
+    if let Some(base_url) = payload
+        .openai_compatible_base_url
+        .as_deref()
+        .map(str::trim)
+        .filter(|value| !value.is_empty())
+    {
+        let api_key = match get_saved_api_key(OPENAI_COMPATIBLE_ID) {
+            Ok(value) => value,
+            Err(err) => {
+                tracing::warn!(%err, "failed to read openai-compatible API key");
+                None
+            }
+        };
+
+        match openai_compatible::list_models(base_url, api_key.as_deref()).await {
+            Ok(models) => {
+                for model in models {
+                    result.push(llm::ModelInfo::api(OPENAI_COMPATIBLE_ID, &model));
+                }
+            }
+            Err(err) => {
+                tracing::warn!(%err, "failed to list openai-compatible models");
+            }
+        }
+    }
+
     Ok(result)
 }
 
@@ -126,11 +103,13 @@ pub async fn llm_load(state: AppResources, payload: LlmLoadPayload) -> anyhow::R
     if payload.id.contains(':') {
         let (provider_id, model_id) = payload.id.split_once(':').unwrap();
         let api_key = match payload.api_key {
-            Some(key) => key,
-            None => get_saved_api_key(provider_id)?
-                .ok_or_else(|| anyhow::anyhow!("api_key is required for API models"))?,
+            Some(key) if !key.trim().is_empty() => Some(key),
+            _ => get_saved_api_key(provider_id)?,
         };
-        state.llm.load_api(provider_id, model_id, api_key).await?;
+        state
+            .llm
+            .load_api(provider_id, model_id, api_key, payload.base_url)
+            .await?;
     } else {
         let id = ModelId::from_str(&payload.id)?;
         state.llm.load(id).await;

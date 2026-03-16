@@ -6,6 +6,7 @@ import { api } from '@/lib/api'
 import { queryKeys } from '@/lib/query/keys'
 import { useEditorUiStore } from '@/lib/stores/editorUiStore'
 import { useLlmUiStore } from '@/lib/stores/llmUiStore'
+import { usePreferencesStore } from '@/lib/stores/preferencesStore'
 import i18n from '@/lib/i18n'
 import { useRpcConnection } from '@/hooks/useRpcConnection'
 
@@ -62,6 +63,9 @@ export const useFontsQuery = () =>
 export const useLlmModelsQuery = () => {
   const [language, setLanguage] = useState(i18n.language)
   const rpcConnected = useRpcConnection()
+  const compatibleBaseUrl = usePreferencesStore(
+    (state) => state.providerBaseUrls['openai-compatible']?.trim() ?? '',
+  )
 
   useEffect(() => {
     const handleLanguageChange = (nextLanguage: string) => {
@@ -74,8 +78,11 @@ export const useLlmModelsQuery = () => {
   }, [])
 
   return useQuery({
-    queryKey: queryKeys.llm.models(language ?? 'default'),
-    queryFn: () => api.llmList(language),
+    queryKey: queryKeys.llm.models(
+      language ?? 'default',
+      compatibleBaseUrl || undefined,
+    ),
+    queryFn: () => api.llmList(language, compatibleBaseUrl || undefined),
     enabled: rpcConnected,
     staleTime: 5 * 60 * 1000,
   })
@@ -93,7 +100,7 @@ export const useLlmReadyQuery = () => {
   const selectedModel = useLlmUiStore((state) => state.selectedModel)
   return useQuery({
     queryKey: queryKeys.llm.ready(selectedModel),
-    queryFn: () => api.llmReady(),
+    queryFn: () => api.llmReady(selectedModel),
     enabled: !!selectedModel,
   })
 }

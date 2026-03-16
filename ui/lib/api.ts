@@ -587,16 +587,27 @@ export const api = {
     })
   },
 
-  async llmList(language?: string): Promise<LlmModelInfo[]> {
-    const params = language ? `?language=${encodeURIComponent(language)}` : ''
-    return fetchJson<LlmModelInfo[]>(`/llm/models${params}`)
+  async llmList(
+    language?: string,
+    openAiCompatibleBaseUrl?: string,
+  ): Promise<LlmModelInfo[]> {
+    const params = new URLSearchParams()
+    if (language) {
+      params.set('language', language)
+    }
+    if (openAiCompatibleBaseUrl) {
+      params.set('openaiCompatibleBaseUrl', openAiCompatibleBaseUrl)
+    }
+    const queryString = params.toString()
+    const query = queryString ? `?${queryString}` : ''
+    return fetchJson<LlmModelInfo[]>(`/llm/models${query}`)
   },
 
-  async llmLoad(id: string, apiKey?: string): Promise<void> {
+  async llmLoad(id: string, apiKey?: string, baseUrl?: string): Promise<void> {
     await fetchJson<LlmState>('/llm/load', {
       method: 'POST',
       headers: { 'content-type': 'application/json' },
-      body: JSON.stringify({ id, apiKey }),
+      body: JSON.stringify({ id, apiKey, baseUrl }),
     })
   },
 
@@ -606,9 +617,12 @@ export const api = {
     })
   },
 
-  async llmReady(): Promise<boolean> {
+  async llmReady(selectedModel?: string): Promise<boolean> {
     const state = await fetchJson<LlmState>('/llm/state')
-    return state.status === 'ready'
+    return (
+      state.status === 'ready' &&
+      (!selectedModel || !state.modelId || state.modelId === selectedModel)
+    )
   },
 
   async llmGenerate(
@@ -635,6 +649,7 @@ export const api = {
     index?: number
     llmModelId?: string
     llmApiKey?: string
+    llmBaseUrl?: string
     language?: string
     shaderEffect?: RenderEffect
     shaderStroke?: RenderStroke
@@ -653,6 +668,7 @@ export const api = {
           documentId,
           llmModelId: options.llmModelId,
           llmApiKey: options.llmApiKey,
+          llmBaseUrl: options.llmBaseUrl,
           language: options.language,
           shaderEffect: options.shaderEffect,
           shaderStroke: options.shaderStroke,

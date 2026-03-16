@@ -61,7 +61,7 @@ pub enum State {
     },
     Ready(Llm),
     ApiReady {
-        provider: Box<dyn super::provider::AnyProvider>,
+        provider: Box<dyn super::providers::AnyProvider>,
         provider_id: String,
         model: String,
     },
@@ -95,17 +95,6 @@ impl Default for Model {
 pub trait Translatable {
     fn get_source(&self) -> anyhow::Result<String>;
     fn set_translation(&mut self, translation: String) -> anyhow::Result<()>;
-
-    fn translate_with_llm(
-        &mut self,
-        llm: &mut Llm,
-        target_language: Option<&str>,
-    ) -> anyhow::Result<()> {
-        let text = self.get_source()?;
-        let response = llm.generate(&text, &GenerateOptions::default(), target_language)?;
-        let response = response.trim().to_string();
-        self.set_translation(response)
-    }
 }
 
 fn escape_block_text(text: &str) -> String {
@@ -435,17 +424,6 @@ impl Translatable for Document {
         }
         Ok(())
     }
-
-    fn translate_with_llm(
-        &mut self,
-        llm: &mut Llm,
-        target_language: Option<&str>,
-    ) -> anyhow::Result<()> {
-        let text = self.get_source()?;
-        let response = llm.generate(&text, &GenerateOptions::default(), target_language)?;
-        let response = response.trim().to_string();
-        self.set_translation(response)
-    }
 }
 
 impl Translatable for TextBlock {
@@ -454,10 +432,19 @@ impl Translatable for TextBlock {
             .text
             .clone()
             .ok_or_else(|| anyhow::anyhow!("No source text found"))?;
-        Ok(source)
+        Ok(format!(
+            r#"<block id="0">
+{}
+</block>"#,
+            escape_block_text(&source)
+        ))
     }
 
     fn set_translation(&mut self, translation: String) -> anyhow::Result<()> {
+        let translation = match parse_tagged_blocks(&translation, 1)? {
+            Some(blocks) => blocks.into_iter().next().unwrap_or_default(),
+            None => translation,
+        };
         self.translation = Some(strip_wrapping_quotes(&translation));
         Ok(())
     }
@@ -481,16 +468,10 @@ impl Model {
         &self,
         provider_id: &str,
         model_id: &str,
-        api_key: String,
+        api_key: Option<String>,
+        base_url: Option<String>,
     ) -> anyhow::Result<()> {
-        use super::provider::AnyProvider;
-        let provider: Box<dyn AnyProvider> = match provider_id {
-            "openai" => Box::new(super::provider::openai::OpenAiProvider { api_key }),
-            "gemini" => Box::new(super::provider::gemini::GeminiProvider { api_key }),
-            "claude" => Box::new(super::provider::claude::ClaudeProvider { api_key }),
-            "deepseek" => Box::new(super::provider::deepseek::DeepSeekProvider { api_key }),
-            other => anyhow::bail!("Unknown API provider: {other}"),
-        };
+        let provider = super::providers::build_provider(provider_id, api_key, base_url)?;
         *self.state.write().await = State::ApiReady {
             provider,
             provider_id: provider_id.to_string(),
@@ -574,22 +555,23 @@ impl Model {
         target_language: Option<&str>,
     ) -> anyhow::Result<()> {
         let lang = target_language.unwrap_or("English");
+        let source = doc.get_source()?;
         let mut guard = self.state.write().await;
-        match &mut *guard {
-            State::Ready(llm) => doc.translate_with_llm(llm, target_language),
+        let translation = match &mut *guard {
+            State::Ready(llm) => {
+                llm.generate(&source, &GenerateOptions::default(), target_language)
+            }
             State::ApiReady {
                 provider, model, ..
             } => {
-                let text = doc.get_source()?;
                 let model = model.clone();
-                let response = provider.translate(&text, lang, &model).await?;
-                let response = response.trim().to_string();
-                doc.set_translation(response)
+                provider.translate(&source, lang, &model).await
             }
             State::Loading { .. } => Err(anyhow::anyhow!("Model is still loading")),
             State::Failed(e) => Err(anyhow::anyhow!("Model failed to load: {e}")),
             State::Empty => Err(anyhow::anyhow!("No model is loaded")),
-        }
+        }?;
+        doc.set_translation(translation.trim().to_string())
     }
 }
 
@@ -834,6 +816,40 @@ mod tests {
         let mut block = TextBlock::default();
         block.set_translation("“quoted”".to_string())?;
         assert_eq!(block.translation.as_deref(), Some("quoted"));
+        Ok(())
+    }
+
+    #[test]
+    fn text_block_source_uses_single_tagged_block() -> anyhow::Result<()> {
+        let block = TextBlock {
+            text: Some("1 < 2\nA & B".to_string()),
+            ..Default::default()
+        };
+
+        let source = block.get_source()?;
+        assert_eq!(source, "<block id=\"0\">\n1 &lt; 2\nA &amp; B\n</block>");
+
+        Ok(())
+    }
+
+    #[test]
+    fn text_block_translation_extracts_tagged_block_content() -> anyhow::Result<()> {
+        let mut block = TextBlock::default();
+        block.set_translation(
+            "Sure.\n<block id=\"0\">\nTranslated &lt;line&gt;\n</block>\nDone.".to_string(),
+        )?;
+        assert_eq!(block.translation.as_deref(), Some("Translated <line>"));
+        Ok(())
+    }
+
+    #[test]
+    fn text_block_translation_keeps_multiline_plain_text() -> anyhow::Result<()> {
+        let mut block = TextBlock::default();
+        block.set_translation("First line\nSecond line".to_string())?;
+        assert_eq!(
+            block.translation.as_deref(),
+            Some("First line\nSecond line")
+        );
         Ok(())
     }
 

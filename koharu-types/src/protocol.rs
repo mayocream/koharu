@@ -210,6 +210,7 @@ pub struct LlmState {
 pub struct LlmLoadRequest {
     pub id: String,
     pub api_key: Option<String>,
+    pub base_url: Option<String>,
 }
 
 #[derive(Debug, Clone, Copy, Serialize, Deserialize, JsonSchema, TS)]
@@ -325,6 +326,7 @@ pub struct PipelineJobRequest {
     pub document_id: Option<String>,
     pub llm_model_id: Option<String>,
     pub llm_api_key: Option<String>,
+    pub llm_base_url: Option<String>,
     pub language: Option<String>,
     pub shader_effect: Option<TextShaderEffect>,
     pub shader_stroke: Option<TextStrokeStyle>,

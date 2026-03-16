@@ -5,7 +5,9 @@ use serde::Serialize;
 
 use koharu_http::http::http_client;
 
-use super::{AnyProvider, ensure_provider_success, system_prompt};
+use crate::llm::prompt::system_prompt;
+
+use super::{AnyProvider, ensure_provider_success};
 
 pub struct DeepSeekProvider {
     pub api_key: String,

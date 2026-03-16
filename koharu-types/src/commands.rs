@@ -72,6 +72,7 @@ pub struct UpdateTextBlocksPayload {
 #[serde(rename_all = "camelCase")]
 pub struct LlmListPayload {
     pub language: Option<String>,
+    pub openai_compatible_base_url: Option<String>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -98,6 +99,7 @@ pub struct ApiKeyResult {
 pub struct LlmLoadPayload {
     pub id: String,
     pub api_key: Option<String>,
+    pub base_url: Option<String>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -113,6 +115,7 @@ pub struct LlmGeneratePayload {
 pub struct LlmLoadParams {
     pub id: String,
     pub api_key: Option<String>,
+    pub base_url: Option<String>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, JsonSchema)]
@@ -129,6 +132,7 @@ pub struct ProcessRequest {
     pub index: Option<usize>,
     pub llm_model_id: Option<String>,
     pub llm_api_key: Option<String>,
+    pub llm_base_url: Option<String>,
     pub language: Option<String>,
     pub shader_effect: Option<TextShaderEffect>,
     pub shader_stroke: Option<TextStrokeStyle>,
@@ -360,10 +364,12 @@ mod tests {
         });
         round_trip(&LlmListPayload {
             language: Some("zh-CN".to_string()),
+            openai_compatible_base_url: Some("http://127.0.0.1:1234/v1".to_string()),
         });
         round_trip(&LlmLoadPayload {
             id: "sakura".to_string(),
             api_key: None,
+            base_url: Some("http://127.0.0.1:1234/v1".to_string()),
         });
         round_trip(&LlmGeneratePayload {
             index: 1,
@@ -373,6 +379,7 @@ mod tests {
         round_trip(&LlmLoadParams {
             id: "sakura".to_string(),
             api_key: None,
+            base_url: Some("http://127.0.0.1:1234/v1".to_string()),
         });
         round_trip(&LlmGenerateParams {
             index: 1,
@@ -383,6 +390,7 @@ mod tests {
             index: Some(1),
             llm_model_id: Some("sakura".to_string()),
             llm_api_key: None,
+            llm_base_url: Some("http://127.0.0.1:1234/v1".to_string()),
             language: Some("zh-CN".to_string()),
             shader_effect: Some(TextShaderEffect {
                 italic: true,
