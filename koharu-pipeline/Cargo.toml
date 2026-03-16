@@ -28,6 +28,7 @@ strum = { workspace = true }
 tokio = { workspace = true }
 tracing = { workspace = true }
 keyring = { workspace = true }
+uuid = { workspace = true }
 
 [target.'cfg(windows)'.dependencies]
 keyring = { workspace = true, features = ["windows-native"] }

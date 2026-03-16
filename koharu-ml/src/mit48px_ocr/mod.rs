@@ -79,16 +79,16 @@ pub struct Mit48pxOcr {
 }
 
 impl Mit48pxOcr {
-    pub async fn load(use_cpu: bool) -> Result<Self> {
+    pub async fn load(cpu: bool) -> Result<Self> {
         let files = ModelFiles {
             config: loading::resolve_manifest_path(Manifest::Config.get()).await?,
             dictionary: loading::resolve_manifest_path(Manifest::Dictionary.get()).await?,
             weights: loading::resolve_manifest_path(Manifest::Model.get()).await?,
         };
-        Self::load_from_files(files, use_cpu)
+        Self::load_from_files(files, cpu)
     }
 
-    pub fn load_from_dir(dir: impl AsRef<Path>, use_cpu: bool) -> Result<Self> {
+    pub fn load_from_dir(dir: impl AsRef<Path>, cpu: bool) -> Result<Self> {
         let dir = dir.as_ref();
         Self::load_from_files(
             ModelFiles {
@@ -96,12 +96,12 @@ impl Mit48pxOcr {
                 dictionary: dir.join("alphabet-all-v7.txt"),
                 weights: dir.join("model.safetensors"),
             },
-            use_cpu,
+            cpu,
         )
     }
 
-    fn load_from_files(files: ModelFiles, use_cpu: bool) -> Result<Self> {
-        let device = device(use_cpu)?;
+    fn load_from_files(files: ModelFiles, cpu: bool) -> Result<Self> {
+        let device = device(cpu)?;
         let config: Mit48pxConfig =
             loading::read_json(&files.config).context("failed to parse mit48px config")?;
         let dictionary = read_dictionary(&files.dictionary)?;

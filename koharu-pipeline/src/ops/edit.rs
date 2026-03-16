@@ -118,6 +118,10 @@ fn rehydrate_runtime_text_block_state(current: &mut TextBlock, previous: Option<
         return;
     };
 
+    if current.id.trim().is_empty() {
+        current.id = prev.id.clone();
+    }
+
     current.lock_layout_box = if size_changed(current, prev) {
         true
     } else {
@@ -205,7 +209,7 @@ pub async fn update_text_blocks(
     state: AppResources,
     payload: UpdateTextBlocksPayload,
 ) -> anyhow::Result<()> {
-    state_tx::mutate_doc(&state.state, payload.index, |document| {
+    state_tx::mutate_doc(&state.state, payload.index, &["textBlocks"], |document| {
         let previous = std::mem::take(&mut document.text_blocks);
         document.text_blocks = payload.text_blocks;
 
@@ -228,7 +232,7 @@ pub async fn update_text_block(
     state: AppResources,
     payload: UpdateTextBlockPayload,
 ) -> anyhow::Result<TextBlockInfo> {
-    state_tx::mutate_doc(&state.state, payload.index, |document| {
+    state_tx::mutate_doc(&state.state, payload.index, &["textBlocks"], |document| {
         let block = document
             .text_blocks
             .get_mut(payload.text_block_index)
@@ -298,7 +302,7 @@ pub async fn add_text_block(
     state: AppResources,
     payload: AddTextBlockPayload,
 ) -> anyhow::Result<usize> {
-    state_tx::mutate_doc(&state.state, payload.index, |document| {
+    state_tx::mutate_doc(&state.state, payload.index, &["textBlocks"], |document| {
         let mut block = TextBlock {
             x: payload.x,
             y: payload.y,
@@ -318,7 +322,7 @@ pub async fn remove_text_block(
     state: AppResources,
     payload: RemoveTextBlockPayload,
 ) -> anyhow::Result<usize> {
-    state_tx::mutate_doc(&state.state, payload.index, |document| {
+    state_tx::mutate_doc(&state.state, payload.index, &["textBlocks"], |document| {
         if payload.text_block_index >= document.text_blocks.len() {
             anyhow::bail!("Text block {} not found", payload.text_block_index);
         }
@@ -333,7 +337,7 @@ pub async fn dilate_mask(state: AppResources, payload: MaskMorphPayload) -> anyh
         anyhow::bail!("Radius must be 1-50");
     }
 
-    state_tx::mutate_doc(&state.state, payload.index, |document| {
+    state_tx::mutate_doc(&state.state, payload.index, &["segment"], |document| {
         let segment = document
             .segment
             .as_ref()
@@ -352,7 +356,7 @@ pub async fn erode_mask(state: AppResources, payload: MaskMorphPayload) -> anyho
         anyhow::bail!("Radius must be 1-50");
     }
 
-    state_tx::mutate_doc(&state.state, payload.index, |document| {
+    state_tx::mutate_doc(&state.state, payload.index, &["segment"], |document| {
         let segment = document
             .segment
             .as_ref()
@@ -427,7 +431,7 @@ pub async fn update_inpaint_mask(
 
     let mut updated = snapshot;
     updated.segment = Some(image::DynamicImage::ImageRgba8(base_mask).into());
-    state_tx::update_doc(&state.state, payload.index, updated).await
+    state_tx::update_doc(&state.state, payload.index, updated, &["segment"]).await
 }
 
 pub async fn update_brush_layer(
@@ -470,7 +474,7 @@ pub async fn update_brush_layer(
     let mut updated = snapshot;
     updated.brush_layer = Some(image::DynamicImage::ImageRgba8(brush_layer).into());
 
-    state_tx::update_doc(&state.state, payload.index, updated).await
+    state_tx::update_doc(&state.state, payload.index, updated, &["brushLayer"]).await
 }
 
 #[instrument(level = "info", skip_all)]
@@ -536,7 +540,7 @@ pub async fn inpaint_partial(
     let mut updated = snapshot;
     updated.inpainted = Some(image::DynamicImage::ImageRgba8(stitched).into());
 
-    state_tx::update_doc(&state.state, payload.index, updated).await
+    state_tx::update_doc(&state.state, payload.index, updated, &["inpainted"]).await
 }
 
 #[cfg(test)]

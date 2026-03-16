@@ -19,6 +19,8 @@ schemars = { workspace = true }
 serde = { workspace = true }
 serde_bytes = { workspace = true }
 tokio = { workspace = true }
+ts-rs = { workspace = true }
+uuid = { workspace = true }
 
 [dev-dependencies]
 serde_json = { workspace = true }

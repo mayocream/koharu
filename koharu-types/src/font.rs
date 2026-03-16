@@ -1,12 +1,16 @@
+use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
+use ts_rs::TS;
 
-#[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Eq, TS, JsonSchema)]
+#[ts(export)]
 pub enum TextDirection {
     Horizontal,
     Vertical,
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, TS, JsonSchema)]
+#[ts(export)]
 pub struct NamedFontPrediction {
     pub index: usize,
     pub name: String,
@@ -15,7 +19,8 @@ pub struct NamedFontPrediction {
     pub serif: bool,
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, TS, JsonSchema)]
+#[ts(export)]
 pub struct FontPrediction {
     pub top_fonts: Vec<(usize, f32)>,
     pub named_fonts: Vec<NamedFontPrediction>,

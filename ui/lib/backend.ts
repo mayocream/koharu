@@ -1,68 +1,27 @@
 'use client'
 
-import { WsRpcClient } from './ws'
-import { fileOpen, fileSave } from 'browser-fs-access'
-import { toArrayBuffer } from './util'
-import { reportRpcError } from './errors'
-import type { RpcMethodMap, RpcNotificationMap, FileResult } from './rpc-types'
+import type {
+  DocumentChangedEvent,
+  DocumentsChangedEvent,
+  DownloadState,
+  JobState,
+  LlmState,
+  SnapshotEvent,
+} from '@/lib/protocol'
 
-// --- Singleton client ---
-
-let client: WsRpcClient | null = null
-
-function getClient(): WsRpcClient {
-  if (client) return client
-
-  let url: string
-  const isDev = process.env.NODE_ENV === 'development'
-
-  if (isDev) {
-    const proto =
-      typeof location !== 'undefined' && location.protocol === 'https:'
-        ? 'wss:'
-        : 'ws:'
-    url = `${proto}//127.0.0.1:9999/ws`
-  } else if (
-    typeof window !== 'undefined' &&
-    (window as any).__KOHARU_WS_PORT__
-  ) {
-    const port = (window as any).__KOHARU_WS_PORT__ as number
-    url = `ws://127.0.0.1:${port}/ws`
-  } else {
-    // Browser / headless mode: derive from current location
-    const proto =
-      typeof location !== 'undefined' && location.protocol === 'https:'
-        ? 'wss:'
-        : 'ws:'
-    const host = typeof location !== 'undefined' ? location.host : '127.0.0.1'
-    url = `${proto}//${host}/ws`
-  }
-
-  client = new WsRpcClient(url)
-  client.connect()
-  return client
+type ServerEventMap = {
+  snapshot: SnapshotEvent
+  'documents.changed': DocumentsChangedEvent
+  'document.changed': DocumentChangedEvent
+  'job.changed': JobState
+  'download.changed': DownloadState
+  'llm.changed': LlmState
 }
 
-// --- Environment helpers ---
-
-const isTauriEnv = (): boolean =>
-  typeof window !== 'undefined' && !!(window as any).__TAURI_INTERNALS__
-
-export const isTauri = isTauriEnv
-
-export const isMacOS = (): boolean => {
-  if (typeof window === 'undefined') return false
-  return /Mac|iPhone|iPad|iPod/.test(navigator.userAgent)
-}
-
-// --- Progress bar ---
-
-export enum ProgressBarStatus {
-  None = 'none',
-  Normal = 'normal',
-  Indeterminate = 'indeterminate',
-  Paused = 'paused',
-  Error = 'error',
+type BinaryResult = {
+  data: Uint8Array
+  contentType: string
+  filename?: string
 }
 
 type ProgressTarget = {
@@ -72,8 +31,201 @@ type ProgressTarget = {
   }) => Promise<void>
 }
 
+const EVENT_NAMES = [
+  'snapshot',
+  'documents.changed',
+  'document.changed',
+  'job.changed',
+  'download.changed',
+  'llm.changed',
+] as const satisfies ReadonlyArray<keyof ServerEventMap>
+
+const eventListeners = new Map<
+  keyof ServerEventMap,
+  Set<(payload: unknown) => void>
+>()
+const connectionListeners = new Set<(connected: boolean) => void>()
+
+let eventSource: EventSource | null = null
+let connected = false
+let activePipelineJobId: string | null = null
+
+const setConnected = (next: boolean) => {
+  if (connected === next) return
+  connected = next
+  connectionListeners.forEach((listener) => listener(next))
+}
+
+const updateActivePipelineJob = (jobId: string | null) => {
+  activePipelineJobId = jobId
+}
+
+const syncActivePipelineJobFromSnapshot = (payload: SnapshotEvent) => {
+  const runningJob =
+    payload.jobs.find(
+      (job) => job.kind === 'pipeline' && job.status === 'running',
+    ) ?? null
+  updateActivePipelineJob(runningJob?.id ?? null)
+}
+
+const handleEventPayload = <K extends keyof ServerEventMap>(
+  event: K,
+  payload: ServerEventMap[K],
+) => {
+  if (event === 'snapshot') {
+    syncActivePipelineJobFromSnapshot(payload as SnapshotEvent)
+  }
+
+  if (event === 'job.changed') {
+    const job = payload as JobState
+    if (job.kind === 'pipeline') {
+      if (job.status === 'running') {
+        updateActivePipelineJob(job.id)
+      } else if (activePipelineJobId === job.id) {
+        updateActivePipelineJob(null)
+      }
+    }
+  }
+
+  const listeners = eventListeners.get(event)
+  if (!listeners?.size) return
+  listeners.forEach((listener) => listener(payload))
+}
+
+const ensureEventSource = () => {
+  if (eventSource || typeof window === 'undefined') return
+
+  const next = new EventSource(`${getApiBaseUrl()}/events`)
+  eventSource = next
+
+  next.onopen = () => {
+    setConnected(true)
+  }
+
+  next.onerror = () => {
+    setConnected(false)
+  }
+
+  for (const eventName of EVENT_NAMES) {
+    next.addEventListener(eventName, (event) => {
+      try {
+        const payload = JSON.parse((event as MessageEvent).data)
+        handleEventPayload(eventName, payload)
+      } catch (error) {
+        console.error(`[backend] failed to parse ${eventName}`, error)
+      }
+    })
+  }
+}
+
+const parseError = async (response: Response) => {
+  const message = (await response.text()) || response.statusText
+  return new Error(message || `Request failed with ${response.status}`)
+}
+
+const getApiOrigin = () => {
+  const isDev = process.env.NODE_ENV === 'development'
+
+  if (isDev) {
+    return 'http://127.0.0.1:9999'
+  }
+
+  if (typeof window !== 'undefined') {
+    const port = (window as any).__KOHARU_API_PORT__
+    if (port) {
+      return `http://127.0.0.1:${port}`
+    }
+
+    if (location.origin) {
+      return location.origin
+    }
+  }
+
+  return 'http://127.0.0.1:9999'
+}
+
+export const getApiBaseUrl = () => `${getApiOrigin()}/api/v1`
+
+export const isTauri = (): boolean =>
+  typeof window !== 'undefined' && !!(window as any).__TAURI_INTERNALS__
+
+export const isMacOS = (): boolean => {
+  if (typeof window === 'undefined') return false
+  return /Mac|iPhone|iPad|iPod/.test(navigator.userAgent)
+}
+
+export enum ProgressBarStatus {
+  None = 'none',
+  Normal = 'normal',
+  Indeterminate = 'indeterminate',
+  Paused = 'paused',
+  Error = 'error',
+}
+
+export async function fetchJson<T>(
+  path: string,
+  init?: RequestInit,
+): Promise<T> {
+  const headers = new Headers(init?.headers)
+  const response = await fetch(`${getApiBaseUrl()}${path}`, {
+    ...init,
+    headers,
+  })
+
+  if (!response.ok) {
+    throw await parseError(response)
+  }
+
+  if (response.status === 204) {
+    return undefined as T
+  }
+
+  return (await response.json()) as T
+}
+
+export async function fetchBinary(
+  path: string,
+  init?: RequestInit,
+): Promise<BinaryResult> {
+  const response = await fetch(`${getApiBaseUrl()}${path}`, init)
+
+  if (!response.ok) {
+    throw await parseError(response)
+  }
+
+  const data = new Uint8Array(await response.arrayBuffer())
+  const filename = parseContentDispositionFilename(
+    response.headers.get('content-disposition'),
+  )
+
+  return {
+    data,
+    contentType:
+      response.headers.get('content-type') ?? 'application/octet-stream',
+    filename,
+  }
+}
+
+export async function listen<T>(
+  event: string,
+  handler: (event: { payload: T }) => void,
+): Promise<() => void> {
+  if (isTauri()) {
+    const { listen } = await import('@tauri-apps/api/event')
+    return listen<T>(event, handler)
+  }
+
+  if (typeof window !== 'undefined' && event === 'tauri://resize') {
+    const listener = () => handler({ payload: undefined as T })
+    window.addEventListener('resize', listener)
+    return async () => window.removeEventListener('resize', listener)
+  }
+
+  return async () => {}
+}
+
 export function getCurrentWindow(): ProgressTarget {
-  if (isTauriEnv()) {
+  if (isTauri()) {
     return {
       async setProgressBar(options) {
         const { getCurrentWindow } = await import('@tauri-apps/api/window')
@@ -89,49 +241,27 @@ export function getCurrentWindow(): ProgressTarget {
   }
 }
 
-// --- Window resize listener ---
-
-export async function listen<T>(
-  event: string,
-  handler: (event: { payload: T }) => void,
-): Promise<() => void> {
-  if (isTauriEnv()) {
-    const { listen } = await import('@tauri-apps/api/event')
-    return listen<T>(event, handler)
-  }
-
-  if (typeof window !== 'undefined' && event === 'tauri://resize') {
-    const listener = () => handler({ payload: undefined as T })
-    window.addEventListener('resize', listener)
-    return async () => window.removeEventListener('resize', listener)
-  }
-
-  return async () => {}
-}
-
-// --- Window controls ---
-
 export const windowControls = {
   async minimize() {
-    if (isTauriEnv()) {
+    if (isTauri()) {
       const { getCurrentWindow } = await import('@tauri-apps/api/window')
       return getCurrentWindow().minimize()
     }
   },
   async toggleMaximize() {
-    if (isTauriEnv()) {
+    if (isTauri()) {
       const { getCurrentWindow } = await import('@tauri-apps/api/window')
       return getCurrentWindow().toggleMaximize()
     }
   },
   async close() {
-    if (isTauriEnv()) {
+    if (isTauri()) {
       const { getCurrentWindow } = await import('@tauri-apps/api/window')
       return getCurrentWindow().close()
     }
   },
   async isMaximized(): Promise<boolean> {
-    if (isTauriEnv()) {
+    if (isTauri()) {
       const { getCurrentWindow } = await import('@tauri-apps/api/window')
       return getCurrentWindow().isMaximized()
     }
@@ -139,113 +269,69 @@ export const windowControls = {
   },
 }
 
-// --- Typed RPC invoke ---
+export function subscribeServerEvent<K extends keyof ServerEventMap>(
+  event: K,
+  cb: (payload: ServerEventMap[K]) => void,
+): () => void {
+  ensureEventSource()
+  const listeners =
+    eventListeners.get(event) ?? new Set<(payload: unknown) => void>()
+  listeners.add(cb as (payload: unknown) => void)
+  eventListeners.set(event, listeners)
 
-export async function invoke<M extends keyof RpcMethodMap>(
-  method: M,
-  ...args: RpcMethodMap[M][0] extends void ? [] : [RpcMethodMap[M][0]]
-): Promise<RpcMethodMap[M][1]> {
-  const params = args[0]
-
-  // Browser-only: open_external in a new tab
-  if (!isTauriEnv() && method === 'open_external') {
-    const p = params as { url: string }
-    if (p?.url) {
-      window.open(p.url, '_blank', 'noopener,noreferrer')
-    }
-    return undefined as RpcMethodMap[M][1]
-  }
-
-  // Special file-pick flow for open_documents / add_documents
-  if (method === 'open_documents' || method === 'add_documents') {
-    return (await openDocumentsRpc(method)) as RpcMethodMap[M][1]
-  }
-
-  // Special file-save flow for save_documents / export_document
-  if (method === 'save_documents' || method === 'export_document') {
-    try {
-      const result = await getClient().invoke<FileResult>(method, params)
-      const blob = new Blob([toArrayBuffer(result.data)])
-      try {
-        await fileSave(blob, { fileName: result.filename })
-      } catch {}
-      return undefined as RpcMethodMap[M][1]
-    } catch (error) {
-      reportRpcError(method, error)
-      throw error
+  return () => {
+    const current = eventListeners.get(event)
+    if (!current) return
+    current.delete(cb as (payload: unknown) => void)
+    if (!current.size) {
+      eventListeners.delete(event)
     }
   }
+}
 
-  try {
-    return await getClient().invoke<RpcMethodMap[M][1]>(method, params)
-  } catch (error) {
-    reportRpcError(method, error)
-    throw error
+export const subscribeSnapshot = (cb: (payload: SnapshotEvent) => void) =>
+  subscribeServerEvent('snapshot', cb)
+
+export const subscribeDocumentsChanged = (
+  cb: (payload: DocumentsChangedEvent) => void,
+) => subscribeServerEvent('documents.changed', cb)
+
+export const subscribeDocumentChanged = (
+  cb: (payload: DocumentChangedEvent) => void,
+) => subscribeServerEvent('document.changed', cb)
+
+export const subscribeJobChanged = (cb: (payload: JobState) => void) =>
+  subscribeServerEvent('job.changed', cb)
+
+export const subscribeDownloadChanged = (
+  cb: (payload: DownloadState) => void,
+) => subscribeServerEvent('download.changed', cb)
+
+export const subscribeLlmChanged = (cb: (payload: LlmState) => void) =>
+  subscribeServerEvent('llm.changed', cb)
+
+export const subscribeRpcConnection = (
+  cb: (nextConnected: boolean) => void,
+): (() => void) => {
+  ensureEventSource()
+  connectionListeners.add(cb)
+  cb(connected)
+
+  return () => {
+    connectionListeners.delete(cb)
   }
 }
 
-async function openDocumentsRpc(
-  method: 'open_documents' | 'add_documents',
-): Promise<number> {
-  let files: File[]
-  try {
-    files = await fileOpen({
-      description: 'Documents',
-      mimeTypes: ['image/*'],
-      extensions: ['.png', '.jpg', '.jpeg', '.webp'],
-      multiple: true,
-    })
-  } catch {
-    return 0
-  }
-  if (!files.length) return 0
+export const getActivePipelineJobId = () => activePipelineJobId
 
-  const entries = await Promise.all(
-    files.map(async (file: File) => ({
-      name: file.name,
-      data: new Uint8Array(await file.arrayBuffer()),
-    })),
-  )
-
-  return getClient().invoke<number>(method, { files: entries })
+export const setActivePipelineJobId = (jobId: string | null) => {
+  updateActivePipelineJob(jobId)
 }
 
-// --- Thumbnail fetch ---
-
-export async function fetchThumbnail(index: number): Promise<Blob> {
-  const result = await getClient().invoke<{
-    data: Uint8Array
-    contentType: string
-  }>('get_thumbnail', { index })
-  return new Blob([toArrayBuffer(result.data)], {
-    type: result.contentType,
-  })
-}
-
-// --- Notification subscriptions ---
-
-export type { DownloadProgress, ProcessProgress } from './rpc-types'
-
-export function subscribeDownloadProgress(
-  cb: (p: RpcNotificationMap['download_progress']) => void,
-): () => void {
-  return getClient().onNotification<RpcNotificationMap['download_progress']>(
-    'download_progress',
-    cb,
-  )
-}
-
-export function subscribeProcessProgress(
-  cb: (p: RpcNotificationMap['process_progress']) => void,
-): () => void {
-  return getClient().onNotification<RpcNotificationMap['process_progress']>(
-    'process_progress',
-    cb,
-  )
-}
-
-export function subscribeRpcConnection(
-  cb: (connected: boolean) => void,
-): () => void {
-  return getClient().onConnectionChange(cb)
+function parseContentDispositionFilename(
+  contentDisposition: string | null,
+): string | undefined {
+  if (!contentDisposition) return undefined
+  const match = contentDisposition.match(/filename=\"([^\"]+)\"/)
+  return match?.[1]
 }

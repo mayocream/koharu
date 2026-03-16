@@ -4,7 +4,7 @@ use anyhow::{Context, Result};
 use clap::Parser;
 use once_cell::sync::Lazy;
 use rfd::MessageDialog;
-use tauri::Manager;
+use tauri::{Manager, WebviewWindowBuilder};
 use tokio::{net::TcpListener, sync::RwLock};
 use tracing_subscriber::fmt::format::FmtSpan;
 
@@ -171,11 +171,12 @@ pub async fn run() -> Result<()> {
     }
 
     let listener = TcpListener::bind(format!("127.0.0.1:{}", port.unwrap_or(0))).await?;
-    let ws_port = listener.local_addr()?.port();
+    let api_port = listener.local_addr()?.port();
     let shared: SharedResources = Arc::new(tokio::sync::OnceCell::new());
 
     let app = tauri::Builder::default()
-        .append_invoke_initialization_script(format!("window.__KOHARU_WS_PORT__ = {};", ws_port))
+        .append_invoke_initialization_script(format!("window.__KOHARU_API_PORT__ = {api_port};"))
+        // Setup will ONLY be called when app is running in non-headless mode
         .setup({
             let shared = shared.clone();
             move |app| {
@@ -190,16 +191,29 @@ pub async fn run() -> Result<()> {
                         .await
                         .expect("failed to build app resources");
 
+                    // Hidden webview still excutes JavaScript,
+                    // which will trigger the API calls when bootstrapping (not ready).
+                    // We manually create the webview ONLY after resources are ready.
+                    // ref: https://github.com/tauri-apps/tauri/issues/10950
+                    let main_config = handle
+                        .config()
+                        .app
+                        .windows
+                        .iter()
+                        .find(|window| window.label == "main")
+                        .cloned()
+                        .expect("main window config not found");
+                    let main_window = WebviewWindowBuilder::from_config(&handle, &main_config)
+                        .expect("failed to build main window builder")
+                        .build()
+                        .expect("failed to create main window");
+
                     handle
                         .get_webview_window("splashscreen")
                         .expect("splashscreen window not found")
                         .close()
                         .ok();
-                    handle
-                        .get_webview_window("main")
-                        .expect("main window not found")
-                        .show()
-                        .ok();
+                    main_window.show().ok();
                 });
                 Ok(())
             }

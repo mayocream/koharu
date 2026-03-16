@@ -127,10 +127,7 @@ pub async fn open_documents(
     }
 
     let docs = load_documents(inputs)?;
-    let count = docs.len();
-    let mut guard = state.state.write().await;
-    guard.documents = docs;
-    Ok(count)
+    state_tx::replace_docs(&state.state, docs).await
 }
 
 pub async fn add_documents(
@@ -148,9 +145,7 @@ pub async fn add_documents(
     }
 
     let docs = load_documents(inputs)?;
-    let mut guard = state.state.write().await;
-    guard.documents.extend(docs);
-    Ok(guard.documents.len())
+    state_tx::append_docs(&state.state, docs).await
 }
 
 pub async fn export_document(

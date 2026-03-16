@@ -45,6 +45,7 @@ export type TextStyle = {
 }
 
 export type TextBlock = {
+  id?: string
   x: number
   y: number
   width: number
@@ -84,6 +85,7 @@ export type Document = {
   image: Uint8Array
   width: number
   height: number
+  revision?: number
   textBlocks: TextBlock[]
   segment?: Uint8Array
   inpainted?: Uint8Array

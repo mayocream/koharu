@@ -49,8 +49,8 @@ pub struct ComicTextDetector {
 }
 
 impl ComicTextDetector {
-    pub async fn load(use_cpu: bool) -> anyhow::Result<Self> {
-        let device = device(use_cpu)?;
+    pub async fn load(cpu: bool) -> anyhow::Result<Self> {
+        let device = device(cpu)?;
         let yolo = loading::load_mmaped_safetensors(Manifest::Yolov5.get(), &device, |vb| {
             yolo_v5::YoloV5::load(vb, 2, 3)
         })

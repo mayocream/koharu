@@ -14,6 +14,7 @@ use tokio::sync::broadcast;
 use crate::{AppResources, state_tx};
 
 pub struct PipelineHandle {
+    pub id: String,
     pub cancel: Arc<AtomicBool>,
 }
 
@@ -41,8 +42,9 @@ pub async fn run_pipeline(
     resources: AppResources,
     request: ProcessRequest,
     cancel: Arc<AtomicBool>,
+    job_id: String,
 ) {
-    let result = run_pipeline_inner(&resources, &request, &cancel).await;
+    let result = run_pipeline_inner(&resources, &request, &cancel, &job_id).await;
 
     let total_docs = match request.index {
         Some(_) => 1,
@@ -52,6 +54,7 @@ pub async fn run_pipeline(
     match result {
         Ok(()) if cancel.load(Ordering::Relaxed) => {
             emit(PipelineProgress {
+                job_id: job_id.clone(),
                 status: PipelineStatus::Cancelled,
                 step: None,
                 current_document: total_docs,
@@ -63,6 +66,7 @@ pub async fn run_pipeline(
         }
         Ok(()) => {
             emit(PipelineProgress {
+                job_id: job_id.clone(),
                 status: PipelineStatus::Completed,
                 step: None,
                 current_document: total_docs,
@@ -75,6 +79,7 @@ pub async fn run_pipeline(
         Err(err) => {
             tracing::error!("Pipeline failed: {err:#}");
             emit(PipelineProgress {
+                job_id: job_id.clone(),
                 status: PipelineStatus::Failed(err.to_string()),
                 step: None,
                 current_document: 0,
@@ -94,6 +99,7 @@ async fn run_pipeline_inner(
     res: &AppResources,
     req: &ProcessRequest,
     cancel: &Arc<AtomicBool>,
+    job_id: &str,
 ) -> anyhow::Result<()> {
     let total_docs = {
         let guard = res.state.read().await;
@@ -149,6 +155,7 @@ async fn run_pipeline_inner(
 
             let overall = compute_percent(doc_ordinal, step_ordinal, total_docs, total_steps);
             emit(PipelineProgress {
+                job_id: job_id.to_string(),
                 status: PipelineStatus::Running,
                 step: Some(*step),
                 current_document: doc_ordinal,
@@ -183,7 +190,14 @@ async fn run_pipeline_inner(
                 }
             }
 
-            state_tx::update_doc(&res.state, doc_index, snapshot).await?;
+            let changed = match step {
+                PipelineStep::Detect => &["textBlocks", "segment"][..],
+                PipelineStep::Ocr => &["textBlocks"][..],
+                PipelineStep::Inpaint => &["inpainted"][..],
+                PipelineStep::LlmGenerate => &["textBlocks"][..],
+                PipelineStep::Render => &["textBlocks", "rendered"][..],
+            };
+            state_tx::update_doc(&res.state, doc_index, snapshot, changed).await?;
         }
     }
 

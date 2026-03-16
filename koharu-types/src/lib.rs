@@ -1,7 +1,7 @@
 pub mod commands;
 pub mod events;
-pub mod method;
 pub mod parse;
+pub mod protocol;
 pub mod views;
 
 mod effect;
@@ -13,17 +13,26 @@ pub use effect::TextShaderEffect;
 pub use events::*;
 pub use font::{FontPrediction, NamedFontPrediction, TextDirection};
 pub use image::SerializableDynamicImage;
-pub use method::Method;
+pub use protocol::*;
 
 use std::{path::PathBuf, sync::Arc};
 
 use ::image::GenericImageView;
+use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
 use tokio::sync::RwLock;
+use ts_rs::TS;
+use uuid::Uuid;
+
+fn new_text_block_id() -> String {
+    Uuid::new_v4().to_string()
+}
 
 #[derive(Default, Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct TextBlock {
+    #[serde(default = "new_text_block_id")]
+    pub id: String,
     pub x: f32,
     pub y: f32,
     pub width: f32,
@@ -53,6 +62,12 @@ pub struct TextBlock {
 }
 
 impl TextBlock {
+    pub fn ensure_id(&mut self) {
+        if self.id.trim().is_empty() {
+            self.id = new_text_block_id();
+        }
+    }
+
     pub fn set_layout_seed(&mut self, x: f32, y: f32, width: f32, height: f32) {
         self.layout_seed_x = Some(x);
         self.layout_seed_y = Some(y);
@@ -80,8 +95,9 @@ impl TextBlock {
     }
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, TS, JsonSchema)]
 #[serde(rename_all = "camelCase")]
+#[ts(export)]
 pub struct TextStrokeStyle {
     #[serde(default = "default_true")]
     pub enabled: bool,
@@ -109,8 +125,9 @@ const fn default_stroke_color() -> [u8; 4] {
     [255, 255, 255, 255]
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, Default)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, Default, TS, JsonSchema)]
 #[serde(rename_all = "camelCase")]
+#[ts(export)]
 pub enum TextAlign {
     #[default]
     Left,
@@ -118,8 +135,9 @@ pub enum TextAlign {
     Right,
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, TS, JsonSchema)]
 #[serde(rename_all = "camelCase")]
+#[ts(export)]
 pub struct TextStyle {
     pub font_families: Vec<String>,
     pub font_size: Option<f32>,
@@ -139,6 +157,8 @@ pub struct Document {
     pub image: SerializableDynamicImage,
     pub width: u32,
     pub height: u32,
+    #[serde(default)]
+    pub revision: u64,
     pub text_blocks: Vec<TextBlock>,
     pub segment: Option<SerializableDynamicImage>,
     pub inpainted: Option<SerializableDynamicImage>,
@@ -180,6 +200,20 @@ impl Document {
             height,
             ..Default::default()
         })
+    }
+
+    pub fn ensure_text_block_ids(&mut self) {
+        for block in &mut self.text_blocks {
+            block.ensure_id();
+        }
+    }
+
+    pub fn bump_revision(&mut self) {
+        self.revision = self.revision.saturating_add(1);
+    }
+
+    pub fn prepare_for_store(&mut self) {
+        self.ensure_text_block_ids();
     }
 }
 

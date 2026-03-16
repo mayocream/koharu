@@ -9,6 +9,7 @@ import { selectors } from './selectors'
 export async function runDetect(page: Page, timeout = 45_000) {
   await page.getByTestId(selectors.toolbar.detect).click()
   await waitForLayerHasContent(page, 'mask', true, timeout)
+  await waitForOperationFinish(page, timeout)
 }
 
 export async function runOcr(page: Page, timeout = 45_000) {
@@ -22,16 +23,19 @@ export async function runOcr(page: Page, timeout = 45_000) {
   await expect(page.getByTestId(selectors.panels.textBlockOcr(0))).toBeVisible({
     timeout,
   })
+  await waitForOperationFinish(page, timeout)
 }
 
 export async function runInpaint(page: Page, timeout = 45_000) {
   await page.getByTestId(selectors.toolbar.inpaint).click()
   await waitForLayerHasContent(page, 'inpainted', true, timeout)
+  await waitForOperationFinish(page, timeout)
 }
 
 export async function runRender(page: Page, timeout = 45_000) {
   await page.getByTestId(selectors.toolbar.render).click()
   await waitForLayerHasContent(page, 'rendered', true, timeout)
+  await waitForOperationFinish(page, timeout)
 }
 
 export async function prepareDetectAndOcr(page: Page) {

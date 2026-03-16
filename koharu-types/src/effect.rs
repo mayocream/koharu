@@ -1,9 +1,12 @@
+use schemars::JsonSchema;
 use serde::{Deserialize, Deserializer, Serialize};
 use std::fmt;
 use std::str::FromStr;
+use ts_rs::TS;
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Default)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Default, TS, JsonSchema)]
 #[serde(rename_all = "camelCase")]
+#[ts(export)]
 pub struct TextShaderEffect {
     #[serde(default)]
     pub italic: bool,

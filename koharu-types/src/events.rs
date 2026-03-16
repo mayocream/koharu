@@ -50,6 +50,7 @@ pub enum PipelineStatus {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct PipelineProgress {
+    pub job_id: String,
     pub status: PipelineStatus,
     pub step: Option<PipelineStep>,
     pub current_document: usize,
@@ -92,6 +93,7 @@ mod tests {
             status: DownloadStatus::Failed("network".to_string()),
         });
         round_trip(&PipelineProgress {
+            job_id: "job-1".to_string(),
             status: PipelineStatus::Running,
             step: Some(PipelineStep::Inpaint),
             current_document: 1,
@@ -101,6 +103,7 @@ mod tests {
             overall_percent: 40,
         });
         round_trip(&PipelineProgress {
+            job_id: "job-2".to_string(),
             status: PipelineStatus::Failed("boom".to_string()),
             step: Some(PipelineStep::Render),
             current_document: 2,

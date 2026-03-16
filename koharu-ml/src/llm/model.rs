@@ -70,7 +70,7 @@ impl Default for GenerateOptions {
 
 impl Llm {
     /// Constructs a new LLM instance from a quantized GGUF model (including tokenizer metadata).
-    pub async fn load(id: ModelId, use_cpu: bool) -> Result<Self> {
+    pub async fn load(id: ModelId, cpu: bool) -> Result<Self> {
         let model_path = id.get().await?;
 
         // Peek GGUF metadata to choose device/loader
@@ -96,7 +96,7 @@ impl Llm {
             _ => eos_token_id,
         };
 
-        let device = device(use_cpu)?;
+        let device = device(cpu)?;
 
         let bos_token = tokenizer
             .id_to_token(bos_token_id)

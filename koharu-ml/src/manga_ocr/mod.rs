@@ -29,8 +29,8 @@ pub struct MangaOcr {
 }
 
 impl MangaOcr {
-    pub async fn load(use_cpu: bool) -> Result<Self> {
-        let device = device(use_cpu)?;
+    pub async fn load(cpu: bool) -> Result<Self> {
+        let device = device(cpu)?;
         let config_path = loading::resolve_manifest_path(Manifest::Config.get()).await?;
         let preprocessor_path =
             loading::resolve_manifest_path(Manifest::PreprocessorConfig.get()).await?;

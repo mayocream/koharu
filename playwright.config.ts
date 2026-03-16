@@ -17,11 +17,8 @@ export default defineConfig({
   },
   webServer: {
     command: 'bun run dev -- --headless',
-    url: 'http://localhost:3000',
+    url: 'http://127.0.0.1:9999/api/v1/meta',
     reuseExistingServer: true,
-    timeout: 90_000,
-    wait: {
-      stdout: /Running (.*) --headless/,
-    },
+    timeout: 180_000,
   },
 })

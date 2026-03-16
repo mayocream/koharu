@@ -6,15 +6,16 @@ use axum::{
     body::Body,
     http::{HeaderValue, StatusCode, Uri, header},
     response::{IntoResponse, Response},
-    routing::get,
 };
 use rmcp::transport::streamable_http_server::{
     StreamableHttpService, session::local::LocalSessionManager, tower::StreamableHttpServerConfig,
 };
 use tokio::net::TcpListener;
+use tower_http::cors::CorsLayer;
 
+use crate::api;
+use crate::events::EventHub;
 use crate::mcp::KoharuMcp;
-use crate::rpc::{self, WsState};
 use crate::shared::SharedResources;
 
 /// An asset returned by the resolver: raw bytes + MIME type.
@@ -27,9 +28,8 @@ pub struct Asset {
 pub type SharedAssetResolver = Arc<dyn Fn(&str) -> Option<Asset> + Send + Sync>;
 
 fn build_router(shared: SharedResources, resolver: SharedAssetResolver) -> Router {
-    let ws_state = WsState {
-        resources: shared.clone(),
-    };
+    let events = EventHub::new(shared.clone());
+    let cors = CorsLayer::very_permissive();
 
     let mcp_service = StreamableHttpService::new(
         {
@@ -44,9 +44,9 @@ fn build_router(shared: SharedResources, resolver: SharedAssetResolver) -> Route
     );
 
     Router::new()
-        .route("/ws", get(rpc::ws_handler))
-        .with_state(ws_state)
+        .nest("/api/v1", api::router(shared.clone(), events))
         .nest_service("/mcp", mcp_service)
+        .layer(cors)
         .fallback(move |uri: Uri| {
             let resolver = resolver.clone();
             async move { serve_asset(&resolver, uri) }

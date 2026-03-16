@@ -145,7 +145,6 @@ function OperationCard({
       : undefined
   const titles: Record<OperationState['type'], string> = {
     'load-khr': t('operations.loadKhr'),
-    'save-khr': t('operations.saveKhr'),
     'process-current': t('operations.processCurrent'),
     'process-all': t('operations.processAll'),
     'llm-load': t('operations.loadModel'),

@@ -23,7 +23,6 @@ export const useCurrentDocumentQuery = (index: number, enabled = true) =>
     enabled,
     placeholderData: keepPreviousData,
     structuralSharing: false,
-    refetchOnMount: false,
   })
 
 export const useCurrentDocumentState = () => {
@@ -96,7 +95,6 @@ export const useLlmReadyQuery = () => {
     queryKey: queryKeys.llm.ready(selectedModel),
     queryFn: () => api.llmReady(),
     enabled: !!selectedModel,
-    refetchInterval: 1500,
   })
 }
 

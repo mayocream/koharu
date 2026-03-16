@@ -21,9 +21,8 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select'
-import { invoke, isTauri } from '@/lib/backend'
+import { isTauri } from '@/lib/backend'
 import { api } from '@/lib/api'
-import type { DeviceInfo } from '@/lib/rpc-types'
 import { usePreferencesStore } from '@/lib/stores/preferencesStore'
 
 const THEME_OPTIONS = [
@@ -45,7 +44,7 @@ export default function SettingsPage() {
     () => Object.keys(i18n.options.resources || {}),
     [i18n.options.resources],
   )
-  const [deviceInfo, setDeviceInfo] = useState<DeviceInfo>()
+  const [deviceInfo, setDeviceInfo] = useState<{ mlDevice: string }>()
   const apiKeys = usePreferencesStore((state) => state.apiKeys)
   const setApiKey = usePreferencesStore((state) => state.setApiKey)
   const [visibleKeys, setVisibleKeys] = useState<Record<string, boolean>>({})
@@ -59,7 +58,7 @@ export default function SettingsPage() {
 
     const loadDeviceInfo = async () => {
       try {
-        const info = await invoke('device')
+        const info = await api.deviceInfo()
         setDeviceInfo(info)
       } catch (error) {
         console.error('Failed to load device info', error)

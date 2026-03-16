@@ -21,8 +21,8 @@ test('changes style controls and re-renders', async ({ page }) => {
   await expect(page.getByTestId(selectors.panels.layout)).toBeVisible()
 
   await page.getByTestId(selectors.panels.renderFontSelect).click()
-  await expect(page.getByTestId(selectors.panels.renderFontOption(1))).toBeVisible()
-  await page.getByTestId(selectors.panels.renderFontOption(1)).click()
+  await page.keyboard.press('ArrowDown')
+  await page.keyboard.press('Enter')
 
   const swatch = page.getByTestId(selectors.panels.renderColorSwatch)
   const colorBefore = await swatch.evaluate((node) => {

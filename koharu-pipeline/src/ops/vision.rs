@@ -7,21 +7,27 @@ use crate::{AppResources, state_tx};
 pub async fn detect(state: AppResources, payload: IndexPayload) -> anyhow::Result<()> {
     let mut snapshot = state_tx::read_doc(&state.state, payload.index).await?;
     state.ml.detect(&mut snapshot).await?;
-    state_tx::update_doc(&state.state, payload.index, snapshot).await
+    state_tx::update_doc(
+        &state.state,
+        payload.index,
+        snapshot,
+        &["textBlocks", "segment"],
+    )
+    .await
 }
 
 #[instrument(level = "info", skip_all)]
 pub async fn ocr(state: AppResources, payload: IndexPayload) -> anyhow::Result<()> {
     let mut snapshot = state_tx::read_doc(&state.state, payload.index).await?;
     state.ml.ocr(&mut snapshot).await?;
-    state_tx::update_doc(&state.state, payload.index, snapshot).await
+    state_tx::update_doc(&state.state, payload.index, snapshot, &["textBlocks"]).await
 }
 
 #[instrument(level = "info", skip_all)]
 pub async fn inpaint(state: AppResources, payload: IndexPayload) -> anyhow::Result<()> {
     let mut snapshot = state_tx::read_doc(&state.state, payload.index).await?;
     state.ml.inpaint(&mut snapshot).await?;
-    state_tx::update_doc(&state.state, payload.index, snapshot).await
+    state_tx::update_doc(&state.state, payload.index, snapshot, &["inpainted"]).await
 }
 
 #[instrument(level = "info", skip_all)]
@@ -36,7 +42,13 @@ pub async fn render(state: AppResources, payload: RenderPayload) -> anyhow::Resu
         payload.font_family.as_deref(),
     )?;
 
-    state_tx::update_doc(&state.state, payload.index, updated).await
+    state_tx::update_doc(
+        &state.state,
+        payload.index,
+        updated,
+        &["textBlocks", "rendered"],
+    )
+    .await
 }
 
 pub async fn list_font_families(state: AppResources) -> anyhow::Result<Vec<String>> {

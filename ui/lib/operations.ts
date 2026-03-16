@@ -2,7 +2,6 @@
 
 export type OperationType =
   | 'load-khr'
-  | 'save-khr'
   | 'process-current'
   | 'process-all'
   | 'llm-load'
@@ -48,8 +47,8 @@ export const createOperationSlice = (set: any): OperationSlice => ({
         : { operation: undefined },
     )
     // Also cancel backend pipeline if running
-    import('@/lib/backend').then(({ invoke }) => {
-      invoke('process_cancel').catch(() => {})
+    import('@/lib/api').then(({ api }) => {
+      api.processCancel().catch(() => {})
     })
   },
 })

@@ -55,7 +55,6 @@ export function MenuBar() {
       onSelect: addDocuments,
       testId: 'menu-file-add',
     },
-    // TODO: { label: t('menu.save'), onSelect: saveDocuments },
     {
       label: t('menu.export'),
       onSelect: exportDocument,

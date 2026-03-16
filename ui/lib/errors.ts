@@ -6,7 +6,6 @@ import i18n from '@/lib/i18n'
 const SURFACED_RPC_METHODS = new Set([
   'open_documents',
   'add_documents',
-  'save_documents',
   'export_document',
   'export_all_inpainted',
   'export_all_rendered',

@@ -20,11 +20,6 @@ import {
 } from '@/lib/services/syncQueues'
 import i18n from '@/lib/i18n'
 
-const sleep = (ms: number) =>
-  new Promise<void>((resolve) => {
-    setTimeout(resolve, ms)
-  })
-
 const invalidateCurrentDocument = async (
   queryClient: QueryClient,
   index: number,
@@ -320,19 +315,6 @@ export const useDocumentMutations = () => {
     }
   }, [queryClient, refreshDocuments])
 
-  const saveDocuments = useCallback(async () => {
-    const { startOperation, finishOperation } = useOperationStore.getState()
-    startOperation({
-      type: 'save-khr',
-      cancellable: false,
-    })
-    try {
-      await api.saveDocuments()
-    } finally {
-      finishOperation()
-    }
-  }, [])
-
   const openExternal = useCallback(async (url: string) => {
     await api.openExternal(url)
   }, [])
@@ -537,7 +519,6 @@ export const useDocumentMutations = () => {
     refreshCurrentDocument,
     addDocuments,
     openDocuments,
-    saveDocuments,
     openExternal,
     detect,
     ocr,
@@ -557,7 +538,7 @@ export const useDocumentMutations = () => {
 
 export const useLlmMutations = () => {
   const queryClient = useQueryClient()
-  const { setProgress, clearProgress } = useProgressActions()
+  const { setProgress } = useProgressActions()
   const { renderTextBlock } = useTextBlockMutations()
 
   const llmSetSelectedModel = useCallback(
@@ -604,13 +585,12 @@ export const useLlmMutations = () => {
       return
     }
 
-    const { startOperation, finishOperation } = useOperationStore.getState()
+    const { startOperation } = useOperationStore.getState()
     startOperation({
       type: 'llm-load',
       cancellable: false,
     })
 
-    let loaded = false
     useLlmUiStore.getState().setLoading(true)
     try {
       const models = getCachedLlmModels(queryClient)
@@ -621,28 +601,10 @@ export const useLlmMutations = () => {
           : undefined
       await api.llmLoad(selectedModel, apiKey)
       await setProgress(100, ProgressBarStatus.Paused)
-
-      let attempts = 0
-      while (attempts++ < 300) {
-        const readyNow = await queryClient.fetchQuery({
-          queryKey: readyKey,
-          queryFn: () => api.llmReady(),
-        })
-        if (readyNow) {
-          loaded = true
-          break
-        }
-        await sleep(100)
-      }
     } finally {
-      useLlmUiStore.getState().setLoading(false)
-      if (!loaded) {
-        queryClient.setQueryData(readyKey, false)
-      }
-      await clearProgress()
-      finishOperation()
+      queryClient.setQueryData(readyKey, false)
     }
-  }, [clearProgress, queryClient, setProgress])
+  }, [queryClient, setProgress])
 
   const llmGenerate = useCallback(
     async (_?: any, index?: number, textBlockIndex?: number) => {

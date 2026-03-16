@@ -75,12 +75,12 @@ pub struct Model {
 }
 
 impl Model {
-    pub async fn new(use_cpu: bool) -> Result<Self> {
+    pub async fn new(cpu: bool) -> Result<Self> {
         Ok(Self {
-            dialog_detector: ComicTextDetector::load(use_cpu).await?,
-            ocr: Mit48pxOcr::load(use_cpu).await?,
-            lama: Lama::load(use_cpu).await?,
-            font_detector: FontDetector::load(use_cpu).await?,
+            dialog_detector: ComicTextDetector::load(cpu).await?,
+            ocr: Mit48pxOcr::load(cpu).await?,
+            lama: Lama::load(cpu).await?,
+            font_detector: FontDetector::load(cpu).await?,
         })
     }
 

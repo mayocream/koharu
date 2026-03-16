@@ -165,7 +165,7 @@ pub async fn llm_generate(state: AppResources, payload: LlmGeneratePayload) -> a
         }
     }
 
-    state_tx::update_doc(&state.state, payload.index, updated).await
+    state_tx::update_doc(&state.state, payload.index, updated, &["textBlocks"]).await
 }
 
 pub async fn get_document_for_llm(

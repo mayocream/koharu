@@ -24,7 +24,8 @@ const createClient = () =>
       queries: {
         gcTime: 5 * 60 * 1000,
         retry: 1,
-        refetchOnWindowFocus: false,
+        refetchOnReconnect: true,
+        refetchOnWindowFocus: true,
       },
       mutations: {
         retry: false,

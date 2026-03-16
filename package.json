@@ -8,7 +8,7 @@
   },
   "scripts": {
     "dev": "bun run scripts/dev.ts tauri dev -- --release -- --port=9999",
-    "build": "bun run scripts/dev.ts tauri build",
+    "build": "bun run scripts/dev.ts tauri build --no-bundle",
     "cargo": "bun run scripts/dev.ts cargo",
     "format": "prettier --write ui/ --ignore-path ui/.gitignore",
     "test:e2e": "playwright test"

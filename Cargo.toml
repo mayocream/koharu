@@ -109,7 +109,8 @@ icu = "2.1"
 fontique = "0.7"
 fontdue = "0.9"
 tiny-skia = "0.12"
-axum = { version = "0.8", features = ["ws"] }
+axum = { version = "0.8", features = ["multipart", "ws"] }
+async-stream = "0.3"
 rmp-serde = "1"
 rmpv = { version = "1", features = ["with-serde"] }
 rmcp = { version = "0.16", features = [
@@ -117,7 +118,10 @@ rmcp = { version = "0.16", features = [
     "transport-streamable-http-server",
 ] }
 schemars = "1.2"
+ts-rs = { version = "10.1", features = ["serde-json-impl"] }
+uuid = { version = "1.18", features = ["v4", "serde"] }
 base64 = "0.22"
+tower-http = { version = "0.6", features = ["cors"] }
 criterion = { version = "0.8", features = ["html_reports"] }
 git-version = "0.3"
 keyring = "3.6"

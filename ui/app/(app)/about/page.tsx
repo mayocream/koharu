@@ -10,7 +10,8 @@ import {
   LoaderIcon,
 } from 'lucide-react'
 import { ScrollArea } from '@/components/ui/scroll-area'
-import { invoke, isTauri } from '@/lib/backend'
+import { isTauri } from '@/lib/backend'
+import { api } from '@/lib/api'
 import { useDocumentMutations } from '@/lib/query/mutations'
 import Image from 'next/image'
 
@@ -30,7 +31,7 @@ export default function AboutPage() {
     const checkVersion = async () => {
       try {
         if (isTauri()) {
-          const version = await invoke('app_version')
+          const version = await api.appVersion()
           setAppVersion(version)
 
           const res = await fetch(

@@ -39,7 +39,7 @@ export function TextBlockSpriteLayer({
     >
       {renderBlocks.map((block, index) => (
         <TextBlockSprite
-          key={`${block.x}-${block.y}-${index}`}
+          key={block.id ?? `${block.x}-${block.y}-${index}`}
           block={block}
           scale={scale}
         />

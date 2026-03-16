@@ -42,8 +42,8 @@ pub struct Lama {
 }
 
 impl Lama {
-    pub async fn load(use_cpu: bool) -> Result<Self> {
-        let device = device(use_cpu)?;
+    pub async fn load(cpu: bool) -> Result<Self> {
+        let device = device(cpu)?;
         let model = loading::load_buffered_safetensors(Manifest::Lama.get(), &device, |vb| {
             model::Lama::load(&vb)
         })

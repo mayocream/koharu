@@ -3,6 +3,7 @@
 import { useEffect, useRef } from 'react'
 import { useCurrentDocumentState } from '@/lib/query/hooks'
 import { useTextBlockMutations } from '@/lib/query/mutations'
+import { createTempTextBlockId } from '@/lib/api'
 import { useEditorUiStore } from '@/lib/stores/editorUiStore'
 import { TextBlock } from '@/types'
 
@@ -90,7 +91,13 @@ export function useTextBlocks() {
 
   const appendBlock = async (block: TextBlock) => {
     const currentBlocks = document?.textBlocks ?? []
-    const nextBlocks = [...currentBlocks, block]
+    const nextBlocks = [
+      ...currentBlocks,
+      {
+        ...block,
+        id: block.id ?? createTempTextBlockId(),
+      },
+    ]
     await updateTextBlocks(nextBlocks)
     setSelectedBlockIndex(nextBlocks.length - 1)
   }

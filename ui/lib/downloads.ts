@@ -1,10 +1,10 @@
 'use client'
 
 import { create } from 'zustand'
-import { subscribeDownloadProgress, type DownloadProgress } from '@/lib/backend'
-import { parseDownloadProgress } from '@/lib/api'
+import { subscribeDownloadChanged, subscribeSnapshot } from '@/lib/backend'
+import type { DownloadState } from '@/lib/protocol'
 
-type DownloadEntry = DownloadProgress & {
+type DownloadEntry = DownloadState & {
   percent?: number
 }
 
@@ -22,26 +22,27 @@ export const useDownloadStore = create<DownloadStore>((set, get) => ({
     if (subscribed) return
     subscribed = true
 
-    subscribeDownloadProgress((payload) => {
-      let progress: DownloadProgress
-      try {
-        progress = parseDownloadProgress(payload)
-      } catch (error) {
-        console.error('[downloads] invalid download_progress payload', error)
-        return
+    subscribeSnapshot((snapshot) => {
+      const next = new Map(get().downloads)
+      next.clear()
+      for (const progress of snapshot.downloads) {
+        const percent =
+          progress.total && progress.total > 0
+            ? Math.round((progress.downloaded / progress.total) * 100)
+            : undefined
+        next.set(progress.filename, { ...progress, percent })
       }
+      set({ downloads: next })
+    })
 
+    subscribeDownloadChanged((progress) => {
       const next = new Map(get().downloads)
       const percent =
         progress.total && progress.total > 0
           ? Math.round((progress.downloaded / progress.total) * 100)
           : undefined
 
-      const status = progress.status
-      if (
-        status === 'completed' ||
-        (typeof status === 'object' && 'failed' in status)
-      ) {
+      if (progress.status === 'completed' || progress.status === 'failed') {
         next.set(progress.filename, { ...progress, percent })
         set({ downloads: next })
         setTimeout(() => {
@@ -52,10 +53,11 @@ export const useDownloadStore = create<DownloadStore>((set, get) => ({
             set({ downloads: updated })
           }
         }, 3000)
-      } else {
-        next.set(progress.filename, { ...progress, percent })
-        set({ downloads: next })
+        return
       }
+
+      next.set(progress.filename, { ...progress, percent })
+      set({ downloads: next })
     })
   },
 }))

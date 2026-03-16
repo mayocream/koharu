@@ -2,7 +2,8 @@
 
 import { useEffect, useRef, useState } from 'react'
 import { useTranslation } from 'react-i18next'
-import { subscribeDownloadProgress, type DownloadProgress } from '@/lib/backend'
+import { subscribeDownloadChanged } from '@/lib/backend'
+import type { DownloadState } from '@/lib/protocol'
 
 type AggregateProgress = {
   filename: string
@@ -17,7 +18,7 @@ export default function SplashScreen() {
   )
 
   useEffect(() => {
-    const unsub = subscribeDownloadProgress((msg: DownloadProgress) => {
+    const unsub = subscribeDownloadChanged((msg: DownloadState) => {
       const files = filesRef.current
 
       if (msg.status === 'started') {

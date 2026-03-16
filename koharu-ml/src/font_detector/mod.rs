@@ -27,12 +27,12 @@ pub struct FontDetector {
 }
 
 impl FontDetector {
-    pub async fn load(use_cpu: bool) -> Result<Self> {
-        Self::load_with_kind(use_cpu, ModelKind::default()).await
+    pub async fn load(cpu: bool) -> Result<Self> {
+        Self::load_with_kind(cpu, ModelKind::default()).await
     }
 
-    pub async fn load_with_kind(use_cpu: bool, kind: ModelKind) -> Result<Self> {
-        let device = device(use_cpu)?;
+    pub async fn load_with_kind(cpu: bool, kind: ModelKind) -> Result<Self> {
+        let device = device(cpu)?;
         let model =
             loading::load_mmaped_safetensors(Manifest::FontWeights.get(), &device, move |vb| {
                 models::Model::load(vb.pp("model._orig_mod.model"), kind)

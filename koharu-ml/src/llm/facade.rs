@@ -1,9 +1,9 @@
 use std::sync::Arc;
 
 use serde::Serialize;
-use tokio::sync::RwLock;
+use tokio::sync::{RwLock, broadcast};
 
-use koharu_types::{Document, TextBlock};
+use koharu_types::{Document, LlmState, LlmStateStatus, TextBlock};
 
 use super::{GenerateOptions, Llm, ModelId};
 
@@ -55,10 +55,14 @@ impl ModelInfo {
 #[allow(clippy::large_enum_variant)]
 pub enum State {
     Empty,
-    Loading,
+    Loading {
+        model_id: String,
+        source: String,
+    },
     Ready(Llm),
     ApiReady {
         provider: Box<dyn super::provider::AnyProvider>,
+        provider_id: String,
         model: String,
     },
     Failed(String),
@@ -68,7 +72,7 @@ impl std::fmt::Display for State {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
             State::Empty => write!(f, "empty"),
-            State::Loading => write!(f, "loading"),
+            State::Loading { .. } => write!(f, "loading"),
             State::Ready(_) | State::ApiReady { .. } => write!(f, "ready"),
             State::Failed(_) => write!(f, "failed"),
         }
@@ -78,7 +82,8 @@ impl std::fmt::Display for State {
 /// Minimal owner for the LLM with non-blocking initialization.
 pub struct Model {
     state: Arc<RwLock<State>>,
-    use_cpu: bool,
+    state_tx: broadcast::Sender<LlmState>,
+    cpu: bool,
 }
 
 impl Default for Model {
@@ -459,15 +464,16 @@ impl Translatable for TextBlock {
 }
 
 impl Model {
-    pub fn new(use_cpu: bool) -> Self {
+    pub fn new(cpu: bool) -> Self {
         Self {
             state: Arc::new(RwLock::new(State::Empty)),
-            use_cpu,
+            state_tx: broadcast::channel(64).0,
+            cpu,
         }
     }
 
     pub fn is_cpu(&self) -> bool {
-        self.use_cpu
+        self.cpu
     }
 
     /// Start loading an API-backed provider and return immediately.
@@ -486,8 +492,10 @@ impl Model {
         };
         *self.state.write().await = State::ApiReady {
             provider,
+            provider_id: provider_id.to_string(),
             model: model_id.to_string(),
         };
+        self.emit_state().await;
         Ok(())
     }
 
@@ -495,13 +503,18 @@ impl Model {
     pub async fn load(&self, id: ModelId) {
         {
             let mut guard = self.state.write().await;
-            *guard = State::Loading;
+            *guard = State::Loading {
+                model_id: id.to_string(),
+                source: "local".to_string(),
+            };
         }
+        self.emit_state().await;
 
         let state_cloned = self.state.clone();
-        let use_cpu = self.use_cpu;
+        let state_tx = self.state_tx.clone();
+        let cpu = self.cpu;
         tokio::spawn(async move {
-            let res = Llm::load(id, use_cpu).await;
+            let res = Llm::load(id, cpu).await;
             match res {
                 Ok(llm) => {
                     let mut guard = state_cloned.write().await;
@@ -513,6 +526,11 @@ impl Model {
                     *guard = State::Failed(format!("join error: {e}"));
                 }
             }
+            let snapshot = {
+                let guard = state_cloned.read().await;
+                snapshot_from_state(&guard)
+            };
+            let _ = state_tx.send(snapshot);
         });
     }
 
@@ -526,6 +544,7 @@ impl Model {
 
     pub async fn offload(&self) {
         *self.state.write().await = State::Empty;
+        self.emit_state().await;
     }
 
     pub async fn ready(&self) -> bool {
@@ -533,6 +552,19 @@ impl Model {
             *self.state.read().await,
             State::Ready(_) | State::ApiReady { .. }
         )
+    }
+
+    pub fn subscribe(&self) -> broadcast::Receiver<LlmState> {
+        self.state_tx.subscribe()
+    }
+
+    pub async fn snapshot(&self) -> LlmState {
+        let guard = self.state.read().await;
+        snapshot_from_state(&guard)
+    }
+
+    async fn emit_state(&self) {
+        let _ = self.state_tx.send(self.snapshot().await);
     }
 
     pub async fn translate(
@@ -544,17 +576,56 @@ impl Model {
         let mut guard = self.state.write().await;
         match &mut *guard {
             State::Ready(llm) => doc.translate_with_llm(llm, target_language),
-            State::ApiReady { provider, model } => {
+            State::ApiReady {
+                provider, model, ..
+            } => {
                 let text = doc.get_source()?;
                 let model = model.clone();
                 let response = provider.translate(&text, lang, &model).await?;
                 let response = response.trim().to_string();
                 doc.set_translation(response)
             }
-            State::Loading => Err(anyhow::anyhow!("Model is still loading")),
+            State::Loading { .. } => Err(anyhow::anyhow!("Model is still loading")),
             State::Failed(e) => Err(anyhow::anyhow!("Model failed to load: {e}")),
             State::Empty => Err(anyhow::anyhow!("No model is loaded")),
         }
+    }
+}
+
+fn snapshot_from_state(state: &State) -> LlmState {
+    match state {
+        State::Empty => LlmState {
+            status: LlmStateStatus::Empty,
+            model_id: None,
+            source: None,
+            error: None,
+        },
+        State::Loading { model_id, source } => LlmState {
+            status: LlmStateStatus::Loading,
+            model_id: Some(model_id.clone()),
+            source: Some(source.clone()),
+            error: None,
+        },
+        State::Ready(llm) => LlmState {
+            status: LlmStateStatus::Ready,
+            model_id: Some(llm.id().to_string()),
+            source: Some("local".to_string()),
+            error: None,
+        },
+        State::ApiReady {
+            provider_id, model, ..
+        } => LlmState {
+            status: LlmStateStatus::Ready,
+            model_id: Some(format!("{provider_id}:{model}")),
+            source: Some(provider_id.clone()),
+            error: None,
+        },
+        State::Failed(error) => LlmState {
+            status: LlmStateStatus::Failed,
+            model_id: None,
+            source: None,
+            error: Some(error.clone()),
+        },
     }
 }
 

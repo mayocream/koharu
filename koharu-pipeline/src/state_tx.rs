@@ -1,5 +1,27 @@
 use anyhow::Result;
 use koharu_types::{AppState, Document};
+use once_cell::sync::Lazy;
+use tokio::sync::broadcast;
+
+#[derive(Debug, Clone)]
+pub enum StateEvent {
+    DocumentsChanged,
+    DocumentChanged {
+        document_id: String,
+        revision: u64,
+        changed: Vec<String>,
+    },
+}
+
+static STATE_TX: Lazy<broadcast::Sender<StateEvent>> = Lazy::new(|| broadcast::channel(256).0);
+
+pub fn subscribe() -> broadcast::Receiver<StateEvent> {
+    STATE_TX.subscribe()
+}
+
+fn emit(event: StateEvent) {
+    let _ = STATE_TX.send(event);
+}
 
 pub async fn read_doc(state: &AppState, index: usize) -> Result<Document> {
     let guard = state.read().await;
@@ -10,17 +32,77 @@ pub async fn read_doc(state: &AppState, index: usize) -> Result<Document> {
         .ok_or_else(|| anyhow::anyhow!("Document not found at index {index}"))
 }
 
-pub async fn update_doc(state: &AppState, index: usize, document: Document) -> Result<()> {
+pub async fn list_docs(state: &AppState) -> Vec<Document> {
+    state.read().await.documents.clone()
+}
+
+pub async fn find_doc_index(state: &AppState, document_id: &str) -> Result<usize> {
+    let guard = state.read().await;
+    guard
+        .documents
+        .iter()
+        .position(|document| document.id == document_id)
+        .ok_or_else(|| anyhow::anyhow!("Document not found: {document_id}"))
+}
+
+pub async fn replace_docs(state: &AppState, mut documents: Vec<Document>) -> Result<usize> {
+    for document in &mut documents {
+        document.prepare_for_store();
+    }
+
+    let count = documents.len();
+    let mut guard = state.write().await;
+    guard.documents = documents;
+    drop(guard);
+    emit(StateEvent::DocumentsChanged);
+    Ok(count)
+}
+
+pub async fn append_docs(state: &AppState, mut documents: Vec<Document>) -> Result<usize> {
+    for document in &mut documents {
+        document.prepare_for_store();
+    }
+
+    let mut guard = state.write().await;
+    guard.documents.extend(documents);
+    let count = guard.documents.len();
+    drop(guard);
+    emit(StateEvent::DocumentsChanged);
+    Ok(count)
+}
+
+pub async fn update_doc(
+    state: &AppState,
+    index: usize,
+    mut document: Document,
+    changed: &[&str],
+) -> Result<()> {
+    document.prepare_for_store();
+    document.bump_revision();
+    let document_id = document.id.clone();
+    let revision = document.revision;
+
     let mut guard = state.write().await;
     let target = guard
         .documents
         .get_mut(index)
         .ok_or_else(|| anyhow::anyhow!("Document not found at index {index}"))?;
     *target = document;
+    drop(guard);
+    emit(StateEvent::DocumentChanged {
+        document_id,
+        revision,
+        changed: changed.iter().map(|value| (*value).to_string()).collect(),
+    });
     Ok(())
 }
 
-pub async fn mutate_doc<T, F>(state: &AppState, index: usize, mutator: F) -> Result<T>
+pub async fn mutate_doc<T, F>(
+    state: &AppState,
+    index: usize,
+    changed: &[&str],
+    mutator: F,
+) -> Result<T>
 where
     F: FnOnce(&mut Document) -> Result<T>,
 {
@@ -29,13 +111,26 @@ where
         .documents
         .get_mut(index)
         .ok_or_else(|| anyhow::anyhow!("Document not found at index {index}"))?;
-    mutator(target)
+    let result = mutator(target)?;
+    target.prepare_for_store();
+    target.bump_revision();
+    let document_id = target.id.clone();
+    let revision = target.revision;
+    drop(guard);
+    emit(StateEvent::DocumentChanged {
+        document_id,
+        revision,
+        changed: changed.iter().map(|value| (*value).to_string()).collect(),
+    });
+    Ok(result)
 }
 
 #[cfg(test)]
 mod tests {
-    use super::{mutate_doc, read_doc, update_doc};
-    use koharu_types::{AppState, State};
+    use super::{
+        append_docs, find_doc_index, list_docs, mutate_doc, read_doc, replace_docs, update_doc,
+    };
+    use koharu_types::{AppState, Document, State};
     use std::sync::Arc;
     use tokio::sync::RwLock;
 
@@ -51,11 +146,11 @@ mod tests {
 
         let mut doc = read_doc(&state, 0).await.expect("doc should exist");
         doc.name = "before".to_string();
-        update_doc(&state, 0, doc)
+        update_doc(&state, 0, doc, &["name"])
             .await
             .expect("update should work");
 
-        mutate_doc(&state, 0, |doc| {
+        mutate_doc(&state, 0, &["name"], |doc| {
             doc.name = "after".to_string();
             Ok(())
         })
@@ -74,9 +169,27 @@ mod tests {
             .expect_err("missing document should fail");
         assert_eq!(err.to_string(), "Document not found at index 1");
 
-        let err = mutate_doc(&state, 1, |_| Ok(()))
+        let err = mutate_doc(&state, 1, &["name"], |_| Ok(()))
             .await
             .expect_err("missing document should fail");
         assert_eq!(err.to_string(), "Document not found at index 1");
+    }
+
+    #[tokio::test]
+    async fn replace_append_and_find_doc_work() {
+        let state = test_state();
+        let mut first = Document::default();
+        first.id = "first".to_string();
+        replace_docs(&state, vec![first])
+            .await
+            .expect("replace should work");
+        assert_eq!(list_docs(&state).await.len(), 1);
+
+        let mut second = Document::default();
+        second.id = "second".to_string();
+        append_docs(&state, vec![second])
+            .await
+            .expect("append should work");
+        assert_eq!(find_doc_index(&state, "second").await.expect("find"), 1);
     }
 }
