@@ -44,6 +44,7 @@ function ProvidersBootstrap({ children }: { children: ReactNode }) {
   const openAiApiKeyQuery = useApiKeyQuery('openai', shouldQueryApiKeys)
   const geminiApiKeyQuery = useApiKeyQuery('gemini', shouldQueryApiKeys)
   const claudeApiKeyQuery = useApiKeyQuery('claude', shouldQueryApiKeys)
+  const deepSeekApiKeyQuery = useApiKeyQuery('deepseek', shouldQueryApiKeys)
 
   const applyDocumentsSnapshot = (documents: DocumentSummary[]) => {
     const count = documents.length
@@ -173,6 +174,12 @@ function ProvidersBootstrap({ children }: { children: ReactNode }) {
       setApiKey('claude', claudeApiKeyQuery.data ?? '')
     }
   }, [claudeApiKeyQuery.data, claudeApiKeyQuery.status, setApiKey])
+
+  useEffect(() => {
+    if (deepSeekApiKeyQuery.status === 'success') {
+      setApiKey('deepseek', deepSeekApiKeyQuery.data ?? '')
+    }
+  }, [deepSeekApiKeyQuery.data, deepSeekApiKeyQuery.status, setApiKey])
 
   useEffect(() => {
     let unlisten: (() => void) | undefined

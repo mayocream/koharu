@@ -35,6 +35,7 @@ const API_PROVIDERS = [
   { id: 'openai', name: 'OpenAI', free_tier: false },
   { id: 'gemini', name: 'Gemini', free_tier: true },
   { id: 'claude', name: 'Claude', free_tier: false },
+  { id: 'deepseek', name: 'DeepSeek', free_tier: false },
 ] as const
 
 export default function SettingsPage() {
