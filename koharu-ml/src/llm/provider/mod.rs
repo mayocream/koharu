@@ -4,6 +4,7 @@ use std::pin::Pin;
 use anyhow::Context;
 
 pub mod claude;
+pub mod deepseek;
 pub mod gemini;
 pub mod openai;
 

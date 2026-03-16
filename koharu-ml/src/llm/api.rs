@@ -36,7 +36,16 @@ pub const CLAUDE: ApiProviderInfo = ApiProviderInfo {
     }],
 };
 
-pub const ALL_API_PROVIDERS: &[&ApiProviderInfo] = &[&OPENAI, &GEMINI, &CLAUDE];
+pub const DEEPSEEK: ApiProviderInfo = ApiProviderInfo {
+    id: "deepseek",
+    name: "DeepSeek",
+    models: &[ApiModelInfo {
+        id: "deepseek-chat",
+        name: "DeepSeek-V3.2-Chat",
+    }],
+};
+
+pub const ALL_API_PROVIDERS: &[&ApiProviderInfo] = &[&OPENAI, &GEMINI, &CLAUDE, &DEEPSEEK];
 
 /// Parse a namespaced model ID like `"openai:gpt-5-mini"` into its provider
 /// and model-id parts. Returns `None` if the ID is not in the expected format

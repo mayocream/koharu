@@ -482,6 +482,7 @@ impl Model {
             "openai" => Box::new(super::provider::openai::OpenAiProvider { api_key }),
             "gemini" => Box::new(super::provider::gemini::GeminiProvider { api_key }),
             "claude" => Box::new(super::provider::claude::ClaudeProvider { api_key }),
+            "deepseek" => Box::new(super::provider::deepseek::DeepSeekProvider { api_key }),
             other => anyhow::bail!("Unknown API provider: {other}"),
         };
         *self.state.write().await = State::ApiReady {
