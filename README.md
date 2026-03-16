@@ -9,7 +9,7 @@ Koharu introduces a new workflow for manga translation, utilizing the power of M
 Under the hood, Koharu uses [candle](https://github.com/huggingface/candle) for high-performance inference, and uses [Tauri](https://github.com/tauri-apps/tauri) for the GUI. All components are written in Rust, ensuring safety and speed.
 
 > [!NOTE]
-> Koharu runs ML models **locally** on your machine, ensuring your data privacy. No data is sent to external servers. We guarantee that Koharu does not collect any user data.
+> Koharu runs its vision models and local LLMs **locally** on your machine by default. If you choose a remote LLM provider, Koharu sends translation text only to the provider you configured. Koharu itself does not collect user data.
 
 ---
 
@@ -119,7 +119,11 @@ We convert the original models to safetensors format for better performance and 
 
 ### Large Language Models
 
-Koharu supports various quantized LLMs in GGUF format via [candle](https://github.com/huggingface/candle), and preselect model based on system locale settings. Supported models and suggested usage:
+Koharu supports both local and remote LLM backends, and preselects a model based on your system locale when possible.
+
+#### Local LLMs
+
+Koharu supports various quantized LLMs in GGUF format via [candle](https://github.com/huggingface/candle). These models run on your machine and are downloaded on demand when you select them in Settings. Supported models and suggested usage:
 
 For translating to English:
 
@@ -136,6 +140,20 @@ For other languages, you may use:
 - [hunyuan-7b-mt-v1.0](https://huggingface.co/Mungert/Hunyuan-MT-7B-GGUF): ~6.3GB and fits on 8 GB VRAM, decent multi-language translation quality.
 
 LLMs will be automatically downloaded on demand when you select a model in the settings. Choose the smallest model that meets your quality needs if you are memory-bound; prefer the 7B/8B variants when you have sufficient VRAM/RAM for better translations.
+
+#### Remote LLMs
+
+Koharu can also translate through remote or self-hosted API providers instead of a downloaded local model. Supported remote providers:
+
+- OpenAI
+- Gemini
+- Claude
+- DeepSeek
+- OpenAI Compatible, including tools and services such as LM Studio, OpenRouter, or any endpoint that exposes the OpenAI-style `/v1/models` and `/v1/chat/completions` APIs
+
+Remote providers are configured in **Settings > API Keys**. For OpenAI Compatible, you also set a custom base URL. API keys are optional for local servers like LM Studio, but typically required for hosted services like OpenRouter.
+
+Use remote providers when you want to avoid local model downloads, reduce local VRAM/RAM usage, or connect Koharu to a hosted model. Keep in mind that OCR text selected for translation is sent to the configured provider.
 
 ## Installation
 
