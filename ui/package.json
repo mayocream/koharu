@@ -46,7 +46,7 @@
     "react-hotkeys-hook": "^5.2.4",
     "react-i18next": "^16.5.8",
     "react-markdown": "^9.1.0",
-    "react-resizable-panels": "^4.7.2",
+    "react-resizable-panels": "^4.7.3",
     "react-rnd": "^10.5.3",
     "remark-gfm": "^4.0.1",
     "tailwind-merge": "^3.5.0",
