@@ -53,30 +53,22 @@ impl ModelInfo {
 
 /// Load state of the LLM
 #[allow(clippy::large_enum_variant)]
+#[derive(strum::Display)]
 pub enum State {
+    #[strum(serialize = "empty")]
     Empty,
-    Loading {
-        model_id: String,
-        source: String,
-    },
+    #[strum(serialize = "loading")]
+    Loading { model_id: String, source: String },
+    #[strum(serialize = "ready")]
     Ready(Llm),
+    #[strum(serialize = "ready")]
     ApiReady {
         provider: Box<dyn super::providers::AnyProvider>,
         provider_id: String,
         model: String,
     },
+    #[strum(serialize = "failed")]
     Failed(String),
-}
-
-impl std::fmt::Display for State {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        match self {
-            State::Empty => write!(f, "empty"),
-            State::Loading { .. } => write!(f, "loading"),
-            State::Ready(_) | State::ApiReady { .. } => write!(f, "ready"),
-            State::Failed(_) => write!(f, "failed"),
-        }
-    }
 }
 
 /// Minimal owner for the LLM with non-blocking initialization.

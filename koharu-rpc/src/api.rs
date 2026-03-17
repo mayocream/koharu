@@ -17,7 +17,10 @@ use axum::{
     routing::{delete, get, patch, post, put},
 };
 use image::ImageFormat;
-use koharu_pipeline::{AppResources, operations, state_tx};
+use koharu_pipeline::{
+    AppResources, operations,
+    state_tx::{self, ChangedField},
+};
 use koharu_types::{
     ApiKeyGetPayload, ApiKeyResponse, ApiKeySetPayload, ApiKeyValue, CreateTextBlock, Document,
     DocumentDetail, DocumentSummary, ExportLayer, ExportResult, FileEntry, IndexPayload,
@@ -435,23 +438,28 @@ async fn create_text_block(
     let resources = state.resources()?;
     let (index, _) = find_document(&resources, &document_id).await?;
 
-    let detail = state_tx::mutate_doc(&resources.state, index, &["textBlocks"], |document| {
-        let mut block = TextBlock {
-            x: request.x,
-            y: request.y,
-            width: request.width,
-            height: request.height,
-            confidence: 1.0,
-            ..Default::default()
-        };
-        block.set_layout_seed(block.x, block.y, block.width, block.height);
-        document.text_blocks.push(block);
-        let block = document
-            .text_blocks
-            .last()
-            .ok_or_else(|| anyhow::anyhow!("Failed to append text block"))?;
-        Ok(TextBlockDetail::from(block))
-    })
+    let detail = state_tx::mutate_doc(
+        &resources.state,
+        index,
+        &[ChangedField::TextBlocks],
+        |document| {
+            let mut block = TextBlock {
+                x: request.x,
+                y: request.y,
+                width: request.width,
+                height: request.height,
+                confidence: 1.0,
+                ..Default::default()
+            };
+            block.set_layout_seed(block.x, block.y, block.width, block.height);
+            document.text_blocks.push(block);
+            let block = document
+                .text_blocks
+                .last()
+                .ok_or_else(|| anyhow::anyhow!("Failed to append text block"))?;
+            Ok(TextBlockDetail::from(block))
+        },
+    )
     .await?;
 
     Ok(Json(detail))
@@ -465,15 +473,20 @@ async fn patch_text_block(
     let resources = state.resources()?;
     let (index, _) = find_document(&resources, &document_id).await?;
 
-    let detail = state_tx::mutate_doc(&resources.state, index, &["textBlocks"], |document| {
-        let block = document
-            .text_blocks
-            .iter_mut()
-            .find(|block| block.id == text_block_id)
-            .ok_or_else(|| anyhow::anyhow!("Text block not found: {text_block_id}"))?;
-        apply_text_block_patch(block, request.clone());
-        Ok(TextBlockDetail::from(&*block))
-    })
+    let detail = state_tx::mutate_doc(
+        &resources.state,
+        index,
+        &[ChangedField::TextBlocks],
+        |document| {
+            let block = document
+                .text_blocks
+                .iter_mut()
+                .find(|block| block.id == text_block_id)
+                .ok_or_else(|| anyhow::anyhow!("Text block not found: {text_block_id}"))?;
+            apply_text_block_patch(block, request.clone());
+            Ok(TextBlockDetail::from(&*block))
+        },
+    )
     .await?;
 
     Ok(Json(detail))
@@ -486,15 +499,20 @@ async fn delete_text_block(
     let resources = state.resources()?;
     let (index, _) = find_document(&resources, &document_id).await?;
 
-    state_tx::mutate_doc(&resources.state, index, &["textBlocks"], |document| {
-        let block_index = document
-            .text_blocks
-            .iter()
-            .position(|block| block.id == text_block_id)
-            .ok_or_else(|| anyhow::anyhow!("Text block not found: {text_block_id}"))?;
-        document.text_blocks.remove(block_index);
-        Ok(())
-    })
+    state_tx::mutate_doc(
+        &resources.state,
+        index,
+        &[ChangedField::TextBlocks],
+        |document| {
+            let block_index = document
+                .text_blocks
+                .iter()
+                .position(|block| block.id == text_block_id)
+                .ok_or_else(|| anyhow::anyhow!("Text block not found: {text_block_id}"))?;
+            document.text_blocks.remove(block_index);
+            Ok(())
+        },
+    )
     .await?;
 
     Ok(StatusCode::NO_CONTENT)

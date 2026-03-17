@@ -20,6 +20,8 @@ pub struct DownloadProgress {
 
 #[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq)]
 #[serde(rename_all = "camelCase")]
+#[derive(strum::Display)]
+#[strum(serialize_all = "snake_case")]
 pub enum PipelineStep {
     Detect,
     Ocr,

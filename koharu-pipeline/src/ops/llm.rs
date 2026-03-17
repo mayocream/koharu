@@ -11,7 +11,10 @@ use koharu_types::commands::{
 use strum::IntoEnumIterator;
 use tracing::instrument;
 
-use crate::{AppResources, state_tx};
+use crate::{
+    AppResources,
+    state_tx::{self, ChangedField},
+};
 
 #[instrument(level = "debug", skip_all, fields(provider = %payload.provider))]
 pub async fn get_api_key(
@@ -144,7 +147,13 @@ pub async fn llm_generate(state: AppResources, payload: LlmGeneratePayload) -> a
         }
     }
 
-    state_tx::update_doc(&state.state, payload.index, updated, &["textBlocks"]).await
+    state_tx::update_doc(
+        &state.state,
+        payload.index,
+        updated,
+        &[ChangedField::TextBlocks],
+    )
+    .await
 }
 
 pub async fn get_document_for_llm(

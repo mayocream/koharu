@@ -11,7 +11,10 @@ use koharu_types::views::{TextBlockInfo, to_block_info};
 use koharu_types::{SerializableDynamicImage, TextBlock, TextStyle};
 use tracing::instrument;
 
-use crate::{AppResources, state_tx};
+use crate::{
+    AppResources,
+    state_tx::{self, ChangedField},
+};
 
 use super::utils::{InpaintRegionExt, blank_rgba};
 
@@ -209,22 +212,28 @@ pub async fn update_text_blocks(
     state: AppResources,
     payload: UpdateTextBlocksPayload,
 ) -> anyhow::Result<()> {
-    state_tx::mutate_doc(&state.state, payload.index, &["textBlocks"], |document| {
-        let previous = std::mem::take(&mut document.text_blocks);
-        document.text_blocks = payload.text_blocks;
+    state_tx::mutate_doc(
+        &state.state,
+        payload.index,
+        &[ChangedField::TextBlocks],
+        |document| {
+            let previous = std::mem::take(&mut document.text_blocks);
+            document.text_blocks = payload.text_blocks;
 
-        let mut used_previous = vec![false; previous.len()];
-        for (block_index, block) in document.text_blocks.iter_mut().enumerate() {
-            let matched_idx = find_matching_previous(block, block_index, &previous, &used_previous);
-            if let Some(idx) = matched_idx {
-                used_previous[idx] = true;
-                rehydrate_runtime_text_block_state(block, Some(&previous[idx]));
-            } else {
-                rehydrate_runtime_text_block_state(block, None);
+            let mut used_previous = vec![false; previous.len()];
+            for (block_index, block) in document.text_blocks.iter_mut().enumerate() {
+                let matched_idx =
+                    find_matching_previous(block, block_index, &previous, &used_previous);
+                if let Some(idx) = matched_idx {
+                    used_previous[idx] = true;
+                    rehydrate_runtime_text_block_state(block, Some(&previous[idx]));
+                } else {
+                    rehydrate_runtime_text_block_state(block, None);
+                }
             }
-        }
-        Ok(())
-    })
+            Ok(())
+        },
+    )
     .await
 }
 
@@ -232,69 +241,76 @@ pub async fn update_text_block(
     state: AppResources,
     payload: UpdateTextBlockPayload,
 ) -> anyhow::Result<TextBlockInfo> {
-    state_tx::mutate_doc(&state.state, payload.index, &["textBlocks"], |document| {
-        let block = document
-            .text_blocks
-            .get_mut(payload.text_block_index)
-            .ok_or_else(|| anyhow::anyhow!("Text block {} not found", payload.text_block_index))?;
-        let mut geometry_changed = false;
+    state_tx::mutate_doc(
+        &state.state,
+        payload.index,
+        &[ChangedField::TextBlocks],
+        |document| {
+            let block = document
+                .text_blocks
+                .get_mut(payload.text_block_index)
+                .ok_or_else(|| {
+                    anyhow::anyhow!("Text block {} not found", payload.text_block_index)
+                })?;
+            let mut geometry_changed = false;
 
-        if let Some(translation) = payload.translation {
-            block.translation = Some(translation);
-        }
-        if let Some(x) = payload.x {
-            block.x = x;
-            geometry_changed = true;
-        }
-        if let Some(y) = payload.y {
-            block.y = y;
-            geometry_changed = true;
-        }
-        if let Some(width) = payload.width {
-            block.width = width;
-            geometry_changed = true;
-            block.lock_layout_box = true;
-        }
-        if let Some(height) = payload.height {
-            block.height = height;
-            geometry_changed = true;
-            block.lock_layout_box = true;
-        }
-        if geometry_changed {
-            block.set_layout_seed(block.x, block.y, block.width, block.height);
-        }
+            if let Some(translation) = payload.translation {
+                block.translation = Some(translation);
+            }
+            if let Some(x) = payload.x {
+                block.x = x;
+                geometry_changed = true;
+            }
+            if let Some(y) = payload.y {
+                block.y = y;
+                geometry_changed = true;
+            }
+            if let Some(width) = payload.width {
+                block.width = width;
+                geometry_changed = true;
+                block.lock_layout_box = true;
+            }
+            if let Some(height) = payload.height {
+                block.height = height;
+                geometry_changed = true;
+                block.lock_layout_box = true;
+            }
+            if geometry_changed {
+                block.set_layout_seed(block.x, block.y, block.width, block.height);
+            }
 
-        if payload.font_families.is_some()
-            || payload.font_size.is_some()
-            || payload.color.is_some()
-            || payload.shader_effect.is_some()
-        {
-            let style = block.style.get_or_insert_with(|| TextStyle {
-                font_families: Vec::new(),
-                font_size: None,
-                color: [0, 0, 0, 255],
-                effect: None,
-                stroke: None,
-                text_align: None,
-            });
+            if payload.font_families.is_some()
+                || payload.font_size.is_some()
+                || payload.color.is_some()
+                || payload.shader_effect.is_some()
+            {
+                let style = block.style.get_or_insert_with(|| TextStyle {
+                    font_families: Vec::new(),
+                    font_size: None,
+                    color: [0, 0, 0, 255],
+                    effect: None,
+                    stroke: None,
+                    text_align: None,
+                });
 
-            if let Some(families) = payload.font_families {
-                style.font_families = families;
+                if let Some(families) = payload.font_families {
+                    style.font_families = families;
+                }
+                if let Some(font_size) = payload.font_size {
+                    style.font_size = Some(font_size);
+                }
+                if let Some(hex) = payload.color {
+                    style.color = parse_hex_color(&hex)?;
+                }
+                if let Some(effect) = payload.shader_effect {
+                    style.effect = Some(effect.parse()?);
+                }
             }
-            if let Some(font_size) = payload.font_size {
-                style.font_size = Some(font_size);
-            }
-            if let Some(hex) = payload.color {
-                style.color = parse_hex_color(&hex)?;
-            }
-            if let Some(effect) = payload.shader_effect {
-                style.effect = Some(effect.parse()?);
-            }
-        }
 
-        block.rendered = None;
-        Ok(to_block_info(payload.text_block_index, block))
-    })
+            block.rendered = None;
+            Ok(to_block_info(payload.text_block_index, block))
+        },
+    )
     .await
 }
 
@@ -302,19 +318,24 @@ pub async fn add_text_block(
     state: AppResources,
     payload: AddTextBlockPayload,
 ) -> anyhow::Result<usize> {
-    state_tx::mutate_doc(&state.state, payload.index, &["textBlocks"], |document| {
-        let mut block = TextBlock {
-            x: payload.x,
-            y: payload.y,
-            width: payload.width,
-            height: payload.height,
-            confidence: 1.0,
-            ..Default::default()
-        };
-        block.set_layout_seed(block.x, block.y, block.width, block.height);
-        document.text_blocks.push(block);
-        Ok(document.text_blocks.len() - 1)
-    })
+    state_tx::mutate_doc(
+        &state.state,
+        payload.index,
+        &[ChangedField::TextBlocks],
+        |document| {
+            let mut block = TextBlock {
+                x: payload.x,
+                y: payload.y,
+                width: payload.width,
+                height: payload.height,
+                confidence: 1.0,
+                ..Default::default()
+            };
+            block.set_layout_seed(block.x, block.y, block.width, block.height);
+            document.text_blocks.push(block);
+            Ok(document.text_blocks.len() - 1)
+        },
+    )
     .await
 }
 
@@ -322,13 +343,18 @@ pub async fn remove_text_block(
     state: AppResources,
     payload: RemoveTextBlockPayload,
 ) -> anyhow::Result<usize> {
-    state_tx::mutate_doc(&state.state, payload.index, &["textBlocks"], |document| {
-        if payload.text_block_index >= document.text_blocks.len() {
-            anyhow::bail!("Text block {} not found", payload.text_block_index);
-        }
-        document.text_blocks.remove(payload.text_block_index);
-        Ok(document.text_blocks.len())
-    })
+    state_tx::mutate_doc(
+        &state.state,
+        payload.index,
+        &[ChangedField::TextBlocks],
+        |document| {
+            if payload.text_block_index >= document.text_blocks.len() {
+                anyhow::bail!("Text block {} not found", payload.text_block_index);
+            }
+            document.text_blocks.remove(payload.text_block_index);
+            Ok(document.text_blocks.len())
+        },
+    )
     .await
 }
 
@@ -337,17 +363,22 @@ pub async fn dilate_mask(state: AppResources, payload: MaskMorphPayload) -> anyh
         anyhow::bail!("Radius must be 1-50");
     }
 
-    state_tx::mutate_doc(&state.state, payload.index, &["segment"], |document| {
-        let segment = document
-            .segment
-            .as_ref()
-            .ok_or_else(|| anyhow::anyhow!("No segment mask. Run detect first."))?;
+    state_tx::mutate_doc(
+        &state.state,
+        payload.index,
+        &[ChangedField::Segment],
+        |document| {
+            let segment = document
+                .segment
+                .as_ref()
+                .ok_or_else(|| anyhow::anyhow!("No segment mask. Run detect first."))?;
 
-        let gray = segment.to_luma8();
-        let dilated = imageproc::morphology::dilate(&gray, Norm::LInf, payload.radius);
-        document.segment = Some(SerializableDynamicImage(DynamicImage::ImageLuma8(dilated)));
-        Ok(())
-    })
+            let gray = segment.to_luma8();
+            let dilated = imageproc::morphology::dilate(&gray, Norm::LInf, payload.radius);
+            document.segment = Some(SerializableDynamicImage(DynamicImage::ImageLuma8(dilated)));
+            Ok(())
+        },
+    )
     .await
 }
 
@@ -356,17 +387,22 @@ pub async fn erode_mask(state: AppResources, payload: MaskMorphPayload) -> anyho
         anyhow::bail!("Radius must be 1-50");
     }
 
-    state_tx::mutate_doc(&state.state, payload.index, &["segment"], |document| {
-        let segment = document
-            .segment
-            .as_ref()
-            .ok_or_else(|| anyhow::anyhow!("No segment mask. Run detect first."))?;
+    state_tx::mutate_doc(
+        &state.state,
+        payload.index,
+        &[ChangedField::Segment],
+        |document| {
+            let segment = document
+                .segment
+                .as_ref()
+                .ok_or_else(|| anyhow::anyhow!("No segment mask. Run detect first."))?;
 
-        let gray = segment.to_luma8();
-        let eroded = imageproc::morphology::erode(&gray, Norm::LInf, payload.radius);
-        document.segment = Some(SerializableDynamicImage(DynamicImage::ImageLuma8(eroded)));
-        Ok(())
-    })
+            let gray = segment.to_luma8();
+            let eroded = imageproc::morphology::erode(&gray, Norm::LInf, payload.radius);
+            document.segment = Some(SerializableDynamicImage(DynamicImage::ImageLuma8(eroded)));
+            Ok(())
+        },
+    )
     .await
 }
 
@@ -431,7 +467,13 @@ pub async fn update_inpaint_mask(
 
     let mut updated = snapshot;
     updated.segment = Some(image::DynamicImage::ImageRgba8(base_mask).into());
-    state_tx::update_doc(&state.state, payload.index, updated, &["segment"]).await
+    state_tx::update_doc(
+        &state.state,
+        payload.index,
+        updated,
+        &[ChangedField::Segment],
+    )
+    .await
 }
 
 pub async fn update_brush_layer(
@@ -474,7 +516,13 @@ pub async fn update_brush_layer(
     let mut updated = snapshot;
     updated.brush_layer = Some(image::DynamicImage::ImageRgba8(brush_layer).into());
 
-    state_tx::update_doc(&state.state, payload.index, updated, &["brushLayer"]).await
+    state_tx::update_doc(
+        &state.state,
+        payload.index,
+        updated,
+        &[ChangedField::BrushLayer],
+    )
+    .await
 }
 
 #[instrument(level = "info", skip_all)]
@@ -540,7 +588,13 @@ pub async fn inpaint_partial(
     let mut updated = snapshot;
     updated.inpainted = Some(image::DynamicImage::ImageRgba8(stitched).into());
 
-    state_tx::update_doc(&state.state, payload.index, updated, &["inpainted"]).await
+    state_tx::update_doc(
+        &state.state,
+        payload.index,
+        updated,
+        &[ChangedField::Inpainted],
+    )
+    .await
 }
 
 #[cfg(test)]

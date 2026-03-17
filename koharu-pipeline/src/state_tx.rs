@@ -3,6 +3,22 @@ use koharu_types::{AppState, Document};
 use once_cell::sync::Lazy;
 use tokio::sync::broadcast;
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq, strum::Display)]
+pub enum ChangedField {
+    #[strum(serialize = "name")]
+    Name,
+    #[strum(serialize = "textBlocks")]
+    TextBlocks,
+    #[strum(serialize = "segment")]
+    Segment,
+    #[strum(serialize = "brushLayer")]
+    BrushLayer,
+    #[strum(serialize = "inpainted")]
+    Inpainted,
+    #[strum(serialize = "rendered")]
+    Rendered,
+}
+
 #[derive(Debug, Clone)]
 pub enum StateEvent {
     DocumentsChanged,
@@ -21,6 +37,10 @@ pub fn subscribe() -> broadcast::Receiver<StateEvent> {
 
 fn emit(event: StateEvent) {
     let _ = STATE_TX.send(event);
+}
+
+fn serialize_changed_fields(changed: &[ChangedField]) -> Vec<String> {
+    changed.iter().map(ToString::to_string).collect()
 }
 
 pub async fn read_doc(state: &AppState, index: usize) -> Result<Document> {
@@ -75,7 +95,7 @@ pub async fn update_doc(
     state: &AppState,
     index: usize,
     mut document: Document,
-    changed: &[&str],
+    changed: &[ChangedField],
 ) -> Result<()> {
     document.prepare_for_store();
     document.bump_revision();
@@ -92,7 +112,7 @@ pub async fn update_doc(
     emit(StateEvent::DocumentChanged {
         document_id,
         revision,
-        changed: changed.iter().map(|value| (*value).to_string()).collect(),
+        changed: serialize_changed_fields(changed),
     });
     Ok(())
 }
@@ -100,7 +120,7 @@ pub async fn update_doc(
 pub async fn mutate_doc<T, F>(
     state: &AppState,
     index: usize,
-    changed: &[&str],
+    changed: &[ChangedField],
     mutator: F,
 ) -> Result<T>
 where
@@ -120,7 +140,7 @@ where
     emit(StateEvent::DocumentChanged {
         document_id,
         revision,
-        changed: changed.iter().map(|value| (*value).to_string()).collect(),
+        changed: serialize_changed_fields(changed),
     });
     Ok(result)
 }
@@ -128,7 +148,8 @@ where
 #[cfg(test)]
 mod tests {
     use super::{
-        append_docs, find_doc_index, list_docs, mutate_doc, read_doc, replace_docs, update_doc,
+        ChangedField, append_docs, find_doc_index, list_docs, mutate_doc, read_doc, replace_docs,
+        update_doc,
     };
     use koharu_types::{AppState, Document, State};
     use std::sync::Arc;
@@ -146,11 +167,11 @@ mod tests {
 
         let mut doc = read_doc(&state, 0).await.expect("doc should exist");
         doc.name = "before".to_string();
-        update_doc(&state, 0, doc, &["name"])
+        update_doc(&state, 0, doc, &[ChangedField::Name])
             .await
             .expect("update should work");
 
-        mutate_doc(&state, 0, &["name"], |doc| {
+        mutate_doc(&state, 0, &[ChangedField::Name], |doc| {
             doc.name = "after".to_string();
             Ok(())
         })
@@ -169,7 +190,7 @@ mod tests {
             .expect_err("missing document should fail");
         assert_eq!(err.to_string(), "Document not found at index 1");
 
-        let err = mutate_doc(&state, 1, &["name"], |_| Ok(()))
+        let err = mutate_doc(&state, 1, &[ChangedField::Name], |_| Ok(()))
             .await
             .expect_err("missing document should fail");
         assert_eq!(err.to_string(), "Document not found at index 1");

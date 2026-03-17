@@ -11,7 +11,10 @@ use koharu_types::events::{PipelineProgress, PipelineStatus, PipelineStep};
 use once_cell::sync::Lazy;
 use tokio::sync::broadcast;
 
-use crate::{AppResources, state_tx};
+use crate::{
+    AppResources,
+    state_tx::{self, ChangedField},
+};
 
 pub struct PipelineHandle {
     pub id: String,
@@ -194,11 +197,11 @@ async fn run_pipeline_inner(
             }
 
             let changed = match step {
-                PipelineStep::Detect => &["textBlocks", "segment"][..],
-                PipelineStep::Ocr => &["textBlocks"][..],
-                PipelineStep::Inpaint => &["inpainted"][..],
-                PipelineStep::LlmGenerate => &["textBlocks"][..],
-                PipelineStep::Render => &["textBlocks", "rendered"][..],
+                PipelineStep::Detect => &[ChangedField::TextBlocks, ChangedField::Segment][..],
+                PipelineStep::Ocr => &[ChangedField::TextBlocks][..],
+                PipelineStep::Inpaint => &[ChangedField::Inpainted][..],
+                PipelineStep::LlmGenerate => &[ChangedField::TextBlocks][..],
+                PipelineStep::Render => &[ChangedField::TextBlocks, ChangedField::Rendered][..],
             };
             state_tx::update_doc(&res.state, doc_index, snapshot, changed).await?;
         }

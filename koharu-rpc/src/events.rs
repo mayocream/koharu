@@ -241,14 +241,7 @@ fn pipeline_job_state(progress: PipelineProgress) -> JobState {
 }
 
 fn pipeline_step_name(step: PipelineStep) -> String {
-    match step {
-        PipelineStep::Detect => "detect",
-        PipelineStep::Ocr => "ocr",
-        PipelineStep::Inpaint => "inpaint",
-        PipelineStep::LlmGenerate => "llm_generate",
-        PipelineStep::Render => "render",
-    }
-    .to_string()
+    step.to_string()
 }
 
 fn download_state(progress: DownloadProgress) -> DownloadState {
