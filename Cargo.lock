@@ -3869,6 +3869,7 @@ dependencies = [
  "koharu-rpc",
  "koharu-runtime",
  "koharu-types",
+ "libloading 0.9.0",
  "once_cell",
  "rfd",
  "serde_json",

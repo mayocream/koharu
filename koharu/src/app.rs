@@ -112,8 +112,52 @@ async fn prefetch() -> Result<()> {
     Ok(())
 }
 
-async fn build_resources(cpu: bool) -> Result<AppResources> {
-    if cuda_is_available() {
+fn warning(headless: bool, title: &str, description: &str) {
+    tracing::warn!("{description}");
+
+    if headless {
+        return;
+    }
+
+    MessageDialog::new()
+        .set_level(rfd::MessageLevel::Warning)
+        .set_title(title)
+        .set_description(description)
+        .show();
+}
+
+async fn build_resources(cpu: bool, headless: bool) -> Result<AppResources> {
+    let mut cpu = cpu;
+
+    if !cpu && cuda_is_available() {
+        match crate::nvidia::driver_version() {
+            Ok(version) if version.supports_cuda_13_1() => {
+                tracing::info!("NVIDIA driver reports CUDA {version} support");
+            }
+            Ok(version) => {
+                warning(
+                    headless,
+                    "NVIDIA Driver Update Recommended",
+                    &format!(
+                        "Your NVIDIA driver only supports CUDA {version}. Koharu will fall back to CPU. Please update your NVIDIA driver to a version that supports CUDA 13.1 or newer to enable GPU acceleration."
+                    ),
+                );
+                cpu = true;
+            }
+            Err(err) => {
+                warning(
+                    headless,
+                    "NVIDIA Driver Check Failed",
+                    &format!(
+                        "Koharu could not verify NVIDIA driver support for CUDA 13.1: {err:#}. Koharu will fall back to CPU. Please update your NVIDIA driver to a version that supports CUDA 13.1 or newer to enable GPU acceleration."
+                    ),
+                );
+                cpu = true;
+            }
+        }
+    }
+
+    if !cpu && cuda_is_available() {
         ensure_dylibs(LIB_ROOT.to_path_buf())
             .await
             .context("Failed to ensure dynamic libraries")?;
@@ -188,7 +232,7 @@ pub async fn run() -> Result<()> {
             }
         });
         shared
-            .get_or_try_init(|| async { build_resources(cpu).await })
+            .get_or_try_init(|| async { build_resources(cpu, headless).await })
             .await?;
         tokio::signal::ctrl_c().await?;
         return Ok(());
@@ -219,7 +263,7 @@ pub async fn run() -> Result<()> {
                     .ok();
 
                 shared
-                    .get_or_try_init(|| async { build_resources(cpu).await })
+                    .get_or_try_init(|| async { build_resources(cpu, headless).await })
                     .await
                     .expect("failed to build app resources");
 
