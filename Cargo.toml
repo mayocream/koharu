@@ -102,7 +102,7 @@ windows = { version = "0.62", features = [
     "Win32_UI_WindowsAndMessaging",
 ] }
 windows-sys = "0.61"
-winreg = "0.55"
+winreg = "0.56"
 skrifa = "0.40"
 harfrust = "0.5"
 icu = "2.1"
