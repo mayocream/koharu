@@ -1157,6 +1157,10 @@ fn try_merge_text_line(block: &mut CtdBlock, other: &mut CtdBlock, font_size_tol
 }
 
 fn sort_regions(mut blocks: Vec<CtdBlock>) -> Vec<CtdBlock> {
+    if blocks.len() < 2 {
+        return blocks;
+    }
+
     let vertical_blocks = blocks
         .iter()
         .filter(|block| block.source_direction == TextDirection::Vertical)
@@ -1171,23 +1175,21 @@ fn compare_blocks_for_reading_order(
     b: &CtdBlock,
     right_to_left: bool,
 ) -> std::cmp::Ordering {
-    let overlap_y = vertical_overlap(&a.bbox, &b.bbox);
-    let row_tolerance = (a.detected_font_size_px.max(b.detected_font_size_px) * 0.6).max(1.0);
-    if overlap_y > 0.0 || (a.center()[1] - b.center()[1]).abs() <= row_tolerance {
-        if right_to_left {
-            b.center()[0]
-                .total_cmp(&a.center()[0])
-                .then_with(|| a.center()[1].total_cmp(&b.center()[1]))
-        } else {
-            a.center()[0]
-                .total_cmp(&b.center()[0])
-                .then_with(|| a.center()[1].total_cmp(&b.center()[1]))
-        }
+    let primary = if right_to_left {
+        b.bbox[2].total_cmp(&a.bbox[2])
     } else {
-        a.center()[1]
-            .total_cmp(&b.center()[1])
-            .then_with(|| a.center()[0].total_cmp(&b.center()[0]))
-    }
+        a.bbox[0].total_cmp(&b.bbox[0])
+    };
+    let tertiary = if right_to_left {
+        b.bbox[0].total_cmp(&a.bbox[0])
+    } else {
+        a.bbox[2].total_cmp(&b.bbox[2])
+    };
+
+    primary
+        .then_with(|| a.bbox[1].total_cmp(&b.bbox[1]))
+        .then_with(|| tertiary)
+        .then_with(|| a.bbox[3].total_cmp(&b.bbox[3]))
 }
 
 fn dedupe_blocks(blocks: &mut Vec<CtdBlock>) {
@@ -1642,10 +1644,6 @@ fn horizontal_overlap(a: &[f32; 4], b: &[f32; 4]) -> f32 {
     (a[2].min(b[2]) - a[0].max(b[0])).max(0.0)
 }
 
-fn vertical_overlap(a: &[f32; 4], b: &[f32; 4]) -> f32 {
-    (a[3].min(b[3]) - a[1].max(b[1])).max(0.0)
-}
-
 fn mean_mask_score(mask: &GrayImage, bbox: &[f32; 4]) -> f32 {
     let x1 = bbox[0].floor().max(0.0) as u32;
     let y1 = bbox[1].floor().max(0.0) as u32;
@@ -1801,6 +1799,22 @@ impl BboxExt for CtdBlock {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    fn test_block(bbox: [f32; 4], source_direction: TextDirection) -> CtdBlock {
+        CtdBlock {
+            bbox,
+            confidence: 0.9,
+            source_language: "unknown".to_string(),
+            source_direction,
+            lines: Vec::new(),
+            angle_deg: 0.0,
+            detected_font_size_px: 10.0,
+            distances: Vec::new(),
+            direction_vec: [1.0, 0.0],
+            direction_norm: 1.0,
+            merged: false,
+        }
+    }
 
     #[test]
     fn component_quad_tracks_orientation() {
@@ -2058,5 +2072,44 @@ mod tests {
 
         let merged = merge_paragraph_blocks(vec![top, blocker, bottom], 2000, 2000);
         assert_eq!(merged.len(), 3);
+    }
+
+    #[test]
+    fn reading_order_comparator_stays_transitive_across_row_boundaries() {
+        let left_lower = test_block([0.0, 9.0, 2.0, 11.0], TextDirection::Horizontal);
+        let middle = test_block([1.0, 4.0, 3.0, 6.0], TextDirection::Horizontal);
+        let right_upper = test_block([2.0, -1.0, 4.0, 1.0], TextDirection::Horizontal);
+
+        assert_eq!(
+            compare_blocks_for_reading_order(&left_lower, &middle, false),
+            std::cmp::Ordering::Less
+        );
+        assert_eq!(
+            compare_blocks_for_reading_order(&middle, &right_upper, false),
+            std::cmp::Ordering::Less
+        );
+        assert_eq!(
+            compare_blocks_for_reading_order(&left_lower, &right_upper, false),
+            std::cmp::Ordering::Less
+        );
+    }
+
+    #[test]
+    fn sort_regions_orders_vertical_blocks_right_to_left_then_top_to_bottom() {
+        let sorted = sort_regions(vec![
+            test_block([10.0, 20.0, 18.0, 28.0], TextDirection::Vertical),
+            test_block([30.0, 15.0, 38.0, 23.0], TextDirection::Vertical),
+            test_block([30.0, 5.0, 38.0, 13.0], TextDirection::Vertical),
+        ]);
+        let bboxes = sorted.iter().map(|block| block.bbox).collect::<Vec<_>>();
+
+        assert_eq!(
+            bboxes,
+            vec![
+                [30.0, 5.0, 38.0, 13.0],
+                [30.0, 15.0, 38.0, 23.0],
+                [10.0, 20.0, 18.0, 28.0],
+            ]
+        );
     }
 }
