@@ -118,7 +118,7 @@ rmcp = { version = "0.16", features = [
     "transport-streamable-http-server",
 ] }
 schemars = "1.2"
-ts-rs = { version = "10.1", features = ["serde-json-impl"] }
+ts-rs = { version = "12.0", features = ["serde-json-impl"] }
 uuid = { version = "1.18", features = ["v4", "serde"] }
 base64 = "0.22"
 tower-http = { version = "0.6", features = ["cors"] }
