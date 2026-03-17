@@ -1,3 +1,20 @@
+## [0.38.1](https://github.com/mayocream/koharu/compare/0.38.0..0.38.1) - 2026-03-17
+
+### 🐛 Bug Fixes
+
+- Fallback to cpu if nvidia driver doesn't support cuda 13.1 - ([f3a8f74](https://github.com/mayocream/koharu/commit/f3a8f743605185cb6d7c4c297fbde681078f7a3f))
+- Compare_blocks_for_reading_order panics - ([103b93e](https://github.com/mayocream/koharu/commit/103b93e4d3e65623b4d17e1aef5120eab5a843a6))
+- Headless on linux - ([1878064](https://github.com/mayocream/koharu/commit/18780641a326a504b6991a76030cc8116d9d8eff))
+
+### 🚜 Refactor
+
+- Simplify string serialization - ([dae1647](https://github.com/mayocream/koharu/commit/dae164746989af050d197531915551ef3273c3c0))
+
+### ⚙️ Miscellaneous Tasks
+
+- Update deps - ([0eb93c9](https://github.com/mayocream/koharu/commit/0eb93c9ef02d6a9fa10b3114a5af2c48e19dbea1))
+
+
 ## [0.38.0](https://github.com/mayocream/koharu/compare/0.37.0..0.38.0) - 2026-03-16
 
 ### ⛰️  Features
