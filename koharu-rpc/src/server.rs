@@ -27,6 +27,14 @@ pub struct Asset {
 /// A function that resolves a path to an asset.
 pub type SharedAssetResolver = Arc<dyn Fn(&str) -> Option<Asset> + Send + Sync>;
 
+pub fn asset_resolver<I>(resolvers: I) -> SharedAssetResolver
+where
+    I: IntoIterator<Item = SharedAssetResolver>,
+{
+    let resolvers = resolvers.into_iter().collect::<Vec<_>>();
+    Arc::new(move |path: &str| resolvers.iter().find_map(|resolver| resolver(path)))
+}
+
 fn build_router(shared: SharedResources, resolver: SharedAssetResolver) -> Router {
     let events = EventHub::new(shared.clone());
     let cors = CorsLayer::very_permissive();

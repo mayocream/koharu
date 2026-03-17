@@ -173,78 +173,83 @@ pub async fn run() -> Result<()> {
     let listener = TcpListener::bind(format!("127.0.0.1:{}", port.unwrap_or(0))).await?;
     let api_port = listener.local_addr()?.port();
     let shared: SharedResources = Arc::new(tokio::sync::OnceCell::new());
-
-    let app = tauri::Builder::default()
-        .append_invoke_initialization_script(format!("window.__KOHARU_API_PORT__ = {api_port};"))
-        // Setup will ONLY be called when app is running in non-headless mode
-        .setup({
-            let shared = shared.clone();
-            move |app| {
-                let handle = app.handle().clone();
-                tauri::async_runtime::spawn(async move {
-                    handle
-                        .plugin(tauri_plugin_updater::Builder::new().build())
-                        .ok();
-
-                    shared
-                        .get_or_try_init(|| async { build_resources(cpu).await })
-                        .await
-                        .expect("failed to build app resources");
-
-                    // Hidden webview still excutes JavaScript,
-                    // which will trigger the API calls when bootstrapping (not ready).
-                    // We manually create the webview ONLY after resources are ready.
-                    // ref: https://github.com/tauri-apps/tauri/issues/10950
-                    let main_config = handle
-                        .config()
-                        .app
-                        .windows
-                        .iter()
-                        .find(|window| window.label == "main")
-                        .cloned()
-                        .expect("main window config not found");
-                    let main_window = WebviewWindowBuilder::from_config(&handle, &main_config)
-                        .expect("failed to build main window builder")
-                        .build()
-                        .expect("failed to create main window");
-
-                    handle
-                        .get_webview_window("splashscreen")
-                        .expect("splashscreen window not found")
-                        .close()
-                        .ok();
-                    main_window.show().ok();
-                });
-                Ok(())
-            }
-        })
-        .build(tauri::generate_context!())?;
-
-    let tauri_resolver = Arc::new(app.asset_resolver());
-    let resolver: server::SharedAssetResolver = Arc::new(move |path: &str| {
-        let asset = tauri_resolver.get(path.to_string())?;
-        Some(server::Asset {
-            bytes: asset.bytes.to_vec(),
-            mime_type: asset.mime_type.clone(),
-        })
-    });
-    tokio::spawn({
-        let shared = shared.clone();
-        async move {
-            if let Err(err) = server::serve_with_listener(listener, shared, resolver).await {
-                tracing::error!("Server error: {err:#}");
-            }
-        }
-    });
+    let mut context = tauri::generate_context!();
+    let shared_assets = crate::assets::share_context_assets(&mut context);
 
     if headless {
+        let resolver =
+            server::asset_resolver([crate::assets::embedded_asset_resolver(shared_assets)]);
+        tauri::async_runtime::spawn({
+            let shared = shared.clone();
+            async move {
+                if let Err(err) = server::serve_with_listener(listener, shared, resolver).await {
+                    tracing::error!("Server error: {err:#}");
+                }
+            }
+        });
         shared
             .get_or_try_init(|| async { build_resources(cpu).await })
             .await?;
         tokio::signal::ctrl_c().await?;
-    } else {
-        app.run(|_, _| {});
+        return Ok(());
     }
+
+    let embedded_resolver = crate::assets::embedded_asset_resolver(shared_assets);
+    tauri::Builder::default()
+        .append_invoke_initialization_script(format!("window.__KOHARU_API_PORT__ = {api_port};"))
+        .setup(move |app| {
+            let resolver = server::asset_resolver([
+                crate::assets::tauri_asset_resolver(app.asset_resolver()),
+                embedded_resolver,
+            ]);
+            tauri::async_runtime::spawn({
+                let shared = shared.clone();
+                async move {
+                    if let Err(err) = server::serve_with_listener(listener, shared, resolver).await
+                    {
+                        tracing::error!("Server error: {err:#}");
+                    }
+                }
+            });
+
+            let handle = app.handle().clone();
+            tauri::async_runtime::spawn(async move {
+                handle
+                    .plugin(tauri_plugin_updater::Builder::new().build())
+                    .ok();
+
+                shared
+                    .get_or_try_init(|| async { build_resources(cpu).await })
+                    .await
+                    .expect("failed to build app resources");
+
+                // Hidden webview still excutes JavaScript,
+                // which will trigger the API calls when bootstrapping (not ready).
+                // We manually create the webview ONLY after resources are ready.
+                // ref: https://github.com/tauri-apps/tauri/issues/10950
+                let main_config = handle
+                    .config()
+                    .app
+                    .windows
+                    .iter()
+                    .find(|window| window.label == "main")
+                    .cloned()
+                    .expect("main window config not found");
+                let main_window = WebviewWindowBuilder::from_config(&handle, &main_config)
+                    .expect("failed to build main window builder")
+                    .build()
+                    .expect("failed to create main window");
+
+                handle
+                    .get_webview_window("splashscreen")
+                    .expect("splashscreen window not found")
+                    .close()
+                    .ok();
+                main_window.show().ok();
+            });
+            Ok(())
+        })
+        .run(context)?;
 
     Ok(())
 }
