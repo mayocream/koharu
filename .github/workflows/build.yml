@@ -43,7 +43,7 @@ jobs:
         with:
           cuda: '13.1.0'
           method: 'network'
-          sub-packages: '["nvcc", "cudart", "cublas", "cufft", "curand", "nvrtc"]'
+          sub-packages: '["nvcc", "cudart", "cublas", "nvrtc", "nvcc_dev", "cudart_dev", "cublas_dev", "nvrtc_dev"]'
       - uses: ilammy/msvc-dev-cmd@v1
         if: matrix.os == 'windows-latest'
       - run: bun install
