@@ -20,6 +20,8 @@ jobs:
       - uses: Jimver/cuda-toolkit@master
         with:
           cuda: '13.1.0'
+          method: 'network'
+          sub-packages: '["nvcc", "cudart", "crt", "thrust", "nvvm", "cublas", "cublas_dev", "cufft", "cufft_dev", "curand", "curand_dev", "nvrtc", "nvrtc_dev"]'
       - uses: ilammy/msvc-dev-cmd@v1
       - run: bun install
       - working-directory: ./ui

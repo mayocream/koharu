@@ -35,9 +35,17 @@ jobs:
       - uses: oven-sh/setup-bun@v2
       - uses: Swatinem/rust-cache@v2
       - uses: Jimver/cuda-toolkit@master
-        if: matrix.os != 'macos-latest'
+        if: matrix.os == 'ubuntu-latest'
         with:
           cuda: '13.1.0'
+          log-file-suffix: '${{ matrix.os }}.txt'
+      - uses: Jimver/cuda-toolkit@master
+        if: matrix.os == 'windows-latest'
+        with:
+          cuda: '13.1.0'
+          method: 'network'
+          sub-packages: '["nvcc", "cudart", "crt", "thrust", "nvvm", "cublas", "cublas_dev", "cufft", "cufft_dev", "curand", "curand_dev", "nvrtc", "nvrtc_dev"]'
+          log-file-suffix: '${{ matrix.os }}.txt'
       - uses: ilammy/msvc-dev-cmd@v1
         if: matrix.os == 'windows-latest'
       - run: bun install

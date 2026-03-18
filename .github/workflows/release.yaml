@@ -40,11 +40,21 @@ jobs:
           sudo apt-get update
           sudo apt-get install -y libwebkit2gtk-4.1-dev libappindicator3-dev librsvg2-dev patchelf
 
-      - name: Install CUDA Toolkit
+      - name: Install CUDA Toolkit (ubuntu only)
         uses: Jimver/cuda-toolkit@master
-        if: matrix.platform != 'macos-latest'
+        if: matrix.platform == 'ubuntu-latest'
         with:
           cuda: '13.1.0'
+          log-file-suffix: '${{ matrix.platform }}.txt'
+
+      - name: Install CUDA Toolkit (windows only)
+        uses: Jimver/cuda-toolkit@master
+        if: matrix.platform == 'windows-latest'
+        with:
+          cuda: '13.1.0'
+          method: 'network'
+          sub-packages: '["nvcc", "cudart", "crt", "thrust", "nvvm", "cublas", "cublas_dev", "cufft", "cufft_dev", "curand", "curand_dev", "nvrtc", "nvrtc_dev"]'
+          log-file-suffix: '${{ matrix.platform }}.txt'
 
       - name: Install MSVC Build Tools
         uses: ilammy/msvc-dev-cmd@v1
