@@ -4,7 +4,7 @@ import { useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import { motion } from 'motion/react'
 import { TextBlock } from '@/types'
-import { Languages, LoaderCircleIcon } from 'lucide-react'
+import { Languages, LoaderCircleIcon, Trash2Icon } from 'lucide-react'
 import { useTextBlocks } from '@/hooks/useTextBlocks'
 import { useLlmReadyQuery } from '@/lib/query/hooks'
 import { useLlmMutations } from '@/lib/query/mutations'
@@ -30,6 +30,7 @@ export function TextBlocksPanel() {
     selectedBlockIndex,
     setSelectedBlockIndex,
     replaceBlock,
+    removeBlock,
   } = useTextBlocks()
   const { t } = useTranslation()
   const { llmGenerate } = useLlmMutations()
@@ -100,6 +101,7 @@ export function TextBlocksPanel() {
                   index={index}
                   selected={index === selectedBlockIndex}
                   onChange={(updates) => void replaceBlock(index, updates)}
+                  onDelete={() => void removeBlock(index)}
                   onGenerate={() => void handleGenerate(index)}
                   generating={generatingIndex === index}
                   llmReady={llmReady}
@@ -118,6 +120,7 @@ type BlockCardProps = {
   index: number
   selected: boolean
   onChange: (updates: Partial<TextBlock>) => void
+  onDelete: () => void | Promise<void>
   onGenerate: () => void | Promise<void>
   generating: boolean
   llmReady: boolean
@@ -128,6 +131,7 @@ function BlockCard({
   index,
   selected,
   onChange,
+  onDelete,
   onGenerate,
   generating,
   llmReady,
@@ -204,27 +208,45 @@ function BlockCard({
                 <span className='text-muted-foreground text-[10px] uppercase'>
                   {t('textBlocks.translationLabel')}
                 </span>
-                <Tooltip>
-                  <TooltipTrigger asChild>
-                    <Button
-                      data-testid={`textblock-generate-${index}`}
-                      variant='ghost'
-                      size='icon-xs'
-                      disabled={!llmReady || generating}
-                      onClick={onGenerate}
-                      className='size-5'
-                    >
-                      {generating ? (
-                        <LoaderCircleIcon className='size-3 animate-spin' />
-                      ) : (
-                        <Languages className='size-3' />
-                      )}
-                    </Button>
-                  </TooltipTrigger>
-                  <TooltipContent side='left' sideOffset={4}>
-                    {t('llm.generateTooltip')}
-                  </TooltipContent>
-                </Tooltip>
+                <div className='flex items-center gap-0.5'>
+                  <Tooltip>
+                    <TooltipTrigger asChild>
+                      <Button
+                        data-testid={`textblock-delete-${index}`}
+                        variant='ghost'
+                        size='icon-xs'
+                        onClick={onDelete}
+                        className='size-5 text-rose-600 hover:text-rose-600'
+                      >
+                        <Trash2Icon className='size-3' />
+                      </Button>
+                    </TooltipTrigger>
+                    <TooltipContent side='left' sideOffset={4}>
+                      {t('workspace.deleteBlock')}
+                    </TooltipContent>
+                  </Tooltip>
+                  <Tooltip>
+                    <TooltipTrigger asChild>
+                      <Button
+                        data-testid={`textblock-generate-${index}`}
+                        variant='ghost'
+                        size='icon-xs'
+                        disabled={!llmReady || generating}
+                        onClick={onGenerate}
+                        className='size-5'
+                      >
+                        {generating ? (
+                          <LoaderCircleIcon className='size-3 animate-spin' />
+                        ) : (
+                          <Languages className='size-3' />
+                        )}
+                      </Button>
+                    </TooltipTrigger>
+                    <TooltipContent side='left' sideOffset={4}>
+                      {t('llm.generateTooltip')}
+                    </TooltipContent>
+                  </Tooltip>
+                </div>
               </div>
               <DraftTextarea
                 data-testid={`textblock-translation-${index}`}
