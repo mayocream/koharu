@@ -38,6 +38,8 @@ jobs:
         if: matrix.os != 'macos-latest'
         with:
           cuda: '13.1.0'
+          method: 'network'
+          sub-packages: '["nvcc", "cudart", "cublas", "cufft", "curand", "nvrtc"]'
       - uses: ilammy/msvc-dev-cmd@v1
         if: matrix.os == 'windows-latest'
       - run: bun install
