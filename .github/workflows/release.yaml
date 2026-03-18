@@ -28,6 +28,9 @@ jobs:
     runs-on: ${{ matrix.platform }}
     steps:
       - uses: actions/checkout@v6
+        with:
+          fetch-depth: 0
+          fetch-tags: true
 
       - uses: oven-sh/setup-bun@v2
 
@@ -49,6 +52,16 @@ jobs:
 
       - name: Install dependencies
         run: bun install
+
+      - name: Generate release changelog
+        id: release_notes
+        shell: bash
+        run: |
+          {
+            echo 'release_body<<EOF'
+            bun git-cliff --current --strip all
+            echo 'EOF'
+          } >> "$GITHUB_OUTPUT"
 
       - name: Install trusted-signing-cli (windows only)
         if: matrix.platform == 'windows-latest'
@@ -95,6 +108,7 @@ jobs:
         with:
           tagName: ${{ github.ref_name }}
           releaseName: ${{ github.ref_name }}
+          releaseBody: ${{ steps.release_notes.outputs.release_body }}
           releaseDraft: false
           prerelease: false
           args: ${{ matrix.args }}
