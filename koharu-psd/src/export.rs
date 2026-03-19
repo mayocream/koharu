@@ -689,19 +689,25 @@ fn infer_font_name(block: &TextBlock) -> String {
 
 fn infer_font_size(block: &TextBlock) -> f64 {
     if let Some(size) = block.style.as_ref().and_then(|style| style.font_size)
-        && size.is_finite() && size > 0.0 {
-            return size as f64;
-        }
+        && size.is_finite()
+        && size > 0.0
+    {
+        return size as f64;
+    }
 
     if let Some(prediction) = block.font_prediction.as_ref()
-        && prediction.font_size_px.is_finite() && prediction.font_size_px > 0.0 {
-            return prediction.font_size_px as f64;
-        }
+        && prediction.font_size_px.is_finite()
+        && prediction.font_size_px > 0.0
+    {
+        return prediction.font_size_px as f64;
+    }
 
     if let Some(size) = block.detected_font_size_px
-        && size.is_finite() && size > 0.0 {
-            return size as f64;
-        }
+        && size.is_finite()
+        && size > 0.0
+    {
+        return size as f64;
+    }
 
     f64::max(6.0, f64::from(block.width.min(block.height)) * 0.7)
 }
