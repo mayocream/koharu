@@ -1156,7 +1156,7 @@ fn try_merge_text_line(block: &mut CtdBlock, other: &mut CtdBlock, font_size_tol
     true
 }
 
-fn sort_regions(mut blocks: Vec<CtdBlock>) -> Vec<CtdBlock> {
+fn sort_regions(blocks: Vec<CtdBlock>) -> Vec<CtdBlock> {
     if blocks.len() < 2 {
         return blocks;
     }
@@ -1166,8 +1166,15 @@ fn sort_regions(mut blocks: Vec<CtdBlock>) -> Vec<CtdBlock> {
         .filter(|block| block.source_direction == TextDirection::Vertical)
         .count();
     let right_to_left = !blocks.is_empty() && vertical_blocks * 2 >= blocks.len();
-    blocks.sort_by(|a, b| compare_blocks_for_reading_order(a, b, right_to_left));
-    blocks
+    let order = stable_reading_order_indices(&blocks, right_to_left);
+    let mut ordered = Vec::with_capacity(blocks.len());
+    let mut slots = blocks.into_iter().map(Some).collect::<Vec<_>>();
+    for index in order {
+        if let Some(block) = slots[index].take() {
+            ordered.push(block);
+        }
+    }
+    ordered
 }
 
 fn compare_blocks_for_reading_order(
@@ -1175,23 +1182,62 @@ fn compare_blocks_for_reading_order(
     b: &CtdBlock,
     right_to_left: bool,
 ) -> std::cmp::Ordering {
-    let primary = if right_to_left {
-        b.bbox[2].total_cmp(&a.bbox[2])
+    let overlap_y = vertical_overlap(&a.bbox, &b.bbox);
+    let row_tolerance = (a.detected_font_size_px.max(b.detected_font_size_px) * 0.6).max(1.0);
+    if overlap_y > 0.0 || (a.center()[1] - b.center()[1]).abs() <= row_tolerance {
+        if right_to_left {
+            b.center()[0]
+                .total_cmp(&a.center()[0])
+                .then_with(|| a.center()[1].total_cmp(&b.center()[1]))
+        } else {
+            a.center()[0]
+                .total_cmp(&b.center()[0])
+                .then_with(|| a.center()[1].total_cmp(&b.center()[1]))
+        }
     } else {
-        a.bbox[0].total_cmp(&b.bbox[0])
-    };
-    let tertiary = if right_to_left {
-        b.bbox[0].total_cmp(&a.bbox[0])
-    } else {
-        a.bbox[2].total_cmp(&b.bbox[2])
-    };
-
-    primary
-        .then_with(|| a.bbox[1].total_cmp(&b.bbox[1]))
-        .then_with(|| tertiary)
-        .then_with(|| a.bbox[3].total_cmp(&b.bbox[3]))
+        a.center()[1]
+            .total_cmp(&b.center()[1])
+            .then_with(|| a.center()[0].total_cmp(&b.center()[0]))
+    }
 }
 
+fn stable_reading_order_indices(blocks: &[CtdBlock], right_to_left: bool) -> Vec<usize> {
+    let mut edges = vec![Vec::new(); blocks.len()];
+    let mut indegree = vec![0usize; blocks.len()];
+    for left in 0..blocks.len() {
+        for right in (left + 1)..blocks.len() {
+            match compare_blocks_for_reading_order(&blocks[left], &blocks[right], right_to_left) {
+                std::cmp::Ordering::Less => {
+                    edges[left].push(right);
+                    indegree[right] += 1;
+                }
+                std::cmp::Ordering::Greater => {
+                    edges[right].push(left);
+                    indegree[left] += 1;
+                }
+                std::cmp::Ordering::Equal => {}
+            }
+        }
+    }
+
+    let mut remaining = (0..blocks.len()).collect::<Vec<_>>();
+    let mut ordered = Vec::with_capacity(blocks.len());
+    while !remaining.is_empty() {
+        let available = remaining
+            .iter()
+            .copied()
+            .filter(|index| indegree[*index] == 0)
+            .collect::<Vec<_>>();
+        let next = available.first().copied().unwrap_or_else(|| remaining[0]);
+        ordered.push(next);
+        remaining.retain(|index| *index != next);
+        for successor in &edges[next] {
+            indegree[*successor] = indegree[*successor].saturating_sub(1);
+        }
+    }
+
+    ordered
+}
 fn dedupe_blocks(blocks: &mut Vec<CtdBlock>) {
     if blocks.len() < 2 {
         return;
@@ -1644,6 +1690,10 @@ fn horizontal_overlap(a: &[f32; 4], b: &[f32; 4]) -> f32 {
     (a[2].min(b[2]) - a[0].max(b[0])).max(0.0)
 }
 
+fn vertical_overlap(a: &[f32; 4], b: &[f32; 4]) -> f32 {
+    (a[3].min(b[3]) - a[1].max(b[1])).max(0.0)
+}
+
 fn mean_mask_score(mask: &GrayImage, bbox: &[f32; 4]) -> f32 {
     let x1 = bbox[0].floor().max(0.0) as u32;
     let y1 = bbox[1].floor().max(0.0) as u32;
@@ -2075,22 +2125,20 @@ mod tests {
     }
 
     #[test]
-    fn reading_order_comparator_stays_transitive_across_row_boundaries() {
+    fn sort_regions_stays_stable_across_row_boundaries() {
         let left_lower = test_block([0.0, 9.0, 2.0, 11.0], TextDirection::Horizontal);
         let middle = test_block([1.0, 4.0, 3.0, 6.0], TextDirection::Horizontal);
         let right_upper = test_block([2.0, -1.0, 4.0, 1.0], TextDirection::Horizontal);
+        let sorted = sort_regions(vec![left_lower, middle, right_upper]);
+        let bboxes = sorted.iter().map(|block| block.bbox).collect::<Vec<_>>();
 
         assert_eq!(
-            compare_blocks_for_reading_order(&left_lower, &middle, false),
-            std::cmp::Ordering::Less
-        );
-        assert_eq!(
-            compare_blocks_for_reading_order(&middle, &right_upper, false),
-            std::cmp::Ordering::Less
-        );
-        assert_eq!(
-            compare_blocks_for_reading_order(&left_lower, &right_upper, false),
-            std::cmp::Ordering::Less
+            bboxes,
+            vec![
+                [0.0, 9.0, 2.0, 11.0],
+                [1.0, 4.0, 3.0, 6.0],
+                [2.0, -1.0, 4.0, 1.0],
+            ]
         );
     }
 

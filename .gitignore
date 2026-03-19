@@ -49,3 +49,6 @@ temp/
 tmp/
 playwright-report/
 test-results/
+
+# Misc
+AGENTS.md
