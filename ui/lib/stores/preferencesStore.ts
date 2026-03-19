@@ -15,6 +15,7 @@ type PreferencesState = {
   setApiKey: (provider: string, key: string) => void
   providerBaseUrls: Record<string, string>
   setProviderBaseUrl: (provider: string, url: string) => void
+  openAiCompatibleConfigVersion: number
   resetPreferences: () => void
 }
 
@@ -26,6 +27,7 @@ const initialPreferences = {
   fontFamily: undefined as string | undefined,
   apiKeys: {} as Record<string, string>,
   providerBaseUrls: {} as Record<string, string>,
+  openAiCompatibleConfigVersion: 0,
 }
 
 export const usePreferencesStore = create<PreferencesState>()(
@@ -43,6 +45,10 @@ export const usePreferencesStore = create<PreferencesState>()(
       setApiKey: (provider, key) =>
         set((state) => ({
           apiKeys: { ...state.apiKeys, [provider]: key },
+          openAiCompatibleConfigVersion:
+            provider === 'openai-compatible'
+              ? state.openAiCompatibleConfigVersion + 1
+              : state.openAiCompatibleConfigVersion,
         })),
       setProviderBaseUrl: (provider, url) =>
         set((state) => ({
@@ -50,6 +56,10 @@ export const usePreferencesStore = create<PreferencesState>()(
             ...state.providerBaseUrls,
             [provider]: url,
           },
+          openAiCompatibleConfigVersion:
+            provider === 'openai-compatible'
+              ? state.openAiCompatibleConfigVersion + 1
+              : state.openAiCompatibleConfigVersion,
         })),
       resetPreferences: () => set({ ...initialPreferences }),
     }),

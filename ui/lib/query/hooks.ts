@@ -66,6 +66,9 @@ export const useLlmModelsQuery = () => {
   const compatibleBaseUrl = usePreferencesStore(
     (state) => state.providerBaseUrls['openai-compatible']?.trim() ?? '',
   )
+  const compatibleConfigVersion = usePreferencesStore(
+    (state) => state.openAiCompatibleConfigVersion,
+  )
 
   useEffect(() => {
     const handleLanguageChange = (nextLanguage: string) => {
@@ -81,10 +84,11 @@ export const useLlmModelsQuery = () => {
     queryKey: queryKeys.llm.models(
       language ?? 'default',
       compatibleBaseUrl || undefined,
+      compatibleConfigVersion,
     ),
     queryFn: () => api.llmList(language, compatibleBaseUrl || undefined),
     enabled: rpcConnected,
-    staleTime: 5 * 60 * 1000,
+    staleTime: compatibleBaseUrl ? 0 : 5 * 60 * 1000,
   })
 }
 

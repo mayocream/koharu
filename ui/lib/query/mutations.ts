@@ -81,6 +81,7 @@ const getCachedLlmModels = (queryClient: QueryClient) =>
       usePreferencesStore
         .getState()
         .providerBaseUrls['openai-compatible']?.trim() || undefined,
+      usePreferencesStore.getState().openAiCompatibleConfigVersion,
     ),
   ) ?? []) as { id: string; languages: string[]; source: string }[]
 
@@ -667,6 +668,8 @@ export const useLlmMutations = () => {
       usePreferencesStore
         .getState()
         .providerBaseUrls['openai-compatible']?.trim() || undefined
+    const compatibleConfigVersion =
+      usePreferencesStore.getState().openAiCompatibleConfigVersion
     const models = await api.llmList(i18n.language, compatibleBaseUrl)
     const providers = Array.from(
       new Set(
@@ -689,7 +692,11 @@ export const useLlmMutations = () => {
     }
 
     queryClient.setQueryData(
-      queryKeys.llm.models(i18n.language, compatibleBaseUrl),
+      queryKeys.llm.models(
+        i18n.language,
+        compatibleBaseUrl,
+        compatibleConfigVersion,
+      ),
       models,
     )
     const currentModel = useLlmUiStore.getState().selectedModel
