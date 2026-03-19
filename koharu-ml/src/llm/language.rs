@@ -224,6 +224,13 @@ pub enum Language {
     )]
     Bengali,
     #[strum(
+        to_string = "Bulgarian",
+        serialize = "bg-BG",
+        serialize = "bg",
+        props(tag = "bg-BG")
+    )]
+    Bulgarian,
+    #[strum(
         to_string = "Tamil",
         serialize = "ta-IN",
         serialize = "ta",
@@ -321,12 +328,15 @@ mod tests {
         );
         assert_eq!(Language::parse("fil-PH"), Some(Language::Filipino));
         assert_eq!(Language::parse("tl"), Some(Language::Filipino));
+        assert_eq!(Language::parse("bg-BG"), Some(Language::Bulgarian));
+        assert_eq!(Language::parse("bg"), Some(Language::Bulgarian));
     }
 
     #[test]
     fn supported_locales_returns_tags() {
         let locales = supported_locales();
         assert!(locales.contains(&"en-US".to_string()));
+        assert!(locales.contains(&"bg-BG".to_string()));
         assert!(locales.contains(&"zh-CN".to_string()));
         assert!(locales.contains(&"yue-HK".to_string()));
     }
