@@ -22,7 +22,8 @@ jobs:
         if: matrix.os == 'ubuntu-latest'
         run: |
           sudo apt update
-          sudo apt install libwebkit2gtk-4.1-dev \
+          sudo apt install --no-install-recommends \
+            libwebkit2gtk-4.1-dev \
             build-essential \
             curl \
             wget \
