@@ -5,7 +5,7 @@ use serde::Serialize;
 
 use koharu_http::http::http_client;
 
-use crate::llm::prompt::system_prompt;
+use crate::llm::{Language, prompt::system_prompt};
 
 use super::{AnyProvider, ensure_provider_success};
 
@@ -38,7 +38,7 @@ impl AnyProvider for GeminiProvider {
     fn translate<'a>(
         &'a self,
         source: &'a str,
-        target_language: &'a str,
+        target_language: Language,
         model: &'a str,
     ) -> Pin<Box<dyn Future<Output = anyhow::Result<String>> + Send + 'a>> {
         Box::pin(async move {

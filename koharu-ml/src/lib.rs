@@ -14,7 +14,7 @@ use candle_core::utils::metal_is_available;
 
 pub use candle_core::Device;
 pub use koharu_http::hf_hub::set_cache_dir;
-pub use llm::{language_from_tag, supported_locales};
+pub use llm::{Language, language_from_tag, supported_locales};
 
 pub fn device(cpu: bool) -> Result<Device> {
     if cpu {

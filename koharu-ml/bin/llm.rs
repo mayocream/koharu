@@ -1,5 +1,5 @@
 use clap::Parser;
-use koharu_ml::llm::{GenerateOptions, Llm, ModelId, language_from_tag};
+use koharu_ml::llm::{GenerateOptions, Language, Llm, ModelId};
 
 #[path = "common.rs"]
 mod common;
@@ -72,7 +72,7 @@ async fn main() -> anyhow::Result<()> {
     let args = Args::parse();
 
     let mut llm = Llm::load(args.model, args.cpu).await?;
-    let target_language = language_from_tag(&args.locale);
+    let target_language = Language::parse(&args.locale).unwrap_or(Language::English);
 
     let opts = GenerateOptions {
         max_tokens: args.max_tokens,
@@ -85,7 +85,7 @@ async fn main() -> anyhow::Result<()> {
         repeat_last_n: args.repeat_last_n,
     };
 
-    let out = llm.generate(&args.prompt, &opts, Some(target_language))?;
+    let out = llm.generate(&args.prompt, &opts, target_language)?;
 
     println!("{}", out);
     println!(

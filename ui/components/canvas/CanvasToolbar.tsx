@@ -295,9 +295,7 @@ function LlmStatusPopover() {
                     value={language}
                     data-testid={`llm-language-option-${index}`}
                   >
-                    {language.includes('-')
-                      ? t(`menu.languages.${language}`)
-                      : language}
+                    {t(`llm.languages.${language}`)}
                   </SelectItem>
                 ))}
               </SelectContent>

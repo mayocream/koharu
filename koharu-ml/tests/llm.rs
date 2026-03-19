@@ -1,6 +1,6 @@
 use std::path::PathBuf;
 
-use koharu_ml::llm::{GenerateOptions, Llm, ModelId};
+use koharu_ml::llm::{GenerateOptions, Language, Llm, ModelId};
 use strum::IntoEnumIterator;
 
 #[tokio::test]
@@ -30,7 +30,7 @@ async fn llm_generates_text_for_all_models() -> anyhow::Result<()> {
             repeat_last_n: 64,
         };
 
-        let generated = llm.generate(prompt, &opts, None)?;
+        let generated = llm.generate(prompt, &opts, Language::English)?;
         assert!(
             !generated.trim().is_empty(),
             "model {model:?} should return some text"

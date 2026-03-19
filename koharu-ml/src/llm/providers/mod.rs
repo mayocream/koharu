@@ -4,6 +4,8 @@ use std::pin::Pin;
 use anyhow::Context;
 use keyring::Entry;
 
+use crate::llm::Language;
+
 pub mod claude;
 pub mod deepseek;
 pub mod gemini;
@@ -71,7 +73,7 @@ pub trait AnyProvider: Send + Sync {
     fn translate<'a>(
         &'a self,
         source: &'a str,
-        target_language: &'a str,
+        target_language: Language,
         model: &'a str,
     ) -> Pin<Box<dyn Future<Output = anyhow::Result<String>> + Send + 'a>>;
 }

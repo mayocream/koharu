@@ -2,7 +2,7 @@ use minijinja::{Environment, context};
 use serde::Serialize;
 use strum::{Display, EnumString};
 
-use crate::llm::ModelId;
+use crate::llm::{Language, ModelId};
 
 #[derive(Debug, Clone, PartialEq, Eq, Display, EnumString)]
 #[strum(serialize_all = "lowercase")]
@@ -48,9 +48,10 @@ pub struct PromptRenderer {
 
 const BLOCK_TAG_INSTRUCTIONS: &str = "If the input contains <block id=\"N\">...</block>, translate only the text inside each block. Keep every block tag exactly unchanged, including ids, order, and block count. Do not merge blocks, split blocks, or add any text outside the blocks.";
 
-pub fn system_prompt(target_language: &str) -> String {
+pub fn system_prompt(target_language: Language) -> String {
     format!(
-        "You are a professional manga translator. Translate Japanese manga dialogue into natural {target_language} that fits inside speech bubbles. Preserve character voice, emotional tone, relationship nuance, emphasis, and sound effects naturally. Keep the wording concise. Do not add notes, explanations, or romanization. {BLOCK_TAG_INSTRUCTIONS}"
+        "You are a professional manga translator. Translate Japanese manga dialogue into natural {} that fits inside speech bubbles. Preserve character voice, emotional tone, relationship nuance, emphasis, and sound effects naturally. Keep the wording concise. Do not add notes, explanations, or romanization. {BLOCK_TAG_INSTRUCTIONS}",
+        target_language
     )
 }
 
@@ -68,14 +69,13 @@ impl PromptRenderer {
         }
     }
 
-    fn messages(&self, text: impl Into<String>, target_language: Option<&str>) -> Vec<ChatMessage> {
-        let target_language = target_language.unwrap_or("English");
+    fn messages(&self, text: impl Into<String>, target_language: Language) -> Vec<ChatMessage> {
         let text = text.into();
 
         match self.model_id {
             ModelId::VntlLlama3_8Bv2 => vec![
                 ChatMessage::new(ChatRole::System, system_prompt(target_language)),
-                ChatMessage::new(ChatRole::Name("Japanese".to_string()), text),
+                ChatMessage::new(ChatRole::Name(Language::Japanese.to_string()), text),
                 ChatMessage::new(ChatRole::Name(target_language.to_string()), String::new()),
             ],
             ModelId::Lfm2_350mEnjpMt => vec![
@@ -102,7 +102,7 @@ impl PromptRenderer {
     pub fn format_chat_prompt(
         &self,
         prompt: String,
-        target_language: Option<&str>,
+        target_language: Language,
     ) -> anyhow::Result<String> {
         let messages = self.messages(prompt, target_language);
         let tmpl = self.env.template_from_str(&self.template)?;
@@ -130,7 +130,7 @@ mod tests {
 
     #[test]
     fn system_prompt_mentions_target_language_and_block_rules() {
-        let prompt = system_prompt("Korean");
+        let prompt = system_prompt(Language::Korean);
         assert!(prompt.contains("natural Korean"));
         assert!(prompt.contains("<block id=\"N\">...</block>"));
         assert!(prompt.contains("Do not merge blocks"));
@@ -144,10 +144,10 @@ mod tests {
             "<|begin_of_text|>".to_string(),
             "<|end_of_text|>".to_string(),
         );
-        let formatted = renderer.format_chat_prompt("hello".to_string(), None)?;
+        let formatted = renderer.format_chat_prompt("hello".to_string(), Language::English)?;
         let expected = format!(
             "<|begin_of_text|><|start_header_id|>Metadata<|end_header_id|>\n\n{}<|eot_id|><|start_header_id|>Japanese<|end_header_id|>\n\nhello<|eot_id|><|start_header_id|>English<|end_header_id|>\n\n",
-            system_prompt("English")
+            system_prompt(Language::English)
         );
         assert_eq!(formatted, expected);
 
@@ -162,12 +162,12 @@ mod tests {
             "<|begin_of_text|>".to_string(),
             "<|end_of_text|>".to_string(),
         );
-        let formatted = renderer.format_chat_prompt("hello".to_string(), None)?;
+        let formatted = renderer.format_chat_prompt("hello".to_string(), Language::English)?;
         let expected = format!(
             "<|begin_of_text|><|im_start|>system {}<|im_end|> <|im_start|>user hello<|im_end|> <|im_start|>assistant ",
             format!(
                 "{} Do not add or delete line breaks inside a block.",
-                system_prompt("English")
+                system_prompt(Language::English)
             )
         );
         assert_eq!(formatted, expected);
@@ -183,10 +183,10 @@ mod tests {
             "<s>".to_string(),
             "</s>".to_string(),
         );
-        let formatted = renderer.format_chat_prompt("hello".to_string(), Some("Korean"))?;
+        let formatted = renderer.format_chat_prompt("hello".to_string(), Language::Korean)?;
         let expected = format!(
             "<|im_start|>system {}<|im_end|> <|im_start|>user hello<|im_end|> <|im_start|>assistant ",
-            system_prompt("Korean")
+            system_prompt(Language::Korean)
         );
         assert_eq!(formatted, expected);
 
@@ -201,8 +201,11 @@ mod tests {
             "<s>".to_string(),
             "</s>".to_string(),
         );
-        let formatted = renderer.format_chat_prompt("hello".to_string(), Some("Korean"))?;
-        assert_eq!(formatted, format!("{}\n\nhello", system_prompt("Korean")));
+        let formatted = renderer.format_chat_prompt("hello".to_string(), Language::Korean)?;
+        assert_eq!(
+            formatted,
+            format!("{}\n\nhello", system_prompt(Language::Korean))
+        );
 
         Ok(())
     }

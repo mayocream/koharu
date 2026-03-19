@@ -10,7 +10,7 @@ use tokenizers::Tokenizer;
 use crate::device;
 use crate::llm::prompt::PromptRenderer;
 use crate::llm::tokenizer::TokenizerFromGguf;
-use crate::llm::{ModelId, quantized_hunyuan_dense, quantized_lfm2};
+use crate::llm::{Language, ModelId, quantized_hunyuan_dense, quantized_lfm2};
 
 pub enum Model {
     Llama(quantized_llama::ModelWeights),
@@ -146,7 +146,7 @@ impl Llm {
         &mut self,
         prompt: &str,
         opts: &GenerateOptions,
-        target_language: Option<&str>,
+        target_language: Language,
     ) -> Result<String> {
         let prompt = self
             .prompt_renderer

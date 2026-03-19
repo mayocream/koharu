@@ -5,7 +5,9 @@ use tokio::sync::{RwLock, broadcast};
 
 use koharu_types::{Document, LlmState, LlmStateStatus, TextBlock};
 
-use super::{GenerateOptions, Llm, ModelId};
+use super::{
+    GenerateOptions, Language, Llm, ModelId, language::tags as language_tags, supported_locales,
+};
 
 pub use super::prefetch;
 
@@ -32,9 +34,10 @@ pub struct ModelInfo {
 
 impl ModelInfo {
     pub fn new(id: ModelId) -> Self {
+        let languages = id.languages();
         Self {
             id: id.to_string(),
-            languages: id.languages(),
+            languages: language_tags(&languages),
             source: "local",
         }
     }
@@ -42,10 +45,7 @@ impl ModelInfo {
     pub fn api(provider_id: &'static str, model_id: &str) -> Self {
         Self {
             id: format!("{provider_id}:{model_id}"),
-            languages: ["en-US", "zh-CN", "zh-TW", "ja-JP", "ru-RU", "es-ES"]
-                .into_iter()
-                .map(str::to_string)
-                .collect(),
+            languages: supported_locales(),
             source: provider_id,
         }
     }
@@ -546,7 +546,9 @@ impl Model {
         doc: &mut impl Translatable,
         target_language: Option<&str>,
     ) -> anyhow::Result<()> {
-        let lang = target_language.unwrap_or("English");
+        let target_language = target_language
+            .and_then(Language::parse)
+            .unwrap_or(Language::English);
         let source = doc.get_source()?;
         let mut guard = self.state.write().await;
         let translation = match &mut *guard {
@@ -557,7 +559,7 @@ impl Model {
                 provider, model, ..
             } => {
                 let model = model.clone();
-                provider.translate(&source, lang, &model).await
+                provider.translate(&source, target_language, &model).await
             }
             State::Loading { .. } => Err(anyhow::anyhow!("Model is still loading")),
             State::Failed(e) => Err(anyhow::anyhow!("Model failed to load: {e}")),

@@ -441,7 +441,7 @@ export const useDocumentMutations = () => {
       try {
         const models = getCachedLlmModels(queryClient)
         const modelInfo = models.find((m) => m.id === selectedModel)
-        const language = apiLanguageToBackendName(selectedLanguage)
+        const language = selectedLanguage
         const llmApiKey =
           modelInfo && modelInfo.source !== 'local'
             ? usePreferencesStore.getState().apiKeys[modelInfo.source]
@@ -487,7 +487,7 @@ export const useDocumentMutations = () => {
     try {
       const models = getCachedLlmModels(queryClient)
       const modelInfo = models.find((m) => m.id === selectedModel)
-      const language = apiLanguageToBackendName(selectedLanguage)
+      const language = selectedLanguage
       const llmApiKey =
         modelInfo && modelInfo.source !== 'local'
           ? usePreferencesStore.getState().apiKeys[modelInfo.source]
@@ -652,11 +652,7 @@ export const useLlmMutations = () => {
             : languages[0]
           : undefined
 
-      await api.llmGenerate(
-        resolvedIndex,
-        textBlockIndex,
-        apiLanguageToBackendName(language),
-      )
+      await api.llmGenerate(resolvedIndex, textBlockIndex, language)
       await invalidateCurrentDocument(queryClient, resolvedIndex)
       useEditorUiStore.getState().setShowTextBlocksOverlay(true)
       if (typeof textBlockIndex === 'number') {
