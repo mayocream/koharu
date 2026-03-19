@@ -96,3 +96,22 @@ test('drafts a block and edits OCR/translation fields', async ({ page }) => {
   await openNavigatorPage(page, 0)
   await expect(page.getByTestId(selectors.workspace.canvas)).toBeVisible()
 })
+
+test('deletes a text block from the panel and updates count', async ({ page }) => {
+  await importAndOpenPage(page, SMOKE_SET.slice(0, 2))
+  await prepareDetectAndOcr(page)
+
+  const countBefore = await readTextBlocksCount(page)
+  expect(countBefore).toBeGreaterThan(0)
+
+  const cards = page.locator('[data-testid^="textblock-card-"]')
+  await expect(cards).toHaveCount(countBefore)
+
+  await page.getByTestId(selectors.panels.textBlockCard(0)).click()
+  await page.getByTestId(selectors.panels.textBlockDelete(0)).click()
+
+  await expect
+    .poll(async () => readTextBlocksCount(page), { timeout: 15_000 })
+    .toBe(countBefore - 1)
+  await expect(cards).toHaveCount(countBefore - 1)
+})
