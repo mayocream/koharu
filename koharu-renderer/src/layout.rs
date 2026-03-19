@@ -526,7 +526,7 @@ fn is_fullwidth_punctuation(ch: char) -> bool {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::font::{FamilyName, Font, FontBook, Properties};
+    use crate::font::{Font, FontBook};
     use skrifa::{
         MetadataProvider,
         instance::{LocationRef, Size},
@@ -534,7 +534,6 @@ mod tests {
 
     fn any_system_font() -> Font {
         let mut book = FontBook::new();
-        let props = Properties::default();
 
         // Prefer fonts that are commonly available depending on OS/environment.
         // This is only used to construct a `TextLayout` for calling `compute_bounds`.
@@ -549,9 +548,32 @@ mod tests {
         ];
 
         for name in preferred {
-            if let Ok(font) = book.query(&[FamilyName::Title(name.to_string())], &props) {
+            if let Some(post_script_name) = book
+                .all_families()
+                .into_iter()
+                .find(|face| {
+                    face.post_script_name == name
+                        || face
+                            .families
+                            .iter()
+                            .any(|(family, _)| family.as_str() == name)
+                })
+                .map(|face| face.post_script_name)
+                .filter(|post_script_name| !post_script_name.is_empty())
+                && let Ok(font) = book.query(&post_script_name)
+            {
                 return font;
             }
+        }
+
+        if let Some(face) = book
+            .all_families()
+            .into_iter()
+            .find(|face| !face.post_script_name.is_empty())
+        {
+            return book
+                .query(&face.post_script_name)
+                .expect("failed to load first system font");
         }
 
         panic!("no system font available for tests");

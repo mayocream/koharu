@@ -19,6 +19,7 @@ import type { DocumentsChangedEvent as GeneratedDocumentsChangedEvent } from '@/
 import type { DocumentSummary as GeneratedDocumentSummary } from '@/lib/generated/protocol/DocumentSummary'
 import type { ExportLayer } from '@/lib/generated/protocol/ExportLayer'
 import type { ExportResult } from '@/lib/generated/protocol/ExportResult'
+import type { FontFaceInfo } from '@/lib/generated/protocol/FontFaceInfo'
 import type { ImportMode } from '@/lib/generated/protocol/ImportMode'
 import type { ImportResult as GeneratedImportResult } from '@/lib/generated/protocol/ImportResult'
 import type { InpaintRegionRequest } from '@/lib/generated/protocol/InpaintRegionRequest'
@@ -46,6 +47,7 @@ export type {
   CreateTextBlock,
   ExportLayer,
   ExportResult,
+  FontFaceInfo,
   ImportMode,
   InpaintRegionRequest,
   JobState,

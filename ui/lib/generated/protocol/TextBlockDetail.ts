@@ -14,6 +14,7 @@ export type TextBlockDetail = {
     [[number, number], [number, number], [number, number], [number, number]]
   > | null
   sourceDirection: TextDirection | null
+  renderedDirection: TextDirection | null
   sourceLanguage: string | null
   rotationDeg: number | null
   detectedFontSizePx: number | null

@@ -95,7 +95,11 @@ impl KoharuMcp {
         let fonts = operations::list_font_families(res)
             .await
             .map_err(|e| e.to_string())?;
-        Ok(fonts.join(", "))
+        Ok(fonts
+            .into_iter()
+            .map(|font| format!("{} ({})", font.family_name, font.post_script_name))
+            .collect::<Vec<_>>()
+            .join(", "))
     }
 
     #[tool(description = "List available LLM translation models with supported languages")]

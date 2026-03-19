@@ -1,3 +1,4 @@
+use koharu_types::FontFaceInfo;
 use koharu_types::commands::{IndexPayload, RenderPayload};
 use tracing::instrument;
 
@@ -66,6 +67,6 @@ pub async fn render(state: AppResources, payload: RenderPayload) -> anyhow::Resu
     .await
 }
 
-pub async fn list_font_families(state: AppResources) -> anyhow::Result<Vec<String>> {
+pub async fn list_font_families(state: AppResources) -> anyhow::Result<Vec<FontFaceInfo>> {
     state.renderer.available_fonts()
 }

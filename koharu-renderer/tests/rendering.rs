@@ -2,7 +2,7 @@ use std::path::PathBuf;
 
 use anyhow::Result;
 use koharu_renderer::{
-    font::{FamilyName, Font, FontBook, Properties},
+    font::{Font, FontBook},
     layout::{TextLayout, WritingMode},
     renderer::{RenderOptions, TinySkiaRenderer},
 };
@@ -21,10 +21,20 @@ fn output_dir() -> PathBuf {
 
 fn font(family_name: &str) -> Result<Font> {
     let mut book = FontBook::new();
-    let font = book.query(
-        &[FamilyName::Title(family_name.to_string())],
-        &Properties::default(),
-    )?;
+    let post_script_name = book
+        .all_families()
+        .into_iter()
+        .find(|face| {
+            face.post_script_name == family_name
+                || face
+                    .families
+                    .iter()
+                    .any(|(family, _)| family.as_str() == family_name)
+        })
+        .map(|face| face.post_script_name)
+        .filter(|post_script_name| !post_script_name.is_empty())
+        .ok_or_else(|| anyhow::anyhow!("font not found: {family_name}"))?;
+    let font = book.query(&post_script_name)?;
     // preload fontdue font
     let _ = font.fontdue()?;
 

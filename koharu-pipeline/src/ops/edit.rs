@@ -308,6 +308,7 @@ pub async fn update_text_block(
             }
 
             block.rendered = None;
+            block.rendered_direction = None;
             Ok(to_block_info(payload.text_block_index, block))
         },
     )

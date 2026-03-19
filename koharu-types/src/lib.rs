@@ -40,6 +40,7 @@ pub struct TextBlock {
     pub confidence: f32,
     pub line_polygons: Option<Vec<[[f32; 2]; 4]>>,
     pub source_direction: Option<TextDirection>,
+    pub rendered_direction: Option<TextDirection>,
     pub source_language: Option<String>,
     pub rotation_deg: Option<f32>,
     pub detected_font_size_px: Option<f32>,

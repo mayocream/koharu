@@ -126,7 +126,14 @@ fn is_cjk_text(text: &str) -> bool {
 
 #[cfg(test)]
 mod tests {
-    use super::{font_families_for_text, is_latin_only, normalize_translation_for_layout};
+    use koharu_types::{TextBlock, TextDirection};
+
+    use crate::layout::WritingMode;
+
+    use super::{
+        font_families_for_text, is_latin_only, normalize_translation_for_layout,
+        writing_mode_for_block,
+    };
 
     #[test]
     fn latin_detection_is_reasonable() {
@@ -144,5 +151,31 @@ mod tests {
     fn font_family_selection_returns_candidates() {
         assert!(!font_families_for_text("hello").is_empty());
         assert!(!font_families_for_text("你好").is_empty());
+    }
+
+    #[test]
+    fn writing_mode_uses_cjk_tall_box_heuristic() {
+        let block = TextBlock {
+            width: 40.0,
+            height: 120.0,
+            translation: Some("縦書き".to_string()),
+            ..Default::default()
+        };
+
+        assert_eq!(writing_mode_for_block(&block), WritingMode::VerticalRl);
+    }
+
+    #[test]
+    fn writing_mode_ignores_stale_rendered_direction() {
+        let block = TextBlock {
+            width: 40.0,
+            height: 120.0,
+            translation: Some("HELLO".to_string()),
+            source_direction: Some(TextDirection::Horizontal),
+            rendered_direction: Some(TextDirection::Vertical),
+            ..Default::default()
+        };
+
+        assert_eq!(writing_mode_for_block(&block), WritingMode::Horizontal);
     }
 }

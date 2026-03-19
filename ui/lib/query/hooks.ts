@@ -56,7 +56,7 @@ export const useThumbnailQuery = (index: number, documentsVersion: number) =>
 export const useFontsQuery = () =>
   useQuery({
     queryKey: queryKeys.fonts,
-    queryFn: () => api.listFontFamilies(),
+    queryFn: () => api.listFonts(),
     staleTime: 10 * 60 * 1000,
   })
 

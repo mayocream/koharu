@@ -40,6 +40,7 @@ export function MenuBar() {
     inpaintAndRenderImage,
     processAllImages,
     exportDocument,
+    exportPsdDocument,
     exportAllInpainted,
     exportAllRendered,
   } = useDocumentMutations()
@@ -59,6 +60,13 @@ export function MenuBar() {
       label: t('menu.export'),
       onSelect: exportDocument,
       testId: 'menu-file-export',
+    },
+    {
+      label: t('menu.exportPsd', {
+        defaultValue: 'Export PSD...',
+      }),
+      onSelect: exportPsdDocument,
+      testId: 'menu-file-export-psd',
     },
     {
       label: t('menu.exportAllInpainted'),

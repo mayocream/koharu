@@ -4,7 +4,7 @@ use std::hint::black_box;
 
 use criterion::{Criterion, criterion_group, criterion_main};
 use koharu_renderer::{
-    font::{FamilyName, FontBook, Properties},
+    font::FontBook,
     layout::{TextLayout, WritingMode},
     renderer::{RenderOptions, TinySkiaRenderer},
 };
@@ -15,8 +15,14 @@ const SAMPLE_TEXT: &str = "The quick brown fox jumps over the lazy dog.";
 fn rendering_benchmark(c: &mut Criterion) {
     let mut fontbook = FontBook::new();
     let renderer = TinySkiaRenderer::new().expect("Failed to create renderer");
+    let post_script_name = fontbook
+        .all_families()
+        .into_iter()
+        .find(|face| !face.post_script_name.is_empty())
+        .map(|face| face.post_script_name)
+        .expect("Failed to find font");
     let font = fontbook
-        .query(&[FamilyName::SansSerif], &Properties::default())
+        .query(&post_script_name)
         .expect("Failed to find font");
     let _ = font.fontdue().expect("Failed to load font");
     let layout = TextLayout::new(&font, Some(FONT_SIZE))

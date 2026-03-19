@@ -13,6 +13,7 @@ import type {
   DocumentDetail,
   DocumentSummary,
   ExportResult,
+  FontFaceInfo,
   JobState,
   LlmModelInfo,
   LlmState,
@@ -374,6 +375,21 @@ export const api = {
     })
   },
 
+  async exportPsdDocument(index: number): Promise<void> {
+    return withRpcError('export_psd_document', async () => {
+      const summary = await getDocumentSummaryAtIndex(index)
+      const file = await fetchBinary(`/documents/${summary.id}/export/psd`)
+      const blob = new Blob([toArrayBuffer(file.data)], {
+        type: file.contentType,
+      })
+      try {
+        await fileSave(blob, {
+          fileName: file.filename ?? `${summary.name}_koharu.psd`,
+        })
+      } catch {}
+    })
+  },
+
   async exportAllInpainted(): Promise<number> {
     return withRpcError('export_all_inpainted', async () => {
       const result = await fetchJson<ExportResult>('/exports?layer=inpainted', {
@@ -568,8 +584,8 @@ export const api = {
     })
   },
 
-  async listFontFamilies(): Promise<string[]> {
-    return fetchJson<string[]>('/fonts')
+  async listFonts(): Promise<FontFaceInfo[]> {
+    return fetchJson<FontFaceInfo[]>('/fonts')
   },
 
   async getApiKey(provider: string): Promise<string | null> {

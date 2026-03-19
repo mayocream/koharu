@@ -21,13 +21,15 @@ use koharu_pipeline::{
     AppResources, operations,
     state_tx::{self, ChangedField},
 };
+use koharu_psd::{PsdExportOptions, TextLayerMode};
 use koharu_types::{
     ApiKeyGetPayload, ApiKeyResponse, ApiKeySetPayload, ApiKeyValue, CreateTextBlock, Document,
-    DocumentDetail, DocumentSummary, ExportLayer, ExportResult, FileEntry, IndexPayload,
-    InpaintPartialPayload, InpaintRegion, JobState, JobStatus, LlmLoadPayload, LlmLoadRequest,
-    LlmModelInfo, MaskRegionRequest, MetaInfo, OpenDocumentsPayload, PipelineJobRequest, Region,
-    RenderPayload, RenderRequest, SerializableDynamicImage, TextBlock, TextBlockDetail,
-    TextBlockPatch, TranslateRequest, UpdateBrushLayerPayload, UpdateInpaintMaskPayload,
+    DocumentDetail, DocumentSummary, ExportLayer, ExportResult, FileEntry, FontFaceInfo,
+    IndexPayload, InpaintPartialPayload, InpaintRegion, JobState, JobStatus, LlmLoadPayload,
+    LlmLoadRequest, LlmModelInfo, MaskRegionRequest, MetaInfo, OpenDocumentsPayload,
+    PipelineJobRequest, Region, RenderPayload, RenderRequest, SerializableDynamicImage, TextBlock,
+    TextBlockDetail, TextBlockPatch, TranslateRequest, UpdateBrushLayerPayload,
+    UpdateInpaintMaskPayload,
 };
 use serde::Deserialize;
 
@@ -93,6 +95,10 @@ pub fn router(resources: SharedResources, events: EventHub) -> Router {
             patch(patch_text_block).delete(delete_text_block),
         )
         .route("/documents/{document_id}/export", get(export_document))
+        .route(
+            "/documents/{document_id}/export/psd",
+            get(export_document_psd),
+        )
         .route("/llm/models", get(list_llm_models))
         .route("/llm/state", get(get_llm_state))
         .route("/llm/load", post(load_llm))
@@ -187,7 +193,7 @@ async fn get_meta(State(state): State<ApiState>) -> ApiResult<Json<MetaInfo>> {
     }))
 }
 
-async fn get_fonts(State(state): State<ApiState>) -> ApiResult<Json<Vec<String>>> {
+async fn get_fonts(State(state): State<ApiState>) -> ApiResult<Json<Vec<FontFaceInfo>>> {
     let resources = state.resources()?;
     let fonts = operations::list_font_families(resources)
         .await
@@ -684,6 +690,21 @@ async fn export_document(
     Ok(binary_response(data, content_type, Some(filename)))
 }
 
+async fn export_document_psd(
+    State(state): State<ApiState>,
+    Path(document_id): Path<String>,
+) -> ApiResult<Response> {
+    let resources = state.resources()?;
+    let (_, document) = find_document(&resources, &document_id).await?;
+    let data = koharu_psd::export_document(&document, &app_psd_export_options())
+        .map_err(|error| ApiError::bad_request(error.to_string()))?;
+    Ok(binary_response(
+        data,
+        "image/vnd.adobe.photoshop",
+        Some(psd_export_filename(&document)),
+    ))
+}
+
 async fn export_all(
     State(state): State<ApiState>,
     Query(query): Query<LayerQuery>,
@@ -852,6 +873,17 @@ fn export_target(
     }
 }
 
+fn psd_export_filename(document: &Document) -> String {
+    format!("{}_koharu.psd", document.name)
+}
+
+fn app_psd_export_options() -> PsdExportOptions {
+    PsdExportOptions {
+        text_layer_mode: TextLayerMode::Editable,
+        ..PsdExportOptions::default()
+    }
+}
+
 fn to_inpaint_region(region: Region) -> InpaintRegion {
     InpaintRegion {
         x: region.x,
@@ -918,19 +950,22 @@ fn apply_text_block_patch(block: &mut TextBlock, patch: TextBlockPatch) {
     }
     if invalidate_render {
         block.rendered = None;
+        block.rendered_direction = None;
     }
 }
 
 #[cfg(test)]
 mod tests {
-    use super::apply_text_block_patch;
-    use koharu_types::{TextAlign, TextBlock, TextBlockPatch, TextStyle};
+    use super::{app_psd_export_options, apply_text_block_patch, psd_export_filename};
+    use koharu_psd::TextLayerMode;
+    use koharu_types::{Document, TextAlign, TextBlock, TextBlockPatch, TextDirection, TextStyle};
 
     #[test]
     fn text_block_patch_updates_geometry_and_clears_rendered() {
         let mut block = TextBlock {
             width: 100.0,
             height: 50.0,
+            rendered_direction: Some(TextDirection::Vertical),
             rendered: Some(image::DynamicImage::new_rgba8(1, 1).into()),
             ..Default::default()
         };
@@ -962,5 +997,24 @@ mod tests {
         assert_eq!(block.height, 40.0);
         assert!(block.lock_layout_box);
         assert!(block.rendered.is_none());
+        assert!(block.rendered_direction.is_none());
+    }
+
+    #[test]
+    fn psd_export_filename_uses_koharu_suffix() {
+        let document = Document {
+            name: "chapter-01".to_string(),
+            ..Default::default()
+        };
+
+        assert_eq!(psd_export_filename(&document), "chapter-01_koharu.psd");
+    }
+
+    #[test]
+    fn app_psd_export_uses_editable_text_layers() {
+        assert_eq!(
+            app_psd_export_options().text_layer_mode,
+            TextLayerMode::Editable
+        );
     }
 }

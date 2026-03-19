@@ -4,6 +4,14 @@ use ts_rs::TS;
 
 use crate::{Document, FontPrediction, TextBlock, TextShaderEffect, TextStrokeStyle, TextStyle};
 
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq, PartialOrd, Ord, JsonSchema, TS)]
+#[serde(rename_all = "camelCase")]
+#[ts(export)]
+pub struct FontFaceInfo {
+    pub family_name: String,
+    pub post_script_name: String,
+}
+
 #[derive(Debug, Clone, Serialize, Deserialize, JsonSchema, TS)]
 #[serde(rename_all = "camelCase")]
 #[ts(export)]
@@ -57,6 +65,7 @@ pub struct TextBlockDetail {
     pub confidence: f32,
     pub line_polygons: Option<Vec<[[f32; 2]; 4]>>,
     pub source_direction: Option<crate::TextDirection>,
+    pub rendered_direction: Option<crate::TextDirection>,
     pub source_language: Option<String>,
     pub rotation_deg: Option<f32>,
     pub detected_font_size_px: Option<f32>,
@@ -78,6 +87,7 @@ impl From<&TextBlock> for TextBlockDetail {
             confidence: block.confidence,
             line_polygons: block.line_polygons.clone(),
             source_direction: block.source_direction,
+            rendered_direction: block.rendered_direction,
             source_language: block.source_language.clone(),
             rotation_deg: block.rotation_deg,
             detected_font_size_px: block.detected_font_size_px,

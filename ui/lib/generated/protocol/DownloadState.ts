@@ -4,8 +4,8 @@ import type { TransferStatus } from './TransferStatus'
 export type DownloadState = {
   id: string
   filename: string
-  downloaded: bigint
-  total: bigint | null
+  downloaded: number
+  total: number | null
   status: TransferStatus
   error: string | null
 }

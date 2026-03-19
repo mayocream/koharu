@@ -4,6 +4,7 @@ members = [
     "koharu-http",
     "koharu-ml",
     "koharu-runtime",
+    "koharu-psd",
     "koharu-renderer",
     "koharu-pipeline",
     "koharu-rpc",
@@ -31,6 +32,7 @@ publish = false
 koharu-http = { path = "koharu-http", default-features = false }
 koharu-runtime = { path = "koharu-runtime", default-features = false }
 koharu-ml = { path = "koharu-ml", default-features = false }
+koharu-psd = { path = "koharu-psd", default-features = false }
 koharu-renderer = { path = "koharu-renderer", default-features = false }
 koharu-pipeline = { path = "koharu-pipeline", default-features = false }
 koharu-rpc = { path = "koharu-rpc", default-features = false }
@@ -106,7 +108,7 @@ winreg = "0.56"
 skrifa = "0.40"
 harfrust = "0.5"
 icu = "2.1"
-fontique = "0.7"
+fontdb = "0.23"
 fontdue = "0.9"
 tiny-skia = "0.12"
 axum = { version = "0.8", features = ["multipart", "ws"] }

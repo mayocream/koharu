@@ -21,7 +21,7 @@ serde = { workspace = true }
 skrifa = { workspace = true }
 harfrust = { workspace = true }
 icu = { workspace = true }
-fontique = { workspace = true }
+fontdb = { workspace = true }
 fontdue = { workspace = true }
 tiny-skia = { workspace = true }
 tracing = { workspace = true }

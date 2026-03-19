@@ -7,6 +7,6 @@ export type DocumentDetail = {
   name: string
   width: number
   height: number
-  revision: bigint
+  revision: number
   textBlocks: Array<TextBlockDetail>
 }

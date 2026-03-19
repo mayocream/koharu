@@ -519,6 +519,11 @@ export const useDocumentMutations = () => {
     await api.exportDocument(currentDocumentIndex)
   }, [])
 
+  const exportPsdDocument = useCallback(async () => {
+    const { currentDocumentIndex } = useEditorUiStore.getState()
+    await api.exportPsdDocument(currentDocumentIndex)
+  }, [])
+
   const exportAllInpainted = useCallback(async () => {
     await api.exportAllInpainted()
   }, [])
@@ -545,6 +550,7 @@ export const useDocumentMutations = () => {
     processAllImages,
     inpaintAndRenderImage,
     exportDocument,
+    exportPsdDocument,
     exportAllInpainted,
     exportAllRendered,
     cancelOperation,

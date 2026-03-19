@@ -5,12 +5,12 @@ use image::{DynamicImage, GrayImage, imageops};
 use rayon::iter::{IntoParallelRefMutIterator, ParallelIterator};
 
 use koharu_types::{
-    Document, SerializableDynamicImage, TextAlign, TextBlock, TextShaderEffect, TextStrokeStyle,
-    TextStyle,
+    Document, FontFaceInfo, SerializableDynamicImage, TextAlign, TextBlock, TextShaderEffect,
+    TextStrokeStyle, TextStyle,
 };
 
 use crate::{
-    font::{FamilyName, Font, FontBook, Properties},
+    font::{FaceInfo, Font, FontBook},
     layout::{LayoutRun, TextLayout, WritingMode},
     renderer::{RenderOptions, RenderStrokeOptions, TinySkiaRenderer},
     text::{
@@ -43,14 +43,26 @@ impl Renderer {
         })
     }
 
-    pub fn available_fonts(&self) -> Result<Vec<String>> {
-        let mut fontbook = self
+    pub fn available_fonts(&self) -> Result<Vec<FontFaceInfo>> {
+        let fontbook = self
             .fontbook
             .lock()
             .map_err(|_| anyhow::anyhow!("Failed to lock fontbook"))?;
-        let mut families = fontbook.all_families();
-        families.sort();
-        Ok(families)
+        let mut fonts = fontbook
+            .all_families()
+            .into_iter()
+            .filter(|face| !face.post_script_name.is_empty())
+            .map(|face| FontFaceInfo {
+                family_name: face
+                    .families
+                    .first()
+                    .map(|(family, _)| family.clone())
+                    .unwrap_or_else(|| face.post_script_name.clone()),
+                post_script_name: face.post_script_name,
+            })
+            .collect::<Vec<_>>();
+        fonts.sort();
+        Ok(fonts)
     }
 
     pub fn render(
@@ -134,6 +146,8 @@ impl Renderer {
             width: seed_width,
             height: seed_height,
             translation: Some(translation.clone()),
+            source_direction: text_block.source_direction,
+            rendered_direction: text_block.rendered_direction,
             ..Default::default()
         };
 
@@ -264,7 +278,20 @@ impl Renderer {
         text_block.y = layout_box.y;
         text_block.width = layout_box.width;
         text_block.height = layout_box.height;
+        text_block.rendered_direction = Some(match writing_mode {
+            WritingMode::Horizontal => koharu_types::TextDirection::Horizontal,
+            WritingMode::VerticalRl => koharu_types::TextDirection::Vertical,
+        });
         text_block.rendered = Some(SerializableDynamicImage(DynamicImage::ImageRgba8(rendered)));
+        let persisted_style = text_block.style.get_or_insert_with(|| TextStyle {
+            font_families: Vec::new(),
+            font_size: None,
+            color,
+            effect: None,
+            stroke: None,
+            text_align: None,
+        });
+        persisted_style.font_families = vec![font.post_script_name().to_string()];
         Ok(())
     }
 
@@ -273,16 +300,15 @@ impl Renderer {
             .fontbook
             .lock()
             .map_err(|_| anyhow::anyhow!("Failed to lock fontbook"))?;
-        let font = fontbook.query(
-            style
-                .font_families
-                .iter()
-                .map(|family| FamilyName::Title(family.to_string()))
-                .collect::<Vec<_>>()
-                .as_slice(),
-            &Properties::default(),
-        )?;
-        Ok(font)
+        let faces = fontbook.all_families();
+        let post_script_name = style
+            .font_families
+            .iter()
+            .find_map(|candidate| face_post_script_name(&faces, candidate))
+            .ok_or_else(|| {
+                anyhow::anyhow!("no font found for candidates: {:?}", style.font_families)
+            })?;
+        fontbook.query(&post_script_name)
     }
 }
 
@@ -439,7 +465,6 @@ fn center_layout_vertically(layout: &mut LayoutRun<'_>, container_height: f32) {
 }
 
 fn load_symbol_fallbacks(fontbook: &mut FontBook) -> Vec<Font> {
-    let props = Properties::default();
     let candidates = [
         "Segoe UI Symbol",
         "Segoe UI Emoji",
@@ -451,13 +476,26 @@ fn load_symbol_fallbacks(fontbook: &mut FontBook) -> Vec<Font> {
         "Symbola",
         "Arial Unicode MS",
     ];
-    let mut fonts = Vec::new();
-    for name in candidates {
-        if let Ok(font) = fontbook.query(&[FamilyName::Title(name.to_string())], &props) {
-            fonts.push(font);
-        }
-    }
-    fonts
+    let faces = fontbook.all_families();
+    candidates
+        .iter()
+        .filter_map(|candidate| face_post_script_name(&faces, candidate))
+        .filter_map(|post_script_name| fontbook.query(&post_script_name).ok())
+        .collect()
+}
+
+fn face_post_script_name(faces: &[FaceInfo], candidate: &str) -> Option<String> {
+    faces
+        .iter()
+        .find(|face| {
+            face.post_script_name == candidate
+                || face
+                    .families
+                    .iter()
+                    .any(|(family, _)| family.as_str() == candidate)
+        })
+        .map(|face| face.post_script_name.clone())
+        .filter(|post_script_name| !post_script_name.is_empty())
 }
 
 #[cfg(test)]

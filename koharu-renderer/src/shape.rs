@@ -182,7 +182,7 @@ pub(crate) fn shape_segment_with_fallbacks<'a>(
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::font::{FamilyName, FontBook, Properties};
+    use crate::font::FontBook;
 
     const PRIMARY_FAMILIES: &[&str] = &[
         "Arial",
@@ -218,11 +218,19 @@ mod tests {
     ];
 
     fn query_font(book: &mut FontBook, name: &str) -> Option<Font> {
-        book.query(
-            &[FamilyName::Title(name.to_string())],
-            &Properties::default(),
-        )
-        .ok()
+        let post_script_name = book
+            .all_families()
+            .into_iter()
+            .find(|face| {
+                face.post_script_name == name
+                    || face
+                        .families
+                        .iter()
+                        .any(|(family, _)| family.as_str() == name)
+            })
+            .map(|face| face.post_script_name)
+            .filter(|post_script_name| !post_script_name.is_empty())?;
+        book.query(&post_script_name).ok()
     }
 
     #[test]

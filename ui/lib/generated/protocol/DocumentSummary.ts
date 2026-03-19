@@ -5,7 +5,7 @@ export type DocumentSummary = {
   name: string
   width: number
   height: number
-  revision: bigint
+  revision: number
   hasSegment: boolean
   hasInpainted: boolean
   hasBrushLayer: boolean

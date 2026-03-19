@@ -25,6 +25,7 @@ Under the hood, Koharu uses [candle](https://github.com/huggingface/candle) for 
 - Inpainting to remove original text from images
 - LLM-powered translation
 - Vertical text layout for CJK languages
+- Export to layered PSD with editable text
 - MCP server for AI agents
 
 ## Usage
@@ -34,6 +35,10 @@ Under the hood, Koharu uses [candle](https://github.com/huggingface/candle) for 
 - <kbd>Ctrl</kbd> + Mouse Wheel: Zoom in/out
 - <kbd>Ctrl</kbd> + Drag: Pan the canvas
 - <kbd>Del</kbd>: Delete selected text block
+
+### Export
+
+Koharu can export the current page as a rendered image or as a layered Photoshop PSD. PSD export preserves helper layers and writes translated text as editable text layers for further cleanup in Photoshop.
 
 ### MCP Server
 

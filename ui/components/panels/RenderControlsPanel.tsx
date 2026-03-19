@@ -20,6 +20,7 @@ import {
   TextAlign,
   TextStyle,
 } from '@/types'
+import type { FontFaceInfo } from '@/lib/protocol'
 import { Button } from '@/components/ui/button'
 import { ColorPicker } from '@/components/ui/color-picker'
 import { Input } from '@/components/ui/input'
@@ -42,7 +43,12 @@ import { useTextBlockMutations } from '@/lib/query/mutations'
 import { cn } from '@/lib/utils'
 
 const DEFAULT_COLOR: RgbaColor = [0, 0, 0, 255]
-const DEFAULT_FONT_FAMILIES = ['Arial']
+const DEFAULT_FONT_FACES: FontFaceInfo[] = [
+  {
+    familyName: 'Arial',
+    postScriptName: 'ArialMT',
+  },
+]
 const DEFAULT_EFFECT: RenderEffect = {
   italic: false,
   bold: false,
@@ -90,13 +96,35 @@ const hexToColor = (value: string, alpha: number): RgbaColor => {
   return [r, g, b, clampByte(alpha)]
 }
 
-const uniqueStrings = (values: string[]) => {
+const uniqueFontFaces = (values: FontFaceInfo[]) => {
   const seen = new Set<string>()
   return values.filter((value) => {
-    if (!value || seen.has(value)) return false
-    seen.add(value)
+    if (!value.postScriptName || seen.has(value.postScriptName)) return false
+    seen.add(value.postScriptName)
     return true
   })
+}
+
+const findFontFace = (fonts: FontFaceInfo[], value?: string) => {
+  if (!value) return undefined
+  return fonts.find(
+    (font) =>
+      font.postScriptName === value ||
+      font.familyName === value ||
+      font.familyName.trim() === value.trim(),
+  )
+}
+
+const normalizeFontValue = (fonts: FontFaceInfo[], value?: string) =>
+  findFontFace(fonts, value)?.postScriptName ?? value
+
+const fallbackFontFace = (value?: string): FontFaceInfo | undefined => {
+  const normalized = value?.trim()
+  if (!normalized) return undefined
+  return {
+    familyName: normalized,
+    postScriptName: normalized,
+  }
 }
 
 const normalizeEffect = (effect?: Partial<RenderEffect>): RenderEffect => ({
@@ -167,23 +195,32 @@ export function RenderControlsPanel() {
       : undefined
   const firstBlock = textBlocks[0]
   const hasBlocks = textBlocks.length > 0
-  const fallbackFontFamilies =
-    availableFonts.length > 0 ? [availableFonts[0]] : DEFAULT_FONT_FAMILIES
+  const fontCandidates = uniqueFontFaces(
+    [
+      ...availableFonts,
+      ...(fontFamily ? [fallbackFontFace(fontFamily)] : []),
+      ...(selectedBlock?.style?.fontFamilies
+        ?.slice(0, 1)
+        ?.map(fallbackFontFace) ?? []),
+      ...(firstBlock?.style?.fontFamilies?.slice(0, 1)?.map(fallbackFontFace) ??
+        []),
+      ...DEFAULT_FONT_FACES,
+    ].filter((value): value is FontFaceInfo => !!value),
+  )
+  const fallbackFontFaces =
+    fontCandidates.length > 0 ? fontCandidates : DEFAULT_FONT_FACES
   const fallbackColor = firstBlock?.style?.color ?? DEFAULT_COLOR
-  const fontCandidates =
-    availableFonts.length > 0
-      ? availableFonts
-      : [
-          ...(fontFamily ? [fontFamily] : []),
-          ...(selectedBlock?.style?.fontFamilies?.slice(0, 1) ?? []),
-          ...DEFAULT_FONT_FAMILIES,
-        ]
-  const fontOptions = uniqueStrings(fontCandidates)
-  const currentFont =
+  const fontOptions = fontCandidates
+  const currentFontCandidate =
     selectedBlock?.style?.fontFamilies?.[0] ??
     fontFamily ??
     firstBlock?.style?.fontFamilies?.[0] ??
-    (hasBlocks ? fallbackFontFamilies[0] : '')
+    (hasBlocks ? fallbackFontFaces[0]?.postScriptName : '')
+  const currentFontFace =
+    findFontFace(fontOptions, currentFontCandidate) ??
+    fallbackFontFace(currentFontCandidate)
+  const currentFont = currentFontFace?.postScriptName ?? ''
+  const currentFontFamilyName = currentFontFace?.familyName
   const currentEffect = normalizeEffect(
     selectedBlock?.style?.effect ?? renderEffect,
   )
@@ -264,7 +301,11 @@ export function RenderControlsPanel() {
     nextFont: string,
     current: string[] | undefined,
   ) => {
-    const base = current?.length ? current : fallbackFontFamilies
+    const base = (
+      current?.length
+        ? current
+        : fallbackFontFaces.map((font) => font.postScriptName)
+    ).map((family) => normalizeFontValue(fontOptions, family) ?? family)
     return [nextFont, ...base.filter((family) => family !== nextFont)]
   }
 
@@ -360,19 +401,23 @@ export function RenderControlsPanel() {
                 data-testid='render-font-select'
                 size='sm'
                 className='h-7 w-full min-w-0 text-xs'
-                style={currentFont ? { fontFamily: currentFont } : undefined}
+                style={
+                  currentFontFamilyName
+                    ? { fontFamily: currentFontFamilyName }
+                    : undefined
+                }
               >
                 <SelectValue placeholder={t('render.fontPlaceholder')} />
               </SelectTrigger>
               <SelectContent position='popper'>
                 {fontOptions.map((font, index) => (
                   <SelectItem
-                    key={font}
-                    value={font}
-                    style={{ fontFamily: font }}
+                    key={font.postScriptName}
+                    value={font.postScriptName}
+                    style={{ fontFamily: font.familyName }}
                     data-testid={`render-font-option-${index}`}
                   >
-                    {font}
+                    {font.familyName}
                   </SelectItem>
                 ))}
               </SelectContent>
