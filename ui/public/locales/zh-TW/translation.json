@@ -8,6 +8,7 @@
     "addFile": "新增檔案...",
     "save": "儲存...",
     "export": "匯出...",
+    "exportPsd": "匯出 PSD...",
     "exportAllInpainted": "匯出所有修補後的影像...",
     "exportAllRendered": "匯出所有渲染後的影像...",
     "view": "檢視",
@@ -115,12 +116,14 @@
     "fontLabel": "字體",
     "fontPlaceholder": "選擇字體",
     "fontColorLabel": "字體顏色",
-    "fontScopeGlobal": "Global",
-    "fontScopeBlock": "Per block",
-    "fontScopeBlockIndex": "Block {{index}}",
+    "fontScopeGlobal": "全域",
+    "fontScopeBlock": "依文字區塊",
+    "fontScopeBlockIndex": "文字區塊 {{index}}",
     "effectItalic": "斜體",
     "effectBold": "粗體",
-    "effectBorder": "描邊"
+    "effectBorder": "描邊",
+    "strokeColorLabel": "描邊顏色",
+    "strokeWidthLabel": "描邊寬度"
   },
   "textBlocks": {
     "emptyPrompt": "開啟影像以查看文字區塊。",

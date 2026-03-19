@@ -8,6 +8,7 @@
     "addFile": "ファイルを追加...",
     "save": "保存...",
     "export": "エクスポート...",
+    "exportPsd": "PSD を書き出し...",
     "exportAllInpainted": "インペイント画像をすべてエクスポート...",
     "exportAllRendered": "レンダリング画像をすべてエクスポート...",
     "view": "表示",
@@ -115,12 +116,14 @@
     "fontLabel": "フォント",
     "fontPlaceholder": "フォントを選択",
     "fontColorLabel": "フォントカラー",
-    "fontScopeGlobal": "Global",
-    "fontScopeBlock": "Per block",
-    "fontScopeBlockIndex": "Block {{index}}",
+    "fontScopeGlobal": "全体",
+    "fontScopeBlock": "ブロックごと",
+    "fontScopeBlockIndex": "ブロック {{index}}",
     "effectItalic": "斜体",
     "effectBold": "太字",
-    "effectBorder": "縁取り"
+    "effectBorder": "縁取り",
+    "strokeColorLabel": "縁取りの色",
+    "strokeWidthLabel": "縁取りの太さ"
   },
   "textBlocks": {
     "emptyPrompt": "画像を開くとテキストブロックが表示されます。",

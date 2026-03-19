@@ -8,6 +8,7 @@
     "addFile": "添加文件...",
     "save": "保存...",
     "export": "导出...",
+    "exportPsd": "导出 PSD...",
     "exportAllInpainted": "导出所有修复后的图像...",
     "exportAllRendered": "导出所有渲染后的图像...",
     "view": "视图",
@@ -115,12 +116,14 @@
     "fontLabel": "字体",
     "fontPlaceholder": "选择字体",
     "fontColorLabel": "字体颜色",
-    "fontScopeGlobal": "Global",
-    "fontScopeBlock": "Per block",
-    "fontScopeBlockIndex": "Block {{index}}",
+    "fontScopeGlobal": "全局",
+    "fontScopeBlock": "按文本块",
+    "fontScopeBlockIndex": "文本块 {{index}}",
     "effectItalic": "斜体",
     "effectBold": "粗体",
-    "effectBorder": "描边"
+    "effectBorder": "描边",
+    "strokeColorLabel": "描边颜色",
+    "strokeWidthLabel": "描边宽度"
   },
   "textBlocks": {
     "emptyPrompt": "打开图像以查看文本块。",

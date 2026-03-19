@@ -62,9 +62,7 @@ export function MenuBar() {
       testId: 'menu-file-export',
     },
     {
-      label: t('menu.exportPsd', {
-        defaultValue: 'Export PSD...',
-      }),
+      label: t('menu.exportPsd'),
       onSelect: exportPsdDocument,
       testId: 'menu-file-export-psd',
     },

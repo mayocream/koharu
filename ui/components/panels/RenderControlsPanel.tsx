@@ -235,15 +235,9 @@ export function RenderControlsPanel() {
   const fontLabel = t('render.fontLabel')
   const effectLabel = t('render.effectLabel')
   const strokeLabel = t('render.effectBorder')
-  const strokeColorLabel = t('render.strokeColorLabel', {
-    defaultValue: 'Stroke color',
-  })
-  const strokeWidthLabel = t('render.strokeWidthLabel', {
-    defaultValue: 'Stroke width',
-  })
-  const alignLabel = t('render.alignLabel', {
-    defaultValue: 'Align',
-  })
+  const strokeColorLabel = t('render.strokeColorLabel')
+  const strokeWidthLabel = t('render.strokeWidthLabel')
+  const alignLabel = t('render.alignLabel')
   const currentTextAlign = resolveEffectiveTextAlign(
     selectedBlock ?? firstBlock,
   )
@@ -251,11 +245,8 @@ export function RenderControlsPanel() {
     selectedBlockIndex !== undefined
       ? t('render.fontScopeBlockIndex', {
           index: selectedBlockIndex + 1,
-          defaultValue: `Block ${selectedBlockIndex + 1}`,
         })
-      : t('render.fontScopeGlobal', {
-          defaultValue: 'Global',
-        })
+      : t('render.fontScopeGlobal')
   const scopeToneClass =
     selectedBlockIndex !== undefined
       ? 'border-primary/20 bg-primary/10 text-primary'
@@ -338,17 +329,17 @@ export function RenderControlsPanel() {
   }[] = [
     {
       value: 'left',
-      label: t('render.alignLeft', { defaultValue: 'Align left' }),
+      label: t('render.alignLeft'),
       Icon: AlignLeftIcon,
     },
     {
       value: 'center',
-      label: t('render.alignCenter', { defaultValue: 'Align center' }),
+      label: t('render.alignCenter'),
       Icon: AlignCenterIcon,
     },
     {
       value: 'right',
-      label: t('render.alignRight', { defaultValue: 'Align right' }),
+      label: t('render.alignRight'),
       Icon: AlignRightIcon,
     },
   ]

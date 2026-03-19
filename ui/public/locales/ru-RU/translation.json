@@ -8,6 +8,7 @@
     "addFile": "Добавить файл...",
     "save": "Сохранить...",
     "export": "Экспортировать...",
+    "exportPsd": "Экспортировать PSD...",
     "exportAllInpainted": "Экспортировать все изображения после инпейнтинга...",
     "exportAllRendered": "Экспортировать все отрендеренные изображения...",
     "view": "Вид",
@@ -120,7 +121,9 @@
     "fontScopeBlockIndex": "Блок {{index}}",
     "effectItalic": "Курсив",
     "effectBold": "Жирный",
-    "effectBorder": "Обводка"
+    "effectBorder": "Обводка",
+    "strokeColorLabel": "Цвет обводки",
+    "strokeWidthLabel": "Толщина обводки"
   },
   "textBlocks": {
     "emptyPrompt": "Откройте изображение, чтобы увидеть текстовые блоки.",
