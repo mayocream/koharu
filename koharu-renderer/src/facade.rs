@@ -152,7 +152,7 @@ impl Renderer {
         };
 
         let mut style = text_block.style.clone().unwrap_or_else(|| TextStyle {
-            font_families: font_families_for_text(&normalized_translation),
+            font_families: Vec::new(),
             font_size: None,
             color: [0, 0, 0, 255],
             effect: None,
@@ -631,6 +631,15 @@ mod tests {
         let mut font_families = Vec::new();
         apply_default_font_families(&mut font_families, "hello");
         assert!(!font_families.is_empty());
+    }
+
+    #[test]
+    fn global_font_should_be_applied_before_default_script_fonts() {
+        let mut font_families = Vec::new();
+        apply_global_font_family(&mut font_families, Some("Global Font"));
+        apply_default_font_families(&mut font_families, "hello");
+
+        assert_eq!(font_families, vec!["Global Font".to_string()]);
     }
 
     #[test]
