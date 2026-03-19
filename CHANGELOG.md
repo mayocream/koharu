@@ -1,3 +1,27 @@
+## [0.39.0](https://github.com/mayocream/koharu/compare/0.38.1..0.39.0) - 2026-03-19
+
+### ⛰️  Features
+
+- Add bg-BG lang - ([327120a](https://github.com/mayocream/koharu/commit/327120a279f838e3ee22a8614ea96c131c2a8b0a))
+- Support more languages - ([9b84b51](https://github.com/mayocream/koharu/commit/9b84b5145fd8b01d492c7b1fb0dfc501ba0182a2))
+- Export to psd - ([89b9ed2](https://github.com/mayocream/koharu/commit/89b9ed2158a37ef95b02300e0903684889b9da83))
+- Add delete functionality to text blocks ([#245](https://github.com/mayocream/koharu/issues/245)) - ([d28a260](https://github.com/mayocream/koharu/commit/d28a2609c8f01fe4943ae20d41174451d1bf0b0c))
+
+### 🐛 Bug Fixes
+
+- Global font not applied - ([17382cf](https://github.com/mayocream/koharu/commit/17382cf2394a1d42145bac049d9f874605e3950d))
+- Llm list not loaded - ([3446a09](https://github.com/mayocream/koharu/commit/3446a0936df098ee2ebcfc2ab23b9a15c50eec90))
+- Text box ordering regression - ([c451d84](https://github.com/mayocream/koharu/commit/c451d84fe720dee08127db5a08ad2a8c1df8816e))
+- Style & ui build - ([a7246b1](https://github.com/mayocream/koharu/commit/a7246b160d01916f4da9b63708030aed6c7762de))
+
+### ⚙️ Miscellaneous Tasks
+
+- I18n consistent - ([09e4f25](https://github.com/mayocream/koharu/commit/09e4f25d1d56bbc3a9073ef6230e4cf97549d0c1))
+- Speed up linux - ([5d71b64](https://github.com/mayocream/koharu/commit/5d71b648987fb3b20315a71167a7e5cc729ee5d3))
+- Speed up cuda install - ([c59b3d9](https://github.com/mayocream/koharu/commit/c59b3d9604020af26e9cae7bee52e310c096a18b))
+- Add release notes - ([d5e3101](https://github.com/mayocream/koharu/commit/d5e3101ac84036fdc90fac725ce5848751cf2de8))
+
+
 ## [0.38.1](https://github.com/mayocream/koharu/compare/0.38.0..0.38.1) - 2026-03-17
 
 ### 🐛 Bug Fixes
