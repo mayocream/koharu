@@ -66,6 +66,7 @@ export const selectors = {
     textBlockCard: (index: number) => `textblock-card-${index}`,
     textBlockOcr: (index: number) => `textblock-ocr-${index}`,
     textBlockTranslation: (index: number) => `textblock-translation-${index}`,
+    textBlockDelete: (index: number) => `textblock-delete-${index}`,
     textBlockGenerate: (index: number) => `textblock-generate-${index}`,
     renderFontSelect: 'render-font-select',
     renderFontOption: (index: number) => `render-font-option-${index}`,

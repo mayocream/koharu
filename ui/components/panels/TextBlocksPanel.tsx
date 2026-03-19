@@ -36,6 +36,7 @@ export function TextBlocksPanel() {
   const { llmGenerate } = useLlmMutations()
   const { data: llmReady = false } = useLlmReadyQuery()
   const [generatingIndex, setGeneratingIndex] = useState<number | null>(null)
+  const generating = generatingIndex !== null
 
   if (!document) {
     return (
@@ -57,6 +58,11 @@ export function TextBlocksPanel() {
     } finally {
       setGeneratingIndex(null)
     }
+  }
+
+  const handleDelete = async (blockIndex: number) => {
+    if (generating) return
+    await removeBlock(blockIndex)
   }
 
   return (
@@ -101,8 +107,9 @@ export function TextBlocksPanel() {
                   index={index}
                   selected={index === selectedBlockIndex}
                   onChange={(updates) => void replaceBlock(index, updates)}
-                  onDelete={() => void removeBlock(index)}
+                  onDelete={() => void handleDelete(index)}
                   onGenerate={() => void handleGenerate(index)}
+                  generationInFlight={generating}
                   generating={generatingIndex === index}
                   llmReady={llmReady}
                 />
@@ -122,6 +129,7 @@ type BlockCardProps = {
   onChange: (updates: Partial<TextBlock>) => void
   onDelete: () => void | Promise<void>
   onGenerate: () => void | Promise<void>
+  generationInFlight: boolean
   generating: boolean
   llmReady: boolean
 }
@@ -133,6 +141,7 @@ function BlockCard({
   onChange,
   onDelete,
   onGenerate,
+  generationInFlight,
   generating,
   llmReady,
 }: BlockCardProps) {
@@ -213,8 +222,10 @@ function BlockCard({
                     <TooltipTrigger asChild>
                       <Button
                         data-testid={`textblock-delete-${index}`}
+                        aria-label={t('workspace.deleteBlock')}
                         variant='ghost'
                         size='icon-xs'
+                        disabled={generationInFlight}
                         onClick={onDelete}
                         className='size-5 text-rose-600 hover:text-rose-600'
                       >
@@ -231,7 +242,7 @@ function BlockCard({
                         data-testid={`textblock-generate-${index}`}
                         variant='ghost'
                         size='icon-xs'
-                        disabled={!llmReady || generating}
+                        disabled={!llmReady || generationInFlight}
                         onClick={onGenerate}
                         className='size-5'
                       >
