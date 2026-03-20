@@ -1936,9 +1936,9 @@ checksum = "77ce24cb58228fbb8aa041425bb1050850ac19177686ea6e0f41a70416f56fdb"
 
 [[package]]
 name = "font-types"
-version = "0.11.0"
+version = "0.11.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "b1e4d2d0cf79d38430cc9dc9aadec84774bff2e1ba30ae2bf6c16cfce9385a23"
+checksum = "73829a7b5c91198af28a99159b7ae4afbb252fb906159ff7f189f3a2ceaa3df2"
 dependencies = [
  "bytemuck",
 ]
@@ -2856,7 +2856,7 @@ dependencies = [
  "bitflags 2.11.0",
  "bytemuck",
  "core_maths",
- "read-fonts",
+ "read-fonts 0.37.0",
  "smallvec",
 ]
 
@@ -6009,6 +6009,16 @@ dependencies = [
 ]
 
 [[package]]
+name = "read-fonts"
+version = "0.38.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "70eac20eeee8bd51247a0c2f349f657563fffd19d041cd12988cc2801ec2ebef"
+dependencies = [
+ "bytemuck",
+ "font-types",
+]
+
+[[package]]
 name = "reborrow"
 version = "0.5.5"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -7002,12 +7012,12 @@ checksum = "b2aa850e253778c88a04c3d7323b043aeda9d3e30d5971937c1855769763678e"
 
 [[package]]
 name = "skrifa"
-version = "0.40.0"
+version = "0.41.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "7fbdfe3d2475fbd7ddd1f3e5cf8288a30eb3e5f95832829570cd88115a7434ac"
+checksum = "77c3bef975c2f5f07c0a780f95e1f5002deafb716f8e0484816cc08b1a823d2f"
 dependencies = [
  "bytemuck",
- "read-fonts",
+ "read-fonts 0.38.0",
 ]
 
 [[package]]
