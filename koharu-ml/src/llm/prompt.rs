@@ -163,12 +163,9 @@ mod tests {
             "<|end_of_text|>".to_string(),
         );
         let formatted = renderer.format_chat_prompt("hello".to_string(), Language::English)?;
+        let system = system_prompt(Language::English);
         let expected = format!(
-            "<|begin_of_text|><|im_start|>system {}<|im_end|> <|im_start|>user hello<|im_end|> <|im_start|>assistant ",
-            format!(
-                "{} Do not add or delete line breaks inside a block.",
-                system_prompt(Language::English)
-            )
+            "<|begin_of_text|><|im_start|>system {system} Do not add or delete line breaks inside a block.<|im_end|> <|im_start|>user hello<|im_end|> <|im_start|>assistant "
         );
         assert_eq!(formatted, expected);
 

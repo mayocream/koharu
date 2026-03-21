@@ -199,15 +199,19 @@ mod tests {
     #[tokio::test]
     async fn replace_append_and_find_doc_work() {
         let state = test_state();
-        let mut first = Document::default();
-        first.id = "first".to_string();
+        let first = Document {
+            id: "first".to_string(),
+            ..Default::default()
+        };
         replace_docs(&state, vec![first])
             .await
             .expect("replace should work");
         assert_eq!(list_docs(&state).await.len(), 1);
 
-        let mut second = Document::default();
-        second.id = "second".to_string();
+        let second = Document {
+            id: "second".to_string(),
+            ..Default::default()
+        };
         append_docs(&state, vec![second])
             .await
             .expect("append should work");

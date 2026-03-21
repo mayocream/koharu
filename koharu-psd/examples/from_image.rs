@@ -90,7 +90,7 @@ fn apply_demo_layers(document: &mut Document) {
             id: "top-callout".to_string(),
             x: (width as f32 * 0.08).floor(),
             y: (height as f32 * 0.08).floor(),
-            width: width.min(420).max(180) as f32,
+            width: width.clamp(180, 420) as f32,
             height: (height / 5).max(72) as f32,
             translation: Some("Generated from your image".to_string()),
             style: Some(TextStyle {

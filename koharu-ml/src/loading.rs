@@ -24,6 +24,18 @@ where
     E: Into<anyhow::Error>,
 {
     let weights = resolve_manifest_path(manifest).await?;
+    load_mmaped_safetensors_path(&weights, device, build)
+}
+
+pub fn load_mmaped_safetensors_path<T, Build, E>(
+    weights: &Path,
+    device: &Device,
+    build: Build,
+) -> Result<T>
+where
+    Build: FnOnce(VarBuilder) -> std::result::Result<T, E>,
+    E: Into<anyhow::Error>,
+{
     let vb = unsafe { VarBuilder::from_mmaped_safetensors(&[weights], DType::F32, device)? };
     build(vb).map_err(Into::into)
 }
@@ -39,8 +51,20 @@ where
     E: Into<anyhow::Error>,
 {
     let weights = resolve_manifest_path(manifest).await?;
+    load_buffered_safetensors_path(&weights, device, build)
+}
+
+pub fn load_buffered_safetensors_path<T, Build, E>(
+    weights: &Path,
+    device: &Device,
+    build: Build,
+) -> Result<T>
+where
+    Build: FnOnce(VarBuilder) -> std::result::Result<T, E>,
+    E: Into<anyhow::Error>,
+{
     let data =
-        std::fs::read(&weights).with_context(|| format!("failed to read {}", weights.display()))?;
+        std::fs::read(weights).with_context(|| format!("failed to read {}", weights.display()))?;
     let vb = VarBuilder::from_buffered_safetensors(data, DType::F32, device)?;
     build(vb).map_err(Into::into)
 }
