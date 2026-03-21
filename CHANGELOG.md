@@ -1,3 +1,26 @@
+## [0.40.0](https://github.com/mayocream/koharu/compare/0.39.0..0.40.0) - 2026-03-21
+
+### ⛰️  Features
+
+- Wire new models - ([ef54307](https://github.com/mayocream/koharu/commit/ef54307643633da38cb2f1ec0c4677907eba06e6))
+- Manga-text-segmentation-2025 model - ([2e7209e](https://github.com/mayocream/koharu/commit/2e7209eb1fe9480131473a0eecec2e30356507b7))
+- Paddleocr-vl-1.5 model - ([1b0f45e](https://github.com/mayocream/koharu/commit/1b0f45e76ff45d0b0d1f84647798994e08f72f92))
+- Pp-doclayout-v3 model - ([3724003](https://github.com/mayocream/koharu/commit/3724003fd031b192a21e8568418bc2c571b8c066))
+
+### 🐛 Bug Fixes
+
+- Refine mask - ([4e4a7ca](https://github.com/mayocream/koharu/commit/4e4a7ca98911fdace1845756515f0dc255f9ee59))
+- Use f32 for paddleocr-vl - ([0534100](https://github.com/mayocream/koharu/commit/05341008fe912ecae8d7d1d51e457705a9c0c601))
+
+### ⚡ Performance
+
+- Speedup detection & ocr - ([2e5eb9c](https://github.com/mayocream/koharu/commit/2e5eb9c85386b4b6190078b07364c53c5e3f8ba0))
+
+### ⚙️ Miscellaneous Tasks
+
+- Add refine manga109 script - ([42ddd88](https://github.com/mayocream/koharu/commit/42ddd88d4164905511d2a4333d2ee3e0af0d312c))
+
+
 ## [0.39.0](https://github.com/mayocream/koharu/compare/0.38.1..0.39.0) - 2026-03-19
 
 ### ⛰️  Features
