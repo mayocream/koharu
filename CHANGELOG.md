@@ -1,3 +1,10 @@
+## [0.40.1](https://github.com/mayocream/koharu/compare/0.40.0..0.40.1) - 2026-03-21
+
+### ⚙️ Miscellaneous Tasks
+
+- Add github token - ([1269cdd](https://github.com/mayocream/koharu/commit/1269cdde0137428eee3b880165e6d1f5819d17cb))
+
+
 ## [0.40.0](https://github.com/mayocream/koharu/compare/0.39.0..0.40.0) - 2026-03-21
 
 ### ⛰️  Features
