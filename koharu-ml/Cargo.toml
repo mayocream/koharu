@@ -32,6 +32,7 @@ tokio = { workspace = true }
 rustfft = { workspace = true }
 futures = { workspace = true }
 num_cpus = { workspace = true }
+rayon = { workspace = true }
 libloading = { workspace = true }
 minijinja = { workspace = true }
 keyring = { workspace = true }

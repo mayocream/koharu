@@ -3,7 +3,7 @@ mod postprocess;
 mod unet;
 mod yolo_v5;
 
-use std::cmp;
+use std::{cmp, time::Instant};
 
 use anyhow::Context;
 use candle_core::{DType, Device, IndexOp, Tensor};
@@ -44,12 +44,20 @@ define_models! {
 pub struct ComicTextDetector {
     yolo: yolo_v5::YoloV5,
     unet: unet::UNet,
-    dbnet: dbnet::DbNet,
+    dbnet: Option<dbnet::DbNet>,
     device: Device,
 }
 
 impl ComicTextDetector {
     pub async fn load(cpu: bool) -> anyhow::Result<Self> {
+        Self::load_inner(cpu, true).await
+    }
+
+    pub async fn load_segmentation_only(cpu: bool) -> anyhow::Result<Self> {
+        Self::load_inner(cpu, false).await
+    }
+
+    async fn load_inner(cpu: bool, load_dbnet: bool) -> anyhow::Result<Self> {
         let device = device(cpu)?;
         let yolo = loading::load_mmaped_safetensors(Manifest::Yolov5.get(), &device, |vb| {
             yolo_v5::YoloV5::load(vb, 2, 3)
@@ -58,9 +66,18 @@ impl ComicTextDetector {
         let unet =
             loading::load_mmaped_safetensors(Manifest::Unet.get(), &device, unet::UNet::load)
                 .await?;
-        let dbnet =
-            loading::load_mmaped_safetensors(Manifest::DbNet.get(), &device, dbnet::DbNet::load)
-                .await?;
+        let dbnet = if load_dbnet {
+            Some(
+                loading::load_mmaped_safetensors(
+                    Manifest::DbNet.get(),
+                    &device,
+                    dbnet::DbNet::load,
+                )
+                .await?,
+            )
+        } else {
+            None
+        };
 
         Ok(Self {
             yolo,
@@ -93,7 +110,54 @@ impl ComicTextDetector {
     }
 
     #[instrument(level = "debug", skip_all)]
+    pub fn inference_segmentation(&self, image: &DynamicImage) -> anyhow::Result<GrayImage> {
+        let started = Instant::now();
+        let detect_size = self.detect_size();
+        let (mask_map, rearranged) = if let Some(mask_map) =
+            self.try_rearranged_mask_map(image, detect_size, DET_REARRANGE_MAX_BATCHES)?
+        {
+            (mask_map, true)
+        } else {
+            let original_dimensions = image.dimensions();
+            let (image_tensor, resized_dimensions) = preprocess(image, &self.device, detect_size)?;
+            let mask = self.forward_mask(&image_tensor)?;
+            (
+                postprocess_mask(&mask, original_dimensions, resized_dimensions)?,
+                false,
+            )
+        };
+
+        tracing::info!(
+            width = image.width(),
+            height = image.height(),
+            rearranged,
+            total_ms = started.elapsed().as_millis(),
+            "comic text detector segmentation timings"
+        );
+
+        Ok(mask_map)
+    }
+
+    #[instrument(level = "debug", skip_all)]
     fn forward(&self, image: &Tensor) -> anyhow::Result<(Tensor, Tensor)> {
+        let (mask, features) = self.forward_yolo_unet(image)?;
+        let dbnet = self
+            .dbnet
+            .as_ref()
+            .context("DBNet not loaded; use ComicTextDetector::load for full detection")?;
+        let shrink_thresh = dbnet.forward(&features[0], &features[1], &features[2])?;
+
+        Ok((mask, shrink_thresh))
+    }
+
+    #[instrument(level = "debug", skip_all)]
+    fn forward_mask(&self, image: &Tensor) -> anyhow::Result<Tensor> {
+        let (mask, _features) = self.forward_yolo_unet(image)?;
+        Ok(mask)
+    }
+
+    #[instrument(level = "debug", skip_all)]
+    fn forward_yolo_unet(&self, image: &Tensor) -> anyhow::Result<(Tensor, [Tensor; 3])> {
         let (_, features) = self.yolo.forward(image)?;
         let (mask, features) = self.unet.forward(
             &features[0],
@@ -102,11 +166,7 @@ impl ComicTextDetector {
             &features[3],
             &features[4],
         )?;
-        let shrink_thresh = self
-            .dbnet
-            .forward(&features[0], &features[1], &features[2])?;
-
-        Ok((mask, shrink_thresh))
+        Ok((mask, features))
     }
 
     fn detect_size(&self) -> u32 {
@@ -122,66 +182,18 @@ impl ComicTextDetector {
         detect_size: u32,
         max_batch_size: usize,
     ) -> anyhow::Result<Option<postprocess::DetectionMaps>> {
-        let mut working = image.to_rgb8();
-        let mut transpose = false;
-        let (mut height, mut width) = working.dimensions();
-        if height < width {
-            transpose = true;
-            working = transpose_rgb_image(&working);
-            (width, height) = working.dimensions();
-        }
-
-        let aspect_ratio = height as f32 / width as f32;
-        let down_scale_ratio = height as f32 / detect_size as f32;
-        let require_rearrange = down_scale_ratio > DET_REARRANGE_DOWNSCALE_THRESHOLD
-            && aspect_ratio > DET_REARRANGE_ASPECT_THRESHOLD;
-        if !require_rearrange {
+        let Some(layout) = build_rearranged_layout(image, detect_size) else {
             return Ok(None);
-        }
-
-        let pw_num = (((2 * detect_size) as f32 / width as f32).floor() as u32).max(2);
-        let patch_height = pw_num * width;
-        let patch_count = height.div_ceil(patch_height);
-        let patch_step = if patch_count > 1 {
-            (height - patch_height) / (patch_count - 1)
-        } else {
-            0
         };
-
-        let mut patches = Vec::new();
-        let mut metadata = Vec::new();
-        for index in 0..patch_count {
-            let top = index * patch_step;
-            let bottom = (top + patch_height).min(height);
-            let actual_height = bottom.saturating_sub(top);
-            let crop = imageops::crop_imm(&working, 0, top, width, actual_height).to_image();
-            let mut padded = RgbImage::from_pixel(width, patch_height, image::Rgb([0, 0, 0]));
-            imageops::replace(&mut padded, &crop, 0, 0);
-            patches.push(padded);
-            metadata.push((top, actual_height));
-        }
-
-        let composites_per_batch = (patch_count as usize).div_ceil(pw_num as usize);
-        let total_slots = composites_per_batch * pw_num as usize;
-        while patches.len() < total_slots {
-            patches.push(RgbImage::from_pixel(
-                width,
-                patch_height,
-                image::Rgb([0, 0, 0]),
-            ));
-            metadata.push((0, 0));
-        }
-
-        let composite_size = patch_height;
-        let mut composites = Vec::new();
-        for chunk in patches.chunks(pw_num as usize) {
-            let mut composite =
-                RgbImage::from_pixel(composite_size, composite_size, image::Rgb([0, 0, 0]));
-            for (slot, patch) in chunk.iter().enumerate() {
-                imageops::replace(&mut composite, patch, (slot as u32 * width) as i64, 0);
-            }
-            composites.push(composite);
-        }
+        let RearrangedLayout {
+            transpose,
+            width,
+            height,
+            pw_num,
+            metadata,
+            composites,
+            composite_size,
+        } = layout;
 
         let pixel_count = (width * height) as usize;
         let mut shrink_sum = vec![0.0f32; pixel_count];
@@ -267,6 +279,163 @@ impl ComicTextDetector {
             mask_map,
         }))
     }
+
+    fn try_rearranged_mask_map(
+        &self,
+        image: &DynamicImage,
+        detect_size: u32,
+        max_batch_size: usize,
+    ) -> anyhow::Result<Option<GrayImage>> {
+        let Some(layout) = build_rearranged_layout(image, detect_size) else {
+            return Ok(None);
+        };
+        let RearrangedLayout {
+            transpose,
+            width,
+            height,
+            pw_num,
+            metadata,
+            composites,
+            composite_size,
+        } = layout;
+
+        let pixel_count = (width * height) as usize;
+        let mut mask_sum = vec![0.0f32; pixel_count];
+        let mut counts = vec![0.0f32; pixel_count];
+
+        for batch_start in (0..composites.len()).step_by(max_batch_size.max(1)) {
+            let batch_end = (batch_start + max_batch_size).min(composites.len());
+            let mut tensors = Vec::with_capacity(batch_end - batch_start);
+            for composite in &composites[batch_start..batch_end] {
+                tensors.push(preprocess_rgb_image(composite, &self.device, detect_size)?);
+            }
+            let refs: Vec<&Tensor> = tensors.iter().collect();
+            let batch = Tensor::cat(&refs, 0)?;
+            let mask_batch = self.forward_mask(&batch)?;
+
+            for batch_index in 0..(batch_end - batch_start) {
+                let mask_map = tensor_channel_to_score_map_resized(
+                    &mask_batch.i((batch_index, 0))?,
+                    composite_size,
+                    composite_size,
+                )?;
+
+                for slot in 0..pw_num as usize {
+                    let patch_index = (batch_start + batch_index) * pw_num as usize + slot;
+                    if patch_index >= metadata.len() {
+                        break;
+                    }
+                    let (top, actual_height) = metadata[patch_index];
+                    if actual_height == 0 {
+                        continue;
+                    }
+
+                    let offset_x = slot as u32 * width;
+                    stitch_mask_patch(
+                        &mut mask_sum,
+                        &mut counts,
+                        &mask_map,
+                        PatchPlacement {
+                            width,
+                            height,
+                            offset_x,
+                            top,
+                            actual_height,
+                        },
+                    );
+                }
+            }
+        }
+
+        let mut mask_map = accumulate_to_gray_image(width, height, &mask_sum, &counts)?;
+        if transpose {
+            mask_map = transpose_gray_image(&mask_map);
+        }
+        Ok(Some(mask_map))
+    }
+}
+
+struct RearrangedLayout {
+    transpose: bool,
+    width: u32,
+    height: u32,
+    pw_num: u32,
+    metadata: Vec<(u32, u32)>,
+    composites: Vec<RgbImage>,
+    composite_size: u32,
+}
+
+fn build_rearranged_layout(image: &DynamicImage, detect_size: u32) -> Option<RearrangedLayout> {
+    let mut working = image.to_rgb8();
+    let mut transpose = false;
+    let (mut height, mut width) = working.dimensions();
+    if height < width {
+        transpose = true;
+        working = transpose_rgb_image(&working);
+        (width, height) = working.dimensions();
+    }
+
+    let aspect_ratio = height as f32 / width as f32;
+    let down_scale_ratio = height as f32 / detect_size as f32;
+    let require_rearrange = down_scale_ratio > DET_REARRANGE_DOWNSCALE_THRESHOLD
+        && aspect_ratio > DET_REARRANGE_ASPECT_THRESHOLD;
+    if !require_rearrange {
+        return None;
+    }
+
+    let pw_num = (((2 * detect_size) as f32 / width as f32).floor() as u32).max(2);
+    let patch_height = pw_num * width;
+    let patch_count = height.div_ceil(patch_height);
+    let patch_step = if patch_count > 1 {
+        (height - patch_height) / (patch_count - 1)
+    } else {
+        0
+    };
+
+    let mut patches = Vec::new();
+    let mut metadata = Vec::new();
+    for index in 0..patch_count {
+        let top = index * patch_step;
+        let bottom = (top + patch_height).min(height);
+        let actual_height = bottom.saturating_sub(top);
+        let crop = imageops::crop_imm(&working, 0, top, width, actual_height).to_image();
+        let mut padded = RgbImage::from_pixel(width, patch_height, image::Rgb([0, 0, 0]));
+        imageops::replace(&mut padded, &crop, 0, 0);
+        patches.push(padded);
+        metadata.push((top, actual_height));
+    }
+
+    let composites_per_batch = (patch_count as usize).div_ceil(pw_num as usize);
+    let total_slots = composites_per_batch * pw_num as usize;
+    while patches.len() < total_slots {
+        patches.push(RgbImage::from_pixel(
+            width,
+            patch_height,
+            image::Rgb([0, 0, 0]),
+        ));
+        metadata.push((0, 0));
+    }
+
+    let composite_size = patch_height;
+    let mut composites = Vec::new();
+    for chunk in patches.chunks(pw_num as usize) {
+        let mut composite =
+            RgbImage::from_pixel(composite_size, composite_size, image::Rgb([0, 0, 0]));
+        for (slot, patch) in chunk.iter().enumerate() {
+            imageops::replace(&mut composite, patch, (slot as u32 * width) as i64, 0);
+        }
+        composites.push(composite);
+    }
+
+    Some(RearrangedLayout {
+        transpose,
+        width,
+        height,
+        pw_num,
+        metadata,
+        composites,
+        composite_size,
+    })
 }
 
 #[instrument(level = "debug", skip_all)]
@@ -360,6 +529,19 @@ fn postprocess_maps(
     })
 }
 
+fn postprocess_mask(
+    mask: &Tensor,
+    original_dimensions: (u32, u32),
+    resized_dimensions: (u32, u32),
+) -> anyhow::Result<GrayImage> {
+    let unet_mask = mask.i((0, 0))?;
+    let (mask_h, mask_w) = unet_mask.dims2()?;
+    let valid_h = mask_h.min(resized_dimensions.1 as usize);
+    let valid_w = mask_w.min(resized_dimensions.0 as usize);
+    let unet_mask = unet_mask.narrow(0, 0, valid_h)?.narrow(1, 0, valid_w)?;
+    tensor_channel_to_gray_resized(&unet_mask, original_dimensions.0, original_dimensions.1)
+}
+
 fn tensor_channel_to_gray_resized(
     tensor: &Tensor,
     width: u32,
@@ -421,6 +603,35 @@ fn stitch_patch(
             buffers.counts[global_index] += 1.0;
         }
     }
+}
+
+fn stitch_mask_patch(
+    mask_sum: &mut [f32],
+    counts: &mut [f32],
+    mask_map: &postprocess::ScoreMap,
+    placement: PatchPlacement,
+) {
+    let PatchPlacement {
+        width,
+        height,
+        offset_x,
+        top,
+        actual_height,
+    } = placement;
+    for y in 0..actual_height.min(height.saturating_sub(top)) {
+        for x in 0..width {
+            let global_index = ((top + y) * width + x) as usize;
+            let source_x = offset_x + x;
+            mask_sum[global_index] += mask_map.get(source_x, y);
+            counts[global_index] += 1.0;
+        }
+    }
+}
+
+pub async fn prefetch_segmentation() -> anyhow::Result<()> {
+    Manifest::Yolov5.get().await?;
+    Manifest::Unet.get().await?;
+    Ok(())
 }
 
 fn accumulate_to_score_map(

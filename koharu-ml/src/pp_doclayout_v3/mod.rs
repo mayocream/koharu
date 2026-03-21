@@ -1,6 +1,6 @@
 mod model;
 
-use std::collections::BTreeMap;
+use std::{collections::BTreeMap, time::Instant};
 
 use anyhow::{Context, Result, bail};
 use candle_core::{DType, Device, Tensor};
@@ -27,6 +27,8 @@ pub struct PPDocLayoutV3 {
     config: PPDocLayoutV3Config,
     preprocessor: PPDocLayoutV3PreprocessorConfig,
     device: Device,
+    mean: Tensor,
+    std: Tensor,
 }
 
 impl PPDocLayoutV3 {
@@ -40,6 +42,10 @@ impl PPDocLayoutV3 {
         let preprocessor =
             loading::read_json::<PPDocLayoutV3PreprocessorConfig>(&preprocessor_path)
                 .with_context(|| format!("failed to load {}", preprocessor_path.display()))?;
+        let mean = Tensor::from_slice(&preprocessor.image_mean, (1, 3, 1, 1), &device)?
+            .to_dtype(DType::F32)?;
+        let std = Tensor::from_slice(&preprocessor.image_std, (1, 3, 1, 1), &device)?
+            .to_dtype(DType::F32)?;
         let model = loading::load_mmaped_safetensors(Manifest::Model.get(), &device, |vb| {
             PPDocLayoutV3ForObjectDetection::load(vb, &config, &device)
         })
@@ -50,6 +56,8 @@ impl PPDocLayoutV3 {
             config,
             preprocessor,
             device,
+            mean,
+            std,
         })
     }
 
@@ -58,19 +66,66 @@ impl PPDocLayoutV3 {
         images: &[DynamicImage],
         threshold: f32,
     ) -> Result<Vec<LayoutDetectionResult>> {
+        self.inference_impl(images, threshold, true)
+    }
+
+    pub fn inference_fast(
+        &self,
+        images: &[DynamicImage],
+        threshold: f32,
+    ) -> Result<Vec<LayoutDetectionResult>> {
+        self.inference_impl(images, threshold, false)
+    }
+
+    fn inference_impl(
+        &self,
+        images: &[DynamicImage],
+        threshold: f32,
+        include_polygons: bool,
+    ) -> Result<Vec<LayoutDetectionResult>> {
         if images.is_empty() {
             return Ok(Vec::new());
         }
 
-        let pixel_values = preprocess_images(images, &self.preprocessor, &self.device)?;
+        let started = Instant::now();
+        let preprocess_started = Instant::now();
+        let pixel_values = preprocess_images(
+            images,
+            &self.preprocessor,
+            &self.device,
+            &self.mean,
+            &self.std,
+        )?;
+        let preprocess_elapsed = preprocess_started.elapsed();
+
+        let forward_started = Instant::now();
         let outputs = self.model.forward(&pixel_values)?;
+        let forward_elapsed = forward_started.elapsed();
+
+        let postprocess_started = Instant::now();
         post_process_outputs(
             &self.config,
             &self.preprocessor,
             &outputs,
             images,
             threshold,
+            include_polygons,
         )
+        .inspect(|results| {
+            tracing::info!(
+                images = images.len(),
+                include_polygons,
+                regions = results
+                    .iter()
+                    .map(|result| result.regions.len())
+                    .sum::<usize>(),
+                preprocess_ms = preprocess_elapsed.as_millis(),
+                forward_ms = forward_elapsed.as_millis(),
+                postprocess_ms = postprocess_started.elapsed().as_millis(),
+                total_ms = started.elapsed().as_millis(),
+                "pp-doclayout-v3 timings"
+            );
+        })
     }
 
     pub fn inference_one(
@@ -79,6 +134,17 @@ impl PPDocLayoutV3 {
         threshold: f32,
     ) -> Result<LayoutDetectionResult> {
         let mut results = self.inference(std::slice::from_ref(image), threshold)?;
+        results
+            .pop()
+            .ok_or_else(|| anyhow::anyhow!("missing layout result"))
+    }
+
+    pub fn inference_one_fast(
+        &self,
+        image: &DynamicImage,
+        threshold: f32,
+    ) -> Result<LayoutDetectionResult> {
+        let mut results = self.inference_fast(std::slice::from_ref(image), threshold)?;
         results
             .pop()
             .ok_or_else(|| anyhow::anyhow!("missing layout result"))
@@ -287,6 +353,8 @@ fn preprocess_images(
     images: &[DynamicImage],
     preprocessor: &PPDocLayoutV3PreprocessorConfig,
     device: &Device,
+    mean: &Tensor,
+    std: &Tensor,
 ) -> Result<Tensor> {
     let target_h = preprocessor.size.height;
     let target_w = preprocessor.size.width;
@@ -298,30 +366,23 @@ fn preprocess_images(
             image.clone()
         };
         let rgb = resized.to_rgb8();
-        let raw = rgb.as_raw();
-        for channel in 0..3usize {
-            for y in 0..target_h {
-                for x in 0..target_w {
-                    let index = (y * target_w + x) * 3 + channel;
-                    let mut value = raw[index] as f32;
-                    if preprocessor.do_rescale {
-                        value *= preprocessor.rescale_factor;
-                    }
-                    if preprocessor.do_normalize {
-                        value = (value - preprocessor.image_mean[channel])
-                            / preprocessor.image_std[channel].max(1e-6);
-                    }
-                    batch.push(value);
-                }
-            }
-        }
+        batch.extend_from_slice(rgb.as_raw());
     }
 
-    Ok(
-        Tensor::from_vec(batch, (images.len(), 3, target_h, target_w), &Device::Cpu)?
-            .to_dtype(DType::F32)?
-            .to_device(device)?,
-    )
+    let tensor = Tensor::from_vec(batch, (images.len(), target_h, target_w, 3), &Device::Cpu)?
+        .to_device(device)?
+        .permute((0, 3, 1, 2))?
+        .to_dtype(DType::F32)?;
+    let tensor = if preprocessor.do_rescale {
+        tensor.affine(preprocessor.rescale_factor as f64, 0.0)?
+    } else {
+        tensor
+    };
+    if preprocessor.do_normalize {
+        Ok(tensor.broadcast_sub(mean)?.broadcast_div(std)?)
+    } else {
+        Ok(tensor)
+    }
 }
 
 fn post_process_outputs(
@@ -330,14 +391,13 @@ fn post_process_outputs(
     outputs: &PPDocLayoutV3Outputs,
     images: &[DynamicImage],
     threshold: f32,
+    include_polygons: bool,
 ) -> Result<Vec<LayoutDetectionResult>> {
     let logits = outputs.logits.to_device(&Device::Cpu)?;
     let boxes = outputs.pred_boxes.to_device(&Device::Cpu)?;
     let order_logits = outputs.order_logits.to_device(&Device::Cpu)?;
-    let masks = outputs.out_masks.to_device(&Device::Cpu)?;
 
     let (batch_size, num_queries, num_classes) = logits.dims3()?;
-    let (_, _, mask_h, mask_w) = masks.dims4()?;
     if batch_size != images.len() {
         bail!("batch size mismatch between model outputs and images");
     }
@@ -345,7 +405,13 @@ fn post_process_outputs(
     let logits = logits.flatten_all()?.to_vec1::<f32>()?;
     let boxes = boxes.flatten_all()?.to_vec1::<f32>()?;
     let order_logits = order_logits.flatten_all()?.to_vec1::<f32>()?;
-    let masks = masks.flatten_all()?.to_vec1::<f32>()?;
+    let (masks, mask_h, mask_w) = if include_polygons {
+        let masks = outputs.out_masks.to_device(&Device::Cpu)?;
+        let (_, _, mask_h, mask_w) = masks.dims4()?;
+        (Some(masks.flatten_all()?.to_vec1::<f32>()?), mask_h, mask_w)
+    } else {
+        (None, 0, 0)
+    };
 
     let mut results = Vec::with_capacity(batch_size);
     for batch in 0..batch_size {
@@ -382,16 +448,20 @@ fn post_process_outputs(
                 image_width as f32,
                 image_height as f32,
             );
-            let mask_offset = (batch * num_queries + query) * mask_h * mask_w;
-            let polygon_points = extract_polygon_points(
-                bbox,
-                &masks[mask_offset..mask_offset + mask_h * mask_w],
-                mask_w,
-                mask_h,
-                preprocessor.size.width as f32 / image_width.max(1) as f32,
-                preprocessor.size.height as f32 / image_height.max(1) as f32,
-                threshold,
-            )?;
+            let polygon_points = if let Some(masks) = masks.as_ref() {
+                let mask_offset = (batch * num_queries + query) * mask_h * mask_w;
+                extract_polygon_points(
+                    bbox,
+                    &masks[mask_offset..mask_offset + mask_h * mask_w],
+                    mask_w,
+                    mask_h,
+                    preprocessor.size.width as f32 / image_width.max(1) as f32,
+                    preprocessor.size.height as f32 / image_height.max(1) as f32,
+                    threshold,
+                )?
+            } else {
+                Vec::new()
+            };
             regions.push(LayoutRegion {
                 order: order_seq[query],
                 label_id: class_id,

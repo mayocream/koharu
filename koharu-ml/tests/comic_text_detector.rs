@@ -33,3 +33,19 @@ async fn comic_text_detector() -> anyhow::Result<()> {
 
     Ok(())
 }
+
+#[tokio::test]
+async fn comic_text_detector_segmentation_only() -> anyhow::Result<()> {
+    let model = ComicTextDetector::load_segmentation_only(false).await?;
+
+    let img = image::open(Path::new(env!("CARGO_MANIFEST_DIR")).join("tests/fixtures/1.jpg"))?;
+    let mask = model.inference_segmentation(&img)?;
+
+    assert_eq!(mask.dimensions(), img.dimensions());
+    assert!(
+        mask.iter().any(|&value| value > 0),
+        "expected CTD segmentation-only mask to contain foreground pixels"
+    );
+
+    Ok(())
+}

@@ -1,5 +1,6 @@
 use std::collections::BTreeMap;
 use std::path::{Path, PathBuf};
+use std::time::Instant;
 
 use anyhow::{Context, Result, bail};
 use candle_core::{D, DType, Device, Tensor};
@@ -12,8 +13,16 @@ use tracing::instrument;
 
 use crate::{define_models, device, loading};
 
-const DEFAULT_MAX_NEW_TOKENS: usize = 512;
+const DEFAULT_MAX_NEW_TOKENS: usize = 128;
 const SPOTTING_UPSCALE_THRESHOLD: u32 = 1500;
+const OCR_MAX_UPSCALE_AREA_RATIO: usize = 4;
+const OCR_MIN_PIXEL_FLOOR_TILES: usize = 32;
+const OCR_BATCH_MAX_TOKEN_INFLATION_NUM: usize = 9;
+const OCR_BATCH_MAX_TOKEN_INFLATION_DEN: usize = 5;
+const REPETITION_SINGLE_TOKEN_LIMIT: usize = 8;
+const REPETITION_PATTERN_LIMITS: &[(usize, usize)] = &[(2, 6), (4, 4), (6, 4)];
+const LOW_DIVERSITY_WINDOW: usize = 48;
+const LOW_DIVERSITY_MAX_UNIQUE_TOKENS: usize = 10;
 
 define_models! {
     ConfigJson => ("PaddlePaddle/PaddleOCR-VL-1.5", "config.json"),
@@ -51,6 +60,22 @@ impl PaddleOcrVlTask {
         } else {
             preprocessor.max_pixels
         }
+    }
+
+    fn min_pixels(
+        self,
+        preprocessor: &PaddleOcrVlPreprocessorConfig,
+        image_width: usize,
+        image_height: usize,
+    ) -> usize {
+        if !matches!(self, Self::Ocr) {
+            return preprocessor.min_pixels;
+        }
+
+        let image_pixels = image_width.saturating_mul(image_height);
+        let floor = preprocessor.factor().pow(2) * OCR_MIN_PIXEL_FLOOR_TILES;
+        let capped = image_pixels.saturating_mul(OCR_MAX_UPSCALE_AREA_RATIO);
+        preprocessor.min_pixels.min(capped.max(floor))
     }
 }
 
@@ -155,6 +180,14 @@ struct PreparedImage {
     upscaled_for_spotting: bool,
 }
 
+struct BatchGroup {
+    indices: Vec<usize>,
+    bucket_width: u32,
+    bucket_height: u32,
+    bucket_num_image_tokens: usize,
+    min_original_num_image_tokens: usize,
+}
+
 pub struct PaddleOcrVl {
     model: PaddleOCRVLModel,
     tokenizer: Tokenizer,
@@ -162,6 +195,8 @@ pub struct PaddleOcrVl {
     preprocessor: PaddleOcrVlPreprocessorConfig,
     device: Device,
     dtype: DType,
+    mean: Tensor,
+    std: Tensor,
     eos_token_id: u32,
 }
 
@@ -209,6 +244,16 @@ impl PaddleOcrVl {
                 .context("failed to parse preprocessor config")?;
         let tokenizer = Tokenizer::from_file(&files.tokenizer).map_err(anyhow::Error::msg)?;
         let eos_token_id = resolve_eos_token_id(&tokenizer);
+        let mean =
+            Tensor::from_slice(&preprocessor.image_mean, (1, 3, 1, 1), &device)?.to_dtype(dtype)?;
+        let std = Tensor::from_slice(
+            &preprocessor
+                .image_std
+                .map(|value| if value == 0.0 { 1.0 } else { value }),
+            (1, 3, 1, 1),
+            &device,
+        )?
+        .to_dtype(dtype)?;
         let vb = if files.weights.extension().is_some_and(|ext| ext == "bin") {
             VarBuilder::from_pth(&files.weights, dtype, &device)?
         } else {
@@ -224,6 +269,8 @@ impl PaddleOcrVl {
             preprocessor,
             device,
             dtype,
+            mean,
+            std,
             eos_token_id,
         })
     }
@@ -245,7 +292,15 @@ impl PaddleOcrVl {
         max_new_tokens: usize,
     ) -> Result<PaddleOcrVlOutput> {
         let (original_width, original_height) = (image.width(), image.height());
-        let prepared = preprocess_image(image, &self.preprocessor, task, self.dtype, &self.device)?;
+        let prepared = preprocess_image(
+            image,
+            &self.preprocessor,
+            task,
+            self.dtype,
+            &self.device,
+            &self.mean,
+            &self.std,
+        )?;
         let input_ids = build_input_tokens(
             &self.tokenizer,
             task,
@@ -276,48 +331,78 @@ impl PaddleOcrVl {
             return Ok(Vec::new());
         }
 
+        let started = Instant::now();
         let mut prepared_images = Vec::with_capacity(images.len());
         let mut original_sizes = Vec::with_capacity(images.len());
-        let mut groups: BTreeMap<(u32, u32), Vec<usize>> = BTreeMap::new();
 
-        for (index, image) in images.iter().enumerate() {
-            let prepared =
-                preprocess_image(image, &self.preprocessor, task, self.dtype, &self.device)?;
-            groups
-                .entry((prepared.processed_width, prepared.processed_height))
-                .or_default()
-                .push(index);
+        let preprocess_started = Instant::now();
+        for image in images {
+            let prepared = preprocess_image(
+                image,
+                &self.preprocessor,
+                task,
+                self.dtype,
+                &self.device,
+                &self.mean,
+                &self.std,
+            )?;
             prepared_images.push(prepared);
             original_sizes.push((image.width(), image.height()));
         }
+        let preprocess_elapsed = preprocess_started.elapsed();
+
+        let groups = build_batch_groups(&prepared_images, &self.preprocessor, task);
 
         let mut outputs = vec![None; images.len()];
-        for indices in groups.into_values() {
-            let first = prepared_images
-                .get(*indices.first().context("empty batch group")?)
-                .context("missing prepared image for batch group")?;
+        let generation_started = Instant::now();
+        let group_count = groups.len();
+        let max_batch_size = groups
+            .iter()
+            .map(|group| group.indices.len())
+            .max()
+            .unwrap_or(0);
+        let max_bucket_image_tokens = groups
+            .iter()
+            .map(|group| group.bucket_num_image_tokens)
+            .max()
+            .unwrap_or(0);
+        let total_bucket_image_tokens = groups
+            .iter()
+            .map(|group| group.bucket_num_image_tokens * group.indices.len())
+            .sum::<usize>();
+        for group in groups {
+            group.indices.first().context("empty batch group")?;
             let input_ids = build_batched_input_tokens(
                 &self.tokenizer,
                 task,
-                first.num_image_tokens,
+                group.bucket_num_image_tokens,
                 &self.config,
-                indices.len(),
+                group.indices.len(),
                 &self.device,
             )?;
             let pixel_values = cat_batch(
-                indices
-                    .iter()
-                    .map(|&index| &prepared_images[index].pixel_values),
+                pad_pixel_batch(
+                    group
+                        .indices
+                        .iter()
+                        .map(|&index| &prepared_images[index].pixel_values),
+                    group.bucket_height,
+                    group.bucket_width,
+                )?
+                .iter()
+                .collect::<Vec<_>>(),
             )?;
-            let grid_thw = cat_batch(
-                indices
-                    .iter()
-                    .map(|&index| &prepared_images[index].grid_thw),
+            let bucket_grid_thw = grid_thw_tensor(
+                group.bucket_height,
+                group.bucket_width,
+                &self.preprocessor,
+                &self.device,
             )?;
+            let grid_thw = cat_batch(std::iter::repeat_n(&bucket_grid_thw, group.indices.len()))?;
             let generated_batch =
                 self.generate_batch(&input_ids, &pixel_values, &grid_thw, max_new_tokens)?;
 
-            for (batch_index, &image_index) in indices.iter().enumerate() {
+            for (batch_index, &image_index) in group.indices.iter().enumerate() {
                 let (original_width, original_height) = original_sizes[image_index];
                 outputs[image_index] = Some(
                     self.build_output(
@@ -333,11 +418,26 @@ impl PaddleOcrVl {
                 );
             }
         }
+        let generation_elapsed = generation_started.elapsed();
 
-        outputs
+        let decode_started = Instant::now();
+        let outputs = outputs
             .into_iter()
             .map(|output| output.context("missing batch inference output"))
-            .collect()
+            .collect::<Result<Vec<_>>>()?;
+        tracing::info!(
+            images = images.len(),
+            group_count,
+            max_batch_size,
+            max_bucket_image_tokens,
+            total_bucket_image_tokens,
+            preprocess_ms = preprocess_elapsed.as_millis(),
+            generation_ms = generation_elapsed.as_millis(),
+            decode_ms = decode_started.elapsed().as_millis(),
+            total_ms = started.elapsed().as_millis(),
+            "paddleocr-vl timings"
+        );
+        Ok(outputs)
     }
 
     fn generate_batch(
@@ -354,19 +454,16 @@ impl PaddleOcrVl {
         }
 
         self.model.clear_kv_cache();
-
         let mut current_ids = input_ids.clone();
         let logits = self
             .model
             .forward(&current_ids, Some(pixel_values), Some(grid_thw), 0)?;
-        let mut next_tokens = logits
-            .argmax(D::Minus1)?
-            .to_dtype(DType::U32)?
-            .to_vec1::<u32>()?;
+        let next_tokens_tensor = logits.argmax(D::Minus1)?.to_dtype(DType::U32)?;
+        let next_tokens = next_tokens_tensor.to_vec1::<u32>()?;
         let mut finished = vec![false; batch_size];
         for (index, token) in next_tokens.iter().copied().enumerate() {
             generated[index].push(token);
-            if token == self.eos_token_id {
+            if token == self.eos_token_id || should_stop_on_repetition(&generated[index]) {
                 finished[index] = true;
             }
         }
@@ -375,29 +472,21 @@ impl PaddleOcrVl {
         }
 
         let mut seqlen_offset = current_ids.dim(1)?;
-        for (token, done) in next_tokens.iter_mut().zip(&finished) {
-            if *done {
-                *token = self.eos_token_id;
-            }
-        }
-        current_ids = Tensor::new(next_tokens.as_slice(), &self.device)?.unsqueeze(1)?;
+        current_ids = next_tokens_tensor.unsqueeze(1)?;
 
         for _ in 1..max_new_tokens {
             let logits = self
                 .model
                 .forward(&current_ids, None, None, seqlen_offset)?;
-            let mut next_tokens = logits
-                .argmax(D::Minus1)?
-                .to_dtype(DType::U32)?
-                .to_vec1::<u32>()?;
+            let next_tokens_tensor = logits.argmax(D::Minus1)?.to_dtype(DType::U32)?;
+            let next_tokens = next_tokens_tensor.to_vec1::<u32>()?;
 
-            for (index, token) in next_tokens.iter_mut().enumerate() {
+            for (index, token) in next_tokens.iter().copied().enumerate() {
                 if finished[index] {
-                    *token = self.eos_token_id;
                     continue;
                 }
-                generated[index].push(*token);
-                if *token == self.eos_token_id {
+                generated[index].push(token);
+                if token == self.eos_token_id || should_stop_on_repetition(&generated[index]) {
                     finished[index] = true;
                 }
             }
@@ -407,7 +496,7 @@ impl PaddleOcrVl {
             }
 
             seqlen_offset += 1;
-            current_ids = Tensor::new(next_tokens.as_slice(), &self.device)?.unsqueeze(1)?;
+            current_ids = next_tokens_tensor.unsqueeze(1)?;
         }
 
         Ok(generated)
@@ -500,6 +589,8 @@ fn preprocess_image(
     task: PaddleOcrVlTask,
     dtype: DType,
     device: &Device,
+    mean: &Tensor,
+    std: &Tensor,
 ) -> Result<PreparedImage> {
     if preprocessor.temporal_patch_size != 1 {
         bail!(
@@ -532,7 +623,11 @@ fn preprocess_image(
             image.height() as usize,
             image.width() as usize,
             preprocessor.factor(),
-            preprocessor.min_pixels,
+            task.min_pixels(
+                preprocessor,
+                image.width() as usize,
+                image.height() as usize,
+            ),
             task.max_pixels(preprocessor),
         )?;
         DynamicImage::ImageRgb8(image::imageops::resize(
@@ -548,11 +643,9 @@ fn preprocess_image(
     let rgb = resized.to_rgb8();
     let processed_width = rgb.width();
     let processed_height = rgb.height();
-    let pixel_values = rgb_to_tensor(&rgb, preprocessor, dtype, device)?;
-    let grid_h = processed_height as usize / preprocessor.patch_size;
-    let grid_w = processed_width as usize / preprocessor.patch_size;
-    let grid_thw = Tensor::new(&[[1u32, grid_h as u32, grid_w as u32]], device)?;
-    let num_image_tokens = (grid_h / preprocessor.merge_size) * (grid_w / preprocessor.merge_size);
+    let pixel_values = rgb_to_tensor(&rgb, preprocessor, dtype, device, mean, std)?;
+    let grid_thw = grid_thw_tensor(processed_height, processed_width, preprocessor, device)?;
+    let num_image_tokens = bucket_num_image_tokens(processed_height, processed_width, preprocessor);
 
     Ok(PreparedImage {
         pixel_values,
@@ -569,32 +662,29 @@ fn rgb_to_tensor(
     preprocessor: &PaddleOcrVlPreprocessorConfig,
     dtype: DType,
     device: &Device,
+    mean: &Tensor,
+    std: &Tensor,
 ) -> Result<Tensor> {
     let width = image.width() as usize;
     let height = image.height() as usize;
-    let mut values = vec![0f32; 3 * height * width];
-    for c in 0..3 {
-        let mean = preprocessor.image_mean[c];
-        let std = if preprocessor.image_std[c] == 0.0 {
-            1.0
-        } else {
-            preprocessor.image_std[c]
-        };
-        for y in 0..height {
-            for x in 0..width {
-                let pixel = image.get_pixel(x as u32, y as u32);
-                let mut value = pixel[c] as f32;
-                if preprocessor.do_rescale {
-                    value *= preprocessor.rescale_factor;
-                }
-                if preprocessor.do_normalize {
-                    value = (value - mean) / std;
-                }
-                values[c * height * width + y * width + x] = value;
-            }
-        }
+    let tensor = Tensor::from_vec(
+        image.clone().into_raw(),
+        (1, height, width, 3),
+        &Device::Cpu,
+    )?
+    .to_device(device)?
+    .permute((0, 3, 1, 2))?
+    .to_dtype(dtype)?;
+    let tensor = if preprocessor.do_rescale {
+        tensor.affine(preprocessor.rescale_factor as f64, 0.0)?
+    } else {
+        tensor
+    };
+    if preprocessor.do_normalize {
+        Ok(tensor.broadcast_sub(mean)?.broadcast_div(std)?)
+    } else {
+        Ok(tensor)
     }
-    Ok(Tensor::from_vec(values, (1, 3, height, width), device)?.to_dtype(dtype)?)
 }
 
 fn build_input_tokens(
@@ -658,4 +748,349 @@ fn build_batched_input_tokens(
 fn cat_batch<'a>(tensors: impl IntoIterator<Item = &'a Tensor>) -> Result<Tensor> {
     let tensors = tensors.into_iter().collect::<Vec<_>>();
     Tensor::cat(&tensors, 0).map_err(Into::into)
+}
+
+fn build_batch_groups(
+    prepared_images: &[PreparedImage],
+    preprocessor: &PaddleOcrVlPreprocessorConfig,
+    task: PaddleOcrVlTask,
+) -> Vec<BatchGroup> {
+    if !matches!(task, PaddleOcrVlTask::Ocr) {
+        let mut groups: BTreeMap<(u32, u32), Vec<usize>> = BTreeMap::new();
+        for (index, prepared) in prepared_images.iter().enumerate() {
+            groups
+                .entry((prepared.processed_width, prepared.processed_height))
+                .or_default()
+                .push(index);
+        }
+        return groups
+            .into_iter()
+            .map(|((bucket_width, bucket_height), indices)| BatchGroup {
+                min_original_num_image_tokens: bucket_num_image_tokens(
+                    bucket_height,
+                    bucket_width,
+                    preprocessor,
+                ),
+                bucket_num_image_tokens: bucket_num_image_tokens(
+                    bucket_height,
+                    bucket_width,
+                    preprocessor,
+                ),
+                indices,
+                bucket_width,
+                bucket_height,
+            })
+            .collect();
+    }
+
+    let mut sorted_indices = (0..prepared_images.len()).collect::<Vec<_>>();
+    sorted_indices.sort_by(|&lhs, &rhs| {
+        let lhs_prepared = &prepared_images[lhs];
+        let rhs_prepared = &prepared_images[rhs];
+        lhs_prepared
+            .num_image_tokens
+            .cmp(&rhs_prepared.num_image_tokens)
+            .then_with(|| {
+                lhs_prepared
+                    .processed_height
+                    .cmp(&rhs_prepared.processed_height)
+            })
+            .then_with(|| {
+                lhs_prepared
+                    .processed_width
+                    .cmp(&rhs_prepared.processed_width)
+            })
+    });
+
+    let max_pixels = task.max_pixels(preprocessor);
+    let mut groups = Vec::<BatchGroup>::new();
+    for index in sorted_indices {
+        let prepared = &prepared_images[index];
+        let mut best_group_index = None;
+        let mut best_group_tokens = usize::MAX;
+
+        for (group_index, group) in groups.iter().enumerate() {
+            let candidate_width = group.bucket_width.max(prepared.processed_width);
+            let candidate_height = group.bucket_height.max(prepared.processed_height);
+            let candidate_pixels =
+                (candidate_width as usize).saturating_mul(candidate_height as usize);
+            if candidate_pixels > max_pixels {
+                continue;
+            }
+
+            let candidate_tokens =
+                bucket_num_image_tokens(candidate_height, candidate_width, preprocessor);
+            let candidate_min_tokens = group
+                .min_original_num_image_tokens
+                .min(prepared.num_image_tokens);
+            if candidate_tokens.saturating_mul(OCR_BATCH_MAX_TOKEN_INFLATION_DEN)
+                > candidate_min_tokens.saturating_mul(OCR_BATCH_MAX_TOKEN_INFLATION_NUM)
+            {
+                continue;
+            }
+
+            if candidate_tokens < best_group_tokens {
+                best_group_tokens = candidate_tokens;
+                best_group_index = Some(group_index);
+            }
+        }
+
+        if let Some(group_index) = best_group_index {
+            let group = &mut groups[group_index];
+            group.bucket_width = group.bucket_width.max(prepared.processed_width);
+            group.bucket_height = group.bucket_height.max(prepared.processed_height);
+            group.bucket_num_image_tokens =
+                bucket_num_image_tokens(group.bucket_height, group.bucket_width, preprocessor);
+            group.min_original_num_image_tokens = group
+                .min_original_num_image_tokens
+                .min(prepared.num_image_tokens);
+            group.indices.push(index);
+        } else {
+            groups.push(BatchGroup {
+                indices: vec![index],
+                bucket_width: prepared.processed_width,
+                bucket_height: prepared.processed_height,
+                bucket_num_image_tokens: prepared.num_image_tokens,
+                min_original_num_image_tokens: prepared.num_image_tokens,
+            });
+        }
+    }
+
+    groups
+}
+
+fn pad_pixel_batch<'a>(
+    tensors: impl IntoIterator<Item = &'a Tensor>,
+    bucket_height: u32,
+    bucket_width: u32,
+) -> Result<Vec<Tensor>> {
+    let bucket_height = bucket_height as usize;
+    let bucket_width = bucket_width as usize;
+    tensors
+        .into_iter()
+        .map(|tensor| {
+            let (_, _, height, width) = tensor.dims4()?;
+            let mut padded = tensor.clone();
+            if bucket_height > height {
+                padded = padded.pad_with_same(2, 0, bucket_height - height)?;
+            }
+            if bucket_width > width {
+                padded = padded.pad_with_same(3, 0, bucket_width - width)?;
+            }
+            Ok(padded)
+        })
+        .collect()
+}
+
+fn bucket_num_image_tokens(
+    processed_height: u32,
+    processed_width: u32,
+    preprocessor: &PaddleOcrVlPreprocessorConfig,
+) -> usize {
+    let grid_h = processed_height as usize / preprocessor.patch_size;
+    let grid_w = processed_width as usize / preprocessor.patch_size;
+    (grid_h / preprocessor.merge_size) * (grid_w / preprocessor.merge_size)
+}
+
+fn grid_thw_tensor(
+    processed_height: u32,
+    processed_width: u32,
+    preprocessor: &PaddleOcrVlPreprocessorConfig,
+    device: &Device,
+) -> Result<Tensor> {
+    let grid_h = processed_height as usize / preprocessor.patch_size;
+    let grid_w = processed_width as usize / preprocessor.patch_size;
+    Tensor::new(&[[1u32, grid_h as u32, grid_w as u32]], device).map_err(Into::into)
+}
+
+fn should_stop_on_repetition(tokens: &[u32]) -> bool {
+    if tokens.len() >= REPETITION_SINGLE_TOKEN_LIMIT {
+        let last = tokens[tokens.len() - 1];
+        if tokens[tokens.len() - REPETITION_SINGLE_TOKEN_LIMIT..]
+            .iter()
+            .all(|&token| token == last)
+        {
+            return true;
+        }
+    }
+
+    if REPETITION_PATTERN_LIMITS
+        .iter()
+        .any(|&(pattern_len, repeats)| repeated_suffix(tokens, pattern_len, repeats))
+    {
+        return true;
+    }
+
+    if tokens.len() < LOW_DIVERSITY_WINDOW {
+        return false;
+    }
+
+    let mut unique = Vec::with_capacity(LOW_DIVERSITY_MAX_UNIQUE_TOKENS + 1);
+    for &token in &tokens[tokens.len() - LOW_DIVERSITY_WINDOW..] {
+        if unique.contains(&token) {
+            continue;
+        }
+        unique.push(token);
+        if unique.len() > LOW_DIVERSITY_MAX_UNIQUE_TOKENS {
+            return false;
+        }
+    }
+
+    true
+}
+
+fn repeated_suffix(tokens: &[u32], pattern_len: usize, repeats: usize) -> bool {
+    let total = pattern_len.saturating_mul(repeats);
+    if pattern_len == 0 || repeats < 2 || tokens.len() < total {
+        return false;
+    }
+
+    let pattern_start = tokens.len() - pattern_len;
+    let pattern = &tokens[pattern_start..];
+    (2..=repeats).all(|repeat_index| {
+        let start = tokens.len() - repeat_index * pattern_len;
+        &tokens[start..start + pattern_len] == pattern
+    })
+}
+
+#[cfg(test)]
+mod tests {
+    use super::{
+        PaddleOcrVlPreprocessorConfig, PaddleOcrVlTask, PreparedImage, bucket_num_image_tokens,
+        build_batch_groups, grid_thw_tensor, should_stop_on_repetition, smart_resize,
+    };
+    use candle_core::{DType, Device, Tensor};
+
+    fn preprocessor() -> PaddleOcrVlPreprocessorConfig {
+        PaddleOcrVlPreprocessorConfig {
+            do_convert_rgb: true,
+            do_normalize: true,
+            do_rescale: true,
+            do_resize: true,
+            image_mean: [0.5, 0.5, 0.5],
+            image_std: [0.5, 0.5, 0.5],
+            max_pixels: 1_003_520,
+            merge_size: 2,
+            min_pixels: 112_896,
+            patch_size: 14,
+            rescale_factor: 1.0 / 255.0,
+            temporal_patch_size: 1,
+        }
+    }
+
+    #[test]
+    fn ocr_min_pixels_caps_small_crop_upscale() {
+        let preprocessor = preprocessor();
+        let min_pixels = PaddleOcrVlTask::Ocr.min_pixels(&preprocessor, 270, 48);
+        assert_eq!(min_pixels, 51_840);
+    }
+
+    #[test]
+    fn smart_resize_honors_capped_ocr_min_pixels() -> anyhow::Result<()> {
+        let preprocessor = preprocessor();
+        let min_pixels = PaddleOcrVlTask::Ocr.min_pixels(&preprocessor, 270, 48);
+        let (height, width) = smart_resize(
+            48,
+            270,
+            preprocessor.factor(),
+            min_pixels,
+            preprocessor.max_pixels,
+        )?;
+        assert_eq!((height, width), (112, 560));
+        Ok(())
+    }
+
+    #[test]
+    fn repetition_guard_detects_repeated_suffix_patterns() {
+        assert!(should_stop_on_repetition(&[
+            1, 2, 1, 2, 1, 2, 1, 2, 1, 2, 1, 2
+        ]));
+        assert!(should_stop_on_repetition(&[9, 9, 9, 9, 9, 9, 9, 9]));
+        assert!(!should_stop_on_repetition(&[1, 2, 3, 1, 2, 4, 1, 2]));
+    }
+
+    #[test]
+    fn repetition_guard_detects_low_diversity_long_outputs() {
+        let mut tokens = Vec::new();
+        for _ in 0..12 {
+            tokens.extend_from_slice(&[1, 2, 3, 4]);
+        }
+        assert!(should_stop_on_repetition(&tokens));
+    }
+
+    fn prepared_image(
+        width: u32,
+        height: u32,
+        preprocessor: &PaddleOcrVlPreprocessorConfig,
+    ) -> anyhow::Result<PreparedImage> {
+        let device = Device::Cpu;
+        let pixel_values =
+            Tensor::zeros((1, 3, height as usize, width as usize), DType::F32, &device)?;
+        let grid_thw = grid_thw_tensor(height, width, preprocessor, &device)?;
+        Ok(PreparedImage {
+            pixel_values,
+            grid_thw,
+            processed_width: width,
+            processed_height: height,
+            num_image_tokens: bucket_num_image_tokens(height, width, preprocessor),
+            upscaled_for_spotting: false,
+        })
+    }
+
+    #[test]
+    fn ocr_batch_groups_merge_compatible_shapes_into_padded_buckets() -> anyhow::Result<()> {
+        let preprocessor = preprocessor();
+        let prepared_images = [
+            prepared_image(112, 252, &preprocessor)?,
+            prepared_image(112, 252, &preprocessor)?,
+            prepared_image(84, 336, &preprocessor)?,
+            prepared_image(140, 196, &preprocessor)?,
+            prepared_image(252, 392, &preprocessor)?,
+            prepared_image(280, 448, &preprocessor)?,
+            prepared_image(224, 560, &preprocessor)?,
+            prepared_image(476, 252, &preprocessor)?,
+        ];
+
+        let groups = build_batch_groups(&prepared_images, &preprocessor, PaddleOcrVlTask::Ocr);
+        assert_eq!(groups.len(), 3);
+        assert_eq!(
+            groups.iter().map(|group| group.indices.len()).max(),
+            Some(4)
+        );
+        assert!(
+            groups
+                .iter()
+                .any(|group| group.indices.len() == 4 && group.bucket_num_image_tokens == 60)
+        );
+        assert!(
+            groups
+                .iter()
+                .any(|group| group.indices.len() == 3 && group.bucket_num_image_tokens == 200)
+        );
+        assert_eq!(
+            groups
+                .iter()
+                .map(|group| group.bucket_num_image_tokens * group.indices.len())
+                .sum::<usize>(),
+            993
+        );
+        Ok(())
+    }
+
+    #[test]
+    fn non_ocr_batch_groups_keep_exact_processed_shapes() -> anyhow::Result<()> {
+        let preprocessor = preprocessor();
+        let prepared_images = [
+            prepared_image(112, 252, &preprocessor)?,
+            prepared_image(84, 336, &preprocessor)?,
+        ];
+
+        let groups = build_batch_groups(&prepared_images, &preprocessor, PaddleOcrVlTask::Table);
+        assert_eq!(groups.len(), 2);
+        assert_eq!(groups[0].bucket_width, 84);
+        assert_eq!(groups[0].bucket_height, 336);
+        assert_eq!(groups[1].bucket_width, 112);
+        assert_eq!(groups[1].bucket_height, 252);
+        Ok(())
+    }
 }

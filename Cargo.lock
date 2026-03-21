@@ -3920,6 +3920,7 @@ dependencies = [
  "objc2-metal",
  "objc2-metal-performance-shaders",
  "objc2-metal-performance-shaders-graph",
+ "rayon",
  "reqwest 0.13.2",
  "rustfft",
  "serde",

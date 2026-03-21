@@ -1,17 +1,17 @@
-use std::{fs, path::PathBuf};
+use std::{fs, path::PathBuf, time::Instant};
 
 use crate::{define_models, device, loading};
 use anyhow::{Context, Result};
-use candle_core::{DType, Device, IndexOp, Tensor};
-use candle_nn::ops::{sigmoid, softmax};
+use candle_core::{DType, Device, Tensor};
 use image::{DynamicImage, GenericImageView, imageops::FilterType};
+use rayon::prelude::*;
 
 mod models;
 pub use models::ModelKind;
 
-const FONT_COUNT: usize = 6_150;
+pub(super) const FONT_COUNT: usize = 6_150;
 const REGRESSION_START: usize = FONT_COUNT + 2;
-const REGRESSION_DIM: usize = 10;
+pub(super) const REGRESSION_DIM: usize = 10;
 
 define_models! {
     FontWeights => ("fffonion/yuzumarker-font-detection", "yuzumarker-font-detection.safetensors"),
@@ -52,26 +52,32 @@ impl FontDetector {
             return Ok(Vec::new());
         }
 
-        let mut processed = Vec::with_capacity(images.len());
-        let mut original_sizes = Vec::with_capacity(images.len());
+        let started = Instant::now();
         let input_size = self.model.input_size();
-        for image in images {
-            let (w, _h) = image.dimensions();
-            original_sizes.push(w);
-            processed.push(preprocess_image(image, input_size, &self.device)?);
-        }
-        let batch = Tensor::stack(&processed, 0)?;
-        let logits = self.model.forward(&batch, false)?;
+        let original_sizes = images
+            .iter()
+            .map(|image| image.dimensions().0)
+            .collect::<Vec<_>>();
+        let preprocess_started = Instant::now();
+        let processed = images
+            .par_iter()
+            .map(|image| preprocess_image(image, input_size))
+            .collect::<Vec<_>>()
+            .into_iter()
+            .collect::<Result<Vec<_>>>()?;
+        let batch = Tensor::stack(&processed, 0)?.to_device(&self.device)?;
+        let preprocess_elapsed = preprocess_started.elapsed();
+
+        let forward_started = Instant::now();
+        let logits = self.model.forward(&batch, false)?.to_device(&Device::Cpu)?;
+        let forward_elapsed = forward_started.elapsed();
+
+        let postprocess_started = Instant::now();
+        let rows = logits.to_vec2::<f32>()?;
 
         let mut predictions = Vec::with_capacity(images.len());
-        for (index, width) in original_sizes.into_iter().enumerate() {
-            let example = logits.i(index)?;
-            let font_logits = example.narrow(0, 0, FONT_COUNT)?;
-            let font_probs = softmax(&font_logits, 0)?;
-            let font_probs_vec: Vec<f32> = font_probs.to_vec1()?;
-            let mut ranked: Vec<(usize, f32)> = font_probs_vec.into_iter().enumerate().collect();
-            ranked.sort_unstable_by(|a, b| b.1.partial_cmp(&a.1).unwrap());
-            ranked.truncate(top_k.min(FONT_COUNT));
+        for (row, width) in rows.into_iter().zip(original_sizes) {
+            let ranked = top_k_softmax(&row[..FONT_COUNT], top_k.min(FONT_COUNT));
 
             let named_fonts = ranked
                 .iter()
@@ -86,19 +92,16 @@ impl FontDetector {
                 })
                 .collect();
 
-            let direction_logits = example.narrow(0, FONT_COUNT, 2)?;
-            let direction_vec: Vec<f32> = direction_logits.to_vec1()?;
-            let direction = if direction_vec.len() == 2 && direction_vec[1] > direction_vec[0] {
+            let direction = if row[FONT_COUNT + 1] > row[FONT_COUNT] {
                 TextDirection::Vertical
             } else {
                 TextDirection::Horizontal
             };
 
-            let regression = example.narrow(0, REGRESSION_START, REGRESSION_DIM)?;
-            // Regression head is trained on normalized values; bring logits into [0, 1].
-            let regression = sigmoid(&regression)?;
-            let mut regression: Vec<f32> = regression.to_vec1()?;
-            regression.resize(REGRESSION_DIM, 0.0);
+            let regression = row[REGRESSION_START..REGRESSION_START + REGRESSION_DIM]
+                .iter()
+                .map(|&value| sigmoid_scalar(value))
+                .collect::<Vec<_>>();
             let clamp01 = |v: f32| v.clamp(0.0, 1.0);
             let text_color = [
                 (clamp01(regression[0]) * 255.0).round() as u8,
@@ -132,6 +135,16 @@ impl FontDetector {
                 angle_deg,
             });
         }
+
+        tracing::info!(
+            images = images.len(),
+            input_size,
+            preprocess_ms = preprocess_elapsed.as_millis(),
+            forward_ms = forward_elapsed.as_millis(),
+            postprocess_ms = postprocess_started.elapsed().as_millis(),
+            total_ms = started.elapsed().as_millis(),
+            "font detector timings"
+        );
 
         Ok(predictions)
     }
@@ -191,7 +204,7 @@ struct FontLabelEntry {
     serif: bool,
 }
 
-fn preprocess_image(image: &DynamicImage, target: usize, device: &Device) -> Result<Tensor> {
+fn preprocess_image(image: &DynamicImage, target: usize) -> Result<Tensor> {
     let resized = image.resize_exact(target as u32, target as u32, FilterType::CatmullRom);
     let data = resized.to_rgb8().into_raw();
     let tensor = Tensor::from_vec(
@@ -202,6 +215,47 @@ fn preprocess_image(image: &DynamicImage, target: usize, device: &Device) -> Res
     .to_dtype(DType::F32)?
     .permute((2, 0, 1))? // (3, H, W)
     * (1.0 / 255.0);
-    let tensor = tensor?;
-    Ok(tensor.to_device(device)?)
+    tensor.map_err(Into::into)
+}
+
+fn top_k_softmax(logits: &[f32], top_k: usize) -> Vec<(usize, f32)> {
+    let top_k = top_k.min(logits.len());
+    if top_k == 0 {
+        return Vec::new();
+    }
+
+    let max_logit = logits.iter().copied().fold(f32::NEG_INFINITY, f32::max);
+    let denom = logits
+        .iter()
+        .map(|&logit| ((logit - max_logit) as f64).exp())
+        .sum::<f64>()
+        .max(f64::MIN_POSITIVE);
+
+    let mut best = Vec::with_capacity(top_k);
+    for (index, &logit) in logits.iter().enumerate() {
+        insert_ranked(&mut best, (index, logit), top_k);
+    }
+
+    best.into_iter()
+        .map(|(index, logit)| (index, (((logit - max_logit) as f64).exp() / denom) as f32))
+        .collect()
+}
+
+fn insert_ranked(best: &mut Vec<(usize, f32)>, candidate: (usize, f32), limit: usize) {
+    let position = best
+        .iter()
+        .position(|(_, value)| candidate.1 > *value)
+        .unwrap_or(best.len());
+    if position < limit {
+        best.insert(position, candidate);
+        if best.len() > limit {
+            best.pop();
+        }
+    } else if best.len() < limit {
+        best.push(candidate);
+    }
+}
+
+fn sigmoid_scalar(value: f32) -> f32 {
+    1.0 / (1.0 + (-value).exp())
 }
