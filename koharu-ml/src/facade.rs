@@ -1,7 +1,7 @@
 use std::{sync::Mutex, time::Instant};
 
 use anyhow::Result;
-use image::{DynamicImage, GrayImage, Luma};
+use image::DynamicImage;
 use koharu_types::{Document, FontPrediction, SerializableDynamicImage, TextBlock, TextDirection};
 
 use crate::comic_text_detector::{self, ComicTextDetector, crop_text_block_bbox};
@@ -17,10 +17,7 @@ const GRAY_NEAR_WHITE_THRESHOLD: u8 = 60;
 const GRAY_TOLERANCE: u8 = 10;
 const SIMILAR_COLOR_MAX_DIFF: u8 = 16;
 const PP_DOCLAYOUT_THRESHOLD: f32 = 0.25;
-const SEGMENTATION_THRESHOLD: f32 = 0.1;
 const VERTICAL_ASPECT_RATIO_THRESHOLD: f32 = 1.15;
-const BLOCK_MASK_PADDING_RATIO: f32 = 0.18;
-const BLOCK_MASK_MIN_PADDING: f32 = 6.0;
 const BLOCK_OVERLAP_DEDUPE_THRESHOLD: f32 = 0.9;
 const OCR_MAX_NEW_TOKENS: usize = 128;
 
@@ -110,7 +107,11 @@ impl Model {
 
         let segmentation_started = Instant::now();
         let probability_map = self.segmenter.inference_segmentation(&doc.image)?;
-        let mask = build_segment_mask(&probability_map, &doc.text_blocks)?;
+        let mask = comic_text_detector::refine_segmentation_mask(
+            &doc.image,
+            &probability_map,
+            &doc.text_blocks,
+        );
         doc.segment = Some(DynamicImage::ImageLuma8(mask).into());
         let segmentation_elapsed = segmentation_started.elapsed();
 
@@ -343,52 +344,6 @@ fn overlap_area(a: [f32; 4], b: [f32; 4]) -> f32 {
     }
 }
 
-fn build_segment_mask(probability_map: &GrayImage, blocks: &[TextBlock]) -> Result<GrayImage> {
-    let threshold = (SEGMENTATION_THRESHOLD.clamp(0.0, 1.0) * 255.0).round() as u8;
-    let thresholded =
-        GrayImage::from_fn(probability_map.width(), probability_map.height(), |x, y| {
-            if probability_map.get_pixel(x, y)[0] >= threshold {
-                Luma([255])
-            } else {
-                Luma([0])
-            }
-        });
-    if blocks.is_empty() {
-        return Ok(thresholded);
-    }
-
-    let mut filtered = GrayImage::new(thresholded.width(), thresholded.height());
-    let max_x = thresholded.width().saturating_sub(1) as f32;
-    let max_y = thresholded.height().saturating_sub(1) as f32;
-    for block in blocks {
-        let pad_x = (block.width * BLOCK_MASK_PADDING_RATIO).max(BLOCK_MASK_MIN_PADDING);
-        let pad_y = (block.height * BLOCK_MASK_PADDING_RATIO).max(BLOCK_MASK_MIN_PADDING);
-        let x1 = (block.x - pad_x).floor().clamp(0.0, max_x) as u32;
-        let y1 = (block.y - pad_y).floor().clamp(0.0, max_y) as u32;
-        let x2 = (block.x + block.width + pad_x)
-            .ceil()
-            .clamp(x1 as f32 + 1.0, thresholded.width() as f32) as u32;
-        let y2 = (block.y + block.height + pad_y)
-            .ceil()
-            .clamp(y1 as f32 + 1.0, thresholded.height() as f32) as u32;
-
-        for y in y1..y2 {
-            for x in x1..x2 {
-                let pixel = thresholded.get_pixel(x, y);
-                if pixel[0] > 0 {
-                    filtered.put_pixel(x, y, *pixel);
-                }
-            }
-        }
-    }
-
-    if filtered.pixels().any(|pixel| pixel[0] > 0) {
-        Ok(filtered)
-    } else {
-        Ok(thresholded)
-    }
-}
-
 fn normalize_ocr_text(text: &str) -> String {
     text.chars()
         .filter(|&ch| ch != '\n' && ch != '\r')
@@ -397,8 +352,6 @@ fn normalize_ocr_text(text: &str) -> String {
 
 #[cfg(test)]
 mod tests {
-    use image::Luma;
-
     use super::*;
 
     fn test_region(order: usize, label: &str, bbox: [f32; 4]) -> LayoutRegion {
@@ -432,29 +385,6 @@ mod tests {
         let blocks = build_text_blocks(&[test_region(0, "text", [5.0, 5.0, 20.0, 60.0])]);
         assert_eq!(blocks.len(), 1);
         assert_eq!(blocks[0].source_direction, Some(TextDirection::Vertical));
-    }
-
-    #[test]
-    fn build_segment_mask_prefers_pixels_within_detected_blocks() -> Result<()> {
-        let probability_map = GrayImage::from_fn(8, 8, |x, y| {
-            if (2..5).contains(&x) && (2..5).contains(&y) {
-                Luma([255])
-            } else {
-                Luma([0])
-            }
-        });
-        let blocks = vec![TextBlock {
-            x: 2.0,
-            y: 2.0,
-            width: 3.0,
-            height: 3.0,
-            ..Default::default()
-        }];
-
-        let mask = build_segment_mask(&probability_map, &blocks)?;
-        assert_eq!(mask.get_pixel(0, 0), &Luma([0]));
-        assert_eq!(mask.get_pixel(3, 3), &Luma([255]));
-        Ok(())
     }
 
     #[test]

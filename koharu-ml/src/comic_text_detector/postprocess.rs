@@ -188,8 +188,7 @@ pub fn build_detection(
         .collect::<Vec<_>>();
     let line_polygons = detected_lines.iter().map(|line| line.quad).collect();
     let text_blocks = group_output(&detected_lines, &mask_map, image.width(), image.height());
-    let refined_mask = refine_mask(&image.to_rgb8(), &mask_map, &text_blocks);
-    let mask = dilate(&refined_mask, Norm::L1, FINAL_MASK_DILATE_RADIUS);
+    let mask = refine_segmentation_mask(image, &mask_map, &text_blocks);
 
     Ok(ComicTextDetection {
         shrink_map,
@@ -198,6 +197,25 @@ pub fn build_detection(
         text_blocks,
         mask,
     })
+}
+
+pub fn refine_segmentation_mask(
+    image: &DynamicImage,
+    pred_mask: &GrayImage,
+    blocks: &[TextBlock],
+) -> GrayImage {
+    let base = if blocks.is_empty() {
+        threshold_binary(pred_mask, 60)
+    } else {
+        let refined = refine_mask(&image.to_rgb8(), pred_mask, blocks);
+        if refined.pixels().any(|pixel| pixel[0] > 0) {
+            refined
+        } else {
+            threshold_binary(pred_mask, 60)
+        }
+    };
+
+    dilate(&base, Norm::L1, FINAL_MASK_DILATE_RADIUS)
 }
 
 pub fn crop_text_block_bbox(image: &DynamicImage, block: &TextBlock) -> DynamicImage {
@@ -2033,6 +2051,22 @@ mod tests {
         let refined = refine_mask(&image, &pred_mask, &[block]);
         assert_eq!(refined.get_pixel(0, 0)[0], 0);
         assert!(refined.get_pixel(16, 15)[0] > 0);
+    }
+
+    #[test]
+    fn refine_segmentation_mask_thresholds_when_blocks_are_missing() {
+        let image = DynamicImage::ImageRgb8(RgbImage::from_pixel(16, 16, Rgb([255, 255, 255])));
+        let pred_mask = GrayImage::from_fn(16, 16, |x, y| {
+            if (4..12).contains(&x) && (5..11).contains(&y) {
+                Luma([200])
+            } else {
+                Luma([0])
+            }
+        });
+
+        let mask = refine_segmentation_mask(&image, &pred_mask, &[]);
+        assert_eq!(mask.get_pixel(0, 0)[0], 0);
+        assert!(mask.get_pixel(8, 8)[0] > 0);
     }
 
     #[test]

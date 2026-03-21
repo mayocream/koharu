@@ -12,7 +12,10 @@ use tracing::instrument;
 
 use crate::{define_models, device, loading};
 
-pub use postprocess::{ComicTextDetection, Quad, crop_text_block_bbox, extract_text_block_regions};
+pub use postprocess::{
+    ComicTextDetection, Quad, crop_text_block_bbox, extract_text_block_regions,
+    refine_segmentation_mask,
+};
 
 const GPU_DETECT_SIZE: u32 = 1280;
 const CPU_DETECT_SIZE: u32 = 640;
