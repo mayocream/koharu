@@ -96,3 +96,7 @@ path = "bin/mit48px-ocr.rs"
 [[bin]]
 name = "font-detect"
 path = "bin/font-detect.rs"
+
+[[bin]]
+name = "pp-doclayout-v3"
+path = "bin/pp-doclayout-v3.rs"
