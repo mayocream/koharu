@@ -113,10 +113,11 @@ Koharu relies on a mixin of computer vision and natural language processing mode
 
 Koharu uses several pre-trained models for different tasks:
 
-- [comic-text-detector](https://github.com/dmMaze/comic-text-detector)
-- [manga-ocr](https://github.com/kha-white/manga-ocr)
-- [AnimeMangaInpainting](https://huggingface.co/dreMaz/AnimeMangaInpainting)
-- [YuzuMarker.FontDetection](https://github.com/JeffersonQin/YuzuMarker.FontDetection)
+- [PP-DocLayoutV3](https://huggingface.co/PaddlePaddle/PP-DocLayoutV3_safetensors) for text detection and layout analysis
+- [comic-text-detector](https://huggingface.co/mayocream/comic-text-detector) for text segmentation
+- [PaddleOCR-VL-1.5](https://huggingface.co/PaddlePaddle/PaddleOCR-VL-1.5) for OCR text recognition
+- [lama-manga](https://huggingface.co/mayocream/lama-manga) for inpainting
+- [YuzuMarker.FontDetection](https://huggingface.co/fffonion/yuzumarker-font-detection) for font and color detection
 
 The models will be automatically downloaded when you run Koharu for the first time.
 

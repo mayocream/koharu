@@ -110,10 +110,11 @@ Koharu 结合计算机视觉与自然语言处理模型来完成各项任务。
 
 Koharu 在不同任务中使用多个预训练模型：
 
-- [comic-text-detector](https://github.com/dmMaze/comic-text-detector)
-- [manga-ocr](https://github.com/kha-white/manga-ocr)
-- [AnimeMangaInpainting](https://huggingface.co/dreMaz/AnimeMangaInpainting)
-- [YuzuMarker.FontDetection](https://github.com/JeffersonQin/YuzuMarker.FontDetection)
+- [PP-DocLayoutV3](https://huggingface.co/PaddlePaddle/PP-DocLayoutV3_safetensors) 用于文本检测和布局分析
+- [comic-text-detector](https://huggingface.co/mayocream/comic-text-detector) 用于生成文本遮罩
+- [PaddleOCR-VL-1.5](https://huggingface.co/PaddlePaddle/PaddleOCR-VL-1.5) 用于 OCR 文本识别
+- [lama-manga](https://huggingface.co/mayocream/lama-manga) 用于图像修复
+- [YuzuMarker.FontDetection](https://huggingface.co/fffonion/yuzumarker-font-detection) 用于字体和颜色检测
 
 这些模型会在你首次运行 Koharu 时自动下载。
 
