@@ -176,7 +176,7 @@ impl Model {
 
         for (block_index, output) in outputs.into_iter().enumerate() {
             if let Some(block) = doc.text_blocks.get_mut(block_index) {
-                block.text = Some(normalize_ocr_text(&output.text));
+                block.text = Some(output.text);
             }
         }
 
@@ -344,12 +344,6 @@ fn overlap_area(a: [f32; 4], b: [f32; 4]) -> f32 {
     }
 }
 
-fn normalize_ocr_text(text: &str) -> String {
-    text.chars()
-        .filter(|&ch| ch != '\n' && ch != '\r')
-        .collect()
-}
-
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -385,10 +379,5 @@ mod tests {
         let blocks = build_text_blocks(&[test_region(0, "text", [5.0, 5.0, 20.0, 60.0])]);
         assert_eq!(blocks.len(), 1);
         assert_eq!(blocks[0].source_direction, Some(TextDirection::Vertical));
-    }
-
-    #[test]
-    fn normalize_ocr_text_removes_newlines() {
-        assert_eq!(normalize_ocr_text("ab\nc\r\nd"), "abcd");
     }
 }
