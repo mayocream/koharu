@@ -168,19 +168,21 @@ impl PatchEmbedding {
             return Ok(result);
         }
 
-        // Reshape position embedding to (base_h, base_w, hidden)
-        let pos_embed = self.position_embedding.to_dtype(DType::F32)?.reshape((
-            base_h,
-            base_w,
-            self.hidden_size,
-        ))?;
+        let pos_embed = self.position_embedding.to_dtype(DType::F32)?;
 
         // Compute scale factors (align_corners=False style)
         let scale_h = base_h as f64 / target_h as f64;
         let scale_w = base_w as f64 / target_w as f64;
 
-        // Build interpolated output
-        let mut output_data = Vec::with_capacity(target_h * target_w * self.hidden_size);
+        let num_positions = target_h * target_w;
+        let mut idx00 = Vec::with_capacity(num_positions);
+        let mut idx01 = Vec::with_capacity(num_positions);
+        let mut idx10 = Vec::with_capacity(num_positions);
+        let mut idx11 = Vec::with_capacity(num_positions);
+        let mut w00_vals = Vec::with_capacity(num_positions);
+        let mut w01_vals = Vec::with_capacity(num_positions);
+        let mut w10_vals = Vec::with_capacity(num_positions);
+        let mut w11_vals = Vec::with_capacity(num_positions);
 
         for ty in 0..target_h {
             for tx in 0..target_w {
@@ -206,26 +208,35 @@ impl PatchEmbedding {
                 let w10 = fy * (1.0 - fx);
                 let w11 = fy * fx;
 
-                // Get the 4 corner embeddings
-                let e00: Vec<f32> = pos_embed.i((sy0, sx0))?.to_vec1()?;
-                let e01: Vec<f32> = pos_embed.i((sy0, sx1))?.to_vec1()?;
-                let e10: Vec<f32> = pos_embed.i((sy1, sx0))?.to_vec1()?;
-                let e11: Vec<f32> = pos_embed.i((sy1, sx1))?.to_vec1()?;
-
-                // Interpolate each dimension
-                for d in 0..self.hidden_size {
-                    let val = w00 * e00[d] + w01 * e01[d] + w10 * e10[d] + w11 * e11[d];
-                    output_data.push(val);
-                }
+                idx00.push((sy0 * base_w + sx0) as i64);
+                idx01.push((sy0 * base_w + sx1) as i64);
+                idx10.push((sy1 * base_w + sx0) as i64);
+                idx11.push((sy1 * base_w + sx1) as i64);
+                w00_vals.push(w00);
+                w01_vals.push(w01);
+                w10_vals.push(w10);
+                w11_vals.push(w11);
             }
         }
 
-        // Create output tensor and cache it
-        let result = Tensor::from_vec(
-            output_data,
-            (1, target_h * target_w, self.hidden_size),
-            device,
-        )?
+        let idx00 = Tensor::from_vec(idx00, (num_positions,), device)?;
+        let idx01 = Tensor::from_vec(idx01, (num_positions,), device)?;
+        let idx10 = Tensor::from_vec(idx10, (num_positions,), device)?;
+        let idx11 = Tensor::from_vec(idx11, (num_positions,), device)?;
+
+        let w00 = Tensor::from_vec(w00_vals, (num_positions, 1), device)?;
+        let w01 = Tensor::from_vec(w01_vals, (num_positions, 1), device)?;
+        let w10 = Tensor::from_vec(w10_vals, (num_positions, 1), device)?;
+        let w11 = Tensor::from_vec(w11_vals, (num_positions, 1), device)?;
+
+        let e00 = pos_embed.index_select(&idx00, 0)?;
+        let e01 = pos_embed.index_select(&idx01, 0)?;
+        let e10 = pos_embed.index_select(&idx10, 0)?;
+        let e11 = pos_embed.index_select(&idx11, 0)?;
+
+        let result = ((e00.broadcast_mul(&w00)? + e01.broadcast_mul(&w01)?)?
+            + (e10.broadcast_mul(&w10)? + e11.broadcast_mul(&w11)?)?)?
+        .reshape((1, num_positions, self.hidden_size))?
         .to_dtype(dtype)?;
         self.pos_embed_cache
             .borrow_mut()
