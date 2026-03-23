@@ -5,13 +5,19 @@ use std::time::Instant;
 use anyhow::{Context, Result, bail};
 use candle_core::{D, DType, Device, Tensor};
 use candle_nn::VarBuilder;
-use candle_transformers::models::paddleocr_vl::{Config as PaddleOcrVlConfig, PaddleOCRVLModel};
 use image::{DynamicImage, RgbImage, imageops::FilterType};
 use serde::{Deserialize, Serialize};
 use tokenizers::Tokenizer;
 use tracing::instrument;
 
 use crate::{define_models, device, loading};
+
+mod config;
+mod model;
+mod text;
+mod vision;
+
+use self::{config::Config as PaddleOcrVlConfig, model::PaddleOCRVLModel};
 
 const DEFAULT_MAX_NEW_TOKENS: usize = 128;
 const SPOTTING_UPSCALE_THRESHOLD: u32 = 1500;
