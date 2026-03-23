@@ -171,7 +171,7 @@ fn default_image_token_id() -> u32 {
 }
 
 fn default_video_token_id() -> u32 {
-    101307
+    100296
 }
 
 fn default_vision_start_token_id() -> u32 {

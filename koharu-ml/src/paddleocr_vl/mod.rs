@@ -20,15 +20,6 @@ mod vision;
 use self::{config::Config as PaddleOcrVlConfig, model::PaddleOCRVLModel};
 
 const DEFAULT_MAX_NEW_TOKENS: usize = 128;
-const SPOTTING_UPSCALE_THRESHOLD: u32 = 1500;
-const OCR_MAX_UPSCALE_AREA_RATIO: usize = 4;
-const OCR_MIN_PIXEL_FLOOR_TILES: usize = 32;
-const OCR_BATCH_MAX_TOKEN_INFLATION_NUM: usize = 9;
-const OCR_BATCH_MAX_TOKEN_INFLATION_DEN: usize = 5;
-const REPETITION_SINGLE_TOKEN_LIMIT: usize = 8;
-const REPETITION_PATTERN_LIMITS: &[(usize, usize)] = &[(2, 6), (4, 4), (6, 4)];
-const LOW_DIVERSITY_WINDOW: usize = 48;
-const LOW_DIVERSITY_MAX_UNIQUE_TOKENS: usize = 10;
 
 define_models! {
     ConfigJson => ("PaddlePaddle/PaddleOCR-VL-1.5", "config.json"),
@@ -59,30 +50,6 @@ impl PaddleOcrVlTask {
             Self::Seal => "Seal Recognition:",
         }
     }
-
-    fn max_pixels(self, preprocessor: &PaddleOcrVlPreprocessorConfig) -> usize {
-        if matches!(self, Self::Spotting) {
-            2048 * preprocessor.factor().pow(2)
-        } else {
-            preprocessor.max_pixels
-        }
-    }
-
-    fn min_pixels(
-        self,
-        preprocessor: &PaddleOcrVlPreprocessorConfig,
-        image_width: usize,
-        image_height: usize,
-    ) -> usize {
-        if !matches!(self, Self::Ocr) {
-            return preprocessor.min_pixels;
-        }
-
-        let image_pixels = image_width.saturating_mul(image_height);
-        let floor = preprocessor.factor().pow(2) * OCR_MIN_PIXEL_FLOOR_TILES;
-        let capped = image_pixels.saturating_mul(OCR_MAX_UPSCALE_AREA_RATIO);
-        preprocessor.min_pixels.min(capped.max(floor))
-    }
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -97,7 +64,6 @@ pub struct PaddleOcrVlOutput {
     pub processed_height: u32,
     pub grid_thw: [u32; 3],
     pub num_image_tokens: usize,
-    pub upscaled_for_spotting: bool,
 }
 
 #[derive(Debug, Clone, Deserialize)]
@@ -151,11 +117,11 @@ const fn default_temporal_patch_size() -> usize {
 }
 
 const fn default_min_pixels() -> usize {
-    112_896
+    384 * 384
 }
 
 const fn default_max_pixels() -> usize {
-    1_003_520
+    1536 * 1536
 }
 
 const fn default_rescale_factor() -> f32 {
@@ -163,11 +129,11 @@ const fn default_rescale_factor() -> f32 {
 }
 
 const fn default_image_mean() -> [f32; 3] {
-    [0.5, 0.5, 0.5]
+    [0.481_454_66, 0.457_827_5, 0.408_210_73]
 }
 
 const fn default_image_std() -> [f32; 3] {
-    [0.5, 0.5, 0.5]
+    [0.268_629_55, 0.261_302_6, 0.275_777_1]
 }
 
 struct ModelFiles {
@@ -183,7 +149,6 @@ struct PreparedImage {
     processed_width: u32,
     processed_height: u32,
     num_image_tokens: usize,
-    upscaled_for_spotting: bool,
 }
 
 struct BatchGroup {
@@ -191,7 +156,6 @@ struct BatchGroup {
     bucket_width: u32,
     bucket_height: u32,
     bucket_num_image_tokens: usize,
-    min_original_num_image_tokens: usize,
 }
 
 pub struct PaddleOcrVl {
@@ -238,8 +202,11 @@ impl PaddleOcrVl {
 
     fn load_from_files(files: ModelFiles, cpu: bool) -> Result<Self> {
         let device = device(cpu)?;
-        // FIXME: bf16 is slower than f32, need to investigate the cause and optimize
-        let dtype = DType::F32;
+        let dtype = if device.is_cuda() {
+            DType::BF16
+        } else {
+            DType::F32
+        };
         let config: PaddleOcrVlConfig =
             loading::read_json(&files.config).context("failed to parse model config")?;
         let preprocessor: PaddleOcrVlPreprocessorConfig =
@@ -298,7 +265,6 @@ impl PaddleOcrVl {
         let prepared = preprocess_image(
             image,
             &self.preprocessor,
-            task,
             self.dtype,
             &self.device,
             &self.mean,
@@ -343,7 +309,6 @@ impl PaddleOcrVl {
             let prepared = preprocess_image(
                 image,
                 &self.preprocessor,
-                task,
                 self.dtype,
                 &self.device,
                 &self.mean,
@@ -354,7 +319,7 @@ impl PaddleOcrVl {
         }
         let preprocess_elapsed = preprocess_started.elapsed();
 
-        let groups = build_batch_groups(&prepared_images, &self.preprocessor, task);
+        let groups = build_batch_groups(&prepared_images, &self.preprocessor);
 
         let mut outputs = vec![None; images.len()];
         let generation_started = Instant::now();
@@ -384,16 +349,10 @@ impl PaddleOcrVl {
                 &self.device,
             )?;
             let pixel_values = cat_batch(
-                pad_pixel_batch(
-                    group
-                        .indices
-                        .iter()
-                        .map(|&index| &prepared_images[index].pixel_values),
-                    group.bucket_height,
-                    group.bucket_width,
-                )?
-                .iter()
-                .collect::<Vec<_>>(),
+                group
+                    .indices
+                    .iter()
+                    .map(|&index| &prepared_images[index].pixel_values),
             )?;
             let bucket_grid_thw = grid_thw_tensor(
                 group.bucket_height,
@@ -466,7 +425,7 @@ impl PaddleOcrVl {
         let mut finished = vec![false; batch_size];
         for (index, token) in next_tokens.iter().copied().enumerate() {
             generated[index].push(token);
-            if token == self.eos_token_id || should_stop_on_repetition(&generated[index]) {
+            if token == self.eos_token_id {
                 finished[index] = true;
             }
         }
@@ -489,7 +448,7 @@ impl PaddleOcrVl {
                     continue;
                 }
                 generated[index].push(token);
-                if token == self.eos_token_id || should_stop_on_repetition(&generated[index]) {
+                if token == self.eos_token_id {
                     finished[index] = true;
                 }
             }
@@ -538,7 +497,6 @@ impl PaddleOcrVl {
             processed_height: prepared.processed_height,
             grid_thw: [grid_thw[0], grid_thw[1], grid_thw[2]],
             num_image_tokens: prepared.num_image_tokens,
-            upscaled_for_spotting: prepared.upscaled_for_spotting,
         })
     }
 }
@@ -561,23 +519,25 @@ fn smart_resize(
     let mut height = height;
     let mut width = width;
     if height < factor {
-        width = (width * factor + height / 2) / height;
+        width = ((width as f64 * factor as f64) / height as f64).round() as usize;
         height = factor;
     }
     if width < factor {
-        height = (height * factor + width / 2) / width;
+        height = ((height as f64 * factor as f64) / width as f64).round() as usize;
         width = factor;
     }
     if (height.max(width) as f64 / height.min(width) as f64) > 200.0 {
         bail!("absolute aspect ratio must be smaller than 200");
     }
-    let mut resized_height = ((height + factor / 2) / factor) * factor;
-    let mut resized_width = ((width + factor / 2) / factor) * factor;
+    let mut resized_height = ((height as f64 / factor as f64).round() as usize) * factor;
+    let mut resized_width = ((width as f64 / factor as f64).round() as usize) * factor;
     let total_pixels = resized_height * resized_width;
     if total_pixels > max_pixels {
         let beta = ((height * width) as f64 / max_pixels as f64).sqrt();
-        resized_height = ((height as f64 / beta / factor as f64).floor() as usize) * factor;
-        resized_width = ((width as f64 / beta / factor as f64).floor() as usize) * factor;
+        resized_height =
+            factor.max(((height as f64 / beta / factor as f64).floor() as usize) * factor);
+        resized_width =
+            factor.max(((width as f64 / beta / factor as f64).floor() as usize) * factor);
     } else if total_pixels < min_pixels {
         let beta = (min_pixels as f64 / (height * width) as f64).sqrt();
         resized_height = ((height as f64 * beta / factor as f64).ceil() as usize) * factor;
@@ -589,7 +549,6 @@ fn smart_resize(
 fn preprocess_image(
     image: &DynamicImage,
     preprocessor: &PaddleOcrVlPreprocessorConfig,
-    task: PaddleOcrVlTask,
     dtype: DType,
     device: &Device,
     mean: &Tensor,
@@ -602,36 +561,19 @@ fn preprocess_image(
         );
     }
 
-    let mut image = if preprocessor.do_convert_rgb {
+    let image = if preprocessor.do_convert_rgb {
         DynamicImage::ImageRgb8(image.to_rgb8())
     } else {
         image.clone()
     };
-    let mut upscaled_for_spotting = false;
-    if matches!(task, PaddleOcrVlTask::Spotting)
-        && image.width() < SPOTTING_UPSCALE_THRESHOLD
-        && image.height() < SPOTTING_UPSCALE_THRESHOLD
-    {
-        image = DynamicImage::ImageRgb8(image::imageops::resize(
-            &image.to_rgb8(),
-            image.width() * 2,
-            image.height() * 2,
-            FilterType::Lanczos3,
-        ));
-        upscaled_for_spotting = true;
-    }
 
     let resized = if preprocessor.do_resize {
         let (new_height, new_width) = smart_resize(
             image.height() as usize,
             image.width() as usize,
             preprocessor.factor(),
-            task.min_pixels(
-                preprocessor,
-                image.width() as usize,
-                image.height() as usize,
-            ),
-            task.max_pixels(preprocessor),
+            preprocessor.min_pixels,
+            preprocessor.max_pixels,
         )?;
         DynamicImage::ImageRgb8(image::imageops::resize(
             &image.to_rgb8(),
@@ -656,7 +598,6 @@ fn preprocess_image(
         processed_width,
         processed_height,
         num_image_tokens,
-        upscaled_for_spotting,
     })
 }
 
@@ -756,131 +697,25 @@ fn cat_batch<'a>(tensors: impl IntoIterator<Item = &'a Tensor>) -> Result<Tensor
 fn build_batch_groups(
     prepared_images: &[PreparedImage],
     preprocessor: &PaddleOcrVlPreprocessorConfig,
-    task: PaddleOcrVlTask,
 ) -> Vec<BatchGroup> {
-    if !matches!(task, PaddleOcrVlTask::Ocr) {
-        let mut groups: BTreeMap<(u32, u32), Vec<usize>> = BTreeMap::new();
-        for (index, prepared) in prepared_images.iter().enumerate() {
-            groups
-                .entry((prepared.processed_width, prepared.processed_height))
-                .or_default()
-                .push(index);
-        }
-        return groups
-            .into_iter()
-            .map(|((bucket_width, bucket_height), indices)| BatchGroup {
-                min_original_num_image_tokens: bucket_num_image_tokens(
-                    bucket_height,
-                    bucket_width,
-                    preprocessor,
-                ),
-                bucket_num_image_tokens: bucket_num_image_tokens(
-                    bucket_height,
-                    bucket_width,
-                    preprocessor,
-                ),
-                indices,
-                bucket_width,
-                bucket_height,
-            })
-            .collect();
+    let mut groups: BTreeMap<(u32, u32), Vec<usize>> = BTreeMap::new();
+    for (index, prepared) in prepared_images.iter().enumerate() {
+        groups
+            .entry((prepared.processed_width, prepared.processed_height))
+            .or_default()
+            .push(index);
     }
-
-    let mut sorted_indices = (0..prepared_images.len()).collect::<Vec<_>>();
-    sorted_indices.sort_by(|&lhs, &rhs| {
-        let lhs_prepared = &prepared_images[lhs];
-        let rhs_prepared = &prepared_images[rhs];
-        lhs_prepared
-            .num_image_tokens
-            .cmp(&rhs_prepared.num_image_tokens)
-            .then_with(|| {
-                lhs_prepared
-                    .processed_height
-                    .cmp(&rhs_prepared.processed_height)
-            })
-            .then_with(|| {
-                lhs_prepared
-                    .processed_width
-                    .cmp(&rhs_prepared.processed_width)
-            })
-    });
-
-    let max_pixels = task.max_pixels(preprocessor);
-    let mut groups = Vec::<BatchGroup>::new();
-    for index in sorted_indices {
-        let prepared = &prepared_images[index];
-        let mut best_group_index = None;
-        let mut best_group_tokens = usize::MAX;
-
-        for (group_index, group) in groups.iter().enumerate() {
-            let candidate_width = group.bucket_width.max(prepared.processed_width);
-            let candidate_height = group.bucket_height.max(prepared.processed_height);
-            let candidate_pixels =
-                (candidate_width as usize).saturating_mul(candidate_height as usize);
-            if candidate_pixels > max_pixels {
-                continue;
-            }
-
-            let candidate_tokens =
-                bucket_num_image_tokens(candidate_height, candidate_width, preprocessor);
-            let candidate_min_tokens = group
-                .min_original_num_image_tokens
-                .min(prepared.num_image_tokens);
-            if candidate_tokens.saturating_mul(OCR_BATCH_MAX_TOKEN_INFLATION_DEN)
-                > candidate_min_tokens.saturating_mul(OCR_BATCH_MAX_TOKEN_INFLATION_NUM)
-            {
-                continue;
-            }
-
-            if candidate_tokens < best_group_tokens {
-                best_group_tokens = candidate_tokens;
-                best_group_index = Some(group_index);
-            }
-        }
-
-        if let Some(group_index) = best_group_index {
-            let group = &mut groups[group_index];
-            group.bucket_width = group.bucket_width.max(prepared.processed_width);
-            group.bucket_height = group.bucket_height.max(prepared.processed_height);
-            group.bucket_num_image_tokens =
-                bucket_num_image_tokens(group.bucket_height, group.bucket_width, preprocessor);
-            group.min_original_num_image_tokens = group
-                .min_original_num_image_tokens
-                .min(prepared.num_image_tokens);
-            group.indices.push(index);
-        } else {
-            groups.push(BatchGroup {
-                indices: vec![index],
-                bucket_width: prepared.processed_width,
-                bucket_height: prepared.processed_height,
-                bucket_num_image_tokens: prepared.num_image_tokens,
-                min_original_num_image_tokens: prepared.num_image_tokens,
-            });
-        }
-    }
-
     groups
-}
-
-fn pad_pixel_batch<'a>(
-    tensors: impl IntoIterator<Item = &'a Tensor>,
-    bucket_height: u32,
-    bucket_width: u32,
-) -> Result<Vec<Tensor>> {
-    let bucket_height = bucket_height as usize;
-    let bucket_width = bucket_width as usize;
-    tensors
         .into_iter()
-        .map(|tensor| {
-            let (_, _, height, width) = tensor.dims4()?;
-            let mut padded = tensor.clone();
-            if bucket_height > height {
-                padded = padded.pad_with_same(2, 0, bucket_height - height)?;
-            }
-            if bucket_width > width {
-                padded = padded.pad_with_same(3, 0, bucket_width - width)?;
-            }
-            Ok(padded)
+        .map(|((bucket_width, bucket_height), indices)| BatchGroup {
+            indices,
+            bucket_width,
+            bucket_height,
+            bucket_num_image_tokens: bucket_num_image_tokens(
+                bucket_height,
+                bucket_width,
+                preprocessor,
+            ),
         })
         .collect()
 }
@@ -906,61 +741,11 @@ fn grid_thw_tensor(
     Tensor::new(&[[1u32, grid_h as u32, grid_w as u32]], device).map_err(Into::into)
 }
 
-fn should_stop_on_repetition(tokens: &[u32]) -> bool {
-    if tokens.len() >= REPETITION_SINGLE_TOKEN_LIMIT {
-        let last = tokens[tokens.len() - 1];
-        if tokens[tokens.len() - REPETITION_SINGLE_TOKEN_LIMIT..]
-            .iter()
-            .all(|&token| token == last)
-        {
-            return true;
-        }
-    }
-
-    if REPETITION_PATTERN_LIMITS
-        .iter()
-        .any(|&(pattern_len, repeats)| repeated_suffix(tokens, pattern_len, repeats))
-    {
-        return true;
-    }
-
-    if tokens.len() < LOW_DIVERSITY_WINDOW {
-        return false;
-    }
-
-    let mut unique = Vec::with_capacity(LOW_DIVERSITY_MAX_UNIQUE_TOKENS + 1);
-    for &token in &tokens[tokens.len() - LOW_DIVERSITY_WINDOW..] {
-        if unique.contains(&token) {
-            continue;
-        }
-        unique.push(token);
-        if unique.len() > LOW_DIVERSITY_MAX_UNIQUE_TOKENS {
-            return false;
-        }
-    }
-
-    true
-}
-
-fn repeated_suffix(tokens: &[u32], pattern_len: usize, repeats: usize) -> bool {
-    let total = pattern_len.saturating_mul(repeats);
-    if pattern_len == 0 || repeats < 2 || tokens.len() < total {
-        return false;
-    }
-
-    let pattern_start = tokens.len() - pattern_len;
-    let pattern = &tokens[pattern_start..];
-    (2..=repeats).all(|repeat_index| {
-        let start = tokens.len() - repeat_index * pattern_len;
-        &tokens[start..start + pattern_len] == pattern
-    })
-}
-
 #[cfg(test)]
 mod tests {
     use super::{
-        PaddleOcrVlPreprocessorConfig, PaddleOcrVlTask, PreparedImage, bucket_num_image_tokens,
-        build_batch_groups, grid_thw_tensor, should_stop_on_repetition, smart_resize,
+        PaddleOcrVlPreprocessorConfig, PreparedImage, bucket_num_image_tokens, build_batch_groups,
+        grid_thw_tensor, smart_resize,
     };
     use candle_core::{DType, Device, Tensor};
 
@@ -970,11 +755,11 @@ mod tests {
             do_normalize: true,
             do_rescale: true,
             do_resize: true,
-            image_mean: [0.5, 0.5, 0.5],
-            image_std: [0.5, 0.5, 0.5],
-            max_pixels: 1_003_520,
+            image_mean: [0.481_454_66, 0.457_827_5, 0.408_210_73],
+            image_std: [0.268_629_55, 0.261_302_6, 0.275_777_1],
+            max_pixels: 1536 * 1536,
             merge_size: 2,
-            min_pixels: 112_896,
+            min_pixels: 384 * 384,
             patch_size: 14,
             rescale_factor: 1.0 / 255.0,
             temporal_patch_size: 1,
@@ -982,43 +767,17 @@ mod tests {
     }
 
     #[test]
-    fn ocr_min_pixels_caps_small_crop_upscale() {
+    fn smart_resize_matches_hf_pixel_floor() -> anyhow::Result<()> {
         let preprocessor = preprocessor();
-        let min_pixels = PaddleOcrVlTask::Ocr.min_pixels(&preprocessor, 270, 48);
-        assert_eq!(min_pixels, 51_840);
-    }
-
-    #[test]
-    fn smart_resize_honors_capped_ocr_min_pixels() -> anyhow::Result<()> {
-        let preprocessor = preprocessor();
-        let min_pixels = PaddleOcrVlTask::Ocr.min_pixels(&preprocessor, 270, 48);
         let (height, width) = smart_resize(
             48,
             270,
             preprocessor.factor(),
-            min_pixels,
+            preprocessor.min_pixels,
             preprocessor.max_pixels,
         )?;
-        assert_eq!((height, width), (112, 560));
+        assert_eq!((height, width), (168, 924));
         Ok(())
-    }
-
-    #[test]
-    fn repetition_guard_detects_repeated_suffix_patterns() {
-        assert!(should_stop_on_repetition(&[
-            1, 2, 1, 2, 1, 2, 1, 2, 1, 2, 1, 2
-        ]));
-        assert!(should_stop_on_repetition(&[9, 9, 9, 9, 9, 9, 9, 9]));
-        assert!(!should_stop_on_repetition(&[1, 2, 3, 1, 2, 4, 1, 2]));
-    }
-
-    #[test]
-    fn repetition_guard_detects_low_diversity_long_outputs() {
-        let mut tokens = Vec::new();
-        for _ in 0..12 {
-            tokens.extend_from_slice(&[1, 2, 3, 4]);
-        }
-        assert!(should_stop_on_repetition(&tokens));
     }
 
     fn prepared_image(
@@ -1036,64 +795,26 @@ mod tests {
             processed_width: width,
             processed_height: height,
             num_image_tokens: bucket_num_image_tokens(height, width, preprocessor),
-            upscaled_for_spotting: false,
         })
     }
 
     #[test]
-    fn ocr_batch_groups_merge_compatible_shapes_into_padded_buckets() -> anyhow::Result<()> {
+    fn batch_groups_keep_exact_processed_shapes() -> anyhow::Result<()> {
         let preprocessor = preprocessor();
         let prepared_images = [
             prepared_image(112, 252, &preprocessor)?,
             prepared_image(112, 252, &preprocessor)?,
             prepared_image(84, 336, &preprocessor)?,
-            prepared_image(140, 196, &preprocessor)?,
-            prepared_image(252, 392, &preprocessor)?,
-            prepared_image(280, 448, &preprocessor)?,
-            prepared_image(224, 560, &preprocessor)?,
-            prepared_image(476, 252, &preprocessor)?,
         ];
 
-        let groups = build_batch_groups(&prepared_images, &preprocessor, PaddleOcrVlTask::Ocr);
-        assert_eq!(groups.len(), 3);
-        assert_eq!(
-            groups.iter().map(|group| group.indices.len()).max(),
-            Some(4)
-        );
-        assert!(
-            groups
-                .iter()
-                .any(|group| group.indices.len() == 4 && group.bucket_num_image_tokens == 60)
-        );
-        assert!(
-            groups
-                .iter()
-                .any(|group| group.indices.len() == 3 && group.bucket_num_image_tokens == 200)
-        );
-        assert_eq!(
-            groups
-                .iter()
-                .map(|group| group.bucket_num_image_tokens * group.indices.len())
-                .sum::<usize>(),
-            993
-        );
-        Ok(())
-    }
-
-    #[test]
-    fn non_ocr_batch_groups_keep_exact_processed_shapes() -> anyhow::Result<()> {
-        let preprocessor = preprocessor();
-        let prepared_images = [
-            prepared_image(112, 252, &preprocessor)?,
-            prepared_image(84, 336, &preprocessor)?,
-        ];
-
-        let groups = build_batch_groups(&prepared_images, &preprocessor, PaddleOcrVlTask::Table);
+        let groups = build_batch_groups(&prepared_images, &preprocessor);
         assert_eq!(groups.len(), 2);
         assert_eq!(groups[0].bucket_width, 84);
         assert_eq!(groups[0].bucket_height, 336);
+        assert_eq!(groups[0].indices.len(), 1);
         assert_eq!(groups[1].bucket_width, 112);
         assert_eq!(groups[1].bucket_height, 252);
+        assert_eq!(groups[1].indices.len(), 2);
         Ok(())
     }
 }

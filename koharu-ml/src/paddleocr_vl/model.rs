@@ -199,12 +199,21 @@ impl PaddleOCRVLModel {
 
             let mut image_offset = 0usize;
             let num_image_tokens = image_embeds.dim(0)?;
+            let num_image_placeholders = input_ids_vec
+                .iter()
+                .filter(|&&token_id| token_id == self.image_token_id)
+                .count();
+
+            if num_image_placeholders != num_image_tokens {
+                return Err(candle::Error::Msg(format!(
+                    "Image features and image tokens do not match: tokens: {num_image_placeholders}, features {num_image_tokens}",
+                )));
+            }
 
             for batch in 0..batch_size {
                 for pos in 0..seq_len {
                     let idx = batch * seq_len + pos;
-                    if input_ids_vec[idx] == self.image_token_id && image_offset < num_image_tokens
-                    {
+                    if input_ids_vec[idx] == self.image_token_id {
                         // Replace this token's embedding with image embedding
                         let img_emb = image_embeds.i(image_offset)?.unsqueeze(0)?.unsqueeze(0)?;
                         input_embeds = input_embeds.slice_assign(
@@ -823,40 +832,12 @@ impl PaddleOCRVLModel {
     ) -> Result<Vec<u32>> {
         self.clear_kv_cache();
 
-        let repetition_penalty = 1.1f32;
         let mut generated_tokens = Vec::new();
         let mut current_ids = input_ids.clone();
-
-        // Helper function to apply repetition penalty
-        fn apply_repetition_penalty(
-            logits: &Tensor,
-            generated: &[u32],
-            penalty: f32,
-        ) -> Result<Tensor> {
-            if generated.is_empty() || penalty == 1.0 {
-                return Ok(logits.clone());
-            }
-            let device = logits.device();
-            let original_shape = logits.dims().to_vec();
-            let logits_flat = logits.flatten_all()?;
-            let mut logits_vec: Vec<f32> = logits_flat.to_vec1()?;
-            for &token in generated {
-                let idx = token as usize;
-                if idx < logits_vec.len() {
-                    if logits_vec[idx] > 0.0 {
-                        logits_vec[idx] /= penalty;
-                    } else {
-                        logits_vec[idx] *= penalty;
-                    }
-                }
-            }
-            Tensor::from_vec(logits_vec, original_shape, device)
-        }
 
         // First forward pass with video
         let logits =
             self.forward_video(&current_ids, pixel_values_video, video_grid_thw, fps, 0)?;
-        let logits = apply_repetition_penalty(&logits, &generated_tokens, repetition_penalty)?;
         let next_token = logits
             .argmax(D::Minus1)?
             .to_dtype(DType::U32)?
@@ -874,7 +855,6 @@ impl PaddleOCRVLModel {
         // Subsequent forward passes (text only, using KV cache)
         for _ in 1..max_new_tokens {
             let logits = self.forward(&current_ids, None, None, seqlen_offset)?;
-            let logits = apply_repetition_penalty(&logits, &generated_tokens, repetition_penalty)?;
             let next_token = logits
                 .argmax(D::Minus1)?
                 .to_dtype(DType::U32)?
@@ -941,11 +921,21 @@ impl PaddleOCRVLModel {
         let input_ids_vec = input_ids_flat.to_vec1::<u32>()?;
         let mut image_offset = 0usize;
         let num_image_tokens = image_embeds.dim(0)?;
+        let num_image_placeholders = input_ids_vec
+            .iter()
+            .filter(|&&token_id| token_id == self.image_token_id)
+            .count();
+
+        if num_image_placeholders != num_image_tokens {
+            return Err(candle::Error::Msg(format!(
+                "Image features and image tokens do not match: tokens: {num_image_placeholders}, features {num_image_tokens}",
+            )));
+        }
 
         for batch in 0..batch_size {
             for pos in 0..seq_len {
                 let idx = batch * seq_len + pos;
-                if input_ids_vec[idx] == self.image_token_id && image_offset < num_image_tokens {
+                if input_ids_vec[idx] == self.image_token_id {
                     let img_emb = image_embeds.i(image_offset)?.unsqueeze(0)?.unsqueeze(0)?;
                     input_embeds = input_embeds
                         .slice_assign(&[batch..batch + 1, pos..pos + 1, 0..hidden_dim], &img_emb)?;
