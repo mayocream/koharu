@@ -100,6 +100,9 @@ pub struct LlmLoadPayload {
     pub id: String,
     pub api_key: Option<String>,
     pub base_url: Option<String>,
+    pub temperature: Option<f64>,
+    pub max_tokens: Option<u32>,
+    pub custom_system_prompt: Option<String>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -116,6 +119,9 @@ pub struct LlmLoadParams {
     pub id: String,
     pub api_key: Option<String>,
     pub base_url: Option<String>,
+    pub temperature: Option<f64>,
+    pub max_tokens: Option<u32>,
+    pub custom_system_prompt: Option<String>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, JsonSchema)]
@@ -133,6 +139,9 @@ pub struct ProcessRequest {
     pub llm_model_id: Option<String>,
     pub llm_api_key: Option<String>,
     pub llm_base_url: Option<String>,
+    pub llm_temperature: Option<f64>,
+    pub llm_max_tokens: Option<u32>,
+    pub llm_custom_system_prompt: Option<String>,
     pub language: Option<String>,
     pub shader_effect: Option<TextShaderEffect>,
     pub shader_stroke: Option<TextStrokeStyle>,
@@ -370,6 +379,9 @@ mod tests {
             id: "sakura".to_string(),
             api_key: None,
             base_url: Some("http://127.0.0.1:1234/v1".to_string()),
+            temperature: Some(0.1),
+            max_tokens: Some(1000),
+            custom_system_prompt: None,
         });
         round_trip(&LlmGeneratePayload {
             index: 1,
@@ -380,6 +392,9 @@ mod tests {
             id: "sakura".to_string(),
             api_key: None,
             base_url: Some("http://127.0.0.1:1234/v1".to_string()),
+            temperature: None,
+            max_tokens: None,
+            custom_system_prompt: None,
         });
         round_trip(&LlmGenerateParams {
             index: 1,
@@ -391,6 +406,9 @@ mod tests {
             llm_model_id: Some("sakura".to_string()),
             llm_api_key: None,
             llm_base_url: Some("http://127.0.0.1:1234/v1".to_string()),
+            llm_temperature: Some(0.1),
+            llm_max_tokens: Some(1000),
+            llm_custom_system_prompt: Some("Translate manga".to_string()),
             language: Some("zh-CN".to_string()),
             shader_effect: Some(TextShaderEffect {
                 italic: true,

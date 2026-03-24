@@ -78,13 +78,21 @@ pub trait AnyProvider: Send + Sync {
     ) -> Pin<Box<dyn Future<Output = anyhow::Result<String>> + Send + 'a>>;
 }
 
+pub struct ProviderConfig {
+    pub api_key: Option<String>,
+    pub base_url: Option<String>,
+    pub temperature: Option<f64>,
+    pub max_tokens: Option<u32>,
+    pub custom_system_prompt: Option<String>,
+}
+
 pub fn build_provider(
     provider_id: &str,
-    api_key: Option<String>,
-    base_url: Option<String>,
+    config: ProviderConfig,
 ) -> anyhow::Result<Box<dyn AnyProvider>> {
     let required_api_key = |name: &str| {
-        api_key
+        config
+            .api_key
             .clone()
             .filter(|value| !value.trim().is_empty())
             .ok_or_else(|| anyhow::anyhow!("api_key is required for {name}"))
@@ -104,12 +112,16 @@ pub fn build_provider(
             api_key: required_api_key("deepseek")?,
         }),
         "openai-compatible" => Box::new(openai_compatible::OpenAiCompatibleProvider {
-            base_url: base_url
+            base_url: config
+                .base_url
                 .filter(|value| !value.trim().is_empty())
                 .ok_or_else(|| {
                     anyhow::anyhow!("base_url is required for the openai-compatible provider")
                 })?,
-            api_key,
+            api_key: config.api_key,
+            temperature: config.temperature,
+            max_tokens: config.max_tokens,
+            custom_system_prompt: config.custom_system_prompt,
         }),
         other => anyhow::bail!("Unknown API provider: {other}"),
     };

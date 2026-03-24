@@ -460,10 +460,9 @@ impl Model {
         &self,
         provider_id: &str,
         model_id: &str,
-        api_key: Option<String>,
-        base_url: Option<String>,
+        config: super::providers::ProviderConfig,
     ) -> anyhow::Result<()> {
-        let provider = super::providers::build_provider(provider_id, api_key, base_url)?;
+        let provider = super::providers::build_provider(provider_id, config)?;
         *self.state.write().await = State::ApiReady {
             provider,
             provider_id: provider_id.to_string(),

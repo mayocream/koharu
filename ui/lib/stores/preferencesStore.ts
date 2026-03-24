@@ -3,6 +3,17 @@
 import { create } from 'zustand'
 import { persist } from 'zustand/middleware'
 
+export type LocalLlmConfig = {
+  preset: 'ollama' | 'lmstudio' | 'custom'
+  baseUrl: string
+  apiKey: string
+  modelName: string
+  temperature: number | null
+  maxTokens: number | null
+  customSystemPrompt: string
+  targetLanguage: string
+}
+
 type PreferencesState = {
   brushConfig: {
     size: number
@@ -15,8 +26,23 @@ type PreferencesState = {
   setApiKey: (provider: string, key: string) => void
   providerBaseUrls: Record<string, string>
   setProviderBaseUrl: (provider: string, url: string) => void
+  providerModelNames: Record<string, string>
+  setProviderModelName: (provider: string, name: string) => void
   openAiCompatibleConfigVersion: number
+  localLlm: LocalLlmConfig
+  setLocalLlm: (config: Partial<LocalLlmConfig>) => void
   resetPreferences: () => void
+}
+
+const initialLocalLlm: LocalLlmConfig = {
+  preset: 'ollama',
+  baseUrl: 'http://localhost:11434/v1',
+  apiKey: '',
+  modelName: '',
+  temperature: null,
+  maxTokens: null,
+  customSystemPrompt: '',
+  targetLanguage: 'en-US',
 }
 
 const initialPreferences = {
@@ -27,7 +53,9 @@ const initialPreferences = {
   fontFamily: undefined as string | undefined,
   apiKeys: {} as Record<string, string>,
   providerBaseUrls: {} as Record<string, string>,
+  providerModelNames: {} as Record<string, string>,
   openAiCompatibleConfigVersion: 0,
+  localLlm: initialLocalLlm,
 }
 
 export const usePreferencesStore = create<PreferencesState>()(
@@ -61,6 +89,23 @@ export const usePreferencesStore = create<PreferencesState>()(
               ? state.openAiCompatibleConfigVersion + 1
               : state.openAiCompatibleConfigVersion,
         })),
+      setProviderModelName: (provider, name) =>
+        set((state) => ({
+          providerModelNames: {
+            ...state.providerModelNames,
+            [provider]: name,
+          },
+          openAiCompatibleConfigVersion:
+            provider === 'openai-compatible'
+              ? state.openAiCompatibleConfigVersion + 1
+              : state.openAiCompatibleConfigVersion,
+        })),
+      setLocalLlm: (config) =>
+        set((state) => ({
+          localLlm: { ...state.localLlm, ...config },
+          openAiCompatibleConfigVersion:
+            state.openAiCompatibleConfigVersion + 1,
+        })),
       resetPreferences: () => set({ ...initialPreferences }),
     }),
     {
@@ -69,6 +114,8 @@ export const usePreferencesStore = create<PreferencesState>()(
         brushConfig: state.brushConfig,
         fontFamily: state.fontFamily,
         providerBaseUrls: state.providerBaseUrls,
+        providerModelNames: state.providerModelNames,
+        localLlm: state.localLlm,
       }),
     },
   ),

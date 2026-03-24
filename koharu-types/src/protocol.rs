@@ -221,6 +221,27 @@ pub struct LlmLoadRequest {
     pub id: String,
     pub api_key: Option<String>,
     pub base_url: Option<String>,
+    pub temperature: Option<f64>,
+    pub max_tokens: Option<u32>,
+    pub custom_system_prompt: Option<String>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, JsonSchema, TS)]
+#[serde(rename_all = "camelCase")]
+#[ts(export)]
+pub struct LlmPingRequest {
+    pub base_url: String,
+    pub api_key: Option<String>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, JsonSchema, TS)]
+#[serde(rename_all = "camelCase")]
+#[ts(export)]
+pub struct LlmPingResponse {
+    pub ok: bool,
+    pub models: Vec<String>,
+    pub latency_ms: Option<u64>,
+    pub error: Option<String>,
 }
 
 #[derive(Debug, Clone, Copy, Serialize, Deserialize, JsonSchema, TS)]
@@ -337,6 +358,9 @@ pub struct PipelineJobRequest {
     pub llm_model_id: Option<String>,
     pub llm_api_key: Option<String>,
     pub llm_base_url: Option<String>,
+    pub llm_temperature: Option<f64>,
+    pub llm_max_tokens: Option<u32>,
+    pub llm_custom_system_prompt: Option<String>,
     pub language: Option<String>,
     pub shader_effect: Option<TextShaderEffect>,
     pub shader_stroke: Option<TextStrokeStyle>,

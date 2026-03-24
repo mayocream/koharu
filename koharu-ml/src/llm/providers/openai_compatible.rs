@@ -1,5 +1,6 @@
 use std::future::Future;
 use std::pin::Pin;
+use std::time::Instant;
 
 use serde::{Deserialize, Serialize};
 
@@ -13,6 +14,9 @@ use super::{AnyProvider, ensure_provider_success};
 pub struct OpenAiCompatibleProvider {
     pub base_url: String,
     pub api_key: Option<String>,
+    pub temperature: Option<f64>,
+    pub max_tokens: Option<u32>,
+    pub custom_system_prompt: Option<String>,
 }
 
 #[derive(Deserialize)]
@@ -35,6 +39,10 @@ struct ChatMessage {
 struct ChatRequest<'a> {
     model: &'a str,
     messages: Vec<ChatMessage>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    temperature: Option<f64>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    max_tokens: Option<u32>,
 }
 
 fn normalized_base_url(base_url: &str) -> anyhow::Result<String> {
@@ -70,6 +78,23 @@ pub async fn list_models(base_url: &str, api_key: Option<&str>) -> anyhow::Resul
     Ok(ids)
 }
 
+pub struct PingResult {
+    pub models: Vec<String>,
+    pub latency_ms: u64,
+}
+
+pub async fn ping(base_url: &str, api_key: Option<&str>) -> anyhow::Result<PingResult> {
+    let start = Instant::now();
+    let models = tokio::time::timeout(
+        std::time::Duration::from_secs(5),
+        list_models(base_url, api_key),
+    )
+    .await
+    .map_err(|_| anyhow::anyhow!("Connection timed out after 5 seconds"))??;
+    let latency_ms = start.elapsed().as_millis() as u64;
+    Ok(PingResult { models, latency_ms })
+}
+
 impl AnyProvider for OpenAiCompatibleProvider {
     fn translate<'a>(
         &'a self,
@@ -78,18 +103,24 @@ impl AnyProvider for OpenAiCompatibleProvider {
         model: &'a str,
     ) -> Pin<Box<dyn Future<Output = anyhow::Result<String>> + Send + 'a>> {
         Box::pin(async move {
+            let prompt = match &self.custom_system_prompt {
+                Some(p) if !p.trim().is_empty() => p.clone(),
+                _ => system_prompt(target_language),
+            };
             let body = ChatRequest {
                 model,
                 messages: vec![
                     ChatMessage {
                         role: "system",
-                        content: system_prompt(target_language),
+                        content: prompt,
                     },
                     ChatMessage {
                         role: "user",
                         content: source.to_string(),
                     },
                 ],
+                temperature: self.temperature,
+                max_tokens: self.max_tokens,
             };
 
             let endpoint = format!("{}/chat/completions", normalized_base_url(&self.base_url)?);

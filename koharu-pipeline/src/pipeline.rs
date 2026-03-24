@@ -127,8 +127,13 @@ async fn run_pipeline_inner(
                 .load_api(
                     provider_id,
                     model_part,
-                    req.llm_api_key.clone(),
-                    req.llm_base_url.clone(),
+                    koharu_ml::llm::providers::ProviderConfig {
+                        api_key: req.llm_api_key.clone(),
+                        base_url: req.llm_base_url.clone(),
+                        temperature: req.llm_temperature,
+                        max_tokens: req.llm_max_tokens,
+                        custom_system_prompt: req.llm_custom_system_prompt.clone(),
+                    },
                 )
                 .await?;
         } else {
