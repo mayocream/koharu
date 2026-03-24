@@ -161,8 +161,8 @@ mod tests {
 
     #[tokio::test]
     async fn test_pip_wheels() -> Result<()> {
-        async fn pick_wheel_url(pkg: &str, tag: &str) -> Result<String> {
-            let meta_url = format!("https://pypi.org/pypi/{pkg}/json");
+        async fn pick_wheel_url(pkg: &str, version: &str, tag: &str) -> Result<String> {
+            let meta_url = format!("https://pypi.org/pypi/{pkg}/{version}/json");
             let resp = http_client().get(&meta_url).send().await?;
             let json: serde_json::Value = resp.json().await?;
             let urls = json
@@ -192,9 +192,14 @@ mod tests {
                 .ok_or_else(|| anyhow::anyhow!("no suitable wheel for tag {tag}"))
         }
 
-        for pkg in ["nvidia-cuda-runtime-cu12", "nvidia-cublas-cu12"] {
+        // Pin versions that are known to publish both win_amd64 and manylinux wheels.
+        // The latest PyPI release may only have a source tarball (e.g. cublas 12.9.2.10).
+        for (pkg, version) in [
+            ("nvidia-cuda-runtime-cu12", "12.9.79"),
+            ("nvidia-cublas-cu12", "12.9.1.4"),
+        ] {
             for tag in ["win_amd64", "manylinux"] {
-                let url = pick_wheel_url(pkg, tag).await?;
+                let url = pick_wheel_url(pkg, version, tag).await?;
                 let entries = fetch_record(&url).await?;
                 assert!(
                     !entries.is_empty(),
