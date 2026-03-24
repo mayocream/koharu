@@ -1,9 +1,9 @@
 use std::str::FromStr;
 
-use koharu_llm::ModelId;
-use koharu_llm::api::{ALL_API_PROVIDERS, OPENAI_COMPATIBLE_ID};
-use koharu_llm::facade as llm;
-use koharu_llm::providers::{get_saved_api_key, openai_compatible, set_saved_api_key};
+use koharu_ml::llm::ModelId;
+use koharu_ml::llm::api::{ALL_API_PROVIDERS, OPENAI_COMPATIBLE_ID};
+use koharu_ml::llm::facade as llm;
+use koharu_ml::llm::providers::{get_saved_api_key, openai_compatible, set_saved_api_key};
 use koharu_types::commands::{
     ApiKeyGetPayload, ApiKeyResult, ApiKeySetPayload, IndexPayload, LlmGeneratePayload,
     LlmListPayload, LlmLoadPayload,
@@ -115,7 +115,7 @@ pub async fn llm_load(state: AppResources, payload: LlmLoadPayload) -> anyhow::R
             .load_api(
                 provider_id,
                 model_id,
-                koharu_llm::providers::ProviderConfig {
+                koharu_ml::llm::providers::ProviderConfig {
                     api_key,
                     base_url: payload.base_url,
                     temperature: payload.temperature,

@@ -5,7 +5,7 @@ use std::sync::{
 };
 use std::time::Duration;
 
-use koharu_llm::ModelId;
+use koharu_ml::llm::ModelId;
 use koharu_types::commands::ProcessRequest;
 use koharu_types::events::{PipelineProgress, PipelineStatus, PipelineStep};
 use once_cell::sync::Lazy;
@@ -127,7 +127,7 @@ async fn run_pipeline_inner(
                 .load_api(
                     provider_id,
                     model_part,
-                    koharu_llm::providers::ProviderConfig {
+                    koharu_ml::llm::providers::ProviderConfig {
                         api_key: req.llm_api_key.clone(),
                         base_url: req.llm_base_url.clone(),
                         temperature: req.llm_temperature,
