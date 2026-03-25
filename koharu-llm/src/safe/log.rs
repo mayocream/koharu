@@ -184,6 +184,7 @@ impl State {
     }
 
     /// Start buffering a message. Not the CONT log level and text is missing a newline.
+    #[allow(clippy::unnecessary_cast)] // ggml_log_level is i32 on Windows, u32 on macOS
     pub(super) fn buffer_non_cont(&self, level: crate::sys::ggml_log_level, text: &str) {
         debug_assert!(!text.ends_with('\n'));
         debug_assert_ne!(level, crate::sys::GGML_LOG_LEVEL_CONT);
@@ -210,6 +211,7 @@ impl State {
     }
 
     // Emit a normal unbuffered log message (not the CONT log level and the text ends with a newline).
+    #[allow(clippy::unnecessary_cast)] // ggml_log_level is i32 on Windows, u32 on macOS
     pub(super) fn emit_non_cont_line(&self, level: crate::sys::ggml_log_level, text: &str) {
         debug_assert!(text.ends_with('\n'));
         debug_assert_ne!(level, crate::sys::GGML_LOG_LEVEL_CONT);
@@ -256,6 +258,7 @@ impl State {
         }
     }
 
+    #[allow(clippy::unnecessary_cast)] // ggml_log_level is i32 on Windows, u32 on macOS
     pub(super) fn update_previous_level_for_disabled_log(&self, level: crate::sys::ggml_log_level) {
         if level != crate::sys::GGML_LOG_LEVEL_CONT {
             self.previous_level

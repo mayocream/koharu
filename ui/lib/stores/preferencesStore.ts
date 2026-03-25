@@ -3,16 +3,37 @@
 import { create } from 'zustand'
 import { persist } from 'zustand/middleware'
 
-export type LocalLlmConfig = {
-  preset: 'ollama' | 'lmstudio' | 'custom'
+export type LocalLlmPreset = 'ollama' | 'lmstudio' | 'preset1' | 'preset2'
+
+export type LocalLlmPresetConfig = {
   baseUrl: string
   apiKey: string
   modelName: string
   temperature: number | null
   maxTokens: number | null
   customSystemPrompt: string
+}
+
+export type LocalLlmConfig = {
+  activePreset: LocalLlmPreset
+  presets: Record<LocalLlmPreset, LocalLlmPresetConfig>
   targetLanguage: string
 }
+
+/** Convenience: get the config for the currently active preset. */
+export const getActivePresetConfig = (llm: LocalLlmConfig) =>
+  llm.presets[llm.activePreset]
+
+/** Get config for a specific preset. */
+export const getPresetConfig = (llm: LocalLlmConfig, preset: LocalLlmPreset) =>
+  llm.presets[preset]
+
+export const ALL_PRESETS: LocalLlmPreset[] = [
+  'ollama',
+  'lmstudio',
+  'preset1',
+  'preset2',
+]
 
 type PreferencesState = {
   brushConfig: {
@@ -30,18 +51,28 @@ type PreferencesState = {
   setProviderModelName: (provider: string, name: string) => void
   openAiCompatibleConfigVersion: number
   localLlm: LocalLlmConfig
-  setLocalLlm: (config: Partial<LocalLlmConfig>) => void
+  setLocalLlm: (config: Partial<LocalLlmPresetConfig>) => void
+  setActivePreset: (preset: LocalLlmPreset) => void
   resetPreferences: () => void
 }
 
-const initialLocalLlm: LocalLlmConfig = {
-  preset: 'ollama',
-  baseUrl: 'http://localhost:11434/v1',
+const defaultPresetConfig = (baseUrl: string): LocalLlmPresetConfig => ({
+  baseUrl,
   apiKey: '',
   modelName: '',
   temperature: null,
   maxTokens: null,
   customSystemPrompt: '',
+})
+
+const initialLocalLlm: LocalLlmConfig = {
+  activePreset: 'ollama',
+  presets: {
+    ollama: defaultPresetConfig('http://localhost:11434/v1'),
+    lmstudio: defaultPresetConfig('http://127.0.0.1:1234/v1'),
+    preset1: defaultPresetConfig(''),
+    preset2: defaultPresetConfig(''),
+  },
   targetLanguage: 'en-US',
 }
 
@@ -100,9 +131,24 @@ export const usePreferencesStore = create<PreferencesState>()(
               ? state.openAiCompatibleConfigVersion + 1
               : state.openAiCompatibleConfigVersion,
         })),
+      setActivePreset: (preset) =>
+        set((state) => ({
+          localLlm: { ...state.localLlm, activePreset: preset },
+          openAiCompatibleConfigVersion:
+            state.openAiCompatibleConfigVersion + 1,
+        })),
       setLocalLlm: (config) =>
         set((state) => ({
-          localLlm: { ...state.localLlm, ...config },
+          localLlm: {
+            ...state.localLlm,
+            presets: {
+              ...state.localLlm.presets,
+              [state.localLlm.activePreset]: {
+                ...state.localLlm.presets[state.localLlm.activePreset],
+                ...config,
+              },
+            },
+          },
           openAiCompatibleConfigVersion:
             state.openAiCompatibleConfigVersion + 1,
         })),
@@ -110,6 +156,60 @@ export const usePreferencesStore = create<PreferencesState>()(
     }),
     {
       name: 'koharu-config',
+      version: 1,
+      migrate: (persisted: any, version: number) => {
+        if (
+          version === 0 &&
+          persisted?.localLlm &&
+          !persisted.localLlm.presets
+        ) {
+          // Migrate flat LocalLlmConfig → per-preset format
+          const old = persisted.localLlm as {
+            preset?: string
+            baseUrl?: string
+            apiKey?: string
+            modelName?: string
+            temperature?: number | null
+            maxTokens?: number | null
+            customSystemPrompt?: string
+            targetLanguage?: string
+          }
+          const oldPreset =
+            old.preset === 'lmstudio'
+              ? 'lmstudio'
+              : old.preset === 'custom'
+                ? 'preset1'
+                : 'ollama'
+          const migratedConfig: LocalLlmPresetConfig = {
+            baseUrl: old.baseUrl ?? '',
+            apiKey: old.apiKey ?? '',
+            modelName: old.modelName ?? '',
+            temperature: old.temperature ?? null,
+            maxTokens: old.maxTokens ?? null,
+            customSystemPrompt: old.customSystemPrompt ?? '',
+          }
+          persisted.localLlm = {
+            activePreset: oldPreset,
+            presets: {
+              ollama:
+                oldPreset === 'ollama'
+                  ? migratedConfig
+                  : defaultPresetConfig('http://localhost:11434/v1'),
+              lmstudio:
+                oldPreset === 'lmstudio'
+                  ? migratedConfig
+                  : defaultPresetConfig('http://127.0.0.1:1234/v1'),
+              preset1:
+                oldPreset === 'preset1'
+                  ? migratedConfig
+                  : defaultPresetConfig(''),
+              preset2: defaultPresetConfig(''),
+            },
+            targetLanguage: old.targetLanguage ?? 'en-US',
+          } satisfies LocalLlmConfig
+        }
+        return persisted
+      },
       partialize: (state) => ({
         brushConfig: state.brushConfig,
         fontFamily: state.fontFamily,

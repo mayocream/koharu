@@ -31,6 +31,7 @@ import {
   useLlmModelsQuery,
   useLlmReadyQuery,
   LOCAL_LLM_PRESET_LABELS,
+  parsePresetFromModelId,
 } from '@/lib/query/hooks'
 import { useDocumentMutations, useLlmMutations } from '@/lib/query/mutations'
 import { useOperationStore } from '@/lib/stores/operationStore'
@@ -302,21 +303,37 @@ function LlmStatusPopover() {
                   data-testid={`llm-model-option-${index}`}
                 >
                   <span className='flex items-center gap-2'>
-                    {model.source === 'openai-compatible' &&
-                    model.origin === 'local-llm' ? (
-                      <span className='rounded bg-emerald-500/10 px-1 py-0.5 text-[10px] leading-none font-semibold text-emerald-600 uppercase dark:text-emerald-400'>
-                        {LOCAL_LLM_PRESET_LABELS[localLlm.preset] ?? 'Local'}
-                      </span>
-                    ) : model.source === 'openai-compatible' ? (
-                      <span className='rounded bg-teal-500/10 px-1 py-0.5 text-[10px] leading-none font-semibold text-teal-600 uppercase dark:text-teal-400'>
-                        OpenAI-like
-                      </span>
+                    {model.source === 'openai-compatible' ? (
+                      (() => {
+                        const preset = parsePresetFromModelId(model.id)
+                        const isTeal =
+                          preset === 'preset1' || preset === 'preset2'
+                        return (
+                          <span
+                            className={`rounded px-1 py-0.5 text-[10px] leading-none font-semibold uppercase ${
+                              isTeal
+                                ? 'bg-teal-500/10 text-teal-600 dark:text-teal-400'
+                                : 'bg-emerald-500/10 text-emerald-600 dark:text-emerald-400'
+                            }`}
+                          >
+                            {preset
+                              ? (LOCAL_LLM_PRESET_LABELS[preset] ?? preset)
+                              : 'OpenAI-like'}
+                          </span>
+                        )
+                      })()
                     ) : model.source !== 'local' ? (
                       <span className='bg-primary/10 text-primary rounded px-1 py-0.5 text-[10px] leading-none font-semibold uppercase'>
                         {getProviderDisplayName(model.source)}
                       </span>
                     ) : null}
-                    {model.id.includes(':') ? model.id.split(':')[1] : model.id}
+                    {/* Display model name: strip "openai-compatible:preset:" prefix */}
+                    {model.source === 'openai-compatible' &&
+                    model.id.split(':').length >= 3
+                      ? model.id.split(':').slice(2).join(':')
+                      : model.id.includes(':')
+                        ? model.id.split(':')[1]
+                        : model.id}
                   </span>
                 </SelectItem>
               ))}
@@ -333,49 +350,59 @@ function LlmStatusPopover() {
           )}
 
           {/* Loaded model info card */}
-          {llmReady && selectedModelInfo?.source === 'openai-compatible' && (
-            <div
-              className={`rounded-md px-2.5 py-2 text-xs ${
-                selectedModelInfo.origin === 'local-llm'
-                  ? 'border border-emerald-500/20 bg-emerald-500/5'
-                  : 'border border-teal-500/20 bg-teal-500/5'
-              }`}
-            >
-              <div className='flex items-center gap-1.5'>
-                <span
-                  className={`size-1.5 rounded-full ${
-                    selectedModelInfo.origin === 'local-llm'
-                      ? 'bg-emerald-500'
-                      : 'bg-teal-500'
-                  }`}
-                />
-                <span
-                  className={`font-medium ${
-                    selectedModelInfo.origin === 'local-llm'
-                      ? 'text-emerald-700 dark:text-emerald-400'
-                      : 'text-teal-700 dark:text-teal-400'
+          {llmReady &&
+            selectedModelInfo?.source === 'openai-compatible' &&
+            (() => {
+              const infoPreset = parsePresetFromModelId(selectedModelInfo.id)
+              const isTeal =
+                infoPreset === 'preset1' || infoPreset === 'preset2'
+              const presetLabel = infoPreset
+                ? (LOCAL_LLM_PRESET_LABELS[infoPreset] ?? infoPreset)
+                : 'OpenAI-like'
+              const presetCfg = infoPreset
+                ? localLlm.presets[infoPreset]
+                : undefined
+              const modelName =
+                selectedModelInfo.id.split(':').length >= 3
+                  ? selectedModelInfo.id.split(':').slice(2).join(':')
+                  : (selectedModelInfo.id.split(':')[1] ?? selectedModelInfo.id)
+              return (
+                <div
+                  className={`rounded-md px-2.5 py-2 text-xs ${
+                    isTeal
+                      ? 'border border-teal-500/20 bg-teal-500/5'
+                      : 'border border-emerald-500/20 bg-emerald-500/5'
                   }`}
                 >
-                  {t('llm.localModelActive')}
-                </span>
-              </div>
-              <p className='text-muted-foreground mt-1'>
-                {t('llm.localModelName', {
-                  name:
-                    selectedModelInfo.id.split(':')[1] ?? selectedModelInfo.id,
-                })}
-              </p>
-              <p className='text-muted-foreground mt-0.5'>
-                {selectedModelInfo.origin === 'local-llm'
-                  ? (LOCAL_LLM_PRESET_LABELS[localLlm.preset] ?? 'Local')
-                  : 'OpenAI-like'}
-                {localLlm.temperature != null &&
-                  ` · temp ${localLlm.temperature}`}
-                {localLlm.maxTokens != null &&
-                  ` · ${localLlm.maxTokens} tokens`}
-              </p>
-            </div>
-          )}
+                  <div className='flex items-center gap-1.5'>
+                    <span
+                      className={`size-1.5 rounded-full ${
+                        isTeal ? 'bg-teal-500' : 'bg-emerald-500'
+                      }`}
+                    />
+                    <span
+                      className={`font-medium ${
+                        isTeal
+                          ? 'text-teal-700 dark:text-teal-400'
+                          : 'text-emerald-700 dark:text-emerald-400'
+                      }`}
+                    >
+                      {t('llm.localModelActive')}
+                    </span>
+                  </div>
+                  <p className='text-muted-foreground mt-1'>
+                    {t('llm.localModelName', { name: modelName })}
+                  </p>
+                  <p className='text-muted-foreground mt-0.5'>
+                    {presetLabel}
+                    {presetCfg?.temperature != null &&
+                      ` · temp ${presetCfg.temperature}`}
+                    {presetCfg?.maxTokens != null &&
+                      ` · ${presetCfg.maxTokens} tokens`}
+                  </p>
+                </div>
+              )
+            })()}
 
           {activeLanguages.length > 0 && (
             <Select
