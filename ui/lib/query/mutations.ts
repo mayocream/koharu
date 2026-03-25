@@ -143,6 +143,9 @@ export const useTextBlockMutations = () => {
     async (textBlocks: TextBlock[]) => {
       const { currentDocumentIndex } = useEditorUiStore.getState()
       const queryKey = queryKeys.documents.current(currentDocumentIndex)
+      // Cancel in-flight refetches to prevent stale server data from
+      // overwriting the optimistic update below.
+      void queryClient.cancelQueries({ queryKey })
       const currentDocument = queryClient.getQueryData<any>(queryKey)
       if (!currentDocument) return
       queryClient.setQueryData(queryKey, {
