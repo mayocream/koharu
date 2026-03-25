@@ -2,9 +2,12 @@
 
 import { useEffect, useRef, type RefObject } from 'react'
 import { useDrag } from '@use-gesture/react'
+import { useQueryClient } from '@tanstack/react-query'
 import { usePreferencesStore } from '@/lib/stores/preferencesStore'
 import { useEditorUiStore } from '@/lib/stores/editorUiStore'
+import { useUndoStore } from '@/lib/stores/undoStore'
 import { useMaskMutations } from '@/lib/query/mutations'
+import { queryKeys } from '@/lib/query/keys'
 import { Document, InpaintRegion, ToolMode } from '@/types'
 import { blobToUint8Array } from '@/lib/util'
 import {
@@ -72,10 +75,9 @@ export function useRenderBrushDrawing({
   const {
     brushConfig: { size: brushSize, color: brushColor },
   } = usePreferencesStore()
+  const queryClient = useQueryClient()
+  const pushUndo = useUndoStore((state) => state.push)
   const { paintRendered } = useMaskMutations()
-  const currentDocumentIndex = useEditorUiStore(
-    (state) => state.currentDocumentIndex,
-  )
   const canvasRef = useRef<HTMLCanvasElement | null>(null)
   const ctxRef = useRef<CanvasRenderingContext2D | null>(null)
   const drawingRef = useRef(false)
@@ -190,6 +192,14 @@ export function useRenderBrushDrawing({
     drawingRef.current = false
     lastPointRef.current = null
 
+    // Snapshot brush layer before change for undo
+    const docIndex = useEditorUiStore.getState().currentDocumentIndex
+    const queryKey = queryKeys.documents.current(docIndex)
+    const snapshotDoc = queryClient.getQueryData<Document>(queryKey)
+    const prevBrushLayer = snapshotDoc?.brushLayer
+      ? new Uint8Array(snapshotDoc.brushLayer)
+      : undefined
+
     void (async () => {
       const patchBytes = await exportPatch(patchRegion)
       if (!patchBytes) {
@@ -202,7 +212,25 @@ export function useRenderBrushDrawing({
       }
       try {
         await paintRendered(patchBytes, patchRegion, {
-          index: currentDocumentIndex,
+          index: docIndex,
+        })
+
+        // Push undo after successful brush paint
+        pushUndo({
+          type: 'brushStroke',
+          description: 'Brush stroke',
+          undo: () => {
+            const key = queryKeys.documents.current(docIndex)
+            const doc = queryClient.getQueryData<any>(key)
+            if (!doc) return
+            queryClient.setQueryData(key, {
+              ...doc,
+              brushLayer: prevBrushLayer,
+            })
+          },
+          redo: () => {
+            void paintRendered(patchBytes, patchRegion, { index: docIndex })
+          },
         })
       } catch (error) {
         console.error(error)

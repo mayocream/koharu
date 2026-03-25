@@ -1,17 +1,13 @@
-use std::{
-    sync::{Arc, Mutex},
-    time::Instant,
-};
+use std::{sync::Mutex, time::Instant};
 
 use anyhow::Result;
 use image::DynamicImage;
-use koharu_llm::paddleocr_vl::{self as paddleocr_vl_llm, PaddleOcrVl, PaddleOcrVlTask};
-use koharu_llm::safe::llama_backend::LlamaBackend;
 use koharu_types::{Document, FontPrediction, SerializableDynamicImage, TextBlock, TextDirection};
 
 use crate::comic_text_detector::{self, ComicTextDetector, crop_text_block_bbox};
 use crate::font_detector::{self, FontDetector};
 use crate::lama::{self, Lama};
+use crate::paddleocr_vl::{self, PaddleOcrVl, PaddleOcrVlTask};
 use crate::pp_doclayout_v3::{self, LayoutRegion, PPDocLayoutV3};
 
 const NEAR_BLACK_THRESHOLD: u8 = 12;
@@ -21,9 +17,21 @@ const GRAY_NEAR_WHITE_THRESHOLD: u8 = 60;
 const GRAY_TOLERANCE: u8 = 10;
 const SIMILAR_COLOR_MAX_DIFF: u8 = 16;
 const PP_DOCLAYOUT_THRESHOLD: f32 = 0.25;
+const PP_DOCLAYOUT_SENSITIVE_THRESHOLD: f32 = 0.10;
 const VERTICAL_ASPECT_RATIO_THRESHOLD: f32 = 1.15;
 const BLOCK_OVERLAP_DEDUPE_THRESHOLD: f32 = 0.9;
 const OCR_MAX_NEW_TOKENS: usize = 128;
+const MIN_BLOCK_DIM: f32 = 6.0;
+const MIN_BLOCK_DIM_SENSITIVE: f32 = 3.0;
+const MIN_BLOCK_AREA: f32 = 48.0;
+const MIN_BLOCK_AREA_SENSITIVE: f32 = 16.0;
+
+/// Options to control detection sensitivity.
+#[derive(Debug, Clone, Copy, Default)]
+pub struct DetectOptions {
+    /// Lower thresholds for higher recall.
+    pub sensitive: bool,
+}
 
 fn clamp_near_black(color: [u8; 3]) -> [u8; 3] {
     let max_channel = *color.iter().max().unwrap_or(&0);
@@ -87,11 +95,16 @@ pub struct Model {
 }
 
 impl Model {
-    pub async fn new(cpu: bool, backend: Arc<LlamaBackend>) -> Result<Self> {
+    /// Access the underlying comic text detector (for segmentation in region-detect).
+    pub fn segmenter(&self) -> &ComicTextDetector {
+        &self.segmenter
+    }
+
+    pub async fn new(cpu: bool) -> Result<Self> {
         Ok(Self {
             layout_detector: PPDocLayoutV3::load(cpu).await?,
-            segmenter: ComicTextDetector::load_segmentation_only(cpu).await?,
-            ocr: Mutex::new(PaddleOcrVl::load(cpu, backend).await?),
+            segmenter: ComicTextDetector::load(cpu).await?,
+            ocr: Mutex::new(PaddleOcrVl::load(cpu).await?),
             lama: Lama::load(cpu).await?,
             font_detector: FontDetector::load(cpu).await?,
         })
@@ -100,15 +113,74 @@ impl Model {
     /// Detect text blocks and fonts in a document.
     /// Sets `doc.text_blocks` (with font predictions/styles) and `doc.segment`.
     pub async fn detect(&self, doc: &mut Document) -> Result<()> {
-        let detect_started = Instant::now();
+        self.detect_with_options(doc, DetectOptions::default()).await
+    }
 
+    /// Detect with configurable options (sensitive mode, etc.).
+    pub async fn detect_with_options(
+        &self,
+        doc: &mut Document,
+        options: DetectOptions,
+    ) -> Result<()> {
+        let detect_started = Instant::now();
+        let threshold = if options.sensitive {
+            PP_DOCLAYOUT_SENSITIVE_THRESHOLD
+        } else {
+            PP_DOCLAYOUT_THRESHOLD
+        };
+
+        // Stage 1: PP-DocLayout detection
         let layout_started = Instant::now();
         let layout = self
             .layout_detector
-            .inference_one_fast(&doc.image, PP_DOCLAYOUT_THRESHOLD)?;
-        doc.text_blocks = build_text_blocks(&layout.regions);
+            .inference_one_fast(&doc.image, threshold)?;
+        doc.text_blocks = build_text_blocks_with_options(&layout.regions, options.sensitive);
         let layout_elapsed = layout_started.elapsed();
 
+        // Stage 1b: CTD fallback when PP-DocLayout finds nothing
+        let mut ctd_elapsed = std::time::Duration::ZERO;
+        if doc.text_blocks.is_empty() {
+            let ctd_started = Instant::now();
+            match self.segmenter.inference(&doc.image) {
+                Ok(detection) => {
+                    let ctd_blocks: Vec<TextBlock> = detection
+                        .text_blocks
+                        .into_iter()
+                        .map(|b| {
+                            let width = b.width.max(1.0);
+                            let height = b.height.max(1.0);
+                            TextBlock {
+                                x: b.x.max(0.0),
+                                y: b.y.max(0.0),
+                                width,
+                                height,
+                                confidence: b.confidence,
+                                source_direction: Some(infer_text_direction(width, height)),
+                                source_language: Some("unknown".to_string()),
+                                rotation_deg: Some(0.0),
+                                detected_font_size_px: Some(width.min(height).max(1.0)),
+                                detector: Some("ctd".to_string()),
+                                line_polygons: b.line_polygons,
+                                ..Default::default()
+                            }
+                        })
+                        .collect();
+                    if !ctd_blocks.is_empty() {
+                        tracing::info!(
+                            ctd_blocks = ctd_blocks.len(),
+                            "PP-DocLayout found 0 blocks, CTD fallback found blocks"
+                        );
+                        doc.text_blocks = ctd_blocks;
+                    }
+                }
+                Err(e) => {
+                    tracing::warn!("CTD fallback failed: {e}");
+                }
+            }
+            ctd_elapsed = ctd_started.elapsed();
+        }
+
+        // Stage 2: Segmentation mask
         let segmentation_started = Instant::now();
         let probability_map = self.segmenter.inference_segmentation(&doc.image)?;
         let mask = comic_text_detector::refine_segmentation_mask(
@@ -119,6 +191,7 @@ impl Model {
         doc.segment = Some(DynamicImage::ImageLuma8(mask).into());
         let segmentation_elapsed = segmentation_started.elapsed();
 
+        // Stage 3: Font detection
         let font_started = Instant::now();
         if !doc.text_blocks.is_empty() {
             let images: Vec<DynamicImage> = doc
@@ -144,7 +217,9 @@ impl Model {
 
         tracing::info!(
             text_blocks = doc.text_blocks.len(),
+            sensitive = options.sensitive,
             layout_ms = layout_elapsed.as_millis(),
+            ctd_fallback_ms = ctd_elapsed.as_millis(),
             segmentation_ms = segmentation_elapsed.as_millis(),
             font_ms = font_elapsed.as_millis(),
             total_ms = detect_started.elapsed().as_millis(),
@@ -248,18 +323,27 @@ impl Model {
 pub async fn prefetch() -> Result<()> {
     pp_doclayout_v3::prefetch().await?;
     comic_text_detector::prefetch_segmentation().await?;
-    paddleocr_vl_llm::prefetch().await?;
+    paddleocr_vl::prefetch().await?;
     lama::prefetch().await?;
     font_detector::prefetch().await?;
 
     Ok(())
 }
 
-fn build_text_blocks(regions: &[LayoutRegion]) -> Vec<TextBlock> {
+fn build_text_blocks_with_options(regions: &[LayoutRegion], sensitive: bool) -> Vec<TextBlock> {
+    let min_dim = if sensitive { MIN_BLOCK_DIM_SENSITIVE } else { MIN_BLOCK_DIM };
+    let min_area = if sensitive { MIN_BLOCK_AREA_SENSITIVE } else { MIN_BLOCK_AREA };
     let mut blocks = regions
         .iter()
-        .filter(|region| is_text_layout_label(&region.label))
-        .filter_map(layout_region_to_text_block)
+        .filter(|region| {
+            if sensitive {
+                // In sensitive mode, accept any detected region
+                true
+            } else {
+                is_text_layout_label(&region.label)
+            }
+        })
+        .filter_map(|region| layout_region_to_text_block_with_limits(region, min_dim, min_area))
         .collect::<Vec<_>>();
     dedupe_text_blocks(&mut blocks);
     blocks
@@ -270,7 +354,11 @@ fn is_text_layout_label(label: &str) -> bool {
     label == "content" || label.contains("text") || label.contains("title")
 }
 
-fn layout_region_to_text_block(region: &LayoutRegion) -> Option<TextBlock> {
+fn layout_region_to_text_block_with_limits(
+    region: &LayoutRegion,
+    min_dim: f32,
+    min_area: f32,
+) -> Option<TextBlock> {
     let x1 = region.bbox[0].min(region.bbox[2]).max(0.0);
     let y1 = region.bbox[1].min(region.bbox[3]).max(0.0);
     let x2 = region.bbox[0].max(region.bbox[2]).max(x1 + 1.0);
@@ -278,7 +366,7 @@ fn layout_region_to_text_block(region: &LayoutRegion) -> Option<TextBlock> {
     let width = (x2 - x1).max(1.0);
     let height = (y2 - y1).max(1.0);
 
-    if width < 6.0 || height < 6.0 || width * height < 48.0 {
+    if width < min_dim || height < min_dim || width * height < min_area {
         return None;
     }
 

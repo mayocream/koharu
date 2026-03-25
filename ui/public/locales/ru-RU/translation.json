@@ -201,7 +201,8 @@
     "block": "Блок",
     "brush": "Кисть",
     "repairBrush": "Кисть восстановления",
-    "eraser": "Ластик"
+    "eraser": "Ластик",
+    "magicEraser": "Волшебный ластик"
   },
   "download": {
     "title": "Загрузка"

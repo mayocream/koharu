@@ -6,7 +6,6 @@ import { LayersPanel } from '@/components/panels/LayersPanel'
 import { RenderControlsPanel } from '@/components/panels/RenderControlsPanel'
 import { TextBlocksPanel } from '@/components/panels/TextBlocksPanel'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
-import { ScrollArea } from '@/components/ui/scroll-area'
 
 export function Panels() {
   const { t } = useTranslation()
@@ -15,7 +14,7 @@ export function Panels() {
     <div className='bg-muted/50 flex h-full min-h-0 w-full flex-col border-l'>
       <Tabs
         defaultValue='layers'
-        className='border-border h-60 shrink-0 gap-0 border-b'
+        className='border-border shrink-0 gap-0 border-b'
         data-testid='panels-settings-tabs'
       >
         <TabsList className='bg-muted/70 m-2 mb-0 grid w-[calc(100%-1rem)] grid-cols-2'>
@@ -43,24 +42,18 @@ export function Panels() {
 
         <TabsContent
           value='layers'
-          className='min-h-0 flex-1 px-1 pb-2 data-[state=inactive]:hidden'
+          className='px-1 pb-2 data-[state=inactive]:hidden'
           data-testid='panels-layers'
         >
-          <ScrollArea className='h-full' viewportClassName='pr-1'>
-            <LayersPanel />
-          </ScrollArea>
+          <LayersPanel />
         </TabsContent>
 
         <TabsContent
           value='layout'
-          className='min-h-0 flex-1 px-2 pb-2 data-[state=inactive]:hidden'
+          className='px-2 pt-1 pb-2 data-[state=inactive]:hidden'
           data-testid='panels-layout'
         >
-          <ScrollArea className='h-full' viewportClassName='pr-1'>
-            <div className='pt-1'>
-              <RenderControlsPanel />
-            </div>
-          </ScrollArea>
+          <RenderControlsPanel />
         </TabsContent>
       </Tabs>
 

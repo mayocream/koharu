@@ -201,7 +201,8 @@
     "block": "框选",
     "brush": "画笔",
     "repairBrush": "修复笔",
-    "eraser": "橡皮擦"
+    "eraser": "橡皮擦",
+    "magicEraser": "魔术橡皮擦"
   },
   "download": {
     "title": "下载中"

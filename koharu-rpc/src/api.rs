@@ -23,13 +23,13 @@ use koharu_pipeline::{
 };
 use koharu_psd::{PsdExportOptions, TextLayerMode};
 use koharu_types::{
-    ApiKeyGetPayload, ApiKeyResponse, ApiKeySetPayload, ApiKeyValue, CreateTextBlock, Document,
-    DocumentDetail, DocumentSummary, ExportLayer, ExportResult, FileEntry, FontFaceInfo,
-    IndexPayload, InpaintPartialPayload, InpaintRegion, JobState, JobStatus, LlmLoadPayload,
-    LlmLoadRequest, LlmModelInfo, LlmPingRequest, LlmPingResponse, MaskRegionRequest, MetaInfo,
-    OpenDocumentsPayload, PipelineJobRequest, Region, RenderPayload, RenderRequest,
-    SerializableDynamicImage, TextBlock, TextBlockDetail, TextBlockPatch, TranslateRequest,
-    UpdateBrushLayerPayload, UpdateInpaintMaskPayload,
+    ApiKeyGetPayload, ApiKeyResponse, ApiKeySetPayload, ApiKeyValue, CreateTextBlock,
+    DetectPayload, Document, DocumentDetail, DocumentSummary, ExportLayer, ExportResult,
+    FileEntry, FontFaceInfo, IndexPayload, InpaintPartialPayload, InpaintRegion, JobState,
+    JobStatus, LlmLoadPayload, LlmLoadRequest, LlmModelInfo, LlmPingRequest, LlmPingResponse,
+    MaskRegionRequest, MetaInfo, OpenDocumentsPayload, PipelineJobRequest, Region, RenderPayload,
+    RenderRequest, SerializableDynamicImage, TextBlock, TextBlockDetail, TextBlockPatch,
+    TranslateRequest, UpdateBrushLayerPayload, UpdateInpaintMaskPayload,
 };
 use serde::Deserialize;
 
@@ -67,6 +67,10 @@ pub fn router(resources: SharedResources, events: EventHub) -> Router {
             get(get_document_layer),
         )
         .route("/documents/{document_id}/detect", post(detect_document))
+        .route(
+            "/documents/{document_id}/detect-options",
+            post(detect_document_options),
+        )
         .route("/documents/{document_id}/ocr", post(ocr_document))
         .route("/documents/{document_id}/inpaint", post(inpaint_document))
         .route("/documents/{document_id}/render", post(render_document))
@@ -85,6 +89,10 @@ pub fn router(resources: SharedResources, events: EventHub) -> Router {
         .route(
             "/documents/{document_id}/inpaint-region",
             post(inpaint_region),
+        )
+        .route(
+            "/documents/{document_id}/inpaint-free",
+            post(inpaint_free_region),
         )
         .route(
             "/documents/{document_id}/text-blocks",
@@ -307,6 +315,25 @@ async fn detect_document(
     Ok(StatusCode::NO_CONTENT)
 }
 
+async fn detect_document_options(
+    State(state): State<ApiState>,
+    Path(document_id): Path<String>,
+    Json(request): Json<koharu_types::DetectRequest>,
+) -> ApiResult<StatusCode> {
+    let resources = state.resources()?;
+    let (index, _) = find_document(&resources, &document_id).await?;
+    operations::detect_with_options(
+        resources,
+        DetectPayload {
+            index,
+            sensitive: request.sensitive,
+            region: request.region.map(to_inpaint_region),
+        },
+    )
+    .await?;
+    Ok(StatusCode::NO_CONTENT)
+}
+
 async fn ocr_document(
     State(state): State<ApiState>,
     Path(document_id): Path<String>,
@@ -427,6 +454,24 @@ async fn inpaint_region(
     let resources = state.resources()?;
     let (index, _) = find_document(&resources, &document_id).await?;
     operations::inpaint_partial(
+        resources,
+        InpaintPartialPayload {
+            index,
+            region: to_inpaint_region(request.region),
+        },
+    )
+    .await?;
+    Ok(StatusCode::NO_CONTENT)
+}
+
+async fn inpaint_free_region(
+    State(state): State<ApiState>,
+    Path(document_id): Path<String>,
+    Json(request): Json<koharu_types::InpaintRegionRequest>,
+) -> ApiResult<StatusCode> {
+    let resources = state.resources()?;
+    let (index, _) = find_document(&resources, &document_id).await?;
+    operations::inpaint_free(
         resources,
         InpaintPartialPayload {
             index,

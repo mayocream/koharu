@@ -201,7 +201,8 @@
     "block": "ブロック",
     "brush": "ブラシ",
     "repairBrush": "リペアブラシ",
-    "eraser": "消しゴム"
+    "eraser": "消しゴム",
+    "magicEraser": "マジック消しゴム"
   },
   "download": {
     "title": "ダウンロード中"

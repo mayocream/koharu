@@ -201,7 +201,8 @@
     "block": "Bloque",
     "brush": "Pincel",
     "repairBrush": "Pincel de reparación",
-    "eraser": "Borrador"
+    "eraser": "Borrador",
+    "magicEraser": "Borrador mágico"
   },
   "download": {
     "title": "Descargando"

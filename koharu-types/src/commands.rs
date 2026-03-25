@@ -22,6 +22,17 @@ pub struct IndexPayload {
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
+pub struct DetectPayload {
+    pub index: usize,
+    /// Use lower thresholds to catch more text (higher recall).
+    #[serde(default)]
+    pub sensitive: bool,
+    /// Optional sub-region to restrict detection.
+    pub region: Option<InpaintRegion>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
 pub struct ThumbnailResult {
     #[serde(with = "serde_bytes")]
     pub data: Vec<u8>,

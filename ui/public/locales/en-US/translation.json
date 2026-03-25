@@ -201,7 +201,8 @@
     "block": "Block",
     "brush": "Brush",
     "repairBrush": "Repair brush",
-    "eraser": "Eraser"
+    "eraser": "Eraser",
+    "magicEraser": "Magic Eraser"
   },
   "download": {
     "title": "Downloading"

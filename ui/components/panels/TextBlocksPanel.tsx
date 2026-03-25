@@ -22,13 +22,16 @@ import {
 import { Button } from '@/components/ui/button'
 import { DraftTextarea } from '@/components/ui/draft-textarea'
 import { ScrollArea } from '@/components/ui/scroll-area'
+import { cn } from '@/lib/utils'
 
 export function TextBlocksPanel() {
   const {
     document,
     textBlocks,
     selectedBlockIndex,
+    selectedBlockIndices,
     setSelectedBlockIndex,
+    toggleBlockSelection,
     replaceBlock,
     removeBlock,
   } = useTextBlocks()
@@ -37,6 +40,7 @@ export function TextBlocksPanel() {
   const { data: llmReady = false } = useLlmReadyQuery()
   const [generatingIndex, setGeneratingIndex] = useState<number | null>(null)
   const generating = generatingIndex !== null
+  const isMultiSelect = selectedBlockIndices.length > 1
 
   if (!document) {
     return (
@@ -65,6 +69,14 @@ export function TextBlocksPanel() {
     await removeBlock(blockIndex)
   }
 
+  const handleCardClick = (index: number, event: React.MouseEvent) => {
+    if (event.ctrlKey || event.metaKey) {
+      event.preventDefault()
+      event.stopPropagation()
+      toggleBlockSelection(index)
+    }
+  }
+
   return (
     <div
       className='flex min-h-0 flex-1 flex-col'
@@ -74,6 +86,11 @@ export function TextBlocksPanel() {
         <span data-testid='textblocks-count' data-count={textBlocks.length}>
           {t('textBlocks.title', { count: textBlocks.length })}
         </span>
+        {isMultiSelect && (
+          <span className='rounded-full bg-sky-400/20 px-1.5 py-0.5 text-[9px] font-semibold text-sky-600 normal-case dark:text-sky-400'>
+            {selectedBlockIndices.length} selected
+          </span>
+        )}
       </div>
       <ScrollArea
         className='min-h-0 flex-1'
@@ -106,9 +123,12 @@ export function TextBlocksPanel() {
                   block={block}
                   index={index}
                   selected={index === selectedBlockIndex}
+                  multiSelected={selectedBlockIndices.includes(index)}
+                  isMultiSelect={isMultiSelect}
                   onChange={(updates) => void replaceBlock(index, updates)}
                   onDelete={() => void handleDelete(index)}
                   onGenerate={() => void handleGenerate(index)}
+                  onCardClick={(e) => handleCardClick(index, e)}
                   generationInFlight={generating}
                   generating={generatingIndex === index}
                   llmReady={llmReady}
@@ -126,9 +146,12 @@ type BlockCardProps = {
   block: TextBlock
   index: number
   selected: boolean
+  multiSelected: boolean
+  isMultiSelect: boolean
   onChange: (updates: Partial<TextBlock>) => void
   onDelete: () => void | Promise<void>
   onGenerate: () => void | Promise<void>
+  onCardClick: (event: React.MouseEvent) => void
   generationInFlight: boolean
   generating: boolean
   llmReady: boolean
@@ -138,9 +161,12 @@ function BlockCard({
   block,
   index,
   selected,
+  multiSelected,
+  isMultiSelect,
   onChange,
   onDelete,
   onGenerate,
+  onCardClick,
   generationInFlight,
   generating,
   llmReady,
@@ -156,17 +182,31 @@ function BlockCard({
       initial={{ opacity: 0, y: 8 }}
       animate={{ opacity: 1, y: 0 }}
       transition={{ duration: 0.2, delay: index * 0.03 }}
+      onClick={onCardClick}
     >
       <AccordionItem
         value={index.toString()}
         data-selected={selected}
-        className='bg-card/90 ring-border data-[selected=true]:ring-primary overflow-hidden rounded text-xs ring-1'
+        data-multi-selected={multiSelected}
+        className={cn(
+          'bg-card/90 overflow-hidden rounded text-xs ring-1',
+          selected
+            ? 'ring-primary'
+            : multiSelected
+              ? 'ring-sky-400'
+              : 'ring-border',
+        )}
       >
         <AccordionTrigger className='data-[state=open]:bg-accent flex w-full cursor-pointer items-center gap-1.5 px-2 py-1.5 text-left transition outline-none hover:no-underline [&>svg]:hidden'>
           <span
-            className={`shrink-0 rounded px-1.5 py-0.5 text-center text-[10px] font-medium text-white tabular-nums ${
-              selected ? 'bg-primary' : 'bg-muted-foreground/60'
-            }`}
+            className={cn(
+              'shrink-0 rounded px-1.5 py-0.5 text-center text-[10px] font-medium text-white tabular-nums',
+              selected
+                ? 'bg-primary'
+                : multiSelected
+                  ? 'bg-sky-400'
+                  : 'bg-muted-foreground/60',
+            )}
             style={{ minWidth: '1.5rem' }}
           >
             {index + 1}

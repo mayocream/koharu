@@ -10,6 +10,7 @@ import {
   ContrastIcon,
   BandageIcon,
   PaintbrushIcon,
+  ImageIcon,
 } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { Button } from '@/components/ui/button'
@@ -51,6 +52,10 @@ export function LayersPanel() {
   const showRenderedImage = useEditorUiStore((state) => state.showRenderedImage)
   const setShowRenderedImage = useEditorUiStore(
     (state) => state.setShowRenderedImage,
+  )
+  const showOriginalOnly = useEditorUiStore((state) => state.showOriginalOnly)
+  const setShowOriginalOnly = useEditorUiStore(
+    (state) => state.setShowOriginalOnly,
   )
 
   const layers: Layer[] = [
@@ -109,18 +114,76 @@ export function LayersPanel() {
 
   return (
     <div className='flex flex-col'>
+      {/* Show Original Only toggle */}
+      <motion.div
+        data-testid='layer-original-toggle'
+        className={cn(
+          'group flex cursor-pointer items-center gap-2 px-2 py-1.5 select-none',
+          showOriginalOnly && 'bg-amber-500/10',
+        )}
+        whileHover={{
+          backgroundColor: showOriginalOnly
+            ? 'rgba(245,158,11,0.15)'
+            : 'rgba(0,0,0,0.03)',
+        }}
+        transition={{ duration: 0.15 }}
+        onClick={() => setShowOriginalOnly(!showOriginalOnly)}
+      >
+        <Button
+          variant='ghost'
+          size='icon-xs'
+          className='size-5 cursor-pointer'
+        >
+          <ImageIcon
+            className={cn(
+              'size-3.5',
+              showOriginalOnly ? 'text-amber-500' : 'text-muted-foreground',
+            )}
+          />
+        </Button>
+        <div className='flex size-5 shrink-0 items-center justify-center rounded'>
+          <EyeIcon
+            className={cn(
+              'size-3.5',
+              showOriginalOnly ? 'text-amber-500' : 'text-muted-foreground/40',
+            )}
+          />
+        </div>
+        <span
+          className={cn(
+            'flex-1 truncate text-xs font-medium',
+            showOriginalOnly
+              ? 'text-amber-600 dark:text-amber-400'
+              : 'text-muted-foreground',
+          )}
+        >
+          Original Image
+        </span>
+        {showOriginalOnly && (
+          <span className='rounded-full bg-amber-500/20 px-1.5 py-0.5 text-[9px] font-semibold text-amber-600 uppercase dark:text-amber-400'>
+            ON
+          </span>
+        )}
+      </motion.div>
+
+      <div className='border-border mx-2 border-b' />
+
       {layers.map((layer) => (
-        <LayerItem key={layer.id} layer={layer} />
+        <LayerItem
+          key={layer.id}
+          layer={layer}
+          disabled={showOriginalOnly && !layer.alwaysEnabled}
+        />
       ))}
     </div>
   )
 }
 
-function LayerItem({ layer }: { layer: Layer }) {
+function LayerItem({ layer, disabled }: { layer: Layer; disabled?: boolean }) {
   const { t } = useTranslation()
   const isLocked = layer.alwaysEnabled
-  const canToggle = layer.hasContent && !isLocked
-  const isActive = layer.hasContent && layer.visible
+  const canToggle = layer.hasContent && !isLocked && !disabled
+  const isActive = layer.hasContent && layer.visible && !disabled
 
   return (
     <motion.div
@@ -129,7 +192,7 @@ function LayerItem({ layer }: { layer: Layer }) {
       data-visible={layer.visible ? 'true' : 'false'}
       className={cn(
         'group flex items-center gap-2 px-2 py-1.5',
-        !layer.hasContent && !isLocked && 'opacity-40',
+        (!layer.hasContent && !isLocked) || disabled ? 'opacity-40' : '',
       )}
       whileHover={{ backgroundColor: 'rgba(0,0,0,0.03)' }}
       transition={{ duration: 0.15 }}
@@ -150,7 +213,7 @@ function LayerItem({ layer }: { layer: Layer }) {
           canToggle ? 'cursor-pointer' : 'cursor-default',
         )}
       >
-        {layer.visible ? (
+        {layer.visible && !disabled ? (
           <EyeIcon
             className={cn(
               'size-3.5',
