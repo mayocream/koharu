@@ -160,20 +160,13 @@ fn main() -> Result<()> {
         list_devices,
     } = Args::parse();
 
-    let runtime_dir = dirs::cache_dir()
-        .unwrap_or_else(std::env::temp_dir)
-        .join("Koharu")
-        .join("llama.cpp")
-        .join(env!("KOHARU_LLM_LLAMA_CPP_TAG"));
     tokio::runtime::Builder::new_current_thread()
         .enable_all()
         .build()
         .with_context(|| "unable to create tokio runtime")?
         .block_on(async {
-            koharu_llm::safe::runtime::ensure_dylibs(&runtime_dir)
+            koharu_runtime::initialize()
                 .await
-                .context("failed to download runtime libraries")?;
-            koharu_llm::safe::runtime::initialize(&runtime_dir)
                 .context("failed to initialize runtime libraries")?;
             Ok::<(), anyhow::Error>(())
         })?;

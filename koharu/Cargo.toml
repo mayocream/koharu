@@ -40,7 +40,6 @@ tauri-plugin-updater = { workspace = true }
 tokio = { workspace = true }
 tracing = { workspace = true }
 tracing-subscriber = { workspace = true }
-libloading = { workspace = true }
 
 [target.'cfg(target_os = "windows")'.dependencies]
 koharu-llm = { workspace = true }
@@ -55,8 +54,7 @@ koharu-llm = { workspace = true }
 koharu-llm = { workspace = true }
 
 [features]
-cuda = ["koharu-runtime/cuda", "koharu-ml/cuda"]
-cudnn = ["koharu-runtime/cudnn", "koharu-ml/cudnn"]
+cuda = ["koharu-ml/cuda"]
 metal = ["koharu-ml/metal"]
 
 [build-dependencies]

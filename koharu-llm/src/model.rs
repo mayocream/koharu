@@ -59,7 +59,6 @@ impl Default for GenerateOptions {
 
 impl Llm {
     pub async fn load(id: ModelId, cpu: bool) -> Result<Self> {
-        ensure_runtime_initialized()?;
         let model_path = id.get().await?;
 
         tokio::task::spawn_blocking(move || Self::load_from_path(id, cpu, model_path))
@@ -68,6 +67,9 @@ impl Llm {
     }
 
     fn load_from_path(id: ModelId, cpu: bool, model_path: PathBuf) -> Result<Self> {
+        crate::sys::initialize()
+            .context("failed to initialize llama.cpp runtime bindings")?;
+
         LOGGING_READY.call_once(|| {
             send_logs_to_tracing(LogOptions::default().with_logs_enabled(true));
         });
@@ -237,14 +239,6 @@ impl Llm {
     fn should_stop(&self, token: LlamaToken) -> bool {
         token == self.eos_token || self.model.is_eog_token(token)
     }
-}
-
-fn ensure_runtime_initialized() -> Result<()> {
-    anyhow::ensure!(
-        crate::sys::is_initialized(),
-        "llama.cpp runtime is not initialized; initialize it before calling `koharu_llm::Llm::load`"
-    );
-    Ok(())
 }
 
 fn model_params(cpu: bool, backend: &LlamaBackend) -> LlamaModelParams {

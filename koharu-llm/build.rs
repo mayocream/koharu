@@ -11,10 +11,6 @@ use reqwest::blocking::Client;
 use syn::{FnArg, ImplItem, Item, Pat, Signature};
 use tar::Archive;
 
-const LLAMA_CPP_TAG: &str = "b8233";
-const LLAMA_CPP_COMMIT: &str = "c5a778891ba0ddbd4cbb507c823f970595b1adc2";
-const SOURCE_URL: &str = "https://github.com/ggml-org/llama.cpp/archive/refs/tags/b8233.tar.gz";
-
 const GGML_FUNCTIONS: &[&str] = &[
     "ggml_backend_dev_count",
     "ggml_backend_dev_get",
@@ -45,6 +41,7 @@ const MTMD_FUNCTIONS: &[&str] = &["mtmd_.*", "mtmd_helper_.*"];
 
 fn main() {
     println!("cargo:rerun-if-changed=build.rs");
+    println!("cargo:rerun-if-env-changed=LLAMA_CPP_TAG");
 
     if let Err(err) = run() {
         panic!("{err:#}");
@@ -54,8 +51,9 @@ fn main() {
 fn run() -> Result<()> {
     validate_target()?;
 
+    let llama_cpp_tag = env::var("LLAMA_CPP_TAG").context("missing LLAMA_CPP_TAG")?;
     let out_dir = PathBuf::from(env::var("OUT_DIR").context("missing OUT_DIR")?);
-    let source_root = ensure_source_tree(&out_dir)?;
+    let source_root = ensure_source_tree(&out_dir, &llama_cpp_tag)?;
     let header_path = write_wrapper_header(&out_dir)?;
     let include_dirs = include_dirs(&source_root);
 
@@ -106,8 +104,7 @@ fn run() -> Result<()> {
         ],
     )?;
 
-    println!("cargo:rustc-env=KOHARU_LLM_LLAMA_CPP_TAG={LLAMA_CPP_TAG}");
-    println!("cargo:rustc-env=KOHARU_LLM_LLAMA_CPP_COMMIT={LLAMA_CPP_COMMIT}");
+    println!("cargo:rustc-env=KOHARU_LLM_LLAMA_CPP_TAG={llama_cpp_tag}");
 
     Ok(())
 }
@@ -125,10 +122,12 @@ fn validate_target() -> Result<()> {
     Ok(())
 }
 
-fn ensure_source_tree(out_dir: &Path) -> Result<PathBuf> {
+fn ensure_source_tree(out_dir: &Path, llama_cpp_tag: &str) -> Result<PathBuf> {
     let cache_dir = out_dir.join("llama.cpp-source");
-    let tarball_path = cache_dir.join(format!("llama.cpp-{LLAMA_CPP_TAG}.tar.gz"));
-    let source_root = cache_dir.join(format!("llama.cpp-{LLAMA_CPP_TAG}"));
+    let tarball_path = cache_dir.join(format!("llama.cpp-{llama_cpp_tag}.tar.gz"));
+    let source_root = cache_dir.join(format!("llama.cpp-{llama_cpp_tag}"));
+    let source_url =
+        format!("https://github.com/ggml-org/llama.cpp/archive/refs/tags/{llama_cpp_tag}.tar.gz");
 
     if source_root.join("include/llama.h").exists() {
         return Ok(source_root);
@@ -142,7 +141,7 @@ fn ensure_source_tree(out_dir: &Path) -> Result<PathBuf> {
             .build()
             .context("failed to build reqwest client")?;
         let mut response = client
-            .get(SOURCE_URL)
+            .get(&source_url)
             .send()
             .context("failed to download llama.cpp source tarball")?
             .error_for_status()

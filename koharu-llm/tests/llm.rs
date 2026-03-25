@@ -5,9 +5,7 @@ use strum::IntoEnumIterator;
 use koharu_llm::{GenerateOptions, Language, Llm, ModelId};
 
 async fn initialize_runtime() -> anyhow::Result<()> {
-    let runtime_dir = koharu_llm::runtime_dir();
-    koharu_llm::safe::runtime::ensure_dylibs(&runtime_dir).await?;
-    koharu_llm::safe::runtime::initialize(&runtime_dir)?;
+    koharu_runtime::initialize().await?;
     Ok(())
 }
 

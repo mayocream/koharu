@@ -1,11 +1,8 @@
 use std::ffi::CString;
 use std::path::{Path, PathBuf};
+use std::sync::OnceLock;
 
 use anyhow::{Context, Result, anyhow, bail};
-use libloading::Library;
-use once_cell::sync::OnceCell;
-
-use crate::safe::runtime::{CoreLibraryKind, LoadStep};
 
 #[allow(warnings)]
 mod generated {
@@ -17,28 +14,24 @@ mod generated {
     #[allow(warnings)]
     pub mod llama {
         use super::types::*;
-
         include!(concat!(env!("OUT_DIR"), "/llama_loader.rs"));
     }
 
     #[allow(warnings)]
     pub mod ggml {
         use super::types::*;
-
         include!(concat!(env!("OUT_DIR"), "/ggml_loader.rs"));
     }
 
     #[allow(warnings)]
     pub mod ggml_base {
         use super::types::*;
-
         include!(concat!(env!("OUT_DIR"), "/ggml_base_loader.rs"));
     }
 
     #[allow(warnings)]
     pub mod mtmd {
         use super::types::*;
-
         include!(concat!(env!("OUT_DIR"), "/mtmd_loader.rs"));
     }
 }
@@ -47,37 +40,56 @@ pub use generated::types::*;
 
 struct LoadedLibraries {
     path: PathBuf,
-    auxiliary: Vec<Library>,
     llama: generated::llama::llama,
     ggml: generated::ggml::ggml,
     ggml_base: generated::ggml_base::ggml_base,
     mtmd: generated::mtmd::mtmd,
 }
 
-static LIBRARIES: OnceCell<LoadedLibraries> = OnceCell::new();
+#[cfg(target_os = "windows")]
+const LIB_NAMES: [&str; 4] = ["ggml-base.dll", "ggml.dll", "llama.dll", "mtmd.dll"];
 
-pub(crate) fn is_initialized() -> bool {
-    LIBRARIES.get().is_some()
-}
+#[cfg(target_os = "linux")]
+const LIB_NAMES: [&str; 4] = ["libggml-base.so", "libggml.so", "libllama.so", "libmtmd.so"];
 
-pub(crate) fn initialize(dir: &Path) -> Result<()> {
-    let canonical_dir = canonical_dir(dir)?;
+#[cfg(target_os = "macos")]
+const LIB_NAMES: [&str; 4] = [
+    "libggml-base.dylib",
+    "libggml.dylib",
+    "libllama.dylib",
+    "libmtmd.dylib",
+];
 
-    if let Some(libraries) = LIBRARIES.get() {
-        if libraries.path == canonical_dir {
-            return Ok(());
-        }
+static LIBRARIES: OnceLock<LoadedLibraries> = OnceLock::new();
 
+pub(crate) fn initialize() -> Result<()> {
+    let runtime_dir = koharu_runtime::llama_runtime_dir()
+        .context("failed to resolve the llama runtime directory; call `koharu_runtime::initialize()` first")?;
+
+    if !runtime_dir.exists() {
         bail!(
-            "koharu-llm is already initialized with `{}` and cannot be reinitialized with `{}`",
-            libraries.path.display(),
-            canonical_dir.display()
+            "runtime directory `{}` does not exist; call `koharu_runtime::initialize()` first",
+            runtime_dir.display()
         );
     }
 
-    let load_plan = crate::safe::runtime::load_plan(&canonical_dir)?;
-    let libraries = load_libraries(&canonical_dir, &load_plan)?;
-    register_backends(&libraries.ggml, &canonical_dir)?;
+    let dir = runtime_dir.canonicalize().with_context(|| {
+        format!("failed to canonicalize `{}`", runtime_dir.display())
+    })?;
+
+    if let Some(existing) = LIBRARIES.get() {
+        if existing.path == dir {
+            return Ok(());
+        }
+        bail!(
+            "koharu-llm is already initialized with `{}` and cannot be reinitialized with `{}`",
+            existing.path.display(),
+            dir.display()
+        );
+    }
+
+    let libraries = load_libraries(&dir)?;
+    register_backends(&libraries.ggml, &dir)?;
 
     LIBRARIES
         .set(libraries)
@@ -86,80 +98,44 @@ pub(crate) fn initialize(dir: &Path) -> Result<()> {
     Ok(())
 }
 
-fn canonical_dir(dir: &Path) -> Result<PathBuf> {
-    if dir.exists() {
-        dir.canonicalize().with_context(|| {
-            format!(
-                "failed to canonicalize runtime directory `{}`",
-                dir.display()
-            )
-        })
-    } else {
-        bail!(
-            "runtime directory `{}` does not exist; call `koharu_llm::runtime::ensure_dylibs` first",
-            dir.display()
-        )
-    }
-}
+fn load_libraries(dir: &Path) -> Result<LoadedLibraries> {
+    let [ggml_base_name, ggml_name, llama_name, mtmd_name] = LIB_NAMES;
 
-fn load_libraries(dir: &Path, load_plan: &[LoadStep]) -> Result<LoadedLibraries> {
-    let mut auxiliary = Vec::new();
-    let mut llama = None;
-    let mut ggml = None;
-    let mut ggml_base = None;
-    let mut mtmd = None;
-
-    for step in load_plan {
-        let library = load_library(&step.path)?;
-
-        match step.core {
-            Some(CoreLibraryKind::Llama) => {
-                llama = Some(
-                    unsafe { generated::llama::llama::from_library(library) }
-                        .with_context(|| format!("failed to bind `{}`", step.path.display()))?,
-                );
-            }
-            Some(CoreLibraryKind::Ggml) => {
-                ggml = Some(
-                    unsafe { generated::ggml::ggml::from_library(library) }
-                        .with_context(|| format!("failed to bind `{}`", step.path.display()))?,
-                );
-            }
-            Some(CoreLibraryKind::GgmlBase) => {
-                ggml_base = Some(
-                    unsafe { generated::ggml_base::ggml_base::from_library(library) }
-                        .with_context(|| format!("failed to bind `{}`", step.path.display()))?,
-                );
-            }
-            Some(CoreLibraryKind::Mtmd) => {
-                mtmd = Some(
-                    unsafe { generated::mtmd::mtmd::from_library(library) }
-                        .with_context(|| format!("failed to bind `{}`", step.path.display()))?,
-                );
-            }
-            None => auxiliary.push(library),
-        }
-    }
+    let ggml_base = load_and_bind(ggml_base_name, |lib| unsafe {
+        generated::ggml_base::ggml_base::from_library(lib)
+    })?;
+    let ggml = load_and_bind(ggml_name, |lib| unsafe {
+        generated::ggml::ggml::from_library(lib)
+    })?;
+    let llama = load_and_bind(llama_name, |lib| unsafe {
+        generated::llama::llama::from_library(lib)
+    })?;
+    let mtmd = load_and_bind(mtmd_name, |lib| unsafe {
+        generated::mtmd::mtmd::from_library(lib)
+    })?;
 
     Ok(LoadedLibraries {
         path: dir.to_path_buf(),
-        auxiliary,
-        llama: llama.ok_or_else(|| anyhow!("core llama runtime library was not loaded"))?,
-        ggml: ggml.ok_or_else(|| anyhow!("core ggml runtime library was not loaded"))?,
-        ggml_base: ggml_base
-            .ok_or_else(|| anyhow!("core ggml-base runtime library was not loaded"))?,
-        mtmd: mtmd.ok_or_else(|| anyhow!("core mtmd runtime library was not loaded"))?,
+        llama,
+        ggml,
+        ggml_base,
+        mtmd,
     })
 }
 
-fn load_library(path: &Path) -> Result<Library> {
-    unsafe { Library::new(path) }.with_context(|| format!("failed to load `{}`", path.display()))
+fn load_and_bind<T>(
+    name: &str,
+    bind: impl FnOnce(libloading::Library) -> std::result::Result<T, libloading::Error>,
+) -> Result<T> {
+    let library = koharu_runtime::load_library_by_name(name)
+        .with_context(|| format!("failed to load `{name}`"))?;
+    bind(library).with_context(|| format!("failed to bind `{name}`"))
 }
 
 fn register_backends(ggml: &generated::ggml::ggml, dir: &Path) -> Result<()> {
     let dir = dir
         .to_str()
-        .ok_or_else(|| anyhow!("runtime directory `{}` is not valid UTF-8", dir.display()))?;
+        .ok_or_else(|| anyhow!("runtime directory is not valid UTF-8"))?;
     let dir = CString::new(dir).context("runtime directory contains an interior null byte")?;
 
     unsafe {
@@ -171,12 +147,11 @@ fn register_backends(ggml: &generated::ggml::ggml, dir: &Path) -> Result<()> {
 
 fn libraries() -> &'static LoadedLibraries {
     LIBRARIES.get().expect(
-        "koharu-llm runtime libraries are not initialized; call `koharu_llm::runtime::initialize` first",
+        "koharu-llm runtime libraries are not initialized; call `koharu_runtime::initialize()` first",
     )
 }
 
 fn llama_lib() -> &'static generated::llama::llama {
-    let _ = libraries().auxiliary.len();
     &libraries().llama
 }
 
@@ -195,7 +170,6 @@ fn mtmd_lib() -> &'static generated::mtmd::mtmd {
 #[allow(warnings)]
 mod wrappers {
     use super::*;
-
     include!(concat!(env!("OUT_DIR"), "/wrappers.rs"));
 }
 

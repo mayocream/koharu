@@ -15,14 +15,6 @@ pub use language::{Language, language_from_tag, supported_locales};
 pub use model::{GenerateOptions, Llm};
 pub use prompt::{ChatMessage, ChatRole};
 
-pub fn runtime_dir() -> PathBuf {
-    dirs::cache_dir()
-        .unwrap_or_else(std::env::temp_dir)
-        .join("Koharu")
-        .join("llama.cpp")
-        .join(env!("KOHARU_LLM_LLAMA_CPP_TAG"))
-}
-
 #[derive(
     Debug,
     Clone,
