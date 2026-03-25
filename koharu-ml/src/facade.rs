@@ -453,12 +453,12 @@ mod tests {
 
     #[test]
     fn build_text_blocks_keeps_textlike_regions_and_dedupes_overlaps() {
-        let blocks = build_text_blocks(&[
+        let blocks = build_text_blocks_with_options(&[
             test_region(0, "text", [10.0, 10.0, 40.0, 40.0]),
             test_region(1, "image", [0.0, 0.0, 128.0, 128.0]),
             test_region(2, "aside_text", [12.0, 12.0, 39.0, 39.0]),
             test_region(3, "doc_title", [60.0, 8.0, 90.0, 24.0]),
-        ]);
+        ], false);
 
         assert_eq!(blocks.len(), 2);
         assert_eq!(blocks[0].detector.as_deref(), Some("pp-doclayout-v3"));
@@ -468,7 +468,7 @@ mod tests {
 
     #[test]
     fn build_text_blocks_marks_tall_regions_as_vertical() {
-        let blocks = build_text_blocks(&[test_region(0, "text", [5.0, 5.0, 20.0, 60.0])]);
+        let blocks = build_text_blocks_with_options(&[test_region(0, "text", [5.0, 5.0, 20.0, 60.0])], false);
         assert_eq!(blocks.len(), 1);
         assert_eq!(blocks[0].source_direction, Some(TextDirection::Vertical));
     }
