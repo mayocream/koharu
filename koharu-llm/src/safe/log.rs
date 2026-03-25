@@ -206,7 +206,7 @@ impl State {
         self.is_buffering
             .store(true, std::sync::atomic::Ordering::Release);
         self.previous_level
-            .store(level, std::sync::atomic::Ordering::Release);
+            .store(level as i32, std::sync::atomic::Ordering::Release);
     }
 
     // Emit a normal unbuffered log message (not the CONT log level and the text ends with a newline).
@@ -230,7 +230,7 @@ impl State {
         }
 
         self.previous_level
-            .store(level, std::sync::atomic::Ordering::Release);
+            .store(level as i32, std::sync::atomic::Ordering::Release);
 
         let (text, newline) = text.split_at(text.len() - 1);
         debug_assert_eq!(newline, "\n");
@@ -259,7 +259,7 @@ impl State {
     pub(super) fn update_previous_level_for_disabled_log(&self, level: crate::sys::ggml_log_level) {
         if level != crate::sys::GGML_LOG_LEVEL_CONT {
             self.previous_level
-                .store(level, std::sync::atomic::Ordering::Release);
+                .store(level as i32, std::sync::atomic::Ordering::Release);
         }
     }
 
