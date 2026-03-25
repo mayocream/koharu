@@ -62,37 +62,6 @@ async function setupCuda() {
   )
 }
 
-async function setupCudnn() {
-  const cudnnRoot = 'C:/Program Files/NVIDIA/CUDNN'
-  const versions = await readdir(cudnnRoot).catch(() => [])
-
-  sortVersionsDesc(versions)
-
-  for (const version of versions) {
-    if (version.startsWith('v')) {
-      const binPath = path.join(cudnnRoot, version, 'bin')
-
-      if (await pathExists(binPath)) {
-        const versions = await readdir(binPath)
-
-        sortVersionsDesc(versions)
-
-        for (const version of versions) {
-          const fullPath = path.join(binPath, version, 'x64')
-          process.env.PATH = `${fullPath}${path.delimiter}${process.env.PATH}`
-
-          console.log(`Added cuDNN to PATH: ${fullPath}`)
-          return
-        }
-      }
-    }
-
-    throw new Error(
-      'cuDNN not found. Please install cuDNN from https://developer.nvidia.com/rdp/cudnn-download',
-    )
-  }
-}
-
 async function setupCl() {
   const vsRoot = 'C:/Program Files/Microsoft Visual Studio'
   const vsVersions = await readdir(vsRoot).catch(() => [])
@@ -128,9 +97,6 @@ async function dev() {
         // Check again after setup
         await checkNvcc()
       })
-
-    // Setup cuDNN path
-    await setupCudnn()
 
     // Setup cl.exe path
     await setupCl()

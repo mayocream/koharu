@@ -14,23 +14,16 @@ publish.workspace = true
 [dependencies]
 koharu-http = { workspace = true }
 anyhow = { workspace = true }
+dirs = { workspace = true }
 serde_json = { workspace = true }
 zip = { workspace = true }
-rayon = { workspace = true }
-tracing = { workspace = true }
-reqwest = { workspace = true }
 tokio = { workspace = true }
-futures = { workspace = true }
-once_cell = { workspace = true }
 libloading = { workspace = true }
-num_cpus = { workspace = true }
-csv = { workspace = true }
 flate2 = { workspace = true }
+tar = "0.4"
+
+[target.'cfg(target_os = "windows")'.dependencies]
+windows-sys = { workspace = true }
 
 [dev-dependencies]
 tempfile = { workspace = true }
-
-[features]
-default = ["cuda", "cudnn"]
-cuda = []
-cudnn = []

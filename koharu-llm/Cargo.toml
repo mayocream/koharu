@@ -30,11 +30,11 @@ flate2 = { workspace = true }
 futures = { workspace = true }
 hf-hub = { workspace = true }
 koharu-http = { workspace = true }
+koharu-runtime = { workspace = true }
 koharu-types = { workspace = true }
-libloading = "0.8.9"
+libloading = { workspace = true }
 minijinja = { workspace = true }
 num_cpus = { workspace = true }
-once_cell = { workspace = true }
 reqwest = { workspace = true }
 serde = { workspace = true }
 serde_json = { workspace = true }

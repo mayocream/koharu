@@ -8,12 +8,11 @@ use tauri::{Manager, WebviewWindowBuilder};
 use tokio::{net::TcpListener, sync::RwLock};
 use tracing_subscriber::fmt::format::FmtSpan;
 
-use koharu_llm::{facade, runtime_dir as llm_runtime_dir};
+use koharu_llm::facade;
 use koharu_ml::{cuda_is_available, device};
 use koharu_pipeline::AppResources;
 use koharu_renderer::facade::Renderer;
 use koharu_rpc::{SharedResources, server};
-use koharu_runtime::{ensure_dylibs, preload_dylibs};
 use koharu_types::State;
 
 static APP_ROOT: Lazy<PathBuf> = Lazy::new(|| {
@@ -21,8 +20,6 @@ static APP_ROOT: Lazy<PathBuf> = Lazy::new(|| {
         .map(|path| path.join("Koharu"))
         .unwrap_or_default()
 });
-static LIB_ROOT: Lazy<PathBuf> = Lazy::new(|| APP_ROOT.join("libs"));
-static LLAMA_RUNTIME_ROOT: Lazy<PathBuf> = Lazy::new(llm_runtime_dir);
 static MODEL_ROOT: Lazy<PathBuf> = Lazy::new(|| APP_ROOT.join("models"));
 
 #[derive(Parser)]
@@ -108,21 +105,11 @@ fn initialize(headless: bool, _debug: bool) -> Result<()> {
 }
 
 async fn prefetch() -> Result<()> {
-    ensure_dylibs(LIB_ROOT.to_path_buf()).await?;
-    koharu_llm::safe::runtime::ensure_dylibs(LLAMA_RUNTIME_ROOT.as_path())
+    koharu_runtime::initialize()
         .await
-        .context("Failed to ensure llama.cpp runtime libraries")?;
+        .context("Failed to initialize runtime packages")?;
     koharu_ml::facade::prefetch().await?;
 
-    Ok(())
-}
-
-async fn initialize_llama_runtime() -> Result<()> {
-    koharu_llm::safe::runtime::ensure_dylibs(LLAMA_RUNTIME_ROOT.as_path())
-        .await
-        .context("Failed to ensure llama.cpp runtime libraries")?;
-    koharu_llm::safe::runtime::initialize(LLAMA_RUNTIME_ROOT.as_path())
-        .context("Failed to initialize llama.cpp runtime libraries")?;
     Ok(())
 }
 
@@ -144,7 +131,7 @@ async fn build_resources(cpu: bool, headless: bool) -> Result<AppResources> {
     let mut cpu = cpu;
 
     if !cpu && cuda_is_available() {
-        match crate::nvidia::driver_version() {
+        match koharu_runtime::cuda_driver_version() {
             Ok(version) if version.supports_cuda_13_1() => {
                 tracing::info!("NVIDIA driver reports CUDA {version} support");
             }
@@ -171,28 +158,20 @@ async fn build_resources(cpu: bool, headless: bool) -> Result<AppResources> {
         }
     }
 
-    if !cpu && cuda_is_available() {
-        ensure_dylibs(LIB_ROOT.to_path_buf())
-            .await
-            .context("Failed to ensure dynamic libraries")?;
-        preload_dylibs(LIB_ROOT.to_path_buf()).context("Failed to preload dynamic libraries")?;
+    koharu_runtime::initialize()
+        .await
+        .context("Failed to initialize runtime packages")?;
 
+    if !cpu && cuda_is_available() {
         #[cfg(target_os = "windows")]
         {
             if let Err(err) = crate::windows::register_khr() {
                 tracing::warn!(?err, "Failed to register .khr file association");
             }
-
-            crate::windows::add_dll_directory(&LIB_ROOT).context("Failed to add DLL directory")?;
         }
 
-        tracing::info!(
-            "CUDA is available, loaded dynamic libraries from {:?}",
-            *LIB_ROOT
-        );
+        tracing::info!("CUDA is available and runtime packages were initialized");
     }
-
-    initialize_llama_runtime().await?;
 
     let ml = Arc::new(
         koharu_ml::facade::Model::new(cpu)
@@ -313,3 +292,4 @@ pub async fn run() -> Result<()> {
 
     Ok(())
 }
+
