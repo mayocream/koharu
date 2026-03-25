@@ -7,8 +7,14 @@ import { queryKeys } from '@/lib/query/keys'
 import { useEditorUiStore } from '@/lib/stores/editorUiStore'
 import { useLlmUiStore } from '@/lib/stores/llmUiStore'
 import { usePreferencesStore } from '@/lib/stores/preferencesStore'
+import type { LlmModelInfo } from '@/lib/generated/protocol/LlmModelInfo'
 import i18n from '@/lib/i18n'
 import { useRpcConnection } from '@/hooks/useRpcConnection'
+
+/** Frontend-extended model entry with origin tracking. */
+export type LlmModelEntry = LlmModelInfo & {
+  origin?: 'local-llm' | 'openai-api'
+}
 
 export const useDocumentsCountQuery = (enabled = true) =>
   useQuery({
@@ -63,9 +69,19 @@ export const useFontsQuery = () =>
 export const useLlmModelsQuery = () => {
   const [language, setLanguage] = useState(i18n.language)
   const rpcConnected = useRpcConnection()
-  const compatibleBaseUrl = usePreferencesStore(
+  const providerBaseUrl = usePreferencesStore(
     (state) => state.providerBaseUrls['openai-compatible']?.trim() ?? '',
   )
+  const localLlmBaseUrl = usePreferencesStore(
+    (state) => state.localLlm.baseUrl?.trim() ?? '',
+  )
+  const localLlmModelName = usePreferencesStore(
+    (state) => state.localLlm.modelName?.trim() ?? '',
+  )
+  const manualModelName = usePreferencesStore(
+    (state) => state.providerModelNames?.['openai-compatible']?.trim() ?? '',
+  )
+  const hasCompatible = !!(providerBaseUrl || localLlmBaseUrl)
   const compatibleConfigVersion = usePreferencesStore(
     (state) => state.openAiCompatibleConfigVersion,
   )
@@ -80,16 +96,57 @@ export const useLlmModelsQuery = () => {
     }
   }, [])
 
-  return useQuery({
+  return useQuery<LlmModelEntry[]>({
     queryKey: queryKeys.llm.models(
       language ?? 'default',
-      compatibleBaseUrl || undefined,
+      hasCompatible ? 'configured' : undefined,
       compatibleConfigVersion,
     ),
-    queryFn: () => api.llmList(language, compatibleBaseUrl || undefined),
+    queryFn: async () => {
+      const raw = await api.llmList(language)
+      const models: LlmModelEntry[] = raw
+      const apiLanguages =
+        models.find((m) => m.source !== 'local' && m.languages.length > 0)
+          ?.languages ?? []
+
+      // Local LLM (Ollama / LM Studio)
+      if (localLlmModelName && localLlmBaseUrl) {
+        const id = `openai-compatible:${localLlmModelName}`
+        if (!models.some((m) => m.id === id)) {
+          models.push({
+            id,
+            languages: apiLanguages,
+            source: 'openai-compatible',
+            origin: 'local-llm',
+          })
+        }
+      }
+
+      // OpenAI Compatible (API Keys section)
+      if (manualModelName && providerBaseUrl) {
+        const id = `openai-compatible:${manualModelName}`
+        if (!models.some((m) => m.id === id)) {
+          models.push({
+            id,
+            languages: apiLanguages,
+            source: 'openai-compatible',
+            origin: 'openai-api',
+          })
+        }
+      }
+
+      return models
+    },
     enabled: rpcConnected,
-    staleTime: compatibleBaseUrl ? 0 : 5 * 60 * 1000,
+    staleTime: hasCompatible ? 0 : 5 * 60 * 1000,
   })
+}
+
+/** Resolve the preset label for a local-llm model. */
+export const LOCAL_LLM_PRESET_LABELS: Record<string, string> = {
+  ollama: 'Ollama',
+  lmstudio: 'LM Studio',
+  custom: 'Local',
 }
 
 export const useApiKeyQuery = (provider: string, enabled = true) =>

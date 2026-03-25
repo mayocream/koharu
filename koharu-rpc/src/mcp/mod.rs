@@ -384,6 +384,9 @@ impl KoharuMcp {
                 id: p.id.clone(),
                 api_key: None,
                 base_url: None,
+                temperature: p.temperature,
+                max_tokens: p.max_tokens,
+                custom_system_prompt: p.custom_system_prompt,
             },
         )
         .await
@@ -451,6 +454,9 @@ impl KoharuMcp {
                 llm_model_id: p.llm_model_id,
                 llm_api_key: None,
                 llm_base_url: None,
+                llm_temperature: None,
+                llm_max_tokens: None,
+                llm_custom_system_prompt: None,
                 language: p.language,
                 shader_effect: effect,
                 shader_stroke: None,

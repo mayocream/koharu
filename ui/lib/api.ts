@@ -1,6 +1,6 @@
 'use client'
 
-import { fileOpen, fileSave } from 'browser-fs-access'
+import { directoryOpen, fileOpen, fileSave } from 'browser-fs-access'
 import {
   fetchBinary,
   fetchJson,
@@ -360,6 +360,42 @@ export const api = {
     })
   },
 
+  async openFolder(): Promise<number> {
+    return withRpcError('open_documents', async () => {
+      const files = await pickFolder()
+      if (!files?.length) return 0
+      const formData = new FormData()
+      files.forEach((file) => formData.append('files', file, file.name))
+      const result = await fetchJson<{ totalCount: number }>(
+        '/documents/import?mode=replace',
+        {
+          method: 'POST',
+          body: formData,
+        },
+      )
+      documentDetailCache.clear()
+      return result.totalCount
+    })
+  },
+
+  async addFolder(): Promise<number> {
+    return withRpcError('add_documents', async () => {
+      const files = await pickFolder()
+      if (!files?.length) return 0
+      const formData = new FormData()
+      files.forEach((file) => formData.append('files', file, file.name))
+      const result = await fetchJson<{ totalCount: number }>(
+        '/documents/import?mode=append',
+        {
+          method: 'POST',
+          body: formData,
+        },
+      )
+      documentDetailCache.clear()
+      return result.totalCount
+    })
+  },
+
   async exportDocument(index: number): Promise<void> {
     return withRpcError('export_document', async () => {
       const summary = await getDocumentSummaryAtIndex(index)
@@ -621,11 +657,41 @@ export const api = {
     return fetchJson<LlmModelInfo[]>(`/llm/models${query}`)
   },
 
-  async llmLoad(id: string, apiKey?: string, baseUrl?: string): Promise<void> {
+  async llmLoad(
+    id: string,
+    apiKey?: string,
+    baseUrl?: string,
+    temperature?: number | null,
+    maxTokens?: number | null,
+    customSystemPrompt?: string,
+  ): Promise<void> {
     await fetchJson<LlmState>('/llm/load', {
       method: 'POST',
       headers: { 'content-type': 'application/json' },
-      body: JSON.stringify({ id, apiKey, baseUrl }),
+      body: JSON.stringify({
+        id,
+        apiKey,
+        baseUrl,
+        temperature: temperature ?? undefined,
+        maxTokens: maxTokens ?? undefined,
+        customSystemPrompt: customSystemPrompt || undefined,
+      }),
+    })
+  },
+
+  async llmPing(
+    baseUrl: string,
+    apiKey?: string,
+  ): Promise<{
+    ok: boolean
+    models: string[]
+    latencyMs?: number
+    error?: string
+  }> {
+    return fetchJson('/llm/ping', {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ baseUrl, apiKey: apiKey || undefined }),
     })
   },
 
@@ -668,6 +734,9 @@ export const api = {
     llmModelId?: string
     llmApiKey?: string
     llmBaseUrl?: string
+    llmTemperature?: number | null
+    llmMaxTokens?: number | null
+    llmCustomSystemPrompt?: string
     language?: string
     shaderEffect?: RenderEffect
     shaderStroke?: RenderStroke
@@ -687,6 +756,9 @@ export const api = {
           llmModelId: options.llmModelId,
           llmApiKey: options.llmApiKey,
           llmBaseUrl: options.llmBaseUrl,
+          llmTemperature: options.llmTemperature ?? undefined,
+          llmMaxTokens: options.llmMaxTokens ?? undefined,
+          llmCustomSystemPrompt: options.llmCustomSystemPrompt || undefined,
           language: options.language,
           shaderEffect: options.shaderEffect,
           shaderStroke: options.shaderStroke,
@@ -704,14 +776,27 @@ export const api = {
   },
 }
 
+const IMAGE_EXTENSIONS = ['.png', '.jpg', '.jpeg', '.webp']
+
 const pickDocuments = async (): Promise<File[] | null> => {
   try {
     return await fileOpen({
       description: 'Documents',
       mimeTypes: ['image/*'],
-      extensions: ['.png', '.jpg', '.jpeg', '.webp'],
+      extensions: IMAGE_EXTENSIONS,
       multiple: true,
     })
+  } catch {
+    return null
+  }
+}
+
+const pickFolder = async (): Promise<File[] | null> => {
+  try {
+    const files = await directoryOpen({ recursive: true })
+    return files.filter((file) =>
+      IMAGE_EXTENSIONS.some((ext) => file.name.toLowerCase().endsWith(ext)),
+    )
   } catch {
     return null
   }

@@ -52,3 +52,6 @@ test-results/
 
 # Misc
 AGENTS.md
+claudedocs/
+/.claude
+/.serena

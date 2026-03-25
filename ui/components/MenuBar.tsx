@@ -35,6 +35,8 @@ export function MenuBar() {
   const {
     addDocuments,
     openDocuments,
+    openFolder,
+    addFolder,
     openExternal,
     processImage,
     inpaintAndRenderImage,
@@ -55,6 +57,16 @@ export function MenuBar() {
       label: t('menu.addFile'),
       onSelect: addDocuments,
       testId: 'menu-file-add',
+    },
+    {
+      label: t('menu.openFolder'),
+      onSelect: openFolder,
+      testId: 'menu-file-open-folder',
+    },
+    {
+      label: t('menu.addFolder'),
+      onSelect: addFolder,
+      testId: 'menu-file-add-folder',
     },
     {
       label: t('menu.export'),

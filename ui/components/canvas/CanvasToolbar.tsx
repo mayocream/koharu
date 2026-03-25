@@ -26,7 +26,11 @@ import {
   PopoverTrigger,
 } from '@/components/ui/popover'
 import { useLlmUiStore } from '@/lib/stores/llmUiStore'
-import { useLlmModelsQuery, useLlmReadyQuery } from '@/lib/query/hooks'
+import {
+  useLlmModelsQuery,
+  useLlmReadyQuery,
+  LOCAL_LLM_PRESET_LABELS,
+} from '@/lib/query/hooks'
 import { useDocumentMutations, useLlmMutations } from '@/lib/query/mutations'
 import { useOperationStore } from '@/lib/stores/operationStore'
 import { usePreferencesStore } from '@/lib/stores/preferencesStore'
@@ -168,6 +172,7 @@ function LlmStatusPopover() {
     useLlmMutations()
   const { t } = useTranslation()
   const apiKeys = usePreferencesStore((state) => state.apiKeys)
+  const localLlm = usePreferencesStore((state) => state.localLlm)
 
   const selectedModelInfo = useMemo(
     () => llmModels.find((m) => m.id === llmSelectedModel),
@@ -236,6 +241,11 @@ function LlmStatusPopover() {
             }
           />
           LLM
+          {llmReady && selectedModelInfo?.source === 'openai-compatible' && (
+            <span className='max-w-[80px] truncate text-[10px] opacity-80'>
+              {selectedModelInfo.id.split(':')[1] ?? selectedModelInfo.id}
+            </span>
+          )}
         </button>
       </PopoverTrigger>
       <PopoverContent align='end' className='w-72' data-testid='llm-popover'>
@@ -256,11 +266,20 @@ function LlmStatusPopover() {
                   data-testid={`llm-model-option-${index}`}
                 >
                   <span className='flex items-center gap-2'>
-                    {model.source !== 'local' && (
+                    {model.source === 'openai-compatible' &&
+                    model.origin === 'local-llm' ? (
+                      <span className='rounded bg-emerald-500/10 px-1 py-0.5 text-[10px] leading-none font-semibold text-emerald-600 uppercase dark:text-emerald-400'>
+                        {LOCAL_LLM_PRESET_LABELS[localLlm.preset] ?? 'Local'}
+                      </span>
+                    ) : model.source === 'openai-compatible' ? (
+                      <span className='rounded bg-teal-500/10 px-1 py-0.5 text-[10px] leading-none font-semibold text-teal-600 uppercase dark:text-teal-400'>
+                        OpenAI-like
+                      </span>
+                    ) : model.source !== 'local' ? (
                       <span className='bg-primary/10 text-primary rounded px-1 py-0.5 text-[10px] leading-none font-semibold uppercase'>
                         {getProviderDisplayName(model.source)}
                       </span>
-                    )}
+                    ) : null}
                     {model.id.includes(':') ? model.id.split(':')[1] : model.id}
                   </span>
                 </SelectItem>
@@ -275,6 +294,51 @@ function LlmStatusPopover() {
                 provider: getProviderDisplayName(selectedModelInfo!.source),
               })}
             </p>
+          )}
+
+          {/* Loaded model info card */}
+          {llmReady && selectedModelInfo?.source === 'openai-compatible' && (
+            <div
+              className={`rounded-md px-2.5 py-2 text-xs ${
+                selectedModelInfo.origin === 'local-llm'
+                  ? 'border border-emerald-500/20 bg-emerald-500/5'
+                  : 'border border-teal-500/20 bg-teal-500/5'
+              }`}
+            >
+              <div className='flex items-center gap-1.5'>
+                <span
+                  className={`size-1.5 rounded-full ${
+                    selectedModelInfo.origin === 'local-llm'
+                      ? 'bg-emerald-500'
+                      : 'bg-teal-500'
+                  }`}
+                />
+                <span
+                  className={`font-medium ${
+                    selectedModelInfo.origin === 'local-llm'
+                      ? 'text-emerald-700 dark:text-emerald-400'
+                      : 'text-teal-700 dark:text-teal-400'
+                  }`}
+                >
+                  {t('llm.localModelActive')}
+                </span>
+              </div>
+              <p className='text-muted-foreground mt-1'>
+                {t('llm.localModelName', {
+                  name:
+                    selectedModelInfo.id.split(':')[1] ?? selectedModelInfo.id,
+                })}
+              </p>
+              <p className='text-muted-foreground mt-0.5'>
+                {selectedModelInfo.origin === 'local-llm'
+                  ? (LOCAL_LLM_PRESET_LABELS[localLlm.preset] ?? 'Local')
+                  : 'OpenAI-like'}
+                {localLlm.temperature != null &&
+                  ` · temp ${localLlm.temperature}`}
+                {localLlm.maxTokens != null &&
+                  ` · ${localLlm.maxTokens} tokens`}
+              </p>
+            </div>
           )}
 
           {activeLanguages.length > 0 && (

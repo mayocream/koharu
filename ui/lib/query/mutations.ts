@@ -74,16 +74,43 @@ const pickLanguage = (
   return languages[0]
 }
 
+const hasCompatibleConfig = () => {
+  const state = usePreferencesStore.getState()
+  return !!(
+    state.providerBaseUrls['openai-compatible']?.trim() ||
+    state.localLlm.baseUrl?.trim()
+  )
+}
+
+const getBaseUrlForModel = (modelId: string) => {
+  const state = usePreferencesStore.getState()
+  const modelName = modelId.includes(':') ? modelId.split(':')[1] : modelId
+  if (
+    state.localLlm.modelName?.trim() === modelName &&
+    state.localLlm.baseUrl?.trim()
+  ) {
+    return state.localLlm.baseUrl.trim()
+  }
+  return (
+    state.providerBaseUrls['openai-compatible']?.trim() ||
+    state.localLlm.baseUrl?.trim() ||
+    undefined
+  )
+}
+
 const getCachedLlmModels = (queryClient: QueryClient) =>
   (queryClient.getQueryData(
     queryKeys.llm.models(
       i18n.language,
-      usePreferencesStore
-        .getState()
-        .providerBaseUrls['openai-compatible']?.trim() || undefined,
+      hasCompatibleConfig() ? 'configured' : undefined,
       usePreferencesStore.getState().openAiCompatibleConfigVersion,
     ),
-  ) ?? []) as { id: string; languages: string[]; source: string }[]
+  ) ?? []) as {
+    id: string
+    languages: string[]
+    source: string
+    origin?: string
+  }[]
 
 export const useProgressActions = () => {
   const setProgress = useCallback(
@@ -319,6 +346,64 @@ export const useDocumentMutations = () => {
     }
   }, [queryClient, refreshDocuments])
 
+  const openFolder = useCallback(async () => {
+    const { startOperation, finishOperation } = useOperationStore.getState()
+    startOperation({
+      type: 'load-khr',
+      cancellable: false,
+    })
+    try {
+      const count = await api.openFolder()
+      useEditorUiStore.getState().setTotalPages(count)
+      clearMaskSync()
+      queryClient.setQueryData(queryKeys.documents.count, count)
+      await refreshDocuments()
+      if (count > 0) {
+        await queryClient.prefetchQuery({
+          queryKey: queryKeys.documents.current(0),
+          queryFn: () => api.getDocument(0),
+        })
+      }
+    } finally {
+      finishOperation()
+    }
+  }, [clearMaskSync, queryClient, refreshDocuments])
+
+  const addFolder = useCallback(async () => {
+    const { startOperation, finishOperation } = useOperationStore.getState()
+    startOperation({
+      type: 'load-khr',
+      cancellable: false,
+    })
+    try {
+      const editorUi = useEditorUiStore.getState()
+      const previousCount = editorUi.totalPages
+      const count = await api.addFolder()
+      if (count === previousCount) {
+        return
+      }
+
+      clearMaskSync()
+      queryClient.setQueryData(queryKeys.documents.count, count)
+      await refreshDocuments()
+      useEditorUiStore.setState((state) => ({
+        totalPages: count,
+        documentsVersion: state.documentsVersion + 1,
+        currentDocumentIndex: previousCount > 0 ? previousCount : 0,
+        selectedBlockIndex: undefined,
+      }))
+
+      if (count > previousCount) {
+        await queryClient.prefetchQuery({
+          queryKey: queryKeys.documents.current(previousCount),
+          queryFn: () => api.getDocument(previousCount),
+        })
+      }
+    } finally {
+      finishOperation()
+    }
+  }, [queryClient, refreshDocuments])
+
   const openExternal = useCallback(async (url: string) => {
     await api.openExternal(url)
   }, [])
@@ -449,15 +534,20 @@ export const useDocumentMutations = () => {
             : undefined
         const llmBaseUrl =
           modelInfo?.source === 'openai-compatible'
-            ? usePreferencesStore
-                .getState()
-                .providerBaseUrls['openai-compatible']?.trim() || undefined
+            ? getBaseUrlForModel(selectedModel!)
             : undefined
+        const localLlm = usePreferencesStore.getState().localLlm
+        const isLocalCompat = modelInfo?.source === 'openai-compatible'
         await api.process({
           index: resolvedIndex,
           llmModelId: selectedModel,
           llmApiKey,
           llmBaseUrl,
+          llmTemperature: isLocalCompat ? localLlm.temperature : undefined,
+          llmMaxTokens: isLocalCompat ? localLlm.maxTokens : undefined,
+          llmCustomSystemPrompt: isLocalCompat
+            ? localLlm.customSystemPrompt
+            : undefined,
           language,
           shaderEffect: renderEffect,
           shaderStroke: renderStroke,
@@ -495,14 +585,19 @@ export const useDocumentMutations = () => {
           : undefined
       const llmBaseUrl =
         modelInfo?.source === 'openai-compatible'
-          ? usePreferencesStore
-              .getState()
-              .providerBaseUrls['openai-compatible']?.trim() || undefined
+          ? getBaseUrlForModel(selectedModel!)
           : undefined
+      const localLlm = usePreferencesStore.getState().localLlm
+      const isLocalCompat = modelInfo?.source === 'openai-compatible'
       await api.process({
         llmModelId: selectedModel,
         llmApiKey,
         llmBaseUrl,
+        llmTemperature: isLocalCompat ? localLlm.temperature : undefined,
+        llmMaxTokens: isLocalCompat ? localLlm.maxTokens : undefined,
+        llmCustomSystemPrompt: isLocalCompat
+          ? localLlm.customSystemPrompt
+          : undefined,
         language,
         shaderEffect: renderEffect,
         shaderStroke: renderStroke,
@@ -542,6 +637,8 @@ export const useDocumentMutations = () => {
     refreshCurrentDocument,
     addDocuments,
     openDocuments,
+    openFolder,
+    addFolder,
     openExternal,
     detect,
     ocr,
@@ -625,11 +722,18 @@ export const useLlmMutations = () => {
         : undefined
     const baseUrl =
       modelInfo?.source === 'openai-compatible'
-        ? usePreferencesStore
-            .getState()
-            .providerBaseUrls['openai-compatible']?.trim() || undefined
+        ? getBaseUrlForModel(selectedModel)
         : undefined
-    await api.llmLoad(selectedModel, apiKey, baseUrl)
+    const localLlmConfig = usePreferencesStore.getState().localLlm
+    const isLocalCompatible = modelInfo?.source === 'openai-compatible'
+    await api.llmLoad(
+      selectedModel,
+      apiKey,
+      baseUrl,
+      isLocalCompatible ? localLlmConfig.temperature : undefined,
+      isLocalCompatible ? localLlmConfig.maxTokens : undefined,
+      isLocalCompatible ? localLlmConfig.customSystemPrompt : undefined,
+    )
     queryClient.setQueryData(
       readyKey,
       await api.llmReady(selectedModel).catch(() => false),
@@ -664,13 +768,9 @@ export const useLlmMutations = () => {
   )
 
   const llmList = useCallback(async () => {
-    const compatibleBaseUrl =
-      usePreferencesStore
-        .getState()
-        .providerBaseUrls['openai-compatible']?.trim() || undefined
     const compatibleConfigVersion =
       usePreferencesStore.getState().openAiCompatibleConfigVersion
-    const models = await api.llmList(i18n.language, compatibleBaseUrl)
+    const models = await api.llmList(i18n.language)
     const providers = Array.from(
       new Set(
         models
@@ -694,7 +794,7 @@ export const useLlmMutations = () => {
     queryClient.setQueryData(
       queryKeys.llm.models(
         i18n.language,
-        compatibleBaseUrl,
+        hasCompatibleConfig() ? 'configured' : undefined,
         compatibleConfigVersion,
       ),
       models,

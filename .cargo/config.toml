@@ -4,4 +4,4 @@ CARGO_WORKSPACE_DIR = { value = "", relative = true }
 TS_RS_EXPORT_DIR = { value = "ui/lib/generated/protocol", relative = true }
 TS_RS_LARGE_INT = "number"
 # CUDA 13.1 requires C++17
-NVCC_PREPEND_FLAGS = "-std=c++17"
+NVCC_PREPEND_FLAGS = "-std=c++17 -Xcompiler /Zc:preprocessor"

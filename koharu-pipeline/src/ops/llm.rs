@@ -8,6 +8,7 @@ use koharu_types::commands::{
     ApiKeyGetPayload, ApiKeyResult, ApiKeySetPayload, IndexPayload, LlmGeneratePayload,
     LlmListPayload, LlmLoadPayload,
 };
+pub use openai_compatible::PingResult;
 use strum::IntoEnumIterator;
 use tracing::instrument;
 
@@ -111,7 +112,17 @@ pub async fn llm_load(state: AppResources, payload: LlmLoadPayload) -> anyhow::R
         };
         state
             .llm
-            .load_api(provider_id, model_id, api_key, payload.base_url)
+            .load_api(
+                provider_id,
+                model_id,
+                koharu_ml::llm::providers::ProviderConfig {
+                    api_key,
+                    base_url: payload.base_url,
+                    temperature: payload.temperature,
+                    max_tokens: payload.max_tokens,
+                    custom_system_prompt: payload.custom_system_prompt,
+                },
+            )
             .await?;
     } else {
         let id = ModelId::from_str(&payload.id)?;
@@ -154,6 +165,13 @@ pub async fn llm_generate(state: AppResources, payload: LlmGeneratePayload) -> a
         &[ChangedField::TextBlocks],
     )
     .await
+}
+
+pub async fn llm_ping(
+    base_url: &str,
+    api_key: Option<&str>,
+) -> anyhow::Result<openai_compatible::PingResult> {
+    openai_compatible::ping(base_url, api_key).await
 }
 
 pub async fn get_document_for_llm(

@@ -26,10 +26,10 @@ use koharu_types::{
     ApiKeyGetPayload, ApiKeyResponse, ApiKeySetPayload, ApiKeyValue, CreateTextBlock, Document,
     DocumentDetail, DocumentSummary, ExportLayer, ExportResult, FileEntry, FontFaceInfo,
     IndexPayload, InpaintPartialPayload, InpaintRegion, JobState, JobStatus, LlmLoadPayload,
-    LlmLoadRequest, LlmModelInfo, MaskRegionRequest, MetaInfo, OpenDocumentsPayload,
-    PipelineJobRequest, Region, RenderPayload, RenderRequest, SerializableDynamicImage, TextBlock,
-    TextBlockDetail, TextBlockPatch, TranslateRequest, UpdateBrushLayerPayload,
-    UpdateInpaintMaskPayload,
+    LlmLoadRequest, LlmModelInfo, LlmPingRequest, LlmPingResponse, MaskRegionRequest, MetaInfo,
+    OpenDocumentsPayload, PipelineJobRequest, Region, RenderPayload, RenderRequest,
+    SerializableDynamicImage, TextBlock, TextBlockDetail, TextBlockPatch, TranslateRequest,
+    UpdateBrushLayerPayload, UpdateInpaintMaskPayload,
 };
 use serde::Deserialize;
 
@@ -103,6 +103,7 @@ pub fn router(resources: SharedResources, events: EventHub) -> Router {
         .route("/llm/state", get(get_llm_state))
         .route("/llm/load", post(load_llm))
         .route("/llm/offload", post(offload_llm))
+        .route("/llm/ping", post(ping_llm))
         .route(
             "/providers/{provider}/api-key",
             get(get_api_key).put(set_api_key),
@@ -563,6 +564,9 @@ async fn load_llm(
             id: request.id,
             api_key: request.api_key,
             base_url: request.base_url,
+            temperature: request.temperature,
+            max_tokens: request.max_tokens,
+            custom_system_prompt: request.custom_system_prompt,
         },
     )
     .await?;
@@ -573,6 +577,23 @@ async fn offload_llm(State(state): State<ApiState>) -> ApiResult<Json<koharu_typ
     let resources = state.resources()?;
     operations::llm_offload(resources.clone()).await?;
     Ok(Json(resources.llm.snapshot().await))
+}
+
+async fn ping_llm(Json(request): Json<LlmPingRequest>) -> ApiResult<Json<LlmPingResponse>> {
+    match operations::llm_ping(&request.base_url, request.api_key.as_deref()).await {
+        Ok(result) => Ok(Json(LlmPingResponse {
+            ok: true,
+            models: result.models,
+            latency_ms: Some(result.latency_ms),
+            error: None,
+        })),
+        Err(err) => Ok(Json(LlmPingResponse {
+            ok: false,
+            models: vec![],
+            latency_ms: None,
+            error: Some(err.to_string()),
+        })),
+    }
 }
 
 async fn get_api_key(
@@ -625,6 +646,9 @@ async fn start_pipeline_job(
             llm_model_id: request.llm_model_id,
             llm_api_key: request.llm_api_key,
             llm_base_url: request.llm_base_url,
+            llm_temperature: request.llm_temperature,
+            llm_max_tokens: request.llm_max_tokens,
+            llm_custom_system_prompt: request.llm_custom_system_prompt,
             language: request.language,
             shader_effect: request.shader_effect,
             shader_stroke: request.shader_stroke,
