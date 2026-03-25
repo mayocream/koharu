@@ -66,7 +66,10 @@ pub async fn detect_with_options(
         snapshot.text_blocks.extend(new_blocks);
 
         // Refresh segmentation on full image with all blocks
-        let probability_map = state.ml.segmenter().inference_segmentation(&snapshot.image)?;
+        let probability_map = state
+            .ml
+            .segmenter()
+            .inference_segmentation(&snapshot.image)?;
         let mask = koharu_ml::comic_text_detector::refine_segmentation_mask(
             &snapshot.image,
             &probability_map,
@@ -74,10 +77,7 @@ pub async fn detect_with_options(
         );
         snapshot.segment = Some(image::DynamicImage::ImageLuma8(mask).into());
     } else {
-        state
-            .ml
-            .detect_with_options(&mut snapshot, options)
-            .await?;
+        state.ml.detect_with_options(&mut snapshot, options).await?;
     }
 
     state_tx::update_doc(

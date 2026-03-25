@@ -611,10 +611,7 @@ pub async fn inpaint_free(
     // Build a mask: prefer the stored segment, fall back to a blank black mask
     let (img_width, img_height) = (snapshot.width, snapshot.height);
     let fallback_mask = blank_rgba(img_width, img_height, image::Rgba([0, 0, 0, 255]));
-    let mask_image = snapshot
-        .segment
-        .as_ref()
-        .unwrap_or(&fallback_mask);
+    let mask_image = snapshot.segment.as_ref().unwrap_or(&fallback_mask);
 
     if payload.region.width == 0 || payload.region.height == 0 {
         return Ok(());
@@ -641,14 +638,10 @@ pub async fn inpaint_free(
 
     let image_crop =
         SerializableDynamicImage(snapshot.image.crop_imm(x0, y0, crop_width, crop_height));
-    let mask_crop =
-        SerializableDynamicImage(mask_image.crop_imm(x0, y0, crop_width, crop_height));
+    let mask_crop = SerializableDynamicImage(mask_image.crop_imm(x0, y0, crop_width, crop_height));
 
     // Pass None for text_blocks — LaMa inpaints purely from the mask
-    let inpainted_crop = state
-        .ml
-        .inpaint_raw(&image_crop, &mask_crop, None)
-        .await?;
+    let inpainted_crop = state.ml.inpaint_raw(&image_crop, &mask_crop, None).await?;
 
     let mut stitched = snapshot
         .inpainted

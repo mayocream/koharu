@@ -113,7 +113,8 @@ impl Model {
     /// Detect text blocks and fonts in a document.
     /// Sets `doc.text_blocks` (with font predictions/styles) and `doc.segment`.
     pub async fn detect(&self, doc: &mut Document) -> Result<()> {
-        self.detect_with_options(doc, DetectOptions::default()).await
+        self.detect_with_options(doc, DetectOptions::default())
+            .await
     }
 
     /// Detect with configurable options (sensitive mode, etc.).
@@ -331,8 +332,16 @@ pub async fn prefetch() -> Result<()> {
 }
 
 fn build_text_blocks_with_options(regions: &[LayoutRegion], sensitive: bool) -> Vec<TextBlock> {
-    let min_dim = if sensitive { MIN_BLOCK_DIM_SENSITIVE } else { MIN_BLOCK_DIM };
-    let min_area = if sensitive { MIN_BLOCK_AREA_SENSITIVE } else { MIN_BLOCK_AREA };
+    let min_dim = if sensitive {
+        MIN_BLOCK_DIM_SENSITIVE
+    } else {
+        MIN_BLOCK_DIM
+    };
+    let min_area = if sensitive {
+        MIN_BLOCK_AREA_SENSITIVE
+    } else {
+        MIN_BLOCK_AREA
+    };
     let mut blocks = regions
         .iter()
         .filter(|region| {
@@ -453,12 +462,15 @@ mod tests {
 
     #[test]
     fn build_text_blocks_keeps_textlike_regions_and_dedupes_overlaps() {
-        let blocks = build_text_blocks_with_options(&[
-            test_region(0, "text", [10.0, 10.0, 40.0, 40.0]),
-            test_region(1, "image", [0.0, 0.0, 128.0, 128.0]),
-            test_region(2, "aside_text", [12.0, 12.0, 39.0, 39.0]),
-            test_region(3, "doc_title", [60.0, 8.0, 90.0, 24.0]),
-        ], false);
+        let blocks = build_text_blocks_with_options(
+            &[
+                test_region(0, "text", [10.0, 10.0, 40.0, 40.0]),
+                test_region(1, "image", [0.0, 0.0, 128.0, 128.0]),
+                test_region(2, "aside_text", [12.0, 12.0, 39.0, 39.0]),
+                test_region(3, "doc_title", [60.0, 8.0, 90.0, 24.0]),
+            ],
+            false,
+        );
 
         assert_eq!(blocks.len(), 2);
         assert_eq!(blocks[0].detector.as_deref(), Some("pp-doclayout-v3"));
@@ -468,7 +480,10 @@ mod tests {
 
     #[test]
     fn build_text_blocks_marks_tall_regions_as_vertical() {
-        let blocks = build_text_blocks_with_options(&[test_region(0, "text", [5.0, 5.0, 20.0, 60.0])], false);
+        let blocks = build_text_blocks_with_options(
+            &[test_region(0, "text", [5.0, 5.0, 20.0, 60.0])],
+            false,
+        );
         assert_eq!(blocks.len(), 1);
         assert_eq!(blocks[0].source_direction, Some(TextDirection::Vertical));
     }
