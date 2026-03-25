@@ -18,6 +18,10 @@ doctest = false
 name = "llama"
 path = "bin/llama.rs"
 
+[[bin]]
+name = "llm"
+path = "bin/llm.rs"
+
 [dependencies]
 anyhow = { workspace = true }
 clap = { workspace = true, features = ["derive"] }
@@ -25,9 +29,16 @@ dirs = { workspace = true }
 flate2 = { workspace = true }
 futures = { workspace = true }
 hf-hub = { workspace = true }
+koharu-http = { workspace = true }
+koharu-types = { workspace = true }
 libloading = "0.8.9"
+minijinja = { workspace = true }
+num_cpus = { workspace = true }
 once_cell = { workspace = true }
 reqwest = { workspace = true }
+serde = { workspace = true }
+serde_json = { workspace = true }
+strum = { workspace = true }
 tar = "0.4"
 thiserror = { workspace = true }
 tokio = { workspace = true }
@@ -37,6 +48,16 @@ tracing-core = "0.1"
 zip = { workspace = true }
 encoding_rs = "0.8"
 enumflags2 = "0.7.12"
+keyring = { workspace = true }
+
+[target.'cfg(windows)'.dependencies]
+keyring = { workspace = true, features = ["windows-native"] }
+
+[target.'cfg(target_os = "macos")'.dependencies]
+keyring = { workspace = true, features = ["apple-native"] }
+
+[target.'cfg(target_os = "linux")'.dependencies]
+keyring = { workspace = true, features = ["sync-secret-service"] }
 
 [build-dependencies]
 anyhow = { workspace = true }
@@ -50,9 +71,3 @@ tar = "0.4"
 
 [dev-dependencies]
 tempfile = { workspace = true }
-
-[features]
-default = ["cuda", "mtmd"]
-cuda = []
-vulkan = []
-mtmd = []

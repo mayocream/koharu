@@ -4,7 +4,7 @@ use std::pin::Pin;
 use anyhow::Context;
 use keyring::Entry;
 
-use crate::llm::Language;
+use crate::Language;
 
 pub mod claude;
 pub mod deepseek;

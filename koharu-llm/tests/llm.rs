@@ -1,21 +1,30 @@
 use std::path::PathBuf;
 
-use koharu_ml::llm::{GenerateOptions, Language, Llm, ModelId};
 use strum::IntoEnumIterator;
+
+use koharu_llm::{GenerateOptions, Language, Llm, ModelId};
+
+async fn initialize_runtime() -> anyhow::Result<()> {
+    let runtime_dir = koharu_llm::runtime_dir();
+    koharu_llm::safe::runtime::ensure_dylibs(&runtime_dir).await?;
+    koharu_llm::safe::runtime::initialize(&runtime_dir)?;
+    Ok(())
+}
 
 #[tokio::test]
 #[ignore] // Ignored because it requires downloading multiple large models.
 async fn llm_generates_text_for_all_models() -> anyhow::Result<()> {
-    let prompt = r#"こんにちは。
-テストです。
-さよなら。"#;
+    let prompt = r#"ã“ã‚“ã«ã¡ã¯ã€‚
+ãƒ†ã‚¹ãƒˆã§ã™ã€‚
+ã•ã‚ˆãªã‚‰ã€‚"#;
 
     let model_dir = dirs::data_local_dir()
         .map(|path| path.join("Koharu"))
         .unwrap_or(PathBuf::from("."))
         .join("models");
 
-    koharu_ml::set_cache_dir(model_dir)?;
+    koharu_http::hf_hub::set_cache_dir(model_dir)?;
+    initialize_runtime().await?;
 
     for model in ModelId::iter() {
         let mut llm = Llm::load(model, false).await?;
@@ -35,9 +44,6 @@ async fn llm_generates_text_for_all_models() -> anyhow::Result<()> {
             !generated.trim().is_empty(),
             "model {model:?} should return some text"
         );
-        // output should have three lines
-        // let line_count = generated.lines().count();
-        // assert!(line_count == 3, "model {model:?} should return exactly 3 lines, got {line_count}: {generated}");
     }
 
     Ok(())

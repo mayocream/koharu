@@ -2,7 +2,7 @@ use minijinja::{Environment, context};
 use serde::Serialize;
 use strum::{Display, EnumString};
 
-use crate::llm::{Language, ModelId};
+use crate::{Language, ModelId};
 
 #[derive(Debug, Clone, PartialEq, Eq, Display, EnumString)]
 #[strum(serialize_all = "lowercase")]

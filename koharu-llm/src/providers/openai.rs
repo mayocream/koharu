@@ -5,11 +5,11 @@ use serde::Serialize;
 
 use koharu_http::http::http_client;
 
-use crate::llm::{Language, prompt::system_prompt};
+use crate::{Language, prompt::system_prompt};
 
 use super::{AnyProvider, ensure_provider_success};
 
-pub struct DeepSeekProvider {
+pub struct OpenAiProvider {
     pub api_key: String,
 }
 
@@ -23,10 +23,9 @@ struct ChatMessage {
 struct ChatRequest<'a> {
     model: &'a str,
     messages: Vec<ChatMessage>,
-    temperature: f32,
 }
 
-impl AnyProvider for DeepSeekProvider {
+impl AnyProvider for OpenAiProvider {
     fn translate<'a>(
         &'a self,
         source: &'a str,
@@ -46,26 +45,24 @@ impl AnyProvider for DeepSeekProvider {
                         content: source.to_string(),
                     },
                 ],
-                // Deepseek recommends 1.3 for better translation
-                temperature: 1.3,
             };
 
             let response = http_client()
-                .post("https://api.deepseek.com/chat/completions")
+                .post("https://api.openai.com/v1/chat/completions")
                 .bearer_auth(&self.api_key)
                 .header("content-type", "application/json")
                 .body(serde_json::to_vec(&body)?)
                 .send()
                 .await?;
 
-            let resp: serde_json::Value = ensure_provider_success("deepseek", response)
+            let resp: serde_json::Value = ensure_provider_success("openai", response)
                 .await?
                 .json()
                 .await?;
 
             let text = resp["choices"][0]["message"]["content"]
                 .as_str()
-                .ok_or_else(|| anyhow::anyhow!("DeepSeek returned no content"))?
+                .ok_or_else(|| anyhow::anyhow!("OpenAI returned no content"))?
                 .to_string();
 
             Ok(text)

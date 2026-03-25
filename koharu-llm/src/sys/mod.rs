@@ -56,6 +56,10 @@ struct LoadedLibraries {
 
 static LIBRARIES: OnceCell<LoadedLibraries> = OnceCell::new();
 
+pub(crate) fn is_initialized() -> bool {
+    LIBRARIES.get().is_some()
+}
+
 pub(crate) fn initialize(dir: &Path) -> Result<()> {
     let canonical_dir = canonical_dir(dir)?;
 

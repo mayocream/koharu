@@ -45,7 +45,6 @@ struct Args {
     #[arg(short = 'o', value_parser = parse_key_val)]
     key_value_overrides: Vec<(String, ParamOverrideValue)>,
     /// Disable offloading layers to the gpu
-    #[cfg(any(feature = "cuda", feature = "vulkan"))]
     #[clap(long)]
     disable_gpu: bool,
     /// Set main GPU device index (default: 0)
@@ -65,7 +64,6 @@ struct Args {
         help = "Set devices to use by index, separated by commas (e.g. --devices 0,1,2). Overrides main-gpu and enables multi-GPU."
     )]
     devices: Option<Vec<usize>>,
-    #[cfg(any(feature = "cuda", feature = "vulkan"))]
     #[arg(long, help = "Keep MoE layers on CPU")]
     cmoe: bool,
     #[arg(short = 's', long, help = "RNG seed (default: 1234)")]
@@ -149,11 +147,9 @@ fn main() -> Result<()> {
         model,
         prompt,
         file,
-        #[cfg(any(feature = "cuda", feature = "vulkan"))]
         disable_gpu,
         main_gpu,
         devices,
-        #[cfg(any(feature = "cuda", feature = "vulkan"))]
         cmoe,
         key_value_overrides,
         seed,
@@ -209,14 +205,10 @@ fn main() -> Result<()> {
     }
 
     // offload all layers to the gpu
-    let mut model_params = {
-        #[cfg(any(feature = "cuda", feature = "vulkan"))]
-        if !disable_gpu {
-            LlamaModelParams::default().with_n_gpu_layers(1000)
-        } else {
-            LlamaModelParams::default()
-        }
-        #[cfg(not(any(feature = "cuda", feature = "vulkan")))]
+    let gpu_offload_enabled = backend.supports_gpu_offload() && !disable_gpu;
+    let mut model_params = if gpu_offload_enabled {
+        LlamaModelParams::default().with_n_gpu_layers(1000)
+    } else {
         LlamaModelParams::default()
     };
 
@@ -251,11 +243,10 @@ fn main() -> Result<()> {
         model_params.as_mut().append_kv_override(k.as_c_str(), *v);
     }
 
-    #[cfg(any(feature = "cuda", feature = "vulkan"))]
-    {
-        if !disable_gpu && cmoe {
-            model_params.as_mut().add_cpu_moe_override();
-        }
+    if gpu_offload_enabled && cmoe {
+        model_params.as_mut().add_cpu_moe_override();
+    } else if cmoe {
+        eprintln!("warning: --cmoe ignored because GPU offload is not active");
     }
 
     let model_path = model

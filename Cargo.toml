@@ -31,7 +31,7 @@ publish = false
 
 [workspace.dependencies]
 koharu-http = { path = "koharu-http", default-features = false }
-koharu-llm = { path = "koharu-llm", default-features = false }
+koharu-llm = { path = "koharu-llm" }
 koharu-runtime = { path = "koharu-runtime", default-features = false }
 koharu-ml = { path = "koharu-ml", default-features = false }
 koharu-psd = { path = "koharu-psd", default-features = false }

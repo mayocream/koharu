@@ -6,7 +6,7 @@ use serde::{Deserialize, Serialize};
 
 use koharu_http::http::http_client;
 
-use crate::llm::{Language, prompt::system_prompt};
+use crate::{Language, prompt::system_prompt};
 
 use super::{AnyProvider, ensure_provider_success};
 

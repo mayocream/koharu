@@ -1,8 +1,7 @@
 use clap::Parser;
-use koharu_ml::llm::{GenerateOptions, Language, Llm, ModelId};
+use tracing_subscriber::fmt::format::FmtSpan;
 
-#[path = "common.rs"]
-mod common;
+use koharu_llm::{GenerateOptions, Language, Llm, ModelId};
 
 #[derive(Parser, Debug)]
 #[command(author, version, about)]
@@ -10,14 +9,14 @@ struct Args {
     /// Prompt to generate from
     #[arg(
         long,
-        default_value = r#"「え、マジで!?」
-俺、田中太郎は気がつくと見知らぬ森の中にいた。目の前には巨大な魔獣が牙を剥いている。
-「やばい、死ぬ!」
-その瞬間、俺の手から青白い光が放たれた。魔獣は一瞬で消滅する。
-『レベルアップしました。新スキル「爆炎魔法」を習得』
-頭の中に謎の声が響く。どうやら俺、チート能力を手に入れたらしい。
-「この世界で、俺は最強になる!」
-こうして俺の異世界ライフが始まった。美少女との出会いも、もちろん待っている。"#
+        default_value = r#"ã€Œãˆã€ãƒžã‚¸ã§!?ã€
+ä¿ºã€ç”°ä¸­å¤ªéƒŽã¯æ°—ãŒã¤ãã¨è¦‹çŸ¥ã‚‰ã¬æ£®ã®ä¸­ã«ã„ãŸã€‚ç›®ã®å‰ã«ã¯å·¨å¤§ãªé­”ç£ãŒç‰™ã‚’å‰¥ã„ã¦ã„ã‚‹ã€‚
+ã€Œã‚„ã°ã„ã€æ­»ã¬!ã€
+ãã®çž¬é–“ã€ä¿ºã®æ‰‹ã‹ã‚‰é’ç™½ã„å…‰ãŒæ”¾ãŸã‚ŒãŸã€‚é­”ç£ã¯ä¸€çž¬ã§æ¶ˆæ»…ã™ã‚‹ã€‚
+ã€Žãƒ¬ãƒ™ãƒ«ã‚¢ãƒƒãƒ—ã—ã¾ã—ãŸã€‚æ–°ã‚¹ã‚­ãƒ«ã€Œçˆ†ç‚Žé­”æ³•ã€ã‚’ç¿’å¾—ã€
+é ­ã®ä¸­ã«è¬Žã®å£°ãŒéŸ¿ãã€‚ã©ã†ã‚„ã‚‰ä¿ºã€ãƒãƒ¼ãƒˆèƒ½åŠ›ã‚’æ‰‹ã«å…¥ã‚ŒãŸã‚‰ã—ã„ã€‚
+ã€Œã“ã®ä¸–ç•Œã§ã€ä¿ºã¯æœ€å¼·ã«ãªã‚‹!ã€
+ã“ã†ã—ã¦ä¿ºã®ç•°ä¸–ç•Œãƒ©ã‚¤ãƒ•ãŒå§‹ã¾ã£ãŸã€‚ç¾Žå°‘å¥³ã¨ã®å‡ºä¼šã„ã‚‚ã€ã‚‚ã¡ã‚ã‚“å¾…ã£ã¦ã„ã‚‹ã€‚"#
     )]
     prompt: String,
 
@@ -65,11 +64,25 @@ struct Args {
     locale: String,
 }
 
+fn init_tracing() {
+    tracing_subscriber::fmt()
+        .with_span_events(FmtSpan::CLOSE)
+        .init();
+}
+
+async fn initialize_runtime() -> anyhow::Result<()> {
+    let runtime_dir = koharu_llm::runtime_dir();
+    koharu_llm::safe::runtime::ensure_dylibs(&runtime_dir).await?;
+    koharu_llm::safe::runtime::initialize(&runtime_dir)?;
+    Ok(())
+}
+
 #[tokio::main]
 async fn main() -> anyhow::Result<()> {
-    common::init_tracing();
+    init_tracing();
 
     let args = Args::parse();
+    initialize_runtime().await?;
 
     let mut llm = Llm::load(args.model, args.cpu).await?;
     let target_language = Language::parse(&args.locale).unwrap_or(Language::English);

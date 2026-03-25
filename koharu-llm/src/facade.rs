@@ -5,11 +5,11 @@ use tokio::sync::{RwLock, broadcast};
 
 use koharu_types::{Document, LlmState, LlmStateStatus, TextBlock};
 
-use super::{
+use crate::{
     GenerateOptions, Language, Llm, ModelId, language::tags as language_tags, supported_locales,
 };
 
-pub use super::prefetch;
+pub use crate::prefetch;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 struct BlockStartTag {
@@ -51,7 +51,6 @@ impl ModelInfo {
     }
 }
 
-/// Load state of the LLM
 #[allow(clippy::large_enum_variant)]
 #[derive(strum::Display)]
 pub enum State {
@@ -63,7 +62,7 @@ pub enum State {
     Ready(Llm),
     #[strum(serialize = "ready")]
     ApiReady {
-        provider: Box<dyn super::providers::AnyProvider>,
+        provider: Box<dyn crate::providers::AnyProvider>,
         provider_id: String,
         model: String,
     },
@@ -71,7 +70,6 @@ pub enum State {
     Failed(String),
 }
 
-/// Minimal owner for the LLM with non-blocking initialization.
 pub struct Model {
     state: Arc<RwLock<State>>,
     state_tx: broadcast::Sender<LlmState>,
@@ -455,14 +453,13 @@ impl Model {
         self.cpu
     }
 
-    /// Start loading an API-backed provider and return immediately.
     pub async fn load_api(
         &self,
         provider_id: &str,
         model_id: &str,
-        config: super::providers::ProviderConfig,
+        config: crate::providers::ProviderConfig,
     ) -> anyhow::Result<()> {
-        let provider = super::providers::build_provider(provider_id, config)?;
+        let provider = crate::providers::build_provider(provider_id, config)?;
         *self.state.write().await = State::ApiReady {
             provider,
             provider_id: provider_id.to_string(),
@@ -472,7 +469,6 @@ impl Model {
         Ok(())
     }
 
-    /// Start loading the model on a blocking thread and return immediately.
     pub async fn load(&self, id: ModelId) {
         {
             let mut guard = self.state.write().await;

@@ -8,6 +8,7 @@ use tauri::{Manager, WebviewWindowBuilder};
 use tokio::{net::TcpListener, sync::RwLock};
 use tracing_subscriber::fmt::format::FmtSpan;
 
+use koharu_llm::{facade, runtime_dir as llm_runtime_dir};
 use koharu_ml::{cuda_is_available, device};
 use koharu_pipeline::AppResources;
 use koharu_renderer::facade::Renderer;
@@ -21,6 +22,7 @@ static APP_ROOT: Lazy<PathBuf> = Lazy::new(|| {
         .unwrap_or_default()
 });
 static LIB_ROOT: Lazy<PathBuf> = Lazy::new(|| APP_ROOT.join("libs"));
+static LLAMA_RUNTIME_ROOT: Lazy<PathBuf> = Lazy::new(llm_runtime_dir);
 static MODEL_ROOT: Lazy<PathBuf> = Lazy::new(|| APP_ROOT.join("models"));
 
 #[derive(Parser)]
@@ -107,8 +109,20 @@ fn initialize(headless: bool, _debug: bool) -> Result<()> {
 
 async fn prefetch() -> Result<()> {
     ensure_dylibs(LIB_ROOT.to_path_buf()).await?;
+    koharu_llm::safe::runtime::ensure_dylibs(LLAMA_RUNTIME_ROOT.as_path())
+        .await
+        .context("Failed to ensure llama.cpp runtime libraries")?;
     koharu_ml::facade::prefetch().await?;
 
+    Ok(())
+}
+
+async fn initialize_llama_runtime() -> Result<()> {
+    koharu_llm::safe::runtime::ensure_dylibs(LLAMA_RUNTIME_ROOT.as_path())
+        .await
+        .context("Failed to ensure llama.cpp runtime libraries")?;
+    koharu_llm::safe::runtime::initialize(LLAMA_RUNTIME_ROOT.as_path())
+        .context("Failed to initialize llama.cpp runtime libraries")?;
     Ok(())
 }
 
@@ -178,12 +192,14 @@ async fn build_resources(cpu: bool, headless: bool) -> Result<AppResources> {
         );
     }
 
+    initialize_llama_runtime().await?;
+
     let ml = Arc::new(
         koharu_ml::facade::Model::new(cpu)
             .await
             .context("Failed to initialize ML model")?,
     );
-    let llm = Arc::new(koharu_ml::llm::facade::Model::new(cpu));
+    let llm = Arc::new(facade::Model::new(cpu));
     let renderer = Arc::new(Renderer::new().context("Failed to initialize renderer")?);
     let state = Arc::new(RwLock::new(State::default()));
 

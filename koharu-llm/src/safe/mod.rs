@@ -9,10 +9,7 @@
 //!
 //! - [simple](https://github.com/utilityai/llama-cpp-rs/tree/main/examples/simple)
 //!
-//! # Feature Flags
-//!
-//! - `cuda` enables CUDA gpu support.
-//! - `sampler` adds the [`context::sample::sampler`] struct for a more rusty way of sampling.
+//! Runtime backends are selected automatically from the current target and the host machine.
 use std::ffi::{NulError, c_char};
 use std::fmt::Debug;
 use std::num::NonZeroI32;
@@ -29,7 +26,6 @@ pub mod gguf;
 pub mod llama_backend;
 pub mod llama_batch;
 pub mod model;
-#[cfg(feature = "mtmd")]
 pub mod mtmd;
 pub mod runtime;
 pub mod sampling;

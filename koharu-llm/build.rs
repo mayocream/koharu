@@ -114,25 +114,9 @@ fn run() -> Result<()> {
 
 fn validate_target() -> Result<()> {
     let target = env::var("TARGET").context("missing TARGET")?;
-    let cuda = env::var_os("CARGO_FEATURE_CUDA").is_some();
-    let vulkan = env::var_os("CARGO_FEATURE_VULKAN").is_some();
 
     match target.as_str() {
-        "x86_64-pc-windows-msvc" => {
-            if cuda == vulkan {
-                bail!("Windows builds require exactly one of `cuda` or `vulkan`");
-            }
-        }
-        "x86_64-unknown-linux-gnu" => {
-            if !vulkan || cuda {
-                bail!("Linux builds require `vulkan` and do not support `cuda`");
-            }
-        }
-        "aarch64-apple-darwin" => {
-            if cuda || vulkan {
-                bail!("macOS arm64 builds do not accept `cuda` or `vulkan` features");
-            }
-        }
+        "x86_64-pc-windows-msvc" | "x86_64-unknown-linux-gnu" | "aarch64-apple-darwin" => {}
         _ => bail!(
             "unsupported target `{target}`; only Windows x86_64 MSVC, Linux x86_64, and macOS arm64 are supported"
         ),

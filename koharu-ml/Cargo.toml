@@ -83,10 +83,6 @@ name = "lama"
 path = "bin/lama.rs"
 
 [[bin]]
-name = "llm"
-path = "bin/llm.rs"
-
-[[bin]]
 name = "manga-ocr"
 path = "bin/manga-ocr.rs"
 

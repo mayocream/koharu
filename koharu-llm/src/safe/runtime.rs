@@ -7,6 +7,7 @@ use std::path::{Path, PathBuf};
 use anyhow::{Context, Result, bail};
 use flate2::read::GzDecoder;
 use futures::StreamExt;
+use libloading::Library;
 use tokio::io::AsyncWriteExt;
 use zip::read::ZipArchive;
 
@@ -61,6 +62,13 @@ struct Manifest {
     plugin_prefixes: &'static [&'static str],
     library_extension: &'static str,
     assets: &'static [ReleaseAsset],
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+struct TargetTriple {
+    os: &'static str,
+    arch: &'static str,
+    env: &'static str,
 }
 
 const WINDOWS_CUDA_ASSETS: &[ReleaseAsset] = &[
@@ -143,13 +151,19 @@ const MACOS_ARM64_MANIFEST: Manifest = Manifest {
 
 pub async fn ensure_dylibs(path: impl AsRef<Path>) -> Result<()> {
     let root = path.as_ref().to_path_buf();
-    let manifest = compiled_manifest();
+    let manifest = detect_manifest()?;
+    let runtime_dir = resolve_runtime_dir(&root, manifest)?;
 
-    tokio::fs::create_dir_all(&root)
+    tokio::fs::create_dir_all(&runtime_dir)
         .await
-        .with_context(|| format!("failed to create runtime directory `{}`", root.display()))?;
+        .with_context(|| {
+            format!(
+                "failed to create runtime directory `{}`",
+                runtime_dir.display()
+            )
+        })?;
 
-    if stamp_matches(&root, manifest)? && core_libraries_present(&root, manifest) {
+    if stamp_matches(&runtime_dir, manifest)? && core_libraries_present(&runtime_dir, manifest) {
         return Ok(());
     }
 
@@ -165,23 +179,25 @@ pub async fn ensure_dylibs(path: impl AsRef<Path>) -> Result<()> {
 
     for asset in manifest.assets {
         let archive_path = download_asset(asset, &downloads_dir).await?;
-        let extract_root = root.clone();
+        let extract_root = runtime_dir.clone();
         let asset_name = asset.name;
         tokio::task::spawn_blocking(move || extract_archive(asset, &archive_path, &extract_root))
             .await
             .with_context(|| format!("failed to join extraction task for `{asset_name}`"))??;
     }
 
-    write_stamp(&root, manifest)?;
+    write_stamp(&runtime_dir, manifest)?;
     Ok(())
 }
 
 pub fn initialize(path: impl AsRef<Path>) -> Result<()> {
-    crate::sys::initialize(path.as_ref())
+    let manifest = detect_manifest()?;
+    let runtime_dir = resolve_runtime_dir(path.as_ref(), manifest)?;
+    crate::sys::initialize(&runtime_dir)
 }
 
 pub(crate) fn load_plan(dir: &Path) -> Result<Vec<LoadStep>> {
-    let manifest = compiled_manifest();
+    let manifest = manifest_for_runtime_dir(dir)?;
     let mut steps = Vec::new();
 
     for library_name in manifest.support_libraries {
@@ -235,26 +251,18 @@ pub(crate) fn load_plan(dir: &Path) -> Result<Vec<LoadStep>> {
     Ok(steps)
 }
 
-fn compiled_manifest() -> &'static Manifest {
-    let backend = compiled_backend();
-    select_manifest(env::consts::OS, env::consts::ARCH, target_env(), backend)
-        .expect("build.rs validates supported target/backend combinations")
+fn detect_manifest() -> Result<&'static Manifest> {
+    let target = current_target();
+    validate_target(target)?;
+    let backend = detect_backend(target)?;
+    select_manifest(target.os, target.arch, target.env, backend)
 }
 
-fn compiled_backend() -> Backend {
-    #[cfg(feature = "cuda")]
-    {
-        Backend::Cuda
-    }
-
-    #[cfg(all(not(feature = "cuda"), feature = "vulkan"))]
-    {
-        Backend::Vulkan
-    }
-
-    #[cfg(all(not(feature = "cuda"), not(feature = "vulkan")))]
-    {
-        Backend::Default
+fn current_target() -> TargetTriple {
+    TargetTriple {
+        os: env::consts::OS,
+        arch: env::consts::ARCH,
+        env: target_env(),
     }
 }
 
@@ -268,6 +276,48 @@ fn target_env() -> &'static str {
     {
         ""
     }
+}
+
+fn validate_target(target: TargetTriple) -> Result<()> {
+    match (target.os, target.arch, target.env) {
+        ("windows", "x86_64", "msvc") | ("linux", "x86_64", _) | ("macos", "aarch64", _) => Ok(()),
+        _ => bail!(
+            "unsupported koharu-llm target: target_os={}, target_arch={}, target_env={}",
+            target.os,
+            target.arch,
+            target.env
+        ),
+    }
+}
+
+fn detect_backend(target: TargetTriple) -> Result<Backend> {
+    let has_cuda_driver = matches!(
+        (target.os, target.arch, target.env),
+        ("windows", "x86_64", "msvc")
+    ) && windows_has_cuda_driver();
+    detect_backend_for_target(target, has_cuda_driver)
+}
+
+fn detect_backend_for_target(target: TargetTriple, has_cuda_driver: bool) -> Result<Backend> {
+    match (target.os, target.arch, target.env) {
+        ("windows", "x86_64", "msvc") => Ok(if has_cuda_driver {
+            Backend::Cuda
+        } else {
+            Backend::Vulkan
+        }),
+        ("linux", "x86_64", _) => Ok(Backend::Vulkan),
+        ("macos", "aarch64", _) => Ok(Backend::Default),
+        _ => bail!(
+            "unsupported koharu-llm target/backend detection: target_os={}, target_arch={}, target_env={}",
+            target.os,
+            target.arch,
+            target.env
+        ),
+    }
+}
+
+fn windows_has_cuda_driver() -> bool {
+    unsafe { Library::new("nvcuda.dll") }.is_ok()
 }
 
 fn select_manifest(
@@ -284,6 +334,82 @@ fn select_manifest(
         _ => bail!(
             "unsupported koharu-llm target/backend combination: target_os={target_os}, target_arch={target_arch}, target_env={target_env}, backend={backend:?}"
         ),
+    }
+}
+
+fn resolve_runtime_dir(root: &Path, manifest: &Manifest) -> Result<PathBuf> {
+    if is_runtime_dir(root, manifest)? {
+        Ok(root.to_path_buf())
+    } else {
+        Ok(root.join(manifest.id))
+    }
+}
+
+fn is_runtime_dir(dir: &Path, manifest: &Manifest) -> Result<bool> {
+    if dir.file_name().and_then(OsStr::to_str) == Some(manifest.id) {
+        return Ok(true);
+    }
+
+    if let Some(existing_manifest) = manifest_from_stamp(dir)? {
+        return Ok(existing_manifest.id == manifest.id);
+    }
+
+    Ok(core_libraries_present(dir, manifest))
+}
+
+fn manifest_for_runtime_dir(dir: &Path) -> Result<&'static Manifest> {
+    if let Some(manifest) = manifest_from_stamp(dir)? {
+        return Ok(manifest);
+    }
+
+    if let Some(manifest) = dir
+        .file_name()
+        .and_then(OsStr::to_str)
+        .and_then(manifest_by_id)
+    {
+        return Ok(manifest);
+    }
+
+    let manifest = detect_manifest()?;
+    if core_libraries_present(dir, manifest) {
+        return Ok(manifest);
+    }
+
+    bail!(
+        "failed to determine the koharu-llm runtime manifest for `{}`",
+        dir.display()
+    )
+}
+
+fn manifest_from_stamp(dir: &Path) -> Result<Option<&'static Manifest>> {
+    let stamp_path = dir.join(STAMP_FILE);
+    if !stamp_path.exists() {
+        return Ok(None);
+    }
+
+    let contents = fs::read_to_string(&stamp_path)
+        .with_context(|| format!("failed to read `{}`", stamp_path.display()))?;
+    Ok(parse_manifest_from_stamp(&contents))
+}
+
+fn parse_manifest_from_stamp(contents: &str) -> Option<&'static Manifest> {
+    let mut lines = contents.lines();
+    let _tag = lines.next()?;
+    let id = lines.next()?;
+    manifest_by_id(id)
+}
+
+fn manifest_by_id(id: &str) -> Option<&'static Manifest> {
+    if id == WINDOWS_CUDA_MANIFEST.id {
+        Some(&WINDOWS_CUDA_MANIFEST)
+    } else if id == WINDOWS_VULKAN_MANIFEST.id {
+        Some(&WINDOWS_VULKAN_MANIFEST)
+    } else if id == LINUX_VULKAN_MANIFEST.id {
+        Some(&LINUX_VULKAN_MANIFEST)
+    } else if id == MACOS_ARM64_MANIFEST.id {
+        Some(&MACOS_ARM64_MANIFEST)
+    } else {
+        None
     }
 }
 
@@ -624,9 +750,55 @@ mod tests {
     }
 
     #[test]
+    fn detects_backends_for_supported_targets() {
+        let windows = TargetTriple {
+            os: "windows",
+            arch: "x86_64",
+            env: "msvc",
+        };
+        let linux = TargetTriple {
+            os: "linux",
+            arch: "x86_64",
+            env: "",
+        };
+        let macos = TargetTriple {
+            os: "macos",
+            arch: "aarch64",
+            env: "",
+        };
+
+        assert_eq!(
+            detect_backend_for_target(windows, true).unwrap(),
+            Backend::Cuda
+        );
+        assert_eq!(
+            detect_backend_for_target(windows, false).unwrap(),
+            Backend::Vulkan
+        );
+        assert_eq!(
+            detect_backend_for_target(linux, true).unwrap(),
+            Backend::Vulkan
+        );
+        assert_eq!(
+            detect_backend_for_target(macos, true).unwrap(),
+            Backend::Default
+        );
+    }
+
+    #[test]
     fn rejects_unsupported_manifest() {
         assert!(select_manifest("linux", "x86_64", "", Backend::Cuda).is_err());
         assert!(select_manifest("windows", "aarch64", "msvc", Backend::Cuda).is_err());
+    }
+
+    #[test]
+    fn resolves_manifest_from_stamp() {
+        assert_eq!(
+            parse_manifest_from_stamp(&manifest_stamp(&WINDOWS_VULKAN_MANIFEST))
+                .unwrap()
+                .id,
+            WINDOWS_VULKAN_MANIFEST.id
+        );
     }
 
     #[test]
@@ -665,6 +837,7 @@ mod tests {
         touch(&root.join("libomp140.x86_64.dll"));
         touch(&root.join("ggml-cuda.dll"));
         touch(&root.join("ggml-rpc.dll"));
+        write_stamp(root, manifest).unwrap();
 
         let steps = load_plan(root).unwrap();
         let names = steps
@@ -694,7 +867,9 @@ mod tests {
     async fn downloads_runtime_assets() -> Result<()> {
         let tempdir = tempfile::tempdir()?;
         ensure_dylibs(tempdir.path()).await?;
-        assert!(core_libraries_present(tempdir.path(), compiled_manifest()));
+        let manifest = detect_manifest()?;
+        let runtime_dir = resolve_runtime_dir(tempdir.path(), manifest)?;
+        assert!(core_libraries_present(&runtime_dir, manifest));
         Ok(())
     }
 

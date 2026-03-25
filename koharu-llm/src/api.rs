@@ -49,9 +49,6 @@ pub const DEEPSEEK: ApiProviderInfo = ApiProviderInfo {
 
 pub const ALL_API_PROVIDERS: &[&ApiProviderInfo] = &[&OPENAI, &GEMINI, &CLAUDE, &DEEPSEEK];
 
-/// Parse a namespaced model ID like `"openai:gpt-5-mini"` into its provider
-/// and model-id parts. Returns `None` if the ID is not in the expected format
-/// or the provider / model are not recognised.
 pub fn find_api_model(id: &str) -> Option<(&'static ApiProviderInfo, &'static str)> {
     let (provider_id, model_id) = id.split_once(':')?;
     let provider = ALL_API_PROVIDERS
