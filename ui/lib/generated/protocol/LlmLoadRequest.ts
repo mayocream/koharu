@@ -4,4 +4,7 @@ export type LlmLoadRequest = {
   id: string
   apiKey: string | null
   baseUrl: string | null
+  temperature: number | null
+  maxTokens: number | null
+  customSystemPrompt: string | null
 }

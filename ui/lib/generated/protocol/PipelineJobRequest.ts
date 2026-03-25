@@ -7,6 +7,9 @@ export type PipelineJobRequest = {
   llmModelId: string | null
   llmApiKey: string | null
   llmBaseUrl: string | null
+  llmTemperature: number | null
+  llmMaxTokens: number | null
+  llmCustomSystemPrompt: string | null
   language: string | null
   shaderEffect: TextShaderEffect | null
   shaderStroke: TextStrokeStyle | null

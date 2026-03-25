@@ -38,15 +38,15 @@ export function DraftTextarea({
   }, [draftValue])
 
   useEffect(() => {
-    const previousExternalValue = lastExternalValueRef.current
     lastExternalValueRef.current = value
 
-    if (
-      (!isComposingRef.current && !isFocusedRef.current) ||
-      draftValueRef.current === previousExternalValue
-    ) {
-      setDraftValue(value)
+    // While the user is focused or composing, preserve their draft.
+    // Stale server refetches must not override what the user is actively typing.
+    if (isFocusedRef.current || isComposingRef.current) {
+      return
     }
+
+    setDraftValue(value)
   }, [value])
 
   return (
