@@ -62,7 +62,7 @@ const LIB_NAMES: [&str; 4] = [
 
 static LIBRARIES: OnceLock<LoadedLibraries> = OnceLock::new();
 
-pub fn initialize() -> Result<()> {
+pub(crate) fn initialize() -> Result<()> {
     let runtime_dir = koharu_runtime::llama_runtime_dir().context(
         "failed to resolve the llama runtime directory; call `koharu_runtime::initialize()` first",
     )?;
