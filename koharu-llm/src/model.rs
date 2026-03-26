@@ -67,8 +67,7 @@ impl Llm {
     }
 
     fn load_from_path(id: ModelId, cpu: bool, model_path: PathBuf) -> Result<Self> {
-        crate::sys::initialize()
-            .context("failed to initialize llama.cpp runtime bindings")?;
+        crate::sys::initialize().context("failed to initialize llama.cpp runtime bindings")?;
 
         LOGGING_READY.call_once(|| {
             send_logs_to_tracing(LogOptions::default().with_logs_enabled(true));

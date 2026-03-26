@@ -2,12 +2,12 @@ use std::{sync::Mutex, time::Instant};
 
 use anyhow::Result;
 use image::DynamicImage;
+use koharu_llm::paddleocr_vl::{self as paddleocr_vl_llm, PaddleOcrVl, PaddleOcrVlTask};
 use koharu_types::{Document, FontPrediction, SerializableDynamicImage, TextBlock, TextDirection};
 
 use crate::comic_text_detector::{self, ComicTextDetector, crop_text_block_bbox};
 use crate::font_detector::{self, FontDetector};
 use crate::lama::{self, Lama};
-use crate::paddleocr_vl::{self, PaddleOcrVl, PaddleOcrVlTask};
 use crate::pp_doclayout_v3::{self, LayoutRegion, PPDocLayoutV3};
 
 const NEAR_BLACK_THRESHOLD: u8 = 12;
@@ -244,7 +244,7 @@ impl Model {
 pub async fn prefetch() -> Result<()> {
     pp_doclayout_v3::prefetch().await?;
     comic_text_detector::prefetch_segmentation().await?;
-    paddleocr_vl::prefetch().await?;
+    paddleocr_vl_llm::prefetch().await?;
     lama::prefetch().await?;
     font_detector::prefetch().await?;
 

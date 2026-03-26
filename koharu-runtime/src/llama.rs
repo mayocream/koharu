@@ -235,11 +235,13 @@ mod tests {
     fn install_dir_includes_tag_and_id() {
         let root = Path::new("/tmp/rt");
         let dir = LlamaRuntime::WindowsVulkanX64.install_dir(root);
-        assert!(dir.ends_with(
-            Path::new("llama.cpp")
-                .join(LLAMA_CPP_TAG)
-                .join("windows-vulkan-x64")
-        ));
+        assert!(
+            dir.ends_with(
+                Path::new("llama.cpp")
+                    .join(LLAMA_CPP_TAG)
+                    .join("windows-vulkan-x64")
+            )
+        );
     }
 
     #[test]

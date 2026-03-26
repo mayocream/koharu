@@ -58,8 +58,7 @@ fn is_up_to_date(install_dir: &Path, source_id: &str) -> bool {
 
 fn reset_dir(dir: &Path) -> Result<()> {
     if dir.exists() {
-        fs::remove_dir_all(dir)
-            .with_context(|| format!("failed to reset `{}`", dir.display()))?;
+        fs::remove_dir_all(dir).with_context(|| format!("failed to reset `{}`", dir.display()))?;
     }
     fs::create_dir_all(dir).with_context(|| format!("failed to create `{}`", dir.display()))?;
     Ok(())

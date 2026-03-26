@@ -22,6 +22,10 @@ path = "bin/llama.rs"
 name = "llm"
 path = "bin/llm.rs"
 
+[[bin]]
+name = "paddleocr-vl-llm"
+path = "bin/paddleocr-vl.rs"
+
 [dependencies]
 anyhow = { workspace = true }
 clap = { workspace = true, features = ["derive"] }
@@ -29,6 +33,7 @@ dirs = { workspace = true }
 flate2 = { workspace = true }
 futures = { workspace = true }
 hf-hub = { workspace = true }
+image = { workspace = true }
 koharu-http = { workspace = true }
 koharu-runtime = { workspace = true }
 koharu-types = { workspace = true }

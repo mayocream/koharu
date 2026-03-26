@@ -63,8 +63,9 @@ const LIB_NAMES: [&str; 4] = [
 static LIBRARIES: OnceLock<LoadedLibraries> = OnceLock::new();
 
 pub(crate) fn initialize() -> Result<()> {
-    let runtime_dir = koharu_runtime::llama_runtime_dir()
-        .context("failed to resolve the llama runtime directory; call `koharu_runtime::initialize()` first")?;
+    let runtime_dir = koharu_runtime::llama_runtime_dir().context(
+        "failed to resolve the llama runtime directory; call `koharu_runtime::initialize()` first",
+    )?;
 
     if !runtime_dir.exists() {
         bail!(
@@ -73,9 +74,9 @@ pub(crate) fn initialize() -> Result<()> {
         );
     }
 
-    let dir = runtime_dir.canonicalize().with_context(|| {
-        format!("failed to canonicalize `{}`", runtime_dir.display())
-    })?;
+    let dir = runtime_dir
+        .canonicalize()
+        .with_context(|| format!("failed to canonicalize `{}`", runtime_dir.display()))?;
 
     if let Some(existing) = LIBRARIES.get() {
         if existing.path == dir {

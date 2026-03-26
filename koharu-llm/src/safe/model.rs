@@ -401,8 +401,14 @@ impl LlamaModel {
             ),
             x => x,
         }?;
-        // here the assumption is that each byte from the output may map to at most one output charakter
-        let mut output_piece = String::with_capacity(bytes.len());
+        let mut output_piece = String::new();
+        // encoding_rs treats the String capacity as the output buffer size and will not
+        // reallocate, so reserve using the decoder's current state before decoding.
+        output_piece.reserve(
+            decoder
+                .max_utf8_buffer_length(bytes.len())
+                .unwrap_or(bytes.len().saturating_mul(3).saturating_add(3)),
+        );
         // _result only tells if there is nothing more in the input, or if the output was full
         // but further decoding will happen on the next interation anyway
         let (_result, _somesize, _truthy) =

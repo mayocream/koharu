@@ -13,6 +13,7 @@ publish.workspace = true
 
 [dependencies]
 koharu-http = { workspace = true }
+koharu-llm = { workspace = true }
 koharu-types = { workspace = true }
 anyhow = { workspace = true }
 clap = { workspace = true }

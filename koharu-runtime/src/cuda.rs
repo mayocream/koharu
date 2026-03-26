@@ -256,8 +256,10 @@ mod tests {
             }
         }
 
-        let all_dylibs: Vec<&str> =
-            WHEELS.iter().flat_map(|w| w.dylibs().iter().copied()).collect();
+        let all_dylibs: Vec<&str> = WHEELS
+            .iter()
+            .flat_map(|w| w.dylibs().iter().copied())
+            .collect();
         for dylib in &all_dylibs {
             assert!(root.join(dylib).exists());
         }
