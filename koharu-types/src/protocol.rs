@@ -399,3 +399,15 @@ pub struct BrushRegionRequest {
 pub struct InpaintRegionRequest {
     pub region: Region,
 }
+
+#[derive(Debug, Clone, Serialize, Deserialize, JsonSchema, TS)]
+#[serde(rename_all = "camelCase")]
+#[ts(export)]
+pub struct DetectRequest {
+    /// When true, uses lower confidence thresholds and smaller minimum block
+    /// sizes to catch more text (higher recall at the cost of more false positives).
+    #[serde(default)]
+    pub sensitive: bool,
+    /// Optional region to restrict detection to a sub-area of the image.
+    pub region: Option<Region>,
+}
