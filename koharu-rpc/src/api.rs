@@ -214,13 +214,11 @@ async fn get_document(
     Path(document_id): Path<String>,
 ) -> ApiResult<Json<DocumentDetail>> {
     let resources = state.resources()?;
-    let index = state_tx::find_doc_index(&resources.state, &document_id)
-        .await
-        .map_err(ApiError::from)?;
     let guard = resources.state.read().await;
     let doc = guard
         .documents
-        .get(index)
+        .iter()
+        .find(|d| d.id == document_id)
         .ok_or_else(|| ApiError::not_found("Document not found"))?;
     Ok(Json(DocumentDetail::from(doc)))
 }
@@ -230,13 +228,11 @@ async fn get_thumbnail(
     Path(document_id): Path<String>,
 ) -> ApiResult<Response> {
     let resources = state.resources()?;
-    let index = state_tx::find_doc_index(&resources.state, &document_id)
-        .await
-        .map_err(ApiError::from)?;
     let guard = resources.state.read().await;
     let doc = guard
         .documents
-        .get(index)
+        .iter()
+        .find(|d| d.id == document_id)
         .ok_or_else(|| ApiError::not_found("Document not found"))?;
     let source = doc.rendered.as_ref().unwrap_or(&doc.image);
     let thumbnail = source.thumbnail(200, 200);
@@ -250,13 +246,11 @@ async fn get_document_layer(
     Path((document_id, layer)): Path<(String, String)>,
 ) -> ApiResult<Response> {
     let resources = state.resources()?;
-    let index = state_tx::find_doc_index(&resources.state, &document_id)
-        .await
-        .map_err(ApiError::from)?;
     let guard = resources.state.read().await;
     let doc = guard
         .documents
-        .get(index)
+        .iter()
+        .find(|d| d.id == document_id)
         .ok_or_else(|| ApiError::not_found("Document not found"))?;
     let image = document_layer(doc, &layer)?;
     let bytes = encode_webp(image)?;
