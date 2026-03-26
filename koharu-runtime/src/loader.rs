@@ -1,7 +1,9 @@
 use std::ffi::OsStr;
 use std::path::Path;
 
-use anyhow::{Context, Result, bail};
+use anyhow::{Context, Result};
+#[cfg(target_os = "windows")]
+use anyhow::bail;
 use libloading::Library;
 
 pub(crate) fn add_runtime_search_path(path: &Path) -> Result<()> {

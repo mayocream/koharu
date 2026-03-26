@@ -1,6 +1,7 @@
 use std::path::{Path, PathBuf};
 
 use anyhow::{Result, bail};
+#[cfg(target_os = "windows")]
 use libloading::Library;
 
 use crate::archive;
