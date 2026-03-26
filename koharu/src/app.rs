@@ -184,13 +184,13 @@ async fn build_resources(cpu: bool, headless: bool) -> Result<AppResources> {
         tracing::info!("CUDA is available and runtime packages were initialized");
     }
 
-    let llama_backend = shared_llama_backend()?;
+    shared_llama_backend()?;
     let ml = Arc::new(
-        koharu_ml::facade::Model::new(cpu, Arc::clone(&llama_backend))
+        koharu_ml::facade::Model::new(cpu)
             .await
             .context("Failed to initialize ML model")?,
     );
-    let llm = Arc::new(facade::Model::new(cpu, llama_backend));
+    let llm = Arc::new(facade::Model::new(cpu));
     let renderer = Arc::new(Renderer::new().context("Failed to initialize renderer")?);
     let state = Arc::new(RwLock::new(State::default()));
 
