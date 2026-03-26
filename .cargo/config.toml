@@ -5,4 +5,4 @@ TS_RS_EXPORT_DIR = { value = "ui/lib/generated/protocol", relative = true }
 TS_RS_LARGE_INT = "number"
 LLAMA_CPP_TAG = "b8233"
 # CUDA 13.1 requires C++17
-NVCC_PREPEND_FLAGS = "-std=c++17 -Xcompiler /Zc:preprocessor"
+NVCC_PREPEND_FLAGS = "-std=c++17"
