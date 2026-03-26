@@ -1,7 +1,6 @@
 use std::path::{Path, PathBuf};
 
 use anyhow::{Result, bail};
-use libloading::Library;
 
 use crate::archive;
 use crate::loader::{add_runtime_search_path, preload_library};
@@ -22,7 +21,7 @@ impl LlamaRuntime {
     #[allow(clippy::needless_return)]
     fn detect() -> Result<Self> {
         #[cfg(all(target_os = "windows", target_arch = "x86_64"))]
-        if unsafe { Library::new("nvcuda.dll") }.is_ok() {
+        if unsafe { libloading::Library::new("nvcuda.dll") }.is_ok() {
             return Ok(Self::WindowsCuda13X64);
         } else {
             return Ok(Self::WindowsVulkanX64);

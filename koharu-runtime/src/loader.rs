@@ -1,7 +1,7 @@
 use std::ffi::OsStr;
 use std::path::Path;
 
-use anyhow::{Context, Result, bail};
+use anyhow::{Context, Result};
 use libloading::Library;
 
 pub(crate) fn add_runtime_search_path(path: &Path) -> Result<()> {
@@ -32,13 +32,13 @@ pub(crate) fn add_runtime_search_path(path: &Path) -> Result<()> {
                 LOAD_LIBRARY_SEARCH_USER_DIRS | LOAD_LIBRARY_SEARCH_SYSTEM32,
             ) == 0
             {
-                bail!(
+                anyhow::bail!(
                     "failed to set default DLL directories: {}",
                     std::io::Error::last_os_error()
                 );
             }
             if AddDllDirectory(wide.as_ptr()).is_null() {
-                bail!(
+                anyhow::bail!(
                     "failed to add DLL directory: {}",
                     std::io::Error::last_os_error()
                 );
