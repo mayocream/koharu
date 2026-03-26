@@ -456,6 +456,24 @@ export const api = {
     })
   },
 
+  async detectWithOptions(
+    index: number,
+    options: { sensitive?: boolean; region?: InpaintRegion },
+  ): Promise<void> {
+    return withRpcError('detect_options', async () => {
+      const summary = await getDocumentSummaryAtIndex(index)
+      await fetchJson<void>(`/documents/${summary.id}/detect-options`, {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({
+          sensitive: options.sensitive ?? false,
+          region: options.region ?? null,
+        }),
+      })
+      documentDetailCache.delete(summary.id)
+    })
+  },
+
   async ocr(index: number): Promise<void> {
     return withRpcError('ocr', async () => {
       const summary = await getDocumentSummaryAtIndex(index)
@@ -514,6 +532,18 @@ export const api = {
     return withRpcError('inpaint_partial', async () => {
       const summary = await getDocumentSummaryAtIndex(index)
       await fetchJson<void>(`/documents/${summary.id}/inpaint-region`, {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({ region }),
+      })
+      documentDetailCache.delete(summary.id)
+    })
+  },
+
+  async inpaintFree(index: number, region: InpaintRegion): Promise<void> {
+    return withRpcError('inpaint_free', async () => {
+      const summary = await getDocumentSummaryAtIndex(index)
+      await fetchJson<void>(`/documents/${summary.id}/inpaint-free`, {
         method: 'POST',
         headers: { 'content-type': 'application/json' },
         body: JSON.stringify({ region }),
