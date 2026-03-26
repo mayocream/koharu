@@ -155,6 +155,7 @@ Koharu can also translate through remote or self-hosted API providers instead of
 - Gemini
 - Claude
 - DeepSeek
+- MiniMax
 - OpenAI Compatible, including tools and services such as LM Studio, OpenRouter, or any endpoint that exposes the OpenAI-style `/v1/models` and `/v1/chat/completions` APIs
 
 Remote providers are configured in **Settings > API Keys**. For OpenAI Compatible, you also set a custom base URL. API keys are optional for local servers like LM Studio, but typically required for hosted services like OpenRouter.

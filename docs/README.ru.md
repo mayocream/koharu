@@ -152,6 +152,7 @@ Koharu также может переводить через удалённые 
 - Gemini
 - Claude
 - DeepSeek
+- MiniMax
 - OpenAI Compatible: LM Studio, OpenRouter или любой эндпоинт, предоставляющий API в стиле OpenAI (`/v1/models` и `/v1/chat/completions`)
 
 Удалённые провайдеры настраиваются в **Настройки > API-ключи**. Для OpenAI Compatible также указывается пользовательский Base URL. API-ключи необязательны для локальных серверов вроде LM Studio, но обычно требуются для размещённых сервисов вроде OpenRouter.
