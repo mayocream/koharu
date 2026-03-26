@@ -204,11 +204,8 @@ async fn get_fonts(State(state): State<ApiState>) -> ApiResult<Json<Vec<FontFace
 
 async fn list_documents(State(state): State<ApiState>) -> ApiResult<Json<Vec<DocumentSummary>>> {
     let resources = state.resources()?;
-    let documents = state_tx::list_docs(&resources.state)
-        .await
-        .iter()
-        .map(DocumentSummary::from)
-        .collect();
+    let guard = resources.state.read().await;
+    let documents = guard.documents.iter().map(DocumentSummary::from).collect();
     Ok(Json(documents))
 }
 
@@ -217,8 +214,15 @@ async fn get_document(
     Path(document_id): Path<String>,
 ) -> ApiResult<Json<DocumentDetail>> {
     let resources = state.resources()?;
-    let (_, document) = find_document(&resources, &document_id).await?;
-    Ok(Json(DocumentDetail::from(&document)))
+    let index = state_tx::find_doc_index(&resources.state, &document_id)
+        .await
+        .map_err(ApiError::from)?;
+    let guard = resources.state.read().await;
+    let doc = guard
+        .documents
+        .get(index)
+        .ok_or_else(|| ApiError::not_found("Document not found"))?;
+    Ok(Json(DocumentDetail::from(doc)))
 }
 
 async fn get_thumbnail(
@@ -226,10 +230,18 @@ async fn get_thumbnail(
     Path(document_id): Path<String>,
 ) -> ApiResult<Response> {
     let resources = state.resources()?;
-    let (_, document) = find_document(&resources, &document_id).await?;
-    let source = document.rendered.as_ref().unwrap_or(&document.image);
+    let index = state_tx::find_doc_index(&resources.state, &document_id)
+        .await
+        .map_err(ApiError::from)?;
+    let guard = resources.state.read().await;
+    let doc = guard
+        .documents
+        .get(index)
+        .ok_or_else(|| ApiError::not_found("Document not found"))?;
+    let source = doc.rendered.as_ref().unwrap_or(&doc.image);
     let thumbnail = source.thumbnail(200, 200);
     let bytes = encode_webp(&thumbnail.into())?;
+    drop(guard);
     Ok(binary_response(bytes, "image/webp", None))
 }
 
@@ -238,9 +250,17 @@ async fn get_document_layer(
     Path((document_id, layer)): Path<(String, String)>,
 ) -> ApiResult<Response> {
     let resources = state.resources()?;
-    let (_, document) = find_document(&resources, &document_id).await?;
-    let image = document_layer(&document, &layer)?;
+    let index = state_tx::find_doc_index(&resources.state, &document_id)
+        .await
+        .map_err(ApiError::from)?;
+    let guard = resources.state.read().await;
+    let doc = guard
+        .documents
+        .get(index)
+        .ok_or_else(|| ApiError::not_found("Document not found"))?;
+    let image = document_layer(doc, &layer)?;
     let bytes = encode_webp(image)?;
+    drop(guard);
     Ok(binary_response(bytes, "image/webp", None))
 }
 
@@ -636,7 +656,7 @@ async fn start_pipeline_job(
     };
     let total_documents = match index {
         Some(_) => 1,
-        None => state_tx::list_docs(&resources.state).await.len(),
+        None => state_tx::doc_count(&resources.state).await,
     };
 
     let job_id = operations::process(
@@ -744,8 +764,9 @@ async fn export_all(
 async fn events_stream(
     State(state): State<ApiState>,
 ) -> ApiResult<Sse<impl futures::Stream<Item = Result<Event, Infallible>>>> {
-    let snapshot = state.events.snapshot().await?;
-    let mut rx = state.events.subscribe();
+    let events = state.events.clone();
+    let snapshot = events.snapshot().await?;
+    let mut rx = events.subscribe();
 
     let stream = stream! {
         yield Ok(sse_event("snapshot", &snapshot));
@@ -756,7 +777,13 @@ async fn events_stream(
                         yield Ok(event);
                     }
                 }
-                Err(tokio::sync::broadcast::error::RecvError::Lagged(_)) => continue,
+                Err(tokio::sync::broadcast::error::RecvError::Lagged(n)) => {
+                    tracing::warn!("SSE client lagged behind by {n} events, re-sending snapshot");
+                    match events.snapshot().await {
+                        Ok(snap) => yield Ok(sse_event("snapshot", &snap)),
+                        Err(e) => tracing::warn!("Failed to build resync snapshot: {e}"),
+                    }
+                }
                 Err(tokio::sync::broadcast::error::RecvError::Closed) => break,
             }
         }
