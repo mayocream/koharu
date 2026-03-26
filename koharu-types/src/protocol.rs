@@ -398,6 +398,9 @@ pub struct BrushRegionRequest {
 #[ts(export)]
 pub struct InpaintRegionRequest {
     pub region: Region,
+    /// When true, inpaint purely from the mask without requiring text blocks (Magic Eraser).
+    #[serde(default)]
+    pub free: bool,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, JsonSchema, TS)]

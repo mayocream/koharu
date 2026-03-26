@@ -191,6 +191,9 @@ pub struct UpdateBrushLayerPayload {
 pub struct InpaintPartialPayload {
     pub index: usize,
     pub region: InpaintRegion,
+    /// When true, inpaint purely from the mask without requiring text blocks (Magic Eraser).
+    #[serde(default)]
+    pub free: bool,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, JsonSchema)]

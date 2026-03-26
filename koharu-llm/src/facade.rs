@@ -5,11 +5,12 @@ use tokio::sync::{RwLock, broadcast};
 
 use koharu_types::{Document, LlmState, LlmStateStatus, TextBlock};
 
-use super::{
-    GenerateOptions, Language, Llm, ModelId, language::tags as language_tags, supported_locales,
+use crate::{
+    GenerateOptions, Language, Llm, ModelId, language::tags as language_tags,
+    safe::llama_backend::LlamaBackend, supported_locales,
 };
 
-pub use super::prefetch;
+pub use crate::prefetch;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 struct BlockStartTag {
@@ -51,7 +52,6 @@ impl ModelInfo {
     }
 }
 
-/// Load state of the LLM
 #[allow(clippy::large_enum_variant)]
 #[derive(strum::Display)]
 pub enum State {
@@ -63,7 +63,7 @@ pub enum State {
     Ready(Llm),
     #[strum(serialize = "ready")]
     ApiReady {
-        provider: Box<dyn super::providers::AnyProvider>,
+        provider: Box<dyn crate::providers::AnyProvider>,
         provider_id: String,
         model: String,
     },
@@ -71,17 +71,11 @@ pub enum State {
     Failed(String),
 }
 
-/// Minimal owner for the LLM with non-blocking initialization.
 pub struct Model {
     state: Arc<RwLock<State>>,
     state_tx: broadcast::Sender<LlmState>,
     cpu: bool,
-}
-
-impl Default for Model {
-    fn default() -> Self {
-        Self::new(false)
-    }
+    backend: Arc<LlamaBackend>,
 }
 
 pub trait Translatable {
@@ -443,11 +437,12 @@ impl Translatable for TextBlock {
 }
 
 impl Model {
-    pub fn new(cpu: bool) -> Self {
+    pub fn new(cpu: bool, backend: Arc<LlamaBackend>) -> Self {
         Self {
             state: Arc::new(RwLock::new(State::Empty)),
             state_tx: broadcast::channel(64).0,
             cpu,
+            backend,
         }
     }
 
@@ -455,14 +450,13 @@ impl Model {
         self.cpu
     }
 
-    /// Start loading an API-backed provider and return immediately.
     pub async fn load_api(
         &self,
         provider_id: &str,
         model_id: &str,
-        config: super::providers::ProviderConfig,
+        config: crate::providers::ProviderConfig,
     ) -> anyhow::Result<()> {
-        let provider = super::providers::build_provider(provider_id, config)?;
+        let provider = crate::providers::build_provider(provider_id, config)?;
         *self.state.write().await = State::ApiReady {
             provider,
             provider_id: provider_id.to_string(),
@@ -472,7 +466,6 @@ impl Model {
         Ok(())
     }
 
-    /// Start loading the model on a blocking thread and return immediately.
     pub async fn load(&self, id: ModelId) {
         {
             let mut guard = self.state.write().await;
@@ -486,8 +479,9 @@ impl Model {
         let state_cloned = self.state.clone();
         let state_tx = self.state_tx.clone();
         let cpu = self.cpu;
+        let backend = self.backend.clone();
         tokio::spawn(async move {
-            let res = Llm::load(id, cpu).await;
+            let res = Llm::load(id, cpu, backend).await;
             match res {
                 Ok(llm) => {
                     let mut guard = state_cloned.write().await;

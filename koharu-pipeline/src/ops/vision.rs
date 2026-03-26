@@ -76,7 +76,6 @@ pub async fn detect_with_options(
         // Refresh segmentation on full image with all blocks
         let probability_map = state
             .ml
-            .segmenter()
             .inference_segmentation(&snapshot.image)?;
         let mask = koharu_ml::comic_text_detector::refine_segmentation_mask(
             &snapshot.image,
