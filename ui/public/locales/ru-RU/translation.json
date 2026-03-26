@@ -69,11 +69,15 @@
     "brush": "Слой кисти",
     "inpainted": "Инпейнтинг",
     "mask": "Маска сегментации",
-    "base": "Исходное изображение"
+    "base": "Исходное изображение",
+    "originalImage": "Исходное изображение",
+    "on": "ВКЛ"
   },
   "processing": {
     "detect": "Детекция",
     "detectTooltip": "Запустить детекцию текста на текущей странице",
+    "detectSensitive": "Детекция+",
+    "detectSensitiveTooltip": "Чувствительная детекция — низкие пороги, находит больше текста (SFX, мелкий текст, сложные фоны)",
     "ocr": "OCR",
     "ocrTooltip": "Распознать текст в обнаруженных областях",
     "render": "Рендер"
@@ -153,6 +157,8 @@
     }
   },
   "render": {
+    "fontSizeLabel": "Размер",
+    "fontSizeTooltip": "Размер шрифта",
     "effectLabel": "Эффект текста",
     "alignLabel": "Выравнивание",
     "alignLeft": "По левому краю",
@@ -173,6 +179,7 @@
   "textBlocks": {
     "emptyPrompt": "Откройте изображение, чтобы увидеть текстовые блоки.",
     "title": "Текстовые блоки ({{count}})",
+    "selected": "{{count}} выбрано",
     "none": "Текстовых блоков пока нет. Запустите обнаружение, чтобы заполнить список.",
     "emptySummary": "<пусто>",
     "ocrLabel": "Текст OCR",
@@ -201,7 +208,8 @@
     "block": "Блок",
     "brush": "Кисть",
     "repairBrush": "Кисть восстановления",
-    "eraser": "Ластик"
+    "eraser": "Ластик",
+    "magicEraser": "Волшебный ластик"
   },
   "download": {
     "title": "Загрузка"
@@ -249,11 +257,13 @@
     "apiKeysDescription": "Управляйте своими API ключами для различных провайдеров. Ваши ключи надежно хранятся в связке ключей вашего устройства и никогда не передаются другим лицам.",
     "freeTier": "Бесплатный уровень",
     "localLlm": "Локальная LLM",
+    "localLlmTitle": "Локальная LLM и OpenAI-совместимые провайдеры",
     "localLlmDescription": "Подключитесь к локальному серверу LLM (Ollama, LM Studio или любой OpenAI-совместимый эндпоинт) для перевода.",
     "localLlmPreset": "Провайдер",
     "localLlmPresetOllama": "Ollama",
     "localLlmPresetLmStudio": "LM Studio",
-    "localLlmPresetCustom": "Другой",
+    "localLlmPresetPreset1": "Пресет 1",
+    "localLlmPresetPreset2": "Пресет 2",
     "localLlmBaseUrl": "Base URL",
     "localLlmApiKey": "API ключ (необязательно)",
     "localLlmModelName": "Имя модели",
