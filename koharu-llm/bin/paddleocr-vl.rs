@@ -1,9 +1,11 @@
 use std::path::{Path, PathBuf};
+use std::sync::Arc;
 use std::time::Instant;
 
 use anyhow::{Context, Result, bail};
 use clap::{Parser, ValueEnum};
 use koharu_llm::paddleocr_vl::{PaddleOcrVl, PaddleOcrVlOutput, PaddleOcrVlTask};
+use koharu_llm::safe::llama_backend::LlamaBackend;
 
 #[derive(Debug, Clone, Copy, ValueEnum)]
 enum TaskArg {
@@ -112,18 +114,20 @@ async fn main() -> Result<()> {
     koharu_runtime::initialize()
         .await
         .context("failed to initialize runtime libraries")?;
+    koharu_llm::sys::initialize().context("failed to initialize llama.cpp runtime bindings")?;
 
     let cli = Cli::parse();
     let task: PaddleOcrVlTask = cli.task.into();
+    let backend = Arc::new(LlamaBackend::init().context("unable to initialize llama.cpp backend")?);
 
     if cli.input.is_empty() && cli.dataset_root.is_none() {
         bail!("provide either --input or --dataset-root");
     }
 
     let mut model = if let Some(model_dir) = &cli.model_dir {
-        PaddleOcrVl::load_from_dir(model_dir, cli.cpu)?
+        PaddleOcrVl::load_from_dir(model_dir, cli.cpu, Arc::clone(&backend))?
     } else {
-        PaddleOcrVl::load(cli.cpu).await?
+        PaddleOcrVl::load(cli.cpu, backend).await?
     };
 
     if let Some(dataset_root) = &cli.dataset_root {

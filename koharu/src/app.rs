@@ -2,13 +2,14 @@ use std::{path::PathBuf, sync::Arc};
 
 use anyhow::{Context, Result};
 use clap::Parser;
-use once_cell::sync::Lazy;
+use once_cell::sync::{Lazy, OnceCell};
 use rfd::MessageDialog;
 use tauri::{Manager, WebviewWindowBuilder};
 use tokio::{net::TcpListener, sync::RwLock};
 use tracing_subscriber::fmt::format::FmtSpan;
 
 use koharu_llm::facade;
+use koharu_llm::safe::llama_backend::LlamaBackend;
 use koharu_ml::{cuda_is_available, device};
 use koharu_pipeline::AppResources;
 use koharu_renderer::facade::Renderer;
@@ -21,6 +22,7 @@ static APP_ROOT: Lazy<PathBuf> = Lazy::new(|| {
         .unwrap_or_default()
 });
 static MODEL_ROOT: Lazy<PathBuf> = Lazy::new(|| APP_ROOT.join("models"));
+static LLAMA_BACKEND: OnceCell<Arc<LlamaBackend>> = OnceCell::new();
 
 #[derive(Parser)]
 #[command(version = crate::version::APP_VERSION, about)]
@@ -113,6 +115,15 @@ async fn prefetch() -> Result<()> {
     Ok(())
 }
 
+fn shared_llama_backend() -> Result<Arc<LlamaBackend>> {
+    let backend = LLAMA_BACKEND.get_or_try_init(|| -> Result<Arc<LlamaBackend>> {
+        koharu_llm::sys::initialize().context("failed to initialize llama.cpp runtime bindings")?;
+        let backend = LlamaBackend::init().context("unable to initialize llama.cpp backend")?;
+        Ok(Arc::new(backend))
+    })?;
+    Ok(Arc::clone(backend))
+}
+
 fn warning(headless: bool, title: &str, description: &str) {
     tracing::warn!("{description}");
 
@@ -173,12 +184,13 @@ async fn build_resources(cpu: bool, headless: bool) -> Result<AppResources> {
         tracing::info!("CUDA is available and runtime packages were initialized");
     }
 
+    let llama_backend = shared_llama_backend()?;
     let ml = Arc::new(
-        koharu_ml::facade::Model::new(cpu)
+        koharu_ml::facade::Model::new(cpu, Arc::clone(&llama_backend))
             .await
             .context("Failed to initialize ML model")?,
     );
-    let llm = Arc::new(facade::Model::new(cpu));
+    let llm = Arc::new(facade::Model::new(cpu, llama_backend));
     let renderer = Arc::new(Renderer::new().context("Failed to initialize renderer")?);
     let state = Arc::new(RwLock::new(State::default()));
 

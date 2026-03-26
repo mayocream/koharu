@@ -1,8 +1,12 @@
-use std::{sync::Mutex, time::Instant};
+use std::{
+    sync::{Arc, Mutex},
+    time::Instant,
+};
 
 use anyhow::Result;
 use image::DynamicImage;
 use koharu_llm::paddleocr_vl::{self as paddleocr_vl_llm, PaddleOcrVl, PaddleOcrVlTask};
+use koharu_llm::safe::llama_backend::LlamaBackend;
 use koharu_types::{Document, FontPrediction, SerializableDynamicImage, TextBlock, TextDirection};
 
 use crate::comic_text_detector::{self, ComicTextDetector, crop_text_block_bbox};
@@ -83,11 +87,11 @@ pub struct Model {
 }
 
 impl Model {
-    pub async fn new(cpu: bool) -> Result<Self> {
+    pub async fn new(cpu: bool, backend: Arc<LlamaBackend>) -> Result<Self> {
         Ok(Self {
             layout_detector: PPDocLayoutV3::load(cpu).await?,
             segmenter: ComicTextDetector::load_segmentation_only(cpu).await?,
-            ocr: Mutex::new(PaddleOcrVl::load(cpu).await?),
+            ocr: Mutex::new(PaddleOcrVl::load(cpu, backend).await?),
             lama: Lama::load(cpu).await?,
             font_detector: FontDetector::load(cpu).await?,
         })

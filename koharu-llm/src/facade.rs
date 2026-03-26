@@ -6,7 +6,8 @@ use tokio::sync::{RwLock, broadcast};
 use koharu_types::{Document, LlmState, LlmStateStatus, TextBlock};
 
 use crate::{
-    GenerateOptions, Language, Llm, ModelId, language::tags as language_tags, supported_locales,
+    GenerateOptions, Language, Llm, ModelId, language::tags as language_tags,
+    safe::llama_backend::LlamaBackend, supported_locales,
 };
 
 pub use crate::prefetch;
@@ -74,12 +75,7 @@ pub struct Model {
     state: Arc<RwLock<State>>,
     state_tx: broadcast::Sender<LlmState>,
     cpu: bool,
-}
-
-impl Default for Model {
-    fn default() -> Self {
-        Self::new(false)
-    }
+    backend: Arc<LlamaBackend>,
 }
 
 pub trait Translatable {
@@ -441,11 +437,12 @@ impl Translatable for TextBlock {
 }
 
 impl Model {
-    pub fn new(cpu: bool) -> Self {
+    pub fn new(cpu: bool, backend: Arc<LlamaBackend>) -> Self {
         Self {
             state: Arc::new(RwLock::new(State::Empty)),
             state_tx: broadcast::channel(64).0,
             cpu,
+            backend,
         }
     }
 
@@ -482,8 +479,9 @@ impl Model {
         let state_cloned = self.state.clone();
         let state_tx = self.state_tx.clone();
         let cpu = self.cpu;
+        let backend = self.backend.clone();
         tokio::spawn(async move {
-            let res = Llm::load(id, cpu).await;
+            let res = Llm::load(id, cpu, backend).await;
             match res {
                 Ok(llm) => {
                     let mut guard = state_cloned.write().await;

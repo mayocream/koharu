@@ -1,6 +1,7 @@
 use std::ffi::CString;
 use std::num::NonZeroU32;
 use std::path::{Path, PathBuf};
+use std::sync::Arc;
 use std::sync::Once;
 use std::time::Instant;
 
@@ -86,7 +87,7 @@ struct PromptMessage {
 }
 
 pub struct PaddleOcrVl {
-    backend: LlamaBackend,
+    backend: Arc<LlamaBackend>,
     model: LlamaModel,
     chat_template: String,
     bos_token: String,
@@ -96,28 +97,31 @@ pub struct PaddleOcrVl {
 }
 
 impl PaddleOcrVl {
-    pub async fn load(cpu: bool) -> Result<Self> {
+    pub async fn load(cpu: bool, backend: Arc<LlamaBackend>) -> Result<Self> {
         let files = download_model_files().await?;
-        tokio::task::spawn_blocking(move || Self::load_from_files(files, cpu))
+        tokio::task::spawn_blocking(move || Self::load_from_files(files, cpu, backend))
             .await
             .context("failed to join PaddleOCR-VL loading task")?
     }
 
-    pub fn load_from_dir(dir: impl AsRef<Path>, cpu: bool) -> Result<Self> {
+    pub fn load_from_dir(
+        dir: impl AsRef<Path>,
+        cpu: bool,
+        backend: Arc<LlamaBackend>,
+    ) -> Result<Self> {
         let files = resolve_local_model_files(dir.as_ref())?;
-        Self::load_from_files(files, cpu)
+        Self::load_from_files(files, cpu, backend)
     }
 
-    fn load_from_files(files: ModelFiles, cpu: bool) -> Result<Self> {
+    fn load_from_files(files: ModelFiles, cpu: bool, backend: Arc<LlamaBackend>) -> Result<Self> {
         crate::sys::initialize().context("failed to initialize llama.cpp runtime bindings")?;
 
         LOGGING_READY.call_once(|| {
             send_logs_to_tracing(LogOptions::default().with_logs_enabled(true));
         });
 
-        let backend = LlamaBackend::init().context("unable to initialize llama.cpp backend")?;
-        let model_params = model_params(cpu, &backend);
-        let model = LlamaModel::load_from_file(&backend, &files.model, &model_params)
+        let model_params = model_params(cpu, backend.as_ref());
+        let model = LlamaModel::load_from_file(backend.as_ref(), &files.model, &model_params)
             .with_context(|| format!("unable to load model from `{}`", files.model.display()))?;
         let eos_token = model.token_eos();
         let chat_template = model
@@ -134,7 +138,7 @@ impl PaddleOcrVl {
             mmproj_path,
             &model,
             &MtmdContextParams {
-                use_gpu: !cpu && backend.supports_gpu_offload(),
+                use_gpu: !cpu && backend.as_ref().supports_gpu_offload(),
                 print_timings: true,
                 n_threads: num_cpus::get().try_into().unwrap_or(i32::MAX),
                 media_marker: CString::new(DEFAULT_MEDIA_MARKER)
@@ -213,7 +217,7 @@ impl PaddleOcrVl {
         )?;
         let mut ctx = self
             .model
-            .new_context(&self.backend, ctx_params)
+            .new_context(self.backend.as_ref(), ctx_params)
             .context("unable to create PaddleOCR-VL llama.cpp context")?;
         let n_batch = i32::try_from(batch_tokens).context("batch size exceeds i32")?;
 
