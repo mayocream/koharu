@@ -1,6 +1,5 @@
 use std::num::NonZeroU32;
 use std::path::PathBuf;
-use std::sync::Arc;
 use std::sync::Once;
 use std::time::Instant;
 
@@ -25,7 +24,7 @@ const SAKURA_QWEN_CORRECT_EOS_ID: i32 = 151645;
 
 pub struct Llm {
     model_id: ModelId,
-    backend: Arc<LlamaBackend>,
+    backend: LlamaBackend,
     model: LlamaModel,
     prompt_renderer: PromptRenderer,
     eos_token: LlamaToken,
@@ -59,28 +58,24 @@ impl Default for GenerateOptions {
 }
 
 impl Llm {
-    pub async fn load(id: ModelId, cpu: bool, backend: Arc<LlamaBackend>) -> Result<Self> {
+    pub async fn load(id: ModelId, cpu: bool) -> Result<Self> {
         let model_path = id.get().await?;
 
-        tokio::task::spawn_blocking(move || Self::load_from_path(id, cpu, model_path, backend))
+        tokio::task::spawn_blocking(move || Self::load_from_path(id, cpu, model_path))
             .await
             .context("failed to join llama.cpp model loading task")?
     }
 
-    fn load_from_path(
-        id: ModelId,
-        cpu: bool,
-        model_path: PathBuf,
-        backend: Arc<LlamaBackend>,
-    ) -> Result<Self> {
+    fn load_from_path(id: ModelId, cpu: bool, model_path: PathBuf) -> Result<Self> {
         crate::sys::initialize().context("failed to initialize llama.cpp runtime bindings")?;
 
         LOGGING_READY.call_once(|| {
             send_logs_to_tracing(LogOptions::default().with_logs_enabled(true));
         });
 
-        let model_params = model_params(cpu, backend.as_ref());
-        let model = LlamaModel::load_from_file(backend.as_ref(), &model_path, &model_params)
+        let backend = LlamaBackend::init().context("unable to initialize llama.cpp backend")?;
+        let model_params = model_params(cpu, &backend);
+        let model = LlamaModel::load_from_file(&backend, &model_path, &model_params)
             .with_context(|| format!("unable to load model from `{}`", model_path.display()))?;
 
         let chat_template = model
@@ -131,7 +126,7 @@ impl Llm {
         let mut ctx = self
             .model
             .new_context(
-                self.backend.as_ref(),
+                &self.backend,
                 context_params(prompt_tokens.len(), opts.max_tokens)?,
             )
             .context("unable to create llama.cpp context")?;

@@ -4,6 +4,7 @@ import { useEffect, useRef } from 'react'
 import type React from 'react'
 import * as ScrollAreaPrimitive from '@radix-ui/react-scroll-area'
 import { useGesture } from '@use-gesture/react'
+import { useHotkeys } from 'react-hotkeys-hook'
 import {
   ContextMenu,
   ContextMenuContent,
@@ -30,6 +31,7 @@ import { useMaskDrawing } from '@/hooks/useMaskDrawing'
 import { useRenderBrushDrawing } from '@/hooks/useRenderBrushDrawing'
 import { useBrushLayerDisplay } from '@/hooks/useBrushLayerDisplay'
 import { useEditorUiStore } from '@/lib/stores/editorUiStore'
+import { useUndoStore } from '@/lib/stores/undoStore'
 import {
   resolvePinchMemoScaleRatio,
   resolvePinchNextScaleRatio,
@@ -51,12 +53,20 @@ export function Workspace() {
   const showTextBlocksOverlay = useEditorUiStore(
     (state) => state.showTextBlocksOverlay,
   )
+  const showOriginalOnly = useEditorUiStore((state) => state.showOriginalOnly)
+  const setShowOriginalOnly = useEditorUiStore(
+    (state) => state.setShowOriginalOnly,
+  )
   const mode = useEditorUiStore((state) => state.mode)
   const autoFitEnabled = useEditorUiStore((state) => state.autoFitEnabled)
+  const selectedBlockIndices = useEditorUiStore(
+    (state) => state.selectedBlockIndices,
+  )
   const {
     document: currentDocument,
     selectedBlockIndex,
     setSelectedBlockIndex,
+    toggleBlockSelection,
     clearSelection,
     appendBlock,
     removeBlock,
@@ -75,8 +85,10 @@ export function Workspace() {
       void appendBlock(block)
     },
   })
+
   const maskPointerEnabled =
     mode === 'repairBrush' ||
+    mode === 'magicEraser' ||
     (mode === 'eraser' && (showSegmentationMask || !showBrushLayer))
   const brushPointerEnabled =
     mode === 'brush' ||
@@ -85,7 +97,7 @@ export function Workspace() {
     mode,
     currentDocument,
     pointerToDocument,
-    showMask: showSegmentationMask,
+    showMask: showSegmentationMask || mode === 'magicEraser',
     enabled: maskPointerEnabled,
   })
   const brushLayerDisplay = useBrushLayerDisplay({
@@ -103,6 +115,38 @@ export function Workspace() {
   const blockDraftBindings = bindBlockDraft()
   const maskBindings = maskDrawing.bind()
   const brushBindings = brushDrawing.bind()
+
+  // Undo / Redo hotkeys
+  const undo = useUndoStore((state) => state.undo)
+  const redo = useUndoStore((state) => state.redo)
+
+  useHotkeys(
+    'mod+z',
+    (e) => {
+      e.preventDefault()
+      undo()
+    },
+    { preventDefault: true },
+    [undo],
+  )
+
+  useHotkeys(
+    'mod+shift+z',
+    (e) => {
+      e.preventDefault()
+      redo()
+    },
+    { preventDefault: true },
+    [redo],
+  )
+
+  // Show Original hotkey (O)
+  useHotkeys(
+    'o',
+    () => setShowOriginalOnly(!showOriginalOnly),
+    { enableOnFormTags: false },
+    [showOriginalOnly, setShowOriginalOnly],
+  )
 
   useEffect(() => {
     if (currentDocument && autoFitEnabled) {
@@ -130,7 +174,8 @@ export function Workspace() {
 
     const setupListener = async () => {
       unlisten = await listen('tauri://resize', () => {
-        if (currentDocument && autoFitEnabled) {
+        const { autoFitEnabled: fitEnabled } = useEditorUiStore.getState()
+        if (currentDocument && fitEnabled) {
           fitCanvasToViewport()
         }
       })
@@ -209,7 +254,7 @@ export function Workspace() {
         enabled: true,
         pinchOnWheel: false,
         preventDefault: true,
-        scaleBounds: { min: 0.1, max: 1 },
+        scaleBounds: { min: 0.1, max: 4 },
         from: () => [useEditorUiStore.getState().scale / 100, 0],
       },
     },
@@ -228,7 +273,10 @@ export function Workspace() {
   }
 
   const isBrushMode =
-    mode === 'brush' || mode === 'repairBrush' || mode === 'eraser'
+    mode === 'brush' ||
+    mode === 'repairBrush' ||
+    mode === 'eraser' ||
+    mode === 'magicEraser'
   const canvasCursor = isBrushMode
     ? BRUSH_CURSOR
     : mode === 'block'
@@ -281,6 +329,7 @@ export function Workspace() {
                           dataKey={`${currentDocument.id}-base`}
                           transition={false}
                         />
+
                         <canvas
                           ref={maskDrawing.canvasRef}
                           data-testid='workspace-mask-canvas'
@@ -288,8 +337,15 @@ export function Workspace() {
                           style={{
                             width: '100%',
                             height: '100%',
-                            opacity: showSegmentationMask ? 0.8 : 0,
-                            pointerEvents: maskPointerEnabled ? 'auto' : 'none',
+                            opacity:
+                              !showOriginalOnly &&
+                              (showSegmentationMask || mode === 'magicEraser')
+                                ? 0.5
+                                : 0,
+                            pointerEvents:
+                              !showOriginalOnly && maskPointerEnabled
+                                ? 'auto'
+                                : 'none',
                             transition: 'opacity 120ms ease',
                           }}
                           {...maskBindings}
@@ -298,7 +354,7 @@ export function Workspace() {
                           <Image
                             data-testid='workspace-inpainted-image'
                             data={currentDocument.inpainted}
-                            visible={showInpaintedImage}
+                            visible={!showOriginalOnly && showInpaintedImage}
                             transition={false}
                           />
                         )}
@@ -309,7 +365,10 @@ export function Workspace() {
                           style={{
                             width: '100%',
                             height: '100%',
-                            opacity: brushLayerDisplay.visible ? 1 : 0,
+                            opacity:
+                              !showOriginalOnly && brushLayerDisplay.visible
+                                ? 1
+                                : 0,
                             pointerEvents: 'none',
                             zIndex: 10,
                             transition: 'opacity 120ms ease',
@@ -322,16 +381,18 @@ export function Workspace() {
                           style={{
                             width: '100%',
                             height: '100%',
-                            opacity: brushDrawing.visible ? 1 : 0,
-                            pointerEvents: brushPointerEnabled
-                              ? 'auto'
-                              : 'none',
+                            opacity:
+                              !showOriginalOnly && brushDrawing.visible ? 1 : 0,
+                            pointerEvents:
+                              !showOriginalOnly && brushPointerEnabled
+                                ? 'auto'
+                                : 'none',
                             zIndex: 20,
                             transition: 'opacity 120ms ease',
                           }}
                           {...brushBindings}
                         />
-                        {showTextBlocksOverlay && (
+                        {showTextBlocksOverlay && !showOriginalOnly && (
                           <TextBlockSpriteLayer
                             blocks={currentDocument?.textBlocks}
                             scale={scaleRatio}
@@ -339,21 +400,25 @@ export function Workspace() {
                             style={{ zIndex: 30 }}
                           />
                         )}
-                        {showTextBlocksOverlay && (
+                        {showTextBlocksOverlay && !showOriginalOnly && (
                           <TextBlockAnnotations
                             selectedIndex={selectedBlockIndex}
+                            selectedIndices={selectedBlockIndices}
                             onSelect={setSelectedBlockIndex}
+                            onToggleSelect={toggleBlockSelection}
                             style={{ zIndex: 30 }}
                           />
                         )}
-                        {currentDocument.rendered && showRenderedImage && (
-                          <Image
-                            data-testid='workspace-rendered-image'
-                            data={currentDocument.rendered}
-                            transition={false}
-                            style={{ zIndex: 40 }}
-                          />
-                        )}
+                        {currentDocument.rendered &&
+                          showRenderedImage &&
+                          !showOriginalOnly && (
+                            <Image
+                              data-testid='workspace-rendered-image'
+                              data={currentDocument.rendered}
+                              transition={false}
+                              style={{ zIndex: 40 }}
+                            />
+                          )}
                       </div>
                       {draftBlock && (
                         <div

@@ -7,7 +7,6 @@ on:
 
 env:
   CARGO_TERM_COLOR: always
-
 jobs:
   test:
     name: Integration tests
@@ -16,7 +15,7 @@ jobs:
       # refer: https://v2.tauri.app/start/prerequisites/#linux
       - run: |
           sudo apt update
-          sudo apt install --no-install-recommends \
+          sudo apt install --no-install-recommends -y \
             libwebkit2gtk-4.1-dev \
             build-essential \
             curl \
@@ -26,7 +25,10 @@ jobs:
             libssl-dev \
             libayatana-appindicator3-dev \
             librsvg2-dev \
-            fonts-noto-cjk
+            fonts-noto-cjk \
+            llvm-dev \
+            libclang-dev \
+            clang
       - uses: actions/checkout@v6
       - uses: Swatinem/rust-cache@v2
         with:

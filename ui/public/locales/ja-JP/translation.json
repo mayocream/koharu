@@ -69,11 +69,15 @@
     "brush": "ブラシレイヤー",
     "inpainted": "インペイント",
     "mask": "セグメンテーションマスク",
-    "base": "元画像"
+    "base": "元画像",
+    "originalImage": "元画像",
+    "on": "ON"
   },
   "processing": {
     "detect": "検出",
     "detectTooltip": "現在のページでテキスト検出を実行",
+    "detectSensitive": "検出+",
+    "detectSensitiveTooltip": "高感度検出 — 低閾値でより多くのテキストを検出（効果音、小さい文字、複雑な背景）",
     "ocr": "OCR",
     "ocrTooltip": "検出された領域のテキストを認識",
     "render": "レンダー"
@@ -153,6 +157,8 @@
     }
   },
   "render": {
+    "fontSizeLabel": "サイズ",
+    "fontSizeTooltip": "フォントサイズ",
     "effectLabel": "文字効果",
     "alignLabel": "配置",
     "alignLeft": "左揃え",
@@ -173,6 +179,7 @@
   "textBlocks": {
     "emptyPrompt": "画像を開くとテキストブロックが表示されます。",
     "title": "テキストブロック（{{count}}）",
+    "selected": "{{count}} 件選択",
     "none": "まだテキストブロックがありません。検出を実行してください。",
     "emptySummary": "<空>",
     "ocrLabel": "OCR テキスト",
@@ -201,7 +208,8 @@
     "block": "ブロック",
     "brush": "ブラシ",
     "repairBrush": "リペアブラシ",
-    "eraser": "消しゴム"
+    "eraser": "消しゴム",
+    "magicEraser": "マジック消しゴム"
   },
   "download": {
     "title": "ダウンロード中"
@@ -249,11 +257,13 @@
     "apiKeysDescription": "異なるプロバイダーの API キーを管理します。キーはデバイスのキーチェーンに安全に保存され、他人と共有されることはありません。",
     "freeTier": "無料プラン",
     "localLlm": "ローカル LLM",
+    "localLlmTitle": "ローカル LLM & OpenAI 互換プロバイダー",
     "localLlmDescription": "ローカル LLM サーバー（Ollama、LM Studio、その他 OpenAI 互換エンドポイント）に接続して翻訳を行います。",
     "localLlmPreset": "プロバイダー",
     "localLlmPresetOllama": "Ollama",
     "localLlmPresetLmStudio": "LM Studio",
-    "localLlmPresetCustom": "カスタム",
+    "localLlmPresetPreset1": "プリセット 1",
+    "localLlmPresetPreset2": "プリセット 2",
     "localLlmBaseUrl": "Base URL",
     "localLlmApiKey": "API キー（任意）",
     "localLlmModelName": "モデル名",

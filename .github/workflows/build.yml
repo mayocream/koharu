@@ -14,12 +14,12 @@ jobs:
     name: ${{ matrix.os }}
     strategy:
       matrix:
-        os: [macos-latest, windows-latest, ubuntu-latest]
+        os: [macos-latest, windows-latest, ubuntu-22.04]
       fail-fast: false
     runs-on: ${{ matrix.os }}
     steps:
       - name: Install dependencies
-        if: matrix.os == 'ubuntu-latest'
+        if: matrix.os == 'ubuntu-22.04'
         run: |
           sudo apt update
           sudo apt install --no-install-recommends \
@@ -31,12 +31,15 @@ jobs:
             libxdo-dev \
             libssl-dev \
             libayatana-appindicator3-dev \
-            librsvg2-dev
+            librsvg2-dev \
+            llvm-dev \
+            libclang-dev \
+            clang
       - uses: actions/checkout@v6
       - uses: oven-sh/setup-bun@v2
       - uses: Swatinem/rust-cache@v2
       - uses: Jimver/cuda-toolkit@master
-        if: matrix.os == 'ubuntu-latest'
+        if: matrix.os == 'ubuntu-22.04'
         with:
           cuda: '13.1.0'
           log-file-suffix: '${{ matrix.os }}.txt'

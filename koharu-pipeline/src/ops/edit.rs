@@ -614,6 +614,72 @@ pub async fn inpaint_partial(
     .await
 }
 
+/// Free-form inpaint: inpaint an arbitrary region using the mask without requiring
+/// text blocks.  Used by the Magic Eraser tool so users can erase defects, artifacts
+/// or any unwanted content anywhere on the canvas.
+#[instrument(level = "info", skip_all)]
+pub async fn inpaint_free(
+    state: AppResources,
+    payload: InpaintPartialPayload,
+) -> anyhow::Result<()> {
+    let snapshot = state_tx::read_doc(&state.state, payload.index).await?;
+
+    // Build a mask: prefer the stored segment, fall back to a blank black mask
+    let (img_width, img_height) = (snapshot.width, snapshot.height);
+    let fallback_mask = blank_rgba(img_width, img_height, image::Rgba([0, 0, 0, 255]));
+    let mask_image = snapshot.segment.as_ref().unwrap_or(&fallback_mask);
+
+    if payload.region.width == 0 || payload.region.height == 0 {
+        return Ok(());
+    }
+
+    let x0 = payload.region.x.min(img_width.saturating_sub(1));
+    let y0 = payload.region.y.min(img_height.saturating_sub(1));
+    let x1 = payload
+        .region
+        .x
+        .saturating_add(payload.region.width)
+        .min(img_width);
+    let y1 = payload
+        .region
+        .y
+        .saturating_add(payload.region.height)
+        .min(img_height);
+    let crop_width = x1.saturating_sub(x0);
+    let crop_height = y1.saturating_sub(y0);
+
+    if crop_width == 0 || crop_height == 0 {
+        return Ok(());
+    }
+
+    let image_crop =
+        SerializableDynamicImage(snapshot.image.crop_imm(x0, y0, crop_width, crop_height));
+    let mask_crop = SerializableDynamicImage(mask_image.crop_imm(x0, y0, crop_width, crop_height));
+
+    // Pass None for text_blocks — LaMa inpaints purely from the mask
+    let inpainted_crop = state.ml.inpaint_raw(&image_crop, &mask_crop, None).await?;
+
+    let mut stitched = snapshot
+        .inpainted
+        .as_ref()
+        .unwrap_or(&snapshot.image)
+        .to_rgba8();
+
+    let patch = inpainted_crop.to_rgba8();
+    paste_crop(&mut stitched, &patch, x0, y0);
+
+    let mut updated = snapshot;
+    updated.inpainted = Some(image::DynamicImage::ImageRgba8(stitched).into());
+
+    state_tx::update_doc(
+        &state.state,
+        payload.index,
+        updated,
+        &[ChangedField::Inpainted],
+    )
+    .await
+}
+
 #[cfg(test)]
 mod tests {
     use super::{

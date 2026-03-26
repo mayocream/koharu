@@ -2,12 +2,14 @@
 
 import type { ComponentType } from 'react'
 import { useTranslation } from 'react-i18next'
+import { useHotkeys } from 'react-hotkeys-hook'
 import {
   MousePointer,
   VectorSquare,
   Brush,
   Bandage,
   Eraser,
+  Sparkles,
 } from 'lucide-react'
 import { useEditorUiStore } from '@/lib/stores/editorUiStore'
 import { usePreferencesStore } from '@/lib/stores/preferencesStore'
@@ -31,6 +33,7 @@ type ModeDefinition = {
   icon: ComponentType<{ className?: string }>
   labelKey: string
   testId: string
+  shortcut?: string
 }
 
 const MODES: ModeDefinition[] = [
@@ -39,30 +42,42 @@ const MODES: ModeDefinition[] = [
     value: 'select',
     icon: MousePointer,
     testId: 'tool-select',
+    shortcut: 'V',
   },
   {
     labelKey: 'toolRail.block',
     value: 'block',
     icon: VectorSquare,
     testId: 'tool-block',
+    shortcut: 'B',
   },
   {
     labelKey: 'toolRail.brush',
     value: 'brush',
     icon: Brush,
     testId: 'tool-brush',
+    shortcut: 'P',
   },
   {
     labelKey: 'toolRail.eraser',
     value: 'eraser',
     icon: Eraser,
     testId: 'tool-eraser',
+    shortcut: 'E',
   },
   {
     labelKey: 'toolRail.repairBrush',
     value: 'repairBrush',
     icon: Bandage,
     testId: 'tool-repairBrush',
+    shortcut: 'R',
+  },
+  {
+    labelKey: 'toolRail.magicEraser',
+    value: 'magicEraser',
+    icon: Sparkles,
+    testId: 'tool-magicEraser',
+    shortcut: 'M',
   },
 ]
 
@@ -71,11 +86,51 @@ export function ToolRail() {
   const setMode = useEditorUiStore((state) => state.setMode)
   const { t } = useTranslation()
 
+  // Keyboard shortcuts for tools
+  useHotkeys(
+    'v',
+    () => setMode('select'),
+    { preventDefault: true, enableOnFormTags: false },
+    [setMode],
+  )
+  useHotkeys(
+    'b',
+    () => setMode('block'),
+    { preventDefault: true, enableOnFormTags: false },
+    [setMode],
+  )
+  useHotkeys(
+    'p',
+    () => setMode('brush'),
+    { preventDefault: true, enableOnFormTags: false },
+    [setMode],
+  )
+  useHotkeys(
+    'e',
+    () => setMode('eraser'),
+    { preventDefault: true, enableOnFormTags: false },
+    [setMode],
+  )
+  useHotkeys(
+    'r',
+    () => setMode('repairBrush'),
+    { preventDefault: true, enableOnFormTags: false },
+    [setMode],
+  )
+  useHotkeys(
+    'm',
+    () => setMode('magicEraser'),
+    { preventDefault: true, enableOnFormTags: false },
+    [setMode],
+  )
+
   return (
     <div className='border-border bg-card flex w-11 flex-col border-r'>
       <div className='flex flex-1 flex-col items-center gap-1 py-2'>
         {MODES.map((item) => {
-          const label = t(item.labelKey)
+          const label = item.shortcut
+            ? `${t(item.labelKey)} (${item.shortcut})`
+            : t(item.labelKey)
 
           // Brush tool gets a popover
           if (item.value === 'brush') {

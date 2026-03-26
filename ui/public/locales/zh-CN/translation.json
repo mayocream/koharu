@@ -69,11 +69,15 @@
     "brush": "笔刷图层",
     "inpainted": "修补图像",
     "mask": "分割遮罩",
-    "base": "原始图像"
+    "base": "原始图像",
+    "originalImage": "原始图像",
+    "on": "开"
   },
   "processing": {
     "detect": "检测",
     "detectTooltip": "对当前页面运行文本检测",
+    "detectSensitive": "检测+",
+    "detectSensitiveTooltip": "敏感检测 — 更低阈值，捕获更多文本（音效、小字、复杂背景）",
     "ocr": "识别",
     "ocrTooltip": "识别已检测区域中的文本",
     "render": "渲染"
@@ -153,6 +157,8 @@
     }
   },
   "render": {
+    "fontSizeLabel": "大小",
+    "fontSizeTooltip": "字体大小",
     "effectLabel": "文字效果",
     "alignLabel": "对齐",
     "alignLeft": "左对齐",
@@ -173,6 +179,7 @@
   "textBlocks": {
     "emptyPrompt": "打开图像以查看文本块。",
     "title": "文本块（{{count}}）",
+    "selected": "已选 {{count}} 个",
     "none": "尚无文本块。运行检测以填充列表。",
     "emptySummary": "<空>",
     "ocrLabel": "OCR 文本",
@@ -201,7 +208,8 @@
     "block": "框选",
     "brush": "画笔",
     "repairBrush": "修复笔",
-    "eraser": "橡皮擦"
+    "eraser": "橡皮擦",
+    "magicEraser": "魔术橡皮擦"
   },
   "download": {
     "title": "下载中"
@@ -249,11 +257,13 @@
     "apiKeysDescription": "管理您在不同提供商的 API 密钥。您的密钥会安全地存储在设备的密钥链中，绝不会与他人共享。",
     "freeTier": "免费等级",
     "localLlm": "本地 LLM",
+    "localLlmTitle": "本地 LLM 和 OpenAI 兼容提供商",
     "localLlmDescription": "连接本地 LLM 服务器（Ollama、LM Studio 或任何 OpenAI 兼容接口）进行翻译。",
     "localLlmPreset": "提供商",
     "localLlmPresetOllama": "Ollama",
     "localLlmPresetLmStudio": "LM Studio",
-    "localLlmPresetCustom": "自定义",
+    "localLlmPresetPreset1": "预设 1",
+    "localLlmPresetPreset2": "预设 2",
     "localLlmBaseUrl": "Base URL",
     "localLlmApiKey": "API 密钥（可选）",
     "localLlmModelName": "模型名称",

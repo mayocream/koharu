@@ -1,9 +1,6 @@
-use std::sync::Arc;
-
 use clap::Parser;
 use tracing_subscriber::fmt::format::FmtSpan;
 
-use koharu_llm::safe::llama_backend::LlamaBackend;
 use koharu_llm::{GenerateOptions, Language, Llm, ModelId};
 
 #[derive(Parser, Debug)]
@@ -85,9 +82,8 @@ async fn main() -> anyhow::Result<()> {
 
     let args = Args::parse();
     initialize_runtime().await?;
-    let backend = Arc::new(LlamaBackend::init()?);
 
-    let mut llm = Llm::load(args.model, args.cpu, backend).await?;
+    let mut llm = Llm::load(args.model, args.cpu).await?;
     let target_language = Language::parse(&args.locale).unwrap_or(Language::English);
 
     let opts = GenerateOptions {
