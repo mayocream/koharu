@@ -469,6 +469,7 @@ mod tests {
                 width: 10,
                 height: 11,
             },
+            free: false,
         });
         round_trip(&ViewImageParams {
             index: 1,
