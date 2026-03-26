@@ -88,7 +88,7 @@ export function TextBlocksPanel() {
         </span>
         {isMultiSelect && (
           <span className='rounded-full bg-sky-400/20 px-1.5 py-0.5 text-[9px] font-semibold text-sky-600 normal-case dark:text-sky-400'>
-            {selectedBlockIndices.length} selected
+            {t('textBlocks.selected', { count: selectedBlockIndices.length })}
           </span>
         )}
       </div>

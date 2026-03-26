@@ -118,7 +118,7 @@ function WorkflowButtons() {
         onClick={handleDetectSensitive}
         data-testid='toolbar-detect-sensitive'
         disabled={isDetecting}
-        title='Sensitive detection — lower thresholds, catches more text (SFX, small text, complex backgrounds)'
+        title={t('processing.detectSensitiveTooltip')}
       >
         {isDetecting && detectVariant === 'sensitive' ? (
           <LoaderCircleIcon className='size-4 animate-spin' />

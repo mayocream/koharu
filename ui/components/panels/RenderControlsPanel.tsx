@@ -486,7 +486,7 @@ export function RenderControlsPanel() {
       {/* Font Size */}
       <div className='grid w-full min-w-0 grid-cols-[3.5rem_minmax(0,1fr)] items-center gap-1.5'>
         <span className='text-muted-foreground text-[10px] font-medium tracking-wide uppercase'>
-          SIZE
+          {t('render.fontSizeLabel')}
         </span>
 
         <div className='flex min-w-0 items-center gap-1'>
@@ -540,7 +540,7 @@ export function RenderControlsPanel() {
               </div>
             </TooltipTrigger>
             <TooltipContent side='bottom' sideOffset={4}>
-              Font Size
+              {t('render.fontSizeTooltip')}
             </TooltipContent>
           </Tooltip>
         </div>

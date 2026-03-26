@@ -15,8 +15,8 @@ type UndoState = {
   past: UndoableAction[]
   future: UndoableAction[]
   push: (action: UndoableAction) => void
-  undo: () => void
-  redo: () => void
+  undo: () => Promise<void>
+  redo: () => Promise<void>
   clear: () => void
 }
 
@@ -31,7 +31,7 @@ export const useUndoStore = create<UndoState>((set, get) => ({
     }))
   },
 
-  undo: () => {
+  undo: async () => {
     const { past, future } = get()
     if (past.length === 0) return
     const action = past[past.length - 1]
@@ -40,13 +40,13 @@ export const useUndoStore = create<UndoState>((set, get) => ({
       future: [action, ...future],
     })
     try {
-      void action.undo()
+      await action.undo()
     } catch (error) {
       console.error('[undo] failed:', error)
     }
   },
 
-  redo: () => {
+  redo: async () => {
     const { past, future } = get()
     if (future.length === 0) return
     const action = future[0]
@@ -55,7 +55,7 @@ export const useUndoStore = create<UndoState>((set, get) => ({
       future: future.slice(1),
     })
     try {
-      void action.redo()
+      await action.redo()
     } catch (error) {
       console.error('[redo] failed:', error)
     }

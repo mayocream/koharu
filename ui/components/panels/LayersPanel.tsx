@@ -28,6 +28,7 @@ type Layer = {
 }
 
 export function LayersPanel() {
+  const { t } = useTranslation()
   const { currentDocument } = useCurrentDocumentState()
   const showInpaintedImage = useEditorUiStore(
     (state) => state.showInpaintedImage,
@@ -157,11 +158,11 @@ export function LayersPanel() {
               : 'text-muted-foreground',
           )}
         >
-          Original Image
+          {t('layers.originalImage')}
         </span>
         {showOriginalOnly && (
           <span className='rounded-full bg-amber-500/20 px-1.5 py-0.5 text-[9px] font-semibold text-amber-600 uppercase dark:text-amber-400'>
-            ON
+            {t('layers.on')}
           </span>
         )}
       </motion.div>

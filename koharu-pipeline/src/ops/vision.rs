@@ -58,6 +58,14 @@ pub async fn detect_with_options(
             .map(|mut b| {
                 b.x += x0 as f32;
                 b.y += y0 as f32;
+                if let Some(ref mut polygons) = b.line_polygons {
+                    for quad in polygons.iter_mut() {
+                        for point in quad.iter_mut() {
+                            point[0] += x0 as f32;
+                            point[1] += y0 as f32;
+                        }
+                    }
+                }
                 b
             })
             .collect();

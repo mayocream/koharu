@@ -219,7 +219,7 @@ export function useRenderBrushDrawing({
         pushUndo({
           type: 'brushStroke',
           description: 'Brush stroke',
-          undo: () => {
+          undo: async () => {
             const key = queryKeys.documents.current(docIndex)
             const doc = queryClient.getQueryData<any>(key)
             if (!doc) return
@@ -227,9 +227,22 @@ export function useRenderBrushDrawing({
               ...doc,
               brushLayer: prevBrushLayer,
             })
+            // Re-paint the previous brush layer to sync backend
+            if (prevBrushLayer) {
+              await paintRendered(
+                prevBrushLayer,
+                {
+                  x: 0,
+                  y: 0,
+                  width: doc.width,
+                  height: doc.height,
+                },
+                { index: docIndex },
+              )
+            }
           },
-          redo: () => {
-            void paintRendered(patchBytes, patchRegion, { index: docIndex })
+          redo: async () => {
+            await paintRendered(patchBytes, patchRegion, { index: docIndex })
           },
         })
       } catch (error) {

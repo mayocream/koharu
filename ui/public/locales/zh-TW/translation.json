@@ -69,11 +69,15 @@
     "brush": "筆刷圖層",
     "inpainted": "修補影像",
     "mask": "分割遮罩",
-    "base": "原始影像"
+    "base": "原始影像",
+    "originalImage": "原始影像",
+    "on": "開"
   },
   "processing": {
     "detect": "偵測",
     "detectTooltip": "在目前頁面執行文字偵測",
+    "detectSensitive": "偵測+",
+    "detectSensitiveTooltip": "敏感偵測 — 更低閾值，擷取更多文字（音效、小字、複雜背景）",
     "ocr": "辨識",
     "ocrTooltip": "辨識已偵測區域中的文字",
     "render": "渲染"
@@ -153,6 +157,8 @@
     }
   },
   "render": {
+    "fontSizeLabel": "大小",
+    "fontSizeTooltip": "字體大小",
     "effectLabel": "文字效果",
     "alignLabel": "對齊",
     "alignLeft": "靠左對齊",
@@ -173,6 +179,7 @@
   "textBlocks": {
     "emptyPrompt": "開啟影像以查看文字區塊。",
     "title": "文字區塊（{{count}}）",
+    "selected": "已選 {{count}} 個",
     "none": "尚無文字區塊。請執行偵測以產生列表。",
     "emptySummary": "<空>",
     "ocrLabel": "OCR 文字",
