@@ -56,6 +56,10 @@ pub async fn list_docs(state: &AppState) -> Vec<Document> {
     state.read().await.documents.clone()
 }
 
+pub async fn doc_count(state: &AppState) -> usize {
+    state.read().await.documents.len()
+}
+
 pub async fn find_doc_index(state: &AppState, document_id: &str) -> Result<usize> {
     let guard = state.read().await;
     guard

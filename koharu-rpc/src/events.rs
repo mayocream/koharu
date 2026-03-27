@@ -55,11 +55,9 @@ impl EventHub {
 
     pub async fn snapshot(&self) -> anyhow::Result<SnapshotEvent> {
         let resources = get_resources(&self.inner.shared)?;
-        let documents = state_tx::list_docs(&resources.state)
-            .await
-            .iter()
-            .map(DocumentSummary::from)
-            .collect();
+        let guard = resources.state.read().await;
+        let documents = guard.documents.iter().map(DocumentSummary::from).collect();
+        drop(guard);
         let llm = resources.llm.snapshot().await;
 
         let mut jobs = self
@@ -104,11 +102,9 @@ fn spawn_state_listener(inner: Arc<Inner>) {
                     let Ok(resources) = get_resources(&inner.shared) else {
                         continue;
                     };
-                    let documents = state_tx::list_docs(&resources.state)
-                        .await
-                        .iter()
-                        .map(DocumentSummary::from)
-                        .collect();
+                    let guard = resources.state.read().await;
+                    let documents = guard.documents.iter().map(DocumentSummary::from).collect();
+                    drop(guard);
                     emit(
                         &inner,
                         ApiEvent::DocumentsChanged(DocumentsChangedEvent { documents }),
@@ -128,7 +124,21 @@ fn spawn_state_listener(inner: Arc<Inner>) {
                         }),
                     );
                 }
-                Err(broadcast::error::RecvError::Lagged(_)) => continue,
+                Err(broadcast::error::RecvError::Lagged(n)) => {
+                    tracing::warn!(
+                        "State event listener lagged by {n} events, re-emitting documents"
+                    );
+                    let Ok(resources) = get_resources(&inner.shared) else {
+                        continue;
+                    };
+                    let guard = resources.state.read().await;
+                    let documents = guard.documents.iter().map(DocumentSummary::from).collect();
+                    drop(guard);
+                    emit(
+                        &inner,
+                        ApiEvent::DocumentsChanged(DocumentsChangedEvent { documents }),
+                    );
+                }
                 Err(broadcast::error::RecvError::Closed) => break,
             }
         }
