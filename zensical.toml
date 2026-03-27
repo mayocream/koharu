@@ -37,6 +37,10 @@ nav = [
 generator = false
 
 [[project.extra.social]]
+icon = "fontawesome/brands/github"
+link = "https://github.com/mayocream"
+
+[[project.extra.social]]
 icon = "fontawesome/brands/x-twitter"
 link = "https://x.com/mayo_irl"
 

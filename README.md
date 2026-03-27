@@ -1,5 +1,7 @@
 # Koharu
 
+[Documentation](https://koharu.rs)
+
 ML-powered manga translator, written in **Rust**.
 
 Koharu introduces a new workflow for manga translation, utilizing the power of ML to automate the process. It combines the capabilities of object detection, OCR, inpainting, and LLMs to create a seamless translation experience.
