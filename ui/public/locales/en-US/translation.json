@@ -76,8 +76,6 @@
   "processing": {
     "detect": "Detect",
     "detectTooltip": "Run text detection on current page",
-    "detectSensitive": "Detect+",
-    "detectSensitiveTooltip": "Sensitive detection — lower thresholds, catches more text (SFX, small text, complex backgrounds)",
     "ocr": "OCR",
     "ocrTooltip": "Recognize text for detected regions",
     "render": "Render"
