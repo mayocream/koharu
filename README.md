@@ -6,7 +6,7 @@ ML-powered manga translator, written in **Rust**.
 
 Koharu introduces a new workflow for manga translation, utilizing the power of ML to automate the process. It combines the capabilities of object detection, OCR, inpainting, and LLMs to create a seamless translation experience.
 
-Under the hood, Koharu uses [candle](https://github.com/huggingface/candle) for high-performance inference, and uses [Tauri](https://github.com/tauri-apps/tauri) for the GUI. All components are written in Rust, ensuring safety and speed.
+Under the hood, Koharu uses [candle](https://github.com/huggingface/candle) and [llama.cpp](https://github.com/ggml-org/llama.cpp) for high-performance inference, and uses [Tauri](https://github.com/tauri-apps/tauri) for the GUI. All components are written in Rust, ensuring safety and speed.
 
 > [!NOTE]
 > Koharu runs its vision models and local LLMs **locally** on your machine by default. If you choose a remote LLM provider, Koharu sends translation text only to the provider you configured. Koharu itself does not collect user data.
@@ -66,20 +66,15 @@ koharu.exe --port 4000 --headless
 
 You can now access Koharu Web UI at `http://localhost:4000`.
 
-### File association
-
-On Windows, Koharu automatically associates `.khr` files, so you can open them by double-clicking. The `.khr` files can also be opened
-from as picture to view the thumbnails of the contained images.
-
 ## GPU acceleration
 
-CUDA and Metal are supported for GPU acceleration, significantly improving performance on supported hardware.
+CUDA, Metal and Vulkan are supported for GPU acceleration, significantly improving performance on supported hardware.
 
-### CUDA
+### CUDA (NVIDIA GPUs on Windows)
 
-Koharu is built with CUDA support, allowing it to leverage the power of NVIDIA GPUs for faster processing.
+Koharu is built with CUDA support on Windows, allowing it to leverage the power of NVIDIA GPUs for faster processing.
 
-Koharu bundles CUDA toolkit 13.1 and cuDNN 9.19, dylibs will be automatically extracted to the application data directory on first run.
+Koharu bundles CUDA toolkit 13.1, dylibs will be automatically extracted to the application data directory on first run.
 
 > [!NOTE]
 > Please ensure that your system has the latest NVIDIA drivers installed. You can download the latest drivers via [NVIDIA App](https://www.nvidia.com/en-us/software/nvidia-app/).
@@ -90,9 +85,15 @@ Koharu supports NVIDIA GPUs with compute capability 7.5 or higher.
 
 Please make sure your GPU is supported by checking the [CUDA GPU Compute Capability](https://developer.nvidia.com/cuda-gpus) and the [cuDNN Support Matrix](https://docs.nvidia.com/deeplearning/cudnn/backend/latest/reference/support-matrix.html).
 
-### Metal
+### Metal (Apple Silicon on macOS)
 
 Koharu supports Metal for GPU acceleration on macOS with Apple Silicon (M1, M2, etc.). This allows Koharu to run efficiently on a wide range of Apple devices.
+
+### Vulkan (Windows and Linux)
+
+Koharu also supports Vulkan for GPU acceleration on Windows and Linux. Vulkan is a cross-platform graphics and compute API that provides high performance and low overhead.
+
+Note that Vulkan support only applies to the OCR and LLM inference, while the detection and inpainting models still rely on CUDA or Metal. AMD and Intel GPUs can use Vulkan for acceleration, but for the best experience with all features enabled, a CUDA-compatible NVIDIA GPU or Apple Silicon device is recommended.
 
 ### CPU fallback
 
@@ -129,7 +130,7 @@ Koharu supports both local and remote LLM backends, and preselects a model based
 
 #### Local LLMs
 
-Koharu supports various quantized LLMs in GGUF format via [candle](https://github.com/huggingface/candle). These models run on your machine and are downloaded on demand when you select them in Settings. Supported models and suggested usage:
+Koharu supports various quantized LLMs in GGUF format via [llama.cpp](https://github.com/ggml-org/llama.cpp). These models run on your machine and are downloaded on demand when you select them in Settings. Supported models and suggested usage:
 
 For translating to English:
 

@@ -22,7 +22,7 @@ Converted model weights are hosted on [Hugging Face](https://huggingface.co/mayo
 
 ## Local LLMs
 
-Koharu supports local GGUF models through [candle](https://github.com/huggingface/candle). These models run on your machine and are downloaded on demand when you select them in Settings.
+Koharu supports local GGUF models through [llama.cpp](https://github.com/ggml-org/llama.cpp). These models run on your machine and are downloaded on demand when you select them in the LLM picker.
 
 ### Suggested local models for English output
 

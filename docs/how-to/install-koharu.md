@@ -32,9 +32,10 @@ Koharu supports:
 
 - CUDA on supported NVIDIA GPUs
 - Metal on Apple Silicon Macs
+- Vulkan on Windows and Linux for OCR and LLM inference
 - CPU fallback on all platforms
 
-For CUDA, Koharu bundles CUDA toolkit 13.1 and cuDNN 9.19, then extracts the required dynamic libraries into the app data directory on first run.
+For CUDA, Koharu bundles CUDA toolkit 13.1, then extracts the required dynamic libraries into the app data directory on first run.
 
 !!! note
 

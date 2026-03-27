@@ -12,7 +12,6 @@ CUDA is the main GPU acceleration path on systems with supported NVIDIA hardware
 
 - Koharu supports NVIDIA GPUs with compute capability 7.5 or higher
 - Koharu bundles CUDA toolkit 13.1
-- Koharu bundles cuDNN 9.19
 
 On first run, the required dynamic libraries are extracted to the application data directory.
 
@@ -23,6 +22,12 @@ On first run, the required dynamic libraries are extracted to the application da
 ## Metal on Apple Silicon
 
 On macOS, Koharu supports Metal acceleration for Apple Silicon devices such as M1 and M2 systems.
+
+## Vulkan on Windows and Linux
+
+Vulkan is supported on Windows and Linux for OCR and LLM inference as an alternative GPU acceleration path when CUDA or Metal are not available.
+
+AMD and Intel GPUs can use Vulkan for acceleration, but detection and inpainting models still rely on CUDA or Metal.
 
 ## CPU fallback
 

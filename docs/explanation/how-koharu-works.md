@@ -24,6 +24,7 @@ This lets one application handle both the language work and much of the visual c
 Koharu uses:
 
 - [candle](https://github.com/huggingface/candle) for high-performance inference
+- [llama.cpp](https://github.com/ggml-org/llama.cpp) for local LLM inference
 - [Tauri](https://github.com/tauri-apps/tauri) for the desktop app shell
 - Rust across the stack for performance and memory safety
 
