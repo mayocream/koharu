@@ -198,6 +198,11 @@ impl Model {
     /// Inpaint text regions in the document.
     /// Uses the current `doc.segment` mask as the inpaint source, sets `doc.inpainted`.
     pub async fn inpaint(&self, doc: &mut Document) -> Result<()> {
+        if doc.text_blocks.is_empty() {
+            tracing::debug!("skipping inpaint: no text blocks detected");
+            return Ok(());
+        }
+
         let mask = doc
             .segment
             .as_ref()
