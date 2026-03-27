@@ -1,0 +1,148 @@
+[project]
+site_name = "koharu"
+site_description = "Koharu 是一款用 Rust 编写的本地优先漫画翻译工具。"
+site_author = "Mayo"
+site_url = "https://koharu.rs/zh-CN/"
+repo_url = "https://github.com/mayocream/koharu"
+repo_name = "mayocream/koharu"
+edit_uri = "edit/main/docs/zh-CN/"
+docs_dir = "zh-CN"
+site_dir = "site/zh-CN"
+nav = [
+  {"概览" = "index.md"},
+  {"教程" = [
+    "tutorials/index.md",
+    "tutorials/translate-your-first-page.md",
+  ]},
+  {"操作指南" = [
+    "how-to/index.md",
+    "how-to/install-koharu.md",
+    "how-to/contributing.md",
+    "how-to/run-gui-headless-and-mcp.md",
+    "how-to/configure-mcp-clients.md",
+    "how-to/use-openai-compatible-api.md",
+    "how-to/export-and-manage-projects.md",
+    "how-to/build-from-source.md",
+    "how-to/troubleshooting.md",
+  ]},
+  {"原理说明" = [
+    "explanation/index.md",
+    "explanation/how-koharu-works.md",
+    "explanation/technical-deep-dive.md",
+    "explanation/text-rendering-and-vertical-cjk-layout.md",
+    "explanation/acceleration-and-runtime.md",
+    "explanation/models-and-providers.md",
+  ]},
+  {"参考" = [
+    "reference/index.md",
+    "reference/cli.md",
+    "reference/http-api.md",
+    "reference/mcp-tools.md",
+    "reference/settings.md",
+    "reference/keyboard-shortcuts.md",
+  ]},
+]
+
+[project.extra]
+generator = false
+og_image = "assets/koharu-screenshot-zh-CN.png"
+og_image_alt = "Koharu 中文界面截图"
+twitter_card = "summary_large_image"
+
+[[project.extra.alternate]]
+name = "English"
+link = "/"
+lang = "en"
+
+[[project.extra.alternate]]
+name = "简体中文"
+link = "/zh-CN/"
+lang = "zh-CN"
+
+[[project.extra.social]]
+icon = "fontawesome/brands/github"
+link = "https://github.com/mayocream"
+
+[[project.extra.social]]
+icon = "fontawesome/brands/x-twitter"
+link = "https://x.com/mayo_irl"
+
+[[project.extra.social]]
+icon = "fontawesome/brands/discord"
+link = "https://discord.gg/mHvHkxGnUY"
+
+[project.theme]
+language = "zh"
+custom_dir = "overrides"
+logo = "assets/Koharu_Halo.png"
+favicon = "assets/Koharu_Halo.png"
+font.text = "Noto Sans SC"
+font.code = "Noto Sans Mono"
+features = [
+  "navigation.sections",
+  "navigation.indexes",
+  "navigation.instant",
+  "navigation.tracking",
+  "navigation.tabs",
+  "navigation.tabs.sticky",
+  "navigation.expand",
+  "navigation.footer",
+  "toc.follow",
+  "content.code.copy",
+  "content.action.edit",
+  "content.action.view",
+  "content.tabs.link",
+]
+
+[project.theme.icon]
+repo = "fontawesome/brands/github"
+
+[project.theme.icon.admonition]
+question = "fontawesome/solid/paper-plane"
+user = "lucide/user-round"
+
+[[project.theme.palette]]
+media = "(prefers-color-scheme)"
+primary = "pink"
+accent = "teal"
+toggle.icon = "lucide/sun-moon"
+toggle.name = "切换到浅色模式"
+
+[[project.theme.palette]]
+media = "(prefers-color-scheme: light)"
+primary = "pink"
+accent = "teal"
+scheme = "default"
+toggle.icon = "lucide/sun"
+toggle.name = "切换到深色模式"
+
+[[project.theme.palette]]
+media = "(prefers-color-scheme: dark)"
+primary = "pink"
+accent = "teal"
+scheme = "slate"
+toggle.icon = "lucide/moon"
+toggle.name = "切换到跟随系统"
+
+[project.markdown_extensions.admonition]
+[project.markdown_extensions.attr_list]
+[project.markdown_extensions.md_in_html]
+[project.markdown_extensions.tables]
+
+[project.markdown_extensions.pymdownx.emoji]
+emoji_index = "zensical.extensions.emoji.twemoji"
+emoji_generator = "zensical.extensions.emoji.to_svg"
+
+[project.markdown_extensions.pymdownx.tabbed]
+alternate_style = true
+
+[project.markdown_extensions.pymdownx.tasklist]
+custom_checkbox = true
+
+[project.markdown_extensions.toc]
+permalink = true
+
+[project.markdown_extensions.pymdownx.superfences]
+custom_fences = [
+  { name = "mermaid", class = "mermaid", format = "pymdownx.superfences.fence_code_format" },
+]

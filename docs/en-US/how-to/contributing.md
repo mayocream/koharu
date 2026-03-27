@@ -82,7 +82,8 @@ bun run format
 For docs validation, use:
 
 ```bash
-zensical build -c
+zensical build -f docs/zensical.toml -c
+zensical build -f docs/zensical.zh-CN.toml
 ```
 
 ## What to run before opening a PR
@@ -107,7 +108,8 @@ If you changed the UI or interaction flow:
 
 If you changed docs:
 
-- `zensical build -c`
+- `zensical build -f docs/zensical.toml -c`
+- `zensical build -f docs/zensical.zh-CN.toml`
 
 You do not always need to run every command in this list for every PR, but you should run enough to cover the code paths you touched.
 
@@ -131,14 +133,14 @@ and waits for the local API to come up before running the browser tests.
 
 ## Docs changes
 
-Docs live in `docs/` and are built by Zensical.
+Docs live under `docs/en-US/` and `docs/zh-CN/`, with `docs/zensical.toml` for the default site and `docs/zensical.zh-CN.toml` for the Chinese build.
 
 When updating docs:
 
 - keep instructions aligned with the current implementation
 - prefer concrete commands and real paths over generic advice
-- update navigation in `zensical.toml` if you add a new page
-- build the docs locally with `zensical build -c`
+- update navigation in `docs/zensical.toml` or `docs/zensical.zh-CN.toml` if you add a new page
+- build the docs locally with `zensical build -f docs/zensical.toml -c` followed by `zensical build -f docs/zensical.zh-CN.toml`
 
 ## Pull request expectations
 

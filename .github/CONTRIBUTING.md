@@ -4,7 +4,7 @@ Thanks for contributing to Koharu.
 
 For the full contributor guide, including local setup, validation commands, and docs workflow, see:
 
-- [`docs/how-to/contributing.md`](../docs/how-to/contributing.md)
+- [`docs/en-US/how-to/contributing.md`](../docs/en-US/how-to/contributing.md)
 
 In short, contributors should:
 
@@ -23,7 +23,8 @@ bun cargo clippy -- -D warnings
 bun cargo test --workspace --tests
 bun run format
 bun run test:e2e
-zensical build -c
+zensical build -f docs/zensical.toml -c
+zensical build -f docs/zensical.zh-CN.toml
 ```
 
 ## AI-Generated PRs
