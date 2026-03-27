@@ -28,6 +28,7 @@ nav = [
     "explanation/index.md",
     "explanation/how-koharu-works.md",
     "explanation/technical-deep-dive.md",
+    "explanation/text-rendering-and-vertical-cjk-layout.md",
     "explanation/acceleration-and-runtime.md",
     "explanation/models-and-providers.md",
   ]},

@@ -92,4 +92,4 @@ If you configure a remote LLM provider, Koharu sends only the text selected for 
 
 ## Want the deep technical version?
 
-See [Technical Deep Dive](technical-deep-dive.md) for model types, segmentation mask theory, FFT-based inpainting, and background references to Wikipedia diagrams plus official model cards.
+See [Technical Deep Dive](technical-deep-dive.md) for model types, segmentation mask theory, FFT-based inpainting, and background references to Wikipedia diagrams plus official model cards. See [Text Rendering and Vertical CJK Layout](text-rendering-and-vertical-cjk-layout.md) for the renderer internals, vertical writing-mode behavior, and current layout limits.
