@@ -4,7 +4,7 @@ Thanks for contributing to Koharu.
 
 For the full contributor guide, including local setup, validation commands, and docs workflow, see:
 
-- [`docs/en-US/how-to/contributing.md`](../docs/en-US/how-to/contributing.md)
+- [Contributing](https://koharu.rs/how-to/contributing/)
 
 In short, contributors should:
 
