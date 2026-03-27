@@ -543,6 +543,10 @@ impl Model {
             .and_then(Language::parse)
             .unwrap_or(Language::English);
         let source = doc.get_source()?;
+        if source.is_empty() {
+            tracing::debug!("skipping translate: no source text");
+            return Ok(());
+        }
         let mut guard = self.state.write().await;
         let translation = match &mut *guard {
             State::Ready(llm) => {
