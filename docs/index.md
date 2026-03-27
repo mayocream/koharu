@@ -1,5 +1,7 @@
 ---
 title: Overview
+social_title: Koharu
+description: Koharu is a local-first manga translator built in Rust with OCR, inpainting, local and remote LLM support, a Web UI, and MCP automation.
 hide:
   - navigation
   - toc

@@ -43,6 +43,9 @@ nav = [
 
 [project.extra]
 generator = false
+og_image = "assets/koharu-screenshot-en.png"
+og_image_alt = "Koharu manga translator interface"
+twitter_card = "summary_large_image"
 
 [[project.extra.social]]
 icon = "fontawesome/brands/github"
@@ -58,6 +61,7 @@ link = "https://discord.gg/mHvHkxGnUY"
 
 [project.theme]
 language = "en"
+custom_dir = "docs/overrides"
 logo = "assets/Koharu_Halo.png"
 favicon = "assets/Koharu_Halo.png"
 font.text = "Nunito"

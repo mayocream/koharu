@@ -1,0 +1,68 @@
+{% extends "base.html" %}
+
+{% block extrahead %}
+  {{ super() }}
+  {% set favicon_href = config.theme.favicon | d("assets/images/favicon.png") | url %}
+  {% if page.meta and page.meta.social_title %}
+    {% set social_title = page.meta.social_title %}
+  {% elif page.is_homepage %}
+    {% set social_title = config.site_name %}
+  {% elif page.meta and page.meta.title %}
+    {% set social_title = page.meta.title ~ " - " ~ config.site_name %}
+  {% elif page.title %}
+    {% set social_title = page.title | striptags ~ " - " ~ config.site_name %}
+  {% else %}
+    {% set social_title = config.site_name %}
+  {% endif %}
+
+  {% if page.meta and page.meta.social_description %}
+    {% set social_description = page.meta.social_description %}
+  {% elif page.meta and page.meta.description %}
+    {% set social_description = page.meta.description %}
+  {% else %}
+    {% set social_description = config.site_description %}
+  {% endif %}
+
+  {% if page.meta and page.meta.social_image %}
+    {% set social_image = page.meta.social_image %}
+  {% elif page.meta and page.meta.image %}
+    {% set social_image = page.meta.image %}
+  {% else %}
+    {% set social_image = config.extra.og_image %}
+  {% endif %}
+
+  {% if social_image %}
+    {% if "://" in social_image %}
+      {% set social_image_url = social_image %}
+    {% else %}
+      {% set social_image_url = config.site_url ~ social_image %}
+    {% endif %}
+  {% endif %}
+
+  <meta property="og:type" content="website">
+  <meta property="og:site_name" content="{{ config.site_name }}">
+  <meta property="og:title" content="{{ social_title }}">
+  <meta name="twitter:card" content="{{ config.extra.twitter_card | d('summary_large_image', true) }}">
+  <meta name="twitter:title" content="{{ social_title }}">
+  <link rel="shortcut icon" href="{{ favicon_href }}">
+  <link rel="apple-touch-icon" href="{{ favicon_href }}">
+
+  {% if social_description %}
+    <meta property="og:description" content="{{ social_description }}">
+    <meta name="twitter:description" content="{{ social_description }}">
+  {% endif %}
+
+  {% if page.canonical_url %}
+    <meta property="og:url" content="{{ page.canonical_url }}">
+    <meta name="twitter:url" content="{{ page.canonical_url }}">
+  {% endif %}
+
+  {% if social_image_url %}
+    <meta property="og:image" content="{{ social_image_url }}">
+    <meta name="twitter:image" content="{{ social_image_url }}">
+    {% if config.extra.og_image_alt %}
+      <meta property="og:image:alt" content="{{ config.extra.og_image_alt }}">
+      <meta name="twitter:image:alt" content="{{ config.extra.og_image_alt }}">
+    {% endif %}
+  {% endif %}
+{% endblock %}
