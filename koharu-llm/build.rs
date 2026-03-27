@@ -4,7 +4,6 @@ use std::io::{self, Write};
 use std::path::{Path, PathBuf};
 
 use anyhow::{Context, Result, bail};
-use bindgen::callbacks::ParseCallbacks;
 use flate2::read::GzDecoder;
 use quote::{format_ident, quote};
 use reqwest::blocking::Client;
@@ -170,6 +169,13 @@ fn ensure_source_tree(out_dir: &Path, llama_cpp_tag: &str) -> Result<PathBuf> {
     Ok(source_root)
 }
 
+fn write_if_changed(path: &Path, content: &[u8]) -> Result<()> {
+    if path.exists() && fs::read(path).ok().as_deref() == Some(content) {
+        return Ok(());
+    }
+    fs::write(path, content).with_context(|| format!("failed to write {}", path.display()))
+}
+
 fn write_wrapper_header(out_dir: &Path) -> Result<PathBuf> {
     let header_path = out_dir.join("koharu_llm_bindings.h");
     let header = r#"
@@ -179,7 +185,7 @@ fn write_wrapper_header(out_dir: &Path) -> Result<PathBuf> {
 #include "mtmd.h"
 #include "mtmd-helper.h"
 "#;
-    fs::write(&header_path, header).context("failed to write bindings wrapper header")?;
+    write_if_changed(&header_path, header.as_bytes())?;
     Ok(header_path)
 }
 
@@ -192,14 +198,12 @@ fn include_dirs(source_root: &Path) -> Vec<PathBuf> {
 }
 
 fn base_builder(header_path: &Path, include_dirs: &[PathBuf]) -> bindgen::Builder {
-    let callbacks: Box<dyn ParseCallbacks> = Box::new(bindgen::CargoCallbacks::new());
     include_dirs.iter().fold(
         bindgen::Builder::default()
             .header(header_path.display().to_string())
             .layout_tests(false)
             .prepend_enum_name(false)
-            .wrap_unsafe_ops(true)
-            .parse_callbacks(callbacks),
+            .wrap_unsafe_ops(true),
         |builder, include_dir| builder.clang_arg(format!("-I{}", include_dir.display())),
     )
 }
