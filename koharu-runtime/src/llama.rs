@@ -57,8 +57,8 @@ impl LlamaRuntime {
     fn assets(self) -> &'static [&'static str] {
         match self {
             Self::WindowsCuda13X64 => &[
-                "llama-b8233-bin-win-cuda-13.1-x64.zip",
-                "cudart-llama-bin-win-cuda-13.1-x64.zip",
+                "llama-b8233-bin-win-cuda-13.0-x64.zip",
+                "cudart-llama-bin-win-cuda-13.0-x64.zip",
             ],
             Self::WindowsVulkanX64 => &["llama-b8233-bin-win-vulkan-x64.zip"],
             Self::LinuxVulkanX64 => &["llama-b8233-bin-ubuntu-vulkan-x64.tar.gz"],

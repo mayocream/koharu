@@ -1,0 +1,10 @@
+# Dar permisos de ejecución al script
+chmod +x scripts/setup-distrobox.sh
+# Ejecutar la configuración del entorno
+./scripts/setup-distrobox.sh
+
+#
+# distrobox enter koharu-build -- bash -c "source ~/.cargo/env && bun install && bun run build"
+# distrobox enter koharu-build -- bash -c "export CUDA_HOME=/usr/local/cuda-13.0; export NVCC_CCBIN=/usr/bin/gcc; export PATH=\$CUDA_HOME/bin:\$HOME/.cargo/bin:\$HOME/.bun/bin:\$PATH; bun install && bun run build"
+
+distrobox enter koharu-build -- bash -l -c "bun install && bun run build"

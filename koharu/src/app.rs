@@ -143,7 +143,7 @@ async fn build_resources(cpu: bool, headless: bool) -> Result<AppResources> {
 
     if !cpu && cuda_is_available() {
         match koharu_runtime::cuda_driver_version() {
-            Ok(version) if version.supports_cuda_13_1() => {
+            Ok(version) if version.supports_cuda_13_0() => {
                 tracing::info!("NVIDIA driver reports CUDA {version} support");
             }
             Ok(version) => {
@@ -151,7 +151,7 @@ async fn build_resources(cpu: bool, headless: bool) -> Result<AppResources> {
                     headless,
                     "NVIDIA Driver Update Recommended",
                     &format!(
-                        "Your NVIDIA driver only supports CUDA {version}. Koharu will fall back to CPU. Please update your NVIDIA driver to a version that supports CUDA 13.1 or newer to enable GPU acceleration."
+                        "Your NVIDIA driver only supports CUDA {version}. Koharu will fall back to CPU. Please update your NVIDIA driver to a version that supports CUDA 13.0 or newer to enable GPU acceleration."
                     ),
                 );
                 cpu = true;
@@ -161,7 +161,7 @@ async fn build_resources(cpu: bool, headless: bool) -> Result<AppResources> {
                     headless,
                     "NVIDIA Driver Check Failed",
                     &format!(
-                        "Koharu could not verify NVIDIA driver support for CUDA 13.1: {err:#}. Koharu will fall back to CPU. Please update your NVIDIA driver to a version that supports CUDA 13.1 or newer to enable GPU acceleration."
+                        "Koharu could not verify NVIDIA driver support for CUDA 13.0: {err:#}. Koharu will fall back to CPU. Please update your NVIDIA driver to a version that supports CUDA 13.0 or newer to enable GPU acceleration."
                     ),
                 );
                 cpu = true;

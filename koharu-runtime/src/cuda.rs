@@ -9,7 +9,7 @@ use crate::archive;
 use crate::loader::{add_runtime_search_path, preload_library};
 
 const CUDA_SUCCESS: i32 = 0;
-const CUDA_13_1_DRIVER_VERSION: i32 = 13010;
+const CUDA_13_0_DRIVER_VERSION: i32 = 13000;
 
 type CuInit = unsafe extern "C" fn(flags: u32) -> i32;
 type CuDriverGetVersion = unsafe extern "C" fn(driver_version: *mut i32) -> i32;
@@ -38,8 +38,8 @@ impl CudaDriverVersion {
         (self.raw % 1000) / 10
     }
 
-    pub const fn supports_cuda_13_1(self) -> bool {
-        self.raw >= CUDA_13_1_DRIVER_VERSION
+    pub const fn supports_cuda_13_0(self) -> bool {
+        self.raw >= CUDA_13_0_DRIVER_VERSION
     }
 }
 
@@ -103,12 +103,12 @@ struct CudaWheel {
 
 const WHEELS: &[CudaWheel] = &[
     CudaWheel {
-        name: "nvidia-cuda-runtime/13.1.80",
+        name: "nvidia-cuda-runtime/13.0.96",
         windows_dylibs: &["cudart64_13.dll"],
         linux_dylibs: &["libcudart.so.13"],
     },
     CudaWheel {
-        name: "nvidia-cublas/13.2.1.1",
+        name: "nvidia-cublas/13.0.0.19",
         windows_dylibs: &["cublasLt64_13.dll", "cublas64_13.dll"],
         linux_dylibs: &["libcublasLt.so.13", "libcublas.so.13"],
     },
@@ -267,17 +267,17 @@ mod tests {
 
     #[test]
     fn parses_major_minor_from_driver_version() {
-        let version = CudaDriverVersion::from_raw(13010);
+        let version = CudaDriverVersion::from_raw(13000);
         assert_eq!(version.major(), 13);
-        assert_eq!(version.minor(), 1);
-        assert_eq!(version.to_string(), "13.1");
+        assert_eq!(version.minor(), 0);
+        assert_eq!(version.to_string(), "13.0");
     }
 
     #[test]
-    fn checks_cuda_13_1_threshold() {
-        assert!(CudaDriverVersion::from_raw(13010).supports_cuda_13_1());
-        assert!(CudaDriverVersion::from_raw(13020).supports_cuda_13_1());
-        assert!(!CudaDriverVersion::from_raw(13000).supports_cuda_13_1());
-        assert!(!CudaDriverVersion::from_raw(12080).supports_cuda_13_1());
+    fn checks_cuda_13_0_threshold() {
+        assert!(CudaDriverVersion::from_raw(13000).supports_cuda_13_0());
+        assert!(CudaDriverVersion::from_raw(13010).supports_cuda_13_0());
+        assert!(!CudaDriverVersion::from_raw(12090).supports_cuda_13_0());
+        assert!(!CudaDriverVersion::from_raw(12080).supports_cuda_13_0());
     }
 }
