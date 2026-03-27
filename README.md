@@ -13,7 +13,7 @@ Under the hood, Koharu uses [candle](https://github.com/huggingface/candle) and 
 
 ---
 
-![screenshot](docs/assets/koharu-screenshot-en.png)
+![screenshot](docs/en-US/assets/koharu-screenshot-en.png)
 
 > [!NOTE]
 > For help and support, join the [Discord server](https://discord.gg/mHvHkxGnUY).
