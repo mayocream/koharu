@@ -139,12 +139,12 @@ export function useMaskDrawing({
     if (needsResize) {
       canvas.width = currentDocument.width
       canvas.height = currentDocument.height
-      ctx?.clearRect(0, 0, canvas.width, canvas.height)
-      ctx?.save()
-      ctx && (ctx.fillStyle = '#000')
-      ctx?.fillRect(0, 0, canvas.width, canvas.height)
-      ctx?.restore()
     }
+
+    // Always clear the canvas when the document or segment changes so that
+    // a stale mask from the previous page never bleeds into the current one
+    // (e.g. when pages share the same dimensions and the new page has no segment).
+    ctx?.clearRect(0, 0, canvas.width, canvas.height)
 
     let cancelled = false
     if (currentDocument.segment) {
@@ -176,6 +176,8 @@ export function useMaskDrawing({
 
     return () => {
       cancelled = true
+      // Clear the canvas so stale masks don't linger during page transitions.
+      ctx?.clearRect(0, 0, canvas.width, canvas.height)
       drawingRef.current = false
       lastPointRef.current = null
       boundsRef.current = null
