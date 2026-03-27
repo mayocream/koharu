@@ -83,6 +83,7 @@ bun run format
 
 ```bash
 zensical build -f docs/zensical.toml -c
+zensical build -f docs/zensical.ja-JP.toml
 zensical build -f docs/zensical.zh-CN.toml
 ```
 
@@ -109,6 +110,7 @@ zensical build -f docs/zensical.zh-CN.toml
 如果你改了文档：
 
 - `zensical build -f docs/zensical.toml -c`
+- `zensical build -f docs/zensical.ja-JP.toml`
 - `zensical build -f docs/zensical.zh-CN.toml`
 
 不一定每个 PR 都要跑完整套命令，但至少应覆盖你实际改动到的代码路径。
@@ -133,14 +135,14 @@ bun run dev -- --headless
 
 ## 文档改动
 
-文档内容位于 `docs/en-US/` 和 `docs/zh-CN/`。默认站点使用 `docs/zensical.toml`，简体中文站点使用 `docs/zensical.zh-CN.toml`。
+文档内容位于 `docs/en-US/`、`docs/ja-JP/` 和 `docs/zh-CN/`。默认站点使用 `docs/zensical.toml`，日文站点使用 `docs/zensical.ja-JP.toml`，简体中文站点使用 `docs/zensical.zh-CN.toml`。
 
 更新文档时请注意：
 
 - 保证说明和当前实现一致
 - 优先给出具体命令与真实路径，而不是泛泛建议
-- 如果新增页面，记得同步更新 `docs/zensical.toml` 或 `docs/zensical.zh-CN.toml`
-- 本地验证时先运行 `zensical build -f docs/zensical.toml -c`，再运行 `zensical build -f docs/zensical.zh-CN.toml`
+- 如果新增页面，记得同步更新 `docs/zensical.toml`、`docs/zensical.ja-JP.toml` 或 `docs/zensical.zh-CN.toml`
+- 本地验证时先运行 `zensical build -f docs/zensical.toml -c`，再运行 `zensical build -f docs/zensical.ja-JP.toml`，最后运行 `zensical build -f docs/zensical.zh-CN.toml`
 
 ## Pull Request 期望
 

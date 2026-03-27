@@ -24,6 +24,7 @@ bun cargo test --workspace --tests
 bun run format
 bun run test:e2e
 zensical build -f docs/zensical.toml -c
+zensical build -f docs/zensical.ja-JP.toml
 zensical build -f docs/zensical.zh-CN.toml
 ```
 

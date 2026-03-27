@@ -1,20 +1,20 @@
 [project]
 site_name = "koharu"
-site_description = "Koharu 是一款用 Rust 编写的本地优先漫画翻译工具。"
+site_description = "Koharu は Rust で書かれたローカルファーストのマンガ翻訳ツールです。"
 site_author = "Mayo"
-site_url = "https://koharu.rs/zh-CN/"
+site_url = "https://koharu.rs/ja-JP/"
 repo_url = "https://github.com/mayocream/koharu"
 repo_name = "mayocream/koharu"
-edit_uri = "edit/main/docs/zh-CN/"
-docs_dir = "zh-CN"
-site_dir = "site/zh-CN"
+edit_uri = "edit/main/docs/ja-JP/"
+docs_dir = "ja-JP"
+site_dir = "site/ja-JP"
 nav = [
-  {"概览" = "index.md"},
-  {"教程" = [
+  {"概要" = "index.md"},
+  {"チュートリアル" = [
     "tutorials/index.md",
     "tutorials/translate-your-first-page.md",
   ]},
-  {"操作指南" = [
+  {"ハウツー" = [
     "how-to/index.md",
     "how-to/install-koharu.md",
     "how-to/contributing.md",
@@ -25,7 +25,7 @@ nav = [
     "how-to/build-from-source.md",
     "how-to/troubleshooting.md",
   ]},
-  {"原理说明" = [
+  {"解説" = [
     "explanation/index.md",
     "explanation/how-koharu-works.md",
     "explanation/technical-deep-dive.md",
@@ -33,7 +33,7 @@ nav = [
     "explanation/acceleration-and-runtime.md",
     "explanation/models-and-providers.md",
   ]},
-  {"参考" = [
+  {"リファレンス" = [
     "reference/index.md",
     "reference/cli.md",
     "reference/http-api.md",
@@ -45,8 +45,8 @@ nav = [
 
 [project.extra]
 generator = false
-og_image = "assets/koharu-screenshot-zh-CN.png"
-og_image_alt = "Koharu 中文界面截图"
+og_image = "assets/koharu-screenshot-ja.png"
+og_image_alt = "Koharu の日本語インターフェース"
 twitter_card = "summary_large_image"
 
 [[project.extra.alternate]]
@@ -77,11 +77,11 @@ icon = "fontawesome/brands/discord"
 link = "https://discord.gg/mHvHkxGnUY"
 
 [project.theme]
-language = "zh"
+language = "ja"
 custom_dir = "overrides"
 logo = "assets/Koharu_Halo.png"
 favicon = "assets/Koharu_Halo.png"
-font.text = "Noto Sans SC"
+font.text = "Noto Sans JP"
 font.code = "Noto Sans Mono"
 features = [
   "navigation.sections",
@@ -111,7 +111,7 @@ media = "(prefers-color-scheme)"
 primary = "pink"
 accent = "teal"
 toggle.icon = "lucide/sun-moon"
-toggle.name = "切换到浅色模式"
+toggle.name = "ライトモードに切り替え"
 
 [[project.theme.palette]]
 media = "(prefers-color-scheme: light)"
@@ -119,7 +119,7 @@ primary = "pink"
 accent = "teal"
 scheme = "default"
 toggle.icon = "lucide/sun"
-toggle.name = "切换到深色模式"
+toggle.name = "ダークモードに切り替え"
 
 [[project.theme.palette]]
 media = "(prefers-color-scheme: dark)"
@@ -127,7 +127,7 @@ primary = "pink"
 accent = "teal"
 scheme = "slate"
 toggle.icon = "lucide/moon"
-toggle.name = "切换到跟随系统"
+toggle.name = "システム設定に合わせる"
 
 [project.markdown_extensions.admonition]
 [project.markdown_extensions.attr_list]
