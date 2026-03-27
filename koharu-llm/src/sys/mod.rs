@@ -102,16 +102,16 @@ pub fn initialize() -> Result<()> {
 fn load_libraries(dir: &Path) -> Result<LoadedLibraries> {
     let [ggml_base_name, ggml_name, llama_name, mtmd_name] = LIB_NAMES;
 
-    let ggml_base = load_and_bind(ggml_base_name, |lib| unsafe {
+    let ggml_base = load_and_bind(dir.join(ggml_base_name), |lib| unsafe {
         generated::ggml_base::ggml_base::from_library(lib)
     })?;
-    let ggml = load_and_bind(ggml_name, |lib| unsafe {
+    let ggml = load_and_bind(dir.join(ggml_name), |lib| unsafe {
         generated::ggml::ggml::from_library(lib)
     })?;
-    let llama = load_and_bind(llama_name, |lib| unsafe {
+    let llama = load_and_bind(dir.join(llama_name), |lib| unsafe {
         generated::llama::llama::from_library(lib)
     })?;
-    let mtmd = load_and_bind(mtmd_name, |lib| unsafe {
+    let mtmd = load_and_bind(dir.join(mtmd_name), |lib| unsafe {
         generated::mtmd::mtmd::from_library(lib)
     })?;
 
@@ -125,10 +125,14 @@ fn load_libraries(dir: &Path) -> Result<LoadedLibraries> {
 }
 
 fn load_and_bind<T>(
-    name: &str,
+    path: PathBuf,
     bind: impl FnOnce(libloading::Library) -> std::result::Result<T, libloading::Error>,
 ) -> Result<T> {
-    let library = koharu_runtime::load_library_by_name(name)
+    let name = path
+        .file_name()
+        .and_then(|n| n.to_str())
+        .context("invalid library path")?;
+    let library = koharu_runtime::load_library(path.as_os_str())
         .with_context(|| format!("failed to load `{name}`"))?;
     bind(library).with_context(|| format!("failed to bind `{name}`"))
 }

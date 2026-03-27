@@ -45,20 +45,24 @@ pub async fn model(repo: &str, filename: &str) -> anyhow::Result<PathBuf> {
 
 #[tracing::instrument(level = "info")]
 pub async fn bytes(url: &str) -> anyhow::Result<Vec<u8>> {
-    let head = range::head(url)
-        .await
-        .context(format!("cannot download {url}"))?;
-    let total_bytes = head.content_length;
+    let head = range::head(url).await.ok();
+    let total_bytes = head.and_then(|h| h.content_length);
+    let supports_ranges = head.map(|h| h.supports_ranges).unwrap_or(false);
 
-    anyhow::ensure!(total_bytes > 0, "resource reports zero Content-Length");
+    if supports_ranges && total_bytes.is_some_and(|len| len > 0) {
+        let total_bytes = total_bytes.unwrap();
+        match bytes_via_range(url, total_bytes).await {
+            Ok(bytes) => return Ok(bytes),
+            Err(e) => {
+                tracing::warn!(%url, %e, "range download failed, falling back to stream");
+            }
+        }
+    }
 
-    let supports_ranges = head.supports_ranges;
+    bytes_via_stream(url, total_bytes).await
+}
 
-    anyhow::ensure!(
-        supports_ranges,
-        "remote server does not advertise byte ranges"
-    );
-
+async fn bytes_via_range(url: &str, total_bytes: u64) -> anyhow::Result<Vec<u8>> {
     let filename = url.split('/').next_back().unwrap_or(url).to_string();
     let pb = Arc::new(progress_bar(&filename));
 
@@ -152,6 +156,59 @@ pub async fn bytes(url: &str) -> anyhow::Result<Vec<u8>> {
         filename,
         downloaded: total_bytes,
         total: Some(total_bytes),
+        status: DownloadStatus::Completed,
+    });
+
+    Ok(buffer)
+}
+
+async fn bytes_via_stream(url: &str, total_bytes: Option<u64>) -> anyhow::Result<Vec<u8>> {
+    let filename = url.split('/').next_back().unwrap_or(url).to_string();
+    let pb = Arc::new(progress_bar(&filename));
+    if let Some(total) = total_bytes {
+        pb.set_length(total);
+    }
+
+    emit(DownloadProgress {
+        filename: filename.clone(),
+        downloaded: 0,
+        total: total_bytes,
+        status: DownloadStatus::Started,
+    });
+
+    tracing::debug!(%url, ?total_bytes, "downloading resource via HTTP stream");
+
+    let response = crate::http::http_client()
+        .get(url)
+        .send()
+        .await?
+        .error_for_status()?;
+
+    let mut stream = response.bytes_stream();
+    let mut buffer = Vec::new();
+    if let Some(total) = total_bytes {
+        buffer.reserve(total as usize);
+    }
+
+    let mut downloaded = 0u64;
+    while let Some(chunk) = stream.try_next().await? {
+        downloaded += chunk.len() as u64;
+        buffer.extend_from_slice(&chunk);
+        pb.inc(chunk.len() as u64);
+        emit(DownloadProgress {
+            filename: filename.clone(),
+            downloaded,
+            total: total_bytes,
+            status: DownloadStatus::Downloading,
+        });
+    }
+
+    pb.finish_and_clear();
+
+    emit(DownloadProgress {
+        filename,
+        downloaded,
+        total: Some(downloaded),
         status: DownloadStatus::Completed,
     });
 

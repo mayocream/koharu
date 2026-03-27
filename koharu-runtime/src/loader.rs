@@ -62,7 +62,7 @@ pub fn load_library_by_name(name: &str) -> Result<Library> {
     load_library(OsStr::new(name)).with_context(|| format!("failed to load `{name}`"))
 }
 
-fn load_library(target: &OsStr) -> Result<Library> {
+pub fn load_library(target: &OsStr) -> Result<Library> {
     #[cfg(target_os = "windows")]
     {
         let library = unsafe { Library::new(target) }?;

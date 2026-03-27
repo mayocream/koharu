@@ -2,7 +2,7 @@ use crate::http::http_client;
 
 #[derive(Debug, Clone, Copy)]
 pub struct HeadInfo {
-    pub content_length: u64,
+    pub content_length: Option<u64>,
     pub supports_ranges: bool,
 }
 
@@ -13,8 +13,7 @@ pub async fn head(url: &str) -> anyhow::Result<HeadInfo> {
         .headers()
         .get(reqwest::header::CONTENT_LENGTH)
         .and_then(|v| v.to_str().ok())
-        .and_then(|s| s.parse::<u64>().ok())
-        .ok_or_else(|| anyhow::anyhow!("missing Content-Length header"))?;
+        .and_then(|s| s.parse::<u64>().ok());
 
     let supports_ranges = response
         .headers()
@@ -30,7 +29,10 @@ pub async fn head(url: &str) -> anyhow::Result<HeadInfo> {
 }
 
 pub async fn head_content_length(url: &str) -> anyhow::Result<u64> {
-    Ok(head(url).await?.content_length)
+    head(url)
+        .await?
+        .content_length
+        .ok_or_else(|| anyhow::anyhow!("missing Content-Length header"))
 }
 
 pub async fn get_range(url: &str, start: u64, end_inclusive: u64) -> anyhow::Result<Vec<u8>> {

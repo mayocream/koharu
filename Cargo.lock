@@ -4138,10 +4138,12 @@ dependencies = [
  "flate2",
  "koharu-http",
  "libloading 0.8.9",
+ "num_cpus",
  "serde_json",
  "tar",
  "tempfile",
  "tokio",
+ "walkdir",
  "windows-sys 0.61.2",
  "zip 8.4.0",
 ]

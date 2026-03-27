@@ -160,6 +160,15 @@ pub(crate) fn extract_tar_gz(archive_path: &Path, output_dir: &Path) -> Result<(
     materialize_aliases(&aliases)
 }
 
+/// Extract all files from a tar.gz archive.
+pub(crate) fn extract_tar_gz_all(archive_path: &Path, output_dir: &Path) -> Result<()> {
+    let file = fs::File::open(archive_path)
+        .with_context(|| format!("failed to open `{}`", archive_path.display()))?;
+    let mut archive = tar::Archive::new(GzDecoder::new(file));
+    archive.unpack(output_dir)
+        .with_context(|| format!("failed to unpack `{}`", archive_path.display()))
+}
+
 fn looks_like_runtime_library(file_name: &str) -> bool {
     RUNTIME_LIB_EXTENSIONS
         .iter()

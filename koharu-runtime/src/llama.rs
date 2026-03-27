@@ -1,9 +1,12 @@
+use std::fs;
 use std::path::{Path, PathBuf};
+use walkdir::WalkDir;
 
 use anyhow::{Result, bail};
 
 use crate::archive;
 use crate::loader::{add_runtime_search_path, preload_library};
+use tokio::process::Command;
 
 const LLAMA_CPP_TAG: &str = env!("LLAMA_CPP_TAG");
 const RELEASE_BASE_URL: &str = "https://github.com/ggml-org/llama.cpp/releases/download";
@@ -13,6 +16,7 @@ const RELEASE_BASE_URL: &str = "https://github.com/ggml-org/llama.cpp/releases/d
 enum LlamaRuntime {
     WindowsCuda13X64,
     WindowsVulkanX64,
+    LinuxCudaX64,
     LinuxVulkanX64,
     MacosArm64,
 }
@@ -28,7 +32,13 @@ impl LlamaRuntime {
         }
 
         #[cfg(all(target_os = "linux", target_arch = "x86_64"))]
-        return Ok(Self::LinuxVulkanX64);
+        if unsafe { libloading::Library::new("libcuda.so.1") }.is_ok()
+            || unsafe { libloading::Library::new("libcuda.so") }.is_ok()
+        {
+            return Ok(Self::LinuxCudaX64);
+        } else {
+            return Ok(Self::LinuxVulkanX64);
+        }
 
         #[cfg(all(target_os = "macos", target_arch = "aarch64"))]
         return Ok(Self::MacosArm64);
@@ -49,6 +59,7 @@ impl LlamaRuntime {
         match self {
             Self::WindowsCuda13X64 => "windows-cuda13-x64",
             Self::WindowsVulkanX64 => "windows-vulkan-x64",
+            Self::LinuxCudaX64 => "linux-cuda-x64",
             Self::LinuxVulkanX64 => "linux-vulkan-x64",
             Self::MacosArm64 => "macos-arm64",
         }
@@ -61,6 +72,7 @@ impl LlamaRuntime {
                 "cudart-llama-bin-win-cuda-13.0-x64.zip",
             ],
             Self::WindowsVulkanX64 => &["llama-b8233-bin-win-vulkan-x64.zip"],
+            Self::LinuxCudaX64 => &[], // Built from source
             Self::LinuxVulkanX64 => &["llama-b8233-bin-ubuntu-vulkan-x64.tar.gz"],
             Self::MacosArm64 => &["llama-b8233-bin-macos-arm64.tar.gz"],
         }
@@ -139,6 +151,14 @@ impl LlamaRuntime {
                 "libllama.so",
                 "libmtmd.so",
             ],
+            Self::LinuxCudaX64 => &[
+                "libggml-base.so",
+                "libggml-cpu.so",
+                "libggml-cuda.so",
+                "libggml.so",
+                "libllama.so",
+                "libmtmd.so",
+            ],
             Self::MacosArm64 => &[
                 "libggml-base.dylib",
                 "libggml.dylib",
@@ -165,6 +185,10 @@ impl LlamaRuntime {
     }
 
     async fn install(self, install_dir: &Path, downloads_dir: &Path) -> Result<()> {
+        if matches!(self, Self::LinuxCudaX64) {
+            return self.install_from_source(install_dir, downloads_dir).await;
+        }
+
         for asset in self.assets() {
             let url = format!("{RELEASE_BASE_URL}/{LLAMA_CPP_TAG}/{asset}");
             let archive = archive::download_cached(&url, asset, downloads_dir).await?;
@@ -183,6 +207,89 @@ impl LlamaRuntime {
                 );
             }
         }
+
+        Ok(())
+    }
+
+    async fn install_from_source(self, install_dir: &Path, downloads_dir: &Path) -> Result<()> {
+        let asset = format!("llama.cpp-{LLAMA_CPP_TAG}.tar.gz");
+        let url = format!("https://github.com/ggml-org/llama.cpp/archive/refs/tags/{LLAMA_CPP_TAG}.tar.gz");
+        let archive = archive::download_cached(&url, &asset, downloads_dir).await?;
+
+        let build_dir = install_dir.join("build-source");
+        if build_dir.exists() {
+            fs::remove_dir_all(&build_dir).ok();
+        }
+        fs::create_dir_all(&build_dir)?;
+
+        archive::extract_tar_gz_all(&archive, &build_dir)?;
+
+        // The extracted directory name is llama.cpp-<tag>
+        let source_root = build_dir.join(format!("llama.cpp-{LLAMA_CPP_TAG}"));
+        let cmake_build_dir = source_root.join("build");
+        fs::create_dir_all(&cmake_build_dir)?;
+
+        let mut cmake = Command::new("cmake");
+        cmake.current_dir(&cmake_build_dir)
+            .arg("..")
+            .arg("-DBUILD_SHARED_LIBS=ON")
+            .arg("-DGGML_CUDA=ON")
+            .arg("-DGGML_NATIVE=OFF");
+
+        if let Ok(cap) = std::env::var("CUDA_COMPUTE_CAP") {
+             cmake.arg(format!("-DCMAKE_CUDA_ARCHITECTURES={cap}"));
+        } else {
+             cmake.arg("-DCMAKE_CUDA_ARCHITECTURES=all");
+        }
+
+        let status = cmake.status().await?;
+        if !status.success() {
+            bail!("cmake failed to configure llama.cpp");
+        }
+
+        let status = Command::new("cmake")
+            .current_dir(&cmake_build_dir)
+            .arg("--build")
+            .arg(".")
+            .arg("--config")
+            .arg("Release")
+            .arg("-j")
+            .arg(num_cpus::get().to_string())
+            .status()
+            .await?;
+
+        if !status.success() {
+            bail!("cmake failed to build llama.cpp");
+        }
+
+        let status = Command::new("cmake")
+            .current_dir(&cmake_build_dir)
+            .arg("--install")
+            .arg(".")
+            .arg("--prefix")
+            .arg(&build_dir.join("install"))
+            .status()
+            .await?;
+
+        if !status.success() {
+            bail!("cmake failed to install llama.cpp");
+        }
+
+        // Copy all libraries, preserving symlinks via cp -P or cp -a
+        let status = Command::new("cp")
+            .arg("-a")
+            .arg(build_dir.join("install").join("lib").to_string_lossy().as_ref())
+            .arg("-T")
+            .arg(install_dir.to_string_lossy().as_ref())
+            .status()
+            .await?;
+        
+        if !status.success() {
+            bail!("failed to copy installed libraries");
+        }
+
+        // Clean up build dir
+        fs::remove_dir_all(&build_dir).ok();
 
         Ok(())
     }

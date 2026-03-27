@@ -18,9 +18,11 @@ dirs = { workspace = true }
 serde_json = { workspace = true }
 zip = { workspace = true }
 tokio = { workspace = true }
+num_cpus = "1.17"
 libloading = { workspace = true }
 flate2 = { workspace = true }
 tar = "0.4"
+walkdir = "2"
 
 [target.'cfg(target_os = "windows")'.dependencies]
 windows-sys = { workspace = true }
