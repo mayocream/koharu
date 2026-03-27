@@ -54,4 +54,6 @@ test-results/
 AGENTS.md
 claudedocs/
 /.claude
-/.serena
+
+# Zensical
+site/
