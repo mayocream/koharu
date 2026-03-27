@@ -16,19 +16,27 @@ nav = [
   {"How-To Guides" = [
     "how-to/index.md",
     "how-to/install-koharu.md",
+    "how-to/contributing.md",
     "how-to/run-gui-headless-and-mcp.md",
+    "how-to/configure-mcp-clients.md",
+    "how-to/use-openai-compatible-api.md",
     "how-to/export-and-manage-projects.md",
     "how-to/build-from-source.md",
+    "how-to/troubleshooting.md",
   ]},
   {"Explanation" = [
     "explanation/index.md",
     "explanation/how-koharu-works.md",
+    "explanation/technical-deep-dive.md",
     "explanation/acceleration-and-runtime.md",
     "explanation/models-and-providers.md",
   ]},
   {"Reference" = [
     "reference/index.md",
     "reference/cli.md",
+    "reference/http-api.md",
+    "reference/mcp-tools.md",
+    "reference/settings.md",
     "reference/keyboard-shortcuts.md",
   ]},
 ]

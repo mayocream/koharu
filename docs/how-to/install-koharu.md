@@ -16,15 +16,27 @@ Koharu provides prebuilt binaries for:
 
 If your platform is not covered by a release build, use [Build From Source](build-from-source.md).
 
+## What gets installed locally
+
+Koharu is a local-first app. In practice, the desktop binary is only part of the installation footprint. The first real run also creates a per-user local data directory for:
+
+- runtime libraries used by llama.cpp and GPU backends
+- downloaded vision and OCR models
+- optional local translation models you select later
+
+Koharu keeps its own files under a `Koharu` app-data root and stores model weights separately from the application binary.
+
 ## First launch expectations
 
 On first run, Koharu may:
 
-- extract bundled runtime libraries
-- download required vision models
-- download local LLMs later when you select them in Settings
+- extract or download runtime libraries required by the local inference stack
+- download the default vision and OCR models used by detection, segmentation, OCR, inpainting, and font estimation
+- wait to download local translation LLMs until you actually select them in Settings
 
 This is normal and can take time depending on your connection and hardware.
+
+If you want to prefetch those runtime dependencies ahead of time, run Koharu once with `--download`. That path initializes the runtime packages and default vision stack, then exits without opening the GUI.
 
 ## GPU acceleration notes
 
@@ -35,11 +47,32 @@ Koharu supports:
 - Vulkan on Windows and Linux for OCR and LLM inference
 - CPU fallback on all platforms
 
-For CUDA, Koharu bundles CUDA toolkit 13.1, then extracts the required dynamic libraries into the app data directory on first run.
+Some practical details matter:
+
+- detection and inpainting benefit most from CUDA or Metal
+- Vulkan is mainly the fallback GPU path for OCR and local LLM inference
+- if Koharu cannot verify that your NVIDIA driver supports CUDA 13.1, it falls back to CPU
+
+For CUDA-capable systems, Koharu bundles and initializes the runtime pieces it needs instead of requiring you to wire every library path by hand.
 
 !!! note
 
     Keep your NVIDIA driver up to date. Koharu checks for CUDA 13.1 support and falls back to CPU if the driver is too old.
+
+## After installation
+
+Once Koharu launches successfully, the next decisions are usually:
+
+- desktop GUI vs headless mode
+- local translation model vs remote provider
+- rendered export vs layered PSD export
+
+See:
+
+- [Run GUI, Headless, and MCP Modes](run-gui-headless-and-mcp.md)
+- [Models and Providers](../explanation/models-and-providers.md)
+- [Export Pages and Manage Projects](export-and-manage-projects.md)
+- [Troubleshooting](troubleshooting.md)
 
 ## Need help?
 

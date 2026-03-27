@@ -6,6 +6,13 @@ title: CLI Reference
 
 This page covers the command-line options exposed by Koharu's desktop binary.
 
+Koharu uses the same binary for:
+
+- desktop startup
+- headless local Web UI
+- the local HTTP API
+- the built-in MCP server
+
 ## Common usage
 
 ```bash
@@ -20,11 +27,26 @@ koharu.exe [OPTIONS]
 
 | Option | Meaning |
 | --- | --- |
-| `-d`, `--download` | Download runtime libraries and exit |
+| `-d`, `--download` | Prefetch runtime libraries and the default vision and OCR stack, then exit |
 | `--cpu` | Force CPU mode even when a GPU is available |
-| `-p`, `--port <PORT>` | Bind the local HTTP server to a specific port |
+| `-p`, `--port <PORT>` | Bind the local HTTP server to a specific `127.0.0.1` port instead of a random one |
 | `--headless` | Run without starting the desktop GUI |
-| `--debug` | Enable debug mode with console output |
+| `--debug` | Enable debug-oriented console output |
+
+## Behavior notes
+
+Some flags change more than just startup appearance:
+
+- without `--port`, Koharu chooses a random local port
+- with `--headless`, Koharu skips the Tauri window but still serves the Web UI and API
+- with `--download`, Koharu exits after dependency prefetch and does not stay running
+- with `--cpu`, both the vision stack and local LLM path avoid GPU acceleration
+
+When a fixed port is set, the main local endpoints are:
+
+- `http://localhost:<PORT>/`
+- `http://localhost:<PORT>/api/v1`
+- `http://localhost:<PORT>/mcp`
 
 ## Common patterns
 
@@ -44,4 +66,22 @@ Download runtime packages ahead of time:
 
 ```bash
 koharu --download
+```
+
+Run a local MCP endpoint on a stable port:
+
+```bash
+koharu --port 9999
+```
+
+Then connect your MCP client to:
+
+```text
+http://localhost:9999/mcp
+```
+
+Start with explicit debug logging:
+
+```bash
+koharu --debug
 ```

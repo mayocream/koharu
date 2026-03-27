@@ -1,13 +1,34 @@
 # Contributing
 
-We welcome contributions! Please ensure your code is:
+Thanks for contributing to Koharu.
 
-- Well-structured and follows existing conventions
-- Tested and passing all checks
+For the full contributor guide, including local setup, validation commands, and docs workflow, see:
+
+- [`docs/how-to/contributing.md`](../docs/how-to/contributing.md)
+
+In short, contributors should:
+
+- follow existing code and UI patterns
+- run the checks that match the area they changed
+- explain what changed and how they verified it in the PR
+
+Useful local commands:
+
+```bash
+bun install
+bun run build
+bun cargo fmt -- --check
+bun cargo check
+bun cargo clippy -- -D warnings
+bun cargo test --workspace --tests
+bun run format
+bun run test:e2e
+zensical build -c
+```
 
 ## AI-Generated PRs
 
 AI-generated contributions are welcome, provided:
 
-1. A human has reviewed the code before opening the PR
-2. The submitter understands the changes being made
+1. A human has reviewed the code before opening the PR.
+2. The submitter understands the changes being made.
