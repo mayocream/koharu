@@ -215,7 +215,58 @@ pub fn refine_segmentation_mask(
         }
     };
 
-    dilate(&base, Norm::L1, FINAL_MASK_DILATE_RADIUS)
+    // Use adaptive per-block dilation when text blocks are available:
+    // smaller blocks get less dilation to preserve surrounding details.
+    if blocks.is_empty() {
+        dilate(&base, Norm::L1, FINAL_MASK_DILATE_RADIUS)
+    } else {
+        adaptive_dilate_mask(&base, blocks)
+    }
+}
+
+/// Dilate the mask with a per-block adaptive radius.  Small text blocks
+/// receive less dilation (1 px) to preserve nearby fine details, while
+/// larger blocks use the standard radius.
+fn adaptive_dilate_mask(base: &GrayImage, blocks: &[TextBlock]) -> GrayImage {
+    let (w, h) = base.dimensions();
+    let mut result = GrayImage::new(w, h);
+
+    for block in blocks {
+        let min_dim = block.width.min(block.height);
+        let radius: u8 = if min_dim < 20.0 {
+            1
+        } else if min_dim < 60.0 {
+            FINAL_MASK_DILATE_RADIUS
+        } else {
+            FINAL_MASK_DILATE_RADIUS + 1
+        };
+
+        // Crop the block region (with small margin) from the base mask,
+        // dilate locally, then blit back.
+        let margin = u32::from(radius) + 2;
+        let x0 = (block.x.floor() as u32).saturating_sub(margin).min(w);
+        let y0 = (block.y.floor() as u32).saturating_sub(margin).min(h);
+        let x1 = ((block.x + block.width).ceil() as u32 + margin).min(w);
+        let y1 = ((block.y + block.height).ceil() as u32 + margin).min(h);
+        let cw = x1.saturating_sub(x0);
+        let ch = y1.saturating_sub(y0);
+        if cw == 0 || ch == 0 {
+            continue;
+        }
+
+        let crop = imageops::crop_imm(base, x0, y0, cw, ch).to_image();
+        let dilated = dilate(&crop, Norm::L1, radius);
+
+        for ly in 0..ch {
+            for lx in 0..cw {
+                if dilated.get_pixel(lx, ly)[0] > 0 {
+                    result.put_pixel(x0 + lx, y0 + ly, Luma([255]));
+                }
+            }
+        }
+    }
+
+    result
 }
 
 pub fn crop_text_block_bbox(image: &DynamicImage, block: &TextBlock) -> DynamicImage {
@@ -1304,9 +1355,14 @@ fn refine_mask(image: &RgbImage, pred_mask: &GrayImage, blocks: &[TextBlock]) ->
         candidates.extend(otsu_mask_candidates(&rgb_crop, &mask_crop));
         let merged = merge_mask_candidates(candidates, &mask_crop);
 
+        // Morphological opening (erode → dilate) removes small spurious
+        // pixels that capture background details as text, while preserving
+        // dense text regions.
+        let opened = dilate(&erode(&merged, Norm::L1, 1), Norm::L1, 1);
+
         for local_y in 0..height {
             for local_x in 0..width {
-                if merged.get_pixel(local_x, local_y)[0] > 0 {
+                if opened.get_pixel(local_x, local_y)[0] > 0 {
                     refined.put_pixel(x1 + local_x, y1 + local_y, Luma([255]));
                 }
             }

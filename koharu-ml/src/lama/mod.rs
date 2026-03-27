@@ -23,7 +23,14 @@ define_models! {
 const BALLOON_CANNY_LOW: f32 = 70.0;
 const BALLOON_CANNY_HIGH: f32 = 140.0;
 const BALLOON_WINDOW_RATIO: f64 = 1.7;
+const BALLOON_WINDOW_RATIO_SMALL: f64 = 1.3;
 const BALLOON_WINDOW_ASPECT_RATIO: f64 = 1.0;
+/// Text block area (in pixels) below which the smaller enlarge ratio is used.
+const SMALL_BLOCK_AREA_THRESHOLD: f64 = 4000.0;
+/// Gaussian blur sigma applied to mask edges before LaMa inference.
+const MASK_FEATHER_SIGMA: f32 = 1.5;
+/// Radius (in pixels) of the alpha-blend transition zone around mask edges.
+const BLEND_TRANSITION_RADIUS: u8 = 4;
 const SIMPLE_BG_THRESHOLD_LOW_VARIANCE: f64 = 10.0;
 const SIMPLE_BG_THRESHOLD_HIGH_VARIANCE: f64 = 7.0;
 const SIMPLE_BG_CHANNEL_STD_SWITCH: f64 = 1.0;
@@ -89,20 +96,25 @@ impl Lama {
         }
 
         let binary_mask = binarize_mask(mask);
+        let feathered = feather_mask(&binary_mask, MASK_FEATHER_SIGMA);
         let output_rgb = if let Some(blocks) = text_blocks.filter(|blocks| !blocks.is_empty()) {
             let image_rgb = image.to_rgb8();
-            self.inference_blockwise(&image_rgb, &binary_mask, blocks)?
+            self.inference_blockwise(&image_rgb, &feathered, blocks)?
         } else {
-            self.inference_crop(&image.to_rgb8(), &binary_mask)?
+            self.inference_crop(&image.to_rgb8(), &feathered)?
         };
+
+        // Alpha-blend inpainted result with original using a soft transition
+        // zone so that details near mask edges are preserved.
+        let blended = alpha_blend_result(&image.to_rgb8(), &output_rgb, &binary_mask);
 
         if image.color().has_alpha() {
             let original_alpha = image.to_rgba8();
             let alpha = extract_alpha(&original_alpha);
-            let output = restore_alpha_channel(&output_rgb, &alpha, &binary_mask);
+            let output = restore_alpha_channel(&blended, &alpha, &binary_mask);
             Ok(DynamicImage::ImageRgba8(output))
         } else {
-            Ok(DynamicImage::ImageRgb8(output_rgb))
+            Ok(DynamicImage::ImageRgb8(blended))
         }
     }
 
@@ -130,13 +142,15 @@ impl Lama {
             let Some(xyxy) = block_xyxy(block, im_w, im_h) else {
                 continue;
             };
-            let xyxy_e = enlarge_window(
-                xyxy,
-                im_w,
-                im_h,
-                BALLOON_WINDOW_RATIO,
-                BALLOON_WINDOW_ASPECT_RATIO,
-            );
+            // Use a smaller context window for small text blocks so LaMa
+            // overwrites fewer surrounding details.
+            let block_area = f64::from(block.width) * f64::from(block.height);
+            let ratio = if block_area < SMALL_BLOCK_AREA_THRESHOLD {
+                BALLOON_WINDOW_RATIO_SMALL
+            } else {
+                BALLOON_WINDOW_RATIO
+            };
+            let xyxy_e = enlarge_window(xyxy, im_w, im_h, ratio, BALLOON_WINDOW_ASPECT_RATIO);
             let crop_width = xyxy_e[2].saturating_sub(xyxy_e[0]);
             let crop_height = xyxy_e[3].saturating_sub(xyxy_e[1]);
             if crop_width == 0 || crop_height == 0 {
@@ -229,6 +243,92 @@ fn binarize_mask(mask: &DynamicImage) -> GrayImage {
         pixel.0[0] = if pixel.0[0] > 127 { 255 } else { 0 };
     }
     binary
+}
+
+/// Apply Gaussian blur to a binary mask to create soft (feathered) edges.
+///
+/// The interior of the mask stays close to 255 while edge pixels get gradual
+/// falloff, allowing LaMa to blend naturally with the original image near
+/// mask boundaries.
+fn feather_mask(mask: &GrayImage, sigma: f32) -> GrayImage {
+    if sigma <= 0.0 {
+        return mask.clone();
+    }
+    gaussian_blur_f32(mask, sigma)
+}
+
+/// Blend the LaMa output with the original image using a soft transition zone
+/// around mask edges.  Pixels fully inside the mask receive the inpainted
+/// result; pixels outside remain original; pixels within
+/// `BLEND_TRANSITION_RADIUS` of the edge get a weighted mix.
+fn alpha_blend_result(
+    original: &RgbImage,
+    inpainted: &RgbImage,
+    binary_mask: &GrayImage,
+) -> RgbImage {
+    if BLEND_TRANSITION_RADIUS == 0 {
+        return inpainted.clone();
+    }
+    let dilated = dilate(binary_mask, Norm::L1, BLEND_TRANSITION_RADIUS);
+    let mut result = original.clone();
+    let radius_f = f64::from(BLEND_TRANSITION_RADIUS);
+
+    for (x, y, orig_pixel) in original.enumerate_pixels() {
+        let mask_val = binary_mask.get_pixel(x, y).0[0];
+        let dilated_val = dilated.get_pixel(x, y).0[0];
+
+        if mask_val > 0 {
+            // Fully inside the mask → use inpainted result.
+            result.put_pixel(x, y, *inpainted.get_pixel(x, y));
+        } else if dilated_val > 0 {
+            // Transition zone: compute approximate distance to mask edge.
+            // Use the dilated-minus-mask ring to create a linear falloff.
+            let distance = approximate_edge_distance(binary_mask, x, y, BLEND_TRANSITION_RADIUS);
+            let alpha = 1.0 - (distance / radius_f).min(1.0);
+            let inp = inpainted.get_pixel(x, y);
+            let blended = Rgb([
+                blend_channel(orig_pixel.0[0], inp.0[0], alpha),
+                blend_channel(orig_pixel.0[1], inp.0[1], alpha),
+                blend_channel(orig_pixel.0[2], inp.0[2], alpha),
+            ]);
+            result.put_pixel(x, y, blended);
+        }
+        // Outside dilated region: keep original (already in result).
+    }
+
+    result
+}
+
+#[inline]
+fn blend_channel(original: u8, inpainted: u8, alpha: f64) -> u8 {
+    let blended = f64::from(original) * (1.0 - alpha) + f64::from(inpainted) * alpha;
+    blended.round().clamp(0.0, 255.0) as u8
+}
+
+/// Approximate the Chebyshev distance from (px, py) to the nearest non-zero
+/// pixel in the mask, searching within the given radius.
+fn approximate_edge_distance(mask: &GrayImage, px: u32, py: u32, radius: u8) -> f64 {
+    let (w, h) = mask.dimensions();
+    let r = u32::from(radius);
+    let mut best = f64::from(radius) + 1.0;
+    let x0 = px.saturating_sub(r);
+    let y0 = py.saturating_sub(r);
+    let x1 = (px + r + 1).min(w);
+    let y1 = (py + r + 1).min(h);
+
+    for sy in y0..y1 {
+        for sx in x0..x1 {
+            if mask.get_pixel(sx, sy).0[0] > 0 {
+                let dx = (sx as f64 - px as f64).abs();
+                let dy = (sy as f64 - py as f64).abs();
+                let dist = (dx * dx + dy * dy).sqrt();
+                if dist < best {
+                    best = dist;
+                }
+            }
+        }
+    }
+    best
 }
 
 fn extract_alpha(image: &RgbaImage) -> GrayImage {
