@@ -23,7 +23,17 @@ jobs:
           method: 'network'
           sub-packages: '["nvcc", "cudart", "crt", "thrust", "nvvm", "cublas", "cublas_dev", "cufft", "cufft_dev", "curand", "curand_dev", "nvrtc", "nvrtc_dev"]'
       - uses: ilammy/msvc-dev-cmd@v1
+      - uses: actions/cache@v5
+        with:
+          path: ~/.bun/install/cache
+          key: ${{ runner.os }}-bun-${{ hashFiles('**/bun.lock') }}
       - run: bun install
+      - uses: actions/cache@v5
+        with:
+          path: ${{ github.workspace }}/ui/.next/cache
+          key: ${{ runner.os }}-nextjs-${{ hashFiles('**/bun.lock') }}-${{ hashFiles('ui/**/*.js', 'ui/**/*.jsx', 'ui/**/*.ts', 'ui/**/*.tsx') }}
+          restore-keys: |
+            ${{ runner.os }}-nextjs-${{ hashFiles('**/bun.lock') }}-
       - working-directory: ./ui
         run: bun run build
       - run: cargo publish --workspace --no-verify --token ${{ secrets.CARGO_REGISTRY_TOKEN }}

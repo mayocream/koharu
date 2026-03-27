@@ -60,8 +60,20 @@ jobs:
         uses: ilammy/msvc-dev-cmd@v1
         if: matrix.platform == 'windows-latest'
 
+      - uses: actions/cache@v5
+        with:
+          path: ~/.bun/install/cache
+          key: ${{ runner.os }}-bun-${{ hashFiles('**/bun.lock') }}
+
       - name: Install dependencies
         run: bun install
+
+      - uses: actions/cache@v5
+        with:
+          path: ${{ github.workspace }}/ui/.next/cache
+          key: ${{ runner.os }}-nextjs-${{ hashFiles('**/bun.lock') }}-${{ hashFiles('ui/**/*.js', 'ui/**/*.jsx', 'ui/**/*.ts', 'ui/**/*.tsx') }}
+          restore-keys: |
+            ${{ runner.os }}-nextjs-${{ hashFiles('**/bun.lock') }}-
 
       - name: Generate release changelog
         id: release_notes
