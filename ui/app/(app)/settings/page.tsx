@@ -29,7 +29,8 @@ import { isTauri } from '@/lib/backend'
 import { api } from '@/lib/api'
 import {
   usePreferencesStore,
-  type LocalLlmConfig,
+  getActivePresetConfig,
+  type LocalLlmPreset,
 } from '@/lib/stores/preferencesStore'
 
 const THEME_OPTIONS = [
@@ -42,80 +43,21 @@ type ApiProvider = {
   id: string
   name: string
   free_tier: boolean
-  supportsBaseUrl?: boolean
-  baseUrlPlaceholder?: string
-  supportsModelName?: boolean
-  modelNamePlaceholder?: string
-  supportsPing?: boolean
-  helperText?: string
 }
 
 const API_PROVIDERS: ApiProvider[] = [
   { id: 'openai', name: 'OpenAI', free_tier: false },
-  {
-    id: 'openai-compatible',
-    name: 'OpenAI Compatible',
-    free_tier: false,
-    supportsBaseUrl: true,
-    baseUrlPlaceholder: 'http://127.0.0.1:1234/v1',
-    supportsModelName: true,
-    modelNamePlaceholder: 'e.g. gpt-4o, deepseek-chat',
-    supportsPing: true,
-    helperText:
-      'Use LM Studio, OpenRouter, or another OpenAI-compatible endpoint.',
-  },
   { id: 'gemini', name: 'Gemini', free_tier: true },
   { id: 'claude', name: 'Claude', free_tier: false },
   { id: 'deepseek', name: 'DeepSeek', free_tier: false },
 ]
 
-const PRESET_URLS: Record<LocalLlmConfig['preset'], string> = {
-  ollama: 'http://localhost:11434/v1',
-  lmstudio: 'http://127.0.0.1:1234/v1',
-  custom: '',
-}
-
-const LLM_LANGUAGES = [
-  'en-US',
-  'zh-CN',
-  'zh-TW',
-  'ja-JP',
-  'ru-RU',
-  'es-ES',
-  'fr-FR',
-  'pt-PT',
-  'tr-TR',
-  'ar-SA',
-  'ko-KR',
-  'th-TH',
-  'it-IT',
-  'de-DE',
-  'vi-VN',
-  'ms-MY',
-  'id-ID',
-  'fil-PH',
-  'hi-IN',
-  'pl-PL',
-  'cs-CZ',
-  'nl-NL',
-  'km-KH',
-  'my-MM',
-  'fa-IR',
-  'gu-IN',
-  'ur-PK',
-  'te-IN',
-  'mr-IN',
-  'he-IL',
-  'bn-BD',
-  'bg-BG',
-  'ta-IN',
-  'uk-UA',
-  'bo-CN',
-  'kk-KZ',
-  'mn-MN',
-  'ug-CN',
-  'yue-HK',
-] as const
+const PRESET_BUTTONS: { value: LocalLlmPreset; labelKey: string }[] = [
+  { value: 'ollama', labelKey: 'settings.localLlmPresetOllama' },
+  { value: 'lmstudio', labelKey: 'settings.localLlmPresetLmStudio' },
+  { value: 'preset1', labelKey: 'settings.localLlmPresetPreset1' },
+  { value: 'preset2', labelKey: 'settings.localLlmPresetPreset2' },
+]
 
 const DEFAULT_SYSTEM_PROMPT =
   'You are a professional manga translator. Translate Japanese manga dialogue into natural {target_language} that fits inside speech bubbles. Preserve character voice, emotional tone, relationship nuance, emphasis, and sound effects naturally. Keep the wording concise. Do not add notes, explanations, or romanization. If the input contains <block id="N">...</block>, translate only the text inside each block. Keep every block tag exactly unchanged, including ids, order, and block count. Do not merge blocks, split blocks, or add any text outside the blocks.'
@@ -132,21 +74,10 @@ export default function SettingsPage() {
   )
   const [deviceInfo, setDeviceInfo] = useState<{ mlDevice: string }>()
   const apiKeys = usePreferencesStore((state) => state.apiKeys)
-  const providerBaseUrls = usePreferencesStore(
-    (state) => state.providerBaseUrls,
-  )
   const setApiKey = usePreferencesStore((state) => state.setApiKey)
-  const setProviderBaseUrl = usePreferencesStore(
-    (state) => state.setProviderBaseUrl,
-  )
   const localLlm = usePreferencesStore((state) => state.localLlm)
   const setLocalLlm = usePreferencesStore((state) => state.setLocalLlm)
-  const providerModelNames = usePreferencesStore(
-    (state) => state.providerModelNames,
-  )
-  const setProviderModelName = usePreferencesStore(
-    (state) => state.setProviderModelName,
-  )
+  const setActivePreset = usePreferencesStore((state) => state.setActivePreset)
   const [visibleKeys, setVisibleKeys] = useState<Record<string, boolean>>({})
   const saveTimersRef = useRef<Record<string, ReturnType<typeof setTimeout>>>(
     {},
@@ -158,20 +89,8 @@ export default function SettingsPage() {
     loading: boolean
     result?: { ok: boolean; count: number; latency: number; error?: string }
   }>({ loading: false })
-  const [providerPingState, setProviderPingState] = useState<
-    Record<
-      string,
-      {
-        loading: boolean
-        result?: {
-          ok: boolean
-          count: number
-          latency: number
-          error?: string
-        }
-      }
-    >
-  >({})
+
+  const activeConfig = getActivePresetConfig(localLlm)
 
   useEffect(() => {
     if (!isTauri()) return
@@ -235,16 +154,12 @@ export default function SettingsPage() {
     }, 300)
   }
 
-  const handlePresetChange = (preset: LocalLlmConfig['preset']) => {
-    setLocalLlm({ preset, baseUrl: PRESET_URLS[preset] || localLlm.baseUrl })
-  }
-
   const handleTestConnection = async () => {
     setPingState({ loading: true })
     try {
       const result = await api.llmPing(
-        localLlm.baseUrl,
-        localLlm.apiKey || undefined,
+        activeConfig.baseUrl,
+        activeConfig.apiKey || undefined,
       )
       setPingState({
         loading: false,
@@ -268,44 +183,9 @@ export default function SettingsPage() {
     }
   }
 
-  const handleProviderPing = async (providerId: string) => {
-    const baseUrl = providerBaseUrls[providerId]?.trim()
-    if (!baseUrl) return
-    setProviderPingState((prev) => ({
-      ...prev,
-      [providerId]: { loading: true },
-    }))
-    try {
-      const result = await api.llmPing(
-        baseUrl,
-        apiKeys[providerId] || undefined,
-      )
-      setProviderPingState((prev) => ({
-        ...prev,
-        [providerId]: {
-          loading: false,
-          result: {
-            ok: result.ok,
-            count: result.models.length,
-            latency: result.latencyMs ?? 0,
-            error: result.error,
-          },
-        },
-      }))
-    } catch (error) {
-      setProviderPingState((prev) => ({
-        ...prev,
-        [providerId]: {
-          loading: false,
-          result: {
-            ok: false,
-            count: 0,
-            latency: 0,
-            error: String(error),
-          },
-        },
-      }))
-    }
+  const handlePresetChange = (preset: LocalLlmPreset) => {
+    setActivePreset(preset)
+    setPingState({ loading: false })
   }
 
   return (
@@ -417,141 +297,51 @@ export default function SettingsPage() {
                 {t('settings.apiKeysDescription')}
               </p>
               <div className='space-y-3'>
-                {API_PROVIDERS.map(
-                  ({
-                    id,
-                    name,
-                    free_tier,
-                    supportsBaseUrl,
-                    baseUrlPlaceholder,
-                    supportsModelName,
-                    modelNamePlaceholder,
-                    supportsPing,
-                    helperText,
-                  }) => (
-                    <div key={id} className='space-y-1'>
-                      <label className='text-foreground text-sm'>{name}</label>
-                      <div className='space-y-1'>
-                        {supportsBaseUrl && (
-                          <input
-                            type='url'
-                            value={providerBaseUrls[id] ?? ''}
-                            onChange={(e) =>
-                              setProviderBaseUrl(id, e.target.value)
-                            }
-                            placeholder={baseUrlPlaceholder}
-                            className={inputClass}
-                          />
-                        )}
-                        <div className='relative'>
-                          <input
-                            type={visibleKeys[id] ? 'text' : 'password'}
-                            value={apiKeys[id] ?? ''}
-                            onChange={(e) =>
-                              handleApiKeyChange(id, e.target.value)
-                            }
-                            onBlur={() => flushApiKeySave(id)}
-                            placeholder='Enter API key'
-                            className={`${inputClass} pr-9`}
-                          />
-                          <button
-                            type='button'
-                            onClick={() =>
-                              setVisibleKeys((v) => ({ ...v, [id]: !v[id] }))
-                            }
-                            className='text-muted-foreground hover:text-foreground absolute top-1/2 right-2.5 -translate-y-1/2 transition'
-                          >
-                            {visibleKeys[id] ? (
-                              <EyeOffIcon className='size-4' />
-                            ) : (
-                              <EyeIcon className='size-4' />
-                            )}
-                          </button>
-                        </div>
-
-                        {supportsModelName && (
-                          <input
-                            type='text'
-                            value={providerModelNames[id] ?? ''}
-                            onChange={(e) =>
-                              setProviderModelName(id, e.target.value)
-                            }
-                            placeholder={modelNamePlaceholder}
-                            className={inputClass}
-                          />
-                        )}
-
-                        {helperText && (
-                          <span className='ml-2 text-xs text-slate-500'>
-                            {helperText}
-                          </span>
-                        )}
-
-                        {free_tier && (
-                          <span className='ml-2 text-xs text-green-500'>
-                            {t('settings.freeTier')}
-                          </span>
-                        )}
-
-                        {supportsPing && (
-                          <div className='space-y-1 pt-1'>
-                            <button
-                              onClick={() => handleProviderPing(id)}
-                              disabled={
-                                !providerBaseUrls[id]?.trim() ||
-                                providerPingState[id]?.loading
-                              }
-                              className='border-border bg-card text-foreground hover:bg-muted inline-flex items-center gap-1.5 rounded-md border px-3 py-1.5 text-sm transition disabled:cursor-not-allowed disabled:opacity-50'
-                            >
-                              {providerPingState[id]?.loading ? (
-                                <>
-                                  <LoaderIcon className='size-3.5 animate-spin' />
-                                  {t('settings.localLlmTesting')}
-                                </>
-                              ) : (
-                                t('settings.localLlmTestConnection')
-                              )}
-                            </button>
-                            {providerPingState[id]?.result && (
-                              <div className='flex items-start gap-1.5 text-xs'>
-                                {providerPingState[id].result!.ok ? (
-                                  <>
-                                    <CheckCircleIcon className='mt-0.5 size-3.5 shrink-0 text-green-500' />
-                                    <span className='text-green-600 dark:text-green-400'>
-                                      {t('settings.localLlmTestSuccess', {
-                                        count:
-                                          providerPingState[id].result!.count,
-                                        latency:
-                                          providerPingState[id].result!.latency,
-                                      })}
-                                    </span>
-                                  </>
-                                ) : (
-                                  <>
-                                    <XCircleIcon className='mt-0.5 size-3.5 shrink-0 text-red-500' />
-                                    <span className='text-red-600 dark:text-red-400'>
-                                      {t('settings.localLlmTestFailed', {
-                                        error:
-                                          providerPingState[id].result!.error,
-                                      })}
-                                    </span>
-                                  </>
-                                )}
-                              </div>
-                            )}
-                          </div>
-                        )}
+                {API_PROVIDERS.map(({ id, name, free_tier }) => (
+                  <div key={id} className='space-y-1'>
+                    <label className='text-foreground text-sm'>{name}</label>
+                    <div className='space-y-1'>
+                      <div className='relative'>
+                        <input
+                          type={visibleKeys[id] ? 'text' : 'password'}
+                          value={apiKeys[id] ?? ''}
+                          onChange={(e) =>
+                            handleApiKeyChange(id, e.target.value)
+                          }
+                          onBlur={() => flushApiKeySave(id)}
+                          placeholder='Enter API key'
+                          className={`${inputClass} pr-9`}
+                        />
+                        <button
+                          type='button'
+                          onClick={() =>
+                            setVisibleKeys((v) => ({ ...v, [id]: !v[id] }))
+                          }
+                          className='text-muted-foreground hover:text-foreground absolute top-1/2 right-2.5 -translate-y-1/2 transition'
+                        >
+                          {visibleKeys[id] ? (
+                            <EyeOffIcon className='size-4' />
+                          ) : (
+                            <EyeIcon className='size-4' />
+                          )}
+                        </button>
                       </div>
+
+                      {free_tier && (
+                        <span className='ml-2 text-xs text-green-500'>
+                          {t('settings.freeTier')}
+                        </span>
+                      )}
                     </div>
-                  ),
-                )}
+                  </div>
+                ))}
               </div>
             </section>
 
-            {/* Local LLM Section */}
+            {/* Local LLM & OpenAI Compatible Providers Section */}
             <section className='mb-8'>
               <h2 className='text-foreground mb-1 text-sm font-bold'>
-                {t('settings.localLlm')}
+                {t('settings.localLlmTitle')}
               </h2>
               <p className='text-muted-foreground mb-4 text-sm'>
                 {t('settings.localLlmDescription')}
@@ -563,28 +353,13 @@ export default function SettingsPage() {
                   <label className='text-foreground text-sm'>
                     {t('settings.localLlmPreset')}
                   </label>
-                  <div className='flex gap-2'>
-                    {(
-                      [
-                        {
-                          value: 'ollama',
-                          labelKey: 'settings.localLlmPresetOllama',
-                        },
-                        {
-                          value: 'lmstudio',
-                          labelKey: 'settings.localLlmPresetLmStudio',
-                        },
-                        {
-                          value: 'custom',
-                          labelKey: 'settings.localLlmPresetCustom',
-                        },
-                      ] as const
-                    ).map(({ value, labelKey }) => (
+                  <div className='grid grid-cols-4 gap-2'>
+                    {PRESET_BUTTONS.map(({ value, labelKey }) => (
                       <button
                         key={value}
                         onClick={() => handlePresetChange(value)}
-                        data-active={localLlm.preset === value}
-                        className='border-border bg-card text-muted-foreground hover:border-foreground/30 data-[active=true]:border-primary data-[active=true]:text-foreground flex-1 rounded-lg border px-3 py-2 text-sm font-medium transition'
+                        data-active={localLlm.activePreset === value}
+                        className='border-border bg-card text-muted-foreground hover:border-foreground/30 data-[active=true]:border-primary data-[active=true]:text-foreground rounded-lg border px-3 py-2 text-sm font-medium transition'
                       >
                         {t(labelKey)}
                       </button>
@@ -599,9 +374,9 @@ export default function SettingsPage() {
                   </label>
                   <input
                     type='url'
-                    value={localLlm.baseUrl}
+                    value={activeConfig.baseUrl}
                     onChange={(e) => setLocalLlm({ baseUrl: e.target.value })}
-                    placeholder={PRESET_URLS[localLlm.preset]}
+                    placeholder='http://127.0.0.1:1234/v1'
                     className={inputClass}
                   />
                 </div>
@@ -613,8 +388,12 @@ export default function SettingsPage() {
                   </label>
                   <div className='relative'>
                     <input
-                      type={visibleKeys['local-llm-key'] ? 'text' : 'password'}
-                      value={localLlm.apiKey}
+                      type={
+                        visibleKeys[`llm-${localLlm.activePreset}`]
+                          ? 'text'
+                          : 'password'
+                      }
+                      value={activeConfig.apiKey}
                       onChange={(e) => setLocalLlm({ apiKey: e.target.value })}
                       placeholder='API key'
                       className={`${inputClass} pr-9`}
@@ -624,12 +403,13 @@ export default function SettingsPage() {
                       onClick={() =>
                         setVisibleKeys((v) => ({
                           ...v,
-                          'local-llm-key': !v['local-llm-key'],
+                          [`llm-${localLlm.activePreset}`]:
+                            !v[`llm-${localLlm.activePreset}`],
                         }))
                       }
                       className='text-muted-foreground hover:text-foreground absolute top-1/2 right-2.5 -translate-y-1/2 transition'
                     >
-                      {visibleKeys['local-llm-key'] ? (
+                      {visibleKeys[`llm-${localLlm.activePreset}`] ? (
                         <EyeOffIcon className='size-4' />
                       ) : (
                         <EyeIcon className='size-4' />
@@ -645,35 +425,11 @@ export default function SettingsPage() {
                   </label>
                   <input
                     type='text'
-                    value={localLlm.modelName}
+                    value={activeConfig.modelName}
                     onChange={(e) => setLocalLlm({ modelName: e.target.value })}
                     placeholder={t('settings.localLlmModelNamePlaceholder')}
                     className={inputClass}
                   />
-                </div>
-
-                {/* Target Language */}
-                <div className='space-y-1'>
-                  <label className='text-foreground text-sm'>
-                    {t('settings.localLlmTargetLanguage')}
-                  </label>
-                  <Select
-                    value={localLlm.targetLanguage}
-                    onValueChange={(value) =>
-                      setLocalLlm({ targetLanguage: value })
-                    }
-                  >
-                    <SelectTrigger className='w-full'>
-                      <SelectValue />
-                    </SelectTrigger>
-                    <SelectContent>
-                      {LLM_LANGUAGES.map((code) => (
-                        <SelectItem key={code} value={code}>
-                          {t(`llm.languages.${code}`)}
-                        </SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
                 </div>
 
                 {/* Advanced Section Toggle */}
@@ -697,7 +453,7 @@ export default function SettingsPage() {
                       </label>
                       <input
                         type='number'
-                        value={localLlm.temperature ?? ''}
+                        value={activeConfig.temperature ?? ''}
                         onChange={(e) =>
                           setLocalLlm({
                             temperature:
@@ -723,7 +479,7 @@ export default function SettingsPage() {
                       </label>
                       <input
                         type='number'
-                        value={localLlm.maxTokens ?? ''}
+                        value={activeConfig.maxTokens ?? ''}
                         onChange={(e) =>
                           setLocalLlm({
                             maxTokens:
@@ -745,7 +501,7 @@ export default function SettingsPage() {
                         <label className='text-foreground text-sm'>
                           {t('settings.localLlmSystemPrompt')}
                         </label>
-                        {localLlm.customSystemPrompt && (
+                        {activeConfig.customSystemPrompt && (
                           <button
                             type='button'
                             onClick={() =>
@@ -758,7 +514,7 @@ export default function SettingsPage() {
                         )}
                       </div>
                       <textarea
-                        value={localLlm.customSystemPrompt}
+                        value={activeConfig.customSystemPrompt}
                         onChange={(e) =>
                           setLocalLlm({
                             customSystemPrompt: e.target.value,
@@ -780,7 +536,7 @@ export default function SettingsPage() {
                   <button
                     type='button'
                     onClick={handleTestConnection}
-                    disabled={pingState.loading || !localLlm.baseUrl.trim()}
+                    disabled={pingState.loading || !activeConfig.baseUrl.trim()}
                     className='border-border bg-card text-foreground hover:bg-accent disabled:text-muted-foreground inline-flex items-center gap-2 rounded-md border px-4 py-1.5 text-sm font-medium transition disabled:opacity-50'
                   >
                     {pingState.loading ? (

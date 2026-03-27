@@ -8,7 +8,12 @@ import { InpaintRegion, TextBlock } from '@/types'
 import { useEditorUiStore } from '@/lib/stores/editorUiStore'
 import { useLlmUiStore } from '@/lib/stores/llmUiStore'
 import { useOperationStore } from '@/lib/stores/operationStore'
-import { usePreferencesStore } from '@/lib/stores/preferencesStore'
+import {
+  usePreferencesStore,
+  ALL_PRESETS,
+  type LocalLlmPresetConfig,
+  type LocalLlmPreset,
+} from '@/lib/stores/preferencesStore'
 import { queryKeys } from '@/lib/query/keys'
 import {
   clearMaskSync,
@@ -75,27 +80,47 @@ const pickLanguage = (
 }
 
 const hasCompatibleConfig = () => {
-  const state = usePreferencesStore.getState()
-  return !!(
-    state.providerBaseUrls['openai-compatible']?.trim() ||
-    state.localLlm.baseUrl?.trim()
+  const { presets } = usePreferencesStore.getState().localLlm
+  return ALL_PRESETS.some(
+    (p) => presets[p].baseUrl?.trim() && presets[p].modelName?.trim(),
   )
 }
 
-const getBaseUrlForModel = (modelId: string) => {
-  const state = usePreferencesStore.getState()
-  const modelName = modelId.includes(':') ? modelId.split(':')[1] : modelId
-  if (
-    state.localLlm.modelName?.trim() === modelName &&
-    state.localLlm.baseUrl?.trim()
-  ) {
-    return state.localLlm.baseUrl.trim()
+/** Extract the preset from a model ID like "openai-compatible:preset1:modelName". */
+const resolvePresetFromModelId = (
+  modelId: string,
+): LocalLlmPreset | undefined => {
+  const parts = modelId.split(':')
+  if (parts[0] === 'openai-compatible' && parts.length >= 3) {
+    const preset = parts[1] as LocalLlmPreset
+    if (ALL_PRESETS.includes(preset)) return preset
   }
-  return (
-    state.providerBaseUrls['openai-compatible']?.trim() ||
-    state.localLlm.baseUrl?.trim() ||
-    undefined
-  )
+  return undefined
+}
+
+const getPresetConfigForModel = (
+  modelId: string,
+): LocalLlmPresetConfig | undefined => {
+  const preset = resolvePresetFromModelId(modelId)
+  if (!preset) return undefined
+  return usePreferencesStore.getState().localLlm.presets[preset]
+}
+
+const getBaseUrlForModel = (modelId: string) => {
+  const cfg = getPresetConfigForModel(modelId)
+  return cfg?.baseUrl?.trim() || undefined
+}
+
+/**
+ * Convert frontend model ID (openai-compatible:preset1:modelName)
+ * to backend format (openai-compatible:modelName).
+ */
+const toBackendModelId = (modelId: string): string => {
+  if (resolvePresetFromModelId(modelId)) {
+    const parts = modelId.split(':')
+    return [parts[0], ...parts.slice(2)].join(':')
+  }
+  return modelId
 }
 
 const getCachedLlmModels = (queryClient: QueryClient) =>
@@ -531,26 +556,28 @@ export const useDocumentMutations = () => {
         const models = getCachedLlmModels(queryClient)
         const modelInfo = models.find((m) => m.id === selectedModel)
         const language = selectedLanguage
-        const llmApiKey =
-          modelInfo && modelInfo.source !== 'local'
+        const presetCfg = selectedModel
+          ? getPresetConfigForModel(selectedModel)
+          : undefined
+        const llmApiKey = presetCfg
+          ? presetCfg.apiKey || undefined
+          : modelInfo && modelInfo.source !== 'local'
             ? usePreferencesStore.getState().apiKeys[modelInfo.source]
             : undefined
         const llmBaseUrl =
           modelInfo?.source === 'openai-compatible'
             ? getBaseUrlForModel(selectedModel!)
             : undefined
-        const localLlm = usePreferencesStore.getState().localLlm
-        const isLocalCompat = modelInfo?.source === 'openai-compatible'
         await api.process({
           index: resolvedIndex,
-          llmModelId: selectedModel,
+          llmModelId: selectedModel
+            ? toBackendModelId(selectedModel)
+            : selectedModel,
           llmApiKey,
           llmBaseUrl,
-          llmTemperature: isLocalCompat ? localLlm.temperature : undefined,
-          llmMaxTokens: isLocalCompat ? localLlm.maxTokens : undefined,
-          llmCustomSystemPrompt: isLocalCompat
-            ? localLlm.customSystemPrompt
-            : undefined,
+          llmTemperature: presetCfg?.temperature ?? undefined,
+          llmMaxTokens: presetCfg?.maxTokens ?? undefined,
+          llmCustomSystemPrompt: presetCfg?.customSystemPrompt || undefined,
           language,
           shaderEffect: renderEffect,
           shaderStroke: renderStroke,
@@ -582,25 +609,27 @@ export const useDocumentMutations = () => {
       const models = getCachedLlmModels(queryClient)
       const modelInfo = models.find((m) => m.id === selectedModel)
       const language = selectedLanguage
-      const llmApiKey =
-        modelInfo && modelInfo.source !== 'local'
+      const presetCfg2 = selectedModel
+        ? getPresetConfigForModel(selectedModel)
+        : undefined
+      const llmApiKey = presetCfg2
+        ? presetCfg2.apiKey || undefined
+        : modelInfo && modelInfo.source !== 'local'
           ? usePreferencesStore.getState().apiKeys[modelInfo.source]
           : undefined
       const llmBaseUrl =
         modelInfo?.source === 'openai-compatible'
           ? getBaseUrlForModel(selectedModel!)
           : undefined
-      const localLlm = usePreferencesStore.getState().localLlm
-      const isLocalCompat = modelInfo?.source === 'openai-compatible'
       await api.process({
-        llmModelId: selectedModel,
+        llmModelId: selectedModel
+          ? toBackendModelId(selectedModel)
+          : selectedModel,
         llmApiKey,
         llmBaseUrl,
-        llmTemperature: isLocalCompat ? localLlm.temperature : undefined,
-        llmMaxTokens: isLocalCompat ? localLlm.maxTokens : undefined,
-        llmCustomSystemPrompt: isLocalCompat
-          ? localLlm.customSystemPrompt
-          : undefined,
+        llmTemperature: presetCfg2?.temperature ?? undefined,
+        llmMaxTokens: presetCfg2?.maxTokens ?? undefined,
+        llmCustomSystemPrompt: presetCfg2?.customSystemPrompt || undefined,
         language,
         shaderEffect: renderEffect,
         shaderStroke: renderStroke,
@@ -719,27 +748,30 @@ export const useLlmMutations = () => {
     queryClient.setQueryData(readyKey, false)
     const models = getCachedLlmModels(queryClient)
     const modelInfo = models.find((m) => m.id === selectedModel)
-    const apiKey =
-      modelInfo && modelInfo.source !== 'local'
+    const presetCfg = selectedModel
+      ? getPresetConfigForModel(selectedModel)
+      : undefined
+    const apiKey = presetCfg
+      ? presetCfg.apiKey || undefined
+      : modelInfo && modelInfo.source !== 'local'
         ? usePreferencesStore.getState().apiKeys[modelInfo.source]
         : undefined
     const baseUrl =
       modelInfo?.source === 'openai-compatible'
         ? getBaseUrlForModel(selectedModel)
         : undefined
-    const localLlmConfig = usePreferencesStore.getState().localLlm
-    const isLocalCompatible = modelInfo?.source === 'openai-compatible'
+    const backendModelId = toBackendModelId(selectedModel)
     await api.llmLoad(
-      selectedModel,
+      backendModelId,
       apiKey,
       baseUrl,
-      isLocalCompatible ? localLlmConfig.temperature : undefined,
-      isLocalCompatible ? localLlmConfig.maxTokens : undefined,
-      isLocalCompatible ? localLlmConfig.customSystemPrompt : undefined,
+      presetCfg?.temperature ?? undefined,
+      presetCfg?.maxTokens ?? undefined,
+      presetCfg?.customSystemPrompt || undefined,
     )
     queryClient.setQueryData(
       readyKey,
-      await api.llmReady(selectedModel).catch(() => false),
+      await api.llmReady(backendModelId).catch(() => false),
     )
     await setProgress(100, ProgressBarStatus.Paused)
   }, [queryClient, setProgress])

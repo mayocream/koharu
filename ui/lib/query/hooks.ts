@@ -6,14 +6,19 @@ import { api } from '@/lib/api'
 import { queryKeys } from '@/lib/query/keys'
 import { useEditorUiStore } from '@/lib/stores/editorUiStore'
 import { useLlmUiStore } from '@/lib/stores/llmUiStore'
-import { usePreferencesStore } from '@/lib/stores/preferencesStore'
+import {
+  usePreferencesStore,
+  ALL_PRESETS,
+  type LocalLlmPreset,
+} from '@/lib/stores/preferencesStore'
 import type { LlmModelInfo } from '@/lib/generated/protocol/LlmModelInfo'
 import i18n from '@/lib/i18n'
 import { useRpcConnection } from '@/hooks/useRpcConnection'
 
 /** Frontend-extended model entry with origin tracking. */
 export type LlmModelEntry = LlmModelInfo & {
-  origin?: 'local-llm' | 'openai-api'
+  /** Which local-llm preset this model belongs to (undefined for cloud models). */
+  originPreset?: LocalLlmPreset
 }
 
 export const useDocumentsCountQuery = (enabled = true) =>
@@ -69,19 +74,12 @@ export const useFontsQuery = () =>
 export const useLlmModelsQuery = () => {
   const [language, setLanguage] = useState(i18n.language)
   const rpcConnected = useRpcConnection()
-  const providerBaseUrl = usePreferencesStore(
-    (state) => state.providerBaseUrls['openai-compatible']?.trim() ?? '',
+  const localLlmPresets = usePreferencesStore((state) => state.localLlm.presets)
+  const hasCompatible = ALL_PRESETS.some(
+    (p) =>
+      localLlmPresets[p].baseUrl?.trim() &&
+      localLlmPresets[p].modelName?.trim(),
   )
-  const localLlmBaseUrl = usePreferencesStore(
-    (state) => state.localLlm.baseUrl?.trim() ?? '',
-  )
-  const localLlmModelName = usePreferencesStore(
-    (state) => state.localLlm.modelName?.trim() ?? '',
-  )
-  const manualModelName = usePreferencesStore(
-    (state) => state.providerModelNames?.['openai-compatible']?.trim() ?? '',
-  )
-  const hasCompatible = !!(providerBaseUrl || localLlmBaseUrl)
   const compatibleConfigVersion = usePreferencesStore(
     (state) => state.openAiCompatibleConfigVersion,
   )
@@ -109,29 +107,21 @@ export const useLlmModelsQuery = () => {
         models.find((m) => m.source !== 'local' && m.languages.length > 0)
           ?.languages ?? []
 
-      // Local LLM (Ollama / LM Studio)
-      if (localLlmModelName && localLlmBaseUrl) {
-        const id = `openai-compatible:${localLlmModelName}`
-        if (!models.some((m) => m.id === id)) {
-          models.push({
-            id,
-            languages: apiLanguages,
-            source: 'openai-compatible',
-            origin: 'local-llm',
-          })
-        }
-      }
-
-      // OpenAI Compatible (API Keys section)
-      if (manualModelName && providerBaseUrl) {
-        const id = `openai-compatible:${manualModelName}`
-        if (!models.some((m) => m.id === id)) {
-          models.push({
-            id,
-            languages: apiLanguages,
-            source: 'openai-compatible',
-            origin: 'openai-api',
-          })
+      // Inject a model entry for each preset that has baseUrl + modelName
+      for (const preset of ALL_PRESETS) {
+        const cfg = localLlmPresets[preset]
+        const baseUrl = cfg.baseUrl?.trim()
+        const modelName = cfg.modelName?.trim()
+        if (baseUrl && modelName) {
+          const id = `openai-compatible:${preset}:${modelName}`
+          if (!models.some((m) => m.id === id)) {
+            models.push({
+              id,
+              languages: apiLanguages,
+              source: 'openai-compatible',
+              originPreset: preset,
+            })
+          }
         }
       }
 
@@ -146,7 +136,32 @@ export const useLlmModelsQuery = () => {
 export const LOCAL_LLM_PRESET_LABELS: Record<string, string> = {
   ollama: 'Ollama',
   lmstudio: 'LM Studio',
-  custom: 'Local',
+  preset1: 'Preset 1',
+  preset2: 'Preset 2',
+}
+
+/** Extract the preset from a model ID like "openai-compatible:preset1:modelName". */
+export const parsePresetFromModelId = (
+  modelId: string,
+): LocalLlmPreset | undefined => {
+  const parts = modelId.split(':')
+  if (parts[0] === 'openai-compatible' && parts.length >= 3) {
+    const preset = parts[1] as LocalLlmPreset
+    if (ALL_PRESETS.includes(preset)) return preset
+  }
+  return undefined
+}
+
+/**
+ * Convert frontend model ID (openai-compatible:preset1:modelName)
+ * to backend format (openai-compatible:modelName).
+ */
+export const toBackendModelId = (modelId: string): string => {
+  if (parsePresetFromModelId(modelId)) {
+    const parts = modelId.split(':')
+    return [parts[0], ...parts.slice(2)].join(':')
+  }
+  return modelId
 }
 
 export const useApiKeyQuery = (provider: string, enabled = true) =>
@@ -159,9 +174,10 @@ export const useApiKeyQuery = (provider: string, enabled = true) =>
 
 export const useLlmReadyQuery = () => {
   const selectedModel = useLlmUiStore((state) => state.selectedModel)
+  const backendId = selectedModel ? toBackendModelId(selectedModel) : undefined
   return useQuery({
     queryKey: queryKeys.llm.ready(selectedModel),
-    queryFn: () => api.llmReady(selectedModel),
+    queryFn: () => api.llmReady(backendId),
     enabled: !!selectedModel,
   })
 }
