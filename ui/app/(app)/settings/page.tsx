@@ -50,6 +50,7 @@ const API_PROVIDERS: ApiProvider[] = [
   { id: 'gemini', name: 'Gemini', free_tier: true },
   { id: 'claude', name: 'Claude', free_tier: false },
   { id: 'deepseek', name: 'DeepSeek', free_tier: false },
+  { id: 'minimax', name: 'MiniMax', free_tier: false },
 ]
 
 const PRESET_BUTTONS: { value: LocalLlmPreset; labelKey: string }[] = [

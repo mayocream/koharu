@@ -9,6 +9,7 @@ use crate::Language;
 pub mod claude;
 pub mod deepseek;
 pub mod gemini;
+pub mod minimax;
 pub mod openai;
 pub mod openai_compatible;
 
@@ -110,6 +111,9 @@ pub fn build_provider(
         }),
         "deepseek" => Box::new(deepseek::DeepSeekProvider {
             api_key: required_api_key("deepseek")?,
+        }),
+        "minimax" => Box::new(minimax::MiniMaxProvider {
+            api_key: required_api_key("minimax")?,
         }),
         "openai-compatible" => Box::new(openai_compatible::OpenAiCompatibleProvider {
             base_url: config

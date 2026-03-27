@@ -221,6 +221,7 @@
     "gemini": "Gemini",
     "claude": "Claude",
     "deepseek": "DeepSeek",
+    "minimax": "MiniMax",
     "unknown": "Провайдер"
   },
   "settings": {
