@@ -270,6 +270,20 @@ export const useMaskMutations = () => {
     [queryClient],
   )
 
+  const inpaintFree = useCallback(
+    async (region: InpaintRegion, options?: { index?: number }) => {
+      const resolvedIndex =
+        options?.index ?? useEditorUiStore.getState().currentDocumentIndex
+      if (!region) return
+      await flushMaskSyncQueue()
+      await api.inpaintFree(resolvedIndex, region)
+      await invalidateCurrentDocument(queryClient, resolvedIndex)
+      await invalidateThumbnailAtIndex(queryClient, resolvedIndex)
+      useEditorUiStore.getState().setShowInpaintedImage(true)
+    },
+    [queryClient],
+  )
+
   const paintRendered = useCallback(
     async (
       patch: Uint8Array,
@@ -294,6 +308,7 @@ export const useMaskMutations = () => {
     updateMask,
     flushMaskSync,
     inpaintPartial,
+    inpaintFree,
     paintRendered,
   }
 }

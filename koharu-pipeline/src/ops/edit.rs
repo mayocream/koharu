@@ -533,16 +533,25 @@ pub async fn inpaint_partial(
 ) -> anyhow::Result<()> {
     let snapshot = state_tx::read_doc(&state.state, payload.index).await?;
 
-    let mask_image = snapshot
-        .segment
-        .as_ref()
-        .ok_or_else(|| anyhow::anyhow!("Segment image not found"))?;
+    let (img_width, img_height) = (snapshot.width, snapshot.height);
+
+    // In free mode (Magic Eraser), fall back to a blank mask if segment is absent.
+    // In normal mode, require the segment to exist.
+    let fallback_mask;
+    let mask_image = if payload.free {
+        fallback_mask = blank_rgba(img_width, img_height, image::Rgba([0, 0, 0, 255]));
+        snapshot.segment.as_ref().unwrap_or(&fallback_mask)
+    } else {
+        snapshot
+            .segment
+            .as_ref()
+            .ok_or_else(|| anyhow::anyhow!("Segment image not found"))?
+    };
 
     if payload.region.width == 0 || payload.region.height == 0 {
         return Ok(());
     }
 
-    let (img_width, img_height) = (snapshot.width, snapshot.height);
     let x0 = payload.region.x.min(img_width.saturating_sub(1));
     let y0 = payload.region.y.min(img_height.saturating_sub(1));
     let x1 = payload
@@ -562,11 +571,18 @@ pub async fn inpaint_partial(
         return Ok(());
     }
 
-    let localized_blocks =
-        localize_inpaint_text_blocks(&snapshot.text_blocks, x0, y0, crop_width, crop_height);
-    if localized_blocks.is_empty() {
-        return Ok(());
-    }
+    // In free mode, skip text block requirement and pass None to inpaint purely from mask.
+    // In normal mode, require overlapping text blocks.
+    let text_blocks = if payload.free {
+        None
+    } else {
+        let localized_blocks =
+            localize_inpaint_text_blocks(&snapshot.text_blocks, x0, y0, crop_width, crop_height);
+        if localized_blocks.is_empty() {
+            return Ok(());
+        }
+        Some(localized_blocks)
+    };
 
     let image_crop =
         SerializableDynamicImage(snapshot.image.crop_imm(x0, y0, crop_width, crop_height));
@@ -574,7 +590,7 @@ pub async fn inpaint_partial(
 
     let inpainted_crop = state
         .ml
-        .inpaint_raw(&image_crop, &mask_crop, Some(&localized_blocks))
+        .inpaint_raw(&image_crop, &mask_crop, text_blocks.as_deref())
         .await?;
 
     let mut stitched = snapshot

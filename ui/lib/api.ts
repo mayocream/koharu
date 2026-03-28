@@ -522,6 +522,18 @@ export const api = {
     })
   },
 
+  async inpaintFree(index: number, region: InpaintRegion): Promise<void> {
+    return withRpcError('inpaint_partial', async () => {
+      const summary = await getDocumentSummaryAtIndex(index)
+      await fetchJson<void>(`/documents/${summary.id}/inpaint-region`, {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({ region, free: true }),
+      })
+      documentDetailCache.delete(summary.id)
+    })
+  },
+
   async render(
     index: number,
     options?: {

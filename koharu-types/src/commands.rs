@@ -22,6 +22,17 @@ pub struct IndexPayload {
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
+pub struct DetectPayload {
+    pub index: usize,
+    /// Use lower thresholds to catch more text (higher recall).
+    #[serde(default)]
+    pub sensitive: bool,
+    /// Optional sub-region to restrict detection.
+    pub region: Option<InpaintRegion>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
 pub struct ThumbnailResult {
     #[serde(with = "serde_bytes")]
     pub data: Vec<u8>,
@@ -180,6 +191,9 @@ pub struct UpdateBrushLayerPayload {
 pub struct InpaintPartialPayload {
     pub index: usize,
     pub region: InpaintRegion,
+    /// When true, inpaint purely from the mask without requiring text blocks (Magic Eraser).
+    #[serde(default)]
+    pub free: bool,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, JsonSchema)]
@@ -455,6 +469,7 @@ mod tests {
                 width: 10,
                 height: 11,
             },
+            free: false,
         });
         round_trip(&ViewImageParams {
             index: 1,

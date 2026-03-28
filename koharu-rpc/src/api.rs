@@ -445,6 +445,7 @@ async fn inpaint_region(
         InpaintPartialPayload {
             index,
             region: to_inpaint_region(request.region),
+            free: request.free,
         },
     )
     .await?;
