@@ -4,6 +4,7 @@ use image::GenericImageView;
 use koharu_ml::comic_text_detector::ComicTextDetector;
 
 #[tokio::test]
+#[ignore = "requires model download and is not critical for CI"]
 async fn comic_text_detector() -> anyhow::Result<()> {
     let model = ComicTextDetector::load(false).await?;
 
@@ -35,6 +36,7 @@ async fn comic_text_detector() -> anyhow::Result<()> {
 }
 
 #[tokio::test]
+#[ignore = "requires model download and is not critical for CI"]
 async fn comic_text_detector_segmentation_only() -> anyhow::Result<()> {
     let model = ComicTextDetector::load_segmentation_only(false).await?;
 

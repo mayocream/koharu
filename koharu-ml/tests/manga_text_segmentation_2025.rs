@@ -3,6 +3,7 @@ use std::path::Path;
 use koharu_ml::manga_text_segmentation_2025::MangaTextSegmentation;
 
 #[tokio::test]
+#[ignore = "requires model download and is not critical for CI"]
 async fn manga_text_segmentation_2025() -> anyhow::Result<()> {
     let model = MangaTextSegmentation::load(false).await?;
     let image = image::open(Path::new(env!("CARGO_MANIFEST_DIR")).join("tests/fixtures/1.jpg"))?;
