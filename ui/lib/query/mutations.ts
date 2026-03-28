@@ -463,28 +463,7 @@ export const useDocumentMutations = () => {
         cancellable: true,
       })
       try {
-        await api.detect(resolvedIndex)
-        await invalidateCurrentDocument(queryClient, resolvedIndex)
-        await invalidateThumbnailAtIndex(queryClient, resolvedIndex)
-        useEditorUiStore.getState().setShowRenderedImage(false)
-      } finally {
-        finishOperation()
-      }
-    },
-    [queryClient, startOperation, finishOperation],
-  )
-
-  const detectSensitive = useCallback(
-    async (_?: any, index?: number) => {
-      const resolvedIndex =
-        index ?? useEditorUiStore.getState().currentDocumentIndex
-      startOperation({
-        type: 'process-current',
-        step: 'detect',
-        cancellable: true,
-      })
-      try {
-        await api.detectWithOptions(resolvedIndex, { sensitive: true })
+        await api.detectWithOptions(resolvedIndex, {})
         await invalidateCurrentDocument(queryClient, resolvedIndex)
         await invalidateThumbnailAtIndex(queryClient, resolvedIndex)
         useEditorUiStore.getState().setShowRenderedImage(false)
@@ -733,7 +712,6 @@ export const useDocumentMutations = () => {
     addFolder,
     openExternal,
     detect,
-    detectSensitive,
     detectRegion,
     ocr,
     inpaint,

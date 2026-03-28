@@ -76,8 +76,6 @@
   "processing": {
     "detect": "Detectar",
     "detectTooltip": "Ejecutar detección de texto en la página actual",
-    "detectSensitive": "Detectar+",
-    "detectSensitiveTooltip": "Detección sensible — umbrales más bajos, captura más texto (SFX, texto pequeño, fondos complejos)",
     "ocr": "OCR",
     "ocrTooltip": "Reconocer texto en las regiones detectadas",
     "render": "Renderizar"

@@ -76,8 +76,6 @@
   "processing": {
     "detect": "检测",
     "detectTooltip": "对当前页面运行文本检测",
-    "detectSensitive": "检测+",
-    "detectSensitiveTooltip": "敏感检测 — 更低阈值，捕获更多文本（音效、小字、复杂背景）",
     "ocr": "识别",
     "ocrTooltip": "识别已检测区域中的文本",
     "render": "渲染"

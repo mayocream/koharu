@@ -460,9 +460,9 @@ export const api = {
     index: number,
     options: { sensitive?: boolean; region?: InpaintRegion },
   ): Promise<void> {
-    return withRpcError('detect_options', async () => {
+    return withRpcError('detect', async () => {
       const summary = await getDocumentSummaryAtIndex(index)
-      await fetchJson<void>(`/documents/${summary.id}/detect-options`, {
+      await fetchJson<void>(`/documents/${summary.id}/detect`, {
         method: 'POST',
         headers: { 'content-type': 'application/json' },
         body: JSON.stringify({

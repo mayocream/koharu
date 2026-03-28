@@ -1,13 +1,17 @@
-use std::{sync::Mutex, time::Instant};
+use std::{
+    sync::{Arc, Mutex},
+    time::Instant,
+};
 
 use anyhow::Result;
 use image::DynamicImage;
+use koharu_llm::paddleocr_vl::{self as paddleocr_vl_llm, PaddleOcrVl, PaddleOcrVlTask};
+use koharu_llm::safe::llama_backend::LlamaBackend;
 use koharu_types::{Document, FontPrediction, SerializableDynamicImage, TextBlock, TextDirection};
 
 use crate::comic_text_detector::{self, ComicTextDetector, crop_text_block_bbox};
 use crate::font_detector::{self, FontDetector};
 use crate::lama::{self, Lama};
-use crate::paddleocr_vl::{self, PaddleOcrVl, PaddleOcrVlTask};
 use crate::pp_doclayout_v3::{self, LayoutRegion, PPDocLayoutV3};
 
 const NEAR_BLACK_THRESHOLD: u8 = 12;
@@ -88,26 +92,33 @@ fn normalize_font_prediction(prediction: &mut FontPrediction) {
 
 pub struct Model {
     layout_detector: PPDocLayoutV3,
-    segmenter: ComicTextDetector,
+    ctd: ComicTextDetector,
     ocr: Mutex<PaddleOcrVl>,
     lama: Lama,
     font_detector: FontDetector,
 }
 
 impl Model {
-    /// Access the underlying comic text detector (for segmentation in region-detect).
-    pub fn segmenter(&self) -> &ComicTextDetector {
-        &self.segmenter
-    }
-
-    pub async fn new(cpu: bool) -> Result<Self> {
+    pub async fn new(cpu: bool, backend: Arc<LlamaBackend>) -> Result<Self> {
         Ok(Self {
             layout_detector: PPDocLayoutV3::load(cpu).await?,
-            segmenter: ComicTextDetector::load(cpu).await?,
-            ocr: Mutex::new(PaddleOcrVl::load(cpu).await?),
+            ctd: ComicTextDetector::load(cpu).await?,
+            ocr: Mutex::new(PaddleOcrVl::load(cpu, backend).await?),
             lama: Lama::load(cpu).await?,
             font_detector: FontDetector::load(cpu).await?,
         })
+    }
+
+    /// Compute the segmentation mask for an image given its text blocks.
+    pub fn compute_segment_mask(
+        &self,
+        image: &SerializableDynamicImage,
+        text_blocks: &[TextBlock],
+    ) -> Result<SerializableDynamicImage> {
+        let probability_map = self.ctd.inference_segmentation(image)?;
+        let mask =
+            comic_text_detector::refine_segmentation_mask(image, &probability_map, text_blocks);
+        Ok(DynamicImage::ImageLuma8(mask).into())
     }
 
     /// Detect text blocks and fonts in a document.
@@ -142,7 +153,7 @@ impl Model {
         let mut ctd_elapsed = std::time::Duration::ZERO;
         if doc.text_blocks.is_empty() {
             let ctd_started = Instant::now();
-            match self.segmenter.inference(&doc.image) {
+            match self.ctd.inference(&doc.image) {
                 Ok(detection) => {
                     let ctd_blocks: Vec<TextBlock> = detection
                         .text_blocks
@@ -183,7 +194,7 @@ impl Model {
 
         // Stage 2: Segmentation mask
         let segmentation_started = Instant::now();
-        let probability_map = self.segmenter.inference_segmentation(&doc.image)?;
+        let probability_map = self.ctd.inference_segmentation(&doc.image)?;
         let mask = comic_text_detector::refine_segmentation_mask(
             &doc.image,
             &probability_map,
@@ -324,7 +335,7 @@ impl Model {
 pub async fn prefetch() -> Result<()> {
     pp_doclayout_v3::prefetch().await?;
     comic_text_detector::prefetch_segmentation().await?;
-    paddleocr_vl::prefetch().await?;
+    paddleocr_vl_llm::prefetch().await?;
     lama::prefetch().await?;
     font_detector::prefetch().await?;
 

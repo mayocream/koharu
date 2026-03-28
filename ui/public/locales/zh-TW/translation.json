@@ -76,8 +76,6 @@
   "processing": {
     "detect": "偵測",
     "detectTooltip": "在目前頁面執行文字偵測",
-    "detectSensitive": "偵測+",
-    "detectSensitiveTooltip": "敏感偵測 — 更低閾值，擷取更多文字（音效、小字、複雜背景）",
     "ocr": "辨識",
     "ocrTooltip": "辨識已偵測區域中的文字",
     "render": "渲染"

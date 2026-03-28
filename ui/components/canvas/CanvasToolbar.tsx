@@ -10,7 +10,6 @@ import {
   TypeIcon,
   LoaderCircleIcon,
   LanguagesIcon,
-  SearchIcon,
 } from 'lucide-react'
 import { Separator } from '@/components/ui/separator'
 import { Button } from '@/components/ui/button'
@@ -49,14 +48,10 @@ export function CanvasToolbar() {
 }
 
 function WorkflowButtons() {
-  const { inpaint, detect, detectSensitive, ocr, render } =
-    useDocumentMutations()
+  const { inpaint, detect, ocr, render } = useDocumentMutations()
   const { llmGenerate } = useLlmMutations()
   const { data: llmReady = false } = useLlmReadyQuery()
   const [generating, setGenerating] = useState(false)
-  const [detectVariant, setDetectVariant] = useState<
-    'normal' | 'sensitive' | null
-  >(null)
   const { t } = useTranslation()
   const operation = useOperationStore((state) => state.operation)
 
@@ -68,21 +63,6 @@ function WorkflowButtons() {
     operation?.type === 'process-current' && operation?.step === 'inpaint'
   const isRendering =
     operation?.type === 'process-current' && operation?.step === 'render'
-
-  // Clear variant tracking when detection finishes
-  useEffect(() => {
-    if (!isDetecting) setDetectVariant(null)
-  }, [isDetecting])
-
-  const handleDetect = () => {
-    setDetectVariant('normal')
-    void detect()
-  }
-
-  const handleDetectSensitive = () => {
-    setDetectVariant('sensitive')
-    void detectSensitive()
-  }
 
   const handleTranslate = async () => {
     setGenerating(true)
@@ -100,32 +80,16 @@ function WorkflowButtons() {
       <Button
         variant='ghost'
         size='xs'
-        onClick={handleDetect}
+        onClick={() => void detect()}
         data-testid='toolbar-detect'
         disabled={isDetecting}
       >
-        {isDetecting && detectVariant === 'normal' ? (
+        {isDetecting ? (
           <LoaderCircleIcon className='size-4 animate-spin' />
         ) : (
           <ScanIcon className='size-4' />
         )}
         {t('processing.detect')}
-      </Button>
-
-      <Button
-        variant='ghost'
-        size='xs'
-        onClick={handleDetectSensitive}
-        data-testid='toolbar-detect-sensitive'
-        disabled={isDetecting}
-        title={t('processing.detectSensitiveTooltip')}
-      >
-        {isDetecting && detectVariant === 'sensitive' ? (
-          <LoaderCircleIcon className='size-4 animate-spin' />
-        ) : (
-          <SearchIcon className='size-4' />
-        )}
-        {t('processing.detectSensitive', { defaultValue: 'Detect+' })}
       </Button>
 
       <Separator orientation='vertical' className='mx-0.5 h-4' />
