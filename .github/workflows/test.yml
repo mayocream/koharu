@@ -10,7 +10,7 @@ env:
 
 jobs:
   test:
-    name: Integration tests
+    name: Unit Tests
     runs-on: ubuntu-latest
     steps:
       # refer: https://v2.tauri.app/start/prerequisites/#linux
