@@ -10,7 +10,7 @@ use std::path::{Path, PathBuf};
 use anyhow::{Context, Result};
 
 pub use cuda::{CudaDriverVersion, driver_version as cuda_driver_version};
-pub use loader::load_library_by_name;
+pub use loader::{load_library_by_name, load_library_by_path};
 
 const DOWNLOADS_DIR: &str = ".downloads";
 const INSTALLED_MARKER: &str = ".installed";

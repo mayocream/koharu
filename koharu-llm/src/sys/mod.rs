@@ -102,16 +102,16 @@ pub fn initialize() -> Result<()> {
 fn load_libraries(dir: &Path) -> Result<LoadedLibraries> {
     let [ggml_base_name, ggml_name, llama_name, mtmd_name] = LIB_NAMES;
 
-    let ggml_base = load_and_bind(ggml_base_name, |lib| unsafe {
+    let ggml_base = load_and_bind(&dir.join(ggml_base_name), ggml_base_name, |lib| unsafe {
         generated::ggml_base::ggml_base::from_library(lib)
     })?;
-    let ggml = load_and_bind(ggml_name, |lib| unsafe {
+    let ggml = load_and_bind(&dir.join(ggml_name), ggml_name, |lib| unsafe {
         generated::ggml::ggml::from_library(lib)
     })?;
-    let llama = load_and_bind(llama_name, |lib| unsafe {
+    let llama = load_and_bind(&dir.join(llama_name), llama_name, |lib| unsafe {
         generated::llama::llama::from_library(lib)
     })?;
-    let mtmd = load_and_bind(mtmd_name, |lib| unsafe {
+    let mtmd = load_and_bind(&dir.join(mtmd_name), mtmd_name, |lib| unsafe {
         generated::mtmd::mtmd::from_library(lib)
     })?;
 
@@ -125,10 +125,17 @@ fn load_libraries(dir: &Path) -> Result<LoadedLibraries> {
 }
 
 fn load_and_bind<T>(
+    path: &Path,
     name: &str,
     bind: impl FnOnce(libloading::Library) -> std::result::Result<T, libloading::Error>,
 ) -> Result<T> {
+    // On Windows, DLL search paths are configured via add_runtime_search_path,
+    // On Linux and macOS, we load libraries by path to ensure we get the correct ones.
+    #[cfg(target_os = "windows")]
     let library = koharu_runtime::load_library_by_name(name)
+        .with_context(|| format!("failed to load `{name}`"))?;
+    #[cfg(not(target_os = "windows"))]
+    let library = koharu_runtime::load_library_by_path(path)
         .with_context(|| format!("failed to load `{name}`"))?;
     bind(library).with_context(|| format!("failed to bind `{name}`"))
 }
