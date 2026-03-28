@@ -189,7 +189,8 @@
   },
   "workspace": {
     "importPrompt": "匯入頁面以開始編輯。",
-    "deleteBlock": "刪除區塊"
+    "deleteBlock": "刪除區塊",
+    "mergeBlocks": "合併文字區塊"
   },
   "statusBar": {
     "zoom": "縮放",

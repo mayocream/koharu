@@ -13,11 +13,13 @@ import {
   SquareIcon,
 } from 'lucide-react'
 import { useTextBlocks } from '@/hooks/useTextBlocks'
+import { useUndoStore } from '@/lib/stores/undoStore'
 import {
   RenderEffect,
   RenderStroke,
   RgbaColor,
   TextAlign,
+  TextBlock,
   TextStyle,
 } from '@/types'
 import type { FontFaceInfo } from '@/lib/protocol'
@@ -192,6 +194,7 @@ export function RenderControlsPanel() {
   const selectedBlockIndices = useEditorUiStore(
     (state) => state.selectedBlockIndices,
   )
+  const pushUndo = useUndoStore((state) => state.push)
   const { updateTextBlocks } = useTextBlockMutations()
   const { data: availableFonts = [] } = useFontsQuery()
   const fontFamily = usePreferencesStore((state) => state.fontFamily)
@@ -199,6 +202,7 @@ export function RenderControlsPanel() {
   const {
     textBlocks,
     selectedBlockIndex,
+    readCurrentBlocks,
     replaceBlock,
     replaceMultipleBlocks,
   } = useTextBlocks()
@@ -298,14 +302,39 @@ export function RenderControlsPanel() {
   })
 
   const applyStyleToSelected = (updates: Partial<TextStyle>) => {
-    // Multi-select: apply to all selected blocks
+    // Multi-select: apply per-block computed styles with undo support
     if (isMultiSelect) {
+      const indexSet = new Set(selectedBlockIndices)
+      const snapshots = new Map<number, TextBlock>()
+      selectedBlockIndices.forEach((i) => {
+        if (textBlocks[i]) snapshots.set(i, { ...textBlocks[i] })
+      })
+
       const nextBlocks = textBlocks.map((block, idx) =>
-        selectedBlockIndices.includes(idx)
+        indexSet.has(idx)
           ? { ...block, style: buildStyle(block, block.style, updates) }
           : block,
       )
       void updateTextBlocks(nextBlocks)
+
+      pushUndo({
+        type: 'replaceMultipleBlocks',
+        description: `Style ${selectedBlockIndices.length} blocks`,
+        undo: () => {
+          const blocks = readCurrentBlocks()
+          const restored = blocks.map((b, idx) => snapshots.get(idx) ?? b)
+          void updateTextBlocks(restored)
+        },
+        redo: () => {
+          const blocks = readCurrentBlocks()
+          const reapplied = blocks.map((block, idx) =>
+            indexSet.has(idx)
+              ? { ...block, style: buildStyle(block, block.style, updates) }
+              : block,
+          )
+          void updateTextBlocks(reapplied)
+        },
+      })
       return true
     }
     if (selectedBlockIndex === undefined) return false

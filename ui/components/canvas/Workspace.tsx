@@ -70,6 +70,7 @@ export function Workspace() {
     clearSelection,
     appendBlock,
     removeBlock,
+    mergeBlocks,
   } = useTextBlocks()
   const viewportRef = useRef<HTMLDivElement | null>(null)
   const { setScale: applyScale } = useCanvasZoom()
@@ -138,6 +139,18 @@ export function Workspace() {
     },
     { preventDefault: true },
     [redo],
+  )
+
+  // Merge selected blocks (Ctrl+M)
+  useHotkeys(
+    'mod+m',
+    (e) => {
+      e.preventDefault()
+      const indices = useEditorUiStore.getState().selectedBlockIndices
+      if (indices.length >= 2) void mergeBlocks(indices)
+    },
+    { preventDefault: true, enableOnFormTags: false },
+    [mergeBlocks],
   )
 
   // Show Original hotkey (O)
@@ -435,6 +448,14 @@ export function Workspace() {
                   </div>
                 </ContextMenuTrigger>
                 <ContextMenuContent className='min-w-32'>
+                  <ContextMenuItem
+                    disabled={selectedBlockIndices.length < 2}
+                    onSelect={() =>
+                      void mergeBlocks(selectedBlockIndices)
+                    }
+                  >
+                    {t('workspace.mergeBlocks')}
+                  </ContextMenuItem>
                   <ContextMenuItem
                     disabled={contextMenuBlockIndex === undefined}
                     onSelect={handleDeleteBlock}

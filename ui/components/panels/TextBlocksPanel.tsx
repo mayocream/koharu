@@ -1,10 +1,10 @@
 'use client'
 
-import { useState } from 'react'
+import { useMemo, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import { motion } from 'motion/react'
 import { TextBlock } from '@/types'
-import { Languages, LoaderCircleIcon, Trash2Icon } from 'lucide-react'
+import { Languages, LoaderCircleIcon, MergeIcon, Trash2Icon } from 'lucide-react'
 import { useTextBlocks } from '@/hooks/useTextBlocks'
 import { useLlmReadyQuery } from '@/lib/query/hooks'
 import { useLlmMutations } from '@/lib/query/mutations'
@@ -34,6 +34,7 @@ export function TextBlocksPanel() {
     toggleBlockSelection,
     replaceBlock,
     removeBlock,
+    mergeBlocks,
   } = useTextBlocks()
   const { t } = useTranslation()
   const { llmGenerate } = useLlmMutations()
@@ -41,6 +42,7 @@ export function TextBlocksPanel() {
   const [generatingIndex, setGeneratingIndex] = useState<number | null>(null)
   const generating = generatingIndex !== null
   const isMultiSelect = selectedBlockIndices.length > 1
+  const selectedIndicesSet = useMemo(() => new Set(selectedBlockIndices), [selectedBlockIndices])
 
   if (!document) {
     return (
@@ -87,9 +89,28 @@ export function TextBlocksPanel() {
           {t('textBlocks.title', { count: textBlocks.length })}
         </span>
         {isMultiSelect && (
-          <span className='rounded-full bg-sky-400/20 px-1.5 py-0.5 text-[9px] font-semibold text-sky-600 normal-case dark:text-sky-400'>
-            {t('textBlocks.selected', { count: selectedBlockIndices.length })}
-          </span>
+          <div className='flex items-center gap-1'>
+            <span className='rounded-full bg-sky-400/20 px-1.5 py-0.5 text-[9px] font-semibold text-sky-600 normal-case dark:text-sky-400'>
+              {t('textBlocks.selected', { count: selectedBlockIndices.length })}
+            </span>
+            <Tooltip>
+              <TooltipTrigger asChild>
+                <Button
+                  variant='ghost'
+                  size='icon-xs'
+                  data-testid='textblocks-merge'
+                  className='size-5'
+                  disabled={generating}
+                  onClick={() => void mergeBlocks(selectedBlockIndices)}
+                >
+                  <MergeIcon className='size-3' />
+                </Button>
+              </TooltipTrigger>
+              <TooltipContent side='bottom' sideOffset={4}>
+                {t('workspace.mergeBlocks')}
+              </TooltipContent>
+            </Tooltip>
+          </div>
         )}
       </div>
       <ScrollArea
@@ -123,7 +144,7 @@ export function TextBlocksPanel() {
                   block={block}
                   index={index}
                   selected={index === selectedBlockIndex}
-                  multiSelected={selectedBlockIndices.includes(index)}
+                  multiSelected={selectedIndicesSet.has(index)}
                   isMultiSelect={isMultiSelect}
                   onChange={(updates) => void replaceBlock(index, updates)}
                   onDelete={() => void handleDelete(index)}

@@ -1,6 +1,6 @@
 'use client'
 
-import { useEffect, useRef, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import { Rnd, type RndResizeCallback, type RndDragCallback } from 'react-rnd'
 import { useHotkeys } from 'react-hotkeys-hook'
 import { useEditorUiStore } from '@/lib/stores/editorUiStore'
@@ -26,6 +26,7 @@ export function TextBlockAnnotations({
     useTextBlocks()
   const mode = useEditorUiStore((state) => state.mode)
   const interactive = mode === 'select' || mode === 'block'
+  const selectedIndicesSet = useMemo(() => new Set(selectedIndices), [selectedIndices])
 
   useHotkeys(
     'backspace,delete',
@@ -61,7 +62,7 @@ export function TextBlockAnnotations({
           block={block}
           index={index}
           selected={index === selectedIndex}
-          multiSelected={selectedIndices.includes(index)}
+          multiSelected={selectedIndicesSet.has(index)}
           onSelect={onSelect}
           onToggleSelect={onToggleSelect}
           interactive={interactive}
@@ -169,6 +170,14 @@ function TextBlockAnnotation({
   const handlePointerDown = (event: MouseEvent) => {
     if (!interactive) return
     event.stopPropagation()
+    // Right-click: preserve multi-selection when clicking a block that is
+    // already selected so the context menu can act on the whole selection.
+    if (event.button === 2) {
+      if (!selected && !multiSelected) {
+        onSelect(index)
+      }
+      return
+    }
     if (event.ctrlKey || event.metaKey) {
       onToggleSelect?.(index)
     } else {
@@ -219,7 +228,20 @@ function TextBlockAnnotation({
       }}
       className='absolute'
     >
-      <div className='relative h-full w-full select-none'>
+      <div
+        className='relative h-full w-full select-none'
+        onPointerDownCapture={(e) => {
+          // Intercept Ctrl+click BEFORE Rnd sees the event so that
+          // multi-selection works without interfering with Rnd's internal
+          // drag/select logic.
+          if (!interactive) return
+          if (e.ctrlKey || e.metaKey) {
+            e.stopPropagation()
+            e.preventDefault()
+            onToggleSelect?.(index)
+          }
+        }}
+      >
         <div
           className={`absolute inset-0 rounded ${
             selected

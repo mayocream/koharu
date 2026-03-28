@@ -189,7 +189,8 @@
   },
   "workspace": {
     "importPrompt": "Импортируйте страницу, чтобы начать редактирование.",
-    "deleteBlock": "Удалить блок"
+    "deleteBlock": "Удалить блок",
+    "mergeBlocks": "Объединить блоки"
   },
   "statusBar": {
     "zoom": "Масштаб",
