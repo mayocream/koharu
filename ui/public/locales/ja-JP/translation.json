@@ -184,7 +184,8 @@
   },
   "workspace": {
     "importPrompt": "ページを読み込んで編集を開始してください。",
-    "deleteBlock": "ブロックを削除"
+    "deleteBlock": "ブロックを削除",
+    "mergeBlocks": "ブロックを結合"
   },
   "statusBar": {
     "zoom": "ズーム",
