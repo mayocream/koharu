@@ -3,6 +3,7 @@
 import { useState } from 'react'
 import type React from 'react'
 import { Document } from '@/types'
+import { useEditorUiStore } from '@/lib/stores/editorUiStore'
 import type { PointerToDocumentFn } from '@/hooks/usePointerToDocument'
 
 type BlockContextMenuOptions = {
@@ -39,7 +40,13 @@ export function useBlockContextMenu({
         point.y <= block.y + block.height,
     )
     if (blockIndex >= 0) {
-      selectBlock(blockIndex)
+      // Don't reset multi-selection when right-clicking a block that is
+      // already part of it — the user needs the selection to stay so they
+      // can use "Merge blocks" from the context menu.
+      const { selectedBlockIndices } = useEditorUiStore.getState()
+      if (!selectedBlockIndices.includes(blockIndex)) {
+        selectBlock(blockIndex)
+      }
       setContextMenuBlockIndex(blockIndex)
     } else {
       event.preventDefault()

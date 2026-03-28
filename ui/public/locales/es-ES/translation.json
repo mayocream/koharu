@@ -184,7 +184,8 @@
   },
   "workspace": {
     "importPrompt": "Importa una página para comenzar a editar.",
-    "deleteBlock": "Eliminar bloque"
+    "deleteBlock": "Eliminar bloque",
+    "mergeBlocks": "Fusionar bloques"
   },
   "statusBar": {
     "zoom": "Zoom",

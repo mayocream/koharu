@@ -38,6 +38,10 @@ export function useBrushLayerDisplay({
       canvas.height = currentDocument.height
     }
 
+    // Always clear before async load so stale content from a previous page
+    // doesn't flash when both pages share the same canvas dimensions.
+    ctx?.clearRect(0, 0, canvas.width, canvas.height)
+
     let cancelled = false
     const brushLayer = currentDocument.brushLayer
 
@@ -66,8 +70,6 @@ export function useBrushLayerDisplay({
           console.error(error)
         }
       })()
-    } else {
-      ctx?.clearRect(0, 0, canvas.width, canvas.height)
     }
 
     return () => {
