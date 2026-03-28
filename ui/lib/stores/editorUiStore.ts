@@ -2,6 +2,7 @@
 
 import { create } from 'zustand'
 import { RenderEffect, RenderStroke, ToolMode } from '@/types'
+import { useUndoStore } from '@/lib/stores/undoStore'
 
 type LayerVisibility = {
   showSegmentationMask: boolean
@@ -89,12 +90,17 @@ export const useEditorUiStore = create<EditorUiState>((set, get) => ({
       }
     })
   },
-  setCurrentDocumentIndex: (index) =>
+  setCurrentDocumentIndex: (index) => {
     set(() => ({
       currentDocumentIndex: index,
       selectedBlockIndex: undefined,
       selectedBlockIndices: [],
-    })),
+    }))
+    // Undo actions reference the page they were created on.  Leaving them
+    // in the stack after a page switch causes Ctrl+Z to silently modify a
+    // page the user is no longer viewing.
+    useUndoStore.getState().clear()
+  },
   setScale: (scale) => {
     const clamped = Math.max(10, Math.min(400, Math.round(scale)))
     set({ scale: clamped })

@@ -119,6 +119,17 @@ export function useMaskDrawing({
     inpaintQueueRef.current = Promise.resolve()
   }, [enabled, mode])
 
+  // Clear the mask canvas when entering magic eraser mode so the user
+  // doesn't see a leftover segmentation mask from a previous mode.
+  useEffect(() => {
+    if (!isMagicEraser) return
+    const ctx = ctxRef.current
+    const canvas = canvasRef.current
+    if (ctx && canvas) {
+      ctx.clearRect(0, 0, canvas.width, canvas.height)
+    }
+  }, [isMagicEraser])
+
   useEffect(() => {
     const canvas = canvasRef.current
     if (!canvas) return
@@ -146,8 +157,10 @@ export function useMaskDrawing({
     // (e.g. when pages share the same dimensions and the new page has no segment).
     ctx?.clearRect(0, 0, canvas.width, canvas.height)
 
+    // In magic eraser mode the canvas is used only for the user's white
+    // stroke preview — don't paint the segmentation mask underneath.
     let cancelled = false
-    if (currentDocument.segment) {
+    if (currentDocument.segment && !isMagicEraser) {
       void (async () => {
         try {
           const bitmap = await convertToImageBitmap(currentDocument.segment!)
@@ -188,6 +201,7 @@ export function useMaskDrawing({
     currentDocument?.width,
     currentDocument?.height,
     currentDocument?.segment,
+    isMagicEraser,
   ])
 
   const drawStroke = (from: DocumentPointer, to: DocumentPointer) => {
@@ -264,16 +278,7 @@ export function useMaskDrawing({
     drawingRef.current = false
     lastPointRef.current = null
 
-    // Snapshot document state BEFORE inpaint for undo
     const docIndex = useEditorUiStore.getState().currentDocumentIndex
-    const queryKey = queryKeys.documents.current(docIndex)
-    const snapshotDoc = queryClient.getQueryData<Document>(queryKey)
-    const prevInpainted = snapshotDoc?.inpainted
-      ? new Uint8Array(snapshotDoc.inpainted)
-      : undefined
-    const prevSegment = snapshotDoc?.segment
-      ? new Uint8Array(snapshotDoc.segment)
-      : undefined
 
     void (async () => {
       const [maskBytes, patchBytes] = await Promise.all([
@@ -296,6 +301,18 @@ export function useMaskDrawing({
         return
       }
       queueInpaint(async () => {
+        // Snapshot INSIDE the queue so that when multiple strokes are queued,
+        // each snapshot captures the state AFTER the previous inpaint
+        // completed — not the stale state from before the queue started.
+        const queryKey = queryKeys.documents.current(docIndex)
+        const snapshotDoc = queryClient.getQueryData<Document>(queryKey)
+        const prevInpainted = snapshotDoc?.inpainted
+          ? new Uint8Array(snapshotDoc.inpainted)
+          : undefined
+        const prevSegment = snapshotDoc?.segment
+          ? new Uint8Array(snapshotDoc.segment)
+          : undefined
+
         try {
           if (isMagicEraser) {
             await inpaintFree(region, { index: docIndex })
@@ -303,12 +320,10 @@ export function useMaskDrawing({
             await inpaintPartial(region, { index: docIndex })
           }
 
-          // Push undo action after successful inpaint
           pushUndo({
             type: isMagicEraser ? 'magicEraser' : 'repairBrush',
             description: isMagicEraser ? 'Magic Eraser' : 'Repair Brush',
             undo: () => {
-              // Restore previous inpainted image and segment in cache
               const key = queryKeys.documents.current(docIndex)
               const doc = queryClient.getQueryData<any>(key)
               if (!doc) return
@@ -317,13 +332,11 @@ export function useMaskDrawing({
                 inpainted: prevInpainted,
                 segment: prevSegment,
               })
-              // Sync mask back to backend
               if (prevSegment) {
                 void updateMask(prevSegment, { sync: true })
               }
             },
             redo: () => {
-              // Re-apply: update mask and re-inpaint
               void (async () => {
                 if (maskBytes) {
                   await updateMask(maskBytes, {

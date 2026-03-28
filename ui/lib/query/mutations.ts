@@ -463,7 +463,7 @@ export const useDocumentMutations = () => {
         cancellable: true,
       })
       try {
-        await api.detectWithOptions(resolvedIndex, { sensitive: true })
+        await api.detectWithOptions(resolvedIndex, {})
         await invalidateCurrentDocument(queryClient, resolvedIndex)
         await invalidateThumbnailAtIndex(queryClient, resolvedIndex)
         useEditorUiStore.getState().setShowRenderedImage(false)

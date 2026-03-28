@@ -181,14 +181,14 @@ export function Workspace() {
   })
   const { t } = useTranslation()
 
-  // Listen for Tauri resize events
+  // Listen for Tauri resize events — register once, read state from store.
   useEffect(() => {
     let unlisten: (() => void) | undefined
 
     const setupListener = async () => {
       unlisten = await listen('tauri://resize', () => {
-        const { autoFitEnabled: fitEnabled } = useEditorUiStore.getState()
-        if (currentDocument && fitEnabled) {
+        const { autoFitEnabled, totalPages } = useEditorUiStore.getState()
+        if (totalPages > 0 && autoFitEnabled) {
           fitCanvasToViewport()
         }
       })
@@ -201,7 +201,7 @@ export function Workspace() {
         unlisten()
       }
     }
-  }, [currentDocument])
+  }, [])
 
   useGesture(
     {
