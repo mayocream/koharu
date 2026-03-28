@@ -1,9 +1,10 @@
 'use client'
 
-import { useEffect, useRef, useState, type ReactNode } from 'react'
+import { useEffect, useRef, type ReactNode } from 'react'
 import { I18nextProvider } from 'react-i18next'
 import { ThemeProvider } from 'next-themes'
 import { QueryClientProvider, useQueryClient } from '@tanstack/react-query'
+import ClientOnly from '@/components/ClientOnly'
 import { TooltipProvider } from '@/components/ui/tooltip'
 import {
   ProgressBarStatus,
@@ -263,7 +264,6 @@ function ProvidersBootstrap({ children }: { children: ReactNode }) {
 }
 
 export function Providers({ children }: { children: ReactNode }) {
-  const [mounted, setMounted] = useState(false)
   const queryClient = getQueryClient()
   const ensureDownloadSubscribed = useDownloadStore(
     (state) => state.ensureSubscribed,
@@ -274,8 +274,6 @@ export function Providers({ children }: { children: ReactNode }) {
   }, [ensureDownloadSubscribed])
 
   useEffect(() => {
-    setMounted(true)
-
     const handleLanguageChange = (lng: string) => {
       document.documentElement.lang = lng
     }
@@ -287,17 +285,17 @@ export function Providers({ children }: { children: ReactNode }) {
     }
   }, [])
 
-  if (!mounted) return null
-
   return (
     <QueryClientProvider client={queryClient}>
-      <ProvidersBootstrap>
-        <I18nextProvider i18n={i18n}>
-          <ThemeProvider attribute='class' defaultTheme='system' enableSystem>
-            <TooltipProvider delayDuration={0}>{children}</TooltipProvider>
-          </ThemeProvider>
-        </I18nextProvider>
-      </ProvidersBootstrap>
+      <ThemeProvider attribute='class' defaultTheme='system' enableSystem>
+        <ClientOnly>
+          <ProvidersBootstrap>
+            <I18nextProvider i18n={i18n}>
+              <TooltipProvider delayDuration={0}>{children}</TooltipProvider>
+            </I18nextProvider>
+          </ProvidersBootstrap>
+        </ClientOnly>
+      </ThemeProvider>
     </QueryClientProvider>
   )
 }

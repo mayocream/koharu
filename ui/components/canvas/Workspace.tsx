@@ -200,6 +200,9 @@ export function Workspace() {
       eventOptions: { passive: false },
       drag: {
         filterTaps: true,
+        pointer: {
+          mouse: true,
+        },
       },
       wheel: {
         preventDefault: true,
@@ -270,7 +273,11 @@ export function Workspace() {
                       ref={canvasRef}
                       data-testid='workspace-canvas'
                       className='border-border bg-card relative rounded border shadow-sm'
-                      style={{ ...canvasDimensions, cursor: canvasCursor }}
+                      style={{
+                        ...canvasDimensions,
+                        cursor: canvasCursor,
+                        touchAction: 'none',
+                      }}
                       onPointerDownCapture={handleCanvasPointerDownCapture}
                       onContextMenuCapture={handleCanvasContextMenu}
                       {...blockDraftBindings}
@@ -290,6 +297,7 @@ export function Workspace() {
                             height: '100%',
                             opacity: showSegmentationMask ? 0.8 : 0,
                             pointerEvents: maskPointerEnabled ? 'auto' : 'none',
+                            touchAction: 'none',
                             transition: 'opacity 120ms ease',
                           }}
                           {...maskBindings}
@@ -326,6 +334,7 @@ export function Workspace() {
                             pointerEvents: brushPointerEnabled
                               ? 'auto'
                               : 'none',
+                            touchAction: 'none',
                             zIndex: 20,
                             transition: 'opacity 120ms ease',
                           }}
