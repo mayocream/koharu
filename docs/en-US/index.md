@@ -177,6 +177,19 @@ hide:
     padding-inline: 1.05rem;
   }
 
+  .kh-download-platform-row {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    justify-content: center;
+    gap: 0.6rem;
+  }
+
+  .kh-download-platform-row .kh-download-button {
+    min-width: 0;
+    flex: 1 1 auto;
+  }
+
   .kh-download-hero__subtext {
     color: var(--kh-muted);
     font-size: 0.84rem;
@@ -421,6 +434,16 @@ hide:
   }
 
   @media screen and (max-width: 56rem) {
+    .kh-download-platform-row {
+      flex-direction: column;
+    }
+
+    .kh-download-platform-row .kh-download-button {
+      width: 100%;
+    }
+  }
+
+  @media screen and (max-width: 56rem) {
     .kh-announce {
       gap: 0.35rem;
       padding: 0.45rem 0.65rem;
@@ -493,11 +516,13 @@ hide:
           </div>
         </div>
         <div class="kh-download-hero">
-          <a class="kh-download-button" href="https://github.com/mayocream/koharu/releases/latest">
-            Download for Windows&nbsp;&nbsp;<span class="kh-download-button__version">0.40.1</span>
-          </a>
+          <div class="kh-download-platform-row">
+            <a class="kh-download-button" href="https://github.com/mayocream/koharu/releases/latest">
+              Download for Windows&nbsp;&nbsp;<span class="kh-download-button__version">0.40.1</span>
+            </a>
+          </div>
           <div class="kh-download-hero__subtext">
-            Koharu is free and open source.
+            Koharu is free and open source. &middot; <a href="how-to/install-koharu/">All install options →</a>
           </div>
         </div>
       </div>

@@ -4,17 +4,85 @@ title: Install Koharu
 
 # Install Koharu
 
-## Download a release build
-
-Download the latest release from the [Koharu releases page](https://github.com/mayocream/koharu/releases/latest).
-
-Koharu provides prebuilt binaries for:
-
-- Windows
-- macOS
-- Linux
+Download from the [Koharu releases page](https://github.com/mayocream/koharu/releases/latest) and follow the steps for your platform below.
 
 If your platform is not covered by a release build, use [Build From Source](build-from-source.md).
+
+## Install by platform
+
+=== "Windows"
+
+    Download the `.exe` installer from the [releases page](https://github.com/mayocream/koharu/releases/latest) and run it.
+
+    The installer handles all required dependencies automatically. Once complete, launch Koharu from the Start menu or desktop shortcut.
+
+=== "macOS"
+
+    Download the `.dmg` from the [releases page](https://github.com/mayocream/koharu/releases/latest).
+
+    Open the `.dmg`, drag **Koharu** into your **Applications** folder, then launch it from the Applications folder or Spotlight.
+
+    !!! note
+
+        On first launch macOS may show a security prompt. Open **System Settings → Privacy & Security** and click **Open Anyway**.
+
+=== "Arch Linux (AUR)"
+
+    Install using your preferred AUR helper:
+
+    ```bash
+    yay -S koharu-bin
+    ```
+
+    Or with `paru`:
+
+    ```bash
+    paru -S koharu-bin
+    ```
+
+    Or manually:
+
+    ```bash
+    git clone https://aur.archlinux.org/koharu-bin.git
+    cd koharu-bin
+    makepkg -si
+    ```
+
+    `koharu-bin` installs the prebuilt binary from the GitHub release. `webkit2gtk-4.1` and other GTK dependencies are pulled in automatically.
+
+=== "Ubuntu / Debian"
+
+    Download the `.deb` package from the [releases page](https://github.com/mayocream/koharu/releases/latest) and install with `apt`:
+
+    ```bash
+    # Replace x.y.z with the actual version
+    sudo apt install ./koharu_x.y.z_amd64.deb
+    ```
+
+    Required dependencies (resolved automatically):
+
+    - `libwebkit2gtk-4.1`
+    - `libgtk-3-0`
+    - `libayatana-appindicator3-1`
+
+=== "AppImage"
+
+    The AppImage works on most Linux distributions without installation:
+
+    ```bash
+    chmod +x koharu_x.y.z_amd64.AppImage
+    ./koharu_x.y.z_amd64.AppImage
+    ```
+
+    !!! note "Wayland"
+
+        If you see a "Protocol error dispatching to Wayland display" error, set this environment variable before launching:
+
+        ```bash
+        WEBKIT_DISABLE_DMABUF_RENDERER=1 ./koharu
+        ```
+
+        Add it to your shell profile (`~/.bashrc`, `~/.zshrc`, `~/.config/fish/config.fish`) to make it permanent.
 
 ## What gets installed locally
 
