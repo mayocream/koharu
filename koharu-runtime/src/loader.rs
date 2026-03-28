@@ -63,6 +63,9 @@ pub fn load_library_by_name(name: &str) -> Result<Library> {
 }
 
 pub fn load_library_by_path(path: &std::path::Path) -> Result<Library> {
+    let path = path
+        .canonicalize()
+        .with_context(|| format!("failed to canonicalize `{}`", path.display()))?;
     load_library(path.as_os_str()).with_context(|| format!("failed to load `{}`", path.display()))
 }
 

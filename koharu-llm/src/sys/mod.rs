@@ -132,6 +132,8 @@ fn load_and_bind<T>(
     // On Windows, DLL search paths are configured via add_runtime_search_path,
     // On Linux and macOS, we load libraries by path to ensure we get the correct ones.
     #[cfg(target_os = "windows")]
+    let _ = path;
+    #[cfg(target_os = "windows")]
     let library = koharu_runtime::load_library_by_name(name)
         .with_context(|| format!("failed to load `{name}`"))?;
     #[cfg(not(target_os = "windows"))]
