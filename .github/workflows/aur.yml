@@ -1,0 +1,79 @@
+name: Publish AUR Package
+
+# Runs after a GitHub release is published by the Release workflow.
+# The ubuntu-latest matrix leg creates the release and uploads the AppImage
+# in the same step, so by the time "published" fires the AppImage is available.
+on:
+  release:
+    types: [published]
+
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Extract version from tag
+        id: meta
+        # Strip the leading "v" so pkgver is plain semver (e.g. 0.41.0)
+        run: echo "version=${GITHUB_REF_NAME#v}" >> "$GITHUB_OUTPUT"
+
+      - name: Compute SHA-256 checksums
+        id: sums
+        env:
+          VERSION: ${{ steps.meta.outputs.version }}
+        run: |
+          APPIMAGE_URL="https://github.com/mayocream/koharu/releases/download/v${VERSION}/koharu_${VERSION}_amd64.AppImage"
+          ICON_URL="https://raw.githubusercontent.com/mayocream/koharu/main/koharu/icons/128x128.png"
+
+          echo "Fetching AppImage checksum…"
+          SHA_APPIMAGE=$(curl -fsSL "$APPIMAGE_URL" | sha256sum | awk '{print $1}')
+
+          echo "Computing desktop file checksum…"
+          SHA_DESKTOP=$(sha256sum packaging/aur/koharu.desktop | awk '{print $1}')
+
+          echo "Fetching icon checksum…"
+          SHA_ICON=$(curl -fsSL "$ICON_URL" | sha256sum | awk '{print $1}')
+
+          echo "appimage=${SHA_APPIMAGE}" >> "$GITHUB_OUTPUT"
+          echo "desktop=${SHA_DESKTOP}"   >> "$GITHUB_OUTPUT"
+          echo "icon=${SHA_ICON}"         >> "$GITHUB_OUTPUT"
+
+      - name: Update PKGBUILD version and checksums
+        env:
+          VERSION:      ${{ steps.meta.outputs.version }}
+          SHA_APPIMAGE: ${{ steps.sums.outputs.appimage }}
+          SHA_DESKTOP:  ${{ steps.sums.outputs.desktop }}
+          SHA_ICON:     ${{ steps.sums.outputs.icon }}
+        run: |
+          sed -i "s/^pkgver=.*/pkgver=${VERSION}/" packaging/aur/PKGBUILD
+          sed -i "s/^pkgrel=.*/pkgrel=1/"          packaging/aur/PKGBUILD
+
+          # Rewrite the sha256sums array in-place
+          python3 - <<'PYEOF'
+          import re, os, textwrap
+          path = 'packaging/aur/PKGBUILD'
+          txt  = open(path).read()
+          sums = (
+              "sha256sums=('{appimage}'\n"
+              "            '{desktop}'\n"
+              "            '{icon}')"
+          ).format(
+              appimage=os.environ['SHA_APPIMAGE'],
+              desktop =os.environ['SHA_DESKTOP'],
+              icon    =os.environ['SHA_ICON'],
+          )
+          txt = re.sub(r"sha256sums=\(.*?\)", sums, txt, flags=re.DOTALL)
+          open(path, 'w').write(txt)
+          PYEOF
+
+      - name: Publish to AUR
+        uses: KSXGitHub/github-actions-deploy-aur@v3.0.1
+        with:
+          pkgname: koharu-bin
+          pkgbuild: packaging/aur/PKGBUILD
+          commit_username: mayocream
+          commit_email: mayo@mayo.dev
+          ssh_private_key: ${{ secrets.AUR_SSH_PRIVATE_KEY }}
+          commit_message: "upgpkg: koharu-bin ${{ steps.meta.outputs.version }}"
+          force_push: true

@@ -1,0 +1,50 @@
+# Maintainer: mayocream <mayo@mayo.dev>
+# koharu-bin: installs prebuilt binaries from GitHub releases.
+# For a source build see the koharu package instead.
+
+pkgname=koharu-bin
+pkgver=0.40.1
+pkgrel=1
+pkgdesc="AI-powered manga and manhwa translation desktop app"
+arch=('x86_64')
+url="https://github.com/mayocream/koharu"
+license=('AGPL-3.0-only')
+depends=(
+    'webkit2gtk-4.1'
+    'gtk3'
+    'libayatana-appindicator'
+    'xdg-utils'
+)
+optdepends=(
+    'vulkan-icd-loader: GPU-accelerated OCR and LLM inference via Vulkan'
+    'nvidia-utils: CUDA GPU acceleration'
+)
+provides=('koharu')
+conflicts=('koharu')
+source=("koharu-${pkgver}-x86_64.AppImage::https://github.com/mayocream/koharu/releases/download/v${pkgver}/koharu_${pkgver}_amd64.AppImage"
+        "koharu.desktop"
+        "koharu.png::https://raw.githubusercontent.com/mayocream/koharu/main/koharu/icons/128x128.png")
+noextract=("koharu-${pkgver}-x86_64.AppImage")
+sha256sums=('SKIP'
+            'SKIP'
+            'SKIP')
+
+prepare() {
+    chmod +x "${srcdir}/koharu-${pkgver}-x86_64.AppImage"
+    "${srcdir}/koharu-${pkgver}-x86_64.AppImage" --appimage-extract
+}
+
+package() {
+    install -Dm755 "${srcdir}/squashfs-root/usr/bin/koharu" \
+        "${pkgdir}/usr/bin/koharu"
+
+    install -Dm644 "${srcdir}/koharu.desktop" \
+        "${pkgdir}/usr/share/applications/koharu.desktop"
+
+    install -Dm644 "${srcdir}/koharu.png" \
+        "${pkgdir}/usr/share/pixmaps/koharu.png"
+
+    if [ -d "${srcdir}/squashfs-root/usr/lib" ]; then
+        cp -r "${srcdir}/squashfs-root/usr/lib" "${pkgdir}/usr/"
+    fi
+}

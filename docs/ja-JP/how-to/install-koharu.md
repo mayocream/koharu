@@ -4,17 +4,85 @@ title: Koharu をインストールする
 
 # Koharu をインストールする
 
-## リリース版をダウンロードする
+[Koharu releases ページ](https://github.com/mayocream/koharu/releases/latest) からダウンロードし、お使いのプラットフォームに合った手順に従ってください。
 
-最新のリリースは [Koharu releases ページ](https://github.com/mayocream/koharu/releases/latest) から取得できます。
+リリースビルドが対応していないプラットフォームをお使いの場合は、[ソースからビルドする](build-from-source.md) をご利用ください。
 
-Koharu は次のプラットフォーム向けにビルド済みバイナリを提供しています。
+## プラットフォームを選択
 
-- Windows
-- macOS
-- Linux
+=== "Windows"
 
-利用中の環境向けのリリース版がない場合は、[ソースからビルドする](build-from-source.md) を使ってください。
+    [リリースページ](https://github.com/mayocream/koharu/releases/latest) から `.exe` インストーラーをダウンロードして実行します。
+
+    インストーラーが必要な依存関係をすべて自動的に処理します。完了後、スタートメニューまたはデスクトップのショートカットから Koharu を起動できます。
+
+=== "macOS"
+
+    [リリースページ](https://github.com/mayocream/koharu/releases/latest) から `.dmg` をダウンロードします。
+
+    `.dmg` を開き、**Koharu** を **アプリケーション** フォルダにドラッグしてから、アプリケーションフォルダまたは Spotlight から起動します。
+
+    !!! note
+
+        初回起動時に macOS のセキュリティプロンプトが表示される場合があります。**システム設定 → プライバシーとセキュリティ** を開き、**このまま開く** をクリックしてください。
+
+=== "Arch Linux（AUR）"
+
+    お好みの AUR ヘルパーを使ってインストールします：
+
+    ```bash
+    yay -S koharu-bin
+    ```
+
+    または `paru` を使う場合：
+
+    ```bash
+    paru -S koharu-bin
+    ```
+
+    手動でインストールする場合：
+
+    ```bash
+    git clone https://aur.archlinux.org/koharu-bin.git
+    cd koharu-bin
+    makepkg -si
+    ```
+
+    `koharu-bin` は GitHub リリースのビルド済みバイナリをインストールします。`webkit2gtk-4.1` などの GTK 依存関係は自動で解決されます。
+
+=== "Ubuntu / Debian"
+
+    [リリースページ](https://github.com/mayocream/koharu/releases/latest) から `.deb` パッケージをダウンロードし、`apt` でインストールします：
+
+    ```bash
+    # x.y.z を実際のバージョンに置き換えてください
+    sudo apt install ./koharu_x.y.z_amd64.deb
+    ```
+
+    自動的に解決される依存関係：
+
+    - `libwebkit2gtk-4.1`
+    - `libgtk-3-0`
+    - `libayatana-appindicator3-1`
+
+=== "AppImage"
+
+    AppImage はほとんどの Linux ディストリビューションでインストール不要で動作します：
+
+    ```bash
+    chmod +x koharu_x.y.z_amd64.AppImage
+    ./koharu_x.y.z_amd64.AppImage
+    ```
+
+    !!! note "Wayland"
+
+        「Protocol error dispatching to Wayland display」エラーが表示される場合は、起動前に以下の環境変数を設定してください：
+
+        ```bash
+        WEBKIT_DISABLE_DMABUF_RENDERER=1 ./koharu
+        ```
+
+        シェルのプロファイル（`~/.bashrc`、`~/.zshrc`、`~/.config/fish/config.fish` など）に追加すると恒久的に設定できます。
 
 ## ローカルに何が入るのか
 

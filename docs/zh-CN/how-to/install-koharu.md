@@ -4,17 +4,85 @@ title: 安装 Koharu
 
 # 安装 Koharu
 
-## 下载发行版
-
-从 [Koharu releases 页面](https://github.com/mayocream/koharu/releases/latest) 下载最新发行版。
-
-Koharu 提供以下平台的预构建二进制：
-
-- Windows
-- macOS
-- Linux
+从 [Koharu releases 页面](https://github.com/mayocream/koharu/releases/latest) 下载，并按照适合你平台的步骤操作。
 
 如果你的平台没有发行版，请改用 [从源码构建](build-from-source.md)。
+
+## 选择平台
+
+=== "Windows"
+
+    从 [releases 页面](https://github.com/mayocream/koharu/releases/latest) 下载 `.exe` 安装程序并运行。
+
+    安装程序会自动处理所有必要的依赖项。完成后，从开始菜单或桌面快捷方式启动 Koharu。
+
+=== "macOS"
+
+    从 [releases 页面](https://github.com/mayocream/koharu/releases/latest) 下载 `.dmg`。
+
+    打开 `.dmg`，将 **Koharu** 拖入 **应用程序** 文件夹，然后从应用程序文件夹或 Spotlight 启动。
+
+    !!! note
+
+        首次启动时 macOS 可能会显示安全提示。打开 **系统设置 → 隐私与安全性**，点击 **仍然打开**。
+
+=== "Arch Linux（AUR）"
+
+    使用你喜欢的 AUR 助手安装：
+
+    ```bash
+    yay -S koharu-bin
+    ```
+
+    或使用 `paru`：
+
+    ```bash
+    paru -S koharu-bin
+    ```
+
+    手动安装：
+
+    ```bash
+    git clone https://aur.archlinux.org/koharu-bin.git
+    cd koharu-bin
+    makepkg -si
+    ```
+
+    `koharu-bin` 会安装 GitHub release 中的预构建二进制文件，GTK 依赖（`webkit2gtk-4.1` 等）会自动处理。
+
+=== "Ubuntu / Debian"
+
+    从 [releases 页面](https://github.com/mayocream/koharu/releases/latest) 下载 `.deb` 包，使用 `apt` 安装：
+
+    ```bash
+    # 将 x.y.z 替换为实际版本号
+    sudo apt install ./koharu_x.y.z_amd64.deb
+    ```
+
+    自动解决的依赖项：
+
+    - `libwebkit2gtk-4.1`
+    - `libgtk-3-0`
+    - `libayatana-appindicator3-1`
+
+=== "AppImage"
+
+    AppImage 在大多数 Linux 发行版上无需安装即可运行：
+
+    ```bash
+    chmod +x koharu_x.y.z_amd64.AppImage
+    ./koharu_x.y.z_amd64.AppImage
+    ```
+
+    !!! note "Wayland"
+
+        如果在 Wayland 环境下遇到「Protocol error dispatching to Wayland display」错误，请在启动前设置以下环境变量：
+
+        ```bash
+        WEBKIT_DISABLE_DMABUF_RENDERER=1 ./koharu
+        ```
+
+        可将其添加到 shell 配置文件（`~/.bashrc`、`~/.zshrc`、`~/.config/fish/config.fish` 等）以永久生效。
 
 ## 本地会安装什么
 

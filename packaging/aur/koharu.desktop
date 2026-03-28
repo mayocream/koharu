@@ -1,0 +1,9 @@
+[Desktop Entry]
+Type=Application
+Name=Koharu
+Comment=AI-powered manga and manhwa translation
+Exec=koharu
+Icon=koharu
+Categories=Graphics;
+MimeType=application/x-koharu;
+StartupNotify=true
