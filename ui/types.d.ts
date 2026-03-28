@@ -70,7 +70,13 @@ export type TextBlock = {
   rendered?: Uint8Array
 }
 
-export type ToolMode = 'select' | 'block' | 'brush' | 'repairBrush' | 'eraser'
+export type ToolMode =
+  | 'select'
+  | 'block'
+  | 'brush'
+  | 'repairBrush'
+  | 'eraser'
+  | 'magicEraser'
 
 export type InpaintRegion = {
   x: number

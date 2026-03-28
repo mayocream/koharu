@@ -52,6 +52,7 @@ impl ModelInfo {
     }
 }
 
+/// Load state of the LLM
 #[allow(clippy::large_enum_variant)]
 #[derive(strum::Display)]
 pub enum State {

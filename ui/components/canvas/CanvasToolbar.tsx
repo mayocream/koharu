@@ -80,7 +80,7 @@ function WorkflowButtons() {
       <Button
         variant='ghost'
         size='xs'
-        onClick={detect}
+        onClick={() => void detect()}
         data-testid='toolbar-detect'
         disabled={isDetecting}
       >

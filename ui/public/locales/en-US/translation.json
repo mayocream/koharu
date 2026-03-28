@@ -69,7 +69,9 @@
     "brush": "Brush Layer",
     "inpainted": "Inpainted",
     "mask": "Segmentation Mask",
-    "base": "Original Image"
+    "base": "Original Image",
+    "originalImage": "Original Image",
+    "on": "ON"
   },
   "processing": {
     "detect": "Detect",
@@ -153,6 +155,8 @@
     }
   },
   "render": {
+    "fontSizeLabel": "Size",
+    "fontSizeTooltip": "Font Size",
     "effectLabel": "Text effect",
     "alignLabel": "Align",
     "alignLeft": "Align left",
@@ -173,6 +177,7 @@
   "textBlocks": {
     "emptyPrompt": "Open an image to see text blocks.",
     "title": "Text Blocks ({{count}})",
+    "selected": "{{count}} selected",
     "none": "No text blocks yet. Run detection to populate the list.",
     "emptySummary": "<empty>",
     "ocrLabel": "OCR text",
@@ -201,7 +206,8 @@
     "block": "Block",
     "brush": "Brush",
     "repairBrush": "Repair brush",
-    "eraser": "Eraser"
+    "eraser": "Eraser",
+    "magicEraser": "Magic Eraser"
   },
   "download": {
     "title": "Downloading"
@@ -249,11 +255,13 @@
     "apiKeysDescription": "Manage your API keys for different providers. Your keys are stored securely on your device keychain and are never shared with anyone.",
     "freeTier": "Free Tier",
     "localLlm": "Local LLM",
+    "localLlmTitle": "Local LLM & OpenAI Compatible Providers",
     "localLlmDescription": "Connect to a local LLM server (Ollama, LM Studio, or any OpenAI-compatible endpoint) for translation.",
     "localLlmPreset": "Provider",
     "localLlmPresetOllama": "Ollama",
     "localLlmPresetLmStudio": "LM Studio",
-    "localLlmPresetCustom": "Custom",
+    "localLlmPresetPreset1": "Preset 1",
+    "localLlmPresetPreset2": "Preset 2",
     "localLlmBaseUrl": "Base URL",
     "localLlmApiKey": "API Key (optional)",
     "localLlmModelName": "Model name",

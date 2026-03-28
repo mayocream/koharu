@@ -69,7 +69,9 @@
     "brush": "筆刷圖層",
     "inpainted": "修補影像",
     "mask": "分割遮罩",
-    "base": "原始影像"
+    "base": "原始影像",
+    "originalImage": "原始影像",
+    "on": "開"
   },
   "processing": {
     "detect": "偵測",
@@ -153,6 +155,8 @@
     }
   },
   "render": {
+    "fontSizeLabel": "大小",
+    "fontSizeTooltip": "字體大小",
     "effectLabel": "文字效果",
     "alignLabel": "對齊",
     "alignLeft": "靠左對齊",
@@ -173,6 +177,7 @@
   "textBlocks": {
     "emptyPrompt": "開啟影像以查看文字區塊。",
     "title": "文字區塊（{{count}}）",
+    "selected": "已選 {{count}} 個",
     "none": "尚無文字區塊。請執行偵測以產生列表。",
     "emptySummary": "<空>",
     "ocrLabel": "OCR 文字",
@@ -201,7 +206,8 @@
     "block": "框選",
     "brush": "筆刷",
     "repairBrush": "修復筆",
-    "eraser": "橡皮擦"
+    "eraser": "橡皮擦",
+    "magicEraser": "魔術橡皮擦"
   },
   "download": {
     "title": "下載中"
@@ -249,11 +255,13 @@
     "apiKeysDescription": "管理您在不同提供商的 API 密鑰。您的密鑰會安全地存儲在設備的密鑰鏈中，絕不會與他人共享。",
     "freeTier": "免費等級",
     "localLlm": "本機 LLM",
+    "localLlmTitle": "本機 LLM 與 OpenAI 相容提供者",
     "localLlmDescription": "連線至本機 LLM 伺服器（Ollama、LM Studio 或任何 OpenAI 相容端點）進行翻譯。",
     "localLlmPreset": "提供者",
     "localLlmPresetOllama": "Ollama",
     "localLlmPresetLmStudio": "LM Studio",
-    "localLlmPresetCustom": "自訂",
+    "localLlmPresetPreset1": "預設 1",
+    "localLlmPresetPreset2": "預設 2",
     "localLlmBaseUrl": "Base URL",
     "localLlmApiKey": "API 密鑰（選填）",
     "localLlmModelName": "模型名稱",

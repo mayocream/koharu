@@ -21,9 +21,21 @@ const GRAY_NEAR_WHITE_THRESHOLD: u8 = 60;
 const GRAY_TOLERANCE: u8 = 10;
 const SIMILAR_COLOR_MAX_DIFF: u8 = 16;
 const PP_DOCLAYOUT_THRESHOLD: f32 = 0.25;
+const PP_DOCLAYOUT_SENSITIVE_THRESHOLD: f32 = 0.10;
 const VERTICAL_ASPECT_RATIO_THRESHOLD: f32 = 1.15;
 const BLOCK_OVERLAP_DEDUPE_THRESHOLD: f32 = 0.9;
 const OCR_MAX_NEW_TOKENS: usize = 128;
+const MIN_BLOCK_DIM: f32 = 6.0;
+const MIN_BLOCK_DIM_SENSITIVE: f32 = 3.0;
+const MIN_BLOCK_AREA: f32 = 48.0;
+const MIN_BLOCK_AREA_SENSITIVE: f32 = 16.0;
+
+/// Options to control detection sensitivity.
+#[derive(Debug, Clone, Copy, Default)]
+pub struct DetectOptions {
+    /// Lower thresholds for higher recall.
+    pub sensitive: bool,
+}
 
 fn clamp_near_black(color: [u8; 3]) -> [u8; 3] {
     let max_channel = *color.iter().max().unwrap_or(&0);
@@ -80,7 +92,7 @@ fn normalize_font_prediction(prediction: &mut FontPrediction) {
 
 pub struct Model {
     layout_detector: PPDocLayoutV3,
-    segmenter: ComicTextDetector,
+    ctd: ComicTextDetector,
     ocr: Mutex<PaddleOcrVl>,
     lama: Lama,
     font_detector: FontDetector,
@@ -90,27 +102,99 @@ impl Model {
     pub async fn new(cpu: bool, backend: Arc<LlamaBackend>) -> Result<Self> {
         Ok(Self {
             layout_detector: PPDocLayoutV3::load(cpu).await?,
-            segmenter: ComicTextDetector::load_segmentation_only(cpu).await?,
+            ctd: ComicTextDetector::load(cpu).await?,
             ocr: Mutex::new(PaddleOcrVl::load(cpu, backend).await?),
             lama: Lama::load(cpu).await?,
             font_detector: FontDetector::load(cpu).await?,
         })
     }
 
+    /// Compute the segmentation mask for an image given its text blocks.
+    pub fn compute_segment_mask(
+        &self,
+        image: &SerializableDynamicImage,
+        text_blocks: &[TextBlock],
+    ) -> Result<SerializableDynamicImage> {
+        let probability_map = self.ctd.inference_segmentation(image)?;
+        let mask =
+            comic_text_detector::refine_segmentation_mask(image, &probability_map, text_blocks);
+        Ok(DynamicImage::ImageLuma8(mask).into())
+    }
+
     /// Detect text blocks and fonts in a document.
     /// Sets `doc.text_blocks` (with font predictions/styles) and `doc.segment`.
     pub async fn detect(&self, doc: &mut Document) -> Result<()> {
-        let detect_started = Instant::now();
+        self.detect_with_options(doc, DetectOptions::default())
+            .await
+    }
 
+    /// Detect with configurable options (sensitive mode, etc.).
+    pub async fn detect_with_options(
+        &self,
+        doc: &mut Document,
+        options: DetectOptions,
+    ) -> Result<()> {
+        let detect_started = Instant::now();
+        let threshold = if options.sensitive {
+            PP_DOCLAYOUT_SENSITIVE_THRESHOLD
+        } else {
+            PP_DOCLAYOUT_THRESHOLD
+        };
+
+        // Stage 1: PP-DocLayout detection
         let layout_started = Instant::now();
         let layout = self
             .layout_detector
-            .inference_one_fast(&doc.image, PP_DOCLAYOUT_THRESHOLD)?;
-        doc.text_blocks = build_text_blocks(&layout.regions);
+            .inference_one_fast(&doc.image, threshold)?;
+        doc.text_blocks = build_text_blocks_with_options(&layout.regions, options.sensitive);
         let layout_elapsed = layout_started.elapsed();
 
+        // Stage 1b: CTD fallback when PP-DocLayout finds nothing
+        let mut ctd_elapsed = std::time::Duration::ZERO;
+        if doc.text_blocks.is_empty() {
+            let ctd_started = Instant::now();
+            match self.ctd.inference(&doc.image) {
+                Ok(detection) => {
+                    let ctd_blocks: Vec<TextBlock> = detection
+                        .text_blocks
+                        .into_iter()
+                        .map(|b| {
+                            let width = b.width.max(1.0);
+                            let height = b.height.max(1.0);
+                            TextBlock {
+                                x: b.x.max(0.0),
+                                y: b.y.max(0.0),
+                                width,
+                                height,
+                                confidence: b.confidence,
+                                source_direction: Some(infer_text_direction(width, height)),
+                                source_language: Some("unknown".to_string()),
+                                rotation_deg: Some(0.0),
+                                detected_font_size_px: Some(width.min(height).max(1.0)),
+                                detector: Some("ctd".to_string()),
+                                line_polygons: b.line_polygons,
+                                ..Default::default()
+                            }
+                        })
+                        .collect();
+                    if !ctd_blocks.is_empty() {
+                        tracing::info!(
+                            ctd_blocks = ctd_blocks.len(),
+                            "PP-DocLayout found 0 blocks, CTD fallback found blocks"
+                        );
+                        doc.text_blocks = ctd_blocks;
+                    }
+                }
+                Err(e) => {
+                    tracing::warn!("CTD fallback failed: {e}");
+                }
+            }
+            ctd_elapsed = ctd_started.elapsed();
+        }
+
+        // Stage 2: Segmentation mask
         let segmentation_started = Instant::now();
-        let probability_map = self.segmenter.inference_segmentation(&doc.image)?;
+        let probability_map = self.ctd.inference_segmentation(&doc.image)?;
         let mask = comic_text_detector::refine_segmentation_mask(
             &doc.image,
             &probability_map,
@@ -119,6 +203,7 @@ impl Model {
         doc.segment = Some(DynamicImage::ImageLuma8(mask).into());
         let segmentation_elapsed = segmentation_started.elapsed();
 
+        // Stage 3: Font detection
         let font_started = Instant::now();
         if !doc.text_blocks.is_empty() {
             let images: Vec<DynamicImage> = doc
@@ -144,7 +229,9 @@ impl Model {
 
         tracing::info!(
             text_blocks = doc.text_blocks.len(),
+            sensitive = options.sensitive,
             layout_ms = layout_elapsed.as_millis(),
+            ctd_fallback_ms = ctd_elapsed.as_millis(),
             segmentation_ms = segmentation_elapsed.as_millis(),
             font_ms = font_elapsed.as_millis(),
             total_ms = detect_started.elapsed().as_millis(),
@@ -260,11 +347,28 @@ pub async fn prefetch() -> Result<()> {
     Ok(())
 }
 
-fn build_text_blocks(regions: &[LayoutRegion]) -> Vec<TextBlock> {
+fn build_text_blocks_with_options(regions: &[LayoutRegion], sensitive: bool) -> Vec<TextBlock> {
+    let min_dim = if sensitive {
+        MIN_BLOCK_DIM_SENSITIVE
+    } else {
+        MIN_BLOCK_DIM
+    };
+    let min_area = if sensitive {
+        MIN_BLOCK_AREA_SENSITIVE
+    } else {
+        MIN_BLOCK_AREA
+    };
     let mut blocks = regions
         .iter()
-        .filter(|region| is_text_layout_label(&region.label))
-        .filter_map(layout_region_to_text_block)
+        .filter(|region| {
+            if sensitive {
+                // In sensitive mode, accept any detected region
+                true
+            } else {
+                is_text_layout_label(&region.label)
+            }
+        })
+        .filter_map(|region| layout_region_to_text_block_with_limits(region, min_dim, min_area))
         .collect::<Vec<_>>();
     dedupe_text_blocks(&mut blocks);
     blocks
@@ -275,7 +379,11 @@ fn is_text_layout_label(label: &str) -> bool {
     label == "content" || label.contains("text") || label.contains("title")
 }
 
-fn layout_region_to_text_block(region: &LayoutRegion) -> Option<TextBlock> {
+fn layout_region_to_text_block_with_limits(
+    region: &LayoutRegion,
+    min_dim: f32,
+    min_area: f32,
+) -> Option<TextBlock> {
     let x1 = region.bbox[0].min(region.bbox[2]).max(0.0);
     let y1 = region.bbox[1].min(region.bbox[3]).max(0.0);
     let x2 = region.bbox[0].max(region.bbox[2]).max(x1 + 1.0);
@@ -283,7 +391,7 @@ fn layout_region_to_text_block(region: &LayoutRegion) -> Option<TextBlock> {
     let width = (x2 - x1).max(1.0);
     let height = (y2 - y1).max(1.0);
 
-    if width < 6.0 || height < 6.0 || width * height < 48.0 {
+    if width < min_dim || height < min_dim || width * height < min_area {
         return None;
     }
 
@@ -370,12 +478,15 @@ mod tests {
 
     #[test]
     fn build_text_blocks_keeps_textlike_regions_and_dedupes_overlaps() {
-        let blocks = build_text_blocks(&[
-            test_region(0, "text", [10.0, 10.0, 40.0, 40.0]),
-            test_region(1, "image", [0.0, 0.0, 128.0, 128.0]),
-            test_region(2, "aside_text", [12.0, 12.0, 39.0, 39.0]),
-            test_region(3, "doc_title", [60.0, 8.0, 90.0, 24.0]),
-        ]);
+        let blocks = build_text_blocks_with_options(
+            &[
+                test_region(0, "text", [10.0, 10.0, 40.0, 40.0]),
+                test_region(1, "image", [0.0, 0.0, 128.0, 128.0]),
+                test_region(2, "aside_text", [12.0, 12.0, 39.0, 39.0]),
+                test_region(3, "doc_title", [60.0, 8.0, 90.0, 24.0]),
+            ],
+            false,
+        );
 
         assert_eq!(blocks.len(), 2);
         assert_eq!(blocks[0].detector.as_deref(), Some("pp-doclayout-v3"));
@@ -385,7 +496,10 @@ mod tests {
 
     #[test]
     fn build_text_blocks_marks_tall_regions_as_vertical() {
-        let blocks = build_text_blocks(&[test_region(0, "text", [5.0, 5.0, 20.0, 60.0])]);
+        let blocks = build_text_blocks_with_options(
+            &[test_region(0, "text", [5.0, 5.0, 20.0, 60.0])],
+            false,
+        );
         assert_eq!(blocks.len(), 1);
         assert_eq!(blocks[0].source_direction, Some(TextDirection::Vertical));
     }

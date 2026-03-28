@@ -270,6 +270,20 @@ export const useMaskMutations = () => {
     [queryClient],
   )
 
+  const inpaintFree = useCallback(
+    async (region: InpaintRegion, options?: { index?: number }) => {
+      const resolvedIndex =
+        options?.index ?? useEditorUiStore.getState().currentDocumentIndex
+      if (!region) return
+      await flushMaskSyncQueue()
+      await api.inpaintFree(resolvedIndex, region)
+      await invalidateCurrentDocument(queryClient, resolvedIndex)
+      await invalidateThumbnailAtIndex(queryClient, resolvedIndex)
+      useEditorUiStore.getState().setShowInpaintedImage(true)
+    },
+    [queryClient],
+  )
+
   const paintRendered = useCallback(
     async (
       patch: Uint8Array,
@@ -294,6 +308,7 @@ export const useMaskMutations = () => {
     updateMask,
     flushMaskSync,
     inpaintPartial,
+    inpaintFree,
     paintRendered,
   }
 }
@@ -448,10 +463,34 @@ export const useDocumentMutations = () => {
         cancellable: true,
       })
       try {
-        await api.detect(resolvedIndex)
+        await api.detectWithOptions(resolvedIndex, {})
         await invalidateCurrentDocument(queryClient, resolvedIndex)
         await invalidateThumbnailAtIndex(queryClient, resolvedIndex)
         useEditorUiStore.getState().setShowRenderedImage(false)
+      } finally {
+        finishOperation()
+      }
+    },
+    [queryClient, startOperation, finishOperation],
+  )
+
+  const detectRegion = useCallback(
+    async (region: InpaintRegion, options?: { sensitive?: boolean }) => {
+      const resolvedIndex = useEditorUiStore.getState().currentDocumentIndex
+      startOperation({
+        type: 'process-current',
+        step: 'detect',
+        cancellable: true,
+      })
+      try {
+        await api.detectWithOptions(resolvedIndex, {
+          sensitive: options?.sensitive ?? true,
+          region,
+        })
+        await invalidateCurrentDocument(queryClient, resolvedIndex)
+        await invalidateThumbnailAtIndex(queryClient, resolvedIndex)
+        useEditorUiStore.getState().setShowRenderedImage(false)
+        useEditorUiStore.getState().setShowTextBlocksOverlay(true)
       } finally {
         finishOperation()
       }
@@ -673,6 +712,7 @@ export const useDocumentMutations = () => {
     addFolder,
     openExternal,
     detect,
+    detectRegion,
     ocr,
     inpaint,
     render,

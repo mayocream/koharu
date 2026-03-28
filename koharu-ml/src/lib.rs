@@ -15,6 +15,7 @@ use anyhow::Result;
 use candle_core::utils::metal_is_available;
 
 pub use candle_core::Device;
+pub use facade::{DetectOptions, Model};
 pub use koharu_http::hf_hub::set_cache_dir;
 
 pub fn device(cpu: bool) -> Result<Device> {

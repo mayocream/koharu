@@ -62,6 +62,9 @@ const DEFAULT_STROKE_WIDTH = 1.6
 const MIN_STROKE_WIDTH = 0.2
 const MAX_STROKE_WIDTH = 24
 const STROKE_WIDTH_STEP = 0.1
+const DEFAULT_FONT_SIZE = 24
+const MIN_FONT_SIZE = 4
+const MAX_FONT_SIZE = 200
 const LATIN_ONLY_PATTERN =
   /^[\p{Script=Latin}\p{Script=Common}\p{Script=Inherited}]*$/u
 
@@ -72,6 +75,9 @@ const clampStrokeWidth = (value: number) =>
   Number(
     Math.max(MIN_STROKE_WIDTH, Math.min(MAX_STROKE_WIDTH, value)).toFixed(1),
   )
+
+const clampFontSize = (value: number) =>
+  Math.max(MIN_FONT_SIZE, Math.min(MAX_FONT_SIZE, Math.round(value)))
 
 const colorToHex = (color: RgbaColor) =>
   `#${color
@@ -183,11 +189,19 @@ export function RenderControlsPanel() {
   const renderStroke = useEditorUiStore((state) => state.renderStroke)
   const setRenderEffect = useEditorUiStore((state) => state.setRenderEffect)
   const setRenderStroke = useEditorUiStore((state) => state.setRenderStroke)
+  const selectedBlockIndices = useEditorUiStore(
+    (state) => state.selectedBlockIndices,
+  )
   const { updateTextBlocks } = useTextBlockMutations()
   const { data: availableFonts = [] } = useFontsQuery()
   const fontFamily = usePreferencesStore((state) => state.fontFamily)
   const setFontFamily = usePreferencesStore((state) => state.setFontFamily)
-  const { textBlocks, selectedBlockIndex, replaceBlock } = useTextBlocks()
+  const {
+    textBlocks,
+    selectedBlockIndex,
+    replaceBlock,
+    replaceMultipleBlocks,
+  } = useTextBlocks()
   const { t } = useTranslation()
   const selectedBlock =
     selectedBlockIndex !== undefined
@@ -195,6 +209,7 @@ export function RenderControlsPanel() {
       : undefined
   const firstBlock = textBlocks[0]
   const hasBlocks = textBlocks.length > 0
+  const isMultiSelect = selectedBlockIndices.length > 1
   const fontCandidates = uniqueFontFaces(
     [
       ...availableFonts,
@@ -232,6 +247,11 @@ export function RenderControlsPanel() {
   const currentColorHex = colorToHex(currentColor)
   const currentStrokeColorHex = colorToHex(currentStroke.color)
   const currentStrokeWidth = currentStroke.widthPx ?? DEFAULT_STROKE_WIDTH
+  const currentFontSize =
+    selectedBlock?.style?.fontSize ??
+    selectedBlock?.detectedFontSizePx ??
+    selectedBlock?.fontPrediction?.font_size_px ??
+    DEFAULT_FONT_SIZE
   const fontLabel = t('render.fontLabel')
   const effectLabel = t('render.effectLabel')
   const strokeLabel = t('render.effectBorder')
@@ -241,14 +261,19 @@ export function RenderControlsPanel() {
   const currentTextAlign = resolveEffectiveTextAlign(
     selectedBlock ?? firstBlock,
   )
-  const scopeLabel =
-    selectedBlockIndex !== undefined
+  const scopeLabel = isMultiSelect
+    ? t('render.fontScopeMulti', {
+        count: selectedBlockIndices.length,
+        defaultValue: `${selectedBlockIndices.length} blocks`,
+      })
+    : selectedBlockIndex !== undefined
       ? t('render.fontScopeBlockIndex', {
           index: selectedBlockIndex + 1,
         })
       : t('render.fontScopeGlobal')
-  const scopeToneClass =
-    selectedBlockIndex !== undefined
+  const scopeToneClass = isMultiSelect
+    ? 'border-sky-400/20 bg-sky-400/10 text-sky-600'
+    : selectedBlockIndex !== undefined
       ? 'border-primary/20 bg-primary/10 text-primary'
       : 'border-border/60 bg-muted text-muted-foreground'
 
@@ -273,6 +298,16 @@ export function RenderControlsPanel() {
   })
 
   const applyStyleToSelected = (updates: Partial<TextStyle>) => {
+    // Multi-select: apply to all selected blocks
+    if (isMultiSelect) {
+      const nextBlocks = textBlocks.map((block, idx) =>
+        selectedBlockIndices.includes(idx)
+          ? { ...block, style: buildStyle(block, block.style, updates) }
+          : block,
+      )
+      void updateTextBlocks(nextBlocks)
+      return true
+    }
     if (selectedBlockIndex === undefined) return false
     const nextStyle = buildStyle(selectedBlock, selectedBlock?.style, updates)
     void replaceBlock(selectedBlockIndex, { style: nextStyle })
@@ -311,6 +346,12 @@ export function RenderControlsPanel() {
       ...currentStroke,
       widthPx: clampStrokeWidth(value),
     })
+  }
+
+  const updateFontSize = (value: number) => {
+    const clamped = clampFontSize(value)
+    if (applyStyleToSelected({ fontSize: clamped })) return
+    // No global fontSize fallback — it requires a selected block
   }
 
   const effectItems: {
@@ -437,6 +478,69 @@ export function RenderControlsPanel() {
             </TooltipTrigger>
             <TooltipContent side='bottom' sideOffset={4}>
               {t('render.fontColorLabel')}
+            </TooltipContent>
+          </Tooltip>
+        </div>
+      </div>
+
+      {/* Font Size */}
+      <div className='grid w-full min-w-0 grid-cols-[3.5rem_minmax(0,1fr)] items-center gap-1.5'>
+        <span className='text-muted-foreground text-[10px] font-medium tracking-wide uppercase'>
+          {t('render.fontSizeLabel')}
+        </span>
+
+        <div className='flex min-w-0 items-center gap-1'>
+          <Tooltip>
+            <TooltipTrigger asChild>
+              <div className='border-input bg-background flex w-auto min-w-0 shrink-0 items-center rounded-md border shadow-xs'>
+                <Button
+                  type='button'
+                  variant='ghost'
+                  size='icon-sm'
+                  aria-label='Decrease font size'
+                  className='size-7 rounded-r-none border-r'
+                  disabled={!hasBlocks}
+                  onClick={() => updateFontSize(currentFontSize - 1)}
+                >
+                  <MinusIcon className='size-3' />
+                </Button>
+
+                <Input
+                  type='number'
+                  step='1'
+                  min={String(MIN_FONT_SIZE)}
+                  max={String(MAX_FONT_SIZE)}
+                  inputMode='numeric'
+                  className='h-7 w-14 min-w-0 [appearance:textfield] rounded-none border-0 px-1.5 text-center text-[11px] shadow-none focus-visible:ring-0 [&::-webkit-inner-spin-button]:appearance-none [&::-webkit-outer-spin-button]:appearance-none'
+                  data-testid='render-font-size'
+                  disabled={!hasBlocks}
+                  value={
+                    Number.isFinite(currentFontSize)
+                      ? Math.round(currentFontSize)
+                      : DEFAULT_FONT_SIZE
+                  }
+                  onChange={(event) => {
+                    const parsed = Number.parseInt(event.target.value, 10)
+                    if (!Number.isFinite(parsed)) return
+                    updateFontSize(parsed)
+                  }}
+                />
+
+                <Button
+                  type='button'
+                  variant='ghost'
+                  size='icon-sm'
+                  aria-label='Increase font size'
+                  className='size-7 rounded-l-none border-l'
+                  disabled={!hasBlocks}
+                  onClick={() => updateFontSize(currentFontSize + 1)}
+                >
+                  <PlusIcon className='size-3' />
+                </Button>
+              </div>
+            </TooltipTrigger>
+            <TooltipContent side='bottom' sideOffset={4}>
+              {t('render.fontSizeTooltip')}
             </TooltipContent>
           </Tooltip>
         </div>

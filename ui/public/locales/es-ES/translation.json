@@ -69,7 +69,9 @@
     "brush": "Capa de pincel",
     "inpainted": "Rellenado",
     "mask": "Máscara de segmentación",
-    "base": "Imagen original"
+    "base": "Imagen original",
+    "originalImage": "Imagen original",
+    "on": "SÍ"
   },
   "processing": {
     "detect": "Detectar",
@@ -153,6 +155,8 @@
     }
   },
   "render": {
+    "fontSizeLabel": "Tamaño",
+    "fontSizeTooltip": "Tamaño de fuente",
     "effectLabel": "Efecto de texto",
     "alignLabel": "Alineación",
     "alignLeft": "Alinear a la izquierda",
@@ -173,6 +177,7 @@
   "textBlocks": {
     "emptyPrompt": "Abre una imagen para ver los bloques de texto.",
     "title": "Bloques de texto ({{count}})",
+    "selected": "{{count}} seleccionados",
     "none": "Aún no hay bloques de texto. Ejecuta la detección para llenar la lista.",
     "emptySummary": "<vacío>",
     "ocrLabel": "Texto OCR",
@@ -201,7 +206,8 @@
     "block": "Bloque",
     "brush": "Pincel",
     "repairBrush": "Pincel de reparación",
-    "eraser": "Borrador"
+    "eraser": "Borrador",
+    "magicEraser": "Borrador mágico"
   },
   "download": {
     "title": "Descargando"
@@ -249,11 +255,13 @@
     "apiKeysDescription": "Gestiona tus claves API para diferentes proveedores. Tus claves se almacenan de forma segura en el llavero de tu dispositivo y nunca se comparten con nadie.",
     "freeTier": "Nivel gratuito",
     "localLlm": "LLM local",
+    "localLlmTitle": "LLM local y proveedores compatibles con OpenAI",
     "localLlmDescription": "Conector a un servidor LLM local (Ollama, LM Studio o cualquier endpoint compatible con OpenAI) para traducir.",
     "localLlmPreset": "Proveedor",
     "localLlmPresetOllama": "Ollama",
     "localLlmPresetLmStudio": "LM Studio",
-    "localLlmPresetCustom": "Personalizado",
+    "localLlmPresetPreset1": "Preset 1",
+    "localLlmPresetPreset2": "Preset 2",
     "localLlmBaseUrl": "Base URL",
     "localLlmApiKey": "Clave API (opcional)",
     "localLlmModelName": "Nombre del modelo",

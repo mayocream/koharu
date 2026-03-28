@@ -16,7 +16,7 @@ export function StatusBar() {
           data-testid='zoom-slider'
           className='[&_[data-slot=slider-range]]:bg-primary [&_[data-slot=slider-thumb]]:border-primary [&_[data-slot=slider-thumb]]:bg-primary [&_[data-slot=slider-track]]:bg-primary/20 w-44 [&_[data-slot=slider-thumb]]:size-2.5'
           min={10}
-          max={100}
+          max={400}
           step={5}
           value={[scale]}
           onValueChange={(v) => setScale(v[0] ?? scale)}
