@@ -547,6 +547,7 @@ impl KoharuMcp {
                     width: p.width,
                     height: p.height,
                 },
+                free: false,
             },
         )
         .await

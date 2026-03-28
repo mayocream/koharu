@@ -2,9 +2,13 @@
 
 import { useEffect, useRef } from 'react'
 import { useDrag } from '@use-gesture/react'
+import { useQueryClient } from '@tanstack/react-query'
 import { usePreferencesStore } from '@/lib/stores/preferencesStore'
 import { useEditorUiStore } from '@/lib/stores/editorUiStore'
+import { useUiErrorStore } from '@/lib/stores/uiErrorStore'
+import { useUndoStore } from '@/lib/stores/undoStore'
 import { useMaskMutations } from '@/lib/query/mutations'
+import { queryKeys } from '@/lib/query/keys'
 import { blobToUint8Array, convertToImageBitmap } from '@/lib/util'
 import { Document, InpaintRegion, ToolMode } from '@/types'
 import {
@@ -92,10 +96,9 @@ export function useMaskDrawing({
   const {
     brushConfig: { size: brushSize },
   } = usePreferencesStore()
-  const { updateMask, inpaintPartial } = useMaskMutations()
-  const currentDocumentIndex = useEditorUiStore(
-    (state) => state.currentDocumentIndex,
-  )
+  const queryClient = useQueryClient()
+  const pushUndo = useUndoStore((state) => state.push)
+  const { updateMask, inpaintPartial, inpaintFree } = useMaskMutations()
   const canvasRef = useRef<HTMLCanvasElement | null>(null)
   const ctxRef = useRef<CanvasRenderingContext2D | null>(null)
   const drawingRef = useRef(false)
@@ -103,8 +106,9 @@ export function useMaskDrawing({
   const boundsRef = useRef<Bounds | null>(null)
   const inpaintQueueRef = useRef<Promise<void>>(Promise.resolve())
   const isRepairMode = mode === 'repairBrush'
+  const isMagicEraser = mode === 'magicEraser'
   const isEraseMode = mode === 'eraser'
-  const isActive = enabled && (isRepairMode || isEraseMode)
+  const isActive = enabled && (isRepairMode || isEraseMode || isMagicEraser)
 
   // Reset drawing state when interaction is disabled so stale strokes don't carry over.
   useEffect(() => {
@@ -114,6 +118,17 @@ export function useMaskDrawing({
     boundsRef.current = null
     inpaintQueueRef.current = Promise.resolve()
   }, [enabled, mode])
+
+  // Clear the mask canvas when entering magic eraser mode so the user
+  // doesn't see a leftover segmentation mask from a previous mode.
+  useEffect(() => {
+    if (!isMagicEraser) return
+    const ctx = ctxRef.current
+    const canvas = canvasRef.current
+    if (ctx && canvas) {
+      ctx.clearRect(0, 0, canvas.width, canvas.height)
+    }
+  }, [isMagicEraser])
 
   useEffect(() => {
     const canvas = canvasRef.current
@@ -135,15 +150,17 @@ export function useMaskDrawing({
     if (needsResize) {
       canvas.width = currentDocument.width
       canvas.height = currentDocument.height
-      ctx?.clearRect(0, 0, canvas.width, canvas.height)
-      ctx?.save()
-      ctx && (ctx.fillStyle = '#000')
-      ctx?.fillRect(0, 0, canvas.width, canvas.height)
-      ctx?.restore()
     }
 
+    // Always clear the canvas when the document or segment changes so that
+    // a stale mask from the previous page never bleeds into the current one
+    // (e.g. when pages share the same dimensions and the new page has no segment).
+    ctx?.clearRect(0, 0, canvas.width, canvas.height)
+
+    // In magic eraser mode the canvas is used only for the user's white
+    // stroke preview — don't paint the segmentation mask underneath.
     let cancelled = false
-    if (currentDocument.segment) {
+    if (currentDocument.segment && !isMagicEraser) {
       void (async () => {
         try {
           const bitmap = await convertToImageBitmap(currentDocument.segment!)
@@ -172,6 +189,8 @@ export function useMaskDrawing({
 
     return () => {
       cancelled = true
+      // Clear the canvas so stale masks don't linger during page transitions.
+      ctx?.clearRect(0, 0, canvas.width, canvas.height)
       drawingRef.current = false
       lastPointRef.current = null
       boundsRef.current = null
@@ -182,6 +201,7 @@ export function useMaskDrawing({
     currentDocument?.width,
     currentDocument?.height,
     currentDocument?.segment,
+    isMagicEraser,
   ])
 
   const drawStroke = (from: DocumentPointer, to: DocumentPointer) => {
@@ -251,11 +271,14 @@ export function useMaskDrawing({
     if (!isActive) return
     const strokeBounds = boundsRef.current
     if (!currentDocument || !strokeBounds) return
+
     const patchRegion = boundsToRegion(strokeBounds, currentDocument)
     const region = withMargin(strokeBounds, brushSize, currentDocument)
     boundsRef.current = null
     drawingRef.current = false
     lastPointRef.current = null
+
+    const docIndex = useEditorUiStore.getState().currentDocumentIndex
 
     void (async () => {
       const [maskBytes, patchBytes] = await Promise.all([
@@ -269,15 +292,73 @@ export function useMaskDrawing({
           patch: patchBytes ?? undefined,
         })
       } catch (error) {
-        console.error(error)
+        console.error('[mask] updateMask failed:', error)
+        useUiErrorStore
+          .getState()
+          .showError(
+            error instanceof Error ? error.message : 'Failed to update mask',
+          )
+        return
       }
       queueInpaint(async () => {
+        // Snapshot INSIDE the queue so that when multiple strokes are queued,
+        // each snapshot captures the state AFTER the previous inpaint
+        // completed — not the stale state from before the queue started.
+        const queryKey = queryKeys.documents.current(docIndex)
+        const snapshotDoc = queryClient.getQueryData<Document>(queryKey)
+        const prevInpainted = snapshotDoc?.inpainted
+          ? new Uint8Array(snapshotDoc.inpainted)
+          : undefined
+        const prevSegment = snapshotDoc?.segment
+          ? new Uint8Array(snapshotDoc.segment)
+          : undefined
+
         try {
-          await inpaintPartial(region, {
-            index: currentDocumentIndex,
+          if (isMagicEraser) {
+            await inpaintFree(region, { index: docIndex })
+          } else {
+            await inpaintPartial(region, { index: docIndex })
+          }
+
+          pushUndo({
+            type: isMagicEraser ? 'magicEraser' : 'repairBrush',
+            description: isMagicEraser ? 'Magic Eraser' : 'Repair Brush',
+            undo: () => {
+              const key = queryKeys.documents.current(docIndex)
+              const doc = queryClient.getQueryData<any>(key)
+              if (!doc) return
+              queryClient.setQueryData(key, {
+                ...doc,
+                inpainted: prevInpainted,
+                segment: prevSegment,
+              })
+              if (prevSegment) {
+                void updateMask(prevSegment, { sync: true })
+              }
+            },
+            redo: () => {
+              void (async () => {
+                if (maskBytes) {
+                  await updateMask(maskBytes, {
+                    patchRegion: patchBytes ? patchRegion : undefined,
+                    patch: patchBytes ?? undefined,
+                  })
+                }
+                if (isMagicEraser) {
+                  await inpaintFree(region, { index: docIndex })
+                } else {
+                  await inpaintPartial(region, { index: docIndex })
+                }
+              })()
+            },
           })
         } catch (error) {
-          console.error(error)
+          console.error('[mask] inpaint failed:', error)
+          useUiErrorStore
+            .getState()
+            .showError(
+              error instanceof Error ? error.message : 'Inpaint failed',
+            )
         }
       })
     })()
