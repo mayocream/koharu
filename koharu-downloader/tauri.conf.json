@@ -1,0 +1,41 @@
+{
+  "$schema": "../node_modules/@tauri-apps/cli/config.schema.json",
+  "identifier": "rs.koharu.downloader",
+  "build": {
+    "beforeDevCommand": "bun run --cwd downloader-ui dev -- --port 3001",
+    "beforeBuildCommand": "bun run --cwd downloader-ui build",
+    "devUrl": "http://localhost:3001",
+    "frontendDist": "../downloader-ui/out"
+  },
+  "app": {
+    "security": {
+      "csp": null
+    },
+    "windows": [
+      {
+        "label": "main",
+        "width": 860,
+        "height": 580,
+        "minWidth": 720,
+        "minHeight": 480,
+        "center": true,
+        "title": "Koharu Downloader",
+        "decorations": false
+      }
+    ]
+  },
+  "bundle": {
+    "active": true,
+    "targets": "all",
+    "icon": [
+      "../koharu/icons/32x32.png",
+      "../koharu/icons/128x128.png",
+      "../koharu/icons/128x128@2x.png",
+      "../koharu/icons/icon.icns",
+      "../koharu/icons/icon.ico"
+    ]
+  }
+}
+
+
+

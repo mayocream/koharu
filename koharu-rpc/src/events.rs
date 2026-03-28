@@ -263,7 +263,7 @@ fn download_state(progress: DownloadProgress) -> DownloadState {
     };
 
     DownloadState {
-        id: progress.filename.clone(),
+        id: progress.id,
         filename: progress.filename,
         downloaded: progress.downloaded,
         total: progress.total,

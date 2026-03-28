@@ -6,8 +6,6 @@ use crate::archive;
 use crate::loader::{add_runtime_search_path, preload_library};
 
 const LLAMA_CPP_TAG: &str = env!("LLAMA_CPP_TAG");
-const RELEASE_BASE_URL: &str = "https://github.com/ggml-org/llama.cpp/releases/download";
-
 #[derive(Debug, Clone, Copy)]
 #[allow(dead_code)]
 enum LlamaRuntime {
@@ -166,7 +164,10 @@ impl LlamaRuntime {
 
     async fn install(self, install_dir: &Path, downloads_dir: &Path) -> Result<()> {
         for asset in self.assets() {
-            let url = format!("{RELEASE_BASE_URL}/{LLAMA_CPP_TAG}/{asset}");
+            let url = format!(
+                "{}/{LLAMA_CPP_TAG}/{asset}",
+                koharu_http::config::github_release_base_url()
+            );
             let archive = archive::download_cached(&url, asset, downloads_dir).await?;
             if Self::is_zip_asset(asset) {
                 archive::extract_zip(&archive, install_dir)?;
@@ -209,6 +210,18 @@ pub(crate) async fn ensure_ready(root: &Path, downloads_dir: &Path) -> Result<()
 
 pub(crate) fn runtime_dir(root: &Path) -> Result<PathBuf> {
     Ok(LlamaRuntime::detect()?.install_dir(root))
+}
+
+pub(crate) fn runtime_install_dir_for_current_platform(root: &Path) -> Option<PathBuf> {
+    LlamaRuntime::detect()
+        .ok()
+        .map(|runtime| runtime.install_dir(root))
+}
+
+pub(crate) fn required_libraries_for_current_platform() -> &'static [&'static str] {
+    LlamaRuntime::detect()
+        .map(|runtime| runtime.libraries())
+        .unwrap_or(&[])
 }
 
 #[cfg(test)]

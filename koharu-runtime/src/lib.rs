@@ -3,7 +3,6 @@ mod cuda;
 mod llama;
 mod loader;
 
-use std::env;
 use std::fs;
 use std::path::{Path, PathBuf};
 
@@ -20,6 +19,7 @@ pub async fn initialize() -> Result<()> {
 }
 
 async fn initialize_with_root(root: &Path) -> Result<()> {
+    let _root_lock = koharu_http::lock::acquire_managed_root(root)?;
     fs::create_dir_all(root)
         .with_context(|| format!("failed to create runtime root `{}`", root.display()))?;
     let downloads_dir = root.join(DOWNLOADS_DIR);
@@ -39,14 +39,81 @@ pub fn llama_runtime_dir() -> Result<PathBuf> {
     llama::runtime_dir(&runtime_root())
 }
 
-fn runtime_root() -> PathBuf {
-    if let Some(path) = env::var_os("KOHARU_RUNTIME_ROOT") {
-        return PathBuf::from(path);
+pub fn runtime_root() -> PathBuf {
+    koharu_http::paths::runtime_root()
+}
+
+pub fn delete_runtime_root() -> Result<()> {
+    let root = runtime_root();
+    let _root_lock = koharu_http::lock::acquire_managed_root(&root)?;
+    if root.exists() {
+        fs::remove_dir_all(&root)
+            .with_context(|| format!("failed to delete runtime root `{}`", root.display()))?;
     }
-    dirs::data_local_dir()
-        .unwrap_or_else(env::temp_dir)
-        .join("Koharu")
-        .join("runtime")
+    Ok(())
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum RuntimeValidation {
+    Missing,
+    Ready,
+    Partial,
+    FailedValidation,
+    Busy,
+}
+
+pub fn validate_runtime() -> RuntimeValidation {
+    let root = runtime_root();
+    let Ok(_root_lock) = koharu_http::lock::acquire_managed_root(&root) else {
+        return RuntimeValidation::Busy;
+    };
+
+    let downloads_dir = root.join(DOWNLOADS_DIR);
+    let mut any_present = downloads_dir.exists();
+    let mut any_invalid = false;
+
+    let Some(llama_install_dir) = llama::runtime_install_dir_for_current_platform(&root) else {
+        return RuntimeValidation::FailedValidation;
+    };
+    let llama_libraries = llama::required_libraries_for_current_platform();
+    let llama_marker = llama_install_dir.join(INSTALLED_MARKER);
+    let llama_present = llama_install_dir.exists();
+    any_present |= llama_present;
+
+    if llama_present {
+        let libraries_ok = llama_libraries
+            .iter()
+            .all(|library| file_exists_and_non_empty(&llama_install_dir.join(library)));
+        let marker_ok = file_exists_and_non_empty(&llama_marker);
+        if !libraries_ok || !marker_ok {
+            any_invalid = true;
+        }
+    }
+
+    if let Some(cuda_install_dir) = cuda::runtime_install_dir_if_applicable(&root) {
+        let cuda_marker = cuda_install_dir.join(INSTALLED_MARKER);
+        let cuda_present = cuda_install_dir.exists();
+        any_present |= cuda_present;
+        if cuda_present {
+            let libraries_ok = cuda::required_libraries_for_current_platform()
+                .iter()
+                .all(|library| file_exists_and_non_empty(&cuda_install_dir.join(library)));
+            let marker_ok = file_exists_and_non_empty(&cuda_marker);
+            if !libraries_ok || !marker_ok {
+                any_invalid = true;
+            }
+        }
+    }
+
+    if !any_present {
+        RuntimeValidation::Missing
+    } else if any_invalid {
+        RuntimeValidation::FailedValidation
+    } else if file_exists_and_non_empty(&llama_marker) {
+        RuntimeValidation::Ready
+    } else {
+        RuntimeValidation::Partial
+    }
 }
 
 fn is_up_to_date(install_dir: &Path, source_id: &str) -> bool {
@@ -67,6 +134,12 @@ fn reset_dir(dir: &Path) -> Result<()> {
 fn mark_installed(install_dir: &Path, source_id: &str) -> Result<()> {
     fs::write(install_dir.join(INSTALLED_MARKER), source_id)
         .with_context(|| format!("failed to write marker in `{}`", install_dir.display()))
+}
+
+fn file_exists_and_non_empty(path: &Path) -> bool {
+    fs::metadata(path)
+        .map(|metadata| metadata.is_file() && metadata.len() > 0)
+        .unwrap_or(false)
 }
 
 #[cfg(test)]

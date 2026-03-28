@@ -1,8 +1,8 @@
-use std::{path::PathBuf, sync::Arc};
+use std::sync::Arc;
 
 use anyhow::{Context, Result};
 use clap::Parser;
-use once_cell::sync::{Lazy, OnceCell};
+use once_cell::sync::OnceCell;
 use rfd::MessageDialog;
 use tauri::{Manager, WebviewWindowBuilder};
 use tokio::{net::TcpListener, sync::RwLock};
@@ -16,12 +16,6 @@ use koharu_renderer::facade::Renderer;
 use koharu_rpc::{SharedResources, server};
 use koharu_types::State;
 
-static APP_ROOT: Lazy<PathBuf> = Lazy::new(|| {
-    dirs::data_local_dir()
-        .map(|path| path.join("Koharu"))
-        .unwrap_or_default()
-});
-static MODEL_ROOT: Lazy<PathBuf> = Lazy::new(|| APP_ROOT.join("models"));
 static LLAMA_BACKEND: OnceCell<Arc<LlamaBackend>> = OnceCell::new();
 
 #[derive(Parser)]
@@ -85,7 +79,7 @@ fn initialize(headless: bool, _debug: bool) -> Result<()> {
         .init();
 
     // hook model cache dir
-    koharu_ml::set_cache_dir(MODEL_ROOT.to_path_buf())?;
+    koharu_ml::set_cache_dir(koharu_http::paths::model_root())?;
 
     if headless {
         std::panic::set_hook(Box::new(|info| {

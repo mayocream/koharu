@@ -30,7 +30,7 @@ export const useDownloadStore = create<DownloadStore>((set, get) => ({
           progress.total && progress.total > 0
             ? Math.round((progress.downloaded / progress.total) * 100)
             : undefined
-        next.set(progress.filename, { ...progress, percent })
+        next.set(progress.id, { ...progress, percent })
       }
       set({ downloads: next })
     })
@@ -43,21 +43,23 @@ export const useDownloadStore = create<DownloadStore>((set, get) => ({
           : undefined
 
       if (progress.status === 'completed' || progress.status === 'failed') {
-        next.set(progress.filename, { ...progress, percent })
+        next.set(progress.id, { ...progress, percent })
         set({ downloads: next })
         setTimeout(() => {
           const current = get().downloads
-          if (current.has(progress.filename)) {
+          if (current.has(progress.id)) {
             const updated = new Map(current)
-            updated.delete(progress.filename)
+            updated.delete(progress.id)
             set({ downloads: updated })
           }
         }, 3000)
         return
       }
 
-      next.set(progress.filename, { ...progress, percent })
+      next.set(progress.id, { ...progress, percent })
       set({ downloads: next })
     })
   },
 }))
+
+

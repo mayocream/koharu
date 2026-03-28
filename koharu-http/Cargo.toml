@@ -26,5 +26,12 @@ serde = { workspace = true }
 tokio = { workspace = true }
 tracing = { workspace = true }
 
+[target.'cfg(target_family = "unix")'.dependencies]
+libc = { workspace = true }
+
+[target.'cfg(target_family = "windows")'.dependencies]
+windows-sys = { workspace = true, features = ["Win32_Foundation", "Win32_Storage_FileSystem"] }
+
 [dev-dependencies]
 axum = { workspace = true }
+tempfile = { workspace = true }

@@ -10,6 +10,8 @@ use image::DynamicImage;
 use minijinja::{Environment, context};
 use serde::{Deserialize, Serialize};
 
+use koharu_http::download::HubAssetSpec;
+
 use crate::safe::context::params::{LlamaAttentionType, LlamaContextParams};
 use crate::safe::llama_backend::LlamaBackend;
 use crate::safe::llama_batch::LlamaBatch;
@@ -352,11 +354,21 @@ pub async fn prefetch() -> Result<()> {
     Ok(())
 }
 
+pub const SUPPORT_MODEL_ASSETS: [HubAssetSpec; 2] = [
+    HubAssetSpec {
+        repo: HF_REPO,
+        filename: MODEL_FILENAME,
+    },
+    HubAssetSpec {
+        repo: HF_REPO,
+        filename: MMPROJ_FILENAME,
+    },
+];
+
 async fn download_model_files() -> Result<ModelFiles> {
-    let (model, mmproj) = tokio::try_join!(
-        koharu_http::download::model(HF_REPO, MODEL_FILENAME),
-        koharu_http::download::model(HF_REPO, MMPROJ_FILENAME),
-    )?;
+    // Keep these large downloads sequential to reduce pressure on flaky proxy links.
+    let model = koharu_http::download::model(HF_REPO, MODEL_FILENAME).await?;
+    let mmproj = koharu_http::download::model(HF_REPO, MMPROJ_FILENAME).await?;
 
     Ok(ModelFiles { model, mmproj })
 }

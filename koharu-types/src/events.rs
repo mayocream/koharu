@@ -12,6 +12,7 @@ pub enum DownloadStatus {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct DownloadProgress {
+    pub id: String,
     pub filename: String,
     pub downloaded: u64,
     pub total: Option<u64>,
@@ -83,12 +84,14 @@ mod tests {
     #[test]
     fn event_dtos_round_trip() {
         round_trip(&DownloadProgress {
+            id: "hf:repo:model.bin".to_string(),
             filename: "model.bin".to_string(),
             downloaded: 123,
             total: Some(456),
             status: DownloadStatus::Downloading,
         });
         round_trip(&DownloadProgress {
+            id: "hf:repo:model.bin".to_string(),
             filename: "model.bin".to_string(),
             downloaded: 123,
             total: Some(456),

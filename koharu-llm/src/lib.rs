@@ -12,6 +12,7 @@ use std::path::PathBuf;
 
 use strum::{EnumProperty, IntoEnumIterator};
 
+use koharu_http::download::HubAssetSpec;
 pub use language::{Language, language_from_tag, supported_locales};
 pub use model::{GenerateOptions, Llm};
 pub use prompt::{ChatMessage, ChatRole};
@@ -80,8 +81,16 @@ impl ModelId {
         self.get_str(name).expect("missing model property")
     }
 
+    pub fn repo(&self) -> &'static str {
+        self.property("repo")
+    }
+
+    pub fn filename(&self) -> &'static str {
+        self.property("filename")
+    }
+
     pub async fn get(&self) -> anyhow::Result<PathBuf> {
-        koharu_http::download::model(self.property("repo"), self.property("filename")).await
+        koharu_http::download::model(self.repo(), self.filename()).await
     }
 
     pub fn languages(&self) -> Vec<Language> {
@@ -90,6 +99,20 @@ impl ModelId {
             .map(|tag| Language::parse(tag).expect("invalid model language tag"))
             .collect()
     }
+}
+
+pub fn local_model_assets() -> Vec<(ModelId, HubAssetSpec)> {
+    ModelId::iter()
+        .map(|model| {
+            (
+                model,
+                HubAssetSpec {
+                    repo: model.repo(),
+                    filename: model.filename(),
+                },
+            )
+        })
+        .collect()
 }
 
 pub async fn prefetch() -> anyhow::Result<()> {

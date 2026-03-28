@@ -25,6 +25,7 @@ include = [
 koharu-ml = { workspace = true }
 koharu-pipeline = { workspace = true }
 koharu-renderer = { workspace = true }
+koharu-http = { workspace = true }
 koharu-rpc = { workspace = true }
 koharu-runtime = { workspace = true }
 koharu-types = { workspace = true }

@@ -22,21 +22,21 @@ export default function SplashScreen() {
       const files = filesRef.current
 
       if (msg.status === 'started') {
-        files.set(msg.filename, { downloaded: 0, total: msg.total ?? 0 })
+        files.set(msg.id, { downloaded: 0, total: msg.total ?? 0 })
       } else if (msg.status === 'downloading') {
-        const entry = files.get(msg.filename)
+        const entry = files.get(msg.id)
         if (entry) {
           entry.downloaded = msg.downloaded
           if (msg.total) entry.total = msg.total
         } else {
-          files.set(msg.filename, {
+          files.set(msg.id, {
             downloaded: msg.downloaded,
             total: msg.total ?? 0,
           })
         }
       } else {
         // Completed or Failed — lock this file at 100%
-        const entry = files.get(msg.filename)
+        const entry = files.get(msg.id)
         if (entry) {
           entry.downloaded = entry.total
         }
@@ -103,3 +103,4 @@ export default function SplashScreen() {
     </main>
   )
 }
+
