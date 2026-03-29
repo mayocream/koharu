@@ -42,7 +42,7 @@ enum PendingWindowTarget {
 fn pending_window_target(phase: BootstrapPhase, onboarding_exists: bool) -> PendingWindowTarget {
     match phase {
         BootstrapPhase::NeedsOnboarding | BootstrapPhase::Failed => PendingWindowTarget::Onboarding,
-        BootstrapPhase::PendingInitialize | BootstrapPhase::Initializing => {
+        BootstrapPhase::Loading => {
             if onboarding_exists {
                 PendingWindowTarget::Onboarding
             } else {
@@ -96,25 +96,13 @@ mod tests {
     use crate::bootstrap::BootstrapPhase;
 
     #[test]
-    fn startup_idle_prefers_splashscreen_until_onboarding_exists() {
+    fn startup_loading_prefers_splashscreen_until_onboarding_exists() {
         assert_eq!(
-            pending_window_target(BootstrapPhase::PendingInitialize, false),
+            pending_window_target(BootstrapPhase::Loading, false),
             PendingWindowTarget::Splashscreen
         );
         assert_eq!(
-            pending_window_target(BootstrapPhase::PendingInitialize, true),
-            PendingWindowTarget::Onboarding
-        );
-    }
-
-    #[test]
-    fn initializing_keeps_existing_onboarding_window() {
-        assert_eq!(
-            pending_window_target(BootstrapPhase::Initializing, false),
-            PendingWindowTarget::Splashscreen
-        );
-        assert_eq!(
-            pending_window_target(BootstrapPhase::Initializing, true),
+            pending_window_target(BootstrapPhase::Loading, true),
             PendingWindowTarget::Onboarding
         );
     }

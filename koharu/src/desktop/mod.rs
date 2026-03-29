@@ -5,7 +5,8 @@ use clap::Parser;
 use tauri::Builder;
 use tokio::net::TcpListener;
 
-use crate::bootstrap::{BootstrapManager, ProjectPaths};
+use crate::bootstrap::BootstrapManager;
+use crate::config::ProjectPaths;
 use crate::server::{SharedResources, http};
 
 mod assets;

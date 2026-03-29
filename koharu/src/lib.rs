@@ -1,3 +1,4 @@
+mod config;
 mod bootstrap;
 mod desktop;
 #[cfg(target_os = "windows")]

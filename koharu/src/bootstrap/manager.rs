@@ -2,22 +2,22 @@ use std::sync::Arc;
 
 use arc_swap::ArcSwap;
 use koharu_core::Config;
-use koharu_runtime::registry::{BootstrapPaths, required_entries};
+use koharu_runtime::registry::required_entries;
 use thiserror::Error;
 use tokio::sync::{Mutex, broadcast};
 
-use crate::bootstrap::config::{BootstrapConfigError, ConfigStore, ProjectPaths};
+use crate::config::{ConfigError, ConfigStore, ProjectPaths};
 use crate::services::AppResources;
 
 type ResourceBuilderFuture =
     std::pin::Pin<Box<dyn std::future::Future<Output = anyhow::Result<AppResources>> + Send>>;
-type ResourceBuilder = Arc<dyn Fn(BootstrapPaths) -> ResourceBuilderFuture + Send + Sync>;
+type ResourceBuilder =
+    Arc<dyn Fn(koharu_runtime::registry::BootstrapPaths) -> ResourceBuilderFuture + Send + Sync>;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub(crate) enum BootstrapPhase {
     NeedsOnboarding,
-    PendingInitialize,
-    Initializing,
+    Loading,
     Ready,
     Failed,
 }
@@ -31,7 +31,7 @@ pub(crate) struct BootstrapSnapshot {
 #[derive(Debug, Error)]
 pub(crate) enum BootstrapManagerError {
     #[error(transparent)]
-    Config(#[from] BootstrapConfigError),
+    Config(#[from] ConfigError),
     #[error("bootstrap entry `{entry_id}` failed: {source}")]
     Dependency {
         entry_id: String,
@@ -60,10 +60,9 @@ impl BootstrapManager {
     ) -> std::result::Result<Arc<Self>, BootstrapManagerError> {
         let config_store = ConfigStore::new(paths);
         let config = config_store.load()?;
-        config_store.apply(&config)?;
-        let dependency_paths = config_store.dependency_paths(&config)?;
-        let phase = if dependencies_ready(&dependency_paths)? {
-            BootstrapPhase::PendingInitialize
+        let resolved = config_store.apply(&config)?;
+        let phase = if dependencies_ready(&resolved.bootstrap_paths())? {
+            BootstrapPhase::Loading
         } else {
             BootstrapPhase::NeedsOnboarding
         };
@@ -102,30 +101,23 @@ impl BootstrapManager {
         let previous = self.config();
         let current_state = self.snapshot();
 
-        if self.resources.get().is_some() {
-            self.config_store.enforce_locked_paths(&previous, &config)?;
-        }
-        if matches!(current_state.phase, BootstrapPhase::Initializing) {
-            self.config_store.enforce_locked_paths(&previous, &config)?;
+        if self.resources.get().is_some() || matches!(current_state.phase, BootstrapPhase::Loading)
+        {
+            self.config_store.ensure_paths_locked(&previous, &config)?;
         }
 
-        self.config_store.apply(&config)?;
-        self.config_store.persist(&config)?;
+        let resolved = self.config_store.apply(&config)?;
+        self.config_store.save(&config)?;
         self.config.store(Arc::new(config.clone()));
 
-        if !matches!(current_state.phase, BootstrapPhase::Initializing) {
-            let dependency_paths = self.config_store.dependency_paths(&config)?;
-            let phase = if dependencies_ready(&dependency_paths)? {
-                if self.resources.get().is_some() {
-                    BootstrapPhase::Ready
-                } else {
-                    BootstrapPhase::PendingInitialize
-                }
-            } else {
-                BootstrapPhase::NeedsOnboarding
-            };
-            self.replace_state(BootstrapSnapshot { phase, error: None });
-        }
+        let phase = if self.resources.get().is_some() {
+            BootstrapPhase::Ready
+        } else if dependencies_ready(&resolved.bootstrap_paths())? {
+            BootstrapPhase::Loading
+        } else {
+            BootstrapPhase::NeedsOnboarding
+        };
+        self.replace_state(BootstrapSnapshot { phase, error: None });
 
         Ok(config)
     }
@@ -134,12 +126,17 @@ impl BootstrapManager {
         self: &Arc<Self>,
     ) -> std::result::Result<(), BootstrapManagerError> {
         let _guard = self.command_lock.lock().await;
-        if !matches!(self.snapshot().phase, BootstrapPhase::Initializing) {
+        if self.resources.get().is_some() {
             self.replace_state(BootstrapSnapshot {
-                phase: BootstrapPhase::Initializing,
+                phase: BootstrapPhase::Ready,
                 error: None,
             });
+            return Ok(());
         }
+        self.replace_state(BootstrapSnapshot {
+            phase: BootstrapPhase::Loading,
+            error: None,
+        });
 
         let result = self.run_initialize().await;
         match result {
@@ -163,11 +160,7 @@ impl BootstrapManager {
     pub(crate) async fn maybe_start_on_launch(
         self: &Arc<Self>,
     ) -> std::result::Result<(), BootstrapManagerError> {
-        if matches!(self.snapshot().phase, BootstrapPhase::PendingInitialize) {
-            self.replace_state(BootstrapSnapshot {
-                phase: BootstrapPhase::Initializing,
-                error: None,
-            });
+        if matches!(self.snapshot().phase, BootstrapPhase::Loading) {
             let manager = Arc::clone(self);
             tokio::spawn(async move {
                 if let Err(error) = manager.initialize().await {
@@ -185,8 +178,7 @@ impl BootstrapManager {
 
     async fn run_initialize(&self) -> std::result::Result<(), BootstrapManagerError> {
         let config = self.config();
-        self.config_store.apply(&config)?;
-        let dependency_paths = self.config_store.dependency_paths(&config)?;
+        let dependency_paths = self.config_store.apply(&config)?.bootstrap_paths();
 
         for entry in required_entries() {
             if entry.is_ready(&dependency_paths).map_err(|source| {
@@ -217,7 +209,9 @@ impl BootstrapManager {
     }
 }
 
-fn dependencies_ready(paths: &BootstrapPaths) -> std::result::Result<bool, BootstrapManagerError> {
+fn dependencies_ready(
+    paths: &koharu_runtime::registry::BootstrapPaths,
+) -> std::result::Result<bool, BootstrapManagerError> {
     for entry in required_entries() {
         if !entry
             .is_ready(paths)
