@@ -224,13 +224,13 @@ async fn check_proxy(proxy_url: String) -> std::result::Result<(), String> {
         .timeout(Duration::from_secs(10));
 
     if !proxy_url.trim().is_empty() {
-        builder = builder.proxy(
-            reqwest::Proxy::all(&proxy_url)
-                .map_err(|e| format!("Invalid proxy URL: {e}"))?,
-        );
+        builder = builder
+            .proxy(reqwest::Proxy::all(&proxy_url).map_err(|e| format!("Invalid proxy URL: {e}"))?);
     }
 
-    let client = builder.build().map_err(|e| format!("Failed to build client: {e}"))?;
+    let client = builder
+        .build()
+        .map_err(|e| format!("Failed to build client: {e}"))?;
 
     client
         .head("https://huggingface.co")
