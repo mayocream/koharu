@@ -228,8 +228,10 @@ pub async fn run() -> Result<()> {
     let shared_assets = crate::assets::share_context_assets(&mut context);
 
     if headless {
-        let resolver =
-            server::asset_resolver([crate::assets::embedded_asset_resolver(shared_assets)]);
+        let resolver = server::asset_resolver([
+            crate::assets::filesystem_asset_resolver(),
+            crate::assets::embedded_asset_resolver(shared_assets),
+        ]);
         tauri::async_runtime::spawn({
             let shared = shared.clone();
             async move {
@@ -250,6 +252,7 @@ pub async fn run() -> Result<()> {
         .append_invoke_initialization_script(format!("window.__KOHARU_API_PORT__ = {api_port};"))
         .setup(move |app| {
             let resolver = server::asset_resolver([
+                crate::assets::filesystem_asset_resolver(),
                 crate::assets::tauri_asset_resolver(app.asset_resolver()),
                 embedded_resolver,
             ]);

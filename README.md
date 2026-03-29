@@ -213,6 +213,83 @@ The built binaries will be located in `target/release`.
 
 For platform-specific build notes, see [Build From Source](https://koharu.rs/how-to/build-from-source/). For the local development workflow, see [Contributing](https://koharu.rs/how-to/contributing/).
 
+## Ubuntu 22.04 Headless CPU
+
+If you want a reproducible Ubuntu 22.04 setup without CUDA and without the desktop window, use the helper script in this repository.
+
+### What this path does
+
+- installs the Linux system packages needed for a source build
+- installs Rust and Bun if they are missing
+- builds the static UI
+- builds the `koharu` binary in CPU-only mode
+- predownloads the default runtime and vision dependencies
+- serves the browser UI and API in headless mode
+
+### Bootstrap on Ubuntu 22.04
+
+```bash
+git clone https://github.com/mayocream/koharu.git
+cd koharu
+bash scripts/bootstrap-ubuntu22-headless-cpu.sh
+```
+
+### Start headless mode
+
+```bash
+bash scripts/run-headless-cpu.sh
+```
+
+Then open:
+
+```text
+http://127.0.0.1:4000/
+```
+
+Useful endpoints:
+
+- Web UI: `http://127.0.0.1:4000/`
+- API: `http://127.0.0.1:4000/api/v1/meta`
+- MCP: `http://127.0.0.1:4000/mcp`
+
+### Why this path exists
+
+The default Linux desktop build path in this repository follows the CUDA-enabled feature path. On Ubuntu 22.04 systems where you want a headless CPU-only deployment, the direct `cargo build --release -p koharu --no-default-features` path is more practical.
+
+Headless mode also needs access to the built `ui/out` assets. This repository includes a filesystem asset fallback so the browser UI can be served even when using the CPU-only direct Cargo build instead of the normal Tauri packaging flow.
+
+### xAI OpenAI-compatible setup
+
+Koharu's OpenAI-compatible provider expects:
+
+- base URL ending in `/v1`
+- `GET /models`
+- `POST /chat/completions`
+
+For xAI, configure **Settings -> Local LLM & OpenAI Compatible Providers** like this:
+
+- `Preset 1` or `Preset 2`
+- `Base URL`: `https://api.x.ai/v1`
+- `API Key`: your xAI API key
+- `Model name`: the exact model `id` returned by `GET /models`
+
+Example:
+
+```bash
+curl https://api.x.ai/v1/models \
+  -H "Authorization: Bearer $XAI_API_KEY"
+```
+
+### Optional systemd service
+
+Copy the provided unit file into place, then enable it:
+
+```bash
+cp deploy/koharu-headless-cpu.service /etc/systemd/system/
+systemctl daemon-reload
+systemctl enable --now koharu-headless-cpu
+```
+
 ## Sponsorship
 
 If you find Koharu useful, consider sponsoring the project to support its development.

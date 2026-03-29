@@ -1,4 +1,4 @@
-use std::{borrow::Cow, sync::Arc};
+use std::{borrow::Cow, fs, path::PathBuf, sync::Arc};
 
 use koharu_rpc::server;
 
@@ -75,6 +75,35 @@ pub fn embedded_asset_resolver<R: tauri::Runtime>(
     assets: Arc<dyn tauri::Assets<R>>,
 ) -> server::SharedAssetResolver {
     Arc::new(move |path: &str| resolve_embedded_asset(assets.as_ref(), path))
+}
+
+fn workspace_ui_out_dir() -> PathBuf {
+    PathBuf::from(env!("CARGO_WORKSPACE_DIR")).join("ui/out")
+}
+
+fn resolve_filesystem_asset(path: &str) -> Option<server::Asset> {
+    let path = path.trim_matches('/');
+    let path = if path.is_empty() { "index.html" } else { path };
+    let root = workspace_ui_out_dir();
+
+    let candidates = [
+        root.join(path),
+        root.join(format!("{path}.html")),
+        root.join(path).join("index.html"),
+    ];
+
+    candidates.into_iter().find_map(|path| {
+        let bytes = fs::read(&path).ok()?;
+        let name = path.file_name()?.to_str()?;
+        Some(server::Asset {
+            mime_type: tauri::utils::mime_type::MimeType::parse(&bytes, name),
+            bytes,
+        })
+    })
+}
+
+pub fn filesystem_asset_resolver() -> server::SharedAssetResolver {
+    Arc::new(resolve_filesystem_asset)
 }
 
 pub fn tauri_asset_resolver<R: tauri::Runtime>(
