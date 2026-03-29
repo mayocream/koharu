@@ -2,12 +2,31 @@ name: Headless CPU Build
 
 on:
   workflow_dispatch:
+    inputs:
+      publish_release:
+        description: Publish artifact to a GitHub Release in this fork
+        required: false
+        default: false
+        type: boolean
+      release_tag:
+        description: Release tag to create or update
+        required: false
+        default: headless-cpu-latest
+        type: string
+      release_name:
+        description: Release title
+        required: false
+        default: Koharu Headless CPU
+        type: string
   push:
     branches:
       - codex/ubuntu22-headless-cpu
 
 env:
   CARGO_TERM_COLOR: always
+
+permissions:
+  contents: write
 
 jobs:
   build-linux-cpu:
@@ -82,3 +101,21 @@ jobs:
           name: koharu-headless-cpu-ubuntu22.04
           path: koharu-headless-cpu-ubuntu22.04.tar.gz
           retention-days: 14
+
+      - name: Publish release in fork
+        if: ${{ github.event_name == 'workflow_dispatch' && inputs.publish_release }}
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ inputs.release_tag }}
+          name: ${{ inputs.release_name }}
+          target_commitish: ${{ github.sha }}
+          prerelease: true
+          files: koharu-headless-cpu-ubuntu22.04.tar.gz
+          body: |
+            CPU-only headless build for Ubuntu 22.04.
+
+            Run:
+              ./koharu --cpu --headless --port 4000
+
+            Open:
+              http://127.0.0.1:4000/
