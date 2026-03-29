@@ -1,0 +1,16 @@
+[Unit]
+Description=Koharu Headless CPU
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=root
+WorkingDirectory=/root/koharu
+Environment=PORT=4000
+ExecStart=/root/koharu/scripts/run-headless-cpu.sh
+Restart=on-failure
+RestartSec=5
+
+[Install]
+WantedBy=multi-user.target
