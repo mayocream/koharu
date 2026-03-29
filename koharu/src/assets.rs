@@ -80,10 +80,10 @@ pub fn embedded_asset_resolver<R: tauri::Runtime>(
 fn ui_out_roots() -> Vec<PathBuf> {
     let mut roots = Vec::new();
 
-    if let Ok(path) = env::current_exe() {
-        if let Some(parent) = path.parent() {
-            roots.push(parent.join("ui/out"));
-        }
+    if let Ok(path) = env::current_exe()
+        && let Some(parent) = path.parent()
+    {
+        roots.push(parent.join("ui/out"));
     }
 
     if let Ok(path) = env::current_dir() {
