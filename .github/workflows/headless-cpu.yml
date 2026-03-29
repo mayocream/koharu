@@ -1,0 +1,84 @@
+name: Headless CPU Build
+
+on:
+  workflow_dispatch:
+  push:
+    branches:
+      - codex/ubuntu22-headless-cpu
+
+env:
+  CARGO_TERM_COLOR: always
+
+jobs:
+  build-linux-cpu:
+    name: ubuntu-22.04 cpu
+    runs-on: ubuntu-22.04
+
+    steps:
+      - uses: actions/checkout@v6
+
+      - name: Install system dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends \
+            build-essential \
+            ca-certificates \
+            clang \
+            cmake \
+            curl \
+            file \
+            fonts-noto-cjk \
+            libayatana-appindicator3-dev \
+            libclang-dev \
+            librsvg2-dev \
+            libssl-dev \
+            libwebkit2gtk-4.1-dev \
+            libxdo-dev \
+            patchelf \
+            pkg-config \
+            wget
+
+      - uses: oven-sh/setup-bun@v2
+
+      - name: Install stable Rust
+        uses: dtolnay/rust-toolchain@stable
+
+      - uses: Swatinem/rust-cache@v2
+        with:
+          cache-on-failure: true
+
+      - name: Cache Bun packages
+        uses: actions/cache@v4
+        with:
+          path: ~/.bun/install/cache
+          key: ${{ runner.os }}-bun-${{ hashFiles('**/bun.lock') }}
+
+      - name: Install JS dependencies
+        run: bun install
+
+      - name: Build static UI
+        run: bun --cwd ui build
+
+      - name: Build CPU-only binary
+        run: cargo build --release -p koharu --no-default-features
+
+      - name: Prepare artifact
+        run: |
+          mkdir -p dist
+          cp target/release/koharu dist/
+          cp README.md dist/README.md
+          cat > dist/RUN.txt <<'EOF'
+          Run on Ubuntu 22.04:
+            ./koharu --cpu --headless --port 4000
+
+          Open:
+            http://127.0.0.1:4000/
+          EOF
+          tar -C dist -czf koharu-headless-cpu-ubuntu22.04.tar.gz .
+
+      - name: Upload artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: koharu-headless-cpu-ubuntu22.04
+          path: koharu-headless-cpu-ubuntu22.04.tar.gz
+          retention-days: 14
