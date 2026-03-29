@@ -48,7 +48,7 @@ jobs:
           cache-on-failure: true
 
       - name: Cache Bun packages
-        uses: actions/cache@v4
+        uses: actions/cache@v5
         with:
           path: ~/.bun/install/cache
           key: ${{ runner.os }}-bun-${{ hashFiles('**/bun.lock') }}
@@ -77,7 +77,7 @@ jobs:
           tar -C dist -czf koharu-headless-cpu-ubuntu22.04.tar.gz .
 
       - name: Upload artifact
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v6
         with:
           name: koharu-headless-cpu-ubuntu22.04
           path: koharu-headless-cpu-ubuntu22.04.tar.gz
