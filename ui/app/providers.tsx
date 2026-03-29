@@ -1,11 +1,13 @@
 'use client'
 
 import { useEffect, useRef, type ReactNode } from 'react'
+import { usePathname } from 'next/navigation'
 import { I18nextProvider } from 'react-i18next'
 import { ThemeProvider } from 'next-themes'
 import { QueryClientProvider, useQueryClient } from '@tanstack/react-query'
 import ClientOnly from '@/components/ClientOnly'
 import { TooltipProvider } from '@/components/ui/tooltip'
+import { api } from '@/lib/api'
 import {
   ProgressBarStatus,
   getCurrentWindow,
@@ -35,13 +37,18 @@ import type {
 } from '@/lib/protocol'
 
 function ProvidersBootstrap({ children }: { children: ReactNode }) {
+  const pathname = usePathname()
   const queryClient = useQueryClient()
   const hasConnectedRef = useRef(false)
   const setTotalPages = useEditorUiStore((state) => state.setTotalPages)
   const setApiKey = usePreferencesStore((state) => state.setApiKey)
   const rpcConnected = useRpcConnection()
-  const shouldQueryApiKeys = rpcConnected && isTauri()
-  const { data: documentsCount } = useDocumentsCountQuery(rpcConnected)
+  const isWorkspaceRoute =
+    pathname !== '/onboarding' && pathname !== '/splashscreen'
+  const shouldQueryApiKeys = rpcConnected && isTauri() && isWorkspaceRoute
+  const { data: documentsCount } = useDocumentsCountQuery(
+    rpcConnected && isWorkspaceRoute,
+  )
   const openAiApiKeyQuery = useApiKeyQuery('openai', shouldQueryApiKeys)
   const openAiCompatibleApiKeyQuery = useApiKeyQuery(
     'openai-compatible',
@@ -154,6 +161,16 @@ function ProvidersBootstrap({ children }: { children: ReactNode }) {
     }
 
     hasConnectedRef.current = true
+    void api
+      .getConfig()
+      .then((config) => {
+        if (config.language && i18n.language !== config.language) {
+          void i18n.changeLanguage(config.language)
+        }
+      })
+      .catch((error) => {
+        console.error('Failed to fetch config', error)
+      })
   }, [queryClient, rpcConnected])
 
   useEffect(() => {

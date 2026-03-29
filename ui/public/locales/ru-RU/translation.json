@@ -274,5 +274,24 @@
     "localLlmTestSuccess": "Подключено. Найдено моделей: {{count}}. Задержка: {{latency}}мс",
     "localLlmTestFailed": "Ошибка подключения: {{error}}",
     "localLlmAdvanced": "Расширенные настройки"
+  },
+  "config": {
+    "language": "Язык",
+    "runtime": "Среда выполнения",
+    "models": "Модели",
+    "proxy": "Прокси",
+    "pypi": "PyPI",
+    "github": "GitHub",
+    "official": "Официальный",
+    "custom": "Пользовательский"
+  },
+  "onboarding": {
+    "back": "Назад",
+    "next": "Далее",
+    "start": "Запуск",
+    "retry": "Повторить",
+    "downloading": "Загрузка файлов.",
+    "opening": "Открываем Koharu.",
+    "failed": "Не удалось выполнить инициализацию."
   }
 }

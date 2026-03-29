@@ -274,5 +274,24 @@
     "localLlmTestSuccess": "Conectado. {{count}} modelo(s) encontrados. Latencia: {{latency}}ms",
     "localLlmTestFailed": "Error de conexión: {{error}}",
     "localLlmAdvanced": "Avanzado"
+  },
+  "config": {
+    "language": "Idioma",
+    "runtime": "Runtime",
+    "models": "Modelos",
+    "proxy": "Proxy",
+    "pypi": "PyPI",
+    "github": "GitHub",
+    "official": "Oficial",
+    "custom": "Personalizado"
+  },
+  "onboarding": {
+    "back": "Atrás",
+    "next": "Siguiente",
+    "start": "Iniciar",
+    "retry": "Reintentar",
+    "downloading": "Descargando archivos.",
+    "opening": "Abriendo Koharu.",
+    "failed": "La inicialización falló."
   }
 }

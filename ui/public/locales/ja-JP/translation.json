@@ -274,5 +274,24 @@
     "localLlmTestSuccess": "接続成功。{{count}} 個のモデルが見つかりました。レイテンシ: {{latency}}ms",
     "localLlmTestFailed": "接続失敗: {{error}}",
     "localLlmAdvanced": "詳細設定"
+  },
+  "config": {
+    "language": "言語",
+    "runtime": "ランタイム",
+    "models": "モデル",
+    "proxy": "プロキシ",
+    "pypi": "PyPI",
+    "github": "GitHub",
+    "official": "公式",
+    "custom": "カスタム"
+  },
+  "onboarding": {
+    "back": "戻る",
+    "next": "次へ",
+    "start": "開始",
+    "retry": "再試行",
+    "downloading": "ファイルをダウンロード中です。",
+    "opening": "Koharu を開いています。",
+    "failed": "初期化に失敗しました。"
   }
 }

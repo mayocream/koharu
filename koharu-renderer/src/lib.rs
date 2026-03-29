@@ -1,4 +1,3 @@
-pub mod facade;
 pub mod font;
 pub mod layout;
 pub mod renderer;

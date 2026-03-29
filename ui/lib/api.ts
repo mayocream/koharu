@@ -10,6 +10,7 @@ import {
 import { reportRpcError } from '@/lib/errors'
 import type {
   ApiKeyResponse,
+  Config,
   DocumentDetail,
   DocumentSummary,
   ExportResult,
@@ -260,9 +261,27 @@ export const api = {
     return meta.version
   },
 
-  async deviceInfo(): Promise<{ mlDevice: string }> {
+  async deviceInfo(): Promise<{ mlDevice: string | null }> {
     const meta = await fetchJson<MetaInfo>('/meta')
     return { mlDevice: meta.mlDevice }
+  },
+
+  async getConfig(): Promise<Config> {
+    return fetchJson<Config>('/config')
+  },
+
+  async updateConfig(config: Config): Promise<Config> {
+    return fetchJson<Config>('/config', {
+      method: 'PUT',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify(config),
+    })
+  },
+
+  async initialize(): Promise<void> {
+    return fetchJson<void>('/initialize', {
+      method: 'POST',
+    })
   },
 
   async openExternal(url: string): Promise<void> {

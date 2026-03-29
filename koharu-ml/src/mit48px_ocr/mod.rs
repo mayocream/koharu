@@ -6,7 +6,7 @@ use anyhow::{Context, Result};
 use candle_core::{DType, Device, Tensor};
 use candle_nn::VarBuilder;
 use image::{DynamicImage, RgbImage, imageops::FilterType};
-use koharu_types::TextBlock;
+use koharu_core::TextBlock;
 use serde::{Deserialize, Serialize};
 use tracing::instrument;
 
@@ -20,6 +20,16 @@ define_models! {
     Config => ("mayocream/mit48px-ocr", "config.json"),
     Dictionary => ("mayocream/mit48px-ocr", "alphabet-all-v7.txt"),
     Model => ("mayocream/mit48px-ocr", "model.safetensors"),
+}
+
+fn register_manifest_entries() -> Vec<koharu_runtime::registry::BootstrapEntry> {
+    manifest_registry_entries(5_100, |_| false)
+}
+
+inventory::submit! {
+    koharu_runtime::registry::RegistryProvider {
+        entries: register_manifest_entries,
+    }
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -79,11 +89,12 @@ pub struct Mit48pxOcr {
 }
 
 impl Mit48pxOcr {
-    pub async fn load(cpu: bool) -> Result<Self> {
+    pub async fn load(cpu: bool, models_root: &Path) -> Result<Self> {
         let files = ModelFiles {
-            config: loading::resolve_manifest_path(Manifest::Config.get()).await?,
-            dictionary: loading::resolve_manifest_path(Manifest::Dictionary.get()).await?,
-            weights: loading::resolve_manifest_path(Manifest::Model.get()).await?,
+            config: loading::resolve_manifest_path(Manifest::Config.get(models_root)).await?,
+            dictionary: loading::resolve_manifest_path(Manifest::Dictionary.get(models_root))
+                .await?,
+            weights: loading::resolve_manifest_path(Manifest::Model.get(models_root)).await?,
         };
         Self::load_from_files(files, cpu)
     }

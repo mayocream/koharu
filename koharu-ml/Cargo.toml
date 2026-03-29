@@ -12,9 +12,8 @@ keywords.workspace = true
 publish.workspace = true
 
 [dependencies]
-koharu-http = { workspace = true }
-koharu-llm = { workspace = true }
-koharu-types = { workspace = true }
+koharu-core = { workspace = true }
+koharu-runtime = { workspace = true }
 anyhow = { workspace = true }
 clap = { workspace = true }
 image = { workspace = true }
@@ -32,6 +31,8 @@ tracing-subscriber = { workspace = true }
 tokio = { workspace = true }
 rustfft = { workspace = true }
 futures = { workspace = true }
+directories = { workspace = true }
+inventory = { workspace = true }
 num_cpus = { workspace = true }
 rayon = { workspace = true }
 libloading = { workspace = true }

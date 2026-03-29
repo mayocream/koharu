@@ -1,5 +1,5 @@
 use std::num::NonZeroU32;
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 use std::sync::Arc;
 use std::sync::Once;
 use std::time::Instant;
@@ -59,12 +59,21 @@ impl Default for GenerateOptions {
 }
 
 impl Llm {
-    pub async fn load(id: ModelId, cpu: bool, backend: Arc<LlamaBackend>) -> Result<Self> {
-        let model_path = id.get().await?;
+    pub async fn load(
+        id: ModelId,
+        cpu: bool,
+        backend: Arc<LlamaBackend>,
+        runtime_root: &Path,
+        models_root: &Path,
+    ) -> Result<Self> {
+        let model_path = id.get(models_root).await?;
+        let runtime_root = runtime_root.to_path_buf();
 
-        tokio::task::spawn_blocking(move || Self::load_from_path(id, cpu, model_path, backend))
-            .await
-            .context("failed to join llama.cpp model loading task")?
+        tokio::task::spawn_blocking(move || {
+            Self::load_from_path(id, cpu, model_path, backend, runtime_root)
+        })
+        .await
+        .context("failed to join llama.cpp model loading task")?
     }
 
     fn load_from_path(
@@ -72,8 +81,10 @@ impl Llm {
         cpu: bool,
         model_path: PathBuf,
         backend: Arc<LlamaBackend>,
+        runtime_root: PathBuf,
     ) -> Result<Self> {
-        crate::sys::initialize().context("failed to initialize llama.cpp runtime bindings")?;
+        crate::sys::initialize(&runtime_root)
+            .context("failed to initialize llama.cpp runtime bindings")?;
 
         LOGGING_READY.call_once(|| {
             send_logs_to_tracing(LogOptions::default().with_logs_enabled(true));

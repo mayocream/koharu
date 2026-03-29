@@ -22,15 +22,37 @@ use crate::safe::sampling::LlamaSampler;
 use crate::safe::token::LlamaToken;
 use crate::safe::{LogOptions, send_logs_to_tracing};
 
-const HF_REPO: &str = "PaddlePaddle/PaddleOCR-VL-1.5-GGUF";
-const MODEL_FILENAME: &str = "PaddleOCR-VL-1.5.gguf";
-const MMPROJ_FILENAME: &str = "PaddleOCR-VL-1.5-mmproj.gguf";
+pub const HF_REPO: &str = "PaddlePaddle/PaddleOCR-VL-1.5-GGUF";
+pub const MODEL_FILENAME: &str = "PaddleOCR-VL-1.5.gguf";
+pub const MMPROJ_FILENAME: &str = "PaddleOCR-VL-1.5-mmproj.gguf";
 const DEFAULT_MEDIA_MARKER: &str = "<__media__>";
 const DEFAULT_GPU_LAYERS: u32 = 1000;
 const DEFAULT_MAX_NEW_TOKENS: usize = 128;
 const MAX_UBATCH: u32 = 512;
 
 static LOGGING_READY: Once = Once::new();
+
+fn register_manifest_entries() -> Vec<koharu_runtime::registry::BootstrapEntry> {
+    component_assets()
+        .into_iter()
+        .map(|(repo, filename)| {
+            koharu_runtime::registry::BootstrapEntry::model(
+                format!("hf:{repo}:{filename}"),
+                filename.to_string(),
+                1_200,
+                true,
+                repo,
+                filename,
+            )
+        })
+        .collect()
+}
+
+inventory::submit! {
+    koharu_runtime::registry::RegistryProvider {
+        entries: register_manifest_entries,
+    }
+}
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
@@ -97,24 +119,39 @@ pub struct PaddleOcrVl {
 }
 
 impl PaddleOcrVl {
-    pub async fn load(cpu: bool, backend: Arc<LlamaBackend>) -> Result<Self> {
-        let files = download_model_files().await?;
-        tokio::task::spawn_blocking(move || Self::load_from_files(files, cpu, backend))
-            .await
-            .context("failed to join PaddleOCR-VL loading task")?
+    pub async fn load(
+        cpu: bool,
+        backend: Arc<LlamaBackend>,
+        runtime_root: &Path,
+        models_root: &Path,
+    ) -> Result<Self> {
+        let files = resolve_cached_model_files(models_root).await?;
+        let runtime_root = runtime_root.to_path_buf();
+        tokio::task::spawn_blocking(move || {
+            Self::load_from_files(files, cpu, backend, runtime_root)
+        })
+        .await
+        .context("failed to join PaddleOCR-VL loading task")?
     }
 
     pub fn load_from_dir(
         dir: impl AsRef<Path>,
         cpu: bool,
         backend: Arc<LlamaBackend>,
+        runtime_root: &Path,
     ) -> Result<Self> {
         let files = resolve_local_model_files(dir.as_ref())?;
-        Self::load_from_files(files, cpu, backend)
+        Self::load_from_files(files, cpu, backend, runtime_root.to_path_buf())
     }
 
-    fn load_from_files(files: ModelFiles, cpu: bool, backend: Arc<LlamaBackend>) -> Result<Self> {
-        crate::sys::initialize().context("failed to initialize llama.cpp runtime bindings")?;
+    fn load_from_files(
+        files: ModelFiles,
+        cpu: bool,
+        backend: Arc<LlamaBackend>,
+        runtime_root: PathBuf,
+    ) -> Result<Self> {
+        crate::sys::initialize(&runtime_root)
+            .context("failed to initialize llama.cpp runtime bindings")?;
 
         LOGGING_READY.call_once(|| {
             send_logs_to_tracing(LogOptions::default().with_logs_enabled(true));
@@ -347,16 +384,20 @@ impl PaddleOcrVl {
     }
 }
 
-pub async fn prefetch() -> Result<()> {
-    download_model_files().await?;
+pub async fn prefetch(models_root: &Path) -> Result<()> {
+    resolve_cached_model_files(models_root).await?;
     Ok(())
 }
 
-async fn download_model_files() -> Result<ModelFiles> {
-    let (model, mmproj) = tokio::try_join!(
-        koharu_http::download::model(HF_REPO, MODEL_FILENAME),
-        koharu_http::download::model(HF_REPO, MMPROJ_FILENAME),
-    )?;
+pub fn component_assets() -> [(&'static str, &'static str); 2] {
+    [(HF_REPO, MODEL_FILENAME), (HF_REPO, MMPROJ_FILENAME)]
+}
+
+async fn resolve_cached_model_files(models_root: &Path) -> Result<ModelFiles> {
+    let model = koharu_runtime::download::cached_model_path(models_root, HF_REPO, MODEL_FILENAME)
+        .with_context(|| format!("failed to resolve {MODEL_FILENAME} from {HF_REPO}"))?;
+    let mmproj = koharu_runtime::download::cached_model_path(models_root, HF_REPO, MMPROJ_FILENAME)
+        .with_context(|| format!("failed to resolve {MMPROJ_FILENAME} from {HF_REPO}"))?;
 
     Ok(ModelFiles { model, mmproj })
 }

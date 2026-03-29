@@ -1,9 +1,13 @@
-use std::future::Future;
-use std::pin::Pin;
-
 use anyhow::Context;
+use async_trait::async_trait;
 use keyring::Entry;
+use secrecy::SecretString;
+use url::Url;
 
+use self::{
+    claude::ClaudeProvider, deepseek::DeepSeekProvider, gemini::GeminiProvider,
+    openai::OpenAiProvider, openai_compatible::OpenAiCompatibleProvider,
+};
 use crate::Language;
 
 pub mod claude;
@@ -69,13 +73,50 @@ pub async fn ensure_provider_success(
     anyhow::bail!("{provider} API request failed ({status}): {body}");
 }
 
+#[async_trait]
 pub trait AnyProvider: Send + Sync {
-    fn translate<'a>(
-        &'a self,
-        source: &'a str,
+    async fn translate(
+        &self,
+        source: &str,
         target_language: Language,
-        model: &'a str,
-    ) -> Pin<Box<dyn Future<Output = anyhow::Result<String>> + Send + 'a>>;
+        model: &str,
+    ) -> anyhow::Result<String>;
+}
+
+pub enum Provider {
+    OpenAiProvider(OpenAiProvider),
+    GeminiProvider(GeminiProvider),
+    ClaudeProvider(ClaudeProvider),
+    DeepSeekProvider(DeepSeekProvider),
+    OpenAiCompatibleProvider(OpenAiCompatibleProvider),
+}
+
+#[async_trait]
+impl AnyProvider for Provider {
+    async fn translate(
+        &self,
+        source: &str,
+        target_language: Language,
+        model: &str,
+    ) -> anyhow::Result<String> {
+        match self {
+            Self::OpenAiProvider(provider) => {
+                provider.translate(source, target_language, model).await
+            }
+            Self::GeminiProvider(provider) => {
+                provider.translate(source, target_language, model).await
+            }
+            Self::ClaudeProvider(provider) => {
+                provider.translate(source, target_language, model).await
+            }
+            Self::DeepSeekProvider(provider) => {
+                provider.translate(source, target_language, model).await
+            }
+            Self::OpenAiCompatibleProvider(provider) => {
+                provider.translate(source, target_language, model).await
+            }
+        }
+    }
 }
 
 pub struct ProviderConfig {
@@ -86,43 +127,44 @@ pub struct ProviderConfig {
     pub custom_system_prompt: Option<String>,
 }
 
-pub fn build_provider(
-    provider_id: &str,
-    config: ProviderConfig,
-) -> anyhow::Result<Box<dyn AnyProvider>> {
+pub fn build_provider(provider_id: &str, config: ProviderConfig) -> anyhow::Result<Provider> {
     let required_api_key = |name: &str| {
         config
             .api_key
             .clone()
             .filter(|value| !value.trim().is_empty())
+            .map(SecretString::from)
             .ok_or_else(|| anyhow::anyhow!("api_key is required for {name}"))
     };
 
-    let provider: Box<dyn AnyProvider> = match provider_id {
-        "openai" => Box::new(openai::OpenAiProvider {
+    let provider = match provider_id {
+        "openai" => Provider::OpenAiProvider(openai::OpenAiProvider {
             api_key: required_api_key("openai")?,
         }),
-        "gemini" => Box::new(gemini::GeminiProvider {
+        "gemini" => Provider::GeminiProvider(gemini::GeminiProvider {
             api_key: required_api_key("gemini")?,
         }),
-        "claude" => Box::new(claude::ClaudeProvider {
+        "claude" => Provider::ClaudeProvider(claude::ClaudeProvider {
             api_key: required_api_key("claude")?,
         }),
-        "deepseek" => Box::new(deepseek::DeepSeekProvider {
+        "deepseek" => Provider::DeepSeekProvider(deepseek::DeepSeekProvider {
             api_key: required_api_key("deepseek")?,
         }),
-        "openai-compatible" => Box::new(openai_compatible::OpenAiCompatibleProvider {
-            base_url: config
-                .base_url
-                .filter(|value| !value.trim().is_empty())
-                .ok_or_else(|| {
-                    anyhow::anyhow!("base_url is required for the openai-compatible provider")
-                })?,
-            api_key: config.api_key,
-            temperature: config.temperature,
-            max_tokens: config.max_tokens,
-            custom_system_prompt: config.custom_system_prompt,
-        }),
+        "openai-compatible" => {
+            Provider::OpenAiCompatibleProvider(openai_compatible::OpenAiCompatibleProvider {
+                base_url: config
+                    .base_url
+                    .filter(|value| !value.trim().is_empty())
+                    .ok_or_else(|| {
+                        anyhow::anyhow!("base_url is required for the openai-compatible provider")
+                    })?
+                    .parse::<Url>()?,
+                api_key: config.api_key.map(SecretString::from),
+                temperature: config.temperature,
+                max_tokens: config.max_tokens,
+                custom_system_prompt: config.custom_system_prompt,
+            })
+        }
         other => anyhow::bail!("Unknown API provider: {other}"),
     };
 

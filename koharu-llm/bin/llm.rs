@@ -1,6 +1,7 @@
 use std::sync::Arc;
 
 use clap::Parser;
+use directories::ProjectDirs;
 use tracing_subscriber::fmt::format::FmtSpan;
 
 use koharu_llm::safe::llama_backend::LlamaBackend;
@@ -73,9 +74,15 @@ fn init_tracing() {
         .init();
 }
 
-async fn initialize_runtime() -> anyhow::Result<()> {
-    koharu_runtime::initialize().await?;
-    koharu_llm::sys::initialize()?;
+fn data_root() -> std::path::PathBuf {
+    ProjectDirs::from("rs", "Koharu", "Koharu")
+        .map(|dirs| dirs.data_local_dir().to_path_buf())
+        .unwrap_or_else(|| std::path::PathBuf::from("."))
+}
+
+async fn initialize_runtime(runtime_root: &std::path::Path) -> anyhow::Result<()> {
+    koharu_runtime::initialize(runtime_root).await?;
+    koharu_llm::sys::initialize(runtime_root)?;
     Ok(())
 }
 
@@ -84,10 +91,13 @@ async fn main() -> anyhow::Result<()> {
     init_tracing();
 
     let args = Args::parse();
-    initialize_runtime().await?;
+    let data_root = data_root();
+    let runtime_root = data_root.join("runtime");
+    let models_root = data_root.join("models");
+    initialize_runtime(&runtime_root).await?;
     let backend = Arc::new(LlamaBackend::init()?);
 
-    let mut llm = Llm::load(args.model, args.cpu, backend).await?;
+    let mut llm = Llm::load(args.model, args.cpu, backend, &runtime_root, &models_root).await?;
     let target_language = Language::parse(&args.locale).unwrap_or(Language::English);
 
     let opts = GenerateOptions {

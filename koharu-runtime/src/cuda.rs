@@ -2,15 +2,16 @@ use std::fmt;
 use std::path::Path;
 
 use anyhow::{Context, Result, anyhow, bail};
-use koharu_http::http::http_client;
 use libloading::Library;
 
 use crate::archive;
+use crate::download::DownloadDescriptor;
+use crate::http::http_client;
+use crate::http::pypi_metadata_url;
 use crate::loader::{add_runtime_search_path, preload_library};
 
 const CUDA_SUCCESS: i32 = 0;
 const CUDA_13_1_DRIVER_VERSION: i32 = 13010;
-
 type CuInit = unsafe extern "C" fn(flags: u32) -> i32;
 type CuDriverGetVersion = unsafe extern "C" fn(driver_version: *mut i32) -> i32;
 
@@ -174,7 +175,13 @@ pub(crate) async fn ensure_ready(root: &Path, downloads_dir: &Path) -> Result<()
         let tags = platform_tags()?;
         for wheel in WHEELS {
             let (url, filename) = select_wheel(wheel.name, tags).await?;
-            let archive = archive::download_cached(&url, &filename, downloads_dir).await?;
+            let archive = archive::download_cached(
+                &url,
+                &filename,
+                descriptor_for_wheel(wheel.name, &filename),
+                downloads_dir,
+            )
+            .await?;
             archive::extract_zip_selected(&archive, &install_dir, wheel.dylibs())?;
         }
 
@@ -194,12 +201,22 @@ pub(crate) async fn ensure_ready(root: &Path, downloads_dir: &Path) -> Result<()
     Ok(())
 }
 
+pub(crate) fn is_ready(root: &Path) -> Result<bool> {
+    let install_dir = root.join("cuda");
+    let source_id = source_id()?;
+    Ok(crate::is_up_to_date(&install_dir, &source_id)
+        && WHEELS
+            .iter()
+            .flat_map(CudaWheel::dylibs)
+            .all(|dylib| install_dir.join(dylib).exists()))
+}
+
 async fn select_wheel(package: &str, tags: &[&str]) -> Result<(String, String)> {
     let (dist, version) = package
         .split_once('/')
         .ok_or_else(|| anyhow!("invalid wheel package `{package}`"))?;
 
-    let meta_url = format!("https://pypi.org/pypi/{dist}/{version}/json");
+    let meta_url = pypi_metadata_url(dist, version);
     let json: serde_json::Value = http_client()
         .get(&meta_url)
         .send()
@@ -224,6 +241,14 @@ async fn select_wheel(package: &str, tags: &[&str]) -> Result<(String, String)> 
     }
 
     bail!("no wheel found for `{dist}` {version} on {tags:?}")
+}
+
+fn descriptor_for_wheel(package: &str, filename: &str) -> DownloadDescriptor {
+    DownloadDescriptor {
+        id: format!("pypi:{package}:{filename}"),
+        label: format!("CUDA runtime: {package}"),
+        filename: filename.to_string(),
+    }
 }
 
 #[cfg(test)]

@@ -4,6 +4,7 @@
   "description": "default",
   "windows": [
     "main",
+    "onboarding",
     "splashscreen"
   ],
   "permissions": [

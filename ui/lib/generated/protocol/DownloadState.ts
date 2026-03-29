@@ -3,6 +3,7 @@ import type { TransferStatus } from './TransferStatus'
 
 export type DownloadState = {
   id: string
+  label: string
   filename: string
   downloaded: number
   total: number | null

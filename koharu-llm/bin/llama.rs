@@ -8,6 +8,7 @@
 
 use anyhow::{Context, Result, anyhow, bail};
 use clap::Parser;
+use directories::ProjectDirs;
 use hf_hub::api::sync::ApiBuilder;
 use koharu_llm::safe::context::params::LlamaContextParams;
 use koharu_llm::safe::llama_backend::LlamaBackend;
@@ -165,7 +166,11 @@ fn main() -> Result<()> {
         .build()
         .with_context(|| "unable to create tokio runtime")?
         .block_on(async {
-            koharu_runtime::initialize()
+            let runtime_root = ProjectDirs::from("rs", "Koharu", "Koharu")
+                .map(|dirs| dirs.data_local_dir().to_path_buf())
+                .unwrap_or_else(|| PathBuf::from("."))
+                .join("runtime");
+            koharu_runtime::initialize(&runtime_root)
                 .await
                 .context("failed to initialize runtime libraries")?;
             Ok::<(), anyhow::Error>(())

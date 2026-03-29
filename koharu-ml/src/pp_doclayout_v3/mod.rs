@@ -1,6 +1,6 @@
 mod model;
 
-use std::{collections::BTreeMap, time::Instant};
+use std::{collections::BTreeMap, path::Path, time::Instant};
 
 use anyhow::{Context, Result, bail};
 use candle_core::{DType, Device, Tensor};
@@ -21,6 +21,16 @@ define_models! {
     Model => ("PaddlePaddle/PP-DocLayoutV3_safetensors", "model.safetensors"),
 }
 
+fn register_manifest_entries() -> Vec<koharu_runtime::registry::BootstrapEntry> {
+    manifest_registry_entries(1_000, |_| true)
+}
+
+inventory::submit! {
+    koharu_runtime::registry::RegistryProvider {
+        entries: register_manifest_entries,
+    }
+}
+
 #[derive(Debug)]
 pub struct PPDocLayoutV3 {
     model: PPDocLayoutV3ForObjectDetection,
@@ -32,11 +42,11 @@ pub struct PPDocLayoutV3 {
 }
 
 impl PPDocLayoutV3 {
-    pub async fn load(cpu: bool) -> Result<Self> {
+    pub async fn load(cpu: bool, models_root: &Path) -> Result<Self> {
         let device = device(cpu)?;
-        let config_path = loading::resolve_manifest_path(Manifest::Config.get()).await?;
+        let config_path = loading::resolve_manifest_path(Manifest::Config.get(models_root)).await?;
         let preprocessor_path =
-            loading::resolve_manifest_path(Manifest::PreprocessorConfig.get()).await?;
+            loading::resolve_manifest_path(Manifest::PreprocessorConfig.get(models_root)).await?;
         let config = loading::read_json::<PPDocLayoutV3Config>(&config_path)
             .with_context(|| format!("failed to load {}", config_path.display()))?;
         let preprocessor =
@@ -46,10 +56,11 @@ impl PPDocLayoutV3 {
             .to_dtype(DType::F32)?;
         let std = Tensor::from_slice(&preprocessor.image_std, (1, 3, 1, 1), &device)?
             .to_dtype(DType::F32)?;
-        let model = loading::load_mmaped_safetensors(Manifest::Model.get(), &device, |vb| {
-            PPDocLayoutV3ForObjectDetection::load(vb, &config, &device)
-        })
-        .await?;
+        let model =
+            loading::load_mmaped_safetensors(Manifest::Model.get(models_root), &device, |vb| {
+                PPDocLayoutV3ForObjectDetection::load(vb, &config, &device)
+            })
+            .await?;
 
         Ok(Self {
             model,

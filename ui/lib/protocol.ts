@@ -8,62 +8,40 @@ import type {
   TextStyle as UiTextStyle,
 } from '@/types'
 
-import type { ApiKeyResponse } from '@/lib/generated/protocol/ApiKeyResponse'
-import type { ApiKeyValue } from '@/lib/generated/protocol/ApiKeyValue'
-import type { BrushRegionRequest } from '@/lib/generated/protocol/BrushRegionRequest'
-import type { CreateTextBlock } from '@/lib/generated/protocol/CreateTextBlock'
-import type { DownloadState as GeneratedDownloadState } from '@/lib/generated/protocol/DownloadState'
-import type { DocumentChangedEvent as GeneratedDocumentChangedEvent } from '@/lib/generated/protocol/DocumentChangedEvent'
 import type { DocumentDetail as GeneratedDocumentDetail } from '@/lib/generated/protocol/DocumentDetail'
-import type { DocumentsChangedEvent as GeneratedDocumentsChangedEvent } from '@/lib/generated/protocol/DocumentsChangedEvent'
-import type { DocumentSummary as GeneratedDocumentSummary } from '@/lib/generated/protocol/DocumentSummary'
-import type { ExportLayer } from '@/lib/generated/protocol/ExportLayer'
-import type { ExportResult } from '@/lib/generated/protocol/ExportResult'
-import type { FontFaceInfo } from '@/lib/generated/protocol/FontFaceInfo'
-import type { ImportMode } from '@/lib/generated/protocol/ImportMode'
-import type { ImportResult as GeneratedImportResult } from '@/lib/generated/protocol/ImportResult'
-import type { InpaintRegionRequest } from '@/lib/generated/protocol/InpaintRegionRequest'
-import type { JobState } from '@/lib/generated/protocol/JobState'
-import type { JobStatus } from '@/lib/generated/protocol/JobStatus'
-import type { LlmLoadRequest } from '@/lib/generated/protocol/LlmLoadRequest'
-import type { LlmModelInfo } from '@/lib/generated/protocol/LlmModelInfo'
-import type { LlmState } from '@/lib/generated/protocol/LlmState'
-import type { LlmStateStatus } from '@/lib/generated/protocol/LlmStateStatus'
-import type { MaskRegionRequest } from '@/lib/generated/protocol/MaskRegionRequest'
-import type { MetaInfo } from '@/lib/generated/protocol/MetaInfo'
-import type { PipelineJobRequest } from '@/lib/generated/protocol/PipelineJobRequest'
-import type { Region } from '@/lib/generated/protocol/Region'
-import type { RenderRequest } from '@/lib/generated/protocol/RenderRequest'
-import type { SnapshotEvent as GeneratedSnapshotEvent } from '@/lib/generated/protocol/SnapshotEvent'
 import type { TextBlockDetail as GeneratedTextBlockDetail } from '@/lib/generated/protocol/TextBlockDetail'
-import type { TextBlockPatch as GeneratedTextBlockPatch } from '@/lib/generated/protocol/TextBlockPatch'
-import type { TransferStatus } from '@/lib/generated/protocol/TransferStatus'
-import type { TranslateRequest } from '@/lib/generated/protocol/TranslateRequest'
 
-export type {
-  ApiKeyResponse,
-  ApiKeyValue,
-  BrushRegionRequest,
-  CreateTextBlock,
-  ExportLayer,
-  ExportResult,
-  FontFaceInfo,
-  ImportMode,
-  InpaintRegionRequest,
-  JobState,
-  JobStatus,
-  LlmLoadRequest,
-  LlmModelInfo,
-  LlmState,
-  LlmStateStatus,
-  MaskRegionRequest,
-  MetaInfo,
-  PipelineJobRequest,
-  Region,
-  RenderRequest,
-  TransferStatus,
-  TranslateRequest,
-}
+export type { ApiKeyResponse } from '@/lib/generated/protocol/ApiKeyResponse'
+export type { ApiKeyValue } from '@/lib/generated/protocol/ApiKeyValue'
+export type { BrushRegionRequest } from '@/lib/generated/protocol/BrushRegionRequest'
+export type { Config } from '@/lib/generated/protocol/Config'
+export type { CreateTextBlock } from '@/lib/generated/protocol/CreateTextBlock'
+export type { DocumentChangedEvent } from '@/lib/generated/protocol/DocumentChangedEvent'
+export type { DocumentsChangedEvent } from '@/lib/generated/protocol/DocumentsChangedEvent'
+export type { DocumentSummary } from '@/lib/generated/protocol/DocumentSummary'
+export type { DownloadState } from '@/lib/generated/protocol/DownloadState'
+export type { ExportLayer } from '@/lib/generated/protocol/ExportLayer'
+export type { ExportResult } from '@/lib/generated/protocol/ExportResult'
+export type { FontFaceInfo } from '@/lib/generated/protocol/FontFaceInfo'
+export type { ImportMode } from '@/lib/generated/protocol/ImportMode'
+export type { ImportResult } from '@/lib/generated/protocol/ImportResult'
+export type { InpaintRegionRequest } from '@/lib/generated/protocol/InpaintRegionRequest'
+export type { JobState } from '@/lib/generated/protocol/JobState'
+export type { JobStatus } from '@/lib/generated/protocol/JobStatus'
+export type { LlmLoadRequest } from '@/lib/generated/protocol/LlmLoadRequest'
+export type { LlmModelInfo } from '@/lib/generated/protocol/LlmModelInfo'
+export type { LlmState } from '@/lib/generated/protocol/LlmState'
+export type { LlmStateStatus } from '@/lib/generated/protocol/LlmStateStatus'
+export type { MaskRegionRequest } from '@/lib/generated/protocol/MaskRegionRequest'
+export type { MetaInfo } from '@/lib/generated/protocol/MetaInfo'
+export type { MirrorKind } from '@/lib/generated/protocol/MirrorKind'
+export type { MirrorSelection } from '@/lib/generated/protocol/MirrorSelection'
+export type { PipelineJobRequest } from '@/lib/generated/protocol/PipelineJobRequest'
+export type { Region } from '@/lib/generated/protocol/Region'
+export type { RenderRequest } from '@/lib/generated/protocol/RenderRequest'
+export type { SnapshotEvent } from '@/lib/generated/protocol/SnapshotEvent'
+export type { TransferStatus } from '@/lib/generated/protocol/TransferStatus'
+export type { TranslateRequest } from '@/lib/generated/protocol/TranslateRequest'
 
 export type TextAlign = UiTextAlign
 export type TextDirection = UiTextDirection
@@ -73,10 +51,6 @@ export type TextStyle = UiTextStyle
 export type NamedFontPrediction = UiNamedFontPrediction
 export type FontPrediction = UiFontPrediction
 
-export type DocumentSummary = Omit<GeneratedDocumentSummary, 'revision'> & {
-  revision: number
-}
-
 export type TextBlockDetail = Omit<
   GeneratedTextBlockDetail,
   'style' | 'fontPrediction'
@@ -85,11 +59,7 @@ export type TextBlockDetail = Omit<
   fontPrediction: FontPrediction | null
 }
 
-export type DocumentDetail = Omit<
-  GeneratedDocumentDetail,
-  'revision' | 'textBlocks'
-> & {
-  revision: number
+export type DocumentDetail = Omit<GeneratedDocumentDetail, 'textBlocks'> & {
   textBlocks: TextBlockDetail[]
 }
 
@@ -101,38 +71,4 @@ export type TextBlockPatch = {
   width?: number
   height?: number
   style?: TextStyle
-}
-
-export type DocumentChangedEvent = Omit<
-  GeneratedDocumentChangedEvent,
-  'revision'
-> & {
-  revision: number
-}
-
-export type DocumentsChangedEvent = Omit<
-  GeneratedDocumentsChangedEvent,
-  'documents'
-> & {
-  documents: DocumentSummary[]
-}
-
-export type DownloadState = Omit<
-  GeneratedDownloadState,
-  'downloaded' | 'total'
-> & {
-  downloaded: number
-  total: number | null
-}
-
-export type ImportResult = Omit<GeneratedImportResult, 'documents'> & {
-  documents: DocumentSummary[]
-}
-
-export type SnapshotEvent = Omit<
-  GeneratedSnapshotEvent,
-  'documents' | 'downloads'
-> & {
-  documents: DocumentSummary[]
-  downloads: DownloadState[]
 }

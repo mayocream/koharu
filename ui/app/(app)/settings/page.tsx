@@ -18,6 +18,7 @@ import {
   LoaderIcon,
 } from 'lucide-react'
 import { ScrollArea } from '@/components/ui/scroll-area'
+import { RuntimeSettingsSection } from '@/components/settings/RuntimeSettingsSection'
 import {
   Select,
   SelectContent,
@@ -32,6 +33,7 @@ import {
   getActivePresetConfig,
   type LocalLlmPreset,
 } from '@/lib/stores/preferencesStore'
+import type { Config } from '@/lib/protocol'
 
 const THEME_OPTIONS = [
   { value: 'light', icon: SunIcon, labelKey: 'settings.themeLight' },
@@ -72,7 +74,8 @@ export default function SettingsPage() {
     () => Object.keys(i18n.options.resources || {}),
     [i18n.options.resources],
   )
-  const [deviceInfo, setDeviceInfo] = useState<{ mlDevice: string }>()
+  const [config, setConfig] = useState<Config | null>(null)
+  const [deviceInfo, setDeviceInfo] = useState<{ mlDevice: string | null }>()
   const apiKeys = usePreferencesStore((state) => state.apiKeys)
   const setApiKey = usePreferencesStore((state) => state.setApiKey)
   const localLlm = usePreferencesStore((state) => state.localLlm)
@@ -83,6 +86,7 @@ export default function SettingsPage() {
     {},
   )
   const pendingApiKeysRef = useRef<Record<string, string>>({})
+  const languageRequestIdRef = useRef(0)
 
   const [showAdvanced, setShowAdvanced] = useState(false)
   const [pingState, setPingState] = useState<{
@@ -105,6 +109,24 @@ export default function SettingsPage() {
     }
 
     void loadDeviceInfo()
+  }, [])
+
+  useEffect(() => {
+    let cancelled = false
+
+    void api
+      .getConfig()
+      .then((nextConfig) => {
+        if (cancelled) return
+        setConfig(nextConfig)
+      })
+      .catch((error) => {
+        console.error('Failed to load config', error)
+      })
+
+    return () => {
+      cancelled = true
+    }
   }, [])
 
   const persistApiKey = async (provider: string, value: string) => {
@@ -188,6 +210,35 @@ export default function SettingsPage() {
     setPingState({ loading: false })
   }
 
+  const handleLanguageChange = async (value: string) => {
+    if (!config) return
+    const requestId = languageRequestIdRef.current + 1
+    languageRequestIdRef.current = requestId
+    const previousLanguage = config.language
+    const nextConfig = {
+      ...config,
+      language: value,
+    }
+
+    setConfig(nextConfig)
+    await i18n.changeLanguage(value)
+
+    try {
+      const next = await api.updateConfig(nextConfig)
+      if (languageRequestIdRef.current !== requestId) {
+        return
+      }
+      setConfig(next)
+    } catch (error) {
+      if (languageRequestIdRef.current !== requestId) {
+        return
+      }
+      console.error('Failed to save language', error)
+      setConfig(config)
+      await i18n.changeLanguage(previousLanguage)
+    }
+  }
+
   return (
     <div className='bg-muted flex min-h-0 flex-1 flex-col overflow-hidden'>
       <ScrollArea className='min-h-0 flex-1' viewportClassName='h-full'>
@@ -247,8 +298,8 @@ export default function SettingsPage() {
               </p>
 
               <Select
-                value={i18n.language}
-                onValueChange={(value) => i18n.changeLanguage(value)}
+                value={config?.language ?? i18n.language}
+                onValueChange={(value) => void handleLanguageChange(value)}
               >
                 <SelectTrigger className='w-full'>
                   <SelectValue />
@@ -280,13 +331,15 @@ export default function SettingsPage() {
                         {t('settings.deviceMl')}
                       </span>
                       <span className='text-foreground font-medium'>
-                        {deviceInfo.mlDevice}
+                        {deviceInfo.mlDevice ?? 'Initializing'}
                       </span>
                     </div>
                   </div>
                 </div>
               </section>
             )}
+
+            <RuntimeSettingsSection config={config} onSaved={setConfig} />
 
             {/* API Keys Section */}
             <section className='mb-8'>

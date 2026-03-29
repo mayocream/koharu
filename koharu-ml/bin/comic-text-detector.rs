@@ -82,8 +82,9 @@ fn main() -> Result<()> {
 
 async fn async_main() -> Result<()> {
     let cli = Cli::parse();
+    let models_root = common::default_models_root();
 
-    let model = ComicTextDetector::load(cli.cpu).await?;
+    let model = ComicTextDetector::load(cli.cpu, &models_root).await?;
     let bytes = std::fs::read(&cli.input)?;
     let format = image::guess_format(&bytes)?;
     let image = image::load_from_memory_with_format(&bytes, format)?;

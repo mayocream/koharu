@@ -61,7 +61,7 @@ Because of that, one model is usually not enough. Koharu first estimates layout,
 
 ## The implementation shape
 
-In source terms, the pipeline entrypoint runs in `koharu-pipeline/src/pipeline.rs`, while the vision stack is coordinated in `koharu-ml/src/facade.rs`.
+In source terms, the pipeline entrypoint runs in `koharu/src/pipeline/runner.rs`, while the vision stack is coordinated in `koharu-ml/src/facade.rs`.
 
 Some implementation details that matter:
 

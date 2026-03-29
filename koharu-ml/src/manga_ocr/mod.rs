@@ -2,6 +2,8 @@ mod bert;
 mod model;
 mod tokenizer;
 
+use std::path::Path;
+
 use anyhow::{Context, Result};
 use candle_core::{DType, Device, Tensor};
 use image::GenericImageView;
@@ -21,6 +23,16 @@ define_models! {
     Model => ("mayocream/manga-ocr", "model.safetensors"),
 }
 
+fn register_manifest_entries() -> Vec<koharu_runtime::registry::BootstrapEntry> {
+    manifest_registry_entries(5_200, |_| false)
+}
+
+inventory::submit! {
+    koharu_runtime::registry::RegistryProvider {
+        entries: register_manifest_entries,
+    }
+}
+
 pub struct MangaOcr {
     model: VisionEncoderDecoder,
     tokenizer: Tokenizer,
@@ -29,14 +41,14 @@ pub struct MangaOcr {
 }
 
 impl MangaOcr {
-    pub async fn load(cpu: bool) -> Result<Self> {
+    pub async fn load(cpu: bool, models_root: &Path) -> Result<Self> {
         let device = device(cpu)?;
-        let config_path = loading::resolve_manifest_path(Manifest::Config.get()).await?;
+        let config_path = loading::resolve_manifest_path(Manifest::Config.get(models_root)).await?;
         let preprocessor_path =
-            loading::resolve_manifest_path(Manifest::PreprocessorConfig.get()).await?;
-        let vocab_path = loading::resolve_manifest_path(Manifest::Vocab.get()).await?;
+            loading::resolve_manifest_path(Manifest::PreprocessorConfig.get(models_root)).await?;
+        let vocab_path = loading::resolve_manifest_path(Manifest::Vocab.get(models_root)).await?;
         let special_tokens_path =
-            loading::resolve_manifest_path(Manifest::SpecialTokensMap.get()).await?;
+            loading::resolve_manifest_path(Manifest::SpecialTokensMap.get(models_root)).await?;
 
         let config: VisionEncoderDecoderConfig =
             loading::read_json(&config_path).context("failed to parse model config")?;
@@ -44,9 +56,11 @@ impl MangaOcr {
             .context("failed to parse preprocessor config")?;
         let tokenizer = load_tokenizer(None, &vocab_path, &special_tokens_path)?;
         let model_device = device.clone();
-        let model = loading::load_mmaped_safetensors(Manifest::Model.get(), &device, move |vb| {
-            VisionEncoderDecoder::from_config(config, vb, model_device.clone())
-        })
+        let model = loading::load_mmaped_safetensors(
+            Manifest::Model.get(models_root),
+            &device,
+            move |vb| VisionEncoderDecoder::from_config(config, vb, model_device.clone()),
+        )
         .await?;
 
         Ok(Self {

@@ -22,27 +22,30 @@ export default function SplashScreen() {
       const files = filesRef.current
 
       if (msg.status === 'started') {
-        files.set(msg.filename, { downloaded: 0, total: msg.total ?? 0 })
+        files.set(msg.id, { downloaded: 0, total: msg.total ?? 0 })
       } else if (msg.status === 'downloading') {
-        const entry = files.get(msg.filename)
+        const entry = files.get(msg.id)
         if (entry) {
           entry.downloaded = msg.downloaded
           if (msg.total) entry.total = msg.total
         } else {
-          files.set(msg.filename, {
+          files.set(msg.id, {
             downloaded: msg.downloaded,
             total: msg.total ?? 0,
           })
         }
-      } else {
-        // Completed or Failed — lock this file at 100%
-        const entry = files.get(msg.filename)
+      } else if (msg.status === 'completed') {
+        const entry = files.get(msg.id)
         if (entry) {
           entry.downloaded = entry.total
         }
+      } else if (msg.status === 'failed') {
+        const entry = files.get(msg.id)
+        if (entry && msg.total) {
+          entry.total = msg.total
+        }
       }
 
-      // Compute aggregate
       let totalBytes = 0
       let downloadedBytes = 0
       for (const entry of files.values()) {
@@ -50,7 +53,6 @@ export default function SplashScreen() {
         downloadedBytes += entry.downloaded
       }
 
-      // Find current active file (last non-completed)
       const activeFilename =
         msg.status === 'started' || msg.status === 'downloading'
           ? msg.filename
@@ -64,7 +66,6 @@ export default function SplashScreen() {
       if (activeFilename) {
         setProgress({ filename: activeFilename, percent })
       } else {
-        // All done — keep showing 100% briefly
         setProgress((prev) =>
           prev ? { ...prev, percent: percent ?? 100 } : null,
         )

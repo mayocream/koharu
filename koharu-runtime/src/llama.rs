@@ -3,11 +3,11 @@ use std::path::{Path, PathBuf};
 use anyhow::{Result, bail};
 
 use crate::archive;
+use crate::download::DownloadDescriptor;
 use crate::loader::{add_runtime_search_path, preload_library};
 
 const LLAMA_CPP_TAG: &str = env!("LLAMA_CPP_TAG");
 const RELEASE_BASE_URL: &str = "https://github.com/ggml-org/llama.cpp/releases/download";
-
 #[derive(Debug, Clone, Copy)]
 #[allow(dead_code)]
 enum LlamaRuntime {
@@ -167,7 +167,17 @@ impl LlamaRuntime {
     async fn install(self, install_dir: &Path, downloads_dir: &Path) -> Result<()> {
         for asset in self.assets() {
             let url = format!("{RELEASE_BASE_URL}/{LLAMA_CPP_TAG}/{asset}");
-            let archive = archive::download_cached(&url, asset, downloads_dir).await?;
+            let archive = archive::download_cached(
+                &url,
+                asset,
+                DownloadDescriptor {
+                    id: format!("github:llama.cpp:{asset}"),
+                    label: "llama.cpp runtime".to_string(),
+                    filename: asset.to_string(),
+                },
+                downloads_dir,
+            )
+            .await?;
             if Self::is_zip_asset(asset) {
                 archive::extract_zip(&archive, install_dir)?;
             } else {
@@ -205,6 +215,17 @@ pub(crate) async fn ensure_ready(root: &Path, downloads_dir: &Path) -> Result<()
     }
 
     Ok(())
+}
+
+pub(crate) fn is_ready(root: &Path) -> Result<bool> {
+    let runtime = LlamaRuntime::detect()?;
+    let install_dir = runtime.install_dir(root);
+    let source_id = runtime.source_id();
+    Ok(crate::is_up_to_date(&install_dir, &source_id)
+        && runtime
+            .libraries()
+            .iter()
+            .all(|library| install_dir.join(library).exists()))
 }
 
 pub(crate) fn runtime_dir(root: &Path) -> Result<PathBuf> {

@@ -61,7 +61,7 @@ flowchart LR
 
 ## 实现结构
 
-从源码结构看，管线入口在 `koharu-pipeline/src/pipeline.rs`，视觉栈的协调逻辑主要在 `koharu-ml/src/facade.rs`。
+从源码结构看，管线入口在 `koharu/src/pipeline/runner.rs`，视觉栈的协调逻辑主要在 `koharu-ml/src/facade.rs`。
 
 一些重要的实现细节：
 

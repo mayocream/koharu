@@ -3,15 +3,16 @@ use std::fs;
 use std::io::{self, Write};
 use std::path::{Path, PathBuf};
 
+use crate::download::{self, DownloadDescriptor};
 use anyhow::{Context, Result, bail};
 use flate2::read::GzDecoder;
-use koharu_http::download;
 
 const RUNTIME_LIB_EXTENSIONS: &[&str] = &[".dll", ".so", ".dylib"];
 
 pub(crate) async fn download_cached(
     url: &str,
     file_name: &str,
+    descriptor: DownloadDescriptor,
     downloads_dir: &Path,
 ) -> Result<PathBuf> {
     let archive_path = downloads_dir.join(file_name);
@@ -20,7 +21,7 @@ pub(crate) async fn download_cached(
     }
 
     let partial_path = downloads_dir.join(format!("{file_name}.partial"));
-    let bytes = download::bytes(url)
+    let bytes = download::bytes_with_descriptor(url, descriptor)
         .await
         .with_context(|| format!("failed to download `{url}`"))?;
 

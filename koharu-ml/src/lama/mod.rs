@@ -1,6 +1,8 @@
 mod fft;
 mod model;
 
+use std::path::Path;
+
 use anyhow::{Result, bail};
 use candle_core::{DType, Device, Tensor};
 use image::{
@@ -11,13 +13,23 @@ use imageproc::{
     contours::find_contours, distance_transform::Norm, drawing::draw_polygon_mut, edges::canny,
     filter::gaussian_blur_f32, morphology::dilate, point::Point,
 };
-use koharu_types::TextBlock;
+use koharu_core::TextBlock;
 use tracing::instrument;
 
 use crate::{define_models, device, loading};
 
 define_models! {
     Lama => ("mayocream/lama-manga", "lama-manga.safetensors"),
+}
+
+fn register_manifest_entries() -> Vec<koharu_runtime::registry::BootstrapEntry> {
+    manifest_registry_entries(1_300, |_| true)
+}
+
+inventory::submit! {
+    koharu_runtime::registry::RegistryProvider {
+        entries: register_manifest_entries,
+    }
 }
 
 const BALLOON_CANNY_LOW: f32 = 70.0;
@@ -42,12 +54,13 @@ pub struct Lama {
 }
 
 impl Lama {
-    pub async fn load(cpu: bool) -> Result<Self> {
+    pub async fn load(cpu: bool, models_root: &Path) -> Result<Self> {
         let device = device(cpu)?;
-        let model = loading::load_buffered_safetensors(Manifest::Lama.get(), &device, |vb| {
-            model::Lama::load(&vb)
-        })
-        .await?;
+        let model =
+            loading::load_buffered_safetensors(Manifest::Lama.get(models_root), &device, |vb| {
+                model::Lama::load(&vb)
+            })
+            .await?;
 
         Ok(Self { model, device })
     }
@@ -624,7 +637,7 @@ mod tests {
     use image::{GrayImage, Luma, Rgb, RgbImage};
     use imageproc::drawing::draw_hollow_rect_mut;
     use imageproc::rect::Rect;
-    use koharu_types::TextBlock;
+    use koharu_core::TextBlock;
 
     #[test]
     fn enlarge_window_matches_ratio_1_7_reference() {

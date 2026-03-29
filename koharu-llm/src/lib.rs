@@ -1,5 +1,4 @@
 pub mod api;
-pub mod facade;
 pub mod language;
 mod model;
 pub mod paddleocr_vl;
@@ -8,7 +7,7 @@ pub mod providers;
 pub mod safe;
 pub mod sys;
 
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 
 use strum::{EnumProperty, IntoEnumIterator};
 
@@ -80,8 +79,12 @@ impl ModelId {
         self.get_str(name).expect("missing model property")
     }
 
-    pub async fn get(&self) -> anyhow::Result<PathBuf> {
-        koharu_http::download::model(self.property("repo"), self.property("filename")).await
+    pub async fn get(&self, models_root: &Path) -> anyhow::Result<PathBuf> {
+        koharu_runtime::download::cached_model_path(
+            models_root,
+            self.property("repo"),
+            self.property("filename"),
+        )
     }
 
     pub fn languages(&self) -> Vec<Language> {
@@ -92,11 +95,34 @@ impl ModelId {
     }
 }
 
-pub async fn prefetch() -> anyhow::Result<()> {
+fn register_manifest_entries() -> Vec<koharu_runtime::registry::BootstrapEntry> {
+    ModelId::iter()
+        .map(|model| {
+            let repo = model.property("repo");
+            let filename = model.property("filename");
+            koharu_runtime::registry::BootstrapEntry::model(
+                format!("hf:{repo}:{filename}"),
+                model.to_string(),
+                5_400,
+                false,
+                repo,
+                filename,
+            )
+        })
+        .collect()
+}
+
+inventory::submit! {
+    koharu_runtime::registry::RegistryProvider {
+        entries: register_manifest_entries,
+    }
+}
+
+pub async fn prefetch(models_root: &Path) -> anyhow::Result<()> {
     use futures::stream::{self, StreamExt, TryStreamExt};
 
     stream::iter(ModelId::iter())
-        .map(|model| async move { model.get().await })
+        .map(|model| async move { model.get(models_root).await })
         .buffer_unordered(num_cpus::get())
         .try_collect::<Vec<_>>()
         .await?;

@@ -12,10 +12,9 @@ keywords.workspace = true
 publish.workspace = true
 
 [dependencies]
-koharu-types = { workspace = true }
+koharu-core = { workspace = true }
 image = { workspace = true }
 thiserror = { workspace = true }
 
 [dev-dependencies]
-koharu-renderer = { workspace = true }
 psd = "0.3.5"

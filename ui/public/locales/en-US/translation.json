@@ -274,5 +274,24 @@
     "localLlmTestSuccess": "Connected. Found {{count}} model(s). Latency: {{latency}}ms",
     "localLlmTestFailed": "Connection failed: {{error}}",
     "localLlmAdvanced": "Advanced"
+  },
+  "config": {
+    "language": "Language",
+    "runtime": "Runtime",
+    "models": "Models",
+    "proxy": "Proxy",
+    "pypi": "PyPI",
+    "github": "GitHub",
+    "official": "Official",
+    "custom": "Custom"
+  },
+  "onboarding": {
+    "back": "Back",
+    "next": "Next",
+    "start": "Start",
+    "retry": "Retry",
+    "downloading": "Downloading files.",
+    "opening": "Opening Koharu.",
+    "failed": "Initialization failed."
   }
 }

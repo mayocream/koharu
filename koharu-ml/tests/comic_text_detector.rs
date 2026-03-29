@@ -3,10 +3,13 @@ use std::path::Path;
 use image::GenericImageView;
 use koharu_ml::comic_text_detector::ComicTextDetector;
 
+mod support;
+
 #[tokio::test]
 #[ignore = "requires model download and is not critical for CI"]
 async fn comic_text_detector() -> anyhow::Result<()> {
-    let model = ComicTextDetector::load(false).await?;
+    let models_root = support::default_models_root();
+    let model = ComicTextDetector::load(false, &models_root).await?;
 
     let img = image::open(Path::new(env!("CARGO_MANIFEST_DIR")).join("tests/fixtures/1.jpg"))?;
     let detection = model.inference(&img)?;
@@ -38,7 +41,8 @@ async fn comic_text_detector() -> anyhow::Result<()> {
 #[tokio::test]
 #[ignore = "requires model download and is not critical for CI"]
 async fn comic_text_detector_segmentation_only() -> anyhow::Result<()> {
-    let model = ComicTextDetector::load_segmentation_only(false).await?;
+    let models_root = support::default_models_root();
+    let model = ComicTextDetector::load_segmentation_only(false, &models_root).await?;
 
     let img = image::open(Path::new(env!("CARGO_MANIFEST_DIR")).join("tests/fixtures/1.jpg"))?;
     let mask = model.inference_segmentation(&img)?;

@@ -1,7 +1,12 @@
-#[allow(unused_imports)]
-pub use koharu_http::download::model;
-#[allow(unused_imports)]
-pub use koharu_http::hf_hub::set_cache_dir;
+use std::path::{Path, PathBuf};
+
+pub async fn cached_model_path(
+    models_root: &Path,
+    repo: &str,
+    filename: &str,
+) -> anyhow::Result<PathBuf> {
+    koharu_runtime::download::cached_model_path(models_root, repo, filename)
+}
 
 #[macro_export]
 macro_rules! define_models {
@@ -15,28 +20,45 @@ macro_rules! define_models {
         }
 
         impl Manifest {
-            pub async fn get(&self) -> anyhow::Result<std::path::PathBuf> {
+            pub async fn get(
+                &self,
+                models_root: &std::path::Path,
+            ) -> anyhow::Result<std::path::PathBuf> {
                 use strum::EnumProperty;
                 let repo = self.get_str("repo").expect("repo property");
                 let filename = self.get_str("filename").expect("filename property");
-                koharu_http::download::model(repo, filename).await
+                $crate::hf_hub::cached_model_path(models_root, repo, filename).await
             }
         }
 
         #[allow(unused)]
-        pub async fn prefetch() -> anyhow::Result<()> {
-            use futures::stream::{self, StreamExt, TryStreamExt};
-            let manifests = [
-                $(Manifest::$variant),*
-            ];
-            stream::iter(manifests)
-                .map(|manifest| async move {
-                    manifest.get().await
+        pub fn component_assets() -> Vec<(&'static str, &'static str)> {
+            vec![
+                $(($repo, $filename)),*
+            ]
+        }
+
+        #[allow(unused)]
+        pub fn manifest_registry_entries(
+            priority: u32,
+            required: impl Fn(Manifest) -> bool,
+        ) -> Vec<koharu_runtime::registry::BootstrapEntry> {
+            use strum::{EnumProperty, IntoEnumIterator};
+
+            Manifest::iter()
+                .map(|manifest| {
+                    let repo = manifest.get_str("repo").expect("repo property");
+                    let filename = manifest.get_str("filename").expect("filename property");
+                    koharu_runtime::registry::BootstrapEntry::model(
+                        format!("hf:{repo}:{filename}"),
+                        filename.to_string(),
+                        priority,
+                        required(manifest.clone()),
+                        repo,
+                        filename,
+                    )
                 })
-                .buffer_unordered(num_cpus::get())
-                .try_collect::<Vec<_>>()
-                .await?;
-            Ok(())
+                .collect()
         }
     };
 }

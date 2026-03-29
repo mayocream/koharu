@@ -35,7 +35,7 @@ The main top-level areas are:
 If you are not sure where a change belongs:
 
 - UI interaction and panels usually live in `ui/`
-- backend APIs, MCP tools, and orchestration usually live in `koharu-rpc/` or `koharu-pipeline/`
+- backend APIs, MCP tools, and orchestration usually live in `koharu/src/rpc/` or `koharu/src/pipeline/`
 - rendering, OCR, model runtime, and ML-specific logic live in the Rust workspace crates
 
 ## Set up the repository

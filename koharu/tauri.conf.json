@@ -25,6 +25,20 @@
         "decorations": false
       },
       {
+        "label": "onboarding",
+        "url": "/onboarding",
+        "create": false,
+        "width": 300,
+        "height": 200,
+        "minWidth": 300,
+        "minHeight": 200,
+        "center": true,
+        "title": "Koharu Setup",
+        "decorations": false,
+        "resizable": false,
+        "maximizable": false
+      },
+      {
         "label": "splashscreen",
         "url": "/splashscreen",
         "decorations": false,

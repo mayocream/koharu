@@ -1,12 +1,11 @@
 use std::{error::Error, fs, path::PathBuf};
 
 use image::{DynamicImage, GrayImage, Luma, Rgba, RgbaImage};
-use koharu_psd::{PsdExportOptions, TextLayerMode, export_document};
-use koharu_renderer::facade::Renderer;
-use koharu_types::{
+use koharu_core::{
     Document, FontPrediction, NamedFontPrediction, SerializableDynamicImage, TextAlign, TextBlock,
     TextDirection, TextShaderEffect, TextStyle,
 };
+use koharu_psd::{PsdExportOptions, TextLayerMode, export_document};
 
 fn main() -> Result<(), Box<dyn Error>> {
     let (output, editable) = parse_args()?;
@@ -16,7 +15,7 @@ fn main() -> Result<(), Box<dyn Error>> {
     }
 
     let mut document = build_document();
-    render_demo_text(&mut document)?;
+    attach_demo_raster_text(&mut document);
 
     let options = PsdExportOptions {
         text_layer_mode: if editable {
@@ -197,9 +196,10 @@ fn build_brush_layer(width: u32, height: u32) -> RgbaImage {
     image
 }
 
-fn render_demo_text(document: &mut Document) -> Result<(), Box<dyn Error>> {
-    Renderer::new()?.render(document, None, TextShaderEffect::none(), None, None)?;
-    Ok(())
+fn attach_demo_raster_text(document: &mut Document) {
+    for block in &mut document.text_blocks {
+        block.rendered = Some(to_serializable_rgba(raster_text_bitmap(block)));
+    }
 }
 
 fn to_serializable_rgba(image: RgbaImage) -> SerializableDynamicImage {
@@ -208,4 +208,42 @@ fn to_serializable_rgba(image: RgbaImage) -> SerializableDynamicImage {
 
 fn to_serializable_luma(image: GrayImage) -> SerializableDynamicImage {
     SerializableDynamicImage(DynamicImage::ImageLuma8(image))
+}
+
+fn raster_text_bitmap(block: &TextBlock) -> RgbaImage {
+    let width = block.width.ceil().max(1.0) as u32;
+    let height = block.height.ceil().max(1.0) as u32;
+    let mut image = RgbaImage::from_pixel(width, height, Rgba([0, 0, 0, 0]));
+    let color = block
+        .style
+        .as_ref()
+        .map(|style| style.color)
+        .unwrap_or([32, 32, 32, 255]);
+    let is_vertical = matches!(block.source_direction, Some(TextDirection::Vertical));
+
+    if is_vertical {
+        let column_width = (width / 3).max(2);
+        let x0 = width.saturating_sub(column_width) / 2;
+        for x in x0..(x0 + column_width).min(width) {
+            for y in 3..height.saturating_sub(3) {
+                if y % 12 < 8 {
+                    image.put_pixel(x, y, Rgba(color));
+                }
+            }
+        }
+    } else {
+        let line_count = 5u32.min((height / 8).max(1));
+        for line in 0..line_count {
+            let y0 = 4 + line * (height.saturating_sub(8) / line_count.max(1));
+            let y1 = (y0 + 4).min(height);
+            let x1 = width.saturating_sub(8 + line * 10);
+            for y in y0..y1 {
+                for x in 6..x1.max(7) {
+                    image.put_pixel(x, y, Rgba(color));
+                }
+            }
+        }
+    }
+
+    image
 }

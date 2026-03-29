@@ -2,6 +2,8 @@ use std::path::Path;
 
 use koharu_ml::pp_doclayout_v3::PPDocLayoutV3;
 
+mod support;
+
 fn is_textlike_label(label: &str) -> bool {
     let label = label.to_ascii_lowercase();
     label == "content" || label.contains("text") || label.contains("title")
@@ -10,7 +12,8 @@ fn is_textlike_label(label: &str) -> bool {
 #[tokio::test]
 #[ignore]
 async fn pp_doclayout_v3_detects_textlike_regions_on_manga_fixture() -> anyhow::Result<()> {
-    let model = PPDocLayoutV3::load(false).await?;
+    let models_root = support::default_models_root();
+    let model = PPDocLayoutV3::load(false, &models_root).await?;
     let image = image::open(Path::new(env!("CARGO_MANIFEST_DIR")).join("tests/fixtures/1.jpg"))?;
     let result = model.inference_one(&image, 0.25)?;
 

@@ -19,6 +19,23 @@ const IMAGENET_STD: [f32; 3] = [0.229, 0.224, 0.225];
 const GPU_MAX_PIXELS: u64 = 1_536 * 1_536;
 const CPU_MAX_PIXELS: u64 = 1_280 * 1_280;
 
+fn register_manifest_entries() -> Vec<koharu_runtime::registry::BootstrapEntry> {
+    vec![koharu_runtime::registry::BootstrapEntry::model(
+        format!("hf:{REPO}:{SAFETENSORS_FILENAME}"),
+        SAFETENSORS_FILENAME.to_string(),
+        5_300,
+        false,
+        REPO,
+        SAFETENSORS_FILENAME,
+    )]
+}
+
+inventory::submit! {
+    koharu_runtime::registry::RegistryProvider {
+        entries: register_manifest_entries,
+    }
+}
+
 #[derive(Debug, Clone)]
 pub struct ProbabilityMap {
     pub width: u32,
@@ -70,8 +87,8 @@ struct PreparedInput {
 }
 
 impl MangaTextSegmentation {
-    pub async fn load(cpu: bool) -> Result<Self> {
-        let safetensors = resolve_safetensors_path().await?;
+    pub async fn load(cpu: bool, models_root: &Path) -> Result<Self> {
+        let safetensors = resolve_safetensors_path(models_root).await?;
         Self::load_from_path(&safetensors, cpu)
     }
 
@@ -189,15 +206,18 @@ impl MangaTextSegmentation {
     }
 }
 
-pub async fn prefetch() -> Result<()> {
-    let _ = resolve_safetensors_path().await?;
+pub fn component_assets() -> Vec<(&'static str, &'static str)> {
+    vec![(REPO, SAFETENSORS_FILENAME)]
+}
+
+pub async fn prefetch(models_root: &Path) -> Result<()> {
+    let _ = resolve_safetensors_path(models_root).await?;
     Ok(())
 }
 
-async fn resolve_safetensors_path() -> Result<PathBuf> {
-    koharu_http::download::model(REPO, SAFETENSORS_FILENAME)
-        .await
-        .with_context(|| format!("failed to download {SAFETENSORS_FILENAME} from {REPO}"))
+async fn resolve_safetensors_path(models_root: &Path) -> Result<PathBuf> {
+    koharu_runtime::download::cached_model_path(models_root, REPO, SAFETENSORS_FILENAME)
+        .with_context(|| format!("failed to resolve {SAFETENSORS_FILENAME} from {REPO}"))
 }
 
 fn scaled_dimensions(width: u32, height: u32, max_pixels: u64) -> (u32, u32) {

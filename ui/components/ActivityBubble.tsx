@@ -272,7 +272,7 @@ export function ActivityBubble() {
       )}
       {activeDownloads.map((d) => (
         <DownloadCard
-          key={d.filename}
+          key={d.id}
           filename={d.filename}
           percent={d.percent}
           t={t}

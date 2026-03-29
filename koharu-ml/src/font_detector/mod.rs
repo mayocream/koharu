@@ -1,4 +1,8 @@
-use std::{fs, path::PathBuf, time::Instant};
+use std::{
+    fs,
+    path::{Path, PathBuf},
+    time::Instant,
+};
 
 use crate::{define_models, device, loading};
 use anyhow::{Context, Result};
@@ -18,7 +22,17 @@ define_models! {
     FontNames => ("fffonion/yuzumarker-font-detection", "font-labels-ex.json"),
 }
 
-pub use koharu_types::{FontPrediction, NamedFontPrediction, TextDirection};
+fn register_manifest_entries() -> Vec<koharu_runtime::registry::BootstrapEntry> {
+    manifest_registry_entries(1_400, |_| true)
+}
+
+inventory::submit! {
+    koharu_runtime::registry::RegistryProvider {
+        entries: register_manifest_entries,
+    }
+}
+
+pub use koharu_core::{FontPrediction, NamedFontPrediction, TextDirection};
 
 pub struct FontDetector {
     model: models::Model,
@@ -27,18 +41,19 @@ pub struct FontDetector {
 }
 
 impl FontDetector {
-    pub async fn load(cpu: bool) -> Result<Self> {
-        Self::load_with_kind(cpu, ModelKind::default()).await
+    pub async fn load(cpu: bool, models_root: &Path) -> Result<Self> {
+        Self::load_with_kind(cpu, ModelKind::default(), models_root).await
     }
 
-    pub async fn load_with_kind(cpu: bool, kind: ModelKind) -> Result<Self> {
+    pub async fn load_with_kind(cpu: bool, kind: ModelKind, models_root: &Path) -> Result<Self> {
         let device = device(cpu)?;
-        let model =
-            loading::load_mmaped_safetensors(Manifest::FontWeights.get(), &device, move |vb| {
-                models::Model::load(vb.pp("model._orig_mod.model"), kind)
-            })
-            .await?;
-        let labels = FontLabels::load().await?;
+        let model = loading::load_mmaped_safetensors(
+            Manifest::FontWeights.get(models_root),
+            &device,
+            move |vb| models::Model::load(vb.pp("model._orig_mod.model"), kind),
+        )
+        .await?;
+        let labels = FontLabels::load(models_root).await?;
 
         Ok(Self {
             model,
@@ -163,8 +178,8 @@ pub struct FontLabels {
 }
 
 impl FontLabels {
-    pub async fn load() -> Result<Self> {
-        let path = loading::resolve_manifest_path(Manifest::FontNames.get()).await?;
+    pub async fn load(models_root: &Path) -> Result<Self> {
+        let path = loading::resolve_manifest_path(Manifest::FontNames.get(models_root)).await?;
         Self::from_path(&path)
     }
 

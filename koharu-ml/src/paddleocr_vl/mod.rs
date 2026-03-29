@@ -28,6 +28,16 @@ define_models! {
     Model => ("PaddlePaddle/PaddleOCR-VL-1.5", "model.safetensors"),
 }
 
+fn register_manifest_entries() -> Vec<koharu_runtime::registry::BootstrapEntry> {
+    manifest_registry_entries(5_000, |_| false)
+}
+
+inventory::submit! {
+    koharu_runtime::registry::RegistryProvider {
+        entries: register_manifest_entries,
+    }
+}
+
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
 pub enum PaddleOcrVlTask {
@@ -171,13 +181,16 @@ pub struct PaddleOcrVl {
 }
 
 impl PaddleOcrVl {
-    pub async fn load(cpu: bool) -> Result<Self> {
+    pub async fn load(cpu: bool, models_root: &Path) -> Result<Self> {
         let files = ModelFiles {
-            config: loading::resolve_manifest_path(Manifest::ConfigJson.get()).await?,
-            preprocessor: loading::resolve_manifest_path(Manifest::PreprocessorConfigJson.get())
+            config: loading::resolve_manifest_path(Manifest::ConfigJson.get(models_root)).await?,
+            preprocessor: loading::resolve_manifest_path(
+                Manifest::PreprocessorConfigJson.get(models_root),
+            )
+            .await?,
+            tokenizer: loading::resolve_manifest_path(Manifest::TokenizerJson.get(models_root))
                 .await?,
-            tokenizer: loading::resolve_manifest_path(Manifest::TokenizerJson.get()).await?,
-            weights: loading::resolve_manifest_path(Manifest::Model.get()).await?,
+            weights: loading::resolve_manifest_path(Manifest::Model.get(models_root)).await?,
         };
         Self::load_from_files(files, cpu)
     }

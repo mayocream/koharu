@@ -1,5 +1,6 @@
 'use client'
 
+import { match } from 'ts-pattern'
 import type {
   DocumentChangedEvent,
   DocumentsChangedEvent,
@@ -68,24 +69,27 @@ const syncActivePipelineJobFromSnapshot = (payload: SnapshotEvent) => {
   updateActivePipelineJob(runningJob?.id ?? null)
 }
 
-const handleEventPayload = <K extends keyof ServerEventMap>(
-  event: K,
-  payload: ServerEventMap[K],
+const handleEventPayload = (
+  event: keyof ServerEventMap,
+  payload: ServerEventMap[keyof ServerEventMap],
 ) => {
-  if (event === 'snapshot') {
-    syncActivePipelineJobFromSnapshot(payload as SnapshotEvent)
-  }
+  match(event)
+    .with('snapshot', () => {
+      syncActivePipelineJobFromSnapshot(payload as SnapshotEvent)
+    })
+    .with('job.changed', () => {
+      const job = payload as JobState
+      if (job.kind !== 'pipeline') return
 
-  if (event === 'job.changed') {
-    const job = payload as JobState
-    if (job.kind === 'pipeline') {
-      if (job.status === 'running') {
-        updateActivePipelineJob(job.id)
-      } else if (activePipelineJobId === job.id) {
-        updateActivePipelineJob(null)
-      }
-    }
-  }
+      match(job.status)
+        .with('running', () => updateActivePipelineJob(job.id))
+        .otherwise(() => {
+          if (activePipelineJobId === job.id) {
+            updateActivePipelineJob(null)
+          }
+        })
+    })
+    .otherwise(() => {})
 
   const listeners = eventListeners.get(event)
   if (!listeners?.size) return

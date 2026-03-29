@@ -3,7 +3,7 @@ mod postprocess;
 mod unet;
 mod yolo_v5;
 
-use std::{cmp, time::Instant};
+use std::{cmp, path::Path, time::Instant};
 
 use anyhow::Context;
 use candle_core::{DType, Device, IndexOp, Tensor};
@@ -44,6 +44,16 @@ define_models! {
     DbNet => ("mayocream/comic-text-detector", "dbnet.safetensors"),
 }
 
+fn register_manifest_entries() -> Vec<koharu_runtime::registry::BootstrapEntry> {
+    manifest_registry_entries(1_100, |manifest| !matches!(manifest, Manifest::DbNet))
+}
+
+inventory::submit! {
+    koharu_runtime::registry::RegistryProvider {
+        entries: register_manifest_entries,
+    }
+}
+
 pub struct ComicTextDetector {
     yolo: yolo_v5::YoloV5,
     unet: unet::UNet,
@@ -52,27 +62,31 @@ pub struct ComicTextDetector {
 }
 
 impl ComicTextDetector {
-    pub async fn load(cpu: bool) -> anyhow::Result<Self> {
-        Self::load_inner(cpu, true).await
+    pub async fn load(cpu: bool, models_root: &Path) -> anyhow::Result<Self> {
+        Self::load_inner(cpu, true, models_root).await
     }
 
-    pub async fn load_segmentation_only(cpu: bool) -> anyhow::Result<Self> {
-        Self::load_inner(cpu, false).await
+    pub async fn load_segmentation_only(cpu: bool, models_root: &Path) -> anyhow::Result<Self> {
+        Self::load_inner(cpu, false, models_root).await
     }
 
-    async fn load_inner(cpu: bool, load_dbnet: bool) -> anyhow::Result<Self> {
+    async fn load_inner(cpu: bool, load_dbnet: bool, models_root: &Path) -> anyhow::Result<Self> {
         let device = device(cpu)?;
-        let yolo = loading::load_mmaped_safetensors(Manifest::Yolov5.get(), &device, |vb| {
-            yolo_v5::YoloV5::load(vb, 2, 3)
-        })
+        let yolo =
+            loading::load_mmaped_safetensors(Manifest::Yolov5.get(models_root), &device, |vb| {
+                yolo_v5::YoloV5::load(vb, 2, 3)
+            })
+            .await?;
+        let unet = loading::load_mmaped_safetensors(
+            Manifest::Unet.get(models_root),
+            &device,
+            unet::UNet::load,
+        )
         .await?;
-        let unet =
-            loading::load_mmaped_safetensors(Manifest::Unet.get(), &device, unet::UNet::load)
-                .await?;
         let dbnet = if load_dbnet {
             Some(
                 loading::load_mmaped_safetensors(
-                    Manifest::DbNet.get(),
+                    Manifest::DbNet.get(models_root),
                     &device,
                     dbnet::DbNet::load,
                 )
@@ -631,10 +645,21 @@ fn stitch_mask_patch(
     }
 }
 
-pub async fn prefetch_segmentation() -> anyhow::Result<()> {
-    Manifest::Yolov5.get().await?;
-    Manifest::Unet.get().await?;
+pub fn segmentation_assets() -> Vec<(&'static str, &'static str)> {
+    component_assets()
+        .into_iter()
+        .filter(|(_, filename)| *filename != "dbnet.safetensors")
+        .collect()
+}
+
+pub async fn prefetch_segmentation(models_root: &Path) -> anyhow::Result<()> {
+    Manifest::Yolov5.get(models_root).await?;
+    Manifest::Unet.get(models_root).await?;
     Ok(())
+}
+
+pub fn segmentation_manifests() -> [Manifest; 2] {
+    [Manifest::Yolov5, Manifest::Unet]
 }
 
 fn accumulate_to_score_map(

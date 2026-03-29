@@ -22,36 +22,53 @@ include = [
 ]
 
 [dependencies]
+arc-swap = { workspace = true }
+async-stream = { workspace = true }
+atomicwrites = { workspace = true }
+axum = { workspace = true }
+base64 = { workspace = true }
+camino = { workspace = true }
+futures = { workspace = true }
+dashmap = { workspace = true }
+directories = { workspace = true }
+indexmap = { workspace = true }
+koharu-core = { workspace = true }
 koharu-ml = { workspace = true }
-koharu-pipeline = { workspace = true }
+koharu-psd = { workspace = true }
 koharu-renderer = { workspace = true }
-koharu-rpc = { workspace = true }
 koharu-runtime = { workspace = true }
-koharu-types = { workspace = true }
 anyhow = { workspace = true }
 clap = { workspace = true }
-dirs = { workspace = true }
 git-version = { workspace = true }
+image = { workspace = true }
+imageproc = { workspace = true }
+miette = { workspace = true }
+open = { workspace = true }
+rayon = { workspace = true }
+rmcp = { workspace = true }
+schemars = { workspace = true }
+serde = { workspace = true }
 serde_json = { workspace = true }
+serde_path_to_error = { workspace = true }
 once_cell = { workspace = true }
 rfd = { workspace = true }
+strum = { workspace = true }
 tauri = { workspace = true }
 tauri-plugin-updater = { workspace = true }
+thiserror = { workspace = true }
 tokio = { workspace = true }
+tower-http = { workspace = true }
 tracing = { workspace = true }
 tracing-subscriber = { workspace = true }
+typed-builder = { workspace = true }
+url = { workspace = true }
+uuid = { workspace = true }
+koharu-llm = { workspace = true }
 
 [target.'cfg(target_os = "windows")'.dependencies]
-koharu-llm = { workspace = true }
 windows = { workspace = true }
 windows-sys = { workspace = true }
 winreg = { workspace = true }
-
-[target.'cfg(target_os = "macos")'.dependencies]
-koharu-llm = { workspace = true }
-
-[target.'cfg(target_os = "linux")'.dependencies]
-koharu-llm = { workspace = true }
 
 [features]
 cuda = ["koharu-ml/cuda"]

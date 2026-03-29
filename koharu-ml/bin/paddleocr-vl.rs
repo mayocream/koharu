@@ -63,7 +63,8 @@ async fn main() -> anyhow::Result<()> {
     let mut model = if let Some(model_dir) = &cli.model_dir {
         PaddleOcrVl::load_from_dir(model_dir, cli.cpu)?
     } else {
-        PaddleOcrVl::load(cli.cpu).await?
+        let models_root = common::default_models_root();
+        PaddleOcrVl::load(cli.cpu, &models_root).await?
     };
 
     let images = cli

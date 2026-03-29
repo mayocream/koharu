@@ -1,13 +1,18 @@
 use std::path::PathBuf;
 use std::sync::Arc;
 
+use directories::ProjectDirs;
 use strum::IntoEnumIterator;
 
 use koharu_llm::safe::llama_backend::LlamaBackend;
 use koharu_llm::{GenerateOptions, Language, Llm, ModelId};
 
 async fn initialize_runtime() -> anyhow::Result<()> {
-    koharu_runtime::initialize().await?;
+    let runtime_dir = ProjectDirs::from("rs", "Koharu", "Koharu")
+        .map(|dirs| dirs.data_local_dir().to_path_buf())
+        .unwrap_or(PathBuf::from("."))
+        .join("runtime");
+    koharu_runtime::initialize(&runtime_dir).await?;
     Ok(())
 }
 
@@ -18,18 +23,22 @@ async fn llm_generates_text_for_all_models() -> anyhow::Result<()> {
 ãƒ†ã‚¹ãƒˆã§ã™ã€‚
 ã•ã‚ˆãªã‚‰ã€‚"#;
 
-    let model_dir = dirs::data_local_dir()
-        .map(|path| path.join("Koharu"))
+    let model_dir = ProjectDirs::from("rs", "Koharu", "Koharu")
+        .map(|dirs| dirs.data_local_dir().to_path_buf())
         .unwrap_or(PathBuf::from("."))
         .join("models");
+    let runtime_dir = ProjectDirs::from("rs", "Koharu", "Koharu")
+        .map(|dirs| dirs.data_local_dir().to_path_buf())
+        .unwrap_or(PathBuf::from("."))
+        .join("runtime");
 
-    koharu_http::hf_hub::set_cache_dir(model_dir)?;
     initialize_runtime().await?;
-    koharu_llm::sys::initialize()?;
+    koharu_llm::sys::initialize(&runtime_dir)?;
     let backend = Arc::new(LlamaBackend::init()?);
 
     for model in ModelId::iter() {
-        let mut llm = Llm::load(model, false, Arc::clone(&backend)).await?;
+        let mut llm =
+            Llm::load(model, false, Arc::clone(&backend), &runtime_dir, &model_dir).await?;
         let opts = GenerateOptions {
             max_tokens: 100,
             temperature: 0.3,

@@ -24,8 +24,9 @@ async fn main() -> anyhow::Result<()> {
     common::init_tracing();
 
     let cli = Cli::parse();
+    let models_root = common::default_models_root();
 
-    let model = Lama::load(cli.cpu).await?;
+    let model = Lama::load(cli.cpu, &models_root).await?;
     let image = image::open(&cli.input)?;
     let mask = image::open(&cli.mask)?;
 

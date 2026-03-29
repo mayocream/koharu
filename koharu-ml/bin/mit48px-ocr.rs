@@ -1,6 +1,6 @@
 use clap::Parser;
+use koharu_core::TextBlock;
 use koharu_ml::mit48px_ocr::{Mit48pxBlockPrediction, Mit48pxOcr, Mit48pxPrediction};
-use koharu_types::TextBlock;
 
 #[path = "common.rs"]
 mod common;
@@ -39,7 +39,8 @@ async fn main() -> anyhow::Result<()> {
     let model = if let Some(model_dir) = &cli.model_dir {
         Mit48pxOcr::load_from_dir(model_dir, cli.cpu)?
     } else {
-        Mit48pxOcr::load(cli.cpu).await?
+        let models_root = common::default_models_root();
+        Mit48pxOcr::load(cli.cpu, &models_root).await?
     };
 
     let output = if let Some(blocks_path) = &cli.blocks_json {

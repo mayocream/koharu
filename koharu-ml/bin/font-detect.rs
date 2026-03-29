@@ -4,6 +4,9 @@ use anyhow::Result;
 use clap::Parser;
 use koharu_ml::font_detector::{FontDetector, ModelKind, TextDirection};
 
+#[path = "common.rs"]
+mod common;
+
 #[derive(Parser, Debug)]
 #[command(
     author,
@@ -27,8 +30,10 @@ struct Args {
 
 #[tokio::main]
 async fn main() -> Result<()> {
+    common::init_tracing();
     let args = Args::parse();
-    let detector = FontDetector::load_with_kind(args.cpu, args.model).await?;
+    let models_root = common::default_models_root();
+    let detector = FontDetector::load_with_kind(args.cpu, args.model, &models_root).await?;
     let image = image::open(&args.input)?;
     let start = std::time::Instant::now();
     let result = detector.inference(&[image], args.top_k)?;

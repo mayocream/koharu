@@ -61,7 +61,7 @@ flowchart LR
 
 ## 実装の形
 
-ソースコード上では、パイプラインの入口は `koharu-pipeline/src/pipeline.rs` にあり、vision スタックの調整は `koharu-ml/src/facade.rs` で行われています。
+ソースコード上では、パイプラインの入口は `koharu/src/pipeline/runner.rs` にあり、vision スタックの調整は `koharu-ml/src/facade.rs` で行われています。
 
 実装上、重要な点は次の通りです。
 

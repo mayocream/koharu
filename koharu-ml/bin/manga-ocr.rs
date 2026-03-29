@@ -20,8 +20,9 @@ async fn main() -> anyhow::Result<()> {
     let cli = Cli::parse();
     let image = image::open(&cli.input)?;
     let images = vec![image];
+    let models_root = common::default_models_root();
 
-    let model = MangaOcr::load(cli.cpu).await?;
+    let model = MangaOcr::load(cli.cpu, &models_root).await?;
     let output = model
         .inference(&images)?
         .into_iter()
