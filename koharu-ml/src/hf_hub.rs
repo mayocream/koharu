@@ -33,7 +33,7 @@ macro_rules! define_models {
                 .map(|manifest| async move {
                     manifest.get().await
                 })
-                .buffer_unordered(num_cpus::get())
+                .buffer_unordered(num_cpus::get().clamp(1, 2))
                 .try_collect::<Vec<_>>()
                 .await?;
             Ok(())

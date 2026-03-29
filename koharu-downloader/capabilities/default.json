@@ -1,0 +1,19 @@
+{
+  "$schema": "../gen/schemas/desktop-schema.json",
+  "identifier": "default",
+  "description": "default",
+  "windows": [
+    "main"
+  ],
+  "permissions": [
+    "core:default",
+    "core:event:default",
+    "core:window:default",
+    "core:window:allow-close",
+    "core:window:allow-minimize",
+    "core:window:allow-maximize",
+    "core:window:allow-toggle-maximize",
+    "core:window:allow-start-dragging"
+  ]
+}
+

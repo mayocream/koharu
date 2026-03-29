@@ -1,5 +1,5 @@
-use std::fmt;
 use std::path::Path;
+use std::{fmt, path::PathBuf};
 
 use anyhow::{Context, Result, anyhow, bail};
 use koharu_http::http::http_client;
@@ -199,7 +199,10 @@ async fn select_wheel(package: &str, tags: &[&str]) -> Result<(String, String)> 
         .split_once('/')
         .ok_or_else(|| anyhow!("invalid wheel package `{package}`"))?;
 
-    let meta_url = format!("https://pypi.org/pypi/{dist}/{version}/json");
+    let meta_url = format!(
+        "{}/pypi/{dist}/{version}/json",
+        koharu_http::config::pypi_base_url()
+    );
     let json: serde_json::Value = http_client()
         .get(&meta_url)
         .send()
@@ -224,6 +227,17 @@ async fn select_wheel(package: &str, tags: &[&str]) -> Result<(String, String)> 
     }
 
     bail!("no wheel found for `{dist}` {version} on {tags:?}")
+}
+
+pub(crate) fn runtime_install_dir_if_applicable(root: &Path) -> Option<PathBuf> {
+    is_available().then(|| root.join("cuda"))
+}
+
+pub(crate) fn required_libraries_for_current_platform() -> Vec<&'static str> {
+    WHEELS
+        .iter()
+        .flat_map(|wheel| wheel.dylibs().iter().copied())
+        .collect()
 }
 
 #[cfg(test)]

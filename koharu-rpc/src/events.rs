@@ -263,7 +263,7 @@ fn download_state(progress: DownloadProgress) -> DownloadState {
     };
 
     DownloadState {
-        id: progress.filename.clone(),
+        id: progress.id,
         filename: progress.filename,
         downloaded: progress.downloaded,
         total: progress.total,
@@ -302,6 +302,7 @@ mod tests {
     #[test]
     fn download_progress_maps_to_download_state() {
         let state = download_state(koharu_types::DownloadProgress {
+            id: "model.bin".to_string(),
             filename: "model.bin".to_string(),
             downloaded: 32,
             total: Some(64),

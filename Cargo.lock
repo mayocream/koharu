@@ -3907,6 +3907,7 @@ dependencies = [
  "clap",
  "dirs",
  "git-version",
+ "koharu-http",
  "koharu-llm",
  "koharu-ml",
  "koharu-pipeline",
@@ -3929,6 +3930,32 @@ dependencies = [
 ]
 
 [[package]]
+name = "koharu-downloader"
+version = "0.40.1"
+dependencies = [
+ "anyhow",
+ "clap",
+ "dirs",
+ "koharu-http",
+ "koharu-llm",
+ "koharu-ml",
+ "koharu-runtime",
+ "koharu-types",
+ "once_cell",
+ "open",
+ "reqwest 0.13.2",
+ "serde",
+ "serde_json",
+ "strum",
+ "tauri",
+ "tauri-build",
+ "tempfile",
+ "tokio",
+ "tracing",
+ "tracing-subscriber",
+]
+
+[[package]]
 name = "koharu-http"
 version = "0.40.1"
 dependencies = [
@@ -3939,13 +3966,16 @@ dependencies = [
  "hf-hub",
  "indicatif",
  "koharu-types",
+ "libc",
  "once_cell",
  "reqwest 0.13.2",
  "reqwest-middleware",
  "reqwest-retry",
  "serde",
+ "tempfile",
  "tokio",
  "tracing",
+ "windows-sys 0.61.2",
 ]
 
 [[package]]

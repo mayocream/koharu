@@ -1,0 +1,47 @@
+[package]
+name = "koharu-downloader"
+version.workspace = true
+edition.workspace = true
+description.workspace = true
+authors.workspace = true
+readme.workspace = true
+homepage.workspace = true
+repository.workspace = true
+keywords.workspace = true
+publish.workspace = true
+license.workspace = true
+include = [
+    "src/**",
+    "capabilities/**",
+    "tauri.conf.json",
+    "build.rs",
+    "../downloader-ui/out/**",
+]
+
+[dependencies]
+anyhow = { workspace = true }
+clap = { workspace = true }
+dirs = { workspace = true }
+koharu-http = { workspace = true }
+koharu-llm = { workspace = true }
+koharu-ml = { workspace = true }
+koharu-runtime = { workspace = true }
+koharu-types = { workspace = true }
+once_cell = { workspace = true }
+open = { workspace = true }
+reqwest = { workspace = true }
+serde = { workspace = true }
+serde_json = { workspace = true }
+strum = { workspace = true }
+tauri = { workspace = true }
+tokio = { workspace = true }
+tracing = { workspace = true }
+tracing-subscriber = { workspace = true }
+
+[build-dependencies]
+tauri-build = { workspace = true }
+
+
+[dev-dependencies]
+tempfile = { workspace = true }
+
