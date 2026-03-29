@@ -3943,6 +3943,7 @@ dependencies = [
  "koharu-types",
  "once_cell",
  "open",
+ "reqwest 0.13.2",
  "serde",
  "serde_json",
  "strum",

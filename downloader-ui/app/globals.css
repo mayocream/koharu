@@ -343,6 +343,37 @@ button, input { font: inherit; outline: none; }
 .field input:focus { border-color: var(--primary); box-shadow: 0 0 0 1px var(--primary); }
 .field small { font-size: 12px; color: var(--muted); }
 
+/* 代理输入行 */
+.proxy-input-row {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+}
+.proxy-input-row input { flex: 1; }
+.button.compact {
+  padding: 7px 14px;
+  font-size: 12px;
+  font-weight: 500;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  background: var(--surface);
+  color: var(--fg);
+  cursor: pointer;
+  white-space: nowrap;
+  transition: border-color 0.15s, background 0.15s;
+}
+.button.compact:hover:not(:disabled) { border-color: var(--primary); background: var(--bg); }
+.button.compact:disabled { opacity: 0.5; cursor: not-allowed; }
+.proxy-hint-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 12px;
+}
+.proxy-result { font-size: 12px; white-space: nowrap; }
+.proxy-result.ok { color: #22c55e; }
+.proxy-result.error { color: var(--danger); white-space: normal; text-align: right; max-width: 50%; }
+
 .form-actions { margin-top: 12px; }
 .form-actions .button.primary {
   display: flex;
@@ -380,5 +411,60 @@ button, input { font: inherit; outline: none; }
   gap: 8px;
 }
 
-
-
+/* 确认对话框 */
+.dialog-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 1000;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: rgba(0, 0, 0, 0.45);
+  backdrop-filter: blur(4px);
+  animation: overlay-in 0.15s ease-out;
+}
+@keyframes overlay-in {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+.dialog-box {
+  background: var(--panel-bg);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: 24px;
+  min-width: 320px;
+  max-width: 420px;
+  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.18);
+  animation: dialog-in 0.15s ease-out;
+}
+.dialog-box:focus { outline: none; }
+@keyframes dialog-in {
+  from { opacity: 0; transform: scale(0.95) translateY(8px); }
+  to { opacity: 1; transform: scale(1) translateY(0); }
+}
+.dialog-message {
+  margin: 0 0 20px;
+  font-size: 14px;
+  color: var(--fg);
+  line-height: 1.5;
+}
+.dialog-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+}
+.button.dialog-confirm {
+  padding: 7px 16px;
+  font-size: 12px;
+  font-weight: 500;
+  border: 1px solid var(--danger);
+  border-radius: var(--radius);
+  background: transparent;
+  color: var(--danger);
+  cursor: pointer;
+  transition: background 0.15s, color 0.15s;
+}
+.button.dialog-confirm:hover {
+  background: var(--danger);
+  color: white;
+}

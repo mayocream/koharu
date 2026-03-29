@@ -99,6 +99,11 @@ export default function Page() {
   const [speedByItem, setSpeedByItem] = useState<Record<string, number>>({})
   const transferSamplesRef = useRef<Map<string, TransferSample>>(new Map())
   const draftDirtyRef = useRef(false)
+  const confirmButtonRef = useRef<HTMLButtonElement | null>(null)
+  const dialogRef = useRef<HTMLDivElement | null>(null)
+  const restoreFocusRef = useRef<HTMLElement | null>(null)
+  const [proxyCheck, setProxyCheck] = useState<{ status: 'idle' | 'checking' | 'ok' | 'error'; message?: string }>({ status: 'idle' })
+  const [confirmDialog, setConfirmDialog] = useState<{ message: string; onConfirm: () => void } | null>(null)
   const [isTauri, setIsTauri] = useState(false)
   
   // Navigation State
@@ -211,6 +216,57 @@ export default function Page() {
     return () => window.clearInterval(timer)
   }, [])
 
+  useEffect(() => {
+    if (!confirmDialog || typeof window === 'undefined') return
+
+    restoreFocusRef.current = document.activeElement instanceof HTMLElement ? document.activeElement : null
+    const focusTarget = window.setTimeout(() => confirmButtonRef.current?.focus(), 0)
+
+    function handleKeyDown(event: KeyboardEvent) {
+      if (event.key === 'Escape') {
+        event.preventDefault()
+        setConfirmDialog(null)
+        return
+      }
+
+      if (event.key !== 'Tab') return
+      const dialog = dialogRef.current
+      if (!dialog) return
+
+      const focusable = Array.from(
+        dialog.querySelectorAll<HTMLElement>(
+          'button:not([disabled]), [href], input:not([disabled]), select:not([disabled]), textarea:not([disabled]), [tabindex]:not([tabindex="-1"])',
+        ),
+      )
+      if (focusable.length === 0) return
+
+      const first = focusable[0]
+      const last = focusable[focusable.length - 1]
+      const active = document.activeElement
+
+      if (event.shiftKey) {
+        if (active === first || !dialog.contains(active)) {
+          event.preventDefault()
+          last.focus()
+        }
+        return
+      }
+
+      if (active === last || !dialog.contains(active)) {
+        event.preventDefault()
+        first.focus()
+      }
+    }
+
+    window.addEventListener('keydown', handleKeyDown)
+    return () => {
+      window.clearTimeout(focusTarget)
+      window.removeEventListener('keydown', handleKeyDown)
+      restoreFocusRef.current?.focus()
+      restoreFocusRef.current = null
+    }
+  }, [confirmDialog])
+
   async function invokeAndRefresh<T>(action: string, command: string, args?: Record<string, unknown>) {
     setPendingAction(action)
     setError(null)
@@ -263,7 +319,21 @@ export default function Page() {
 
   function updateDraftField(field: keyof DownloaderConfig, value: string) {
     draftDirtyRef.current = true
+    if (field === 'proxyUrl') setProxyCheck({ status: 'idle' })
     setDraft((current) => ({ ...current, [field]: value }))
+  }
+
+  async function checkProxy() {
+    const url = draft.proxyUrl?.trim()
+    if (!url) return
+    setProxyCheck({ status: 'checking' })
+    try {
+      const { invoke } = await import('@tauri-apps/api/core')
+      await invoke('check_proxy', { proxyUrl: url })
+      setProxyCheck({ status: 'ok' })
+    } catch (cause) {
+      setProxyCheck({ status: 'error', message: cause instanceof Error ? cause.message : String(cause) })
+    }
   }
 
   return (
@@ -369,8 +439,13 @@ export default function Page() {
                 onDownload={(itemId) => invokeAndRefresh('download', 'download_item', { itemId })}
                 onRetry={(itemId) => invokeAndRefresh('retry', 'retry_item', { itemId })}
                 onDelete={(itemId) => {
-                  if (!window.confirm(t('delete_confirm'))) return
-                  void invokeAndRefresh('delete', 'delete_item', { itemId })
+                  setConfirmDialog({
+                    message: t('delete_confirm'),
+                    onConfirm: () => {
+                      setConfirmDialog(null)
+                      void invokeAndRefresh('delete', 'delete_item', { itemId })
+                    },
+                  })
                 }}
                 onCancel={() => invokeAndRefresh('cancel', 'cancel_active_task')}
               />
@@ -384,8 +459,13 @@ export default function Page() {
                 onDownload={(itemId) => invokeAndRefresh('download', 'download_item', { itemId })}
                 onRetry={(itemId) => invokeAndRefresh('retry', 'retry_item', { itemId })}
                 onDelete={(itemId) => {
-                  if (!window.confirm(t('delete_confirm'))) return
-                  void invokeAndRefresh('delete', 'delete_item', { itemId })
+                  setConfirmDialog({
+                    message: t('delete_confirm'),
+                    onConfirm: () => {
+                      setConfirmDialog(null)
+                      void invokeAndRefresh('delete', 'delete_item', { itemId })
+                    },
+                  })
                 }}
                 onCancel={() => invokeAndRefresh('cancel', 'cancel_active_task')}
               />
@@ -395,12 +475,32 @@ export default function Page() {
               <div className='net-form'>
                 <div className='field'>
                   <label>{t('net_proxy')}</label>
-                  <input
-                    value={draft.proxyUrl ?? ''}
-                    onChange={(e) => updateDraftField('proxyUrl', e.target.value)}
-                    placeholder="socks5:///"
-                  />
-                  <small>{t('net_proxy_hint')}</small>
+                  <div className='proxy-input-row'>
+                    <input
+                      value={draft.proxyUrl ?? ''}
+                      onChange={(e) => updateDraftField('proxyUrl', e.target.value)}
+                      placeholder="socks5:///"
+                    />
+                    {isTauri && (
+                      <button
+                        type='button'
+                        className='button compact'
+                        disabled={!draft.proxyUrl?.trim() || proxyCheck.status === 'checking'}
+                        onClick={() => void checkProxy()}
+                      >
+                        {proxyCheck.status === 'checking' ? t('net_checking') : t('net_check')}
+                      </button>
+                    )}
+                  </div>
+                  <div className='proxy-hint-row'>
+                    <small>{t('net_proxy_hint')}</small>
+                    {proxyCheck.status === 'ok' && (
+                      <small className='proxy-result ok'>✓ {t('net_check_ok')}</small>
+                    )}
+                    {proxyCheck.status === 'error' && (
+                      <small className='proxy-result error'>✗ {proxyCheck.message}</small>
+                    )}
+                  </div>
                 </div>
                 <div className='field'>
                   <label>{t('net_pypi')}</label>
@@ -434,6 +534,35 @@ export default function Page() {
           </div>
         </main>
       </div>
+
+      {/* Confirm Dialog */}
+      {confirmDialog && (
+        <div className='dialog-overlay' onClick={() => setConfirmDialog(null)}>
+          <div
+            ref={dialogRef}
+            className='dialog-box'
+            role='dialog'
+            aria-modal='true'
+            aria-labelledby='confirm-dialog-message'
+            onClick={(e) => e.stopPropagation()}
+          >
+            <p className='dialog-message' id='confirm-dialog-message'>{confirmDialog.message}</p>
+            <div className='dialog-actions'>
+              <button
+                ref={confirmButtonRef}
+                type='button'
+                className='button dialog-confirm'
+                onClick={confirmDialog.onConfirm}
+              >
+                {t('action_delete')}
+              </button>
+              <button type='button' className='button compact' onClick={() => setConfirmDialog(null)}>
+                {t('action_cancel')}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   )
 }

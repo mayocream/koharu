@@ -124,6 +124,7 @@ async fn run_gui(app: DownloaderApp) -> Result<()> {
         .invoke_handler(tauri::generate_handler![
             snapshot,
             set_network_config,
+            check_proxy,
             download_item,
             retry_item,
             cancel_active_task,
@@ -211,6 +212,42 @@ async fn open_model_dir(app: tauri::State<'_, DownloaderApp>) -> std::result::Re
     app.open_root(ManagedRootKind::Model)
         .await
         .map_err(to_string_error)
+}
+
+#[tauri::command]
+async fn check_proxy(proxy_url: String) -> std::result::Result<(), String> {
+    use std::time::Duration;
+
+    let mut builder = reqwest::Client::builder()
+        .user_agent("koharu-downloader/proxy-check")
+        .connect_timeout(Duration::from_secs(10))
+        .timeout(Duration::from_secs(10));
+
+    if !proxy_url.trim().is_empty() {
+        builder = builder.proxy(
+            reqwest::Proxy::all(&proxy_url)
+                .map_err(|e| format!("Invalid proxy URL: {e}"))?,
+        );
+    }
+
+    let client = builder.build().map_err(|e| format!("Failed to build client: {e}"))?;
+
+    client
+        .head("https://huggingface.co")
+        .send()
+        .await
+        .and_then(|response| response.error_for_status())
+        .map_err(|e| {
+            if e.is_connect() {
+                "Connection failed: proxy unreachable or refused".to_string()
+            } else if e.is_timeout() {
+                "Connection timed out (10s)".to_string()
+            } else {
+                format!("Request failed: {e}")
+            }
+        })?;
+
+    Ok(())
 }
 
 fn to_string_error(error: impl ToString) -> String {

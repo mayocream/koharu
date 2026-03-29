@@ -45,6 +45,9 @@ const dictionaries = {
     net_github: 'GitHub Mirror URL',
     net_github_hint: 'Custom base URL for llama.cpp release downloads.',
     net_save: 'Save',
+    net_check: 'Check',
+    net_checking: 'Checking…',
+    net_check_ok: 'Connected',
     
     maint_title: 'Directories',
     maint_desc: 'Open managed directories in the file explorer.',
@@ -94,6 +97,9 @@ const dictionaries = {
     net_github: 'GitHub 镜像地址',
     net_github_hint: '用于下载 llama.cpp 发布文件的自定义地址。',
     net_save: '保存',
+    net_check: '检查',
+    net_checking: '检查中…',
+    net_check_ok: '已连通',
     
     maint_title: '目录',
     maint_desc: '在文件管理器中打开对应目录。',
