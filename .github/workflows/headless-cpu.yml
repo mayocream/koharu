@@ -83,15 +83,18 @@ jobs:
 
       - name: Prepare artifact
         run: |
-          mkdir -p dist
+          mkdir -p dist/ui
           cp target/release/koharu dist/
           cp README.md dist/README.md
+          cp -R ui/out dist/ui/
           cat > dist/RUN.txt <<'EOF'
           Run on Ubuntu 22.04:
             ./koharu --cpu --headless --port 4000
 
           Open:
             http://127.0.0.1:4000/
+
+          Keep the bundled ui/out directory next to the binary.
           EOF
           tar -C dist -czf koharu-headless-cpu-ubuntu22.04.tar.gz .
 
