@@ -1,5 +1,6 @@
 use std::future::Future;
 use std::pin::Pin;
+use std::sync::atomic::{AtomicBool, Ordering};
 
 use anyhow::Context;
 use keyring::Entry;
@@ -14,12 +15,30 @@ pub mod openai_compatible;
 
 const API_KEY_SERVICE: &str = "koharu";
 
+static NO_KEYRING: AtomicBool = AtomicBool::new(false);
+
+pub fn disable_keyring() {
+    NO_KEYRING.store(true, Ordering::Release);
+}
+
+fn env_key_var(provider: &str) -> String {
+    format!(
+        "KOHARU_{}_API_KEY",
+        provider.to_ascii_uppercase().replace('-', "_")
+    )
+}
+
 fn provider_key_entry(provider: &str) -> anyhow::Result<Entry> {
     let username = format!("llm_provider_api_key_{provider}");
     Ok(Entry::new(API_KEY_SERVICE, &username)?)
 }
 
 pub fn get_saved_api_key(provider: &str) -> anyhow::Result<Option<String>> {
+    if NO_KEYRING.load(Ordering::Acquire) {
+        let var = env_key_var(provider);
+        return Ok(std::env::var(&var).ok().filter(|v| !v.trim().is_empty()));
+    }
+
     let entry = provider_key_entry(provider)?;
     match entry.get_password() {
         Ok(value) => Ok(Some(value)),
@@ -29,6 +48,14 @@ pub fn get_saved_api_key(provider: &str) -> anyhow::Result<Option<String>> {
 }
 
 pub fn set_saved_api_key(provider: &str, api_key: &str) -> anyhow::Result<()> {
+    if NO_KEYRING.load(Ordering::Acquire) {
+        tracing::warn!(
+            provider,
+            "keyring is disabled; API key changes are not saved"
+        );
+        return Ok(());
+    }
+
     let entry = provider_key_entry(provider)?;
     if api_key.trim().is_empty() {
         match entry.delete_credential() {
