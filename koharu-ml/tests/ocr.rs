@@ -4,6 +4,8 @@ use koharu_core::{TextBlock, TextDirection};
 use koharu_ml::comic_text_detector::extract_text_block_regions;
 use koharu_ml::paddleocr_vl::{PaddleOcrVl, PaddleOcrVlTask};
 
+mod support;
+
 #[tokio::test]
 #[ignore]
 async fn paddleocr_vl_reads_dialog_image_via_default_block_path() -> anyhow::Result<()> {
@@ -26,7 +28,8 @@ async fn paddleocr_vl_reads_dialog_image_via_default_block_path() -> anyhow::Res
     };
 
     let regions = extract_text_block_regions(&image, &block);
-    let mut ocr = PaddleOcrVl::load(false).await?;
+    let runtime = support::cpu_runtime();
+    let mut ocr = PaddleOcrVl::load(&runtime, false).await?;
     let results = ocr.inference_images(&regions, PaddleOcrVlTask::Ocr, 128)?;
 
     assert_eq!(results.len(), 1);

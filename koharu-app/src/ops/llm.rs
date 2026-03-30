@@ -1,4 +1,5 @@
 use std::str::FromStr;
+use std::sync::Arc;
 
 use koharu_core::commands::{
     ApiKeyGetPayload, ApiKeyResult, ApiKeySetPayload, IndexPayload, LlmGeneratePayload,
@@ -8,6 +9,7 @@ use koharu_llm::ModelId;
 use koharu_llm::api::{ALL_API_PROVIDERS, OPENAI_COMPATIBLE_ID};
 use koharu_llm::providers::{get_saved_api_key, openai_compatible, set_saved_api_key};
 pub use openai_compatible::PingResult;
+use reqwest_middleware::ClientWithMiddleware;
 use strum::IntoEnumIterator;
 use tracing::instrument;
 
@@ -86,7 +88,13 @@ pub async fn llm_list(
             }
         };
 
-        match openai_compatible::list_models(base_url, api_key.as_deref()).await {
+        match openai_compatible::list_models(
+            state.runtime.http_client(),
+            base_url,
+            api_key.as_deref(),
+        )
+        .await
+        {
             Ok(models) => {
                 for model in models {
                     result.push(llm::ModelInfo::api(OPENAI_COMPATIBLE_ID, &model));
@@ -115,6 +123,7 @@ pub async fn llm_load(state: AppResources, payload: LlmLoadPayload) -> anyhow::R
                 provider_id,
                 model_id,
                 koharu_llm::providers::ProviderConfig {
+                    http_client: state.runtime.http_client(),
                     api_key,
                     base_url: payload.base_url,
                     temperature: payload.temperature,
@@ -167,10 +176,11 @@ pub async fn llm_generate(state: AppResources, payload: LlmGeneratePayload) -> a
 }
 
 pub async fn llm_ping(
+    http_client: Arc<ClientWithMiddleware>,
     base_url: &str,
     api_key: Option<&str>,
 ) -> anyhow::Result<openai_compatible::PingResult> {
-    openai_compatible::ping(base_url, api_key).await
+    openai_compatible::ping(http_client, base_url, api_key).await
 }
 
 pub async fn get_document_for_llm(

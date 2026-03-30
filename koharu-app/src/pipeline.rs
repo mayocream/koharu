@@ -128,6 +128,7 @@ async fn run_pipeline_inner(
                     provider_id,
                     model_part,
                     koharu_llm::providers::ProviderConfig {
+                        http_client: res.runtime.http_client(),
                         api_key: req.llm_api_key.clone(),
                         base_url: req.llm_base_url.clone(),
                         temperature: req.llm_temperature,

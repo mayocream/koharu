@@ -4,6 +4,7 @@ use serde::Serialize;
 use tokio::sync::{RwLock, broadcast};
 
 use koharu_core::{Document, LlmState, LlmStateStatus, TextBlock};
+use koharu_runtime::RuntimeManager;
 
 use koharu_llm::{
     GenerateOptions, Language, Llm, ModelId, language::tags as language_tags,
@@ -74,6 +75,7 @@ pub enum State {
 pub struct Model {
     state: Arc<RwLock<State>>,
     state_tx: broadcast::Sender<LlmState>,
+    runtime: RuntimeManager,
     cpu: bool,
     backend: Arc<LlamaBackend>,
 }
@@ -437,10 +439,11 @@ impl Translatable for TextBlock {
 }
 
 impl Model {
-    pub fn new(cpu: bool, backend: Arc<LlamaBackend>) -> Self {
+    pub fn new(runtime: RuntimeManager, cpu: bool, backend: Arc<LlamaBackend>) -> Self {
         Self {
             state: Arc::new(RwLock::new(State::Empty)),
             state_tx: broadcast::channel(64).0,
+            runtime,
             cpu,
             backend,
         }
@@ -478,10 +481,11 @@ impl Model {
 
         let state_cloned = self.state.clone();
         let state_tx = self.state_tx.clone();
+        let runtime = self.runtime.clone();
         let cpu = self.cpu;
         let backend = self.backend.clone();
         tokio::spawn(async move {
-            let res = Llm::load(id, cpu, backend).await;
+            let res = Llm::load(&runtime, id, cpu, backend).await;
             match res {
                 Ok(llm) => {
                     let mut guard = state_cloned.write().await;

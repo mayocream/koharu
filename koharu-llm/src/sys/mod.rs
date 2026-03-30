@@ -3,6 +3,7 @@ use std::path::{Path, PathBuf};
 use std::sync::OnceLock;
 
 use anyhow::{Context, Result, anyhow, bail};
+use koharu_runtime::RuntimeManager;
 
 #[allow(warnings)]
 mod generated {
@@ -62,14 +63,14 @@ const LIB_NAMES: [&str; 4] = [
 
 static LIBRARIES: OnceLock<LoadedLibraries> = OnceLock::new();
 
-pub fn initialize() -> Result<()> {
-    let runtime_dir = koharu_runtime::llama_runtime_dir().context(
-        "failed to resolve the llama runtime directory; call `koharu_runtime::initialize()` first",
+pub fn initialize(runtime: &RuntimeManager) -> Result<()> {
+    let runtime_dir = runtime.llama_directory().context(
+        "failed to resolve the llama runtime directory; call `koharu_runtime::prepare()` first",
     )?;
 
     if !runtime_dir.exists() {
         bail!(
-            "runtime directory `{}` does not exist; call `koharu_runtime::initialize()` first",
+            "runtime directory `{}` does not exist; call `koharu_runtime::prepare()` first",
             runtime_dir.display()
         );
     }
@@ -157,7 +158,7 @@ fn register_backends(ggml: &generated::ggml::ggml, dir: &Path) -> Result<()> {
 
 fn libraries() -> &'static LoadedLibraries {
     LIBRARIES.get().expect(
-        "koharu-llm runtime libraries are not initialized; call `koharu_runtime::initialize()` first",
+        "koharu-llm runtime libraries are not initialized; call `koharu_runtime::prepare()` first",
     )
 }
 

@@ -1,5 +1,6 @@
 use clap::Parser;
 use koharu_ml::manga_ocr::MangaOcr;
+use koharu_runtime::{ComputePolicy, RuntimeManager, Settings};
 
 #[path = "common.rs"]
 mod common;
@@ -21,7 +22,15 @@ async fn main() -> anyhow::Result<()> {
     let image = image::open(&cli.input)?;
     let images = vec![image];
 
-    let model = MangaOcr::load(cli.cpu).await?;
+    let runtime = RuntimeManager::new(
+        Settings::default(),
+        if cli.cpu {
+            ComputePolicy::CpuOnly
+        } else {
+            ComputePolicy::PreferGpu
+        },
+    )?;
+    let model = MangaOcr::load(&runtime, cli.cpu).await?;
     let output = model
         .inference(&images)?
         .into_iter()

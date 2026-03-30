@@ -3,6 +3,8 @@ use std::path::Path;
 use anyhow::Result;
 use koharu_ml::font_detector::{FontDetector, TextDirection};
 
+mod support;
+
 #[tokio::test]
 #[ignore]
 async fn font_detect_inference_on_dialog_fixture() -> Result<()> {
@@ -13,7 +15,8 @@ async fn font_detect_inference_on_dialog_fixture() -> Result<()> {
         fixture.display()
     );
 
-    let detector = FontDetector::load(false).await?;
+    let runtime = support::cpu_runtime();
+    let detector = FontDetector::load(&runtime, false).await?;
     let image = image::open(&fixture)?;
     let mut predictions = detector.inference(&[image], 5)?;
 

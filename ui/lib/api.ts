@@ -10,6 +10,7 @@ import {
 import { reportRpcError } from '@/lib/errors'
 import type {
   ApiKeyResponse,
+  BootstrapConfig,
   DocumentDetail,
   DocumentSummary,
   ExportResult,
@@ -255,6 +256,24 @@ export const createTempTextBlockId = () =>
   `temp:${globalThis.crypto?.randomUUID?.() ?? Math.random().toString(36).slice(2)}`
 
 export const api = {
+  async getBootstrapConfig(): Promise<BootstrapConfig> {
+    return fetchJson<BootstrapConfig>('/config')
+  },
+
+  async saveBootstrapConfig(config: BootstrapConfig): Promise<BootstrapConfig> {
+    return fetchJson<BootstrapConfig>('/config', {
+      method: 'PUT',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify(config),
+    })
+  },
+
+  async initializeBootstrap(): Promise<void> {
+    await fetchJson<void>('/initialize', {
+      method: 'POST',
+    })
+  },
+
   async appVersion(): Promise<string> {
     const meta = await fetchJson<MetaInfo>('/meta')
     return meta.version

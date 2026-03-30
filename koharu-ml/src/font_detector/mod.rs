@@ -4,6 +4,7 @@ use crate::{define_models, device, loading};
 use anyhow::{Context, Result};
 use candle_core::{DType, Device, Tensor};
 use image::{DynamicImage, GenericImageView, imageops::FilterType};
+use koharu_runtime::RuntimeManager;
 use rayon::prelude::*;
 
 mod models;
@@ -18,6 +19,21 @@ define_models! {
     FontNames => ("fffonion/yuzumarker-font-detection", "font-labels-ex.json"),
 }
 
+koharu_runtime::declare_hf_model_package!(
+    id: "model:font-detector:weights",
+    repo: "fffonion/yuzumarker-font-detection",
+    file: "yuzumarker-font-detection.safetensors",
+    bootstrap: true,
+    order: 140,
+);
+koharu_runtime::declare_hf_model_package!(
+    id: "model:font-detector:labels",
+    repo: "fffonion/yuzumarker-font-detection",
+    file: "font-labels-ex.json",
+    bootstrap: true,
+    order: 141,
+);
+
 pub use koharu_core::{FontPrediction, NamedFontPrediction, TextDirection};
 
 pub struct FontDetector {
@@ -27,18 +43,23 @@ pub struct FontDetector {
 }
 
 impl FontDetector {
-    pub async fn load(cpu: bool) -> Result<Self> {
-        Self::load_with_kind(cpu, ModelKind::default()).await
+    pub async fn load(runtime: &RuntimeManager, cpu: bool) -> Result<Self> {
+        Self::load_with_kind(runtime, cpu, ModelKind::default()).await
     }
 
-    pub async fn load_with_kind(cpu: bool, kind: ModelKind) -> Result<Self> {
+    pub async fn load_with_kind(
+        runtime: &RuntimeManager,
+        cpu: bool,
+        kind: ModelKind,
+    ) -> Result<Self> {
         let device = device(cpu)?;
-        let model =
-            loading::load_mmaped_safetensors(Manifest::FontWeights.get(), &device, move |vb| {
-                models::Model::load(vb.pp("model._orig_mod.model"), kind)
-            })
-            .await?;
-        let labels = FontLabels::load().await?;
+        let model = loading::load_mmaped_safetensors(
+            Manifest::FontWeights.get(runtime),
+            &device,
+            move |vb| models::Model::load(vb.pp("model._orig_mod.model"), kind),
+        )
+        .await?;
+        let labels = FontLabels::load(runtime).await?;
 
         Ok(Self {
             model,
@@ -163,8 +184,8 @@ pub struct FontLabels {
 }
 
 impl FontLabels {
-    pub async fn load() -> Result<Self> {
-        let path = loading::resolve_manifest_path(Manifest::FontNames.get()).await?;
+    pub async fn load(runtime: &RuntimeManager) -> Result<Self> {
+        let path = loading::resolve_manifest_path(Manifest::FontNames.get(runtime)).await?;
         Self::from_path(&path)
     }
 

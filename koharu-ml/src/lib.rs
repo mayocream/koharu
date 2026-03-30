@@ -14,7 +14,6 @@ use anyhow::Result;
 use candle_core::utils::metal_is_available;
 
 pub use candle_core::Device;
-pub use koharu_runtime::hf_hub::set_cache_dir;
 
 pub fn device(cpu: bool) -> Result<Device> {
     if cpu {

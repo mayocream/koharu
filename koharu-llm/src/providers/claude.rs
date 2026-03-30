@@ -1,15 +1,16 @@
 use std::future::Future;
 use std::pin::Pin;
+use std::sync::Arc;
 
+use reqwest_middleware::ClientWithMiddleware;
 use serde::Serialize;
-
-use koharu_runtime::http::http_client;
 
 use crate::{Language, prompt::system_prompt};
 
 use super::{AnyProvider, ensure_provider_success};
 
 pub struct ClaudeProvider {
+    pub http_client: Arc<ClientWithMiddleware>,
     pub api_key: String,
 }
 
@@ -45,7 +46,8 @@ impl AnyProvider for ClaudeProvider {
                 }],
             };
 
-            let response = http_client()
+            let response = self
+                .http_client
                 .post("https://api.anthropic.com/v1/messages")
                 .header("x-api-key", &self.api_key)
                 .header("anthropic-version", "2023-06-01")

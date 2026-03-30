@@ -8,6 +8,7 @@ use image::DynamicImage;
 use koharu_core::{Document, FontPrediction, SerializableDynamicImage, TextBlock, TextDirection};
 use koharu_llm::paddleocr_vl::{self as paddleocr_vl_llm, PaddleOcrVl, PaddleOcrVlTask};
 use koharu_llm::safe::llama_backend::LlamaBackend;
+use koharu_runtime::RuntimeManager;
 
 use koharu_ml::comic_text_detector::{self, ComicTextDetector, crop_text_block_bbox};
 use koharu_ml::font_detector::{self, FontDetector};
@@ -87,13 +88,17 @@ pub struct Model {
 }
 
 impl Model {
-    pub async fn new(cpu: bool, backend: Arc<LlamaBackend>) -> Result<Self> {
+    pub async fn new(
+        runtime: &RuntimeManager,
+        cpu: bool,
+        backend: Arc<LlamaBackend>,
+    ) -> Result<Self> {
         Ok(Self {
-            layout_detector: PPDocLayoutV3::load(cpu).await?,
-            segmenter: ComicTextDetector::load_segmentation_only(cpu).await?,
-            ocr: Mutex::new(PaddleOcrVl::load(cpu, backend).await?),
-            lama: Lama::load(cpu).await?,
-            font_detector: FontDetector::load(cpu).await?,
+            layout_detector: PPDocLayoutV3::load(runtime, cpu).await?,
+            segmenter: ComicTextDetector::load_segmentation_only(runtime, cpu).await?,
+            ocr: Mutex::new(PaddleOcrVl::load(runtime, cpu, backend).await?),
+            lama: Lama::load(runtime, cpu).await?,
+            font_detector: FontDetector::load(runtime, cpu).await?,
         })
     }
 
@@ -250,12 +255,12 @@ impl Model {
     }
 }
 
-pub async fn prefetch() -> Result<()> {
-    pp_doclayout_v3::prefetch().await?;
-    comic_text_detector::prefetch_segmentation().await?;
-    paddleocr_vl_llm::prefetch().await?;
-    lama::prefetch().await?;
-    font_detector::prefetch().await?;
+pub async fn prefetch(runtime: &RuntimeManager) -> Result<()> {
+    pp_doclayout_v3::prefetch(runtime).await?;
+    comic_text_detector::prefetch_segmentation(runtime).await?;
+    paddleocr_vl_llm::prefetch(runtime).await?;
+    lama::prefetch(runtime).await?;
+    font_detector::prefetch(runtime).await?;
 
     Ok(())
 }

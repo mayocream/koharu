@@ -9,6 +9,7 @@ use anyhow::{Context, Result};
 use candle_core::{DType, Device, IndexOp, Tensor};
 use candle_nn::ops::sigmoid;
 use image::{DynamicImage, GrayImage, imageops::FilterType};
+use koharu_runtime::RuntimeManager;
 
 use crate::{device, loading};
 
@@ -70,8 +71,8 @@ struct PreparedInput {
 }
 
 impl MangaTextSegmentation {
-    pub async fn load(cpu: bool) -> Result<Self> {
-        let safetensors = resolve_safetensors_path().await?;
+    pub async fn load(runtime: &RuntimeManager, cpu: bool) -> Result<Self> {
+        let safetensors = resolve_safetensors_path(runtime).await?;
         Self::load_from_path(&safetensors, cpu)
     }
 
@@ -189,13 +190,15 @@ impl MangaTextSegmentation {
     }
 }
 
-pub async fn prefetch() -> Result<()> {
-    let _ = resolve_safetensors_path().await?;
+pub async fn prefetch(runtime: &RuntimeManager) -> Result<()> {
+    let _ = resolve_safetensors_path(runtime).await?;
     Ok(())
 }
 
-async fn resolve_safetensors_path() -> Result<PathBuf> {
-    koharu_runtime::download::model(REPO, SAFETENSORS_FILENAME)
+async fn resolve_safetensors_path(runtime: &RuntimeManager) -> Result<PathBuf> {
+    runtime
+        .artifacts()
+        .huggingface_model(REPO, SAFETENSORS_FILENAME)
         .await
         .with_context(|| format!("failed to download {SAFETENSORS_FILENAME} from {REPO}"))
 }

@@ -32,6 +32,8 @@ import {
   getActivePresetConfig,
   type LocalLlmPreset,
 } from '@/lib/stores/preferencesStore'
+import { supportedLanguages } from '@/lib/i18n'
+import type { BootstrapConfig } from '@/lib/protocol'
 
 const THEME_OPTIONS = [
   { value: 'light', icon: SunIcon, labelKey: 'settings.themeLight' },
@@ -68,10 +70,7 @@ const inputClass =
 export default function SettingsPage() {
   const { t, i18n } = useTranslation()
   const { theme, setTheme } = useTheme()
-  const locales = useMemo(
-    () => Object.keys(i18n.options.resources || {}),
-    [i18n.options.resources],
-  )
+  const locales = useMemo(() => supportedLanguages, [])
   const [deviceInfo, setDeviceInfo] = useState<{ mlDevice: string }>()
   const apiKeys = usePreferencesStore((state) => state.apiKeys)
   const setApiKey = usePreferencesStore((state) => state.setApiKey)
@@ -83,12 +82,16 @@ export default function SettingsPage() {
     {},
   )
   const pendingApiKeysRef = useRef<Record<string, string>>({})
+  const proxySaveTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
+  const pendingBootstrapConfigRef = useRef<BootstrapConfig | null>(null)
 
   const [showAdvanced, setShowAdvanced] = useState(false)
   const [pingState, setPingState] = useState<{
     loading: boolean
     result?: { ok: boolean; count: number; latency: number; error?: string }
   }>({ loading: false })
+  const [bootstrapConfig, setBootstrapConfig] =
+    useState<BootstrapConfig | null>(null)
 
   const activeConfig = getActivePresetConfig(localLlm)
 
@@ -107,11 +110,33 @@ export default function SettingsPage() {
     void loadDeviceInfo()
   }, [])
 
+  useEffect(() => {
+    const loadBootstrapConfig = async () => {
+      try {
+        const config = await api.getBootstrapConfig()
+        setBootstrapConfig(config)
+      } catch (error) {
+        console.error('Failed to load bootstrap config', error)
+      }
+    }
+
+    void loadBootstrapConfig()
+  }, [])
+
   const persistApiKey = async (provider: string, value: string) => {
     try {
       await api.setApiKey(provider, value)
     } catch (error) {
       console.error(`Failed to save API key for ${provider}`, error)
+    }
+  }
+
+  const persistBootstrapConfig = async (nextConfig: BootstrapConfig) => {
+    try {
+      const saved = await api.saveBootstrapConfig(nextConfig)
+      setBootstrapConfig(saved)
+    } catch (error) {
+      console.error('Failed to save bootstrap config', error)
     }
   }
 
@@ -131,11 +156,28 @@ export default function SettingsPage() {
     void persistApiKey(provider, pendingValue)
   }
 
+  const flushProxySave = () => {
+    const existingTimer = proxySaveTimerRef.current
+    if (existingTimer) {
+      clearTimeout(existingTimer)
+      proxySaveTimerRef.current = null
+    }
+
+    const pendingConfig = pendingBootstrapConfigRef.current
+    if (!pendingConfig) {
+      return
+    }
+
+    pendingBootstrapConfigRef.current = null
+    void persistBootstrapConfig(pendingConfig)
+  }
+
   useEffect(() => {
     return () => {
       Object.keys(saveTimersRef.current).forEach((provider) => {
         flushApiKeySave(provider)
       })
+      flushProxySave()
     }
   }, [])
 
@@ -151,6 +193,29 @@ export default function SettingsPage() {
     saveTimersRef.current[provider] = setTimeout(() => {
       delete saveTimersRef.current[provider]
       flushApiKeySave(provider)
+    }, 300)
+  }
+
+  const handleProxyChange = (value: string) => {
+    if (!bootstrapConfig) return
+
+    const nextConfig: BootstrapConfig = {
+      ...bootstrapConfig,
+      http: {
+        proxy: value.trim() ? value : null,
+      },
+    }
+
+    setBootstrapConfig(nextConfig)
+    pendingBootstrapConfigRef.current = nextConfig
+
+    if (proxySaveTimerRef.current) {
+      clearTimeout(proxySaveTimerRef.current)
+    }
+
+    proxySaveTimerRef.current = setTimeout(() => {
+      proxySaveTimerRef.current = null
+      flushProxySave()
     }, 300)
   }
 
@@ -261,6 +326,30 @@ export default function SettingsPage() {
                   ))}
                 </SelectContent>
               </Select>
+            </section>
+
+            <section className='mb-8'>
+              <h2 className='text-foreground mb-1 text-sm font-bold'>
+                {t('settings.httpProxy')}
+              </h2>
+              <p className='text-muted-foreground mb-4 text-sm'>
+                {t('settings.httpProxyDescription')}
+              </p>
+
+              <div className='space-y-1'>
+                <label className='text-foreground text-sm'>
+                  {t('bootstrap.proxyUrl')}
+                </label>
+                <input
+                  type='url'
+                  value={bootstrapConfig?.http.proxy ?? ''}
+                  onChange={(e) => handleProxyChange(e.target.value)}
+                  onBlur={flushProxySave}
+                  placeholder={t('bootstrap.proxyUrlPlaceholder')}
+                  disabled={!bootstrapConfig}
+                  className={inputClass}
+                />
+              </div>
             </section>
 
             {/* Device Section */}

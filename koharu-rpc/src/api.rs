@@ -22,27 +22,27 @@ use koharu_app::{
     state_tx::{self, ChangedField},
 };
 use koharu_core::{
-    ApiKeyGetPayload, ApiKeyResponse, ApiKeySetPayload, ApiKeyValue, CreateTextBlock, Document,
-    DocumentDetail, DocumentSummary, ExportLayer, ExportResult, FileEntry, FontFaceInfo,
-    IndexPayload, InpaintPartialPayload, InpaintRegion, JobState, JobStatus, LlmLoadPayload,
-    LlmLoadRequest, LlmModelInfo, LlmPingRequest, LlmPingResponse, MaskRegionRequest, MetaInfo,
-    OpenDocumentsPayload, PipelineJobRequest, Region, RenderPayload, RenderRequest,
-    SerializableDynamicImage, TextBlock, TextBlockDetail, TextBlockPatch, TranslateRequest,
-    UpdateBrushLayerPayload, UpdateInpaintMaskPayload,
+    ApiKeyGetPayload, ApiKeyResponse, ApiKeySetPayload, ApiKeyValue, BootstrapConfig,
+    CreateTextBlock, Document, DocumentDetail, DocumentSummary, ExportLayer, ExportResult,
+    FileEntry, FontFaceInfo, IndexPayload, InpaintPartialPayload, InpaintRegion, JobState,
+    JobStatus, LlmLoadPayload, LlmLoadRequest, LlmModelInfo, LlmPingRequest, LlmPingResponse,
+    MaskRegionRequest, MetaInfo, OpenDocumentsPayload, PipelineJobRequest, Region, RenderPayload,
+    RenderRequest, SerializableDynamicImage, TextBlock, TextBlockDetail, TextBlockPatch,
+    TranslateRequest, UpdateBrushLayerPayload, UpdateInpaintMaskPayload,
 };
 use koharu_psd::{PsdExportOptions, TextLayerMode};
 use serde::Deserialize;
 
 use crate::{
     events::{ApiEvent, EventHub},
-    shared::{SharedResources, get_resources},
+    shared::{SharedState, get_resources},
 };
 
 const MAX_BODY_SIZE: usize = 1024 * 1024 * 1024;
 
 #[derive(Clone)]
 pub struct ApiState {
-    pub resources: SharedResources,
+    pub resources: SharedState,
     pub events: EventHub,
 }
 
@@ -52,10 +52,12 @@ impl ApiState {
     }
 }
 
-pub fn router(resources: SharedResources, events: EventHub) -> Router {
+pub fn router(resources: SharedState, events: EventHub) -> Router {
     let state = ApiState { resources, events };
 
     Router::new()
+        .route("/config", get(get_config).put(put_config))
+        .route("/initialize", post(initialize_app))
         .route("/meta", get(get_meta))
         .route("/fonts", get(get_fonts))
         .route("/documents", get(list_documents))
@@ -140,6 +142,10 @@ impl ApiError {
         Self::new(StatusCode::NOT_FOUND, message)
     }
 
+    fn conflict(message: impl Into<String>) -> Self {
+        Self::new(StatusCode::CONFLICT, message)
+    }
+
     fn service_unavailable(error: anyhow::Error) -> Self {
         Self::new(StatusCode::SERVICE_UNAVAILABLE, error.to_string())
     }
@@ -183,6 +189,33 @@ struct LayerQuery {
 struct LlmModelsQuery {
     language: Option<String>,
     openai_compatible_base_url: Option<String>,
+}
+
+async fn get_config(State(state): State<ApiState>) -> ApiResult<Json<BootstrapConfig>> {
+    let config = state.resources.get_config().map_err(ApiError::internal)?;
+    Ok(Json(config))
+}
+
+async fn put_config(
+    State(state): State<ApiState>,
+    Json(config): Json<BootstrapConfig>,
+) -> ApiResult<Json<BootstrapConfig>> {
+    let saved = state.resources.put_config(config).map_err(ApiError::from)?;
+    Ok(Json(saved))
+}
+
+async fn initialize_app(State(state): State<ApiState>) -> ApiResult<StatusCode> {
+    match state.resources.initialize().await {
+        Ok(()) => Ok(StatusCode::NO_CONTENT),
+        Err(error) => {
+            let message = error.to_string();
+            if message.contains("already in progress") {
+                Err(ApiError::conflict(message))
+            } else {
+                Err(ApiError::internal(error))
+            }
+        }
+    }
 }
 
 async fn get_meta(State(state): State<ApiState>) -> ApiResult<Json<MetaInfo>> {
@@ -593,8 +626,17 @@ async fn offload_llm(State(state): State<ApiState>) -> ApiResult<Json<koharu_cor
     Ok(Json(resources.llm.snapshot().await))
 }
 
-async fn ping_llm(Json(request): Json<LlmPingRequest>) -> ApiResult<Json<LlmPingResponse>> {
-    match operations::llm_ping(&request.base_url, request.api_key.as_deref()).await {
+async fn ping_llm(
+    State(state): State<ApiState>,
+    Json(request): Json<LlmPingRequest>,
+) -> ApiResult<Json<LlmPingResponse>> {
+    match operations::llm_ping(
+        state.resources.runtime().http_client(),
+        &request.base_url,
+        request.api_key.as_deref(),
+    )
+    .await
+    {
         Ok(result) => Ok(Json(LlmPingResponse {
             ok: true,
             models: result.models,

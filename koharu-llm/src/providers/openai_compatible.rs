@@ -1,10 +1,10 @@
 use std::future::Future;
 use std::pin::Pin;
+use std::sync::Arc;
 use std::time::Instant;
 
+use reqwest_middleware::ClientWithMiddleware;
 use serde::{Deserialize, Serialize};
-
-use koharu_runtime::http::http_client;
 
 use crate::{Language, prompt::system_prompt};
 
@@ -12,6 +12,7 @@ use super::{AnyProvider, ensure_provider_success};
 
 #[derive(Debug, Clone)]
 pub struct OpenAiCompatibleProvider {
+    pub http_client: Arc<ClientWithMiddleware>,
     pub base_url: String,
     pub api_key: Option<String>,
     pub temperature: Option<f64>,
@@ -53,9 +54,13 @@ fn normalized_base_url(base_url: &str) -> anyhow::Result<String> {
     Ok(normalized)
 }
 
-pub async fn list_models(base_url: &str, api_key: Option<&str>) -> anyhow::Result<Vec<String>> {
+pub async fn list_models(
+    http_client: Arc<ClientWithMiddleware>,
+    base_url: &str,
+    api_key: Option<&str>,
+) -> anyhow::Result<Vec<String>> {
     let endpoint = format!("{}/models", normalized_base_url(base_url)?);
-    let mut request = http_client().get(endpoint);
+    let mut request = http_client.get(endpoint);
 
     if let Some(api_key) = api_key.filter(|value| !value.trim().is_empty()) {
         request = request.bearer_auth(api_key);
@@ -83,11 +88,15 @@ pub struct PingResult {
     pub latency_ms: u64,
 }
 
-pub async fn ping(base_url: &str, api_key: Option<&str>) -> anyhow::Result<PingResult> {
+pub async fn ping(
+    http_client: Arc<ClientWithMiddleware>,
+    base_url: &str,
+    api_key: Option<&str>,
+) -> anyhow::Result<PingResult> {
     let start = Instant::now();
     let models = tokio::time::timeout(
         std::time::Duration::from_secs(5),
-        list_models(base_url, api_key),
+        list_models(http_client, base_url, api_key),
     )
     .await
     .map_err(|_| anyhow::anyhow!("Connection timed out after 5 seconds"))??;
@@ -124,7 +133,7 @@ impl AnyProvider for OpenAiCompatibleProvider {
             };
 
             let endpoint = format!("{}/chat/completions", normalized_base_url(&self.base_url)?);
-            let mut request = http_client().post(endpoint);
+            let mut request = self.http_client.post(endpoint);
             if let Some(api_key) = self
                 .api_key
                 .as_deref()

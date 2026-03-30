@@ -12,6 +12,7 @@ use imageproc::{
     filter::gaussian_blur_f32, morphology::dilate, point::Point,
 };
 use koharu_core::TextBlock;
+use koharu_runtime::RuntimeManager;
 use tracing::instrument;
 
 use crate::{define_models, device, loading};
@@ -19,6 +20,14 @@ use crate::{define_models, device, loading};
 define_models! {
     Lama => ("mayocream/lama-manga", "lama-manga.safetensors"),
 }
+
+koharu_runtime::declare_hf_model_package!(
+    id: "model:lama:weights",
+    repo: "mayocream/lama-manga",
+    file: "lama-manga.safetensors",
+    bootstrap: true,
+    order: 130,
+);
 
 const BALLOON_CANNY_LOW: f32 = 70.0;
 const BALLOON_CANNY_HIGH: f32 = 140.0;
@@ -42,12 +51,13 @@ pub struct Lama {
 }
 
 impl Lama {
-    pub async fn load(cpu: bool) -> Result<Self> {
+    pub async fn load(runtime: &RuntimeManager, cpu: bool) -> Result<Self> {
         let device = device(cpu)?;
-        let model = loading::load_buffered_safetensors(Manifest::Lama.get(), &device, |vb| {
-            model::Lama::load(&vb)
-        })
-        .await?;
+        let model =
+            loading::load_buffered_safetensors(Manifest::Lama.get(runtime), &device, |vb| {
+                model::Lama::load(&vb)
+            })
+            .await?;
 
         Ok(Self { model, device })
     }

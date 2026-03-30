@@ -1,26 +1,26 @@
-use std::{path::PathBuf, sync::Arc};
+use std::sync::{Arc, Mutex as StdMutex};
 
 use anyhow::{Context, Result};
 use clap::Parser;
-use once_cell::sync::{Lazy, OnceCell};
 use rfd::MessageDialog;
-use tauri::{Manager, WebviewWindowBuilder};
-use tokio::{net::TcpListener, sync::RwLock};
+use tauri::{AppHandle, Manager, WebviewWindowBuilder};
+use tokio::{
+    net::TcpListener,
+    sync::{RwLock, watch},
+};
 use tracing_subscriber::fmt::format::FmtSpan;
 
-use koharu_app::{AppResources, llm, ml, renderer::Renderer};
-use koharu_core::State;
+use koharu_app::{
+    AppResources,
+    config::{self as app_config, AppConfig},
+    llm, ml,
+    renderer::Renderer,
+};
+use koharu_core::{BootstrapConfig, State};
 use koharu_llm::safe::llama_backend::LlamaBackend;
 use koharu_ml::{cuda_is_available, device};
-use koharu_rpc::{SharedResources, server};
-
-static APP_ROOT: Lazy<PathBuf> = Lazy::new(|| {
-    dirs::data_local_dir()
-        .map(|path| path.join("Koharu"))
-        .unwrap_or_default()
-});
-static MODEL_ROOT: Lazy<PathBuf> = Lazy::new(|| APP_ROOT.join("models"));
-static LLAMA_BACKEND: OnceCell<Arc<LlamaBackend>> = OnceCell::new();
+use koharu_rpc::{BootstrapHooks, SharedState, server};
+use koharu_runtime::{ComputePolicy, RuntimeManager};
 
 #[derive(Parser)]
 #[command(version = crate::version::APP_VERSION, about)]
@@ -59,14 +59,84 @@ struct Cli {
     debug: bool,
 }
 
-fn initialize(headless: bool, _debug: bool) -> Result<()> {
+#[derive(Clone)]
+struct BootstrapController {
+    resources: Arc<tokio::sync::OnceCell<AppResources>>,
+    runtime_tx: watch::Sender<RuntimeManager>,
+    init_lock: Arc<tokio::sync::Mutex<()>>,
+    handle: Arc<StdMutex<Option<AppHandle>>>,
+    cpu: bool,
+    headless: bool,
+}
+
+impl BootstrapController {
+    fn get_config(&self) -> Result<BootstrapConfig> {
+        Ok(app_config::to_bootstrap_config(&app_config::load()?))
+    }
+
+    fn put_config(&self, config: BootstrapConfig) -> Result<BootstrapConfig> {
+        let config = app_config::from_bootstrap_config(config)?;
+        app_config::save(&config)?;
+        if self.resources.get().is_none() {
+            self.runtime_tx
+                .send_replace(runtime_from_config(config.clone(), self.cpu)?);
+        }
+        Ok(app_config::to_bootstrap_config(&config))
+    }
+
+    fn set_handle(&self, handle: AppHandle) {
+        if let Ok(mut slot) = self.handle.lock() {
+            *slot = Some(handle);
+        }
+    }
+
+    async fn initialize(&self) -> Result<()> {
+        if self.resources.get().is_some() {
+            if let Some(handle) = self.current_handle() {
+                show_main_window(&handle)?;
+            }
+            return Ok(());
+        }
+
+        let _guard = self
+            .init_lock
+            .try_lock()
+            .map_err(|_| anyhow::anyhow!("initialization already in progress"))?;
+
+        let runtime = self.runtime_tx.borrow().clone();
+        let settings = runtime.settings();
+        tracing::info!(
+            runtime_root = %settings.runtime.path.display(),
+            models_root = %settings.models.path.display(),
+            proxy = settings.http.proxy.as_ref().map(|value| value.as_str()).unwrap_or("<direct>"),
+            "initializing application resources"
+        );
+
+        self.resources
+            .get_or_try_init(|| {
+                let runtime = runtime.clone();
+                async move { build_resources(runtime, self.cpu, self.headless).await }
+            })
+            .await?;
+
+        if let Some(handle) = self.current_handle() {
+            show_main_window(&handle)?;
+        }
+
+        Ok(())
+    }
+
+    fn current_handle(&self) -> Option<AppHandle> {
+        self.handle.lock().ok().and_then(|slot| slot.clone())
+    }
+}
+
+fn initialize(headless: bool, debug: bool) -> Result<()> {
     #[cfg(target_os = "windows")]
     {
         let attached_to_parent = crate::windows::attach_parent_console();
 
-        // In GUI release builds, prefer the parent terminal if one exists.
-        // Only allocate a new console window for explicit console-oriented runs.
-        if !attached_to_parent && (headless || _debug) {
+        if !attached_to_parent && (headless || debug) {
             crate::windows::create_console_window();
         }
 
@@ -81,9 +151,6 @@ fn initialize(headless: bool, _debug: bool) -> Result<()> {
                 .from_env_lossy(),
         )
         .init();
-
-    // hook model cache dir
-    koharu_ml::set_cache_dir(MODEL_ROOT.to_path_buf())?;
 
     if headless {
         std::panic::set_hook(Box::new(|info| {
@@ -104,22 +171,35 @@ fn initialize(headless: bool, _debug: bool) -> Result<()> {
     Ok(())
 }
 
-async fn prefetch() -> Result<()> {
-    koharu_runtime::initialize()
-        .await
-        .context("Failed to initialize runtime packages")?;
-    ml::prefetch().await?;
+fn compute_policy(cpu: bool) -> ComputePolicy {
+    if cpu {
+        ComputePolicy::CpuOnly
+    } else {
+        ComputePolicy::PreferGpu
+    }
+}
 
+fn runtime_from_config(config: AppConfig, cpu: bool) -> Result<RuntimeManager> {
+    RuntimeManager::new(config, compute_policy(cpu))
+}
+
+fn load_runtime(cpu: bool) -> Result<RuntimeManager> {
+    runtime_from_config(app_config::load()?, cpu)
+}
+
+async fn prefetch(cpu: bool) -> Result<()> {
+    load_runtime(cpu)?
+        .prepare()
+        .await
+        .context("Failed to initialize runtime and model packages")?;
     Ok(())
 }
 
-fn shared_llama_backend() -> Result<Arc<LlamaBackend>> {
-    let backend = LLAMA_BACKEND.get_or_try_init(|| -> Result<Arc<LlamaBackend>> {
-        koharu_llm::sys::initialize().context("failed to initialize llama.cpp runtime bindings")?;
-        let backend = LlamaBackend::init().context("unable to initialize llama.cpp backend")?;
-        Ok(Arc::new(backend))
-    })?;
-    Ok(Arc::clone(backend))
+fn build_llama_backend(runtime: &RuntimeManager) -> Result<Arc<LlamaBackend>> {
+    koharu_llm::sys::initialize(runtime)
+        .context("failed to initialize llama.cpp runtime bindings")?;
+    let backend = LlamaBackend::init().context("unable to initialize llama.cpp backend")?;
+    Ok(Arc::new(backend))
 }
 
 fn warning(headless: bool, title: &str, description: &str) {
@@ -136,11 +216,15 @@ fn warning(headless: bool, title: &str, description: &str) {
         .show();
 }
 
-async fn build_resources(cpu: bool, headless: bool) -> Result<AppResources> {
+async fn build_resources(
+    runtime: RuntimeManager,
+    cpu: bool,
+    headless: bool,
+) -> Result<AppResources> {
     let mut cpu = cpu;
 
     if !cpu && cuda_is_available() {
-        match koharu_runtime::cuda_driver_version() {
+        match koharu_runtime::nvidia_driver_version() {
             Ok(version) if version.supports_cuda_13_1() => {
                 tracing::info!("NVIDIA driver reports CUDA {version} support");
             }
@@ -167,9 +251,10 @@ async fn build_resources(cpu: bool, headless: bool) -> Result<AppResources> {
         }
     }
 
-    koharu_runtime::initialize()
+    runtime
+        .prepare()
         .await
-        .context("Failed to initialize runtime packages")?;
+        .context("Failed to initialize runtime and model packages")?;
 
     if !cpu && cuda_is_available() {
         #[cfg(target_os = "windows")]
@@ -182,17 +267,18 @@ async fn build_resources(cpu: bool, headless: bool) -> Result<AppResources> {
         tracing::info!("CUDA is available and runtime packages were initialized");
     }
 
-    let llama_backend = shared_llama_backend()?;
+    let llama_backend = build_llama_backend(&runtime)?;
     let ml = Arc::new(
-        ml::Model::new(cpu, Arc::clone(&llama_backend))
+        ml::Model::new(&runtime, cpu, Arc::clone(&llama_backend))
             .await
             .context("Failed to initialize ML model")?,
     );
-    let llm = Arc::new(llm::Model::new(cpu, llama_backend));
+    let llm = Arc::new(llm::Model::new(runtime.clone(), cpu, llama_backend));
     let renderer = Arc::new(Renderer::new().context("Failed to initialize renderer")?);
     let state = Arc::new(RwLock::new(State::default()));
 
     Ok(AppResources {
+        runtime,
         state,
         ml,
         llm,
@@ -201,6 +287,67 @@ async fn build_resources(cpu: bool, headless: bool) -> Result<AppResources> {
         pipeline: Arc::new(RwLock::new(None)),
         version: crate::version::current(),
     })
+}
+
+fn create_window(handle: &AppHandle, label: &str) -> Result<()> {
+    if handle.get_webview_window(label).is_some() {
+        return Ok(());
+    }
+
+    let window_config = handle
+        .config()
+        .app
+        .windows
+        .iter()
+        .find(|window| window.label == label)
+        .cloned()
+        .with_context(|| format!("window config `{label}` not found"))?;
+
+    WebviewWindowBuilder::from_config(handle, &window_config)
+        .with_context(|| format!("failed to build `{label}` window"))?
+        .build()
+        .with_context(|| format!("failed to create `{label}` window"))?;
+
+    if let Some(window) = handle.get_webview_window(label) {
+        window.show().ok();
+    }
+
+    Ok(())
+}
+
+fn show_main_window(handle: &AppHandle) -> Result<()> {
+    create_window(handle, "main")?;
+    if let Some(main_window) = handle.get_webview_window("main") {
+        main_window.show().ok();
+    }
+
+    for label in ["splashscreen", "bootstrap"] {
+        if let Some(window) = handle.get_webview_window(label) {
+            window.close().ok();
+        }
+    }
+
+    Ok(())
+}
+
+fn make_bootstrap_hooks(controller: Arc<BootstrapController>) -> BootstrapHooks {
+    BootstrapHooks {
+        get_config: Arc::new({
+            let controller = Arc::clone(&controller);
+            move || controller.get_config()
+        }),
+        put_config: Arc::new({
+            let controller = Arc::clone(&controller);
+            move |config| controller.put_config(config)
+        }),
+        initialize: Arc::new({
+            let controller = Arc::clone(&controller);
+            move || {
+                let controller = Arc::clone(&controller);
+                Box::pin(async move { controller.initialize().await })
+            }
+        }),
+    }
 }
 
 pub async fn run() -> Result<()> {
@@ -215,13 +362,28 @@ pub async fn run() -> Result<()> {
     initialize(headless, debug)?;
 
     if download {
-        prefetch().await?;
+        prefetch(cpu).await?;
         return Ok(());
     }
 
+    let initial_runtime = load_runtime(cpu)?;
     let listener = TcpListener::bind(format!("127.0.0.1:{}", port.unwrap_or(0))).await?;
     let api_port = listener.local_addr()?.port();
-    let shared: SharedResources = Arc::new(tokio::sync::OnceCell::new());
+    let resources = Arc::new(tokio::sync::OnceCell::new());
+    let (runtime_tx, runtime_rx) = watch::channel(initial_runtime.clone());
+    let controller = Arc::new(BootstrapController {
+        resources: Arc::clone(&resources),
+        runtime_tx,
+        init_lock: Arc::new(tokio::sync::Mutex::new(())),
+        handle: Arc::new(StdMutex::new(None)),
+        cpu,
+        headless,
+    });
+    let shared = SharedState::new(
+        Arc::clone(&resources),
+        runtime_rx,
+        make_bootstrap_hooks(controller.clone()),
+    );
     let mut context = tauri::generate_context!();
     let shared_assets = crate::assets::share_context_assets(&mut context);
 
@@ -237,7 +399,10 @@ pub async fn run() -> Result<()> {
             }
         });
         shared
-            .get_or_try_init(|| async { build_resources(cpu, headless).await })
+            .get_or_try_init(|| {
+                let runtime = initial_runtime.clone();
+                async move { build_resources(runtime, cpu, headless).await }
+            })
             .await?;
         tokio::signal::ctrl_c().await?;
         return Ok(());
@@ -262,40 +427,38 @@ pub async fn run() -> Result<()> {
             });
 
             let handle = app.handle().clone();
+            controller.set_handle(handle.clone());
+
+            let runtime = initial_runtime.clone();
+            let needs_bootstrap = runtime.needs_bootstrap().with_context(|| {
+                format!(
+                    "failed to inspect bootstrap packages for runtime `{}` and models `{}`",
+                    runtime.settings().runtime.path.display(),
+                    runtime.settings().models.path.display()
+                )
+            })?;
+
+            if needs_bootstrap {
+                create_window(&handle, "bootstrap")?;
+            } else {
+                create_window(&handle, "splashscreen")?;
+                tauri::async_runtime::spawn({
+                    let controller = controller.clone();
+                    async move {
+                        controller
+                            .initialize()
+                            .await
+                            .expect("failed to build app resources");
+                    }
+                });
+            }
+
             tauri::async_runtime::spawn(async move {
                 handle
                     .plugin(tauri_plugin_updater::Builder::new().build())
                     .ok();
-
-                shared
-                    .get_or_try_init(|| async { build_resources(cpu, headless).await })
-                    .await
-                    .expect("failed to build app resources");
-
-                // Hidden webview still excutes JavaScript,
-                // which will trigger the API calls when bootstrapping (not ready).
-                // We manually create the webview ONLY after resources are ready.
-                // ref: https://github.com/tauri-apps/tauri/issues/10950
-                let main_config = handle
-                    .config()
-                    .app
-                    .windows
-                    .iter()
-                    .find(|window| window.label == "main")
-                    .cloned()
-                    .expect("main window config not found");
-                let main_window = WebviewWindowBuilder::from_config(&handle, &main_config)
-                    .expect("failed to build main window builder")
-                    .build()
-                    .expect("failed to create main window");
-
-                handle
-                    .get_webview_window("splashscreen")
-                    .expect("splashscreen window not found")
-                    .close()
-                    .ok();
-                main_window.show().ok();
             });
+
             Ok(())
         })
         .run(context)?;

@@ -223,7 +223,27 @@
     "deepseek": "DeepSeek",
     "unknown": "提供者"
   },
+  "bootstrap": {
+    "loading": "載入中",
+    "language": "語言",
+    "runtimePath": "執行階段路徑",
+    "modelsPath": "模型路徑",
+    "proxyUrl": "代理 URL",
+    "runtimePathPlaceholder": "執行階段路徑",
+    "modelsPathPlaceholder": "模型路徑",
+    "proxyUrlPlaceholder": "HTTP://127.0.0.1:7890",
+    "pathsRequired": "執行階段路徑與模型路徑為必填項。",
+    "failedLoadConfig": "設定載入失敗。",
+    "failed": "失敗",
+    "waitingForDownload": "等待下載",
+    "back": "返回",
+    "next": "下一步",
+    "init": "初始化",
+    "retryNow": "立即重試"
+  },
   "settings": {
+    "httpProxy": "HTTP 代理",
+    "httpProxyDescription": "用於執行階段與模型下載。更改會自動儲存。",
     "title": "設定",
     "appearance": "外觀",
     "appearanceDescription": "自訂 Koharu 在您裝置上的外觀。",

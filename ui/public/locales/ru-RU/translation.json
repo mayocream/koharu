@@ -223,7 +223,27 @@
     "deepseek": "DeepSeek",
     "unknown": "Провайдер"
   },
+  "bootstrap": {
+    "loading": "ЗАГРУЗКА",
+    "language": "ЯЗЫК",
+    "runtimePath": "ПУТЬ К СРЕДЕ",
+    "modelsPath": "ПУТЬ К МОДЕЛЯМ",
+    "proxyUrl": "URL ПРОКСИ",
+    "runtimePathPlaceholder": "ПУТЬ К СРЕДЕ",
+    "modelsPathPlaceholder": "ПУТЬ К МОДЕЛЯМ",
+    "proxyUrlPlaceholder": "HTTP://127.0.0.1:7890",
+    "pathsRequired": "ПУТЬ К СРЕДЕ И ПУТЬ К МОДЕЛЯМ ОБЯЗАТЕЛЬНЫ.",
+    "failedLoadConfig": "НЕ УДАЛОСЬ ЗАГРУЗИТЬ КОНФИГУРАЦИЮ.",
+    "failed": "СБОЙ",
+    "waitingForDownload": "ОЖИДАНИЕ ЗАГРУЗКИ",
+    "back": "НАЗАД",
+    "next": "ДАЛЕЕ",
+    "init": "СТАРТ",
+    "retryNow": "ПОВТОРИТЬ СЕЙЧАС"
+  },
   "settings": {
+    "httpProxy": "HTTP-прокси",
+    "httpProxyDescription": "Используется для загрузки среды и моделей. Изменения сохраняются автоматически.",
     "title": "Настройки",
     "appearance": "Внешний вид",
     "appearanceDescription": "Настройте внешний вид Koharu.",

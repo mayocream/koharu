@@ -1,11 +1,11 @@
-use std::fmt;
-use std::path::Path;
-
 use anyhow::{Context, Result, anyhow, bail};
 use libloading::Library;
+use serde::Deserialize;
+use std::fmt;
 
-use crate::archive;
-use crate::http::http_client;
+use crate::Runtime;
+use crate::archive::{self, ArchiveKind, ExtractPolicy};
+use crate::install::InstallState;
 use crate::loader::{add_runtime_search_path, preload_library};
 
 const CUDA_SUCCESS: i32 = 0;
@@ -14,12 +14,51 @@ const CUDA_13_1_DRIVER_VERSION: i32 = 13010;
 type CuInit = unsafe extern "C" fn(flags: u32) -> i32;
 type CuDriverGetVersion = unsafe extern "C" fn(driver_version: *mut i32) -> i32;
 
-// ── Public driver API ────────────────────────────────────────────────
-
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
 pub struct CudaDriverVersion {
     raw: i32,
 }
+
+#[derive(Debug, Deserialize)]
+struct PypiRelease {
+    urls: Vec<PypiFile>,
+}
+
+#[derive(Debug, Deserialize)]
+struct PypiFile {
+    filename: String,
+    url: String,
+}
+
+#[allow(dead_code)]
+struct WheelSpec {
+    package: &'static str,
+    windows_dylibs: &'static [&'static str],
+    linux_dylibs: &'static [&'static str],
+}
+
+const WHEELS: &[WheelSpec] = &[
+    WheelSpec {
+        package: "nvidia-cuda-runtime/13.1.80",
+        windows_dylibs: &["cudart64_13.dll"],
+        linux_dylibs: &["libcudart.so.13"],
+    },
+    WheelSpec {
+        package: "nvidia-cublas/13.2.1.1",
+        windows_dylibs: &["cublasLt64_13.dll", "cublas64_13.dll"],
+        linux_dylibs: &["libcublasLt.so.13", "libcublas.so.13"],
+    },
+    WheelSpec {
+        package: "nvidia-cufft/12.1.0.78",
+        windows_dylibs: &["cufft64_12.dll"],
+        linux_dylibs: &["libcufft.so.12"],
+    },
+    WheelSpec {
+        package: "nvidia-curand/10.4.1.81",
+        windows_dylibs: &["curand64_10.dll"],
+        linux_dylibs: &["libcurand.so.10"],
+    },
+];
 
 impl CudaDriverVersion {
     pub const fn from_raw(raw: i32) -> Self {
@@ -50,15 +89,15 @@ impl fmt::Display for CudaDriverVersion {
 }
 
 pub fn driver_version() -> Result<CudaDriverVersion> {
-    let lib_name = if cfg!(target_os = "windows") {
+    let library_name = if cfg!(target_os = "windows") {
         "nvcuda.dll"
     } else {
         "libcuda.so"
     };
 
     unsafe {
-        let library = Library::new(lib_name)
-            .with_context(|| format!("failed to load NVIDIA driver library {lib_name}"))?;
+        let library = Library::new(library_name)
+            .with_context(|| format!("failed to load NVIDIA driver library `{library_name}`"))?;
         let cu_init = *library
             .get::<CuInit>(b"cuInit\0")
             .context("failed to load cuInit from NVIDIA driver")?;
@@ -81,7 +120,82 @@ pub fn driver_version() -> Result<CudaDriverVersion> {
     }
 }
 
-pub(crate) fn is_available() -> bool {
+pub(crate) fn package_enabled(runtime: &Runtime) -> bool {
+    runtime.wants_gpu()
+        && driver_library_available()
+        && driver_version()
+            .map(|version| version.supports_cuda_13_1())
+            .unwrap_or(false)
+}
+
+pub(crate) fn package_present(runtime: &Runtime) -> Result<bool> {
+    let install_dir = install_dir(runtime);
+    let source_id = source_id()?;
+    let install = InstallState::new(&install_dir, &source_id);
+    if !install.is_current() {
+        return Ok(false);
+    }
+
+    Ok(WHEELS
+        .iter()
+        .flat_map(|wheel| wheel.dylibs().iter())
+        .all(|dylib| install_dir.join(dylib).exists()))
+}
+
+pub(crate) async fn package_prepare(runtime: &Runtime) -> Result<()> {
+    ensure_ready(runtime).await
+}
+
+pub(crate) async fn ensure_ready(runtime: &Runtime) -> Result<()> {
+    let install_dir = install_dir(runtime);
+    let source_id = source_id()?;
+    let install = InstallState::new(&install_dir, &source_id);
+
+    if !install.is_current() {
+        install.reset()?;
+
+        for wheel in WHEELS {
+            let asset = select_wheel(runtime, wheel).await?;
+            let archive = archive::fetch(runtime, &asset.url, &asset.filename).await?;
+            archive::extract(
+                &archive,
+                &install_dir,
+                ArchiveKind::Zip,
+                ExtractPolicy::Selected(wheel.dylibs()),
+            )?;
+        }
+
+        install.commit()?;
+    }
+
+    add_runtime_search_path(&install_dir)?;
+    for wheel in WHEELS {
+        for dylib in wheel.dylibs() {
+            let path = install_dir.join(dylib);
+            if path.exists() {
+                preload_library(&path)?;
+            }
+        }
+    }
+
+    Ok(())
+}
+
+crate::declare_native_package!(
+    id: "runtime:cuda",
+    bootstrap: true,
+    order: 10,
+    enabled: package_enabled,
+    present: package_present,
+    prepare: package_prepare,
+);
+
+struct WheelAsset {
+    url: String,
+    filename: String,
+}
+
+fn driver_library_available() -> bool {
     #[cfg(target_os = "windows")]
     return unsafe { Library::new("nvcuda.dll") }.is_ok();
 
@@ -92,37 +206,9 @@ pub(crate) fn is_available() -> bool {
     false
 }
 
-// ── Wheel installation ───────────────────────────────────────────────
-
-#[allow(dead_code)]
-struct CudaWheel {
-    name: &'static str,
-    windows_dylibs: &'static [&'static str],
-    linux_dylibs: &'static [&'static str],
+fn install_dir(runtime: &Runtime) -> std::path::PathBuf {
+    runtime.layout().runtime_package_dir("cuda")
 }
-
-const WHEELS: &[CudaWheel] = &[
-    CudaWheel {
-        name: "nvidia-cuda-runtime/13.1.80",
-        windows_dylibs: &["cudart64_13.dll"],
-        linux_dylibs: &["libcudart.so.13"],
-    },
-    CudaWheel {
-        name: "nvidia-cublas/13.2.1.1",
-        windows_dylibs: &["cublasLt64_13.dll", "cublas64_13.dll"],
-        linux_dylibs: &["libcublasLt.so.13", "libcublas.so.13"],
-    },
-    CudaWheel {
-        name: "nvidia-cufft/12.1.0.78",
-        windows_dylibs: &["cufft64_12.dll"],
-        linux_dylibs: &["libcufft.so.12"],
-    },
-    CudaWheel {
-        name: "nvidia-curand/10.4.1.81",
-        windows_dylibs: &["curand64_10.dll"],
-        linux_dylibs: &["libcurand.so.10"],
-    },
-];
 
 fn platform_tags() -> Result<&'static [&'static str]> {
     #[cfg(all(target_os = "windows", target_arch = "x86_64"))]
@@ -142,7 +228,7 @@ fn platform_tags() -> Result<&'static [&'static str]> {
     )
 }
 
-impl CudaWheel {
+impl WheelSpec {
     fn dylibs(&self) -> &'static [&'static str] {
         #[cfg(target_os = "windows")]
         return self.windows_dylibs;
@@ -156,74 +242,42 @@ impl CudaWheel {
 }
 
 fn source_id() -> Result<String> {
-    let wheels: Vec<&str> = WHEELS.iter().map(|w| w.name).collect();
+    let packages = WHEELS.iter().map(|wheel| wheel.package).collect::<Vec<_>>();
     Ok(format!(
         "cuda;platform={};wheels={}",
         platform_tags()?.join(","),
-        wheels.join(",")
+        packages.join(",")
     ))
 }
 
-pub(crate) async fn ensure_ready(root: &Path, downloads_dir: &Path) -> Result<()> {
-    let install_dir = root.join("cuda");
-    let source_id = source_id()?;
-
-    if !crate::is_up_to_date(&install_dir, &source_id) {
-        crate::reset_dir(&install_dir)?;
-
-        let tags = platform_tags()?;
-        for wheel in WHEELS {
-            let (url, filename) = select_wheel(wheel.name, tags).await?;
-            let archive = archive::download_cached(&url, &filename, downloads_dir).await?;
-            archive::extract_zip_selected(&archive, &install_dir, wheel.dylibs())?;
-        }
-
-        crate::mark_installed(&install_dir, &source_id)?;
-    }
-
-    add_runtime_search_path(&install_dir)?;
-    for wheel in WHEELS {
-        for dylib in wheel.dylibs() {
-            let path = install_dir.join(dylib);
-            if path.exists() {
-                preload_library(&path)?;
-            }
-        }
-    }
-
-    Ok(())
-}
-
-async fn select_wheel(package: &str, tags: &[&str]) -> Result<(String, String)> {
-    let (dist, version) = package
+async fn select_wheel(runtime: &Runtime, wheel: &WheelSpec) -> Result<WheelAsset> {
+    let (distribution, version) = wheel
+        .package
         .split_once('/')
-        .ok_or_else(|| anyhow!("invalid wheel package `{package}`"))?;
+        .ok_or_else(|| anyhow!("invalid wheel package `{}`", wheel.package))?;
 
-    let meta_url = format!("https://pypi.org/pypi/{dist}/{version}/json");
-    let json: serde_json::Value = http_client()
-        .get(&meta_url)
+    let metadata_url = format!("https://pypi.org/pypi/{distribution}/{version}/json");
+    let release: PypiRelease = runtime
+        .http_client()
+        .get(&metadata_url)
         .send()
         .await
-        .with_context(|| format!("failed to fetch `{meta_url}`"))?
+        .with_context(|| format!("failed to fetch `{metadata_url}`"))?
         .json()
         .await
-        .with_context(|| format!("failed to parse metadata for `{dist}`"))?;
+        .with_context(|| format!("failed to parse metadata for `{distribution}`"))?;
 
-    let files = json
-        .get("urls")
-        .and_then(|v| v.as_array())
-        .ok_or_else(|| anyhow!("bad PyPI json for `{dist}`"))?;
-
-    for file in files {
-        let filename = file.get("filename").and_then(|v| v.as_str()).unwrap_or("");
-        let url = file.get("url").and_then(|v| v.as_str()).unwrap_or("");
-
-        if filename.ends_with(".whl") && tags.iter().any(|tag| filename.contains(tag)) {
-            return Ok((url.to_string(), filename.to_string()));
+    let tags = platform_tags()?;
+    for file in release.urls {
+        if file.filename.ends_with(".whl") && tags.iter().any(|tag| file.filename.contains(tag)) {
+            return Ok(WheelAsset {
+                url: file.url,
+                filename: file.filename,
+            });
         }
     }
 
-    bail!("no wheel found for `{dist}` {version} on {tags:?}")
+    bail!("no wheel found for `{distribution}` {version} on {tags:?}")
 }
 
 #[cfg(test)]
@@ -241,7 +295,11 @@ mod tests {
     fn wheels_have_dylibs_for_current_platform() {
         for wheel in WHEELS {
             #[cfg(any(target_os = "windows", target_os = "linux"))]
-            assert!(!wheel.dylibs().is_empty(), "{} has no dylibs", wheel.name);
+            assert!(
+                !wheel.dylibs().is_empty(),
+                "{} has no dylibs",
+                wheel.package
+            );
         }
     }
 
@@ -258,7 +316,7 @@ mod tests {
 
         let all_dylibs: Vec<&str> = WHEELS
             .iter()
-            .flat_map(|w| w.dylibs().iter().copied())
+            .flat_map(|wheel| wheel.dylibs().iter().copied())
             .collect();
         for dylib in &all_dylibs {
             assert!(root.join(dylib).exists());

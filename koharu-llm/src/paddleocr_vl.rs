@@ -7,6 +7,7 @@ use std::time::Instant;
 
 use anyhow::{Context, Result, bail};
 use image::DynamicImage;
+use koharu_runtime::RuntimeManager;
 use minijinja::{Environment, context};
 use serde::{Deserialize, Serialize};
 
@@ -29,6 +30,21 @@ const DEFAULT_MEDIA_MARKER: &str = "<__media__>";
 const DEFAULT_GPU_LAYERS: u32 = 1000;
 const DEFAULT_MAX_NEW_TOKENS: usize = 128;
 const MAX_UBATCH: u32 = 512;
+
+koharu_runtime::declare_hf_model_package!(
+    id: "model:paddleocr-vl:weights",
+    repo: HF_REPO,
+    file: MODEL_FILENAME,
+    bootstrap: true,
+    order: 120,
+);
+koharu_runtime::declare_hf_model_package!(
+    id: "model:paddleocr-vl:mmproj",
+    repo: HF_REPO,
+    file: MMPROJ_FILENAME,
+    bootstrap: true,
+    order: 121,
+);
 
 static LOGGING_READY: Once = Once::new();
 
@@ -97,24 +113,36 @@ pub struct PaddleOcrVl {
 }
 
 impl PaddleOcrVl {
-    pub async fn load(cpu: bool, backend: Arc<LlamaBackend>) -> Result<Self> {
-        let files = download_model_files().await?;
-        tokio::task::spawn_blocking(move || Self::load_from_files(files, cpu, backend))
+    pub async fn load(
+        runtime: &RuntimeManager,
+        cpu: bool,
+        backend: Arc<LlamaBackend>,
+    ) -> Result<Self> {
+        let files = download_model_files(runtime).await?;
+        let runtime = runtime.clone();
+        tokio::task::spawn_blocking(move || Self::load_from_files(&runtime, files, cpu, backend))
             .await
             .context("failed to join PaddleOCR-VL loading task")?
     }
 
     pub fn load_from_dir(
+        runtime: &RuntimeManager,
         dir: impl AsRef<Path>,
         cpu: bool,
         backend: Arc<LlamaBackend>,
     ) -> Result<Self> {
         let files = resolve_local_model_files(dir.as_ref())?;
-        Self::load_from_files(files, cpu, backend)
+        Self::load_from_files(runtime, files, cpu, backend)
     }
 
-    fn load_from_files(files: ModelFiles, cpu: bool, backend: Arc<LlamaBackend>) -> Result<Self> {
-        crate::sys::initialize().context("failed to initialize llama.cpp runtime bindings")?;
+    fn load_from_files(
+        runtime: &RuntimeManager,
+        files: ModelFiles,
+        cpu: bool,
+        backend: Arc<LlamaBackend>,
+    ) -> Result<Self> {
+        crate::sys::initialize(runtime)
+            .context("failed to initialize llama.cpp runtime bindings")?;
 
         LOGGING_READY.call_once(|| {
             send_logs_to_tracing(LogOptions::default().with_logs_enabled(true));
@@ -347,15 +375,16 @@ impl PaddleOcrVl {
     }
 }
 
-pub async fn prefetch() -> Result<()> {
-    download_model_files().await?;
+pub async fn prefetch(runtime: &RuntimeManager) -> Result<()> {
+    download_model_files(runtime).await?;
     Ok(())
 }
 
-async fn download_model_files() -> Result<ModelFiles> {
+async fn download_model_files(runtime: &RuntimeManager) -> Result<ModelFiles> {
+    let artifacts = runtime.artifacts();
     let (model, mmproj) = tokio::try_join!(
-        koharu_runtime::download::model(HF_REPO, MODEL_FILENAME),
-        koharu_runtime::download::model(HF_REPO, MMPROJ_FILENAME),
+        artifacts.huggingface_model(HF_REPO, MODEL_FILENAME),
+        artifacts.huggingface_model(HF_REPO, MMPROJ_FILENAME),
     )?;
 
     Ok(ModelFiles { model, mmproj })

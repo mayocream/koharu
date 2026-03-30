@@ -1,23 +1,25 @@
-use std::path::{Path, PathBuf};
+use std::path::PathBuf;
 
 use anyhow::{Result, bail};
 
-use crate::archive;
+use crate::Runtime;
+use crate::archive::{self, ExtractPolicy};
+use crate::install::InstallState;
 use crate::loader::{add_runtime_search_path, preload_library};
 
 const LLAMA_CPP_TAG: &str = env!("LLAMA_CPP_TAG");
 const RELEASE_BASE_URL: &str = "https://github.com/ggml-org/llama.cpp/releases/download";
 
-#[derive(Debug, Clone, Copy)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
 #[allow(dead_code)]
-enum LlamaRuntime {
+enum LlamaDistribution {
     WindowsCuda13X64,
     WindowsVulkanX64,
     LinuxVulkanX64,
     MacosArm64,
 }
 
-impl LlamaRuntime {
+impl LlamaDistribution {
     #[allow(clippy::needless_return)]
     fn detect() -> Result<Self> {
         #[cfg(all(target_os = "windows", target_arch = "x86_64"))]
@@ -152,64 +154,95 @@ impl LlamaRuntime {
         }
     }
 
-    fn install_dir(self, root: &Path) -> PathBuf {
-        root.join("llama.cpp").join(LLAMA_CPP_TAG).join(self.id())
+    fn install_dir(self, runtime: &Runtime) -> PathBuf {
+        runtime
+            .layout()
+            .runtime_package_dir("llama.cpp")
+            .join(LLAMA_CPP_TAG)
+            .join(self.id())
     }
 
     fn source_id(self) -> String {
         format!("llama-{LLAMA_CPP_TAG}-{}", self.id())
     }
+}
 
-    fn is_zip_asset(asset: &str) -> bool {
-        asset.ends_with(".zip")
+pub(crate) fn package_enabled(_: &Runtime) -> bool {
+    LlamaDistribution::detect().is_ok()
+}
+
+pub(crate) fn package_present(runtime: &Runtime) -> Result<bool> {
+    let distribution = LlamaDistribution::detect()?;
+    let install_dir = distribution.install_dir(runtime);
+    let source_id = distribution.source_id();
+    let install = InstallState::new(&install_dir, &source_id);
+    if !install.is_current() {
+        return Ok(false);
     }
 
-    async fn install(self, install_dir: &Path, downloads_dir: &Path) -> Result<()> {
-        for asset in self.assets() {
+    Ok(distribution
+        .libraries()
+        .iter()
+        .all(|library| install_dir.join(library).exists()))
+}
+
+pub(crate) async fn package_prepare(runtime: &Runtime) -> Result<()> {
+    ensure_ready(runtime).await
+}
+
+pub(crate) async fn ensure_ready(runtime: &Runtime) -> Result<()> {
+    let distribution = LlamaDistribution::detect()?;
+    let install_dir = distribution.install_dir(runtime);
+    let source_id = distribution.source_id();
+    let install = InstallState::new(&install_dir, &source_id);
+
+    if !install.is_current() {
+        install.reset()?;
+
+        for asset in distribution.assets() {
             let url = format!("{RELEASE_BASE_URL}/{LLAMA_CPP_TAG}/{asset}");
-            let archive = archive::download_cached(&url, asset, downloads_dir).await?;
-            if Self::is_zip_asset(asset) {
-                archive::extract_zip(&archive, install_dir)?;
-            } else {
-                archive::extract_tar_gz(&archive, install_dir)?;
-            }
+            let archive = archive::fetch(runtime, &url, asset).await?;
+            let kind = archive::detect_kind(asset)?;
+            archive::extract(
+                &archive,
+                &install_dir,
+                kind,
+                ExtractPolicy::RuntimeLibraries,
+            )?;
         }
 
-        for lib in self.libraries() {
-            if !install_dir.join(lib).exists() {
+        for library in distribution.libraries() {
+            if !install_dir.join(library).exists() {
                 bail!(
-                    "required library `{lib}` missing from `{}`",
+                    "required library `{library}` missing from `{}`",
                     install_dir.display()
                 );
             }
         }
 
-        Ok(())
-    }
-}
-
-pub(crate) async fn ensure_ready(root: &Path, downloads_dir: &Path) -> Result<()> {
-    let runtime = LlamaRuntime::detect()?;
-    let install_dir = runtime.install_dir(root);
-    let source_id = runtime.source_id();
-
-    if !crate::is_up_to_date(&install_dir, &source_id) {
-        crate::reset_dir(&install_dir)?;
-        runtime.install(&install_dir, downloads_dir).await?;
-        crate::mark_installed(&install_dir, &source_id)?;
+        install.commit()?;
     }
 
     add_runtime_search_path(&install_dir)?;
-    for lib in runtime.libraries() {
-        preload_library(&install_dir.join(lib))?;
+    for library in distribution.libraries() {
+        preload_library(&install_dir.join(library))?;
     }
 
     Ok(())
 }
 
-pub(crate) fn runtime_dir(root: &Path) -> Result<PathBuf> {
-    Ok(LlamaRuntime::detect()?.install_dir(root))
+pub(crate) fn runtime_dir(runtime: &Runtime) -> Result<PathBuf> {
+    Ok(LlamaDistribution::detect()?.install_dir(runtime))
 }
+
+crate::declare_native_package!(
+    id: "runtime:llama",
+    bootstrap: true,
+    order: 20,
+    enabled: crate::llama::package_enabled,
+    present: crate::llama::package_present,
+    prepare: crate::llama::package_prepare,
+);
 
 #[cfg(test)]
 mod tests {
@@ -224,7 +257,7 @@ mod tests {
 
     #[test]
     fn detect_returns_a_variant_for_current_platform() {
-        let runtime = LlamaRuntime::detect().unwrap();
+        let runtime = LlamaDistribution::detect().unwrap();
         assert!(!runtime.id().is_empty());
         assert!(!runtime.assets().is_empty());
         assert!(!runtime.libraries().is_empty());
@@ -232,11 +265,15 @@ mod tests {
 
     #[test]
     fn install_dir_includes_tag_and_id() {
-        let root = Path::new("/tmp/rt");
-        let dir = LlamaRuntime::WindowsVulkanX64.install_dir(root);
+        let runtime = Runtime::new(
+            crate::Settings::from_paths("/tmp/rt", "/tmp/models"),
+            crate::ComputePolicy::CpuOnly,
+        )
+        .unwrap();
+        let dir = LlamaDistribution::WindowsVulkanX64.install_dir(&runtime);
         assert!(
             dir.ends_with(
-                Path::new("llama.cpp")
+                std::path::Path::new("llama.cpp")
                     .join(LLAMA_CPP_TAG)
                     .join("windows-vulkan-x64")
             )
@@ -247,14 +284,18 @@ mod tests {
     fn preload_order_matches_libraries() {
         let tempdir = tempfile::tempdir().unwrap();
         let root = tempdir.path();
-        let rt = LlamaRuntime::WindowsCuda13X64;
+        let runtime = LlamaDistribution::WindowsCuda13X64;
 
-        for lib in rt.libraries() {
-            touch(&root.join(lib));
+        for library in runtime.libraries() {
+            touch(&root.join(library));
         }
 
-        let paths: Vec<PathBuf> = rt.libraries().iter().map(|l| root.join(l)).collect();
-        assert!(paths.iter().all(|p| p.exists()));
-        assert_eq!(paths.len(), rt.libraries().len());
+        let paths: Vec<PathBuf> = runtime
+            .libraries()
+            .iter()
+            .map(|library| root.join(library))
+            .collect();
+        assert!(paths.iter().all(|path| path.exists()));
+        assert_eq!(paths.len(), runtime.libraries().len());
     }
 }

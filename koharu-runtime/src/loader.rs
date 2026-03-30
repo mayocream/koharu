@@ -1,5 +1,5 @@
 use std::ffi::OsStr;
-use std::path::Path;
+use std::path::{Path, PathBuf};
 
 use anyhow::{Context, Result};
 use libloading::Library;
@@ -19,14 +19,13 @@ pub(crate) fn add_runtime_search_path(path: &Path) -> Result<()> {
             SetDefaultDllDirectories,
         };
 
-        let path = path
-            .canonicalize()
-            .with_context(|| format!("failed to canonicalize `{}`", path.display()))?;
-        let wide = path
+        let canonical = canonicalize_path(path)?;
+        let wide = canonical
             .as_os_str()
             .encode_wide()
             .chain(std::iter::once(0))
             .collect::<Vec<_>>();
+
         unsafe {
             if SetDefaultDllDirectories(
                 LOAD_LIBRARY_SEARCH_USER_DIRS | LOAD_LIBRARY_SEARCH_SYSTEM32,
@@ -44,36 +43,36 @@ pub(crate) fn add_runtime_search_path(path: &Path) -> Result<()> {
                 );
             }
         }
+
         Ok(())
     }
 }
 
 pub(crate) fn preload_library(path: &Path) -> Result<()> {
-    let path = path
-        .canonicalize()
-        .with_context(|| format!("failed to canonicalize `{}`", path.display()))?;
-    let library = load_library(path.as_os_str())
-        .with_context(|| format!("failed to preload `{}`", path.display()))?;
+    let library = load_library_by_path(path)?;
     std::mem::forget(library);
     Ok(())
 }
 
 pub fn load_library_by_name(name: &str) -> Result<Library> {
-    load_library(OsStr::new(name)).with_context(|| format!("failed to load `{name}`"))
+    open_library(OsStr::new(name)).with_context(|| format!("failed to load `{name}`"))
 }
 
-pub fn load_library_by_path(path: &std::path::Path) -> Result<Library> {
-    let path = path
-        .canonicalize()
-        .with_context(|| format!("failed to canonicalize `{}`", path.display()))?;
-    load_library(path.as_os_str()).with_context(|| format!("failed to load `{}`", path.display()))
+pub fn load_library_by_path(path: &Path) -> Result<Library> {
+    let canonical = canonicalize_path(path)?;
+    open_library(canonical.as_os_str())
+        .with_context(|| format!("failed to load `{}`", canonical.display()))
 }
 
-fn load_library(target: &OsStr) -> Result<Library> {
+fn canonicalize_path(path: &Path) -> Result<PathBuf> {
+    path.canonicalize()
+        .with_context(|| format!("failed to canonicalize `{}`", path.display()))
+}
+
+fn open_library(target: &OsStr) -> Result<Library> {
     #[cfg(target_os = "windows")]
     {
-        let library = unsafe { Library::new(target) }?;
-        Ok(library)
+        Ok(unsafe { Library::new(target) }?)
     }
 
     #[cfg(not(target_os = "windows"))]

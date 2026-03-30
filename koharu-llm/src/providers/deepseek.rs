@@ -1,15 +1,16 @@
 use std::future::Future;
 use std::pin::Pin;
+use std::sync::Arc;
 
+use reqwest_middleware::ClientWithMiddleware;
 use serde::Serialize;
-
-use koharu_runtime::http::http_client;
 
 use crate::{Language, prompt::system_prompt};
 
 use super::{AnyProvider, ensure_provider_success};
 
 pub struct DeepSeekProvider {
+    pub http_client: Arc<ClientWithMiddleware>,
     pub api_key: String,
 }
 
@@ -49,7 +50,8 @@ impl AnyProvider for DeepSeekProvider {
                 temperature: 1.3,
             };
 
-            let response = http_client()
+            let response = self
+                .http_client
                 .post("https://api.deepseek.com/chat/completions")
                 .bearer_auth(&self.api_key)
                 .header("content-type", "application/json")

@@ -3694,6 +3694,15 @@ dependencies = [
 ]
 
 [[package]]
+name = "inventory"
+version = "0.3.23"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "8062b737e5389949f477d4760a2ebbff0c366f97798f2419b8d8f366363d3342"
+dependencies = [
+ "rustversion",
+]
+
+[[package]]
 name = "ipnet"
 version = "2.12.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -3933,21 +3942,27 @@ name = "koharu-app"
 version = "0.40.1"
 dependencies = [
  "anyhow",
+ "dirs",
  "image",
  "imageproc",
  "koharu-core",
  "koharu-llm",
  "koharu-ml",
  "koharu-renderer",
+ "koharu-runtime",
  "once_cell",
  "open",
  "rayon",
+ "reqwest-middleware",
  "rfd",
  "serde",
  "serde_bytes",
  "strum",
+ "tempfile",
  "tokio",
+ "toml 0.9.12+spec-1.1.0",
  "tracing",
+ "url",
  "uuid",
 ]
 
@@ -3991,6 +4006,7 @@ dependencies = [
  "proc-macro2",
  "quote",
  "reqwest 0.13.2",
+ "reqwest-middleware",
  "serde",
  "serde_json",
  "strum",
@@ -4111,10 +4127,11 @@ dependencies = [
  "flate2",
  "futures",
  "hf-hub",
+ "indexmap 2.13.0",
  "indicatif",
+ "inventory",
  "koharu-core",
  "libloading 0.8.9",
- "once_cell",
  "reqwest 0.13.2",
  "reqwest-middleware",
  "reqwest-retry",
@@ -4124,6 +4141,7 @@ dependencies = [
  "tempfile",
  "tokio",
  "tracing",
+ "url",
  "windows-sys 0.61.2",
  "zip 8.4.0",
 ]

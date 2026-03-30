@@ -20,6 +20,29 @@ pub struct MetaInfo {
     pub ml_device: String,
 }
 
+#[derive(Debug, Clone, Serialize, Deserialize, Default, JsonSchema, TS)]
+#[serde(rename_all = "camelCase")]
+#[ts(export)]
+pub struct BootstrapConfig {
+    pub runtime: BootstrapPathConfig,
+    pub models: BootstrapPathConfig,
+    pub http: BootstrapHttpConfig,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, Default, JsonSchema, TS)]
+#[serde(rename_all = "camelCase")]
+#[ts(export)]
+pub struct BootstrapPathConfig {
+    pub path: String,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, Default, JsonSchema, TS)]
+#[serde(rename_all = "camelCase")]
+#[ts(export)]
+pub struct BootstrapHttpConfig {
+    pub proxy: Option<String>,
+}
+
 #[derive(Debug, Clone, Serialize, Deserialize, JsonSchema, TS)]
 #[serde(rename_all = "camelCase")]
 #[ts(export)]

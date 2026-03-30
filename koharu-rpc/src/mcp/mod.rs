@@ -22,18 +22,18 @@ use koharu_core::commands::{
 };
 use koharu_core::views::to_doc_info;
 
-use crate::shared::SharedResources;
+use crate::shared::SharedState;
 
 use helpers::encode_png_base64;
 
 #[derive(Clone)]
 pub struct KoharuMcp {
-    pub shared: SharedResources,
+    pub shared: SharedState,
     tool_router: ToolRouter<Self>,
 }
 
 impl KoharuMcp {
-    pub fn new(shared: SharedResources) -> Self {
+    pub fn new(shared: SharedState) -> Self {
         Self {
             shared,
             tool_router: Self::tool_router(),
@@ -43,7 +43,6 @@ impl KoharuMcp {
     fn resources(&self) -> Result<AppResources, String> {
         self.shared
             .get()
-            .cloned()
             .ok_or_else(|| "Resources not initialized yet".to_string())
     }
 }

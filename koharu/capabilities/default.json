@@ -4,7 +4,8 @@
   "description": "default",
   "windows": [
     "main",
-    "splashscreen"
+    "splashscreen",
+    "bootstrap"
   ],
   "permissions": [
     "core:default",

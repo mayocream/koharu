@@ -1,5 +1,6 @@
 use clap::Parser;
 use koharu_ml::lama::Lama;
+use koharu_runtime::{ComputePolicy, RuntimeManager, Settings};
 
 #[path = "common.rs"]
 mod common;
@@ -25,7 +26,15 @@ async fn main() -> anyhow::Result<()> {
 
     let cli = Cli::parse();
 
-    let model = Lama::load(cli.cpu).await?;
+    let runtime = RuntimeManager::new(
+        Settings::default(),
+        if cli.cpu {
+            ComputePolicy::CpuOnly
+        } else {
+            ComputePolicy::PreferGpu
+        },
+    )?;
+    let model = Lama::load(&runtime, cli.cpu).await?;
     let image = image::open(&cli.input)?;
     let mask = image::open(&cli.mask)?;
 

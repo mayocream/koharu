@@ -6,6 +6,7 @@ use anyhow::{Context, Result, bail};
 use clap::{Parser, ValueEnum};
 use koharu_llm::paddleocr_vl::{PaddleOcrVl, PaddleOcrVlOutput, PaddleOcrVlTask};
 use koharu_llm::safe::llama_backend::LlamaBackend;
+use koharu_runtime::{ComputePolicy, RuntimeManager, Settings};
 
 #[derive(Debug, Clone, Copy, ValueEnum)]
 enum TaskArg {
@@ -111,12 +112,21 @@ fn init_tracing() {
 #[tokio::main]
 async fn main() -> Result<()> {
     init_tracing();
-    koharu_runtime::initialize()
+    let cli = Cli::parse();
+    let runtime = RuntimeManager::new(
+        Settings::default(),
+        if cli.cpu {
+            ComputePolicy::CpuOnly
+        } else {
+            ComputePolicy::PreferGpu
+        },
+    )?;
+    runtime
+        .prepare()
         .await
         .context("failed to initialize runtime libraries")?;
-    koharu_llm::sys::initialize().context("failed to initialize llama.cpp runtime bindings")?;
-
-    let cli = Cli::parse();
+    koharu_llm::sys::initialize(&runtime)
+        .context("failed to initialize llama.cpp runtime bindings")?;
     let task: PaddleOcrVlTask = cli.task.into();
     let backend = Arc::new(LlamaBackend::init().context("unable to initialize llama.cpp backend")?);
 
@@ -125,9 +135,9 @@ async fn main() -> Result<()> {
     }
 
     let mut model = if let Some(model_dir) = &cli.model_dir {
-        PaddleOcrVl::load_from_dir(model_dir, cli.cpu, Arc::clone(&backend))?
+        PaddleOcrVl::load_from_dir(&runtime, model_dir, cli.cpu, Arc::clone(&backend))?
     } else {
-        PaddleOcrVl::load(cli.cpu, backend).await?
+        PaddleOcrVl::load(&runtime, cli.cpu, backend).await?
     };
 
     if let Some(dataset_root) = &cli.dataset_root {

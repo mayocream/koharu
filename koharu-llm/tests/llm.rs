@@ -5,11 +5,7 @@ use strum::IntoEnumIterator;
 
 use koharu_llm::safe::llama_backend::LlamaBackend;
 use koharu_llm::{GenerateOptions, Language, Llm, ModelId};
-
-async fn initialize_runtime() -> anyhow::Result<()> {
-    koharu_runtime::initialize().await?;
-    Ok(())
-}
+use koharu_runtime::{ComputePolicy, RuntimeManager, Settings};
 
 #[tokio::test]
 #[ignore] // Ignored because it requires downloading multiple large models.
@@ -23,13 +19,16 @@ async fn llm_generates_text_for_all_models() -> anyhow::Result<()> {
         .unwrap_or(PathBuf::from("."))
         .join("models");
 
-    koharu_runtime::hf_hub::set_cache_dir(model_dir)?;
-    initialize_runtime().await?;
-    koharu_llm::sys::initialize()?;
+    let runtime = RuntimeManager::new(
+        Settings::from_paths(koharu_runtime::default_runtime_root(), model_dir),
+        ComputePolicy::PreferGpu,
+    )?;
+    runtime.prepare().await?;
+    koharu_llm::sys::initialize(&runtime)?;
     let backend = Arc::new(LlamaBackend::init()?);
 
     for model in ModelId::iter() {
-        let mut llm = Llm::load(model, false, Arc::clone(&backend)).await?;
+        let mut llm = Llm::load(&runtime, model, false, Arc::clone(&backend)).await?;
         let opts = GenerateOptions {
             max_tokens: 100,
             temperature: 0.3,

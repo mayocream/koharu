@@ -17,8 +17,9 @@ anyhow = { workspace = true }
 dirs = { workspace = true }
 futures = { workspace = true }
 hf-hub = { workspace = true }
+indexmap = { workspace = true }
 indicatif = { workspace = true }
-once_cell = { workspace = true }
+inventory = { workspace = true }
 reqwest = { workspace = true }
 reqwest-middleware = { workspace = true }
 reqwest-retry = { workspace = true }
@@ -27,6 +28,7 @@ serde_json = { workspace = true }
 zip = { workspace = true }
 tokio = { workspace = true }
 tracing = { workspace = true }
+url = { workspace = true }
 libloading = { workspace = true }
 flate2 = { workspace = true }
 tar = "0.4"
