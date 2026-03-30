@@ -3907,13 +3907,13 @@ dependencies = [
  "clap",
  "dirs",
  "git-version",
+ "koharu-app",
+ "koharu-core",
  "koharu-llm",
  "koharu-ml",
- "koharu-pipeline",
  "koharu-renderer",
  "koharu-rpc",
  "koharu-runtime",
- "koharu-types",
  "once_cell",
  "rfd",
  "serde_json",
@@ -3929,23 +3929,43 @@ dependencies = [
 ]
 
 [[package]]
-name = "koharu-http"
+name = "koharu-app"
 version = "0.40.1"
 dependencies = [
  "anyhow",
- "axum",
- "dirs",
- "futures",
- "hf-hub",
- "indicatif",
- "koharu-types",
+ "image",
+ "imageproc",
+ "koharu-core",
+ "koharu-llm",
+ "koharu-ml",
+ "koharu-renderer",
  "once_cell",
- "reqwest 0.13.2",
- "reqwest-middleware",
- "reqwest-retry",
+ "open",
+ "rayon",
+ "rfd",
  "serde",
+ "serde_bytes",
+ "strum",
  "tokio",
  "tracing",
+ "uuid",
+]
+
+[[package]]
+name = "koharu-core"
+version = "0.40.1"
+dependencies = [
+ "anyhow",
+ "blake3",
+ "image",
+ "schemars 1.2.1",
+ "serde",
+ "serde_bytes",
+ "serde_json",
+ "strum",
+ "tokio",
+ "ts-rs",
+ "uuid",
 ]
 
 [[package]]
@@ -3963,9 +3983,8 @@ dependencies = [
  "hf-hub",
  "image",
  "keyring",
- "koharu-http",
+ "koharu-core",
  "koharu-runtime",
- "koharu-types",
  "libloading 0.8.9",
  "minijinja",
  "num_cpus",
@@ -4001,9 +4020,9 @@ dependencies = [
  "image",
  "imageproc",
  "keyring",
- "koharu-http",
+ "koharu-core",
  "koharu-llm",
- "koharu-types",
+ "koharu-runtime",
  "libloading 0.8.9",
  "minijinja",
  "num_cpus",
@@ -4025,35 +4044,12 @@ dependencies = [
 ]
 
 [[package]]
-name = "koharu-pipeline"
-version = "0.40.1"
-dependencies = [
- "anyhow",
- "image",
- "imageproc",
- "koharu-llm",
- "koharu-ml",
- "koharu-renderer",
- "koharu-types",
- "once_cell",
- "open",
- "rayon",
- "rfd",
- "serde",
- "serde_bytes",
- "strum",
- "tokio",
- "tracing",
- "uuid",
-]
-
-[[package]]
 name = "koharu-psd"
 version = "0.40.1"
 dependencies = [
  "image",
- "koharu-renderer",
- "koharu-types",
+ "koharu-app",
+ "koharu-core",
  "psd",
  "thiserror 2.0.18",
 ]
@@ -4070,7 +4066,7 @@ dependencies = [
  "icu",
  "image",
  "imageproc",
- "koharu-types",
+ "koharu-core",
  "once_cell",
  "rayon",
  "serde",
@@ -4091,10 +4087,10 @@ dependencies = [
  "futures",
  "image",
  "imageproc",
- "koharu-http",
- "koharu-pipeline",
+ "koharu-app",
+ "koharu-core",
  "koharu-psd",
- "koharu-types",
+ "koharu-runtime",
  "rmcp",
  "rmp-serde",
  "rmpv",
@@ -4110,33 +4106,26 @@ name = "koharu-runtime"
 version = "0.40.1"
 dependencies = [
  "anyhow",
+ "axum",
  "dirs",
  "flate2",
- "koharu-http",
+ "futures",
+ "hf-hub",
+ "indicatif",
+ "koharu-core",
  "libloading 0.8.9",
+ "once_cell",
+ "reqwest 0.13.2",
+ "reqwest-middleware",
+ "reqwest-retry",
+ "serde",
  "serde_json",
  "tar",
  "tempfile",
  "tokio",
+ "tracing",
  "windows-sys 0.61.2",
  "zip 8.4.0",
-]
-
-[[package]]
-name = "koharu-types"
-version = "0.40.1"
-dependencies = [
- "anyhow",
- "blake3",
- "image",
- "schemars 1.2.1",
- "serde",
- "serde_bytes",
- "serde_json",
- "strum",
- "tokio",
- "ts-rs",
- "uuid",
 ]
 
 [[package]]

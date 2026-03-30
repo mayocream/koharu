@@ -1,8 +1,8 @@
 use std::path::Path;
 
+use koharu_core::{TextBlock, TextDirection};
 use koharu_ml::comic_text_detector::extract_text_block_regions;
 use koharu_ml::paddleocr_vl::{PaddleOcrVl, PaddleOcrVlTask};
-use koharu_types::{TextBlock, TextDirection};
 
 #[tokio::test]
 #[ignore]

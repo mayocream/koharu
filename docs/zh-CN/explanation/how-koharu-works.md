@@ -61,7 +61,7 @@ flowchart LR
 
 ## 实现结构
 
-从源码结构看，管线入口在 `koharu-pipeline/src/pipeline.rs`，视觉栈的协调逻辑主要在 `koharu-ml/src/facade.rs`。
+从源码结构看，管线入口在 `koharu-app/src/pipeline.rs`，视觉栈的协调逻辑主要在 `koharu-app/src/ml.rs`。
 
 一些重要的实现细节：
 
@@ -93,3 +93,5 @@ Koharu 使用：
 ## 想看更深的技术版本？
 
 请参见 [技术深潜](technical-deep-dive.md)，了解模型类型、分割掩码理论、基于 FFT 的修复，以及维基百科图示和官方模型卡的背景说明。关于渲染器、纵排写字模式和当前版面限制，请参见 [文本渲染与纵排 CJK 布局](text-rendering-and-vertical-cjk-layout.md)。
+
+

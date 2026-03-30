@@ -1,12 +1,12 @@
 use std::{collections::HashMap, sync::Arc, time::Duration};
 
-use koharu_http::download;
-use koharu_pipeline::{pipeline, state_tx};
-use koharu_types::{
+use koharu_app::{pipeline, state_tx};
+use koharu_core::{
     DocumentChangedEvent, DocumentSummary, DocumentsChangedEvent, DownloadState, DownloadStatus,
     JobState, JobStatus, LlmState, PipelineProgress, PipelineStatus, PipelineStep, SnapshotEvent,
     TransferStatus,
 };
+use koharu_runtime::download;
 use tokio::sync::{RwLock, broadcast};
 
 use crate::shared::{SharedResources, get_resources};
@@ -272,17 +272,17 @@ fn download_state(progress: DownloadProgress) -> DownloadState {
     }
 }
 
-use koharu_types::DownloadProgress;
+use koharu_core::DownloadProgress;
 
 #[cfg(test)]
 mod tests {
-    use koharu_types::{PipelineStatus, PipelineStep};
+    use koharu_core::{PipelineStatus, PipelineStep};
 
     use super::{TransferStatus, download_state, pipeline_job_state};
 
     #[test]
     fn pipeline_progress_maps_to_job_state() {
-        let state = pipeline_job_state(koharu_types::PipelineProgress {
+        let state = pipeline_job_state(koharu_core::PipelineProgress {
             job_id: "job-1".to_string(),
             status: PipelineStatus::Failed("boom".to_string()),
             step: Some(PipelineStep::Render),
@@ -301,11 +301,11 @@ mod tests {
 
     #[test]
     fn download_progress_maps_to_download_state() {
-        let state = download_state(koharu_types::DownloadProgress {
+        let state = download_state(koharu_core::DownloadProgress {
             filename: "model.bin".to_string(),
             downloaded: 32,
             total: Some(64),
-            status: koharu_types::DownloadStatus::Completed,
+            status: koharu_core::DownloadStatus::Completed,
         });
 
         assert_eq!(state.id, "model.bin");

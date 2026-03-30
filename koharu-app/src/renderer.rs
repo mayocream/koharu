@@ -4,12 +4,12 @@ use anyhow::Result;
 use image::{DynamicImage, GrayImage, imageops};
 use rayon::iter::{IntoParallelRefMutIterator, ParallelIterator};
 
-use koharu_types::{
+use koharu_core::{
     Document, FontFaceInfo, SerializableDynamicImage, TextAlign, TextBlock, TextShaderEffect,
     TextStrokeStyle, TextStyle,
 };
 
-use crate::{
+use koharu_renderer::{
     font::{FaceInfo, Font, FontBook},
     layout::{LayoutRun, TextLayout, WritingMode},
     renderer::{RenderOptions, RenderStrokeOptions, TinySkiaRenderer},
@@ -279,8 +279,8 @@ impl Renderer {
         text_block.width = layout_box.width;
         text_block.height = layout_box.height;
         text_block.rendered_direction = Some(match writing_mode {
-            WritingMode::Horizontal => koharu_types::TextDirection::Horizontal,
-            WritingMode::VerticalRl => koharu_types::TextDirection::Vertical,
+            WritingMode::Horizontal => koharu_core::TextDirection::Horizontal,
+            WritingMode::VerticalRl => koharu_core::TextDirection::Vertical,
         });
         text_block.rendered = Some(SerializableDynamicImage(DynamicImage::ImageRgba8(rendered)));
         let persisted_style = text_block.style.get_or_insert_with(|| TextStyle {
@@ -504,8 +504,8 @@ mod tests {
         EnglishLayoutBehavior, align_layout_horizontally, apply_default_font_families,
         apply_global_font_family, center_layout_vertically, english_layout_behavior,
     };
-    use crate::layout::{LayoutLine, LayoutRun, WritingMode};
-    use koharu_types::{TextAlign, TextBlock};
+    use koharu_core::{TextAlign, TextBlock};
+    use koharu_renderer::layout::{LayoutLine, LayoutRun, WritingMode};
 
     #[test]
     fn horizontal_alignment_offsets_each_line() {

@@ -1,8 +1,8 @@
 use std::path::Path;
 
 use image::GenericImageView;
+use koharu_core::TextBlock;
 use koharu_ml::lama::Lama;
-use koharu_types::TextBlock;
 
 #[tokio::test]
 #[ignore]

@@ -1,6 +1,6 @@
 use clap::Parser;
+use koharu_core::TextBlock;
 use koharu_ml::mit48px_ocr::{Mit48pxBlockPrediction, Mit48pxOcr, Mit48pxPrediction};
-use koharu_types::TextBlock;
 
 #[path = "common.rs"]
 mod common;

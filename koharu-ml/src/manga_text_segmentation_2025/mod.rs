@@ -195,7 +195,7 @@ pub async fn prefetch() -> Result<()> {
 }
 
 async fn resolve_safetensors_path() -> Result<PathBuf> {
-    koharu_http::download::model(REPO, SAFETENSORS_FILENAME)
+    koharu_runtime::download::model(REPO, SAFETENSORS_FILENAME)
         .await
         .with_context(|| format!("failed to download {SAFETENSORS_FILENAME} from {REPO}"))
 }

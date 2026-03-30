@@ -42,7 +42,7 @@ flowchart LR
 
 从实现上看，渲染器位于 `koharu-renderer` crate，核心协作逻辑分布在：
 
-- `src/facade.rs`
+- `koharu-app/src/renderer.rs`
 - `src/layout.rs`
 - `src/shape.rs`
 - `src/segment.rs`
@@ -232,3 +232,4 @@ Koharu 把纵排处理前移到了整形与布局阶段，这就是它纵排 CJK
 - “完美文本渲染”通常只是实现之前的一种错觉
 
 一句话总结：Koharu 的渲染器之所以这么小心，是因为文本渲染这件事本来就非常刁钻。
+

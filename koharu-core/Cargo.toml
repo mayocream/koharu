@@ -1,5 +1,5 @@
 [package]
-name = "koharu-types"
+name = "koharu-core"
 version.workspace = true
 edition.workspace = true
 description.workspace = true

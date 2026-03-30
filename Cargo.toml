@@ -1,15 +1,14 @@
 [workspace]
 members = [
     "koharu",
-    "koharu-http",
     "koharu-llm",
     "koharu-ml",
     "koharu-runtime",
     "koharu-psd",
     "koharu-renderer",
-    "koharu-pipeline",
+    "koharu-app",
     "koharu-rpc",
-    "koharu-types",
+    "koharu-core",
 ]
 default-members = ["koharu"]
 resolver = "3"
@@ -30,15 +29,14 @@ keywords = ["manga", "ocr", "translation", "deep_learning", "computer_vision"]
 publish = false
 
 [workspace.dependencies]
-koharu-http = { path = "koharu-http", default-features = false }
+koharu-app = { path = "koharu-app", default-features = false }
+koharu-core = { path = "koharu-core", default-features = false }
 koharu-llm = { path = "koharu-llm" }
 koharu-runtime = { path = "koharu-runtime", default-features = false }
 koharu-ml = { path = "koharu-ml", default-features = false }
 koharu-psd = { path = "koharu-psd", default-features = false }
 koharu-renderer = { path = "koharu-renderer", default-features = false }
-koharu-pipeline = { path = "koharu-pipeline", default-features = false }
 koharu-rpc = { path = "koharu-rpc", default-features = false }
-koharu-types = { path = "koharu-types", default-features = false }
 candle-transformers = "=0.9.2"
 candle-core = "=0.9.2"
 candle-nn = "=0.9.2"

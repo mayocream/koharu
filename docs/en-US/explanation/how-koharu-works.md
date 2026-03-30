@@ -61,7 +61,7 @@ Because of that, one model is usually not enough. Koharu first estimates layout,
 
 ## The implementation shape
 
-In source terms, the pipeline entrypoint runs in `koharu-pipeline/src/pipeline.rs`, while the vision stack is coordinated in `koharu-ml/src/facade.rs`.
+In source terms, the pipeline entrypoint runs in `koharu-app/src/pipeline.rs`, while the vision stack is coordinated in `koharu-app/src/ml.rs`.
 
 Some implementation details that matter:
 
@@ -93,3 +93,5 @@ If you configure a remote LLM provider, Koharu sends only the text selected for 
 ## Want the deep technical version?
 
 See [Technical Deep Dive](technical-deep-dive.md) for model types, segmentation mask theory, FFT-based inpainting, and background references to Wikipedia diagrams plus official model cards. See [Text Rendering and Vertical CJK Layout](text-rendering-and-vertical-cjk-layout.md) for the renderer internals, vertical writing-mode behavior, and current layout limits.
+
+

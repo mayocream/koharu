@@ -12,7 +12,7 @@ use imageproc::{
     point::Point,
     region_labelling::{Connectivity, connected_components},
 };
-use koharu_types::{TextBlock, TextDirection};
+use koharu_core::{TextBlock, TextDirection};
 
 const LINE_THRESHOLD: f32 = 0.3;
 const LINE_SCORE_THRESHOLD: f32 = 0.6;

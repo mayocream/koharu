@@ -3,14 +3,14 @@ use std::sync::Arc;
 use serde::Serialize;
 use tokio::sync::{RwLock, broadcast};
 
-use koharu_types::{Document, LlmState, LlmStateStatus, TextBlock};
+use koharu_core::{Document, LlmState, LlmStateStatus, TextBlock};
 
-use crate::{
+use koharu_llm::{
     GenerateOptions, Language, Llm, ModelId, language::tags as language_tags,
     safe::llama_backend::LlamaBackend, supported_locales,
 };
 
-pub use crate::prefetch;
+pub use koharu_llm::prefetch;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 struct BlockStartTag {
@@ -63,7 +63,7 @@ pub enum State {
     Ready(Llm),
     #[strum(serialize = "ready")]
     ApiReady {
-        provider: Box<dyn crate::providers::AnyProvider>,
+        provider: Box<dyn koharu_llm::providers::AnyProvider>,
         provider_id: String,
         model: String,
     },
@@ -454,9 +454,9 @@ impl Model {
         &self,
         provider_id: &str,
         model_id: &str,
-        config: crate::providers::ProviderConfig,
+        config: koharu_llm::providers::ProviderConfig,
     ) -> anyhow::Result<()> {
-        let provider = crate::providers::build_provider(provider_id, config)?;
+        let provider = koharu_llm::providers::build_provider(provider_id, config)?;
         *self.state.write().await = State::ApiReady {
             provider,
             provider_id: provider_id.to_string(),
@@ -605,7 +605,7 @@ fn snapshot_from_state(state: &State) -> LlmState {
 
 #[cfg(test)]
 mod tests {
-    use koharu_types::Document;
+    use koharu_core::Document;
 
     use super::*;
 

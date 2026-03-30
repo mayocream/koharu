@@ -1,5 +1,5 @@
-use koharu_types::FontFaceInfo;
-use koharu_types::commands::{IndexPayload, RenderPayload};
+use koharu_core::FontFaceInfo;
+use koharu_core::commands::{IndexPayload, RenderPayload};
 use tracing::instrument;
 
 use crate::{

@@ -5,9 +5,9 @@ use std::sync::{
 };
 use std::time::Duration;
 
+use koharu_core::commands::ProcessRequest;
+use koharu_core::events::{PipelineProgress, PipelineStatus, PipelineStep};
 use koharu_llm::ModelId;
-use koharu_types::commands::ProcessRequest;
-use koharu_types::events::{PipelineProgress, PipelineStatus, PipelineStep};
 use once_cell::sync::Lazy;
 use tokio::sync::broadcast;
 

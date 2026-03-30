@@ -11,7 +11,7 @@ use imageproc::{
     contours::find_contours, distance_transform::Norm, drawing::draw_polygon_mut, edges::canny,
     filter::gaussian_blur_f32, morphology::dilate, point::Point,
 };
-use koharu_types::TextBlock;
+use koharu_core::TextBlock;
 use tracing::instrument;
 
 use crate::{define_models, device, loading};
@@ -624,7 +624,7 @@ mod tests {
     use image::{GrayImage, Luma, Rgb, RgbImage};
     use imageproc::drawing::draw_hollow_rect_mut;
     use imageproc::rect::Rect;
-    use koharu_types::TextBlock;
+    use koharu_core::TextBlock;
 
     #[test]
     fn enlarge_window_matches_ratio_1_7_reference() {

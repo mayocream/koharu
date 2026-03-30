@@ -6,7 +6,7 @@ use anyhow::{Context, Result};
 use candle_core::{DType, Device, Tensor};
 use candle_nn::VarBuilder;
 use image::{DynamicImage, RgbImage, imageops::FilterType};
-use koharu_types::TextBlock;
+use koharu_core::TextBlock;
 use serde::{Deserialize, Serialize};
 use tracing::instrument;
 

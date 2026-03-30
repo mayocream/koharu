@@ -354,8 +354,8 @@ pub async fn prefetch() -> Result<()> {
 
 async fn download_model_files() -> Result<ModelFiles> {
     let (model, mmproj) = tokio::try_join!(
-        koharu_http::download::model(HF_REPO, MODEL_FILENAME),
-        koharu_http::download::model(HF_REPO, MMPROJ_FILENAME),
+        koharu_runtime::download::model(HF_REPO, MODEL_FILENAME),
+        koharu_runtime::download::model(HF_REPO, MMPROJ_FILENAME),
     )?;
 
     Ok(ModelFiles { model, mmproj })

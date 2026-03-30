@@ -11,16 +11,16 @@ use rmcp::model::{
 };
 use rmcp::{ServerHandler, tool, tool_handler, tool_router};
 
-use koharu_pipeline::AppResources;
-use koharu_pipeline::operations;
-use koharu_types::commands::{
+use koharu_app::AppResources;
+use koharu_app::operations;
+use koharu_core::commands::{
     AddTextBlockPayload, ExportDocumentParams, FileEntry, IndexPayload, InpaintPartialPayload,
     InpaintRegion, InpaintRegionParams, LlmGenerateParams, LlmGeneratePayload, LlmListPayload,
     LlmLoadParams, LlmLoadPayload, MaskMorphPayload, OpenDocumentsParams, OpenDocumentsPayload,
     ProcessParams, ProcessRequest, RemoveTextBlockPayload, RenderParams, RenderPayload,
     UpdateTextBlockPayload, ViewImageParams, ViewTextBlockParams,
 };
-use koharu_types::views::to_doc_info;
+use koharu_core::views::to_doc_info;
 
 use crate::shared::SharedResources;
 

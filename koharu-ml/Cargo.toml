@@ -12,9 +12,9 @@ keywords.workspace = true
 publish.workspace = true
 
 [dependencies]
-koharu-http = { workspace = true }
+koharu-core = { workspace = true }
 koharu-llm = { workspace = true }
-koharu-types = { workspace = true }
+koharu-runtime = { workspace = true }
 anyhow = { workspace = true }
 clap = { workspace = true }
 image = { workspace = true }

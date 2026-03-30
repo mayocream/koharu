@@ -1,14 +1,14 @@
 use image::DynamicImage;
 use image::GenericImageView;
 use imageproc::distance_transform::Norm;
-use koharu_types::commands::{
+use koharu_core::commands::{
     AddTextBlockPayload, InpaintPartialPayload, MaskMorphPayload, RemoveTextBlockPayload,
     UpdateBrushLayerPayload, UpdateInpaintMaskPayload, UpdateTextBlockPayload,
     UpdateTextBlocksPayload,
 };
-use koharu_types::parse::parse_hex_color;
-use koharu_types::views::{TextBlockInfo, to_block_info};
-use koharu_types::{SerializableDynamicImage, TextBlock, TextStyle};
+use koharu_core::parse::parse_hex_color;
+use koharu_core::views::{TextBlockInfo, to_block_info};
+use koharu_core::{SerializableDynamicImage, TextBlock, TextStyle};
 use tracing::instrument;
 
 use crate::{
@@ -605,7 +605,7 @@ mod tests {
         rehydrate_runtime_text_block_state,
     };
     use image::{Rgba, RgbaImage};
-    use koharu_types::TextBlock;
+    use koharu_core::TextBlock;
 
     #[test]
     fn resized_block_locks_layout_box() {

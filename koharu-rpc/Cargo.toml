@@ -12,10 +12,10 @@ keywords.workspace = true
 publish.workspace = true
 
 [dependencies]
-koharu-http = { workspace = true }
+koharu-app = { workspace = true }
+koharu-core = { workspace = true }
 koharu-psd = { workspace = true }
-koharu-pipeline = { workspace = true }
-koharu-types = { workspace = true }
+koharu-runtime = { workspace = true }
 anyhow = { workspace = true }
 async-stream = { workspace = true }
 axum = { workspace = true }

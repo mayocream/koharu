@@ -4,7 +4,7 @@ use std::time::Instant;
 
 use serde::{Deserialize, Serialize};
 
-use koharu_http::http::http_client;
+use koharu_runtime::http::http_client;
 
 use crate::{Language, prompt::system_prompt};
 

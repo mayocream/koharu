@@ -1,5 +1,5 @@
 use icu::properties::{CodePointMapData, props::Script};
-use koharu_types::TextBlock;
+use koharu_core::TextBlock;
 
 use crate::layout::WritingMode;
 
@@ -126,7 +126,7 @@ fn is_cjk_text(text: &str) -> bool {
 
 #[cfg(test)]
 mod tests {
-    use koharu_types::{TextBlock, TextDirection};
+    use koharu_core::{TextBlock, TextDirection};
 
     use crate::layout::WritingMode;
 

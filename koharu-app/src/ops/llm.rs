@@ -1,19 +1,18 @@
 use std::str::FromStr;
 
-use koharu_llm::ModelId;
-use koharu_llm::api::{ALL_API_PROVIDERS, OPENAI_COMPATIBLE_ID};
-use koharu_llm::facade as llm;
-use koharu_llm::providers::{get_saved_api_key, openai_compatible, set_saved_api_key};
-use koharu_types::commands::{
+use koharu_core::commands::{
     ApiKeyGetPayload, ApiKeyResult, ApiKeySetPayload, IndexPayload, LlmGeneratePayload,
     LlmListPayload, LlmLoadPayload,
 };
+use koharu_llm::ModelId;
+use koharu_llm::api::{ALL_API_PROVIDERS, OPENAI_COMPATIBLE_ID};
+use koharu_llm::providers::{get_saved_api_key, openai_compatible, set_saved_api_key};
 pub use openai_compatible::PingResult;
 use strum::IntoEnumIterator;
 use tracing::instrument;
 
 use crate::{
-    AppResources,
+    AppResources, llm,
     state_tx::{self, ChangedField},
 };
 
@@ -177,6 +176,6 @@ pub async fn llm_ping(
 pub async fn get_document_for_llm(
     state: AppResources,
     payload: IndexPayload,
-) -> anyhow::Result<koharu_types::Document> {
+) -> anyhow::Result<koharu_core::Document> {
     state_tx::read_doc(&state.state, payload.index).await
 }

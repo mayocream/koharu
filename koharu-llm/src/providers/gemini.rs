@@ -3,7 +3,7 @@ use std::pin::Pin;
 
 use serde::Serialize;
 
-use koharu_http::http::http_client;
+use koharu_runtime::http::http_client;
 
 use crate::{Language, prompt::system_prompt};
 

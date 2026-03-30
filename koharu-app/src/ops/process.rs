@@ -3,8 +3,8 @@ use std::sync::{
     atomic::{AtomicBool, Ordering},
 };
 
+use koharu_core::commands::ProcessRequest;
 use koharu_llm::providers::get_saved_api_key;
-use koharu_types::commands::ProcessRequest;
 use uuid::Uuid;
 
 use crate::AppResources;

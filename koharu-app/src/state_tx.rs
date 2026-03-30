@@ -1,5 +1,5 @@
 use anyhow::Result;
-use koharu_types::{AppState, Document};
+use koharu_core::{AppState, Document};
 use once_cell::sync::Lazy;
 use tokio::sync::broadcast;
 
@@ -155,7 +155,7 @@ mod tests {
         ChangedField, append_docs, find_doc_index, list_docs, mutate_doc, read_doc, replace_docs,
         update_doc,
     };
-    use koharu_types::{AppState, Document, State};
+    use koharu_core::{AppState, Document, State};
     use std::sync::Arc;
     use tokio::sync::RwLock;
 

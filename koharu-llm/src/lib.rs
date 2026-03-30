@@ -1,5 +1,4 @@
 pub mod api;
-pub mod facade;
 pub mod language;
 mod model;
 pub mod paddleocr_vl;
@@ -81,7 +80,7 @@ impl ModelId {
     }
 
     pub async fn get(&self) -> anyhow::Result<PathBuf> {
-        koharu_http::download::model(self.property("repo"), self.property("filename")).await
+        koharu_runtime::download::model(self.property("repo"), self.property("filename")).await
     }
 
     pub fn languages(&self) -> Vec<Language> {

@@ -8,13 +8,11 @@ use tauri::{Manager, WebviewWindowBuilder};
 use tokio::{net::TcpListener, sync::RwLock};
 use tracing_subscriber::fmt::format::FmtSpan;
 
-use koharu_llm::facade;
+use koharu_app::{AppResources, llm, ml, renderer::Renderer};
+use koharu_core::State;
 use koharu_llm::safe::llama_backend::LlamaBackend;
 use koharu_ml::{cuda_is_available, device};
-use koharu_pipeline::AppResources;
-use koharu_renderer::facade::Renderer;
 use koharu_rpc::{SharedResources, server};
-use koharu_types::State;
 
 static APP_ROOT: Lazy<PathBuf> = Lazy::new(|| {
     dirs::data_local_dir()
@@ -110,7 +108,7 @@ async fn prefetch() -> Result<()> {
     koharu_runtime::initialize()
         .await
         .context("Failed to initialize runtime packages")?;
-    koharu_ml::facade::prefetch().await?;
+    ml::prefetch().await?;
 
     Ok(())
 }
@@ -186,11 +184,11 @@ async fn build_resources(cpu: bool, headless: bool) -> Result<AppResources> {
 
     let llama_backend = shared_llama_backend()?;
     let ml = Arc::new(
-        koharu_ml::facade::Model::new(cpu, Arc::clone(&llama_backend))
+        ml::Model::new(cpu, Arc::clone(&llama_backend))
             .await
             .context("Failed to initialize ML model")?,
     );
-    let llm = Arc::new(facade::Model::new(cpu, llama_backend));
+    let llm = Arc::new(llm::Model::new(cpu, llama_backend));
     let renderer = Arc::new(Renderer::new().context("Failed to initialize renderer")?);
     let state = Arc::new(RwLock::new(State::default()));
 

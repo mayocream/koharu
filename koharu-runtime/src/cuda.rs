@@ -2,10 +2,10 @@ use std::fmt;
 use std::path::Path;
 
 use anyhow::{Context, Result, anyhow, bail};
-use koharu_http::http::http_client;
 use libloading::Library;
 
 use crate::archive;
+use crate::http::http_client;
 use crate::loader::{add_runtime_search_path, preload_library};
 
 const CUDA_SUCCESS: i32 = 0;

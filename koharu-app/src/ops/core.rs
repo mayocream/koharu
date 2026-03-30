@@ -1,7 +1,7 @@
 use std::path::{Path, PathBuf};
 
 use image::ImageFormat;
-use koharu_types::commands::{
+use koharu_core::commands::{
     DeviceInfo, FileResult, IndexPayload, OpenDocumentsPayload, OpenExternalPayload,
     ThumbnailResult,
 };
@@ -25,7 +25,7 @@ async fn pick_output_dir() -> anyhow::Result<Option<PathBuf>> {
     Ok(tokio::task::spawn_blocking(|| FileDialog::new().pick_folder()).await?)
 }
 
-fn document_ext(document: &koharu_types::Document) -> String {
+fn document_ext(document: &koharu_core::Document) -> String {
     document
         .path
         .extension()
@@ -35,11 +35,11 @@ fn document_ext(document: &koharu_types::Document) -> String {
 }
 
 fn export_documents_matching(
-    documents: &[koharu_types::Document],
+    documents: &[koharu_core::Document],
     output_dir: &Path,
     suffix: &str,
     missing_error: &str,
-    image: impl Fn(&koharu_types::Document) -> Option<&koharu_types::SerializableDynamicImage>,
+    image: impl Fn(&koharu_core::Document) -> Option<&koharu_core::SerializableDynamicImage>,
 ) -> anyhow::Result<usize> {
     let mut exported = 0usize;
 
@@ -90,7 +90,7 @@ pub async fn get_documents(state: AppResources) -> anyhow::Result<usize> {
 pub async fn get_document(
     state: AppResources,
     payload: IndexPayload,
-) -> anyhow::Result<koharu_types::Document> {
+) -> anyhow::Result<koharu_core::Document> {
     state_tx::read_doc(&state.state, payload.index).await
 }
 

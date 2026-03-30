@@ -5,7 +5,6 @@ use std::path::{Path, PathBuf};
 
 use anyhow::{Context, Result, bail};
 use flate2::read::GzDecoder;
-use koharu_http::download;
 
 const RUNTIME_LIB_EXTENSIONS: &[&str] = &[".dll", ".so", ".dylib"];
 
@@ -20,7 +19,7 @@ pub(crate) async fn download_cached(
     }
 
     let partial_path = downloads_dir.join(format!("{file_name}.partial"));
-    let bytes = download::bytes(url)
+    let bytes = crate::download::bytes(url)
         .await
         .with_context(|| format!("failed to download `{url}`"))?;
 

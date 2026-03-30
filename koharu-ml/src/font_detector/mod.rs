@@ -18,7 +18,7 @@ define_models! {
     FontNames => ("fffonion/yuzumarker-font-detection", "font-labels-ex.json"),
 }
 
-pub use koharu_types::{FontPrediction, NamedFontPrediction, TextDirection};
+pub use koharu_core::{FontPrediction, NamedFontPrediction, TextDirection};
 
 pub struct FontDetector {
     model: models::Model,

@@ -1,7 +1,7 @@
 #[allow(unused_imports)]
-pub use koharu_http::download::model;
+pub use koharu_runtime::download::model;
 #[allow(unused_imports)]
-pub use koharu_http::hf_hub::set_cache_dir;
+pub use koharu_runtime::hf_hub::set_cache_dir;
 
 #[macro_export]
 macro_rules! define_models {
@@ -19,7 +19,7 @@ macro_rules! define_models {
                 use strum::EnumProperty;
                 let repo = self.get_str("repo").expect("repo property");
                 let filename = self.get_str("filename").expect("filename property");
-                koharu_http::download::model(repo, filename).await
+                koharu_runtime::download::model(repo, filename).await
             }
         }
 

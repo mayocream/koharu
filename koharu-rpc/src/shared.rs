@@ -1,6 +1,6 @@
 use std::sync::Arc;
 
-use koharu_pipeline::AppResources;
+use koharu_app::AppResources;
 use tokio::sync::OnceCell;
 
 pub type SharedResources = Arc<OnceCell<AppResources>>;

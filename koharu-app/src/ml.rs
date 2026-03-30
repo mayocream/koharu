@@ -5,14 +5,14 @@ use std::{
 
 use anyhow::Result;
 use image::DynamicImage;
+use koharu_core::{Document, FontPrediction, SerializableDynamicImage, TextBlock, TextDirection};
 use koharu_llm::paddleocr_vl::{self as paddleocr_vl_llm, PaddleOcrVl, PaddleOcrVlTask};
 use koharu_llm::safe::llama_backend::LlamaBackend;
-use koharu_types::{Document, FontPrediction, SerializableDynamicImage, TextBlock, TextDirection};
 
-use crate::comic_text_detector::{self, ComicTextDetector, crop_text_block_bbox};
-use crate::font_detector::{self, FontDetector};
-use crate::lama::{self, Lama};
-use crate::pp_doclayout_v3::{self, LayoutRegion, PPDocLayoutV3};
+use koharu_ml::comic_text_detector::{self, ComicTextDetector, crop_text_block_bbox};
+use koharu_ml::font_detector::{self, FontDetector};
+use koharu_ml::lama::{self, Lama};
+use koharu_ml::pp_doclayout_v3::{self, LayoutRegion, PPDocLayoutV3};
 
 const NEAR_BLACK_THRESHOLD: u8 = 12;
 const GRAY_NEAR_BLACK_THRESHOLD: u8 = 60;
@@ -220,7 +220,7 @@ impl Model {
         &self,
         image: &SerializableDynamicImage,
         mask: &SerializableDynamicImage,
-        text_blocks: Option<&[koharu_types::TextBlock]>,
+        text_blocks: Option<&[koharu_core::TextBlock]>,
     ) -> Result<SerializableDynamicImage> {
         let result = self.lama.inference_with_blocks(image, mask, text_blocks)?;
         Ok(result.into())

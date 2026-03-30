@@ -23,7 +23,7 @@ async fn llm_generates_text_for_all_models() -> anyhow::Result<()> {
         .unwrap_or(PathBuf::from("."))
         .join("models");
 
-    koharu_http::hf_hub::set_cache_dir(model_dir)?;
+    koharu_runtime::hf_hub::set_cache_dir(model_dir)?;
     initialize_runtime().await?;
     koharu_llm::sys::initialize()?;
     let backend = Arc::new(LlamaBackend::init()?);
