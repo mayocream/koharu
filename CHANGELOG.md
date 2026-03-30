@@ -1,3 +1,10 @@
+## [0.41.1](https://github.com/mayocream/koharu/compare/0.41.0..0.41.1) - 2026-03-30
+
+### 🐛 Bug Fixes
+
+- *(macos)* Allow downloaded llama runtimes to load - ([bb3e7d3](https://github.com/mayocream/koharu/commit/bb3e7d37680f1c5b2aa66078f19cb910eb3eeae3))
+
+
 ## [0.41.0](https://github.com/mayocream/koharu/compare/0.40.1..0.41.0) - 2026-03-30
 
 ### ⛰️  Features
