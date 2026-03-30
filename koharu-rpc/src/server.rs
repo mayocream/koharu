@@ -16,7 +16,7 @@ use tower_http::cors::CorsLayer;
 use crate::api;
 use crate::events::EventHub;
 use crate::mcp::KoharuMcp;
-use crate::shared::SharedResources;
+use crate::shared::SharedState;
 
 /// An asset returned by the resolver: raw bytes + MIME type.
 pub struct Asset {
@@ -35,7 +35,7 @@ where
     Arc::new(move |path: &str| resolvers.iter().find_map(|resolver| resolver(path)))
 }
 
-fn build_router(shared: SharedResources, resolver: SharedAssetResolver) -> Router {
+fn build_router(shared: SharedState, resolver: SharedAssetResolver) -> Router {
     let events = EventHub::new(shared.clone());
     let cors = CorsLayer::very_permissive();
 
@@ -85,7 +85,7 @@ fn resolve_asset(resolver: &SharedAssetResolver, path: &str) -> Option<Response>
 
 pub async fn serve_with_listener(
     listener: TcpListener,
-    shared: SharedResources,
+    shared: SharedState,
     resolver: SharedAssetResolver,
 ) -> Result<()> {
     let router = build_router(shared, resolver);

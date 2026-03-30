@@ -1,3 +1,97 @@
+## [0.41.4](https://github.com/mayocream/koharu/compare/0.41.3..0.41.4) - 2026-03-30
+
+### ⚙️ Miscellaneous Tasks
+
+- Use explicit tauri cli package in release - ([64cadbc](https://github.com/mayocream/koharu/commit/64cadbc4fcdcb16879df4591de07676ee08032e9))
+
+
+## [0.41.3](https://github.com/mayocream/koharu/compare/0.41.2..0.41.3) - 2026-03-30
+
+### ⚙️ Miscellaneous Tasks
+
+- Use npx tauri for release builds - ([ea2a80b](https://github.com/mayocream/koharu/commit/ea2a80b688f4aad148be55ae78d6650c995a6b69))
+
+
+## [0.41.2](https://github.com/mayocream/koharu/compare/0.41.1..0.41.2) - 2026-03-30
+
+### ⚙️ Miscellaneous Tasks
+
+- Download trusted-signing-cli from release - ([b686601](https://github.com/mayocream/koharu/commit/b6866015cbe8a695cb4f6415e35720afec31b644))
+
+
+## [0.41.1](https://github.com/mayocream/koharu/compare/0.41.0..0.41.1) - 2026-03-30
+
+### 🐛 Bug Fixes
+
+- *(macos)* Allow downloaded llama runtimes to load - ([bb3e7d3](https://github.com/mayocream/koharu/commit/bb3e7d37680f1c5b2aa66078f19cb910eb3eeae3))
+
+
+## [0.41.0](https://github.com/mayocream/koharu/compare/0.40.1..0.41.0) - 2026-03-30
+
+### ⛰️  Features
+
+- *(ui)* LLM multi-preset configuration ([#282](https://github.com/mayocream/koharu/issues/282)) - ([bcd9df1](https://github.com/mayocream/koharu/commit/bcd9df15a58bda1e19f9cb0c6742294dc8e7d2d0))
+- Bootstrap window - ([288fcc7](https://github.com/mayocream/koharu/commit/288fcc7022c31bf8e79539357dbc04033fdc78f2))
+- Llama.cpp-based paddleocr-vl-1.5 - ([5c4b7c1](https://github.com/mayocream/koharu/commit/5c4b7c1cabae636f470a9d5a406a6c639a1aeb31))
+- Integrate llama.cpp - ([30db042](https://github.com/mayocream/koharu/commit/30db0424b70f21695aedfacb9a71bb3f1b2e794a))
+- Llama.cpp crate - ([0465ff7](https://github.com/mayocream/koharu/commit/0465ff7eae8d4e47fdb3855ea523e170196290be))
+- Add open folder import, CUDA 13.2 build fixes, local LLM settin… ([#271](https://github.com/mayocream/koharu/issues/271)) - ([83615e7](https://github.com/mayocream/koharu/commit/83615e7bbf52d68f38faf931c00b579cf58ccfb8))
+
+### 🐛 Bug Fixes
+
+- *(linux)* Load native libraryes by using explicit path to resolve missing libggml errors on Unix systems ([#295](https://github.com/mayocream/koharu/issues/295)) - ([5b0a3c1](https://github.com/mayocream/koharu/commit/5b0a3c1a7d32c033b83173fe4448cee470d0ac42))
+- Pipeline crash when no text blocks detected ([#291](https://github.com/mayocream/koharu/issues/291)) - ([82454e0](https://github.com/mayocream/koharu/commit/82454e03722358d1d50c4c9309c999d40dfb482d))
+- Prevent koharu-llm from recompiling on every build ([#289](https://github.com/mayocream/koharu/issues/289)) - ([1ccf02c](https://github.com/mayocream/koharu/commit/1ccf02c767a00753f39db5f4e38ca06fb65934ee))
+- Avoid full document cloning in API endpoints to speed up image switching ([#279](https://github.com/mayocream/koharu/issues/279)) - ([46d47f8](https://github.com/mayocream/koharu/commit/46d47f86f0f2f7e01216da6e37945001dc29b40c))
+- Nvcc build failure on linux - ([8808b12](https://github.com/mayocream/koharu/commit/8808b12492dc73e257819f0cb6245f12a88e7ead))
+- Revert cudaforge - ([1e0bac8](https://github.com/mayocream/koharu/commit/1e0bac816e45a0883f9656d1c4f167d349cfb4a4))
+- Pin candle commit - ([0eae785](https://github.com/mayocream/koharu/commit/0eae7857b789e3d54b8d501cbb8f24c820b0bf6c))
+- Cast log level to i32 for previous level storage ([#273](https://github.com/mayocream/koharu/issues/273)) - ([b22ade6](https://github.com/mayocream/koharu/commit/b22ade66e45fb87f961b99fd1519ee07b286227f))
+- Shared llama.cpp backend - ([f8db7d9](https://github.com/mayocream/koharu/commit/f8db7d9053979eb0dcbf506bb13b278e32b31505))
+- Ui issue and automatic code formatting :v ([#272](https://github.com/mayocream/koharu/issues/272)) - ([08e4170](https://github.com/mayocream/koharu/commit/08e4170f7fc622c98c3ba477897ae4b1666003e1))
+- Align paddleocr-vl impl with transformers - ([879c8da](https://github.com/mayocream/koharu/commit/879c8da4b622159746608e7ffa08ae236d461467))
+- Remove normalize_ocr_text - ([ca64093](https://github.com/mayocream/koharu/commit/ca640939e6baf7322dafb49a67334cf0bbed5d43))
+
+### 🚜 Refactor
+
+- Merge crates - ([98f90f7](https://github.com/mayocream/koharu/commit/98f90f7412bec282d65f1b840a425200e74e82f8))
+- Koharu-runtime - ([e78b2d2](https://github.com/mayocream/koharu/commit/e78b2d24060501c9a4f09246f7b639006f3c6348))
+
+### 📚 Documentation
+
+- Fix broken link - ([b1a4565](https://github.com/mayocream/koharu/commit/b1a45659c2065018d3471fedb067a9f42152f051))
+- Fix readme img link - ([2e66e8d](https://github.com/mayocream/koharu/commit/2e66e8d4ee018ac5cea970ca911de61d418fa41a))
+- Ja-JP translation - ([daa4b10](https://github.com/mayocream/koharu/commit/daa4b10bf064519ee6a842b3132fddb37cccb0a2))
+- Zh-CN translations - ([90e6a29](https://github.com/mayocream/koharu/commit/90e6a29cadbf583b30f4b331928744b2a4fd34c4))
+- Text rendering - ([3780b1c](https://github.com/mayocream/koharu/commit/3780b1c3e4a1197c4783e11aad94ec018c21ed54))
+- Open graph - ([c013790](https://github.com/mayocream/koharu/commit/c013790178ff10c47ecb5b775791201413d3f5e6))
+- More content - ([13e07b2](https://github.com/mayocream/koharu/commit/13e07b21fb0a486b25c9910372e88b74d0933abd))
+- Add llama.cpp - ([d607a67](https://github.com/mayocream/koharu/commit/d607a6742c2c850561e9e8f118f95841583ab1f7))
+- Homepage - ([ebd16c8](https://github.com/mayocream/koharu/commit/ebd16c8ff51e5ad9c3fdb099a06c9361f9608150))
+- Add site - ([b8f34a0](https://github.com/mayocream/koharu/commit/b8f34a043fca3a556400f38e06a3f30777977e7a))
+- Update models section - ([f9987ca](https://github.com/mayocream/koharu/commit/f9987ca1d157939ccafc174d0c5849909e4fbd21))
+
+### ⚡ Performance
+
+- Fix paddleocr-vl - ([c367543](https://github.com/mayocream/koharu/commit/c367543b11ef391b81eb16ef3e684557d9a8f987))
+
+### ⚙️ Miscellaneous Tasks
+
+- *(cargo)* Update deps - ([d73b2ad](https://github.com/mayocream/koharu/commit/d73b2ad8082493f3b316b1c46fb1ae81f1a3f617))
+- *(dev)* Fix hydration warning - ([042cdb6](https://github.com/mayocream/koharu/commit/042cdb6cd892abf13b1b11a5b2413dc374d867c5))
+- *(i18n)* Add missing translations - ([ea899a7](https://github.com/mayocream/koharu/commit/ea899a7e445a5c16ca6f43b73e190569afde993f))
+- Make clippy happy - ([55575a7](https://github.com/mayocream/koharu/commit/55575a7f6f82af25d935fa1c8897eeb0810bb114))
+- Rename integration tests to unit tests - ([623a55f](https://github.com/mayocream/koharu/commit/623a55fe7cd21117047a088fde607d65865eda19))
+- Disable ml models integration tests - ([2df4fca](https://github.com/mayocream/koharu/commit/2df4fca2a95e34f3c3559e2b0183462652cea3fe))
+- Cache bun packages and Next.js build output ([#290](https://github.com/mayocream/koharu/issues/290)) - ([b17ead9](https://github.com/mayocream/koharu/commit/b17ead9cea8243fd0ae8e8a44717fbaecf8786d5))
+- Make clippy happy - ([8af2862](https://github.com/mayocream/koharu/commit/8af2862cc17eba9607fdb1894cd84b5fe77a6494))
+- Vendor paddleocr-vl - ([8003e9b](https://github.com/mayocream/koharu/commit/8003e9bf8a41d327b28e334db989c28b4d69060a))
+
+## New Contributors ❤️
+
+* @EverythingSuckz made their first contribution in [#291](https://github.com/mayocream/koharu/pull/291)
+* @spgsroot made their first contribution in [#282](https://github.com/mayocream/koharu/pull/282)
+
 ## [0.40.1](https://github.com/mayocream/koharu/compare/0.40.0..0.40.1) - 2026-03-21
 
 ### ⚙️ Miscellaneous Tasks

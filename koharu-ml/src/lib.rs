@@ -1,7 +1,6 @@
 mod hf_hub;
 
 pub mod comic_text_detector;
-pub mod facade;
 pub mod font_detector;
 pub mod lama;
 pub mod loading;
@@ -15,7 +14,6 @@ use anyhow::Result;
 use candle_core::utils::metal_is_available;
 
 pub use candle_core::Device;
-pub use koharu_http::hf_hub::set_cache_dir;
 
 pub fn device(cpu: bool) -> Result<Device> {
     if cpu {

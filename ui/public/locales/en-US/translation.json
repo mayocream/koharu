@@ -223,7 +223,27 @@
     "deepseek": "DeepSeek",
     "unknown": "Provider"
   },
+  "bootstrap": {
+    "loading": "LOADING",
+    "language": "LANGUAGE",
+    "runtimePath": "RUNTIME PATH",
+    "modelsPath": "MODELS PATH",
+    "proxyUrl": "PROXY URL",
+    "runtimePathPlaceholder": "RUNTIME PATH",
+    "modelsPathPlaceholder": "MODELS PATH",
+    "proxyUrlPlaceholder": "HTTP://127.0.0.1:7890",
+    "pathsRequired": "RUNTIME PATH AND MODELS PATH ARE REQUIRED.",
+    "failedLoadConfig": "FAILED TO LOAD CONFIG.",
+    "failed": "FAILED",
+    "waitingForDownload": "WAITING FOR DOWNLOAD",
+    "back": "BACK",
+    "next": "NEXT",
+    "init": "INIT",
+    "retryNow": "RETRY NOW"
+  },
   "settings": {
+    "httpProxy": "HTTP Proxy",
+    "httpProxyDescription": "Used for runtime and model downloads. Changes save automatically.",
     "title": "Settings",
     "appearance": "Appearance",
     "appearanceDescription": "Customize how Koharu looks on your device.",

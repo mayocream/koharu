@@ -61,7 +61,7 @@ flowchart LR
 
 ## 実装の形
 
-ソースコード上では、パイプラインの入口は `koharu-pipeline/src/pipeline.rs` にあり、vision スタックの調整は `koharu-ml/src/facade.rs` で行われています。
+ソースコード上では、パイプラインの入口は `koharu-app/src/pipeline.rs` にあり、vision スタックの調整は `koharu-app/src/ml.rs` で行われています。
 
 実装上、重要な点は次の通りです。
 
@@ -93,3 +93,5 @@ Koharu は次を使っています。
 ## もっと技術寄りの説明が欲しい場合
 
 モデル種別、segmentation mask の理屈、FFT ベースの inpainting、Wikipedia 図表と公式 model card への参照を含む詳細説明は [技術的な詳細解説](technical-deep-dive.md) を参照してください。レンダラ内部、縦書き挙動、現在のレイアウト上の限界については [テキストレンダリングと縦書き CJK レイアウト](text-rendering-and-vertical-cjk-layout.md) にあります。
+
+

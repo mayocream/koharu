@@ -10,6 +10,7 @@ import type {
 
 import type { ApiKeyResponse } from '@/lib/generated/protocol/ApiKeyResponse'
 import type { ApiKeyValue } from '@/lib/generated/protocol/ApiKeyValue'
+import type { BootstrapConfig } from '@/lib/generated/protocol/BootstrapConfig'
 import type { BrushRegionRequest } from '@/lib/generated/protocol/BrushRegionRequest'
 import type { CreateTextBlock } from '@/lib/generated/protocol/CreateTextBlock'
 import type { DownloadState as GeneratedDownloadState } from '@/lib/generated/protocol/DownloadState'
@@ -43,6 +44,7 @@ import type { TranslateRequest } from '@/lib/generated/protocol/TranslateRequest
 export type {
   ApiKeyResponse,
   ApiKeyValue,
+  BootstrapConfig,
   BrushRegionRequest,
   CreateTextBlock,
   ExportLayer,

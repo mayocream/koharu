@@ -35,7 +35,7 @@ The main top-level areas are:
 If you are not sure where a change belongs:
 
 - UI interaction and panels usually live in `ui/`
-- backend APIs, MCP tools, and orchestration usually live in `koharu-rpc/` or `koharu-pipeline/`
+- backend APIs, MCP tools, and orchestration usually live in `koharu-rpc/` or `koharu-app/`
 - rendering, OCR, model runtime, and ML-specific logic live in the Rust workspace crates
 
 ## Set up the repository
@@ -176,3 +176,4 @@ That rule already exists in the repository's GitHub contribution guidance and re
 - [Run GUI, Headless, and MCP Modes](run-gui-headless-and-mcp.md)
 - [Configure MCP Clients](configure-mcp-clients.md)
 - [Troubleshooting](troubleshooting.md)
+

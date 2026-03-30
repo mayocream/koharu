@@ -1,15 +1,14 @@
 use std::{collections::HashMap, sync::Arc, time::Duration};
 
-use koharu_http::download;
-use koharu_pipeline::{pipeline, state_tx};
-use koharu_types::{
+use koharu_app::{pipeline, state_tx};
+use koharu_core::{
     DocumentChangedEvent, DocumentSummary, DocumentsChangedEvent, DownloadState, DownloadStatus,
     JobState, JobStatus, LlmState, PipelineProgress, PipelineStatus, PipelineStep, SnapshotEvent,
     TransferStatus,
 };
 use tokio::sync::{RwLock, broadcast};
 
-use crate::shared::{SharedResources, get_resources};
+use crate::shared::{SharedState, get_resources};
 
 #[derive(Debug, Clone)]
 pub enum ApiEvent {
@@ -26,14 +25,14 @@ pub struct EventHub {
 }
 
 struct Inner {
-    shared: SharedResources,
+    shared: SharedState,
     tx: broadcast::Sender<ApiEvent>,
     jobs: RwLock<HashMap<String, JobState>>,
     downloads: RwLock<HashMap<String, DownloadState>>,
 }
 
 impl EventHub {
-    pub fn new(shared: SharedResources) -> Self {
+    pub fn new(shared: SharedState) -> Self {
         let inner = Arc::new(Inner {
             shared,
             tx: broadcast::channel(256).0,
@@ -54,11 +53,22 @@ impl EventHub {
     }
 
     pub async fn snapshot(&self) -> anyhow::Result<SnapshotEvent> {
-        let resources = get_resources(&self.inner.shared)?;
-        let guard = resources.state.read().await;
-        let documents = guard.documents.iter().map(DocumentSummary::from).collect();
-        drop(guard);
-        let llm = resources.llm.snapshot().await;
+        let (documents, llm) = if let Ok(resources) = get_resources(&self.inner.shared) {
+            let guard = resources.state.read().await;
+            let documents = guard.documents.iter().map(DocumentSummary::from).collect();
+            drop(guard);
+            (documents, resources.llm.snapshot().await)
+        } else {
+            (
+                Vec::new(),
+                LlmState {
+                    status: koharu_core::LlmStateStatus::Empty,
+                    model_id: None,
+                    source: None,
+                    error: None,
+                },
+            )
+        };
 
         let mut jobs = self
             .inner
@@ -161,15 +171,28 @@ fn spawn_pipeline_listener(inner: Arc<Inner>) {
 }
 
 fn spawn_download_listener(inner: Arc<Inner>) {
-    let mut rx = download::subscribe();
     tokio::spawn(async move {
+        let mut runtime_rx = inner.shared.subscribe_runtime();
+        let mut download_rx = runtime_rx.borrow().clone().subscribe_downloads();
+
         loop {
-            match rx.recv().await {
-                Ok(progress) => {
-                    update_download_state(&inner, download_state(progress)).await;
+            tokio::select! {
+                changed = runtime_rx.changed() => {
+                    if changed.is_err() {
+                        break;
+                    }
+                    inner.downloads.write().await.clear();
+                    download_rx = runtime_rx.borrow().clone().subscribe_downloads();
                 }
-                Err(broadcast::error::RecvError::Lagged(_)) => continue,
-                Err(broadcast::error::RecvError::Closed) => break,
+                received = download_rx.recv() => match received {
+                    Ok(progress) => {
+                        update_download_state(&inner, download_state(progress)).await;
+                    }
+                    Err(broadcast::error::RecvError::Lagged(_)) => continue,
+                    Err(broadcast::error::RecvError::Closed) => {
+                        download_rx = runtime_rx.borrow().clone().subscribe_downloads();
+                    }
+                }
             }
         }
     });
@@ -272,17 +295,17 @@ fn download_state(progress: DownloadProgress) -> DownloadState {
     }
 }
 
-use koharu_types::DownloadProgress;
+use koharu_core::DownloadProgress;
 
 #[cfg(test)]
 mod tests {
-    use koharu_types::{PipelineStatus, PipelineStep};
+    use koharu_core::{PipelineStatus, PipelineStep};
 
     use super::{TransferStatus, download_state, pipeline_job_state};
 
     #[test]
     fn pipeline_progress_maps_to_job_state() {
-        let state = pipeline_job_state(koharu_types::PipelineProgress {
+        let state = pipeline_job_state(koharu_core::PipelineProgress {
             job_id: "job-1".to_string(),
             status: PipelineStatus::Failed("boom".to_string()),
             step: Some(PipelineStep::Render),
@@ -301,11 +324,11 @@ mod tests {
 
     #[test]
     fn download_progress_maps_to_download_state() {
-        let state = download_state(koharu_types::DownloadProgress {
+        let state = download_state(koharu_core::DownloadProgress {
             filename: "model.bin".to_string(),
             downloaded: 32,
             total: Some(64),
-            status: koharu_types::DownloadStatus::Completed,
+            status: koharu_core::DownloadStatus::Completed,
         });
 
         assert_eq!(state.id, "model.bin");

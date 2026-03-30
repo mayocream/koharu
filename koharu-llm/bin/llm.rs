@@ -5,6 +5,7 @@ use tracing_subscriber::fmt::format::FmtSpan;
 
 use koharu_llm::safe::llama_backend::LlamaBackend;
 use koharu_llm::{GenerateOptions, Language, Llm, ModelId};
+use koharu_runtime::{ComputePolicy, RuntimeManager, Settings};
 
 #[derive(Parser, Debug)]
 #[command(author, version, about)]
@@ -73,10 +74,15 @@ fn init_tracing() {
         .init();
 }
 
-async fn initialize_runtime() -> anyhow::Result<()> {
-    koharu_runtime::initialize().await?;
-    koharu_llm::sys::initialize()?;
-    Ok(())
+fn build_runtime(cpu: bool) -> anyhow::Result<RuntimeManager> {
+    RuntimeManager::new(
+        Settings::default(),
+        if cpu {
+            ComputePolicy::CpuOnly
+        } else {
+            ComputePolicy::PreferGpu
+        },
+    )
 }
 
 #[tokio::main]
@@ -84,10 +90,12 @@ async fn main() -> anyhow::Result<()> {
     init_tracing();
 
     let args = Args::parse();
-    initialize_runtime().await?;
+    let runtime = build_runtime(args.cpu)?;
+    runtime.prepare().await?;
+    koharu_llm::sys::initialize(&runtime)?;
     let backend = Arc::new(LlamaBackend::init()?);
 
-    let mut llm = Llm::load(args.model, args.cpu, backend).await?;
+    let mut llm = Llm::load(&runtime, args.model, args.cpu, backend).await?;
     let target_language = Language::parse(&args.locale).unwrap_or(Language::English);
 
     let opts = GenerateOptions {

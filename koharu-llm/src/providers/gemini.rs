@@ -1,15 +1,16 @@
 use std::future::Future;
 use std::pin::Pin;
+use std::sync::Arc;
 
+use reqwest_middleware::ClientWithMiddleware;
 use serde::Serialize;
-
-use koharu_http::http::http_client;
 
 use crate::{Language, prompt::system_prompt};
 
 use super::{AnyProvider, ensure_provider_success};
 
 pub struct GeminiProvider {
+    pub http_client: Arc<ClientWithMiddleware>,
     pub api_key: String,
 }
 
@@ -60,7 +61,8 @@ impl AnyProvider for GeminiProvider {
                 }],
             };
 
-            let response = http_client()
+            let response = self
+                .http_client
                 .post(&url)
                 .header("content-type", "application/json")
                 .body(serde_json::to_vec(&body)?)

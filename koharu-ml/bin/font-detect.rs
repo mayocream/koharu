@@ -3,6 +3,7 @@ use std::path::PathBuf;
 use anyhow::Result;
 use clap::Parser;
 use koharu_ml::font_detector::{FontDetector, ModelKind, TextDirection};
+use koharu_runtime::{ComputePolicy, RuntimeManager, Settings};
 
 #[derive(Parser, Debug)]
 #[command(
@@ -28,7 +29,15 @@ struct Args {
 #[tokio::main]
 async fn main() -> Result<()> {
     let args = Args::parse();
-    let detector = FontDetector::load_with_kind(args.cpu, args.model).await?;
+    let runtime = RuntimeManager::new(
+        Settings::default(),
+        if args.cpu {
+            ComputePolicy::CpuOnly
+        } else {
+            ComputePolicy::PreferGpu
+        },
+    )?;
+    let detector = FontDetector::load_with_kind(&runtime, args.cpu, args.model).await?;
     let image = image::open(&args.input)?;
     let start = std::time::Instant::now();
     let result = detector.inference(&[image], args.top_k)?;

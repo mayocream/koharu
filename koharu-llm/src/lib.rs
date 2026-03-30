@@ -1,5 +1,4 @@
 pub mod api;
-pub mod facade;
 pub mod language;
 mod model;
 pub mod paddleocr_vl;
@@ -10,6 +9,7 @@ pub mod sys;
 
 use std::path::PathBuf;
 
+use koharu_runtime::RuntimeManager;
 use strum::{EnumProperty, IntoEnumIterator};
 
 pub use language::{Language, language_from_tag, supported_locales};
@@ -80,8 +80,11 @@ impl ModelId {
         self.get_str(name).expect("missing model property")
     }
 
-    pub async fn get(&self) -> anyhow::Result<PathBuf> {
-        koharu_http::download::model(self.property("repo"), self.property("filename")).await
+    pub async fn get(&self, runtime: &RuntimeManager) -> anyhow::Result<PathBuf> {
+        runtime
+            .artifacts()
+            .huggingface_model(self.property("repo"), self.property("filename"))
+            .await
     }
 
     pub fn languages(&self) -> Vec<Language> {
@@ -92,11 +95,14 @@ impl ModelId {
     }
 }
 
-pub async fn prefetch() -> anyhow::Result<()> {
+pub async fn prefetch(runtime: &RuntimeManager) -> anyhow::Result<()> {
     use futures::stream::{self, StreamExt, TryStreamExt};
 
     stream::iter(ModelId::iter())
-        .map(|model| async move { model.get().await })
+        .map(|model| {
+            let runtime = runtime.clone();
+            async move { model.get(&runtime).await }
+        })
         .buffer_unordered(num_cpus::get())
         .try_collect::<Vec<_>>()
         .await?;

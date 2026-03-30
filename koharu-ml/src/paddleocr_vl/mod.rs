@@ -6,6 +6,7 @@ use anyhow::{Context, Result, bail};
 use candle_core::{D, DType, Device, Tensor};
 use candle_nn::VarBuilder;
 use image::{DynamicImage, RgbImage, imageops::FilterType};
+use koharu_runtime::RuntimeManager;
 use serde::{Deserialize, Serialize};
 use tokenizers::Tokenizer;
 use tracing::instrument;
@@ -171,13 +172,15 @@ pub struct PaddleOcrVl {
 }
 
 impl PaddleOcrVl {
-    pub async fn load(cpu: bool) -> Result<Self> {
+    pub async fn load(runtime: &RuntimeManager, cpu: bool) -> Result<Self> {
         let files = ModelFiles {
-            config: loading::resolve_manifest_path(Manifest::ConfigJson.get()).await?,
-            preprocessor: loading::resolve_manifest_path(Manifest::PreprocessorConfigJson.get())
-                .await?,
-            tokenizer: loading::resolve_manifest_path(Manifest::TokenizerJson.get()).await?,
-            weights: loading::resolve_manifest_path(Manifest::Model.get()).await?,
+            config: loading::resolve_manifest_path(Manifest::ConfigJson.get(runtime)).await?,
+            preprocessor: loading::resolve_manifest_path(
+                Manifest::PreprocessorConfigJson.get(runtime),
+            )
+            .await?,
+            tokenizer: loading::resolve_manifest_path(Manifest::TokenizerJson.get(runtime)).await?,
+            weights: loading::resolve_manifest_path(Manifest::Model.get(runtime)).await?,
         };
         Self::load_from_files(files, cpu)
     }

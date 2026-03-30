@@ -5,6 +5,7 @@ mod tokenizer;
 use anyhow::{Context, Result};
 use candle_core::{DType, Device, Tensor};
 use image::GenericImageView;
+use koharu_runtime::RuntimeManager;
 use tokenizers::Tokenizer;
 use tracing::instrument;
 
@@ -29,14 +30,14 @@ pub struct MangaOcr {
 }
 
 impl MangaOcr {
-    pub async fn load(cpu: bool) -> Result<Self> {
+    pub async fn load(runtime: &RuntimeManager, cpu: bool) -> Result<Self> {
         let device = device(cpu)?;
-        let config_path = loading::resolve_manifest_path(Manifest::Config.get()).await?;
+        let config_path = loading::resolve_manifest_path(Manifest::Config.get(runtime)).await?;
         let preprocessor_path =
-            loading::resolve_manifest_path(Manifest::PreprocessorConfig.get()).await?;
-        let vocab_path = loading::resolve_manifest_path(Manifest::Vocab.get()).await?;
+            loading::resolve_manifest_path(Manifest::PreprocessorConfig.get(runtime)).await?;
+        let vocab_path = loading::resolve_manifest_path(Manifest::Vocab.get(runtime)).await?;
         let special_tokens_path =
-            loading::resolve_manifest_path(Manifest::SpecialTokensMap.get()).await?;
+            loading::resolve_manifest_path(Manifest::SpecialTokensMap.get(runtime)).await?;
 
         let config: VisionEncoderDecoderConfig =
             loading::read_json(&config_path).context("failed to parse model config")?;
@@ -44,10 +45,11 @@ impl MangaOcr {
             .context("failed to parse preprocessor config")?;
         let tokenizer = load_tokenizer(None, &vocab_path, &special_tokens_path)?;
         let model_device = device.clone();
-        let model = loading::load_mmaped_safetensors(Manifest::Model.get(), &device, move |vb| {
-            VisionEncoderDecoder::from_config(config, vb, model_device.clone())
-        })
-        .await?;
+        let model =
+            loading::load_mmaped_safetensors(Manifest::Model.get(runtime), &device, move |vb| {
+                VisionEncoderDecoder::from_config(config, vb, model_device.clone())
+            })
+            .await?;
 
         Ok(Self {
             model,

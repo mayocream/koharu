@@ -3694,6 +3694,15 @@ dependencies = [
 ]
 
 [[package]]
+name = "inventory"
+version = "0.3.23"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "8062b737e5389949f477d4760a2ebbff0c366f97798f2419b8d8f366363d3342"
+dependencies = [
+ "rustversion",
+]
+
+[[package]]
 name = "ipnet"
 version = "2.12.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -3901,19 +3910,19 @@ dependencies = [
 
 [[package]]
 name = "koharu"
-version = "0.40.1"
+version = "0.41.4"
 dependencies = [
  "anyhow",
  "clap",
  "dirs",
  "git-version",
+ "koharu-app",
+ "koharu-core",
  "koharu-llm",
  "koharu-ml",
- "koharu-pipeline",
  "koharu-renderer",
  "koharu-rpc",
  "koharu-runtime",
- "koharu-types",
  "once_cell",
  "rfd",
  "serde_json",
@@ -3929,28 +3938,54 @@ dependencies = [
 ]
 
 [[package]]
-name = "koharu-http"
-version = "0.40.1"
+name = "koharu-app"
+version = "0.41.4"
 dependencies = [
  "anyhow",
- "axum",
  "dirs",
- "futures",
- "hf-hub",
- "indicatif",
- "koharu-types",
+ "image",
+ "imageproc",
+ "koharu-core",
+ "koharu-llm",
+ "koharu-ml",
+ "koharu-renderer",
+ "koharu-runtime",
  "once_cell",
- "reqwest 0.13.2",
+ "open",
+ "rayon",
  "reqwest-middleware",
- "reqwest-retry",
+ "rfd",
  "serde",
+ "serde_bytes",
+ "strum",
+ "tempfile",
  "tokio",
+ "toml 0.9.12+spec-1.1.0",
  "tracing",
+ "url",
+ "uuid",
+]
+
+[[package]]
+name = "koharu-core"
+version = "0.41.4"
+dependencies = [
+ "anyhow",
+ "blake3",
+ "image",
+ "schemars 1.2.1",
+ "serde",
+ "serde_bytes",
+ "serde_json",
+ "strum",
+ "tokio",
+ "ts-rs",
+ "uuid",
 ]
 
 [[package]]
 name = "koharu-llm"
-version = "0.40.1"
+version = "0.41.4"
 dependencies = [
  "anyhow",
  "bindgen",
@@ -3963,15 +3998,15 @@ dependencies = [
  "hf-hub",
  "image",
  "keyring",
- "koharu-http",
+ "koharu-core",
  "koharu-runtime",
- "koharu-types",
  "libloading 0.8.9",
  "minijinja",
  "num_cpus",
  "proc-macro2",
  "quote",
  "reqwest 0.13.2",
+ "reqwest-middleware",
  "serde",
  "serde_json",
  "strum",
@@ -3988,7 +4023,7 @@ dependencies = [
 
 [[package]]
 name = "koharu-ml"
-version = "0.40.1"
+version = "0.41.4"
 dependencies = [
  "anyhow",
  "candle-core",
@@ -4001,9 +4036,9 @@ dependencies = [
  "image",
  "imageproc",
  "keyring",
- "koharu-http",
+ "koharu-core",
  "koharu-llm",
- "koharu-types",
+ "koharu-runtime",
  "libloading 0.8.9",
  "minijinja",
  "num_cpus",
@@ -4025,42 +4060,19 @@ dependencies = [
 ]
 
 [[package]]
-name = "koharu-pipeline"
-version = "0.40.1"
-dependencies = [
- "anyhow",
- "image",
- "imageproc",
- "koharu-llm",
- "koharu-ml",
- "koharu-renderer",
- "koharu-types",
- "once_cell",
- "open",
- "rayon",
- "rfd",
- "serde",
- "serde_bytes",
- "strum",
- "tokio",
- "tracing",
- "uuid",
-]
-
-[[package]]
 name = "koharu-psd"
-version = "0.40.1"
+version = "0.41.4"
 dependencies = [
  "image",
- "koharu-renderer",
- "koharu-types",
+ "koharu-app",
+ "koharu-core",
  "psd",
  "thiserror 2.0.18",
 ]
 
 [[package]]
 name = "koharu-renderer"
-version = "0.40.1"
+version = "0.41.4"
 dependencies = [
  "anyhow",
  "criterion",
@@ -4070,7 +4082,7 @@ dependencies = [
  "icu",
  "image",
  "imageproc",
- "koharu-types",
+ "koharu-core",
  "once_cell",
  "rayon",
  "serde",
@@ -4082,7 +4094,7 @@ dependencies = [
 
 [[package]]
 name = "koharu-rpc"
-version = "0.40.1"
+version = "0.41.4"
 dependencies = [
  "anyhow",
  "async-stream",
@@ -4091,10 +4103,10 @@ dependencies = [
  "futures",
  "image",
  "imageproc",
- "koharu-http",
- "koharu-pipeline",
+ "koharu-app",
+ "koharu-core",
  "koharu-psd",
- "koharu-types",
+ "koharu-runtime",
  "rmcp",
  "rmp-serde",
  "rmpv",
@@ -4107,36 +4119,31 @@ dependencies = [
 
 [[package]]
 name = "koharu-runtime"
-version = "0.40.1"
+version = "0.41.4"
 dependencies = [
  "anyhow",
+ "axum",
  "dirs",
  "flate2",
- "koharu-http",
+ "futures",
+ "hf-hub",
+ "indexmap 2.13.0",
+ "indicatif",
+ "inventory",
+ "koharu-core",
  "libloading 0.8.9",
+ "reqwest 0.13.2",
+ "reqwest-middleware",
+ "reqwest-retry",
+ "serde",
  "serde_json",
  "tar",
  "tempfile",
  "tokio",
+ "tracing",
+ "url",
  "windows-sys 0.61.2",
  "zip 8.4.0",
-]
-
-[[package]]
-name = "koharu-types"
-version = "0.40.1"
-dependencies = [
- "anyhow",
- "blake3",
- "image",
- "schemars 1.2.1",
- "serde",
- "serde_bytes",
- "serde_json",
- "strum",
- "tokio",
- "ts-rs",
- "uuid",
 ]
 
 [[package]]

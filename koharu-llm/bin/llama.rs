@@ -8,7 +8,6 @@
 
 use anyhow::{Context, Result, anyhow, bail};
 use clap::Parser;
-use hf_hub::api::sync::ApiBuilder;
 use koharu_llm::safe::context::params::LlamaContextParams;
 use koharu_llm::safe::llama_backend::LlamaBackend;
 use koharu_llm::safe::llama_batch::LlamaBatch;
@@ -18,6 +17,7 @@ use koharu_llm::safe::model::params::kv_overrides::ParamOverrideValue;
 use koharu_llm::safe::model::params::{LlamaModelParams, LlamaSplitMode};
 use koharu_llm::safe::sampling::LlamaSampler;
 use koharu_llm::safe::{LogOptions, ggml_time_us, send_logs_to_tracing};
+use koharu_runtime::{ComputePolicy, RuntimeManager, Settings};
 
 use std::ffi::CString;
 use std::io::Write;
@@ -126,15 +126,13 @@ enum Model {
 
 impl Model {
     /// Convert the model to a path - may download from huggingface
-    fn get_or_load(self) -> Result<PathBuf> {
+    async fn get_or_load(self, runtime: &RuntimeManager) -> Result<PathBuf> {
         match self {
             Model::Local { path } => Ok(path),
-            Model::HuggingFace { model, repo } => ApiBuilder::new()
-                .with_progress(true)
-                .build()
-                .with_context(|| "unable to create huggingface api")?
-                .model(repo)
-                .get(&model)
+            Model::HuggingFace { model, repo } => runtime
+                .artifacts()
+                .huggingface_model(&repo, &model)
+                .await
                 .with_context(|| "unable to download model"),
         }
     }
@@ -160,16 +158,26 @@ fn main() -> Result<()> {
         list_devices,
     } = Args::parse();
 
-    tokio::runtime::Builder::new_current_thread()
+    let runtime = tokio::runtime::Builder::new_current_thread()
         .enable_all()
         .build()
-        .with_context(|| "unable to create tokio runtime")?
-        .block_on(async {
-            koharu_runtime::initialize()
-                .await
-                .context("failed to initialize runtime libraries")?;
-            Ok::<(), anyhow::Error>(())
-        })?;
+        .with_context(|| "unable to create tokio runtime")?;
+    let runtime_manager = RuntimeManager::new(
+        Settings::default(),
+        if disable_gpu {
+            ComputePolicy::CpuOnly
+        } else {
+            ComputePolicy::PreferGpu
+        },
+    )?;
+
+    runtime.block_on(async {
+        runtime_manager
+            .prepare()
+            .await
+            .context("failed to initialize runtime libraries")?;
+        Ok::<(), anyhow::Error>(())
+    })?;
 
     if verbose {
         tracing_subscriber::fmt::init();
@@ -242,8 +250,8 @@ fn main() -> Result<()> {
         eprintln!("warning: --cmoe ignored because GPU offload is not active");
     }
 
-    let model_path = model
-        .get_or_load()
+    let model_path = runtime
+        .block_on(model.get_or_load(&runtime_manager))
         .with_context(|| "failed to get model from args")?;
 
     let model = LlamaModel::load_from_file(&backend, model_path, &model_params)

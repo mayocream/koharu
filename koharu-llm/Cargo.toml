@@ -34,13 +34,13 @@ flate2 = { workspace = true }
 futures = { workspace = true }
 hf-hub = { workspace = true }
 image = { workspace = true }
-koharu-http = { workspace = true }
+koharu-core = { workspace = true }
 koharu-runtime = { workspace = true }
-koharu-types = { workspace = true }
 libloading = { workspace = true }
 minijinja = { workspace = true }
 num_cpus = { workspace = true }
 reqwest = { workspace = true }
+reqwest-middleware = { workspace = true }
 serde = { workspace = true }
 serde_json = { workspace = true }
 strum = { workspace = true }

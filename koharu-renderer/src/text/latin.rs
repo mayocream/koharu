@@ -7,7 +7,7 @@ use imageproc::{
     morphology::{dilate, erode},
     region_labelling::{Connectivity, connected_components},
 };
-use koharu_types::TextBlock;
+use koharu_core::TextBlock;
 
 use crate::layout::LayoutRun;
 

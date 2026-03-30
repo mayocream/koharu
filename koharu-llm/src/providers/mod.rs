@@ -1,9 +1,11 @@
 use std::future::Future;
 use std::pin::Pin;
 use std::sync::atomic::{AtomicBool, Ordering};
+use std::sync::Arc;
 
 use anyhow::Context;
 use keyring::Entry;
+use reqwest_middleware::ClientWithMiddleware;
 
 use crate::Language;
 
@@ -106,6 +108,7 @@ pub trait AnyProvider: Send + Sync {
 }
 
 pub struct ProviderConfig {
+    pub http_client: Arc<ClientWithMiddleware>,
     pub api_key: Option<String>,
     pub base_url: Option<String>,
     pub temperature: Option<f64>,
@@ -127,18 +130,23 @@ pub fn build_provider(
 
     let provider: Box<dyn AnyProvider> = match provider_id {
         "openai" => Box::new(openai::OpenAiProvider {
+            http_client: Arc::clone(&config.http_client),
             api_key: required_api_key("openai")?,
         }),
         "gemini" => Box::new(gemini::GeminiProvider {
+            http_client: Arc::clone(&config.http_client),
             api_key: required_api_key("gemini")?,
         }),
         "claude" => Box::new(claude::ClaudeProvider {
+            http_client: Arc::clone(&config.http_client),
             api_key: required_api_key("claude")?,
         }),
         "deepseek" => Box::new(deepseek::DeepSeekProvider {
+            http_client: Arc::clone(&config.http_client),
             api_key: required_api_key("deepseek")?,
         }),
         "openai-compatible" => Box::new(openai_compatible::OpenAiCompatibleProvider {
+            http_client: Arc::clone(&config.http_client),
             base_url: config
                 .base_url
                 .filter(|value| !value.trim().is_empty())

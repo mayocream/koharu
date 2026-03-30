@@ -1,7 +1,7 @@
 use std::io::Write;
 
 use image::{DynamicImage, GrayImage, Rgba, RgbaImage, imageops::overlay};
-use koharu_types::{
+use koharu_core::{
     Document, FontPrediction, SerializableDynamicImage, TextAlign, TextBlock, TextDirection,
 };
 
@@ -748,7 +748,7 @@ mod tests {
 
     use crate::writer::PsdWriter;
 
-    use koharu_types::{TextBlock, TextDirection};
+    use koharu_core::{TextBlock, TextDirection};
 
     use super::{
         TextOrientation, contains_cjk, infer_font_name, infer_orientation, is_probably_latin,
@@ -817,7 +817,7 @@ mod tests {
     #[test]
     fn style_font_name_is_used_for_editable_export() {
         let block = TextBlock {
-            style: Some(koharu_types::TextStyle {
+            style: Some(koharu_core::TextStyle {
                 font_families: vec!["ArialMT".to_string()],
                 font_size: None,
                 color: [0, 0, 0, 255],

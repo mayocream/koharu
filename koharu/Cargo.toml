@@ -22,12 +22,12 @@ include = [
 ]
 
 [dependencies]
+koharu-app = { workspace = true }
+koharu-core = { workspace = true }
 koharu-ml = { workspace = true }
-koharu-pipeline = { workspace = true }
 koharu-renderer = { workspace = true }
 koharu-rpc = { workspace = true }
 koharu-runtime = { workspace = true }
-koharu-types = { workspace = true }
 anyhow = { workspace = true }
 clap = { workspace = true }
 dirs = { workspace = true }

@@ -1,15 +1,18 @@
 use std::path::Path;
 
 use image::GenericImageView;
+use koharu_core::TextBlock;
 use koharu_ml::lama::Lama;
-use koharu_types::TextBlock;
+
+mod support;
 
 #[tokio::test]
 #[ignore]
 async fn lama_inpainting_updates_masked_region() -> anyhow::Result<()> {
     let fixtures = Path::new(env!("CARGO_MANIFEST_DIR")).join("tests/fixtures");
 
-    let lama = Lama::load(false).await?;
+    let runtime = support::cpu_runtime();
+    let lama = Lama::load(&runtime, false).await?;
     let base = image::open(fixtures.join("image.jpg"))?;
     let mask = image::open(fixtures.join("mask.png"))?;
 
@@ -41,7 +44,8 @@ async fn lama_inpainting_updates_masked_region() -> anyhow::Result<()> {
 async fn lama_block_aware_inpainting_returns_same_size() -> anyhow::Result<()> {
     let fixtures = Path::new(env!("CARGO_MANIFEST_DIR")).join("tests/fixtures");
 
-    let lama = Lama::load(false).await?;
+    let runtime = support::cpu_runtime();
+    let lama = Lama::load(&runtime, false).await?;
     let base = image::open(fixtures.join("image.jpg"))?;
     let mask = image::open(fixtures.join("mask.png"))?;
     let mask_luma = mask.to_luma8();

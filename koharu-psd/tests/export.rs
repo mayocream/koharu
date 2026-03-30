@@ -1,11 +1,11 @@
 use std::path::PathBuf;
 
 use image::{DynamicImage, GrayImage, Rgba, RgbaImage};
-use koharu_psd::{PsdExportError, PsdExportOptions, TextLayerMode, export_document};
-use koharu_types::{
+use koharu_core::{
     Document, FontPrediction, NamedFontPrediction, SerializableDynamicImage, TextAlign, TextBlock,
     TextDirection, TextShaderEffect, TextStrokeStyle, TextStyle,
 };
+use koharu_psd::{PsdExportError, PsdExportOptions, TextLayerMode, export_document};
 
 fn rgba_image(width: u32, height: u32, color: [u8; 4]) -> SerializableDynamicImage {
     SerializableDynamicImage(DynamicImage::ImageRgba8(RgbaImage::from_pixel(

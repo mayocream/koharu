@@ -17,32 +17,32 @@ use axum::{
     routing::{delete, get, patch, post, put},
 };
 use image::ImageFormat;
-use koharu_pipeline::{
+use koharu_app::{
     AppResources, operations,
     state_tx::{self, ChangedField},
 };
-use koharu_psd::{PsdExportOptions, TextLayerMode};
-use koharu_types::{
-    ApiKeyGetPayload, ApiKeyResponse, ApiKeySetPayload, ApiKeyValue, CreateTextBlock, Document,
-    DocumentDetail, DocumentSummary, ExportLayer, ExportResult, FileEntry, FontFaceInfo,
-    IndexPayload, InpaintPartialPayload, InpaintRegion, JobState, JobStatus, LlmLoadPayload,
-    LlmLoadRequest, LlmModelInfo, LlmPingRequest, LlmPingResponse, MaskRegionRequest, MetaInfo,
-    OpenDocumentsPayload, PipelineJobRequest, Region, RenderPayload, RenderRequest,
-    SerializableDynamicImage, TextBlock, TextBlockDetail, TextBlockPatch, TranslateRequest,
-    UpdateBrushLayerPayload, UpdateInpaintMaskPayload,
+use koharu_core::{
+    ApiKeyGetPayload, ApiKeyResponse, ApiKeySetPayload, ApiKeyValue, BootstrapConfig,
+    CreateTextBlock, Document, DocumentDetail, DocumentSummary, ExportLayer, ExportResult,
+    FileEntry, FontFaceInfo, IndexPayload, InpaintPartialPayload, InpaintRegion, JobState,
+    JobStatus, LlmLoadPayload, LlmLoadRequest, LlmModelInfo, LlmPingRequest, LlmPingResponse,
+    MaskRegionRequest, MetaInfo, OpenDocumentsPayload, PipelineJobRequest, Region, RenderPayload,
+    RenderRequest, SerializableDynamicImage, TextBlock, TextBlockDetail, TextBlockPatch,
+    TranslateRequest, UpdateBrushLayerPayload, UpdateInpaintMaskPayload,
 };
+use koharu_psd::{PsdExportOptions, TextLayerMode};
 use serde::Deserialize;
 
 use crate::{
     events::{ApiEvent, EventHub},
-    shared::{SharedResources, get_resources},
+    shared::{SharedState, get_resources},
 };
 
 const MAX_BODY_SIZE: usize = 1024 * 1024 * 1024;
 
 #[derive(Clone)]
 pub struct ApiState {
-    pub resources: SharedResources,
+    pub resources: SharedState,
     pub events: EventHub,
 }
 
@@ -52,10 +52,12 @@ impl ApiState {
     }
 }
 
-pub fn router(resources: SharedResources, events: EventHub) -> Router {
+pub fn router(resources: SharedState, events: EventHub) -> Router {
     let state = ApiState { resources, events };
 
     Router::new()
+        .route("/config", get(get_config).put(put_config))
+        .route("/initialize", post(initialize_app))
         .route("/meta", get(get_meta))
         .route("/fonts", get(get_fonts))
         .route("/documents", get(list_documents))
@@ -140,6 +142,10 @@ impl ApiError {
         Self::new(StatusCode::NOT_FOUND, message)
     }
 
+    fn conflict(message: impl Into<String>) -> Self {
+        Self::new(StatusCode::CONFLICT, message)
+    }
+
     fn service_unavailable(error: anyhow::Error) -> Self {
         Self::new(StatusCode::SERVICE_UNAVAILABLE, error.to_string())
     }
@@ -169,7 +175,7 @@ impl IntoResponse for ApiError {
 #[derive(Debug, Deserialize)]
 #[serde(rename_all = "camelCase")]
 struct ImportQuery {
-    mode: Option<koharu_types::ImportMode>,
+    mode: Option<koharu_core::ImportMode>,
 }
 
 #[derive(Debug, Deserialize)]
@@ -183,6 +189,33 @@ struct LayerQuery {
 struct LlmModelsQuery {
     language: Option<String>,
     openai_compatible_base_url: Option<String>,
+}
+
+async fn get_config(State(state): State<ApiState>) -> ApiResult<Json<BootstrapConfig>> {
+    let config = state.resources.get_config().map_err(ApiError::internal)?;
+    Ok(Json(config))
+}
+
+async fn put_config(
+    State(state): State<ApiState>,
+    Json(config): Json<BootstrapConfig>,
+) -> ApiResult<Json<BootstrapConfig>> {
+    let saved = state.resources.put_config(config).map_err(ApiError::from)?;
+    Ok(Json(saved))
+}
+
+async fn initialize_app(State(state): State<ApiState>) -> ApiResult<StatusCode> {
+    match state.resources.initialize().await {
+        Ok(()) => Ok(StatusCode::NO_CONTENT),
+        Err(error) => {
+            let message = error.to_string();
+            if message.contains("already in progress") {
+                Err(ApiError::conflict(message))
+            } else {
+                Err(ApiError::internal(error))
+            }
+        }
+    }
 }
 
 async fn get_meta(State(state): State<ApiState>) -> ApiResult<Json<MetaInfo>> {
@@ -262,7 +295,7 @@ async fn import_documents(
     State(state): State<ApiState>,
     Query(query): Query<ImportQuery>,
     mut multipart: Multipart,
-) -> ApiResult<Json<koharu_types::ImportResult>> {
+) -> ApiResult<Json<koharu_core::ImportResult>> {
     let resources = state.resources()?;
     let mut files = Vec::new();
 
@@ -290,11 +323,11 @@ async fn import_documents(
     }
 
     let payload = OpenDocumentsPayload { files };
-    match query.mode.unwrap_or(koharu_types::ImportMode::Replace) {
-        koharu_types::ImportMode::Replace => {
+    match query.mode.unwrap_or(koharu_core::ImportMode::Replace) {
+        koharu_core::ImportMode::Replace => {
             operations::open_documents(resources.clone(), payload).await?;
         }
-        koharu_types::ImportMode::Append => {
+        koharu_core::ImportMode::Append => {
             operations::add_documents(resources.clone(), payload).await?;
         }
     }
@@ -305,7 +338,7 @@ async fn import_documents(
         .map(DocumentSummary::from)
         .collect::<Vec<_>>();
 
-    Ok(Json(koharu_types::ImportResult {
+    Ok(Json(koharu_core::ImportResult {
         total_count: documents.len(),
         documents,
     }))
@@ -384,7 +417,7 @@ async fn translate_document(
 
     operations::llm_generate(
         resources,
-        koharu_types::LlmGeneratePayload {
+        koharu_core::LlmGeneratePayload {
             index,
             text_block_index,
             language: request.language,
@@ -417,7 +450,7 @@ async fn update_mask_region(
 async fn update_brush_region(
     State(state): State<ApiState>,
     Path(document_id): Path<String>,
-    Json(request): Json<koharu_types::BrushRegionRequest>,
+    Json(request): Json<koharu_core::BrushRegionRequest>,
 ) -> ApiResult<StatusCode> {
     let resources = state.resources()?;
     let (index, _) = find_document(&resources, &document_id).await?;
@@ -436,7 +469,7 @@ async fn update_brush_region(
 async fn inpaint_region(
     State(state): State<ApiState>,
     Path(document_id): Path<String>,
-    Json(request): Json<koharu_types::InpaintRegionRequest>,
+    Json(request): Json<koharu_core::InpaintRegionRequest>,
 ) -> ApiResult<StatusCode> {
     let resources = state.resources()?;
     let (index, _) = find_document(&resources, &document_id).await?;
@@ -546,7 +579,7 @@ async fn list_llm_models(
     let resources = state.resources()?;
     let models = operations::llm_list(
         resources,
-        koharu_types::LlmListPayload {
+        koharu_core::LlmListPayload {
             language: query.language,
             openai_compatible_base_url: query.openai_compatible_base_url,
         },
@@ -562,7 +595,7 @@ async fn list_llm_models(
     Ok(Json(models))
 }
 
-async fn get_llm_state(State(state): State<ApiState>) -> ApiResult<Json<koharu_types::LlmState>> {
+async fn get_llm_state(State(state): State<ApiState>) -> ApiResult<Json<koharu_core::LlmState>> {
     let resources = state.resources()?;
     Ok(Json(resources.llm.snapshot().await))
 }
@@ -570,7 +603,7 @@ async fn get_llm_state(State(state): State<ApiState>) -> ApiResult<Json<koharu_t
 async fn load_llm(
     State(state): State<ApiState>,
     Json(request): Json<LlmLoadRequest>,
-) -> ApiResult<Json<koharu_types::LlmState>> {
+) -> ApiResult<Json<koharu_core::LlmState>> {
     let resources = state.resources()?;
     operations::llm_load(
         resources.clone(),
@@ -587,14 +620,23 @@ async fn load_llm(
     Ok(Json(resources.llm.snapshot().await))
 }
 
-async fn offload_llm(State(state): State<ApiState>) -> ApiResult<Json<koharu_types::LlmState>> {
+async fn offload_llm(State(state): State<ApiState>) -> ApiResult<Json<koharu_core::LlmState>> {
     let resources = state.resources()?;
     operations::llm_offload(resources.clone()).await?;
     Ok(Json(resources.llm.snapshot().await))
 }
 
-async fn ping_llm(Json(request): Json<LlmPingRequest>) -> ApiResult<Json<LlmPingResponse>> {
-    match operations::llm_ping(&request.base_url, request.api_key.as_deref()).await {
+async fn ping_llm(
+    State(state): State<ApiState>,
+    Json(request): Json<LlmPingRequest>,
+) -> ApiResult<Json<LlmPingResponse>> {
+    match operations::llm_ping(
+        state.resources.runtime().http_client(),
+        &request.base_url,
+        request.api_key.as_deref(),
+    )
+    .await
+    {
         Ok(result) => Ok(Json(LlmPingResponse {
             ok: true,
             models: result.models,
@@ -655,7 +697,7 @@ async fn start_pipeline_job(
 
     let job_id = operations::process(
         resources.clone(),
-        koharu_types::ProcessRequest {
+        koharu_core::ProcessRequest {
             index,
             llm_model_id: request.llm_model_id,
             llm_api_key: request.llm_api_key,
@@ -679,7 +721,7 @@ async fn start_pipeline_job(
         current_document: 0,
         total_documents,
         current_step_index: 0,
-        total_steps: koharu_types::PipelineStep::ALL.len(),
+        total_steps: koharu_core::PipelineStep::ALL.len(),
         overall_percent: 0,
         error: None,
     };
@@ -1002,8 +1044,8 @@ fn apply_text_block_patch(block: &mut TextBlock, patch: TextBlockPatch) {
 #[cfg(test)]
 mod tests {
     use super::{app_psd_export_options, apply_text_block_patch, psd_export_filename};
+    use koharu_core::{Document, TextAlign, TextBlock, TextBlockPatch, TextDirection, TextStyle};
     use koharu_psd::TextLayerMode;
-    use koharu_types::{Document, TextAlign, TextBlock, TextBlockPatch, TextDirection, TextStyle};
 
     #[test]
     fn text_block_patch_updates_geometry_and_clears_rendered() {

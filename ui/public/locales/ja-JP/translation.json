@@ -223,7 +223,27 @@
     "deepseek": "DeepSeek",
     "unknown": "プロバイダー"
   },
+  "bootstrap": {
+    "loading": "読み込み中",
+    "language": "言語",
+    "runtimePath": "ランタイムパス",
+    "modelsPath": "モデルパス",
+    "proxyUrl": "プロキシ URL",
+    "runtimePathPlaceholder": "ランタイムパス",
+    "modelsPathPlaceholder": "モデルパス",
+    "proxyUrlPlaceholder": "HTTP://127.0.0.1:7890",
+    "pathsRequired": "ランタイムパスとモデルパスは必須です。",
+    "failedLoadConfig": "設定を読み込めませんでした。",
+    "failed": "失敗",
+    "waitingForDownload": "ダウンロード待機中",
+    "back": "戻る",
+    "next": "次へ",
+    "init": "開始",
+    "retryNow": "今すぐ再試行"
+  },
   "settings": {
+    "httpProxy": "HTTP プロキシ",
+    "httpProxyDescription": "ランタイムとモデルのダウンロードに使用します。変更は自動で保存されます。",
     "title": "設定",
     "appearance": "外観",
     "appearanceDescription": "Koharu の外観をカスタマイズします。",

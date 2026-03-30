@@ -35,7 +35,7 @@ Koharu 接受对 Rust workspace、Tauri 桌面壳、Next.js UI、ML 管线、MCP
 如果你不确定改动应放在哪：
 
 - UI 交互与面板通常在 `ui/`
-- 后端 API、MCP 工具与调度逻辑通常在 `koharu-rpc/` 或 `koharu-pipeline/`
+- 后端 API、MCP 工具与调度逻辑通常在 `koharu-rpc/` 或 `koharu-app/`
 - 渲染、OCR、模型运行时与 ML 相关逻辑通常在 Rust workspace crate 中
 
 ## 设置仓库
@@ -176,3 +176,4 @@ bun run dev -- --headless
 - [以 GUI、Headless 与 MCP 模式运行](run-gui-headless-and-mcp.md)
 - [配置 MCP 客户端](configure-mcp-clients.md)
 - [故障排查](troubleshooting.md)
+

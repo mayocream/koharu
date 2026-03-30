@@ -6,7 +6,8 @@ use anyhow::{Context, Result};
 use candle_core::{DType, Device, Tensor};
 use candle_nn::VarBuilder;
 use image::{DynamicImage, RgbImage, imageops::FilterType};
-use koharu_types::TextBlock;
+use koharu_core::TextBlock;
+use koharu_runtime::RuntimeManager;
 use serde::{Deserialize, Serialize};
 use tracing::instrument;
 
@@ -79,11 +80,11 @@ pub struct Mit48pxOcr {
 }
 
 impl Mit48pxOcr {
-    pub async fn load(cpu: bool) -> Result<Self> {
+    pub async fn load(runtime: &RuntimeManager, cpu: bool) -> Result<Self> {
         let files = ModelFiles {
-            config: loading::resolve_manifest_path(Manifest::Config.get()).await?,
-            dictionary: loading::resolve_manifest_path(Manifest::Dictionary.get()).await?,
-            weights: loading::resolve_manifest_path(Manifest::Model.get()).await?,
+            config: loading::resolve_manifest_path(Manifest::Config.get(runtime)).await?,
+            dictionary: loading::resolve_manifest_path(Manifest::Dictionary.get(runtime)).await?,
+            weights: loading::resolve_manifest_path(Manifest::Model.get(runtime)).await?,
         };
         Self::load_from_files(files, cpu)
     }

@@ -5,5 +5,10 @@
     "features": [
       "metal"
     ]
+  },
+  "bundle": {
+    "macOS": {
+      "entitlements": "./Entitlements.plist"
+    }
   }
 }

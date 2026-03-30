@@ -1,12 +1,12 @@
 use std::{error::Error, fs, path::PathBuf};
 
 use image::{DynamicImage, GrayImage, Luma, Rgba, RgbaImage};
-use koharu_psd::{PsdExportOptions, TextLayerMode, export_document};
-use koharu_renderer::facade::Renderer;
-use koharu_types::{
+use koharu_app::renderer::Renderer;
+use koharu_core::{
     Document, FontPrediction, NamedFontPrediction, SerializableDynamicImage, TextAlign, TextBlock,
     TextDirection, TextShaderEffect, TextStyle,
 };
+use koharu_psd::{PsdExportOptions, TextLayerMode, export_document};
 
 fn main() -> Result<(), Box<dyn Error>> {
     let (output, editable) = parse_args()?;

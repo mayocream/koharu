@@ -6,6 +6,8 @@ use std::time::Instant;
 
 use anyhow::{Context, Result};
 
+use koharu_runtime::RuntimeManager;
+
 use crate::prompt::PromptRenderer;
 use crate::safe::context::params::LlamaContextParams;
 use crate::safe::llama_backend::LlamaBackend;
@@ -59,8 +61,15 @@ impl Default for GenerateOptions {
 }
 
 impl Llm {
-    pub async fn load(id: ModelId, cpu: bool, backend: Arc<LlamaBackend>) -> Result<Self> {
-        let model_path = id.get().await?;
+    pub async fn load(
+        runtime: &RuntimeManager,
+        id: ModelId,
+        cpu: bool,
+        backend: Arc<LlamaBackend>,
+    ) -> Result<Self> {
+        crate::sys::initialize(runtime)
+            .context("failed to initialize llama.cpp runtime bindings")?;
+        let model_path = id.get(runtime).await?;
 
         tokio::task::spawn_blocking(move || Self::load_from_path(id, cpu, model_path, backend))
             .await
@@ -73,8 +82,6 @@ impl Llm {
         model_path: PathBuf,
         backend: Arc<LlamaBackend>,
     ) -> Result<Self> {
-        crate::sys::initialize().context("failed to initialize llama.cpp runtime bindings")?;
-
         LOGGING_READY.call_once(|| {
             send_logs_to_tracing(LogOptions::default().with_logs_enabled(true));
         });

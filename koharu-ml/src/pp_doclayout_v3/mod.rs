@@ -9,6 +9,7 @@ use image::{
     imageops::{self, FilterType},
 };
 use imageproc::contours::{BorderType, find_contours};
+use koharu_runtime::RuntimeManager;
 use serde::{Deserialize, Serialize};
 
 use crate::{define_models, device, loading};
@@ -21,6 +22,28 @@ define_models! {
     Model => ("PaddlePaddle/PP-DocLayoutV3_safetensors", "model.safetensors"),
 }
 
+koharu_runtime::declare_hf_model_package!(
+    id: "model:pp-doclayout-v3:config",
+    repo: "PaddlePaddle/PP-DocLayoutV3_safetensors",
+    file: "config.json",
+    bootstrap: true,
+    order: 100,
+);
+koharu_runtime::declare_hf_model_package!(
+    id: "model:pp-doclayout-v3:preprocessor-config",
+    repo: "PaddlePaddle/PP-DocLayoutV3_safetensors",
+    file: "preprocessor_config.json",
+    bootstrap: true,
+    order: 101,
+);
+koharu_runtime::declare_hf_model_package!(
+    id: "model:pp-doclayout-v3:weights",
+    repo: "PaddlePaddle/PP-DocLayoutV3_safetensors",
+    file: "model.safetensors",
+    bootstrap: true,
+    order: 102,
+);
+
 #[derive(Debug)]
 pub struct PPDocLayoutV3 {
     model: PPDocLayoutV3ForObjectDetection,
@@ -32,11 +55,11 @@ pub struct PPDocLayoutV3 {
 }
 
 impl PPDocLayoutV3 {
-    pub async fn load(cpu: bool) -> Result<Self> {
+    pub async fn load(runtime: &RuntimeManager, cpu: bool) -> Result<Self> {
         let device = device(cpu)?;
-        let config_path = loading::resolve_manifest_path(Manifest::Config.get()).await?;
+        let config_path = loading::resolve_manifest_path(Manifest::Config.get(runtime)).await?;
         let preprocessor_path =
-            loading::resolve_manifest_path(Manifest::PreprocessorConfig.get()).await?;
+            loading::resolve_manifest_path(Manifest::PreprocessorConfig.get(runtime)).await?;
         let config = loading::read_json::<PPDocLayoutV3Config>(&config_path)
             .with_context(|| format!("failed to load {}", config_path.display()))?;
         let preprocessor =
@@ -46,7 +69,7 @@ impl PPDocLayoutV3 {
             .to_dtype(DType::F32)?;
         let std = Tensor::from_slice(&preprocessor.image_std, (1, 3, 1, 1), &device)?
             .to_dtype(DType::F32)?;
-        let model = loading::load_mmaped_safetensors(Manifest::Model.get(), &device, |vb| {
+        let model = loading::load_mmaped_safetensors(Manifest::Model.get(runtime), &device, |vb| {
             PPDocLayoutV3ForObjectDetection::load(vb, &config, &device)
         })
         .await?;

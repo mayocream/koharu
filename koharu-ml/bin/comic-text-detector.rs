@@ -6,6 +6,7 @@ use imageproc::{
     rect::Rect,
 };
 use koharu_ml::comic_text_detector::ComicTextDetector;
+use koharu_runtime::{ComputePolicy, RuntimeManager, Settings};
 use tokio::runtime::Builder;
 
 #[path = "common.rs"]
@@ -83,7 +84,15 @@ fn main() -> Result<()> {
 async fn async_main() -> Result<()> {
     let cli = Cli::parse();
 
-    let model = ComicTextDetector::load(cli.cpu).await?;
+    let runtime = RuntimeManager::new(
+        Settings::default(),
+        if cli.cpu {
+            ComputePolicy::CpuOnly
+        } else {
+            ComputePolicy::PreferGpu
+        },
+    )?;
+    let model = ComicTextDetector::load(&runtime, cli.cpu).await?;
     let bytes = std::fs::read(&cli.input)?;
     let format = image::guess_format(&bytes)?;
     let image = image::load_from_memory_with_format(&bytes, format)?;

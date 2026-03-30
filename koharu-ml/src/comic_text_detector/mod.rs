@@ -8,6 +8,7 @@ use std::{cmp, time::Instant};
 use anyhow::Context;
 use candle_core::{DType, Device, IndexOp, Tensor};
 use image::{DynamicImage, GenericImageView, GrayImage, RgbImage, imageops};
+use koharu_runtime::RuntimeManager;
 use tracing::instrument;
 
 use crate::{define_models, device, loading};
@@ -44,6 +45,21 @@ define_models! {
     DbNet => ("mayocream/comic-text-detector", "dbnet.safetensors"),
 }
 
+koharu_runtime::declare_hf_model_package!(
+    id: "model:comic-text-detector:yolo-v5",
+    repo: "mayocream/comic-text-detector",
+    file: "yolo-v5.safetensors",
+    bootstrap: true,
+    order: 110,
+);
+koharu_runtime::declare_hf_model_package!(
+    id: "model:comic-text-detector:unet",
+    repo: "mayocream/comic-text-detector",
+    file: "unet.safetensors",
+    bootstrap: true,
+    order: 111,
+);
+
 pub struct ComicTextDetector {
     yolo: yolo_v5::YoloV5,
     unet: unet::UNet,
@@ -52,27 +68,37 @@ pub struct ComicTextDetector {
 }
 
 impl ComicTextDetector {
-    pub async fn load(cpu: bool) -> anyhow::Result<Self> {
-        Self::load_inner(cpu, true).await
+    pub async fn load(runtime: &RuntimeManager, cpu: bool) -> anyhow::Result<Self> {
+        Self::load_inner(runtime, cpu, true).await
     }
 
-    pub async fn load_segmentation_only(cpu: bool) -> anyhow::Result<Self> {
-        Self::load_inner(cpu, false).await
+    pub async fn load_segmentation_only(
+        runtime: &RuntimeManager,
+        cpu: bool,
+    ) -> anyhow::Result<Self> {
+        Self::load_inner(runtime, cpu, false).await
     }
 
-    async fn load_inner(cpu: bool, load_dbnet: bool) -> anyhow::Result<Self> {
+    async fn load_inner(
+        runtime: &RuntimeManager,
+        cpu: bool,
+        load_dbnet: bool,
+    ) -> anyhow::Result<Self> {
         let device = device(cpu)?;
-        let yolo = loading::load_mmaped_safetensors(Manifest::Yolov5.get(), &device, |vb| {
+        let yolo = loading::load_mmaped_safetensors(Manifest::Yolov5.get(runtime), &device, |vb| {
             yolo_v5::YoloV5::load(vb, 2, 3)
         })
         .await?;
-        let unet =
-            loading::load_mmaped_safetensors(Manifest::Unet.get(), &device, unet::UNet::load)
-                .await?;
+        let unet = loading::load_mmaped_safetensors(
+            Manifest::Unet.get(runtime),
+            &device,
+            unet::UNet::load,
+        )
+        .await?;
         let dbnet = if load_dbnet {
             Some(
                 loading::load_mmaped_safetensors(
-                    Manifest::DbNet.get(),
+                    Manifest::DbNet.get(runtime),
                     &device,
                     dbnet::DbNet::load,
                 )
@@ -631,9 +657,9 @@ fn stitch_mask_patch(
     }
 }
 
-pub async fn prefetch_segmentation() -> anyhow::Result<()> {
-    Manifest::Yolov5.get().await?;
-    Manifest::Unet.get().await?;
+pub async fn prefetch_segmentation(runtime: &RuntimeManager) -> anyhow::Result<()> {
+    Manifest::Yolov5.get(runtime).await?;
+    Manifest::Unet.get(runtime).await?;
     Ok(())
 }
 

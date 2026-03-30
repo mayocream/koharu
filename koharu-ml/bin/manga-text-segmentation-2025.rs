@@ -1,6 +1,7 @@
 use anyhow::{Result, anyhow};
 use clap::Parser;
 use koharu_ml::manga_text_segmentation_2025::MangaTextSegmentation;
+use koharu_runtime::{ComputePolicy, RuntimeManager, Settings};
 use tokio::runtime::Builder;
 
 #[path = "common.rs"]
@@ -40,7 +41,15 @@ fn main() -> Result<()> {
 
 async fn async_main() -> Result<()> {
     let cli = Cli::parse();
-    let model = MangaTextSegmentation::load(cli.cpu).await?;
+    let runtime = RuntimeManager::new(
+        Settings::default(),
+        if cli.cpu {
+            ComputePolicy::CpuOnly
+        } else {
+            ComputePolicy::PreferGpu
+        },
+    )?;
+    let model = MangaTextSegmentation::load(&runtime, cli.cpu).await?;
     let bytes = std::fs::read(&cli.input)?;
     let format = image::guess_format(&bytes)?;
     let image = image::load_from_memory_with_format(&bytes, format)?;

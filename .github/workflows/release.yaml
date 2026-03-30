@@ -77,7 +77,11 @@ jobs:
 
       - name: Install trusted-signing-cli (windows only)
         if: matrix.platform == 'windows-latest'
-        run: cargo install trusted-signing-cli
+        shell: bash
+        run: |
+          curl -fsSL "https://github.com/Levminer/trusted-signing-cli/releases/download/0.8.0/trusted-signing-cli.exe" -o "$RUNNER_TEMP/trusted-signing-cli.exe"
+          printf '%s\n' "$RUNNER_TEMP" >> "$GITHUB_PATH"
+          "$RUNNER_TEMP/trusted-signing-cli.exe" --version
 
       - name: Import Apple Developer Certificate
         if: matrix.platform == 'macos-latest'
@@ -118,6 +122,7 @@ jobs:
           TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
           TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
         with:
+          tauriScript: npx @tauri-apps/cli
           tagName: ${{ github.ref_name }}
           releaseName: ${{ github.ref_name }}
           releaseBody: ${{ steps.release_notes.outputs.release_body }}

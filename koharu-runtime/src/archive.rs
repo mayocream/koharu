@@ -1,43 +1,57 @@
 use std::ffi::OsStr;
 use std::fs;
-use std::io::{self, Write};
+use std::io;
 use std::path::{Path, PathBuf};
 
 use anyhow::{Context, Result, bail};
 use flate2::read::GzDecoder;
-use koharu_http::download;
+
+use crate::Runtime;
 
 const RUNTIME_LIB_EXTENSIONS: &[&str] = &[".dll", ".so", ".dylib"];
 
-pub(crate) async fn download_cached(
-    url: &str,
-    file_name: &str,
-    downloads_dir: &Path,
-) -> Result<PathBuf> {
-    let archive_path = downloads_dir.join(file_name);
-    if archive_path.exists() {
-        return Ok(archive_path);
-    }
-
-    let partial_path = downloads_dir.join(format!("{file_name}.partial"));
-    let bytes = download::bytes(url)
-        .await
-        .with_context(|| format!("failed to download `{url}`"))?;
-
-    let mut file = fs::File::create(&partial_path)
-        .with_context(|| format!("failed to create `{}`", partial_path.display()))?;
-    file.write_all(&bytes)
-        .with_context(|| format!("failed to write `{}`", partial_path.display()))?;
-    file.flush()?;
-
-    fs::rename(&partial_path, &archive_path)
-        .with_context(|| format!("failed to finalize `{}`", archive_path.display()))?;
-
-    Ok(archive_path)
+pub(crate) enum ArchiveKind {
+    Zip,
+    TarGz,
 }
 
-/// Extract files matching known runtime library extensions from a zip archive.
-pub(crate) fn extract_zip(archive_path: &Path, output_dir: &Path) -> Result<()> {
+#[derive(Clone, Copy)]
+pub(crate) enum ExtractPolicy<'a> {
+    RuntimeLibraries,
+    Selected(&'a [&'a str]),
+}
+
+pub(crate) async fn fetch(runtime: &Runtime, url: &str, file_name: &str) -> Result<PathBuf> {
+    runtime
+        .artifacts()
+        .cached_download(url, file_name, runtime.layout().downloads_root())
+        .await
+        .with_context(|| format!("failed to download `{url}`"))
+}
+
+pub(crate) fn detect_kind(file_name: &str) -> Result<ArchiveKind> {
+    if file_name.ends_with(".zip") {
+        Ok(ArchiveKind::Zip)
+    } else if file_name.ends_with(".tar.gz") {
+        Ok(ArchiveKind::TarGz)
+    } else {
+        bail!("unsupported archive format for `{file_name}`")
+    }
+}
+
+pub(crate) fn extract(
+    archive_path: &Path,
+    output_dir: &Path,
+    kind: ArchiveKind,
+    policy: ExtractPolicy<'_>,
+) -> Result<()> {
+    match kind {
+        ArchiveKind::Zip => extract_zip(archive_path, output_dir, policy),
+        ArchiveKind::TarGz => extract_tar_gz(archive_path, output_dir, policy),
+    }
+}
+
+fn extract_zip(archive_path: &Path, output_dir: &Path, policy: ExtractPolicy<'_>) -> Result<()> {
     let file = fs::File::open(archive_path)
         .with_context(|| format!("failed to open `{}`", archive_path.display()))?;
     let mut archive = zip::ZipArchive::new(file)
@@ -49,14 +63,10 @@ pub(crate) fn extract_zip(archive_path: &Path, output_dir: &Path) -> Result<()> 
             continue;
         }
 
-        let Some(file_name) = Path::new(entry.name())
-            .file_name()
-            .and_then(OsStr::to_str)
-            .map(ToOwned::to_owned)
-        else {
+        let Some(file_name) = entry_basename(entry.name()) else {
             continue;
         };
-        if !looks_like_runtime_library(&file_name) {
+        if !should_extract(&file_name, policy) {
             continue;
         }
 
@@ -70,46 +80,7 @@ pub(crate) fn extract_zip(archive_path: &Path, output_dir: &Path) -> Result<()> 
     Ok(())
 }
 
-/// Extract specific files by name from a zip archive (case-insensitive match on basename).
-pub(crate) fn extract_zip_selected(
-    archive_path: &Path,
-    output_dir: &Path,
-    wanted_names: &[&str],
-) -> Result<()> {
-    let file = fs::File::open(archive_path)
-        .with_context(|| format!("failed to open `{}`", archive_path.display()))?;
-    let mut archive = zip::ZipArchive::new(file)
-        .with_context(|| format!("failed to read zip `{}`", archive_path.display()))?;
-
-    for index in 0..archive.len() {
-        let mut entry = archive.by_index(index)?;
-        if entry.is_dir() {
-            continue;
-        }
-
-        let entry_name = Path::new(entry.name())
-            .file_name()
-            .and_then(OsStr::to_str)
-            .unwrap_or(entry.name());
-        if !wanted_names
-            .iter()
-            .any(|name| entry_name.eq_ignore_ascii_case(name))
-        {
-            continue;
-        }
-
-        let out_path = output_dir.join(entry_name);
-        let mut out_file = fs::File::create(&out_path)
-            .with_context(|| format!("failed to create `{}`", out_path.display()))?;
-        io::copy(&mut entry, &mut out_file)
-            .with_context(|| format!("failed to extract `{}`", out_path.display()))?;
-    }
-
-    Ok(())
-}
-
-/// Extract files matching known runtime library extensions from a tar.gz archive.
-pub(crate) fn extract_tar_gz(archive_path: &Path, output_dir: &Path) -> Result<()> {
+fn extract_tar_gz(archive_path: &Path, output_dir: &Path, policy: ExtractPolicy<'_>) -> Result<()> {
     let file = fs::File::open(archive_path)
         .with_context(|| format!("failed to open `{}`", archive_path.display()))?;
     let mut archive = tar::Archive::new(GzDecoder::new(file));
@@ -120,15 +91,17 @@ pub(crate) fn extract_tar_gz(archive_path: &Path, output_dir: &Path) -> Result<(
         .with_context(|| format!("failed to read tar `{}`", archive_path.display()))?
     {
         let mut entry = entry.context("failed to read tar entry")?;
-        let path = entry.path().context("failed to read tar entry path")?;
-        let Some(file_name) = path
-            .file_name()
-            .and_then(OsStr::to_str)
-            .map(ToOwned::to_owned)
-        else {
+        let Some(file_name) = entry_basename(
+            entry
+                .path()
+                .context("failed to read tar entry path")?
+                .as_os_str()
+                .to_string_lossy()
+                .as_ref(),
+        ) else {
             continue;
         };
-        if !looks_like_runtime_library(&file_name) {
+        if !should_extract(&file_name, policy) {
             continue;
         }
 
@@ -137,12 +110,12 @@ pub(crate) fn extract_tar_gz(archive_path: &Path, output_dir: &Path) -> Result<(
             let Some(target_name) = entry
                 .link_name()
                 .context("failed to read tar symlink target")?
-                .and_then(|t| t.file_name().map(ToOwned::to_owned))
-                .and_then(|n| n.to_str().map(ToOwned::to_owned))
+                .and_then(|target| target.file_name().map(ToOwned::to_owned))
+                .and_then(|name| name.to_str().map(ToOwned::to_owned))
             else {
                 continue;
             };
-            aliases.push((output_dir.join(file_name), output_dir.join(target_name)));
+            aliases.push((output_dir.join(&file_name), output_dir.join(target_name)));
             continue;
         }
 
@@ -158,6 +131,22 @@ pub(crate) fn extract_tar_gz(archive_path: &Path, output_dir: &Path) -> Result<(
     }
 
     materialize_aliases(&aliases)
+}
+
+fn should_extract(file_name: &str, policy: ExtractPolicy<'_>) -> bool {
+    match policy {
+        ExtractPolicy::RuntimeLibraries => looks_like_runtime_library(file_name),
+        ExtractPolicy::Selected(wanted) => wanted
+            .iter()
+            .any(|candidate| file_name.eq_ignore_ascii_case(candidate)),
+    }
+}
+
+fn entry_basename(entry_name: &str) -> Option<String> {
+    Path::new(entry_name)
+        .file_name()
+        .and_then(OsStr::to_str)
+        .map(ToOwned::to_owned)
 }
 
 fn looks_like_runtime_library(file_name: &str) -> bool {
@@ -198,7 +187,7 @@ fn materialize_aliases(aliases: &[(PathBuf, PathBuf)]) -> Result<()> {
         if !progressed {
             let unresolved: Vec<_> = next
                 .iter()
-                .map(|(a, t)| format!("{} -> {}", a.display(), t.display()))
+                .map(|(alias, target)| format!("{} -> {}", alias.display(), target.display()))
                 .collect();
             bail!("unresolvable aliases: {}", unresolved.join(", "));
         }
@@ -229,7 +218,19 @@ mod tests {
     }
 
     #[test]
-    fn extract_zip_selected_filters_by_name() {
+    fn detects_archive_kind_from_filename() {
+        assert!(matches!(
+            detect_kind("runtime.zip").unwrap(),
+            ArchiveKind::Zip
+        ));
+        assert!(matches!(
+            detect_kind("runtime.tar.gz").unwrap(),
+            ArchiveKind::TarGz
+        ));
+    }
+
+    #[test]
+    fn extract_selected_filters_by_name() {
         let tempdir = tempfile::tempdir().unwrap();
         let archive_path = tempdir.path().join("test.zip");
         let output_dir = tempdir.path().join("out");
@@ -244,7 +245,13 @@ mod tests {
         zip.write_all(b"ignore").unwrap();
         zip.finish().unwrap();
 
-        extract_zip_selected(&archive_path, &output_dir, &["cudart64_13.dll"]).unwrap();
+        extract(
+            &archive_path,
+            &output_dir,
+            ArchiveKind::Zip,
+            ExtractPolicy::Selected(&["cudart64_13.dll"]),
+        )
+        .unwrap();
 
         assert_eq!(
             fs::read(output_dir.join("cudart64_13.dll")).unwrap(),
