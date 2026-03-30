@@ -141,3 +141,24 @@ koharu.exe --debug
 ```
 
 On Windows, debug and headless runs also influence how Koharu attaches to or creates a console window.
+
+## Running without keyring
+
+By default Koharu stores API keys in the system keyring. In container or CI environments where there is no persistent keyring, you can pass `--no-keyring` to skip it and supply API keys through environment variables instead.
+
+The variable name for each provider follows the pattern `KOHARU_<PROVIDER>_API_KEY`:
+
+| Provider | Environment variable |
+| --- | --- |
+| OpenAI | `KOHARU_OPENAI_API_KEY` |
+| Gemini | `KOHARU_GEMINI_API_KEY` |
+| Claude | `KOHARU_CLAUDE_API_KEY` |
+| DeepSeek | `KOHARU_DEEPSEEK_API_KEY` |
+
+Example for a headless container run:
+
+```bash
+KOHARU_OPENAI_API_KEY=sk-... koharu --port 9999 --headless --no-keyring
+```
+
+When `--no-keyring` is active, calls to save an API key through the UI or HTTP API are ignored.
