@@ -1,3 +1,10 @@
+## [0.41.3](https://github.com/mayocream/koharu/compare/0.41.2..0.41.3) - 2026-03-30
+
+### ⚙️ Miscellaneous Tasks
+
+- Use npx tauri for release builds - ([ea2a80b](https://github.com/mayocream/koharu/commit/ea2a80b688f4aad148be55ae78d6650c995a6b69))
+
+
 ## [0.41.2](https://github.com/mayocream/koharu/compare/0.41.1..0.41.2) - 2026-03-30
 
 ### ⚙️ Miscellaneous Tasks
