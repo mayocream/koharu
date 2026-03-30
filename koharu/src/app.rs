@@ -131,12 +131,12 @@ impl BootstrapController {
     }
 }
 
-fn initialize(headless: bool, debug: bool) -> Result<()> {
+fn initialize(headless: bool, _debug: bool) -> Result<()> {
     #[cfg(target_os = "windows")]
     {
         let attached_to_parent = crate::windows::attach_parent_console();
 
-        if !attached_to_parent && (headless || debug) {
+        if !attached_to_parent && (headless || _debug) {
             crate::windows::create_console_window();
         }
 
