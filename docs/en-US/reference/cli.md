@@ -88,7 +88,7 @@ Start with explicit debug logging:
 koharu --debug
 ```
 
-Use with no keyring
+Use without keyring
 
 ```bash
 KOHARU_OPENAI_API_KEY=[key] koharu --no-keyring
