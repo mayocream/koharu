@@ -1,3 +1,10 @@
+## [0.41.4](https://github.com/mayocream/koharu/compare/0.41.3..0.41.4) - 2026-03-30
+
+### ⚙️ Miscellaneous Tasks
+
+- Use explicit tauri cli package in release - ([64cadbc](https://github.com/mayocream/koharu/commit/64cadbc4fcdcb16879df4591de07676ee08032e9))
+
+
 ## [0.41.3](https://github.com/mayocream/koharu/compare/0.41.2..0.41.3) - 2026-03-30
 
 ### ⚙️ Miscellaneous Tasks
