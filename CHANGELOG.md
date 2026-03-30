@@ -1,3 +1,10 @@
+## [0.41.2](https://github.com/mayocream/koharu/compare/0.41.1..0.41.2) - 2026-03-30
+
+### ⚙️ Miscellaneous Tasks
+
+- Download trusted-signing-cli from release - ([b686601](https://github.com/mayocream/koharu/commit/b6866015cbe8a695cb4f6415e35720afec31b644))
+
+
 ## [0.41.1](https://github.com/mayocream/koharu/compare/0.41.0..0.41.1) - 2026-03-30
 
 ### 🐛 Bug Fixes
