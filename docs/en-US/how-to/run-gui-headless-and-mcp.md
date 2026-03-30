@@ -154,6 +154,9 @@ The variable name for each provider follows the pattern `KOHARU_<PROVIDER>_API_K
 | Gemini | `KOHARU_GEMINI_API_KEY` |
 | Claude | `KOHARU_CLAUDE_API_KEY` |
 | DeepSeek | `KOHARU_DEEPSEEK_API_KEY` |
+| OpenAI-compatible | `KOHARU_OPENAI_COMPATIBLE_API_KEY` |
+
+Hyphens in provider IDs are converted to underscores in the variable name.
 
 Example for a headless container run:
 
