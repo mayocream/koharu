@@ -70,7 +70,7 @@ futures = "0.3"
 reqwest = { version = "0.13", features = ["stream", "json", "blocking"] }
 reqwest-middleware = "0.5"
 reqwest-retry = "0.9"
-toml = "0.9"
+toml = "1.1"
 inventory = "0.3"
 url = { version = "2.5", features = ["serde"] }
 arc-swap = "1.7"
