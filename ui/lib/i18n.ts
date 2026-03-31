@@ -11,6 +11,7 @@ import zhTW from '@/public/locales/zh-TW/translation.json'
 import jaJP from '@/public/locales/ja-JP/translation.json'
 import ruRU from '@/public/locales/ru-RU/translation.json'
 import esES from '@/public/locales/es-ES/translation.json'
+import trTR from '@/public/locales/tr-TR/translation.json'
 
 export const resources = {
   'en-US': { translation: enUS },
@@ -19,6 +20,7 @@ export const resources = {
   'ja-JP': { translation: jaJP },
   'ru-RU': { translation: ruRU },
   'es-ES': { translation: esES },
+  'tr-TR': { translation: trTR },
 } satisfies Resource
 
 export const supportedLanguages = Object.keys(resources)
