@@ -53,6 +53,12 @@ struct Cli {
     headless: bool,
     #[arg(
         long,
+        help = "Disable keyring and read API keys from environment variables instead (e.g. KOHARU_OPENAI_API_KEY)",
+        default_value_t = false
+    )]
+    no_keyring: bool,
+    #[arg(
+        long,
         help = "Enable debug mode with console output",
         default_value_t = false
     )]
@@ -356,8 +362,13 @@ pub async fn run() -> Result<()> {
         cpu,
         port,
         headless,
+        no_keyring,
         debug,
     } = Cli::parse();
+
+    if no_keyring {
+        koharu_llm::providers::disable_keyring();
+    }
 
     initialize(headless, debug)?;
 
