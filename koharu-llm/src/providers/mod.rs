@@ -38,12 +38,10 @@ fn provider_key_entry(provider: &str) -> anyhow::Result<Entry> {
 pub fn get_saved_api_key(provider: &str) -> anyhow::Result<Option<String>> {
     if NO_KEYRING.load(Ordering::Relaxed) {
         let var = env_key_var(provider);
-        return Ok(
-            std::env::var(&var)
-                .ok()
-                .map(|v| v.trim().to_string())
-                .filter(|v| !v.is_empty()),
-        );
+        return Ok(std::env::var(&var)
+            .ok()
+            .map(|v| v.trim().to_string())
+            .filter(|v| !v.is_empty()));
     }
 
     let entry = provider_key_entry(provider)?;
@@ -60,7 +58,9 @@ pub fn set_saved_api_key(provider: &str, api_key: &str) -> anyhow::Result<()> {
             provider,
             "keyring is disabled; API key changes are not saved"
         );
-        return Err(anyhow::anyhow!("keyring is disabled; API key cannot be saved"));
+        return Err(anyhow::anyhow!(
+            "keyring is disabled; API key cannot be saved"
+        ));
     }
 
     let entry = provider_key_entry(provider)?;
