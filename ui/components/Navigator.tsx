@@ -1,31 +1,38 @@
 'use client'
 
+import { useQuery } from '@tanstack/react-query'
 import { useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react'
 import { useVirtualizer } from '@tanstack/react-virtual'
 import { useTranslation } from 'react-i18next'
 import {
   findDocumentIndex,
   resolveCurrentDocumentId,
-} from '@/lib/documents/selection'
-import { useDocumentsQuery, useThumbnailQuery } from '@/lib/documents/queries'
+} from '@/lib/features/documents/selection'
+import {
+  getDocumentThumbnailOptions,
+  getDocumentsListOptions,
+} from '@/lib/app/documents/queries'
 import { OPERATION_TYPE } from '@/lib/operations'
-import type { DocumentSummary } from '@/lib/protocol'
-import { useEditorUiStore } from '@/lib/stores/editorUiStore'
-import { useOperationStore } from '@/lib/stores/operationStore'
+import type { DocumentSummary } from '@/lib/contracts/protocol'
+import { useEditorUiState } from '@/hooks/ui/useEditorUiState'
+import { useOperationState } from '@/hooks/runtime/useOperationState'
 import { Button } from '@/components/ui/button'
 import { ScrollArea } from '@/components/ui/scroll-area'
-import { flushTextBlockSync } from '@/lib/services/syncQueues'
-import { cancelObjectUrlRevoke, revokeObjectUrlLater } from '@/lib/util'
+import { flushTextBlockSync } from '@/lib/app/documents/sync-queues'
+import {
+  cancelObjectUrlRevoke,
+  revokeObjectUrlLater,
+} from '@/lib/infra/media/assets'
 
 export function Navigator() {
-  const { data: documents = [] } = useDocumentsQuery()
+  const { data: documents = [] } = useQuery(getDocumentsListOptions())
   const totalPages = documents.length
-  const documentsVersion = useEditorUiStore((state) => state.documentsVersion)
-  const currentDocumentId = useEditorUiStore((state) => state.currentDocumentId)
-  const setCurrentDocumentId = useEditorUiStore(
+  const documentsVersion = useEditorUiState((state) => state.documentsVersion)
+  const currentDocumentId = useEditorUiState((state) => state.currentDocumentId)
+  const setCurrentDocumentId = useEditorUiState(
     (state) => state.setCurrentDocumentId,
   )
-  const thumbnailsEnabled = useOperationStore(
+  const thumbnailsEnabled = useOperationState(
     (state) => state.operation?.type !== OPERATION_TYPE.loadKhr,
   )
   const listRef = useRef<HTMLDivElement | null>(null)
@@ -147,7 +154,7 @@ function PagePreview({
     data: thumbnailBlob,
     isPending: loading,
     isError: error,
-  } = useThumbnailQuery(document, thumbnailsEnabled)
+  } = useQuery(getDocumentThumbnailOptions(document, thumbnailsEnabled))
 
   useLayoutEffect(() => {
     if (!thumbnailBlob) {

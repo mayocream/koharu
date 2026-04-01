@@ -8,18 +8,10 @@ import ClientOnly from '@/components/ClientOnly'
 import { TooltipProvider } from '@/components/ui/tooltip'
 import i18n from '@/lib/i18n'
 import { getQueryClient } from '@/lib/react-query/client'
-import { useDownloadStore } from '@/lib/downloads'
 import { ProvidersBootstrap } from './providers-bootstrap'
 
 export function Providers({ children }: { children: ReactNode }) {
   const queryClient = getQueryClient()
-  const ensureDownloadSubscribed = useDownloadStore(
-    (state) => state.ensureSubscribed,
-  )
-
-  useEffect(() => {
-    ensureDownloadSubscribed()
-  }, [ensureDownloadSubscribed])
 
   useEffect(() => {
     const handleLanguageChange = (language: string) => {

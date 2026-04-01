@@ -7,9 +7,9 @@ import {
   COMPATIBLE_PROVIDER_ID,
   getProviderDisplayName,
   normalizeProviderId,
-} from '@/lib/providers'
+} from '@/lib/features/llm/providers'
 import { QUERY_SCOPE, matchesScopedQueryKey } from '@/lib/react-query/scopes'
-import { useUiErrorStore } from '@/lib/stores/uiErrorStore'
+import { useUiErrorStore } from '@/lib/state/errors/store'
 
 const SURFACED_RPC_METHODS = new Set([
   'open_documents',

@@ -1,10 +1,9 @@
 'use client'
 
-import { type ReactNode, useEffect } from 'react'
+import { type ReactNode } from 'react'
 import { useTranslation } from 'react-i18next'
 import { CircleXIcon } from 'lucide-react'
-import { isActiveDownload } from '@/lib/download-state'
-import { useDownloadStore } from '@/lib/downloads'
+import { isActiveDownload } from '@/lib/features/downloads/state'
 import { Button } from '@/components/ui/button'
 import {
   isOperationType,
@@ -12,9 +11,10 @@ import {
   OPERATION_TYPE,
   type OperationState,
 } from '@/lib/operations'
-import { useOperationStore } from '@/lib/stores/operationStore'
-import { useUiErrorStore } from '@/lib/stores/uiErrorStore'
-import { useDocumentMutations } from '@/lib/documents/mutations'
+import { useOperationState } from '@/hooks/runtime/useOperationState'
+import { useUiErrorState } from '@/hooks/runtime/useUiErrorState'
+import { useDocumentCommands } from '@/hooks/documents/useDocumentCommands'
+import { useRuntimeDownloads } from '@/hooks/runtime/useRuntimeDownloads'
 
 type TranslateFunc = ReturnType<typeof useTranslation>['t']
 
@@ -250,20 +250,11 @@ function OperationCard({
 
 export function ActivityBubble() {
   const { t } = useTranslation()
-  const operation = useOperationStore((state) => state.operation)
-  const error = useUiErrorStore((state) => state.error)
-  const clearError = useUiErrorStore((state) => state.clearError)
-  const { cancelOperation } = useDocumentMutations()
-  const downloads = useDownloadStore((s) => s.downloads)
-  const ensureSubscribed = useDownloadStore((s) => s.ensureSubscribed)
-
-  useEffect(() => {
-    ensureSubscribed()
-  }, [ensureSubscribed])
-
-  const activeDownloads = Array.from(downloads.values()).filter(
-    isActiveDownload,
-  )
+  const operation = useOperationState((state) => state.operation)
+  const error = useUiErrorState((state) => state.error)
+  const clearError = useUiErrorState((state) => state.clearError)
+  const { cancelOperation } = useDocumentCommands()
+  const activeDownloads = useRuntimeDownloads().filter(isActiveDownload)
 
   if (!error && !operation && activeDownloads.length === 0) return null
 

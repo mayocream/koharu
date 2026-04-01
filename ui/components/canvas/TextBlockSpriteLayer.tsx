@@ -6,7 +6,7 @@ import {
   cancelObjectUrlRevoke,
   convertToBlob,
   revokeObjectUrlLater,
-} from '@/lib/util'
+} from '@/lib/infra/media/assets'
 
 type TextBlockSpriteLayerProps = {
   blocks?: TextBlock[]

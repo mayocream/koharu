@@ -1,6 +1,9 @@
 import { MonitorIcon, MoonIcon, SunIcon } from 'lucide-react'
-import { SETTINGS_API_KEY_PROVIDERS } from '@/lib/providers'
-import { ALL_PRESETS, LOCAL_LLM_PRESET_DEFINITIONS } from '@/lib/llm/presets'
+import { SETTINGS_API_KEY_PROVIDERS } from '@/lib/features/llm/providers'
+import {
+  ALL_PRESETS,
+  LOCAL_LLM_PRESET_DEFINITIONS,
+} from '@/lib/features/llm/presets'
 
 export const THEME_OPTIONS = [
   { value: 'light', icon: SunIcon, labelKey: 'settings.themeLight' },

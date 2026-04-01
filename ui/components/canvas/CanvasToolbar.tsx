@@ -1,6 +1,6 @@
 'use client'
 
-import { useEffect, useMemo, useState } from 'react'
+import { useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import { motion } from 'motion/react'
 import {
@@ -25,8 +25,6 @@ import {
   SelectValue,
 } from '@/components/ui/select'
 import { Separator } from '@/components/ui/separator'
-import { useDocumentMutations } from '@/lib/documents/mutations'
-import { pickLanguage } from '@/lib/llm/config'
 import {
   getCompatiblePresetLabel,
   getCompatiblePresetTone,
@@ -34,14 +32,13 @@ import {
   isCompatibleModelSource,
   isLocalModelSource,
   parsePresetFromModelId,
-} from '@/lib/llm/models'
-import { useLlmMutations } from '@/lib/llm/mutations'
-import { useLlmModelsQuery, useLlmReadyQuery } from '@/lib/llm/queries'
+} from '@/lib/features/llm/models'
 import { isCurrentProcessStep, OPERATION_STEP } from '@/lib/operations'
-import { getProviderDisplayName } from '@/lib/providers'
-import { useLlmUiStore } from '@/lib/stores/llmUiStore'
-import { useOperationStore } from '@/lib/stores/operationStore'
-import { usePreferencesStore } from '@/lib/stores/preferencesStore'
+import { getProviderDisplayName } from '@/lib/features/llm/providers'
+import { useDocumentCommands } from '@/hooks/documents/useDocumentCommands'
+import { useLlmCommands } from '@/hooks/llm/useLlmCommands'
+import { useLlmView } from '@/hooks/llm/useLlmView'
+import { useOperationState } from '@/hooks/runtime/useOperationState'
 import { cn } from '@/lib/utils'
 
 const COMPATIBLE_MODEL_TONE_CLASSES = {
@@ -70,12 +67,12 @@ export function CanvasToolbar() {
 }
 
 function WorkflowButtons() {
-  const { detect, inpaint, ocr, render } = useDocumentMutations()
-  const { llmGenerate } = useLlmMutations()
-  const { data: llmReady = false } = useLlmReadyQuery()
+  const { detect, inpaint, ocr, render } = useDocumentCommands()
+  const { llmGenerate } = useLlmCommands()
+  const { ready: llmReady } = useLlmView()
   const [generating, setGenerating] = useState(false)
   const { t } = useTranslation()
-  const operation = useOperationStore((state) => state.operation)
+  const operation = useOperationState((state) => state.operation)
 
   const isDetecting = isCurrentProcessStep(operation, OPERATION_STEP.detect)
   const isOcr = isCurrentProcessStep(operation, OPERATION_STEP.ocr)
@@ -198,21 +195,19 @@ function CompatibleModelBadge({ modelId }: { modelId: string }) {
 }
 
 function LlmStatusPopover() {
-  const { data: llmModels = [] } = useLlmModelsQuery()
-  const llmSelectedModel = useLlmUiStore((state) => state.selectedModel)
-  const llmSelectedLanguage = useLlmUiStore((state) => state.selectedLanguage)
-  const llmLoading = useLlmUiStore((state) => state.loading)
-  const { data: llmReady = false } = useLlmReadyQuery()
+  const {
+    models: llmModels,
+    ready: llmReady,
+    loading: llmLoading,
+    selectedModel: llmSelectedModel,
+    selectedLanguage: llmSelectedLanguage,
+    selectedModelInfo,
+    apiKeys,
+    localLlm,
+  } = useLlmView()
   const { llmSetSelectedModel, llmSetSelectedLanguage, llmToggleLoadUnload } =
-    useLlmMutations()
+    useLlmCommands()
   const { t } = useTranslation()
-  const apiKeys = usePreferencesStore((state) => state.apiKeys)
-  const localLlm = usePreferencesStore((state) => state.localLlm)
-
-  const selectedModelInfo = useMemo(
-    () => llmModels.find((model) => model.id === llmSelectedModel),
-    [llmModels, llmSelectedModel],
-  )
   const compatibleModelInfo =
     selectedModelInfo && isCompatibleModelSource(selectedModelInfo.source)
       ? selectedModelInfo
@@ -233,39 +228,6 @@ function LlmStatusPopover() {
     isApiModel &&
     !isCompatibleModelSource(selectedModelInfo?.source) &&
     !apiKeys[selectedModelInfo.source]
-
-  useEffect(() => {
-    if (!llmModels.length) {
-      return
-    }
-
-    const hasCurrent = llmModels.some((model) => model.id === llmSelectedModel)
-    const nextModel = hasCurrent ? llmSelectedModel : llmModels[0]?.id
-
-    if (!nextModel) {
-      return
-    }
-
-    const nextLanguage = pickLanguage(
-      llmModels,
-      nextModel,
-      hasCurrent ? llmSelectedLanguage : undefined,
-    )
-    const currentState = useLlmUiStore.getState()
-
-    if (
-      currentState.selectedModel === nextModel &&
-      currentState.selectedLanguage === nextLanguage
-    ) {
-      return
-    }
-
-    useLlmUiStore.setState((state) => ({
-      selectedModel: nextModel,
-      selectedLanguage: nextLanguage,
-      loading: state.loading,
-    }))
-  }, [llmModels, llmSelectedLanguage, llmSelectedModel])
 
   return (
     <Popover>

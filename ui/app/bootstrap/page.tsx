@@ -18,20 +18,17 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select'
-import {
-  computeDownloadPercent,
-  isActiveDownload,
-  DOWNLOAD_STATUS,
-} from '@/lib/download-state'
+import { DOWNLOAD_STATUS } from '@/lib/features/downloads/state'
+import { getPrimaryDownload } from '@/lib/app/runtime/controller'
 import { normalizeErrorMessage } from '@/lib/errors'
 import i18n, { supportedLanguages } from '@/lib/i18n'
-import type { BootstrapConfig, DownloadState } from '@/lib/protocol'
-import { subscribeDownloadChanged, subscribeSnapshot } from '@/lib/rpc-events'
+import type { BootstrapConfig } from '@/lib/contracts/protocol'
+import { useRuntimeDownloads } from '@/hooks/runtime/useRuntimeDownloads'
 import {
   useInitializeSystemMutation,
   useUpdateBootstrapConfigMutation,
-} from '@/lib/system/mutations'
-import { useBootstrapConfigQuery } from '@/lib/system/queries'
+  useBootstrapConfigQuery,
+} from '@/hooks/runtime/useSystemQueries'
 
 const DEFAULT_CONFIG: BootstrapConfig = {
   runtime: { path: '' },
@@ -68,7 +65,15 @@ export default function BootstrapPage() {
   const [initializing, setInitializing] = useState(false)
   const [failed, setFailed] = useState(false)
   const [error, setError] = useState<string | null>(null)
-  const [download, setDownload] = useState<ActiveDownload | null>(null)
+  const runtimeDownloads = useRuntimeDownloads()
+  const primaryDownload = getPrimaryDownload(runtimeDownloads)
+  const download: ActiveDownload | null = primaryDownload
+    ? {
+        filename: primaryDownload.filename,
+        percent: primaryDownload.percent,
+        failed: primaryDownload.status === DOWNLOAD_STATUS.failed,
+      }
+    : null
 
   const startInitialize = useCallback(async () => {
     const nextConfig = normalizeConfig(config)
@@ -103,39 +108,6 @@ export default function BootstrapPage() {
     if (!bootstrapConfigQuery.error) return
     setError(normalizeErrorMessage(bootstrapConfigQuery.error))
   }, [bootstrapConfigQuery.error])
-
-  useEffect(() => {
-    const updateDownload = (progress: DownloadState) => {
-      setDownload({
-        filename: progress.filename,
-        percent: computeDownloadPercent(progress),
-        failed: progress.status === DOWNLOAD_STATUS.failed,
-      })
-    }
-
-    const unsubscribeSnapshot = subscribeSnapshot((snapshot) => {
-      const active =
-        snapshot.downloads.find(isActiveDownload) ??
-        snapshot.downloads
-          .slice()
-          .sort((left, right) => left.filename.localeCompare(right.filename))
-          .at(-1) ??
-        null
-
-      if (active) {
-        updateDownload(active)
-      }
-    })
-
-    const unsubscribeDownload = subscribeDownloadChanged((progress) => {
-      updateDownload(progress)
-    })
-
-    return () => {
-      unsubscribeSnapshot()
-      unsubscribeDownload()
-    }
-  }, [])
 
   const goNext = async () => {
     setError(null)

@@ -5,9 +5,9 @@ import { ErrorBoundary, type FallbackProps } from 'react-error-boundary'
 import { Button } from '@/components/ui/button'
 import { logAppError, normalizeErrorMessage } from '@/lib/errors'
 import { getQueryClient } from '@/lib/react-query/client'
-import { useEditorUiStore } from '@/lib/stores/editorUiStore'
-import { useLlmUiStore } from '@/lib/stores/llmUiStore'
-import { useOperationStore } from '@/lib/stores/operationStore'
+import { resetEditorUiState } from '@/hooks/ui/useEditorUiState'
+import { resetLlmUiState } from '@/hooks/ui/useLlmUiState'
+import { resetOperationState } from '@/hooks/runtime/useOperationState'
 
 function ErrorFallback({ error, resetErrorBoundary }: FallbackProps) {
   const errorMessage = normalizeErrorMessage(error)
@@ -26,9 +26,9 @@ function ErrorFallback({ error, resetErrorBoundary }: FallbackProps) {
           size='sm'
           variant='outline'
           onClick={() => {
-            useEditorUiStore.getState().resetUiState()
-            useLlmUiStore.getState().resetLlmUiState()
-            useOperationStore.getState().resetOperationState()
+            resetEditorUiState()
+            resetLlmUiState()
+            resetOperationState()
             resetErrorBoundary()
           }}
         >

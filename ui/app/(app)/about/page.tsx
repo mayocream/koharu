@@ -10,9 +10,9 @@ import {
   LoaderIcon,
 } from 'lucide-react'
 import { ScrollArea } from '@/components/ui/scroll-area'
-import { isTauri } from '@/lib/native'
-import { useDocumentMutations } from '@/lib/documents/mutations'
-import { useAppVersionQuery } from '@/lib/system/queries'
+import { isTauri } from '@/lib/infra/platform/native'
+import { useDocumentCommands } from '@/hooks/documents/useDocumentCommands'
+import { useAppVersionQuery } from '@/hooks/runtime/useSystemQueries'
 import Image from 'next/image'
 
 const GITHUB_REPO = 'mayocream/koharu'
@@ -21,7 +21,7 @@ type VersionStatus = 'loading' | 'latest' | 'outdated' | 'error'
 
 export default function AboutPage() {
   const { t } = useTranslation()
-  const { openExternal } = useDocumentMutations()
+  const { openExternal } = useDocumentCommands()
   const tauri = isTauri()
   const { data: appVersion, status: appVersionStatus } =
     useAppVersionQuery(tauri)

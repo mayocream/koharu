@@ -1,8 +1,8 @@
 'use client'
 
-import { getCachedDocument } from '@/lib/documents/queries'
+import { getCachedDocument } from '@/lib/app/documents/queries'
 import { getQueryClient } from '@/lib/react-query/client'
-import { useEditorUiStore } from '@/lib/stores/editorUiStore'
+import { getEditorUiState } from '@/hooks/ui/useEditorUiState'
 
 const canvasViewportRef: { current: HTMLDivElement | null } = { current: null }
 
@@ -11,8 +11,7 @@ export function setCanvasViewport(element: HTMLDivElement | null) {
 }
 
 export function fitCanvasToViewport() {
-  const { setScale, setAutoFitEnabled, currentDocumentId } =
-    useEditorUiStore.getState()
+  const { setScale, setAutoFitEnabled, currentDocumentId } = getEditorUiState()
   if (!currentDocumentId) return
   const doc = getCachedDocument(getQueryClient(), currentDocumentId)
   const viewport = canvasViewportRef.current
@@ -27,7 +26,7 @@ export function fitCanvasToViewport() {
 }
 
 export function resetCanvasScale() {
-  const { setScale, setAutoFitEnabled } = useEditorUiStore.getState()
+  const { setScale, setAutoFitEnabled } = getEditorUiState()
   setAutoFitEnabled(false)
   setScale(100)
 }

@@ -12,7 +12,6 @@ import {
   PlusIcon,
   SquareIcon,
 } from 'lucide-react'
-import { useTextBlocks } from '@/hooks/useTextBlocks'
 import {
   RenderEffect,
   RenderStroke,
@@ -20,7 +19,7 @@ import {
   TextAlign,
   TextStyle,
 } from '@/types'
-import type { FontFaceInfo } from '@/lib/protocol'
+import type { FontFaceInfo } from '@/lib/contracts/protocol'
 import { Button } from '@/components/ui/button'
 import { ColorPicker } from '@/components/ui/color-picker'
 import { Input } from '@/components/ui/input'
@@ -36,10 +35,11 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select'
-import { useEditorUiStore } from '@/lib/stores/editorUiStore'
-import { usePreferencesStore } from '@/lib/stores/preferencesStore'
-import { useTextBlockMutations } from '@/lib/documents/mutations'
-import { useSystemFontsQuery } from '@/lib/system/queries'
+import { useEditorUiState } from '@/hooks/ui/useEditorUiState'
+import { usePreferencesState } from '@/hooks/ui/usePreferencesState'
+import { useTextBlockCommands } from '@/hooks/documents/useTextBlockCommands'
+import { useTextBlockView } from '@/hooks/documents/useTextBlockView'
+import { useSystemFontsQuery } from '@/hooks/runtime/useSystemQueries'
 import { cn } from '@/lib/utils'
 
 const DEFAULT_COLOR: RgbaColor = [0, 0, 0, 255]
@@ -179,15 +179,15 @@ const resolveEffectiveTextAlign = (
 }
 
 export function RenderControlsPanel() {
-  const renderEffect = useEditorUiStore((state) => state.renderEffect)
-  const renderStroke = useEditorUiStore((state) => state.renderStroke)
-  const setRenderEffect = useEditorUiStore((state) => state.setRenderEffect)
-  const setRenderStroke = useEditorUiStore((state) => state.setRenderStroke)
-  const { updateTextBlocks } = useTextBlockMutations()
+  const renderEffect = useEditorUiState((state) => state.renderEffect)
+  const renderStroke = useEditorUiState((state) => state.renderStroke)
+  const setRenderEffect = useEditorUiState((state) => state.setRenderEffect)
+  const setRenderStroke = useEditorUiState((state) => state.setRenderStroke)
+  const { updateTextBlocks, replaceBlock } = useTextBlockCommands()
   const { data: availableFonts = [] } = useSystemFontsQuery()
-  const fontFamily = usePreferencesStore((state) => state.fontFamily)
-  const setFontFamily = usePreferencesStore((state) => state.setFontFamily)
-  const { textBlocks, selectedBlockIndex, replaceBlock } = useTextBlocks()
+  const fontFamily = usePreferencesState((state) => state.fontFamily)
+  const setFontFamily = usePreferencesState((state) => state.setFontFamily)
+  const { textBlocks, selectedBlockIndex } = useTextBlockView()
   const { t } = useTranslation()
   const selectedBlock =
     selectedBlockIndex !== undefined

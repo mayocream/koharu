@@ -5,9 +5,10 @@ import { useTranslation } from 'react-i18next'
 import { motion } from 'motion/react'
 import { TextBlock } from '@/types'
 import { Languages, LoaderCircleIcon, Trash2Icon } from 'lucide-react'
-import { useTextBlocks } from '@/hooks/useTextBlocks'
-import { useLlmMutations } from '@/lib/llm/mutations'
-import { useLlmReadyQuery } from '@/lib/llm/queries'
+import { useTextBlockView } from '@/hooks/documents/useTextBlockView'
+import { useTextBlockCommands } from '@/hooks/documents/useTextBlockCommands'
+import { useLlmCommands } from '@/hooks/llm/useLlmCommands'
+import { useLlmView } from '@/hooks/llm/useLlmView'
 import {
   Accordion,
   AccordionContent,
@@ -24,17 +25,12 @@ import { DraftTextarea } from '@/components/ui/draft-textarea'
 import { ScrollArea } from '@/components/ui/scroll-area'
 
 export function TextBlocksPanel() {
-  const {
-    document,
-    textBlocks,
-    selectedBlockIndex,
-    setSelectedBlockIndex,
-    replaceBlock,
-    removeBlock,
-  } = useTextBlocks()
+  const { document, textBlocks, selectedBlockIndex, setSelectedBlockIndex } =
+    useTextBlockView()
+  const { replaceBlock, removeBlock } = useTextBlockCommands()
   const { t } = useTranslation()
-  const { llmGenerate } = useLlmMutations()
-  const { data: llmReady = false } = useLlmReadyQuery()
+  const { llmGenerate } = useLlmCommands()
+  const { ready: llmReady } = useLlmView()
   const [generatingIndex, setGeneratingIndex] = useState<number | null>(null)
   const generating = generatingIndex !== null
 

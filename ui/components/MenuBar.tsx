@@ -14,8 +14,8 @@ import {
   MenubarSeparator,
   MenubarTrigger,
 } from '@/components/ui/menubar'
-import { isMacOS, isTauri, windowControls } from '@/lib/native'
-import { useDocumentMutations } from '@/lib/documents/mutations'
+import { isMacOS, isTauri, windowControls } from '@/lib/infra/platform/native'
+import { useDocumentCommands } from '@/hooks/documents/useDocumentCommands'
 
 type MenuItem = {
   label: string
@@ -45,7 +45,7 @@ export function MenuBar() {
     exportPsdDocument,
     exportAllInpainted,
     exportAllRendered,
-  } = useDocumentMutations()
+  } = useDocumentCommands()
 
   const fileMenuItems: MenuItem[] = [
     {

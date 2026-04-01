@@ -1,10 +1,8 @@
 'use client'
 
-import { useEffect, useRef, useState } from 'react'
 import { useTranslation } from 'react-i18next'
-import { DOWNLOAD_STATUS, isActiveDownload } from '@/lib/download-state'
-import { subscribeDownloadChanged } from '@/lib/rpc-events'
-import type { DownloadState } from '@/lib/protocol'
+import { getPrimaryDownload } from '@/lib/app/runtime/controller'
+import { useRuntimeDownloads } from '@/hooks/runtime/useRuntimeDownloads'
 
 type AggregateProgress = {
   filename: string
@@ -13,64 +11,14 @@ type AggregateProgress = {
 
 export default function SplashScreen() {
   const { t } = useTranslation()
-  const [progress, setProgress] = useState<AggregateProgress | null>(null)
-  const filesRef = useRef<Map<string, { downloaded: number; total: number }>>(
-    new Map(),
-  )
-
-  useEffect(() => {
-    const unsub = subscribeDownloadChanged((msg: DownloadState) => {
-      const files = filesRef.current
-
-      if (msg.status === DOWNLOAD_STATUS.started) {
-        files.set(msg.filename, { downloaded: 0, total: msg.total ?? 0 })
-      } else if (msg.status === DOWNLOAD_STATUS.downloading) {
-        const entry = files.get(msg.filename)
-        if (entry) {
-          entry.downloaded = msg.downloaded
-          if (msg.total) entry.total = msg.total
-        } else {
-          files.set(msg.filename, {
-            downloaded: msg.downloaded,
-            total: msg.total ?? 0,
-          })
-        }
-      } else {
-        // Completed or Failed — lock this file at 100%
-        const entry = files.get(msg.filename)
-        if (entry) {
-          entry.downloaded = entry.total
-        }
+  const downloads = useRuntimeDownloads()
+  const primaryDownload = getPrimaryDownload(downloads)
+  const progress: AggregateProgress | null = primaryDownload
+    ? {
+        filename: primaryDownload.filename,
+        percent: primaryDownload.percent,
       }
-
-      // Compute aggregate
-      let totalBytes = 0
-      let downloadedBytes = 0
-      for (const entry of files.values()) {
-        totalBytes += entry.total
-        downloadedBytes += entry.downloaded
-      }
-
-      // Find current active file (last non-completed)
-      const activeFilename = isActiveDownload(msg) ? msg.filename : null
-
-      const percent =
-        totalBytes > 0
-          ? Math.min(100, Math.round((downloadedBytes / totalBytes) * 100))
-          : undefined
-
-      if (activeFilename) {
-        setProgress({ filename: activeFilename, percent })
-      } else {
-        // All done — keep showing 100% briefly
-        setProgress((prev) =>
-          prev ? { ...prev, percent: percent ?? 100 } : null,
-        )
-      }
-    })
-
-    return () => unsub()
-  }, [])
+    : null
 
   return (
     <main className='bg-background flex min-h-screen flex-col items-center justify-center select-none'>

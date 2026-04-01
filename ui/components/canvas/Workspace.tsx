@@ -20,16 +20,17 @@ import { ToolRail } from '@/components/canvas/ToolRail'
 import { CanvasToolbar } from '@/components/canvas/CanvasToolbar'
 import { TextBlockAnnotations } from '@/components/canvas/TextBlockAnnotations'
 import { TextBlockSpriteLayer } from '@/components/canvas/TextBlockSpriteLayer'
-import { useCanvasZoom } from '@/hooks/useCanvasZoom'
-import { usePointerToDocument } from '@/hooks/usePointerToDocument'
-import { useBlockDrafting } from '@/hooks/useBlockDrafting'
-import { useBlockContextMenu } from '@/hooks/useBlockContextMenu'
-import { useTextBlocks } from '@/hooks/useTextBlocks'
-import { useMaskDrawing } from '@/hooks/useMaskDrawing'
-import { useRenderBrushDrawing } from '@/hooks/useRenderBrushDrawing'
-import { useBrushLayerDisplay } from '@/hooks/useBrushLayerDisplay'
-import { useEditorUiStore } from '@/lib/stores/editorUiStore'
-import { listen } from '@/lib/native'
+import { useCanvasZoom } from '@/hooks/canvas/useCanvasZoom'
+import { usePointerToDocument } from '@/hooks/canvas/usePointerToDocument'
+import { useBlockDrafting } from '@/hooks/canvas/useBlockDrafting'
+import { useBlockContextMenu } from '@/hooks/canvas/useBlockContextMenu'
+import { useMaskStrokeSession } from '@/hooks/canvas/useMaskStrokeSession'
+import { useRenderStrokeSession } from '@/hooks/canvas/useRenderStrokeSession'
+import { useBrushLayerDisplay } from '@/hooks/canvas/useBrushLayerDisplay'
+import { useTextBlockView } from '@/hooks/documents/useTextBlockView'
+import { useTextBlockCommands } from '@/hooks/documents/useTextBlockCommands'
+import { useEditorUiState } from '@/hooks/ui/useEditorUiState'
+import { listen } from '@/lib/infra/platform/native'
 import {
   resolvePinchMemoScaleRatio,
   resolvePinchNextScaleRatio,
@@ -39,28 +40,27 @@ const BRUSH_CURSOR =
   'url(\'data:image/svg+xml,%3Csvg xmlns="http://www.w3.org/2000/svg" width="16" height="16"%3E%3Ccircle cx="8" cy="8" r="4" stroke="black" stroke-width="1.5" fill="white"/%3E%3C/svg%3E\') 8 8, crosshair'
 
 export function Workspace() {
-  const scale = useEditorUiStore((state) => state.scale)
-  const showSegmentationMask = useEditorUiStore(
+  const scale = useEditorUiState((state) => state.scale)
+  const showSegmentationMask = useEditorUiState(
     (state) => state.showSegmentationMask,
   )
-  const showInpaintedImage = useEditorUiStore(
+  const showInpaintedImage = useEditorUiState(
     (state) => state.showInpaintedImage,
   )
-  const showBrushLayer = useEditorUiStore((state) => state.showBrushLayer)
-  const showRenderedImage = useEditorUiStore((state) => state.showRenderedImage)
-  const showTextBlocksOverlay = useEditorUiStore(
+  const showBrushLayer = useEditorUiState((state) => state.showBrushLayer)
+  const showRenderedImage = useEditorUiState((state) => state.showRenderedImage)
+  const showTextBlocksOverlay = useEditorUiState(
     (state) => state.showTextBlocksOverlay,
   )
-  const mode = useEditorUiStore((state) => state.mode)
-  const autoFitEnabled = useEditorUiStore((state) => state.autoFitEnabled)
+  const mode = useEditorUiState((state) => state.mode)
+  const autoFitEnabled = useEditorUiState((state) => state.autoFitEnabled)
   const {
     document: currentDocument,
     selectedBlockIndex,
     setSelectedBlockIndex,
     clearSelection,
-    appendBlock,
-    removeBlock,
-  } = useTextBlocks()
+  } = useTextBlockView()
+  const { appendBlock, removeBlock } = useTextBlockCommands()
   const viewportRef = useRef<HTMLDivElement | null>(null)
   const { setScale: applyScale } = useCanvasZoom()
   const scaleRatio = scale / 100
@@ -81,7 +81,7 @@ export function Workspace() {
   const brushPointerEnabled =
     mode === 'brush' ||
     (mode === 'eraser' && !showSegmentationMask && showBrushLayer)
-  const maskDrawing = useMaskDrawing({
+  const maskDrawing = useMaskStrokeSession({
     mode,
     currentDocument,
     pointerToDocument,
@@ -92,7 +92,7 @@ export function Workspace() {
     currentDocument,
     visible: showBrushLayer,
   })
-  const brushDrawing = useRenderBrushDrawing({
+  const brushDrawing = useRenderStrokeSession({
     mode,
     currentDocument,
     pointerToDocument,
@@ -178,15 +178,11 @@ export function Workspace() {
 
         const direction = Math.sign(dy)
         if (!direction) return
-        const currentScale = useEditorUiStore.getState().scale
-        applyScale(currentScale - direction)
+        applyScale(scale - direction)
       },
       onPinch: ({ canceled, movement: [movementScale], memo }) => {
         if (!currentDocument || canceled) return memo
-        const memoScaleRatio = resolvePinchMemoScaleRatio(
-          memo,
-          useEditorUiStore.getState().scale / 100,
-        )
+        const memoScaleRatio = resolvePinchMemoScaleRatio(memo, scale / 100)
         const nextScaleRatio = resolvePinchNextScaleRatio(
           memoScaleRatio,
           movementScale,
@@ -213,7 +209,7 @@ export function Workspace() {
         pinchOnWheel: false,
         preventDefault: true,
         scaleBounds: { min: 0.1, max: 1 },
-        from: () => [useEditorUiStore.getState().scale / 100, 0],
+        from: () => [scale / 100, 0],
       },
     },
   )

@@ -1,7 +1,7 @@
 'use client'
 
 import { useTranslation } from 'react-i18next'
-import { useCanvasZoom } from '@/hooks/useCanvasZoom'
+import { useCanvasZoom } from '@/hooks/canvas/useCanvasZoom'
 import { Slider } from '@/components/ui/slider'
 
 export function StatusBar() {

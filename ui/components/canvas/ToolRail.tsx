@@ -9,8 +9,8 @@ import {
   Bandage,
   Eraser,
 } from 'lucide-react'
-import { useEditorUiStore } from '@/lib/stores/editorUiStore'
-import { usePreferencesStore } from '@/lib/stores/preferencesStore'
+import { useEditorUiState } from '@/hooks/ui/useEditorUiState'
+import { usePreferencesState } from '@/hooks/ui/usePreferencesState'
 import { ToolMode } from '@/types'
 import {
   Tooltip,
@@ -67,8 +67,8 @@ const MODES: ModeDefinition[] = [
 ]
 
 export function ToolRail() {
-  const mode = useEditorUiStore((state) => state.mode)
-  const setMode = useEditorUiStore((state) => state.setMode)
+  const mode = useEditorUiState((state) => state.mode)
+  const setMode = useEditorUiState((state) => state.setMode)
   const { t } = useTranslation()
 
   return (
@@ -127,10 +127,9 @@ function BrushToolWithPopover({
   isActive: boolean
   onSelect: () => void
 }) {
-  const {
-    brushConfig: { size: brushSize, color: brushColor },
-    setBrushConfig,
-  } = usePreferencesStore()
+  const brushSize = usePreferencesState((state) => state.brushConfig.size)
+  const brushColor = usePreferencesState((state) => state.brushConfig.color)
+  const setBrushConfig = usePreferencesState((state) => state.setBrushConfig)
   const { t } = useTranslation()
 
   return (

@@ -3,9 +3,10 @@
 import { useEffect, useState } from 'react'
 import { Rnd, type RndResizeCallback, type RndDragCallback } from 'react-rnd'
 import { useHotkeys } from 'react-hotkeys-hook'
-import { useEditorUiStore } from '@/lib/stores/editorUiStore'
+import { useEditorUiState } from '@/hooks/ui/useEditorUiState'
 import { TextBlock } from '@/types'
-import { useTextBlocks } from '@/hooks/useTextBlocks'
+import { useTextBlockCommands } from '@/hooks/documents/useTextBlockCommands'
+import { useTextBlockView } from '@/hooks/documents/useTextBlockView'
 
 type TextBlockAnnotationsProps = {
   selectedIndex?: number
@@ -18,8 +19,9 @@ export function TextBlockAnnotations({
   onSelect,
   style,
 }: TextBlockAnnotationsProps) {
-  const { textBlocks, replaceBlock, removeBlock } = useTextBlocks()
-  const mode = useEditorUiStore((state) => state.mode)
+  const { textBlocks } = useTextBlockView()
+  const { replaceBlock, removeBlock } = useTextBlockCommands()
+  const mode = useEditorUiState((state) => state.mode)
   const interactive = mode === 'select' || mode === 'block'
 
   useHotkeys(
@@ -82,7 +84,7 @@ function TextBlockAnnotation({
   onSelect,
   onUpdate,
 }: TextBlockAnnotationProps) {
-  const scale = useEditorUiStore((state) => state.scale)
+  const scale = useEditorUiState((state) => state.scale)
   const scaleRatio = scale / 100
 
   const scaledSize = {

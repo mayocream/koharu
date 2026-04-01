@@ -20,12 +20,12 @@ import {
 import {
   getLocalLlmBaseUrlPlaceholder,
   type LocalLlmPreset,
-} from '@/lib/llm/presets'
-import type { BootstrapConfig } from '@/lib/protocol'
+} from '@/lib/features/llm/presets'
+import type { BootstrapConfig } from '@/lib/contracts/protocol'
 import {
   type LocalLlmConfig,
   type LocalLlmPresetConfig,
-} from '@/lib/stores/preferencesStore'
+} from '@/lib/state/preferences/store'
 import { cn } from '@/lib/utils'
 import {
   API_PROVIDERS,

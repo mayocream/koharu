@@ -2,27 +2,27 @@
 
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import { useTheme } from 'next-themes'
-import { pingLlm } from '@/lib/generated/orval/llm/llm'
+import { pingLlm } from '@/lib/infra/llm/api'
 import {
   createDebouncedAsyncTask,
   type DebouncedAsyncTask,
 } from '@/lib/debounced-async'
 import { reportAppError } from '@/lib/errors'
 import { supportedLanguages } from '@/lib/i18n'
-import type { LocalLlmPreset } from '@/lib/llm/presets'
-import { useSetProviderApiKeyMutation } from '@/lib/llm/queries'
-import { isTauri } from '@/lib/native'
-import type { BootstrapConfig } from '@/lib/protocol'
+import type { LocalLlmPreset } from '@/lib/features/llm/presets'
+import { useProviderApiKeyMutation } from '@/hooks/llm/useProviderApiKeyMutation'
+import { isTauri } from '@/lib/infra/platform/native'
+import type { BootstrapConfig } from '@/lib/contracts/protocol'
 import {
   getActivePresetConfig,
   type LocalLlmPresetConfig,
-  usePreferencesStore,
-} from '@/lib/stores/preferencesStore'
-import { useUpdateBootstrapConfigMutation } from '@/lib/system/mutations'
+} from '@/lib/state/preferences/store'
+import { usePreferencesState } from '@/hooks/ui/usePreferencesState'
 import {
   useBootstrapConfigQuery,
   useDeviceInfoQuery,
-} from '@/lib/system/queries'
+  useUpdateBootstrapConfigMutation,
+} from '@/hooks/runtime/useSystemQueries'
 import { API_PROVIDERS } from './settings-constants'
 
 type PingResult = {
@@ -42,13 +42,13 @@ export const useSettingsController = () => {
   const tauri = isTauri()
   const { data: deviceInfo } = useDeviceInfoQuery(tauri)
   const bootstrapConfigQuery = useBootstrapConfigQuery()
-  const setProviderApiKeyMutation = useSetProviderApiKeyMutation()
+  const setProviderApiKeyMutation = useProviderApiKeyMutation()
   const updateBootstrapConfigMutation = useUpdateBootstrapConfigMutation()
-  const apiKeys = usePreferencesStore((state) => state.apiKeys)
-  const setApiKey = usePreferencesStore((state) => state.setApiKey)
-  const localLlm = usePreferencesStore((state) => state.localLlm)
-  const setLocalLlm = usePreferencesStore((state) => state.setLocalLlm)
-  const setActivePreset = usePreferencesStore((state) => state.setActivePreset)
+  const apiKeys = usePreferencesState((state) => state.apiKeys)
+  const setApiKey = usePreferencesState((state) => state.setApiKey)
+  const localLlm = usePreferencesState((state) => state.localLlm)
+  const setLocalLlm = usePreferencesState((state) => state.setLocalLlm)
+  const setActivePreset = usePreferencesState((state) => state.setActivePreset)
   const [visibleKeys, setVisibleKeys] = useState<Record<string, boolean>>({})
   const [showAdvanced, setShowAdvanced] = useState(false)
   const [pingState, setPingState] = useState<PingState>({ loading: false })

@@ -1,7 +1,7 @@
 'use client'
 
 import { z } from 'zod'
-import { resolveApiUrl } from '@/lib/api-origin'
+import { resolveApiUrl } from '@/lib/infra/platform/api-origin'
 
 type ErrorPayload = {
   message?: string

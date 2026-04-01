@@ -13,8 +13,8 @@ import {
 } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { Button } from '@/components/ui/button'
-import { useEditorUiStore } from '@/lib/stores/editorUiStore'
-import { useCurrentDocumentState } from '@/lib/documents/queries'
+import { useDocumentView } from '@/hooks/documents/useDocumentView'
+import { useEditorUiState } from '@/hooks/ui/useEditorUiState'
 
 type Layer = {
   id: string
@@ -27,29 +27,29 @@ type Layer = {
 }
 
 export function LayersPanel() {
-  const { currentDocument } = useCurrentDocumentState()
-  const showInpaintedImage = useEditorUiStore(
+  const { currentDocument } = useDocumentView()
+  const showInpaintedImage = useEditorUiState(
     (state) => state.showInpaintedImage,
   )
-  const setShowInpaintedImage = useEditorUiStore(
+  const setShowInpaintedImage = useEditorUiState(
     (state) => state.setShowInpaintedImage,
   )
-  const showSegmentationMask = useEditorUiStore(
+  const showSegmentationMask = useEditorUiState(
     (state) => state.showSegmentationMask,
   )
-  const setShowSegmentationMask = useEditorUiStore(
+  const setShowSegmentationMask = useEditorUiState(
     (state) => state.setShowSegmentationMask,
   )
-  const showBrushLayer = useEditorUiStore((state) => state.showBrushLayer)
-  const setShowBrushLayer = useEditorUiStore((state) => state.setShowBrushLayer)
-  const showTextBlocksOverlay = useEditorUiStore(
+  const showBrushLayer = useEditorUiState((state) => state.showBrushLayer)
+  const setShowBrushLayer = useEditorUiState((state) => state.setShowBrushLayer)
+  const showTextBlocksOverlay = useEditorUiState(
     (state) => state.showTextBlocksOverlay,
   )
-  const setShowTextBlocksOverlay = useEditorUiStore(
+  const setShowTextBlocksOverlay = useEditorUiState(
     (state) => state.setShowTextBlocksOverlay,
   )
-  const showRenderedImage = useEditorUiStore((state) => state.showRenderedImage)
-  const setShowRenderedImage = useEditorUiStore(
+  const showRenderedImage = useEditorUiState((state) => state.showRenderedImage)
+  const setShowRenderedImage = useEditorUiState(
     (state) => state.setShowRenderedImage,
   )
 
