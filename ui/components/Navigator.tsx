@@ -2,8 +2,10 @@
 
 import { useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react'
 import { useVirtualizer } from '@tanstack/react-virtual'
+import { Trash2Icon } from 'lucide-react'
 import { useTranslation } from 'react-i18next'
 import { useDocumentsCountQuery, useThumbnailQuery } from '@/lib/query/hooks'
+import { useDocumentMutations } from '@/lib/query/mutations'
 import { useEditorUiStore } from '@/lib/stores/editorUiStore'
 import { Button } from '@/components/ui/button'
 import { ScrollArea } from '@/components/ui/scroll-area'
@@ -20,6 +22,7 @@ export function Navigator() {
   const setCurrentDocumentIndex = useEditorUiStore(
     (state) => state.setCurrentDocumentIndex,
   )
+  const { deleteDocument } = useDocumentMutations()
   const listRef = useRef<HTMLDivElement | null>(null)
   const indices = useMemo(
     () => Array.from({ length: totalPages }, (_, idx) => idx),
@@ -95,6 +98,15 @@ export function Navigator() {
                     index={idx}
                     documentsVersion={documentsVersion}
                     selected={idx === currentDocumentIndex}
+                    onDelete={() => {
+                      if (
+                        typeof window !== 'undefined' &&
+                        !window.confirm('Delete this page from the project?')
+                      ) {
+                        return
+                      }
+                      void deleteDocument(idx)
+                    }}
                     onSelect={() => {
                       void flushTextBlockSync()
                         .catch(() => {})
@@ -117,6 +129,7 @@ type PagePreviewProps = {
   index: number
   documentsVersion: number
   selected: boolean
+  onDelete: () => void
   onSelect: () => void
 }
 
@@ -124,6 +137,7 @@ function PagePreview({
   index,
   documentsVersion,
   selected,
+  onDelete,
   onSelect,
 }: PagePreviewProps) {
   const [preview, setPreview] = useState<string>()
@@ -147,35 +161,49 @@ function PagePreview({
   }, [thumbnailBlob])
 
   return (
-    <Button
-      variant='ghost'
-      onClick={onSelect}
-      data-testid={`navigator-page-${index}`}
-      data-page-index={index}
-      data-selected={selected}
-      className='bg-card data-[selected=true]:border-primary flex h-auto flex-col gap-0.5 rounded border border-transparent p-1.5 text-left shadow-sm'
-    >
-      {loading ? (
-        <div className='bg-muted aspect-3/4 w-full animate-pulse rounded' />
-      ) : error ? (
-        <div className='bg-muted flex aspect-3/4 w-full items-center justify-center rounded'>
-          <span className='text-muted-foreground text-[10px]'>?</span>
+    <div className='group relative'>
+      <Button
+        variant='ghost'
+        onClick={onSelect}
+        data-testid={`navigator-page-${index}`}
+        data-page-index={index}
+        data-selected={selected}
+        className='bg-card data-[selected=true]:border-primary flex h-auto w-full flex-col gap-0.5 rounded border border-transparent p-1.5 text-left shadow-sm'
+      >
+        {loading ? (
+          <div className='bg-muted aspect-3/4 w-full animate-pulse rounded' />
+        ) : error ? (
+          <div className='bg-muted flex aspect-3/4 w-full items-center justify-center rounded'>
+            <span className='text-muted-foreground text-[10px]'>?</span>
+          </div>
+        ) : preview ? (
+          <img
+            src={preview}
+            alt={`Page ${index + 1}`}
+            style={{ objectFit: 'contain' }}
+            className='aspect-3/4 w-full rounded object-cover'
+          />
+        ) : (
+          <div className='bg-muted aspect-3/4 w-full rounded' />
+        )}
+        <div className='text-muted-foreground flex flex-1 items-center text-xs'>
+          <div className='text-foreground mx-auto flex text-center font-semibold'>
+            {index + 1}
+          </div>
         </div>
-      ) : preview ? (
-        <img
-          src={preview}
-          alt={`Page ${index + 1}`}
-          style={{ objectFit: 'contain' }}
-          className='aspect-3/4 w-full rounded object-cover'
-        />
-      ) : (
-        <div className='bg-muted aspect-3/4 w-full rounded' />
-      )}
-      <div className='text-muted-foreground flex flex-1 items-center text-xs'>
-        <div className='text-foreground mx-auto flex text-center font-semibold'>
-          {index + 1}
-        </div>
-      </div>
-    </Button>
+      </Button>
+      <button
+        type='button'
+        aria-label='Delete page'
+        title='Delete page'
+        onClick={(event) => {
+          event.stopPropagation()
+          onDelete()
+        }}
+        className='bg-background/95 text-muted-foreground hover:text-foreground absolute top-2 right-2 rounded border p-1 opacity-0 shadow-sm transition-opacity group-hover:opacity-100'
+      >
+        <Trash2Icon className='size-3.5' />
+      </button>
+    </div>
   )
 }

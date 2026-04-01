@@ -15,6 +15,7 @@ import type {
   DocumentSummary,
   ExportResult,
   FontFaceInfo,
+  ImportResult,
   JobState,
   LlmModelInfo,
   LlmState,
@@ -801,26 +802,42 @@ export const api = {
     })
   },
 
-  async openProject(
-    projectId: string,
-  ): Promise<{
+  async openProject(projectId: string): Promise<{
     totalCount: number
     documents: DocumentSummary[]
     currentDocumentId?: string
   }> {
     return withRpcError('open_project', async () => {
-      const result = await fetchJson<{
-        totalCount: number
-        documents: DocumentSummary[]
-      }>(`/projects/${projectId}/open`, {
-        method: 'POST',
-      })
+      const result = await fetchJson<ImportResult>(
+        `/projects/${projectId}/open`,
+        {
+          method: 'POST',
+        },
+      )
       documentDetailCache.clear()
-      const currentProject = await api.getCurrentProject().catch(() => null)
       return {
         totalCount: result.totalCount,
         documents: result.documents,
-        currentDocumentId: currentProject?.currentDocumentId ?? undefined,
+        currentDocumentId: result.currentDocumentId ?? undefined,
+      }
+    })
+  },
+
+  async deleteDocument(index: number): Promise<{
+    totalCount: number
+    documents: DocumentSummary[]
+    currentDocumentId?: string
+  }> {
+    return withRpcError('delete_document', async () => {
+      const summary = await getDocumentSummaryAtIndex(index)
+      const result = await fetchJson<ImportResult>(`/documents/${summary.id}`, {
+        method: 'DELETE',
+      })
+      documentDetailCache.delete(summary.id)
+      return {
+        totalCount: result.totalCount,
+        documents: result.documents,
+        currentDocumentId: result.currentDocumentId ?? undefined,
       }
     })
   },

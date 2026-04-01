@@ -10,6 +10,8 @@
     "dev": "bun run scripts/dev.ts tauri dev -- --release -- --port=9999",
     "build": "bun run scripts/dev.ts tauri build --no-bundle",
     "cargo": "bun run scripts/dev.ts cargo",
+    "project:export": "bun run scripts/project-export.ts",
+    "project:psd": "bun run scripts/project-export.ts --format psd",
     "format": "prettier --write ui/ --ignore-path ui/.gitignore",
     "test:e2e": "playwright test"
   },

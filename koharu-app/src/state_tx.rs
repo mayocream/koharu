@@ -328,6 +328,16 @@ pub async fn append_docs_from_files(state: &AppState, files: Vec<koharu_core::Fi
     Ok(count)
 }
 
+pub async fn delete_doc(state: &AppState, index: usize) -> Result<usize> {
+    let mut guard = state.write().await;
+    let project = current_project_mut(&mut guard)?;
+    let document_id = page_id_at_index(project, index)?;
+    let count = projects::remove_document(project, &document_id)?;
+    drop(guard);
+    emit(StateEvent::DocumentsChanged);
+    Ok(count)
+}
+
 pub async fn open_project(state: &AppState, project_id: &str) -> Result<usize> {
     let session = projects::open_project(project_id)?;
     let count = session.pages.len();

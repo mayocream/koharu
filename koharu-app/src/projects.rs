@@ -205,6 +205,50 @@ pub fn append_files(session: &mut ProjectSessionState, files: Vec<FileEntry>) ->
     Ok(session.pages.len())
 }
 
+pub fn remove_document(session: &mut ProjectSessionState, document_id: &str) -> Result<usize> {
+    let index = session
+        .pages
+        .iter()
+        .position(|page| page.summary.id == document_id)
+        .ok_or_else(|| anyhow::anyhow!("Document not found: {document_id}"))?;
+    let page = session.pages.remove(index);
+
+    session.loaded_documents.remove(document_id);
+
+    for path in [
+        session.root.join(&page.asset_rel_path),
+        session.root.join(&page.thumbnail_rel_path),
+        page_disk_path(&session.root, document_id),
+        segment_layer_path(&session.root, document_id),
+        brush_layer_path(&session.root, document_id),
+        inpainted_cache_path(&session.root, document_id),
+        rendered_cache_path(&session.root, document_id),
+    ] {
+        remove_file_if_exists(&path)?;
+    }
+
+    let current_missing = session
+        .current_document_id
+        .as_deref()
+        .is_none_or(|current| !session.pages.iter().any(|page| page.summary.id == current));
+
+    if current_missing {
+        session.current_document_id = session
+            .pages
+            .get(index)
+            .or_else(|| index.checked_sub(1).and_then(|prev| session.pages.get(prev)))
+            .or_else(|| session.pages.first())
+            .map(|page| page.summary.id.clone());
+    }
+
+    session.summary.page_count = session.pages.len();
+    session.summary.updated_at_ms = now_ms();
+    session.summary.current_document_id = session.current_document_id.clone();
+    save_manifest(session)?;
+    touch_recent(&session.summary.id)?;
+    Ok(session.pages.len())
+}
+
 pub fn load_document(session: &mut ProjectSessionState, document_id: &str) -> Result<Document> {
     if let Some(document) = session.loaded_documents.get(document_id) {
         return Ok(document.clone());
@@ -435,6 +479,14 @@ fn read_optional_layer(path: &Path) -> Result<Option<SerializableDynamicImage>> 
     let image = image::load_from_memory(&bytes)
         .with_context(|| format!("failed to decode layer `{}`", path.display()))?;
     Ok(Some(SerializableDynamicImage(image)))
+}
+
+fn remove_file_if_exists(path: &Path) -> Result<()> {
+    if path.exists() {
+        fs::remove_file(path)
+            .with_context(|| format!("failed to remove file `{}`", path.display()))?;
+    }
+    Ok(())
 }
 
 fn load_project_summary(root: &Path) -> Result<ProjectSummary> {
@@ -846,6 +898,29 @@ mod tests {
             assert_eq!(block.layout_seed_width, Some(33.0));
             assert_eq!(block.layout_seed_height, Some(44.0));
             assert_eq!(block.translation.as_deref(), Some("tr"));
+        });
+    }
+
+    #[test]
+    fn remove_document_updates_current_page_and_deletes_files() {
+        with_test_app_data_root(|| {
+            let mut session = create_project(vec![
+                sample_file_entry("page-1.png"),
+                sample_file_entry("page-2.png"),
+            ])
+            .expect("project should exist");
+
+            let removed_id = session.pages[0].summary.id.clone();
+            let next_id = session.pages[1].summary.id.clone();
+            let removed_page = session.pages[0].clone();
+
+            let remaining = remove_document(&mut session, &removed_id).expect("remove should work");
+            assert_eq!(remaining, 1);
+            assert_eq!(session.current_document_id.as_deref(), Some(next_id.as_str()));
+            assert_eq!(session.summary.page_count, 1);
+            assert!(!session.root.join(&removed_page.asset_rel_path).exists());
+            assert!(!session.root.join(&removed_page.thumbnail_rel_path).exists());
+            assert!(!page_disk_path(&session.root, &removed_id).exists());
         });
     }
 }

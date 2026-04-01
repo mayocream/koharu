@@ -71,7 +71,7 @@ pub fn router(resources: SharedState, events: EventHub) -> Router {
         .route("/projects/{project_id}/open", post(open_project))
         .route("/documents", get(list_documents))
         .route("/documents/import", post(import_documents))
-        .route("/documents/{document_id}", get(get_document))
+        .route("/documents/{document_id}", get(get_document).delete(delete_document))
         .route("/documents/{document_id}/thumbnail", get(get_thumbnail))
         .route(
             "/documents/{document_id}/layers/{layer}",
@@ -287,6 +287,7 @@ async fn open_project(
     Ok(Json(koharu_core::ImportResult {
         total_count,
         documents,
+        current_document_id: state_tx::current_document_id(&resources.state).await,
     }))
 }
 
@@ -399,6 +400,25 @@ async fn import_documents(
     Ok(Json(koharu_core::ImportResult {
         total_count: documents.len(),
         documents,
+        current_document_id: state_tx::current_document_id(&resources.state).await,
+    }))
+}
+
+async fn delete_document(
+    State(state): State<ApiState>,
+    Path(document_id): Path<String>,
+) -> ApiResult<Json<koharu_core::ImportResult>> {
+    let resources = state.resources()?;
+    let (index, _) = find_document(&resources, &document_id).await?;
+    let total_count = state_tx::delete_doc(&resources.state, index)
+        .await
+        .map_err(ApiError::from)?;
+    let documents = state_tx::list_doc_summaries(&resources.state).await;
+
+    Ok(Json(koharu_core::ImportResult {
+        total_count,
+        documents,
+        current_document_id: state_tx::current_document_id(&resources.state).await,
     }))
 }
 

@@ -304,6 +304,7 @@ pub enum ImportMode {
 pub struct ImportResult {
     pub total_count: usize,
     pub documents: Vec<DocumentSummary>,
+    pub current_document_id: Option<String>,
 }
 
 #[derive(Debug, Clone, Copy, Serialize, Deserialize, JsonSchema, TS)]

@@ -506,6 +506,42 @@ export const useDocumentMutations = () => {
     }
   }, [refreshProjects])
 
+  const deleteDocument = useCallback(
+    async (index: number) => {
+      await flushTextBlockSync()
+      await flushMaskSyncQueue()
+      const result = await api.deleteDocument(index)
+      clearMaskSync()
+      queryClient.setQueryData(queryKeys.documents.count, result.totalCount)
+      const currentIndex = result.currentDocumentId
+        ? Math.max(
+            0,
+            result.documents.findIndex(
+              (document) => document.id === result.currentDocumentId,
+            ),
+          )
+        : 0
+
+      useEditorUiStore.setState((state) => ({
+        totalPages: result.totalCount,
+        documentsVersion: state.documentsVersion + 1,
+        currentDocumentIndex: result.totalCount > 0 ? currentIndex : 0,
+        selectedBlockIndex: undefined,
+      }))
+
+      await refreshDocuments()
+      await refreshProjects()
+
+      if (result.totalCount > 0) {
+        await queryClient.prefetchQuery({
+          queryKey: queryKeys.documents.current(currentIndex),
+          queryFn: () => api.getDocument(currentIndex),
+        })
+      }
+    },
+    [queryClient, refreshDocuments, refreshProjects],
+  )
+
   const openExternal = useCallback(async (url: string) => {
     await api.openExternal(url)
   }, [])
@@ -743,6 +779,7 @@ export const useDocumentMutations = () => {
     refreshCurrentDocument,
     saveProject,
     openProject,
+    deleteDocument,
     addDocuments,
     openDocuments,
     openFolder,
