@@ -4,7 +4,35 @@ title: Export Pages and Manage Projects
 
 # Export Pages and Manage Projects
 
-Koharu's workflow is page-based. You import image pages, run the pipeline, review text blocks, and then export either flattened output or a layered handoff file for manual finishing.
+Koharu's workflow is project-based. You import image pages into a local project, run the pipeline, review text blocks, and then export either flattened output or a layered handoff file for manual finishing.
+
+## How project save works
+
+Koharu now keeps project state on disk instead of relying on an in-memory page set only.
+
+- the first `Open File` or `Open Folder` action creates a new project and copies the source images into it
+- `Add File` and `Add Folder` append more pages to the current project
+- text edits, masks, brush strokes, page metadata, and pipeline status autosave to disk
+- `Save Project` forces pending writes to flush, but autosave is the normal path
+- `Open Project` and `Open Recent` switch between saved local projects
+- on the next launch, Koharu restores the last open project and the last active page automatically
+
+Each project is stored as a self-contained folder in the local app data directory and includes:
+
+- `project_manifest.json` for project metadata and page summaries
+- `pages/*.json` for per-page editable state
+- `assets/pages/` for copied source images
+- `assets/thumbs/` for thumbnails
+- `layers/segment/` and `layers/brush/` for editable source layers
+- `cache/inpainted/` and `cache/rendered/` for derived layers that can be regenerated later
+
+This split matters in practice:
+
+- segmentation masks and brush edits are treated as source project data
+- inpainted and rendered layers are treated as cache
+- if CUDA, inpainting, or rendering fails, the project still keeps your text blocks, masks, brush edits, and metadata
+
+The current implementation is folder-backed rather than a portable single-file project format.
 
 ## Supported page inputs
 
@@ -76,18 +104,17 @@ Koharu currently writes classic PSD files, not PSB files. That means very large 
 
 The implementation rejects dimensions above `30000 x 30000`.
 
-## Manage loaded page sets
+## Manage projects and page sets
 
-Koharu lets you work with multiple loaded pages in one session.
+Koharu still lets you work with multiple pages in one batch, but that batch now lives inside a saved project.
 
 The practical choices are:
 
-- open images and replace the current set
-- append more images to the current set
-- open a folder and load its supported image files
-- append a folder to the current set
-
-This is the main way to manage a chapter or batch job inside the app today.
+- open images and create a new project that replaces the current one
+- append more images to the current project
+- open a folder and create a new project from its supported image files
+- append a folder to the current project
+- reopen a previous chapter through `Open Project` or `Open Recent`
 
 ## When to use each format
 

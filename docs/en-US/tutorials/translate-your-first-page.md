@@ -24,7 +24,7 @@ On the first run, Koharu may spend time initializing local runtime packages and 
 
 Load your page image into the app.
 
-At the moment, the documented import flow is image-based rather than project-file based. If you import a folder instead of a single file, Koharu recursively filters it down to supported image files.
+The first import creates a local project and copies the source page into it. If you import a folder instead of a single file, Koharu recursively filters it down to supported image files and adds them to the project.
 
 For a first pass, use one clean page so it is easy to judge:
 
@@ -83,6 +83,8 @@ Koharu helps with text layout and vertical CJK rendering, but the final page sti
 - blocks whose source OCR looked uncertain
 
 If a translation reads correctly but still looks cramped, adjust the text block or styling before exporting.
+
+Your edits autosave while you work. Text blocks, masks, brush strokes, and project metadata are written to disk even if a later inpaint or render pass fails.
 
 ## 6. Export the result
 
