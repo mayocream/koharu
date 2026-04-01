@@ -13,6 +13,7 @@ import ruRU from '@/public/locales/ru-RU/translation.json'
 import esES from '@/public/locales/es-ES/translation.json'
 import trTR from '@/public/locales/tr-TR/translation.json'
 import koKR from '@/public/locales/ko-KR/translation.json'
+import ptBR from '@/public/locales/pt-BR/translation.json'
 
 export const resources = {
   'en-US': { translation: enUS },
@@ -23,6 +24,7 @@ export const resources = {
   'es-ES': { translation: esES },
   'tr-TR': { translation: trTR },
   'ko-KR': { translation: koKR },
+  'pt-BR': { translation: ptBR },
 } satisfies Resource
 
 export const supportedLanguages = Object.keys(resources)

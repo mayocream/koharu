@@ -35,7 +35,8 @@
       "ru-RU": "Rusça",
       "es-ES": "İspanyolca",
       "tr-TR": "Türkçe",
-      "ko-KR": "Korece"
+      "ko-KR": "Korece",
+      "pt-BR": "Português (Brasil)"
     }
   },
   "operations": {
@@ -151,7 +152,8 @@
       "kk-KZ": "Kazakça (Kazakistan)",
       "mn-MN": "Moğolca (Moğolistan)",
       "ug-CN": "Uygurca (Çin)",
-      "yue-HK": "Kantonca (Hong Kong ÖİB Çin)"
+      "yue-HK": "Kantonca (Hong Kong ÖİB Çin)",
+      "pt-BR": "Brezilya Portekizcesi"
     }
   },
   "render": {

@@ -35,7 +35,8 @@
       "ru-RU": "Ruso",
       "es-ES": "Español",
       "tr-TR": "Turco",
-      "ko-KR": "Coreano"
+      "ko-KR": "Coreano",
+      "pt-BR": "Português (Brasil)"
     }
   },
   "operations": {
@@ -151,7 +152,8 @@
       "kk-KZ": "Kazajo (Kazajistán)",
       "mn-MN": "Mongol (Mongolia)",
       "ug-CN": "Uigur (China)",
-      "yue-HK": "Cantonés (RAE de Hong Kong [China])"
+      "yue-HK": "Cantonés (RAE de Hong Kong [China])",
+      "pt-BR": "Portugués brasileño"
     }
   },
   "render": {
