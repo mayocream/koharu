@@ -292,9 +292,9 @@ mod tests {
     }
 
     #[test]
+    #[cfg(any(target_os = "windows", target_os = "linux"))]
     fn wheels_have_dylibs_for_current_platform() {
         for wheel in WHEELS {
-            #[cfg(any(target_os = "windows", target_os = "linux"))]
             assert!(
                 !wheel.dylibs().is_empty(),
                 "{} has no dylibs",
