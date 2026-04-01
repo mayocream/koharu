@@ -1,14 +1,32 @@
+const DEFAULT_DEV_API_PORT = 9999
+const DEFAULT_LOOPBACK_HOST = '127.0.0.1'
+const DEFAULT_DEV_HOST = 'localhost'
+
+const getBrowserApiHost = () => {
+  if (typeof window === 'undefined') return undefined
+  return location.hostname || undefined
+}
+
+const getBrowserApiProtocol = () => {
+  if (typeof window === 'undefined') return 'http:'
+  return location.protocol === 'https:' ? 'https:' : 'http:'
+}
+
+const buildOrigin = (host: string, port: string | number) =>
+  `${getBrowserApiProtocol()}//${host}:${port}`
+
 const getApiOrigin = () => {
-  const isDev = process.env.NODE_ENV === 'development'
-
-  if (isDev) {
-    return 'http://127.0.0.1:9999'
-  }
-
   if (typeof window !== 'undefined') {
-    const port = (window as any).__KOHARU_API_PORT__
+    const port = window.__KOHARU_API_PORT__
     if (port) {
-      return `http://127.0.0.1:${port}`
+      return buildOrigin(DEFAULT_LOOPBACK_HOST, port)
+    }
+
+    if (process.env.NODE_ENV === 'development') {
+      return buildOrigin(
+        getBrowserApiHost() ?? DEFAULT_DEV_HOST,
+        DEFAULT_DEV_API_PORT,
+      )
     }
 
     if (location.origin) {
@@ -16,13 +34,17 @@ const getApiOrigin = () => {
     }
   }
 
-  return 'http://127.0.0.1:9999'
+  if (process.env.NODE_ENV === 'development') {
+    return `http://${DEFAULT_DEV_HOST}:${DEFAULT_DEV_API_PORT}`
+  }
+
+  return `http://${DEFAULT_LOOPBACK_HOST}:${DEFAULT_DEV_API_PORT}`
 }
 
 export const getApiBaseUrl = () => `${getApiOrigin()}/api/v1`
 
 export const resolveApiUrl = (path: string) => {
-  if (path.startsWith('http://') || path.startsWith('https://')) {
+  if (/^[a-z][a-z\d+\-.]*:/i.test(path)) {
     return path
   }
 

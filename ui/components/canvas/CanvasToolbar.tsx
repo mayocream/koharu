@@ -4,15 +4,19 @@ import { useEffect, useMemo, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import { motion } from 'motion/react'
 import {
+  LanguagesIcon,
+  LoaderCircleIcon,
   ScanIcon,
   ScanTextIcon,
-  Wand2Icon,
   TypeIcon,
-  LoaderCircleIcon,
-  LanguagesIcon,
+  Wand2Icon,
 } from 'lucide-react'
-import { Separator } from '@/components/ui/separator'
 import { Button } from '@/components/ui/button'
+import {
+  Popover,
+  PopoverContent,
+  PopoverTrigger,
+} from '@/components/ui/popover'
 import {
   Select,
   SelectContent,
@@ -20,25 +24,40 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select'
-import {
-  Popover,
-  PopoverContent,
-  PopoverTrigger,
-} from '@/components/ui/popover'
+import { Separator } from '@/components/ui/separator'
 import { useDocumentMutations } from '@/lib/documents/mutations'
-import { useLlmMutations } from '@/lib/llm/mutations'
+import { pickLanguage } from '@/lib/llm/config'
 import {
-  useLlmModelsQuery,
-  useLlmReadyQuery,
-} from '@/lib/llm/queries'
-import { useLlmUiStore } from '@/lib/stores/llmUiStore'
-import {
-  LOCAL_LLM_PRESET_LABELS,
+  getCompatiblePresetLabel,
+  getCompatiblePresetTone,
+  getLlmModelDisplayName,
+  isCompatibleModelSource,
+  isLocalModelSource,
   parsePresetFromModelId,
 } from '@/lib/llm/models'
+import { useLlmMutations } from '@/lib/llm/mutations'
+import { useLlmModelsQuery, useLlmReadyQuery } from '@/lib/llm/queries'
+import { isCurrentProcessStep, OPERATION_STEP } from '@/lib/operations'
+import { getProviderDisplayName } from '@/lib/providers'
+import { useLlmUiStore } from '@/lib/stores/llmUiStore'
 import { useOperationStore } from '@/lib/stores/operationStore'
 import { usePreferencesStore } from '@/lib/stores/preferencesStore'
-import { getProviderDisplayName } from '@/lib/providers'
+import { cn } from '@/lib/utils'
+
+const COMPATIBLE_MODEL_TONE_CLASSES = {
+  emerald: {
+    badge: 'bg-emerald-500/10 text-emerald-600 dark:text-emerald-400',
+    panel: 'border border-emerald-500/20 bg-emerald-500/5',
+    dot: 'bg-emerald-500',
+    title: 'text-emerald-700 dark:text-emerald-400',
+  },
+  teal: {
+    badge: 'bg-teal-500/10 text-teal-600 dark:text-teal-400',
+    panel: 'border border-teal-500/20 bg-teal-500/5',
+    dot: 'bg-teal-500',
+    title: 'text-teal-700 dark:text-teal-400',
+  },
+} as const
 
 export function CanvasToolbar() {
   return (
@@ -51,26 +70,22 @@ export function CanvasToolbar() {
 }
 
 function WorkflowButtons() {
-  const { inpaint, detect, ocr, render } = useDocumentMutations()
+  const { detect, inpaint, ocr, render } = useDocumentMutations()
   const { llmGenerate } = useLlmMutations()
   const { data: llmReady = false } = useLlmReadyQuery()
   const [generating, setGenerating] = useState(false)
   const { t } = useTranslation()
   const operation = useOperationStore((state) => state.operation)
 
-  const isDetecting =
-    operation?.type === 'process-current' && operation?.step === 'detect'
-  const isOcr =
-    operation?.type === 'process-current' && operation?.step === 'ocr'
-  const isInpainting =
-    operation?.type === 'process-current' && operation?.step === 'inpaint'
-  const isRendering =
-    operation?.type === 'process-current' && operation?.step === 'render'
+  const isDetecting = isCurrentProcessStep(operation, OPERATION_STEP.detect)
+  const isOcr = isCurrentProcessStep(operation, OPERATION_STEP.ocr)
+  const isInpainting = isCurrentProcessStep(operation, OPERATION_STEP.inpaint)
+  const isRendering = isCurrentProcessStep(operation, OPERATION_STEP.render)
 
   const handleTranslate = async () => {
     setGenerating(true)
     try {
-      await llmGenerate(null)
+      await llmGenerate(undefined)
     } catch (error) {
       console.error(error)
     } finally {
@@ -166,6 +181,22 @@ function WorkflowButtons() {
   )
 }
 
+function CompatibleModelBadge({ modelId }: { modelId: string }) {
+  const preset = parsePresetFromModelId(modelId)
+  const tone = COMPATIBLE_MODEL_TONE_CLASSES[getCompatiblePresetTone(preset)]
+
+  return (
+    <span
+      className={cn(
+        'rounded px-1 py-0.5 text-[10px] leading-none font-semibold uppercase',
+        tone.badge,
+      )}
+    >
+      {getCompatiblePresetLabel(preset)}
+    </span>
+  )
+}
+
 function LlmStatusPopover() {
   const { data: llmModels = [] } = useLlmModelsQuery()
   const llmSelectedModel = useLlmUiStore((state) => state.selectedModel)
@@ -179,40 +210,56 @@ function LlmStatusPopover() {
   const localLlm = usePreferencesStore((state) => state.localLlm)
 
   const selectedModelInfo = useMemo(
-    () => llmModels.find((m) => m.id === llmSelectedModel),
+    () => llmModels.find((model) => model.id === llmSelectedModel),
     [llmModels, llmSelectedModel],
   )
+  const compatibleModelInfo =
+    selectedModelInfo && isCompatibleModelSource(selectedModelInfo.source)
+      ? selectedModelInfo
+      : undefined
+  const compatiblePreset = compatibleModelInfo
+    ? parsePresetFromModelId(compatibleModelInfo.id)
+    : undefined
+  const compatibleTone =
+    COMPATIBLE_MODEL_TONE_CLASSES[getCompatiblePresetTone(compatiblePreset)]
+  const compatiblePresetConfig = compatiblePreset
+    ? localLlm.presets[compatiblePreset]
+    : undefined
+  const activeLanguages = selectedModelInfo?.languages ?? []
   const isApiModel =
-    selectedModelInfo?.source !== 'local' &&
+    !isLocalModelSource(selectedModelInfo?.source) &&
     selectedModelInfo?.source !== undefined
   const apiKeyMissing =
     isApiModel &&
-    selectedModelInfo?.source !== 'openai-compatible' &&
-    !apiKeys[selectedModelInfo!.source]
-
-  const activeLanguages = useMemo(
-    () => selectedModelInfo?.languages ?? [],
-    [selectedModelInfo],
-  )
+    !isCompatibleModelSource(selectedModelInfo?.source) &&
+    !apiKeys[selectedModelInfo.source]
 
   useEffect(() => {
-    if (llmModels.length === 0) return
+    if (!llmModels.length) {
+      return
+    }
+
     const hasCurrent = llmModels.some((model) => model.id === llmSelectedModel)
     const nextModel = hasCurrent ? llmSelectedModel : llmModels[0]?.id
-    if (!nextModel) return
-    const languages =
-      llmModels.find((model) => model.id === nextModel)?.languages ?? []
-    const nextLanguage =
-      llmSelectedLanguage && languages.includes(llmSelectedLanguage)
-        ? llmSelectedLanguage
-        : languages[0]
+
+    if (!nextModel) {
+      return
+    }
+
+    const nextLanguage = pickLanguage(
+      llmModels,
+      nextModel,
+      hasCurrent ? llmSelectedLanguage : undefined,
+    )
     const currentState = useLlmUiStore.getState()
+
     if (
       currentState.selectedModel === nextModel &&
       currentState.selectedLanguage === nextLanguage
     ) {
       return
     }
+
     useLlmUiStore.setState((state) => ({
       selectedModel: nextModel,
       selectedLanguage: nextLanguage,
@@ -245,11 +292,11 @@ function LlmStatusPopover() {
             }
           />
           LLM
-          {llmReady && selectedModelInfo?.source === 'openai-compatible' && (
+          {llmReady && compatiblePreset ? (
             <span className='max-w-[80px] truncate text-[10px] opacity-80'>
-              {selectedModelInfo.id.split(':')[1] ?? selectedModelInfo.id}
+              {getCompatiblePresetLabel(compatiblePreset)}
             </span>
-          )}
+          ) : null}
         </button>
       </PopoverTrigger>
       <PopoverContent align='end' className='w-72' data-testid='llm-popover'>
@@ -270,108 +317,59 @@ function LlmStatusPopover() {
                   data-testid={`llm-model-option-${index}`}
                 >
                   <span className='flex items-center gap-2'>
-                    {model.source === 'openai-compatible' ? (
-                      (() => {
-                        const preset = parsePresetFromModelId(model.id)
-                        const isTeal =
-                          preset === 'preset1' || preset === 'preset2'
-                        return (
-                          <span
-                            className={`rounded px-1 py-0.5 text-[10px] leading-none font-semibold uppercase ${
-                              isTeal
-                                ? 'bg-teal-500/10 text-teal-600 dark:text-teal-400'
-                                : 'bg-emerald-500/10 text-emerald-600 dark:text-emerald-400'
-                            }`}
-                          >
-                            {preset
-                              ? (LOCAL_LLM_PRESET_LABELS[preset] ?? preset)
-                              : 'OpenAI-like'}
-                          </span>
-                        )
-                      })()
-                    ) : model.source !== 'local' ? (
+                    {isCompatibleModelSource(model.source) ? (
+                      <CompatibleModelBadge modelId={model.id} />
+                    ) : !isLocalModelSource(model.source) ? (
                       <span className='bg-primary/10 text-primary rounded px-1 py-0.5 text-[10px] leading-none font-semibold uppercase'>
                         {getProviderDisplayName(model.source)}
                       </span>
                     ) : null}
-                    {/* Display model name: strip "openai-compatible:preset:" prefix */}
-                    {model.source === 'openai-compatible' &&
-                    model.id.split(':').length >= 3
-                      ? model.id.split(':').slice(2).join(':')
-                      : model.id.includes(':')
-                        ? model.id.split(':')[1]
-                        : model.id}
+                    {getLlmModelDisplayName(model)}
                   </span>
                 </SelectItem>
               ))}
             </SelectContent>
           </Select>
 
-          {/* API key warning */}
-          {apiKeyMissing && (
+          {apiKeyMissing ? (
             <p className='text-xs text-amber-500'>
               {t('llm.apiKeyMissing', {
-                provider: getProviderDisplayName(selectedModelInfo!.source),
+                provider: getProviderDisplayName(selectedModelInfo.source),
               })}
             </p>
-          )}
+          ) : null}
 
-          {/* Loaded model info card */}
-          {llmReady &&
-            selectedModelInfo?.source === 'openai-compatible' &&
-            (() => {
-              const infoPreset = parsePresetFromModelId(selectedModelInfo.id)
-              const isTeal =
-                infoPreset === 'preset1' || infoPreset === 'preset2'
-              const presetLabel = infoPreset
-                ? (LOCAL_LLM_PRESET_LABELS[infoPreset] ?? infoPreset)
-                : 'OpenAI-like'
-              const presetCfg = infoPreset
-                ? localLlm.presets[infoPreset]
-                : undefined
-              const modelName =
-                selectedModelInfo.id.split(':').length >= 3
-                  ? selectedModelInfo.id.split(':').slice(2).join(':')
-                  : (selectedModelInfo.id.split(':')[1] ?? selectedModelInfo.id)
-              return (
-                <div
-                  className={`rounded-md px-2.5 py-2 text-xs ${
-                    isTeal
-                      ? 'border border-teal-500/20 bg-teal-500/5'
-                      : 'border border-emerald-500/20 bg-emerald-500/5'
-                  }`}
-                >
-                  <div className='flex items-center gap-1.5'>
-                    <span
-                      className={`size-1.5 rounded-full ${
-                        isTeal ? 'bg-teal-500' : 'bg-emerald-500'
-                      }`}
-                    />
-                    <span
-                      className={`font-medium ${
-                        isTeal
-                          ? 'text-teal-700 dark:text-teal-400'
-                          : 'text-emerald-700 dark:text-emerald-400'
-                      }`}
-                    >
-                      {t('llm.localModelActive')}
-                    </span>
-                  </div>
-                  <p className='text-muted-foreground mt-1'>
-                    {t('llm.localModelName', { name: modelName })}
-                  </p>
-                  <p className='text-muted-foreground mt-0.5'>
-                    {presetLabel}
-                    {presetCfg?.temperature != null &&
-                      ` · temp ${presetCfg.temperature}`}
-                    {presetCfg?.maxTokens != null &&
-                      ` · ${presetCfg.maxTokens} tokens`}
-                  </p>
-                </div>
-              )
-            })()}
+          {llmReady && compatibleModelInfo ? (
+            <div
+              className={cn(
+                'rounded-md px-2.5 py-2 text-xs',
+                compatibleTone.panel,
+              )}
+            >
+              <div className='flex items-center gap-1.5'>
+                <span
+                  className={cn('size-1.5 rounded-full', compatibleTone.dot)}
+                />
+                <span className={cn('font-medium', compatibleTone.title)}>
+                  {t('llm.localModelActive')}
+                </span>
+              </div>
+              <p className='text-muted-foreground mt-1'>
+                {t('llm.localModelName', {
+                  name: getLlmModelDisplayName(compatibleModelInfo),
+                })}
+              </p>
+              <p className='text-muted-foreground mt-0.5'>
+                {getCompatiblePresetLabel(compatiblePreset)}
+                {compatiblePresetConfig?.temperature != null &&
+                  ` | temp ${compatiblePresetConfig.temperature}`}
+                {compatiblePresetConfig?.maxTokens != null &&
+                  ` | ${compatiblePresetConfig.maxTokens} tokens`}
+              </p>
+            </div>
+          ) : null}
 
-          {activeLanguages.length > 0 && (
+          {activeLanguages.length > 0 ? (
             <Select
               value={llmSelectedLanguage ?? activeLanguages[0]}
               onValueChange={llmSetSelectedLanguage}
@@ -394,7 +392,7 @@ function LlmStatusPopover() {
                 ))}
               </SelectContent>
             </Select>
-          )}
+          ) : null}
 
           <Button
             data-testid='llm-load-toggle'
@@ -406,9 +404,9 @@ function LlmStatusPopover() {
             disabled={!llmSelectedModel || llmLoading}
             className='w-full gap-1.5 text-xs'
           >
-            {llmLoading && (
+            {llmLoading ? (
               <LoaderCircleIcon className='size-3.5 animate-spin' />
-            )}
+            ) : null}
             {!llmReady ? t('llm.load') : t('llm.unload')}
           </Button>
         </div>

@@ -1,6 +1,7 @@
 'use client'
 
 import { create } from 'zustand'
+import { immer } from 'zustand/middleware/immer'
 import type { OperationState } from '@/lib/operations'
 
 type OperationStoreState = {
@@ -12,33 +13,33 @@ type OperationStoreState = {
   resetOperationState: () => void
 }
 
-export const useOperationStore = create<OperationStoreState>((set) => ({
-  operation: undefined,
-  startOperation: (operation) =>
-    set({
-      operation: {
-        ...operation,
-        cancelRequested: false,
-      },
-    }),
-  updateOperation: (operation) =>
-    set((state) =>
-      state.operation
-        ? {
-            operation: {
-              ...state.operation,
-              ...operation,
-            },
-          }
-        : { operation: undefined },
-    ),
-  finishOperation: () => set({ operation: undefined }),
-  cancelOperation: () => {
-    set((state) =>
-      state.operation
-        ? { operation: { ...state.operation, cancelRequested: true } }
-        : { operation: undefined },
-    )
-  },
-  resetOperationState: () => set({ operation: undefined }),
-}))
+export const useOperationStore = create<OperationStoreState>()(
+  immer((set) => ({
+    operation: undefined,
+    startOperation: (operation) =>
+      set((state) => {
+        state.operation = {
+          ...operation,
+          cancelRequested: false,
+        }
+      }),
+    updateOperation: (operation) =>
+      set((state) => {
+        if (!state.operation) return
+        Object.assign(state.operation, operation)
+      }),
+    finishOperation: () =>
+      set((state) => {
+        state.operation = undefined
+      }),
+    cancelOperation: () =>
+      set((state) => {
+        if (!state.operation) return
+        state.operation.cancelRequested = true
+      }),
+    resetOperationState: () =>
+      set((state) => {
+        state.operation = undefined
+      }),
+  })),
+)

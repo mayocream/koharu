@@ -1,5 +1,6 @@
 'use client'
 
+import { dequal } from 'dequal'
 import { directoryOpen, fileOpen, fileSave } from 'browser-fs-access'
 import {
   createDocumentTextBlock as createRemoteTextBlock,
@@ -21,6 +22,7 @@ import type { TextBlock, TextStyle } from '@/types'
 const IMAGE_EXTENSIONS = ['.png', '.jpg', '.jpeg', '.webp']
 
 const documentResourceCache = new Map<string, DocumentResource>()
+const documentResourceRequests = new Map<string, Promise<DocumentResource>>()
 const textBlockIdAliases = new Map<string, string>()
 
 const isTempTextBlockId = (id?: string) => !!id && id.startsWith('temp:')
@@ -45,8 +47,19 @@ const rememberTextBlockAlias = (
   textBlockIdAliases.set(textBlockAliasKey(documentId, tempId), realId)
 }
 
-const sameJson = (left: unknown, right: unknown) =>
-  JSON.stringify(left ?? null) === JSON.stringify(right ?? null)
+const clearTextBlockAliases = (documentId?: string) => {
+  if (!documentId) {
+    textBlockIdAliases.clear()
+    return
+  }
+
+  const prefix = `${documentId}:`
+  for (const key of textBlockIdAliases.keys()) {
+    if (key.startsWith(prefix)) {
+      textBlockIdAliases.delete(key)
+    }
+  }
+}
 
 const getDocumentExtension = (documentPath: string) => {
   const extension = documentPath.split('.').pop()?.trim().toLowerCase()
@@ -61,21 +74,38 @@ const buildDocumentExportFilename = (
 const getDocumentResource = async (
   documentId: string,
 ): Promise<DocumentResource> => {
-  const resource = (await getRemoteDocument(documentId)) as DocumentResource
-  documentResourceCache.set(documentId, resource)
-  return resource
+  const inFlight = documentResourceRequests.get(documentId)
+  if (inFlight) {
+    return inFlight
+  }
+
+  const request = (async () => {
+    const resource = (await getRemoteDocument(documentId)) as DocumentResource
+    documentResourceCache.set(documentId, resource)
+    return resource
+  })().finally(() => {
+    documentResourceRequests.delete(documentId)
+  })
+
+  documentResourceRequests.set(documentId, request)
+  return request
 }
 
 export const getCachedOrFetchDocumentResource = async (documentId: string) =>
-  documentResourceCache.get(documentId) ?? (await getDocumentResource(documentId))
+  documentResourceCache.get(documentId) ??
+  (await getDocumentResource(documentId))
 
 export const clearDocumentResourceCache = (documentId?: string) => {
   if (!documentId) {
     documentResourceCache.clear()
+    documentResourceRequests.clear()
+    clearTextBlockAliases()
     return
   }
 
   documentResourceCache.delete(documentId)
+  documentResourceRequests.delete(documentId)
+  clearTextBlockAliases(documentId)
 }
 
 export const pruneDocumentResourceCache = (documentIds: Iterable<string>) => {
@@ -83,6 +113,8 @@ export const pruneDocumentResourceCache = (documentIds: Iterable<string>) => {
   for (const documentId of documentResourceCache.keys()) {
     if (!retained.has(documentId)) {
       documentResourceCache.delete(documentId)
+      documentResourceRequests.delete(documentId)
+      clearTextBlockAliases(documentId)
     }
   }
 }
@@ -154,7 +186,7 @@ const buildTextBlockPatch = (
   if (next.height !== previous.height) {
     patch.height = next.height
   }
-  if (!sameJson(mapTextStyle(next.style), previous.style)) {
+  if (!dequal(mapTextStyle(next.style) ?? null, previous.style ?? null)) {
     patch.style = mapTextStyle(next.style)
   }
 
@@ -201,7 +233,9 @@ export const syncDocumentTextBlocks = async (
 ) =>
   withRpcError('update_text_blocks', async () => {
     const previous = await getCachedOrFetchDocumentResource(documentId)
-    const previousMap = new Map(previous.textBlocks.map((block) => [block.id, block]))
+    const previousMap = new Map(
+      previous.textBlocks.map((block) => [block.id, block]),
+    )
 
     const normalizedBlocks = textBlocks.map((block) => ({
       ...block,

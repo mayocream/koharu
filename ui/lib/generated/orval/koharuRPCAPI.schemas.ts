@@ -7,66 +7,65 @@
  */
 export interface ApiKeyResponse {
   /** @nullable */
-  apiKey?: string | null;
+  apiKey?: string | null
 }
 
 export interface ApiKeyValue {
-  apiKey: string;
+  apiKey: string
 }
 
 export interface BootstrapHttpConfig {
   /** @nullable */
-  proxy?: string | null;
+  proxy?: string | null
 }
 
 export interface BootstrapPathConfig {
-  path: string;
+  path: string
 }
 
 export interface BootstrapConfig {
-  http: BootstrapHttpConfig;
-  models: BootstrapPathConfig;
-  runtime: BootstrapPathConfig;
+  http: BootstrapHttpConfig
+  models: BootstrapPathConfig
+  runtime: BootstrapPathConfig
 }
 
 export interface Region {
   /** @minimum 0 */
-  height: number;
+  height: number
   /** @minimum 0 */
-  width: number;
+  width: number
   /** @minimum 0 */
-  x: number;
+  x: number
   /** @minimum 0 */
-  y: number;
+  y: number
 }
 
 export interface BrushRegionRequest {
-  data: number[];
-  region: Region;
+  data: number[]
+  region: Region
 }
 
 export interface CreateTextBlock {
-  height: number;
-  width: number;
-  x: number;
-  y: number;
+  height: number
+  width: number
+  x: number
+  y: number
 }
 
 export interface DocumentAssets {
   /** @nullable */
-  brushLayer?: string | null;
-  image: string;
+  brushLayer?: string | null
+  image: string
   /** @nullable */
-  inpainted?: string | null;
+  inpainted?: string | null
   /** @nullable */
-  rendered?: string | null;
+  rendered?: string | null
   /** @nullable */
-  segment?: string | null;
-  thumbnail: string;
+  segment?: string | null
+  thumbnail: string
 }
 
-export type DocumentLayer = typeof DocumentLayer[keyof typeof DocumentLayer];
-
+export type DocumentLayer = (typeof DocumentLayer)[keyof typeof DocumentLayer]
 
 export const DocumentLayer = {
   original: 'original',
@@ -74,367 +73,361 @@ export const DocumentLayer = {
   inpainted: 'inpainted',
   rendered: 'rendered',
   brush: 'brush',
-} as const;
+} as const
 
-export type TextDirection = typeof TextDirection[keyof typeof TextDirection];
-
+export type TextDirection = (typeof TextDirection)[keyof typeof TextDirection]
 
 export const TextDirection = {
   Horizontal: 'Horizontal',
   Vertical: 'Vertical',
-} as const;
+} as const
 
 export interface NamedFontPrediction {
   /** @minimum 0 */
-  index: number;
+  index: number
   /** @nullable */
-  language?: string | null;
-  name: string;
-  probability: number;
-  serif: boolean;
+  language?: string | null
+  name: string
+  probability: number
+  serif: boolean
 }
 
 export interface FontPrediction {
-  angle_deg: number;
-  direction: TextDirection;
-  font_size_px: number;
-  line_height: number;
-  named_fonts: NamedFontPrediction[];
-  stroke_color: number[];
-  stroke_width_px: number;
-  text_color: number[];
-  top_fonts: [number, number][];
+  angle_deg: number
+  direction: TextDirection
+  font_size_px: number
+  line_height: number
+  named_fonts: NamedFontPrediction[]
+  stroke_color: number[]
+  stroke_width_px: number
+  text_color: number[]
+  top_fonts: [number, number][]
 }
 
 export interface TextShaderEffect {
-  bold?: boolean;
-  italic?: boolean;
+  bold?: boolean
+  italic?: boolean
 }
 
 export interface TextStrokeStyle {
-  color?: number[];
-  enabled?: boolean;
+  color?: number[]
+  enabled?: boolean
   /** @nullable */
-  widthPx?: number | null;
+  widthPx?: number | null
 }
 
-export type TextAlign = typeof TextAlign[keyof typeof TextAlign];
-
+export type TextAlign = (typeof TextAlign)[keyof typeof TextAlign]
 
 export const TextAlign = {
   left: 'left',
   center: 'center',
   right: 'right',
-} as const;
+} as const
 
 export interface TextStyle {
-  color: number[];
-  effect?: null | TextShaderEffect;
-  fontFamilies: string[];
+  color: number[]
+  effect?: null | TextShaderEffect
+  fontFamilies: string[]
   /** @nullable */
-  fontSize?: number | null;
-  stroke?: null | TextStrokeStyle;
-  textAlign?: null | TextAlign;
+  fontSize?: number | null
+  stroke?: null | TextStrokeStyle
+  textAlign?: null | TextAlign
 }
 
 export interface TextBlockDetail {
-  confidence: number;
+  confidence: number
   /** @nullable */
-  detectedFontSizePx?: number | null;
+  detectedFontSizePx?: number | null
   /** @nullable */
-  detector?: string | null;
-  fontPrediction?: null | FontPrediction;
-  height: number;
-  id: string;
+  detector?: string | null
+  fontPrediction?: null | FontPrediction
+  height: number
+  id: string
   /** @nullable */
-  linePolygons?: number[][][] | null;
-  renderedDirection?: null | TextDirection;
+  linePolygons?: number[][][] | null
+  renderedDirection?: null | TextDirection
   /** @nullable */
-  rotationDeg?: number | null;
-  sourceDirection?: null | TextDirection;
+  rotationDeg?: number | null
+  sourceDirection?: null | TextDirection
   /** @nullable */
-  sourceLanguage?: string | null;
-  style?: null | TextStyle;
+  sourceLanguage?: string | null
+  style?: null | TextStyle
   /** @nullable */
-  text?: string | null;
+  text?: string | null
   /** @nullable */
-  translation?: string | null;
-  width: number;
-  x: number;
-  y: number;
+  translation?: string | null
+  width: number
+  x: number
+  y: number
 }
 
 export interface DocumentResource {
-  assets: DocumentAssets;
+  assets: DocumentAssets
   /** @minimum 0 */
-  height: number;
-  id: string;
-  name: string;
-  path: string;
+  height: number
+  id: string
+  name: string
+  path: string
   /** @minimum 0 */
-  revision: number;
-  textBlocks: TextBlockDetail[];
+  revision: number
+  textBlocks: TextBlockDetail[]
   /** @minimum 0 */
-  width: number;
+  width: number
 }
 
 export interface DocumentSummary {
-  documentUrl: string;
-  hasBrushLayer: boolean;
-  hasInpainted: boolean;
-  hasRendered: boolean;
-  hasSegment: boolean;
+  documentUrl: string
+  hasBrushLayer: boolean
+  hasInpainted: boolean
+  hasRendered: boolean
+  hasSegment: boolean
   /** @minimum 0 */
-  height: number;
-  id: string;
-  name: string;
+  height: number
+  id: string
+  name: string
   /** @minimum 0 */
-  revision: number;
+  revision: number
   /** @minimum 0 */
-  textBlockCount: number;
-  thumbnailUrl: string;
+  textBlockCount: number
+  thumbnailUrl: string
   /** @minimum 0 */
-  width: number;
+  width: number
 }
 
 export interface ErrorResponse {
-  message: string;
+  message: string
   /** @minimum 0 */
-  status: number;
+  status: number
 }
 
-export type ExportLayer = typeof ExportLayer[keyof typeof ExportLayer];
-
+export type ExportLayer = (typeof ExportLayer)[keyof typeof ExportLayer]
 
 export const ExportLayer = {
   rendered: 'rendered',
   inpainted: 'inpainted',
-} as const;
+} as const
 
 export interface ExportAllRequest {
-  layer?: null | ExportLayer;
+  layer?: null | ExportLayer
 }
 
 export interface ExportResult {
   /** @minimum 0 */
-  count: number;
+  count: number
 }
 
 export interface FontFaceInfo {
-  familyName: string;
-  postScriptName: string;
+  familyName: string
+  postScriptName: string
 }
 
-export type ImportMode = typeof ImportMode[keyof typeof ImportMode];
-
+export type ImportMode = (typeof ImportMode)[keyof typeof ImportMode]
 
 export const ImportMode = {
   replace: 'replace',
   append: 'append',
-} as const;
+} as const
 
 export interface ImportResult {
-  documents: DocumentSummary[];
+  documents: DocumentSummary[]
   /** @minimum 0 */
-  totalCount: number;
+  totalCount: number
 }
 
 export interface InpaintRegionRequest {
-  region: Region;
+  region: Region
 }
 
-export type JobStatus = typeof JobStatus[keyof typeof JobStatus];
-
+export type JobStatus = (typeof JobStatus)[keyof typeof JobStatus]
 
 export const JobStatus = {
   running: 'running',
   completed: 'completed',
   cancelled: 'cancelled',
   failed: 'failed',
-} as const;
+} as const
 
 export interface JobState {
   /** @minimum 0 */
-  currentDocument: number;
+  currentDocument: number
   /** @minimum 0 */
-  currentStepIndex: number;
+  currentStepIndex: number
   /** @nullable */
-  error?: string | null;
-  id: string;
-  kind: string;
+  error?: string | null
+  id: string
+  kind: string
   /** @minimum 0 */
-  overallPercent: number;
-  status: JobStatus;
+  overallPercent: number
+  status: JobStatus
   /** @nullable */
-  step?: string | null;
+  step?: string | null
   /** @minimum 0 */
-  totalDocuments: number;
+  totalDocuments: number
   /** @minimum 0 */
-  totalSteps: number;
+  totalSteps: number
 }
 
 export interface LlmLoadRequest {
   /** @nullable */
-  apiKey?: string | null;
+  apiKey?: string | null
   /** @nullable */
-  baseUrl?: string | null;
+  baseUrl?: string | null
   /** @nullable */
-  customSystemPrompt?: string | null;
-  id: string;
+  customSystemPrompt?: string | null
+  id: string
   /**
-     * @minimum 0
-     * @nullable
-     */
-  maxTokens?: number | null;
+   * @minimum 0
+   * @nullable
+   */
+  maxTokens?: number | null
   /** @nullable */
-  temperature?: number | null;
+  temperature?: number | null
 }
 
 export interface LlmModelInfo {
-  id: string;
-  languages: string[];
-  source: string;
+  id: string
+  languages: string[]
+  source: string
 }
 
 export interface LlmPingRequest {
   /** @nullable */
-  apiKey?: string | null;
-  baseUrl: string;
+  apiKey?: string | null
+  baseUrl: string
 }
 
 export interface LlmPingResponse {
   /** @nullable */
-  error?: string | null;
+  error?: string | null
   /**
-     * @minimum 0
-     * @nullable
-     */
-  latencyMs?: number | null;
-  models: string[];
-  ok: boolean;
+   * @minimum 0
+   * @nullable
+   */
+  latencyMs?: number | null
+  models: string[]
+  ok: boolean
 }
 
-export type LlmStateStatus = typeof LlmStateStatus[keyof typeof LlmStateStatus];
-
+export type LlmStateStatus =
+  (typeof LlmStateStatus)[keyof typeof LlmStateStatus]
 
 export const LlmStateStatus = {
   empty: 'empty',
   loading: 'loading',
   ready: 'ready',
   failed: 'failed',
-} as const;
+} as const
 
 export interface LlmState {
   /** @nullable */
-  error?: string | null;
+  error?: string | null
   /** @nullable */
-  modelId?: string | null;
+  modelId?: string | null
   /** @nullable */
-  source?: string | null;
-  status: LlmStateStatus;
+  source?: string | null
+  status: LlmStateStatus
 }
 
 export interface MaskRegionRequest {
-  data: number[];
-  region?: null | Region;
+  data: number[]
+  region?: null | Region
 }
 
 export interface MetaInfo {
-  mlDevice: string;
-  version: string;
+  mlDevice: string
+  version: string
 }
 
 export interface PipelineJobRequest {
   /** @nullable */
-  documentId?: string | null;
+  documentId?: string | null
   /** @nullable */
-  fontFamily?: string | null;
+  fontFamily?: string | null
   /** @nullable */
-  language?: string | null;
+  language?: string | null
   /** @nullable */
-  llmApiKey?: string | null;
+  llmApiKey?: string | null
   /** @nullable */
-  llmBaseUrl?: string | null;
+  llmBaseUrl?: string | null
   /** @nullable */
-  llmCustomSystemPrompt?: string | null;
+  llmCustomSystemPrompt?: string | null
   /**
-     * @minimum 0
-     * @nullable
-     */
-  llmMaxTokens?: number | null;
+   * @minimum 0
+   * @nullable
+   */
+  llmMaxTokens?: number | null
   /** @nullable */
-  llmModelId?: string | null;
+  llmModelId?: string | null
   /** @nullable */
-  llmTemperature?: number | null;
-  shaderEffect?: null | TextShaderEffect;
-  shaderStroke?: null | TextStrokeStyle;
+  llmTemperature?: number | null
+  shaderEffect?: null | TextShaderEffect
+  shaderStroke?: null | TextStrokeStyle
 }
 
 export interface RenderRequest {
   /** @nullable */
-  fontFamily?: string | null;
-  shaderEffect?: null | TextShaderEffect;
-  shaderStroke?: null | TextStrokeStyle;
+  fontFamily?: string | null
+  shaderEffect?: null | TextShaderEffect
+  shaderStroke?: null | TextStrokeStyle
   /** @nullable */
-  textBlockId?: string | null;
+  textBlockId?: string | null
 }
 
 export interface TextBlockPatch {
   /** @nullable */
-  height?: number | null;
-  style?: null | TextStyle;
+  height?: number | null
+  style?: null | TextStyle
   /** @nullable */
-  text?: string | null;
+  text?: string | null
   /** @nullable */
-  translation?: string | null;
+  translation?: string | null
   /** @nullable */
-  width?: number | null;
+  width?: number | null
   /** @nullable */
-  x?: number | null;
+  x?: number | null
   /** @nullable */
-  y?: number | null;
+  y?: number | null
 }
 
 export interface TranslateRequest {
   /** @nullable */
-  language?: string | null;
+  language?: string | null
   /** @nullable */
-  textBlockId?: string | null;
+  textBlockId?: string | null
 }
 
 export type ImportDocumentsParams = {
-mode?: null | ImportMode;
-};
+  mode?: null | ImportMode
+}
 
 export type ImportDocumentsBody = {
   /** @minItems 1 */
-  files: Blob[];
-};
+  files: Blob[]
+}
 
 export type GetDocumentLayerParams = {
-/**
- * @minimum 0
- * @nullable
- */
-revision?: number | null;
-};
+  /**
+   * @minimum 0
+   * @nullable
+   */
+  revision?: number | null
+}
 
 export type GetDocumentThumbnailParams = {
-/**
- * @minimum 0
- * @nullable
- */
-revision?: number | null;
-};
+  /**
+   * @minimum 0
+   * @nullable
+   */
+  revision?: number | null
+}
 
 export type ListLlmModelsParams = {
-/**
- * @nullable
- */
-language?: string | null;
-/**
- * @nullable
- */
-openaiCompatibleBaseUrl?: string | null;
-};
-
+  /**
+   * @nullable
+   */
+  language?: string | null
+  /**
+   * @nullable
+   */
+  openaiCompatibleBaseUrl?: string | null
+}

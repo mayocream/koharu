@@ -53,8 +53,7 @@ export function TextBlocksPanel() {
     setGeneratingIndex(blockIndex)
     try {
       await llmGenerate(undefined, undefined, blockIndex)
-    } catch (error) {
-      console.error(error)
+    } catch {
     } finally {
       setGeneratingIndex(null)
     }

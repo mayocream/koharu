@@ -3,14 +3,14 @@
 import { type ReactNode } from 'react'
 import { ErrorBoundary, type FallbackProps } from 'react-error-boundary'
 import { Button } from '@/components/ui/button'
+import { logAppError, normalizeErrorMessage } from '@/lib/errors'
 import { getQueryClient } from '@/lib/react-query/client'
 import { useEditorUiStore } from '@/lib/stores/editorUiStore'
 import { useLlmUiStore } from '@/lib/stores/llmUiStore'
 import { useOperationStore } from '@/lib/stores/operationStore'
 
 function ErrorFallback({ error, resetErrorBoundary }: FallbackProps) {
-  const errorMessage =
-    error instanceof Error ? error.message : 'Unexpected error'
+  const errorMessage = normalizeErrorMessage(error)
 
   return (
     <div className='bg-muted/40 flex h-full min-h-0 w-full flex-col items-center justify-center gap-3 p-4 text-center'>
@@ -51,6 +51,13 @@ function ErrorFallback({ error, resetErrorBoundary }: FallbackProps) {
 
 export function AppErrorBoundary({ children }: { children: ReactNode }) {
   return (
-    <ErrorBoundary FallbackComponent={ErrorFallback}>{children}</ErrorBoundary>
+    <ErrorBoundary
+      FallbackComponent={ErrorFallback}
+      onError={(error) => {
+        logAppError('render boundary', error)
+      }}
+    >
+      {children}
+    </ErrorBoundary>
   )
 }

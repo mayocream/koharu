@@ -73,9 +73,7 @@ export function useRenderBrushDrawing({
     brushConfig: { size: brushSize, color: brushColor },
   } = usePreferencesStore()
   const { paintRendered } = useMaskMutations()
-  const currentDocumentId = useEditorUiStore(
-    (state) => state.currentDocumentId,
-  )
+  const currentDocumentId = useEditorUiStore((state) => state.currentDocumentId)
   const canvasRef = useRef<HTMLCanvasElement | null>(null)
   const ctxRef = useRef<CanvasRenderingContext2D | null>(null)
   const drawingRef = useRef(false)

@@ -5,10 +5,7 @@
  * OpenAPI description for Koharu's HTTP RPC surface.
  * OpenAPI spec version: 0.41.4
  */
-import {
-  useMutation,
-  useQuery
-} from '@tanstack/react-query';
+import { useMutation, useQuery } from '@tanstack/react-query'
 import type {
   DataTag,
   DefinedInitialDataOptions,
@@ -21,8 +18,8 @@ import type {
   UseMutationOptions,
   UseMutationResult,
   UseQueryOptions,
-  UseQueryResult
-} from '@tanstack/react-query';
+  UseQueryResult,
+} from '@tanstack/react-query'
 
 import type {
   BrushRegionRequest,
@@ -44,1575 +41,2261 @@ import type {
   RenderRequest,
   TextBlockDetail,
   TextBlockPatch,
-  TranslateRequest
-} from '../koharuRPCAPI.schemas';
+  TranslateRequest,
+} from '../koharuRPCAPI.schemas'
 
-import { customFetch } from '../../../orval/custom-fetch';
-import type { ErrorType } from '../../../orval/custom-fetch';
+import { customFetch } from '../../../orval/custom-fetch'
+import type { ErrorType } from '../../../orval/custom-fetch'
 
-
-type SecondParameter<T extends (...args: never) => unknown> = Parameters<T>[1];
-
-
+type SecondParameter<T extends (...args: never) => unknown> = Parameters<T>[1]
 
 /**
  * @summary Export all documents for the selected output layer.
  */
 export const getExportAllDocumentsUrl = () => {
-
-
-
-
   return `/api/v1/document-exports`
 }
 
-export const exportAllDocuments = async (exportAllRequest: ExportAllRequest, options?: RequestInit): Promise<ExportResult> => {
-
-  return customFetch<ExportResult>(getExportAllDocumentsUrl(),
-  {
+export const exportAllDocuments = async (
+  exportAllRequest: ExportAllRequest,
+  options?: RequestInit,
+): Promise<ExportResult> => {
+  return customFetch<ExportResult>(getExportAllDocumentsUrl(), {
     ...options,
     method: 'POST',
     headers: { 'Content-Type': 'application/json', ...options?.headers },
-    body: JSON.stringify(
-      exportAllRequest,)
+    body: JSON.stringify(exportAllRequest),
+  })
+}
+
+export const getExportAllDocumentsMutationOptions = <
+  TError = ErrorType<ErrorResponse>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof exportAllDocuments>>,
+    TError,
+    { data: ExportAllRequest },
+    TContext
+  >
+  request?: SecondParameter<typeof customFetch>
+}): UseMutationOptions<
+  Awaited<ReturnType<typeof exportAllDocuments>>,
+  TError,
+  { data: ExportAllRequest },
+  TContext
+> => {
+  const mutationKey = ['exportAllDocuments']
+  const { mutation: mutationOptions, request: requestOptions } = options
+    ? options.mutation &&
+      'mutationKey' in options.mutation &&
+      options.mutation.mutationKey
+      ? options
+      : { ...options, mutation: { ...options.mutation, mutationKey } }
+    : { mutation: { mutationKey }, request: undefined }
+
+  const mutationFn: MutationFunction<
+    Awaited<ReturnType<typeof exportAllDocuments>>,
+    { data: ExportAllRequest }
+  > = (props) => {
+    const { data } = props ?? {}
+
+    return exportAllDocuments(data, requestOptions)
   }
-);}
 
+  return { mutationFn, ...mutationOptions }
+}
 
+export type ExportAllDocumentsMutationResult = NonNullable<
+  Awaited<ReturnType<typeof exportAllDocuments>>
+>
+export type ExportAllDocumentsMutationBody = ExportAllRequest
+export type ExportAllDocumentsMutationError = ErrorType<ErrorResponse>
 
-
-export const getExportAllDocumentsMutationOptions = <TError = ErrorType<ErrorResponse>,
-    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof exportAllDocuments>>, TError,{data: ExportAllRequest}, TContext>, request?: SecondParameter<typeof customFetch>}
-): UseMutationOptions<Awaited<ReturnType<typeof exportAllDocuments>>, TError,{data: ExportAllRequest}, TContext> => {
-
-const mutationKey = ['exportAllDocuments'];
-const {mutation: mutationOptions, request: requestOptions} = options ?
-      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
-      options
-      : {...options, mutation: {...options.mutation, mutationKey}}
-      : {mutation: { mutationKey, }, request: undefined};
-
-
-
-
-      const mutationFn: MutationFunction<Awaited<ReturnType<typeof exportAllDocuments>>, {data: ExportAllRequest}> = (props) => {
-          const {data} = props ?? {};
-
-          return  exportAllDocuments(data,requestOptions)
-        }
-
-
-
-
-
-
-  return  { mutationFn, ...mutationOptions }}
-
-    export type ExportAllDocumentsMutationResult = NonNullable<Awaited<ReturnType<typeof exportAllDocuments>>>
-    export type ExportAllDocumentsMutationBody = ExportAllRequest
-    export type ExportAllDocumentsMutationError = ErrorType<ErrorResponse>
-
-    /**
+/**
  * @summary Export all documents for the selected output layer.
  */
-export const useExportAllDocuments = <TError = ErrorType<ErrorResponse>,
-    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof exportAllDocuments>>, TError,{data: ExportAllRequest}, TContext>, request?: SecondParameter<typeof customFetch>}
- , queryClient?: QueryClient): UseMutationResult<
-        Awaited<ReturnType<typeof exportAllDocuments>>,
-        TError,
-        {data: ExportAllRequest},
-        TContext
-      > => {
-      return useMutation(getExportAllDocumentsMutationOptions(options), queryClient);
-    }
-    /**
+export const useExportAllDocuments = <
+  TError = ErrorType<ErrorResponse>,
+  TContext = unknown,
+>(
+  options?: {
+    mutation?: UseMutationOptions<
+      Awaited<ReturnType<typeof exportAllDocuments>>,
+      TError,
+      { data: ExportAllRequest },
+      TContext
+    >
+    request?: SecondParameter<typeof customFetch>
+  },
+  queryClient?: QueryClient,
+): UseMutationResult<
+  Awaited<ReturnType<typeof exportAllDocuments>>,
+  TError,
+  { data: ExportAllRequest },
+  TContext
+> => {
+  return useMutation(getExportAllDocumentsMutationOptions(options), queryClient)
+}
+/**
  * @summary List all imported documents.
  */
 export const getListDocumentsUrl = () => {
-
-
-
-
   return `/api/v1/documents`
 }
 
-export const listDocuments = async ( options?: RequestInit): Promise<DocumentSummary[]> => {
-
-  return customFetch<DocumentSummary[]>(getListDocumentsUrl(),
-  {
+export const listDocuments = async (
+  options?: RequestInit,
+): Promise<DocumentSummary[]> => {
+  return customFetch<DocumentSummary[]>(getListDocumentsUrl(), {
     ...options,
-    method: 'GET'
-
-
-  }
-);}
-
-
-
-
-
-export const getListDocumentsQueryKey = () => {
-    return [
-    `/api/v1/documents`
-    ] as const;
-    }
-
-
-export const getListDocumentsQueryOptions = <TData = Awaited<ReturnType<typeof listDocuments>>, TError = ErrorType<unknown>>( options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof listDocuments>>, TError, TData>>, request?: SecondParameter<typeof customFetch>}
-) => {
-
-const {query: queryOptions, request: requestOptions} = options ?? {};
-
-  const queryKey =  queryOptions?.queryKey ?? getListDocumentsQueryKey();
-
-
-
-    const queryFn: QueryFunction<Awaited<ReturnType<typeof listDocuments>>> = ({ signal }) => listDocuments({ signal, ...requestOptions });
-
-
-
-
-
-   return  { queryKey, queryFn, ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof listDocuments>>, TError, TData> & { queryKey: DataTag<QueryKey, TData, TError> }
+    method: 'GET',
+  })
 }
 
-export type ListDocumentsQueryResult = NonNullable<Awaited<ReturnType<typeof listDocuments>>>
+export const getListDocumentsQueryKey = () => {
+  return [`/api/v1/documents`] as const
+}
+
+export const getListDocumentsQueryOptions = <
+  TData = Awaited<ReturnType<typeof listDocuments>>,
+  TError = ErrorType<unknown>,
+>(options?: {
+  query?: Partial<
+    UseQueryOptions<Awaited<ReturnType<typeof listDocuments>>, TError, TData>
+  >
+  request?: SecondParameter<typeof customFetch>
+}) => {
+  const { query: queryOptions, request: requestOptions } = options ?? {}
+
+  const queryKey = queryOptions?.queryKey ?? getListDocumentsQueryKey()
+
+  const queryFn: QueryFunction<Awaited<ReturnType<typeof listDocuments>>> = ({
+    signal,
+  }) => listDocuments({ signal, ...requestOptions })
+
+  return { queryKey, queryFn, ...queryOptions } as UseQueryOptions<
+    Awaited<ReturnType<typeof listDocuments>>,
+    TError,
+    TData
+  > & { queryKey: DataTag<QueryKey, TData, TError> }
+}
+
+export type ListDocumentsQueryResult = NonNullable<
+  Awaited<ReturnType<typeof listDocuments>>
+>
 export type ListDocumentsQueryError = ErrorType<unknown>
 
-
-export function useListDocuments<TData = Awaited<ReturnType<typeof listDocuments>>, TError = ErrorType<unknown>>(
-  options: { query:Partial<UseQueryOptions<Awaited<ReturnType<typeof listDocuments>>, TError, TData>> & Pick<
+export function useListDocuments<
+  TData = Awaited<ReturnType<typeof listDocuments>>,
+  TError = ErrorType<unknown>,
+>(
+  options: {
+    query: Partial<
+      UseQueryOptions<Awaited<ReturnType<typeof listDocuments>>, TError, TData>
+    > &
+      Pick<
         DefinedInitialDataOptions<
           Awaited<ReturnType<typeof listDocuments>>,
           TError,
           Awaited<ReturnType<typeof listDocuments>>
-        > , 'initialData'
-      >, request?: SecondParameter<typeof customFetch>}
- , queryClient?: QueryClient
-  ):  DefinedUseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> }
-export function useListDocuments<TData = Awaited<ReturnType<typeof listDocuments>>, TError = ErrorType<unknown>>(
-  options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof listDocuments>>, TError, TData>> & Pick<
+        >,
+        'initialData'
+      >
+    request?: SecondParameter<typeof customFetch>
+  },
+  queryClient?: QueryClient,
+): DefinedUseQueryResult<TData, TError> & {
+  queryKey: DataTag<QueryKey, TData, TError>
+}
+export function useListDocuments<
+  TData = Awaited<ReturnType<typeof listDocuments>>,
+  TError = ErrorType<unknown>,
+>(
+  options?: {
+    query?: Partial<
+      UseQueryOptions<Awaited<ReturnType<typeof listDocuments>>, TError, TData>
+    > &
+      Pick<
         UndefinedInitialDataOptions<
           Awaited<ReturnType<typeof listDocuments>>,
           TError,
           Awaited<ReturnType<typeof listDocuments>>
-        > , 'initialData'
-      >, request?: SecondParameter<typeof customFetch>}
- , queryClient?: QueryClient
-  ):  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> }
-export function useListDocuments<TData = Awaited<ReturnType<typeof listDocuments>>, TError = ErrorType<unknown>>(
-  options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof listDocuments>>, TError, TData>>, request?: SecondParameter<typeof customFetch>}
- , queryClient?: QueryClient
-  ):  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> }
+        >,
+        'initialData'
+      >
+    request?: SecondParameter<typeof customFetch>
+  },
+  queryClient?: QueryClient,
+): UseQueryResult<TData, TError> & {
+  queryKey: DataTag<QueryKey, TData, TError>
+}
+export function useListDocuments<
+  TData = Awaited<ReturnType<typeof listDocuments>>,
+  TError = ErrorType<unknown>,
+>(
+  options?: {
+    query?: Partial<
+      UseQueryOptions<Awaited<ReturnType<typeof listDocuments>>, TError, TData>
+    >
+    request?: SecondParameter<typeof customFetch>
+  },
+  queryClient?: QueryClient,
+): UseQueryResult<TData, TError> & {
+  queryKey: DataTag<QueryKey, TData, TError>
+}
 /**
  * @summary List all imported documents.
  */
 
-export function useListDocuments<TData = Awaited<ReturnType<typeof listDocuments>>, TError = ErrorType<unknown>>(
-  options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof listDocuments>>, TError, TData>>, request?: SecondParameter<typeof customFetch>}
- , queryClient?: QueryClient
- ):  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> } {
-
+export function useListDocuments<
+  TData = Awaited<ReturnType<typeof listDocuments>>,
+  TError = ErrorType<unknown>,
+>(
+  options?: {
+    query?: Partial<
+      UseQueryOptions<Awaited<ReturnType<typeof listDocuments>>, TError, TData>
+    >
+    request?: SecondParameter<typeof customFetch>
+  },
+  queryClient?: QueryClient,
+): UseQueryResult<TData, TError> & {
+  queryKey: DataTag<QueryKey, TData, TError>
+} {
   const queryOptions = getListDocumentsQueryOptions(options)
 
-  const query = useQuery(queryOptions, queryClient) as  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> };
+  const query = useQuery(queryOptions, queryClient) as UseQueryResult<
+    TData,
+    TError
+  > & { queryKey: DataTag<QueryKey, TData, TError> }
 
-  return { ...query, queryKey: queryOptions.queryKey };
+  return { ...query, queryKey: queryOptions.queryKey }
 }
-
-
-
 
 /**
  * @summary Import one or more documents with multipart upload.
  */
-export const getImportDocumentsUrl = (params?: ImportDocumentsParams,) => {
-  const normalizedParams = new URLSearchParams();
+export const getImportDocumentsUrl = (params?: ImportDocumentsParams) => {
+  const normalizedParams = new URLSearchParams()
 
   Object.entries(params || {}).forEach(([key, value]) => {
-
     if (value !== undefined) {
       normalizedParams.append(key, value === null ? 'null' : value.toString())
     }
-  });
+  })
 
-  const stringifiedParams = normalizedParams.toString();
+  const stringifiedParams = normalizedParams.toString()
 
-  return stringifiedParams.length > 0 ? `/api/v1/documents?${stringifiedParams}` : `/api/v1/documents`
+  return stringifiedParams.length > 0
+    ? `/api/v1/documents?${stringifiedParams}`
+    : `/api/v1/documents`
 }
 
-export const importDocuments = async (importDocumentsBody: ImportDocumentsBody,
-    params?: ImportDocumentsParams, options?: RequestInit): Promise<ImportResult> => {
-    const formData = new FormData();
-importDocumentsBody.files.forEach(value => formData.append(`files`, value));
+export const importDocuments = async (
+  importDocumentsBody: ImportDocumentsBody,
+  params?: ImportDocumentsParams,
+  options?: RequestInit,
+): Promise<ImportResult> => {
+  const formData = new FormData()
+  importDocumentsBody.files.forEach((value) => formData.append(`files`, value))
 
-  return customFetch<ImportResult>(getImportDocumentsUrl(params),
-  {
+  return customFetch<ImportResult>(getImportDocumentsUrl(params), {
     ...options,
-    method: 'POST'
-    ,
-    body:
-      formData,
+    method: 'POST',
+    body: formData,
+  })
+}
+
+export const getImportDocumentsMutationOptions = <
+  TError = ErrorType<ErrorResponse>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof importDocuments>>,
+    TError,
+    { data: ImportDocumentsBody; params?: ImportDocumentsParams },
+    TContext
+  >
+  request?: SecondParameter<typeof customFetch>
+}): UseMutationOptions<
+  Awaited<ReturnType<typeof importDocuments>>,
+  TError,
+  { data: ImportDocumentsBody; params?: ImportDocumentsParams },
+  TContext
+> => {
+  const mutationKey = ['importDocuments']
+  const { mutation: mutationOptions, request: requestOptions } = options
+    ? options.mutation &&
+      'mutationKey' in options.mutation &&
+      options.mutation.mutationKey
+      ? options
+      : { ...options, mutation: { ...options.mutation, mutationKey } }
+    : { mutation: { mutationKey }, request: undefined }
+
+  const mutationFn: MutationFunction<
+    Awaited<ReturnType<typeof importDocuments>>,
+    { data: ImportDocumentsBody; params?: ImportDocumentsParams }
+  > = (props) => {
+    const { data, params } = props ?? {}
+
+    return importDocuments(data, params, requestOptions)
   }
-);}
 
+  return { mutationFn, ...mutationOptions }
+}
 
+export type ImportDocumentsMutationResult = NonNullable<
+  Awaited<ReturnType<typeof importDocuments>>
+>
+export type ImportDocumentsMutationBody = ImportDocumentsBody
+export type ImportDocumentsMutationError = ErrorType<ErrorResponse>
 
-
-export const getImportDocumentsMutationOptions = <TError = ErrorType<ErrorResponse>,
-    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof importDocuments>>, TError,{data: ImportDocumentsBody;params?: ImportDocumentsParams}, TContext>, request?: SecondParameter<typeof customFetch>}
-): UseMutationOptions<Awaited<ReturnType<typeof importDocuments>>, TError,{data: ImportDocumentsBody;params?: ImportDocumentsParams}, TContext> => {
-
-const mutationKey = ['importDocuments'];
-const {mutation: mutationOptions, request: requestOptions} = options ?
-      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
-      options
-      : {...options, mutation: {...options.mutation, mutationKey}}
-      : {mutation: { mutationKey, }, request: undefined};
-
-
-
-
-      const mutationFn: MutationFunction<Awaited<ReturnType<typeof importDocuments>>, {data: ImportDocumentsBody;params?: ImportDocumentsParams}> = (props) => {
-          const {data,params} = props ?? {};
-
-          return  importDocuments(data,params,requestOptions)
-        }
-
-
-
-
-
-
-  return  { mutationFn, ...mutationOptions }}
-
-    export type ImportDocumentsMutationResult = NonNullable<Awaited<ReturnType<typeof importDocuments>>>
-    export type ImportDocumentsMutationBody = ImportDocumentsBody
-    export type ImportDocumentsMutationError = ErrorType<ErrorResponse>
-
-    /**
+/**
  * @summary Import one or more documents with multipart upload.
  */
-export const useImportDocuments = <TError = ErrorType<ErrorResponse>,
-    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof importDocuments>>, TError,{data: ImportDocumentsBody;params?: ImportDocumentsParams}, TContext>, request?: SecondParameter<typeof customFetch>}
- , queryClient?: QueryClient): UseMutationResult<
-        Awaited<ReturnType<typeof importDocuments>>,
-        TError,
-        {data: ImportDocumentsBody;params?: ImportDocumentsParams},
-        TContext
-      > => {
-      return useMutation(getImportDocumentsMutationOptions(options), queryClient);
-    }
-    /**
+export const useImportDocuments = <
+  TError = ErrorType<ErrorResponse>,
+  TContext = unknown,
+>(
+  options?: {
+    mutation?: UseMutationOptions<
+      Awaited<ReturnType<typeof importDocuments>>,
+      TError,
+      { data: ImportDocumentsBody; params?: ImportDocumentsParams },
+      TContext
+    >
+    request?: SecondParameter<typeof customFetch>
+  },
+  queryClient?: QueryClient,
+): UseMutationResult<
+  Awaited<ReturnType<typeof importDocuments>>,
+  TError,
+  { data: ImportDocumentsBody; params?: ImportDocumentsParams },
+  TContext
+> => {
+  return useMutation(getImportDocumentsMutationOptions(options), queryClient)
+}
+/**
  * @summary Fetch the current document detail.
  */
-export const getGetDocumentUrl = (documentId: string,) => {
-
-
-
-
+export const getGetDocumentUrl = (documentId: string) => {
   return `/api/v1/documents/${documentId}`
 }
 
-export const getDocument = async (documentId: string, options?: RequestInit): Promise<DocumentResource> => {
-
-  return customFetch<DocumentResource>(getGetDocumentUrl(documentId),
-  {
+export const getDocument = async (
+  documentId: string,
+  options?: RequestInit,
+): Promise<DocumentResource> => {
+  return customFetch<DocumentResource>(getGetDocumentUrl(documentId), {
     ...options,
-    method: 'GET'
-
-
-  }
-);}
-
-
-
-
-
-export const getGetDocumentQueryKey = (documentId: string,) => {
-    return [
-    `/api/v1/documents/${documentId}`
-    ] as const;
-    }
-
-
-export const getGetDocumentQueryOptions = <TData = Awaited<ReturnType<typeof getDocument>>, TError = ErrorType<ErrorResponse>>(documentId: string, options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof getDocument>>, TError, TData>>, request?: SecondParameter<typeof customFetch>}
-) => {
-
-const {query: queryOptions, request: requestOptions} = options ?? {};
-
-  const queryKey =  queryOptions?.queryKey ?? getGetDocumentQueryKey(documentId);
-
-
-
-    const queryFn: QueryFunction<Awaited<ReturnType<typeof getDocument>>> = ({ signal }) => getDocument(documentId, { signal, ...requestOptions });
-
-
-
-
-
-   return  { queryKey, queryFn, enabled: !!(documentId), ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof getDocument>>, TError, TData> & { queryKey: DataTag<QueryKey, TData, TError> }
+    method: 'GET',
+  })
 }
 
-export type GetDocumentQueryResult = NonNullable<Awaited<ReturnType<typeof getDocument>>>
+export const getGetDocumentQueryKey = (documentId: string) => {
+  return [`/api/v1/documents/${documentId}`] as const
+}
+
+export const getGetDocumentQueryOptions = <
+  TData = Awaited<ReturnType<typeof getDocument>>,
+  TError = ErrorType<ErrorResponse>,
+>(
+  documentId: string,
+  options?: {
+    query?: Partial<
+      UseQueryOptions<Awaited<ReturnType<typeof getDocument>>, TError, TData>
+    >
+    request?: SecondParameter<typeof customFetch>
+  },
+) => {
+  const { query: queryOptions, request: requestOptions } = options ?? {}
+
+  const queryKey = queryOptions?.queryKey ?? getGetDocumentQueryKey(documentId)
+
+  const queryFn: QueryFunction<Awaited<ReturnType<typeof getDocument>>> = ({
+    signal,
+  }) => getDocument(documentId, { signal, ...requestOptions })
+
+  return {
+    queryKey,
+    queryFn,
+    enabled: !!documentId,
+    ...queryOptions,
+  } as UseQueryOptions<
+    Awaited<ReturnType<typeof getDocument>>,
+    TError,
+    TData
+  > & { queryKey: DataTag<QueryKey, TData, TError> }
+}
+
+export type GetDocumentQueryResult = NonNullable<
+  Awaited<ReturnType<typeof getDocument>>
+>
 export type GetDocumentQueryError = ErrorType<ErrorResponse>
 
-
-export function useGetDocument<TData = Awaited<ReturnType<typeof getDocument>>, TError = ErrorType<ErrorResponse>>(
- documentId: string, options: { query:Partial<UseQueryOptions<Awaited<ReturnType<typeof getDocument>>, TError, TData>> & Pick<
+export function useGetDocument<
+  TData = Awaited<ReturnType<typeof getDocument>>,
+  TError = ErrorType<ErrorResponse>,
+>(
+  documentId: string,
+  options: {
+    query: Partial<
+      UseQueryOptions<Awaited<ReturnType<typeof getDocument>>, TError, TData>
+    > &
+      Pick<
         DefinedInitialDataOptions<
           Awaited<ReturnType<typeof getDocument>>,
           TError,
           Awaited<ReturnType<typeof getDocument>>
-        > , 'initialData'
-      >, request?: SecondParameter<typeof customFetch>}
- , queryClient?: QueryClient
-  ):  DefinedUseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> }
-export function useGetDocument<TData = Awaited<ReturnType<typeof getDocument>>, TError = ErrorType<ErrorResponse>>(
- documentId: string, options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof getDocument>>, TError, TData>> & Pick<
+        >,
+        'initialData'
+      >
+    request?: SecondParameter<typeof customFetch>
+  },
+  queryClient?: QueryClient,
+): DefinedUseQueryResult<TData, TError> & {
+  queryKey: DataTag<QueryKey, TData, TError>
+}
+export function useGetDocument<
+  TData = Awaited<ReturnType<typeof getDocument>>,
+  TError = ErrorType<ErrorResponse>,
+>(
+  documentId: string,
+  options?: {
+    query?: Partial<
+      UseQueryOptions<Awaited<ReturnType<typeof getDocument>>, TError, TData>
+    > &
+      Pick<
         UndefinedInitialDataOptions<
           Awaited<ReturnType<typeof getDocument>>,
           TError,
           Awaited<ReturnType<typeof getDocument>>
-        > , 'initialData'
-      >, request?: SecondParameter<typeof customFetch>}
- , queryClient?: QueryClient
-  ):  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> }
-export function useGetDocument<TData = Awaited<ReturnType<typeof getDocument>>, TError = ErrorType<ErrorResponse>>(
- documentId: string, options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof getDocument>>, TError, TData>>, request?: SecondParameter<typeof customFetch>}
- , queryClient?: QueryClient
-  ):  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> }
+        >,
+        'initialData'
+      >
+    request?: SecondParameter<typeof customFetch>
+  },
+  queryClient?: QueryClient,
+): UseQueryResult<TData, TError> & {
+  queryKey: DataTag<QueryKey, TData, TError>
+}
+export function useGetDocument<
+  TData = Awaited<ReturnType<typeof getDocument>>,
+  TError = ErrorType<ErrorResponse>,
+>(
+  documentId: string,
+  options?: {
+    query?: Partial<
+      UseQueryOptions<Awaited<ReturnType<typeof getDocument>>, TError, TData>
+    >
+    request?: SecondParameter<typeof customFetch>
+  },
+  queryClient?: QueryClient,
+): UseQueryResult<TData, TError> & {
+  queryKey: DataTag<QueryKey, TData, TError>
+}
 /**
  * @summary Fetch the current document detail.
  */
 
-export function useGetDocument<TData = Awaited<ReturnType<typeof getDocument>>, TError = ErrorType<ErrorResponse>>(
- documentId: string, options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof getDocument>>, TError, TData>>, request?: SecondParameter<typeof customFetch>}
- , queryClient?: QueryClient
- ):  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> } {
+export function useGetDocument<
+  TData = Awaited<ReturnType<typeof getDocument>>,
+  TError = ErrorType<ErrorResponse>,
+>(
+  documentId: string,
+  options?: {
+    query?: Partial<
+      UseQueryOptions<Awaited<ReturnType<typeof getDocument>>, TError, TData>
+    >
+    request?: SecondParameter<typeof customFetch>
+  },
+  queryClient?: QueryClient,
+): UseQueryResult<TData, TError> & {
+  queryKey: DataTag<QueryKey, TData, TError>
+} {
+  const queryOptions = getGetDocumentQueryOptions(documentId, options)
 
-  const queryOptions = getGetDocumentQueryOptions(documentId,options)
+  const query = useQuery(queryOptions, queryClient) as UseQueryResult<
+    TData,
+    TError
+  > & { queryKey: DataTag<QueryKey, TData, TError> }
 
-  const query = useQuery(queryOptions, queryClient) as  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> };
-
-  return { ...query, queryKey: queryOptions.queryKey };
+  return { ...query, queryKey: queryOptions.queryKey }
 }
-
-
-
 
 /**
  * @summary Apply a brush patch to a document.
  */
-export const getUpdateDocumentBrushRegionUrl = (documentId: string,) => {
-
-
-
-
+export const getUpdateDocumentBrushRegionUrl = (documentId: string) => {
   return `/api/v1/documents/${documentId}/brush-layer/region`
 }
 
-export const updateDocumentBrushRegion = async (documentId: string,
-    brushRegionRequest: BrushRegionRequest, options?: RequestInit): Promise<void> => {
-
-  return customFetch<void>(getUpdateDocumentBrushRegionUrl(documentId),
-  {
+export const updateDocumentBrushRegion = async (
+  documentId: string,
+  brushRegionRequest: BrushRegionRequest,
+  options?: RequestInit,
+): Promise<void> => {
+  return customFetch<void>(getUpdateDocumentBrushRegionUrl(documentId), {
     ...options,
     method: 'PUT',
     headers: { 'Content-Type': 'application/json', ...options?.headers },
-    body: JSON.stringify(
-      brushRegionRequest,)
+    body: JSON.stringify(brushRegionRequest),
+  })
+}
+
+export const getUpdateDocumentBrushRegionMutationOptions = <
+  TError = ErrorType<ErrorResponse>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof updateDocumentBrushRegion>>,
+    TError,
+    { documentId: string; data: BrushRegionRequest },
+    TContext
+  >
+  request?: SecondParameter<typeof customFetch>
+}): UseMutationOptions<
+  Awaited<ReturnType<typeof updateDocumentBrushRegion>>,
+  TError,
+  { documentId: string; data: BrushRegionRequest },
+  TContext
+> => {
+  const mutationKey = ['updateDocumentBrushRegion']
+  const { mutation: mutationOptions, request: requestOptions } = options
+    ? options.mutation &&
+      'mutationKey' in options.mutation &&
+      options.mutation.mutationKey
+      ? options
+      : { ...options, mutation: { ...options.mutation, mutationKey } }
+    : { mutation: { mutationKey }, request: undefined }
+
+  const mutationFn: MutationFunction<
+    Awaited<ReturnType<typeof updateDocumentBrushRegion>>,
+    { documentId: string; data: BrushRegionRequest }
+  > = (props) => {
+    const { documentId, data } = props ?? {}
+
+    return updateDocumentBrushRegion(documentId, data, requestOptions)
   }
-);}
 
+  return { mutationFn, ...mutationOptions }
+}
 
+export type UpdateDocumentBrushRegionMutationResult = NonNullable<
+  Awaited<ReturnType<typeof updateDocumentBrushRegion>>
+>
+export type UpdateDocumentBrushRegionMutationBody = BrushRegionRequest
+export type UpdateDocumentBrushRegionMutationError = ErrorType<ErrorResponse>
 
-
-export const getUpdateDocumentBrushRegionMutationOptions = <TError = ErrorType<ErrorResponse>,
-    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof updateDocumentBrushRegion>>, TError,{documentId: string;data: BrushRegionRequest}, TContext>, request?: SecondParameter<typeof customFetch>}
-): UseMutationOptions<Awaited<ReturnType<typeof updateDocumentBrushRegion>>, TError,{documentId: string;data: BrushRegionRequest}, TContext> => {
-
-const mutationKey = ['updateDocumentBrushRegion'];
-const {mutation: mutationOptions, request: requestOptions} = options ?
-      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
-      options
-      : {...options, mutation: {...options.mutation, mutationKey}}
-      : {mutation: { mutationKey, }, request: undefined};
-
-
-
-
-      const mutationFn: MutationFunction<Awaited<ReturnType<typeof updateDocumentBrushRegion>>, {documentId: string;data: BrushRegionRequest}> = (props) => {
-          const {documentId,data} = props ?? {};
-
-          return  updateDocumentBrushRegion(documentId,data,requestOptions)
-        }
-
-
-
-
-
-
-  return  { mutationFn, ...mutationOptions }}
-
-    export type UpdateDocumentBrushRegionMutationResult = NonNullable<Awaited<ReturnType<typeof updateDocumentBrushRegion>>>
-    export type UpdateDocumentBrushRegionMutationBody = BrushRegionRequest
-    export type UpdateDocumentBrushRegionMutationError = ErrorType<ErrorResponse>
-
-    /**
+/**
  * @summary Apply a brush patch to a document.
  */
-export const useUpdateDocumentBrushRegion = <TError = ErrorType<ErrorResponse>,
-    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof updateDocumentBrushRegion>>, TError,{documentId: string;data: BrushRegionRequest}, TContext>, request?: SecondParameter<typeof customFetch>}
- , queryClient?: QueryClient): UseMutationResult<
-        Awaited<ReturnType<typeof updateDocumentBrushRegion>>,
-        TError,
-        {documentId: string;data: BrushRegionRequest},
-        TContext
-      > => {
-      return useMutation(getUpdateDocumentBrushRegionMutationOptions(options), queryClient);
-    }
-    /**
+export const useUpdateDocumentBrushRegion = <
+  TError = ErrorType<ErrorResponse>,
+  TContext = unknown,
+>(
+  options?: {
+    mutation?: UseMutationOptions<
+      Awaited<ReturnType<typeof updateDocumentBrushRegion>>,
+      TError,
+      { documentId: string; data: BrushRegionRequest },
+      TContext
+    >
+    request?: SecondParameter<typeof customFetch>
+  },
+  queryClient?: QueryClient,
+): UseMutationResult<
+  Awaited<ReturnType<typeof updateDocumentBrushRegion>>,
+  TError,
+  { documentId: string; data: BrushRegionRequest },
+  TContext
+> => {
+  return useMutation(
+    getUpdateDocumentBrushRegionMutationOptions(options),
+    queryClient,
+  )
+}
+/**
  * @summary Trigger text detection for a document.
  */
-export const getDetectDocumentUrl = (documentId: string,) => {
-
-
-
-
+export const getDetectDocumentUrl = (documentId: string) => {
   return `/api/v1/documents/${documentId}/detection`
 }
 
-export const detectDocument = async (documentId: string, options?: RequestInit): Promise<void> => {
-
-  return customFetch<void>(getDetectDocumentUrl(documentId),
-  {
+export const detectDocument = async (
+  documentId: string,
+  options?: RequestInit,
+): Promise<void> => {
+  return customFetch<void>(getDetectDocumentUrl(documentId), {
     ...options,
-    method: 'POST'
+    method: 'POST',
+  })
+}
 
+export const getDetectDocumentMutationOptions = <
+  TError = ErrorType<ErrorResponse>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof detectDocument>>,
+    TError,
+    { documentId: string },
+    TContext
+  >
+  request?: SecondParameter<typeof customFetch>
+}): UseMutationOptions<
+  Awaited<ReturnType<typeof detectDocument>>,
+  TError,
+  { documentId: string },
+  TContext
+> => {
+  const mutationKey = ['detectDocument']
+  const { mutation: mutationOptions, request: requestOptions } = options
+    ? options.mutation &&
+      'mutationKey' in options.mutation &&
+      options.mutation.mutationKey
+      ? options
+      : { ...options, mutation: { ...options.mutation, mutationKey } }
+    : { mutation: { mutationKey }, request: undefined }
 
+  const mutationFn: MutationFunction<
+    Awaited<ReturnType<typeof detectDocument>>,
+    { documentId: string }
+  > = (props) => {
+    const { documentId } = props ?? {}
+
+    return detectDocument(documentId, requestOptions)
   }
-);}
 
+  return { mutationFn, ...mutationOptions }
+}
 
+export type DetectDocumentMutationResult = NonNullable<
+  Awaited<ReturnType<typeof detectDocument>>
+>
 
+export type DetectDocumentMutationError = ErrorType<ErrorResponse>
 
-export const getDetectDocumentMutationOptions = <TError = ErrorType<ErrorResponse>,
-    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof detectDocument>>, TError,{documentId: string}, TContext>, request?: SecondParameter<typeof customFetch>}
-): UseMutationOptions<Awaited<ReturnType<typeof detectDocument>>, TError,{documentId: string}, TContext> => {
-
-const mutationKey = ['detectDocument'];
-const {mutation: mutationOptions, request: requestOptions} = options ?
-      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
-      options
-      : {...options, mutation: {...options.mutation, mutationKey}}
-      : {mutation: { mutationKey, }, request: undefined};
-
-
-
-
-      const mutationFn: MutationFunction<Awaited<ReturnType<typeof detectDocument>>, {documentId: string}> = (props) => {
-          const {documentId} = props ?? {};
-
-          return  detectDocument(documentId,requestOptions)
-        }
-
-
-
-
-
-
-  return  { mutationFn, ...mutationOptions }}
-
-    export type DetectDocumentMutationResult = NonNullable<Awaited<ReturnType<typeof detectDocument>>>
-
-    export type DetectDocumentMutationError = ErrorType<ErrorResponse>
-
-    /**
+/**
  * @summary Trigger text detection for a document.
  */
-export const useDetectDocument = <TError = ErrorType<ErrorResponse>,
-    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof detectDocument>>, TError,{documentId: string}, TContext>, request?: SecondParameter<typeof customFetch>}
- , queryClient?: QueryClient): UseMutationResult<
-        Awaited<ReturnType<typeof detectDocument>>,
-        TError,
-        {documentId: string},
-        TContext
-      > => {
-      return useMutation(getDetectDocumentMutationOptions(options), queryClient);
-    }
-    /**
+export const useDetectDocument = <
+  TError = ErrorType<ErrorResponse>,
+  TContext = unknown,
+>(
+  options?: {
+    mutation?: UseMutationOptions<
+      Awaited<ReturnType<typeof detectDocument>>,
+      TError,
+      { documentId: string },
+      TContext
+    >
+    request?: SecondParameter<typeof customFetch>
+  },
+  queryClient?: QueryClient,
+): UseMutationResult<
+  Awaited<ReturnType<typeof detectDocument>>,
+  TError,
+  { documentId: string },
+  TContext
+> => {
+  return useMutation(getDetectDocumentMutationOptions(options), queryClient)
+}
+/**
  * @summary Export a document image layer as a file download.
  */
-export const getExportDocumentImageUrl = (documentId: string,
-    layer: ExportLayer,) => {
-
-
-
-
+export const getExportDocumentImageUrl = (
+  documentId: string,
+  layer: ExportLayer,
+) => {
   return `/api/v1/documents/${documentId}/exports/images/${layer}`
 }
 
-export const exportDocumentImage = async (documentId: string,
-    layer: ExportLayer, options?: RequestInit): Promise<Blob> => {
-
-  return customFetch<Blob>(getExportDocumentImageUrl(documentId,layer),
-  {
+export const exportDocumentImage = async (
+  documentId: string,
+  layer: ExportLayer,
+  options?: RequestInit,
+): Promise<Blob> => {
+  return customFetch<Blob>(getExportDocumentImageUrl(documentId, layer), {
     ...options,
-    method: 'GET'
-
-
-  }
-);}
-
-
-
-
-
-export const getExportDocumentImageQueryKey = (documentId: string,
-    layer: ExportLayer,) => {
-    return [
-    `/api/v1/documents/${documentId}/exports/images/${layer}`
-    ] as const;
-    }
-
-
-export const getExportDocumentImageQueryOptions = <TData = Awaited<ReturnType<typeof exportDocumentImage>>, TError = ErrorType<ErrorResponse>>(documentId: string,
-    layer: ExportLayer, options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof exportDocumentImage>>, TError, TData>>, request?: SecondParameter<typeof customFetch>}
-) => {
-
-const {query: queryOptions, request: requestOptions} = options ?? {};
-
-  const queryKey =  queryOptions?.queryKey ?? getExportDocumentImageQueryKey(documentId,layer);
-
-
-
-    const queryFn: QueryFunction<Awaited<ReturnType<typeof exportDocumentImage>>> = ({ signal }) => exportDocumentImage(documentId,layer, { signal, ...requestOptions });
-
-
-
-
-
-   return  { queryKey, queryFn, enabled: !!(documentId && layer), ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof exportDocumentImage>>, TError, TData> & { queryKey: DataTag<QueryKey, TData, TError> }
+    method: 'GET',
+  })
 }
 
-export type ExportDocumentImageQueryResult = NonNullable<Awaited<ReturnType<typeof exportDocumentImage>>>
+export const getExportDocumentImageQueryKey = (
+  documentId: string,
+  layer: ExportLayer,
+) => {
+  return [`/api/v1/documents/${documentId}/exports/images/${layer}`] as const
+}
+
+export const getExportDocumentImageQueryOptions = <
+  TData = Awaited<ReturnType<typeof exportDocumentImage>>,
+  TError = ErrorType<ErrorResponse>,
+>(
+  documentId: string,
+  layer: ExportLayer,
+  options?: {
+    query?: Partial<
+      UseQueryOptions<
+        Awaited<ReturnType<typeof exportDocumentImage>>,
+        TError,
+        TData
+      >
+    >
+    request?: SecondParameter<typeof customFetch>
+  },
+) => {
+  const { query: queryOptions, request: requestOptions } = options ?? {}
+
+  const queryKey =
+    queryOptions?.queryKey ?? getExportDocumentImageQueryKey(documentId, layer)
+
+  const queryFn: QueryFunction<
+    Awaited<ReturnType<typeof exportDocumentImage>>
+  > = ({ signal }) =>
+    exportDocumentImage(documentId, layer, { signal, ...requestOptions })
+
+  return {
+    queryKey,
+    queryFn,
+    enabled: !!(documentId && layer),
+    ...queryOptions,
+  } as UseQueryOptions<
+    Awaited<ReturnType<typeof exportDocumentImage>>,
+    TError,
+    TData
+  > & { queryKey: DataTag<QueryKey, TData, TError> }
+}
+
+export type ExportDocumentImageQueryResult = NonNullable<
+  Awaited<ReturnType<typeof exportDocumentImage>>
+>
 export type ExportDocumentImageQueryError = ErrorType<ErrorResponse>
 
-
-export function useExportDocumentImage<TData = Awaited<ReturnType<typeof exportDocumentImage>>, TError = ErrorType<ErrorResponse>>(
- documentId: string,
-    layer: ExportLayer, options: { query:Partial<UseQueryOptions<Awaited<ReturnType<typeof exportDocumentImage>>, TError, TData>> & Pick<
+export function useExportDocumentImage<
+  TData = Awaited<ReturnType<typeof exportDocumentImage>>,
+  TError = ErrorType<ErrorResponse>,
+>(
+  documentId: string,
+  layer: ExportLayer,
+  options: {
+    query: Partial<
+      UseQueryOptions<
+        Awaited<ReturnType<typeof exportDocumentImage>>,
+        TError,
+        TData
+      >
+    > &
+      Pick<
         DefinedInitialDataOptions<
           Awaited<ReturnType<typeof exportDocumentImage>>,
           TError,
           Awaited<ReturnType<typeof exportDocumentImage>>
-        > , 'initialData'
-      >, request?: SecondParameter<typeof customFetch>}
- , queryClient?: QueryClient
-  ):  DefinedUseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> }
-export function useExportDocumentImage<TData = Awaited<ReturnType<typeof exportDocumentImage>>, TError = ErrorType<ErrorResponse>>(
- documentId: string,
-    layer: ExportLayer, options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof exportDocumentImage>>, TError, TData>> & Pick<
+        >,
+        'initialData'
+      >
+    request?: SecondParameter<typeof customFetch>
+  },
+  queryClient?: QueryClient,
+): DefinedUseQueryResult<TData, TError> & {
+  queryKey: DataTag<QueryKey, TData, TError>
+}
+export function useExportDocumentImage<
+  TData = Awaited<ReturnType<typeof exportDocumentImage>>,
+  TError = ErrorType<ErrorResponse>,
+>(
+  documentId: string,
+  layer: ExportLayer,
+  options?: {
+    query?: Partial<
+      UseQueryOptions<
+        Awaited<ReturnType<typeof exportDocumentImage>>,
+        TError,
+        TData
+      >
+    > &
+      Pick<
         UndefinedInitialDataOptions<
           Awaited<ReturnType<typeof exportDocumentImage>>,
           TError,
           Awaited<ReturnType<typeof exportDocumentImage>>
-        > , 'initialData'
-      >, request?: SecondParameter<typeof customFetch>}
- , queryClient?: QueryClient
-  ):  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> }
-export function useExportDocumentImage<TData = Awaited<ReturnType<typeof exportDocumentImage>>, TError = ErrorType<ErrorResponse>>(
- documentId: string,
-    layer: ExportLayer, options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof exportDocumentImage>>, TError, TData>>, request?: SecondParameter<typeof customFetch>}
- , queryClient?: QueryClient
-  ):  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> }
+        >,
+        'initialData'
+      >
+    request?: SecondParameter<typeof customFetch>
+  },
+  queryClient?: QueryClient,
+): UseQueryResult<TData, TError> & {
+  queryKey: DataTag<QueryKey, TData, TError>
+}
+export function useExportDocumentImage<
+  TData = Awaited<ReturnType<typeof exportDocumentImage>>,
+  TError = ErrorType<ErrorResponse>,
+>(
+  documentId: string,
+  layer: ExportLayer,
+  options?: {
+    query?: Partial<
+      UseQueryOptions<
+        Awaited<ReturnType<typeof exportDocumentImage>>,
+        TError,
+        TData
+      >
+    >
+    request?: SecondParameter<typeof customFetch>
+  },
+  queryClient?: QueryClient,
+): UseQueryResult<TData, TError> & {
+  queryKey: DataTag<QueryKey, TData, TError>
+}
 /**
  * @summary Export a document image layer as a file download.
  */
 
-export function useExportDocumentImage<TData = Awaited<ReturnType<typeof exportDocumentImage>>, TError = ErrorType<ErrorResponse>>(
- documentId: string,
-    layer: ExportLayer, options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof exportDocumentImage>>, TError, TData>>, request?: SecondParameter<typeof customFetch>}
- , queryClient?: QueryClient
- ):  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> } {
+export function useExportDocumentImage<
+  TData = Awaited<ReturnType<typeof exportDocumentImage>>,
+  TError = ErrorType<ErrorResponse>,
+>(
+  documentId: string,
+  layer: ExportLayer,
+  options?: {
+    query?: Partial<
+      UseQueryOptions<
+        Awaited<ReturnType<typeof exportDocumentImage>>,
+        TError,
+        TData
+      >
+    >
+    request?: SecondParameter<typeof customFetch>
+  },
+  queryClient?: QueryClient,
+): UseQueryResult<TData, TError> & {
+  queryKey: DataTag<QueryKey, TData, TError>
+} {
+  const queryOptions = getExportDocumentImageQueryOptions(
+    documentId,
+    layer,
+    options,
+  )
 
-  const queryOptions = getExportDocumentImageQueryOptions(documentId,layer,options)
+  const query = useQuery(queryOptions, queryClient) as UseQueryResult<
+    TData,
+    TError
+  > & { queryKey: DataTag<QueryKey, TData, TError> }
 
-  const query = useQuery(queryOptions, queryClient) as  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> };
-
-  return { ...query, queryKey: queryOptions.queryKey };
+  return { ...query, queryKey: queryOptions.queryKey }
 }
-
-
-
 
 /**
  * @summary Export a document as a layered PSD.
  */
-export const getExportDocumentPsdUrl = (documentId: string,) => {
-
-
-
-
+export const getExportDocumentPsdUrl = (documentId: string) => {
   return `/api/v1/documents/${documentId}/exports/psd`
 }
 
-export const exportDocumentPsd = async (documentId: string, options?: RequestInit): Promise<Blob> => {
-
-  return customFetch<Blob>(getExportDocumentPsdUrl(documentId),
-  {
+export const exportDocumentPsd = async (
+  documentId: string,
+  options?: RequestInit,
+): Promise<Blob> => {
+  return customFetch<Blob>(getExportDocumentPsdUrl(documentId), {
     ...options,
-    method: 'GET'
-
-
-  }
-);}
-
-
-
-
-
-export const getExportDocumentPsdQueryKey = (documentId: string,) => {
-    return [
-    `/api/v1/documents/${documentId}/exports/psd`
-    ] as const;
-    }
-
-
-export const getExportDocumentPsdQueryOptions = <TData = Awaited<ReturnType<typeof exportDocumentPsd>>, TError = ErrorType<ErrorResponse>>(documentId: string, options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof exportDocumentPsd>>, TError, TData>>, request?: SecondParameter<typeof customFetch>}
-) => {
-
-const {query: queryOptions, request: requestOptions} = options ?? {};
-
-  const queryKey =  queryOptions?.queryKey ?? getExportDocumentPsdQueryKey(documentId);
-
-
-
-    const queryFn: QueryFunction<Awaited<ReturnType<typeof exportDocumentPsd>>> = ({ signal }) => exportDocumentPsd(documentId, { signal, ...requestOptions });
-
-
-
-
-
-   return  { queryKey, queryFn, enabled: !!(documentId), ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof exportDocumentPsd>>, TError, TData> & { queryKey: DataTag<QueryKey, TData, TError> }
+    method: 'GET',
+  })
 }
 
-export type ExportDocumentPsdQueryResult = NonNullable<Awaited<ReturnType<typeof exportDocumentPsd>>>
+export const getExportDocumentPsdQueryKey = (documentId: string) => {
+  return [`/api/v1/documents/${documentId}/exports/psd`] as const
+}
+
+export const getExportDocumentPsdQueryOptions = <
+  TData = Awaited<ReturnType<typeof exportDocumentPsd>>,
+  TError = ErrorType<ErrorResponse>,
+>(
+  documentId: string,
+  options?: {
+    query?: Partial<
+      UseQueryOptions<
+        Awaited<ReturnType<typeof exportDocumentPsd>>,
+        TError,
+        TData
+      >
+    >
+    request?: SecondParameter<typeof customFetch>
+  },
+) => {
+  const { query: queryOptions, request: requestOptions } = options ?? {}
+
+  const queryKey =
+    queryOptions?.queryKey ?? getExportDocumentPsdQueryKey(documentId)
+
+  const queryFn: QueryFunction<
+    Awaited<ReturnType<typeof exportDocumentPsd>>
+  > = ({ signal }) =>
+    exportDocumentPsd(documentId, { signal, ...requestOptions })
+
+  return {
+    queryKey,
+    queryFn,
+    enabled: !!documentId,
+    ...queryOptions,
+  } as UseQueryOptions<
+    Awaited<ReturnType<typeof exportDocumentPsd>>,
+    TError,
+    TData
+  > & { queryKey: DataTag<QueryKey, TData, TError> }
+}
+
+export type ExportDocumentPsdQueryResult = NonNullable<
+  Awaited<ReturnType<typeof exportDocumentPsd>>
+>
 export type ExportDocumentPsdQueryError = ErrorType<ErrorResponse>
 
-
-export function useExportDocumentPsd<TData = Awaited<ReturnType<typeof exportDocumentPsd>>, TError = ErrorType<ErrorResponse>>(
- documentId: string, options: { query:Partial<UseQueryOptions<Awaited<ReturnType<typeof exportDocumentPsd>>, TError, TData>> & Pick<
+export function useExportDocumentPsd<
+  TData = Awaited<ReturnType<typeof exportDocumentPsd>>,
+  TError = ErrorType<ErrorResponse>,
+>(
+  documentId: string,
+  options: {
+    query: Partial<
+      UseQueryOptions<
+        Awaited<ReturnType<typeof exportDocumentPsd>>,
+        TError,
+        TData
+      >
+    > &
+      Pick<
         DefinedInitialDataOptions<
           Awaited<ReturnType<typeof exportDocumentPsd>>,
           TError,
           Awaited<ReturnType<typeof exportDocumentPsd>>
-        > , 'initialData'
-      >, request?: SecondParameter<typeof customFetch>}
- , queryClient?: QueryClient
-  ):  DefinedUseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> }
-export function useExportDocumentPsd<TData = Awaited<ReturnType<typeof exportDocumentPsd>>, TError = ErrorType<ErrorResponse>>(
- documentId: string, options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof exportDocumentPsd>>, TError, TData>> & Pick<
+        >,
+        'initialData'
+      >
+    request?: SecondParameter<typeof customFetch>
+  },
+  queryClient?: QueryClient,
+): DefinedUseQueryResult<TData, TError> & {
+  queryKey: DataTag<QueryKey, TData, TError>
+}
+export function useExportDocumentPsd<
+  TData = Awaited<ReturnType<typeof exportDocumentPsd>>,
+  TError = ErrorType<ErrorResponse>,
+>(
+  documentId: string,
+  options?: {
+    query?: Partial<
+      UseQueryOptions<
+        Awaited<ReturnType<typeof exportDocumentPsd>>,
+        TError,
+        TData
+      >
+    > &
+      Pick<
         UndefinedInitialDataOptions<
           Awaited<ReturnType<typeof exportDocumentPsd>>,
           TError,
           Awaited<ReturnType<typeof exportDocumentPsd>>
-        > , 'initialData'
-      >, request?: SecondParameter<typeof customFetch>}
- , queryClient?: QueryClient
-  ):  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> }
-export function useExportDocumentPsd<TData = Awaited<ReturnType<typeof exportDocumentPsd>>, TError = ErrorType<ErrorResponse>>(
- documentId: string, options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof exportDocumentPsd>>, TError, TData>>, request?: SecondParameter<typeof customFetch>}
- , queryClient?: QueryClient
-  ):  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> }
+        >,
+        'initialData'
+      >
+    request?: SecondParameter<typeof customFetch>
+  },
+  queryClient?: QueryClient,
+): UseQueryResult<TData, TError> & {
+  queryKey: DataTag<QueryKey, TData, TError>
+}
+export function useExportDocumentPsd<
+  TData = Awaited<ReturnType<typeof exportDocumentPsd>>,
+  TError = ErrorType<ErrorResponse>,
+>(
+  documentId: string,
+  options?: {
+    query?: Partial<
+      UseQueryOptions<
+        Awaited<ReturnType<typeof exportDocumentPsd>>,
+        TError,
+        TData
+      >
+    >
+    request?: SecondParameter<typeof customFetch>
+  },
+  queryClient?: QueryClient,
+): UseQueryResult<TData, TError> & {
+  queryKey: DataTag<QueryKey, TData, TError>
+}
 /**
  * @summary Export a document as a layered PSD.
  */
 
-export function useExportDocumentPsd<TData = Awaited<ReturnType<typeof exportDocumentPsd>>, TError = ErrorType<ErrorResponse>>(
- documentId: string, options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof exportDocumentPsd>>, TError, TData>>, request?: SecondParameter<typeof customFetch>}
- , queryClient?: QueryClient
- ):  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> } {
+export function useExportDocumentPsd<
+  TData = Awaited<ReturnType<typeof exportDocumentPsd>>,
+  TError = ErrorType<ErrorResponse>,
+>(
+  documentId: string,
+  options?: {
+    query?: Partial<
+      UseQueryOptions<
+        Awaited<ReturnType<typeof exportDocumentPsd>>,
+        TError,
+        TData
+      >
+    >
+    request?: SecondParameter<typeof customFetch>
+  },
+  queryClient?: QueryClient,
+): UseQueryResult<TData, TError> & {
+  queryKey: DataTag<QueryKey, TData, TError>
+} {
+  const queryOptions = getExportDocumentPsdQueryOptions(documentId, options)
 
-  const queryOptions = getExportDocumentPsdQueryOptions(documentId,options)
+  const query = useQuery(queryOptions, queryClient) as UseQueryResult<
+    TData,
+    TError
+  > & { queryKey: DataTag<QueryKey, TData, TError> }
 
-  const query = useQuery(queryOptions, queryClient) as  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> };
-
-  return { ...query, queryKey: queryOptions.queryKey };
+  return { ...query, queryKey: queryOptions.queryKey }
 }
-
-
-
 
 /**
  * @summary Trigger full-document inpainting.
  */
-export const getInpaintDocumentUrl = (documentId: string,) => {
-
-
-
-
+export const getInpaintDocumentUrl = (documentId: string) => {
   return `/api/v1/documents/${documentId}/inpainting`
 }
 
-export const inpaintDocument = async (documentId: string, options?: RequestInit): Promise<void> => {
-
-  return customFetch<void>(getInpaintDocumentUrl(documentId),
-  {
+export const inpaintDocument = async (
+  documentId: string,
+  options?: RequestInit,
+): Promise<void> => {
+  return customFetch<void>(getInpaintDocumentUrl(documentId), {
     ...options,
-    method: 'POST'
+    method: 'POST',
+  })
+}
 
+export const getInpaintDocumentMutationOptions = <
+  TError = ErrorType<ErrorResponse>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof inpaintDocument>>,
+    TError,
+    { documentId: string },
+    TContext
+  >
+  request?: SecondParameter<typeof customFetch>
+}): UseMutationOptions<
+  Awaited<ReturnType<typeof inpaintDocument>>,
+  TError,
+  { documentId: string },
+  TContext
+> => {
+  const mutationKey = ['inpaintDocument']
+  const { mutation: mutationOptions, request: requestOptions } = options
+    ? options.mutation &&
+      'mutationKey' in options.mutation &&
+      options.mutation.mutationKey
+      ? options
+      : { ...options, mutation: { ...options.mutation, mutationKey } }
+    : { mutation: { mutationKey }, request: undefined }
 
+  const mutationFn: MutationFunction<
+    Awaited<ReturnType<typeof inpaintDocument>>,
+    { documentId: string }
+  > = (props) => {
+    const { documentId } = props ?? {}
+
+    return inpaintDocument(documentId, requestOptions)
   }
-);}
 
+  return { mutationFn, ...mutationOptions }
+}
 
+export type InpaintDocumentMutationResult = NonNullable<
+  Awaited<ReturnType<typeof inpaintDocument>>
+>
 
+export type InpaintDocumentMutationError = ErrorType<ErrorResponse>
 
-export const getInpaintDocumentMutationOptions = <TError = ErrorType<ErrorResponse>,
-    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof inpaintDocument>>, TError,{documentId: string}, TContext>, request?: SecondParameter<typeof customFetch>}
-): UseMutationOptions<Awaited<ReturnType<typeof inpaintDocument>>, TError,{documentId: string}, TContext> => {
-
-const mutationKey = ['inpaintDocument'];
-const {mutation: mutationOptions, request: requestOptions} = options ?
-      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
-      options
-      : {...options, mutation: {...options.mutation, mutationKey}}
-      : {mutation: { mutationKey, }, request: undefined};
-
-
-
-
-      const mutationFn: MutationFunction<Awaited<ReturnType<typeof inpaintDocument>>, {documentId: string}> = (props) => {
-          const {documentId} = props ?? {};
-
-          return  inpaintDocument(documentId,requestOptions)
-        }
-
-
-
-
-
-
-  return  { mutationFn, ...mutationOptions }}
-
-    export type InpaintDocumentMutationResult = NonNullable<Awaited<ReturnType<typeof inpaintDocument>>>
-
-    export type InpaintDocumentMutationError = ErrorType<ErrorResponse>
-
-    /**
+/**
  * @summary Trigger full-document inpainting.
  */
-export const useInpaintDocument = <TError = ErrorType<ErrorResponse>,
-    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof inpaintDocument>>, TError,{documentId: string}, TContext>, request?: SecondParameter<typeof customFetch>}
- , queryClient?: QueryClient): UseMutationResult<
-        Awaited<ReturnType<typeof inpaintDocument>>,
-        TError,
-        {documentId: string},
-        TContext
-      > => {
-      return useMutation(getInpaintDocumentMutationOptions(options), queryClient);
-    }
-    /**
+export const useInpaintDocument = <
+  TError = ErrorType<ErrorResponse>,
+  TContext = unknown,
+>(
+  options?: {
+    mutation?: UseMutationOptions<
+      Awaited<ReturnType<typeof inpaintDocument>>,
+      TError,
+      { documentId: string },
+      TContext
+    >
+    request?: SecondParameter<typeof customFetch>
+  },
+  queryClient?: QueryClient,
+): UseMutationResult<
+  Awaited<ReturnType<typeof inpaintDocument>>,
+  TError,
+  { documentId: string },
+  TContext
+> => {
+  return useMutation(getInpaintDocumentMutationOptions(options), queryClient)
+}
+/**
  * @summary Replace the inpainting mask for a document.
  */
-export const getUpdateDocumentInpaintingMaskUrl = (documentId: string,) => {
-
-
-
-
+export const getUpdateDocumentInpaintingMaskUrl = (documentId: string) => {
   return `/api/v1/documents/${documentId}/inpainting/mask`
 }
 
-export const updateDocumentInpaintingMask = async (documentId: string,
-    maskRegionRequest: MaskRegionRequest, options?: RequestInit): Promise<void> => {
-
-  return customFetch<void>(getUpdateDocumentInpaintingMaskUrl(documentId),
-  {
+export const updateDocumentInpaintingMask = async (
+  documentId: string,
+  maskRegionRequest: MaskRegionRequest,
+  options?: RequestInit,
+): Promise<void> => {
+  return customFetch<void>(getUpdateDocumentInpaintingMaskUrl(documentId), {
     ...options,
     method: 'PUT',
     headers: { 'Content-Type': 'application/json', ...options?.headers },
-    body: JSON.stringify(
-      maskRegionRequest,)
+    body: JSON.stringify(maskRegionRequest),
+  })
+}
+
+export const getUpdateDocumentInpaintingMaskMutationOptions = <
+  TError = ErrorType<ErrorResponse>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof updateDocumentInpaintingMask>>,
+    TError,
+    { documentId: string; data: MaskRegionRequest },
+    TContext
+  >
+  request?: SecondParameter<typeof customFetch>
+}): UseMutationOptions<
+  Awaited<ReturnType<typeof updateDocumentInpaintingMask>>,
+  TError,
+  { documentId: string; data: MaskRegionRequest },
+  TContext
+> => {
+  const mutationKey = ['updateDocumentInpaintingMask']
+  const { mutation: mutationOptions, request: requestOptions } = options
+    ? options.mutation &&
+      'mutationKey' in options.mutation &&
+      options.mutation.mutationKey
+      ? options
+      : { ...options, mutation: { ...options.mutation, mutationKey } }
+    : { mutation: { mutationKey }, request: undefined }
+
+  const mutationFn: MutationFunction<
+    Awaited<ReturnType<typeof updateDocumentInpaintingMask>>,
+    { documentId: string; data: MaskRegionRequest }
+  > = (props) => {
+    const { documentId, data } = props ?? {}
+
+    return updateDocumentInpaintingMask(documentId, data, requestOptions)
   }
-);}
 
+  return { mutationFn, ...mutationOptions }
+}
 
+export type UpdateDocumentInpaintingMaskMutationResult = NonNullable<
+  Awaited<ReturnType<typeof updateDocumentInpaintingMask>>
+>
+export type UpdateDocumentInpaintingMaskMutationBody = MaskRegionRequest
+export type UpdateDocumentInpaintingMaskMutationError = ErrorType<ErrorResponse>
 
-
-export const getUpdateDocumentInpaintingMaskMutationOptions = <TError = ErrorType<ErrorResponse>,
-    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof updateDocumentInpaintingMask>>, TError,{documentId: string;data: MaskRegionRequest}, TContext>, request?: SecondParameter<typeof customFetch>}
-): UseMutationOptions<Awaited<ReturnType<typeof updateDocumentInpaintingMask>>, TError,{documentId: string;data: MaskRegionRequest}, TContext> => {
-
-const mutationKey = ['updateDocumentInpaintingMask'];
-const {mutation: mutationOptions, request: requestOptions} = options ?
-      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
-      options
-      : {...options, mutation: {...options.mutation, mutationKey}}
-      : {mutation: { mutationKey, }, request: undefined};
-
-
-
-
-      const mutationFn: MutationFunction<Awaited<ReturnType<typeof updateDocumentInpaintingMask>>, {documentId: string;data: MaskRegionRequest}> = (props) => {
-          const {documentId,data} = props ?? {};
-
-          return  updateDocumentInpaintingMask(documentId,data,requestOptions)
-        }
-
-
-
-
-
-
-  return  { mutationFn, ...mutationOptions }}
-
-    export type UpdateDocumentInpaintingMaskMutationResult = NonNullable<Awaited<ReturnType<typeof updateDocumentInpaintingMask>>>
-    export type UpdateDocumentInpaintingMaskMutationBody = MaskRegionRequest
-    export type UpdateDocumentInpaintingMaskMutationError = ErrorType<ErrorResponse>
-
-    /**
+/**
  * @summary Replace the inpainting mask for a document.
  */
-export const useUpdateDocumentInpaintingMask = <TError = ErrorType<ErrorResponse>,
-    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof updateDocumentInpaintingMask>>, TError,{documentId: string;data: MaskRegionRequest}, TContext>, request?: SecondParameter<typeof customFetch>}
- , queryClient?: QueryClient): UseMutationResult<
-        Awaited<ReturnType<typeof updateDocumentInpaintingMask>>,
-        TError,
-        {documentId: string;data: MaskRegionRequest},
-        TContext
-      > => {
-      return useMutation(getUpdateDocumentInpaintingMaskMutationOptions(options), queryClient);
-    }
-    /**
+export const useUpdateDocumentInpaintingMask = <
+  TError = ErrorType<ErrorResponse>,
+  TContext = unknown,
+>(
+  options?: {
+    mutation?: UseMutationOptions<
+      Awaited<ReturnType<typeof updateDocumentInpaintingMask>>,
+      TError,
+      { documentId: string; data: MaskRegionRequest },
+      TContext
+    >
+    request?: SecondParameter<typeof customFetch>
+  },
+  queryClient?: QueryClient,
+): UseMutationResult<
+  Awaited<ReturnType<typeof updateDocumentInpaintingMask>>,
+  TError,
+  { documentId: string; data: MaskRegionRequest },
+  TContext
+> => {
+  return useMutation(
+    getUpdateDocumentInpaintingMaskMutationOptions(options),
+    queryClient,
+  )
+}
+/**
  * @summary Inpaint a specific region of a document.
  */
-export const getInpaintDocumentRegionUrl = (documentId: string,) => {
-
-
-
-
+export const getInpaintDocumentRegionUrl = (documentId: string) => {
   return `/api/v1/documents/${documentId}/inpainting/region`
 }
 
-export const inpaintDocumentRegion = async (documentId: string,
-    inpaintRegionRequest: InpaintRegionRequest, options?: RequestInit): Promise<void> => {
-
-  return customFetch<void>(getInpaintDocumentRegionUrl(documentId),
-  {
+export const inpaintDocumentRegion = async (
+  documentId: string,
+  inpaintRegionRequest: InpaintRegionRequest,
+  options?: RequestInit,
+): Promise<void> => {
+  return customFetch<void>(getInpaintDocumentRegionUrl(documentId), {
     ...options,
     method: 'POST',
     headers: { 'Content-Type': 'application/json', ...options?.headers },
-    body: JSON.stringify(
-      inpaintRegionRequest,)
+    body: JSON.stringify(inpaintRegionRequest),
+  })
+}
+
+export const getInpaintDocumentRegionMutationOptions = <
+  TError = ErrorType<ErrorResponse>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof inpaintDocumentRegion>>,
+    TError,
+    { documentId: string; data: InpaintRegionRequest },
+    TContext
+  >
+  request?: SecondParameter<typeof customFetch>
+}): UseMutationOptions<
+  Awaited<ReturnType<typeof inpaintDocumentRegion>>,
+  TError,
+  { documentId: string; data: InpaintRegionRequest },
+  TContext
+> => {
+  const mutationKey = ['inpaintDocumentRegion']
+  const { mutation: mutationOptions, request: requestOptions } = options
+    ? options.mutation &&
+      'mutationKey' in options.mutation &&
+      options.mutation.mutationKey
+      ? options
+      : { ...options, mutation: { ...options.mutation, mutationKey } }
+    : { mutation: { mutationKey }, request: undefined }
+
+  const mutationFn: MutationFunction<
+    Awaited<ReturnType<typeof inpaintDocumentRegion>>,
+    { documentId: string; data: InpaintRegionRequest }
+  > = (props) => {
+    const { documentId, data } = props ?? {}
+
+    return inpaintDocumentRegion(documentId, data, requestOptions)
   }
-);}
 
+  return { mutationFn, ...mutationOptions }
+}
 
+export type InpaintDocumentRegionMutationResult = NonNullable<
+  Awaited<ReturnType<typeof inpaintDocumentRegion>>
+>
+export type InpaintDocumentRegionMutationBody = InpaintRegionRequest
+export type InpaintDocumentRegionMutationError = ErrorType<ErrorResponse>
 
-
-export const getInpaintDocumentRegionMutationOptions = <TError = ErrorType<ErrorResponse>,
-    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof inpaintDocumentRegion>>, TError,{documentId: string;data: InpaintRegionRequest}, TContext>, request?: SecondParameter<typeof customFetch>}
-): UseMutationOptions<Awaited<ReturnType<typeof inpaintDocumentRegion>>, TError,{documentId: string;data: InpaintRegionRequest}, TContext> => {
-
-const mutationKey = ['inpaintDocumentRegion'];
-const {mutation: mutationOptions, request: requestOptions} = options ?
-      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
-      options
-      : {...options, mutation: {...options.mutation, mutationKey}}
-      : {mutation: { mutationKey, }, request: undefined};
-
-
-
-
-      const mutationFn: MutationFunction<Awaited<ReturnType<typeof inpaintDocumentRegion>>, {documentId: string;data: InpaintRegionRequest}> = (props) => {
-          const {documentId,data} = props ?? {};
-
-          return  inpaintDocumentRegion(documentId,data,requestOptions)
-        }
-
-
-
-
-
-
-  return  { mutationFn, ...mutationOptions }}
-
-    export type InpaintDocumentRegionMutationResult = NonNullable<Awaited<ReturnType<typeof inpaintDocumentRegion>>>
-    export type InpaintDocumentRegionMutationBody = InpaintRegionRequest
-    export type InpaintDocumentRegionMutationError = ErrorType<ErrorResponse>
-
-    /**
+/**
  * @summary Inpaint a specific region of a document.
  */
-export const useInpaintDocumentRegion = <TError = ErrorType<ErrorResponse>,
-    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof inpaintDocumentRegion>>, TError,{documentId: string;data: InpaintRegionRequest}, TContext>, request?: SecondParameter<typeof customFetch>}
- , queryClient?: QueryClient): UseMutationResult<
-        Awaited<ReturnType<typeof inpaintDocumentRegion>>,
-        TError,
-        {documentId: string;data: InpaintRegionRequest},
-        TContext
-      > => {
-      return useMutation(getInpaintDocumentRegionMutationOptions(options), queryClient);
-    }
-    /**
+export const useInpaintDocumentRegion = <
+  TError = ErrorType<ErrorResponse>,
+  TContext = unknown,
+>(
+  options?: {
+    mutation?: UseMutationOptions<
+      Awaited<ReturnType<typeof inpaintDocumentRegion>>,
+      TError,
+      { documentId: string; data: InpaintRegionRequest },
+      TContext
+    >
+    request?: SecondParameter<typeof customFetch>
+  },
+  queryClient?: QueryClient,
+): UseMutationResult<
+  Awaited<ReturnType<typeof inpaintDocumentRegion>>,
+  TError,
+  { documentId: string; data: InpaintRegionRequest },
+  TContext
+> => {
+  return useMutation(
+    getInpaintDocumentRegionMutationOptions(options),
+    queryClient,
+  )
+}
+/**
  * @summary Fetch a named raster layer from a document.
  */
-export const getGetDocumentLayerUrl = (documentId: string,
-    layer: DocumentLayer,
-    params?: GetDocumentLayerParams,) => {
-  const normalizedParams = new URLSearchParams();
+export const getGetDocumentLayerUrl = (
+  documentId: string,
+  layer: DocumentLayer,
+  params?: GetDocumentLayerParams,
+) => {
+  const normalizedParams = new URLSearchParams()
 
   Object.entries(params || {}).forEach(([key, value]) => {
-
     if (value !== undefined) {
       normalizedParams.append(key, value === null ? 'null' : value.toString())
     }
-  });
+  })
 
-  const stringifiedParams = normalizedParams.toString();
+  const stringifiedParams = normalizedParams.toString()
 
-  return stringifiedParams.length > 0 ? `/api/v1/documents/${documentId}/layers/${layer}?${stringifiedParams}` : `/api/v1/documents/${documentId}/layers/${layer}`
+  return stringifiedParams.length > 0
+    ? `/api/v1/documents/${documentId}/layers/${layer}?${stringifiedParams}`
+    : `/api/v1/documents/${documentId}/layers/${layer}`
 }
 
-export const getDocumentLayer = async (documentId: string,
-    layer: DocumentLayer,
-    params?: GetDocumentLayerParams, options?: RequestInit): Promise<Blob> => {
-
-  return customFetch<Blob>(getGetDocumentLayerUrl(documentId,layer,params),
-  {
+export const getDocumentLayer = async (
+  documentId: string,
+  layer: DocumentLayer,
+  params?: GetDocumentLayerParams,
+  options?: RequestInit,
+): Promise<Blob> => {
+  return customFetch<Blob>(getGetDocumentLayerUrl(documentId, layer, params), {
     ...options,
-    method: 'GET'
-
-
-  }
-);}
-
-
-
-
-
-export const getGetDocumentLayerQueryKey = (documentId: string,
-    layer: DocumentLayer,
-    params?: GetDocumentLayerParams,) => {
-    return [
-    `/api/v1/documents/${documentId}/layers/${layer}`, ...(params ? [params] : [])
-    ] as const;
-    }
-
-
-export const getGetDocumentLayerQueryOptions = <TData = Awaited<ReturnType<typeof getDocumentLayer>>, TError = ErrorType<ErrorResponse>>(documentId: string,
-    layer: DocumentLayer,
-    params?: GetDocumentLayerParams, options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof getDocumentLayer>>, TError, TData>>, request?: SecondParameter<typeof customFetch>}
-) => {
-
-const {query: queryOptions, request: requestOptions} = options ?? {};
-
-  const queryKey =  queryOptions?.queryKey ?? getGetDocumentLayerQueryKey(documentId,layer,params);
-
-
-
-    const queryFn: QueryFunction<Awaited<ReturnType<typeof getDocumentLayer>>> = ({ signal }) => getDocumentLayer(documentId,layer,params, { signal, ...requestOptions });
-
-
-
-
-
-   return  { queryKey, queryFn, enabled: !!(documentId && layer), ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof getDocumentLayer>>, TError, TData> & { queryKey: DataTag<QueryKey, TData, TError> }
+    method: 'GET',
+  })
 }
 
-export type GetDocumentLayerQueryResult = NonNullable<Awaited<ReturnType<typeof getDocumentLayer>>>
+export const getGetDocumentLayerQueryKey = (
+  documentId: string,
+  layer: DocumentLayer,
+  params?: GetDocumentLayerParams,
+) => {
+  return [
+    `/api/v1/documents/${documentId}/layers/${layer}`,
+    ...(params ? [params] : []),
+  ] as const
+}
+
+export const getGetDocumentLayerQueryOptions = <
+  TData = Awaited<ReturnType<typeof getDocumentLayer>>,
+  TError = ErrorType<ErrorResponse>,
+>(
+  documentId: string,
+  layer: DocumentLayer,
+  params?: GetDocumentLayerParams,
+  options?: {
+    query?: Partial<
+      UseQueryOptions<
+        Awaited<ReturnType<typeof getDocumentLayer>>,
+        TError,
+        TData
+      >
+    >
+    request?: SecondParameter<typeof customFetch>
+  },
+) => {
+  const { query: queryOptions, request: requestOptions } = options ?? {}
+
+  const queryKey =
+    queryOptions?.queryKey ??
+    getGetDocumentLayerQueryKey(documentId, layer, params)
+
+  const queryFn: QueryFunction<
+    Awaited<ReturnType<typeof getDocumentLayer>>
+  > = ({ signal }) =>
+    getDocumentLayer(documentId, layer, params, { signal, ...requestOptions })
+
+  return {
+    queryKey,
+    queryFn,
+    enabled: !!(documentId && layer),
+    ...queryOptions,
+  } as UseQueryOptions<
+    Awaited<ReturnType<typeof getDocumentLayer>>,
+    TError,
+    TData
+  > & { queryKey: DataTag<QueryKey, TData, TError> }
+}
+
+export type GetDocumentLayerQueryResult = NonNullable<
+  Awaited<ReturnType<typeof getDocumentLayer>>
+>
 export type GetDocumentLayerQueryError = ErrorType<ErrorResponse>
 
-
-export function useGetDocumentLayer<TData = Awaited<ReturnType<typeof getDocumentLayer>>, TError = ErrorType<ErrorResponse>>(
- documentId: string,
-    layer: DocumentLayer,
-    params: undefined |  GetDocumentLayerParams, options: { query:Partial<UseQueryOptions<Awaited<ReturnType<typeof getDocumentLayer>>, TError, TData>> & Pick<
+export function useGetDocumentLayer<
+  TData = Awaited<ReturnType<typeof getDocumentLayer>>,
+  TError = ErrorType<ErrorResponse>,
+>(
+  documentId: string,
+  layer: DocumentLayer,
+  params: undefined | GetDocumentLayerParams,
+  options: {
+    query: Partial<
+      UseQueryOptions<
+        Awaited<ReturnType<typeof getDocumentLayer>>,
+        TError,
+        TData
+      >
+    > &
+      Pick<
         DefinedInitialDataOptions<
           Awaited<ReturnType<typeof getDocumentLayer>>,
           TError,
           Awaited<ReturnType<typeof getDocumentLayer>>
-        > , 'initialData'
-      >, request?: SecondParameter<typeof customFetch>}
- , queryClient?: QueryClient
-  ):  DefinedUseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> }
-export function useGetDocumentLayer<TData = Awaited<ReturnType<typeof getDocumentLayer>>, TError = ErrorType<ErrorResponse>>(
- documentId: string,
-    layer: DocumentLayer,
-    params?: GetDocumentLayerParams, options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof getDocumentLayer>>, TError, TData>> & Pick<
+        >,
+        'initialData'
+      >
+    request?: SecondParameter<typeof customFetch>
+  },
+  queryClient?: QueryClient,
+): DefinedUseQueryResult<TData, TError> & {
+  queryKey: DataTag<QueryKey, TData, TError>
+}
+export function useGetDocumentLayer<
+  TData = Awaited<ReturnType<typeof getDocumentLayer>>,
+  TError = ErrorType<ErrorResponse>,
+>(
+  documentId: string,
+  layer: DocumentLayer,
+  params?: GetDocumentLayerParams,
+  options?: {
+    query?: Partial<
+      UseQueryOptions<
+        Awaited<ReturnType<typeof getDocumentLayer>>,
+        TError,
+        TData
+      >
+    > &
+      Pick<
         UndefinedInitialDataOptions<
           Awaited<ReturnType<typeof getDocumentLayer>>,
           TError,
           Awaited<ReturnType<typeof getDocumentLayer>>
-        > , 'initialData'
-      >, request?: SecondParameter<typeof customFetch>}
- , queryClient?: QueryClient
-  ):  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> }
-export function useGetDocumentLayer<TData = Awaited<ReturnType<typeof getDocumentLayer>>, TError = ErrorType<ErrorResponse>>(
- documentId: string,
-    layer: DocumentLayer,
-    params?: GetDocumentLayerParams, options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof getDocumentLayer>>, TError, TData>>, request?: SecondParameter<typeof customFetch>}
- , queryClient?: QueryClient
-  ):  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> }
+        >,
+        'initialData'
+      >
+    request?: SecondParameter<typeof customFetch>
+  },
+  queryClient?: QueryClient,
+): UseQueryResult<TData, TError> & {
+  queryKey: DataTag<QueryKey, TData, TError>
+}
+export function useGetDocumentLayer<
+  TData = Awaited<ReturnType<typeof getDocumentLayer>>,
+  TError = ErrorType<ErrorResponse>,
+>(
+  documentId: string,
+  layer: DocumentLayer,
+  params?: GetDocumentLayerParams,
+  options?: {
+    query?: Partial<
+      UseQueryOptions<
+        Awaited<ReturnType<typeof getDocumentLayer>>,
+        TError,
+        TData
+      >
+    >
+    request?: SecondParameter<typeof customFetch>
+  },
+  queryClient?: QueryClient,
+): UseQueryResult<TData, TError> & {
+  queryKey: DataTag<QueryKey, TData, TError>
+}
 /**
  * @summary Fetch a named raster layer from a document.
  */
 
-export function useGetDocumentLayer<TData = Awaited<ReturnType<typeof getDocumentLayer>>, TError = ErrorType<ErrorResponse>>(
- documentId: string,
-    layer: DocumentLayer,
-    params?: GetDocumentLayerParams, options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof getDocumentLayer>>, TError, TData>>, request?: SecondParameter<typeof customFetch>}
- , queryClient?: QueryClient
- ):  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> } {
+export function useGetDocumentLayer<
+  TData = Awaited<ReturnType<typeof getDocumentLayer>>,
+  TError = ErrorType<ErrorResponse>,
+>(
+  documentId: string,
+  layer: DocumentLayer,
+  params?: GetDocumentLayerParams,
+  options?: {
+    query?: Partial<
+      UseQueryOptions<
+        Awaited<ReturnType<typeof getDocumentLayer>>,
+        TError,
+        TData
+      >
+    >
+    request?: SecondParameter<typeof customFetch>
+  },
+  queryClient?: QueryClient,
+): UseQueryResult<TData, TError> & {
+  queryKey: DataTag<QueryKey, TData, TError>
+} {
+  const queryOptions = getGetDocumentLayerQueryOptions(
+    documentId,
+    layer,
+    params,
+    options,
+  )
 
-  const queryOptions = getGetDocumentLayerQueryOptions(documentId,layer,params,options)
+  const query = useQuery(queryOptions, queryClient) as UseQueryResult<
+    TData,
+    TError
+  > & { queryKey: DataTag<QueryKey, TData, TError> }
 
-  const query = useQuery(queryOptions, queryClient) as  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> };
-
-  return { ...query, queryKey: queryOptions.queryKey };
+  return { ...query, queryKey: queryOptions.queryKey }
 }
-
-
-
 
 /**
  * @summary Trigger OCR for a document.
  */
-export const getOcrDocumentUrl = (documentId: string,) => {
-
-
-
-
+export const getOcrDocumentUrl = (documentId: string) => {
   return `/api/v1/documents/${documentId}/ocr`
 }
 
-export const ocrDocument = async (documentId: string, options?: RequestInit): Promise<void> => {
-
-  return customFetch<void>(getOcrDocumentUrl(documentId),
-  {
+export const ocrDocument = async (
+  documentId: string,
+  options?: RequestInit,
+): Promise<void> => {
+  return customFetch<void>(getOcrDocumentUrl(documentId), {
     ...options,
-    method: 'POST'
+    method: 'POST',
+  })
+}
 
+export const getOcrDocumentMutationOptions = <
+  TError = ErrorType<ErrorResponse>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof ocrDocument>>,
+    TError,
+    { documentId: string },
+    TContext
+  >
+  request?: SecondParameter<typeof customFetch>
+}): UseMutationOptions<
+  Awaited<ReturnType<typeof ocrDocument>>,
+  TError,
+  { documentId: string },
+  TContext
+> => {
+  const mutationKey = ['ocrDocument']
+  const { mutation: mutationOptions, request: requestOptions } = options
+    ? options.mutation &&
+      'mutationKey' in options.mutation &&
+      options.mutation.mutationKey
+      ? options
+      : { ...options, mutation: { ...options.mutation, mutationKey } }
+    : { mutation: { mutationKey }, request: undefined }
 
+  const mutationFn: MutationFunction<
+    Awaited<ReturnType<typeof ocrDocument>>,
+    { documentId: string }
+  > = (props) => {
+    const { documentId } = props ?? {}
+
+    return ocrDocument(documentId, requestOptions)
   }
-);}
 
+  return { mutationFn, ...mutationOptions }
+}
 
+export type OcrDocumentMutationResult = NonNullable<
+  Awaited<ReturnType<typeof ocrDocument>>
+>
 
+export type OcrDocumentMutationError = ErrorType<ErrorResponse>
 
-export const getOcrDocumentMutationOptions = <TError = ErrorType<ErrorResponse>,
-    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof ocrDocument>>, TError,{documentId: string}, TContext>, request?: SecondParameter<typeof customFetch>}
-): UseMutationOptions<Awaited<ReturnType<typeof ocrDocument>>, TError,{documentId: string}, TContext> => {
-
-const mutationKey = ['ocrDocument'];
-const {mutation: mutationOptions, request: requestOptions} = options ?
-      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
-      options
-      : {...options, mutation: {...options.mutation, mutationKey}}
-      : {mutation: { mutationKey, }, request: undefined};
-
-
-
-
-      const mutationFn: MutationFunction<Awaited<ReturnType<typeof ocrDocument>>, {documentId: string}> = (props) => {
-          const {documentId} = props ?? {};
-
-          return  ocrDocument(documentId,requestOptions)
-        }
-
-
-
-
-
-
-  return  { mutationFn, ...mutationOptions }}
-
-    export type OcrDocumentMutationResult = NonNullable<Awaited<ReturnType<typeof ocrDocument>>>
-
-    export type OcrDocumentMutationError = ErrorType<ErrorResponse>
-
-    /**
+/**
  * @summary Trigger OCR for a document.
  */
-export const useOcrDocument = <TError = ErrorType<ErrorResponse>,
-    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof ocrDocument>>, TError,{documentId: string}, TContext>, request?: SecondParameter<typeof customFetch>}
- , queryClient?: QueryClient): UseMutationResult<
-        Awaited<ReturnType<typeof ocrDocument>>,
-        TError,
-        {documentId: string},
-        TContext
-      > => {
-      return useMutation(getOcrDocumentMutationOptions(options), queryClient);
-    }
-    /**
+export const useOcrDocument = <
+  TError = ErrorType<ErrorResponse>,
+  TContext = unknown,
+>(
+  options?: {
+    mutation?: UseMutationOptions<
+      Awaited<ReturnType<typeof ocrDocument>>,
+      TError,
+      { documentId: string },
+      TContext
+    >
+    request?: SecondParameter<typeof customFetch>
+  },
+  queryClient?: QueryClient,
+): UseMutationResult<
+  Awaited<ReturnType<typeof ocrDocument>>,
+  TError,
+  { documentId: string },
+  TContext
+> => {
+  return useMutation(getOcrDocumentMutationOptions(options), queryClient)
+}
+/**
  * @summary Render translated text for a document.
  */
-export const getRenderDocumentUrl = (documentId: string,) => {
-
-
-
-
+export const getRenderDocumentUrl = (documentId: string) => {
   return `/api/v1/documents/${documentId}/rendering`
 }
 
-export const renderDocument = async (documentId: string,
-    renderRequest: RenderRequest, options?: RequestInit): Promise<void> => {
-
-  return customFetch<void>(getRenderDocumentUrl(documentId),
-  {
+export const renderDocument = async (
+  documentId: string,
+  renderRequest: RenderRequest,
+  options?: RequestInit,
+): Promise<void> => {
+  return customFetch<void>(getRenderDocumentUrl(documentId), {
     ...options,
     method: 'POST',
     headers: { 'Content-Type': 'application/json', ...options?.headers },
-    body: JSON.stringify(
-      renderRequest,)
+    body: JSON.stringify(renderRequest),
+  })
+}
+
+export const getRenderDocumentMutationOptions = <
+  TError = ErrorType<ErrorResponse>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof renderDocument>>,
+    TError,
+    { documentId: string; data: RenderRequest },
+    TContext
+  >
+  request?: SecondParameter<typeof customFetch>
+}): UseMutationOptions<
+  Awaited<ReturnType<typeof renderDocument>>,
+  TError,
+  { documentId: string; data: RenderRequest },
+  TContext
+> => {
+  const mutationKey = ['renderDocument']
+  const { mutation: mutationOptions, request: requestOptions } = options
+    ? options.mutation &&
+      'mutationKey' in options.mutation &&
+      options.mutation.mutationKey
+      ? options
+      : { ...options, mutation: { ...options.mutation, mutationKey } }
+    : { mutation: { mutationKey }, request: undefined }
+
+  const mutationFn: MutationFunction<
+    Awaited<ReturnType<typeof renderDocument>>,
+    { documentId: string; data: RenderRequest }
+  > = (props) => {
+    const { documentId, data } = props ?? {}
+
+    return renderDocument(documentId, data, requestOptions)
   }
-);}
 
+  return { mutationFn, ...mutationOptions }
+}
 
+export type RenderDocumentMutationResult = NonNullable<
+  Awaited<ReturnType<typeof renderDocument>>
+>
+export type RenderDocumentMutationBody = RenderRequest
+export type RenderDocumentMutationError = ErrorType<ErrorResponse>
 
-
-export const getRenderDocumentMutationOptions = <TError = ErrorType<ErrorResponse>,
-    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof renderDocument>>, TError,{documentId: string;data: RenderRequest}, TContext>, request?: SecondParameter<typeof customFetch>}
-): UseMutationOptions<Awaited<ReturnType<typeof renderDocument>>, TError,{documentId: string;data: RenderRequest}, TContext> => {
-
-const mutationKey = ['renderDocument'];
-const {mutation: mutationOptions, request: requestOptions} = options ?
-      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
-      options
-      : {...options, mutation: {...options.mutation, mutationKey}}
-      : {mutation: { mutationKey, }, request: undefined};
-
-
-
-
-      const mutationFn: MutationFunction<Awaited<ReturnType<typeof renderDocument>>, {documentId: string;data: RenderRequest}> = (props) => {
-          const {documentId,data} = props ?? {};
-
-          return  renderDocument(documentId,data,requestOptions)
-        }
-
-
-
-
-
-
-  return  { mutationFn, ...mutationOptions }}
-
-    export type RenderDocumentMutationResult = NonNullable<Awaited<ReturnType<typeof renderDocument>>>
-    export type RenderDocumentMutationBody = RenderRequest
-    export type RenderDocumentMutationError = ErrorType<ErrorResponse>
-
-    /**
+/**
  * @summary Render translated text for a document.
  */
-export const useRenderDocument = <TError = ErrorType<ErrorResponse>,
-    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof renderDocument>>, TError,{documentId: string;data: RenderRequest}, TContext>, request?: SecondParameter<typeof customFetch>}
- , queryClient?: QueryClient): UseMutationResult<
-        Awaited<ReturnType<typeof renderDocument>>,
-        TError,
-        {documentId: string;data: RenderRequest},
-        TContext
-      > => {
-      return useMutation(getRenderDocumentMutationOptions(options), queryClient);
-    }
-    /**
+export const useRenderDocument = <
+  TError = ErrorType<ErrorResponse>,
+  TContext = unknown,
+>(
+  options?: {
+    mutation?: UseMutationOptions<
+      Awaited<ReturnType<typeof renderDocument>>,
+      TError,
+      { documentId: string; data: RenderRequest },
+      TContext
+    >
+    request?: SecondParameter<typeof customFetch>
+  },
+  queryClient?: QueryClient,
+): UseMutationResult<
+  Awaited<ReturnType<typeof renderDocument>>,
+  TError,
+  { documentId: string; data: RenderRequest },
+  TContext
+> => {
+  return useMutation(getRenderDocumentMutationOptions(options), queryClient)
+}
+/**
  * @summary Create a new text block on a document.
  */
-export const getCreateDocumentTextBlockUrl = (documentId: string,) => {
-
-
-
-
+export const getCreateDocumentTextBlockUrl = (documentId: string) => {
   return `/api/v1/documents/${documentId}/text-blocks`
 }
 
-export const createDocumentTextBlock = async (documentId: string,
-    createTextBlock: CreateTextBlock, options?: RequestInit): Promise<TextBlockDetail> => {
+export const createDocumentTextBlock = async (
+  documentId: string,
+  createTextBlock: CreateTextBlock,
+  options?: RequestInit,
+): Promise<TextBlockDetail> => {
+  return customFetch<TextBlockDetail>(
+    getCreateDocumentTextBlockUrl(documentId),
+    {
+      ...options,
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', ...options?.headers },
+      body: JSON.stringify(createTextBlock),
+    },
+  )
+}
 
-  return customFetch<TextBlockDetail>(getCreateDocumentTextBlockUrl(documentId),
-  {
-    ...options,
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json', ...options?.headers },
-    body: JSON.stringify(
-      createTextBlock,)
+export const getCreateDocumentTextBlockMutationOptions = <
+  TError = ErrorType<ErrorResponse>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof createDocumentTextBlock>>,
+    TError,
+    { documentId: string; data: CreateTextBlock },
+    TContext
+  >
+  request?: SecondParameter<typeof customFetch>
+}): UseMutationOptions<
+  Awaited<ReturnType<typeof createDocumentTextBlock>>,
+  TError,
+  { documentId: string; data: CreateTextBlock },
+  TContext
+> => {
+  const mutationKey = ['createDocumentTextBlock']
+  const { mutation: mutationOptions, request: requestOptions } = options
+    ? options.mutation &&
+      'mutationKey' in options.mutation &&
+      options.mutation.mutationKey
+      ? options
+      : { ...options, mutation: { ...options.mutation, mutationKey } }
+    : { mutation: { mutationKey }, request: undefined }
+
+  const mutationFn: MutationFunction<
+    Awaited<ReturnType<typeof createDocumentTextBlock>>,
+    { documentId: string; data: CreateTextBlock }
+  > = (props) => {
+    const { documentId, data } = props ?? {}
+
+    return createDocumentTextBlock(documentId, data, requestOptions)
   }
-);}
 
+  return { mutationFn, ...mutationOptions }
+}
 
+export type CreateDocumentTextBlockMutationResult = NonNullable<
+  Awaited<ReturnType<typeof createDocumentTextBlock>>
+>
+export type CreateDocumentTextBlockMutationBody = CreateTextBlock
+export type CreateDocumentTextBlockMutationError = ErrorType<ErrorResponse>
 
-
-export const getCreateDocumentTextBlockMutationOptions = <TError = ErrorType<ErrorResponse>,
-    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof createDocumentTextBlock>>, TError,{documentId: string;data: CreateTextBlock}, TContext>, request?: SecondParameter<typeof customFetch>}
-): UseMutationOptions<Awaited<ReturnType<typeof createDocumentTextBlock>>, TError,{documentId: string;data: CreateTextBlock}, TContext> => {
-
-const mutationKey = ['createDocumentTextBlock'];
-const {mutation: mutationOptions, request: requestOptions} = options ?
-      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
-      options
-      : {...options, mutation: {...options.mutation, mutationKey}}
-      : {mutation: { mutationKey, }, request: undefined};
-
-
-
-
-      const mutationFn: MutationFunction<Awaited<ReturnType<typeof createDocumentTextBlock>>, {documentId: string;data: CreateTextBlock}> = (props) => {
-          const {documentId,data} = props ?? {};
-
-          return  createDocumentTextBlock(documentId,data,requestOptions)
-        }
-
-
-
-
-
-
-  return  { mutationFn, ...mutationOptions }}
-
-    export type CreateDocumentTextBlockMutationResult = NonNullable<Awaited<ReturnType<typeof createDocumentTextBlock>>>
-    export type CreateDocumentTextBlockMutationBody = CreateTextBlock
-    export type CreateDocumentTextBlockMutationError = ErrorType<ErrorResponse>
-
-    /**
+/**
  * @summary Create a new text block on a document.
  */
-export const useCreateDocumentTextBlock = <TError = ErrorType<ErrorResponse>,
-    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof createDocumentTextBlock>>, TError,{documentId: string;data: CreateTextBlock}, TContext>, request?: SecondParameter<typeof customFetch>}
- , queryClient?: QueryClient): UseMutationResult<
-        Awaited<ReturnType<typeof createDocumentTextBlock>>,
-        TError,
-        {documentId: string;data: CreateTextBlock},
-        TContext
-      > => {
-      return useMutation(getCreateDocumentTextBlockMutationOptions(options), queryClient);
-    }
-    /**
+export const useCreateDocumentTextBlock = <
+  TError = ErrorType<ErrorResponse>,
+  TContext = unknown,
+>(
+  options?: {
+    mutation?: UseMutationOptions<
+      Awaited<ReturnType<typeof createDocumentTextBlock>>,
+      TError,
+      { documentId: string; data: CreateTextBlock },
+      TContext
+    >
+    request?: SecondParameter<typeof customFetch>
+  },
+  queryClient?: QueryClient,
+): UseMutationResult<
+  Awaited<ReturnType<typeof createDocumentTextBlock>>,
+  TError,
+  { documentId: string; data: CreateTextBlock },
+  TContext
+> => {
+  return useMutation(
+    getCreateDocumentTextBlockMutationOptions(options),
+    queryClient,
+  )
+}
+/**
  * @summary Delete a text block from a document.
  */
-export const getDeleteDocumentTextBlockUrl = (documentId: string,
-    textBlockId: string,) => {
-
-
-
-
+export const getDeleteDocumentTextBlockUrl = (
+  documentId: string,
+  textBlockId: string,
+) => {
   return `/api/v1/documents/${documentId}/text-blocks/${textBlockId}`
 }
 
-export const deleteDocumentTextBlock = async (documentId: string,
-    textBlockId: string, options?: RequestInit): Promise<void> => {
+export const deleteDocumentTextBlock = async (
+  documentId: string,
+  textBlockId: string,
+  options?: RequestInit,
+): Promise<void> => {
+  return customFetch<void>(
+    getDeleteDocumentTextBlockUrl(documentId, textBlockId),
+    {
+      ...options,
+      method: 'DELETE',
+    },
+  )
+}
 
-  return customFetch<void>(getDeleteDocumentTextBlockUrl(documentId,textBlockId),
-  {
-    ...options,
-    method: 'DELETE'
+export const getDeleteDocumentTextBlockMutationOptions = <
+  TError = ErrorType<ErrorResponse>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof deleteDocumentTextBlock>>,
+    TError,
+    { documentId: string; textBlockId: string },
+    TContext
+  >
+  request?: SecondParameter<typeof customFetch>
+}): UseMutationOptions<
+  Awaited<ReturnType<typeof deleteDocumentTextBlock>>,
+  TError,
+  { documentId: string; textBlockId: string },
+  TContext
+> => {
+  const mutationKey = ['deleteDocumentTextBlock']
+  const { mutation: mutationOptions, request: requestOptions } = options
+    ? options.mutation &&
+      'mutationKey' in options.mutation &&
+      options.mutation.mutationKey
+      ? options
+      : { ...options, mutation: { ...options.mutation, mutationKey } }
+    : { mutation: { mutationKey }, request: undefined }
 
+  const mutationFn: MutationFunction<
+    Awaited<ReturnType<typeof deleteDocumentTextBlock>>,
+    { documentId: string; textBlockId: string }
+  > = (props) => {
+    const { documentId, textBlockId } = props ?? {}
 
+    return deleteDocumentTextBlock(documentId, textBlockId, requestOptions)
   }
-);}
 
+  return { mutationFn, ...mutationOptions }
+}
 
+export type DeleteDocumentTextBlockMutationResult = NonNullable<
+  Awaited<ReturnType<typeof deleteDocumentTextBlock>>
+>
 
+export type DeleteDocumentTextBlockMutationError = ErrorType<ErrorResponse>
 
-export const getDeleteDocumentTextBlockMutationOptions = <TError = ErrorType<ErrorResponse>,
-    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof deleteDocumentTextBlock>>, TError,{documentId: string;textBlockId: string}, TContext>, request?: SecondParameter<typeof customFetch>}
-): UseMutationOptions<Awaited<ReturnType<typeof deleteDocumentTextBlock>>, TError,{documentId: string;textBlockId: string}, TContext> => {
-
-const mutationKey = ['deleteDocumentTextBlock'];
-const {mutation: mutationOptions, request: requestOptions} = options ?
-      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
-      options
-      : {...options, mutation: {...options.mutation, mutationKey}}
-      : {mutation: { mutationKey, }, request: undefined};
-
-
-
-
-      const mutationFn: MutationFunction<Awaited<ReturnType<typeof deleteDocumentTextBlock>>, {documentId: string;textBlockId: string}> = (props) => {
-          const {documentId,textBlockId} = props ?? {};
-
-          return  deleteDocumentTextBlock(documentId,textBlockId,requestOptions)
-        }
-
-
-
-
-
-
-  return  { mutationFn, ...mutationOptions }}
-
-    export type DeleteDocumentTextBlockMutationResult = NonNullable<Awaited<ReturnType<typeof deleteDocumentTextBlock>>>
-
-    export type DeleteDocumentTextBlockMutationError = ErrorType<ErrorResponse>
-
-    /**
+/**
  * @summary Delete a text block from a document.
  */
-export const useDeleteDocumentTextBlock = <TError = ErrorType<ErrorResponse>,
-    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof deleteDocumentTextBlock>>, TError,{documentId: string;textBlockId: string}, TContext>, request?: SecondParameter<typeof customFetch>}
- , queryClient?: QueryClient): UseMutationResult<
-        Awaited<ReturnType<typeof deleteDocumentTextBlock>>,
-        TError,
-        {documentId: string;textBlockId: string},
-        TContext
-      > => {
-      return useMutation(getDeleteDocumentTextBlockMutationOptions(options), queryClient);
-    }
-    /**
+export const useDeleteDocumentTextBlock = <
+  TError = ErrorType<ErrorResponse>,
+  TContext = unknown,
+>(
+  options?: {
+    mutation?: UseMutationOptions<
+      Awaited<ReturnType<typeof deleteDocumentTextBlock>>,
+      TError,
+      { documentId: string; textBlockId: string },
+      TContext
+    >
+    request?: SecondParameter<typeof customFetch>
+  },
+  queryClient?: QueryClient,
+): UseMutationResult<
+  Awaited<ReturnType<typeof deleteDocumentTextBlock>>,
+  TError,
+  { documentId: string; textBlockId: string },
+  TContext
+> => {
+  return useMutation(
+    getDeleteDocumentTextBlockMutationOptions(options),
+    queryClient,
+  )
+}
+/**
  * @summary Update a text block in place.
  */
-export const getUpdateDocumentTextBlockUrl = (documentId: string,
-    textBlockId: string,) => {
-
-
-
-
+export const getUpdateDocumentTextBlockUrl = (
+  documentId: string,
+  textBlockId: string,
+) => {
   return `/api/v1/documents/${documentId}/text-blocks/${textBlockId}`
 }
 
-export const updateDocumentTextBlock = async (documentId: string,
-    textBlockId: string,
-    textBlockPatch: TextBlockPatch, options?: RequestInit): Promise<TextBlockDetail> => {
+export const updateDocumentTextBlock = async (
+  documentId: string,
+  textBlockId: string,
+  textBlockPatch: TextBlockPatch,
+  options?: RequestInit,
+): Promise<TextBlockDetail> => {
+  return customFetch<TextBlockDetail>(
+    getUpdateDocumentTextBlockUrl(documentId, textBlockId),
+    {
+      ...options,
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json', ...options?.headers },
+      body: JSON.stringify(textBlockPatch),
+    },
+  )
+}
 
-  return customFetch<TextBlockDetail>(getUpdateDocumentTextBlockUrl(documentId,textBlockId),
-  {
-    ...options,
-    method: 'PATCH',
-    headers: { 'Content-Type': 'application/json', ...options?.headers },
-    body: JSON.stringify(
-      textBlockPatch,)
+export const getUpdateDocumentTextBlockMutationOptions = <
+  TError = ErrorType<ErrorResponse>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof updateDocumentTextBlock>>,
+    TError,
+    { documentId: string; textBlockId: string; data: TextBlockPatch },
+    TContext
+  >
+  request?: SecondParameter<typeof customFetch>
+}): UseMutationOptions<
+  Awaited<ReturnType<typeof updateDocumentTextBlock>>,
+  TError,
+  { documentId: string; textBlockId: string; data: TextBlockPatch },
+  TContext
+> => {
+  const mutationKey = ['updateDocumentTextBlock']
+  const { mutation: mutationOptions, request: requestOptions } = options
+    ? options.mutation &&
+      'mutationKey' in options.mutation &&
+      options.mutation.mutationKey
+      ? options
+      : { ...options, mutation: { ...options.mutation, mutationKey } }
+    : { mutation: { mutationKey }, request: undefined }
+
+  const mutationFn: MutationFunction<
+    Awaited<ReturnType<typeof updateDocumentTextBlock>>,
+    { documentId: string; textBlockId: string; data: TextBlockPatch }
+  > = (props) => {
+    const { documentId, textBlockId, data } = props ?? {}
+
+    return updateDocumentTextBlock(
+      documentId,
+      textBlockId,
+      data,
+      requestOptions,
+    )
   }
-);}
 
+  return { mutationFn, ...mutationOptions }
+}
 
+export type UpdateDocumentTextBlockMutationResult = NonNullable<
+  Awaited<ReturnType<typeof updateDocumentTextBlock>>
+>
+export type UpdateDocumentTextBlockMutationBody = TextBlockPatch
+export type UpdateDocumentTextBlockMutationError = ErrorType<ErrorResponse>
 
-
-export const getUpdateDocumentTextBlockMutationOptions = <TError = ErrorType<ErrorResponse>,
-    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof updateDocumentTextBlock>>, TError,{documentId: string;textBlockId: string;data: TextBlockPatch}, TContext>, request?: SecondParameter<typeof customFetch>}
-): UseMutationOptions<Awaited<ReturnType<typeof updateDocumentTextBlock>>, TError,{documentId: string;textBlockId: string;data: TextBlockPatch}, TContext> => {
-
-const mutationKey = ['updateDocumentTextBlock'];
-const {mutation: mutationOptions, request: requestOptions} = options ?
-      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
-      options
-      : {...options, mutation: {...options.mutation, mutationKey}}
-      : {mutation: { mutationKey, }, request: undefined};
-
-
-
-
-      const mutationFn: MutationFunction<Awaited<ReturnType<typeof updateDocumentTextBlock>>, {documentId: string;textBlockId: string;data: TextBlockPatch}> = (props) => {
-          const {documentId,textBlockId,data} = props ?? {};
-
-          return  updateDocumentTextBlock(documentId,textBlockId,data,requestOptions)
-        }
-
-
-
-
-
-
-  return  { mutationFn, ...mutationOptions }}
-
-    export type UpdateDocumentTextBlockMutationResult = NonNullable<Awaited<ReturnType<typeof updateDocumentTextBlock>>>
-    export type UpdateDocumentTextBlockMutationBody = TextBlockPatch
-    export type UpdateDocumentTextBlockMutationError = ErrorType<ErrorResponse>
-
-    /**
+/**
  * @summary Update a text block in place.
  */
-export const useUpdateDocumentTextBlock = <TError = ErrorType<ErrorResponse>,
-    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof updateDocumentTextBlock>>, TError,{documentId: string;textBlockId: string;data: TextBlockPatch}, TContext>, request?: SecondParameter<typeof customFetch>}
- , queryClient?: QueryClient): UseMutationResult<
-        Awaited<ReturnType<typeof updateDocumentTextBlock>>,
-        TError,
-        {documentId: string;textBlockId: string;data: TextBlockPatch},
-        TContext
-      > => {
-      return useMutation(getUpdateDocumentTextBlockMutationOptions(options), queryClient);
-    }
-    /**
+export const useUpdateDocumentTextBlock = <
+  TError = ErrorType<ErrorResponse>,
+  TContext = unknown,
+>(
+  options?: {
+    mutation?: UseMutationOptions<
+      Awaited<ReturnType<typeof updateDocumentTextBlock>>,
+      TError,
+      { documentId: string; textBlockId: string; data: TextBlockPatch },
+      TContext
+    >
+    request?: SecondParameter<typeof customFetch>
+  },
+  queryClient?: QueryClient,
+): UseMutationResult<
+  Awaited<ReturnType<typeof updateDocumentTextBlock>>,
+  TError,
+  { documentId: string; textBlockId: string; data: TextBlockPatch },
+  TContext
+> => {
+  return useMutation(
+    getUpdateDocumentTextBlockMutationOptions(options),
+    queryClient,
+  )
+}
+/**
  * @summary Fetch a thumbnail preview for a document.
  */
-export const getGetDocumentThumbnailUrl = (documentId: string,
-    params?: GetDocumentThumbnailParams,) => {
-  const normalizedParams = new URLSearchParams();
+export const getGetDocumentThumbnailUrl = (
+  documentId: string,
+  params?: GetDocumentThumbnailParams,
+) => {
+  const normalizedParams = new URLSearchParams()
 
   Object.entries(params || {}).forEach(([key, value]) => {
-
     if (value !== undefined) {
       normalizedParams.append(key, value === null ? 'null' : value.toString())
     }
-  });
+  })
 
-  const stringifiedParams = normalizedParams.toString();
+  const stringifiedParams = normalizedParams.toString()
 
-  return stringifiedParams.length > 0 ? `/api/v1/documents/${documentId}/thumbnail?${stringifiedParams}` : `/api/v1/documents/${documentId}/thumbnail`
+  return stringifiedParams.length > 0
+    ? `/api/v1/documents/${documentId}/thumbnail?${stringifiedParams}`
+    : `/api/v1/documents/${documentId}/thumbnail`
 }
 
-export const getDocumentThumbnail = async (documentId: string,
-    params?: GetDocumentThumbnailParams, options?: RequestInit): Promise<Blob> => {
-
-  return customFetch<Blob>(getGetDocumentThumbnailUrl(documentId,params),
-  {
+export const getDocumentThumbnail = async (
+  documentId: string,
+  params?: GetDocumentThumbnailParams,
+  options?: RequestInit,
+): Promise<Blob> => {
+  return customFetch<Blob>(getGetDocumentThumbnailUrl(documentId, params), {
     ...options,
-    method: 'GET'
-
-
-  }
-);}
-
-
-
-
-
-export const getGetDocumentThumbnailQueryKey = (documentId: string,
-    params?: GetDocumentThumbnailParams,) => {
-    return [
-    `/api/v1/documents/${documentId}/thumbnail`, ...(params ? [params] : [])
-    ] as const;
-    }
-
-
-export const getGetDocumentThumbnailQueryOptions = <TData = Awaited<ReturnType<typeof getDocumentThumbnail>>, TError = ErrorType<ErrorResponse>>(documentId: string,
-    params?: GetDocumentThumbnailParams, options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof getDocumentThumbnail>>, TError, TData>>, request?: SecondParameter<typeof customFetch>}
-) => {
-
-const {query: queryOptions, request: requestOptions} = options ?? {};
-
-  const queryKey =  queryOptions?.queryKey ?? getGetDocumentThumbnailQueryKey(documentId,params);
-
-
-
-    const queryFn: QueryFunction<Awaited<ReturnType<typeof getDocumentThumbnail>>> = ({ signal }) => getDocumentThumbnail(documentId,params, { signal, ...requestOptions });
-
-
-
-
-
-   return  { queryKey, queryFn, enabled: !!(documentId), ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof getDocumentThumbnail>>, TError, TData> & { queryKey: DataTag<QueryKey, TData, TError> }
+    method: 'GET',
+  })
 }
 
-export type GetDocumentThumbnailQueryResult = NonNullable<Awaited<ReturnType<typeof getDocumentThumbnail>>>
+export const getGetDocumentThumbnailQueryKey = (
+  documentId: string,
+  params?: GetDocumentThumbnailParams,
+) => {
+  return [
+    `/api/v1/documents/${documentId}/thumbnail`,
+    ...(params ? [params] : []),
+  ] as const
+}
+
+export const getGetDocumentThumbnailQueryOptions = <
+  TData = Awaited<ReturnType<typeof getDocumentThumbnail>>,
+  TError = ErrorType<ErrorResponse>,
+>(
+  documentId: string,
+  params?: GetDocumentThumbnailParams,
+  options?: {
+    query?: Partial<
+      UseQueryOptions<
+        Awaited<ReturnType<typeof getDocumentThumbnail>>,
+        TError,
+        TData
+      >
+    >
+    request?: SecondParameter<typeof customFetch>
+  },
+) => {
+  const { query: queryOptions, request: requestOptions } = options ?? {}
+
+  const queryKey =
+    queryOptions?.queryKey ??
+    getGetDocumentThumbnailQueryKey(documentId, params)
+
+  const queryFn: QueryFunction<
+    Awaited<ReturnType<typeof getDocumentThumbnail>>
+  > = ({ signal }) =>
+    getDocumentThumbnail(documentId, params, { signal, ...requestOptions })
+
+  return {
+    queryKey,
+    queryFn,
+    enabled: !!documentId,
+    ...queryOptions,
+  } as UseQueryOptions<
+    Awaited<ReturnType<typeof getDocumentThumbnail>>,
+    TError,
+    TData
+  > & { queryKey: DataTag<QueryKey, TData, TError> }
+}
+
+export type GetDocumentThumbnailQueryResult = NonNullable<
+  Awaited<ReturnType<typeof getDocumentThumbnail>>
+>
 export type GetDocumentThumbnailQueryError = ErrorType<ErrorResponse>
 
-
-export function useGetDocumentThumbnail<TData = Awaited<ReturnType<typeof getDocumentThumbnail>>, TError = ErrorType<ErrorResponse>>(
- documentId: string,
-    params: undefined |  GetDocumentThumbnailParams, options: { query:Partial<UseQueryOptions<Awaited<ReturnType<typeof getDocumentThumbnail>>, TError, TData>> & Pick<
+export function useGetDocumentThumbnail<
+  TData = Awaited<ReturnType<typeof getDocumentThumbnail>>,
+  TError = ErrorType<ErrorResponse>,
+>(
+  documentId: string,
+  params: undefined | GetDocumentThumbnailParams,
+  options: {
+    query: Partial<
+      UseQueryOptions<
+        Awaited<ReturnType<typeof getDocumentThumbnail>>,
+        TError,
+        TData
+      >
+    > &
+      Pick<
         DefinedInitialDataOptions<
           Awaited<ReturnType<typeof getDocumentThumbnail>>,
           TError,
           Awaited<ReturnType<typeof getDocumentThumbnail>>
-        > , 'initialData'
-      >, request?: SecondParameter<typeof customFetch>}
- , queryClient?: QueryClient
-  ):  DefinedUseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> }
-export function useGetDocumentThumbnail<TData = Awaited<ReturnType<typeof getDocumentThumbnail>>, TError = ErrorType<ErrorResponse>>(
- documentId: string,
-    params?: GetDocumentThumbnailParams, options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof getDocumentThumbnail>>, TError, TData>> & Pick<
+        >,
+        'initialData'
+      >
+    request?: SecondParameter<typeof customFetch>
+  },
+  queryClient?: QueryClient,
+): DefinedUseQueryResult<TData, TError> & {
+  queryKey: DataTag<QueryKey, TData, TError>
+}
+export function useGetDocumentThumbnail<
+  TData = Awaited<ReturnType<typeof getDocumentThumbnail>>,
+  TError = ErrorType<ErrorResponse>,
+>(
+  documentId: string,
+  params?: GetDocumentThumbnailParams,
+  options?: {
+    query?: Partial<
+      UseQueryOptions<
+        Awaited<ReturnType<typeof getDocumentThumbnail>>,
+        TError,
+        TData
+      >
+    > &
+      Pick<
         UndefinedInitialDataOptions<
           Awaited<ReturnType<typeof getDocumentThumbnail>>,
           TError,
           Awaited<ReturnType<typeof getDocumentThumbnail>>
-        > , 'initialData'
-      >, request?: SecondParameter<typeof customFetch>}
- , queryClient?: QueryClient
-  ):  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> }
-export function useGetDocumentThumbnail<TData = Awaited<ReturnType<typeof getDocumentThumbnail>>, TError = ErrorType<ErrorResponse>>(
- documentId: string,
-    params?: GetDocumentThumbnailParams, options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof getDocumentThumbnail>>, TError, TData>>, request?: SecondParameter<typeof customFetch>}
- , queryClient?: QueryClient
-  ):  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> }
+        >,
+        'initialData'
+      >
+    request?: SecondParameter<typeof customFetch>
+  },
+  queryClient?: QueryClient,
+): UseQueryResult<TData, TError> & {
+  queryKey: DataTag<QueryKey, TData, TError>
+}
+export function useGetDocumentThumbnail<
+  TData = Awaited<ReturnType<typeof getDocumentThumbnail>>,
+  TError = ErrorType<ErrorResponse>,
+>(
+  documentId: string,
+  params?: GetDocumentThumbnailParams,
+  options?: {
+    query?: Partial<
+      UseQueryOptions<
+        Awaited<ReturnType<typeof getDocumentThumbnail>>,
+        TError,
+        TData
+      >
+    >
+    request?: SecondParameter<typeof customFetch>
+  },
+  queryClient?: QueryClient,
+): UseQueryResult<TData, TError> & {
+  queryKey: DataTag<QueryKey, TData, TError>
+}
 /**
  * @summary Fetch a thumbnail preview for a document.
  */
 
-export function useGetDocumentThumbnail<TData = Awaited<ReturnType<typeof getDocumentThumbnail>>, TError = ErrorType<ErrorResponse>>(
- documentId: string,
-    params?: GetDocumentThumbnailParams, options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof getDocumentThumbnail>>, TError, TData>>, request?: SecondParameter<typeof customFetch>}
- , queryClient?: QueryClient
- ):  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> } {
+export function useGetDocumentThumbnail<
+  TData = Awaited<ReturnType<typeof getDocumentThumbnail>>,
+  TError = ErrorType<ErrorResponse>,
+>(
+  documentId: string,
+  params?: GetDocumentThumbnailParams,
+  options?: {
+    query?: Partial<
+      UseQueryOptions<
+        Awaited<ReturnType<typeof getDocumentThumbnail>>,
+        TError,
+        TData
+      >
+    >
+    request?: SecondParameter<typeof customFetch>
+  },
+  queryClient?: QueryClient,
+): UseQueryResult<TData, TError> & {
+  queryKey: DataTag<QueryKey, TData, TError>
+} {
+  const queryOptions = getGetDocumentThumbnailQueryOptions(
+    documentId,
+    params,
+    options,
+  )
 
-  const queryOptions = getGetDocumentThumbnailQueryOptions(documentId,params,options)
+  const query = useQuery(queryOptions, queryClient) as UseQueryResult<
+    TData,
+    TError
+  > & { queryKey: DataTag<QueryKey, TData, TError> }
 
-  const query = useQuery(queryOptions, queryClient) as  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> };
-
-  return { ...query, queryKey: queryOptions.queryKey };
+  return { ...query, queryKey: queryOptions.queryKey }
 }
-
-
-
 
 /**
  * @summary Run translation for a document or a single text block.
  */
-export const getTranslateDocumentUrl = (documentId: string,) => {
-
-
-
-
+export const getTranslateDocumentUrl = (documentId: string) => {
   return `/api/v1/documents/${documentId}/translation`
 }
 
-export const translateDocument = async (documentId: string,
-    translateRequest: TranslateRequest, options?: RequestInit): Promise<void> => {
-
-  return customFetch<void>(getTranslateDocumentUrl(documentId),
-  {
+export const translateDocument = async (
+  documentId: string,
+  translateRequest: TranslateRequest,
+  options?: RequestInit,
+): Promise<void> => {
+  return customFetch<void>(getTranslateDocumentUrl(documentId), {
     ...options,
     method: 'POST',
     headers: { 'Content-Type': 'application/json', ...options?.headers },
-    body: JSON.stringify(
-      translateRequest,)
+    body: JSON.stringify(translateRequest),
+  })
+}
+
+export const getTranslateDocumentMutationOptions = <
+  TError = ErrorType<ErrorResponse>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof translateDocument>>,
+    TError,
+    { documentId: string; data: TranslateRequest },
+    TContext
+  >
+  request?: SecondParameter<typeof customFetch>
+}): UseMutationOptions<
+  Awaited<ReturnType<typeof translateDocument>>,
+  TError,
+  { documentId: string; data: TranslateRequest },
+  TContext
+> => {
+  const mutationKey = ['translateDocument']
+  const { mutation: mutationOptions, request: requestOptions } = options
+    ? options.mutation &&
+      'mutationKey' in options.mutation &&
+      options.mutation.mutationKey
+      ? options
+      : { ...options, mutation: { ...options.mutation, mutationKey } }
+    : { mutation: { mutationKey }, request: undefined }
+
+  const mutationFn: MutationFunction<
+    Awaited<ReturnType<typeof translateDocument>>,
+    { documentId: string; data: TranslateRequest }
+  > = (props) => {
+    const { documentId, data } = props ?? {}
+
+    return translateDocument(documentId, data, requestOptions)
   }
-);}
 
+  return { mutationFn, ...mutationOptions }
+}
 
+export type TranslateDocumentMutationResult = NonNullable<
+  Awaited<ReturnType<typeof translateDocument>>
+>
+export type TranslateDocumentMutationBody = TranslateRequest
+export type TranslateDocumentMutationError = ErrorType<ErrorResponse>
 
-
-export const getTranslateDocumentMutationOptions = <TError = ErrorType<ErrorResponse>,
-    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof translateDocument>>, TError,{documentId: string;data: TranslateRequest}, TContext>, request?: SecondParameter<typeof customFetch>}
-): UseMutationOptions<Awaited<ReturnType<typeof translateDocument>>, TError,{documentId: string;data: TranslateRequest}, TContext> => {
-
-const mutationKey = ['translateDocument'];
-const {mutation: mutationOptions, request: requestOptions} = options ?
-      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
-      options
-      : {...options, mutation: {...options.mutation, mutationKey}}
-      : {mutation: { mutationKey, }, request: undefined};
-
-
-
-
-      const mutationFn: MutationFunction<Awaited<ReturnType<typeof translateDocument>>, {documentId: string;data: TranslateRequest}> = (props) => {
-          const {documentId,data} = props ?? {};
-
-          return  translateDocument(documentId,data,requestOptions)
-        }
-
-
-
-
-
-
-  return  { mutationFn, ...mutationOptions }}
-
-    export type TranslateDocumentMutationResult = NonNullable<Awaited<ReturnType<typeof translateDocument>>>
-    export type TranslateDocumentMutationBody = TranslateRequest
-    export type TranslateDocumentMutationError = ErrorType<ErrorResponse>
-
-    /**
+/**
  * @summary Run translation for a document or a single text block.
  */
-export const useTranslateDocument = <TError = ErrorType<ErrorResponse>,
-    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof translateDocument>>, TError,{documentId: string;data: TranslateRequest}, TContext>, request?: SecondParameter<typeof customFetch>}
- , queryClient?: QueryClient): UseMutationResult<
-        Awaited<ReturnType<typeof translateDocument>>,
-        TError,
-        {documentId: string;data: TranslateRequest},
-        TContext
-      > => {
-      return useMutation(getTranslateDocumentMutationOptions(options), queryClient);
-    }
+export const useTranslateDocument = <
+  TError = ErrorType<ErrorResponse>,
+  TContext = unknown,
+>(
+  options?: {
+    mutation?: UseMutationOptions<
+      Awaited<ReturnType<typeof translateDocument>>,
+      TError,
+      { documentId: string; data: TranslateRequest },
+      TContext
+    >
+    request?: SecondParameter<typeof customFetch>
+  },
+  queryClient?: QueryClient,
+): UseMutationResult<
+  Awaited<ReturnType<typeof translateDocument>>,
+  TError,
+  { documentId: string; data: TranslateRequest },
+  TContext
+> => {
+  return useMutation(getTranslateDocumentMutationOptions(options), queryClient)
+}

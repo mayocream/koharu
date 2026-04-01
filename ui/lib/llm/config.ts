@@ -1,8 +1,8 @@
 'use client'
 
+import { ALL_PRESETS } from '@/lib/llm/presets'
 import {
   usePreferencesStore,
-  ALL_PRESETS,
   type LocalLlmPresetConfig,
 } from '@/lib/stores/preferencesStore'
 import { parsePresetFromModelId } from '@/lib/llm/models'

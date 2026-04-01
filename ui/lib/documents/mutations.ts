@@ -1,7 +1,7 @@
 'use client'
 
 import { useCallback } from 'react'
-import { QueryClient, useQueryClient } from '@tanstack/react-query'
+import { type QueryClient, useQueryClient } from '@tanstack/react-query'
 import {
   addDocuments as addPickedDocuments,
   addFolder as addPickedFolder,
@@ -12,26 +12,44 @@ import {
   openDocuments as openPickedDocuments,
   openFolder as openPickedFolder,
 } from '@/lib/documents/actions'
-import { mapDocumentResource } from '@/lib/documents/resource'
+import {
+  documentsQueries,
+  getCachedDocument,
+  getCachedDocuments,
+  getDocumentQueryKey,
+  invalidateDocumentDetails,
+  invalidateDocumentResources,
+  invalidateDocumentsList,
+  prefetchDocument,
+  setCachedDocument,
+  setCachedDocuments,
+} from '@/lib/documents/queries'
 import { resolveCurrentDocumentId } from '@/lib/documents/selection'
 import {
   detectDocument as detectRemoteDocument,
   exportAllDocuments,
-  getDocument as getRemoteDocument,
-  getGetDocumentQueryKey,
-  getGetDocumentThumbnailUrl,
-  getListDocumentsQueryKey,
   inpaintDocument as inpaintRemoteDocument,
   inpaintDocumentRegion as inpaintRemoteRegion,
-  listDocuments as listRemoteDocuments,
   ocrDocument as ocrRemoteDocument,
   renderDocument as renderRemoteDocument,
 } from '@/lib/generated/orval/documents/documents'
-import { cancelActivePipelineJob, startPipelineProcess } from '@/lib/jobs/actions'
-import { getBaseUrlForModel, getPresetConfigForModel } from '@/lib/llm/config'
-import { toBackendModelId } from '@/lib/llm/models'
-import { getCachedLlmModels } from '@/lib/llm/queries'
-import { ProgressBarStatus, getCurrentWindow } from '@/lib/native'
+import {
+  cancelActivePipelineJob,
+  startPipelineProcess,
+} from '@/lib/jobs/actions'
+import { buildPipelineJobRequest } from '@/lib/llm/runtime'
+import {
+  ProgressBarStatus,
+  clearWindowProgress,
+  setWindowProgress,
+} from '@/lib/native'
+import {
+  OPERATION_STEP,
+  OPERATION_TYPE,
+  type OperationStep,
+  type OperationType,
+} from '@/lib/operations'
+import { reportAppError } from '@/lib/errors'
 import type { DocumentSummary } from '@/lib/protocol'
 import { withRpcError } from '@/lib/rpc'
 import {
@@ -43,38 +61,44 @@ import {
   flushTextBlockSync,
 } from '@/lib/services/syncQueues'
 import { useEditorUiStore } from '@/lib/stores/editorUiStore'
-import { useLlmUiStore } from '@/lib/stores/llmUiStore'
 import { useOperationStore } from '@/lib/stores/operationStore'
 import { usePreferencesStore } from '@/lib/stores/preferencesStore'
 import { InpaintRegion, TextBlock } from '@/types'
 
-const invalidateCurrentDocument = async (
-  queryClient: QueryClient,
-  documentId?: string,
-) => {
-  if (!documentId) return
-  await queryClient.invalidateQueries({
-    queryKey: getGetDocumentQueryKey(documentId),
-  })
+type LoadSelectionOptions<T> = {
+  pick: () => Promise<T>
+  selectDocumentId: (
+    documents: DocumentSummary[],
+    previousCount: number,
+  ) => string | undefined
+  shouldSkipSync?: (result: T, previousCount: number) => boolean
 }
 
-const invalidateThumbnailAtIndex = async (
-  queryClient: QueryClient,
-  documentId?: string,
-) => {
-  if (!documentId) return
-  await queryClient.invalidateQueries({
-    predicate: (query) =>
-      query.queryKey[0] === getGetDocumentThumbnailUrl(documentId),
-  })
+type DocumentProcessOptions = {
+  documentId?: string
+  step: Extract<
+    OperationStep,
+    | typeof OPERATION_STEP.detect
+    | typeof OPERATION_STEP.ocr
+    | typeof OPERATION_STEP.inpaint
+    | typeof OPERATION_STEP.render
+  >
+  rpcAction: 'detect' | 'ocr' | 'inpaint' | 'render'
+  before?: () => Promise<void>
+  execute: (documentId: string) => Promise<void>
+  after?: () => void
 }
 
-const getCachedDocuments = (queryClient: QueryClient) =>
-  (queryClient.getQueryData(getListDocumentsQueryKey()) ?? []) as DocumentSummary[]
+const getCurrentDocumentId = (documentId?: string) =>
+  documentId ?? useEditorUiStore.getState().currentDocumentId
+
+const getKnownDocumentCount = (queryClient: QueryClient) =>
+  getCachedDocuments(queryClient).length ||
+  useEditorUiStore.getState().totalPages
 
 const syncDocumentsList = async (queryClient: QueryClient) => {
-  const documents = (await listRemoteDocuments()) as DocumentSummary[]
-  queryClient.setQueryData(getListDocumentsQueryKey(), documents)
+  const documents = await documentsQueries.list.fetcher()
+  setCachedDocuments(queryClient, documents as DocumentSummary[])
   return documents
 }
 
@@ -103,40 +127,16 @@ const applyDocumentsState = (
   return nextDocumentId
 }
 
-const prefetchDocument = async (
-  queryClient: QueryClient,
-  documentId?: string,
-) => {
-  if (!documentId) return
-  await queryClient.prefetchQuery({
-    queryKey: getGetDocumentQueryKey(documentId),
-    queryFn: async () => mapDocumentResource(await getRemoteDocument(documentId)),
-  })
-}
-
-const isDocumentDetailQuery = (queryKey: readonly unknown[]) =>
-  typeof queryKey[0] === 'string' && /^\/api\/v1\/documents\/[^/]+$/.test(queryKey[0])
-
-const isDocumentThumbnailQuery = (queryKey: readonly unknown[]) =>
-  typeof queryKey[0] === 'string' &&
-  /^\/api\/v1\/documents\/[^/]+\/thumbnail$/.test(queryKey[0])
-
 export const useProgressActions = () => {
   const setProgress = useCallback(
     async (progress?: number, status?: ProgressBarStatus) => {
-      await getCurrentWindow().setProgressBar({
-        status: status ?? ProgressBarStatus.Normal,
-        progress,
-      })
+      await setWindowProgress(progress, status ?? ProgressBarStatus.Normal)
     },
     [],
   )
 
   const clearProgress = useCallback(async () => {
-    await getCurrentWindow().setProgressBar({
-      status: ProgressBarStatus.None,
-      progress: 0,
-    })
+    await clearWindowProgress()
   }, [])
 
   return {
@@ -150,15 +150,16 @@ export const useTextBlockMutations = () => {
 
   const updateTextBlocks = useCallback(
     async (textBlocks: TextBlock[]) => {
-      const { currentDocumentId } = useEditorUiStore.getState()
+      const currentDocumentId = getCurrentDocumentId()
       if (!currentDocumentId) return
-      const queryKey = getGetDocumentQueryKey(currentDocumentId)
-      // Cancel in-flight refetches to prevent stale server data from
-      // overwriting the optimistic update below.
+
+      const queryKey = getDocumentQueryKey(currentDocumentId)
       void queryClient.cancelQueries({ queryKey })
-      const currentDocument = queryClient.getQueryData<any>(queryKey)
+
+      const currentDocument = getCachedDocument(queryClient, currentDocumentId)
       if (!currentDocument) return
-      queryClient.setQueryData(queryKey, {
+
+      setCachedDocument(queryClient, currentDocumentId, {
         ...currentDocument,
         textBlocks,
       })
@@ -168,14 +169,14 @@ export const useTextBlockMutations = () => {
   )
 
   const renderTextBlock = useCallback(
-    async (_?: any, documentId?: string, textBlockIndex?: number) => {
-      const resolvedDocumentId =
-        documentId ?? useEditorUiStore.getState().currentDocumentId
-      if (!resolvedDocumentId) return
-      if (typeof textBlockIndex !== 'number') return
+    async (_?: unknown, documentId?: string, textBlockIndex?: number) => {
+      const resolvedDocumentId = getCurrentDocumentId(documentId)
+      if (!resolvedDocumentId || typeof textBlockIndex !== 'number') return
+
       await flushTextBlockSync()
       const { renderEffect, renderStroke } = useEditorUiStore.getState()
       const { fontFamily } = usePreferencesStore.getState()
+
       await withRpcError('render', async () => {
         const textBlockId = await getDocumentTextBlockId(
           resolvedDocumentId,
@@ -189,8 +190,8 @@ export const useTextBlockMutations = () => {
         })
         clearDocumentResourceCache(resolvedDocumentId)
       })
-      await invalidateCurrentDocument(queryClient, resolvedDocumentId)
-      await invalidateThumbnailAtIndex(queryClient, resolvedDocumentId)
+
+      await invalidateDocumentResources(queryClient, resolvedDocumentId)
     },
     [queryClient],
   )
@@ -213,30 +214,30 @@ export const useMaskMutations = () => {
         patchRegion?: InpaintRegion
       },
     ) => {
-      const sync = options?.sync !== false
-      const { currentDocumentId } = useEditorUiStore.getState()
+      const currentDocumentId = getCurrentDocumentId()
       if (!currentDocumentId) return
-      const queryKey = getGetDocumentQueryKey(currentDocumentId)
-      const currentDocument = queryClient.getQueryData<any>(queryKey)
+
+      const currentDocument = getCachedDocument(queryClient, currentDocumentId)
       if (!currentDocument) return
 
-      queryClient.setQueryData(queryKey, {
+      setCachedDocument(queryClient, currentDocumentId, {
         ...currentDocument,
         segment: mask,
       })
 
-      if (sync) {
-        const patchRegion =
-          options?.patch && options.patchRegion
-            ? options.patchRegion
-            : undefined
-        const payloadMask = patchRegion && options?.patch ? options.patch : mask
-        enqueueMaskSync({
-          documentId: currentDocumentId,
-          mask: payloadMask,
-          region: patchRegion,
-        })
+      if (options?.sync === false) {
+        return
       }
+
+      const patchRegion =
+        options?.patch && options.patchRegion ? options.patchRegion : undefined
+      const payloadMask = patchRegion && options?.patch ? options.patch : mask
+
+      enqueueMaskSync({
+        documentId: currentDocumentId,
+        mask: payloadMask,
+        region: patchRegion,
+      })
     },
     [queryClient],
   )
@@ -250,17 +251,17 @@ export const useMaskMutations = () => {
       region: InpaintRegion,
       options?: { documentId?: string; autoShowInpaintedImage?: boolean },
     ) => {
-      const resolvedDocumentId =
-        options?.documentId ?? useEditorUiStore.getState().currentDocumentId
-      if (!resolvedDocumentId) return
-      if (!region) return
+      const resolvedDocumentId = getCurrentDocumentId(options?.documentId)
+      if (!resolvedDocumentId || !region) return
+
       await flushMaskSyncQueue()
       await withRpcError('inpaint_partial', async () => {
         await inpaintRemoteRegion(resolvedDocumentId, { region })
         clearDocumentResourceCache(resolvedDocumentId)
       })
-      await invalidateCurrentDocument(queryClient, resolvedDocumentId)
-      await invalidateThumbnailAtIndex(queryClient, resolvedDocumentId)
+
+      await invalidateDocumentResources(queryClient, resolvedDocumentId)
+
       if (options?.autoShowInpaintedImage !== false) {
         useEditorUiStore.getState().setShowInpaintedImage(true)
       }
@@ -274,16 +275,15 @@ export const useMaskMutations = () => {
       region: InpaintRegion,
       options?: { documentId?: string },
     ) => {
-      const resolvedDocumentId =
-        options?.documentId ?? useEditorUiStore.getState().currentDocumentId
+      const resolvedDocumentId = getCurrentDocumentId(options?.documentId)
       if (!resolvedDocumentId) return
+
       await enqueueBrushPatch({
         documentId: resolvedDocumentId,
         patch,
         region,
       })
-      await invalidateCurrentDocument(queryClient, resolvedDocumentId)
-      await invalidateThumbnailAtIndex(queryClient, resolvedDocumentId)
+      await invalidateDocumentResources(queryClient, resolvedDocumentId)
       useEditorUiStore.getState().setShowBrushLayer(true)
     },
     [queryClient],
@@ -304,116 +304,153 @@ export const useDocumentMutations = () => {
   const refreshDocuments = useCallback(
     async (invalidateList = false) => {
       if (invalidateList) {
-        await queryClient.invalidateQueries({
-          queryKey: getListDocumentsQueryKey(),
-        })
+        await invalidateDocumentsList(queryClient)
       }
-      await queryClient.invalidateQueries({
-        predicate: (query) => isDocumentDetailQuery(query.queryKey),
-      })
-      await queryClient.invalidateQueries({
-        predicate: (query) => isDocumentThumbnailQuery(query.queryKey),
-      })
+      await invalidateDocumentResources(queryClient)
     },
     [queryClient],
   )
 
   const refreshCurrentDocument = useCallback(async () => {
-    const { currentDocumentId } = useEditorUiStore.getState()
-    await invalidateCurrentDocument(queryClient, currentDocumentId)
+    await invalidateDocumentDetails(
+      queryClient,
+      useEditorUiStore.getState().currentDocumentId,
+    )
   }, [queryClient])
 
+  const runDocumentLoadOperation = useCallback(
+    async <T>({
+      pick,
+      selectDocumentId,
+      shouldSkipSync,
+    }: LoadSelectionOptions<T>) => {
+      const operationStore = useOperationStore.getState()
+      operationStore.startOperation({
+        type: OPERATION_TYPE.loadKhr,
+        cancellable: false,
+      })
+
+      try {
+        const previousCount = getKnownDocumentCount(queryClient)
+        const result = await pick()
+
+        if (shouldSkipSync?.(result, previousCount)) {
+          return
+        }
+
+        clearMaskSync()
+        const documents = await syncDocumentsList(queryClient)
+        const currentDocumentId = applyDocumentsState(
+          documents,
+          selectDocumentId(documents, previousCount),
+        )
+        await refreshDocuments()
+        await prefetchDocument(queryClient, currentDocumentId)
+      } finally {
+        operationStore.finishOperation()
+      }
+    },
+    [queryClient, refreshDocuments],
+  )
+
+  const runCurrentDocumentProcess = useCallback(
+    async ({
+      documentId,
+      step,
+      rpcAction,
+      before,
+      execute,
+      after,
+    }: DocumentProcessOptions) => {
+      const resolvedDocumentId = getCurrentDocumentId(documentId)
+      if (!resolvedDocumentId) return
+
+      const operationStore = useOperationStore.getState()
+      operationStore.startOperation({
+        type: OPERATION_TYPE.processCurrent,
+        step,
+        cancellable: true,
+      })
+
+      try {
+        await before?.()
+        await withRpcError(rpcAction, async () => {
+          await execute(resolvedDocumentId)
+          clearDocumentResourceCache(resolvedDocumentId)
+        })
+        await invalidateDocumentResources(queryClient, resolvedDocumentId)
+        after?.()
+      } finally {
+        operationStore.finishOperation()
+      }
+    },
+    [queryClient],
+  )
+
+  const runPipelineOperation = useCallback(
+    async (options: {
+      type: Extract<
+        OperationType,
+        typeof OPERATION_TYPE.processCurrent | typeof OPERATION_TYPE.processAll
+      >
+      total: number
+      documentId?: string
+    }) => {
+      if (!options.total) {
+        return
+      }
+
+      const operationStore = useOperationStore.getState()
+      operationStore.startOperation({
+        type: options.type,
+        cancellable: true,
+        current: 0,
+        total: options.total,
+      })
+
+      try {
+        await startPipelineProcess(
+          buildPipelineJobRequest(queryClient, options.documentId),
+        )
+      } catch {
+        operationStore.finishOperation()
+        await clearProgress()
+      }
+    },
+    [clearProgress, queryClient],
+  )
+
   const openDocuments = useCallback(async () => {
-    const { startOperation, finishOperation } = useOperationStore.getState()
-    startOperation({
-      type: 'load-khr',
-      cancellable: false,
+    await runDocumentLoadOperation({
+      pick: openPickedDocuments,
+      selectDocumentId: (documents) => documents[0]?.id,
     })
-    try {
-      await openPickedDocuments()
-      clearMaskSync()
-      const documents = await syncDocumentsList(queryClient)
-      const currentDocumentId = applyDocumentsState(documents, documents[0]?.id)
-      await refreshDocuments()
-      await prefetchDocument(queryClient, currentDocumentId)
-    } finally {
-      finishOperation()
-    }
-  }, [queryClient, refreshDocuments])
+  }, [runDocumentLoadOperation])
 
   const addDocuments = useCallback(async () => {
-    const { startOperation, finishOperation } = useOperationStore.getState()
-    startOperation({
-      type: 'load-khr',
-      cancellable: false,
-    })
-    try {
-      const previousCount =
-        getCachedDocuments(queryClient).length ||
-        useEditorUiStore.getState().totalPages
-      const count = await addPickedDocuments()
-      if (count === previousCount) {
-        return
-      }
-
-      clearMaskSync()
-      const documents = await syncDocumentsList(queryClient)
-      const currentDocumentId = applyDocumentsState(
-        documents,
+    await runDocumentLoadOperation({
+      pick: addPickedDocuments,
+      shouldSkipSync: (count, previousCount) => count === previousCount,
+      selectDocumentId: (documents, previousCount) =>
         documents[previousCount]?.id,
-      )
-      await refreshDocuments()
-      await prefetchDocument(queryClient, currentDocumentId)
-    } finally {
-      finishOperation()
-    }
-  }, [queryClient, refreshDocuments])
+    })
+  }, [runDocumentLoadOperation])
 
   const openFolder = useCallback(async () => {
-    const { startOperation, finishOperation } = useOperationStore.getState()
-    startOperation({
-      type: 'load-khr',
-      cancellable: false,
+    await runDocumentLoadOperation({
+      pick: openPickedFolder,
+      selectDocumentId: (documents) => documents[0]?.id,
     })
-    try {
-      await openPickedFolder()
-      clearMaskSync()
-      const documents = await syncDocumentsList(queryClient)
-      const currentDocumentId = applyDocumentsState(documents, documents[0]?.id)
-      await refreshDocuments()
-      await prefetchDocument(queryClient, currentDocumentId)
-    } finally {
-      finishOperation()
-    }
-  }, [queryClient, refreshDocuments])
+  }, [runDocumentLoadOperation])
 
   const addFolder = useCallback(async () => {
-    const { startOperation, finishOperation } = useOperationStore.getState()
-    startOperation({
-      type: 'load-khr',
-      cancellable: false,
-    })
-    try {
-      const previousCount =
-        getCachedDocuments(queryClient).length ||
-        useEditorUiStore.getState().totalPages
-      const count = await addPickedFolder()
-      if (count === previousCount) {
-        return
-      }
-
-      clearMaskSync()
-      const documents = await syncDocumentsList(queryClient)
-      const currentDocumentId = applyDocumentsState(
-        documents,
+    await runDocumentLoadOperation({
+      pick: addPickedFolder,
+      shouldSkipSync: (count, previousCount) => count === previousCount,
+      selectDocumentId: (documents, previousCount) =>
         documents[previousCount]?.id,
-      )
-      await refreshDocuments()
-      await prefetchDocument(queryClient, currentDocumentId)
-    } finally {
-      finishOperation()
-    }
-  }, [queryClient, refreshDocuments])
+    })
+  }, [runDocumentLoadOperation])
 
   const openExternal = useCallback(async (url: string) => {
     if (typeof window !== 'undefined') {
@@ -421,118 +458,78 @@ export const useDocumentMutations = () => {
     }
   }, [])
 
-  const { startOperation, finishOperation } = useOperationStore.getState()
-
   const detect = useCallback(
-    async (_?: any, documentId?: string) => {
-      const resolvedDocumentId =
-        documentId ?? useEditorUiStore.getState().currentDocumentId
-      if (!resolvedDocumentId) return
-      startOperation({
-        type: 'process-current',
-        step: 'detect',
-        cancellable: true,
+    async (_?: unknown, documentId?: string) => {
+      await runCurrentDocumentProcess({
+        documentId,
+        step: OPERATION_STEP.detect,
+        rpcAction: 'detect',
+        execute: detectRemoteDocument,
+        after: () => {
+          useEditorUiStore.getState().setShowRenderedImage(false)
+        },
       })
-      try {
-        await withRpcError('detect', async () => {
-          await detectRemoteDocument(resolvedDocumentId)
-          clearDocumentResourceCache(resolvedDocumentId)
-        })
-        await invalidateCurrentDocument(queryClient, resolvedDocumentId)
-        await invalidateThumbnailAtIndex(queryClient, resolvedDocumentId)
-        useEditorUiStore.getState().setShowRenderedImage(false)
-      } finally {
-        finishOperation()
-      }
     },
-    [queryClient, startOperation, finishOperation],
+    [runCurrentDocumentProcess],
   )
 
   const ocr = useCallback(
-    async (_?: any, documentId?: string) => {
-      const resolvedDocumentId =
-        documentId ?? useEditorUiStore.getState().currentDocumentId
-      if (!resolvedDocumentId) return
-      startOperation({
-        type: 'process-current',
-        step: 'ocr',
-        cancellable: true,
+    async (_?: unknown, documentId?: string) => {
+      await runCurrentDocumentProcess({
+        documentId,
+        step: OPERATION_STEP.ocr,
+        rpcAction: 'ocr',
+        execute: ocrRemoteDocument,
       })
-      try {
-        await withRpcError('ocr', async () => {
-          await ocrRemoteDocument(resolvedDocumentId)
-          clearDocumentResourceCache(resolvedDocumentId)
-        })
-        await invalidateCurrentDocument(queryClient, resolvedDocumentId)
-        await invalidateThumbnailAtIndex(queryClient, resolvedDocumentId)
-      } finally {
-        finishOperation()
-      }
     },
-    [queryClient, startOperation, finishOperation],
+    [runCurrentDocumentProcess],
   )
 
   const inpaint = useCallback(
-    async (_?: any, documentId?: string) => {
-      const resolvedDocumentId =
-        documentId ?? useEditorUiStore.getState().currentDocumentId
-      if (!resolvedDocumentId) return
-      startOperation({
-        type: 'process-current',
-        step: 'inpaint',
-        cancellable: true,
+    async (_?: unknown, documentId?: string) => {
+      await runCurrentDocumentProcess({
+        documentId,
+        step: OPERATION_STEP.inpaint,
+        rpcAction: 'inpaint',
+        before: async () => {
+          await flushTextBlockSync()
+          await flushMaskSyncQueue()
+        },
+        execute: inpaintRemoteDocument,
+        after: () => {
+          useEditorUiStore.getState().setShowInpaintedImage(true)
+        },
       })
-      try {
-        await flushTextBlockSync()
-        await flushMaskSyncQueue()
-        await withRpcError('inpaint', async () => {
-          await inpaintRemoteDocument(resolvedDocumentId)
-          clearDocumentResourceCache(resolvedDocumentId)
-        })
-        await invalidateCurrentDocument(queryClient, resolvedDocumentId)
-        await invalidateThumbnailAtIndex(queryClient, resolvedDocumentId)
-        useEditorUiStore.getState().setShowInpaintedImage(true)
-      } finally {
-        finishOperation()
-      }
     },
-    [queryClient, startOperation, finishOperation],
+    [runCurrentDocumentProcess],
   )
 
   const render = useCallback(
-    async (_?: any, documentId?: string) => {
-      const resolvedDocumentId =
-        documentId ?? useEditorUiStore.getState().currentDocumentId
-      if (!resolvedDocumentId) return
-      startOperation({
-        type: 'process-current',
-        step: 'render',
-        cancellable: true,
-      })
-      try {
-        const { renderEffect, renderStroke } = useEditorUiStore.getState()
-        const { fontFamily } = usePreferencesStore.getState()
-        await flushTextBlockSync()
-        await withRpcError('render', async () => {
+    async (_?: unknown, documentId?: string) => {
+      await runCurrentDocumentProcess({
+        documentId,
+        step: OPERATION_STEP.render,
+        rpcAction: 'render',
+        before: flushTextBlockSync,
+        execute: async (resolvedDocumentId) => {
+          const { renderEffect, renderStroke } = useEditorUiStore.getState()
+          const { fontFamily } = usePreferencesStore.getState()
           await renderRemoteDocument(resolvedDocumentId, {
             shaderEffect: renderEffect,
             shaderStroke: renderStroke,
             fontFamily,
           })
-          clearDocumentResourceCache(resolvedDocumentId)
-        })
-        await invalidateCurrentDocument(queryClient, resolvedDocumentId)
-        await invalidateThumbnailAtIndex(queryClient, resolvedDocumentId)
-        useEditorUiStore.getState().setShowRenderedImage(true)
-      } finally {
-        finishOperation()
-      }
+        },
+        after: () => {
+          useEditorUiStore.getState().setShowRenderedImage(true)
+        },
+      })
     },
-    [queryClient, startOperation, finishOperation],
+    [runCurrentDocumentProcess],
   )
 
   const inpaintAndRenderImage = useCallback(
-    async (_?: any, documentId?: string) => {
+    async (_?: unknown, documentId?: string) => {
       await inpaint(_, documentId)
       await render(_, documentId)
     },
@@ -540,116 +537,34 @@ export const useDocumentMutations = () => {
   )
 
   const processImage = useCallback(
-    async (_?: any, documentId?: string) => {
-      const resolvedDocumentId =
-        documentId ?? useEditorUiStore.getState().currentDocumentId
+    async (_?: unknown, documentId?: string) => {
+      const resolvedDocumentId = getCurrentDocumentId(documentId)
       if (!resolvedDocumentId) return
-      const { selectedModel, selectedLanguage } = useLlmUiStore.getState()
-      const { renderEffect, renderStroke } = useEditorUiStore.getState()
-      const { fontFamily } = usePreferencesStore.getState()
-      const { startOperation, finishOperation } = useOperationStore.getState()
-      startOperation({
-        type: 'process-current',
-        cancellable: true,
-        current: 0,
+
+      await runPipelineOperation({
+        type: OPERATION_TYPE.processCurrent,
         total: 5,
+        documentId: resolvedDocumentId,
       })
-      try {
-        const models = getCachedLlmModels(queryClient)
-        const modelInfo = models.find((model) => model.id === selectedModel)
-        const presetCfg = selectedModel
-          ? getPresetConfigForModel(selectedModel)
-          : undefined
-        const llmApiKey = presetCfg
-          ? presetCfg.apiKey || undefined
-          : modelInfo && modelInfo.source !== 'local'
-            ? usePreferencesStore.getState().apiKeys[modelInfo.source]
-            : undefined
-        const llmBaseUrl =
-          modelInfo?.source === 'openai-compatible' && selectedModel
-            ? getBaseUrlForModel(selectedModel)
-            : undefined
-        await startPipelineProcess({
-          documentId: resolvedDocumentId,
-          llmModelId: selectedModel
-            ? toBackendModelId(selectedModel)
-            : selectedModel,
-          llmApiKey,
-          llmBaseUrl,
-          llmTemperature: presetCfg?.temperature ?? undefined,
-          llmMaxTokens: presetCfg?.maxTokens ?? undefined,
-          llmCustomSystemPrompt: presetCfg?.customSystemPrompt || undefined,
-          language: selectedLanguage,
-          shaderEffect: renderEffect,
-          shaderStroke: renderStroke,
-          fontFamily,
-        })
-      } catch (error) {
-        console.error('Failed to start processing:', error)
-        finishOperation()
-        await clearProgress()
-      }
     },
-    [clearProgress, queryClient],
+    [runPipelineOperation],
   )
 
   const processAllImages = useCallback(async () => {
-    const { selectedModel, selectedLanguage } = useLlmUiStore.getState()
-    const { renderEffect, renderStroke, totalPages } =
-      useEditorUiStore.getState()
-    const { fontFamily } = usePreferencesStore.getState()
-    const { startOperation, finishOperation } = useOperationStore.getState()
-    if (!totalPages) return
-    startOperation({
-      type: 'process-all',
-      cancellable: true,
-      current: 0,
-      total: totalPages,
+    await runPipelineOperation({
+      type: OPERATION_TYPE.processAll,
+      total: useEditorUiStore.getState().totalPages,
     })
-    try {
-      const models = getCachedLlmModels(queryClient)
-      const modelInfo = models.find((model) => model.id === selectedModel)
-      const presetCfg = selectedModel
-        ? getPresetConfigForModel(selectedModel)
-        : undefined
-      const llmApiKey = presetCfg
-        ? presetCfg.apiKey || undefined
-        : modelInfo && modelInfo.source !== 'local'
-          ? usePreferencesStore.getState().apiKeys[modelInfo.source]
-          : undefined
-      const llmBaseUrl =
-        modelInfo?.source === 'openai-compatible' && selectedModel
-          ? getBaseUrlForModel(selectedModel)
-          : undefined
-      await startPipelineProcess({
-        llmModelId: selectedModel
-          ? toBackendModelId(selectedModel)
-          : selectedModel,
-        llmApiKey,
-        llmBaseUrl,
-        llmTemperature: presetCfg?.temperature ?? undefined,
-        llmMaxTokens: presetCfg?.maxTokens ?? undefined,
-        llmCustomSystemPrompt: presetCfg?.customSystemPrompt || undefined,
-        language: selectedLanguage,
-        shaderEffect: renderEffect,
-        shaderStroke: renderStroke,
-        fontFamily,
-      })
-    } catch (error) {
-      console.error('Failed to start processing:', error)
-      finishOperation()
-      await clearProgress()
-    }
-  }, [clearProgress, queryClient])
+  }, [runPipelineOperation])
 
   const exportDocument = useCallback(async () => {
-    const { currentDocumentId } = useEditorUiStore.getState()
+    const currentDocumentId = getCurrentDocumentId()
     if (!currentDocumentId) return
     await saveDocumentExport(currentDocumentId)
   }, [])
 
   const exportPsdDocument = useCallback(async () => {
-    const { currentDocumentId } = useEditorUiStore.getState()
+    const currentDocumentId = getCurrentDocumentId()
     if (!currentDocumentId) return
     await savePsdDocumentExport(currentDocumentId)
   }, [])
@@ -668,7 +583,12 @@ export const useDocumentMutations = () => {
 
   const cancelOperation = useCallback(async () => {
     useOperationStore.getState().cancelOperation()
-    await cancelActivePipelineJob().catch(() => {})
+    await cancelActivePipelineJob().catch((error) => {
+      reportAppError(error, {
+        context: 'cancel image processing',
+        dedupeKey: 'documents:cancel-processing',
+      })
+    })
   }, [])
 
   return {

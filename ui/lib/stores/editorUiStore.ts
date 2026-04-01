@@ -1,6 +1,7 @@
 'use client'
 
 import { create } from 'zustand'
+import { immer } from 'zustand/middleware/immer'
 import { RenderEffect, RenderStroke, ToolMode } from '@/types'
 
 type EditorUiState = {
@@ -34,10 +35,10 @@ type EditorUiState = {
   resetUiState: () => void
 }
 
-const initialState = {
+const createInitialState = () => ({
   totalPages: 0,
   documentsVersion: 0,
-  currentDocumentId: undefined,
+  currentDocumentId: undefined as string | undefined,
   scale: 100,
   showSegmentationMask: false,
   showInpaintedImage: false,
@@ -45,7 +46,7 @@ const initialState = {
   showRenderedImage: false,
   showTextBlocksOverlay: false,
   mode: 'select' as ToolMode,
-  selectedBlockIndex: undefined,
+  selectedBlockIndex: undefined as number | undefined,
   autoFitEnabled: true,
   renderEffect: {
     italic: false,
@@ -56,75 +57,105 @@ const initialState = {
     color: [255, 255, 255, 255],
     widthPx: undefined,
   } as RenderStroke,
-}
+})
 
-export const useEditorUiStore = create<EditorUiState>((set, get) => ({
-  ...initialState,
-  setTotalPages: (count) => {
-    set((state) => {
-      if (state.totalPages === count) return state
-      return {
-        totalPages: count,
-        documentsVersion: state.documentsVersion + 1,
-        currentDocumentId: count === 0 ? undefined : state.currentDocumentId,
-        selectedBlockIndex:
-          count === 0 ? undefined : state.selectedBlockIndex,
-      }
-    })
-  },
-  setCurrentDocumentId: (documentId) =>
-    set(() => ({
-      currentDocumentId: documentId,
-      selectedBlockIndex: undefined,
-    })),
-  setScale: (scale) => {
-    const clamped = Math.max(10, Math.min(100, Math.round(scale)))
-    set({ scale: clamped })
-  },
-  setShowSegmentationMask: (show) => set({ showSegmentationMask: show }),
-  setShowInpaintedImage: (show) => set({ showInpaintedImage: show }),
-  setShowBrushLayer: (show) => set({ showBrushLayer: show }),
-  setShowRenderedImage: (show) => set({ showRenderedImage: show }),
-  setShowTextBlocksOverlay: (show) => set({ showTextBlocksOverlay: show }),
-  setMode: (mode) => {
-    set({ mode })
+const clampScale = (scale: number) =>
+  Math.max(10, Math.min(100, Math.round(scale)))
 
-    if (mode === 'repairBrush' || mode === 'brush' || mode === 'eraser') {
-      set({
-        showRenderedImage: false,
-        showInpaintedImage: true,
-      })
-    }
+export const useEditorUiStore = create<EditorUiState>()(
+  immer((set) => ({
+    ...createInitialState(),
+    setTotalPages: (count) =>
+      set((state) => {
+        if (state.totalPages === count) return
+        state.totalPages = count
+        state.documentsVersion += 1
+        if (count === 0) {
+          state.currentDocumentId = undefined
+          state.selectedBlockIndex = undefined
+        }
+      }),
+    setCurrentDocumentId: (documentId) =>
+      set((state) => {
+        state.currentDocumentId = documentId
+        state.selectedBlockIndex = undefined
+      }),
+    setScale: (scale) =>
+      set((state) => {
+        state.scale = clampScale(scale)
+      }),
+    setShowSegmentationMask: (show) =>
+      set((state) => {
+        state.showSegmentationMask = show
+      }),
+    setShowInpaintedImage: (show) =>
+      set((state) => {
+        state.showInpaintedImage = show
+      }),
+    setShowBrushLayer: (show) =>
+      set((state) => {
+        state.showBrushLayer = show
+      }),
+    setShowRenderedImage: (show) =>
+      set((state) => {
+        state.showRenderedImage = show
+      }),
+    setShowTextBlocksOverlay: (show) =>
+      set((state) => {
+        state.showTextBlocksOverlay = show
+      }),
+    setMode: (mode) =>
+      set((state) => {
+        state.mode = mode
 
-    if (mode === 'repairBrush') {
-      set({
-        showTextBlocksOverlay: true,
-        showSegmentationMask: true,
-        showBrushLayer: false,
-      })
-    } else if (mode !== 'eraser') {
-      set({ showSegmentationMask: false })
+        if (mode === 'repairBrush' || mode === 'brush' || mode === 'eraser') {
+          state.showRenderedImage = false
+          state.showInpaintedImage = true
+        }
 
-      if (mode === 'brush') {
-        set({
-          showBrushLayer: true,
-        })
-      } else if (mode === 'block') {
-        set({
-          showTextBlocksOverlay: true,
-        })
-      }
-    }
-  },
-  setSelectedBlockIndex: (index) => set({ selectedBlockIndex: index }),
-  setAutoFitEnabled: (enabled) => set({ autoFitEnabled: enabled }),
-  setRenderEffect: (effect) => set({ renderEffect: effect }),
-  setRenderStroke: (stroke) => set({ renderStroke: stroke }),
-  resetUiState: () =>
-    set(() => ({
-      ...initialState,
-      totalPages: get().totalPages,
-      documentsVersion: get().documentsVersion,
-      currentDocumentId: get().currentDocumentId,
-    })),
-}))
+        if (mode === 'repairBrush') {
+          state.showTextBlocksOverlay = true
+          state.showSegmentationMask = true
+          state.showBrushLayer = false
+          return
+        }
+
+        if (mode === 'eraser') {
+          return
+        }
+
+        state.showSegmentationMask = false
+
+        if (mode === 'brush') {
+          state.showBrushLayer = true
+        } else if (mode === 'block') {
+          state.showTextBlocksOverlay = true
+        }
+      }),
+    setSelectedBlockIndex: (index) =>
+      set((state) => {
+        state.selectedBlockIndex = index
+      }),
+    setAutoFitEnabled: (enabled) =>
+      set((state) => {
+        state.autoFitEnabled = enabled
+      }),
+    setRenderEffect: (effect) =>
+      set((state) => {
+        state.renderEffect = effect
+      }),
+    setRenderStroke: (stroke) =>
+      set((state) => {
+        state.renderStroke = stroke
+      }),
+    resetUiState: () =>
+      set((state) => {
+        const preservedState = {
+          totalPages: state.totalPages,
+          documentsVersion: state.documentsVersion,
+          currentDocumentId: state.currentDocumentId,
+        }
+        Object.assign(state, createInitialState(), preservedState)
+      }),
+  })),
+)

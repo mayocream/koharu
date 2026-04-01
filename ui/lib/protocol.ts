@@ -111,11 +111,7 @@ export type TextBlockPatch = {
   style?: TextStyle
 }
 
-export type TransferStatus =
-  | 'started'
-  | 'downloading'
-  | 'completed'
-  | 'failed'
+export type TransferStatus = 'started' | 'downloading' | 'completed' | 'failed'
 
 export type DownloadState = {
   id: string

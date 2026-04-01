@@ -6,33 +6,37 @@ import {
   getDocumentTextBlockId,
   clearDocumentResourceCache,
 } from '@/lib/documents/actions'
-import { useProgressActions, useTextBlockMutations } from '@/lib/documents/mutations'
+import { invalidateDocumentDetails } from '@/lib/documents/queries'
 import {
-  getGetDocumentQueryKey,
-  translateDocument as translateRemoteDocument,
-} from '@/lib/generated/orval/documents/documents'
+  useProgressActions,
+  useTextBlockMutations,
+} from '@/lib/documents/mutations'
+import { translateDocument as translateRemoteDocument } from '@/lib/generated/orval/documents/documents'
 import {
   deleteLlmSession,
   getLlmSession,
   listLlmModels,
   setLlmSession,
 } from '@/lib/generated/orval/llm/llm'
-import { getGetProviderApiKeyQueryOptions } from '@/lib/generated/orval/providers/providers'
-import {
-  findModelLanguages,
-  getBaseUrlForModel,
-  getPresetConfigForModel,
-  hasCompatibleConfig,
-  pickLanguage,
-} from '@/lib/llm/config'
+import { findModelLanguages, pickLanguage } from '@/lib/llm/config'
 import {
   extendLlmModels,
   isLlmSessionReady,
-  toBackendModelId,
+  isRemoteModelSource,
 } from '@/lib/llm/models'
-import { llmQueryKeys, getCachedLlmModels } from '@/lib/llm/queries'
+import { buildLlmLoadRequest } from '@/lib/llm/runtime'
+import {
+  fetchProviderApiKey,
+  getCachedLlmModels,
+  getLlmReadyQueryKey,
+  setCachedLlmModels,
+  setLlmReadyCache,
+} from '@/lib/llm/queries'
+import { logAppError } from '@/lib/errors'
 import { ProgressBarStatus } from '@/lib/native'
+import { OPERATION_TYPE } from '@/lib/operations'
 import { withRpcError } from '@/lib/rpc'
+import { flushTextBlockSync } from '@/lib/services/syncQueues'
 import { useEditorUiStore } from '@/lib/stores/editorUiStore'
 import { useLlmUiStore } from '@/lib/stores/llmUiStore'
 import { useOperationStore } from '@/lib/stores/operationStore'
@@ -46,7 +50,9 @@ export const useLlmMutations = () => {
 
   const llmSetSelectedModel = useCallback(
     async (id: string) => {
-      await deleteLlmSession()
+      await withRpcError('llm_offload', async () => {
+        await deleteLlmSession()
+      })
       const models = getCachedLlmModels(queryClient)
       const nextLanguage = pickLanguage(
         models,
@@ -58,7 +64,7 @@ export const useLlmMutations = () => {
         selectedLanguage: nextLanguage,
         loading: false,
       })
-      queryClient.setQueryData(llmQueryKeys.ready(id), false)
+      setLlmReadyCache(queryClient, id, false)
     },
     [queryClient],
   )
@@ -78,73 +84,57 @@ export const useLlmMutations = () => {
     const { selectedModel } = useLlmUiStore.getState()
     if (!selectedModel) return
 
-    const readyKey = llmQueryKeys.ready(selectedModel)
+    const readyKey = getLlmReadyQueryKey(selectedModel)
     const ready = queryClient.getQueryData<boolean>(readyKey) === true
 
     if (ready) {
-      await deleteLlmSession()
+      await withRpcError('llm_offload', async () => {
+        await deleteLlmSession()
+      })
       useLlmUiStore.getState().setLoading(false)
-      queryClient.setQueryData(readyKey, false)
+      setLlmReadyCache(queryClient, selectedModel, false)
       return
     }
 
     const { startOperation } = useOperationStore.getState()
     startOperation({
-      type: 'llm-load',
+      type: OPERATION_TYPE.llmLoad,
       cancellable: false,
     })
 
     useLlmUiStore.getState().setLoading(true)
-    queryClient.setQueryData(readyKey, false)
-    const models = getCachedLlmModels(queryClient)
-    const modelInfo = models.find((model) => model.id === selectedModel)
-    const presetCfg = selectedModel
-      ? getPresetConfigForModel(selectedModel)
-      : undefined
-    const apiKey = presetCfg
-      ? presetCfg.apiKey || undefined
-      : modelInfo && modelInfo.source !== 'local'
-        ? usePreferencesStore.getState().apiKeys[modelInfo.source]
-        : undefined
-    const baseUrl =
-      modelInfo?.source === 'openai-compatible'
-        ? getBaseUrlForModel(selectedModel)
-        : undefined
-    const backendModelId = toBackendModelId(selectedModel)
-    await setLlmSession({
-      id: backendModelId,
-      apiKey,
-      baseUrl,
-      temperature: presetCfg?.temperature ?? undefined,
-      maxTokens: presetCfg?.maxTokens ?? undefined,
-      customSystemPrompt: presetCfg?.customSystemPrompt || undefined,
-    })
-    queryClient.setQueryData(
-      readyKey,
-      await getLlmSession()
-        .then((state) => isLlmSessionReady(state, backendModelId))
-        .catch(() => false),
-    )
-    await setProgress(100, ProgressBarStatus.Paused)
+    setLlmReadyCache(queryClient, selectedModel, false)
+    const loadRequest = buildLlmLoadRequest(queryClient, selectedModel)
+    try {
+      await withRpcError('llm_load', async () => {
+        await setLlmSession(loadRequest)
+      })
+      setLlmReadyCache(
+        queryClient,
+        selectedModel,
+        await getLlmSession()
+          .then((state) => isLlmSessionReady(state, loadRequest.id))
+          .catch(() => false),
+      )
+      await setProgress(100, ProgressBarStatus.Paused)
+    } catch (error) {
+      useLlmUiStore.getState().setLoading(false)
+      useOperationStore.getState().finishOperation()
+      throw error
+    }
   }, [queryClient, setProgress])
 
   const llmGenerate = useCallback(
-    async (_?: any, documentId?: string, textBlockIndex?: number) => {
+    async (_?: unknown, documentId?: string, textBlockIndex?: number) => {
       const resolvedDocumentId =
         documentId ?? useEditorUiStore.getState().currentDocumentId
       if (!resolvedDocumentId) return
       const selectedModel = useLlmUiStore.getState().selectedModel
       const selectedLanguage = useLlmUiStore.getState().selectedLanguage
       const models = getCachedLlmModels(queryClient)
+      const language = pickLanguage(models, selectedModel, selectedLanguage)
 
-      const languages = findModelLanguages(models, selectedModel)
-      const language =
-        languages.length > 0
-          ? selectedLanguage && languages.includes(selectedLanguage)
-            ? selectedLanguage
-            : languages[0]
-          : undefined
-
+      await flushTextBlockSync()
       await withRpcError('llm_generate', async () => {
         const textBlockId = await getDocumentTextBlockId(
           resolvedDocumentId,
@@ -156,9 +146,7 @@ export const useLlmMutations = () => {
         })
         clearDocumentResourceCache(resolvedDocumentId)
       })
-      await queryClient.invalidateQueries({
-        queryKey: getGetDocumentQueryKey(resolvedDocumentId),
-      })
+      await invalidateDocumentDetails(queryClient, resolvedDocumentId)
       useEditorUiStore.getState().setShowTextBlocksOverlay(true)
       if (typeof textBlockIndex === 'number') {
         await renderTextBlock(undefined, resolvedDocumentId, textBlockIndex)
@@ -168,42 +156,23 @@ export const useLlmMutations = () => {
   )
 
   const llmList = useCallback(async () => {
-    const compatibleConfigVersion =
-      usePreferencesStore.getState().openAiCompatibleConfigVersion
     const models = extendLlmModels(
       await listLlmModels({ language: i18n.language }),
       usePreferencesStore.getState().localLlm.presets,
     )
     const providers = Array.from(
-      new Set(
-        models
-          .map((model) => model.source)
-          .filter((source) => source && source !== 'local'),
-      ),
+      new Set(models.map((model) => model.source).filter(isRemoteModelSource)),
     )
     for (const provider of providers) {
       try {
-        const response = await queryClient.fetchQuery(
-          getGetProviderApiKeyQueryOptions(provider, {
-            query: {
-              staleTime: 10 * 60 * 1000,
-            },
-          }),
-        )
-        usePreferencesStore.getState().setApiKey(provider, response.apiKey ?? '')
+        const apiKey = await fetchProviderApiKey(queryClient, provider)
+        usePreferencesStore.getState().setApiKey(provider, apiKey ?? '')
       } catch (error) {
-        console.error(`Failed to hydrate API key for ${provider}`, error)
+        logAppError(`hydrate provider api key:${provider}`, error)
       }
     }
 
-    queryClient.setQueryData(
-      llmQueryKeys.models(
-        i18n.language,
-        hasCompatibleConfig() ? 'configured' : undefined,
-        compatibleConfigVersion,
-      ),
-      models,
-    )
+    setCachedLlmModels(queryClient, models, i18n.language)
     const currentModel = useLlmUiStore.getState().selectedModel
     const currentLanguage = useLlmUiStore.getState().selectedLanguage
     const hasCurrent = models.some((model) => model.id === currentModel)

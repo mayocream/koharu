@@ -3,9 +3,15 @@
 import { type ReactNode, useEffect } from 'react'
 import { useTranslation } from 'react-i18next'
 import { CircleXIcon } from 'lucide-react'
+import { isActiveDownload } from '@/lib/download-state'
 import { useDownloadStore } from '@/lib/downloads'
 import { Button } from '@/components/ui/button'
-import { type OperationState } from '@/lib/operations'
+import {
+  isOperationType,
+  OPERATION_STEP,
+  OPERATION_TYPE,
+  type OperationState,
+} from '@/lib/operations'
 import { useOperationStore } from '@/lib/stores/operationStore'
 import { useUiErrorStore } from '@/lib/stores/uiErrorStore'
 import { useDocumentMutations } from '@/lib/documents/mutations'
@@ -124,7 +130,7 @@ function OperationCard({
   onCancel: () => void
   t: TranslateFunc
 }) {
-  const isProcessAll = operation.type === 'process-all'
+  const isProcessAll = isOperationType(operation, OPERATION_TYPE.processAll)
   const hasProgressNumbers =
     typeof operation.current === 'number' &&
     typeof operation.total === 'number' &&
@@ -144,17 +150,17 @@ function OperationCard({
         )
       : undefined
   const titles: Record<OperationState['type'], string> = {
-    'load-khr': t('operations.loadKhr'),
-    'process-current': t('operations.processCurrent'),
-    'process-all': t('operations.processAll'),
-    'llm-load': t('operations.loadModel'),
+    [OPERATION_TYPE.loadKhr]: t('operations.loadKhr'),
+    [OPERATION_TYPE.processCurrent]: t('operations.processCurrent'),
+    [OPERATION_TYPE.processAll]: t('operations.processAll'),
+    [OPERATION_TYPE.llmLoad]: t('operations.loadModel'),
   }
   const stepLabels: Record<string, string> = {
-    detect: t('processing.detect'),
-    ocr: t('processing.ocr'),
-    inpaint: t('mask.inpaint'),
-    llmGenerate: t('llm.generate'),
-    render: t('processing.render'),
+    [OPERATION_STEP.detect]: t('processing.detect'),
+    [OPERATION_STEP.ocr]: t('processing.ocr'),
+    [OPERATION_STEP.inpaint]: t('mask.inpaint'),
+    [OPERATION_STEP.llmGenerate]: t('llm.generate'),
+    [OPERATION_STEP.render]: t('processing.render'),
   }
 
   const stepLabel = operation.step
@@ -170,7 +176,7 @@ function OperationCard({
       : undefined
 
   const imageText =
-    operation.type === 'process-all' &&
+    isOperationType(operation, OPERATION_TYPE.processAll) &&
     total &&
     typeof displayCurrent === 'number'
       ? t('operations.imageProgress', {
@@ -179,10 +185,9 @@ function OperationCard({
         })
       : undefined
 
-  const subtitleParts =
-    operation.type === 'process-all'
-      ? [stepLabel]
-      : [imageText, stepText ?? stepLabel].filter(Boolean)
+  const subtitleParts = isOperationType(operation, OPERATION_TYPE.processAll)
+    ? [stepLabel]
+    : [imageText, stepText ?? stepLabel].filter(Boolean)
   const subtitle =
     subtitleParts.filter(Boolean).join(' \u00b7 ') || t('operations.inProgress')
 
@@ -257,7 +262,7 @@ export function ActivityBubble() {
   }, [ensureSubscribed])
 
   const activeDownloads = Array.from(downloads.values()).filter(
-    (d) => d.status === 'started' || d.status === 'downloading',
+    isActiveDownload,
   )
 
   if (!error && !operation && activeDownloads.length === 0) return null

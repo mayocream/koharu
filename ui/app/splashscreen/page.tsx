@@ -2,6 +2,7 @@
 
 import { useEffect, useRef, useState } from 'react'
 import { useTranslation } from 'react-i18next'
+import { DOWNLOAD_STATUS, isActiveDownload } from '@/lib/download-state'
 import { subscribeDownloadChanged } from '@/lib/rpc-events'
 import type { DownloadState } from '@/lib/protocol'
 
@@ -21,9 +22,9 @@ export default function SplashScreen() {
     const unsub = subscribeDownloadChanged((msg: DownloadState) => {
       const files = filesRef.current
 
-      if (msg.status === 'started') {
+      if (msg.status === DOWNLOAD_STATUS.started) {
         files.set(msg.filename, { downloaded: 0, total: msg.total ?? 0 })
-      } else if (msg.status === 'downloading') {
+      } else if (msg.status === DOWNLOAD_STATUS.downloading) {
         const entry = files.get(msg.filename)
         if (entry) {
           entry.downloaded = msg.downloaded
@@ -51,10 +52,7 @@ export default function SplashScreen() {
       }
 
       // Find current active file (last non-completed)
-      const activeFilename =
-        msg.status === 'started' || msg.status === 'downloading'
-          ? msg.filename
-          : null
+      const activeFilename = isActiveDownload(msg) ? msg.filename : null
 
       const percent =
         totalBytes > 0

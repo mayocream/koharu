@@ -18,7 +18,8 @@ type ImageProps = {
 } & Omit<React.ImgHTMLAttributes<HTMLImageElement>, 'src'>
 
 const FADE_DURATION_MS = 180
-const isBlobUrl = (value: string | null | undefined) => !!value?.startsWith('blob:')
+const isBlobUrl = (value: string | null | undefined) =>
+  !!value?.startsWith('blob:')
 
 // Cross-fade between successive image buffers to avoid UI flicker when
 // swapping inpaint results.

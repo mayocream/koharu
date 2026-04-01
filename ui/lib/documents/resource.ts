@@ -1,7 +1,11 @@
 'use client'
 
+import { resolveApiUrl } from '@/lib/api-origin'
 import type { DocumentResource } from '@/lib/generated/orval/koharuRPCAPI.schemas'
 import type { Document, FontPrediction, TextBlock, TextStyle } from '@/types'
+
+const mapDocumentAsset = (asset?: string | null) =>
+  asset ? resolveApiUrl(asset) : undefined
 
 const mapTextStyle = (
   style: DocumentResource['textBlocks'][number]['style'],
@@ -20,7 +24,9 @@ const mapTextStyle = (
         stroke: style.stroke
           ? {
               enabled: style.stroke.enabled ?? true,
-              color: style.stroke.color as NonNullable<TextStyle['stroke']>['color'],
+              color: style.stroke.color as NonNullable<
+                TextStyle['stroke']
+              >['color'],
               widthPx: style.stroke.widthPx ?? undefined,
             }
           : undefined,
@@ -70,13 +76,13 @@ export const mapDocumentResource = (resource: DocumentResource): Document => ({
   id: resource.id,
   path: resource.path,
   name: resource.name,
-  image: resource.assets.image,
+  image: resolveApiUrl(resource.assets.image),
   width: resource.width,
   height: resource.height,
   revision: resource.revision,
   textBlocks: resource.textBlocks.map(mapDocumentTextBlock),
-  segment: resource.assets.segment ?? undefined,
-  inpainted: resource.assets.inpainted ?? undefined,
-  brushLayer: resource.assets.brushLayer ?? undefined,
-  rendered: resource.assets.rendered ?? undefined,
+  segment: mapDocumentAsset(resource.assets.segment),
+  inpainted: mapDocumentAsset(resource.assets.inpainted),
+  brushLayer: mapDocumentAsset(resource.assets.brushLayer),
+  rendered: mapDocumentAsset(resource.assets.rendered),
 })

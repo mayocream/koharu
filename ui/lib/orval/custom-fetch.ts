@@ -1,11 +1,19 @@
 'use client'
 
+import { z } from 'zod'
 import { resolveApiUrl } from '@/lib/api-origin'
 
 type ErrorPayload = {
   message?: string
   status?: number
 }
+
+const errorPayloadSchema = z
+  .object({
+    message: z.string().optional(),
+    status: z.number().int().optional(),
+  })
+  .passthrough()
 
 const NO_CONTENT_STATUS = new Set([204, 205, 304])
 
@@ -44,7 +52,9 @@ const parseErrorBody = async (response: Response) => {
 
   const contentType = response.headers.get('content-type')
   if (isJsonResponse(contentType)) {
-    return (await response.json()) as ErrorPayload
+    const payload = await response.json()
+    const parsed = errorPayloadSchema.safeParse(payload)
+    return parsed.success ? parsed.data : payload
   }
 
   if (isTextResponse(contentType)) {
@@ -59,9 +69,13 @@ export class RpcClientError<T = unknown> extends Error {
     message: string,
     public readonly status: number,
     public readonly payload?: T,
+    cause?: unknown,
   ) {
     super(message)
     this.name = 'RpcClientError'
+    if (cause !== undefined) {
+      ;(this as Error & { cause?: unknown }).cause = cause
+    }
   }
 }
 
@@ -69,7 +83,13 @@ export const customFetch = async <T>(
   path: string,
   init?: RequestInit,
 ): Promise<T> => {
-  const response = await fetch(resolveApiUrl(path), init)
+  let response: Response
+
+  try {
+    response = await fetch(resolveApiUrl(path), init)
+  } catch (error) {
+    throw new RpcClientError('Network request failed', 0, undefined, error)
+  }
 
   if (!response.ok) {
     const payload = await parseErrorBody(response)

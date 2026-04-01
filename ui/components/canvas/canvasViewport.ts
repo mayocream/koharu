@@ -1,9 +1,8 @@
 'use client'
 
-import { getGetDocumentQueryKey } from '@/lib/generated/orval/documents/documents'
+import { getCachedDocument } from '@/lib/documents/queries'
 import { getQueryClient } from '@/lib/react-query/client'
 import { useEditorUiStore } from '@/lib/stores/editorUiStore'
-import type { Document } from '@/types'
 
 const canvasViewportRef: { current: HTMLDivElement | null } = { current: null }
 
@@ -15,9 +14,7 @@ export function fitCanvasToViewport() {
   const { setScale, setAutoFitEnabled, currentDocumentId } =
     useEditorUiStore.getState()
   if (!currentDocumentId) return
-  const doc = getQueryClient().getQueryData<Document>(
-    getGetDocumentQueryKey(currentDocumentId),
-  )
+  const doc = getCachedDocument(getQueryClient(), currentDocumentId)
   const viewport = canvasViewportRef.current
   if (!doc || !viewport) return
   const rect = viewport.getBoundingClientRect()

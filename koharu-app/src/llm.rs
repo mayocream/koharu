@@ -230,6 +230,14 @@ fn parse_tagged_blocks(
     Ok(Some(blocks))
 }
 
+fn extract_first_tagged_block_content(translation: &str) -> Option<String> {
+    let start_tag = find_next_block_start_tag(translation)?;
+    let cursor = &translation[start_tag.offset + start_tag.len..];
+    let closing_tag = find_next_block_end_tag(cursor);
+    let block_end = block_boundary(cursor, closing_tag.map(|tag| tag.offset));
+    Some(unescape_block_text(cursor[..block_end].trim()))
+}
+
 fn split_legacy_lines(translation: &str, expected_blocks: usize) -> anyhow::Result<Vec<String>> {
     let mut translations = translation
         .lines()
@@ -430,7 +438,14 @@ impl Translatable for TextBlock {
 
     fn set_translation(&mut self, translation: String) -> anyhow::Result<()> {
         let translation = match parse_tagged_blocks(&translation, 1)? {
-            Some(blocks) => blocks.into_iter().next().unwrap_or_default(),
+            Some(blocks) => {
+                let tagged = blocks.into_iter().next().unwrap_or_default();
+                if tagged.is_empty() {
+                    extract_first_tagged_block_content(&translation).unwrap_or_default()
+                } else {
+                    tagged
+                }
+            }
             None => translation,
         };
         self.translation = Some(strip_wrapping_quotes(&translation));
@@ -833,6 +848,14 @@ mod tests {
         block.set_translation(
             "Sure.\n<block id=\"0\">\nTranslated &lt;line&gt;\n</block>\nDone.".to_string(),
         )?;
+        assert_eq!(block.translation.as_deref(), Some("Translated <line>"));
+        Ok(())
+    }
+
+    #[test]
+    fn text_block_translation_accepts_non_zero_tagged_block_ids() -> anyhow::Result<()> {
+        let mut block = TextBlock::default();
+        block.set_translation("<block id=\"1\">\nTranslated &lt;line&gt;\n</block>".to_string())?;
         assert_eq!(block.translation.as_deref(), Some("Translated <line>"));
         Ok(())
     }

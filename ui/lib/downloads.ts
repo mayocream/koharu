@@ -1,6 +1,10 @@
 'use client'
 
 import { create } from 'zustand'
+import {
+  computeDownloadPercent,
+  isFinishedDownload,
+} from '@/lib/download-state'
 import { subscribeDownloadChanged, subscribeSnapshot } from '@/lib/rpc-events'
 import type { DownloadState } from '@/lib/protocol'
 
@@ -26,10 +30,7 @@ export const useDownloadStore = create<DownloadStore>((set, get) => ({
       const next = new Map(get().downloads)
       next.clear()
       for (const progress of snapshot.downloads) {
-        const percent =
-          progress.total && progress.total > 0
-            ? Math.round((progress.downloaded / progress.total) * 100)
-            : undefined
+        const percent = computeDownloadPercent(progress)
         next.set(progress.filename, { ...progress, percent })
       }
       set({ downloads: next })
@@ -37,12 +38,9 @@ export const useDownloadStore = create<DownloadStore>((set, get) => ({
 
     subscribeDownloadChanged((progress) => {
       const next = new Map(get().downloads)
-      const percent =
-        progress.total && progress.total > 0
-          ? Math.round((progress.downloaded / progress.total) * 100)
-          : undefined
+      const percent = computeDownloadPercent(progress)
 
-      if (progress.status === 'completed' || progress.status === 'failed') {
+      if (isFinishedDownload(progress)) {
         next.set(progress.filename, { ...progress, percent })
         set({ downloads: next })
         setTimeout(() => {

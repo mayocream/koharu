@@ -7,7 +7,6 @@ import {
   useState,
   type ReactNode,
 } from 'react'
-import { useQueryClient } from '@tanstack/react-query'
 import { useTranslation } from 'react-i18next'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
@@ -20,14 +19,19 @@ import {
   SelectValue,
 } from '@/components/ui/select'
 import {
-  getGetConfigQueryKey,
-  initializeSystem,
-  updateConfig,
-  useGetConfig,
-} from '@/lib/generated/orval/system/system'
+  computeDownloadPercent,
+  isActiveDownload,
+  DOWNLOAD_STATUS,
+} from '@/lib/download-state'
+import { normalizeErrorMessage } from '@/lib/errors'
 import i18n, { supportedLanguages } from '@/lib/i18n'
 import type { BootstrapConfig, DownloadState } from '@/lib/protocol'
 import { subscribeDownloadChanged, subscribeSnapshot } from '@/lib/rpc-events'
+import {
+  useInitializeSystemMutation,
+  useUpdateBootstrapConfigMutation,
+} from '@/lib/system/mutations'
+import { useBootstrapConfigQuery } from '@/lib/system/queries'
 
 const DEFAULT_CONFIG: BootstrapConfig = {
   runtime: { path: '' },
@@ -45,11 +49,6 @@ type ActiveDownload = {
   failed?: boolean
 }
 
-const computePercent = (download: DownloadState) =>
-  download.total && download.total > 0
-    ? Math.min(100, Math.round((download.downloaded / download.total) * 100))
-    : undefined
-
 const normalizeConfig = (next: BootstrapConfig): BootstrapConfig => ({
   runtime: { path: next.runtime.path.trim() },
   models: { path: next.models.path.trim() },
@@ -60,12 +59,9 @@ const normalizeConfig = (next: BootstrapConfig): BootstrapConfig => ({
 
 export default function BootstrapPage() {
   const { t } = useTranslation()
-  const queryClient = useQueryClient()
-  const bootstrapConfigQuery = useGetConfig({
-    query: {
-      staleTime: 10 * 60 * 1000,
-    },
-  })
+  const bootstrapConfigQuery = useBootstrapConfigQuery()
+  const updateBootstrapConfigMutation = useUpdateBootstrapConfigMutation()
+  const initializeSystemMutation = useInitializeSystemMutation()
 
   const [step, setStep] = useState<WizardStep>(0)
   const [config, setConfig] = useState<BootstrapConfig>(DEFAULT_CONFIG)
@@ -88,16 +84,15 @@ export default function BootstrapPage() {
     setError(null)
 
     try {
-      const saved = await updateConfig(nextConfig)
-      queryClient.setQueryData(getGetConfigQueryKey(), saved)
+      const saved = await updateBootstrapConfigMutation.mutateAsync(nextConfig)
       setConfig(saved)
-      await initializeSystem()
+      await initializeSystemMutation.mutateAsync()
     } catch (cause) {
       setInitializing(false)
       setFailed(true)
-      setError(cause instanceof Error ? cause.message : t('bootstrap.failed'))
+      setError(normalizeErrorMessage(cause))
     }
-  }, [config, queryClient, t])
+  }, [config, initializeSystemMutation, t, updateBootstrapConfigMutation])
 
   useEffect(() => {
     if (!bootstrapConfigQuery.data) return
@@ -106,28 +101,21 @@ export default function BootstrapPage() {
 
   useEffect(() => {
     if (!bootstrapConfigQuery.error) return
-    const message =
-      bootstrapConfigQuery.error instanceof Error
-        ? bootstrapConfigQuery.error.message
-        : t('bootstrap.failedLoadConfig')
-    setError(message)
-  }, [bootstrapConfigQuery.error, t])
+    setError(normalizeErrorMessage(bootstrapConfigQuery.error))
+  }, [bootstrapConfigQuery.error])
 
   useEffect(() => {
     const updateDownload = (progress: DownloadState) => {
       setDownload({
         filename: progress.filename,
-        percent: computePercent(progress),
-        failed: progress.status === 'failed',
+        percent: computeDownloadPercent(progress),
+        failed: progress.status === DOWNLOAD_STATUS.failed,
       })
     }
 
     const unsubscribeSnapshot = subscribeSnapshot((snapshot) => {
       const active =
-        snapshot.downloads.find(
-          (entry) =>
-            entry.status === 'started' || entry.status === 'downloading',
-        ) ??
+        snapshot.downloads.find(isActiveDownload) ??
         snapshot.downloads
           .slice()
           .sort((left, right) => left.filename.localeCompare(right.filename))

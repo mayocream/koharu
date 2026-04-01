@@ -7,12 +7,11 @@ import {
   findDocumentIndex,
   resolveCurrentDocumentId,
 } from '@/lib/documents/selection'
-import {
-  useDocumentsQuery,
-  useThumbnailQuery,
-} from '@/lib/documents/queries'
+import { useDocumentsQuery, useThumbnailQuery } from '@/lib/documents/queries'
+import { OPERATION_TYPE } from '@/lib/operations'
 import type { DocumentSummary } from '@/lib/protocol'
 import { useEditorUiStore } from '@/lib/stores/editorUiStore'
+import { useOperationStore } from '@/lib/stores/operationStore'
 import { Button } from '@/components/ui/button'
 import { ScrollArea } from '@/components/ui/scroll-area'
 import { flushTextBlockSync } from '@/lib/services/syncQueues'
@@ -22,11 +21,12 @@ export function Navigator() {
   const { data: documents = [] } = useDocumentsQuery()
   const totalPages = documents.length
   const documentsVersion = useEditorUiStore((state) => state.documentsVersion)
-  const currentDocumentId = useEditorUiStore(
-    (state) => state.currentDocumentId,
-  )
+  const currentDocumentId = useEditorUiStore((state) => state.currentDocumentId)
   const setCurrentDocumentId = useEditorUiStore(
     (state) => state.setCurrentDocumentId,
+  )
+  const thumbnailsEnabled = useOperationStore(
+    (state) => state.operation?.type !== OPERATION_TYPE.loadKhr,
   )
   const listRef = useRef<HTMLDivElement | null>(null)
   const resolvedCurrentDocumentId = useMemo(
@@ -108,6 +108,7 @@ export function Navigator() {
                     document={document}
                     pageNumber={virtualRow.index + 1}
                     selected={document.id === resolvedCurrentDocumentId}
+                    thumbnailsEnabled={thumbnailsEnabled}
                     onSelect={() => {
                       void flushTextBlockSync()
                         .catch(() => {})
@@ -130,6 +131,7 @@ type PagePreviewProps = {
   document: DocumentSummary
   pageNumber: number
   selected: boolean
+  thumbnailsEnabled: boolean
   onSelect: () => void
 }
 
@@ -137,6 +139,7 @@ function PagePreview({
   document,
   pageNumber,
   selected,
+  thumbnailsEnabled,
   onSelect,
 }: PagePreviewProps) {
   const [preview, setPreview] = useState<string>()
@@ -144,7 +147,7 @@ function PagePreview({
     data: thumbnailBlob,
     isPending: loading,
     isError: error,
-  } = useThumbnailQuery(document)
+  } = useThumbnailQuery(document, thumbnailsEnabled)
 
   useLayoutEffect(() => {
     if (!thumbnailBlob) {

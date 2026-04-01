@@ -10,9 +10,9 @@ import {
   LoaderIcon,
 } from 'lucide-react'
 import { ScrollArea } from '@/components/ui/scroll-area'
-import { useGetMeta } from '@/lib/generated/orval/system/system'
 import { isTauri } from '@/lib/native'
 import { useDocumentMutations } from '@/lib/documents/mutations'
+import { useAppVersionQuery } from '@/lib/system/queries'
 import Image from 'next/image'
 
 const GITHUB_REPO = 'mayocream/koharu'
@@ -23,13 +23,8 @@ export default function AboutPage() {
   const { t } = useTranslation()
   const { openExternal } = useDocumentMutations()
   const tauri = isTauri()
-  const { data: appVersion, status: appVersionStatus } = useGetMeta<string>({
-    query: {
-      enabled: tauri,
-      staleTime: 10 * 60 * 1000,
-      select: (meta) => meta.version,
-    },
-  })
+  const { data: appVersion, status: appVersionStatus } =
+    useAppVersionQuery(tauri)
 
   const [latestVersion, setLatestVersion] = useState<string>()
   const [versionStatus, setVersionStatus] = useState<VersionStatus>('loading')

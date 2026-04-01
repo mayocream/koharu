@@ -8,7 +8,7 @@ type ProgressTarget = {
 }
 
 export const isTauri = (): boolean =>
-  typeof window !== 'undefined' && !!(window as any).__TAURI_INTERNALS__
+  typeof window !== 'undefined' && !!window.__TAURI_INTERNALS__
 
 export const isMacOS = (): boolean => {
   if (typeof window === 'undefined') return false
@@ -56,6 +56,24 @@ export function getCurrentWindow(): ProgressTarget {
       return
     },
   }
+}
+
+export async function setWindowProgress(
+  progress?: number,
+  status = ProgressBarStatus.Normal,
+) {
+  try {
+    await getCurrentWindow().setProgressBar({ status, progress })
+  } catch {}
+}
+
+export async function clearWindowProgress() {
+  try {
+    await getCurrentWindow().setProgressBar({
+      status: ProgressBarStatus.None,
+      progress: 0,
+    })
+  } catch {}
 }
 
 export const windowControls = {

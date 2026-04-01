@@ -93,9 +93,7 @@ export function useMaskDrawing({
     brushConfig: { size: brushSize },
   } = usePreferencesStore()
   const { updateMask, inpaintPartial } = useMaskMutations()
-  const currentDocumentId = useEditorUiStore(
-    (state) => state.currentDocumentId,
-  )
+  const currentDocumentId = useEditorUiStore((state) => state.currentDocumentId)
   const canvasRef = useRef<HTMLCanvasElement | null>(null)
   const ctxRef = useRef<CanvasRenderingContext2D | null>(null)
   const drawingRef = useRef(false)
@@ -143,7 +141,7 @@ export function useMaskDrawing({
     }
 
     let cancelled = false
-    if (currentDocument.segment) {
+    if (currentDocument.segment && (showMask || isActive)) {
       void (async () => {
         try {
           const bitmap = await convertToImageBitmap(currentDocument.segment!)
@@ -182,6 +180,8 @@ export function useMaskDrawing({
     currentDocument?.width,
     currentDocument?.height,
     currentDocument?.segment,
+    isActive,
+    showMask,
   ])
 
   const drawStroke = (from: DocumentPointer, to: DocumentPointer) => {

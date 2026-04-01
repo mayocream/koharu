@@ -1,6 +1,7 @@
 'use client'
 
 import { create } from 'zustand'
+import { immer } from 'zustand/middleware/immer'
 
 type LlmUiState = {
   selectedModel?: string
@@ -12,23 +13,30 @@ type LlmUiState = {
   resetLlmUiState: () => void
 }
 
-export const useLlmUiStore = create<LlmUiState>((set) => ({
-  selectedModel: undefined,
-  selectedLanguage: undefined,
+const createInitialState = () => ({
+  selectedModel: undefined as string | undefined,
+  selectedLanguage: undefined as string | undefined,
   loading: false,
-  setSelectedModel: (selectedModel) =>
-    set({
-      selectedModel,
-    }),
-  setSelectedLanguage: (selectedLanguage) =>
-    set({
-      selectedLanguage,
-    }),
-  setLoading: (loading) => set({ loading }),
-  resetLlmUiState: () =>
-    set({
-      selectedModel: undefined,
-      selectedLanguage: undefined,
-      loading: false,
-    }),
-}))
+})
+
+export const useLlmUiStore = create<LlmUiState>()(
+  immer((set) => ({
+    ...createInitialState(),
+    setSelectedModel: (selectedModel) =>
+      set((state) => {
+        state.selectedModel = selectedModel
+      }),
+    setSelectedLanguage: (selectedLanguage) =>
+      set((state) => {
+        state.selectedLanguage = selectedLanguage
+      }),
+    setLoading: (loading) =>
+      set((state) => {
+        state.loading = loading
+      }),
+    resetLlmUiState: () =>
+      set((state) => {
+        Object.assign(state, createInitialState())
+      }),
+  })),
+)

@@ -38,8 +38,8 @@ import {
 } from '@/components/ui/select'
 import { useEditorUiStore } from '@/lib/stores/editorUiStore'
 import { usePreferencesStore } from '@/lib/stores/preferencesStore'
-import { useListFonts } from '@/lib/generated/orval/system/system'
 import { useTextBlockMutations } from '@/lib/documents/mutations'
+import { useSystemFontsQuery } from '@/lib/system/queries'
 import { cn } from '@/lib/utils'
 
 const DEFAULT_COLOR: RgbaColor = [0, 0, 0, 255]
@@ -184,11 +184,7 @@ export function RenderControlsPanel() {
   const setRenderEffect = useEditorUiStore((state) => state.setRenderEffect)
   const setRenderStroke = useEditorUiStore((state) => state.setRenderStroke)
   const { updateTextBlocks } = useTextBlockMutations()
-  const { data: availableFonts = [] } = useListFonts({
-    query: {
-      staleTime: 10 * 60 * 1000,
-    },
-  })
+  const { data: availableFonts = [] } = useSystemFontsQuery()
   const fontFamily = usePreferencesStore((state) => state.fontFamily)
   const setFontFamily = usePreferencesStore((state) => state.setFontFamily)
   const { textBlocks, selectedBlockIndex, replaceBlock } = useTextBlocks()

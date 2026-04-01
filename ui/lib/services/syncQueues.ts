@@ -1,9 +1,7 @@
 'use client'
 
 import PQueue from 'p-queue'
-import {
-  syncDocumentTextBlocks,
-} from '@/lib/documents/actions'
+import { syncDocumentTextBlocks } from '@/lib/documents/actions'
 import {
   updateDocumentBrushRegion,
   updateDocumentInpaintingMask,
