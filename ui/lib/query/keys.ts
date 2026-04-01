@@ -8,6 +8,11 @@ export const queryKeys = {
     thumbnail: (documentsVersion: number, index: number) =>
       ['documents', 'thumbnail', documentsVersion, index] as const,
   },
+  projects: {
+    all: ['projects'] as const,
+    current: ['projects', 'current'] as const,
+    recent: ['projects', 'recent'] as const,
+  },
   fonts: ['fonts'] as const,
   llm: {
     all: ['llm'] as const,

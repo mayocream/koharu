@@ -75,6 +75,43 @@ export type TextStyle = UiTextStyle
 export type NamedFontPrediction = UiNamedFontPrediction
 export type FontPrediction = UiFontPrediction
 
+export type ProjectStageStatus = 'idle' | 'ready' | 'stale' | 'failed'
+
+export type ProjectStageState = {
+  status: ProjectStageStatus
+  error: string | null
+}
+
+export type ProjectPageStages = {
+  detect: ProjectStageState
+  ocr: ProjectStageState
+  inpaint: ProjectStageState
+  translate: ProjectStageState
+  render: ProjectStageState
+}
+
+export type ProjectPageSummary = {
+  id: string
+  name: string
+  width: number
+  height: number
+  revision: number
+  hasSegment: boolean
+  hasInpainted: boolean
+  hasBrushLayer: boolean
+  hasRendered: boolean
+  textBlockCount: number
+  stages: ProjectPageStages
+}
+
+export type ProjectSummary = {
+  id: string
+  name: string
+  pageCount: number
+  updatedAtMs: number
+  currentDocumentId: string | null
+}
+
 export type DocumentSummary = Omit<GeneratedDocumentSummary, 'revision'> & {
   revision: number
 }
@@ -136,5 +173,7 @@ export type SnapshotEvent = Omit<
   'documents' | 'downloads'
 > & {
   documents: DocumentSummary[]
+  currentProject: ProjectSummary | null
+  currentDocumentId: string | null
   downloads: DownloadState[]
 }

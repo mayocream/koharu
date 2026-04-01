@@ -2,8 +2,8 @@ use std::{collections::HashMap, sync::Arc, time::Duration};
 
 use koharu_app::{pipeline, state_tx};
 use koharu_core::{
-    DocumentChangedEvent, DocumentSummary, DocumentsChangedEvent, DownloadState, DownloadStatus,
-    JobState, JobStatus, LlmState, PipelineProgress, PipelineStatus, PipelineStep, SnapshotEvent,
+    DocumentChangedEvent, DocumentsChangedEvent, DownloadState, DownloadStatus, JobState,
+    JobStatus, LlmState, PipelineProgress, PipelineStatus, PipelineStep, SnapshotEvent,
     TransferStatus,
 };
 use tokio::sync::{RwLock, broadcast};
@@ -53,14 +53,19 @@ impl EventHub {
     }
 
     pub async fn snapshot(&self) -> anyhow::Result<SnapshotEvent> {
-        let (documents, llm) = if let Ok(resources) = get_resources(&self.inner.shared) {
-            let guard = resources.state.read().await;
-            let documents = guard.documents.iter().map(DocumentSummary::from).collect();
-            drop(guard);
-            (documents, resources.llm.snapshot().await)
+        let (documents, current_project, current_document_id, llm) =
+            if let Ok(resources) = get_resources(&self.inner.shared) {
+                (
+                    state_tx::list_doc_summaries(&resources.state).await,
+                    state_tx::current_project_summary(&resources.state).await,
+                    state_tx::current_document_id(&resources.state).await,
+                    resources.llm.snapshot().await,
+                )
         } else {
             (
                 Vec::new(),
+                None,
+                None,
                 LlmState {
                     status: koharu_core::LlmStateStatus::Empty,
                     model_id: None,
@@ -92,6 +97,8 @@ impl EventHub {
 
         Ok(SnapshotEvent {
             documents,
+            current_project,
+            current_document_id,
             llm,
             jobs,
             downloads,
@@ -112,9 +119,7 @@ fn spawn_state_listener(inner: Arc<Inner>) {
                     let Ok(resources) = get_resources(&inner.shared) else {
                         continue;
                     };
-                    let guard = resources.state.read().await;
-                    let documents = guard.documents.iter().map(DocumentSummary::from).collect();
-                    drop(guard);
+                    let documents = state_tx::list_doc_summaries(&resources.state).await;
                     emit(
                         &inner,
                         ApiEvent::DocumentsChanged(DocumentsChangedEvent { documents }),
@@ -141,9 +146,7 @@ fn spawn_state_listener(inner: Arc<Inner>) {
                     let Ok(resources) = get_resources(&inner.shared) else {
                         continue;
                     };
-                    let guard = resources.state.read().await;
-                    let documents = guard.documents.iter().map(DocumentSummary::from).collect();
-                    drop(guard);
+                    let documents = state_tx::list_doc_summaries(&resources.state).await;
                     emit(
                         &inner,
                         ApiEvent::DocumentsChanged(DocumentsChangedEvent { documents }),

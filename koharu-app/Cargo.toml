@@ -18,6 +18,7 @@ koharu-renderer = { workspace = true }
 koharu-llm = { workspace = true }
 koharu-runtime = { workspace = true }
 anyhow = { workspace = true }
+blake3 = { workspace = true }
 dirs = { workspace = true }
 image = { workspace = true }
 imageproc = { workspace = true }
@@ -28,6 +29,7 @@ rfd = { workspace = true }
 reqwest-middleware = { workspace = true }
 serde = { workspace = true }
 serde_bytes = { workspace = true }
+serde_json = { workspace = true }
 strum = { workspace = true }
 tempfile = { workspace = true }
 tokio = { workspace = true }

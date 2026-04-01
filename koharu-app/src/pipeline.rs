@@ -13,7 +13,7 @@ use tokio::sync::broadcast;
 
 use crate::{
     AppResources,
-    state_tx::{self, ChangedField},
+    state_tx::{self, ChangedField, ProjectStage},
 };
 
 pub struct PipelineHandle {
@@ -51,7 +51,7 @@ pub async fn run_pipeline(
 
     let total_docs = match request.index {
         Some(_) => 1,
-        None => resources.state.read().await.documents.len(),
+        None => state_tx::doc_count(&resources.state).await,
     };
 
     match result {
@@ -105,8 +105,7 @@ async fn run_pipeline_inner(
     job_id: &str,
 ) -> anyhow::Result<()> {
     let total_docs = {
-        let guard = res.state.read().await;
-        let len = guard.documents.len();
+        let len = state_tx::doc_count(&res.state).await;
         match req.index {
             Some(i) if i >= len => anyhow::bail!("Document index {i} out of range (have {len})"),
             Some(_) => 1,
@@ -182,24 +181,39 @@ async fn run_pipeline_inner(
 
             let mut snapshot = state_tx::read_doc(&res.state, doc_index).await?;
 
-            match step {
-                PipelineStep::Detect => res.ml.detect(&mut snapshot).await?,
-                PipelineStep::Ocr => res.ml.ocr(&mut snapshot).await?,
-                PipelineStep::Inpaint => res.ml.inpaint(&mut snapshot).await?,
-                PipelineStep::LlmGenerate => {
-                    res.llm
-                        .translate(&mut snapshot, req.language.as_deref())
-                        .await?;
+            let step_result = async {
+                match step {
+                    PipelineStep::Detect => res.ml.detect(&mut snapshot).await,
+                    PipelineStep::Ocr => res.ml.ocr(&mut snapshot).await,
+                    PipelineStep::Inpaint => res.ml.inpaint(&mut snapshot).await,
+                    PipelineStep::LlmGenerate => {
+                        res.llm
+                            .translate(&mut snapshot, req.language.as_deref())
+                            .await
+                    }
+                    PipelineStep::Render => {
+                        res.renderer.render(
+                            &mut snapshot,
+                            None,
+                            req.shader_effect.unwrap_or_default(),
+                            req.shader_stroke.clone(),
+                            req.font_family.as_deref(),
+                        )?;
+                        Ok(())
+                    }
                 }
-                PipelineStep::Render => {
-                    res.renderer.render(
-                        &mut snapshot,
-                        None,
-                        req.shader_effect.unwrap_or_default(),
-                        req.shader_stroke.clone(),
-                        req.font_family.as_deref(),
-                    )?;
-                }
+            }
+            .await;
+
+            if let Err(err) = step_result {
+                let _ = state_tx::mark_stage_failure(
+                    &res.state,
+                    doc_index,
+                    map_pipeline_stage(*step),
+                    err.to_string(),
+                )
+                .await;
+                return Err(err);
             }
 
             let changed = match step {
@@ -210,10 +224,21 @@ async fn run_pipeline_inner(
                 PipelineStep::Render => &[ChangedField::TextBlocks, ChangedField::Rendered][..],
             };
             state_tx::update_doc(&res.state, doc_index, snapshot, changed).await?;
+            state_tx::mark_stage_success(&res.state, doc_index, map_pipeline_stage(*step)).await?;
         }
     }
 
     Ok(())
+}
+
+fn map_pipeline_stage(step: PipelineStep) -> ProjectStage {
+    match step {
+        PipelineStep::Detect => ProjectStage::Detect,
+        PipelineStep::Ocr => ProjectStage::Ocr,
+        PipelineStep::Inpaint => ProjectStage::Inpaint,
+        PipelineStep::LlmGenerate => ProjectStage::Translate,
+        PipelineStep::Render => ProjectStage::Render,
+    }
 }
 
 #[cfg(test)]

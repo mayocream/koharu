@@ -1,7 +1,12 @@
 use anyhow::Result;
-use koharu_core::{AppState, Document};
+use koharu_core::{
+    AppState, Document, DocumentSummary, ProjectPageStages, ProjectStageState, ProjectStageStatus,
+    ProjectSummary,
+};
 use once_cell::sync::Lazy;
 use tokio::sync::broadcast;
+
+use crate::projects;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, strum::Display)]
 pub enum ChangedField {
@@ -17,6 +22,15 @@ pub enum ChangedField {
     Inpainted,
     #[strum(serialize = "rendered")]
     Rendered,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum ProjectStage {
+    Detect,
+    Ocr,
+    Inpaint,
+    Translate,
+    Render,
 }
 
 #[derive(Debug, Clone)]
@@ -43,56 +57,276 @@ fn serialize_changed_fields(changed: &[ChangedField]) -> Vec<String> {
     changed.iter().map(ToString::to_string).collect()
 }
 
-pub async fn read_doc(state: &AppState, index: usize) -> Result<Document> {
-    let guard = state.read().await;
-    guard
-        .documents
+fn current_project(
+    state: &koharu_core::State,
+) -> Result<&koharu_core::ProjectSessionState> {
+    state
+        .current_project
+        .as_ref()
+        .ok_or_else(|| anyhow::anyhow!("No project is currently open"))
+}
+
+fn current_project_mut(
+    state: &mut koharu_core::State,
+) -> Result<&mut koharu_core::ProjectSessionState> {
+    state
+        .current_project
+        .as_mut()
+        .ok_or_else(|| anyhow::anyhow!("No project is currently open"))
+}
+
+fn page_id_at_index(project: &koharu_core::ProjectSessionState, index: usize) -> Result<String> {
+    project
+        .pages
         .get(index)
-        .cloned()
+        .map(|page| page.summary.id.clone())
         .ok_or_else(|| anyhow::anyhow!("Document not found at index {index}"))
 }
 
+fn stage_mut<'a>(
+    stages: &'a mut ProjectPageStages,
+    stage: ProjectStage,
+) -> &'a mut ProjectStageState {
+    match stage {
+        ProjectStage::Detect => &mut stages.detect,
+        ProjectStage::Ocr => &mut stages.ocr,
+        ProjectStage::Inpaint => &mut stages.inpaint,
+        ProjectStage::Translate => &mut stages.translate,
+        ProjectStage::Render => &mut stages.render,
+    }
+}
+
+fn invalidate_document(document: &mut Document, changed: &[ChangedField], stages: &mut ProjectPageStages) {
+    let changed_text_blocks = changed.contains(&ChangedField::TextBlocks);
+    let changed_segment = changed.contains(&ChangedField::Segment);
+    let changed_brush = changed.contains(&ChangedField::BrushLayer);
+    let changed_inpainted = changed.contains(&ChangedField::Inpainted);
+    let changed_rendered = changed.contains(&ChangedField::Rendered);
+
+    if changed_segment {
+        document.inpainted = None;
+        document.rendered = None;
+        stages.inpaint.status = ProjectStageStatus::Stale;
+        stages.inpaint.error = None;
+        stages.render.status = ProjectStageStatus::Stale;
+        stages.render.error = None;
+    }
+
+    if changed_brush {
+        document.rendered = None;
+        stages.render.status = ProjectStageStatus::Stale;
+        stages.render.error = None;
+    }
+
+    if changed_text_blocks && !changed_rendered {
+        document.rendered = None;
+        stages.render.status = ProjectStageStatus::Stale;
+        stages.render.error = None;
+    }
+
+    if changed_inpainted {
+        stages.inpaint.status = ProjectStageStatus::Ready;
+        stages.inpaint.error = None;
+        document.rendered = None;
+        stages.render.status = ProjectStageStatus::Stale;
+        stages.render.error = None;
+    }
+
+    if changed_rendered {
+        stages.render.status = ProjectStageStatus::Ready;
+        stages.render.error = None;
+    }
+}
+
+fn normalize_stage_success(stages: &mut ProjectPageStages, stage: ProjectStage) {
+    let target = stage_mut(stages, stage);
+    target.status = ProjectStageStatus::Ready;
+    target.error = None;
+
+    match stage {
+        ProjectStage::Detect => {
+            stages.ocr.status = ProjectStageStatus::Stale;
+            stages.ocr.error = None;
+            stages.translate.status = ProjectStageStatus::Stale;
+            stages.translate.error = None;
+            stages.inpaint.status = ProjectStageStatus::Stale;
+            stages.inpaint.error = None;
+            stages.render.status = ProjectStageStatus::Stale;
+            stages.render.error = None;
+        }
+        ProjectStage::Ocr => {
+            stages.translate.status = ProjectStageStatus::Stale;
+            stages.translate.error = None;
+            stages.render.status = ProjectStageStatus::Stale;
+            stages.render.error = None;
+        }
+        ProjectStage::Inpaint => {
+            stages.render.status = ProjectStageStatus::Stale;
+            stages.render.error = None;
+        }
+        ProjectStage::Translate => {
+            stages.render.status = ProjectStageStatus::Stale;
+            stages.render.error = None;
+        }
+        ProjectStage::Render => {}
+    }
+}
+
+pub async fn restore_last_project(state: &AppState) -> Result<bool> {
+    let maybe_session = projects::load_last_project()?;
+    let restored = maybe_session.is_some();
+    if restored {
+        let mut guard = state.write().await;
+        guard.current_project = maybe_session;
+        drop(guard);
+        emit(StateEvent::DocumentsChanged);
+    }
+    Ok(restored)
+}
+
+pub async fn list_doc_summaries(state: &AppState) -> Vec<DocumentSummary> {
+    state
+        .read()
+        .await
+        .current_project
+        .as_ref()
+        .map(|project| {
+            project
+                .pages
+                .iter()
+                .map(|page| DocumentSummary::from(&page.summary))
+                .collect()
+        })
+        .unwrap_or_default()
+}
+
+pub async fn current_project_summary(state: &AppState) -> Option<ProjectSummary> {
+    state
+        .read()
+        .await
+        .current_project
+        .as_ref()
+        .map(|project| project.summary.clone())
+}
+
+pub async fn current_document_id(state: &AppState) -> Option<String> {
+    state
+        .read()
+        .await
+        .current_project
+        .as_ref()
+        .and_then(|project| project.current_document_id.clone())
+}
+
+pub async fn read_doc(state: &AppState, index: usize) -> Result<Document> {
+    let mut guard = state.write().await;
+    let project = current_project_mut(&mut guard)?;
+    let document_id = page_id_at_index(project, index)?;
+    projects::load_document(project, &document_id)
+}
+
 pub async fn list_docs(state: &AppState) -> Vec<Document> {
-    state.read().await.documents.clone()
+    let mut guard = state.write().await;
+    let Ok(project) = current_project_mut(&mut guard) else {
+        return Vec::new();
+    };
+
+    let ids = project
+        .pages
+        .iter()
+        .map(|page| page.summary.id.clone())
+        .collect::<Vec<_>>();
+    let mut documents = Vec::with_capacity(ids.len());
+    for document_id in ids {
+        match projects::load_document(project, &document_id) {
+            Ok(document) => documents.push(document),
+            Err(err) => tracing::warn!(?err, document_id, "failed to load project page"),
+        }
+    }
+    documents
+}
+
+pub async fn read_thumbnail(state: &AppState, index: usize) -> Result<Vec<u8>> {
+    let mut guard = state.write().await;
+    let project = current_project_mut(&mut guard)?;
+    let document_id = page_id_at_index(project, index)?;
+    projects::read_thumbnail(project, &document_id)
 }
 
 pub async fn doc_count(state: &AppState) -> usize {
-    state.read().await.documents.len()
+    state
+        .read()
+        .await
+        .current_project
+        .as_ref()
+        .map(|project| project.pages.len())
+        .unwrap_or(0)
 }
 
 pub async fn find_doc_index(state: &AppState, document_id: &str) -> Result<usize> {
     let guard = state.read().await;
-    guard
-        .documents
+    let project = current_project(&guard)?;
+    project
+        .pages
         .iter()
-        .position(|document| document.id == document_id)
+        .position(|page| page.summary.id == document_id)
         .ok_or_else(|| anyhow::anyhow!("Document not found: {document_id}"))
 }
 
-pub async fn replace_docs(state: &AppState, mut documents: Vec<Document>) -> Result<usize> {
-    for document in &mut documents {
-        document.prepare_for_store();
-    }
-
-    let count = documents.len();
+pub async fn replace_docs_from_files(state: &AppState, files: Vec<koharu_core::FileEntry>) -> Result<usize> {
+    let session = projects::create_project(files)?;
+    let count = session.pages.len();
     let mut guard = state.write().await;
-    guard.documents = documents;
+    guard.current_project = Some(session);
     drop(guard);
     emit(StateEvent::DocumentsChanged);
     Ok(count)
 }
 
-pub async fn append_docs(state: &AppState, mut documents: Vec<Document>) -> Result<usize> {
-    for document in &mut documents {
-        document.prepare_for_store();
-    }
-
+pub async fn append_docs_from_files(state: &AppState, files: Vec<koharu_core::FileEntry>) -> Result<usize> {
     let mut guard = state.write().await;
-    guard.documents.extend(documents);
-    let count = guard.documents.len();
+    let count = match guard.current_project.as_mut() {
+        Some(project) => projects::append_files(project, files)?,
+        None => {
+            let session = projects::create_project(files)?;
+            let count = session.pages.len();
+            guard.current_project = Some(session);
+            count
+        }
+    };
     drop(guard);
     emit(StateEvent::DocumentsChanged);
     Ok(count)
+}
+
+pub async fn open_project(state: &AppState, project_id: &str) -> Result<usize> {
+    let session = projects::open_project(project_id)?;
+    let count = session.pages.len();
+    let mut guard = state.write().await;
+    guard.current_project = Some(session);
+    drop(guard);
+    emit(StateEvent::DocumentsChanged);
+    Ok(count)
+}
+
+pub async fn list_projects(recent_only: bool) -> Result<Vec<ProjectSummary>> {
+    projects::list_projects(recent_only)
+}
+
+pub async fn save_current_project(state: &AppState) -> Result<Option<ProjectSummary>> {
+    let mut guard = state.write().await;
+    let Some(project) = guard.current_project.as_mut() else {
+        return Ok(None);
+    };
+    projects::save_session(project)?;
+    Ok(Some(project.summary.clone()))
+}
+
+pub async fn set_current_document(state: &AppState, document_id: Option<String>) -> Result<()> {
+    let mut guard = state.write().await;
+    let project = current_project_mut(&mut guard)?;
+    projects::set_current_document(project, document_id)?;
+    Ok(())
 }
 
 pub async fn update_doc(
@@ -107,12 +341,15 @@ pub async fn update_doc(
     let revision = document.revision;
 
     let mut guard = state.write().await;
-    let target = guard
-        .documents
+    let project = current_project_mut(&mut guard)?;
+    let page = project
+        .pages
         .get_mut(index)
         .ok_or_else(|| anyhow::anyhow!("Document not found at index {index}"))?;
-    *target = document;
+    invalidate_document(&mut document, changed, &mut page.summary.stages);
+    projects::save_document(project, &document)?;
     drop(guard);
+
     emit(StateEvent::DocumentChanged {
         document_id,
         revision,
@@ -131,16 +368,26 @@ where
     F: FnOnce(&mut Document) -> Result<T>,
 {
     let mut guard = state.write().await;
-    let target = guard
-        .documents
-        .get_mut(index)
+    let project = current_project_mut(&mut guard)?;
+    let document_id = page_id_at_index(project, index)?;
+    let page_stages = project
+        .pages
+        .get(index)
+        .map(|page| page.summary.stages.clone())
         .ok_or_else(|| anyhow::anyhow!("Document not found at index {index}"))?;
-    let result = mutator(target)?;
-    target.prepare_for_store();
-    target.bump_revision();
-    let document_id = target.id.clone();
-    let revision = target.revision;
+    let mut document = projects::load_document(project, &document_id)?;
+    let result = mutator(&mut document)?;
+    document.prepare_for_store();
+    document.bump_revision();
+    let revision = document.revision;
+
+    if let Some(page) = project.pages.get_mut(index) {
+        page.summary.stages = page_stages;
+        invalidate_document(&mut document, changed, &mut page.summary.stages);
+    }
+    projects::save_document(project, &document)?;
     drop(guard);
+
     emit(StateEvent::DocumentChanged {
         document_id,
         revision,
@@ -149,76 +396,41 @@ where
     Ok(result)
 }
 
-#[cfg(test)]
-mod tests {
-    use super::{
-        ChangedField, append_docs, find_doc_index, list_docs, mutate_doc, read_doc, replace_docs,
-        update_doc,
-    };
-    use koharu_core::{AppState, Document, State};
-    use std::sync::Arc;
-    use tokio::sync::RwLock;
+pub async fn mark_stage_success(
+    state: &AppState,
+    index: usize,
+    stage: ProjectStage,
+) -> Result<()> {
+    let mut guard = state.write().await;
+    let project = current_project_mut(&mut guard)?;
+    let page = project
+        .pages
+        .get_mut(index)
+        .ok_or_else(|| anyhow::anyhow!("Document not found at index {index}"))?;
+    normalize_stage_success(&mut page.summary.stages, stage);
+    projects::save_session(project)?;
+    drop(guard);
+    emit(StateEvent::DocumentsChanged);
+    Ok(())
+}
 
-    fn test_state() -> AppState {
-        Arc::new(RwLock::new(State {
-            documents: vec![Default::default()],
-        }))
-    }
-
-    #[tokio::test]
-    async fn read_update_mutate_doc_round_trip() {
-        let state = test_state();
-
-        let mut doc = read_doc(&state, 0).await.expect("doc should exist");
-        doc.name = "before".to_string();
-        update_doc(&state, 0, doc, &[ChangedField::Name])
-            .await
-            .expect("update should work");
-
-        mutate_doc(&state, 0, &[ChangedField::Name], |doc| {
-            doc.name = "after".to_string();
-            Ok(())
-        })
-        .await
-        .expect("mutation should work");
-
-        let doc = read_doc(&state, 0).await.expect("doc should exist");
-        assert_eq!(doc.name, "after");
-    }
-
-    #[tokio::test]
-    async fn index_not_found_errors_are_stable() {
-        let state = test_state();
-        let err = read_doc(&state, 1)
-            .await
-            .expect_err("missing document should fail");
-        assert_eq!(err.to_string(), "Document not found at index 1");
-
-        let err = mutate_doc(&state, 1, &[ChangedField::Name], |_| Ok(()))
-            .await
-            .expect_err("missing document should fail");
-        assert_eq!(err.to_string(), "Document not found at index 1");
-    }
-
-    #[tokio::test]
-    async fn replace_append_and_find_doc_work() {
-        let state = test_state();
-        let first = Document {
-            id: "first".to_string(),
-            ..Default::default()
-        };
-        replace_docs(&state, vec![first])
-            .await
-            .expect("replace should work");
-        assert_eq!(list_docs(&state).await.len(), 1);
-
-        let second = Document {
-            id: "second".to_string(),
-            ..Default::default()
-        };
-        append_docs(&state, vec![second])
-            .await
-            .expect("append should work");
-        assert_eq!(find_doc_index(&state, "second").await.expect("find"), 1);
-    }
+pub async fn mark_stage_failure(
+    state: &AppState,
+    index: usize,
+    stage: ProjectStage,
+    error: impl Into<String>,
+) -> Result<()> {
+    let mut guard = state.write().await;
+    let project = current_project_mut(&mut guard)?;
+    let page = project
+        .pages
+        .get_mut(index)
+        .ok_or_else(|| anyhow::anyhow!("Document not found at index {index}"))?;
+    let target = stage_mut(&mut page.summary.stages, stage);
+    target.status = ProjectStageStatus::Failed;
+    target.error = Some(error.into());
+    projects::save_session(project)?;
+    drop(guard);
+    emit(StateEvent::DocumentsChanged);
+    Ok(())
 }

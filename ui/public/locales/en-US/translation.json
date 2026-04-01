@@ -8,6 +8,8 @@
     "addFile": "Add File...",
     "openFolder": "Open Folder...",
     "addFolder": "Add Folder...",
+    "openProject": "Open Project",
+    "openRecent": "Open Recent",
     "save": "Save...",
     "export": "Export...",
     "exportPsd": "Export PSD...",

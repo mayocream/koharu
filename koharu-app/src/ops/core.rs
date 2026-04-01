@@ -1,6 +1,5 @@
 use std::path::{Path, PathBuf};
 
-use image::ImageFormat;
 use koharu_core::commands::{
     DeviceInfo, FileResult, IndexPayload, OpenDocumentsPayload, OpenExternalPayload,
     ThumbnailResult,
@@ -9,7 +8,7 @@ use rfd::FileDialog;
 
 use crate::{AppResources, state_tx};
 
-use super::utils::{encode_image, load_documents, mime_from_ext};
+use super::utils::{encode_image, mime_from_ext};
 
 fn next_available_path(output_dir: &Path, stem: &str, ext: &str) -> PathBuf {
     let mut candidate = output_dir.join(format!("{stem}.{ext}"));
@@ -83,8 +82,7 @@ pub async fn open_external(
 }
 
 pub async fn get_documents(state: AppResources) -> anyhow::Result<usize> {
-    let guard = state.state.read().await;
-    Ok(guard.documents.len())
+    Ok(state_tx::doc_count(&state.state).await)
 }
 
 pub async fn get_document(
@@ -98,16 +96,8 @@ pub async fn get_thumbnail(
     state: AppResources,
     payload: IndexPayload,
 ) -> anyhow::Result<ThumbnailResult> {
-    let doc = state_tx::read_doc(&state.state, payload.index).await?;
-
-    let source = doc.rendered.as_ref().unwrap_or(&doc.image);
-    let thumbnail = source.thumbnail(200, 200);
-
-    let mut buf = std::io::Cursor::new(Vec::new());
-    thumbnail.write_to(&mut buf, ImageFormat::WebP)?;
-
     Ok(ThumbnailResult {
-        data: buf.into_inner(),
+        data: state_tx::read_thumbnail(&state.state, payload.index).await?,
         content_type: "image/webp".to_string(),
     })
 }
@@ -126,8 +116,14 @@ pub async fn open_documents(
         anyhow::bail!("No files uploaded");
     }
 
-    let docs = load_documents(inputs)?;
-    state_tx::replace_docs(&state.state, docs).await
+    let files = inputs
+        .into_iter()
+        .map(|(path, data)| koharu_core::FileEntry {
+            name: path.to_string_lossy().to_string(),
+            data,
+        })
+        .collect();
+    state_tx::replace_docs_from_files(&state.state, files).await
 }
 
 pub async fn add_documents(
@@ -144,8 +140,14 @@ pub async fn add_documents(
         anyhow::bail!("No files uploaded");
     }
 
-    let docs = load_documents(inputs)?;
-    state_tx::append_docs(&state.state, docs).await
+    let files = inputs
+        .into_iter()
+        .map(|(path, data)| koharu_core::FileEntry {
+            name: path.to_string_lossy().to_string(),
+            data,
+        })
+        .collect();
+    state_tx::append_docs_from_files(&state.state, files).await
 }
 
 pub async fn export_document(
@@ -182,9 +184,9 @@ pub async fn export_all_inpainted(state: AppResources) -> anyhow::Result<usize> 
         return Ok(0);
     };
 
-    let guard = state.state.read().await;
+    let documents = state_tx::list_docs(&state.state).await;
     export_documents_matching(
-        &guard.documents,
+        &documents,
         &output_dir,
         "inpainted",
         "No inpainted images found to export",
@@ -197,9 +199,9 @@ pub async fn export_all_rendered(state: AppResources) -> anyhow::Result<usize> {
         return Ok(0);
     };
 
-    let guard = state.state.read().await;
+    let documents = state_tx::list_docs(&state.state).await;
     export_documents_matching(
-        &guard.documents,
+        &documents,
         &output_dir,
         "rendered",
         "No rendered images found to export",

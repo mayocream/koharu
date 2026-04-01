@@ -13,9 +13,17 @@ import {
   MenubarItem,
   MenubarMenu,
   MenubarSeparator,
+  MenubarSub,
+  MenubarSubContent,
+  MenubarSubTrigger,
   MenubarTrigger,
 } from '@/components/ui/menubar'
 import { useDocumentMutations } from '@/lib/query/mutations'
+import {
+  useCurrentProjectQuery,
+  useProjectsQuery,
+  useRecentProjectsQuery,
+} from '@/lib/query/hooks'
 
 type MenuItem = {
   label: string
@@ -31,8 +39,10 @@ type MenuSection = {
 }
 
 export function MenuBar() {
-  const { t } = useTranslation()
+  const { t, i18n } = useTranslation()
   const {
+    saveProject,
+    openProject,
     addDocuments,
     openDocuments,
     openFolder,
@@ -46,6 +56,16 @@ export function MenuBar() {
     exportAllInpainted,
     exportAllRendered,
   } = useDocumentMutations()
+  const { data: currentProject } = useCurrentProjectQuery()
+  const { data: projects = [] } = useProjectsQuery()
+  const { data: recentProjects = [] } = useRecentProjectsQuery()
+  const isTurkishLocale = i18n.language.startsWith('tr')
+  const openProjectLabel = t('menu.openProject', {
+    defaultValue: isTurkishLocale ? 'Projeyi Aç' : 'Open Project',
+  })
+  const openRecentLabel = t('menu.openRecent', {
+    defaultValue: isTurkishLocale ? 'Son Projeler' : 'Open Recent',
+  })
 
   const fileMenuItems: MenuItem[] = [
     {
@@ -166,6 +186,57 @@ export function MenuBar() {
             sideOffset={5}
             alignOffset={-3}
           >
+            <MenubarItem
+              data-testid='menu-file-save-project'
+              className='text-[13px]'
+              disabled={!currentProject}
+              onSelect={() => {
+                void saveProject()
+              }}
+            >
+              {t('menu.save')}
+            </MenubarItem>
+            {projects.length > 0 && (
+                <MenubarSub>
+                  <MenubarSubTrigger className='text-[13px]'>
+                    {openProjectLabel}
+                  </MenubarSubTrigger>
+                <MenubarSubContent>
+                  {projects.map((project) => (
+                    <MenubarItem
+                      key={project.id}
+                      className='text-[13px]'
+                      onSelect={() => {
+                        void openProject(project.id)
+                      }}
+                    >
+                      {project.name}
+                    </MenubarItem>
+                  ))}
+                </MenubarSubContent>
+              </MenubarSub>
+            )}
+            {recentProjects.length > 0 && (
+                <MenubarSub>
+                  <MenubarSubTrigger className='text-[13px]'>
+                    {openRecentLabel}
+                  </MenubarSubTrigger>
+                <MenubarSubContent>
+                  {recentProjects.map((project) => (
+                    <MenubarItem
+                      key={project.id}
+                      className='text-[13px]'
+                      onSelect={() => {
+                        void openProject(project.id)
+                      }}
+                    >
+                      {project.name}
+                    </MenubarItem>
+                  ))}
+                </MenubarSubContent>
+              </MenubarSub>
+            )}
+            <MenubarSeparator />
             {fileMenuItems.map((item) => (
               <MenubarItem
                 key={item.label}

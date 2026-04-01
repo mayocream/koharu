@@ -3955,6 +3955,7 @@ name = "koharu-app"
 version = "0.41.4"
 dependencies = [
  "anyhow",
+ "blake3",
  "dirs",
  "image",
  "imageproc",
@@ -3970,6 +3971,7 @@ dependencies = [
  "rfd",
  "serde",
  "serde_bytes",
+ "serde_json",
  "strum",
  "tempfile",
  "tokio",

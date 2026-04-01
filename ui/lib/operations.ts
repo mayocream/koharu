@@ -1,7 +1,8 @@
 'use client'
 
 export type OperationType =
-  | 'load-khr'
+  | 'load-project'
+  | 'save-project'
   | 'process-current'
   | 'process-all'
   | 'llm-load'

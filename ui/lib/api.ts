@@ -19,6 +19,7 @@ import type {
   LlmModelInfo,
   LlmState,
   MetaInfo,
+  ProjectSummary,
   TextBlockPatch,
 } from '@/lib/protocol'
 import {
@@ -293,6 +294,18 @@ export const api = {
   async getDocumentsCount(): Promise<number> {
     const documents = await getDocuments()
     return documents.length
+  },
+
+  async getCurrentProject(): Promise<ProjectSummary | null> {
+    return fetchJson<ProjectSummary | null>('/projects/current')
+  },
+
+  async listProjects(): Promise<ProjectSummary[]> {
+    return fetchJson<ProjectSummary[]>('/projects')
+  },
+
+  async listRecentProjects(): Promise<ProjectSummary[]> {
+    return fetchJson<ProjectSummary[]>('/projects/recent')
   },
 
   async getDocument(index: number): Promise<Document> {
@@ -785,6 +798,45 @@ export const api = {
         }),
       })
       setActivePipelineJobId(job.id)
+    })
+  },
+
+  async openProject(
+    projectId: string,
+  ): Promise<{
+    totalCount: number
+    documents: DocumentSummary[]
+    currentDocumentId?: string
+  }> {
+    return withRpcError('open_project', async () => {
+      const result = await fetchJson<{
+        totalCount: number
+        documents: DocumentSummary[]
+      }>(`/projects/${projectId}/open`, {
+        method: 'POST',
+      })
+      documentDetailCache.clear()
+      const currentProject = await api.getCurrentProject().catch(() => null)
+      return {
+        totalCount: result.totalCount,
+        documents: result.documents,
+        currentDocumentId: currentProject?.currentDocumentId ?? undefined,
+      }
+    })
+  },
+
+  async saveProject(): Promise<void> {
+    await fetchJson('/projects/current/save', {
+      method: 'POST',
+    })
+  },
+
+  async setCurrentDocument(index: number): Promise<void> {
+    const summary = await getDocumentSummaryAtIndex(index)
+    await fetchJson<void>('/projects/current/document', {
+      method: 'PUT',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ documentId: summary.id }),
     })
   },
 
