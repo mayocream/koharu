@@ -18,6 +18,7 @@
 # next.js
 /.next/
 /out/
+/.generated/
 
 # production
 /build

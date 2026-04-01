@@ -1,22 +1,29 @@
 'use client'
 
 import PQueue from 'p-queue'
-import { api } from '@/lib/api'
+import {
+  syncDocumentTextBlocks,
+} from '@/lib/documents/actions'
+import {
+  updateDocumentBrushRegion,
+  updateDocumentInpaintingMask,
+} from '@/lib/generated/orval/documents/documents'
+import { withRpcError } from '@/lib/rpc'
 import { InpaintRegion, TextBlock } from '@/types'
 
 type TextBlockPayload = {
-  index: number
+  documentId: string
   textBlocks: TextBlock[]
 }
 
 type MaskPayload = {
-  index: number
+  documentId: string
   mask: Uint8Array
   region?: InpaintRegion
 }
 
 type BrushPayload = {
-  index: number
+  documentId: string
   patch: Uint8Array
   region: InpaintRegion
 }
@@ -42,7 +49,7 @@ const scheduleTextBlockFlush = () => {
       while (textBlockPending) {
         const payload = textBlockPending
         textBlockPending = null
-        await api.updateTextBlocks(payload.index, payload.textBlocks)
+        await syncDocumentTextBlocks(payload.documentId, payload.textBlocks)
       }
     } finally {
       textBlockScheduled = false
@@ -61,7 +68,12 @@ const scheduleMaskFlush = () => {
       while (maskPending.length > 0) {
         const payload = maskPending.shift()
         if (!payload) break
-        await api.updateInpaintMask(payload.index, payload.mask, payload.region)
+        await withRpcError('update_inpaint_mask', () =>
+          updateDocumentInpaintingMask(payload.documentId, {
+            data: Array.from(payload.mask),
+            region: payload.region,
+          }),
+        )
       }
     } finally {
       maskScheduled = false
@@ -73,11 +85,11 @@ const scheduleMaskFlush = () => {
 }
 
 export const enqueueTextBlockSync = (
-  index: number,
+  documentId: string,
   textBlocks: TextBlock[],
 ) => {
   textBlockPending = {
-    index,
+    documentId,
     textBlocks,
   }
   scheduleTextBlockFlush()
@@ -122,7 +134,12 @@ export const clearMaskSync = () => {
 
 export const enqueueBrushPatch = (payload: BrushPayload) =>
   brushQueue.add(async () => {
-    await api.updateBrushLayer(payload.index, payload.patch, payload.region)
+    await withRpcError('update_brush_layer', () =>
+      updateDocumentBrushRegion(payload.documentId, {
+        data: Array.from(payload.patch),
+        region: payload.region,
+      }),
+    )
   })
 
 export const flushBrushSync = async () => {

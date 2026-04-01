@@ -3,7 +3,6 @@
 import { useCallback, useEffect, useState } from 'react'
 import Link from 'next/link'
 import { MinusIcon, SquareIcon, XIcon, CopyIcon } from 'lucide-react'
-import { isTauri, isMacOS, windowControls } from '@/lib/backend'
 import { useTranslation } from 'react-i18next'
 import { fitCanvasToViewport, resetCanvasScale } from '@/components/Canvas'
 import Image from 'next/image'
@@ -15,7 +14,8 @@ import {
   MenubarSeparator,
   MenubarTrigger,
 } from '@/components/ui/menubar'
-import { useDocumentMutations } from '@/lib/query/mutations'
+import { isMacOS, isTauri, windowControls } from '@/lib/native'
+import { useDocumentMutations } from '@/lib/documents/mutations'
 
 type MenuItem = {
   label: string

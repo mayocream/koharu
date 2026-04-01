@@ -6,8 +6,8 @@ import { motion } from 'motion/react'
 import { TextBlock } from '@/types'
 import { Languages, LoaderCircleIcon, Trash2Icon } from 'lucide-react'
 import { useTextBlocks } from '@/hooks/useTextBlocks'
-import { useLlmReadyQuery } from '@/lib/query/hooks'
-import { useLlmMutations } from '@/lib/query/mutations'
+import { useLlmMutations } from '@/lib/llm/mutations'
+import { useLlmReadyQuery } from '@/lib/llm/queries'
 import {
   Accordion,
   AccordionContent,

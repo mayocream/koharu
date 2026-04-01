@@ -1,9 +1,11 @@
 'use client'
 
-import { useEffect, useMemo, useRef, useState } from 'react'
+import { useCallback, useEffect, useMemo, useState } from 'react'
+import { useQueryClient } from '@tanstack/react-query'
 import { useTheme } from 'next-themes'
 import { useTranslation } from 'react-i18next'
 import Link from 'next/link'
+import { debounce } from 'lodash-es'
 import {
   SunIcon,
   MoonIcon,
@@ -25,8 +27,18 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select'
-import { isTauri } from '@/lib/backend'
-import { api } from '@/lib/api'
+import { pingLlm } from '@/lib/generated/orval/llm/llm'
+import {
+  getGetProviderApiKeyQueryKey,
+  setProviderApiKey,
+} from '@/lib/generated/orval/providers/providers'
+import {
+  getGetConfigQueryKey,
+  useGetConfig,
+  useGetMeta,
+  updateConfig,
+} from '@/lib/generated/orval/system/system'
+import { isTauri } from '@/lib/native'
 import {
   usePreferencesStore,
   getActivePresetConfig,
@@ -70,20 +82,27 @@ const inputClass =
 export default function SettingsPage() {
   const { t, i18n } = useTranslation()
   const { theme, setTheme } = useTheme()
+  const queryClient = useQueryClient()
+  const tauri = isTauri()
   const locales = useMemo(() => supportedLanguages, [])
-  const [deviceInfo, setDeviceInfo] = useState<{ mlDevice: string }>()
+  const { data: deviceInfo } = useGetMeta<{ mlDevice: string }>({
+    query: {
+      enabled: tauri,
+      staleTime: 10 * 60 * 1000,
+      select: (meta) => ({ mlDevice: meta.mlDevice }),
+    },
+  })
+  const bootstrapConfigQuery = useGetConfig({
+    query: {
+      staleTime: 10 * 60 * 1000,
+    },
+  })
   const apiKeys = usePreferencesStore((state) => state.apiKeys)
   const setApiKey = usePreferencesStore((state) => state.setApiKey)
   const localLlm = usePreferencesStore((state) => state.localLlm)
   const setLocalLlm = usePreferencesStore((state) => state.setLocalLlm)
   const setActivePreset = usePreferencesStore((state) => state.setActivePreset)
   const [visibleKeys, setVisibleKeys] = useState<Record<string, boolean>>({})
-  const saveTimersRef = useRef<Record<string, ReturnType<typeof setTimeout>>>(
-    {},
-  )
-  const pendingApiKeysRef = useRef<Record<string, string>>({})
-  const proxySaveTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
-  const pendingBootstrapConfigRef = useRef<BootstrapConfig | null>(null)
 
   const [showAdvanced, setShowAdvanced] = useState(false)
   const [pingState, setPingState] = useState<{
@@ -96,104 +115,71 @@ export default function SettingsPage() {
   const activeConfig = getActivePresetConfig(localLlm)
 
   useEffect(() => {
-    if (!isTauri()) return
-
-    const loadDeviceInfo = async () => {
-      try {
-        const info = await api.deviceInfo()
-        setDeviceInfo(info)
-      } catch (error) {
-        console.error('Failed to load device info', error)
-      }
-    }
-
-    void loadDeviceInfo()
-  }, [])
+    if (!bootstrapConfigQuery.data) return
+    setBootstrapConfig((current) => current ?? bootstrapConfigQuery.data)
+  }, [bootstrapConfigQuery.data])
 
   useEffect(() => {
-    const loadBootstrapConfig = async () => {
-      try {
-        const config = await api.getBootstrapConfig()
-        setBootstrapConfig(config)
-      } catch (error) {
-        console.error('Failed to load bootstrap config', error)
-      }
-    }
+    if (!bootstrapConfigQuery.error) return
+    console.error('Failed to load bootstrap config', bootstrapConfigQuery.error)
+  }, [bootstrapConfigQuery.error])
 
-    void loadBootstrapConfig()
-  }, [])
-
-  const persistApiKey = async (provider: string, value: string) => {
+  const persistApiKey = useCallback(async (provider: string, value: string) => {
     try {
-      await api.setApiKey(provider, value)
+      await setProviderApiKey(provider, { apiKey: value })
+      queryClient.setQueryData(getGetProviderApiKeyQueryKey(provider), {
+        apiKey: value,
+      })
     } catch (error) {
       console.error(`Failed to save API key for ${provider}`, error)
     }
-  }
+  }, [queryClient])
 
-  const persistBootstrapConfig = async (nextConfig: BootstrapConfig) => {
+  const persistBootstrapConfig = useCallback(async (nextConfig: BootstrapConfig) => {
     try {
-      const saved = await api.saveBootstrapConfig(nextConfig)
+      const saved = await updateConfig(nextConfig)
+      queryClient.setQueryData(getGetConfigQueryKey(), saved)
       setBootstrapConfig(saved)
     } catch (error) {
       console.error('Failed to save bootstrap config', error)
     }
-  }
+  }, [queryClient])
 
-  const flushApiKeySave = (provider: string) => {
-    const existingTimer = saveTimersRef.current[provider]
-    if (existingTimer) {
-      clearTimeout(existingTimer)
-      delete saveTimersRef.current[provider]
-    }
+  const apiKeySavers = useMemo(
+    () =>
+      Object.fromEntries(
+        API_PROVIDERS.map(({ id }) => [
+          id,
+          debounce((value: string) => {
+            void persistApiKey(id, value)
+          }, 300),
+        ]),
+      ) as Record<string, ReturnType<typeof debounce<(value: string) => void>>>,
+    [persistApiKey],
+  )
 
-    const pendingValue = pendingApiKeysRef.current[provider]
-    if (pendingValue === undefined) {
-      return
-    }
-
-    delete pendingApiKeysRef.current[provider]
-    void persistApiKey(provider, pendingValue)
-  }
-
-  const flushProxySave = () => {
-    const existingTimer = proxySaveTimerRef.current
-    if (existingTimer) {
-      clearTimeout(existingTimer)
-      proxySaveTimerRef.current = null
-    }
-
-    const pendingConfig = pendingBootstrapConfigRef.current
-    if (!pendingConfig) {
-      return
-    }
-
-    pendingBootstrapConfigRef.current = null
-    void persistBootstrapConfig(pendingConfig)
-  }
+  const proxySaver = useMemo(
+    () =>
+      debounce((nextConfig: BootstrapConfig) => {
+        void persistBootstrapConfig(nextConfig)
+      }, 300),
+    [persistBootstrapConfig],
+  )
 
   useEffect(() => {
     return () => {
-      Object.keys(saveTimersRef.current).forEach((provider) => {
-        flushApiKeySave(provider)
+      Object.values(apiKeySavers).forEach((save) => {
+        save.flush()
+        save.cancel()
       })
-      flushProxySave()
+      proxySaver.flush()
+      proxySaver.cancel()
     }
-  }, [])
+  }, [apiKeySavers, proxySaver])
 
   const handleApiKeyChange = (provider: string, value: string) => {
     setApiKey(provider, value)
-    pendingApiKeysRef.current[provider] = value
-
-    const existingTimer = saveTimersRef.current[provider]
-    if (existingTimer) {
-      clearTimeout(existingTimer)
-    }
-
-    saveTimersRef.current[provider] = setTimeout(() => {
-      delete saveTimersRef.current[provider]
-      flushApiKeySave(provider)
-    }, 300)
+    apiKeySavers[provider]?.(value)
   }
 
   const handleProxyChange = (value: string) => {
@@ -207,32 +193,23 @@ export default function SettingsPage() {
     }
 
     setBootstrapConfig(nextConfig)
-    pendingBootstrapConfigRef.current = nextConfig
-
-    if (proxySaveTimerRef.current) {
-      clearTimeout(proxySaveTimerRef.current)
-    }
-
-    proxySaveTimerRef.current = setTimeout(() => {
-      proxySaveTimerRef.current = null
-      flushProxySave()
-    }, 300)
+    proxySaver(nextConfig)
   }
 
   const handleTestConnection = async () => {
     setPingState({ loading: true })
     try {
-      const result = await api.llmPing(
-        activeConfig.baseUrl,
-        activeConfig.apiKey || undefined,
-      )
+      const result = await pingLlm({
+        baseUrl: activeConfig.baseUrl,
+        apiKey: activeConfig.apiKey || undefined,
+      })
       setPingState({
         loading: false,
         result: {
           ok: result.ok,
           count: result.models.length,
           latency: result.latencyMs ?? 0,
-          error: result.error,
+          error: result.error ?? undefined,
         },
       })
     } catch (error) {
@@ -344,7 +321,7 @@ export default function SettingsPage() {
                   type='url'
                   value={bootstrapConfig?.http.proxy ?? ''}
                   onChange={(e) => handleProxyChange(e.target.value)}
-                  onBlur={flushProxySave}
+                  onBlur={() => proxySaver.flush()}
                   placeholder={t('bootstrap.proxyUrlPlaceholder')}
                   disabled={!bootstrapConfig}
                   className={inputClass}
@@ -397,7 +374,7 @@ export default function SettingsPage() {
                           onChange={(e) =>
                             handleApiKeyChange(id, e.target.value)
                           }
-                          onBlur={() => flushApiKeySave(id)}
+                          onBlur={() => apiKeySavers[id]?.flush()}
                           placeholder='Enter API key'
                           className={`${inputClass} pr-9`}
                         />

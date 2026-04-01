@@ -1,4 +1,5 @@
 {
+  "packageManager": "bun@1.3.11",
   "devDependencies": {
     "@playwright/test": "^1.58.2",
     "@tauri-apps/cli": "^2.10.1",
@@ -10,6 +11,7 @@
     "dev": "bun run scripts/dev.ts tauri dev -- --release -- --port=9999",
     "build": "bun run scripts/dev.ts tauri build --no-bundle",
     "cargo": "bun run scripts/dev.ts cargo",
+    "codegen:ui-api": "bun run ui/scripts/generate-api.ts",
     "format": "prettier --write ui/ --ignore-path ui/.gitignore",
     "test:e2e": "playwright test"
   },

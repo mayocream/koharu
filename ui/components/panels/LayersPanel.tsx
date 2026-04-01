@@ -14,7 +14,7 @@ import {
 import { cn } from '@/lib/utils'
 import { Button } from '@/components/ui/button'
 import { useEditorUiStore } from '@/lib/stores/editorUiStore'
-import { useCurrentDocumentState } from '@/lib/query/hooks'
+import { useCurrentDocumentState } from '@/lib/documents/queries'
 
 type Layer = {
   id: string

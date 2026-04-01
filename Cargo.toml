@@ -126,7 +126,8 @@ rmcp = { version = "0.16", features = [
     "transport-streamable-http-server",
 ] }
 schemars = "1.2"
-ts-rs = { version = "12.0", features = ["serde-json-impl"] }
+utoipa = { version = "5.4", features = ["axum_extras"] }
+utoipa-axum = "0.2"
 uuid = { version = "1.18", features = ["v4", "serde"] }
 base64 = "0.22"
 tower-http = { version = "0.6", features = ["cors"] }

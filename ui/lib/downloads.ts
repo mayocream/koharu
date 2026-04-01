@@ -1,7 +1,7 @@
 'use client'
 
 import { create } from 'zustand'
-import { subscribeDownloadChanged, subscribeSnapshot } from '@/lib/backend'
+import { subscribeDownloadChanged, subscribeSnapshot } from '@/lib/rpc-events'
 import type { DownloadState } from '@/lib/protocol'
 
 type DownloadEntry = DownloadState & {

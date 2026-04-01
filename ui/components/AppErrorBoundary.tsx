@@ -3,7 +3,7 @@
 import { type ReactNode } from 'react'
 import { ErrorBoundary, type FallbackProps } from 'react-error-boundary'
 import { Button } from '@/components/ui/button'
-import { getQueryClient } from '@/lib/query/client'
+import { getQueryClient } from '@/lib/react-query/client'
 import { useEditorUiStore } from '@/lib/stores/editorUiStore'
 import { useLlmUiStore } from '@/lib/stores/llmUiStore'
 import { useOperationStore } from '@/lib/stores/operationStore'

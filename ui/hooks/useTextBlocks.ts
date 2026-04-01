@@ -1,9 +1,9 @@
 'use client'
 
 import { useEffect, useRef } from 'react'
-import { useCurrentDocumentState } from '@/lib/query/hooks'
-import { useTextBlockMutations } from '@/lib/query/mutations'
-import { createTempTextBlockId } from '@/lib/api'
+import { createTempTextBlockId } from '@/lib/documents/actions'
+import { useTextBlockMutations } from '@/lib/documents/mutations'
+import { useCurrentDocumentState } from '@/lib/documents/queries'
 import { useEditorUiStore } from '@/lib/stores/editorUiStore'
 import { TextBlock } from '@/types'
 
@@ -26,7 +26,7 @@ const hasGeometryChange = (updates: Partial<TextBlock>) =>
   Object.prototype.hasOwnProperty.call(updates, 'height')
 
 export function useTextBlocks() {
-  const { currentDocument: document, currentDocumentIndex } =
+  const { currentDocument: document, currentDocumentId } =
     useCurrentDocumentState()
   const textBlocks = document?.textBlocks ?? []
   const selectedBlockIndex = useEditorUiStore(
@@ -59,7 +59,7 @@ export function useTextBlocks() {
     clearScheduledRender(index)
     const timer = setTimeout(() => {
       renderTimersRef.current.delete(index)
-      void renderTextBlock(undefined, currentDocumentIndex, index)
+      void renderTextBlock(undefined, currentDocumentId, index)
     }, TEXT_BLOCK_RENDER_DEBOUNCE_MS)
     renderTimersRef.current.set(index, timer)
   }
@@ -82,7 +82,7 @@ export function useTextBlocks() {
     if (shouldRenderSprite(updates)) {
       if (shouldRenderSpriteImmediately(updates)) {
         clearScheduledRender(index)
-        void renderTextBlock(undefined, currentDocumentIndex, index)
+        void renderTextBlock(undefined, currentDocumentId, index)
       } else {
         scheduleRender(index)
       }

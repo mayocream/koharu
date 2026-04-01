@@ -8,7 +8,7 @@ import { Button } from '@/components/ui/button'
 import { type OperationState } from '@/lib/operations'
 import { useOperationStore } from '@/lib/stores/operationStore'
 import { useUiErrorStore } from '@/lib/stores/uiErrorStore'
-import { useDocumentMutations } from '@/lib/query/mutations'
+import { useDocumentMutations } from '@/lib/documents/mutations'
 
 type TranslateFunc = ReturnType<typeof useTranslation>['t']
 

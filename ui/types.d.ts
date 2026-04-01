@@ -79,17 +79,19 @@ export type InpaintRegion = {
   height: number
 }
 
+export type DocumentAsset = Uint8Array | string
+
 export type Document = {
   id: string
   path: string
   name: string
-  image: Uint8Array
+  image: DocumentAsset
   width: number
   height: number
   revision?: number
   textBlocks: TextBlock[]
-  segment?: Uint8Array
-  inpainted?: Uint8Array
-  brushLayer?: Uint8Array
-  rendered?: Uint8Array
+  segment?: DocumentAsset
+  inpainted?: DocumentAsset
+  brushLayer?: DocumentAsset
+  rendered?: DocumentAsset
 }

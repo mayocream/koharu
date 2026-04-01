@@ -38,6 +38,10 @@ where
 fn build_router(shared: SharedState, resolver: SharedAssetResolver) -> Router {
     let events = EventHub::new(shared.clone());
     let cors = CorsLayer::very_permissive();
+    let state = api::ApiState {
+        resources: shared.clone(),
+        events,
+    };
 
     let mcp_service = StreamableHttpService::new(
         {
@@ -51,14 +55,17 @@ fn build_router(shared: SharedState, resolver: SharedAssetResolver) -> Router {
         },
     );
 
-    Router::new()
-        .nest("/api/v1", api::router(shared.clone(), events))
+    let (router, _openapi) = api::openapi_router()
         .nest_service("/mcp", mcp_service)
         .layer(cors)
         .fallback(move |uri: Uri| {
             let resolver = resolver.clone();
             async move { serve_asset(&resolver, uri) }
         })
+        .with_state(state)
+        .split_for_parts();
+
+    router
 }
 
 fn serve_asset(resolver: &SharedAssetResolver, uri: Uri) -> Response {

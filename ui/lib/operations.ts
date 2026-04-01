@@ -47,8 +47,8 @@ export const createOperationSlice = (set: any): OperationSlice => ({
         : { operation: undefined },
     )
     // Also cancel backend pipeline if running
-    import('@/lib/api').then(({ api }) => {
-      api.processCancel().catch(() => {})
+    import('@/lib/jobs/actions').then(({ cancelActivePipelineJob }) => {
+      cancelActivePipelineJob().catch(() => {})
     })
   },
 })

@@ -25,14 +25,17 @@ import {
   PopoverContent,
   PopoverTrigger,
 } from '@/components/ui/popover'
-import { useLlmUiStore } from '@/lib/stores/llmUiStore'
+import { useDocumentMutations } from '@/lib/documents/mutations'
+import { useLlmMutations } from '@/lib/llm/mutations'
 import {
   useLlmModelsQuery,
   useLlmReadyQuery,
+} from '@/lib/llm/queries'
+import { useLlmUiStore } from '@/lib/stores/llmUiStore'
+import {
   LOCAL_LLM_PRESET_LABELS,
   parsePresetFromModelId,
-} from '@/lib/query/hooks'
-import { useDocumentMutations, useLlmMutations } from '@/lib/query/mutations'
+} from '@/lib/llm/models'
 import { useOperationStore } from '@/lib/stores/operationStore'
 import { usePreferencesStore } from '@/lib/stores/preferencesStore'
 import { getProviderDisplayName } from '@/lib/providers'

@@ -11,7 +11,6 @@ import {
   ContextMenuTrigger,
 } from '@/components/ui/context-menu'
 import { useTranslation } from 'react-i18next'
-import { listen } from '@/lib/backend'
 import { Image } from '@/components/Image'
 import {
   setCanvasViewport,
@@ -30,6 +29,7 @@ import { useMaskDrawing } from '@/hooks/useMaskDrawing'
 import { useRenderBrushDrawing } from '@/hooks/useRenderBrushDrawing'
 import { useBrushLayerDisplay } from '@/hooks/useBrushLayerDisplay'
 import { useEditorUiStore } from '@/lib/stores/editorUiStore'
+import { listen } from '@/lib/native'
 import {
   resolvePinchMemoScaleRatio,
   resolvePinchNextScaleRatio,

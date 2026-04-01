@@ -4,7 +4,7 @@ import { useEffect, useRef, type RefObject } from 'react'
 import { useDrag } from '@use-gesture/react'
 import { usePreferencesStore } from '@/lib/stores/preferencesStore'
 import { useEditorUiStore } from '@/lib/stores/editorUiStore'
-import { useMaskMutations } from '@/lib/query/mutations'
+import { useMaskMutations } from '@/lib/documents/mutations'
 import { Document, InpaintRegion, ToolMode } from '@/types'
 import { blobToUint8Array } from '@/lib/util'
 import {
@@ -73,8 +73,8 @@ export function useRenderBrushDrawing({
     brushConfig: { size: brushSize, color: brushColor },
   } = usePreferencesStore()
   const { paintRendered } = useMaskMutations()
-  const currentDocumentIndex = useEditorUiStore(
-    (state) => state.currentDocumentIndex,
+  const currentDocumentId = useEditorUiStore(
+    (state) => state.currentDocumentId,
   )
   const canvasRef = useRef<HTMLCanvasElement | null>(null)
   const ctxRef = useRef<CanvasRenderingContext2D | null>(null)
@@ -202,7 +202,7 @@ export function useRenderBrushDrawing({
       }
       try {
         await paintRendered(patchBytes, patchRegion, {
-          index: currentDocumentIndex,
+          documentId: currentDocumentId,
         })
       } catch (error) {
         console.error(error)

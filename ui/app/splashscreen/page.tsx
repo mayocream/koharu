@@ -2,7 +2,7 @@
 
 import { useEffect, useRef, useState } from 'react'
 import { useTranslation } from 'react-i18next'
-import { subscribeDownloadChanged } from '@/lib/backend'
+import { subscribeDownloadChanged } from '@/lib/rpc-events'
 import type { DownloadState } from '@/lib/protocol'
 
 type AggregateProgress = {

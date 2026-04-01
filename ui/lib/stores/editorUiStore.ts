@@ -6,7 +6,7 @@ import { RenderEffect, RenderStroke, ToolMode } from '@/types'
 type EditorUiState = {
   totalPages: number
   documentsVersion: number
-  currentDocumentIndex: number
+  currentDocumentId?: string
   scale: number
   showSegmentationMask: boolean
   showInpaintedImage: boolean
@@ -19,7 +19,7 @@ type EditorUiState = {
   renderEffect: RenderEffect
   renderStroke: RenderStroke
   setTotalPages: (count: number) => void
-  setCurrentDocumentIndex: (index: number) => void
+  setCurrentDocumentId: (documentId?: string) => void
   setScale: (scale: number) => void
   setShowSegmentationMask: (show: boolean) => void
   setShowInpaintedImage: (show: boolean) => void
@@ -37,7 +37,7 @@ type EditorUiState = {
 const initialState = {
   totalPages: 0,
   documentsVersion: 0,
-  currentDocumentIndex: 0,
+  currentDocumentId: undefined,
   scale: 100,
   showSegmentationMask: false,
   showInpaintedImage: false,
@@ -66,14 +66,15 @@ export const useEditorUiStore = create<EditorUiState>((set, get) => ({
       return {
         totalPages: count,
         documentsVersion: state.documentsVersion + 1,
-        currentDocumentIndex: 0,
-        selectedBlockIndex: undefined,
+        currentDocumentId: count === 0 ? undefined : state.currentDocumentId,
+        selectedBlockIndex:
+          count === 0 ? undefined : state.selectedBlockIndex,
       }
     })
   },
-  setCurrentDocumentIndex: (index) =>
+  setCurrentDocumentId: (documentId) =>
     set(() => ({
-      currentDocumentIndex: index,
+      currentDocumentId: documentId,
       selectedBlockIndex: undefined,
     })),
   setScale: (scale) => {
@@ -124,6 +125,6 @@ export const useEditorUiStore = create<EditorUiState>((set, get) => ({
       ...initialState,
       totalPages: get().totalPages,
       documentsVersion: get().documentsVersion,
-      currentDocumentIndex: get().currentDocumentIndex,
+      currentDocumentId: get().currentDocumentId,
     })),
 }))

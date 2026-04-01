@@ -3,7 +3,15 @@
 import { useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react'
 import { useVirtualizer } from '@tanstack/react-virtual'
 import { useTranslation } from 'react-i18next'
-import { useDocumentsCountQuery, useThumbnailQuery } from '@/lib/query/hooks'
+import {
+  findDocumentIndex,
+  resolveCurrentDocumentId,
+} from '@/lib/documents/selection'
+import {
+  useDocumentsQuery,
+  useThumbnailQuery,
+} from '@/lib/documents/queries'
+import type { DocumentSummary } from '@/lib/protocol'
 import { useEditorUiStore } from '@/lib/stores/editorUiStore'
 import { Button } from '@/components/ui/button'
 import { ScrollArea } from '@/components/ui/scroll-area'
@@ -11,24 +19,28 @@ import { flushTextBlockSync } from '@/lib/services/syncQueues'
 import { cancelObjectUrlRevoke, revokeObjectUrlLater } from '@/lib/util'
 
 export function Navigator() {
-  const { data: totalPagesData = 0 } = useDocumentsCountQuery()
-  const totalPages = totalPagesData ?? 0
+  const { data: documents = [] } = useDocumentsQuery()
+  const totalPages = documents.length
   const documentsVersion = useEditorUiStore((state) => state.documentsVersion)
-  const currentDocumentIndex = useEditorUiStore(
-    (state) => state.currentDocumentIndex,
+  const currentDocumentId = useEditorUiStore(
+    (state) => state.currentDocumentId,
   )
-  const setCurrentDocumentIndex = useEditorUiStore(
-    (state) => state.setCurrentDocumentIndex,
+  const setCurrentDocumentId = useEditorUiStore(
+    (state) => state.setCurrentDocumentId,
   )
   const listRef = useRef<HTMLDivElement | null>(null)
-  const indices = useMemo(
-    () => Array.from({ length: totalPages }, (_, idx) => idx),
-    [totalPages],
+  const resolvedCurrentDocumentId = useMemo(
+    () => resolveCurrentDocumentId(documents, currentDocumentId),
+    [documents, currentDocumentId],
+  )
+  const currentDocumentPosition = useMemo(
+    () => findDocumentIndex(documents, resolvedCurrentDocumentId) + 1,
+    [documents, resolvedCurrentDocumentId],
   )
   const rowVirtualizer = useVirtualizer({
-    count: indices.length,
+    count: documents.length,
     getScrollElement: () => listRef.current,
-    getItemKey: (index) => indices[index] ?? index,
+    getItemKey: (index) => documents[index]?.id ?? index,
     estimateSize: () => 320,
     overscan: 8,
     measureElement: (element) => element.getBoundingClientRect().height,
@@ -59,7 +71,7 @@ export function Navigator() {
       <div className='text-muted-foreground flex items-center gap-1.5 px-2 py-1.5 text-xs'>
         {totalPages > 0 ? (
           <span className='bg-secondary text-secondary-foreground px-2 py-0.5 font-mono text-[10px]'>
-            #{currentDocumentIndex + 1}
+            #{currentDocumentPosition}
           </span>
         ) : (
           <span>{t('navigator.prompt')}</span>
@@ -76,7 +88,8 @@ export function Navigator() {
             }}
           >
             {rowVirtualizer.getVirtualItems().map((virtualRow) => {
-              const idx = indices[virtualRow.index]
+              const document = documents[virtualRow.index]
+              if (!document) return null
               return (
                 <div
                   key={virtualRow.key}
@@ -92,14 +105,14 @@ export function Navigator() {
                   }}
                 >
                   <PagePreview
-                    index={idx}
-                    documentsVersion={documentsVersion}
-                    selected={idx === currentDocumentIndex}
+                    document={document}
+                    pageNumber={virtualRow.index + 1}
+                    selected={document.id === resolvedCurrentDocumentId}
                     onSelect={() => {
                       void flushTextBlockSync()
                         .catch(() => {})
                         .finally(() => {
-                          setCurrentDocumentIndex(idx)
+                          setCurrentDocumentId(document.id)
                         })
                     }}
                   />
@@ -114,15 +127,15 @@ export function Navigator() {
 }
 
 type PagePreviewProps = {
-  index: number
-  documentsVersion: number
+  document: DocumentSummary
+  pageNumber: number
   selected: boolean
   onSelect: () => void
 }
 
 function PagePreview({
-  index,
-  documentsVersion,
+  document,
+  pageNumber,
   selected,
   onSelect,
 }: PagePreviewProps) {
@@ -131,7 +144,7 @@ function PagePreview({
     data: thumbnailBlob,
     isPending: loading,
     isError: error,
-  } = useThumbnailQuery(index, documentsVersion)
+  } = useThumbnailQuery(document)
 
   useLayoutEffect(() => {
     if (!thumbnailBlob) {
@@ -150,8 +163,9 @@ function PagePreview({
     <Button
       variant='ghost'
       onClick={onSelect}
-      data-testid={`navigator-page-${index}`}
-      data-page-index={index}
+      data-testid={`navigator-page-${pageNumber - 1}`}
+      data-document-id={document.id}
+      data-page-index={pageNumber - 1}
       data-selected={selected}
       className='bg-card data-[selected=true]:border-primary flex h-auto flex-col gap-0.5 rounded border border-transparent p-1.5 text-left shadow-sm'
     >
@@ -164,7 +178,7 @@ function PagePreview({
       ) : preview ? (
         <img
           src={preview}
-          alt={`Page ${index + 1}`}
+          alt={`Page ${pageNumber}`}
           style={{ objectFit: 'contain' }}
           className='aspect-3/4 w-full rounded object-cover'
         />
@@ -173,7 +187,7 @@ function PagePreview({
       )}
       <div className='text-muted-foreground flex flex-1 items-center text-xs'>
         <div className='text-foreground mx-auto flex text-center font-semibold'>
-          {index + 1}
+          {pageNumber}
         </div>
       </div>
     </Button>

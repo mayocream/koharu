@@ -3,7 +3,7 @@ use serde::{Deserialize, Deserializer, Serialize};
 use std::fmt;
 use std::str::FromStr;
 use strum::IntoEnumIterator;
-use ts_rs::TS;
+use utoipa::ToSchema;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, strum::Display, strum::EnumIter, strum::EnumString)]
 #[strum(serialize_all = "lowercase")]
@@ -12,9 +12,8 @@ enum TextShaderEffectFlag {
     Bold,
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Default, TS, JsonSchema)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Default, JsonSchema, ToSchema)]
 #[serde(rename_all = "camelCase")]
-#[ts(export)]
 pub struct TextShaderEffect {
     #[serde(default)]
     pub italic: bool,

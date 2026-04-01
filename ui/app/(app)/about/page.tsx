@@ -10,9 +10,9 @@ import {
   LoaderIcon,
 } from 'lucide-react'
 import { ScrollArea } from '@/components/ui/scroll-area'
-import { isTauri } from '@/lib/backend'
-import { api } from '@/lib/api'
-import { useDocumentMutations } from '@/lib/query/mutations'
+import { useGetMeta } from '@/lib/generated/orval/system/system'
+import { isTauri } from '@/lib/native'
+import { useDocumentMutations } from '@/lib/documents/mutations'
 import Image from 'next/image'
 
 const GITHUB_REPO = 'mayocream/koharu'
@@ -22,40 +22,63 @@ type VersionStatus = 'loading' | 'latest' | 'outdated' | 'error'
 export default function AboutPage() {
   const { t } = useTranslation()
   const { openExternal } = useDocumentMutations()
+  const tauri = isTauri()
+  const { data: appVersion, status: appVersionStatus } = useGetMeta<string>({
+    query: {
+      enabled: tauri,
+      staleTime: 10 * 60 * 1000,
+      select: (meta) => meta.version,
+    },
+  })
 
-  const [appVersion, setAppVersion] = useState<string>()
   const [latestVersion, setLatestVersion] = useState<string>()
   const [versionStatus, setVersionStatus] = useState<VersionStatus>('loading')
 
   useEffect(() => {
+    if (!tauri) {
+      setVersionStatus('latest')
+      return
+    }
+
+    if (appVersionStatus === 'error') {
+      setVersionStatus('error')
+      return
+    }
+
+    if (!appVersion) {
+      setVersionStatus('loading')
+      return
+    }
+
+    let cancelled = false
+
     const checkVersion = async () => {
       try {
-        if (isTauri()) {
-          const version = await api.appVersion()
-          setAppVersion(version)
-
-          const res = await fetch(
-            `https://api.github.com/repos/${GITHUB_REPO}/releases/latest`,
-          )
-          if (res.ok) {
-            const data = await res.json()
-            const latest = data.tag_name?.replace(/^v/, '') || data.name
-            setLatestVersion(latest)
-            setVersionStatus(version === latest ? 'latest' : 'outdated')
-          } else {
-            setVersionStatus('error')
-          }
-        } else {
-          setAppVersion('dev')
-          setVersionStatus('latest')
+        const res = await fetch(
+          `https://api.github.com/repos/${GITHUB_REPO}/releases/latest`,
+        )
+        if (!res.ok) {
+          if (!cancelled) setVersionStatus('error')
+          return
         }
+
+        const data = await res.json()
+        const latest = data.tag_name?.replace(/^v/, '') || data.name
+        if (cancelled) return
+
+        setLatestVersion(latest)
+        setVersionStatus(appVersion === latest ? 'latest' : 'outdated')
       } catch {
-        setVersionStatus('error')
+        if (!cancelled) setVersionStatus('error')
       }
     }
 
     void checkVersion()
-  }, [])
+
+    return () => {
+      cancelled = true
+    }
+  }, [appVersion, appVersionStatus, tauri])
 
   return (
     <div className='bg-muted flex flex-1 flex-col overflow-hidden'>
@@ -101,7 +124,7 @@ export default function AboutPage() {
                   </span>
                   <div className='flex items-center gap-2'>
                     <span className='text-foreground font-medium'>
-                      {appVersion || '...'}
+                      {tauri ? (appVersion ?? '...') : 'dev'}
                     </span>
                     {versionStatus === 'loading' && (
                       <LoaderIcon className='text-muted-foreground size-4 animate-spin' />

@@ -7,9 +7,10 @@ import {
   convertToBlob,
   revokeObjectUrlLater,
 } from '@/lib/util'
+import type { DocumentAsset } from '@/types'
 
 type ImageProps = {
-  data?: Uint8Array
+  data?: DocumentAsset
   visible?: boolean
   opacity?: number
   transition?: boolean
@@ -17,6 +18,7 @@ type ImageProps = {
 } & Omit<React.ImgHTMLAttributes<HTMLImageElement>, 'src'>
 
 const FADE_DURATION_MS = 180
+const isBlobUrl = (value: string | null | undefined) => !!value?.startsWith('blob:')
 
 // Cross-fade between successive image buffers to avoid UI flicker when
 // swapping inpaint results.
@@ -40,11 +42,14 @@ export function Image({
         setPlainSrc(null)
         return
       }
-      const blob = convertToBlob(data)
-      const url = URL.createObjectURL(blob)
-      cancelObjectUrlRevoke(url)
-      setPlainSrc(url)
-      return () => revokeObjectUrlLater(url)
+      if (typeof data === 'string') {
+        setPlainSrc(data)
+        return
+      }
+      const objectUrl = URL.createObjectURL(convertToBlob(data))
+      cancelObjectUrlRevoke(objectUrl)
+      setPlainSrc(objectUrl)
+      return () => revokeObjectUrlLater(objectUrl)
     }
     setPlainSrc(null)
     return
@@ -81,6 +86,7 @@ export function Image({
   const nextSrcRef = useRef<string | null>(null)
 
   const cleanupUrl = useCallback((url: string | null) => {
+    if (!isBlobUrl(url)) return
     revokeObjectUrlLater(url)
   }, [])
 
@@ -126,9 +132,11 @@ export function Image({
       return
     }
 
-    const blob = convertToBlob(data)
-    const objectUrl = URL.createObjectURL(blob)
-    cancelObjectUrlRevoke(objectUrl)
+    const objectUrl =
+      typeof data === 'string' ? data : URL.createObjectURL(convertToBlob(data))
+    if (isBlobUrl(objectUrl)) {
+      cancelObjectUrlRevoke(objectUrl)
+    }
     let cancelled = false
 
     const preload = new window.Image()
@@ -164,6 +172,7 @@ export function Image({
     return () => {
       cancelled = true
       if (
+        isBlobUrl(objectUrl) &&
         objectUrl !== currentSrcRef.current &&
         objectUrl !== nextSrcRef.current
       ) {

@@ -10,6 +10,8 @@ use tokio::sync::{RwLock, broadcast};
 
 use crate::shared::{SharedState, get_resources};
 
+const API_V1_ROOT: &str = "/api/v1";
+
 #[derive(Debug, Clone)]
 pub enum ApiEvent {
     DocumentsChanged(DocumentsChangedEvent),
@@ -55,7 +57,11 @@ impl EventHub {
     pub async fn snapshot(&self) -> anyhow::Result<SnapshotEvent> {
         let (documents, llm) = if let Ok(resources) = get_resources(&self.inner.shared) {
             let guard = resources.state.read().await;
-            let documents = guard.documents.iter().map(DocumentSummary::from).collect();
+            let documents = guard
+                .documents
+                .iter()
+                .map(|document| DocumentSummary::from_document(document, API_V1_ROOT))
+                .collect();
             drop(guard);
             (documents, resources.llm.snapshot().await)
         } else {
@@ -113,7 +119,11 @@ fn spawn_state_listener(inner: Arc<Inner>) {
                         continue;
                     };
                     let guard = resources.state.read().await;
-                    let documents = guard.documents.iter().map(DocumentSummary::from).collect();
+                    let documents = guard
+                        .documents
+                        .iter()
+                        .map(|document| DocumentSummary::from_document(document, API_V1_ROOT))
+                        .collect();
                     drop(guard);
                     emit(
                         &inner,
@@ -142,7 +152,11 @@ fn spawn_state_listener(inner: Arc<Inner>) {
                         continue;
                     };
                     let guard = resources.state.read().await;
-                    let documents = guard.documents.iter().map(DocumentSummary::from).collect();
+                    let documents = guard
+                        .documents
+                        .iter()
+                        .map(|document| DocumentSummary::from_document(document, API_V1_ROOT))
+                        .collect();
                     drop(guard);
                     emit(
                         &inner,

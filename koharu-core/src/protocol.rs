@@ -1,51 +1,47 @@
 use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
-use ts_rs::TS;
+use utoipa::ToSchema;
 
 use crate::{Document, FontPrediction, TextBlock, TextShaderEffect, TextStrokeStyle, TextStyle};
 
-#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq, PartialOrd, Ord, JsonSchema, TS)]
+#[derive(
+    Debug, Clone, Serialize, Deserialize, PartialEq, Eq, PartialOrd, Ord, JsonSchema, ToSchema,
+)]
 #[serde(rename_all = "camelCase")]
-#[ts(export)]
 pub struct FontFaceInfo {
     pub family_name: String,
     pub post_script_name: String,
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize, JsonSchema, TS)]
+#[derive(Debug, Clone, Serialize, Deserialize, JsonSchema, ToSchema)]
 #[serde(rename_all = "camelCase")]
-#[ts(export)]
 pub struct MetaInfo {
     pub version: String,
     pub ml_device: String,
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize, Default, JsonSchema, TS)]
+#[derive(Debug, Clone, Serialize, Deserialize, Default, JsonSchema, ToSchema)]
 #[serde(rename_all = "camelCase")]
-#[ts(export)]
 pub struct BootstrapConfig {
     pub runtime: BootstrapPathConfig,
     pub models: BootstrapPathConfig,
     pub http: BootstrapHttpConfig,
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize, Default, JsonSchema, TS)]
+#[derive(Debug, Clone, Serialize, Deserialize, Default, JsonSchema, ToSchema)]
 #[serde(rename_all = "camelCase")]
-#[ts(export)]
 pub struct BootstrapPathConfig {
     pub path: String,
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize, Default, JsonSchema, TS)]
+#[derive(Debug, Clone, Serialize, Deserialize, Default, JsonSchema, ToSchema)]
 #[serde(rename_all = "camelCase")]
-#[ts(export)]
 pub struct BootstrapHttpConfig {
     pub proxy: Option<String>,
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize, JsonSchema, TS)]
+#[derive(Debug, Clone, Serialize, Deserialize, JsonSchema, ToSchema)]
 #[serde(rename_all = "camelCase")]
-#[ts(export)]
 pub struct DocumentSummary {
     pub id: String,
     pub name: String,
@@ -57,10 +53,12 @@ pub struct DocumentSummary {
     pub has_brush_layer: bool,
     pub has_rendered: bool,
     pub text_block_count: usize,
+    pub document_url: String,
+    pub thumbnail_url: String,
 }
 
-impl From<&Document> for DocumentSummary {
-    fn from(document: &Document) -> Self {
+impl DocumentSummary {
+    pub fn from_document(document: &Document, api_root: &str) -> Self {
         Self {
             id: document.id.clone(),
             name: document.name.clone(),
@@ -72,13 +70,14 @@ impl From<&Document> for DocumentSummary {
             has_brush_layer: document.brush_layer.is_some(),
             has_rendered: document.rendered.is_some(),
             text_block_count: document.text_blocks.len(),
+            document_url: format!("{api_root}/documents/{}", document.id),
+            thumbnail_url: document_thumbnail_url(api_root, document),
         }
     }
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize, JsonSchema, TS)]
+#[derive(Debug, Clone, Serialize, Deserialize, JsonSchema, ToSchema)]
 #[serde(rename_all = "camelCase")]
-#[ts(export)]
 pub struct TextBlockDetail {
     pub id: String,
     pub x: f32,
@@ -123,10 +122,20 @@ impl From<&TextBlock> for TextBlockDetail {
     }
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize, JsonSchema, TS)]
+#[derive(Debug, Clone, Serialize, Deserialize, JsonSchema, ToSchema)]
 #[serde(rename_all = "camelCase")]
-#[ts(export)]
-pub struct DocumentDetail {
+pub struct DocumentAssets {
+    pub thumbnail: String,
+    pub image: String,
+    pub segment: Option<String>,
+    pub inpainted: Option<String>,
+    pub rendered: Option<String>,
+    pub brush_layer: Option<String>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, JsonSchema, ToSchema)]
+#[serde(rename_all = "camelCase")]
+pub struct DocumentResource {
     pub id: String,
     pub path: String,
     pub name: String,
@@ -134,10 +143,11 @@ pub struct DocumentDetail {
     pub height: u32,
     pub revision: u64,
     pub text_blocks: Vec<TextBlockDetail>,
+    pub assets: DocumentAssets,
 }
 
-impl From<&Document> for DocumentDetail {
-    fn from(document: &Document) -> Self {
+impl DocumentResource {
+    pub fn from_document(document: &Document, api_root: &str) -> Self {
         Self {
             id: document.id.clone(),
             path: document.path.to_string_lossy().to_string(),
@@ -150,13 +160,46 @@ impl From<&Document> for DocumentDetail {
                 .iter()
                 .map(TextBlockDetail::from)
                 .collect(),
+            assets: DocumentAssets {
+                thumbnail: document_thumbnail_url(api_root, document),
+                image: document_layer_url(api_root, document, "original"),
+                segment: document
+                    .segment
+                    .as_ref()
+                    .map(|_| document_layer_url(api_root, document, "segment")),
+                inpainted: document
+                    .inpainted
+                    .as_ref()
+                    .map(|_| document_layer_url(api_root, document, "inpainted")),
+                rendered: document
+                    .rendered
+                    .as_ref()
+                    .map(|_| document_layer_url(api_root, document, "rendered")),
+                brush_layer: document
+                    .brush_layer
+                    .as_ref()
+                    .map(|_| document_layer_url(api_root, document, "brush")),
+            },
         }
     }
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize, JsonSchema, TS)]
+fn document_thumbnail_url(api_root: &str, document: &Document) -> String {
+    format!(
+        "{api_root}/documents/{}/thumbnail?revision={}",
+        document.id, document.revision
+    )
+}
+
+fn document_layer_url(api_root: &str, document: &Document, layer: &str) -> String {
+    format!(
+        "{api_root}/documents/{}/layers/{layer}?revision={}",
+        document.id, document.revision
+    )
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, JsonSchema, ToSchema)]
 #[serde(rename_all = "camelCase")]
-#[ts(export)]
 pub struct TextBlockPatch {
     pub text: Option<String>,
     pub translation: Option<String>,
@@ -167,9 +210,8 @@ pub struct TextBlockPatch {
     pub style: Option<TextStyle>,
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize, JsonSchema, TS)]
+#[derive(Debug, Clone, Serialize, Deserialize, JsonSchema, ToSchema)]
 #[serde(rename_all = "camelCase")]
-#[ts(export)]
 pub struct CreateTextBlock {
     pub x: f32,
     pub y: f32,
@@ -177,49 +219,43 @@ pub struct CreateTextBlock {
     pub height: f32,
 }
 
-#[derive(Debug, Clone, Copy, Serialize, Deserialize, JsonSchema, TS)]
+#[derive(Debug, Clone, Copy, Serialize, Deserialize, JsonSchema, ToSchema)]
 #[serde(rename_all = "snake_case")]
-#[ts(export)]
 pub enum ImportMode {
     Replace,
     Append,
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize, JsonSchema, TS)]
+#[derive(Debug, Clone, Serialize, Deserialize, JsonSchema, ToSchema)]
 #[serde(rename_all = "camelCase")]
-#[ts(export)]
 pub struct ImportResult {
     pub total_count: usize,
     pub documents: Vec<DocumentSummary>,
 }
 
-#[derive(Debug, Clone, Copy, Serialize, Deserialize, JsonSchema, TS)]
+#[derive(Debug, Clone, Copy, Serialize, Deserialize, JsonSchema, ToSchema)]
 #[serde(rename_all = "snake_case")]
-#[ts(export)]
 pub enum ExportLayer {
     Rendered,
     Inpainted,
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize, JsonSchema, TS)]
+#[derive(Debug, Clone, Serialize, Deserialize, JsonSchema, ToSchema)]
 #[serde(rename_all = "camelCase")]
-#[ts(export)]
 pub struct ExportResult {
     pub count: usize,
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize, JsonSchema, TS)]
+#[derive(Debug, Clone, Serialize, Deserialize, JsonSchema, ToSchema)]
 #[serde(rename_all = "camelCase")]
-#[ts(export)]
 pub struct LlmModelInfo {
     pub id: String,
     pub languages: Vec<String>,
     pub source: String,
 }
 
-#[derive(Debug, Clone, Copy, Serialize, Deserialize, JsonSchema, TS)]
+#[derive(Debug, Clone, Copy, Serialize, Deserialize, JsonSchema, ToSchema)]
 #[serde(rename_all = "snake_case")]
-#[ts(export)]
 pub enum LlmStateStatus {
     Empty,
     Loading,
@@ -227,9 +263,8 @@ pub enum LlmStateStatus {
     Failed,
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize, JsonSchema, TS)]
+#[derive(Debug, Clone, Serialize, Deserialize, JsonSchema, ToSchema)]
 #[serde(rename_all = "camelCase")]
-#[ts(export)]
 pub struct LlmState {
     pub status: LlmStateStatus,
     pub model_id: Option<String>,
@@ -237,9 +272,8 @@ pub struct LlmState {
     pub error: Option<String>,
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize, JsonSchema, TS)]
+#[derive(Debug, Clone, Serialize, Deserialize, JsonSchema, ToSchema)]
 #[serde(rename_all = "camelCase")]
-#[ts(export)]
 pub struct LlmLoadRequest {
     pub id: String,
     pub api_key: Option<String>,
@@ -249,17 +283,15 @@ pub struct LlmLoadRequest {
     pub custom_system_prompt: Option<String>,
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize, JsonSchema, TS)]
+#[derive(Debug, Clone, Serialize, Deserialize, JsonSchema, ToSchema)]
 #[serde(rename_all = "camelCase")]
-#[ts(export)]
 pub struct LlmPingRequest {
     pub base_url: String,
     pub api_key: Option<String>,
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize, JsonSchema, TS)]
+#[derive(Debug, Clone, Serialize, Deserialize, JsonSchema, ToSchema)]
 #[serde(rename_all = "camelCase")]
-#[ts(export)]
 pub struct LlmPingResponse {
     pub ok: bool,
     pub models: Vec<String>,
@@ -267,9 +299,8 @@ pub struct LlmPingResponse {
     pub error: Option<String>,
 }
 
-#[derive(Debug, Clone, Copy, Serialize, Deserialize, JsonSchema, TS)]
+#[derive(Debug, Clone, Copy, Serialize, Deserialize, JsonSchema, ToSchema)]
 #[serde(rename_all = "snake_case")]
-#[ts(export)]
 pub enum JobStatus {
     Running,
     Completed,
@@ -277,9 +308,8 @@ pub enum JobStatus {
     Failed,
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize, JsonSchema, TS)]
+#[derive(Debug, Clone, Serialize, Deserialize, JsonSchema, ToSchema)]
 #[serde(rename_all = "camelCase")]
-#[ts(export)]
 pub struct JobState {
     pub id: String,
     pub kind: String,
@@ -293,9 +323,8 @@ pub struct JobState {
     pub error: Option<String>,
 }
 
-#[derive(Debug, Clone, Copy, Serialize, Deserialize, JsonSchema, TS)]
+#[derive(Debug, Clone, Copy, Serialize, Deserialize, JsonSchema, ToSchema)]
 #[serde(rename_all = "snake_case")]
-#[ts(export)]
 pub enum TransferStatus {
     Started,
     Downloading,
@@ -303,9 +332,8 @@ pub enum TransferStatus {
     Failed,
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize, JsonSchema, TS)]
+#[derive(Debug, Clone, Serialize, Deserialize, JsonSchema, ToSchema)]
 #[serde(rename_all = "camelCase")]
-#[ts(export)]
 pub struct DownloadState {
     pub id: String,
     pub filename: String,
@@ -315,9 +343,8 @@ pub struct DownloadState {
     pub error: Option<String>,
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize, JsonSchema, TS)]
+#[derive(Debug, Clone, Serialize, Deserialize, JsonSchema, ToSchema)]
 #[serde(rename_all = "camelCase")]
-#[ts(export)]
 pub struct SnapshotEvent {
     pub documents: Vec<DocumentSummary>,
     pub llm: LlmState,
@@ -325,39 +352,72 @@ pub struct SnapshotEvent {
     pub downloads: Vec<DownloadState>,
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize, JsonSchema, TS)]
+#[derive(Debug, Clone, Serialize, Deserialize, JsonSchema, ToSchema)]
 #[serde(rename_all = "camelCase")]
-#[ts(export)]
 pub struct DocumentsChangedEvent {
     pub documents: Vec<DocumentSummary>,
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize, JsonSchema, TS)]
+#[derive(Debug, Clone, Serialize, Deserialize, JsonSchema, ToSchema)]
 #[serde(rename_all = "camelCase")]
-#[ts(export)]
 pub struct DocumentChangedEvent {
     pub document_id: String,
     pub revision: u64,
     pub changed: Vec<String>,
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize, JsonSchema, TS)]
+#[cfg(test)]
+mod tests {
+    use super::DocumentResource;
+    use crate::Document;
+
+    #[test]
+    fn document_resource_uses_revisioned_asset_urls() {
+        let document = Document {
+            id: "doc-123".to_string(),
+            revision: 7,
+            segment: Some(image::DynamicImage::new_rgba8(1, 1).into()),
+            brush_layer: Some(image::DynamicImage::new_rgba8(1, 1).into()),
+            ..Default::default()
+        };
+
+        let resource = DocumentResource::from_document(&document, "/api/v1");
+
+        assert_eq!(
+            resource.assets.thumbnail,
+            "/api/v1/documents/doc-123/thumbnail?revision=7"
+        );
+        assert_eq!(
+            resource.assets.image,
+            "/api/v1/documents/doc-123/layers/original?revision=7"
+        );
+        assert_eq!(
+            resource.assets.segment.as_deref(),
+            Some("/api/v1/documents/doc-123/layers/segment?revision=7")
+        );
+        assert_eq!(
+            resource.assets.brush_layer.as_deref(),
+            Some("/api/v1/documents/doc-123/layers/brush?revision=7")
+        );
+        assert!(resource.assets.inpainted.is_none());
+        assert!(resource.assets.rendered.is_none());
+    }
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, JsonSchema, ToSchema)]
 #[serde(rename_all = "camelCase")]
-#[ts(export)]
 pub struct ApiKeyValue {
     pub api_key: String,
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize, JsonSchema, TS)]
+#[derive(Debug, Clone, Serialize, Deserialize, JsonSchema, ToSchema)]
 #[serde(rename_all = "camelCase")]
-#[ts(export)]
 pub struct ApiKeyResponse {
     pub api_key: Option<String>,
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize, JsonSchema, TS)]
+#[derive(Debug, Clone, Serialize, Deserialize, JsonSchema, ToSchema)]
 #[serde(rename_all = "camelCase")]
-#[ts(export)]
 pub struct RenderRequest {
     pub text_block_id: Option<String>,
     pub shader_effect: Option<TextShaderEffect>,
@@ -365,17 +425,15 @@ pub struct RenderRequest {
     pub font_family: Option<String>,
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize, JsonSchema, TS)]
+#[derive(Debug, Clone, Serialize, Deserialize, JsonSchema, ToSchema)]
 #[serde(rename_all = "camelCase")]
-#[ts(export)]
 pub struct TranslateRequest {
     pub text_block_id: Option<String>,
     pub language: Option<String>,
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize, JsonSchema, TS)]
+#[derive(Debug, Clone, Serialize, Deserialize, JsonSchema, ToSchema)]
 #[serde(rename_all = "camelCase")]
-#[ts(export)]
 pub struct PipelineJobRequest {
     pub document_id: Option<String>,
     pub llm_model_id: Option<String>,
@@ -390,9 +448,8 @@ pub struct PipelineJobRequest {
     pub font_family: Option<String>,
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize, JsonSchema, TS)]
+#[derive(Debug, Clone, Serialize, Deserialize, JsonSchema, ToSchema)]
 #[serde(rename_all = "camelCase")]
-#[ts(export)]
 pub struct Region {
     pub x: u32,
     pub y: u32,
@@ -400,25 +457,22 @@ pub struct Region {
     pub height: u32,
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize, JsonSchema, TS)]
+#[derive(Debug, Clone, Serialize, Deserialize, JsonSchema, ToSchema)]
 #[serde(rename_all = "camelCase")]
-#[ts(export)]
 pub struct MaskRegionRequest {
     pub data: Vec<u8>,
     pub region: Option<Region>,
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize, JsonSchema, TS)]
+#[derive(Debug, Clone, Serialize, Deserialize, JsonSchema, ToSchema)]
 #[serde(rename_all = "camelCase")]
-#[ts(export)]
 pub struct BrushRegionRequest {
     pub data: Vec<u8>,
     pub region: Region,
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize, JsonSchema, TS)]
+#[derive(Debug, Clone, Serialize, Deserialize, JsonSchema, ToSchema)]
 #[serde(rename_all = "camelCase")]
-#[ts(export)]
 pub struct InpaintRegionRequest {
     pub region: Region,
 }

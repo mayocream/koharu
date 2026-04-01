@@ -11,22 +11,29 @@ import {
   ProgressBarStatus,
   getCurrentWindow,
   listen,
-  subscribeDocumentChanged,
-  subscribeDocumentsChanged,
-  subscribeJobChanged,
-  subscribeLlmChanged,
-  subscribeSnapshot,
-} from '@/lib/backend'
+} from '@/lib/native'
 import i18n from '@/lib/i18n'
-import { getQueryClient } from '@/lib/query/client'
-import { queryKeys } from '@/lib/query/keys'
-import { useApiKeyQuery, useDocumentsCountQuery } from '@/lib/query/hooks'
+import { resolveCurrentDocumentId } from '@/lib/documents/selection'
+import {
+  getListDocumentsQueryKey,
+} from '@/lib/generated/orval/documents/documents'
+import { useDocumentsQuery } from '@/lib/documents/queries'
+import { isLlmSessionReady } from '@/lib/llm/models'
+import { llmQueryKeys, useApiKeyQuery } from '@/lib/llm/queries'
+import { getQueryClient } from '@/lib/react-query/client'
 import { useDownloadStore } from '@/lib/downloads'
 import { useEditorUiStore } from '@/lib/stores/editorUiStore'
 import { useLlmUiStore } from '@/lib/stores/llmUiStore'
 import { useOperationStore } from '@/lib/stores/operationStore'
 import { usePreferencesStore } from '@/lib/stores/preferencesStore'
-import { isTauri } from '@/lib/backend'
+import { isTauri } from '@/lib/native'
+import {
+  subscribeDocumentChanged,
+  subscribeDocumentsChanged,
+  subscribeJobChanged,
+  subscribeLlmChanged,
+  subscribeSnapshot,
+} from '@/lib/rpc-events'
 import { useRpcConnection } from '@/hooks/useRpcConnection'
 import type {
   DocumentSummary,
@@ -34,6 +41,13 @@ import type {
   LlmState,
   SnapshotEvent,
 } from '@/lib/protocol'
+
+const isDocumentDetailQuery = (queryKey: readonly unknown[]) =>
+  typeof queryKey[0] === 'string' && /^\/api\/v1\/documents\/[^/]+$/.test(queryKey[0])
+
+const isDocumentThumbnailQuery = (queryKey: readonly unknown[]) =>
+  typeof queryKey[0] === 'string' &&
+  /^\/api\/v1\/documents\/[^/]+\/thumbnail$/.test(queryKey[0])
 
 function ProvidersBootstrap({ children }: { children: ReactNode }) {
   const queryClient = useQueryClient()
@@ -45,7 +59,7 @@ function ProvidersBootstrap({ children }: { children: ReactNode }) {
   const setApiKey = usePreferencesStore((state) => state.setApiKey)
   const rpcConnected = useRpcConnection()
   const shouldQueryApiKeys = rpcConnected && !isStartupRoute && isTauri()
-  const { data: documentsCount } = useDocumentsCountQuery(
+  const { data: documents = [] } = useDocumentsQuery(
     rpcConnected && !isStartupRoute,
   )
   const openAiApiKeyQuery = useApiKeyQuery('openai', shouldQueryApiKeys)
@@ -59,28 +73,32 @@ function ProvidersBootstrap({ children }: { children: ReactNode }) {
 
   const applyDocumentsSnapshot = (documents: DocumentSummary[]) => {
     const count = documents.length
+    const currentDocumentId = resolveCurrentDocumentId(
+      documents,
+      useEditorUiStore.getState().currentDocumentId,
+    )
+    queryClient.setQueryData(getListDocumentsQueryKey(), documents)
     useEditorUiStore.setState((state) => ({
       totalPages: count,
-      currentDocumentIndex:
-        count === 0 ? 0 : Math.min(state.currentDocumentIndex, count - 1),
-      selectedBlockIndex: count === 0 ? undefined : state.selectedBlockIndex,
+      currentDocumentId,
+      selectedBlockIndex:
+        count === 0 || currentDocumentId !== state.currentDocumentId
+          ? undefined
+          : state.selectedBlockIndex,
       documentsVersion: state.documentsVersion + 1,
     }))
-    queryClient.setQueryData(queryKeys.documents.count, count)
     queryClient.invalidateQueries({
-      queryKey: queryKeys.documents.currentRoot,
+      predicate: (query) => isDocumentDetailQuery(query.queryKey),
     })
     queryClient.invalidateQueries({
-      queryKey: queryKeys.documents.thumbnailRoot,
+      predicate: (query) => isDocumentThumbnailQuery(query.queryKey),
     })
   }
 
   const applyLlmSnapshot = (llm: LlmState) => {
     const selectedModel = useLlmUiStore.getState().selectedModel
-    const isReady =
-      llm.status === 'ready' &&
-      (!selectedModel || !llm.modelId || llm.modelId === selectedModel)
-    queryClient.setQueryData(queryKeys.llm.ready(selectedModel), isReady)
+    const isReady = isLlmSessionReady(llm, selectedModel)
+    queryClient.setQueryData(llmQueryKeys.ready(selectedModel), isReady)
     useLlmUiStore.getState().setLoading(llm.status === 'loading')
 
     if (llm.status !== 'loading') {
@@ -134,10 +152,10 @@ function ProvidersBootstrap({ children }: { children: ReactNode }) {
       .catch(() => {})
 
     queryClient.invalidateQueries({
-      queryKey: queryKeys.documents.currentRoot,
+      predicate: (query) => isDocumentDetailQuery(query.queryKey),
     })
     queryClient.invalidateQueries({
-      queryKey: queryKeys.documents.thumbnailRoot,
+      predicate: (query) => isDocumentThumbnailQuery(query.queryKey),
     })
 
     setTimeout(() => {
@@ -163,10 +181,30 @@ function ProvidersBootstrap({ children }: { children: ReactNode }) {
   }, [queryClient, rpcConnected])
 
   useEffect(() => {
-    if (typeof documentsCount === 'number') {
-      setTotalPages(documentsCount)
-    }
-  }, [documentsCount, setTotalPages])
+    if (!rpcConnected || isStartupRoute) return
+
+    const nextDocumentId = resolveCurrentDocumentId(
+      documents,
+      useEditorUiStore.getState().currentDocumentId,
+    )
+    useEditorUiStore.setState((state) => {
+      if (
+        state.totalPages === documents.length &&
+        state.currentDocumentId === nextDocumentId
+      ) {
+        return state
+      }
+
+      return {
+        totalPages: documents.length,
+        currentDocumentId: nextDocumentId,
+        selectedBlockIndex:
+          nextDocumentId === state.currentDocumentId
+            ? state.selectedBlockIndex
+            : undefined,
+      }
+    })
+  }, [documents, isStartupRoute, rpcConnected])
 
   useEffect(() => {
     if (openAiApiKeyQuery.status === 'success') {
@@ -211,12 +249,14 @@ function ProvidersBootstrap({ children }: { children: ReactNode }) {
         unlisten = await listen<number>('documents:opened', (event) => {
           const count = event.payload ?? 0
           setTotalPages(count)
-          queryClient.setQueryData(queryKeys.documents.count, count)
           queryClient.invalidateQueries({
-            queryKey: queryKeys.documents.currentRoot,
+            queryKey: getListDocumentsQueryKey(),
           })
           queryClient.invalidateQueries({
-            queryKey: queryKeys.documents.thumbnailRoot,
+            predicate: (query) => isDocumentDetailQuery(query.queryKey),
+          })
+          queryClient.invalidateQueries({
+            predicate: (query) => isDocumentThumbnailQuery(query.queryKey),
           })
         })
       } catch (_) {}
@@ -236,10 +276,10 @@ function ProvidersBootstrap({ children }: { children: ReactNode }) {
 
     const unsubscribeDocument = subscribeDocumentChanged(() => {
       queryClient.invalidateQueries({
-        queryKey: queryKeys.documents.currentRoot,
+        predicate: (query) => isDocumentDetailQuery(query.queryKey),
       })
       queryClient.invalidateQueries({
-        queryKey: queryKeys.documents.thumbnailRoot,
+        predicate: (query) => isDocumentThumbnailQuery(query.queryKey),
       })
     })
 
@@ -247,10 +287,10 @@ function ProvidersBootstrap({ children }: { children: ReactNode }) {
       if (job.kind !== 'pipeline') return
       updatePipelineUi(job)
       queryClient.invalidateQueries({
-        queryKey: queryKeys.documents.currentRoot,
+        predicate: (query) => isDocumentDetailQuery(query.queryKey),
       })
       queryClient.invalidateQueries({
-        queryKey: queryKeys.documents.thumbnailRoot,
+        predicate: (query) => isDocumentThumbnailQuery(query.queryKey),
       })
     })
 

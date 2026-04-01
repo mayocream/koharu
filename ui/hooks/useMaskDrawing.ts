@@ -4,7 +4,7 @@ import { useEffect, useRef } from 'react'
 import { useDrag } from '@use-gesture/react'
 import { usePreferencesStore } from '@/lib/stores/preferencesStore'
 import { useEditorUiStore } from '@/lib/stores/editorUiStore'
-import { useMaskMutations } from '@/lib/query/mutations'
+import { useMaskMutations } from '@/lib/documents/mutations'
 import { blobToUint8Array, convertToImageBitmap } from '@/lib/util'
 import { Document, InpaintRegion, ToolMode } from '@/types'
 import {
@@ -93,8 +93,8 @@ export function useMaskDrawing({
     brushConfig: { size: brushSize },
   } = usePreferencesStore()
   const { updateMask, inpaintPartial } = useMaskMutations()
-  const currentDocumentIndex = useEditorUiStore(
-    (state) => state.currentDocumentIndex,
+  const currentDocumentId = useEditorUiStore(
+    (state) => state.currentDocumentId,
   )
   const canvasRef = useRef<HTMLCanvasElement | null>(null)
   const ctxRef = useRef<CanvasRenderingContext2D | null>(null)
@@ -274,7 +274,7 @@ export function useMaskDrawing({
       queueInpaint(async () => {
         try {
           await inpaintPartial(region, {
-            index: currentDocumentIndex,
+            documentId: currentDocumentId,
           })
         } catch (error) {
           console.error(error)

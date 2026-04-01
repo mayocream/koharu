@@ -1,3 +1,5 @@
+import { resolveApiUrl } from '@/lib/api-origin'
+
 /** Extract a standalone ArrayBuffer from a Uint8Array view (msgpack may return views into a shared decode buffer). */
 export function toArrayBuffer(bytes: Uint8Array): ArrayBuffer {
   return bytes.buffer.slice(
@@ -10,8 +12,20 @@ export function convertToBlob(bytes: Uint8Array): Blob {
   return new Blob([toArrayBuffer(bytes)])
 }
 
-export function convertToImageBitmap(bytes: Uint8Array): Promise<ImageBitmap> {
-  const blob = convertToBlob(bytes)
+export async function convertToImageBitmap(
+  source: Uint8Array | string | Blob,
+): Promise<ImageBitmap> {
+  const blob =
+    typeof source === 'string'
+      ? await fetch(resolveApiUrl(source)).then(async (response) => {
+          if (!response.ok) {
+            throw new Error(`Failed to fetch image asset: ${response.status}`)
+          }
+          return response.blob()
+        })
+      : source instanceof Blob
+        ? source
+        : convertToBlob(source)
   return createImageBitmap(blob)
 }
 

@@ -7,6 +7,7 @@ import {
   useState,
   type ReactNode,
 } from 'react'
+import { useQueryClient } from '@tanstack/react-query'
 import { useTranslation } from 'react-i18next'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
@@ -18,10 +19,15 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select'
-import { api } from '@/lib/api'
-import { subscribeDownloadChanged, subscribeSnapshot } from '@/lib/backend'
+import {
+  getGetConfigQueryKey,
+  initializeSystem,
+  updateConfig,
+  useGetConfig,
+} from '@/lib/generated/orval/system/system'
 import i18n, { supportedLanguages } from '@/lib/i18n'
 import type { BootstrapConfig, DownloadState } from '@/lib/protocol'
+import { subscribeDownloadChanged, subscribeSnapshot } from '@/lib/rpc-events'
 
 const DEFAULT_CONFIG: BootstrapConfig = {
   runtime: { path: '' },
@@ -54,10 +60,15 @@ const normalizeConfig = (next: BootstrapConfig): BootstrapConfig => ({
 
 export default function BootstrapPage() {
   const { t } = useTranslation()
+  const queryClient = useQueryClient()
+  const bootstrapConfigQuery = useGetConfig({
+    query: {
+      staleTime: 10 * 60 * 1000,
+    },
+  })
 
   const [step, setStep] = useState<WizardStep>(0)
   const [config, setConfig] = useState<BootstrapConfig>(DEFAULT_CONFIG)
-  const [loading, setLoading] = useState(true)
   const [initializing, setInitializing] = useState(false)
   const [failed, setFailed] = useState(false)
   const [error, setError] = useState<string | null>(null)
@@ -77,32 +88,30 @@ export default function BootstrapPage() {
     setError(null)
 
     try {
-      const saved = await api.saveBootstrapConfig(nextConfig)
+      const saved = await updateConfig(nextConfig)
+      queryClient.setQueryData(getGetConfigQueryKey(), saved)
       setConfig(saved)
-      await api.initializeBootstrap()
+      await initializeSystem()
     } catch (cause) {
       setInitializing(false)
       setFailed(true)
       setError(cause instanceof Error ? cause.message : t('bootstrap.failed'))
     }
-  }, [config, t])
+  }, [config, queryClient, t])
 
   useEffect(() => {
-    void (async () => {
-      try {
-        const saved = await api.getBootstrapConfig()
-        setConfig(saved)
-      } catch (cause) {
-        const message =
-          cause instanceof Error
-            ? cause.message
-            : t('bootstrap.failedLoadConfig')
-        setError(message)
-      } finally {
-        setLoading(false)
-      }
-    })()
-  }, [])
+    if (!bootstrapConfigQuery.data) return
+    setConfig(bootstrapConfigQuery.data)
+  }, [bootstrapConfigQuery.data])
+
+  useEffect(() => {
+    if (!bootstrapConfigQuery.error) return
+    const message =
+      bootstrapConfigQuery.error instanceof Error
+        ? bootstrapConfigQuery.error.message
+        : t('bootstrap.failedLoadConfig')
+    setError(message)
+  }, [bootstrapConfigQuery.error, t])
 
   useEffect(() => {
     const updateDownload = (progress: DownloadState) => {
@@ -179,6 +188,10 @@ export default function BootstrapPage() {
   const progressLabel = failed
     ? t('bootstrap.failed')
     : t('common.initializing')
+  const loading =
+    bootstrapConfigQuery.isPending &&
+    !bootstrapConfigQuery.data &&
+    !bootstrapConfigQuery.error
 
   if (loading) {
     return (
