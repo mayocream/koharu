@@ -20,6 +20,10 @@ const PROJECTS_DIR: &str = "projects";
 const PROJECTS_STATE_FILE: &str = "projects_state.json";
 const MANIFEST_FILE: &str = "project_manifest.json";
 
+#[cfg(test)]
+static TEST_APP_DATA_ROOT: once_cell::sync::Lazy<std::sync::Mutex<Option<PathBuf>>> =
+    once_cell::sync::Lazy::new(|| std::sync::Mutex::new(None));
+
 #[derive(Debug, Clone, Serialize, Deserialize, Default)]
 #[serde(rename_all = "camelCase")]
 struct ProjectsStateDisk {
@@ -70,10 +74,7 @@ struct ImportedPage {
 }
 
 pub fn projects_root() -> Result<PathBuf> {
-    let base = dirs::data_local_dir()
-        .or_else(dirs::home_dir)
-        .ok_or_else(|| anyhow::anyhow!("failed to resolve local app data directory"))?;
-    Ok(base.join(APP_DATA_DIR).join(PROJECTS_DIR))
+    Ok(app_data_root()?.join(PROJECTS_DIR))
 }
 
 pub fn list_projects(recent_only: bool) -> Result<Vec<ProjectSummary>> {
@@ -581,13 +582,28 @@ fn ensure_project_layout(root: &Path) -> Result<()> {
 }
 
 fn projects_state_path() -> Result<PathBuf> {
-    let base = dirs::data_local_dir()
-        .or_else(dirs::home_dir)
-        .ok_or_else(|| anyhow::anyhow!("failed to resolve local app data directory"))?;
-    let app_root = base.join(APP_DATA_DIR);
+    let app_root = app_data_root()?;
     fs::create_dir_all(&app_root)
         .with_context(|| format!("failed to create app data dir `{}`", app_root.display()))?;
     Ok(app_root.join(PROJECTS_STATE_FILE))
+}
+
+fn app_data_root() -> Result<PathBuf> {
+    #[cfg(test)]
+    {
+        if let Some(path) = TEST_APP_DATA_ROOT
+            .lock()
+            .expect("test app data root lock poisoned")
+            .clone()
+        {
+            return Ok(path);
+        }
+    }
+
+    let base = dirs::data_local_dir()
+        .or_else(dirs::home_dir)
+        .ok_or_else(|| anyhow::anyhow!("failed to resolve local app data directory"))?;
+    Ok(base.join(APP_DATA_DIR))
 }
 
 fn page_disk_path(root: &Path, page_id: &str) -> PathBuf {
@@ -636,6 +652,14 @@ fn write_binary_atomic(path: &Path, bytes: &[u8]) -> Result<()> {
     match temp.persist(path) {
         Ok(_) => Ok(()),
         Err(err) => {
+            if err.error.kind() != std::io::ErrorKind::AlreadyExists {
+                return Err(anyhow::anyhow!(
+                    "failed to persist file `{}`: {}",
+                    path.display(),
+                    err.error
+                ));
+            }
+
             if path.exists() {
                 fs::remove_file(path).with_context(|| {
                     format!("failed to replace existing file `{}`", path.display())
@@ -706,5 +730,122 @@ impl IfEmptyThen for String {
         } else {
             self
         }
+    }
+}
+
+#[cfg(test)]
+pub(crate) fn with_test_app_data_root<T>(run: impl FnOnce() -> T) -> T {
+    static TEST_LOCK: once_cell::sync::Lazy<std::sync::Mutex<()>> =
+        once_cell::sync::Lazy::new(|| std::sync::Mutex::new(()));
+
+    struct TestRootGuard {
+        _temp_dir: tempfile::TempDir,
+    }
+
+    impl Drop for TestRootGuard {
+        fn drop(&mut self) {
+            *TEST_APP_DATA_ROOT
+                .lock()
+                .expect("test app data root lock poisoned") = None;
+        }
+    }
+
+    let _lock = TEST_LOCK.lock().expect("test root lock poisoned");
+    let temp_dir = tempfile::tempdir().expect("failed to create temp dir");
+    *TEST_APP_DATA_ROOT
+        .lock()
+        .expect("test app data root lock poisoned") = Some(temp_dir.path().join(APP_DATA_DIR));
+    let _guard = TestRootGuard {
+        _temp_dir: temp_dir,
+    };
+    run()
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use image::{DynamicImage, ImageFormat, Rgba, RgbaImage};
+    use koharu_core::TextBlock;
+    use std::io::Cursor;
+
+    fn sample_file_entry(name: &str) -> FileEntry {
+        let image = RgbaImage::from_pixel(8, 8, Rgba([255, 255, 255, 255]));
+        let mut cursor = Cursor::new(Vec::new());
+        DynamicImage::ImageRgba8(image)
+            .write_to(&mut cursor, ImageFormat::Png)
+            .expect("png encode should work");
+        FileEntry {
+            name: name.to_string(),
+            data: cursor.into_inner(),
+        }
+    }
+
+    #[test]
+    fn create_project_restores_last_project() {
+        with_test_app_data_root(|| {
+            let session =
+                create_project(vec![sample_file_entry("page.png")]).expect("project should exist");
+            let document_id = session
+                .current_document_id
+                .clone()
+                .expect("project should have a current page");
+
+            assert!(session.root.join(MANIFEST_FILE).exists());
+            assert!(page_disk_path(&session.root, &document_id).exists());
+
+            let reopened = open_project(&session.summary.id).expect("project should reopen");
+            assert_eq!(reopened.summary.id, session.summary.id);
+            assert_eq!(reopened.current_document_id.as_deref(), Some(document_id.as_str()));
+
+            let restored = load_last_project()
+                .expect("restore should succeed")
+                .expect("project should restore");
+            assert_eq!(restored.summary.id, session.summary.id);
+            assert_eq!(restored.current_document_id.as_deref(), Some(document_id.as_str()));
+        });
+    }
+
+    #[test]
+    fn save_document_round_trips_layout_seed_and_lock() {
+        with_test_app_data_root(|| {
+            let mut session =
+                create_project(vec![sample_file_entry("page.png")]).expect("project should exist");
+            let document_id = session
+                .current_document_id
+                .clone()
+                .expect("project should have a current page");
+
+            let mut document =
+                load_document(&mut session, &document_id).expect("document should load");
+            let mut block = TextBlock {
+                x: 10.0,
+                y: 20.0,
+                width: 30.0,
+                height: 40.0,
+                text: Some("jp".to_string()),
+                translation: Some("tr".to_string()),
+                lock_layout_box: true,
+                ..Default::default()
+            };
+            block.set_layout_seed(11.0, 22.0, 33.0, 44.0);
+            document.text_blocks.push(block);
+            document.prepare_for_store();
+
+            save_document(&mut session, &document).expect("document should save");
+
+            let mut reopened = open_project(&session.summary.id).expect("project should reopen");
+            let loaded = load_document(&mut reopened, &document_id).expect("document should load");
+            let block = loaded
+                .text_blocks
+                .first()
+                .expect("text block should persist");
+
+            assert!(block.lock_layout_box);
+            assert_eq!(block.layout_seed_x, Some(11.0));
+            assert_eq!(block.layout_seed_y, Some(22.0));
+            assert_eq!(block.layout_seed_width, Some(33.0));
+            assert_eq!(block.layout_seed_height, Some(44.0));
+            assert_eq!(block.translation.as_deref(), Some("tr"));
+        });
     }
 }

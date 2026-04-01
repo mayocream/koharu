@@ -4,6 +4,7 @@ use koharu_core::{
     ProjectSummary,
 };
 use once_cell::sync::Lazy;
+use std::time::{SystemTime, UNIX_EPOCH};
 use tokio::sync::broadcast;
 
 use crate::projects;
@@ -73,6 +74,19 @@ fn current_project_mut(
         .current_project
         .as_mut()
         .ok_or_else(|| anyhow::anyhow!("No project is currently open"))
+}
+
+fn current_project_snapshot(
+    state: &koharu_core::State,
+) -> Result<koharu_core::ProjectSessionState> {
+    let project = current_project(state)?;
+    Ok(koharu_core::ProjectSessionState {
+        root: project.root.clone(),
+        summary: project.summary.clone(),
+        pages: project.pages.clone(),
+        current_document_id: project.current_document_id.clone(),
+        loaded_documents: Default::default(),
+    })
 }
 
 fn page_id_at_index(project: &koharu_core::ProjectSessionState, index: usize) -> Result<String> {
@@ -172,6 +186,14 @@ fn normalize_stage_success(stages: &mut ProjectPageStages, stage: ProjectStage) 
     }
 }
 
+fn touch_project_summary(project: &mut koharu_core::ProjectSessionState) {
+    project.summary.updated_at_ms = SystemTime::now()
+        .duration_since(UNIX_EPOCH)
+        .unwrap_or_default()
+        .as_millis() as u64;
+    project.summary.current_document_id = project.current_document_id.clone();
+}
+
 pub async fn restore_last_project(state: &AppState) -> Result<bool> {
     let maybe_session = projects::load_last_project()?;
     let restored = maybe_session.is_some();
@@ -219,16 +241,21 @@ pub async fn current_document_id(state: &AppState) -> Option<String> {
 }
 
 pub async fn read_doc(state: &AppState, index: usize) -> Result<Document> {
-    let mut guard = state.write().await;
-    let project = current_project_mut(&mut guard)?;
-    let document_id = page_id_at_index(project, index)?;
-    projects::load_document(project, &document_id)
+    let mut project = {
+        let guard = state.read().await;
+        current_project_snapshot(&guard)?
+    };
+    let document_id = page_id_at_index(&project, index)?;
+    projects::load_document(&mut project, &document_id)
 }
 
 pub async fn list_docs(state: &AppState) -> Vec<Document> {
-    let mut guard = state.write().await;
-    let Ok(project) = current_project_mut(&mut guard) else {
-        return Vec::new();
+    let mut project = {
+        let guard = state.read().await;
+        let Ok(project) = current_project_snapshot(&guard) else {
+            return Vec::new();
+        };
+        project
     };
 
     let ids = project
@@ -238,7 +265,7 @@ pub async fn list_docs(state: &AppState) -> Vec<Document> {
         .collect::<Vec<_>>();
     let mut documents = Vec::with_capacity(ids.len());
     for document_id in ids {
-        match projects::load_document(project, &document_id) {
+        match projects::load_document(&mut project, &document_id) {
             Ok(document) => documents.push(document),
             Err(err) => tracing::warn!(?err, document_id, "failed to load project page"),
         }
@@ -247,10 +274,12 @@ pub async fn list_docs(state: &AppState) -> Vec<Document> {
 }
 
 pub async fn read_thumbnail(state: &AppState, index: usize) -> Result<Vec<u8>> {
-    let mut guard = state.write().await;
-    let project = current_project_mut(&mut guard)?;
-    let document_id = page_id_at_index(project, index)?;
-    projects::read_thumbnail(project, &document_id)
+    let project = {
+        let guard = state.read().await;
+        current_project_snapshot(&guard)?
+    };
+    let document_id = page_id_at_index(&project, index)?;
+    projects::read_thumbnail(&project, &document_id)
 }
 
 pub async fn doc_count(state: &AppState) -> usize {
@@ -318,6 +347,7 @@ pub async fn save_current_project(state: &AppState) -> Result<Option<ProjectSumm
     let Some(project) = guard.current_project.as_mut() else {
         return Ok(None);
     };
+    touch_project_summary(project);
     projects::save_session(project)?;
     Ok(Some(project.summary.clone()))
 }
@@ -408,6 +438,7 @@ pub async fn mark_stage_success(
         .get_mut(index)
         .ok_or_else(|| anyhow::anyhow!("Document not found at index {index}"))?;
     normalize_stage_success(&mut page.summary.stages, stage);
+    touch_project_summary(project);
     projects::save_session(project)?;
     drop(guard);
     emit(StateEvent::DocumentsChanged);
@@ -429,8 +460,116 @@ pub async fn mark_stage_failure(
     let target = stage_mut(&mut page.summary.stages, stage);
     target.status = ProjectStageStatus::Failed;
     target.error = Some(error.into());
+    touch_project_summary(project);
     projects::save_session(project)?;
     drop(guard);
     emit(StateEvent::DocumentsChanged);
     Ok(())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use image::{DynamicImage, ImageFormat, Rgba, RgbaImage};
+    use koharu_core::{FileEntry, State};
+    use std::{io::Cursor, sync::Arc, thread, time::Duration};
+    use tokio::sync::RwLock;
+
+    fn sample_file_entry(name: &str) -> FileEntry {
+        let image = RgbaImage::from_pixel(8, 8, Rgba([255, 255, 255, 255]));
+        let mut cursor = Cursor::new(Vec::new());
+        DynamicImage::ImageRgba8(image)
+            .write_to(&mut cursor, ImageFormat::Png)
+            .expect("png encode should work");
+        FileEntry {
+            name: name.to_string(),
+            data: cursor.into_inner(),
+        }
+    }
+
+    #[test]
+    fn stage_failures_persist_and_touch_updated_at() {
+        crate::projects::with_test_app_data_root(|| {
+            let runtime = tokio::runtime::Builder::new_current_thread()
+                .enable_all()
+                .build()
+                .expect("runtime should build");
+
+            runtime.block_on(async {
+                let session = crate::projects::create_project(vec![sample_file_entry("page.png")])
+                    .expect("project should exist");
+                let project_id = session.summary.id.clone();
+                let document_id = session
+                    .current_document_id
+                    .clone()
+                    .expect("project should have a current page");
+                let state: AppState = Arc::new(RwLock::new(State {
+                    current_project: Some(session),
+                }));
+
+                let before = current_project_summary(&state)
+                    .await
+                    .expect("project summary should exist")
+                    .updated_at_ms;
+                thread::sleep(Duration::from_millis(2));
+                mark_stage_failure(&state, 0, ProjectStage::Render, "cuda failed")
+                    .await
+                    .expect("stage failure should save");
+
+                let after = current_project_summary(&state)
+                    .await
+                    .expect("project summary should exist")
+                    .updated_at_ms;
+                assert!(after > before);
+
+                let reopened =
+                    crate::projects::open_project(&project_id).expect("project should reopen");
+                let page = reopened
+                    .pages
+                    .iter()
+                    .find(|page| page.summary.id == document_id)
+                    .expect("saved page should exist");
+                assert_eq!(page.summary.stages.render.status, ProjectStageStatus::Failed);
+                assert_eq!(page.summary.stages.render.error.as_deref(), Some("cuda failed"));
+            });
+        });
+    }
+
+    #[test]
+    fn stage_success_persists_normalized_statuses() {
+        crate::projects::with_test_app_data_root(|| {
+            let runtime = tokio::runtime::Builder::new_current_thread()
+                .enable_all()
+                .build()
+                .expect("runtime should build");
+
+            runtime.block_on(async {
+                let session = crate::projects::create_project(vec![sample_file_entry("page.png")])
+                    .expect("project should exist");
+                let project_id = session.summary.id.clone();
+                let document_id = session
+                    .current_document_id
+                    .clone()
+                    .expect("project should have a current page");
+                let state: AppState = Arc::new(RwLock::new(State {
+                    current_project: Some(session),
+                }));
+
+                mark_stage_success(&state, 0, ProjectStage::Detect)
+                    .await
+                    .expect("stage success should save");
+
+                let reopened =
+                    crate::projects::open_project(&project_id).expect("project should reopen");
+                let page = reopened
+                    .pages
+                    .iter()
+                    .find(|page| page.summary.id == document_id)
+                    .expect("saved page should exist");
+                assert_eq!(page.summary.stages.detect.status, ProjectStageStatus::Ready);
+                assert_eq!(page.summary.stages.ocr.status, ProjectStageStatus::Stale);
+                assert_eq!(page.summary.stages.render.status, ProjectStageStatus::Stale);
+            });
+        });
+    }
 }

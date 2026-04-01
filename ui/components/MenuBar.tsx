@@ -39,7 +39,7 @@ type MenuSection = {
 }
 
 export function MenuBar() {
-  const { t, i18n } = useTranslation()
+  const { t } = useTranslation()
   const {
     saveProject,
     openProject,
@@ -59,13 +59,6 @@ export function MenuBar() {
   const { data: currentProject } = useCurrentProjectQuery()
   const { data: projects = [] } = useProjectsQuery()
   const { data: recentProjects = [] } = useRecentProjectsQuery()
-  const isTurkishLocale = i18n.language.startsWith('tr')
-  const openProjectLabel = t('menu.openProject', {
-    defaultValue: isTurkishLocale ? 'Projeyi Aç' : 'Open Project',
-  })
-  const openRecentLabel = t('menu.openRecent', {
-    defaultValue: isTurkishLocale ? 'Son Projeler' : 'Open Recent',
-  })
 
   const fileMenuItems: MenuItem[] = [
     {
@@ -194,13 +187,13 @@ export function MenuBar() {
                 void saveProject()
               }}
             >
-              {t('menu.save')}
+              {t('menu.saveProject')}
             </MenubarItem>
             {projects.length > 0 && (
-                <MenubarSub>
-                  <MenubarSubTrigger className='text-[13px]'>
-                    {openProjectLabel}
-                  </MenubarSubTrigger>
+              <MenubarSub>
+                <MenubarSubTrigger className='text-[13px]'>
+                  {t('menu.openProject')}
+                </MenubarSubTrigger>
                 <MenubarSubContent>
                   {projects.map((project) => (
                     <MenubarItem
@@ -217,10 +210,10 @@ export function MenuBar() {
               </MenubarSub>
             )}
             {recentProjects.length > 0 && (
-                <MenubarSub>
-                  <MenubarSubTrigger className='text-[13px]'>
-                    {openRecentLabel}
-                  </MenubarSubTrigger>
+              <MenubarSub>
+                <MenubarSubTrigger className='text-[13px]'>
+                  {t('menu.openRecent')}
+                </MenubarSubTrigger>
                 <MenubarSubContent>
                   {recentProjects.map((project) => (
                     <MenubarItem
