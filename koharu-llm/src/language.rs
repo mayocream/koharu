@@ -34,6 +34,12 @@ pub enum Language {
     )]
     Portuguese,
     #[strum(
+        to_string = "Brazilian Portuguese",
+        serialize = "pt-BR",
+        props(tag = "pt-BR")
+    )]
+    BrazilianPortuguese,
+    #[strum(
         to_string = "Spanish",
         serialize = "es-ES",
         serialize = "es",
