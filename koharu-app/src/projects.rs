@@ -236,7 +236,11 @@ pub fn remove_document(session: &mut ProjectSessionState, document_id: &str) -> 
         session.current_document_id = session
             .pages
             .get(index)
-            .or_else(|| index.checked_sub(1).and_then(|prev| session.pages.get(prev)))
+            .or_else(|| {
+                index
+                    .checked_sub(1)
+                    .and_then(|prev| session.pages.get(prev))
+            })
             .or_else(|| session.pages.first())
             .map(|page| page.summary.id.clone());
     }
@@ -300,7 +304,10 @@ pub fn save_document(session: &mut ProjectSessionState, document: &Document) -> 
     page.summary = page_summary_from_document(document, page.summary.stages.clone());
     write_thumbnail(&session.root, page, document)?;
     write_page_disk(&session.root, page, document)?;
-    write_optional_layer(&segment_layer_path(&session.root, &document.id), document.segment.as_ref())?;
+    write_optional_layer(
+        &segment_layer_path(&session.root, &document.id),
+        document.segment.as_ref(),
+    )?;
     write_optional_layer(
         &brush_layer_path(&session.root, &document.id),
         document.brush_layer.as_ref(),
@@ -338,7 +345,10 @@ pub fn set_current_document(
 ) -> Result<()> {
     if let Some(document_id) = document_id.as_deref() {
         anyhow::ensure!(
-            session.pages.iter().any(|page| page.summary.id == document_id),
+            session
+                .pages
+                .iter()
+                .any(|page| page.summary.id == document_id),
             "Document not found: {document_id}"
         );
     }
@@ -413,7 +423,10 @@ fn parse_imported_pages(files: Vec<FileEntry>) -> Result<Vec<ImportedPage>> {
     Ok(imported)
 }
 
-fn page_summary_from_document(document: &Document, stages: ProjectPageStages) -> ProjectPageSummary {
+fn page_summary_from_document(
+    document: &Document,
+    stages: ProjectPageStages,
+) -> ProjectPageSummary {
     ProjectPageSummary {
         id: document.id.clone(),
         name: document.name.clone(),
@@ -847,13 +860,19 @@ mod tests {
 
             let reopened = open_project(&session.summary.id).expect("project should reopen");
             assert_eq!(reopened.summary.id, session.summary.id);
-            assert_eq!(reopened.current_document_id.as_deref(), Some(document_id.as_str()));
+            assert_eq!(
+                reopened.current_document_id.as_deref(),
+                Some(document_id.as_str())
+            );
 
             let restored = load_last_project()
                 .expect("restore should succeed")
                 .expect("project should restore");
             assert_eq!(restored.summary.id, session.summary.id);
-            assert_eq!(restored.current_document_id.as_deref(), Some(document_id.as_str()));
+            assert_eq!(
+                restored.current_document_id.as_deref(),
+                Some(document_id.as_str())
+            );
         });
     }
 
@@ -916,7 +935,10 @@ mod tests {
 
             let remaining = remove_document(&mut session, &removed_id).expect("remove should work");
             assert_eq!(remaining, 1);
-            assert_eq!(session.current_document_id.as_deref(), Some(next_id.as_str()));
+            assert_eq!(
+                session.current_document_id.as_deref(),
+                Some(next_id.as_str())
+            );
             assert_eq!(session.summary.page_count, 1);
             assert!(!session.root.join(&removed_page.asset_rel_path).exists());
             assert!(!session.root.join(&removed_page.thumbnail_rel_path).exists());

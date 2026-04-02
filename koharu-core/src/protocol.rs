@@ -76,7 +76,7 @@ impl From<&Document> for DocumentSummary {
     }
 }
 
-#[derive(Debug, Clone, Copy, Serialize, Deserialize, Default, JsonSchema, TS)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, Default, JsonSchema, TS)]
 #[serde(rename_all = "snake_case")]
 #[ts(export)]
 pub enum ProjectStageStatus {
@@ -494,6 +494,7 @@ pub struct TranslateRequest {
 #[ts(export)]
 pub struct PipelineJobRequest {
     pub document_id: Option<String>,
+    pub document_ids: Option<Vec<String>>,
     pub llm_model_id: Option<String>,
     pub llm_api_key: Option<String>,
     pub llm_base_url: Option<String>,

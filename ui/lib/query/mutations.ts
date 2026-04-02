@@ -374,6 +374,7 @@ export const useDocumentMutations = () => {
         documentsVersion: state.documentsVersion + 1,
         currentDocumentIndex: previousCount > 0 ? previousCount : 0,
         selectedBlockIndex: undefined,
+        selectedDocumentIndices: new Set(),
       }))
 
       if (count > previousCount) {
@@ -434,6 +435,7 @@ export const useDocumentMutations = () => {
         documentsVersion: state.documentsVersion + 1,
         currentDocumentIndex: previousCount > 0 ? previousCount : 0,
         selectedBlockIndex: undefined,
+        selectedDocumentIndices: new Set(),
       }))
 
       if (count > previousCount) {
@@ -474,6 +476,7 @@ export const useDocumentMutations = () => {
           documentsVersion: state.documentsVersion + 1,
           currentDocumentIndex: currentIndex,
           selectedBlockIndex: undefined,
+          selectedDocumentIndices: new Set(),
         }))
         await refreshDocuments()
         await refreshProjects()
@@ -527,6 +530,7 @@ export const useDocumentMutations = () => {
         documentsVersion: state.documentsVersion + 1,
         currentDocumentIndex: result.totalCount > 0 ? currentIndex : 0,
         selectedBlockIndex: undefined,
+        selectedDocumentIndices: new Set(),
       }))
 
       await refreshDocuments()
@@ -650,17 +654,22 @@ export const useDocumentMutations = () => {
 
   const processImage = useCallback(
     async (_?: any, index?: number) => {
-      const resolvedIndex =
-        index ?? useEditorUiStore.getState().currentDocumentIndex
+      const editorUi = useEditorUiStore.getState()
+      const indices =
+        typeof index === 'number'
+          ? [index]
+          : editorUi.selectedDocumentIndices.size > 0
+            ? Array.from(editorUi.selectedDocumentIndices).sort((a, b) => a - b)
+            : [editorUi.currentDocumentIndex]
       const { selectedModel, selectedLanguage } = useLlmUiStore.getState()
       const { renderEffect, renderStroke } = useEditorUiStore.getState()
       const { fontFamily } = usePreferencesStore.getState()
       const { startOperation, finishOperation } = useOperationStore.getState()
       startOperation({
-        type: 'process-current',
+        type: indices.length > 1 ? 'process-all' : 'process-current',
         cancellable: true,
         current: 0,
-        total: 5,
+        total: indices.length > 1 ? indices.length : 5,
       })
       try {
         const models = getCachedLlmModels(queryClient)
@@ -679,7 +688,8 @@ export const useDocumentMutations = () => {
             ? getBaseUrlForModel(selectedModel!)
             : undefined
         await api.process({
-          index: resolvedIndex,
+          index: typeof index === 'number' ? index : undefined,
+          indices,
           llmModelId: selectedModel
             ? toBackendModelId(selectedModel)
             : selectedModel,
@@ -752,14 +762,16 @@ export const useDocumentMutations = () => {
     }
   }, [clearProgress])
 
-  const exportDocument = useCallback(async () => {
-    const { currentDocumentIndex } = useEditorUiStore.getState()
-    await api.exportDocument(currentDocumentIndex)
+  const exportDocument = useCallback(async (index?: number) => {
+    const resolvedIndex =
+      index ?? useEditorUiStore.getState().currentDocumentIndex
+    await api.exportDocument(resolvedIndex)
   }, [])
 
-  const exportPsdDocument = useCallback(async () => {
-    const { currentDocumentIndex } = useEditorUiStore.getState()
-    await api.exportPsdDocument(currentDocumentIndex)
+  const exportPsdDocument = useCallback(async (index?: number) => {
+    const resolvedIndex =
+      index ?? useEditorUiStore.getState().currentDocumentIndex
+    await api.exportPsdDocument(resolvedIndex)
   }, [])
 
   const exportAllInpainted = useCallback(async () => {

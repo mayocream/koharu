@@ -764,6 +764,7 @@ export const api = {
 
   async process(options: {
     index?: number
+    indices?: number[]
     llmModelId?: string
     llmApiKey?: string
     llmBaseUrl?: string
@@ -780,12 +781,20 @@ export const api = {
         typeof options.index === 'number'
           ? (await getDocumentSummaryAtIndex(options.index)).id
           : undefined
+      const documentIds = options.indices?.length
+        ? await Promise.all(
+            options.indices.map(
+              async (index) => (await getDocumentSummaryAtIndex(index)).id,
+            ),
+          )
+        : undefined
 
       const job = await fetchJson<JobState>('/jobs/pipeline', {
         method: 'POST',
         headers: { 'content-type': 'application/json' },
         body: JSON.stringify({
           documentId,
+          documentIds,
           llmModelId: options.llmModelId,
           llmApiKey: options.llmApiKey,
           llmBaseUrl: options.llmBaseUrl,

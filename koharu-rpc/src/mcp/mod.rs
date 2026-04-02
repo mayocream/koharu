@@ -453,7 +453,8 @@ impl KoharuMcp {
         operations::process(
             res,
             ProcessRequest {
-                index: p.index,
+                index: None,
+                indices: p.index.map(|idx| vec![idx]),
                 llm_model_id: p.llm_model_id,
                 llm_api_key: None,
                 llm_base_url: None,

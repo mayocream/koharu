@@ -49,9 +49,12 @@ pub async fn run_pipeline(
 ) {
     let result = run_pipeline_inner(&resources, &request, &cancel, &job_id).await;
 
-    let total_docs = match request.index {
-        Some(_) => 1,
-        None => state_tx::doc_count(&resources.state).await,
+    let total_docs = match &request.indices {
+        Some(indices) => indices.len(),
+        None => match request.index {
+            Some(_) => 1,
+            None => state_tx::doc_count(&resources.state).await,
+        },
     };
 
     match result {
@@ -104,14 +107,27 @@ async fn run_pipeline_inner(
     cancel: &Arc<AtomicBool>,
     job_id: &str,
 ) -> anyhow::Result<()> {
-    let total_docs = {
+    let docs_to_process = {
         let len = state_tx::doc_count(&res.state).await;
-        match req.index {
-            Some(i) if i >= len => anyhow::bail!("Document index {i} out of range (have {len})"),
-            Some(_) => 1,
-            None => len,
+        match &req.indices {
+            Some(indices) => {
+                for &i in indices {
+                    if i >= len {
+                        anyhow::bail!("Document index {i} out of range (have {len})");
+                    }
+                }
+                indices.clone()
+            }
+            None => match req.index {
+                Some(i) if i >= len => {
+                    anyhow::bail!("Document index {i} out of range (have {len})")
+                }
+                Some(i) => vec![i],
+                None => (0..len).collect(),
+            },
         }
     };
+    let total_docs = docs_to_process.len();
 
     if total_docs == 0 {
         return Ok(());
@@ -154,11 +170,9 @@ async fn run_pipeline_inner(
         }
     }
 
-    let start_index = req.index.unwrap_or(0);
-    let end_index = req.index.map(|i| i + 1).unwrap_or(total_docs);
     let total_steps = PipelineStep::ALL.len();
 
-    for (doc_ordinal, doc_index) in (start_index..end_index).enumerate() {
+    for (doc_ordinal, &doc_index) in docs_to_process.iter().enumerate() {
         for (step_ordinal, step) in PipelineStep::ALL.iter().enumerate() {
             if cancel.load(Ordering::Relaxed) {
                 return Ok(());

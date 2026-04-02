@@ -7,6 +7,7 @@ type EditorUiState = {
   totalPages: number
   documentsVersion: number
   currentDocumentIndex: number
+  selectedDocumentIndices: Set<number>
   scale: number
   showSegmentationMask: boolean
   showInpaintedImage: boolean
@@ -20,6 +21,9 @@ type EditorUiState = {
   renderStroke: RenderStroke
   setTotalPages: (count: number) => void
   setCurrentDocumentIndex: (index: number) => void
+  toggleDocumentSelection: (index: number) => void
+  clearDocumentSelection: () => void
+  setSelectedDocumentIndices: (indices: Set<number>) => void
   setScale: (scale: number) => void
   setShowSegmentationMask: (show: boolean) => void
   setShowInpaintedImage: (show: boolean) => void
@@ -38,6 +42,7 @@ const initialState = {
   totalPages: 0,
   documentsVersion: 0,
   currentDocumentIndex: 0,
+  selectedDocumentIndices: new Set<number>(),
   scale: 100,
   showSegmentationMask: false,
   showInpaintedImage: false,
@@ -68,6 +73,7 @@ export const useEditorUiStore = create<EditorUiState>((set, get) => ({
         documentsVersion: state.documentsVersion + 1,
         currentDocumentIndex: 0,
         selectedBlockIndex: undefined,
+        selectedDocumentIndices: new Set(),
       }
     })
   },
@@ -76,6 +82,19 @@ export const useEditorUiStore = create<EditorUiState>((set, get) => ({
       currentDocumentIndex: index,
       selectedBlockIndex: undefined,
     })),
+  toggleDocumentSelection: (index) =>
+    set((state) => {
+      const next = new Set(state.selectedDocumentIndices)
+      if (next.has(index)) {
+        next.delete(index)
+      } else {
+        next.add(index)
+      }
+      return { selectedDocumentIndices: next }
+    }),
+  clearDocumentSelection: () => set({ selectedDocumentIndices: new Set() }),
+  setSelectedDocumentIndices: (indices) =>
+    set({ selectedDocumentIndices: new Set(indices) }),
   setScale: (scale) => {
     const clamped = Math.max(10, Math.min(100, Math.round(scale)))
     set({ scale: clamped })
@@ -125,5 +144,6 @@ export const useEditorUiStore = create<EditorUiState>((set, get) => ({
       totalPages: get().totalPages,
       documentsVersion: get().documentsVersion,
       currentDocumentIndex: get().currentDocumentIndex,
+      selectedDocumentIndices: new Set(),
     })),
 }))

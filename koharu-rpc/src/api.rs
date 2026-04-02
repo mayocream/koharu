@@ -71,7 +71,10 @@ pub fn router(resources: SharedState, events: EventHub) -> Router {
         .route("/projects/{project_id}/open", post(open_project))
         .route("/documents", get(list_documents))
         .route("/documents/import", post(import_documents))
-        .route("/documents/{document_id}", get(get_document).delete(delete_document))
+        .route(
+            "/documents/{document_id}",
+            get(get_document).delete(delete_document),
+        )
         .route("/documents/{document_id}/thumbnail", get(get_thumbnail))
         .route(
             "/documents/{document_id}/layers/{layer}",
@@ -272,7 +275,9 @@ async fn get_current_project(
     State(state): State<ApiState>,
 ) -> ApiResult<Json<Option<ProjectSummary>>> {
     let resources = state.resources()?;
-    Ok(Json(state_tx::current_project_summary(&resources.state).await))
+    Ok(Json(
+        state_tx::current_project_summary(&resources.state).await,
+    ))
 }
 
 async fn open_project(
@@ -291,7 +296,9 @@ async fn open_project(
     }))
 }
 
-async fn save_current_project(State(state): State<ApiState>) -> ApiResult<Json<Option<ProjectSummary>>> {
+async fn save_current_project(
+    State(state): State<ApiState>,
+) -> ApiResult<Json<Option<ProjectSummary>>> {
     let resources = state.resources()?;
     Ok(Json(
         state_tx::save_current_project(&resources.state)
@@ -763,20 +770,29 @@ async fn start_pipeline_job(
     Json(request): Json<PipelineJobRequest>,
 ) -> ApiResult<Json<JobState>> {
     let resources = state.resources()?;
-    let index = if let Some(document_id) = request.document_id.as_deref() {
-        Some(state_tx::find_doc_index(&resources.state, document_id).await?)
+    let indices = if let Some(document_ids) = request.document_ids.as_deref() {
+        let mut resolved = Vec::with_capacity(document_ids.len());
+        for document_id in document_ids {
+            resolved.push(state_tx::find_doc_index(&resources.state, document_id).await?);
+        }
+        Some(resolved)
+    } else if let Some(document_id) = request.document_id.as_deref() {
+        Some(vec![
+            state_tx::find_doc_index(&resources.state, document_id).await?,
+        ])
     } else {
         None
     };
-    let total_documents = match index {
-        Some(_) => 1,
+    let total_documents = match &indices {
+        Some(indices) => indices.len(),
         None => state_tx::doc_count(&resources.state).await,
     };
 
     let job_id = operations::process(
         resources.clone(),
         koharu_core::ProcessRequest {
-            index,
+            index: None,
+            indices,
             llm_model_id: request.llm_model_id,
             llm_api_key: request.llm_api_key,
             llm_base_url: request.llm_base_url,

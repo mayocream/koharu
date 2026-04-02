@@ -34,9 +34,13 @@ pub async fn detect(state: AppResources, payload: IndexPayload) -> anyhow::Resul
 pub async fn ocr(state: AppResources, payload: IndexPayload) -> anyhow::Result<()> {
     let mut snapshot = state_tx::read_doc(&state.state, payload.index).await?;
     if let Err(err) = state.ml.ocr(&mut snapshot).await {
-        let _ =
-            state_tx::mark_stage_failure(&state.state, payload.index, ProjectStage::Ocr, err.to_string())
-                .await;
+        let _ = state_tx::mark_stage_failure(
+            &state.state,
+            payload.index,
+            ProjectStage::Ocr,
+            err.to_string(),
+        )
+        .await;
         return Err(err);
     }
     state_tx::update_doc(

@@ -79,6 +79,7 @@ function ProvidersBootstrap({ children }: { children: ReactNode }) {
             ? restoredIndex
             : Math.min(state.currentDocumentIndex, count - 1),
       selectedBlockIndex: count === 0 ? undefined : state.selectedBlockIndex,
+      selectedDocumentIndices: new Set(),
       documentsVersion: state.documentsVersion + 1,
     }))
     queryClient.setQueryData(queryKeys.documents.count, count)
@@ -248,7 +249,10 @@ function ProvidersBootstrap({ children }: { children: ReactNode }) {
 
     const unsubscribeSnapshot = subscribeSnapshot((payload: SnapshotEvent) => {
       applyDocumentsSnapshot(payload.documents, payload.currentDocumentId)
-      queryClient.setQueryData(queryKeys.projects.current, payload.currentProject)
+      queryClient.setQueryData(
+        queryKeys.projects.current,
+        payload.currentProject,
+      )
       applyLlmSnapshot(payload.llm)
       const pipelineJob =
         payload.jobs.find((job) => job.kind === 'pipeline') ?? null

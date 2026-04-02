@@ -61,19 +61,19 @@ impl EventHub {
                     state_tx::current_document_id(&resources.state).await,
                     resources.llm.snapshot().await,
                 )
-        } else {
-            (
-                Vec::new(),
-                None,
-                None,
-                LlmState {
-                    status: koharu_core::LlmStateStatus::Empty,
-                    model_id: None,
-                    source: None,
-                    error: None,
-                },
-            )
-        };
+            } else {
+                (
+                    Vec::new(),
+                    None,
+                    None,
+                    LlmState {
+                        status: koharu_core::LlmStateStatus::Empty,
+                        model_id: None,
+                        source: None,
+                        error: None,
+                    },
+                )
+            };
 
         let mut jobs = self
             .inner

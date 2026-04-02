@@ -58,9 +58,7 @@ fn serialize_changed_fields(changed: &[ChangedField]) -> Vec<String> {
     changed.iter().map(ToString::to_string).collect()
 }
 
-fn current_project(
-    state: &koharu_core::State,
-) -> Result<&koharu_core::ProjectSessionState> {
+fn current_project(state: &koharu_core::State) -> Result<&koharu_core::ProjectSessionState> {
     state
         .current_project
         .as_ref()
@@ -110,7 +108,11 @@ fn stage_mut<'a>(
     }
 }
 
-fn invalidate_document(document: &mut Document, changed: &[ChangedField], stages: &mut ProjectPageStages) {
+fn invalidate_document(
+    document: &mut Document,
+    changed: &[ChangedField],
+    stages: &mut ProjectPageStages,
+) {
     let changed_text_blocks = changed.contains(&ChangedField::TextBlocks);
     let changed_segment = changed.contains(&ChangedField::Segment);
     let changed_brush = changed.contains(&ChangedField::BrushLayer);
@@ -302,7 +304,10 @@ pub async fn find_doc_index(state: &AppState, document_id: &str) -> Result<usize
         .ok_or_else(|| anyhow::anyhow!("Document not found: {document_id}"))
 }
 
-pub async fn replace_docs_from_files(state: &AppState, files: Vec<koharu_core::FileEntry>) -> Result<usize> {
+pub async fn replace_docs_from_files(
+    state: &AppState,
+    files: Vec<koharu_core::FileEntry>,
+) -> Result<usize> {
     let session = projects::create_project(files)?;
     let count = session.pages.len();
     let mut guard = state.write().await;
@@ -312,7 +317,10 @@ pub async fn replace_docs_from_files(state: &AppState, files: Vec<koharu_core::F
     Ok(count)
 }
 
-pub async fn append_docs_from_files(state: &AppState, files: Vec<koharu_core::FileEntry>) -> Result<usize> {
+pub async fn append_docs_from_files(
+    state: &AppState,
+    files: Vec<koharu_core::FileEntry>,
+) -> Result<usize> {
     let mut guard = state.write().await;
     let count = match guard.current_project.as_mut() {
         Some(project) => projects::append_files(project, files)?,
@@ -436,11 +444,7 @@ where
     Ok(result)
 }
 
-pub async fn mark_stage_success(
-    state: &AppState,
-    index: usize,
-    stage: ProjectStage,
-) -> Result<()> {
+pub async fn mark_stage_success(state: &AppState, index: usize, stage: ProjectStage) -> Result<()> {
     let mut guard = state.write().await;
     let project = current_project_mut(&mut guard)?;
     let page = project
@@ -539,8 +543,14 @@ mod tests {
                     .iter()
                     .find(|page| page.summary.id == document_id)
                     .expect("saved page should exist");
-                assert_eq!(page.summary.stages.render.status, ProjectStageStatus::Failed);
-                assert_eq!(page.summary.stages.render.error.as_deref(), Some("cuda failed"));
+                assert_eq!(
+                    page.summary.stages.render.status,
+                    ProjectStageStatus::Failed
+                );
+                assert_eq!(
+                    page.summary.stages.render.error.as_deref(),
+                    Some("cuda failed")
+                );
             });
         });
     }
