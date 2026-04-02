@@ -1,4 +1,4 @@
-use std::{borrow::Cow, sync::Arc};
+use std::{borrow::Cow, env, fs, path::PathBuf, sync::Arc};
 
 use koharu_rpc::server;
 
@@ -75,6 +75,49 @@ pub fn embedded_asset_resolver<R: tauri::Runtime>(
     assets: Arc<dyn tauri::Assets<R>>,
 ) -> server::SharedAssetResolver {
     Arc::new(move |path: &str| resolve_embedded_asset(assets.as_ref(), path))
+}
+
+fn ui_out_roots() -> Vec<PathBuf> {
+    let mut roots = Vec::new();
+
+    if let Ok(path) = env::current_exe()
+        && let Some(parent) = path.parent()
+    {
+        roots.push(parent.join("ui/out"));
+    }
+
+    if let Ok(path) = env::current_dir() {
+        roots.push(path.join("ui/out"));
+    }
+
+    roots.push(PathBuf::from(env!("CARGO_WORKSPACE_DIR")).join("ui/out"));
+    roots
+}
+
+fn resolve_filesystem_asset(path: &str) -> Option<server::Asset> {
+    let path = path.trim_matches('/');
+    let path = if path.is_empty() { "index.html" } else { path };
+
+    ui_out_roots().into_iter().find_map(|root| {
+        let candidates = [
+            root.join(path),
+            root.join(format!("{path}.html")),
+            root.join(path).join("index.html"),
+        ];
+
+        candidates.into_iter().find_map(|path| {
+            let bytes = fs::read(&path).ok()?;
+            let name = path.file_name()?.to_str()?;
+            Some(server::Asset {
+                mime_type: tauri::utils::mime_type::MimeType::parse(&bytes, name),
+                bytes,
+            })
+        })
+    })
+}
+
+pub fn filesystem_asset_resolver() -> server::SharedAssetResolver {
+    Arc::new(resolve_filesystem_asset)
 }
 
 pub fn tauri_asset_resolver<R: tauri::Runtime>(
