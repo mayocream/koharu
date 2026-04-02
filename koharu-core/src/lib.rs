@@ -15,7 +15,7 @@ pub use font::{FontPrediction, NamedFontPrediction, TextDirection};
 pub use image::SerializableDynamicImage;
 pub use protocol::*;
 
-use std::{path::PathBuf, sync::Arc};
+use std::{collections::HashMap, path::PathBuf, sync::Arc};
 
 use ::image::GenericImageView;
 use schemars::JsonSchema;
@@ -50,15 +50,15 @@ pub struct TextBlock {
     pub style: Option<TextStyle>,
     pub font_prediction: Option<FontPrediction>,
     pub rendered: Option<SerializableDynamicImage>,
-    #[serde(skip)]
+    #[serde(default)]
     pub lock_layout_box: bool,
-    #[serde(skip)]
+    #[serde(default)]
     pub layout_seed_x: Option<f32>,
-    #[serde(skip)]
+    #[serde(default)]
     pub layout_seed_y: Option<f32>,
-    #[serde(skip)]
+    #[serde(default)]
     pub layout_seed_width: Option<f32>,
-    #[serde(skip)]
+    #[serde(default)]
     pub layout_seed_height: Option<f32>,
 }
 
@@ -218,9 +218,26 @@ impl Document {
     }
 }
 
-#[derive(Default, Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Default)]
+pub struct ProjectPageState {
+    pub summary: ProjectPageSummary,
+    pub asset_rel_path: String,
+    pub thumbnail_rel_path: String,
+    pub asset_hash: String,
+}
+
+#[derive(Debug, Clone, Default)]
+pub struct ProjectSessionState {
+    pub root: PathBuf,
+    pub summary: ProjectSummary,
+    pub pages: Vec<ProjectPageState>,
+    pub current_document_id: Option<String>,
+    pub loaded_documents: HashMap<String, Document>,
+}
+
+#[derive(Default, Debug, Clone)]
 pub struct State {
-    pub documents: Vec<Document>,
+    pub current_project: Option<ProjectSessionState>,
 }
 
 pub type AppState = Arc<RwLock<State>>;

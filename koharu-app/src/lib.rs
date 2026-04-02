@@ -4,6 +4,7 @@ pub mod ml;
 pub mod operations;
 pub mod ops;
 pub mod pipeline;
+pub mod projects;
 pub mod renderer;
 pub mod state_tx;
 

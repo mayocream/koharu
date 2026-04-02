@@ -4,4 +4,5 @@ import type { DocumentSummary } from './DocumentSummary'
 export type ImportResult = {
   totalCount: number
   documents: Array<DocumentSummary>
+  currentDocumentId: string | null
 }

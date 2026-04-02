@@ -15,7 +15,7 @@ use tracing::instrument;
 
 use crate::{
     AppResources, llm,
-    state_tx::{self, ChangedField},
+    state_tx::{self, ChangedField, ProjectStage},
 };
 
 #[instrument(level = "debug", skip_all, fields(provider = %payload.provider))]
@@ -153,17 +153,26 @@ pub async fn llm_generate(state: AppResources, payload: LlmGeneratePayload) -> a
     let mut updated = state_tx::read_doc(&state.state, payload.index).await?;
     let target_language = payload.language.as_deref();
 
-    match payload.text_block_index {
+    let translate_result = match payload.text_block_index {
         Some(block_index) => {
             let text_block = updated
                 .text_blocks
                 .get_mut(block_index)
                 .ok_or_else(|| anyhow::anyhow!("Text block not found"))?;
-            state.llm.translate(text_block, target_language).await?;
+            state.llm.translate(text_block, target_language).await
         }
-        None => {
-            state.llm.translate(&mut updated, target_language).await?;
-        }
+        None => state.llm.translate(&mut updated, target_language).await,
+    };
+
+    if let Err(err) = translate_result {
+        let _ = state_tx::mark_stage_failure(
+            &state.state,
+            payload.index,
+            ProjectStage::Translate,
+            err.to_string(),
+        )
+        .await;
+        return Err(err);
     }
 
     state_tx::update_doc(
@@ -172,7 +181,8 @@ pub async fn llm_generate(state: AppResources, payload: LlmGeneratePayload) -> a
         updated,
         &[ChangedField::TextBlocks],
     )
-    .await
+    .await?;
+    state_tx::mark_stage_success(&state.state, payload.index, ProjectStage::Translate).await
 }
 
 pub async fn llm_ping(

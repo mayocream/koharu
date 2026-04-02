@@ -13,6 +13,7 @@ use rmcp::{ServerHandler, tool, tool_handler, tool_router};
 
 use koharu_app::AppResources;
 use koharu_app::operations;
+use koharu_app::state_tx;
 use koharu_core::commands::{
     AddTextBlockPayload, ExportDocumentParams, FileEntry, IndexPayload, InpaintPartialPayload,
     InpaintRegion, InpaintRegionParams, LlmGenerateParams, LlmGeneratePayload, LlmListPayload,
@@ -268,8 +269,11 @@ impl KoharuMcp {
             .await
             .map_err(|e| e.to_string())?;
 
-        let guard = res.state.read().await;
-        let names: Vec<&str> = guard.documents.iter().map(|d| d.name.as_str()).collect();
+        let documents = state_tx::list_doc_summaries(&res.state).await;
+        let names = documents
+            .iter()
+            .map(|document| document.name.as_str())
+            .collect::<Vec<_>>();
         Ok(format!("Loaded {count} document(s): {}", names.join(", ")))
     }
 
@@ -449,7 +453,8 @@ impl KoharuMcp {
         operations::process(
             res,
             ProcessRequest {
-                index: p.index,
+                index: None,
+                indices: p.index.map(|idx| vec![idx]),
                 llm_model_id: p.llm_model_id,
                 llm_api_key: None,
                 llm_base_url: None,

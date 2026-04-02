@@ -14,6 +14,7 @@ import {
 import type { LlmModelInfo } from '@/lib/generated/protocol/LlmModelInfo'
 import i18n from '@/lib/i18n'
 import { useRpcConnection } from '@/hooks/useRpcConnection'
+import type { ProjectSummary } from '@/lib/protocol'
 
 /** Frontend-extended model entry with origin tracking. */
 export type LlmModelEntry = LlmModelInfo & {
@@ -69,6 +70,30 @@ export const useFontsQuery = () =>
     queryKey: queryKeys.fonts,
     queryFn: () => api.listFonts(),
     staleTime: 10 * 60 * 1000,
+  })
+
+export const useCurrentProjectQuery = (enabled = true) =>
+  useQuery<ProjectSummary | null>({
+    queryKey: queryKeys.projects.current,
+    queryFn: () => api.getCurrentProject(),
+    enabled,
+    staleTime: 30 * 1000,
+  })
+
+export const useProjectsQuery = (enabled = true) =>
+  useQuery<ProjectSummary[]>({
+    queryKey: queryKeys.projects.all,
+    queryFn: () => api.listProjects(),
+    enabled,
+    staleTime: 30 * 1000,
+  })
+
+export const useRecentProjectsQuery = (enabled = true) =>
+  useQuery<ProjectSummary[]>({
+    queryKey: queryKeys.projects.recent,
+    queryFn: () => api.listRecentProjects(),
+    enabled,
+    staleTime: 30 * 1000,
   })
 
 export const useLlmModelsQuery = () => {

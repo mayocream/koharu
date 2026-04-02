@@ -76,6 +76,119 @@ impl From<&Document> for DocumentSummary {
     }
 }
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, Default, JsonSchema, TS)]
+#[serde(rename_all = "snake_case")]
+#[ts(export)]
+pub enum ProjectStageStatus {
+    #[default]
+    Idle,
+    Ready,
+    Stale,
+    Failed,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, Default, JsonSchema, TS)]
+#[serde(rename_all = "camelCase")]
+#[ts(export)]
+pub struct ProjectStageState {
+    pub status: ProjectStageStatus,
+    pub error: Option<String>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, Default, JsonSchema, TS)]
+#[serde(rename_all = "camelCase")]
+#[ts(export)]
+pub struct ProjectPageStages {
+    pub detect: ProjectStageState,
+    pub ocr: ProjectStageState,
+    pub inpaint: ProjectStageState,
+    pub translate: ProjectStageState,
+    pub render: ProjectStageState,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, Default, JsonSchema, TS)]
+#[serde(rename_all = "camelCase")]
+#[ts(export)]
+pub struct ProjectPageSummary {
+    pub id: String,
+    pub name: String,
+    pub width: u32,
+    pub height: u32,
+    pub revision: u64,
+    pub has_segment: bool,
+    pub has_inpainted: bool,
+    pub has_brush_layer: bool,
+    pub has_rendered: bool,
+    pub text_block_count: usize,
+    pub stages: ProjectPageStages,
+}
+
+impl From<&Document> for ProjectPageSummary {
+    fn from(document: &Document) -> Self {
+        Self {
+            id: document.id.clone(),
+            name: document.name.clone(),
+            width: document.width,
+            height: document.height,
+            revision: document.revision,
+            has_segment: document.segment.is_some(),
+            has_inpainted: document.inpainted.is_some(),
+            has_brush_layer: document.brush_layer.is_some(),
+            has_rendered: document.rendered.is_some(),
+            text_block_count: document.text_blocks.len(),
+            stages: ProjectPageStages::default(),
+        }
+    }
+}
+
+impl From<&ProjectPageSummary> for DocumentSummary {
+    fn from(page: &ProjectPageSummary) -> Self {
+        Self {
+            id: page.id.clone(),
+            name: page.name.clone(),
+            width: page.width,
+            height: page.height,
+            revision: page.revision,
+            has_segment: page.has_segment,
+            has_inpainted: page.has_inpainted,
+            has_brush_layer: page.has_brush_layer,
+            has_rendered: page.has_rendered,
+            text_block_count: page.text_block_count,
+        }
+    }
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, Default, JsonSchema, TS)]
+#[serde(rename_all = "camelCase")]
+#[ts(export)]
+pub struct ProjectSummary {
+    pub id: String,
+    pub name: String,
+    pub page_count: usize,
+    pub updated_at_ms: u64,
+    pub current_document_id: Option<String>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, Default, JsonSchema, TS)]
+#[serde(rename_all = "camelCase")]
+#[ts(export)]
+pub struct ProjectManifest {
+    pub id: String,
+    pub name: String,
+    pub page_count: usize,
+    pub updated_at_ms: u64,
+    pub current_document_id: Option<String>,
+    pub pages: Vec<ProjectPageSummary>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, Default, JsonSchema, TS)]
+#[serde(rename_all = "camelCase")]
+#[ts(export)]
+pub struct ProjectPageDetail {
+    pub project_id: String,
+    pub page: ProjectPageSummary,
+}
+
 #[derive(Debug, Clone, Serialize, Deserialize, JsonSchema, TS)]
 #[serde(rename_all = "camelCase")]
 #[ts(export)]
@@ -191,6 +304,7 @@ pub enum ImportMode {
 pub struct ImportResult {
     pub total_count: usize,
     pub documents: Vec<DocumentSummary>,
+    pub current_document_id: Option<String>,
 }
 
 #[derive(Debug, Clone, Copy, Serialize, Deserialize, JsonSchema, TS)]
@@ -320,6 +434,8 @@ pub struct DownloadState {
 #[ts(export)]
 pub struct SnapshotEvent {
     pub documents: Vec<DocumentSummary>,
+    pub current_project: Option<ProjectSummary>,
+    pub current_document_id: Option<String>,
     pub llm: LlmState,
     pub jobs: Vec<JobState>,
     pub downloads: Vec<DownloadState>,
@@ -378,6 +494,7 @@ pub struct TranslateRequest {
 #[ts(export)]
 pub struct PipelineJobRequest {
     pub document_id: Option<String>,
+    pub document_ids: Option<Vec<String>>,
     pub llm_model_id: Option<String>,
     pub llm_api_key: Option<String>,
     pub llm_base_url: Option<String>,

@@ -26,9 +26,9 @@ use koharu_core::{
     CreateTextBlock, Document, DocumentDetail, DocumentSummary, ExportLayer, ExportResult,
     FileEntry, FontFaceInfo, IndexPayload, InpaintPartialPayload, InpaintRegion, JobState,
     JobStatus, LlmLoadPayload, LlmLoadRequest, LlmModelInfo, LlmPingRequest, LlmPingResponse,
-    MaskRegionRequest, MetaInfo, OpenDocumentsPayload, PipelineJobRequest, Region, RenderPayload,
-    RenderRequest, SerializableDynamicImage, TextBlock, TextBlockDetail, TextBlockPatch,
-    TranslateRequest, UpdateBrushLayerPayload, UpdateInpaintMaskPayload,
+    MaskRegionRequest, MetaInfo, OpenDocumentsPayload, PipelineJobRequest, ProjectSummary, Region,
+    RenderPayload, RenderRequest, SerializableDynamicImage, TextBlock, TextBlockDetail,
+    TextBlockPatch, TranslateRequest, UpdateBrushLayerPayload, UpdateInpaintMaskPayload,
 };
 use koharu_psd::{PsdExportOptions, TextLayerMode};
 use serde::Deserialize;
@@ -60,9 +60,21 @@ pub fn router(resources: SharedState, events: EventHub) -> Router {
         .route("/initialize", post(initialize_app))
         .route("/meta", get(get_meta))
         .route("/fonts", get(get_fonts))
+        .route("/projects", get(list_projects))
+        .route("/projects/recent", get(list_recent_projects))
+        .route("/projects/current", get(get_current_project))
+        .route("/projects/current/save", post(save_current_project))
+        .route(
+            "/projects/current/document",
+            put(set_current_project_document),
+        )
+        .route("/projects/{project_id}/open", post(open_project))
         .route("/documents", get(list_documents))
         .route("/documents/import", post(import_documents))
-        .route("/documents/{document_id}", get(get_document))
+        .route(
+            "/documents/{document_id}",
+            get(get_document).delete(delete_document),
+        )
         .route("/documents/{document_id}/thumbnail", get(get_thumbnail))
         .route(
             "/documents/{document_id}/layers/{layer}",
@@ -191,6 +203,12 @@ struct LlmModelsQuery {
     openai_compatible_base_url: Option<String>,
 }
 
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase")]
+struct SetCurrentDocumentRequest {
+    document_id: Option<String>,
+}
+
 async fn get_config(State(state): State<ApiState>) -> ApiResult<Json<BootstrapConfig>> {
     let config = state.resources.get_config().map_err(ApiError::internal)?;
     Ok(Json(config))
@@ -235,11 +253,74 @@ async fn get_fonts(State(state): State<ApiState>) -> ApiResult<Json<Vec<FontFace
     Ok(Json(fonts))
 }
 
+async fn list_projects(State(_state): State<ApiState>) -> ApiResult<Json<Vec<ProjectSummary>>> {
+    Ok(Json(
+        state_tx::list_projects(false)
+            .await
+            .map_err(ApiError::from)?,
+    ))
+}
+
+async fn list_recent_projects(
+    State(_state): State<ApiState>,
+) -> ApiResult<Json<Vec<ProjectSummary>>> {
+    Ok(Json(
+        state_tx::list_projects(true)
+            .await
+            .map_err(ApiError::from)?,
+    ))
+}
+
+async fn get_current_project(
+    State(state): State<ApiState>,
+) -> ApiResult<Json<Option<ProjectSummary>>> {
+    let resources = state.resources()?;
+    Ok(Json(
+        state_tx::current_project_summary(&resources.state).await,
+    ))
+}
+
+async fn open_project(
+    State(state): State<ApiState>,
+    Path(project_id): Path<String>,
+) -> ApiResult<Json<koharu_core::ImportResult>> {
+    let resources = state.resources()?;
+    let total_count = state_tx::open_project(&resources.state, &project_id)
+        .await
+        .map_err(ApiError::from)?;
+    let documents = state_tx::list_doc_summaries(&resources.state).await;
+    Ok(Json(koharu_core::ImportResult {
+        total_count,
+        documents,
+        current_document_id: state_tx::current_document_id(&resources.state).await,
+    }))
+}
+
+async fn save_current_project(
+    State(state): State<ApiState>,
+) -> ApiResult<Json<Option<ProjectSummary>>> {
+    let resources = state.resources()?;
+    Ok(Json(
+        state_tx::save_current_project(&resources.state)
+            .await
+            .map_err(ApiError::from)?,
+    ))
+}
+
+async fn set_current_project_document(
+    State(state): State<ApiState>,
+    Json(request): Json<SetCurrentDocumentRequest>,
+) -> ApiResult<StatusCode> {
+    let resources = state.resources()?;
+    state_tx::set_current_document(&resources.state, request.document_id)
+        .await
+        .map_err(ApiError::from)?;
+    Ok(StatusCode::NO_CONTENT)
+}
+
 async fn list_documents(State(state): State<ApiState>) -> ApiResult<Json<Vec<DocumentSummary>>> {
     let resources = state.resources()?;
-    let guard = resources.state.read().await;
-    let documents = guard.documents.iter().map(DocumentSummary::from).collect();
-    Ok(Json(documents))
+    Ok(Json(state_tx::list_doc_summaries(&resources.state).await))
 }
 
 async fn get_document(
@@ -247,13 +328,11 @@ async fn get_document(
     Path(document_id): Path<String>,
 ) -> ApiResult<Json<DocumentDetail>> {
     let resources = state.resources()?;
-    let guard = resources.state.read().await;
-    let doc = guard
-        .documents
-        .iter()
-        .find(|d| d.id == document_id)
-        .ok_or_else(|| ApiError::not_found("Document not found"))?;
-    Ok(Json(DocumentDetail::from(doc)))
+    let (index, _) = find_document(&resources, &document_id).await?;
+    let doc = state_tx::read_doc(&resources.state, index)
+        .await
+        .map_err(ApiError::from)?;
+    Ok(Json(DocumentDetail::from(&doc)))
 }
 
 async fn get_thumbnail(
@@ -261,16 +340,10 @@ async fn get_thumbnail(
     Path(document_id): Path<String>,
 ) -> ApiResult<Response> {
     let resources = state.resources()?;
-    let guard = resources.state.read().await;
-    let doc = guard
-        .documents
-        .iter()
-        .find(|d| d.id == document_id)
-        .ok_or_else(|| ApiError::not_found("Document not found"))?;
-    let source = doc.rendered.as_ref().unwrap_or(&doc.image);
-    let thumbnail = source.thumbnail(200, 200);
-    let bytes = encode_webp(&thumbnail.into())?;
-    drop(guard);
+    let (index, _) = find_document(&resources, &document_id).await?;
+    let bytes = state_tx::read_thumbnail(&resources.state, index)
+        .await
+        .map_err(ApiError::from)?;
     Ok(binary_response(bytes, "image/webp", None))
 }
 
@@ -279,15 +352,12 @@ async fn get_document_layer(
     Path((document_id, layer)): Path<(String, String)>,
 ) -> ApiResult<Response> {
     let resources = state.resources()?;
-    let guard = resources.state.read().await;
-    let doc = guard
-        .documents
-        .iter()
-        .find(|d| d.id == document_id)
-        .ok_or_else(|| ApiError::not_found("Document not found"))?;
-    let image = document_layer(doc, &layer)?;
+    let (index, _) = find_document(&resources, &document_id).await?;
+    let doc = state_tx::read_doc(&resources.state, index)
+        .await
+        .map_err(ApiError::from)?;
+    let image = document_layer(&doc, &layer)?;
     let bytes = encode_webp(image)?;
-    drop(guard);
     Ok(binary_response(bytes, "image/webp", None))
 }
 
@@ -332,15 +402,30 @@ async fn import_documents(
         }
     }
 
-    let documents = state_tx::list_docs(&resources.state)
-        .await
-        .iter()
-        .map(DocumentSummary::from)
-        .collect::<Vec<_>>();
+    let documents = state_tx::list_doc_summaries(&resources.state).await;
 
     Ok(Json(koharu_core::ImportResult {
         total_count: documents.len(),
         documents,
+        current_document_id: state_tx::current_document_id(&resources.state).await,
+    }))
+}
+
+async fn delete_document(
+    State(state): State<ApiState>,
+    Path(document_id): Path<String>,
+) -> ApiResult<Json<koharu_core::ImportResult>> {
+    let resources = state.resources()?;
+    let (index, _) = find_document(&resources, &document_id).await?;
+    let total_count = state_tx::delete_doc(&resources.state, index)
+        .await
+        .map_err(ApiError::from)?;
+    let documents = state_tx::list_doc_summaries(&resources.state).await;
+
+    Ok(Json(koharu_core::ImportResult {
+        total_count,
+        documents,
+        current_document_id: state_tx::current_document_id(&resources.state).await,
     }))
 }
 
@@ -685,20 +770,29 @@ async fn start_pipeline_job(
     Json(request): Json<PipelineJobRequest>,
 ) -> ApiResult<Json<JobState>> {
     let resources = state.resources()?;
-    let index = if let Some(document_id) = request.document_id.as_deref() {
-        Some(state_tx::find_doc_index(&resources.state, document_id).await?)
+    let indices = if let Some(document_ids) = request.document_ids.as_deref() {
+        let mut resolved = Vec::with_capacity(document_ids.len());
+        for document_id in document_ids {
+            resolved.push(state_tx::find_doc_index(&resources.state, document_id).await?);
+        }
+        Some(resolved)
+    } else if let Some(document_id) = request.document_id.as_deref() {
+        Some(vec![
+            state_tx::find_doc_index(&resources.state, document_id).await?,
+        ])
     } else {
         None
     };
-    let total_documents = match index {
-        Some(_) => 1,
+    let total_documents = match &indices {
+        Some(indices) => indices.len(),
         None => state_tx::doc_count(&resources.state).await,
     };
 
     let job_id = operations::process(
         resources.clone(),
         koharu_core::ProcessRequest {
-            index,
+            index: None,
+            indices,
             llm_model_id: request.llm_model_id,
             llm_api_key: request.llm_api_key,
             llm_base_url: request.llm_base_url,

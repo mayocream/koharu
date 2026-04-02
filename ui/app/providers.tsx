@@ -17,6 +17,7 @@ import {
   subscribeLlmChanged,
   subscribeSnapshot,
 } from '@/lib/backend'
+import { api } from '@/lib/api'
 import i18n from '@/lib/i18n'
 import { getQueryClient } from '@/lib/query/client'
 import { queryKeys } from '@/lib/query/keys'
@@ -42,6 +43,9 @@ function ProvidersBootstrap({ children }: { children: ReactNode }) {
     pathname === '/bootstrap' || pathname === '/splashscreen'
   const hasConnectedRef = useRef(false)
   const setTotalPages = useEditorUiStore((state) => state.setTotalPages)
+  const currentDocumentIndex = useEditorUiStore(
+    (state) => state.currentDocumentIndex,
+  )
   const setApiKey = usePreferencesStore((state) => state.setApiKey)
   const rpcConnected = useRpcConnection()
   const shouldQueryApiKeys = rpcConnected && !isStartupRoute && isTauri()
@@ -57,13 +61,25 @@ function ProvidersBootstrap({ children }: { children: ReactNode }) {
   const claudeApiKeyQuery = useApiKeyQuery('claude', shouldQueryApiKeys)
   const deepSeekApiKeyQuery = useApiKeyQuery('deepseek', shouldQueryApiKeys)
 
-  const applyDocumentsSnapshot = (documents: DocumentSummary[]) => {
+  const applyDocumentsSnapshot = (
+    documents: DocumentSummary[],
+    currentDocumentId?: string | null,
+  ) => {
     const count = documents.length
+    const restoredIndex =
+      currentDocumentId != null
+        ? documents.findIndex((document) => document.id === currentDocumentId)
+        : -1
     useEditorUiStore.setState((state) => ({
       totalPages: count,
       currentDocumentIndex:
-        count === 0 ? 0 : Math.min(state.currentDocumentIndex, count - 1),
+        count === 0
+          ? 0
+          : restoredIndex >= 0
+            ? restoredIndex
+            : Math.min(state.currentDocumentIndex, count - 1),
       selectedBlockIndex: count === 0 ? undefined : state.selectedBlockIndex,
+      selectedDocumentIndices: new Set(),
       documentsVersion: state.documentsVersion + 1,
     }))
     queryClient.setQueryData(queryKeys.documents.count, count)
@@ -72,6 +88,9 @@ function ProvidersBootstrap({ children }: { children: ReactNode }) {
     })
     queryClient.invalidateQueries({
       queryKey: queryKeys.documents.thumbnailRoot,
+    })
+    queryClient.invalidateQueries({
+      queryKey: queryKeys.projects.current,
     })
   }
 
@@ -169,6 +188,12 @@ function ProvidersBootstrap({ children }: { children: ReactNode }) {
   }, [documentsCount, setTotalPages])
 
   useEffect(() => {
+    if (!rpcConnected || isStartupRoute) return
+    if (!documentsCount || documentsCount <= 0) return
+    void api.setCurrentDocument(currentDocumentIndex).catch(() => {})
+  }, [currentDocumentIndex, documentsCount, isStartupRoute, rpcConnected])
+
+  useEffect(() => {
     if (openAiApiKeyQuery.status === 'success') {
       setApiKey('openai', openAiApiKeyQuery.data ?? '')
     }
@@ -223,7 +248,11 @@ function ProvidersBootstrap({ children }: { children: ReactNode }) {
     })()
 
     const unsubscribeSnapshot = subscribeSnapshot((payload: SnapshotEvent) => {
-      applyDocumentsSnapshot(payload.documents)
+      applyDocumentsSnapshot(payload.documents, payload.currentDocumentId)
+      queryClient.setQueryData(
+        queryKeys.projects.current,
+        payload.currentProject,
+      )
       applyLlmSnapshot(payload.llm)
       const pipelineJob =
         payload.jobs.find((job) => job.kind === 'pipeline') ?? null

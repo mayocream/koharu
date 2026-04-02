@@ -24,6 +24,7 @@ Under the hood, Koharu uses [candle](https://github.com/huggingface/candle) and 
 - OCR for manga text recognition
 - Inpainting to remove original text from images
 - LLM-powered translation
+- Disk-backed project autosave and restore
 - Vertical text layout for CJK languages
 - Export to layered PSD with editable text
 - Local HTTP API and MCP server for automation
@@ -37,6 +38,27 @@ If you just want to get started, see [Install Koharu](https://koharu.rs/how-to/i
 - <kbd>Ctrl</kbd> + Mouse Wheel: Zoom in/out
 - <kbd>Ctrl</kbd> + Drag: Pan the canvas
 - <kbd>Del</kbd>: Delete selected text block
+
+### Project save and restore
+
+Koharu now keeps edits in a disk-backed local project instead of relying on in-memory page state alone.
+
+- opening a file or folder creates a project and imports those image pages
+- adding more files or folders appends pages to the current project
+- text edits, masks, brush strokes, and page metadata autosave to disk
+- inpainted and rendered layers are stored as regenerable cache, so a failed CUDA, inpaint, or render step does not discard the editable project state
+- `Save Project` flushes pending writes, `Open Project` and `Open Recent` switch between saved projects, and the last open project and page are restored on startup
+
+Projects are stored as self-contained folders under the local app data directory. Each project keeps:
+
+- `project_manifest.json` for project metadata and page summaries
+- `pages/*.json` for per-page editable state
+- `assets/pages/` for copied source images
+- `assets/thumbs/` for thumbnails
+- `layers/segment/` and `layers/brush/` for editable source layers
+- `cache/inpainted/` and `cache/rendered/` for derived layers that can be regenerated later
+
+The current implementation is folder-backed rather than a portable single-file project format.
 
 ### Export
 

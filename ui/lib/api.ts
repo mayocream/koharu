@@ -15,10 +15,12 @@ import type {
   DocumentSummary,
   ExportResult,
   FontFaceInfo,
+  ImportResult,
   JobState,
   LlmModelInfo,
   LlmState,
   MetaInfo,
+  ProjectSummary,
   TextBlockPatch,
 } from '@/lib/protocol'
 import {
@@ -293,6 +295,18 @@ export const api = {
   async getDocumentsCount(): Promise<number> {
     const documents = await getDocuments()
     return documents.length
+  },
+
+  async getCurrentProject(): Promise<ProjectSummary | null> {
+    return fetchJson<ProjectSummary | null>('/projects/current')
+  },
+
+  async listProjects(): Promise<ProjectSummary[]> {
+    return fetchJson<ProjectSummary[]>('/projects')
+  },
+
+  async listRecentProjects(): Promise<ProjectSummary[]> {
+    return fetchJson<ProjectSummary[]>('/projects/recent')
   },
 
   async getDocument(index: number): Promise<Document> {
@@ -750,6 +764,7 @@ export const api = {
 
   async process(options: {
     index?: number
+    indices?: number[]
     llmModelId?: string
     llmApiKey?: string
     llmBaseUrl?: string
@@ -766,12 +781,20 @@ export const api = {
         typeof options.index === 'number'
           ? (await getDocumentSummaryAtIndex(options.index)).id
           : undefined
+      const documentIds = options.indices?.length
+        ? await Promise.all(
+            options.indices.map(
+              async (index) => (await getDocumentSummaryAtIndex(index)).id,
+            ),
+          )
+        : undefined
 
       const job = await fetchJson<JobState>('/jobs/pipeline', {
         method: 'POST',
         headers: { 'content-type': 'application/json' },
         body: JSON.stringify({
           documentId,
+          documentIds,
           llmModelId: options.llmModelId,
           llmApiKey: options.llmApiKey,
           llmBaseUrl: options.llmBaseUrl,
@@ -785,6 +808,61 @@ export const api = {
         }),
       })
       setActivePipelineJobId(job.id)
+    })
+  },
+
+  async openProject(projectId: string): Promise<{
+    totalCount: number
+    documents: DocumentSummary[]
+    currentDocumentId?: string
+  }> {
+    return withRpcError('open_project', async () => {
+      const result = await fetchJson<ImportResult>(
+        `/projects/${projectId}/open`,
+        {
+          method: 'POST',
+        },
+      )
+      documentDetailCache.clear()
+      return {
+        totalCount: result.totalCount,
+        documents: result.documents,
+        currentDocumentId: result.currentDocumentId ?? undefined,
+      }
+    })
+  },
+
+  async deleteDocument(index: number): Promise<{
+    totalCount: number
+    documents: DocumentSummary[]
+    currentDocumentId?: string
+  }> {
+    return withRpcError('delete_document', async () => {
+      const summary = await getDocumentSummaryAtIndex(index)
+      const result = await fetchJson<ImportResult>(`/documents/${summary.id}`, {
+        method: 'DELETE',
+      })
+      documentDetailCache.delete(summary.id)
+      return {
+        totalCount: result.totalCount,
+        documents: result.documents,
+        currentDocumentId: result.currentDocumentId ?? undefined,
+      }
+    })
+  },
+
+  async saveProject(): Promise<void> {
+    await fetchJson('/projects/current/save', {
+      method: 'POST',
+    })
+  },
+
+  async setCurrentDocument(index: number): Promise<void> {
+    const summary = await getDocumentSummaryAtIndex(index)
+    await fetchJson<void>('/projects/current/document', {
+      method: 'PUT',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ documentId: summary.id }),
     })
   },
 

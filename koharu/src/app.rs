@@ -15,6 +15,7 @@ use koharu_app::{
     config::{self as app_config, AppConfig},
     llm, ml,
     renderer::Renderer,
+    state_tx,
 };
 use koharu_core::{BootstrapConfig, State};
 use koharu_llm::safe::llama_backend::LlamaBackend;
@@ -282,6 +283,9 @@ async fn build_resources(
     let llm = Arc::new(llm::Model::new(runtime.clone(), cpu, llama_backend));
     let renderer = Arc::new(Renderer::new().context("Failed to initialize renderer")?);
     let state = Arc::new(RwLock::new(State::default()));
+    if let Err(err) = state_tx::restore_last_project(&state).await {
+        tracing::warn!(?err, "Failed to restore last project");
+    }
 
     Ok(AppResources {
         runtime,

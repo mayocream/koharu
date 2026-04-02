@@ -311,6 +311,18 @@ export const useDocumentMutations = () => {
     })
   }, [queryClient])
 
+  const refreshProjects = useCallback(async () => {
+    await queryClient.invalidateQueries({
+      queryKey: queryKeys.projects.current,
+    })
+    await queryClient.invalidateQueries({
+      queryKey: queryKeys.projects.all,
+    })
+    await queryClient.invalidateQueries({
+      queryKey: queryKeys.projects.recent,
+    })
+  }, [queryClient])
+
   const refreshCurrentDocument = useCallback(async () => {
     const { currentDocumentIndex } = useEditorUiStore.getState()
     await invalidateCurrentDocument(queryClient, currentDocumentIndex)
@@ -319,7 +331,7 @@ export const useDocumentMutations = () => {
   const openDocuments = useCallback(async () => {
     const { startOperation, finishOperation } = useOperationStore.getState()
     startOperation({
-      type: 'load-khr',
+      type: 'load-project',
       cancellable: false,
     })
     try {
@@ -334,15 +346,16 @@ export const useDocumentMutations = () => {
           queryFn: () => api.getDocument(0),
         })
       }
+      await refreshProjects()
     } finally {
       finishOperation()
     }
-  }, [clearMaskSync, queryClient, refreshDocuments])
+  }, [clearMaskSync, queryClient, refreshDocuments, refreshProjects])
 
   const addDocuments = useCallback(async () => {
     const { startOperation, finishOperation } = useOperationStore.getState()
     startOperation({
-      type: 'load-khr',
+      type: 'load-project',
       cancellable: false,
     })
     try {
@@ -361,6 +374,7 @@ export const useDocumentMutations = () => {
         documentsVersion: state.documentsVersion + 1,
         currentDocumentIndex: previousCount > 0 ? previousCount : 0,
         selectedBlockIndex: undefined,
+        selectedDocumentIndices: new Set(),
       }))
 
       if (count > previousCount) {
@@ -369,15 +383,16 @@ export const useDocumentMutations = () => {
           queryFn: () => api.getDocument(previousCount),
         })
       }
+      await refreshProjects()
     } finally {
       finishOperation()
     }
-  }, [queryClient, refreshDocuments])
+  }, [queryClient, refreshDocuments, refreshProjects])
 
   const openFolder = useCallback(async () => {
     const { startOperation, finishOperation } = useOperationStore.getState()
     startOperation({
-      type: 'load-khr',
+      type: 'load-project',
       cancellable: false,
     })
     try {
@@ -392,15 +407,16 @@ export const useDocumentMutations = () => {
           queryFn: () => api.getDocument(0),
         })
       }
+      await refreshProjects()
     } finally {
       finishOperation()
     }
-  }, [clearMaskSync, queryClient, refreshDocuments])
+  }, [clearMaskSync, queryClient, refreshDocuments, refreshProjects])
 
   const addFolder = useCallback(async () => {
     const { startOperation, finishOperation } = useOperationStore.getState()
     startOperation({
-      type: 'load-khr',
+      type: 'load-project',
       cancellable: false,
     })
     try {
@@ -419,6 +435,7 @@ export const useDocumentMutations = () => {
         documentsVersion: state.documentsVersion + 1,
         currentDocumentIndex: previousCount > 0 ? previousCount : 0,
         selectedBlockIndex: undefined,
+        selectedDocumentIndices: new Set(),
       }))
 
       if (count > previousCount) {
@@ -427,10 +444,107 @@ export const useDocumentMutations = () => {
           queryFn: () => api.getDocument(previousCount),
         })
       }
+      await refreshProjects()
     } finally {
       finishOperation()
     }
-  }, [queryClient, refreshDocuments])
+  }, [queryClient, refreshDocuments, refreshProjects])
+
+  const openProject = useCallback(
+    async (projectId: string) => {
+      const { startOperation, finishOperation } = useOperationStore.getState()
+      startOperation({
+        type: 'load-project',
+        cancellable: false,
+      })
+      try {
+        await flushTextBlockSync()
+        await flushMaskSyncQueue()
+        const result = await api.openProject(projectId)
+        clearMaskSync()
+        queryClient.setQueryData(queryKeys.documents.count, result.totalCount)
+        const currentIndex = result.currentDocumentId
+          ? Math.max(
+              0,
+              result.documents.findIndex(
+                (document) => document.id === result.currentDocumentId,
+              ),
+            )
+          : 0
+        useEditorUiStore.setState((state) => ({
+          totalPages: result.totalCount,
+          documentsVersion: state.documentsVersion + 1,
+          currentDocumentIndex: currentIndex,
+          selectedBlockIndex: undefined,
+          selectedDocumentIndices: new Set(),
+        }))
+        await refreshDocuments()
+        await refreshProjects()
+        if (result.totalCount > 0) {
+          await queryClient.prefetchQuery({
+            queryKey: queryKeys.documents.current(currentIndex),
+            queryFn: () => api.getDocument(currentIndex),
+          })
+        }
+      } finally {
+        finishOperation()
+      }
+    },
+    [clearMaskSync, queryClient, refreshDocuments, refreshProjects],
+  )
+
+  const saveProject = useCallback(async () => {
+    const { startOperation, finishOperation } = useOperationStore.getState()
+    startOperation({
+      type: 'save-project',
+      cancellable: false,
+    })
+    try {
+      await flushTextBlockSync()
+      await flushMaskSyncQueue()
+      await api.saveProject()
+      await refreshProjects()
+    } finally {
+      finishOperation()
+    }
+  }, [refreshProjects])
+
+  const deleteDocument = useCallback(
+    async (index: number) => {
+      await flushTextBlockSync()
+      await flushMaskSyncQueue()
+      const result = await api.deleteDocument(index)
+      clearMaskSync()
+      queryClient.setQueryData(queryKeys.documents.count, result.totalCount)
+      const currentIndex = result.currentDocumentId
+        ? Math.max(
+            0,
+            result.documents.findIndex(
+              (document) => document.id === result.currentDocumentId,
+            ),
+          )
+        : 0
+
+      useEditorUiStore.setState((state) => ({
+        totalPages: result.totalCount,
+        documentsVersion: state.documentsVersion + 1,
+        currentDocumentIndex: result.totalCount > 0 ? currentIndex : 0,
+        selectedBlockIndex: undefined,
+        selectedDocumentIndices: new Set(),
+      }))
+
+      await refreshDocuments()
+      await refreshProjects()
+
+      if (result.totalCount > 0) {
+        await queryClient.prefetchQuery({
+          queryKey: queryKeys.documents.current(currentIndex),
+          queryFn: () => api.getDocument(currentIndex),
+        })
+      }
+    },
+    [queryClient, refreshDocuments, refreshProjects],
+  )
 
   const openExternal = useCallback(async (url: string) => {
     await api.openExternal(url)
@@ -540,17 +654,22 @@ export const useDocumentMutations = () => {
 
   const processImage = useCallback(
     async (_?: any, index?: number) => {
-      const resolvedIndex =
-        index ?? useEditorUiStore.getState().currentDocumentIndex
+      const editorUi = useEditorUiStore.getState()
+      const indices =
+        typeof index === 'number'
+          ? [index]
+          : editorUi.selectedDocumentIndices.size > 0
+            ? Array.from(editorUi.selectedDocumentIndices).sort((a, b) => a - b)
+            : [editorUi.currentDocumentIndex]
       const { selectedModel, selectedLanguage } = useLlmUiStore.getState()
       const { renderEffect, renderStroke } = useEditorUiStore.getState()
       const { fontFamily } = usePreferencesStore.getState()
       const { startOperation, finishOperation } = useOperationStore.getState()
       startOperation({
-        type: 'process-current',
+        type: indices.length > 1 ? 'process-all' : 'process-current',
         cancellable: true,
         current: 0,
-        total: 5,
+        total: indices.length > 1 ? indices.length : 5,
       })
       try {
         const models = getCachedLlmModels(queryClient)
@@ -569,7 +688,8 @@ export const useDocumentMutations = () => {
             ? getBaseUrlForModel(selectedModel!)
             : undefined
         await api.process({
-          index: resolvedIndex,
+          index: typeof index === 'number' ? index : undefined,
+          indices,
           llmModelId: selectedModel
             ? toBackendModelId(selectedModel)
             : selectedModel,
@@ -642,14 +762,16 @@ export const useDocumentMutations = () => {
     }
   }, [clearProgress])
 
-  const exportDocument = useCallback(async () => {
-    const { currentDocumentIndex } = useEditorUiStore.getState()
-    await api.exportDocument(currentDocumentIndex)
+  const exportDocument = useCallback(async (index?: number) => {
+    const resolvedIndex =
+      index ?? useEditorUiStore.getState().currentDocumentIndex
+    await api.exportDocument(resolvedIndex)
   }, [])
 
-  const exportPsdDocument = useCallback(async () => {
-    const { currentDocumentIndex } = useEditorUiStore.getState()
-    await api.exportPsdDocument(currentDocumentIndex)
+  const exportPsdDocument = useCallback(async (index?: number) => {
+    const resolvedIndex =
+      index ?? useEditorUiStore.getState().currentDocumentIndex
+    await api.exportPsdDocument(resolvedIndex)
   }, [])
 
   const exportAllInpainted = useCallback(async () => {
@@ -667,6 +789,9 @@ export const useDocumentMutations = () => {
 
   return {
     refreshCurrentDocument,
+    saveProject,
+    openProject,
+    deleteDocument,
     addDocuments,
     openDocuments,
     openFolder,
