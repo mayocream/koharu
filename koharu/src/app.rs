@@ -1,4 +1,4 @@
-use std::sync::{Arc, Mutex as StdMutex};
+use std::{sync::{Arc, Mutex as StdMutex}};
 
 use anyhow::{Context, Result};
 use clap::Parser;
@@ -45,6 +45,11 @@ struct Cli {
         help = "Bind the HTTP server to a specific port instead of a random port"
     )]
     port: Option<u16>,
+    #[arg(
+        long,
+        help = "Bind the HTTP service to a specific host instead of 127.0.0.1"    
+    )]
+    host: Option<String>,
     #[arg(
         long,
         help = "Run in headless mode without starting the GUI",
@@ -361,6 +366,7 @@ pub async fn run() -> Result<()> {
         download,
         cpu,
         port,
+        host,
         headless,
         no_keyring,
         debug,
@@ -378,7 +384,7 @@ pub async fn run() -> Result<()> {
     }
 
     let initial_runtime = load_runtime(cpu)?;
-    let listener = TcpListener::bind(format!("127.0.0.1:{}", port.unwrap_or(0))).await?;
+    let listener = TcpListener::bind(format!("{}:{}", host.unwrap_or("127.0.0.1".to_string()), port.unwrap_or(0))).await?;
     let api_port = listener.local_addr()?.port();
     let resources = Arc::new(tokio::sync::OnceCell::new());
     let (runtime_tx, runtime_rx) = watch::channel(initial_runtime.clone());
