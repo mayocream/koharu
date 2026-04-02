@@ -2,7 +2,8 @@
 
 import { useRef, useState } from 'react'
 import { useDrag } from '@use-gesture/react'
-import { Document, TextBlock, ToolMode } from '@/types'
+import { TextBlock, ToolMode } from '@/types'
+import type { MappedDocument } from '@/hooks/useTextBlocks'
 import type {
   PointerToDocumentFn,
   DocumentPointer,
@@ -10,7 +11,7 @@ import type {
 
 type BlockDraftingOptions = {
   mode: ToolMode
-  currentDocument: Document | null
+  currentDocument: MappedDocument | null
   pointerToDocument: PointerToDocumentFn
   clearSelection: () => void
   onCreateBlock: (block: TextBlock) => void

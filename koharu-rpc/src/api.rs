@@ -1,20 +1,15 @@
-use std::{convert::Infallible, io::Cursor, time::Duration};
+use std::io::Cursor;
 
 use anyhow::Context;
-use async_stream::stream;
 use axum::{
-    Json, Router,
+    Json,
     body::Body,
     extract::{DefaultBodyLimit, Multipart, Path, Query, State},
     http::{
         HeaderValue, StatusCode,
         header::{CONTENT_DISPOSITION, CONTENT_TYPE},
     },
-    response::{
-        IntoResponse, Response,
-        sse::{Event, KeepAlive, Sse},
-    },
-    routing::{delete, get, patch, post, put},
+    response::{IntoResponse, Response},
 };
 use image::ImageFormat;
 use koharu_app::{
@@ -22,20 +17,20 @@ use koharu_app::{
     state_tx::{self, ChangedField},
 };
 use koharu_core::{
-    ApiKeyGetPayload, ApiKeyResponse, ApiKeySetPayload, ApiKeyValue, BootstrapConfig,
-    CreateTextBlock, Document, DocumentDetail, DocumentSummary, ExportLayer, ExportResult,
-    FileEntry, FontFaceInfo, IndexPayload, InpaintPartialPayload, InpaintRegion, JobState,
-    JobStatus, LlmLoadPayload, LlmLoadRequest, LlmModelInfo, LlmPingRequest, LlmPingResponse,
-    MaskRegionRequest, MetaInfo, OpenDocumentsPayload, PipelineJobRequest, Region, RenderPayload,
-    RenderRequest, SerializableDynamicImage, TextBlock, TextBlockDetail, TextBlockPatch,
-    TranslateRequest, UpdateBrushLayerPayload, UpdateInpaintMaskPayload,
+    ApiKeyResponse, ApiKeyValue, BootstrapConfig, CreateTextBlock, Document, DocumentDetail,
+    DocumentSummary, DownloadState, ExportLayer, ExportResult, FontFaceInfo, InpaintRegion,
+    JobState, JobStatus, LlmLoadRequest, LlmModelInfo, LlmPingRequest, LlmPingResponse,
+    MaskRegionRequest, MetaInfo, PipelineJobRequest, Region, RenderRequest, TextBlock,
+    TextBlockDetail, TextBlockInput, TextBlockPatch, TranslateRequest,
 };
 use koharu_psd::{PsdExportOptions, TextLayerMode};
-use serde::Deserialize;
+use serde::{Deserialize, Serialize};
+use utoipa::IntoParams;
+use utoipa_axum::{router::OpenApiRouter, routes};
 
 use crate::{
-    events::{ApiEvent, EventHub},
     shared::{SharedState, get_resources},
+    tracker::Tracker,
 };
 
 const MAX_BODY_SIZE: usize = 1024 * 1024 * 1024;
@@ -43,7 +38,7 @@ const MAX_BODY_SIZE: usize = 1024 * 1024 * 1024;
 #[derive(Clone)]
 pub struct ApiState {
     pub resources: SharedState,
-    pub events: EventHub,
+    pub tracker: Tracker,
 }
 
 impl ApiState {
@@ -52,84 +47,58 @@ impl ApiState {
     }
 }
 
-pub fn router(resources: SharedState, events: EventHub) -> Router {
-    let state = ApiState { resources, events };
+pub fn api() -> (axum::Router<ApiState>, utoipa::openapi::OpenApi) {
+    OpenApiRouter::default()
+        .routes(routes!(list_documents, import_documents))
+        .routes(routes!(get_document))
+        .routes(routes!(get_document_thumbnail))
+        .routes(routes!(detect_document))
+        .routes(routes!(recognize_document))
+        .routes(routes!(inpaint_document))
+        .routes(routes!(render_document))
+        .routes(routes!(translate_document))
+        .routes(routes!(update_mask))
+        .routes(routes!(update_brush_layer))
+        .routes(routes!(inpaint_region))
+        .routes(routes!(create_text_block, put_text_blocks))
+        .routes(routes!(patch_text_block, delete_text_block))
+        .routes(routes!(export_document))
+        .routes(routes!(batch_export))
+        .routes(routes!(get_llm, load_llm, unload_llm))
+        .routes(routes!(list_llm_models))
+        .routes(routes!(check_llm_health))
+        .routes(routes!(get_api_key, set_api_key))
+        .routes(routes!(start_pipeline))
+        .routes(routes!(list_jobs))
+        .routes(routes!(get_job, cancel_job))
+        .routes(routes!(list_downloads))
+        .routes(routes!(get_meta))
+        .routes(routes!(list_fonts))
+        .routes(routes!(get_config, update_config))
+        .routes(routes!(initialize))
+        .split_for_parts()
+}
 
-    Router::new()
-        .route("/config", get(get_config).put(put_config))
-        .route("/initialize", post(initialize_app))
-        .route("/meta", get(get_meta))
-        .route("/fonts", get(get_fonts))
-        .route("/documents", get(list_documents))
-        .route("/documents/import", post(import_documents))
-        .route("/documents/{document_id}", get(get_document))
-        .route("/documents/{document_id}/thumbnail", get(get_thumbnail))
-        .route(
-            "/documents/{document_id}/layers/{layer}",
-            get(get_document_layer),
-        )
-        .route("/documents/{document_id}/detect", post(detect_document))
-        .route("/documents/{document_id}/ocr", post(ocr_document))
-        .route("/documents/{document_id}/inpaint", post(inpaint_document))
-        .route("/documents/{document_id}/render", post(render_document))
-        .route(
-            "/documents/{document_id}/translate",
-            post(translate_document),
-        )
-        .route(
-            "/documents/{document_id}/mask-region",
-            put(update_mask_region),
-        )
-        .route(
-            "/documents/{document_id}/brush-region",
-            put(update_brush_region),
-        )
-        .route(
-            "/documents/{document_id}/inpaint-region",
-            post(inpaint_region),
-        )
-        .route(
-            "/documents/{document_id}/text-blocks",
-            post(create_text_block),
-        )
-        .route(
-            "/documents/{document_id}/text-blocks/{text_block_id}",
-            patch(patch_text_block).delete(delete_text_block),
-        )
-        .route("/documents/{document_id}/export", get(export_document))
-        .route(
-            "/documents/{document_id}/export/psd",
-            get(export_document_psd),
-        )
-        .route("/llm/models", get(list_llm_models))
-        .route("/llm/state", get(get_llm_state))
-        .route("/llm/load", post(load_llm))
-        .route("/llm/offload", post(offload_llm))
-        .route("/llm/ping", post(ping_llm))
-        .route(
-            "/providers/{provider}/api-key",
-            get(get_api_key).put(set_api_key),
-        )
-        .route("/jobs/pipeline", post(start_pipeline_job))
-        .route("/jobs/{job_id}", delete(cancel_pipeline_job))
-        .route("/exports", post(export_all))
-        .route("/events", get(events_stream))
+pub fn router(resources: SharedState, tracker: Tracker) -> axum::Router {
+    let state = ApiState { resources, tracker };
+    let (router, _) = api();
+    router
         .layer(DefaultBodyLimit::max(MAX_BODY_SIZE))
         .with_state(state)
 }
 
 type ApiResult<T> = Result<T, ApiError>;
 
-#[derive(Debug)]
+#[derive(Debug, Serialize, utoipa::ToSchema)]
 pub struct ApiError {
-    status: StatusCode,
-    message: String,
+    pub status: u16,
+    pub message: String,
 }
 
 impl ApiError {
     fn new(status: StatusCode, message: impl Into<String>) -> Self {
         Self {
-            status,
+            status: status.as_u16(),
             message: message.into(),
         }
     }
@@ -168,35 +137,75 @@ impl From<anyhow::Error> for ApiError {
 
 impl IntoResponse for ApiError {
     fn into_response(self) -> Response {
-        (self.status, self.message).into_response()
+        let status =
+            StatusCode::from_u16(self.status).unwrap_or(StatusCode::INTERNAL_SERVER_ERROR);
+        (status, Json(self)).into_response()
     }
 }
 
-#[derive(Debug, Deserialize)]
+#[derive(Debug, utoipa::ToSchema)]
+#[allow(dead_code)]
+struct MultipartUpload {
+    #[schema(value_type = Vec<String>, format = Binary)]
+    files: Vec<Vec<u8>>,
+}
+
+#[derive(Debug, Deserialize, IntoParams)]
 #[serde(rename_all = "camelCase")]
 struct ImportQuery {
     mode: Option<koharu_core::ImportMode>,
 }
 
-#[derive(Debug, Deserialize)]
-#[serde(rename_all = "camelCase")]
-struct LayerQuery {
-    layer: Option<ExportLayer>,
-}
-
-#[derive(Debug, Deserialize)]
+#[derive(Debug, Deserialize, IntoParams)]
 #[serde(rename_all = "camelCase")]
 struct LlmModelsQuery {
     language: Option<String>,
     openai_compatible_base_url: Option<String>,
 }
 
+#[derive(Debug, Deserialize, IntoParams)]
+#[serde(rename_all = "camelCase")]
+struct ExportQuery {
+    layer: Option<ExportLayer>,
+}
+
+#[derive(Debug, Deserialize, utoipa::ToSchema)]
+#[serde(rename_all = "camelCase")]
+struct ExportBatchRequest {
+    layer: Option<ExportLayer>,
+}
+
+// ---------------------------------------------------------------------------
+// System
+// ---------------------------------------------------------------------------
+
+#[utoipa::path(
+    get,
+    path = "/config",
+    operation_id = "getConfig",
+    tag = "system",
+    responses(
+        (status = 200, body = BootstrapConfig),
+        (status = 503, body = ApiError),
+    ),
+)]
 async fn get_config(State(state): State<ApiState>) -> ApiResult<Json<BootstrapConfig>> {
     let config = state.resources.get_config().map_err(ApiError::internal)?;
     Ok(Json(config))
 }
 
-async fn put_config(
+#[utoipa::path(
+    put,
+    path = "/config",
+    operation_id = "updateConfig",
+    tag = "system",
+    request_body = BootstrapConfig,
+    responses(
+        (status = 200, body = BootstrapConfig),
+        (status = 400, body = ApiError),
+    ),
+)]
+async fn update_config(
     State(state): State<ApiState>,
     Json(config): Json<BootstrapConfig>,
 ) -> ApiResult<Json<BootstrapConfig>> {
@@ -204,7 +213,18 @@ async fn put_config(
     Ok(Json(saved))
 }
 
-async fn initialize_app(State(state): State<ApiState>) -> ApiResult<StatusCode> {
+#[utoipa::path(
+    post,
+    path = "/initialize",
+    operation_id = "initialize",
+    tag = "system",
+    responses(
+        (status = 204),
+        (status = 409, body = ApiError),
+        (status = 500, body = ApiError),
+    ),
+)]
+async fn initialize(State(state): State<ApiState>) -> ApiResult<StatusCode> {
     match state.resources.initialize().await {
         Ok(()) => Ok(StatusCode::NO_CONTENT),
         Err(error) => {
@@ -218,6 +238,16 @@ async fn initialize_app(State(state): State<ApiState>) -> ApiResult<StatusCode> 
     }
 }
 
+#[utoipa::path(
+    get,
+    path = "/meta",
+    operation_id = "getMeta",
+    tag = "system",
+    responses(
+        (status = 200, body = MetaInfo),
+        (status = 503, body = ApiError),
+    ),
+)]
 async fn get_meta(State(state): State<ApiState>) -> ApiResult<Json<MetaInfo>> {
     let resources = state.resources()?;
     let device = operations::device(resources.clone()).await?;
@@ -227,7 +257,17 @@ async fn get_meta(State(state): State<ApiState>) -> ApiResult<Json<MetaInfo>> {
     }))
 }
 
-async fn get_fonts(State(state): State<ApiState>) -> ApiResult<Json<Vec<FontFaceInfo>>> {
+#[utoipa::path(
+    get,
+    path = "/fonts",
+    operation_id = "listFonts",
+    tag = "system",
+    responses(
+        (status = 200, body = Vec<FontFaceInfo>),
+        (status = 503, body = ApiError),
+    ),
+)]
+async fn list_fonts(State(state): State<ApiState>) -> ApiResult<Json<Vec<FontFaceInfo>>> {
     let resources = state.resources()?;
     let fonts = operations::list_font_families(resources)
         .await
@@ -235,6 +275,20 @@ async fn get_fonts(State(state): State<ApiState>) -> ApiResult<Json<Vec<FontFace
     Ok(Json(fonts))
 }
 
+// ---------------------------------------------------------------------------
+// Documents
+// ---------------------------------------------------------------------------
+
+#[utoipa::path(
+    get,
+    path = "/documents",
+    operation_id = "listDocuments",
+    tag = "documents",
+    responses(
+        (status = 200, body = Vec<DocumentSummary>),
+        (status = 503, body = ApiError),
+    ),
+)]
 async fn list_documents(State(state): State<ApiState>) -> ApiResult<Json<Vec<DocumentSummary>>> {
     let resources = state.resources()?;
     let guard = resources.state.read().await;
@@ -242,6 +296,18 @@ async fn list_documents(State(state): State<ApiState>) -> ApiResult<Json<Vec<Doc
     Ok(Json(documents))
 }
 
+#[utoipa::path(
+    get,
+    path = "/documents/{document_id}",
+    operation_id = "getDocument",
+    tag = "documents",
+    params(("document_id" = String, Path,)),
+    responses(
+        (status = 200, body = DocumentDetail),
+        (status = 404, body = ApiError),
+        (status = 503, body = ApiError),
+    ),
+)]
 async fn get_document(
     State(state): State<ApiState>,
     Path(document_id): Path<String>,
@@ -253,13 +319,58 @@ async fn get_document(
         .iter()
         .find(|d| d.id == document_id)
         .ok_or_else(|| ApiError::not_found("Document not found"))?;
-    Ok(Json(DocumentDetail::from(doc)))
+
+    let image = serde_bytes::ByteBuf::from(encode_webp(&doc.image)?);
+    let segment = doc.segment.as_ref().map(|s| encode_webp(s).map(serde_bytes::ByteBuf::from)).transpose()?;
+    let inpainted = doc.inpainted.as_ref().map(|s| encode_webp(s).map(serde_bytes::ByteBuf::from)).transpose()?;
+    let brush_layer = doc.brush_layer.as_ref().map(|s| encode_webp(s).map(serde_bytes::ByteBuf::from)).transpose()?;
+    let rendered = doc.rendered.as_ref().map(|s| encode_webp(s).map(serde_bytes::ByteBuf::from)).transpose()?;
+
+    let text_blocks = doc.text_blocks.iter().map(koharu_core::TextBlockDetail::from).collect();
+
+    let detail = DocumentDetail {
+        id: doc.id.clone(),
+        path: doc.path.to_string_lossy().to_string(),
+        name: doc.name.clone(),
+        width: doc.width,
+        height: doc.height,
+        revision: doc.revision,
+        text_blocks,
+        image,
+        segment,
+        inpainted,
+        brush_layer,
+        rendered,
+    };
+
+    drop(guard);
+    Ok(Json(detail))
 }
 
-async fn get_thumbnail(
+#[derive(Debug, Deserialize, IntoParams)]
+#[serde(rename_all = "camelCase")]
+struct ThumbnailQuery {
+    size: Option<u32>,
+}
+
+#[utoipa::path(
+    get,
+    path = "/documents/{document_id}/thumbnail",
+    operation_id = "getDocumentThumbnail",
+    tag = "documents",
+    params(("document_id" = String, Path,), ThumbnailQuery),
+    responses(
+        (status = 200, content_type = "image/webp", body = inline(String)),
+        (status = 404, body = ApiError),
+        (status = 503, body = ApiError),
+    ),
+)]
+async fn get_document_thumbnail(
     State(state): State<ApiState>,
     Path(document_id): Path<String>,
+    Query(query): Query<ThumbnailQuery>,
 ) -> ApiResult<Response> {
+    let size = query.size.unwrap_or(200).min(800);
     let resources = state.resources()?;
     let guard = resources.state.read().await;
     let doc = guard
@@ -268,29 +379,25 @@ async fn get_thumbnail(
         .find(|d| d.id == document_id)
         .ok_or_else(|| ApiError::not_found("Document not found"))?;
     let source = doc.rendered.as_ref().unwrap_or(&doc.image);
-    let thumbnail = source.thumbnail(200, 200);
+    let thumbnail = source.thumbnail(size, size);
     let bytes = encode_webp(&thumbnail.into())?;
     drop(guard);
     Ok(binary_response(bytes, "image/webp", None))
 }
 
-async fn get_document_layer(
-    State(state): State<ApiState>,
-    Path((document_id, layer)): Path<(String, String)>,
-) -> ApiResult<Response> {
-    let resources = state.resources()?;
-    let guard = resources.state.read().await;
-    let doc = guard
-        .documents
-        .iter()
-        .find(|d| d.id == document_id)
-        .ok_or_else(|| ApiError::not_found("Document not found"))?;
-    let image = document_layer(doc, &layer)?;
-    let bytes = encode_webp(image)?;
-    drop(guard);
-    Ok(binary_response(bytes, "image/webp", None))
-}
-
+#[utoipa::path(
+    post,
+    path = "/documents",
+    operation_id = "importDocuments",
+    tag = "documents",
+    params(ImportQuery),
+    request_body(content_type = "multipart/form-data", content = inline(MultipartUpload)),
+    responses(
+        (status = 200, body = koharu_core::ImportResult),
+        (status = 400, body = ApiError),
+        (status = 503, body = ApiError),
+    ),
+)]
 async fn import_documents(
     State(state): State<ApiState>,
     Query(query): Query<ImportQuery>,
@@ -312,7 +419,7 @@ async fn import_documents(
             .bytes()
             .await
             .map_err(|error| ApiError::bad_request(error.to_string()))?;
-        files.push(FileEntry {
+        files.push(koharu_core::FileEntry {
             name: filename,
             data: data.to_vec(),
         });
@@ -322,7 +429,7 @@ async fn import_documents(
         return Err(ApiError::bad_request("No files uploaded"));
     }
 
-    let payload = OpenDocumentsPayload { files };
+    let payload = koharu_core::OpenDocumentsPayload { files };
     match query.mode.unwrap_or(koharu_core::ImportMode::Replace) {
         koharu_core::ImportMode::Replace => {
             operations::open_documents(resources.clone(), payload).await?;
@@ -344,36 +451,89 @@ async fn import_documents(
     }))
 }
 
+// ---------------------------------------------------------------------------
+// Processing
+// ---------------------------------------------------------------------------
+
+#[utoipa::path(
+    post,
+    path = "/documents/{document_id}/detect",
+    operation_id = "detectDocument",
+    tag = "processing",
+    params(("document_id" = String, Path,)),
+    responses(
+        (status = 204),
+        (status = 404, body = ApiError),
+        (status = 503, body = ApiError),
+    ),
+)]
 async fn detect_document(
     State(state): State<ApiState>,
     Path(document_id): Path<String>,
 ) -> ApiResult<StatusCode> {
     let resources = state.resources()?;
     let (index, _) = find_document(&resources, &document_id).await?;
-    operations::detect(resources, IndexPayload { index }).await?;
+    operations::detect(resources, koharu_core::IndexPayload { index }).await?;
     Ok(StatusCode::NO_CONTENT)
 }
 
-async fn ocr_document(
+#[utoipa::path(
+    post,
+    path = "/documents/{document_id}/recognize",
+    operation_id = "recognizeDocument",
+    tag = "processing",
+    params(("document_id" = String, Path,)),
+    responses(
+        (status = 204),
+        (status = 404, body = ApiError),
+        (status = 503, body = ApiError),
+    ),
+)]
+async fn recognize_document(
     State(state): State<ApiState>,
     Path(document_id): Path<String>,
 ) -> ApiResult<StatusCode> {
     let resources = state.resources()?;
     let (index, _) = find_document(&resources, &document_id).await?;
-    operations::ocr(resources, IndexPayload { index }).await?;
+    operations::ocr(resources, koharu_core::IndexPayload { index }).await?;
     Ok(StatusCode::NO_CONTENT)
 }
 
+#[utoipa::path(
+    post,
+    path = "/documents/{document_id}/inpaint",
+    operation_id = "inpaintDocument",
+    tag = "processing",
+    params(("document_id" = String, Path,)),
+    responses(
+        (status = 204),
+        (status = 404, body = ApiError),
+        (status = 503, body = ApiError),
+    ),
+)]
 async fn inpaint_document(
     State(state): State<ApiState>,
     Path(document_id): Path<String>,
 ) -> ApiResult<StatusCode> {
     let resources = state.resources()?;
     let (index, _) = find_document(&resources, &document_id).await?;
-    operations::inpaint(resources, IndexPayload { index }).await?;
+    operations::inpaint(resources, koharu_core::IndexPayload { index }).await?;
     Ok(StatusCode::NO_CONTENT)
 }
 
+#[utoipa::path(
+    post,
+    path = "/documents/{document_id}/render",
+    operation_id = "renderDocument",
+    tag = "processing",
+    params(("document_id" = String, Path,)),
+    request_body = RenderRequest,
+    responses(
+        (status = 204),
+        (status = 404, body = ApiError),
+        (status = 503, body = ApiError),
+    ),
+)]
 async fn render_document(
     State(state): State<ApiState>,
     Path(document_id): Path<String>,
@@ -389,7 +549,7 @@ async fn render_document(
 
     operations::render(
         resources,
-        RenderPayload {
+        koharu_core::RenderPayload {
             index,
             text_block_index,
             shader_effect: request.shader_effect,
@@ -402,6 +562,19 @@ async fn render_document(
     Ok(StatusCode::NO_CONTENT)
 }
 
+#[utoipa::path(
+    post,
+    path = "/documents/{document_id}/translate",
+    operation_id = "translateDocument",
+    tag = "processing",
+    params(("document_id" = String, Path,)),
+    request_body = TranslateRequest,
+    responses(
+        (status = 204),
+        (status = 404, body = ApiError),
+        (status = 503, body = ApiError),
+    ),
+)]
 async fn translate_document(
     State(state): State<ApiState>,
     Path(document_id): Path<String>,
@@ -428,7 +601,24 @@ async fn translate_document(
     Ok(StatusCode::NO_CONTENT)
 }
 
-async fn update_mask_region(
+// ---------------------------------------------------------------------------
+// Regions
+// ---------------------------------------------------------------------------
+
+#[utoipa::path(
+    put,
+    path = "/documents/{document_id}/mask",
+    operation_id = "updateMask",
+    tag = "regions",
+    params(("document_id" = String, Path,)),
+    request_body = MaskRegionRequest,
+    responses(
+        (status = 204),
+        (status = 404, body = ApiError),
+        (status = 503, body = ApiError),
+    ),
+)]
+async fn update_mask(
     State(state): State<ApiState>,
     Path(document_id): Path<String>,
     Json(request): Json<MaskRegionRequest>,
@@ -437,7 +627,7 @@ async fn update_mask_region(
     let (index, _) = find_document(&resources, &document_id).await?;
     operations::update_inpaint_mask(
         resources,
-        UpdateInpaintMaskPayload {
+        koharu_core::UpdateInpaintMaskPayload {
             index,
             mask: request.data,
             region: request.region.map(to_inpaint_region),
@@ -447,7 +637,19 @@ async fn update_mask_region(
     Ok(StatusCode::NO_CONTENT)
 }
 
-async fn update_brush_region(
+#[utoipa::path(
+    put,
+    path = "/documents/{document_id}/brush-layer",
+    operation_id = "updateBrushLayer",
+    tag = "regions",
+    params(("document_id" = String, Path,)),
+    responses(
+        (status = 204),
+        (status = 404, body = ApiError),
+        (status = 503, body = ApiError),
+    ),
+)]
+async fn update_brush_layer(
     State(state): State<ApiState>,
     Path(document_id): Path<String>,
     Json(request): Json<koharu_core::BrushRegionRequest>,
@@ -456,7 +658,7 @@ async fn update_brush_region(
     let (index, _) = find_document(&resources, &document_id).await?;
     operations::update_brush_layer(
         resources,
-        UpdateBrushLayerPayload {
+        koharu_core::UpdateBrushLayerPayload {
             index,
             patch: request.data,
             region: to_inpaint_region(request.region),
@@ -466,6 +668,18 @@ async fn update_brush_region(
     Ok(StatusCode::NO_CONTENT)
 }
 
+#[utoipa::path(
+    post,
+    path = "/documents/{document_id}/inpaint-region",
+    operation_id = "inpaintRegion",
+    tag = "regions",
+    params(("document_id" = String, Path,)),
+    responses(
+        (status = 204),
+        (status = 404, body = ApiError),
+        (status = 503, body = ApiError),
+    ),
+)]
 async fn inpaint_region(
     State(state): State<ApiState>,
     Path(document_id): Path<String>,
@@ -475,7 +689,7 @@ async fn inpaint_region(
     let (index, _) = find_document(&resources, &document_id).await?;
     operations::inpaint_partial(
         resources,
-        InpaintPartialPayload {
+        koharu_core::InpaintPartialPayload {
             index,
             region: to_inpaint_region(request.region),
         },
@@ -484,6 +698,23 @@ async fn inpaint_region(
     Ok(StatusCode::NO_CONTENT)
 }
 
+// ---------------------------------------------------------------------------
+// Text Blocks
+// ---------------------------------------------------------------------------
+
+#[utoipa::path(
+    post,
+    path = "/documents/{document_id}/text-blocks",
+    operation_id = "createTextBlock",
+    tag = "text-blocks",
+    params(("document_id" = String, Path,)),
+    request_body = CreateTextBlock,
+    responses(
+        (status = 200, body = TextBlockDetail),
+        (status = 404, body = ApiError),
+        (status = 503, body = ApiError),
+    ),
+)]
 async fn create_text_block(
     State(state): State<ApiState>,
     Path(document_id): Path<String>,
@@ -519,6 +750,131 @@ async fn create_text_block(
     Ok(Json(detail))
 }
 
+#[utoipa::path(
+    put,
+    path = "/documents/{document_id}/text-blocks",
+    operation_id = "putTextBlocks",
+    tag = "text-blocks",
+    params(("document_id" = String, Path,)),
+    request_body = Vec<TextBlockInput>,
+    responses(
+        (status = 204),
+        (status = 404, body = ApiError),
+        (status = 503, body = ApiError),
+    ),
+)]
+async fn put_text_blocks(
+    State(state): State<ApiState>,
+    Path(document_id): Path<String>,
+    Json(inputs): Json<Vec<TextBlockInput>>,
+) -> ApiResult<StatusCode> {
+    let resources = state.resources()?;
+    let (index, _) = find_document(&resources, &document_id).await?;
+
+    let any_content_changed = state_tx::mutate_doc(
+        &resources.state,
+        index,
+        &[ChangedField::TextBlocks],
+        |document| {
+            let mut any_changed = false;
+
+            // Build a set of incoming IDs for deletion detection
+            let incoming_ids: std::collections::HashSet<&str> = inputs
+                .iter()
+                .filter_map(|input| input.id.as_deref())
+                .collect();
+
+            // Delete blocks not present in the incoming array
+            let before_len = document.text_blocks.len();
+            document
+                .text_blocks
+                .retain(|block| incoming_ids.contains(block.id.as_str()));
+            if document.text_blocks.len() != before_len {
+                any_changed = true;
+            }
+
+            for input in &inputs {
+                if let Some(ref id) = input.id {
+                    // Update existing block
+                    if let Some(block) = document
+                        .text_blocks
+                        .iter_mut()
+                        .find(|b| &b.id == id)
+                    {
+                        let patch = TextBlockPatch {
+                            text: input.text.clone(),
+                            translation: input.translation.clone(),
+                            x: Some(input.x),
+                            y: Some(input.y),
+                            width: Some(input.width),
+                            height: Some(input.height),
+                            style: input.style.clone(),
+                        };
+                        let had_render = block.rendered.is_some();
+                        apply_text_block_patch(block, patch);
+                        // Content changed if the render was invalidated
+                        if had_render && block.rendered.is_none() {
+                            any_changed = true;
+                        }
+                    }
+                } else {
+                    // Create new block
+                    let mut block = TextBlock {
+                        x: input.x,
+                        y: input.y,
+                        width: input.width,
+                        height: input.height,
+                        text: input.text.clone(),
+                        translation: input.translation.clone(),
+                        style: input.style.clone(),
+                        confidence: 1.0,
+                        ..Default::default()
+                    };
+                    block.set_layout_seed(block.x, block.y, block.width, block.height);
+                    document.text_blocks.push(block);
+                    any_changed = true;
+                }
+            }
+
+            Ok(any_changed)
+        },
+    )
+    .await?;
+
+    // Auto-render if any block content/geometry changed
+    if any_content_changed {
+        let _ = operations::render(
+            resources,
+            koharu_core::RenderPayload {
+                index,
+                text_block_index: None,
+                shader_effect: None,
+                shader_stroke: None,
+                font_family: None,
+            },
+        )
+        .await;
+    }
+
+    Ok(StatusCode::NO_CONTENT)
+}
+
+#[utoipa::path(
+    patch,
+    path = "/documents/{document_id}/text-blocks/{text_block_id}",
+    operation_id = "patchTextBlock",
+    tag = "text-blocks",
+    params(
+        ("document_id" = String, Path,),
+        ("text_block_id" = String, Path,),
+    ),
+    request_body = TextBlockPatch,
+    responses(
+        (status = 200, body = TextBlockDetail),
+        (status = 404, body = ApiError),
+        (status = 503, body = ApiError),
+    ),
+)]
 async fn patch_text_block(
     State(state): State<ApiState>,
     Path((document_id, text_block_id)): Path<(String, String)>,
@@ -546,6 +902,21 @@ async fn patch_text_block(
     Ok(Json(detail))
 }
 
+#[utoipa::path(
+    delete,
+    path = "/documents/{document_id}/text-blocks/{text_block_id}",
+    operation_id = "deleteTextBlock",
+    tag = "text-blocks",
+    params(
+        ("document_id" = String, Path,),
+        ("text_block_id" = String, Path,),
+    ),
+    responses(
+        (status = 204),
+        (status = 404, body = ApiError),
+        (status = 503, body = ApiError),
+    ),
+)]
 async fn delete_text_block(
     State(state): State<ApiState>,
     Path((document_id, text_block_id)): Path<(String, String)>,
@@ -572,6 +943,21 @@ async fn delete_text_block(
     Ok(StatusCode::NO_CONTENT)
 }
 
+// ---------------------------------------------------------------------------
+// LLM
+// ---------------------------------------------------------------------------
+
+#[utoipa::path(
+    get,
+    path = "/llm/models",
+    operation_id = "listLlmModels",
+    tag = "llm",
+    params(LlmModelsQuery),
+    responses(
+        (status = 200, body = Vec<LlmModelInfo>),
+        (status = 503, body = ApiError),
+    ),
+)]
 async fn list_llm_models(
     State(state): State<ApiState>,
     Query(query): Query<LlmModelsQuery>,
@@ -595,11 +981,33 @@ async fn list_llm_models(
     Ok(Json(models))
 }
 
-async fn get_llm_state(State(state): State<ApiState>) -> ApiResult<Json<koharu_core::LlmState>> {
+#[utoipa::path(
+    get,
+    path = "/llm",
+    operation_id = "getLlm",
+    tag = "llm",
+    responses(
+        (status = 200, body = koharu_core::LlmState),
+        (status = 503, body = ApiError),
+    ),
+)]
+async fn get_llm(State(state): State<ApiState>) -> ApiResult<Json<koharu_core::LlmState>> {
     let resources = state.resources()?;
     Ok(Json(resources.llm.snapshot().await))
 }
 
+#[utoipa::path(
+    put,
+    path = "/llm",
+    operation_id = "loadLlm",
+    tag = "llm",
+    request_body = LlmLoadRequest,
+    responses(
+        (status = 200, body = koharu_core::LlmState),
+        (status = 400, body = ApiError),
+        (status = 503, body = ApiError),
+    ),
+)]
 async fn load_llm(
     State(state): State<ApiState>,
     Json(request): Json<LlmLoadRequest>,
@@ -607,7 +1015,7 @@ async fn load_llm(
     let resources = state.resources()?;
     operations::llm_load(
         resources.clone(),
-        LlmLoadPayload {
+        koharu_core::LlmLoadPayload {
             id: request.id,
             api_key: request.api_key,
             base_url: request.base_url,
@@ -620,13 +1028,33 @@ async fn load_llm(
     Ok(Json(resources.llm.snapshot().await))
 }
 
-async fn offload_llm(State(state): State<ApiState>) -> ApiResult<Json<koharu_core::LlmState>> {
+#[utoipa::path(
+    delete,
+    path = "/llm",
+    operation_id = "unloadLlm",
+    tag = "llm",
+    responses(
+        (status = 200, body = koharu_core::LlmState),
+        (status = 503, body = ApiError),
+    ),
+)]
+async fn unload_llm(State(state): State<ApiState>) -> ApiResult<Json<koharu_core::LlmState>> {
     let resources = state.resources()?;
     operations::llm_offload(resources.clone()).await?;
     Ok(Json(resources.llm.snapshot().await))
 }
 
-async fn ping_llm(
+#[utoipa::path(
+    post,
+    path = "/llm/health",
+    operation_id = "checkLlmHealth",
+    tag = "llm",
+    request_body = LlmPingRequest,
+    responses(
+        (status = 200, body = LlmPingResponse),
+    ),
+)]
+async fn check_llm_health(
     State(state): State<ApiState>,
     Json(request): Json<LlmPingRequest>,
 ) -> ApiResult<Json<LlmPingResponse>> {
@@ -652,17 +1080,45 @@ async fn ping_llm(
     }
 }
 
+// ---------------------------------------------------------------------------
+// Providers
+// ---------------------------------------------------------------------------
+
+#[utoipa::path(
+    get,
+    path = "/providers/{provider}/api-key",
+    operation_id = "getApiKey",
+    tag = "providers",
+    params(("provider" = String, Path,)),
+    responses(
+        (status = 200, body = ApiKeyResponse),
+        (status = 503, body = ApiError),
+    ),
+)]
 async fn get_api_key(
     State(state): State<ApiState>,
     Path(provider): Path<String>,
 ) -> ApiResult<Json<ApiKeyResponse>> {
     let resources = state.resources()?;
-    let result = operations::get_api_key(resources, ApiKeyGetPayload { provider }).await?;
+    let result =
+        operations::get_api_key(resources, koharu_core::ApiKeyGetPayload { provider }).await?;
     Ok(Json(ApiKeyResponse {
         api_key: result.api_key,
     }))
 }
 
+#[utoipa::path(
+    put,
+    path = "/providers/{provider}/api-key",
+    operation_id = "setApiKey",
+    tag = "providers",
+    params(("provider" = String, Path,)),
+    request_body = ApiKeyValue,
+    responses(
+        (status = 204),
+        (status = 503, body = ApiError),
+    ),
+)]
 async fn set_api_key(
     State(state): State<ApiState>,
     Path(provider): Path<String>,
@@ -671,7 +1127,7 @@ async fn set_api_key(
     let resources = state.resources()?;
     operations::set_api_key(
         resources,
-        ApiKeySetPayload {
+        koharu_core::ApiKeySetPayload {
             provider,
             api_key: request.api_key,
         },
@@ -680,7 +1136,22 @@ async fn set_api_key(
     Ok(StatusCode::NO_CONTENT)
 }
 
-async fn start_pipeline_job(
+// ---------------------------------------------------------------------------
+// Jobs
+// ---------------------------------------------------------------------------
+
+#[utoipa::path(
+    post,
+    path = "/jobs/pipeline",
+    operation_id = "startPipeline",
+    tag = "jobs",
+    request_body = PipelineJobRequest,
+    responses(
+        (status = 200, body = JobState),
+        (status = 503, body = ApiError),
+    ),
+)]
+async fn start_pipeline(
     State(state): State<ApiState>,
     Json(request): Json<PipelineJobRequest>,
 ) -> ApiResult<Json<JobState>> {
@@ -725,12 +1196,60 @@ async fn start_pipeline_job(
         overall_percent: 0,
         error: None,
     };
-    state.events.publish_job(job.clone()).await;
+    state.tracker.publish_job(job.clone()).await;
 
     Ok(Json(job))
 }
 
-async fn cancel_pipeline_job(
+#[utoipa::path(
+    get,
+    path = "/jobs",
+    operation_id = "listJobs",
+    tag = "jobs",
+    responses(
+        (status = 200, body = Vec<JobState>),
+    ),
+)]
+async fn list_jobs(State(state): State<ApiState>) -> Json<Vec<JobState>> {
+    Json(state.tracker.list_jobs().await)
+}
+
+#[utoipa::path(
+    get,
+    path = "/jobs/{job_id}",
+    operation_id = "getJob",
+    tag = "jobs",
+    params(("job_id" = String, Path,)),
+    responses(
+        (status = 200, body = JobState),
+        (status = 404, body = ApiError),
+    ),
+)]
+async fn get_job(
+    State(state): State<ApiState>,
+    Path(job_id): Path<String>,
+) -> ApiResult<Json<JobState>> {
+    state
+        .tracker
+        .get_job(&job_id)
+        .await
+        .map(Json)
+        .ok_or_else(|| ApiError::not_found(format!("Job not found: {job_id}")))
+}
+
+#[utoipa::path(
+    delete,
+    path = "/jobs/{job_id}",
+    operation_id = "cancelJob",
+    tag = "jobs",
+    params(("job_id" = String, Path,)),
+    responses(
+        (status = 204),
+        (status = 404, body = ApiError),
+        (status = 503, body = ApiError),
+    ),
+)]
+async fn cancel_job(
     State(state): State<ApiState>,
     Path(job_id): Path<String>,
 ) -> ApiResult<StatusCode> {
@@ -750,13 +1269,61 @@ async fn cancel_pipeline_job(
     Ok(StatusCode::NO_CONTENT)
 }
 
+// ---------------------------------------------------------------------------
+// Downloads
+// ---------------------------------------------------------------------------
+
+#[utoipa::path(
+    get,
+    path = "/downloads",
+    operation_id = "listDownloads",
+    tag = "downloads",
+    responses(
+        (status = 200, body = Vec<DownloadState>),
+    ),
+)]
+async fn list_downloads(State(state): State<ApiState>) -> Json<Vec<DownloadState>> {
+    Json(state.tracker.list_downloads().await)
+}
+
+// ---------------------------------------------------------------------------
+// Exports
+// ---------------------------------------------------------------------------
+
+#[utoipa::path(
+    get,
+    path = "/documents/{document_id}/export/{format}",
+    operation_id = "exportDocument",
+    tag = "exports",
+    params(
+        ("document_id" = String, Path,),
+        ("format" = String, Path,),
+        ExportQuery,
+    ),
+    responses(
+        (status = 200, content_type = "application/octet-stream", body = inline(String)),
+        (status = 404, body = ApiError),
+        (status = 503, body = ApiError),
+    ),
+)]
 async fn export_document(
     State(state): State<ApiState>,
-    Path(document_id): Path<String>,
-    Query(query): Query<LayerQuery>,
+    Path((document_id, format)): Path<(String, String)>,
+    Query(query): Query<ExportQuery>,
 ) -> ApiResult<Response> {
     let resources = state.resources()?;
     let (_, document) = find_document(&resources, &document_id).await?;
+
+    if format == "psd" {
+        let data = koharu_psd::export_document(&document, &app_psd_export_options())
+            .map_err(|error| ApiError::bad_request(error.to_string()))?;
+        return Ok(binary_response(
+            data,
+            "image/vnd.adobe.photoshop",
+            Some(psd_export_filename(&document)),
+        ));
+    }
+
     let layer = query.layer.unwrap_or(ExportLayer::Rendered);
     let (image, filename) = export_target(&document, layer)?;
     let ext = document
@@ -770,81 +1337,27 @@ async fn export_document(
     Ok(binary_response(data, content_type, Some(filename)))
 }
 
-async fn export_document_psd(
+#[utoipa::path(
+    post,
+    path = "/exports",
+    operation_id = "batchExport",
+    tag = "exports",
+    request_body = ExportBatchRequest,
+    responses(
+        (status = 200, body = ExportResult),
+        (status = 503, body = ApiError),
+    ),
+)]
+async fn batch_export(
     State(state): State<ApiState>,
-    Path(document_id): Path<String>,
-) -> ApiResult<Response> {
-    let resources = state.resources()?;
-    let (_, document) = find_document(&resources, &document_id).await?;
-    let data = koharu_psd::export_document(&document, &app_psd_export_options())
-        .map_err(|error| ApiError::bad_request(error.to_string()))?;
-    Ok(binary_response(
-        data,
-        "image/vnd.adobe.photoshop",
-        Some(psd_export_filename(&document)),
-    ))
-}
-
-async fn export_all(
-    State(state): State<ApiState>,
-    Query(query): Query<LayerQuery>,
+    Json(request): Json<ExportBatchRequest>,
 ) -> ApiResult<Json<ExportResult>> {
     let resources = state.resources()?;
-    let count = match query.layer.unwrap_or(ExportLayer::Rendered) {
+    let count = match request.layer.unwrap_or(ExportLayer::Rendered) {
         ExportLayer::Rendered => operations::export_all_rendered(resources).await?,
         ExportLayer::Inpainted => operations::export_all_inpainted(resources).await?,
     };
     Ok(Json(ExportResult { count }))
-}
-
-async fn events_stream(
-    State(state): State<ApiState>,
-) -> ApiResult<Sse<impl futures::Stream<Item = Result<Event, Infallible>>>> {
-    let events = state.events.clone();
-    let snapshot = events.snapshot().await?;
-    let mut rx = events.subscribe();
-
-    let stream = stream! {
-        yield Ok(sse_event("snapshot", &snapshot));
-        loop {
-            match rx.recv().await {
-                Ok(event) => {
-                    if let Some(event) = api_event_to_sse(event) {
-                        yield Ok(event);
-                    }
-                }
-                Err(tokio::sync::broadcast::error::RecvError::Lagged(n)) => {
-                    tracing::warn!("SSE client lagged behind by {n} events, re-sending snapshot");
-                    match events.snapshot().await {
-                        Ok(snap) => yield Ok(sse_event("snapshot", &snap)),
-                        Err(e) => tracing::warn!("Failed to build resync snapshot: {e}"),
-                    }
-                }
-                Err(tokio::sync::broadcast::error::RecvError::Closed) => break,
-            }
-        }
-    };
-
-    Ok(Sse::new(stream).keep_alive(
-        KeepAlive::new()
-            .interval(Duration::from_secs(15))
-            .text("keep-alive"),
-    ))
-}
-
-fn api_event_to_sse(event: ApiEvent) -> Option<Event> {
-    match event {
-        ApiEvent::DocumentsChanged(payload) => Some(sse_event("documents.changed", &payload)),
-        ApiEvent::DocumentChanged(payload) => Some(sse_event("document.changed", &payload)),
-        ApiEvent::JobChanged(payload) => Some(sse_event("job.changed", &payload)),
-        ApiEvent::DownloadChanged(payload) => Some(sse_event("download.changed", &payload)),
-        ApiEvent::LlmChanged(payload) => Some(sse_event("llm.changed", &payload)),
-    }
-}
-
-fn sse_event<T: serde::Serialize>(name: &str, payload: &T) -> Event {
-    let data = serde_json::to_string(payload).unwrap_or_else(|_| "{}".to_string());
-    Event::default().event(name).data(data)
 }
 
 async fn find_document(
@@ -868,37 +1381,11 @@ fn find_text_block_index(document: &Document, text_block_id: &str) -> ApiResult<
         .ok_or_else(|| ApiError::not_found(format!("Text block not found: {text_block_id}")))
 }
 
-fn document_layer<'a>(
-    document: &'a Document,
-    layer: &str,
-) -> ApiResult<&'a SerializableDynamicImage> {
-    match layer {
-        "original" => Ok(&document.image),
-        "segment" => document
-            .segment
-            .as_ref()
-            .ok_or_else(|| ApiError::not_found("No segment layer available")),
-        "inpainted" => document
-            .inpainted
-            .as_ref()
-            .ok_or_else(|| ApiError::not_found("No inpainted layer available")),
-        "rendered" => document
-            .rendered
-            .as_ref()
-            .ok_or_else(|| ApiError::not_found("No rendered layer available")),
-        "brush" => document
-            .brush_layer
-            .as_ref()
-            .ok_or_else(|| ApiError::not_found("No brush layer available")),
-        other => Err(ApiError::bad_request(format!("Unknown layer: {other}"))),
-    }
-}
-
-fn encode_webp(image: &SerializableDynamicImage) -> ApiResult<Vec<u8>> {
+fn encode_webp(image: &koharu_core::SerializableDynamicImage) -> ApiResult<Vec<u8>> {
     encode_image(image, "webp")
 }
 
-fn encode_image(image: &SerializableDynamicImage, ext: &str) -> ApiResult<Vec<u8>> {
+fn encode_image(image: &koharu_core::SerializableDynamicImage, ext: &str) -> ApiResult<Vec<u8>> {
     let format = ImageFormat::from_extension(ext).unwrap_or(ImageFormat::Jpeg);
     let mut cursor = Cursor::new(Vec::new());
     image
@@ -934,7 +1421,7 @@ fn mime_from_ext(ext: &str) -> &'static str {
 fn export_target(
     document: &Document,
     layer: ExportLayer,
-) -> ApiResult<(&SerializableDynamicImage, String)> {
+) -> ApiResult<(&koharu_core::SerializableDynamicImage, String)> {
     let ext = document
         .path
         .extension()

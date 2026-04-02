@@ -1,6 +1,6 @@
 'use client'
 
-import { useUiErrorStore } from '@/lib/stores/uiErrorStore'
+import { useEditorUiStore } from '@/lib/stores/editorUiStore'
 import i18n from '@/lib/i18n'
 import { getProviderDisplayName, normalizeProviderId } from '@/lib/providers'
 
@@ -80,5 +80,5 @@ export const normalizeErrorMessage = (error: unknown) => {
 export const reportRpcError = (method: string, error: unknown) => {
   if (!SURFACED_RPC_METHODS.has(method)) return
   const message = normalizeErrorMessage(error)
-  useUiErrorStore.getState().showError(message)
+  useEditorUiStore.getState().showError(message)
 }

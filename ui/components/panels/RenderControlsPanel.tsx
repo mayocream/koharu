@@ -20,7 +20,7 @@ import {
   TextAlign,
   TextStyle,
 } from '@/types'
-import type { FontFaceInfo } from '@/lib/protocol'
+import type { FontFaceInfo } from '@/lib/api/schemas'
 import { Button } from '@/components/ui/button'
 import { ColorPicker } from '@/components/ui/color-picker'
 import { Input } from '@/components/ui/input'
@@ -38,8 +38,7 @@ import {
 } from '@/components/ui/select'
 import { useEditorUiStore } from '@/lib/stores/editorUiStore'
 import { usePreferencesStore } from '@/lib/stores/preferencesStore'
-import { useFontsQuery } from '@/lib/query/hooks'
-import { useTextBlockMutations } from '@/lib/query/mutations'
+import { useListFonts } from '@/lib/api/system/system'
 import { cn } from '@/lib/utils'
 
 const DEFAULT_COLOR: RgbaColor = [0, 0, 0, 255]
@@ -183,11 +182,10 @@ export function RenderControlsPanel() {
   const renderStroke = useEditorUiStore((state) => state.renderStroke)
   const setRenderEffect = useEditorUiStore((state) => state.setRenderEffect)
   const setRenderStroke = useEditorUiStore((state) => state.setRenderStroke)
-  const { updateTextBlocks } = useTextBlockMutations()
-  const { data: availableFonts = [] } = useFontsQuery()
+  const { data: availableFonts = [] } = useListFonts()
   const fontFamily = usePreferencesStore((state) => state.fontFamily)
   const setFontFamily = usePreferencesStore((state) => state.setFontFamily)
-  const { textBlocks, selectedBlockIndex, replaceBlock } = useTextBlocks()
+  const { textBlocks, selectedBlockIndex, replaceBlock, updateTextBlocks } = useTextBlocks()
   const { t } = useTranslation()
   const selectedBlock =
     selectedBlockIndex !== undefined

@@ -2,11 +2,11 @@
 
 import { useState } from 'react'
 import type React from 'react'
-import { Document } from '@/types'
+import type { MappedDocument } from '@/hooks/useTextBlocks'
 import type { PointerToDocumentFn } from '@/hooks/usePointerToDocument'
 
 type BlockContextMenuOptions = {
-  currentDocument: Document | null
+  currentDocument: MappedDocument | null
   pointerToDocument: PointerToDocumentFn
   selectBlock: (index?: number) => void
   removeBlock: (index: number) => void

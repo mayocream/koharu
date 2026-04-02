@@ -18,10 +18,11 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select'
-import { api } from '@/lib/api'
-import { subscribeDownloadChanged, subscribeSnapshot } from '@/lib/backend'
+import { getConfig, updateConfig, initialize } from '@/lib/api/system/system'
+import { listDownloads } from '@/lib/api/downloads/downloads'
+import type { DownloadState } from '@/lib/api/schemas'
+import type { BootstrapConfig } from '@/lib/api/schemas'
 import i18n, { supportedLanguages } from '@/lib/i18n'
-import type { BootstrapConfig, DownloadState } from '@/lib/protocol'
 
 const DEFAULT_CONFIG: BootstrapConfig = {
   runtime: { path: '' },
@@ -77,9 +78,9 @@ export default function BootstrapPage() {
     setError(null)
 
     try {
-      const saved = await api.saveBootstrapConfig(nextConfig)
+      const saved = await updateConfig(nextConfig)
       setConfig(saved)
-      await api.initializeBootstrap()
+      await initialize()
     } catch (cause) {
       setInitializing(false)
       setFailed(true)
@@ -90,7 +91,7 @@ export default function BootstrapPage() {
   useEffect(() => {
     void (async () => {
       try {
-        const saved = await api.getBootstrapConfig()
+        const saved = await getConfig()
         setConfig(saved)
       } catch (cause) {
         const message =
@@ -105,39 +106,33 @@ export default function BootstrapPage() {
   }, [])
 
   useEffect(() => {
-    const updateDownload = (progress: DownloadState) => {
-      setDownload({
-        filename: progress.filename,
-        percent: computePercent(progress),
-        failed: progress.status === 'failed',
-      })
-    }
+    const interval = setInterval(async () => {
+      try {
+        const downloads = await listDownloads()
+        const active =
+          downloads.find(
+            (entry) =>
+              entry.status === 'started' || entry.status === 'downloading',
+          ) ??
+          downloads
+            .slice()
+            .sort((left, right) => left.filename.localeCompare(right.filename))
+            .at(-1) ??
+          null
 
-    const unsubscribeSnapshot = subscribeSnapshot((snapshot) => {
-      const active =
-        snapshot.downloads.find(
-          (entry) =>
-            entry.status === 'started' || entry.status === 'downloading',
-        ) ??
-        snapshot.downloads
-          .slice()
-          .sort((left, right) => left.filename.localeCompare(right.filename))
-          .at(-1) ??
-        null
-
-      if (active) {
-        updateDownload(active)
+        if (active) {
+          setDownload({
+            filename: active.filename,
+            percent: computePercent(active),
+            failed: active.status === 'failed',
+          })
+        }
+      } catch {
+        // Backend may not be ready yet during bootstrap
       }
-    })
+    }, 1500)
 
-    const unsubscribeDownload = subscribeDownloadChanged((progress) => {
-      updateDownload(progress)
-    })
-
-    return () => {
-      unsubscribeSnapshot()
-      unsubscribeDownload()
-    }
+    return () => clearInterval(interval)
   }, [])
 
   const goNext = async () => {
