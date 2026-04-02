@@ -15,6 +15,7 @@ import { listen } from '@/lib/backend'
 import { Image } from '@/components/Image'
 import {
   setCanvasViewport,
+  setCanvasDocumentSize,
   fitCanvasToViewport,
 } from '@/components/canvas/canvasViewport'
 import { ToolRail } from '@/components/canvas/ToolRail'
@@ -61,6 +62,13 @@ export function Workspace() {
     appendBlock,
     removeBlock,
   } = useTextBlocks()
+
+  useEffect(() => {
+    if (currentDocument) {
+      setCanvasDocumentSize(currentDocument.width, currentDocument.height)
+    }
+  }, [currentDocument?.width, currentDocument?.height])
+
   const viewportRef = useRef<HTMLDivElement | null>(null)
   const { setScale: applyScale } = useCanvasZoom()
   const scaleRatio = scale / 100

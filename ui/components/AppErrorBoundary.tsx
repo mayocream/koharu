@@ -1,14 +1,13 @@
 'use client'
 
 import { type ReactNode } from 'react'
+import { useQueryClient } from '@tanstack/react-query'
 import { ErrorBoundary, type FallbackProps } from 'react-error-boundary'
 import { Button } from '@/components/ui/button'
-import { getQueryClient } from '@/lib/query/client'
 import { useEditorUiStore } from '@/lib/stores/editorUiStore'
-import { useLlmUiStore } from '@/lib/stores/llmUiStore'
-import { useOperationStore } from '@/lib/stores/operationStore'
 
 function ErrorFallback({ error, resetErrorBoundary }: FallbackProps) {
+  const queryClient = useQueryClient()
   const errorMessage =
     error instanceof Error ? error.message : 'Unexpected error'
 
@@ -27,8 +26,6 @@ function ErrorFallback({ error, resetErrorBoundary }: FallbackProps) {
           variant='outline'
           onClick={() => {
             useEditorUiStore.getState().resetUiState()
-            useLlmUiStore.getState().resetLlmUiState()
-            useOperationStore.getState().resetOperationState()
             resetErrorBoundary()
           }}
         >
@@ -38,7 +35,7 @@ function ErrorFallback({ error, resetErrorBoundary }: FallbackProps) {
           size='sm'
           variant='outline'
           onClick={() => {
-            getQueryClient().clear()
+            queryClient.clear()
             resetErrorBoundary()
           }}
         >

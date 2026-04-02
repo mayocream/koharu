@@ -21,7 +21,7 @@ use ::image::GenericImageView;
 use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
 use tokio::sync::RwLock;
-use ts_rs::TS;
+use utoipa::ToSchema;
 use uuid::Uuid;
 
 fn new_text_block_id() -> String {
@@ -96,9 +96,8 @@ impl TextBlock {
     }
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize, TS, JsonSchema)]
+#[derive(Debug, Clone, Serialize, Deserialize, ToSchema, JsonSchema)]
 #[serde(rename_all = "camelCase")]
-#[ts(export)]
 pub struct TextStrokeStyle {
     #[serde(default = "default_true")]
     pub enabled: bool,
@@ -126,9 +125,8 @@ const fn default_stroke_color() -> [u8; 4] {
     [255, 255, 255, 255]
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, Default, TS, JsonSchema)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, Default, ToSchema, JsonSchema)]
 #[serde(rename_all = "camelCase")]
-#[ts(export)]
 pub enum TextAlign {
     #[default]
     Left,
@@ -136,9 +134,8 @@ pub enum TextAlign {
     Right,
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize, TS, JsonSchema)]
+#[derive(Debug, Clone, Serialize, Deserialize, ToSchema, JsonSchema)]
 #[serde(rename_all = "camelCase")]
-#[ts(export)]
 pub struct TextStyle {
     pub font_families: Vec<String>,
     pub font_size: Option<f32>,

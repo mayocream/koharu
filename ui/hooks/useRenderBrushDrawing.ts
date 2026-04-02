@@ -1,274 +1,56 @@
 'use client'
 
-import { useEffect, useRef, type RefObject } from 'react'
-import { useDrag } from '@use-gesture/react'
+import type { RefObject } from 'react'
+import { useQueryClient } from '@tanstack/react-query'
 import { usePreferencesStore } from '@/lib/stores/preferencesStore'
-import { useEditorUiStore } from '@/lib/stores/editorUiStore'
-import { useMaskMutations } from '@/lib/query/mutations'
-import { Document, InpaintRegion, ToolMode } from '@/types'
-import { blobToUint8Array } from '@/lib/util'
+import { updateBrushLayer } from '@/lib/api/regions/regions'
 import {
-  PointerToDocumentFn,
-  type DocumentPointer,
-} from '@/hooks/usePointerToDocument'
+  getGetDocumentQueryKey,
+  getListDocumentsQueryKey,
+} from '@/lib/api/documents/documents'
+import { useEditorUiStore } from '@/lib/stores/editorUiStore'
+import type { ToolMode } from '@/types'
+import type { MappedDocument } from '@/hooks/useTextBlocks'
+import type { PointerToDocumentFn } from '@/hooks/usePointerToDocument'
+import { useCanvasDrawing } from '@/hooks/useCanvasDrawing'
 
 type RenderBrushOptions = {
   mode: ToolMode
-  currentDocument: Document | null
+  currentDocument: MappedDocument | null
   pointerToDocument: PointerToDocumentFn
   enabled: boolean
   action: 'paint' | 'erase'
   targetCanvasRef?: RefObject<HTMLCanvasElement | null>
 }
 
-type Bounds = {
-  minX: number
-  minY: number
-  maxX: number
-  maxY: number
-}
-
-const clampToDocument = (
-  point: DocumentPointer,
-  doc?: Document,
-): DocumentPointer => {
-  if (!doc) return point
-  return {
-    x: Math.max(0, Math.min(doc.width, point.x)),
-    y: Math.max(0, Math.min(doc.height, point.y)),
-  }
-}
-
-const expandBounds = (bounds: Bounds, point: DocumentPointer, radius: number) =>
-  ({
-    minX: Math.min(bounds.minX, point.x - radius),
-    minY: Math.min(bounds.minY, point.y - radius),
-    maxX: Math.max(bounds.maxX, point.x + radius),
-    maxY: Math.max(bounds.maxY, point.y + radius),
-  }) satisfies Bounds
-
-const boundsToRegion = (bounds: Bounds, doc: Document): InpaintRegion => {
-  const x0 = Math.max(0, Math.floor(bounds.minX))
-  const y0 = Math.max(0, Math.floor(bounds.minY))
-  const x1 = Math.min(doc.width, Math.ceil(bounds.maxX))
-  const y1 = Math.min(doc.height, Math.ceil(bounds.maxY))
-
-  return {
-    x: x0,
-    y: y0,
-    width: Math.max(1, x1 - x0),
-    height: Math.max(1, y1 - y0),
-  }
-}
-
 export function useRenderBrushDrawing({
-  mode,
   currentDocument,
   pointerToDocument,
   enabled,
   action,
   targetCanvasRef,
 }: RenderBrushOptions) {
-  const {
-    brushConfig: { size: brushSize, color: brushColor },
-  } = usePreferencesStore()
-  const { paintRendered } = useMaskMutations()
-  const currentDocumentIndex = useEditorUiStore(
-    (state) => state.currentDocumentIndex,
-  )
-  const canvasRef = useRef<HTMLCanvasElement | null>(null)
-  const ctxRef = useRef<CanvasRenderingContext2D | null>(null)
-  const drawingRef = useRef(false)
-  const lastPointRef = useRef<DocumentPointer | null>(null)
-  const boundsRef = useRef<Bounds | null>(null)
+  const queryClient = useQueryClient()
+  const isErasing = action === 'erase'
 
-  useEffect(() => {
-    const canvas = canvasRef.current
-    if (!canvas) return
-    const ctx = canvas.getContext('2d')
-    ctxRef.current = ctx
-
-    if (!currentDocument || !enabled) {
-      canvas.width = 0
-      canvas.height = 0
-      ctx?.clearRect(0, 0, canvas.width, canvas.height)
-      return () => {
-        drawingRef.current = false
-        lastPointRef.current = null
-        boundsRef.current = null
-      }
-    }
-
-    const needsResize =
-      canvas.width !== currentDocument.width ||
-      canvas.height !== currentDocument.height
-
-    if (needsResize) {
-      canvas.width = currentDocument.width
-      canvas.height = currentDocument.height
-    }
-    ctx?.clearRect(0, 0, canvas.width, canvas.height)
-
-    return () => {
-      drawingRef.current = false
-      lastPointRef.current = null
-      boundsRef.current = null
-    }
-  }, [
-    currentDocument?.id,
-    currentDocument?.width,
-    currentDocument?.height,
-    mode,
+  return useCanvasDrawing(currentDocument, pointerToDocument, {
+    getColor: () =>
+      isErasing ? '#000000' : usePreferencesStore.getState().brushConfig.color,
+    blendMode: isErasing ? 'destination-out' : 'source-over',
+    getBrushSize: () => usePreferencesStore.getState().brushConfig.size,
     enabled,
-  ])
-
-  const drawStroke = (from: DocumentPointer, to: DocumentPointer) => {
-    if (!enabled) return
-    const isErasing = action === 'erase'
-    const stroke = (ctx: CanvasRenderingContext2D) => {
-      ctx.save()
-      ctx.lineCap = 'round'
-      ctx.lineJoin = 'round'
-      ctx.lineWidth = brushSize
-      ctx.strokeStyle = isErasing ? '#000000' : brushColor
-      ctx.fillStyle = ctx.strokeStyle
-      ctx.globalCompositeOperation = isErasing
-        ? 'destination-out'
-        : 'source-over'
-      ctx.beginPath()
-      ctx.moveTo(from.x, from.y)
-      ctx.lineTo(to.x, to.y)
-      ctx.stroke()
-      ctx.restore()
-    }
-
-    const ctx = ctxRef.current
-    if (ctx) stroke(ctx)
-
-    const targetCanvas = targetCanvasRef?.current
-    const targetCtx = targetCanvas?.getContext('2d')
-    if (targetCtx) stroke(targetCtx)
-  }
-
-  const exportPatch = async (
-    region: InpaintRegion,
-  ): Promise<Uint8Array | null> => {
-    const canvas = targetCanvasRef?.current ?? canvasRef.current
-    if (!canvas || region.width <= 0 || region.height <= 0) return null
-
-    const tempCanvas = document.createElement('canvas')
-    tempCanvas.width = region.width
-    tempCanvas.height = region.height
-    const tempCtx = tempCanvas.getContext('2d')
-    if (!tempCtx) return null
-
-    tempCtx.drawImage(
-      canvas,
-      region.x,
-      region.y,
-      region.width,
-      region.height,
-      0,
-      0,
-      region.width,
-      region.height,
-    )
-
-    const blob = await new Promise<Blob | null>((resolve) => {
-      tempCanvas.toBlob((result) => resolve(result), 'image/png')
-    })
-    if (!blob) return null
-    return blobToUint8Array(blob)
-  }
-
-  const finalizeStroke = () => {
-    if (!enabled) return
-    const strokeBounds = boundsRef.current
-    if (!currentDocument || !strokeBounds) return
-    const patchRegion = boundsToRegion(strokeBounds, currentDocument)
-    boundsRef.current = null
-    drawingRef.current = false
-    lastPointRef.current = null
-
-    void (async () => {
-      const patchBytes = await exportPatch(patchRegion)
-      if (!patchBytes) {
-        const canvas = canvasRef.current
-        const ctx = ctxRef.current
-        if (canvas && ctx) {
-          ctx.clearRect(0, 0, canvas.width, canvas.height)
-        }
-        return
-      }
-      try {
-        await paintRendered(patchBytes, patchRegion, {
-          index: currentDocumentIndex,
-        })
-      } catch (error) {
-        console.error(error)
-      }
-      const canvas = canvasRef.current
-      const ctx = ctxRef.current
-      if (canvas && ctx) {
-        ctx.clearRect(0, 0, canvas.width, canvas.height)
-      }
-    })()
-  }
-
-  const bind = useDrag(
-    ({ first, last, event, active }) => {
-      if (!enabled || !currentDocument) return
-      const sourceEvent = event as MouseEvent
-      const point = pointerToDocument(sourceEvent)
-      if (!point) {
-        if ((last || !active) && drawingRef.current) {
-          finalizeStroke()
-        }
-        return
-      }
-      const clamped = clampToDocument(point, currentDocument)
-
-      if (first) {
-        drawingRef.current = true
-        lastPointRef.current = clamped
-        boundsRef.current = {
-          minX: clamped.x - brushSize / 2,
-          minY: clamped.y - brushSize / 2,
-          maxX: clamped.x + brushSize / 2,
-          maxY: clamped.y + brushSize / 2,
-        }
-        drawStroke(clamped, clamped)
-        return
-      }
-
-      if (!drawingRef.current) return
-      const lastPoint = lastPointRef.current ?? clamped
-      drawStroke(lastPoint, clamped)
-      lastPointRef.current = clamped
-      boundsRef.current = boundsRef.current
-        ? expandBounds(boundsRef.current, clamped, brushSize / 2)
-        : {
-            minX: clamped.x - brushSize / 2,
-            minY: clamped.y - brushSize / 2,
-            maxX: clamped.x + brushSize / 2,
-            maxY: clamped.y + brushSize / 2,
-          }
-
-      if (last || !active) {
-        finalizeStroke()
-      }
+    targetCanvasRef,
+    clearAfterStroke: true,
+    onFinalize: async (patch, region) => {
+      const documentId = useEditorUiStore.getState().currentDocumentId
+      if (!documentId) return
+      await updateBrushLayer(documentId, {
+        data: Array.from(patch),
+        region,
+      })
+      await queryClient.invalidateQueries({ queryKey: getGetDocumentQueryKey(documentId) })
+      await queryClient.invalidateQueries({ queryKey: getListDocumentsQueryKey() })
+      useEditorUiStore.getState().setShowBrushLayer(true)
     },
-    {
-      pointer: { buttons: 1, touch: true },
-      preventDefault: true,
-      filterTaps: true,
-      eventOptions: { passive: false },
-    },
-  )
-
-  return {
-    canvasRef,
-    visible: enabled,
-    bind,
-  }
+  })
 }

@@ -2,12 +2,20 @@
 
 import { useState } from 'react'
 import { useTranslation } from 'react-i18next'
+import { useQueryClient } from '@tanstack/react-query'
 import { motion } from 'motion/react'
 import { TextBlock } from '@/types'
 import { Languages, LoaderCircleIcon, Trash2Icon } from 'lucide-react'
 import { useTextBlocks } from '@/hooks/useTextBlocks'
-import { useLlmReadyQuery } from '@/lib/query/hooks'
-import { useLlmMutations } from '@/lib/query/mutations'
+import { useGetLlm } from '@/lib/api/llm/llm'
+import { translateDocument } from '@/lib/api/processing/processing'
+import { renderDocument } from '@/lib/api/processing/processing'
+import {
+  getGetDocumentQueryKey,
+  getListDocumentsQueryKey,
+} from '@/lib/api/documents/documents'
+import { useEditorUiStore } from '@/lib/stores/editorUiStore'
+import { usePreferencesStore } from '@/lib/stores/preferencesStore'
 import {
   Accordion,
   AccordionContent,
@@ -24,6 +32,7 @@ import { DraftTextarea } from '@/components/ui/draft-textarea'
 import { ScrollArea } from '@/components/ui/scroll-area'
 
 export function TextBlocksPanel() {
+  const queryClient = useQueryClient()
   const {
     document,
     textBlocks,
@@ -33,8 +42,8 @@ export function TextBlocksPanel() {
     removeBlock,
   } = useTextBlocks()
   const { t } = useTranslation()
-  const { llmGenerate } = useLlmMutations()
-  const { data: llmReady = false } = useLlmReadyQuery()
+  const { data: llm } = useGetLlm()
+  const llmReady = llm?.status === 'ready'
   const [generatingIndex, setGeneratingIndex] = useState<number | null>(null)
   const generating = generatingIndex !== null
 
@@ -49,10 +58,30 @@ export function TextBlocksPanel() {
   const accordionValue =
     selectedBlockIndex !== undefined ? selectedBlockIndex.toString() : ''
 
+  const invalidateDocument = async (documentId: string) => {
+    await queryClient.invalidateQueries({ queryKey: getGetDocumentQueryKey(documentId) })
+    await queryClient.invalidateQueries({ queryKey: getListDocumentsQueryKey() })
+  }
+
   const handleGenerate = async (blockIndex: number) => {
+    const documentId = useEditorUiStore.getState().currentDocumentId
+    if (!documentId) return
+    const selectedLanguage = useEditorUiStore.getState().selectedLanguage
+    const textBlockId = document.textBlocks[blockIndex]?.id
     setGeneratingIndex(blockIndex)
     try {
-      await llmGenerate(undefined, undefined, blockIndex)
+      await translateDocument(documentId, { textBlockId, language: selectedLanguage })
+      await invalidateDocument(documentId)
+      useEditorUiStore.getState().setShowTextBlocksOverlay(true)
+      // Re-render the block's sprite
+      const { renderEffect, renderStroke } = useEditorUiStore.getState()
+      const { fontFamily } = usePreferencesStore.getState()
+      await renderDocument(documentId, {
+        shaderEffect: renderEffect,
+        shaderStroke: renderStroke,
+        fontFamily,
+      })
+      await invalidateDocument(documentId)
     } catch (error) {
       console.error(error)
     } finally {

@@ -11,8 +11,7 @@ import {
 } from 'lucide-react'
 import { ScrollArea } from '@/components/ui/scroll-area'
 import { isTauri } from '@/lib/backend'
-import { api } from '@/lib/api'
-import { useDocumentMutations } from '@/lib/query/mutations'
+import { getMeta } from '@/lib/api/system/system'
 import Image from 'next/image'
 
 const GITHUB_REPO = 'mayocream/koharu'
@@ -21,7 +20,9 @@ type VersionStatus = 'loading' | 'latest' | 'outdated' | 'error'
 
 export default function AboutPage() {
   const { t } = useTranslation()
-  const { openExternal } = useDocumentMutations()
+  const openExternal = (url: string) => {
+    window.open(url, '_blank', 'noopener,noreferrer')
+  }
 
   const [appVersion, setAppVersion] = useState<string>()
   const [latestVersion, setLatestVersion] = useState<string>()
@@ -31,7 +32,8 @@ export default function AboutPage() {
     const checkVersion = async () => {
       try {
         if (isTauri()) {
-          const version = await api.appVersion()
+          const meta = await getMeta()
+          const version = meta.version
           setAppVersion(version)
 
           const res = await fetch(

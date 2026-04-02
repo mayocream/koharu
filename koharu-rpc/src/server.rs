@@ -14,9 +14,9 @@ use tokio::net::TcpListener;
 use tower_http::cors::CorsLayer;
 
 use crate::api;
-use crate::events::EventHub;
 use crate::mcp::KoharuMcp;
 use crate::shared::SharedState;
+use crate::tracker::Tracker;
 
 /// An asset returned by the resolver: raw bytes + MIME type.
 pub struct Asset {
@@ -36,7 +36,7 @@ where
 }
 
 fn build_router(shared: SharedState, resolver: SharedAssetResolver) -> Router {
-    let events = EventHub::new(shared.clone());
+    let tracker = Tracker::new(&shared);
     let cors = CorsLayer::very_permissive();
 
     let mcp_service = StreamableHttpService::new(
@@ -52,7 +52,7 @@ fn build_router(shared: SharedState, resolver: SharedAssetResolver) -> Router {
     );
 
     Router::new()
-        .nest("/api/v1", api::router(shared.clone(), events))
+        .nest("/api/v1", api::router(shared.clone(), tracker))
         .nest_service("/mcp", mcp_service)
         .layer(cors)
         .fallback(move |uri: Uri| {

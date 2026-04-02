@@ -14,7 +14,7 @@ import {
 import { cn } from '@/lib/utils'
 import { Button } from '@/components/ui/button'
 import { useEditorUiStore } from '@/lib/stores/editorUiStore'
-import { useCurrentDocumentState } from '@/lib/query/hooks'
+import { useCurrentDocument } from '@/hooks/useTextBlocks'
 
 type Layer = {
   id: string
@@ -27,7 +27,7 @@ type Layer = {
 }
 
 export function LayersPanel() {
-  const { currentDocument } = useCurrentDocumentState()
+  const currentDocument = useCurrentDocument()
   const showInpaintedImage = useEditorUiStore(
     (state) => state.showInpaintedImage,
   )

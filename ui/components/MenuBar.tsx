@@ -3,8 +3,31 @@
 import { useCallback, useEffect, useState } from 'react'
 import Link from 'next/link'
 import { MinusIcon, SquareIcon, XIcon, CopyIcon } from 'lucide-react'
-import { isTauri, isMacOS, windowControls } from '@/lib/backend'
+import { isTauri } from '@/lib/backend'
 import { useTranslation } from 'react-i18next'
+
+const isMacOS = () =>
+  typeof navigator !== 'undefined' &&
+  /Mac|iPhone|iPad|iPod/.test(navigator.userAgent)
+
+const windowControls = {
+  async close() {
+    const { getCurrentWindow } = await import('@tauri-apps/api/window')
+    return getCurrentWindow().close()
+  },
+  async minimize() {
+    const { getCurrentWindow } = await import('@tauri-apps/api/window')
+    return getCurrentWindow().minimize()
+  },
+  async toggleMaximize() {
+    const { getCurrentWindow } = await import('@tauri-apps/api/window')
+    return getCurrentWindow().toggleMaximize()
+  },
+  async isMaximized() {
+    const { getCurrentWindow } = await import('@tauri-apps/api/window')
+    return getCurrentWindow().isMaximized()
+  },
+}
 import { fitCanvasToViewport, resetCanvasScale } from '@/components/Canvas'
 import Image from 'next/image'
 import {
@@ -15,7 +38,10 @@ import {
   MenubarSeparator,
   MenubarTrigger,
 } from '@/components/ui/menubar'
-import { useDocumentMutations } from '@/lib/query/mutations'
+import { useProcessing } from '@/lib/machines'
+import { useEditorUiStore } from '@/lib/stores/editorUiStore'
+import { usePreferencesStore } from '@/lib/stores/preferencesStore'
+import type { PipelineJobRequest } from '@/lib/api/schemas'
 
 type MenuItem = {
   label: string
@@ -30,62 +56,74 @@ type MenuSection = {
   triggerTestId?: string
 }
 
+const openExternal = (url: string) => {
+  window.open(url, '_blank', 'noopener,noreferrer')
+}
+
 export function MenuBar() {
   const { t } = useTranslation()
-  const {
-    addDocuments,
-    openDocuments,
-    openFolder,
-    addFolder,
-    openExternal,
-    processImage,
-    inpaintAndRenderImage,
-    processAllImages,
-    exportDocument,
-    exportPsdDocument,
-    exportAllInpainted,
-    exportAllRendered,
-  } = useDocumentMutations()
+  const { send } = useProcessing()
+
+  const buildPipelineRequest = (documentId?: string): PipelineJobRequest => {
+    const { selectedModel, selectedLanguage, renderEffect, renderStroke } =
+      useEditorUiStore.getState()
+    const { fontFamily, apiKeys } = usePreferencesStore.getState()
+    return {
+      documentId,
+      llmModelId: selectedModel,
+      llmApiKey: selectedModel ? apiKeys[selectedModel.split(':')[0]] : undefined,
+      language: selectedLanguage,
+      shaderEffect: renderEffect,
+      shaderStroke: renderStroke,
+      fontFamily,
+    }
+  }
+
+  const requireDocumentId = () => {
+    const id = useEditorUiStore.getState().currentDocumentId
+    if (!id) throw new Error('No current document selected')
+    return id
+  }
 
   const fileMenuItems: MenuItem[] = [
     {
       label: t('menu.openFile'),
-      onSelect: openDocuments,
+      onSelect: () => send({ type: 'START_IMPORT', mode: 'replace', source: 'files' }),
       testId: 'menu-file-open',
     },
     {
       label: t('menu.addFile'),
-      onSelect: addDocuments,
+      onSelect: () => send({ type: 'START_IMPORT', mode: 'append', source: 'files' }),
       testId: 'menu-file-add',
     },
     {
       label: t('menu.openFolder'),
-      onSelect: openFolder,
+      onSelect: () => send({ type: 'START_IMPORT', mode: 'replace', source: 'folder' }),
       testId: 'menu-file-open-folder',
     },
     {
       label: t('menu.addFolder'),
-      onSelect: addFolder,
+      onSelect: () => send({ type: 'START_IMPORT', mode: 'append', source: 'folder' }),
       testId: 'menu-file-add-folder',
     },
     {
       label: t('menu.export'),
-      onSelect: exportDocument,
+      onSelect: () => send({ type: 'START_EXPORT', documentId: requireDocumentId(), format: 'webp', params: { layer: 'rendered' } }),
       testId: 'menu-file-export',
     },
     {
       label: t('menu.exportPsd'),
-      onSelect: exportPsdDocument,
+      onSelect: () => send({ type: 'START_EXPORT', documentId: requireDocumentId(), format: 'psd' }),
       testId: 'menu-file-export-psd',
     },
     {
       label: t('menu.exportAllInpainted'),
-      onSelect: exportAllInpainted,
+      onSelect: () => send({ type: 'START_BATCH_EXPORT', layer: 'inpainted' }),
       testId: 'menu-file-export-all-inpainted',
     },
     {
       label: t('menu.exportAllRendered'),
-      onSelect: exportAllRendered,
+      onSelect: () => send({ type: 'START_BATCH_EXPORT', layer: 'rendered' }),
       testId: 'menu-file-export-all-rendered',
     },
   ]
@@ -104,17 +142,23 @@ export function MenuBar() {
       items: [
         {
           label: t('menu.processCurrent'),
-          onSelect: processImage,
+          onSelect: () => {
+            const documentId = requireDocumentId()
+            send({ type: 'START_PIPELINE', request: buildPipelineRequest(documentId) })
+          },
           testId: 'menu-process-current',
         },
         {
           label: t('menu.redoInpaintRender'),
-          onSelect: inpaintAndRenderImage,
+          onSelect: () => {
+            const documentId = requireDocumentId()
+            send({ type: 'START_INPAINT', documentId })
+          },
           testId: 'menu-process-rerender',
         },
         {
           label: t('menu.processAll'),
-          onSelect: processAllImages,
+          onSelect: () => send({ type: 'START_PIPELINE', request: buildPipelineRequest() }),
           testId: 'menu-process-all',
         },
       ],

@@ -2,10 +2,10 @@
 
 import { useEffect, useRef } from 'react'
 import { convertToImageBitmap } from '@/lib/util'
-import { Document } from '@/types'
+import type { MappedDocument } from '@/hooks/useTextBlocks'
 
 type BrushLayerDisplayOptions = {
-  currentDocument: Document | null
+  currentDocument: MappedDocument | null
   visible: boolean
 }
 
