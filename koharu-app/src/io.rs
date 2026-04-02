@@ -2,14 +2,12 @@ use std::path::{Path, PathBuf};
 
 use image::ImageFormat;
 use koharu_core::commands::{
-    DeviceInfo, FileResult, IndexPayload, OpenDocumentsPayload, OpenExternalPayload,
-    ThumbnailResult,
+    DeviceInfo, FileResult, OpenDocumentsPayload, OpenExternalPayload, ThumbnailResult,
 };
 use rfd::FileDialog;
 
-use crate::{AppResources, state_tx};
-
-use super::utils::{encode_image, load_documents, mime_from_ext};
+use crate::AppResources;
+use crate::utils::{encode_image, mime_from_ext};
 
 fn next_available_path(output_dir: &Path, stem: &str, ext: &str) -> PathBuf {
     let mut candidate = output_dir.join(format!("{stem}.{ext}"));
@@ -23,15 +21,6 @@ fn next_available_path(output_dir: &Path, stem: &str, ext: &str) -> PathBuf {
 
 async fn pick_output_dir() -> anyhow::Result<Option<PathBuf>> {
     Ok(tokio::task::spawn_blocking(|| FileDialog::new().pick_folder()).await?)
-}
-
-fn document_ext(document: &koharu_core::Document) -> String {
-    document
-        .path
-        .extension()
-        .and_then(|value| value.to_str())
-        .unwrap_or("jpg")
-        .to_string()
 }
 
 fn export_documents_matching(
@@ -48,7 +37,12 @@ fn export_documents_matching(
             continue;
         };
 
-        let ext = document_ext(document);
+        let ext = document
+            .path
+            .extension()
+            .and_then(|value| value.to_str())
+            .unwrap_or("jpg")
+            .to_string();
         let output_path =
             next_available_path(output_dir, &format!("{}_{}", document.name, suffix), &ext);
         let bytes = encode_image(image, &ext)?;
@@ -83,22 +77,21 @@ pub async fn open_external(
 }
 
 pub async fn get_documents(state: AppResources) -> anyhow::Result<usize> {
-    let guard = state.state.read().await;
-    Ok(guard.documents.len())
+    Ok(state.cache.list_documents()?.len())
 }
 
 pub async fn get_document(
     state: AppResources,
-    payload: IndexPayload,
+    document_id: &str,
 ) -> anyhow::Result<koharu_core::Document> {
-    state_tx::read_doc(&state.state, payload.index).await
+    state.cache.get(document_id).await
 }
 
 pub async fn get_thumbnail(
     state: AppResources,
-    payload: IndexPayload,
+    document_id: &str,
 ) -> anyhow::Result<ThumbnailResult> {
-    let doc = state_tx::read_doc(&state.state, payload.index).await?;
+    let doc = state.cache.get(document_id).await?;
 
     let source = doc.rendered.as_ref().unwrap_or(&doc.image);
     let thumbnail = source.thumbnail(200, 200);
@@ -116,43 +109,33 @@ pub async fn open_documents(
     state: AppResources,
     payload: OpenDocumentsPayload,
 ) -> anyhow::Result<usize> {
-    let inputs: Vec<(PathBuf, Vec<u8>)> = payload
-        .files
-        .into_iter()
-        .map(|f| (PathBuf::from(f.name), f.data))
-        .collect();
-
-    if inputs.is_empty() {
+    if payload.files.is_empty() {
         anyhow::bail!("No files uploaded");
     }
 
-    let docs = load_documents(inputs)?;
-    state_tx::replace_docs(&state.state, docs).await
+    let manifests = state.cache.import_files(payload.files)?;
+    let count = manifests.len();
+    state.cache.replace_manifests(&manifests).await?;
+    Ok(count)
 }
 
 pub async fn add_documents(
     state: AppResources,
     payload: OpenDocumentsPayload,
 ) -> anyhow::Result<usize> {
-    let inputs: Vec<(PathBuf, Vec<u8>)> = payload
-        .files
-        .into_iter()
-        .map(|f| (PathBuf::from(f.name), f.data))
-        .collect();
-
-    if inputs.is_empty() {
+    if payload.files.is_empty() {
         anyhow::bail!("No files uploaded");
     }
 
-    let docs = load_documents(inputs)?;
-    state_tx::append_docs(&state.state, docs).await
+    let manifests = state.cache.import_files(payload.files)?;
+    for manifest in &manifests {
+        state.cache.save_manifest(manifest)?;
+    }
+    Ok(state.cache.list_documents()?.len())
 }
 
-pub async fn export_document(
-    state: AppResources,
-    payload: IndexPayload,
-) -> anyhow::Result<FileResult> {
-    let document = state_tx::read_doc(&state.state, payload.index).await?;
+pub async fn export_document(state: AppResources, document_id: &str) -> anyhow::Result<FileResult> {
+    let document = state.cache.get(document_id).await?;
 
     let ext = document
         .path
@@ -182,9 +165,18 @@ pub async fn export_all_inpainted(state: AppResources) -> anyhow::Result<usize> 
         return Ok(0);
     };
 
-    let guard = state.state.read().await;
+    let page_ids: Vec<String> = state
+        .cache
+        .list_documents()?
+        .into_iter()
+        .map(|e| e.id)
+        .collect();
+    let mut documents = Vec::new();
+    for id in &page_ids {
+        documents.push(state.cache.get(id).await?);
+    }
     export_documents_matching(
-        &guard.documents,
+        &documents,
         &output_dir,
         "inpainted",
         "No inpainted images found to export",
@@ -197,9 +189,18 @@ pub async fn export_all_rendered(state: AppResources) -> anyhow::Result<usize> {
         return Ok(0);
     };
 
-    let guard = state.state.read().await;
+    let page_ids: Vec<String> = state
+        .cache
+        .list_documents()?
+        .into_iter()
+        .map(|e| e.id)
+        .collect();
+    let mut documents = Vec::new();
+    for id in &page_ids {
+        documents.push(state.cache.get(id).await?);
+    }
     export_documents_matching(
-        &guard.documents,
+        &documents,
         &output_dir,
         "rendered",
         "No rendered images found to export",

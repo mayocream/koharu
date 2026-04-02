@@ -71,7 +71,7 @@ Valid `view_text_block` layers:
 | `ocr` | run OCR on detected blocks | `index` |
 | `inpaint` | remove text using the current mask | `index` |
 | `render` | draw translated text back onto the page | `index`, optional `text_block_index`, `shader_effect`, `font_family` |
-| `process` | start detect -> OCR -> inpaint -> translate -> render | optional `index`, `llm_model_id`, `language`, `shader_effect`, `font_family` |
+| `process` | start detect -> OCR -> inpaint -> translate -> render | optional `document_id`, `llm_target`, `language`, `shader_effect`, `font_family` |
 
 `process` is the coarse-grained convenience tool. If you need more control or easier debugging, use the stage tools separately.
 
@@ -79,7 +79,7 @@ Valid `view_text_block` layers:
 
 | Tool | What it does | Key parameters |
 | --- | --- | --- |
-| `llm_load` | load a translation model | `id`, optional `temperature`, `max_tokens`, `custom_system_prompt` |
+| `llm_load` | load a translation model target | `target`, optional `options.temperature`, `options.max_tokens`, `options.custom_system_prompt` |
 | `llm_offload` | unload the current model | none |
 | `llm_generate` | translate one block or all blocks | `index`, optional `text_block_index`, `language` |
 

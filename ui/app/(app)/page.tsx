@@ -4,6 +4,8 @@ import { Panels } from '@/components/Panels'
 import { Workspace, StatusBar } from '@/components/Canvas'
 import { Navigator } from '@/components/Navigator'
 import { ActivityBubble } from '@/components/ActivityBubble'
+import { AppInitializationSkeleton } from '@/components/AppInitializationSkeleton'
+import { useGetMeta } from '@/lib/api/system/system'
 import {
   Group,
   Panel,
@@ -19,6 +21,17 @@ export default function Page() {
     id: LAYOUT_ID,
     panelIds: ['left', 'center', 'right'],
   })
+  const { data: meta } = useGetMeta({
+    query: {
+      retry: false,
+      refetchInterval: (query) => (query.state.data ? false : 1500),
+      staleTime: Infinity,
+    },
+  })
+
+  if (!meta) {
+    return <AppInitializationSkeleton />
+  }
 
   return (
     <div className='flex min-h-0 flex-1 flex-col'>

@@ -59,8 +59,12 @@ export function TextBlocksPanel() {
     selectedBlockIndex !== undefined ? selectedBlockIndex.toString() : ''
 
   const invalidateDocument = async (documentId: string) => {
-    await queryClient.invalidateQueries({ queryKey: getGetDocumentQueryKey(documentId) })
-    await queryClient.invalidateQueries({ queryKey: getListDocumentsQueryKey() })
+    await queryClient.invalidateQueries({
+      queryKey: getGetDocumentQueryKey(documentId),
+    })
+    await queryClient.invalidateQueries({
+      queryKey: getListDocumentsQueryKey(),
+    })
   }
 
   const handleGenerate = async (blockIndex: number) => {
@@ -70,7 +74,10 @@ export function TextBlocksPanel() {
     const textBlockId = document.textBlocks[blockIndex]?.id
     setGeneratingIndex(blockIndex)
     try {
-      await translateDocument(documentId, { textBlockId, language: selectedLanguage })
+      await translateDocument(documentId, {
+        textBlockId,
+        language: selectedLanguage,
+      })
       await invalidateDocument(documentId)
       useEditorUiStore.getState().setShowTextBlocksOverlay(true)
       // Re-render the block's sprite

@@ -4,8 +4,9 @@
  * OpenAPI spec version: 0.0.1
  */
 
-export interface LlmPingRequest {
-  /** @nullable */
-  apiKey?: string | null;
-  baseUrl: string;
+export type GetLlmCatalogParams = {
+  /**
+   * @nullable
+   */
+  language?: string | null
 }

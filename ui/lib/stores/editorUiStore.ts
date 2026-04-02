@@ -2,6 +2,7 @@
 
 import { create } from 'zustand'
 import { RenderEffect, RenderStroke, ToolMode } from '@/types'
+import type { LlmTarget } from '@/lib/api/schemas'
 
 // ---------------------------------------------------------------------------
 // Error auto-dismiss timer
@@ -52,9 +53,9 @@ type EditorUiState = {
   setRenderStroke: (stroke: RenderStroke) => void
 
   // --- llm ui ---
-  selectedModel?: string
+  selectedTarget?: LlmTarget
   selectedLanguage?: string
-  setSelectedModel: (selectedModel?: string) => void
+  setSelectedTarget: (selectedTarget?: LlmTarget) => void
   setSelectedLanguage: (selectedLanguage?: string) => void
 
   // --- ui error ---
@@ -91,7 +92,7 @@ const initialState = {
   } as RenderStroke,
 
   // llm ui
-  selectedModel: undefined as string | undefined,
+  selectedTarget: undefined as LlmTarget | undefined,
   selectedLanguage: undefined as string | undefined,
 
   // ui error
@@ -163,7 +164,7 @@ export const useEditorUiStore = create<EditorUiState>((set, get) => ({
   setRenderStroke: (stroke) => set({ renderStroke: stroke }),
 
   // --- llm ui actions ---
-  setSelectedModel: (selectedModel) => set({ selectedModel }),
+  setSelectedTarget: (selectedTarget) => set({ selectedTarget }),
   setSelectedLanguage: (selectedLanguage) => set({ selectedLanguage }),
 
   // --- ui error actions ---

@@ -120,24 +120,24 @@ Single-document export endpoints return binary file content. Bulk export returns
 
 | Method | Path | Purpose |
 | --- | --- | --- |
-| `GET` | `/llm/models` | list local and API-backed translation models |
-| `GET` | `/llm/state` | get the current LLM status |
-| `POST` | `/llm/load` | load a local or API-backed model |
-| `POST` | `/llm/offload` | unload the current model |
-| `POST` | `/llm/ping` | test an OpenAI-compatible base URL |
+| `GET` | `/llm/catalog` | list the grouped local/provider LLM catalog |
+| `GET` | `/llm` | get the current LLM status |
+| `PUT` | `/llm` | load a local or provider-backed model target |
+| `DELETE` | `/llm` | unload the current model |
 
 Useful request details:
 
-- `/llm/models` accepts optional `language` and `openaiCompatibleBaseUrl` query parameters
-- `/llm/load` accepts `id`, `apiKey`, `baseUrl`, `temperature`, `maxTokens`, and `customSystemPrompt`
-- `/llm/ping` accepts `baseUrl` and optional `apiKey`
+- `/llm/catalog` accepts optional `language`
+- `PUT /llm` accepts `target` plus optional `options { temperature, maxTokens, customSystemPrompt }`
+- provider targets use `{ kind: "provider", providerId, modelId }`; local targets use `{ kind: "local", modelId }`
 
-## Provider API keys
+## Provider configuration
 
-| Method | Path | Purpose |
-| --- | --- | --- |
-| `GET` | `/providers/{provider}/api-key` | read a saved API key for a provider |
-| `PUT` | `/providers/{provider}/api-key` | store or overwrite a provider API key |
+Provider settings now live under `GET /config` and `PUT /config`.
+
+- non-secret provider fields such as `baseUrl` are stored in `llm.providers`
+- provider reads expose `hasApiKey`, not the raw saved key
+- provider updates can set or clear API keys through `PUT /config`
 
 Current built-in provider ids include:
 
@@ -157,7 +157,7 @@ Current built-in provider ids include:
 The pipeline job request can include:
 
 - `documentId` to target one page, or omit it to process all loaded pages
-- LLM settings such as `llmModelId`, `llmApiKey`, `llmBaseUrl`, `llmTemperature`, `llmMaxTokens`, and `llmCustomSystemPrompt`
+- `llm { target, options }` to choose a local/provider model and optional generation overrides
 - render settings such as `shaderEffect`, `shaderStroke`, and `fontFamily`
 - `language`
 
@@ -187,7 +187,7 @@ The normal API order for one page is:
 1. `POST /documents/import?mode=replace`
 2. `POST /documents/{documentId}/detect`
 3. `POST /documents/{documentId}/ocr`
-4. `POST /llm/load`
+4. `PUT /llm`
 5. `POST /documents/{documentId}/translate`
 6. `POST /documents/{documentId}/inpaint`
 7. `POST /documents/{documentId}/render`

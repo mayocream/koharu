@@ -4,4 +4,4 @@ pub mod server;
 pub mod shared;
 pub mod tracker;
 
-pub use shared::{BootstrapHooks, SharedState};
+pub use shared::SharedState;

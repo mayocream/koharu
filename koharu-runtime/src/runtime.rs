@@ -1,4 +1,4 @@
-use std::path::{Path, PathBuf};
+use std::path::PathBuf;
 use std::sync::Arc;
 
 use anyhow::Result;
@@ -27,21 +27,24 @@ struct RuntimeInner {
     packages: PackageCatalog,
 }
 
-#[derive(Debug, Clone)]
-pub struct RuntimeBuilder {
-    settings: Settings,
-    compute: ComputePolicy,
-}
-
 impl Runtime {
-    pub fn builder(settings: Settings) -> RuntimeBuilder {
-        RuntimeBuilder::new(settings)
-    }
-
     pub fn new(settings: Settings, compute: ComputePolicy) -> Result<Self> {
-        RuntimeBuilder::new(settings)
-            .compute_policy(compute)
-            .build()
+        let layout = Layout::from_settings(&settings);
+        let http = HttpStack::new()?;
+        let transfers = TransferHub::new();
+        let artifacts = ArtifactStore::new(layout.clone(), http.clone(), transfers.clone());
+
+        Ok(Self {
+            inner: Arc::new(RuntimeInner {
+                settings,
+                compute,
+                layout,
+                http,
+                transfers,
+                artifacts,
+                packages: PackageCatalog::discover(),
+            }),
+        })
     }
 
     pub fn settings(&self) -> &Settings {
@@ -50,22 +53,6 @@ impl Runtime {
 
     pub fn layout(&self) -> &Layout {
         &self.inner.layout
-    }
-
-    pub fn runtime_root(&self) -> &Path {
-        self.layout().runtime_root()
-    }
-
-    pub fn models_root(&self) -> &Path {
-        self.layout().models_root()
-    }
-
-    pub fn downloads_root(&self) -> PathBuf {
-        self.layout().downloads_root().to_path_buf()
-    }
-
-    pub fn http_proxy(&self) -> Option<&url::Url> {
-        self.settings().http_proxy()
     }
 
     pub fn wants_gpu(&self) -> bool {
@@ -88,10 +75,6 @@ impl Runtime {
         &self.inner.packages
     }
 
-    pub fn needs_bootstrap(&self) -> Result<bool> {
-        self.catalog().requires_bootstrap(self)
-    }
-
     pub async fn prepare(&self) -> Result<()> {
         self.layout().ensure_roots()?;
         self.catalog().prepare_bootstrap(self).await
@@ -99,44 +82,6 @@ impl Runtime {
 
     pub fn llama_directory(&self) -> Result<PathBuf> {
         crate::llama::runtime_dir(self)
-    }
-}
-
-impl RuntimeBuilder {
-    pub fn new(settings: Settings) -> Self {
-        Self {
-            settings,
-            compute: ComputePolicy::PreferGpu,
-        }
-    }
-
-    pub fn compute_policy(mut self, compute: ComputePolicy) -> Self {
-        self.compute = compute;
-        self
-    }
-
-    pub fn cpu_only(self) -> Self {
-        self.compute_policy(ComputePolicy::CpuOnly)
-    }
-
-    pub fn build(self) -> Result<Runtime> {
-        let settings = self.settings.apply_process_overrides();
-        let layout = Layout::from_settings(&settings);
-        let http = HttpStack::new(&settings)?;
-        let transfers = TransferHub::new();
-        let artifacts = ArtifactStore::new(layout.clone(), http.clone(), transfers.clone());
-
-        Ok(Runtime {
-            inner: Arc::new(RuntimeInner {
-                settings,
-                compute: self.compute,
-                layout,
-                http,
-                transfers,
-                artifacts,
-                packages: PackageCatalog::discover(),
-            }),
-        })
     }
 }
 
@@ -155,10 +100,16 @@ mod tests {
     async fn prepares_llama_runtime_into_configured_root() -> Result<()> {
         let tempdir = tempfile::tempdir()?;
         let runtime = Runtime::new(
-            Settings::from_paths(
-                tempdir.path().join("runtime"),
-                tempdir.path().join("models"),
-            ),
+            Settings {
+                runtime: crate::DirectorySetting {
+                    path: camino::Utf8PathBuf::from_path_buf(tempdir.path().join("runtime"))
+                        .unwrap(),
+                },
+                models: crate::DirectorySetting {
+                    path: camino::Utf8PathBuf::from_path_buf(tempdir.path().join("models"))
+                        .unwrap(),
+                },
+            },
             ComputePolicy::CpuOnly,
         )?;
         runtime.prepare().await?;
@@ -171,10 +122,16 @@ mod tests {
     async fn repeated_basename_loads_succeed_after_prepare() -> Result<()> {
         let tempdir = tempfile::tempdir()?;
         let runtime = Runtime::new(
-            Settings::from_paths(
-                tempdir.path().join("runtime"),
-                tempdir.path().join("models"),
-            ),
+            Settings {
+                runtime: crate::DirectorySetting {
+                    path: camino::Utf8PathBuf::from_path_buf(tempdir.path().join("runtime"))
+                        .unwrap(),
+                },
+                models: crate::DirectorySetting {
+                    path: camino::Utf8PathBuf::from_path_buf(tempdir.path().join("models"))
+                        .unwrap(),
+                },
+            },
             ComputePolicy::CpuOnly,
         )?;
         runtime.prepare().await?;

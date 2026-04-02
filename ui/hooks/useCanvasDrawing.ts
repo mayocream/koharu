@@ -37,7 +37,10 @@ export type CanvasDrawingConfig = {
   /** When true, clear the drawing canvas after each stroke finalize. */
   clearAfterStroke?: boolean
   /** Called to set up the canvas content when the document changes (e.g. draw existing mask). */
-  onCanvasInit?: (ctx: CanvasRenderingContext2D, doc: MappedDocument) => void | Promise<void>
+  onCanvasInit?: (
+    ctx: CanvasRenderingContext2D,
+    doc: MappedDocument,
+  ) => void | Promise<void>
 }
 
 // ---------------------------------------------------------------------------
@@ -71,7 +74,12 @@ const boundsToRegion = (bounds: Bounds, doc: MappedDocument): InpaintRegion => {
   const y0 = Math.max(0, Math.floor(bounds.minY))
   const x1 = Math.min(doc.width, Math.ceil(bounds.maxX))
   const y1 = Math.min(doc.height, Math.ceil(bounds.maxY))
-  return { x: x0, y: y0, width: Math.max(1, x1 - x0), height: Math.max(1, y1 - y0) }
+  return {
+    x: x0,
+    y: y0,
+    width: Math.max(1, x1 - x0),
+    height: Math.max(1, y1 - y0),
+  }
 }
 
 const exportCanvasRegion = async (
@@ -84,7 +92,17 @@ const exportCanvasRegion = async (
   tmp.height = region.height
   const ctx = tmp.getContext('2d')
   if (!ctx) return null
-  ctx.drawImage(canvas, region.x, region.y, region.width, region.height, 0, 0, region.width, region.height)
+  ctx.drawImage(
+    canvas,
+    region.x,
+    region.y,
+    region.width,
+    region.height,
+    0,
+    0,
+    region.width,
+    region.height,
+  )
   const blob = await new Promise<Blob | null>((r) => tmp.toBlob(r, 'image/png'))
   return blob ? blobToUint8Array(blob) : null
 }
@@ -92,7 +110,9 @@ const exportCanvasRegion = async (
 const exportFullCanvas = async (
   canvas: HTMLCanvasElement,
 ): Promise<Uint8Array | null> => {
-  const blob = await new Promise<Blob | null>((r) => canvas.toBlob(r, 'image/png'))
+  const blob = await new Promise<Blob | null>((r) =>
+    canvas.toBlob(r, 'image/png'),
+  )
   return blob ? blobToUint8Array(blob) : null
 }
 

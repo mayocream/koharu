@@ -5,8 +5,6 @@ use anyhow::Result;
 use reqwest_middleware::{ClientBuilder, ClientWithMiddleware};
 use reqwest_retry::{RetryTransientMiddleware, policies::ExponentialBackoff};
 
-use crate::Settings;
-
 const USER_AGENT: &str = concat!(env!("CARGO_PKG_NAME"), "/", env!("CARGO_PKG_VERSION"));
 
 #[derive(Clone)]
@@ -15,10 +13,10 @@ pub(crate) struct HttpStack {
 }
 
 impl HttpStack {
-    pub(crate) fn new(settings: &Settings) -> Result<Self> {
+    pub(crate) fn new() -> Result<Self> {
         Ok(Self {
             client: Arc::new(
-                ClientBuilder::new(build_base_client(settings)?)
+                ClientBuilder::new(build_base_client()?)
                     .with(RetryTransientMiddleware::new_with_policy(retry_policy()))
                     .build(),
             ),
@@ -30,15 +28,11 @@ impl HttpStack {
     }
 }
 
-fn build_base_client(settings: &Settings) -> Result<reqwest::Client> {
-    let mut builder = reqwest::Client::builder()
+fn build_base_client() -> Result<reqwest::Client> {
+    let builder = reqwest::Client::builder()
         .user_agent(USER_AGENT)
         .connect_timeout(Duration::from_secs(20))
         .read_timeout(Duration::from_secs(60));
-
-    if let Some(proxy) = settings.http_proxy() {
-        builder = builder.proxy(reqwest::Proxy::all(proxy.as_str())?);
-    }
 
     Ok(builder.build()?)
 }

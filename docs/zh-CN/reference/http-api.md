@@ -120,24 +120,24 @@ http://127.0.0.1:<PORT>/api/v1
 
 | 方法 | 路径 | 用途 |
 | --- | --- | --- |
-| `GET` | `/llm/models` | 列出本地与 API 支持的翻译模型 |
-| `GET` | `/llm/state` | 获取当前 LLM 状态 |
-| `POST` | `/llm/load` | 加载本地或 API 模型 |
-| `POST` | `/llm/offload` | 卸载当前模型 |
-| `POST` | `/llm/ping` | 测试 OpenAI 兼容 base URL |
+| `GET` | `/llm/catalog` | 获取按本地/提供商分组的 LLM 目录 |
+| `GET` | `/llm` | 获取当前 LLM 状态 |
+| `PUT` | `/llm` | 加载本地或提供商 target |
+| `DELETE` | `/llm` | 卸载当前模型 |
 
 常用请求细节：
 
-- `/llm/models` 支持可选查询参数 `language` 和 `openaiCompatibleBaseUrl`
-- `/llm/load` 接受 `id`、`apiKey`、`baseUrl`、`temperature`、`maxTokens` 和 `customSystemPrompt`
-- `/llm/ping` 接受 `baseUrl` 以及可选 `apiKey`
+- `/llm/catalog` 支持可选查询参数 `language`
+- `PUT /llm` 接受 `target` 与可选 `options { temperature, maxTokens, customSystemPrompt }`
+- provider target 使用 `{ kind: "provider", providerId, modelId }`，local target 使用 `{ kind: "local", modelId }`
 
-### 提供商 API Key
+### 提供商配置
 
-| 方法 | 路径 | 用途 |
-| --- | --- | --- |
-| `GET` | `/providers/{provider}/api-key` | 读取已保存的提供商 API key |
-| `PUT` | `/providers/{provider}/api-key` | 存储或覆盖 API key |
+提供商设置现在统一放在 `GET /config` 和 `PUT /config` 中。
+
+- `llm.providers` 保存 `baseUrl` 等非秘密配置
+- 读取配置时只返回 `hasApiKey`，不会返回原始 API key
+- 设置或清除 API key 也通过 `PUT /config` 完成
 
 当前内置 provider id 包括：
 
@@ -157,7 +157,7 @@ http://127.0.0.1:<PORT>/api/v1
 管线任务请求可以包含：
 
 - `documentId`：只处理某一页；留空时处理所有已加载页面
-- LLM 设置，例如 `llmModelId`、`llmApiKey`、`llmBaseUrl`、`llmTemperature`、`llmMaxTokens`、`llmCustomSystemPrompt`
+- `llm { target, options }`：选择 LLM 目标以及可选生成参数
 - 渲染设置，例如 `shaderEffect`、`shaderStroke`、`fontFamily`
 - `language`
 

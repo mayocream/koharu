@@ -1,9 +1,10 @@
 'use client'
 
-import { useEffect, useMemo, useRef, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import { useTheme } from 'next-themes'
 import { useTranslation } from 'react-i18next'
 import Link from 'next/link'
+import { relaunch } from '@tauri-apps/plugin-process'
 import {
   SunIcon,
   MoonIcon,
@@ -22,11 +23,17 @@ import {
   SelectValue,
 } from '@/components/ui/select'
 import { isTauri } from '@/lib/backend'
-import { getMeta, getConfig, updateConfig } from '@/lib/api/system/system'
-import { setApiKey as setApiKeyApi } from '@/lib/api/providers/providers'
+import { getConfig, getMeta, updateConfig } from '@/lib/api/system/system'
+import { getLlmCatalog } from '@/lib/api/llm/llm'
+import { toAppConfigUpdate } from '@/lib/appConfig'
 import { usePreferencesStore } from '@/lib/stores/preferencesStore'
 import { supportedLanguages } from '@/lib/i18n'
-import type { BootstrapConfig } from '@/lib/api/schemas'
+import type {
+  AppConfig,
+  AppLlmProviderConfig,
+  AppLlmProviderConfigUpdate,
+  LlmProviderCatalog,
+} from '@/lib/api/schemas'
 
 const THEME_OPTIONS = [
   { value: 'light', icon: SunIcon, labelKey: 'settings.themeLight' },
@@ -34,39 +41,89 @@ const THEME_OPTIONS = [
   { value: 'system', icon: MonitorIcon, labelKey: 'settings.themeSystem' },
 ] as const
 
-type ApiProvider = {
-  id: string
-  name: string
-  free_tier: boolean
-}
-
-const API_PROVIDERS: ApiProvider[] = [
-  { id: 'openai', name: 'OpenAI', free_tier: false },
-  { id: 'gemini', name: 'Gemini', free_tier: true },
-  { id: 'claude', name: 'Claude', free_tier: false },
-  { id: 'deepseek', name: 'DeepSeek', free_tier: false },
-]
-
 const inputClass =
   'border-border bg-card text-foreground placeholder:text-muted-foreground focus:ring-primary w-full rounded-md border px-3 py-1.5 text-sm focus:ring-1 focus:outline-none'
+
+const getProviderConfig = (
+  config: AppConfig | null,
+  providerId: string,
+): AppLlmProviderConfig | undefined =>
+  config?.llm?.providers?.find((provider) => provider.id === providerId)
+
+const upsertProviderConfig = (
+  config: AppConfig,
+  providerId: string,
+  updater: (provider: AppLlmProviderConfig) => AppLlmProviderConfig,
+): AppConfig => {
+  const providers = [...(config.llm?.providers ?? [])]
+  const index = providers.findIndex((provider) => provider.id === providerId)
+  const current =
+    index >= 0
+      ? providers[index]
+      : { id: providerId, baseUrl: null, hasApiKey: false }
+  const nextProvider = updater(current)
+
+  if (index >= 0) {
+    providers[index] = nextProvider
+  } else {
+    providers.push(nextProvider)
+  }
+
+  return {
+    ...config,
+    llm: {
+      providers,
+    },
+  }
+}
+
+const providerStatusText = (provider: LlmProviderCatalog) => {
+  if (provider.status === 'missing_configuration') {
+    return 'Missing configuration'
+  }
+  if (provider.status === 'discovery_failed') {
+    return provider.error ?? 'Model discovery failed'
+  }
+  if (provider.error) {
+    return provider.error
+  }
+  return null
+}
 
 export default function SettingsPage() {
   const { t, i18n } = useTranslation()
   const { theme, setTheme } = useTheme()
   const locales = useMemo(() => supportedLanguages, [])
-  const [deviceInfo, setDeviceInfo] = useState<{ mlDevice: string }>()
-  const apiKeys = usePreferencesStore((state) => state.apiKeys)
-  const setApiKey = usePreferencesStore((state) => state.setApiKey)
-  const [visibleKeys, setVisibleKeys] = useState<Record<string, boolean>>({})
-  const saveTimersRef = useRef<Record<string, ReturnType<typeof setTimeout>>>(
-    {},
-  )
-  const pendingApiKeysRef = useRef<Record<string, string>>({})
-  const proxySaveTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
-  const pendingBootstrapConfigRef = useRef<BootstrapConfig | null>(null)
+  const fontFamily = usePreferencesStore((state) => state.fontFamily)
+  const setFontFamily = usePreferencesStore((state) => state.setFontFamily)
 
-  const [bootstrapConfig, setBootstrapConfig] =
-    useState<BootstrapConfig | null>(null)
+  const [deviceInfo, setDeviceInfo] = useState<{ mlDevice: string }>()
+  const [appConfig, setAppConfig] = useState<AppConfig | null>(null)
+  const [providerCatalogs, setProviderCatalogs] = useState<
+    LlmProviderCatalog[]
+  >([])
+  const [visibleKeys, setVisibleKeys] = useState<Record<string, boolean>>({})
+  const [apiKeyDrafts, setApiKeyDrafts] = useState<Record<string, string>>({})
+  const [dataPathDraft, setDataPathDraft] = useState('')
+  const [dataPathError, setDataPathError] = useState<string | null>(null)
+  const [isSavingDataPath, setIsSavingDataPath] = useState(false)
+
+  useEffect(() => {
+    const loadPageState = async () => {
+      try {
+        const [config, catalog] = await Promise.all([
+          getConfig(),
+          getLlmCatalog(),
+        ])
+        setAppConfig(config)
+        setProviderCatalogs(catalog.providers)
+      } catch (error) {
+        console.error('Failed to load settings state', error)
+      }
+    }
+
+    void loadPageState()
+  }, [])
 
   useEffect(() => {
     if (!isTauri()) return
@@ -84,121 +141,148 @@ export default function SettingsPage() {
   }, [])
 
   useEffect(() => {
-    const loadBootstrapConfig = async () => {
-      try {
-        const config = await getConfig()
-        setBootstrapConfig(config)
-      } catch (error) {
-        console.error('Failed to load bootstrap config', error)
+    if (!appConfig) return
+    setDataPathDraft(appConfig.data.path)
+    setDataPathError(null)
+  }, [appConfig])
+
+  const persistConfig = async (
+    nextConfig: AppConfig,
+    providerOverrides?: AppLlmProviderConfigUpdate[],
+  ): Promise<AppConfig | null> => {
+    try {
+      const saved = await updateConfig(
+        toAppConfigUpdate(nextConfig, providerOverrides),
+      )
+      const catalog = await getLlmCatalog()
+      setAppConfig(saved)
+      setProviderCatalogs(catalog.providers)
+      if (providerOverrides?.length) {
+        setApiKeyDrafts((current) => {
+          const next = { ...current }
+          for (const provider of providerOverrides) {
+            if (provider.apiKey !== undefined || provider.clearApiKey) {
+              delete next[provider.id]
+            }
+          }
+          return next
+        })
       }
-    }
-
-    void loadBootstrapConfig()
-  }, [])
-
-  const persistApiKey = async (provider: string, value: string) => {
-    try {
-      await setApiKeyApi(provider, { apiKey: value })
+      return saved
     } catch (error) {
-      console.error(`Failed to save API key for ${provider}`, error)
+      console.error('Failed to save settings', error)
+      return null
     }
   }
 
-  const persistBootstrapConfig = async (nextConfig: BootstrapConfig) => {
-    try {
-      const saved = await updateConfig(nextConfig)
-      setBootstrapConfig(saved)
-    } catch (error) {
-      console.error('Failed to save bootstrap config', error)
-    }
+  const handleProviderBaseUrlChange = (providerId: string, value: string) => {
+    setAppConfig((current) =>
+      current
+        ? upsertProviderConfig(current, providerId, (provider) => ({
+            ...provider,
+            baseUrl: value || null,
+          }))
+        : current,
+    )
   }
 
-  const flushApiKeySave = (provider: string) => {
-    const existingTimer = saveTimersRef.current[provider]
-    if (existingTimer) {
-      clearTimeout(existingTimer)
-      delete saveTimersRef.current[provider]
-    }
+  const handleProviderApiKeyChange = (providerId: string, value: string) => {
+    setApiKeyDrafts((current) => ({
+      ...current,
+      [providerId]: value,
+    }))
+  }
 
-    const pendingValue = pendingApiKeysRef.current[provider]
-    if (pendingValue === undefined) {
+  const handlePersistCurrentConfig = () => {
+    if (!appConfig) return
+    void persistConfig(appConfig)
+  }
+
+  const handleApplyDataPath = async () => {
+    if (!appConfig) return
+
+    const nextPath = dataPathDraft.trim()
+    if (!nextPath) {
+      setDataPathError('App data path is required.')
       return
     }
 
-    delete pendingApiKeysRef.current[provider]
-    void persistApiKey(provider, pendingValue)
-  }
-
-  const flushProxySave = () => {
-    const existingTimer = proxySaveTimerRef.current
-    if (existingTimer) {
-      clearTimeout(existingTimer)
-      proxySaveTimerRef.current = null
-    }
-
-    const pendingConfig = pendingBootstrapConfigRef.current
-    if (!pendingConfig) {
+    if (nextPath === appConfig.data.path) {
+      setDataPathError(null)
       return
     }
 
-    pendingBootstrapConfigRef.current = null
-    void persistBootstrapConfig(pendingConfig)
-  }
-
-  useEffect(() => {
-    return () => {
-      Object.keys(saveTimersRef.current).forEach((provider) => {
-        flushApiKeySave(provider)
-      })
-      flushProxySave()
-    }
-  }, [])
-
-  const handleApiKeyChange = (provider: string, value: string) => {
-    setApiKey(provider, value)
-    pendingApiKeysRef.current[provider] = value
-
-    const existingTimer = saveTimersRef.current[provider]
-    if (existingTimer) {
-      clearTimeout(existingTimer)
+    const confirmed = window.confirm(
+      'Changing the app data path will move Koharu data to the new location and restart the app. Continue?',
+    )
+    if (!confirmed) {
+      setDataPathDraft(appConfig.data.path)
+      setDataPathError(null)
+      return
     }
 
-    saveTimersRef.current[provider] = setTimeout(() => {
-      delete saveTimersRef.current[provider]
-      flushApiKeySave(provider)
-    }, 300)
-  }
+    setIsSavingDataPath(true)
+    setDataPathError(null)
 
-  const handleProxyChange = (value: string) => {
-    if (!bootstrapConfig) return
-
-    const nextConfig: BootstrapConfig = {
-      ...bootstrapConfig,
-      http: {
-        proxy: value.trim() ? value : null,
+    const saved = await persistConfig({
+      ...appConfig,
+      data: {
+        path: nextPath,
       },
+    })
+
+    setIsSavingDataPath(false)
+    if (!saved) {
+      setDataPathError('Failed to update the app data path.')
+      return
     }
 
-    setBootstrapConfig(nextConfig)
-    pendingBootstrapConfigRef.current = nextConfig
-
-    if (proxySaveTimerRef.current) {
-      clearTimeout(proxySaveTimerRef.current)
+    if (!isTauri()) {
+      window.alert(
+        'Koharu saved the new app data path. Restart the app to finish applying it.',
+      )
+      return
     }
 
-    proxySaveTimerRef.current = setTimeout(() => {
-      proxySaveTimerRef.current = null
-      flushProxySave()
-    }, 300)
+    try {
+      await relaunch()
+    } catch (error) {
+      console.error('Failed to restart Koharu', error)
+      setDataPathError(
+        'Koharu saved the new path but could not restart automatically. Restart it manually.',
+      )
+    }
+  }
+
+  const handlePersistProviderApiKey = (providerId: string) => {
+    if (!appConfig) return
+    const apiKey = apiKeyDrafts[providerId]?.trim()
+    if (!apiKey) return
+    void persistConfig(appConfig, [
+      {
+        id: providerId,
+        apiKey,
+        clearApiKey: false,
+      },
+    ])
+  }
+
+  const handleClearProviderApiKey = (providerId: string) => {
+    if (!appConfig) return
+    void persistConfig(appConfig, [
+      {
+        id: providerId,
+        apiKey: null,
+        clearApiKey: true,
+      },
+    ])
   }
 
   return (
     <div className='bg-muted flex min-h-0 flex-1 flex-col overflow-hidden'>
       <ScrollArea className='min-h-0 flex-1' viewportClassName='h-full'>
         <div className='min-h-full px-4 py-6'>
-          {/* Content column */}
           <div className='relative mx-auto max-w-xl'>
-            {/* Header with back button */}
             <div className='mb-8 flex items-center'>
               <Link
                 href='/'
@@ -212,7 +296,6 @@ export default function SettingsPage() {
               </h1>
             </div>
 
-            {/* Appearance Section */}
             <section className='mb-8'>
               <h2 className='text-foreground mb-1 text-sm font-bold'>
                 {t('settings.appearance')}
@@ -241,7 +324,6 @@ export default function SettingsPage() {
               </div>
             </section>
 
-            {/* Language Section */}
             <section className='mb-8'>
               <h2 className='text-foreground mb-1 text-sm font-bold'>
                 {t('settings.language')}
@@ -269,29 +351,72 @@ export default function SettingsPage() {
 
             <section className='mb-8'>
               <h2 className='text-foreground mb-1 text-sm font-bold'>
-                {t('settings.httpProxy')}
+                {t('llm.render')}
               </h2>
               <p className='text-muted-foreground mb-4 text-sm'>
-                {t('settings.httpProxyDescription')}
+                {t('settings.localLlmDescription')}
               </p>
 
               <div className='space-y-1'>
-                <label className='text-foreground text-sm'>
-                  {t('bootstrap.proxyUrl')}
-                </label>
+                <label className='text-foreground text-sm'>Font Family</label>
                 <input
-                  type='url'
-                  value={bootstrapConfig?.http.proxy ?? ''}
-                  onChange={(e) => handleProxyChange(e.target.value)}
-                  onBlur={flushProxySave}
-                  placeholder={t('bootstrap.proxyUrlPlaceholder')}
-                  disabled={!bootstrapConfig}
+                  type='text'
+                  value={fontFamily ?? ''}
+                  onChange={(event) =>
+                    setFontFamily(event.target.value || undefined)
+                  }
+                  placeholder='e.g. Noto Sans'
                   className={inputClass}
                 />
               </div>
             </section>
 
-            {/* Device Section */}
+            <section className='mb-8'>
+              <h2 className='text-foreground mb-1 text-sm font-bold'>
+                App Data
+              </h2>
+              <p className='text-muted-foreground mb-4 text-sm'>
+                Koharu stores models, runtime packages, pages, and blobs under
+                this folder. Changing it moves managed data and restarts the
+                app. <code>config.toml</code> always stays in{' '}
+                <code>LocalAppData\\Koharu</code>.
+              </p>
+
+              <div className='bg-card border-border space-y-3 rounded-lg border p-4'>
+                <div className='space-y-1'>
+                  <label className='text-foreground text-sm'>Data Path</label>
+                  <input
+                    type='text'
+                    value={dataPathDraft}
+                    onChange={(event) => {
+                      setDataPathDraft(event.target.value)
+                      setDataPathError(null)
+                    }}
+                    placeholder='C:\\Users\\you\\AppData\\Local\\Koharu'
+                    className={inputClass}
+                  />
+                </div>
+
+                <div className='flex items-center justify-between gap-3'>
+                  <div className='text-muted-foreground text-xs'>
+                    {dataPathError ?? 'Apply to move data and restart Koharu.'}
+                  </div>
+                  <button
+                    type='button'
+                    onClick={() => void handleApplyDataPath()}
+                    disabled={
+                      !appConfig ||
+                      isSavingDataPath ||
+                      dataPathDraft.trim() === appConfig.data.path
+                    }
+                    className='bg-foreground text-background disabled:bg-muted disabled:text-muted-foreground rounded-md px-3 py-1.5 text-sm font-medium transition disabled:cursor-not-allowed'
+                  >
+                    {isSavingDataPath ? 'Applying...' : 'Apply and Restart'}
+                  </button>
+                </div>
+              </div>
+            </section>
+
             {deviceInfo && (
               <section className='mb-8'>
                 <h2 className='text-foreground mb-1 text-sm font-bold'>
@@ -316,7 +441,6 @@ export default function SettingsPage() {
               </section>
             )}
 
-            {/* API Keys Section */}
             <section className='mb-8'>
               <h2 className='text-foreground mb-1 text-sm font-bold'>
                 {t('settings.apiKeys')}
@@ -324,52 +448,126 @@ export default function SettingsPage() {
               <p className='text-muted-foreground mb-4 text-sm'>
                 {t('settings.apiKeysDescription')}
               </p>
-              <div className='space-y-3'>
-                {API_PROVIDERS.map(({ id, name, free_tier }) => (
-                  <div key={id} className='space-y-1'>
-                    <label className='text-foreground text-sm'>{name}</label>
-                    <div className='space-y-1'>
-                      <div className='relative'>
-                        <input
-                          type={visibleKeys[id] ? 'text' : 'password'}
-                          value={apiKeys[id] ?? ''}
-                          onChange={(e) =>
-                            handleApiKeyChange(id, e.target.value)
-                          }
-                          onBlur={() => flushApiKeySave(id)}
-                          placeholder='Enter API key'
-                          className={`${inputClass} pr-9`}
-                        />
-                        <button
-                          type='button'
-                          onClick={() =>
-                            setVisibleKeys((v) => ({ ...v, [id]: !v[id] }))
-                          }
-                          className='text-muted-foreground hover:text-foreground absolute top-1/2 right-2.5 -translate-y-1/2 transition'
-                        >
-                          {visibleKeys[id] ? (
-                            <EyeOffIcon className='size-4' />
-                          ) : (
-                            <EyeIcon className='size-4' />
-                          )}
-                        </button>
+
+              <div className='space-y-4'>
+                {providerCatalogs.map((provider) => {
+                  const configured = getProviderConfig(appConfig, provider.id)
+                  const apiKeyDraft = apiKeyDrafts[provider.id] ?? ''
+                  const statusText = providerStatusText(provider)
+
+                  return (
+                    <div
+                      key={provider.id}
+                      className='bg-card border-border space-y-3 rounded-lg border p-4'
+                    >
+                      <div className='flex items-start justify-between gap-3'>
+                        <div>
+                          <div className='text-foreground text-sm font-medium'>
+                            {provider.name}
+                          </div>
+                          {statusText ? (
+                            <div className='text-muted-foreground mt-1 text-xs'>
+                              {statusText}
+                            </div>
+                          ) : null}
+                        </div>
+                        <div className='text-muted-foreground text-xs uppercase'>
+                          {provider.status}
+                        </div>
                       </div>
 
-                      {free_tier && (
-                        <span className='ml-2 text-xs text-green-500'>
-                          {t('settings.freeTier')}
-                        </span>
-                      )}
+                      {provider.requiresBaseUrl ? (
+                        <div className='space-y-1'>
+                          <label className='text-foreground text-sm'>
+                            {t('settings.localLlmBaseUrl')}
+                          </label>
+                          <input
+                            type='url'
+                            value={configured?.baseUrl ?? ''}
+                            onChange={(event) =>
+                              handleProviderBaseUrlChange(
+                                provider.id,
+                                event.target.value,
+                              )
+                            }
+                            onBlur={handlePersistCurrentConfig}
+                            placeholder='https://example.com/v1'
+                            className={inputClass}
+                          />
+                        </div>
+                      ) : null}
+
+                      <div className='space-y-1'>
+                        <label className='text-foreground text-sm'>
+                          {t('settings.apiKeys')}
+                        </label>
+                        <div className='relative'>
+                          <input
+                            type={
+                              visibleKeys[provider.id] ? 'text' : 'password'
+                            }
+                            value={apiKeyDraft}
+                            onChange={(event) =>
+                              handleProviderApiKeyChange(
+                                provider.id,
+                                event.target.value,
+                              )
+                            }
+                            onBlur={() =>
+                              handlePersistProviderApiKey(provider.id)
+                            }
+                            placeholder={
+                              configured?.hasApiKey
+                                ? 'Stored in keychain. Enter a new key to replace it.'
+                                : 'Enter API key'
+                            }
+                            className={`${inputClass} pr-9`}
+                          />
+                          <button
+                            type='button'
+                            onClick={() =>
+                              setVisibleKeys((current) => ({
+                                ...current,
+                                [provider.id]: !current[provider.id],
+                              }))
+                            }
+                            className='text-muted-foreground hover:text-foreground absolute top-1/2 right-2.5 -translate-y-1/2 transition'
+                          >
+                            {visibleKeys[provider.id] ? (
+                              <EyeOffIcon className='size-4' />
+                            ) : (
+                              <EyeIcon className='size-4' />
+                            )}
+                          </button>
+                        </div>
+
+                        <div className='flex items-center justify-between gap-3 text-xs'>
+                          <span className='text-muted-foreground'>
+                            {configured?.hasApiKey
+                              ? 'API key stored in keychain'
+                              : 'No API key stored'}
+                          </span>
+                          {configured?.hasApiKey ? (
+                            <button
+                              type='button'
+                              onClick={() =>
+                                handleClearProviderApiKey(provider.id)
+                              }
+                              className='text-foreground hover:text-destructive transition'
+                            >
+                              Clear stored key
+                            </button>
+                          ) : null}
+                        </div>
+                      </div>
                     </div>
-                  </div>
-                ))}
+                  )
+                })}
               </div>
             </section>
 
-            {/* Divider */}
             <div className='border-border mb-8 border-t' />
 
-            {/* About Link */}
             <Link
               href='/about'
               prefetch={false}

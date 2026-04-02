@@ -3,14 +3,12 @@
  * Do not edit manually.
  * OpenAPI spec version: 0.0.1
  */
-import type { LlmStateStatus } from './llmStateStatus';
+import type { LlmStateStatus } from './llmStateStatus'
+import type { LlmTarget } from './llmTarget'
 
 export interface LlmState {
   /** @nullable */
-  error?: string | null;
-  /** @nullable */
-  modelId?: string | null;
-  /** @nullable */
-  source?: string | null;
-  status: LlmStateStatus;
+  error?: string | null
+  status: LlmStateStatus
+  target?: null | LlmTarget
 }

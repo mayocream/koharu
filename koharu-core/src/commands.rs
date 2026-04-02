@@ -1,4 +1,4 @@
-use crate::{TextBlock, TextShaderEffect, TextStrokeStyle};
+use crate::{TextShaderEffect, TextStrokeStyle};
 use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
 
@@ -12,12 +12,6 @@ pub struct DeviceInfo {
 #[serde(rename_all = "camelCase")]
 pub struct OpenExternalPayload {
     pub url: String,
-}
-
-#[derive(Debug, Clone, Copy, Serialize, Deserialize, JsonSchema)]
-#[serde(rename_all = "camelCase")]
-pub struct IndexPayload {
-    pub index: usize,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -53,81 +47,21 @@ pub struct FileResult {
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
-pub struct RenderPayload {
-    pub index: usize,
-    pub text_block_index: Option<usize>,
-    pub shader_effect: Option<TextShaderEffect>,
-    pub shader_stroke: Option<TextStrokeStyle>,
-    pub font_family: Option<String>,
-}
-
-#[derive(Debug, Clone, Serialize, Deserialize)]
-#[serde(rename_all = "camelCase")]
-pub struct UpdateTextBlocksPayload {
-    pub index: usize,
-    pub text_blocks: Vec<TextBlock>,
-}
-
-#[derive(Debug, Clone, Serialize, Deserialize)]
-#[serde(rename_all = "camelCase")]
-pub struct LlmListPayload {
-    pub language: Option<String>,
-    pub openai_compatible_base_url: Option<String>,
-}
-
-#[derive(Debug, Clone, Serialize, Deserialize)]
-#[serde(rename_all = "camelCase")]
-pub struct ApiKeyGetPayload {
-    pub provider: String,
-}
-
-#[derive(Debug, Clone, Serialize, Deserialize)]
-#[serde(rename_all = "camelCase")]
-pub struct ApiKeySetPayload {
-    pub provider: String,
-    pub api_key: String,
-}
-
-#[derive(Debug, Clone, Serialize, Deserialize)]
-#[serde(rename_all = "camelCase")]
-pub struct ApiKeyResult {
-    pub api_key: Option<String>,
-}
-
-#[derive(Debug, Clone, Serialize, Deserialize)]
-#[serde(rename_all = "camelCase")]
-pub struct LlmLoadPayload {
-    pub id: String,
-    pub api_key: Option<String>,
-    pub base_url: Option<String>,
-    pub temperature: Option<f64>,
-    pub max_tokens: Option<u32>,
-    pub custom_system_prompt: Option<String>,
-}
-
-#[derive(Debug, Clone, Serialize, Deserialize)]
-#[serde(rename_all = "camelCase")]
-pub struct LlmGeneratePayload {
-    pub index: usize,
-    pub text_block_index: Option<usize>,
+pub struct LlmCatalogPayload {
     pub language: Option<String>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, JsonSchema)]
 #[serde(rename_all = "camelCase")]
 pub struct LlmLoadParams {
-    pub id: String,
-    pub api_key: Option<String>,
-    pub base_url: Option<String>,
-    pub temperature: Option<f64>,
-    pub max_tokens: Option<u32>,
-    pub custom_system_prompt: Option<String>,
+    pub target: crate::LlmTarget,
+    pub options: Option<crate::LlmGenerationOptions>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, JsonSchema)]
 #[serde(rename_all = "camelCase")]
 pub struct LlmGenerateParams {
-    pub index: usize,
+    pub document_id: String,
     pub text_block_index: Option<usize>,
     pub language: Option<String>,
 }
@@ -135,13 +69,8 @@ pub struct LlmGenerateParams {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct ProcessRequest {
-    pub index: Option<usize>,
-    pub llm_model_id: Option<String>,
-    pub llm_api_key: Option<String>,
-    pub llm_base_url: Option<String>,
-    pub llm_temperature: Option<f64>,
-    pub llm_max_tokens: Option<u32>,
-    pub llm_custom_system_prompt: Option<String>,
+    pub document_id: Option<String>,
+    pub llm: Option<crate::PipelineLlmRequest>,
     pub language: Option<String>,
     pub shader_effect: Option<TextShaderEffect>,
     pub shader_stroke: Option<TextStrokeStyle>,
@@ -150,42 +79,8 @@ pub struct ProcessRequest {
 
 #[derive(Debug, Clone, Serialize, Deserialize, JsonSchema)]
 #[serde(rename_all = "camelCase")]
-pub struct InpaintRegion {
-    pub x: u32,
-    pub y: u32,
-    pub width: u32,
-    pub height: u32,
-}
-
-#[derive(Debug, Clone, Serialize, Deserialize)]
-#[serde(rename_all = "camelCase")]
-pub struct UpdateInpaintMaskPayload {
-    pub index: usize,
-    #[serde(with = "serde_bytes")]
-    pub mask: Vec<u8>,
-    pub region: Option<InpaintRegion>,
-}
-
-#[derive(Debug, Clone, Serialize, Deserialize)]
-#[serde(rename_all = "camelCase")]
-pub struct UpdateBrushLayerPayload {
-    pub index: usize,
-    #[serde(with = "serde_bytes")]
-    pub patch: Vec<u8>,
-    pub region: InpaintRegion,
-}
-
-#[derive(Debug, Clone, Serialize, Deserialize)]
-#[serde(rename_all = "camelCase")]
-pub struct InpaintPartialPayload {
-    pub index: usize,
-    pub region: InpaintRegion,
-}
-
-#[derive(Debug, Clone, Serialize, Deserialize, JsonSchema)]
-#[serde(rename_all = "camelCase")]
 pub struct ViewImageParams {
-    pub index: usize,
+    pub document_id: String,
     pub layer: String,
     pub max_size: Option<u32>,
 }
@@ -193,7 +88,7 @@ pub struct ViewImageParams {
 #[derive(Debug, Clone, Serialize, Deserialize, JsonSchema)]
 #[serde(rename_all = "camelCase")]
 pub struct ViewTextBlockParams {
-    pub index: usize,
+    pub document_id: String,
     pub text_block_index: usize,
     pub layer: Option<String>,
 }
@@ -207,14 +102,14 @@ pub struct OpenDocumentsParams {
 #[derive(Debug, Clone, Serialize, Deserialize, JsonSchema)]
 #[serde(rename_all = "camelCase")]
 pub struct ExportDocumentParams {
-    pub index: usize,
+    pub document_id: String,
     pub output_path: String,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, JsonSchema)]
 #[serde(rename_all = "camelCase")]
 pub struct RenderParams {
-    pub index: usize,
+    pub document_id: String,
     pub text_block_index: Option<usize>,
     pub shader_effect: Option<String>,
     pub font_family: Option<String>,
@@ -222,9 +117,15 @@ pub struct RenderParams {
 
 #[derive(Debug, Clone, Serialize, Deserialize, JsonSchema)]
 #[serde(rename_all = "camelCase")]
+pub struct DocumentIdParam {
+    pub document_id: String,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, JsonSchema)]
+#[serde(rename_all = "camelCase")]
 pub struct ProcessParams {
-    pub index: Option<usize>,
-    pub llm_model_id: Option<String>,
+    pub document_id: Option<String>,
+    pub llm_target: Option<crate::LlmTarget>,
     pub language: Option<String>,
     pub shader_effect: Option<String>,
     pub font_family: Option<String>,
@@ -273,7 +174,7 @@ pub struct MaskMorphPayload {
 #[derive(Debug, Clone, Serialize, Deserialize, JsonSchema)]
 #[serde(rename_all = "camelCase")]
 pub struct InpaintRegionParams {
-    pub index: usize,
+    pub document_id: String,
     pub x: u32,
     pub y: u32,
     pub width: u32,
@@ -282,7 +183,6 @@ pub struct InpaintRegionParams {
 
 #[cfg(test)]
 mod tests {
-    use crate::{TextAlign, TextStyle};
     use serde::Serialize;
     use serde::de::DeserializeOwned;
 
@@ -301,39 +201,13 @@ mod tests {
 
     #[test]
     fn command_dtos_round_trip() {
-        let text_block = TextBlock {
-            x: 10.0,
-            y: 11.0,
-            width: 120.0,
-            height: 40.0,
-            confidence: 0.95,
-            text: Some("source".to_string()),
-            translation: Some("translated".to_string()),
-            style: Some(TextStyle {
-                font_families: vec!["Noto Sans".to_string()],
-                font_size: Some(18.0),
-                color: [255, 255, 255, 255],
-                effect: Some(TextShaderEffect {
-                    italic: true,
-                    bold: false,
-                }),
-                stroke: Some(TextStrokeStyle {
-                    enabled: true,
-                    color: [255, 255, 255, 255],
-                    width_px: Some(2.0),
-                }),
-                text_align: Some(TextAlign::Right),
-            }),
-            ..Default::default()
-        };
-
         round_trip(&DeviceInfo {
             ml_device: "CPU".to_string(),
         });
         round_trip(&OpenExternalPayload {
             url: "https://example.com".to_string(),
         });
-        round_trip(&IndexPayload { index: 2 });
+
         round_trip(&ThumbnailResult {
             data: vec![1, 2, 3],
             content_type: "image/webp".to_string(),
@@ -353,62 +227,52 @@ mod tests {
             data: vec![1, 2, 3, 4],
             content_type: "image/png".to_string(),
         });
-        round_trip(&RenderPayload {
-            index: 1,
-            text_block_index: Some(3),
-            shader_effect: Some(TextShaderEffect {
-                italic: false,
-                bold: true,
-            }),
-            shader_stroke: Some(TextStrokeStyle {
-                enabled: true,
-                color: [255, 255, 255, 255],
-                width_px: Some(1.6),
-            }),
-            font_family: Some("Noto Sans".to_string()),
-        });
-        round_trip(&UpdateTextBlocksPayload {
-            index: 1,
-            text_blocks: vec![text_block.clone()],
-        });
-        round_trip(&LlmListPayload {
+        round_trip(&LlmCatalogPayload {
             language: Some("zh-CN".to_string()),
-            openai_compatible_base_url: Some("http://127.0.0.1:1234/v1".to_string()),
         });
-        round_trip(&LlmLoadPayload {
-            id: "sakura".to_string(),
-            api_key: None,
-            base_url: Some("http://127.0.0.1:1234/v1".to_string()),
-            temperature: Some(0.1),
-            max_tokens: Some(1000),
-            custom_system_prompt: None,
-        });
-        round_trip(&LlmGeneratePayload {
-            index: 1,
-            text_block_index: Some(0),
-            language: Some("zh-CN".to_string()),
+        round_trip(&crate::LlmLoadRequest {
+            target: crate::LlmTarget {
+                kind: crate::LlmTargetKind::Local,
+                model_id: "sakura".to_string(),
+                provider_id: None,
+            },
+            options: Some(crate::LlmGenerationOptions {
+                temperature: Some(0.1),
+                max_tokens: Some(1000),
+                custom_system_prompt: None,
+            }),
         });
         round_trip(&LlmLoadParams {
-            id: "sakura".to_string(),
-            api_key: None,
-            base_url: Some("http://127.0.0.1:1234/v1".to_string()),
-            temperature: None,
-            max_tokens: None,
-            custom_system_prompt: None,
+            target: crate::LlmTarget {
+                kind: crate::LlmTargetKind::Provider,
+                model_id: "gpt-5-mini".to_string(),
+                provider_id: Some("openai".to_string()),
+            },
+            options: Some(crate::LlmGenerationOptions {
+                temperature: None,
+                max_tokens: None,
+                custom_system_prompt: None,
+            }),
         });
         round_trip(&LlmGenerateParams {
-            index: 1,
+            document_id: "abc123".to_string(),
             text_block_index: Some(0),
             language: Some("zh-CN".to_string()),
         });
         round_trip(&ProcessRequest {
-            index: Some(1),
-            llm_model_id: Some("sakura".to_string()),
-            llm_api_key: None,
-            llm_base_url: Some("http://127.0.0.1:1234/v1".to_string()),
-            llm_temperature: Some(0.1),
-            llm_max_tokens: Some(1000),
-            llm_custom_system_prompt: Some("Translate manga".to_string()),
+            document_id: Some("abc123".to_string()),
+            llm: Some(crate::PipelineLlmRequest {
+                target: crate::LlmTarget {
+                    kind: crate::LlmTargetKind::Provider,
+                    model_id: "gpt-5-mini".to_string(),
+                    provider_id: Some("openai".to_string()),
+                },
+                options: Some(crate::LlmGenerationOptions {
+                    temperature: Some(0.1),
+                    max_tokens: Some(1000),
+                    custom_system_prompt: Some("Translate manga".to_string()),
+                }),
+            }),
             language: Some("zh-CN".to_string()),
             shader_effect: Some(TextShaderEffect {
                 italic: true,
@@ -421,48 +285,13 @@ mod tests {
             }),
             font_family: Some("Noto Sans".to_string()),
         });
-        round_trip(&InpaintRegion {
-            x: 10,
-            y: 20,
-            width: 30,
-            height: 40,
-        });
-        round_trip(&UpdateInpaintMaskPayload {
-            index: 1,
-            mask: vec![0, 255],
-            region: Some(InpaintRegion {
-                x: 1,
-                y: 2,
-                width: 3,
-                height: 4,
-            }),
-        });
-        round_trip(&UpdateBrushLayerPayload {
-            index: 1,
-            patch: vec![1, 2, 3],
-            region: InpaintRegion {
-                x: 4,
-                y: 5,
-                width: 6,
-                height: 7,
-            },
-        });
-        round_trip(&InpaintPartialPayload {
-            index: 1,
-            region: InpaintRegion {
-                x: 8,
-                y: 9,
-                width: 10,
-                height: 11,
-            },
-        });
         round_trip(&ViewImageParams {
-            index: 1,
+            document_id: "abc123".to_string(),
             layer: "original".to_string(),
             max_size: Some(512),
         });
         round_trip(&ViewTextBlockParams {
-            index: 1,
+            document_id: "abc123".to_string(),
             text_block_index: 0,
             layer: Some("rendered".to_string()),
         });
@@ -470,18 +299,22 @@ mod tests {
             paths: vec!["a.png".to_string(), "b.png".to_string()],
         });
         round_trip(&ExportDocumentParams {
-            index: 1,
+            document_id: "abc123".to_string(),
             output_path: "out.png".to_string(),
         });
         round_trip(&RenderParams {
-            index: 1,
+            document_id: "abc123".to_string(),
             text_block_index: Some(0),
             shader_effect: Some("bold".to_string()),
             font_family: Some("Noto Sans".to_string()),
         });
         round_trip(&ProcessParams {
-            index: Some(1),
-            llm_model_id: Some("sakura".to_string()),
+            document_id: Some("abc123".to_string()),
+            llm_target: Some(crate::LlmTarget {
+                kind: crate::LlmTargetKind::Local,
+                model_id: "sakura".to_string(),
+                provider_id: None,
+            }),
             language: Some("zh-CN".to_string()),
             shader_effect: Some("italic,bold".to_string()),
             font_family: Some("Noto Sans".to_string()),
@@ -515,7 +348,7 @@ mod tests {
             radius: 2,
         });
         round_trip(&InpaintRegionParams {
-            index: 1,
+            document_id: "abc123".to_string(),
             x: 2,
             y: 3,
             width: 4,

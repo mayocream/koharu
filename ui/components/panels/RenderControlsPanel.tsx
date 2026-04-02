@@ -185,7 +185,8 @@ export function RenderControlsPanel() {
   const { data: availableFonts = [] } = useListFonts()
   const fontFamily = usePreferencesStore((state) => state.fontFamily)
   const setFontFamily = usePreferencesStore((state) => state.setFontFamily)
-  const { textBlocks, selectedBlockIndex, replaceBlock, updateTextBlocks } = useTextBlocks()
+  const { textBlocks, selectedBlockIndex, replaceBlock, updateTextBlocks } =
+    useTextBlocks()
   const { t } = useTranslation()
   const selectedBlock =
     selectedBlockIndex !== undefined

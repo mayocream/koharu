@@ -31,7 +31,6 @@ fn sample_document() -> Document {
         image: rgba_image(16, 12, [240, 240, 240, 255]),
         width: 16,
         height: 12,
-        revision: 0,
         text_blocks: vec![
             TextBlock {
                 id: "block-h".to_string(),

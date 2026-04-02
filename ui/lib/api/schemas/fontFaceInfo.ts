@@ -5,6 +5,6 @@
  */
 
 export interface FontFaceInfo {
-  familyName: string;
-  postScriptName: string;
+  familyName: string
+  postScriptName: string
 }

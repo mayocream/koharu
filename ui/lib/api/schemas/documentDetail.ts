@@ -3,26 +3,24 @@
  * Do not edit manually.
  * OpenAPI spec version: 0.0.1
  */
-import type { TextBlockDetail } from './textBlockDetail';
+import type { TextBlockDetail } from './textBlockDetail'
 
 export interface DocumentDetail {
   /** @nullable */
-  brushLayer?: number[] | null;
+  brushLayer?: number[] | null
   /** @minimum 0 */
-  height: number;
-  id: string;
-  image: number[];
+  height: number
+  id: string
+  image: number[]
   /** @nullable */
-  inpainted?: number[] | null;
-  name: string;
-  path: string;
+  inpainted?: number[] | null
+  name: string
+  path: string
   /** @nullable */
-  rendered?: number[] | null;
+  rendered?: number[] | null
+  /** @nullable */
+  segment?: number[] | null
+  textBlocks: TextBlockDetail[]
   /** @minimum 0 */
-  revision: number;
-  /** @nullable */
-  segment?: number[] | null;
-  textBlocks: TextBlockDetail[];
-  /** @minimum 0 */
-  width: number;
+  width: number
 }

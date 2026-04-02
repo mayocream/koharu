@@ -1,26 +1,27 @@
-use std::sync::{Arc, Mutex as StdMutex};
+use std::sync::Arc;
 
 use anyhow::{Context, Result};
+use camino::Utf8PathBuf;
 use clap::Parser;
 use rfd::MessageDialog;
 use tauri::{AppHandle, Manager, WebviewWindowBuilder};
-use tokio::{
-    net::TcpListener,
-    sync::{RwLock, watch},
-};
+use tokio::{net::TcpListener, sync::RwLock};
 use tracing_subscriber::fmt::format::FmtSpan;
 
 use koharu_app::{
     AppResources,
-    config::{self as app_config, AppConfig},
-    llm, ml,
+    blob_store::BlobStore,
+    config::{self as app_config},
+    llm,
+    manifest::ManifestStore,
+    ml,
+    page_cache::PageCache,
     renderer::Renderer,
 };
-use koharu_core::{BootstrapConfig, State};
 use koharu_llm::safe::llama_backend::LlamaBackend;
 use koharu_ml::{cuda_is_available, device};
-use koharu_rpc::{BootstrapHooks, SharedState, server};
-use koharu_runtime::{ComputePolicy, RuntimeManager};
+use koharu_rpc::{SharedState, server};
+use koharu_runtime::{ComputePolicy, DirectorySetting, RuntimeManager, Settings};
 
 #[derive(Parser)]
 #[command(version = crate::version::APP_VERSION, about)]
@@ -65,78 +66,6 @@ struct Cli {
     debug: bool,
 }
 
-#[derive(Clone)]
-struct BootstrapController {
-    resources: Arc<tokio::sync::OnceCell<AppResources>>,
-    runtime_tx: watch::Sender<RuntimeManager>,
-    init_lock: Arc<tokio::sync::Mutex<()>>,
-    handle: Arc<StdMutex<Option<AppHandle>>>,
-    cpu: bool,
-    headless: bool,
-}
-
-impl BootstrapController {
-    fn get_config(&self) -> Result<BootstrapConfig> {
-        Ok(app_config::to_bootstrap_config(&app_config::load()?))
-    }
-
-    fn put_config(&self, config: BootstrapConfig) -> Result<BootstrapConfig> {
-        let config = app_config::from_bootstrap_config(config)?;
-        app_config::save(&config)?;
-        if self.resources.get().is_none() {
-            self.runtime_tx
-                .send_replace(runtime_from_config(config.clone(), self.cpu)?);
-        }
-        Ok(app_config::to_bootstrap_config(&config))
-    }
-
-    fn set_handle(&self, handle: AppHandle) {
-        if let Ok(mut slot) = self.handle.lock() {
-            *slot = Some(handle);
-        }
-    }
-
-    async fn initialize(&self) -> Result<()> {
-        if self.resources.get().is_some() {
-            if let Some(handle) = self.current_handle() {
-                show_main_window(&handle)?;
-            }
-            return Ok(());
-        }
-
-        let _guard = self
-            .init_lock
-            .try_lock()
-            .map_err(|_| anyhow::anyhow!("initialization already in progress"))?;
-
-        let runtime = self.runtime_tx.borrow().clone();
-        let settings = runtime.settings();
-        tracing::info!(
-            runtime_root = %settings.runtime.path.display(),
-            models_root = %settings.models.path.display(),
-            proxy = settings.http.proxy.as_ref().map(|value| value.as_str()).unwrap_or("<direct>"),
-            "initializing application resources"
-        );
-
-        self.resources
-            .get_or_try_init(|| {
-                let runtime = runtime.clone();
-                async move { build_resources(runtime, self.cpu, self.headless).await }
-            })
-            .await?;
-
-        if let Some(handle) = self.current_handle() {
-            show_main_window(&handle)?;
-        }
-
-        Ok(())
-    }
-
-    fn current_handle(&self) -> Option<AppHandle> {
-        self.handle.lock().ok().and_then(|slot| slot.clone())
-    }
-}
-
 fn initialize(headless: bool, _debug: bool) -> Result<()> {
     #[cfg(target_os = "windows")]
     {
@@ -177,27 +106,27 @@ fn initialize(headless: bool, _debug: bool) -> Result<()> {
     Ok(())
 }
 
-fn compute_policy(cpu: bool) -> ComputePolicy {
-    if cpu {
-        ComputePolicy::CpuOnly
-    } else {
-        ComputePolicy::PreferGpu
-    }
-}
-
-fn runtime_from_config(config: AppConfig, cpu: bool) -> Result<RuntimeManager> {
-    RuntimeManager::new(config, compute_policy(cpu))
-}
-
-fn load_runtime(cpu: bool) -> Result<RuntimeManager> {
-    runtime_from_config(app_config::load()?, cpu)
-}
-
 async fn prefetch(cpu: bool) -> Result<()> {
-    load_runtime(cpu)?
-        .prepare()
-        .await
-        .context("Failed to initialize runtime and model packages")?;
+    let config = app_config::load()?;
+    let data_root = config.data.path.clone();
+    RuntimeManager::new(
+        Settings {
+            runtime: DirectorySetting {
+                path: data_root.join("runtime"),
+            },
+            models: DirectorySetting {
+                path: data_root.join("models"),
+            },
+        },
+        if cpu {
+            ComputePolicy::CpuOnly
+        } else {
+            ComputePolicy::PreferGpu
+        },
+    )?
+    .prepare()
+    .await
+    .context("Failed to initialize runtime and model packages")?;
     Ok(())
 }
 
@@ -224,6 +153,7 @@ fn warning(headless: bool, title: &str, description: &str) {
 
 async fn build_resources(
     runtime: RuntimeManager,
+    data_root: Utf8PathBuf,
     cpu: bool,
     headless: bool,
 ) -> Result<AppResources> {
@@ -281,11 +211,14 @@ async fn build_resources(
     );
     let llm = Arc::new(llm::Model::new(runtime.clone(), cpu, llama_backend));
     let renderer = Arc::new(Renderer::new().context("Failed to initialize renderer")?);
-    let state = Arc::new(RwLock::new(State::default()));
+
+    let blobs = BlobStore::new(data_root.join("blobs"))?;
+    let manifests = ManifestStore::new(data_root.join("pages"))?;
+    let cache = PageCache::new(blobs, manifests);
 
     Ok(AppResources {
         runtime,
-        state,
+        cache,
         ml,
         llm,
         renderer,
@@ -293,6 +226,35 @@ async fn build_resources(
         pipeline: Arc::new(RwLock::new(None)),
         version: crate::version::current(),
     })
+}
+
+async fn initialize_resources(
+    resources: Arc<tokio::sync::OnceCell<AppResources>>,
+    runtime: RuntimeManager,
+    data_root: Utf8PathBuf,
+    cpu: bool,
+    headless: bool,
+) -> Result<()> {
+    if resources.get().is_some() {
+        return Ok(());
+    }
+
+    let settings = runtime.settings();
+    tracing::info!(
+        runtime_root = %settings.runtime.path,
+        models_root = %settings.models.path,
+        "initializing application resources"
+    );
+
+    resources
+        .get_or_try_init(|| {
+            let runtime = runtime.clone();
+            let data_root = data_root.clone();
+            async move { build_resources(runtime, data_root, cpu, headless).await }
+        })
+        .await?;
+
+    Ok(())
 }
 
 fn create_window(handle: &AppHandle, label: &str) -> Result<()> {
@@ -327,33 +289,7 @@ fn show_main_window(handle: &AppHandle) -> Result<()> {
         main_window.show().ok();
     }
 
-    for label in ["splashscreen", "bootstrap"] {
-        if let Some(window) = handle.get_webview_window(label) {
-            window.close().ok();
-        }
-    }
-
     Ok(())
-}
-
-fn make_bootstrap_hooks(controller: Arc<BootstrapController>) -> BootstrapHooks {
-    BootstrapHooks {
-        get_config: Arc::new({
-            let controller = Arc::clone(&controller);
-            move || controller.get_config()
-        }),
-        put_config: Arc::new({
-            let controller = Arc::clone(&controller);
-            move |config| controller.put_config(config)
-        }),
-        initialize: Arc::new({
-            let controller = Arc::clone(&controller);
-            move || {
-                let controller = Arc::clone(&controller);
-                Box::pin(async move { controller.initialize().await })
-            }
-        }),
-    }
 }
 
 pub async fn run() -> Result<()> {
@@ -377,24 +313,27 @@ pub async fn run() -> Result<()> {
         return Ok(());
     }
 
-    let initial_runtime = load_runtime(cpu)?;
+    let config = app_config::load()?;
+    let data_root = config.data.path.clone();
+    let initial_runtime = RuntimeManager::new(
+        Settings {
+            runtime: DirectorySetting {
+                path: data_root.join("runtime"),
+            },
+            models: DirectorySetting {
+                path: data_root.join("models"),
+            },
+        },
+        if cpu {
+            ComputePolicy::CpuOnly
+        } else {
+            ComputePolicy::PreferGpu
+        },
+    )?;
     let listener = TcpListener::bind(format!("127.0.0.1:{}", port.unwrap_or(0))).await?;
     let api_port = listener.local_addr()?.port();
     let resources = Arc::new(tokio::sync::OnceCell::new());
-    let (runtime_tx, runtime_rx) = watch::channel(initial_runtime.clone());
-    let controller = Arc::new(BootstrapController {
-        resources: Arc::clone(&resources),
-        runtime_tx,
-        init_lock: Arc::new(tokio::sync::Mutex::new(())),
-        handle: Arc::new(StdMutex::new(None)),
-        cpu,
-        headless,
-    });
-    let shared = SharedState::new(
-        Arc::clone(&resources),
-        runtime_rx,
-        make_bootstrap_hooks(controller.clone()),
-    );
+    let shared = SharedState::new(Arc::clone(&resources), initial_runtime.clone());
     let mut context = tauri::generate_context!();
     let shared_assets = crate::assets::share_context_assets(&mut context);
 
@@ -409,18 +348,21 @@ pub async fn run() -> Result<()> {
                 }
             }
         });
-        shared
-            .get_or_try_init(|| {
-                let runtime = initial_runtime.clone();
-                async move { build_resources(runtime, cpu, headless).await }
-            })
-            .await?;
+        initialize_resources(
+            Arc::clone(&resources),
+            initial_runtime.clone(),
+            data_root.clone(),
+            cpu,
+            headless,
+        )
+        .await?;
         tokio::signal::ctrl_c().await?;
         return Ok(());
     }
 
     let embedded_resolver = crate::assets::embedded_asset_resolver(shared_assets);
     tauri::Builder::default()
+        .plugin(tauri_plugin_process::init())
         .append_invoke_initialization_script(format!("window.__KOHARU_API_PORT__ = {api_port};"))
         .setup(move |app| {
             let resolver = server::asset_resolver([
@@ -438,31 +380,17 @@ pub async fn run() -> Result<()> {
             });
 
             let handle = app.handle().clone();
-            controller.set_handle(handle.clone());
-
-            let runtime = initial_runtime.clone();
-            let needs_bootstrap = runtime.needs_bootstrap().with_context(|| {
-                format!(
-                    "failed to inspect bootstrap packages for runtime `{}` and models `{}`",
-                    runtime.settings().runtime.path.display(),
-                    runtime.settings().models.path.display()
-                )
-            })?;
-
-            if needs_bootstrap {
-                create_window(&handle, "bootstrap")?;
-            } else {
-                create_window(&handle, "splashscreen")?;
-                tauri::async_runtime::spawn({
-                    let controller = controller.clone();
-                    async move {
-                        controller
-                            .initialize()
-                            .await
-                            .expect("failed to build app resources");
-                    }
-                });
-            }
+            show_main_window(&handle)?;
+            tauri::async_runtime::spawn({
+                let resources = Arc::clone(&resources);
+                let runtime = initial_runtime.clone();
+                let data_root = data_root.clone();
+                async move {
+                    initialize_resources(resources, runtime, data_root, cpu, headless)
+                        .await
+                        .expect("failed to build app resources");
+                }
+            });
 
             tauri::async_runtime::spawn(async move {
                 handle

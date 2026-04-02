@@ -1,11 +1,12 @@
-use std::path::PathBuf;
 use std::sync::Arc;
 
 use strum::IntoEnumIterator;
 
 use koharu_llm::safe::llama_backend::LlamaBackend;
 use koharu_llm::{GenerateOptions, Language, Llm, ModelId};
-use koharu_runtime::{ComputePolicy, RuntimeManager, Settings};
+use koharu_runtime::{
+    ComputePolicy, DirectorySetting, RuntimeManager, Settings, default_app_data_root,
+};
 
 #[tokio::test]
 #[ignore] // Ignored because it requires downloading multiple large models.
@@ -14,13 +15,17 @@ async fn llm_generates_text_for_all_models() -> anyhow::Result<()> {
 ãƒ†ã‚¹ãƒˆã§ã™ã€‚
 ã•ã‚ˆãªã‚‰ã€‚"#;
 
-    let model_dir = dirs::data_local_dir()
-        .map(|path| path.join("Koharu"))
-        .unwrap_or(PathBuf::from("."))
-        .join("models");
+    let app_data_root = default_app_data_root();
 
     let runtime = RuntimeManager::new(
-        Settings::from_paths(koharu_runtime::default_runtime_root(), model_dir),
+        Settings {
+            runtime: DirectorySetting {
+                path: app_data_root.join("runtime"),
+            },
+            models: DirectorySetting {
+                path: app_data_root.join("models"),
+            },
+        },
         ComputePolicy::PreferGpu,
     )?;
     runtime.prepare().await?;

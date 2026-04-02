@@ -71,7 +71,7 @@ http://127.0.0.1:<PORT>/mcp
 | `ocr` | 検出済みブロックに OCR をかける | `index` |
 | `inpaint` | 現在の mask を使って文字を除去する | `index` |
 | `render` | 翻訳済みテキストをページに描き戻す | `index`, 任意で `text_block_index`, `shader_effect`, `font_family` |
-| `process` | detect -> OCR -> inpaint -> translate -> render をまとめて開始する | 任意で `index`, `llm_model_id`, `language`, `shader_effect`, `font_family` |
+| `process` | detect -> OCR -> inpaint -> translate -> render をまとめて開始する | 任意で `document_id`, `llm_target`, `language`, `shader_effect`, `font_family` |
 
 `process` は粗粒度の convenience tool です。より細かな制御や切り分けが必要なら、各段階ツールを個別に使ってください。
 
@@ -79,7 +79,7 @@ http://127.0.0.1:<PORT>/mcp
 
 | Tool | 役割 | 主な引数 |
 | --- | --- | --- |
-| `llm_load` | 翻訳モデルを読み込む | `id`, 任意で `temperature`, `max_tokens`, `custom_system_prompt` |
+| `llm_load` | 翻訳モデル target を読み込む | `target`, 任意で `options.temperature`, `options.max_tokens`, `options.custom_system_prompt` |
 | `llm_offload` | 現在のモデルをアンロードする | なし |
 | `llm_generate` | 1 ブロックまたは全ブロックを翻訳する | `index`, 任意で `text_block_index`, `language` |
 

@@ -48,8 +48,12 @@ export function useRenderBrushDrawing({
         data: Array.from(patch),
         region,
       })
-      await queryClient.invalidateQueries({ queryKey: getGetDocumentQueryKey(documentId) })
-      await queryClient.invalidateQueries({ queryKey: getListDocumentsQueryKey() })
+      await queryClient.invalidateQueries({
+        queryKey: getGetDocumentQueryKey(documentId),
+      })
+      await queryClient.invalidateQueries({
+        queryKey: getListDocumentsQueryKey(),
+      })
       useEditorUiStore.getState().setShowBrushLayer(true)
     },
   })

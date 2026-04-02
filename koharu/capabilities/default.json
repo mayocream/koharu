@@ -3,9 +3,7 @@
   "identifier": "default",
   "description": "default",
   "windows": [
-    "main",
-    "splashscreen",
-    "bootstrap"
+    "main"
   ],
   "permissions": [
     "core:default",
@@ -17,6 +15,7 @@
     "core:window:allow-maximize",
     "core:window:allow-toggle-maximize",
     "core:window:allow-internal-toggle-maximize",
+    "process:default",
     "updater:default"
   ]
 }

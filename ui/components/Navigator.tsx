@@ -11,9 +11,10 @@ import { useEditorUiStore } from '@/lib/stores/editorUiStore'
 import { Button } from '@/components/ui/button'
 import { ScrollArea } from '@/components/ui/scroll-area'
 
-const THUMBNAIL_DPR = typeof window !== 'undefined'
-  ? Math.min(Math.ceil(window.devicePixelRatio || 1), 3)
-  : 2
+const THUMBNAIL_DPR =
+  typeof window !== 'undefined'
+    ? Math.min(Math.ceil(window.devicePixelRatio || 1), 3)
+    : 2
 
 // Fixed row height: thumbnail (aspect 3:4 in ~150px width ≈ 200px) + page number + padding
 const ROW_HEIGHT = 230
@@ -22,13 +23,13 @@ const OVERSCAN = 5
 export function Navigator() {
   const { data: documents = [] } = useListDocuments()
   const totalPages = documents.length
-  const currentDocumentId = useEditorUiStore(
-    (state) => state.currentDocumentId,
-  )
+  const currentDocumentId = useEditorUiStore((state) => state.currentDocumentId)
   const setCurrentDocumentId = useEditorUiStore(
     (state) => state.setCurrentDocumentId,
   )
-  const currentDocumentIndex = documents.findIndex((d) => d.id === currentDocumentId)
+  const currentDocumentIndex = documents.findIndex(
+    (d) => d.id === currentDocumentId,
+  )
   const viewportRef = useRef<HTMLDivElement | null>(null)
   const { t } = useTranslation()
 
@@ -87,9 +88,7 @@ export function Navigator() {
                   index={virtualRow.index}
                   documentId={doc?.id}
                   selected={doc?.id === currentDocumentId}
-                  onSelect={() =>
-                    doc && setCurrentDocumentId(doc.id)
-                  }
+                  onSelect={() => doc && setCurrentDocumentId(doc.id)}
                 />
               </div>
             )
@@ -139,9 +138,7 @@ function PagePreview({
         )}
       </div>
       <div className='text-muted-foreground flex shrink-0 items-center text-xs'>
-        <div className='text-foreground mx-auto font-semibold'>
-          {index + 1}
-        </div>
+        <div className='text-foreground mx-auto font-semibold'>{index + 1}</div>
       </div>
     </Button>
   )

@@ -1,6 +1,3 @@
-use std::io::Cursor;
-
-use anyhow::Context;
 use axum::{
     Json,
     body::Body,
@@ -11,27 +8,19 @@ use axum::{
     },
     response::{IntoResponse, Response},
 };
-use image::ImageFormat;
-use koharu_app::{
-    AppResources, operations,
-    state_tx::{self, ChangedField},
-};
+use koharu_app::{AppResources, config as app_config, edit, io, llm, ml, pipeline};
 use koharu_core::{
-    ApiKeyResponse, ApiKeyValue, BootstrapConfig, CreateTextBlock, Document, DocumentDetail,
-    DocumentSummary, DownloadState, ExportLayer, ExportResult, FontFaceInfo, InpaintRegion,
-    JobState, JobStatus, LlmLoadRequest, LlmModelInfo, LlmPingRequest, LlmPingResponse,
-    MaskRegionRequest, MetaInfo, PipelineJobRequest, Region, RenderRequest, TextBlock,
-    TextBlockDetail, TextBlockInput, TextBlockPatch, TranslateRequest,
+    AppConfig, AppConfigUpdate, CreateTextBlock, Document, DocumentDetail, DocumentSummary,
+    DownloadState, ExportLayer, ExportResult, FontFaceInfo, JobState, JobStatus, LlmCatalog,
+    LlmLoadRequest, LlmState, MaskRegionRequest, MetaInfo, PipelineJobRequest, RenderRequest,
+    TextBlock, TextBlockDetail, TextBlockInput, TextBlockPatch, TranslateRequest,
 };
 use koharu_psd::{PsdExportOptions, TextLayerMode};
 use serde::{Deserialize, Serialize};
 use utoipa::IntoParams;
 use utoipa_axum::{router::OpenApiRouter, routes};
 
-use crate::{
-    shared::{SharedState, get_resources},
-    tracker::Tracker,
-};
+use crate::{shared::SharedState, tracker::Tracker};
 
 const MAX_BODY_SIZE: usize = 1024 * 1024 * 1024;
 
@@ -43,7 +32,9 @@ pub struct ApiState {
 
 impl ApiState {
     fn resources(&self) -> ApiResult<AppResources> {
-        get_resources(&self.resources).map_err(ApiError::service_unavailable)
+        self.resources.get().ok_or_else(|| {
+            ApiError::service_unavailable(anyhow::anyhow!("Resources not initialized"))
+        })
     }
 }
 
@@ -65,9 +56,7 @@ pub fn api() -> (axum::Router<ApiState>, utoipa::openapi::OpenApi) {
         .routes(routes!(export_document))
         .routes(routes!(batch_export))
         .routes(routes!(get_llm, load_llm, unload_llm))
-        .routes(routes!(list_llm_models))
-        .routes(routes!(check_llm_health))
-        .routes(routes!(get_api_key, set_api_key))
+        .routes(routes!(get_llm_catalog))
         .routes(routes!(start_pipeline))
         .routes(routes!(list_jobs))
         .routes(routes!(get_job, cancel_job))
@@ -75,7 +64,6 @@ pub fn api() -> (axum::Router<ApiState>, utoipa::openapi::OpenApi) {
         .routes(routes!(get_meta))
         .routes(routes!(list_fonts))
         .routes(routes!(get_config, update_config))
-        .routes(routes!(initialize))
         .split_for_parts()
 }
 
@@ -111,10 +99,6 @@ impl ApiError {
         Self::new(StatusCode::NOT_FOUND, message)
     }
 
-    fn conflict(message: impl Into<String>) -> Self {
-        Self::new(StatusCode::CONFLICT, message)
-    }
-
     fn service_unavailable(error: anyhow::Error) -> Self {
         Self::new(StatusCode::SERVICE_UNAVAILABLE, error.to_string())
     }
@@ -137,8 +121,7 @@ impl From<anyhow::Error> for ApiError {
 
 impl IntoResponse for ApiError {
     fn into_response(self) -> Response {
-        let status =
-            StatusCode::from_u16(self.status).unwrap_or(StatusCode::INTERNAL_SERVER_ERROR);
+        let status = StatusCode::from_u16(self.status).unwrap_or(StatusCode::INTERNAL_SERVER_ERROR);
         (status, Json(self)).into_response()
     }
 }
@@ -158,9 +141,8 @@ struct ImportQuery {
 
 #[derive(Debug, Deserialize, IntoParams)]
 #[serde(rename_all = "camelCase")]
-struct LlmModelsQuery {
+struct LlmCatalogQuery {
     language: Option<String>,
-    openai_compatible_base_url: Option<String>,
 }
 
 #[derive(Debug, Deserialize, IntoParams)]
@@ -185,12 +167,13 @@ struct ExportBatchRequest {
     operation_id = "getConfig",
     tag = "system",
     responses(
-        (status = 200, body = BootstrapConfig),
+        (status = 200, body = AppConfig),
         (status = 503, body = ApiError),
     ),
 )]
-async fn get_config(State(state): State<ApiState>) -> ApiResult<Json<BootstrapConfig>> {
-    let config = state.resources.get_config().map_err(ApiError::internal)?;
+async fn get_config() -> ApiResult<Json<AppConfig>> {
+    let stored = app_config::load().map_err(ApiError::internal)?;
+    let config = app_config::to_public_config(&stored).map_err(ApiError::internal)?;
     Ok(Json(config))
 }
 
@@ -199,43 +182,20 @@ async fn get_config(State(state): State<ApiState>) -> ApiResult<Json<BootstrapCo
     path = "/config",
     operation_id = "updateConfig",
     tag = "system",
-    request_body = BootstrapConfig,
+    request_body = AppConfigUpdate,
     responses(
-        (status = 200, body = BootstrapConfig),
+        (status = 200, body = AppConfig),
         (status = 400, body = ApiError),
     ),
 )]
-async fn update_config(
-    State(state): State<ApiState>,
-    Json(config): Json<BootstrapConfig>,
-) -> ApiResult<Json<BootstrapConfig>> {
-    let saved = state.resources.put_config(config).map_err(ApiError::from)?;
+async fn update_config(Json(config): Json<AppConfigUpdate>) -> ApiResult<Json<AppConfig>> {
+    let current = app_config::load().map_err(ApiError::internal)?;
+    let stored = app_config::from_public_update(config.clone()).map_err(ApiError::from)?;
+    app_config::move_app_data_if_needed(&current, &stored).map_err(ApiError::internal)?;
+    app_config::save(&stored).map_err(ApiError::internal)?;
+    app_config::apply_secret_updates(&config).map_err(ApiError::from)?;
+    let saved = app_config::to_public_config(&stored).map_err(ApiError::internal)?;
     Ok(Json(saved))
-}
-
-#[utoipa::path(
-    post,
-    path = "/initialize",
-    operation_id = "initialize",
-    tag = "system",
-    responses(
-        (status = 204),
-        (status = 409, body = ApiError),
-        (status = 500, body = ApiError),
-    ),
-)]
-async fn initialize(State(state): State<ApiState>) -> ApiResult<StatusCode> {
-    match state.resources.initialize().await {
-        Ok(()) => Ok(StatusCode::NO_CONTENT),
-        Err(error) => {
-            let message = error.to_string();
-            if message.contains("already in progress") {
-                Err(ApiError::conflict(message))
-            } else {
-                Err(ApiError::internal(error))
-            }
-        }
-    }
 }
 
 #[utoipa::path(
@@ -250,7 +210,7 @@ async fn initialize(State(state): State<ApiState>) -> ApiResult<StatusCode> {
 )]
 async fn get_meta(State(state): State<ApiState>) -> ApiResult<Json<MetaInfo>> {
     let resources = state.resources()?;
-    let device = operations::device(resources.clone()).await?;
+    let device = io::device(resources.clone()).await?;
     Ok(Json(MetaInfo {
         version: resources.version.to_string(),
         ml_device: device.ml_device,
@@ -269,7 +229,7 @@ async fn get_meta(State(state): State<ApiState>) -> ApiResult<Json<MetaInfo>> {
 )]
 async fn list_fonts(State(state): State<ApiState>) -> ApiResult<Json<Vec<FontFaceInfo>>> {
     let resources = state.resources()?;
-    let fonts = operations::list_font_families(resources)
+    let fonts = ml::list_font_families(resources)
         .await
         .map_err(ApiError::from)?;
     Ok(Json(fonts))
@@ -291,8 +251,10 @@ async fn list_fonts(State(state): State<ApiState>) -> ApiResult<Json<Vec<FontFac
 )]
 async fn list_documents(State(state): State<ApiState>) -> ApiResult<Json<Vec<DocumentSummary>>> {
     let resources = state.resources()?;
-    let guard = resources.state.read().await;
-    let documents = guard.documents.iter().map(DocumentSummary::from).collect();
+    let documents = resources
+        .cache
+        .list_documents()
+        .map_err(ApiError::internal)?;
     Ok(Json(documents))
 }
 
@@ -313,20 +275,45 @@ async fn get_document(
     Path(document_id): Path<String>,
 ) -> ApiResult<Json<DocumentDetail>> {
     let resources = state.resources()?;
-    let guard = resources.state.read().await;
-    let doc = guard
-        .documents
+    let doc = resources
+        .cache
+        .get(&document_id)
+        .await
+        .map_err(|_| ApiError::not_found("Document not found"))?;
+
+    let image = serde_bytes::ByteBuf::from(
+        koharu_app::utils::encode_image(&doc.image, "webp").map_err(ApiError::internal)?,
+    );
+    let segment = doc
+        .segment
+        .as_ref()
+        .map(|s| koharu_app::utils::encode_image(s, "webp").map(serde_bytes::ByteBuf::from))
+        .transpose()
+        .map_err(ApiError::internal)?;
+    let inpainted = doc
+        .inpainted
+        .as_ref()
+        .map(|s| koharu_app::utils::encode_image(s, "webp").map(serde_bytes::ByteBuf::from))
+        .transpose()
+        .map_err(ApiError::internal)?;
+    let brush_layer = doc
+        .brush_layer
+        .as_ref()
+        .map(|s| koharu_app::utils::encode_image(s, "webp").map(serde_bytes::ByteBuf::from))
+        .transpose()
+        .map_err(ApiError::internal)?;
+    let rendered = doc
+        .rendered
+        .as_ref()
+        .map(|s| koharu_app::utils::encode_image(s, "webp").map(serde_bytes::ByteBuf::from))
+        .transpose()
+        .map_err(ApiError::internal)?;
+
+    let text_blocks = doc
+        .text_blocks
         .iter()
-        .find(|d| d.id == document_id)
-        .ok_or_else(|| ApiError::not_found("Document not found"))?;
-
-    let image = serde_bytes::ByteBuf::from(encode_webp(&doc.image)?);
-    let segment = doc.segment.as_ref().map(|s| encode_webp(s).map(serde_bytes::ByteBuf::from)).transpose()?;
-    let inpainted = doc.inpainted.as_ref().map(|s| encode_webp(s).map(serde_bytes::ByteBuf::from)).transpose()?;
-    let brush_layer = doc.brush_layer.as_ref().map(|s| encode_webp(s).map(serde_bytes::ByteBuf::from)).transpose()?;
-    let rendered = doc.rendered.as_ref().map(|s| encode_webp(s).map(serde_bytes::ByteBuf::from)).transpose()?;
-
-    let text_blocks = doc.text_blocks.iter().map(koharu_core::TextBlockDetail::from).collect();
+        .map(koharu_core::TextBlockDetail::from)
+        .collect();
 
     let detail = DocumentDetail {
         id: doc.id.clone(),
@@ -334,7 +321,6 @@ async fn get_document(
         name: doc.name.clone(),
         width: doc.width,
         height: doc.height,
-        revision: doc.revision,
         text_blocks,
         image,
         segment,
@@ -343,7 +329,6 @@ async fn get_document(
         rendered,
     };
 
-    drop(guard);
     Ok(Json(detail))
 }
 
@@ -372,16 +357,15 @@ async fn get_document_thumbnail(
 ) -> ApiResult<Response> {
     let size = query.size.unwrap_or(200).min(800);
     let resources = state.resources()?;
-    let guard = resources.state.read().await;
-    let doc = guard
-        .documents
-        .iter()
-        .find(|d| d.id == document_id)
-        .ok_or_else(|| ApiError::not_found("Document not found"))?;
+    let doc = resources
+        .cache
+        .get(&document_id)
+        .await
+        .map_err(|_| ApiError::not_found("Document not found"))?;
     let source = doc.rendered.as_ref().unwrap_or(&doc.image);
     let thumbnail = source.thumbnail(size, size);
-    let bytes = encode_webp(&thumbnail.into())?;
-    drop(guard);
+    let bytes =
+        koharu_app::utils::encode_image(&thumbnail.into(), "webp").map_err(ApiError::internal)?;
     Ok(binary_response(bytes, "image/webp", None))
 }
 
@@ -404,7 +388,7 @@ async fn import_documents(
     mut multipart: Multipart,
 ) -> ApiResult<Json<koharu_core::ImportResult>> {
     let resources = state.resources()?;
-    let mut files = Vec::new();
+    let mut uploaded_files = Vec::new();
 
     while let Some(field) = multipart
         .next_field()
@@ -419,31 +403,32 @@ async fn import_documents(
             .bytes()
             .await
             .map_err(|error| ApiError::bad_request(error.to_string()))?;
-        files.push(koharu_core::FileEntry {
-            name: filename,
-            data: data.to_vec(),
-        });
+        uploaded_files.push((filename, data.to_vec()));
     }
 
-    if files.is_empty() {
+    if uploaded_files.is_empty() {
         return Err(ApiError::bad_request("No files uploaded"));
     }
+
+    let files = uploaded_files
+        .into_iter()
+        .map(|(name, data)| koharu_core::FileEntry { name, data })
+        .collect();
 
     let payload = koharu_core::OpenDocumentsPayload { files };
     match query.mode.unwrap_or(koharu_core::ImportMode::Replace) {
         koharu_core::ImportMode::Replace => {
-            operations::open_documents(resources.clone(), payload).await?;
+            io::open_documents(resources.clone(), payload).await?;
         }
         koharu_core::ImportMode::Append => {
-            operations::add_documents(resources.clone(), payload).await?;
+            io::add_documents(resources.clone(), payload).await?;
         }
     }
 
-    let documents = state_tx::list_docs(&resources.state)
-        .await
-        .iter()
-        .map(DocumentSummary::from)
-        .collect::<Vec<_>>();
+    let documents = resources
+        .cache
+        .list_documents()
+        .map_err(ApiError::internal)?;
 
     Ok(Json(koharu_core::ImportResult {
         total_count: documents.len(),
@@ -472,8 +457,7 @@ async fn detect_document(
     Path(document_id): Path<String>,
 ) -> ApiResult<StatusCode> {
     let resources = state.resources()?;
-    let (index, _) = find_document(&resources, &document_id).await?;
-    operations::detect(resources, koharu_core::IndexPayload { index }).await?;
+    ml::detect(resources, &document_id).await?;
     Ok(StatusCode::NO_CONTENT)
 }
 
@@ -494,8 +478,7 @@ async fn recognize_document(
     Path(document_id): Path<String>,
 ) -> ApiResult<StatusCode> {
     let resources = state.resources()?;
-    let (index, _) = find_document(&resources, &document_id).await?;
-    operations::ocr(resources, koharu_core::IndexPayload { index }).await?;
+    ml::ocr(resources, &document_id).await?;
     Ok(StatusCode::NO_CONTENT)
 }
 
@@ -516,8 +499,7 @@ async fn inpaint_document(
     Path(document_id): Path<String>,
 ) -> ApiResult<StatusCode> {
     let resources = state.resources()?;
-    let (index, _) = find_document(&resources, &document_id).await?;
-    operations::inpaint(resources, koharu_core::IndexPayload { index }).await?;
+    ml::inpaint(resources, &document_id).await?;
     Ok(StatusCode::NO_CONTENT)
 }
 
@@ -540,22 +522,20 @@ async fn render_document(
     Json(request): Json<RenderRequest>,
 ) -> ApiResult<StatusCode> {
     let resources = state.resources()?;
-    let (index, document) = find_document(&resources, &document_id).await?;
+    let document = find_document(&resources, &document_id).await?;
     let text_block_index = request
         .text_block_id
         .as_deref()
         .map(|id| find_text_block_index(&document, id))
         .transpose()?;
 
-    operations::render(
+    ml::render(
         resources,
-        koharu_core::RenderPayload {
-            index,
-            text_block_index,
-            shader_effect: request.shader_effect,
-            shader_stroke: request.shader_stroke,
-            font_family: request.font_family,
-        },
+        &document_id,
+        text_block_index,
+        request.shader_effect,
+        request.shader_stroke,
+        request.font_family.as_deref(),
     )
     .await?;
 
@@ -581,20 +561,18 @@ async fn translate_document(
     Json(request): Json<TranslateRequest>,
 ) -> ApiResult<StatusCode> {
     let resources = state.resources()?;
-    let (index, document) = find_document(&resources, &document_id).await?;
+    let document = find_document(&resources, &document_id).await?;
     let text_block_index = request
         .text_block_id
         .as_deref()
         .map(|id| find_text_block_index(&document, id))
         .transpose()?;
 
-    operations::llm_generate(
+    llm::llm_generate(
         resources,
-        koharu_core::LlmGeneratePayload {
-            index,
-            text_block_index,
-            language: request.language,
-        },
+        &document_id,
+        text_block_index,
+        request.language.as_deref(),
     )
     .await?;
 
@@ -624,16 +602,7 @@ async fn update_mask(
     Json(request): Json<MaskRegionRequest>,
 ) -> ApiResult<StatusCode> {
     let resources = state.resources()?;
-    let (index, _) = find_document(&resources, &document_id).await?;
-    operations::update_inpaint_mask(
-        resources,
-        koharu_core::UpdateInpaintMaskPayload {
-            index,
-            mask: request.data,
-            region: request.region.map(to_inpaint_region),
-        },
-    )
-    .await?;
+    edit::update_inpaint_mask(resources, &document_id, &request.data, request.region).await?;
     Ok(StatusCode::NO_CONTENT)
 }
 
@@ -655,16 +624,7 @@ async fn update_brush_layer(
     Json(request): Json<koharu_core::BrushRegionRequest>,
 ) -> ApiResult<StatusCode> {
     let resources = state.resources()?;
-    let (index, _) = find_document(&resources, &document_id).await?;
-    operations::update_brush_layer(
-        resources,
-        koharu_core::UpdateBrushLayerPayload {
-            index,
-            patch: request.data,
-            region: to_inpaint_region(request.region),
-        },
-    )
-    .await?;
+    edit::update_brush_layer(resources, &document_id, &request.data, request.region).await?;
     Ok(StatusCode::NO_CONTENT)
 }
 
@@ -686,15 +646,7 @@ async fn inpaint_region(
     Json(request): Json<koharu_core::InpaintRegionRequest>,
 ) -> ApiResult<StatusCode> {
     let resources = state.resources()?;
-    let (index, _) = find_document(&resources, &document_id).await?;
-    operations::inpaint_partial(
-        resources,
-        koharu_core::InpaintPartialPayload {
-            index,
-            region: to_inpaint_region(request.region),
-        },
-    )
-    .await?;
+    edit::inpaint_partial(resources, &document_id, request.region).await?;
     Ok(StatusCode::NO_CONTENT)
 }
 
@@ -721,31 +673,32 @@ async fn create_text_block(
     Json(request): Json<CreateTextBlock>,
 ) -> ApiResult<Json<TextBlockDetail>> {
     let resources = state.resources()?;
-    let (index, _) = find_document(&resources, &document_id).await?;
+    let mut doc = resources
+        .cache
+        .get(&document_id)
+        .await
+        .map_err(|_| ApiError::not_found("Document not found"))?;
 
-    let detail = state_tx::mutate_doc(
-        &resources.state,
-        index,
-        &[ChangedField::TextBlocks],
-        |document| {
-            let mut block = TextBlock {
-                x: request.x,
-                y: request.y,
-                width: request.width,
-                height: request.height,
-                confidence: 1.0,
-                ..Default::default()
-            };
-            block.set_layout_seed(block.x, block.y, block.width, block.height);
-            document.text_blocks.push(block);
-            let block = document
-                .text_blocks
-                .last()
-                .ok_or_else(|| anyhow::anyhow!("Failed to append text block"))?;
-            Ok(TextBlockDetail::from(block))
-        },
-    )
-    .await?;
+    let mut block = TextBlock {
+        x: request.x,
+        y: request.y,
+        width: request.width,
+        height: request.height,
+        confidence: 1.0,
+        ..Default::default()
+    };
+    block.set_layout_seed(block.x, block.y, block.width, block.height);
+    doc.text_blocks.push(block);
+    let detail = doc
+        .text_blocks
+        .last()
+        .map(TextBlockDetail::from)
+        .ok_or_else(|| ApiError::internal(anyhow::anyhow!("Failed to append text block")))?;
+    resources
+        .cache
+        .put(&doc)
+        .await
+        .map_err(ApiError::internal)?;
 
     Ok(Json(detail))
 }
@@ -769,91 +722,77 @@ async fn put_text_blocks(
     Json(inputs): Json<Vec<TextBlockInput>>,
 ) -> ApiResult<StatusCode> {
     let resources = state.resources()?;
-    let (index, _) = find_document(&resources, &document_id).await?;
 
-    let any_content_changed = state_tx::mutate_doc(
-        &resources.state,
-        index,
-        &[ChangedField::TextBlocks],
-        |document| {
-            let mut any_changed = false;
+    let mut doc = resources
+        .cache
+        .get(&document_id)
+        .await
+        .map_err(|_| ApiError::not_found("Document not found"))?;
 
-            // Build a set of incoming IDs for deletion detection
-            let incoming_ids: std::collections::HashSet<&str> = inputs
-                .iter()
-                .filter_map(|input| input.id.as_deref())
-                .collect();
+    let mut any_changed = false;
 
-            // Delete blocks not present in the incoming array
-            let before_len = document.text_blocks.len();
-            document
-                .text_blocks
-                .retain(|block| incoming_ids.contains(block.id.as_str()));
-            if document.text_blocks.len() != before_len {
-                any_changed = true;
-            }
+    // Build a set of incoming IDs for deletion detection
+    let incoming_ids: std::collections::HashSet<&str> = inputs
+        .iter()
+        .filter_map(|input| input.id.as_deref())
+        .collect();
 
-            for input in &inputs {
-                if let Some(ref id) = input.id {
-                    // Update existing block
-                    if let Some(block) = document
-                        .text_blocks
-                        .iter_mut()
-                        .find(|b| &b.id == id)
-                    {
-                        let patch = TextBlockPatch {
-                            text: input.text.clone(),
-                            translation: input.translation.clone(),
-                            x: Some(input.x),
-                            y: Some(input.y),
-                            width: Some(input.width),
-                            height: Some(input.height),
-                            style: input.style.clone(),
-                        };
-                        let had_render = block.rendered.is_some();
-                        apply_text_block_patch(block, patch);
-                        // Content changed if the render was invalidated
-                        if had_render && block.rendered.is_none() {
-                            any_changed = true;
-                        }
-                    }
-                } else {
-                    // Create new block
-                    let mut block = TextBlock {
-                        x: input.x,
-                        y: input.y,
-                        width: input.width,
-                        height: input.height,
-                        text: input.text.clone(),
-                        translation: input.translation.clone(),
-                        style: input.style.clone(),
-                        confidence: 1.0,
-                        ..Default::default()
-                    };
-                    block.set_layout_seed(block.x, block.y, block.width, block.height);
-                    document.text_blocks.push(block);
+    // Delete blocks not present in the incoming array
+    let before_len = doc.text_blocks.len();
+    doc.text_blocks
+        .retain(|block| incoming_ids.contains(block.id.as_str()));
+    if doc.text_blocks.len() != before_len {
+        any_changed = true;
+    }
+
+    for input in &inputs {
+        if let Some(ref id) = input.id {
+            // Update existing block
+            if let Some(block) = doc.text_blocks.iter_mut().find(|b| &b.id == id) {
+                let patch = TextBlockPatch {
+                    text: input.text.clone(),
+                    translation: input.translation.clone(),
+                    x: Some(input.x),
+                    y: Some(input.y),
+                    width: Some(input.width),
+                    height: Some(input.height),
+                    style: input.style.clone(),
+                };
+                let had_render = block.rendered.is_some();
+                apply_text_block_patch(block, patch);
+                // Content changed if the render was invalidated
+                if had_render && block.rendered.is_none() {
                     any_changed = true;
                 }
             }
+        } else {
+            // Create new block
+            let mut block = TextBlock {
+                x: input.x,
+                y: input.y,
+                width: input.width,
+                height: input.height,
+                text: input.text.clone(),
+                translation: input.translation.clone(),
+                style: input.style.clone(),
+                confidence: 1.0,
+                ..Default::default()
+            };
+            block.set_layout_seed(block.x, block.y, block.width, block.height);
+            doc.text_blocks.push(block);
+            any_changed = true;
+        }
+    }
 
-            Ok(any_changed)
-        },
-    )
-    .await?;
+    resources
+        .cache
+        .put(&doc)
+        .await
+        .map_err(ApiError::internal)?;
 
     // Auto-render if any block content/geometry changed
-    if any_content_changed {
-        let _ = operations::render(
-            resources,
-            koharu_core::RenderPayload {
-                index,
-                text_block_index: None,
-                shader_effect: None,
-                shader_stroke: None,
-                font_family: None,
-            },
-        )
-        .await;
+    if any_changed {
+        let _ = ml::render(resources, &document_id, None, None, None, None).await;
     }
 
     Ok(StatusCode::NO_CONTENT)
@@ -881,23 +820,23 @@ async fn patch_text_block(
     Json(request): Json<TextBlockPatch>,
 ) -> ApiResult<Json<TextBlockDetail>> {
     let resources = state.resources()?;
-    let (index, _) = find_document(&resources, &document_id).await?;
-
-    let detail = state_tx::mutate_doc(
-        &resources.state,
-        index,
-        &[ChangedField::TextBlocks],
-        |document| {
-            let block = document
-                .text_blocks
-                .iter_mut()
-                .find(|block| block.id == text_block_id)
-                .ok_or_else(|| anyhow::anyhow!("Text block not found: {text_block_id}"))?;
-            apply_text_block_patch(block, request.clone());
-            Ok(TextBlockDetail::from(&*block))
-        },
-    )
-    .await?;
+    let mut doc = resources
+        .cache
+        .get(&document_id)
+        .await
+        .map_err(|_| ApiError::not_found("Document not found"))?;
+    let block = doc
+        .text_blocks
+        .iter_mut()
+        .find(|block| block.id == text_block_id)
+        .ok_or_else(|| ApiError::not_found(format!("Text block not found: {text_block_id}")))?;
+    apply_text_block_patch(block, request);
+    let detail = TextBlockDetail::from(&*block);
+    resources
+        .cache
+        .put(&doc)
+        .await
+        .map_err(ApiError::internal)?;
 
     Ok(Json(detail))
 }
@@ -922,23 +861,22 @@ async fn delete_text_block(
     Path((document_id, text_block_id)): Path<(String, String)>,
 ) -> ApiResult<StatusCode> {
     let resources = state.resources()?;
-    let (index, _) = find_document(&resources, &document_id).await?;
-
-    state_tx::mutate_doc(
-        &resources.state,
-        index,
-        &[ChangedField::TextBlocks],
-        |document| {
-            let block_index = document
-                .text_blocks
-                .iter()
-                .position(|block| block.id == text_block_id)
-                .ok_or_else(|| anyhow::anyhow!("Text block not found: {text_block_id}"))?;
-            document.text_blocks.remove(block_index);
-            Ok(())
-        },
-    )
-    .await?;
+    let mut doc = resources
+        .cache
+        .get(&document_id)
+        .await
+        .map_err(|_| ApiError::not_found("Document not found"))?;
+    let block_index = doc
+        .text_blocks
+        .iter()
+        .position(|block| block.id == text_block_id)
+        .ok_or_else(|| ApiError::not_found(format!("Text block not found: {text_block_id}")))?;
+    doc.text_blocks.remove(block_index);
+    resources
+        .cache
+        .put(&doc)
+        .await
+        .map_err(ApiError::internal)?;
 
     Ok(StatusCode::NO_CONTENT)
 }
@@ -949,36 +887,23 @@ async fn delete_text_block(
 
 #[utoipa::path(
     get,
-    path = "/llm/models",
-    operation_id = "listLlmModels",
+    path = "/llm/catalog",
+    operation_id = "getLlmCatalog",
     tag = "llm",
-    params(LlmModelsQuery),
+    params(LlmCatalogQuery),
     responses(
-        (status = 200, body = Vec<LlmModelInfo>),
+        (status = 200, body = LlmCatalog),
         (status = 503, body = ApiError),
     ),
 )]
-async fn list_llm_models(
+async fn get_llm_catalog(
     State(state): State<ApiState>,
-    Query(query): Query<LlmModelsQuery>,
-) -> ApiResult<Json<Vec<LlmModelInfo>>> {
+    Query(query): Query<LlmCatalogQuery>,
+) -> ApiResult<Json<LlmCatalog>> {
     let resources = state.resources()?;
-    let models = operations::llm_list(
-        resources,
-        koharu_core::LlmListPayload {
-            language: query.language,
-            openai_compatible_base_url: query.openai_compatible_base_url,
-        },
-    )
-    .await?
-    .into_iter()
-    .map(|model| LlmModelInfo {
-        id: model.id,
-        languages: model.languages,
-        source: model.source.to_string(),
-    })
-    .collect();
-    Ok(Json(models))
+    Ok(Json(
+        llm::llm_catalog(resources, query.language.as_deref()).await?,
+    ))
 }
 
 #[utoipa::path(
@@ -987,11 +912,11 @@ async fn list_llm_models(
     operation_id = "getLlm",
     tag = "llm",
     responses(
-        (status = 200, body = koharu_core::LlmState),
+        (status = 200, body = LlmState),
         (status = 503, body = ApiError),
     ),
 )]
-async fn get_llm(State(state): State<ApiState>) -> ApiResult<Json<koharu_core::LlmState>> {
+async fn get_llm(State(state): State<ApiState>) -> ApiResult<Json<LlmState>> {
     let resources = state.resources()?;
     Ok(Json(resources.llm.snapshot().await))
 }
@@ -1003,7 +928,7 @@ async fn get_llm(State(state): State<ApiState>) -> ApiResult<Json<koharu_core::L
     tag = "llm",
     request_body = LlmLoadRequest,
     responses(
-        (status = 200, body = koharu_core::LlmState),
+        (status = 200, body = LlmState),
         (status = 400, body = ApiError),
         (status = 503, body = ApiError),
     ),
@@ -1011,20 +936,9 @@ async fn get_llm(State(state): State<ApiState>) -> ApiResult<Json<koharu_core::L
 async fn load_llm(
     State(state): State<ApiState>,
     Json(request): Json<LlmLoadRequest>,
-) -> ApiResult<Json<koharu_core::LlmState>> {
+) -> ApiResult<Json<LlmState>> {
     let resources = state.resources()?;
-    operations::llm_load(
-        resources.clone(),
-        koharu_core::LlmLoadPayload {
-            id: request.id,
-            api_key: request.api_key,
-            base_url: request.base_url,
-            temperature: request.temperature,
-            max_tokens: request.max_tokens,
-            custom_system_prompt: request.custom_system_prompt,
-        },
-    )
-    .await?;
+    llm::llm_load(resources.clone(), request).await?;
     Ok(Json(resources.llm.snapshot().await))
 }
 
@@ -1034,106 +948,14 @@ async fn load_llm(
     operation_id = "unloadLlm",
     tag = "llm",
     responses(
-        (status = 200, body = koharu_core::LlmState),
+        (status = 200, body = LlmState),
         (status = 503, body = ApiError),
     ),
 )]
-async fn unload_llm(State(state): State<ApiState>) -> ApiResult<Json<koharu_core::LlmState>> {
+async fn unload_llm(State(state): State<ApiState>) -> ApiResult<Json<LlmState>> {
     let resources = state.resources()?;
-    operations::llm_offload(resources.clone()).await?;
+    llm::llm_offload(resources.clone()).await?;
     Ok(Json(resources.llm.snapshot().await))
-}
-
-#[utoipa::path(
-    post,
-    path = "/llm/health",
-    operation_id = "checkLlmHealth",
-    tag = "llm",
-    request_body = LlmPingRequest,
-    responses(
-        (status = 200, body = LlmPingResponse),
-    ),
-)]
-async fn check_llm_health(
-    State(state): State<ApiState>,
-    Json(request): Json<LlmPingRequest>,
-) -> ApiResult<Json<LlmPingResponse>> {
-    match operations::llm_ping(
-        state.resources.runtime().http_client(),
-        &request.base_url,
-        request.api_key.as_deref(),
-    )
-    .await
-    {
-        Ok(result) => Ok(Json(LlmPingResponse {
-            ok: true,
-            models: result.models,
-            latency_ms: Some(result.latency_ms),
-            error: None,
-        })),
-        Err(err) => Ok(Json(LlmPingResponse {
-            ok: false,
-            models: vec![],
-            latency_ms: None,
-            error: Some(err.to_string()),
-        })),
-    }
-}
-
-// ---------------------------------------------------------------------------
-// Providers
-// ---------------------------------------------------------------------------
-
-#[utoipa::path(
-    get,
-    path = "/providers/{provider}/api-key",
-    operation_id = "getApiKey",
-    tag = "providers",
-    params(("provider" = String, Path,)),
-    responses(
-        (status = 200, body = ApiKeyResponse),
-        (status = 503, body = ApiError),
-    ),
-)]
-async fn get_api_key(
-    State(state): State<ApiState>,
-    Path(provider): Path<String>,
-) -> ApiResult<Json<ApiKeyResponse>> {
-    let resources = state.resources()?;
-    let result =
-        operations::get_api_key(resources, koharu_core::ApiKeyGetPayload { provider }).await?;
-    Ok(Json(ApiKeyResponse {
-        api_key: result.api_key,
-    }))
-}
-
-#[utoipa::path(
-    put,
-    path = "/providers/{provider}/api-key",
-    operation_id = "setApiKey",
-    tag = "providers",
-    params(("provider" = String, Path,)),
-    request_body = ApiKeyValue,
-    responses(
-        (status = 204),
-        (status = 503, body = ApiError),
-    ),
-)]
-async fn set_api_key(
-    State(state): State<ApiState>,
-    Path(provider): Path<String>,
-    Json(request): Json<ApiKeyValue>,
-) -> ApiResult<StatusCode> {
-    let resources = state.resources()?;
-    operations::set_api_key(
-        resources,
-        koharu_core::ApiKeySetPayload {
-            provider,
-            api_key: request.api_key,
-        },
-    )
-    .await?;
-    Ok(StatusCode::NO_CONTENT)
 }
 
 // ---------------------------------------------------------------------------
@@ -1156,31 +978,38 @@ async fn start_pipeline(
     Json(request): Json<PipelineJobRequest>,
 ) -> ApiResult<Json<JobState>> {
     let resources = state.resources()?;
-    let index = if let Some(document_id) = request.document_id.as_deref() {
-        Some(state_tx::find_doc_index(&resources.state, document_id).await?)
-    } else {
-        None
-    };
-    let total_documents = match index {
+    // Validate document_id exists if provided
+    if let Some(document_id) = request.document_id.as_deref() {
+        let entries = resources
+            .cache
+            .list_documents()
+            .map_err(ApiError::internal)?;
+        if !entries.iter().any(|d| d.id == document_id) {
+            return Err(ApiError::not_found(format!(
+                "Document not found: {document_id}"
+            )));
+        }
+    }
+    let total_documents = match &request.document_id {
         Some(_) => 1,
-        None => state_tx::doc_count(&resources.state).await,
+        None => resources
+            .cache
+            .list_documents()
+            .map_err(ApiError::internal)?
+            .len(),
     };
 
-    let job_id = operations::process(
+    let job_id = pipeline::process(
         resources.clone(),
         koharu_core::ProcessRequest {
-            index,
-            llm_model_id: request.llm_model_id,
-            llm_api_key: request.llm_api_key,
-            llm_base_url: request.llm_base_url,
-            llm_temperature: request.llm_temperature,
-            llm_max_tokens: request.llm_max_tokens,
-            llm_custom_system_prompt: request.llm_custom_system_prompt,
+            document_id: request.document_id.clone(),
+            llm: request.llm.clone(),
             language: request.language,
             shader_effect: request.shader_effect,
             shader_stroke: request.shader_stroke,
             font_family: request.font_family,
         },
+        state.tracker.jobs(),
     )
     .await?;
 
@@ -1312,15 +1141,21 @@ async fn export_document(
     Query(query): Query<ExportQuery>,
 ) -> ApiResult<Response> {
     let resources = state.resources()?;
-    let (_, document) = find_document(&resources, &document_id).await?;
+    let document = find_document(&resources, &document_id).await?;
 
     if format == "psd" {
-        let data = koharu_psd::export_document(&document, &app_psd_export_options())
-            .map_err(|error| ApiError::bad_request(error.to_string()))?;
+        let data = koharu_psd::export_document(
+            &document,
+            &PsdExportOptions {
+                text_layer_mode: TextLayerMode::Editable,
+                ..PsdExportOptions::default()
+            },
+        )
+        .map_err(|error| ApiError::bad_request(error.to_string()))?;
         return Ok(binary_response(
             data,
             "image/vnd.adobe.photoshop",
-            Some(psd_export_filename(&document)),
+            Some(format!("{}_koharu.psd", document.name)),
         ));
     }
 
@@ -1332,8 +1167,8 @@ async fn export_document(
         .and_then(|value| value.to_str())
         .unwrap_or("jpg")
         .to_ascii_lowercase();
-    let data = encode_image(image, &ext)?;
-    let content_type = mime_from_ext(&ext);
+    let data = koharu_app::utils::encode_image(image, &ext).map_err(ApiError::internal)?;
+    let content_type = koharu_app::utils::mime_from_ext(&ext);
     Ok(binary_response(data, content_type, Some(filename)))
 }
 
@@ -1354,23 +1189,18 @@ async fn batch_export(
 ) -> ApiResult<Json<ExportResult>> {
     let resources = state.resources()?;
     let count = match request.layer.unwrap_or(ExportLayer::Rendered) {
-        ExportLayer::Rendered => operations::export_all_rendered(resources).await?,
-        ExportLayer::Inpainted => operations::export_all_inpainted(resources).await?,
+        ExportLayer::Rendered => io::export_all_rendered(resources).await?,
+        ExportLayer::Inpainted => io::export_all_inpainted(resources).await?,
     };
     Ok(Json(ExportResult { count }))
 }
 
-async fn find_document(
-    resources: &AppResources,
-    document_id: &str,
-) -> ApiResult<(usize, Document)> {
-    let index = state_tx::find_doc_index(&resources.state, document_id)
+async fn find_document(resources: &AppResources, document_id: &str) -> ApiResult<Document> {
+    resources
+        .cache
+        .get(document_id)
         .await
-        .map_err(ApiError::from)?;
-    let document = state_tx::read_doc(&resources.state, index)
-        .await
-        .map_err(ApiError::from)?;
-    Ok((index, document))
+        .map_err(|_| ApiError::not_found(format!("Document not found: {document_id}")))
 }
 
 fn find_text_block_index(document: &Document, text_block_id: &str) -> ApiResult<usize> {
@@ -1379,21 +1209,6 @@ fn find_text_block_index(document: &Document, text_block_id: &str) -> ApiResult<
         .iter()
         .position(|block| block.id == text_block_id)
         .ok_or_else(|| ApiError::not_found(format!("Text block not found: {text_block_id}")))
-}
-
-fn encode_webp(image: &koharu_core::SerializableDynamicImage) -> ApiResult<Vec<u8>> {
-    encode_image(image, "webp")
-}
-
-fn encode_image(image: &koharu_core::SerializableDynamicImage, ext: &str) -> ApiResult<Vec<u8>> {
-    let format = ImageFormat::from_extension(ext).unwrap_or(ImageFormat::Jpeg);
-    let mut cursor = Cursor::new(Vec::new());
-    image
-        .0
-        .write_to(&mut cursor, format)
-        .with_context(|| format!("failed to encode image as {ext}"))
-        .map_err(ApiError::internal)?;
-    Ok(cursor.into_inner())
 }
 
 fn binary_response(data: Vec<u8>, content_type: &str, filename: Option<String>) -> Response {
@@ -1407,15 +1222,6 @@ fn binary_response(data: Vec<u8>, content_type: &str, filename: Option<String>) 
         response.headers_mut().insert(CONTENT_DISPOSITION, value);
     }
     response
-}
-
-fn mime_from_ext(ext: &str) -> &'static str {
-    match ext {
-        "png" => "image/png",
-        "jpg" | "jpeg" => "image/jpeg",
-        "webp" => "image/webp",
-        _ => "application/octet-stream",
-    }
 }
 
 fn export_target(
@@ -1444,26 +1250,6 @@ fn export_target(
                 .ok_or_else(|| ApiError::not_found("No inpainted image found"))?;
             Ok((image, format!("{}_inpainted.{ext}", document.name)))
         }
-    }
-}
-
-fn psd_export_filename(document: &Document) -> String {
-    format!("{}_koharu.psd", document.name)
-}
-
-fn app_psd_export_options() -> PsdExportOptions {
-    PsdExportOptions {
-        text_layer_mode: TextLayerMode::Editable,
-        ..PsdExportOptions::default()
-    }
-}
-
-fn to_inpaint_region(region: Region) -> InpaintRegion {
-    InpaintRegion {
-        x: region.x,
-        y: region.y,
-        width: region.width,
-        height: region.height,
     }
 }
 
@@ -1530,9 +1316,8 @@ fn apply_text_block_patch(block: &mut TextBlock, patch: TextBlockPatch) {
 
 #[cfg(test)]
 mod tests {
-    use super::{app_psd_export_options, apply_text_block_patch, psd_export_filename};
-    use koharu_core::{Document, TextAlign, TextBlock, TextBlockPatch, TextDirection, TextStyle};
-    use koharu_psd::TextLayerMode;
+    use super::apply_text_block_patch;
+    use koharu_core::{TextAlign, TextBlock, TextBlockPatch, TextDirection, TextStyle};
 
     #[test]
     fn text_block_patch_updates_geometry_and_clears_rendered() {
@@ -1572,23 +1357,5 @@ mod tests {
         assert!(block.lock_layout_box);
         assert!(block.rendered.is_none());
         assert!(block.rendered_direction.is_none());
-    }
-
-    #[test]
-    fn psd_export_filename_uses_koharu_suffix() {
-        let document = Document {
-            name: "chapter-01".to_string(),
-            ..Default::default()
-        };
-
-        assert_eq!(psd_export_filename(&document), "chapter-01_koharu.psd");
-    }
-
-    #[test]
-    fn app_psd_export_uses_editable_text_layers() {
-        assert_eq!(
-            app_psd_export_options().text_layer_mode,
-            TextLayerMode::Editable
-        );
     }
 }

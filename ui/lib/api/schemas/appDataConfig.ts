@@ -4,8 +4,6 @@
  * OpenAPI spec version: 0.0.1
  */
 
-export interface LlmModelInfo {
-  id: string;
-  languages: string[];
-  source: string;
+export interface AppDataConfig {
+  path: string
 }

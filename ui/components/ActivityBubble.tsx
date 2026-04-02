@@ -145,7 +145,10 @@ function OperationCard({
     hasProgressNumbers ? (ctx.current / ctx.total) * 100 : undefined,
   )
   const displayCurrent = hasProgressNumbers
-    ? Math.min(ctx.total, Math.floor(ctx.current) + (ctx.current >= ctx.total ? 0 : 1))
+    ? Math.min(
+        ctx.total,
+        Math.floor(ctx.current) + (ctx.current >= ctx.total ? 0 : 1),
+      )
     : undefined
   const total = hasProgressNumbers ? ctx.total : undefined
 
@@ -159,9 +162,7 @@ function OperationCard({
     render: t('processing.render'),
   }
 
-  const stepLabel = ctx.step
-    ? (stepLabels[ctx.step] ?? ctx.step)
-    : undefined
+  const stepLabel = ctx.step ? (stepLabels[ctx.step] ?? ctx.step) : undefined
   const stepText =
     stepLabel && total && typeof displayCurrent === 'number'
       ? t('operations.stepProgress', {
@@ -189,10 +190,7 @@ function OperationCard({
 
   return (
     <BubbleCard>
-      <div
-        data-testid='operation-card'
-        className='flex items-start gap-3'
-      >
+      <div data-testid='operation-card' className='flex items-start gap-3'>
         <div className='bg-primary mt-1 h-2.5 w-2.5 rounded-full shadow-[0_0_0_6px_hsl(var(--primary)/0.16)]' />
         <div className='flex-1'>
           <div className='flex items-start justify-between gap-2'>
@@ -235,7 +233,13 @@ function OperationCard({
 
 export function ActivityBubble() {
   const { t } = useTranslation()
-  const { isProcessing, state: machineState, send, canCancel, error: machineError } = useProcessing()
+  const {
+    isProcessing,
+    state: machineState,
+    send,
+    canCancel,
+    error: machineError,
+  } = useProcessing()
   const uiError = useEditorUiStore((state) => state.error)
   const clearUiError = useEditorUiStore((state) => state.clearError)
 
@@ -259,9 +263,14 @@ export function ActivityBubble() {
 
   // Show machine errors as well as UI errors
   const errorMessage = machineError ?? uiError?.message
-  const clearError = machineError ? () => { /* machine clears on next operation */ } : clearUiError
+  const clearError = machineError
+    ? () => {
+        /* machine clears on next operation */
+      }
+    : clearUiError
 
-  if (!errorMessage && !isProcessing && activeDownloads.length === 0) return null
+  if (!errorMessage && !isProcessing && activeDownloads.length === 0)
+    return null
 
   return (
     <div className='pointer-events-auto fixed right-6 bottom-6 z-100 flex w-80 max-w-[calc(100%-1.5rem)] flex-col gap-3'>

@@ -15,12 +15,11 @@ pub use font::{FontPrediction, NamedFontPrediction, TextDirection};
 pub use image::SerializableDynamicImage;
 pub use protocol::*;
 
-use std::{path::PathBuf, sync::Arc};
+use std::path::PathBuf;
 
 use ::image::GenericImageView;
 use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
-use tokio::sync::RwLock;
 use utoipa::ToSchema;
 use uuid::Uuid;
 
@@ -63,12 +62,6 @@ pub struct TextBlock {
 }
 
 impl TextBlock {
-    pub fn ensure_id(&mut self) {
-        if self.id.trim().is_empty() {
-            self.id = new_text_block_id();
-        }
-    }
-
     pub fn set_layout_seed(&mut self, x: f32, y: f32, width: f32, height: f32) {
         self.layout_seed_x = Some(x);
         self.layout_seed_y = Some(y);
@@ -125,7 +118,9 @@ const fn default_stroke_color() -> [u8; 4] {
     [255, 255, 255, 255]
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, Default, ToSchema, JsonSchema)]
+#[derive(
+    Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, Default, ToSchema, JsonSchema,
+)]
 #[serde(rename_all = "camelCase")]
 pub enum TextAlign {
     #[default]
@@ -155,8 +150,6 @@ pub struct Document {
     pub image: SerializableDynamicImage,
     pub width: u32,
     pub height: u32,
-    #[serde(default)]
-    pub revision: u64,
     pub text_blocks: Vec<TextBlock>,
     pub segment: Option<SerializableDynamicImage>,
     pub inpainted: Option<SerializableDynamicImage>,
@@ -199,29 +192,10 @@ impl Document {
             ..Default::default()
         })
     }
-
-    pub fn ensure_text_block_ids(&mut self) {
-        for block in &mut self.text_blocks {
-            block.ensure_id();
-        }
-    }
-
-    pub fn bump_revision(&mut self) {
-        self.revision = self.revision.saturating_add(1);
-    }
-
-    pub fn prepare_for_store(&mut self) {
-        self.ensure_text_block_ids();
-    }
 }
 
-#[derive(Default, Debug, Clone, Serialize, Deserialize)]
-pub struct State {
-    pub documents: Vec<Document>,
-}
-
-pub type AppState = Arc<RwLock<State>>;
-
+/// Lightweight entry for a page — no decoded image data.
+/// Stored in global state; the full `Document` lives in the page cache.
 #[cfg(test)]
 mod tests {
     use super::TextBlock;

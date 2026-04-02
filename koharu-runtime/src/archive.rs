@@ -24,7 +24,7 @@ pub(crate) enum ExtractPolicy<'a> {
 pub(crate) async fn fetch(runtime: &Runtime, url: &str, file_name: &str) -> Result<PathBuf> {
     runtime
         .artifacts()
-        .cached_download(url, file_name, runtime.layout().downloads_root())
+        .cached_download(url, file_name, &runtime.layout().downloads_root)
         .await
         .with_context(|| format!("failed to download `{url}`"))
 }

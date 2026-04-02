@@ -74,6 +74,7 @@ toml = "1.1"
 inventory = "0.3"
 url = { version = "2.5", features = ["serde"] }
 arc-swap = "1.7"
+camino = { version = "1.1", features = ["serde1"] }
 indexmap = "2.11"
 flate2 = { version = "1.0", default-features = false, features = [
     "zlib-ng-compat",
@@ -134,6 +135,8 @@ tower-http = { version = "0.6", features = ["cors"] }
 criterion = { version = "0.8", features = ["html_reports"] }
 git-version = "0.3"
 keyring = "3.6"
+lru = "0.14"
+tauri-plugin-process = "2.3"
 
 [patch.crates-io]
 candle-transformers = { git = "https://github.com/mayocream/candle", branch = "cuda-dynamic-loading" }

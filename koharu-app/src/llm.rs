@@ -1,15 +1,28 @@
+use std::str::FromStr;
 use std::sync::Arc;
 
-use serde::Serialize;
+use koharu_llm::providers::{
+    AnyProvider, ProviderCatalogModels, ProviderConfig, all_provider_descriptors, build_provider,
+    discover_models, get_saved_api_key,
+};
 use tokio::sync::{RwLock, broadcast};
+use tracing::instrument;
 
-use koharu_core::{Document, LlmState, LlmStateStatus, TextBlock};
+use koharu_core::{
+    Document, LlmCatalog, LlmCatalogModel, LlmGenerationOptions, LlmLoadRequest,
+    LlmProviderCatalog, LlmProviderCatalogStatus, LlmState, LlmStateStatus, LlmTarget,
+    LlmTargetKind, TextBlock,
+};
 use koharu_runtime::RuntimeManager;
 
 use koharu_llm::{
     GenerateOptions, Language, Llm, ModelId, language::tags as language_tags,
     safe::llama_backend::LlamaBackend, supported_locales,
 };
+use strum::IntoEnumIterator;
+
+use crate::AppResources;
+use crate::config as app_config;
 
 pub use koharu_llm::prefetch;
 
@@ -26,50 +39,25 @@ struct BlockEndTag {
     len: usize,
 }
 
-#[derive(Debug, Clone, Serialize)]
-#[serde(rename_all = "camelCase")]
-pub struct ModelInfo {
-    pub id: String,
-    pub languages: Vec<String>,
-    pub source: &'static str,
-}
-
-impl ModelInfo {
-    pub fn new(id: ModelId) -> Self {
-        let languages = id.languages();
-        Self {
-            id: id.to_string(),
-            languages: language_tags(&languages),
-            source: "local",
-        }
-    }
-
-    pub fn api(provider_id: &'static str, model_id: &str) -> Self {
-        Self {
-            id: format!("{provider_id}:{model_id}"),
-            languages: supported_locales(),
-            source: provider_id,
-        }
-    }
-}
-
 #[allow(clippy::large_enum_variant)]
 #[derive(strum::Display)]
 pub enum State {
     #[strum(serialize = "empty")]
     Empty,
     #[strum(serialize = "loading")]
-    Loading { model_id: String, source: String },
+    Loading { target: LlmTarget },
     #[strum(serialize = "ready")]
-    Ready(Llm),
+    ReadyLocal(Llm),
     #[strum(serialize = "ready")]
-    ApiReady {
-        provider: Box<dyn koharu_llm::providers::AnyProvider>,
-        provider_id: String,
-        model: String,
+    ReadyProvider {
+        target: LlmTarget,
+        provider: Box<dyn AnyProvider>,
     },
     #[strum(serialize = "failed")]
-    Failed(String),
+    Failed {
+        target: Option<LlmTarget>,
+        error: String,
+    },
 }
 
 pub struct Model {
@@ -83,6 +71,58 @@ pub struct Model {
 pub trait Translatable {
     fn get_source(&self) -> anyhow::Result<String>;
     fn set_translation(&mut self, translation: String) -> anyhow::Result<()>;
+}
+
+fn local_target(id: ModelId) -> LlmTarget {
+    LlmTarget {
+        kind: LlmTargetKind::Local,
+        model_id: id.to_string(),
+        provider_id: None,
+    }
+}
+
+fn provider_target(provider_id: &str, model_id: &str) -> LlmTarget {
+    LlmTarget {
+        kind: LlmTargetKind::Provider,
+        model_id: model_id.to_string(),
+        provider_id: Some(provider_id.to_string()),
+    }
+}
+
+fn validate_target(target: &LlmTarget) -> anyhow::Result<()> {
+    match target.kind {
+        LlmTargetKind::Local => {
+            anyhow::ensure!(
+                target.provider_id.is_none(),
+                "local targets must not include provider_id"
+            );
+        }
+        LlmTargetKind::Provider => {
+            anyhow::ensure!(
+                target
+                    .provider_id
+                    .as_deref()
+                    .is_some_and(|value| !value.trim().is_empty()),
+                "provider targets require provider_id"
+            );
+        }
+    }
+
+    anyhow::ensure!(
+        !target.model_id.trim().is_empty(),
+        "target model_id is required"
+    );
+    Ok(())
+}
+
+fn state_target(state: &State) -> Option<LlmTarget> {
+    match state {
+        State::Empty => None,
+        State::Loading { target } => Some(target.clone()),
+        State::ReadyLocal(llm) => Some(local_target(llm.id())),
+        State::ReadyProvider { target, .. } => Some(target.clone()),
+        State::Failed { target, .. } => target.clone(),
+    }
 }
 
 fn escape_block_text(text: &str) -> String {
@@ -453,28 +493,22 @@ impl Model {
         self.cpu
     }
 
-    pub async fn load_api(
+    pub async fn load_provider(
         &self,
-        provider_id: &str,
-        model_id: &str,
-        config: koharu_llm::providers::ProviderConfig,
+        target: LlmTarget,
+        provider: Box<dyn AnyProvider>,
     ) -> anyhow::Result<()> {
-        let provider = koharu_llm::providers::build_provider(provider_id, config)?;
-        *self.state.write().await = State::ApiReady {
-            provider,
-            provider_id: provider_id.to_string(),
-            model: model_id.to_string(),
-        };
+        *self.state.write().await = State::ReadyProvider { target, provider };
         self.emit_state().await;
         Ok(())
     }
 
-    pub async fn load(&self, id: ModelId) {
+    pub async fn load_local(&self, id: ModelId) {
+        let target = local_target(id);
         {
             let mut guard = self.state.write().await;
             *guard = State::Loading {
-                model_id: id.to_string(),
-                source: "local".to_string(),
+                target: target.clone(),
             };
         }
         self.emit_state().await;
@@ -489,12 +523,15 @@ impl Model {
             match res {
                 Ok(llm) => {
                     let mut guard = state_cloned.write().await;
-                    *guard = State::Ready(llm);
+                    *guard = State::ReadyLocal(llm);
                 }
                 Err(e) => {
                     tracing::error!("LLM load join error: {e}");
                     let mut guard = state_cloned.write().await;
-                    *guard = State::Failed(format!("join error: {e}"));
+                    *guard = State::Failed {
+                        target: Some(target),
+                        error: format!("join error: {e}"),
+                    };
                 }
             }
             let snapshot = {
@@ -521,8 +558,13 @@ impl Model {
     pub async fn ready(&self) -> bool {
         matches!(
             *self.state.read().await,
-            State::Ready(_) | State::ApiReady { .. }
+            State::ReadyLocal(_) | State::ReadyProvider { .. }
         )
+    }
+
+    pub async fn current_target(&self) -> Option<LlmTarget> {
+        let guard = self.state.read().await;
+        state_target(&guard)
     }
 
     pub fn subscribe(&self) -> broadcast::Receiver<LlmState> {
@@ -553,17 +595,16 @@ impl Model {
         }
         let mut guard = self.state.write().await;
         let translation = match &mut *guard {
-            State::Ready(llm) => {
+            State::ReadyLocal(llm) => {
                 llm.generate(&source, &GenerateOptions::default(), target_language)
             }
-            State::ApiReady {
-                provider, model, ..
-            } => {
-                let model = model.clone();
-                provider.translate(&source, target_language, &model).await
+            State::ReadyProvider { target, provider } => {
+                provider
+                    .translate(&source, target_language, &target.model_id)
+                    .await
             }
             State::Loading { .. } => Err(anyhow::anyhow!("Model is still loading")),
-            State::Failed(e) => Err(anyhow::anyhow!("Model failed to load: {e}")),
+            State::Failed { error, .. } => Err(anyhow::anyhow!("Model failed to load: {error}")),
             State::Empty => Err(anyhow::anyhow!("No model is loaded")),
         }?;
         doc.set_translation(translation.trim().to_string())
@@ -574,37 +615,306 @@ fn snapshot_from_state(state: &State) -> LlmState {
     match state {
         State::Empty => LlmState {
             status: LlmStateStatus::Empty,
-            model_id: None,
-            source: None,
+            target: None,
             error: None,
         },
-        State::Loading { model_id, source } => LlmState {
+        State::Loading { target } => LlmState {
             status: LlmStateStatus::Loading,
-            model_id: Some(model_id.clone()),
-            source: Some(source.clone()),
+            target: Some(target.clone()),
             error: None,
         },
-        State::Ready(llm) => LlmState {
+        State::ReadyLocal(llm) => LlmState {
             status: LlmStateStatus::Ready,
-            model_id: Some(llm.id().to_string()),
-            source: Some("local".to_string()),
+            target: Some(local_target(llm.id())),
             error: None,
         },
-        State::ApiReady {
-            provider_id, model, ..
-        } => LlmState {
+        State::ReadyProvider { target, .. } => LlmState {
             status: LlmStateStatus::Ready,
-            model_id: Some(format!("{provider_id}:{model}")),
-            source: Some(provider_id.clone()),
+            target: Some(target.clone()),
             error: None,
         },
-        State::Failed(error) => LlmState {
+        State::Failed { target, error } => LlmState {
             status: LlmStateStatus::Failed,
-            model_id: None,
-            source: None,
+            target: target.clone(),
             error: Some(error.clone()),
         },
     }
+}
+
+// ---------------------------------------------------------------------------
+// Operations (merged from ops/llm.rs)
+// ---------------------------------------------------------------------------
+
+fn sorted_local_models(is_cpu: bool, language: Option<&str>) -> Vec<ModelId> {
+    let mut models: Vec<ModelId> = ModelId::iter().collect();
+    let cpu_factor = if is_cpu { 10 } else { 1 };
+    let lang = language.unwrap_or("en");
+    let zh_locale_factor = if lang.starts_with("zh") { 10 } else { 1 };
+    let non_zh_en_locale_factor = if lang.starts_with("zh") || lang.starts_with("en") {
+        1
+    } else {
+        100
+    };
+
+    models.sort_by_key(|m| match m {
+        ModelId::VntlLlama3_8Bv2 => 100,
+        ModelId::Lfm2_350mEnjpMt => 200 / cpu_factor,
+        ModelId::SakuraGalTransl7Bv3_7 => 300 / zh_locale_factor,
+        ModelId::Sakura1_5bQwen2_5v1_0 => 400 / zh_locale_factor / cpu_factor,
+        ModelId::HunyuanMT7B => 500 / non_zh_en_locale_factor,
+    });
+    models
+}
+
+fn local_catalog_models(is_cpu: bool, language: Option<&str>) -> Vec<LlmCatalogModel> {
+    sorted_local_models(is_cpu, language)
+        .into_iter()
+        .map(|model| LlmCatalogModel {
+            target: local_target(model),
+            name: model.to_string(),
+            languages: language_tags(&model.languages()),
+        })
+        .collect()
+}
+
+async fn provider_catalog(state: &AppResources) -> anyhow::Result<Vec<LlmProviderCatalog>> {
+    let config = app_config::load()?;
+    let mut providers = Vec::new();
+
+    for descriptor in all_provider_descriptors() {
+        let stored = config.llm.providers.get(descriptor.id);
+        let base_url = stored.and_then(|provider| provider.base_url.clone());
+        let api_key = get_saved_api_key(descriptor.id)?;
+        let has_api_key = api_key
+            .as_deref()
+            .is_some_and(|value| !value.trim().is_empty());
+        let missing_required_config = (descriptor.requires_api_key && !has_api_key)
+            || (descriptor.requires_base_url
+                && base_url
+                    .as_deref()
+                    .is_none_or(|value| value.trim().is_empty()));
+
+        let (status, error, models) = if missing_required_config {
+            (
+                LlmProviderCatalogStatus::MissingConfiguration,
+                None,
+                static_provider_models(descriptor),
+            )
+        } else {
+            match &descriptor.models {
+                ProviderCatalogModels::Static(_) => (
+                    LlmProviderCatalogStatus::Ready,
+                    None,
+                    static_provider_models(descriptor),
+                ),
+                ProviderCatalogModels::Dynamic(_) => {
+                    let models = discover_models(
+                        descriptor.id,
+                        ProviderConfig {
+                            http_client: state.runtime.http_client(),
+                            api_key,
+                            base_url: base_url.clone(),
+                            temperature: None,
+                            max_tokens: None,
+                            custom_system_prompt: None,
+                        },
+                    )?
+                    .await;
+
+                    match models {
+                        Ok(models) => (
+                            LlmProviderCatalogStatus::Ready,
+                            None,
+                            models
+                                .into_iter()
+                                .map(|model| LlmCatalogModel {
+                                    target: provider_target(descriptor.id, &model.id),
+                                    name: model.name,
+                                    languages: supported_locales(),
+                                })
+                                .collect(),
+                        ),
+                        Err(error) => (
+                            LlmProviderCatalogStatus::DiscoveryFailed,
+                            Some(error.to_string()),
+                            Vec::new(),
+                        ),
+                    }
+                }
+            }
+        };
+
+        providers.push(LlmProviderCatalog {
+            id: descriptor.id.to_string(),
+            name: descriptor.name.to_string(),
+            requires_api_key: descriptor.requires_api_key,
+            requires_base_url: descriptor.requires_base_url,
+            has_api_key,
+            base_url,
+            status,
+            error,
+            models,
+        });
+    }
+
+    Ok(providers)
+}
+
+fn static_provider_models(
+    descriptor: &koharu_llm::providers::ProviderDescriptor,
+) -> Vec<LlmCatalogModel> {
+    match &descriptor.models {
+        ProviderCatalogModels::Static(models) => models
+            .iter()
+            .map(|model| LlmCatalogModel {
+                target: provider_target(descriptor.id, model.id),
+                name: model.name.to_string(),
+                languages: supported_locales(),
+            })
+            .collect(),
+        ProviderCatalogModels::Dynamic(_) => Vec::new(),
+    }
+}
+
+fn provider_config_from_settings(
+    state: &AppResources,
+    target: &LlmTarget,
+    options: Option<&LlmGenerationOptions>,
+) -> anyhow::Result<ProviderConfig> {
+    validate_target(target)?;
+    let provider_id = target
+        .provider_id
+        .as_deref()
+        .ok_or_else(|| anyhow::anyhow!("provider targets require provider_id"))?;
+    let config = app_config::load()?;
+    let stored = config.llm.providers.get(provider_id);
+
+    Ok(ProviderConfig {
+        http_client: state.runtime.http_client(),
+        api_key: get_saved_api_key(provider_id)?,
+        base_url: stored.and_then(|provider| provider.base_url.clone()),
+        temperature: options.and_then(|options| options.temperature),
+        max_tokens: options.and_then(|options| options.max_tokens),
+        custom_system_prompt: options.and_then(|options| options.custom_system_prompt.clone()),
+    })
+}
+
+async fn load_target(
+    state: &AppResources,
+    target: &LlmTarget,
+    options: Option<&LlmGenerationOptions>,
+) -> anyhow::Result<()> {
+    validate_target(target)?;
+    if state.llm.current_target().await.as_ref() == Some(target) && state.llm.ready().await {
+        return Ok(());
+    }
+
+    match target.kind {
+        LlmTargetKind::Local => {
+            let model = ModelId::from_str(&target.model_id)?;
+            state.llm.load_local(model).await;
+        }
+        LlmTargetKind::Provider => {
+            let provider_id = target
+                .provider_id
+                .as_deref()
+                .ok_or_else(|| anyhow::anyhow!("provider targets require provider_id"))?;
+            let provider = build_provider(
+                provider_id,
+                provider_config_from_settings(state, target, options)?,
+            )?;
+            state.llm.load_provider(target.clone(), provider).await?;
+        }
+    }
+
+    Ok(())
+}
+
+pub async fn ensure_target_ready(
+    state: &AppResources,
+    target: &LlmTarget,
+    options: Option<&LlmGenerationOptions>,
+) -> anyhow::Result<()> {
+    load_target(state, target, options).await?;
+    if target.kind != LlmTargetKind::Local {
+        return Ok(());
+    }
+
+    for _ in 0..300 {
+        let snapshot = state.llm.snapshot().await;
+        match snapshot.status {
+            LlmStateStatus::Ready if snapshot.target.as_ref() == Some(target) => return Ok(()),
+            LlmStateStatus::Failed if snapshot.target.as_ref() == Some(target) => {
+                anyhow::bail!(
+                    "{}",
+                    snapshot
+                        .error
+                        .unwrap_or_else(|| "LLM failed to load".to_string())
+                );
+            }
+            _ => {}
+        }
+        tokio::time::sleep(std::time::Duration::from_millis(100)).await;
+    }
+
+    anyhow::bail!("LLM failed to load within timeout");
+}
+
+pub async fn llm_catalog(
+    state: AppResources,
+    language: Option<&str>,
+) -> anyhow::Result<LlmCatalog> {
+    Ok(LlmCatalog {
+        local_models: local_catalog_models(state.llm.is_cpu(), language),
+        providers: provider_catalog(&state).await?,
+    })
+}
+
+#[instrument(level = "info", skip_all)]
+pub async fn llm_load(state: AppResources, payload: LlmLoadRequest) -> anyhow::Result<()> {
+    load_target(&state, &payload.target, payload.options.as_ref()).await
+}
+
+pub async fn llm_offload(state: AppResources) -> anyhow::Result<()> {
+    state.llm.offload().await;
+    Ok(())
+}
+
+pub async fn llm_ready(state: AppResources) -> anyhow::Result<bool> {
+    Ok(state.llm.ready().await)
+}
+
+#[instrument(level = "info", skip_all)]
+pub async fn llm_generate(
+    state: AppResources,
+    document_id: &str,
+    text_block_index: Option<usize>,
+    language: Option<&str>,
+) -> anyhow::Result<()> {
+    let mut doc = state.cache.get(document_id).await?;
+
+    match text_block_index {
+        Some(block_index) => {
+            let text_block = doc
+                .text_blocks
+                .get_mut(block_index)
+                .ok_or_else(|| anyhow::anyhow!("Text block not found"))?;
+            state.llm.translate(text_block, language).await?;
+        }
+        None => {
+            state.llm.translate(&mut doc, language).await?;
+        }
+    }
+
+    state.cache.put(&doc).await?;
+    Ok(())
+}
+
+pub async fn get_document_for_llm(
+    state: AppResources,
+    document_id: &str,
+) -> anyhow::Result<koharu_core::Document> {
+    state.cache.get(document_id).await
 }
 
 #[cfg(test)]

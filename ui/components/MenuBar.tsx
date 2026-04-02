@@ -65,13 +65,12 @@ export function MenuBar() {
   const { send } = useProcessing()
 
   const buildPipelineRequest = (documentId?: string): PipelineJobRequest => {
-    const { selectedModel, selectedLanguage, renderEffect, renderStroke } =
+    const { selectedTarget, selectedLanguage, renderEffect, renderStroke } =
       useEditorUiStore.getState()
-    const { fontFamily, apiKeys } = usePreferencesStore.getState()
+    const { fontFamily } = usePreferencesStore.getState()
     return {
       documentId,
-      llmModelId: selectedModel,
-      llmApiKey: selectedModel ? apiKeys[selectedModel.split(':')[0]] : undefined,
+      llm: selectedTarget ? { target: selectedTarget } : undefined,
       language: selectedLanguage,
       shaderEffect: renderEffect,
       shaderStroke: renderStroke,
@@ -88,32 +87,47 @@ export function MenuBar() {
   const fileMenuItems: MenuItem[] = [
     {
       label: t('menu.openFile'),
-      onSelect: () => send({ type: 'START_IMPORT', mode: 'replace', source: 'files' }),
+      onSelect: () =>
+        send({ type: 'START_IMPORT', mode: 'replace', source: 'files' }),
       testId: 'menu-file-open',
     },
     {
       label: t('menu.addFile'),
-      onSelect: () => send({ type: 'START_IMPORT', mode: 'append', source: 'files' }),
+      onSelect: () =>
+        send({ type: 'START_IMPORT', mode: 'append', source: 'files' }),
       testId: 'menu-file-add',
     },
     {
       label: t('menu.openFolder'),
-      onSelect: () => send({ type: 'START_IMPORT', mode: 'replace', source: 'folder' }),
+      onSelect: () =>
+        send({ type: 'START_IMPORT', mode: 'replace', source: 'folder' }),
       testId: 'menu-file-open-folder',
     },
     {
       label: t('menu.addFolder'),
-      onSelect: () => send({ type: 'START_IMPORT', mode: 'append', source: 'folder' }),
+      onSelect: () =>
+        send({ type: 'START_IMPORT', mode: 'append', source: 'folder' }),
       testId: 'menu-file-add-folder',
     },
     {
       label: t('menu.export'),
-      onSelect: () => send({ type: 'START_EXPORT', documentId: requireDocumentId(), format: 'webp', params: { layer: 'rendered' } }),
+      onSelect: () =>
+        send({
+          type: 'START_EXPORT',
+          documentId: requireDocumentId(),
+          format: 'webp',
+          params: { layer: 'rendered' },
+        }),
       testId: 'menu-file-export',
     },
     {
       label: t('menu.exportPsd'),
-      onSelect: () => send({ type: 'START_EXPORT', documentId: requireDocumentId(), format: 'psd' }),
+      onSelect: () =>
+        send({
+          type: 'START_EXPORT',
+          documentId: requireDocumentId(),
+          format: 'psd',
+        }),
       testId: 'menu-file-export-psd',
     },
     {
@@ -144,7 +158,10 @@ export function MenuBar() {
           label: t('menu.processCurrent'),
           onSelect: () => {
             const documentId = requireDocumentId()
-            send({ type: 'START_PIPELINE', request: buildPipelineRequest(documentId) })
+            send({
+              type: 'START_PIPELINE',
+              request: buildPipelineRequest(documentId),
+            })
           },
           testId: 'menu-process-current',
         },
@@ -158,7 +175,8 @@ export function MenuBar() {
         },
         {
           label: t('menu.processAll'),
-          onSelect: () => send({ type: 'START_PIPELINE', request: buildPipelineRequest() }),
+          onSelect: () =>
+            send({ type: 'START_PIPELINE', request: buildPipelineRequest() }),
           testId: 'menu-process-all',
         },
       ],

@@ -78,4 +78,3 @@ export type InpaintRegion = {
   width: number
   height: number
 }
-

@@ -71,7 +71,7 @@ http://127.0.0.1:<PORT>/mcp
 | `ocr` | 对检测块执行 OCR | `index` |
 | `inpaint` | 使用当前掩码去除文字 | `index` |
 | `render` | 把译文绘制回页面 | `index`、可选 `text_block_index`、`shader_effect`、`font_family` |
-| `process` | 依次执行 detect -> OCR -> inpaint -> translate -> render | 可选 `index`、`llm_model_id`、`language`、`shader_effect`、`font_family` |
+| `process` | 依次执行 detect -> OCR -> inpaint -> translate -> render | 可选 `document_id`、`llm_target`、`language`、`shader_effect`、`font_family` |
 
 `process` 是粗粒度的便捷工具。如果你想要更细的控制或更好排查问题，建议拆开使用各阶段工具。
 
@@ -79,7 +79,7 @@ http://127.0.0.1:<PORT>/mcp
 
 | 工具 | 作用 | 关键参数 |
 | --- | --- | --- |
-| `llm_load` | 加载一个翻译模型 | `id`、可选 `temperature`、`max_tokens`、`custom_system_prompt` |
+| `llm_load` | 加载一个翻译模型 target | `target`、可选 `options.temperature`、`options.max_tokens`、`options.custom_system_prompt` |
 | `llm_offload` | 卸载当前模型 | 无 |
 | `llm_generate` | 翻译单个文本块或全部文本块 | `index`、可选 `text_block_index`、`language` |
 
