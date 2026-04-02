@@ -157,7 +157,8 @@ impl LlamaDistribution {
     fn install_dir(self, runtime: &Runtime) -> PathBuf {
         runtime
             .layout()
-            .runtime_package_dir("llama.cpp")
+            .runtime_root
+            .join("llama.cpp")
             .join(LLAMA_CPP_TAG)
             .join(self.id())
     }
@@ -266,7 +267,14 @@ mod tests {
     #[test]
     fn install_dir_includes_tag_and_id() {
         let runtime = Runtime::new(
-            crate::Settings::from_paths("/tmp/rt", "/tmp/models"),
+            crate::Settings {
+                runtime: crate::DirectorySetting {
+                    path: camino::Utf8PathBuf::from("/tmp/rt"),
+                },
+                models: crate::DirectorySetting {
+                    path: camino::Utf8PathBuf::from("/tmp/models"),
+                },
+            },
             crate::ComputePolicy::CpuOnly,
         )
         .unwrap();

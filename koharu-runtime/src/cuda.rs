@@ -207,7 +207,7 @@ fn driver_library_available() -> bool {
 }
 
 fn install_dir(runtime: &Runtime) -> std::path::PathBuf {
-    runtime.layout().runtime_package_dir("cuda")
+    runtime.layout().runtime_root.join("cuda")
 }
 
 fn platform_tags() -> Result<&'static [&'static str]> {

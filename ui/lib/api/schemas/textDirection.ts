@@ -4,10 +4,9 @@
  * OpenAPI spec version: 0.0.1
  */
 
-export type TextDirection = typeof TextDirection[keyof typeof TextDirection];
-
+export type TextDirection = (typeof TextDirection)[keyof typeof TextDirection]
 
 export const TextDirection = {
   Horizontal: 'Horizontal',
   Vertical: 'Vertical',
-} as const;
+} as const

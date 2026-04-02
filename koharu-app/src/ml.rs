@@ -5,16 +5,21 @@ use std::{
 
 use anyhow::Result;
 use image::DynamicImage;
-use koharu_core::{Document, FontPrediction, SerializableDynamicImage, TextBlock, TextDirection};
+use koharu_core::{
+    Document, FontFaceInfo, FontPrediction, SerializableDynamicImage, TextBlock, TextDirection,
+    TextShaderEffect, TextStrokeStyle,
+};
 use koharu_llm::paddleocr_vl::{self as paddleocr_vl_llm, PaddleOcrVl, PaddleOcrVlTask};
 use koharu_llm::safe::llama_backend::LlamaBackend;
 use koharu_runtime::RuntimeManager;
+use tracing::instrument;
 
 use koharu_ml::comic_text_detector::{self, ComicTextDetector, crop_text_block_bbox};
 use koharu_ml::font_detector::{self, FontDetector};
 use koharu_ml::lama::{self, Lama};
 use koharu_ml::pp_doclayout_v3::{self, LayoutRegion, PPDocLayoutV3};
 
+use crate::AppResources;
 const NEAR_BLACK_THRESHOLD: u8 = 12;
 const GRAY_NEAR_BLACK_THRESHOLD: u8 = 60;
 const NEAR_WHITE_THRESHOLD: u8 = 12;
@@ -356,6 +361,61 @@ fn overlap_area(a: [f32; 4], b: [f32; 4]) -> f32 {
     } else {
         (x2 - x1) * (y2 - y1)
     }
+}
+
+// ---------------------------------------------------------------------------
+// Operations (merged from ops/vision.rs)
+// ---------------------------------------------------------------------------
+
+#[instrument(level = "info", skip_all)]
+pub async fn detect(state: AppResources, document_id: &str) -> Result<()> {
+    let mut doc = state.cache.get(document_id).await?;
+    state.ml.detect(&mut doc).await?;
+    state.cache.put(&doc).await?;
+    Ok(())
+}
+
+#[instrument(level = "info", skip_all)]
+pub async fn ocr(state: AppResources, document_id: &str) -> Result<()> {
+    let mut doc = state.cache.get(document_id).await?;
+    state.ml.ocr(&mut doc).await?;
+    state.cache.put(&doc).await?;
+    Ok(())
+}
+
+#[instrument(level = "info", skip_all)]
+pub async fn inpaint(state: AppResources, document_id: &str) -> Result<()> {
+    let mut doc = state.cache.get(document_id).await?;
+    state.ml.inpaint(&mut doc).await?;
+    state.cache.put(&doc).await?;
+    Ok(())
+}
+
+#[instrument(level = "info", skip_all)]
+pub async fn render(
+    state: AppResources,
+    document_id: &str,
+    text_block_index: Option<usize>,
+    shader_effect: Option<TextShaderEffect>,
+    shader_stroke: Option<TextStrokeStyle>,
+    font_family: Option<&str>,
+) -> Result<()> {
+    let mut doc = state.cache.get(document_id).await?;
+
+    state.renderer.render(
+        &mut doc,
+        text_block_index,
+        shader_effect.unwrap_or_default(),
+        shader_stroke,
+        font_family,
+    )?;
+
+    state.cache.put(&doc).await?;
+    Ok(())
+}
+
+pub async fn list_font_families(state: AppResources) -> Result<Vec<FontFaceInfo>> {
+    state.renderer.available_fonts()
 }
 
 #[cfg(test)]

@@ -35,8 +35,9 @@ const hasGeometryChange = (updates: Partial<TextBlock>) =>
   Object.prototype.hasOwnProperty.call(updates, 'width') ||
   Object.prototype.hasOwnProperty.call(updates, 'height')
 
-const toUint8Array = (data: number[] | null | undefined): Uint8Array | undefined =>
-  data ? new Uint8Array(data) : undefined
+const toUint8Array = (
+  data: number[] | null | undefined,
+): Uint8Array | undefined => (data ? new Uint8Array(data) : undefined)
 
 const mapTextBlock = (
   block: DocumentDetail['textBlocks'][number],
@@ -67,7 +68,6 @@ export type MappedDocument = {
   name: string
   width: number
   height: number
-  revision: number
   textBlocks: TextBlock[]
   image: Uint8Array
   segment?: Uint8Array
@@ -82,7 +82,6 @@ const mapDocumentDetail = (detail: DocumentDetail): MappedDocument => ({
   name: detail.name,
   width: detail.width,
   height: detail.height,
-  revision: detail.revision,
   textBlocks: detail.textBlocks.map(mapTextBlock),
   image: new Uint8Array(detail.image),
   segment: toUint8Array(detail.segment),
@@ -128,8 +127,12 @@ export function useTextBlocks() {
 
   const invalidateDocument = useCallback(
     async (docId: string) => {
-      await queryClient.invalidateQueries({ queryKey: getGetDocumentQueryKey(docId) })
-      await queryClient.invalidateQueries({ queryKey: getListDocumentsQueryKey() })
+      await queryClient.invalidateQueries({
+        queryKey: getGetDocumentQueryKey(docId),
+      })
+      await queryClient.invalidateQueries({
+        queryKey: getListDocumentsQueryKey(),
+      })
     },
     [queryClient],
   )

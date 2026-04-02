@@ -2,9 +2,11 @@ use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
 use utoipa::ToSchema;
 
-use crate::{Document, FontPrediction, TextBlock, TextShaderEffect, TextStrokeStyle, TextStyle};
+use crate::{FontPrediction, TextBlock, TextShaderEffect, TextStrokeStyle, TextStyle};
 
-#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq, PartialOrd, Ord, JsonSchema, ToSchema)]
+#[derive(
+    Debug, Clone, Serialize, Deserialize, PartialEq, Eq, PartialOrd, Ord, JsonSchema, ToSchema,
+)]
 #[serde(rename_all = "camelCase")]
 pub struct FontFaceInfo {
     pub family_name: String,
@@ -20,22 +22,62 @@ pub struct MetaInfo {
 
 #[derive(Debug, Clone, Serialize, Deserialize, Default, JsonSchema, ToSchema)]
 #[serde(rename_all = "camelCase")]
-pub struct BootstrapConfig {
-    pub runtime: BootstrapPathConfig,
-    pub models: BootstrapPathConfig,
-    pub http: BootstrapHttpConfig,
+pub struct AppConfig {
+    pub data: AppDataConfig,
+    #[serde(default)]
+    pub llm: AppLlmConfig,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, Default, JsonSchema, ToSchema)]
 #[serde(rename_all = "camelCase")]
-pub struct BootstrapPathConfig {
+pub struct AppConfigUpdate {
+    pub data: AppDataConfigUpdate,
+    #[serde(default)]
+    pub llm: AppLlmConfigUpdate,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, Default, JsonSchema, ToSchema)]
+#[serde(rename_all = "camelCase")]
+pub struct AppDataConfig {
     pub path: String,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, Default, JsonSchema, ToSchema)]
 #[serde(rename_all = "camelCase")]
-pub struct BootstrapHttpConfig {
-    pub proxy: Option<String>,
+pub struct AppDataConfigUpdate {
+    pub path: String,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, Default, JsonSchema, ToSchema)]
+#[serde(rename_all = "camelCase")]
+pub struct AppLlmConfig {
+    #[serde(default)]
+    pub providers: Vec<AppLlmProviderConfig>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, Default, JsonSchema, ToSchema)]
+#[serde(rename_all = "camelCase")]
+pub struct AppLlmConfigUpdate {
+    #[serde(default)]
+    pub providers: Vec<AppLlmProviderConfigUpdate>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, Default, JsonSchema, ToSchema)]
+#[serde(rename_all = "camelCase")]
+pub struct AppLlmProviderConfig {
+    pub id: String,
+    pub base_url: Option<String>,
+    pub has_api_key: bool,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, Default, JsonSchema, ToSchema)]
+#[serde(rename_all = "camelCase")]
+pub struct AppLlmProviderConfigUpdate {
+    pub id: String,
+    pub base_url: Option<String>,
+    pub api_key: Option<String>,
+    #[serde(default)]
+    pub clear_api_key: bool,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, JsonSchema, ToSchema)]
@@ -45,29 +87,11 @@ pub struct DocumentSummary {
     pub name: String,
     pub width: u32,
     pub height: u32,
-    pub revision: u64,
     pub has_segment: bool,
     pub has_inpainted: bool,
     pub has_brush_layer: bool,
     pub has_rendered: bool,
     pub text_block_count: usize,
-}
-
-impl From<&Document> for DocumentSummary {
-    fn from(document: &Document) -> Self {
-        Self {
-            id: document.id.clone(),
-            name: document.name.clone(),
-            width: document.width,
-            height: document.height,
-            revision: document.revision,
-            has_segment: document.segment.is_some(),
-            has_inpainted: document.inpainted.is_some(),
-            has_brush_layer: document.brush_layer.is_some(),
-            has_rendered: document.rendered.is_some(),
-            text_block_count: document.text_blocks.len(),
-        }
-    }
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, JsonSchema, ToSchema)]
@@ -124,7 +148,6 @@ pub struct DocumentDetail {
     pub name: String,
     pub width: u32,
     pub height: u32,
-    pub revision: u64,
     pub text_blocks: Vec<TextBlockDetail>,
     #[schema(value_type = Vec<u8>)]
     pub image: serde_bytes::ByteBuf,
@@ -141,7 +164,6 @@ pub struct DocumentDetail {
     #[schema(value_type = Option<Vec<u8>>)]
     pub rendered: Option<serde_bytes::ByteBuf>,
 }
-
 
 #[derive(Debug, Clone, Serialize, Deserialize, JsonSchema, ToSchema)]
 #[serde(rename_all = "camelCase")]
@@ -204,14 +226,6 @@ pub struct ExportResult {
     pub count: usize,
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize, JsonSchema, ToSchema)]
-#[serde(rename_all = "camelCase")]
-pub struct LlmModelInfo {
-    pub id: String,
-    pub languages: Vec<String>,
-    pub source: String,
-}
-
 #[derive(Debug, Clone, Copy, Serialize, Deserialize, JsonSchema, ToSchema)]
 #[serde(rename_all = "snake_case")]
 pub enum LlmStateStatus {
@@ -225,36 +239,76 @@ pub enum LlmStateStatus {
 #[serde(rename_all = "camelCase")]
 pub struct LlmState {
     pub status: LlmStateStatus,
-    pub model_id: Option<String>,
-    pub source: Option<String>,
+    pub target: Option<LlmTarget>,
     pub error: Option<String>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, JsonSchema, ToSchema)]
 #[serde(rename_all = "camelCase")]
-pub struct LlmLoadRequest {
-    pub id: String,
-    pub api_key: Option<String>,
-    pub base_url: Option<String>,
+pub struct LlmGenerationOptions {
     pub temperature: Option<f64>,
     pub max_tokens: Option<u32>,
     pub custom_system_prompt: Option<String>,
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize, JsonSchema, ToSchema)]
+#[derive(Debug, Clone, Copy, Serialize, Deserialize, JsonSchema, ToSchema, PartialEq, Eq)]
+#[serde(rename_all = "snake_case")]
+pub enum LlmTargetKind {
+    Local,
+    Provider,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, JsonSchema, ToSchema, PartialEq, Eq)]
 #[serde(rename_all = "camelCase")]
-pub struct LlmPingRequest {
-    pub base_url: String,
-    pub api_key: Option<String>,
+pub struct LlmTarget {
+    pub kind: LlmTargetKind,
+    pub model_id: String,
+    pub provider_id: Option<String>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, JsonSchema, ToSchema)]
 #[serde(rename_all = "camelCase")]
-pub struct LlmPingResponse {
-    pub ok: bool,
-    pub models: Vec<String>,
-    pub latency_ms: Option<u64>,
+pub struct LlmLoadRequest {
+    pub target: LlmTarget,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub options: Option<LlmGenerationOptions>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, JsonSchema, ToSchema)]
+#[serde(rename_all = "camelCase")]
+pub struct LlmCatalogModel {
+    pub target: LlmTarget,
+    pub name: String,
+    pub languages: Vec<String>,
+}
+
+#[derive(Debug, Clone, Copy, Serialize, Deserialize, JsonSchema, ToSchema)]
+#[serde(rename_all = "snake_case")]
+pub enum LlmProviderCatalogStatus {
+    Ready,
+    MissingConfiguration,
+    DiscoveryFailed,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, JsonSchema, ToSchema)]
+#[serde(rename_all = "camelCase")]
+pub struct LlmProviderCatalog {
+    pub id: String,
+    pub name: String,
+    pub requires_api_key: bool,
+    pub requires_base_url: bool,
+    pub has_api_key: bool,
+    pub base_url: Option<String>,
+    pub status: LlmProviderCatalogStatus,
     pub error: Option<String>,
+    pub models: Vec<LlmCatalogModel>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, JsonSchema, ToSchema)]
+#[serde(rename_all = "camelCase")]
+pub struct LlmCatalog {
+    pub local_models: Vec<LlmCatalogModel>,
+    pub providers: Vec<LlmProviderCatalog>,
 }
 
 #[derive(Debug, Clone, Copy, Serialize, Deserialize, JsonSchema, ToSchema)]
@@ -320,20 +374,7 @@ pub struct DocumentsChangedEvent {
 #[serde(rename_all = "camelCase")]
 pub struct DocumentChangedEvent {
     pub document_id: String,
-    pub revision: u64,
     pub changed: Vec<String>,
-}
-
-#[derive(Debug, Clone, Serialize, Deserialize, JsonSchema, ToSchema)]
-#[serde(rename_all = "camelCase")]
-pub struct ApiKeyValue {
-    pub api_key: String,
-}
-
-#[derive(Debug, Clone, Serialize, Deserialize, JsonSchema, ToSchema)]
-#[serde(rename_all = "camelCase")]
-pub struct ApiKeyResponse {
-    pub api_key: Option<String>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, JsonSchema, ToSchema)]
@@ -354,14 +395,17 @@ pub struct TranslateRequest {
 
 #[derive(Debug, Clone, Serialize, Deserialize, JsonSchema, ToSchema)]
 #[serde(rename_all = "camelCase")]
+pub struct PipelineLlmRequest {
+    pub target: LlmTarget,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub options: Option<LlmGenerationOptions>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, JsonSchema, ToSchema)]
+#[serde(rename_all = "camelCase")]
 pub struct PipelineJobRequest {
     pub document_id: Option<String>,
-    pub llm_model_id: Option<String>,
-    pub llm_api_key: Option<String>,
-    pub llm_base_url: Option<String>,
-    pub llm_temperature: Option<f64>,
-    pub llm_max_tokens: Option<u32>,
-    pub llm_custom_system_prompt: Option<String>,
+    pub llm: Option<PipelineLlmRequest>,
     pub language: Option<String>,
     pub shader_effect: Option<TextShaderEffect>,
     pub shader_stroke: Option<TextStrokeStyle>,

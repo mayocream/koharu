@@ -1,13 +1,12 @@
+use reqwest_middleware::ClientWithMiddleware;
+use serde::Deserialize;
 use std::future::Future;
 use std::pin::Pin;
 use std::sync::Arc;
-use std::time::Instant;
-
-use reqwest_middleware::ClientWithMiddleware;
-use serde::{Deserialize, Serialize};
 
 use crate::{Language, prompt::system_prompt};
 
+use super::chat_completions::{ChatCompletionsAuth, ChatCompletionsRequest, send_chat_completion};
 use super::{AnyProvider, ensure_provider_success};
 
 #[derive(Debug, Clone)]
@@ -28,22 +27,6 @@ struct ModelsResponse {
 #[derive(Deserialize)]
 struct ModelEntry {
     id: String,
-}
-
-#[derive(Serialize)]
-struct ChatMessage {
-    role: &'static str,
-    content: String,
-}
-
-#[derive(Serialize)]
-struct ChatRequest<'a> {
-    model: &'a str,
-    messages: Vec<ChatMessage>,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    temperature: Option<f64>,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    max_tokens: Option<u32>,
 }
 
 fn normalized_base_url(base_url: &str) -> anyhow::Result<String> {
@@ -83,27 +66,6 @@ pub async fn list_models(
     Ok(ids)
 }
 
-pub struct PingResult {
-    pub models: Vec<String>,
-    pub latency_ms: u64,
-}
-
-pub async fn ping(
-    http_client: Arc<ClientWithMiddleware>,
-    base_url: &str,
-    api_key: Option<&str>,
-) -> anyhow::Result<PingResult> {
-    let start = Instant::now();
-    let models = tokio::time::timeout(
-        std::time::Duration::from_secs(5),
-        list_models(http_client, base_url, api_key),
-    )
-    .await
-    .map_err(|_| anyhow::anyhow!("Connection timed out after 5 seconds"))??;
-    let latency_ms = start.elapsed().as_millis() as u64;
-    Ok(PingResult { models, latency_ms })
-}
-
 impl AnyProvider for OpenAiCompatibleProvider {
     fn translate<'a>(
         &'a self,
@@ -116,49 +78,25 @@ impl AnyProvider for OpenAiCompatibleProvider {
                 Some(p) if !p.trim().is_empty() => p.clone(),
                 _ => system_prompt(target_language),
             };
-            let body = ChatRequest {
-                model,
-                messages: vec![
-                    ChatMessage {
-                        role: "system",
-                        content: prompt,
-                    },
-                    ChatMessage {
-                        role: "user",
-                        content: source.to_string(),
-                    },
-                ],
-                temperature: self.temperature,
-                max_tokens: self.max_tokens,
-            };
-
-            let endpoint = format!("{}/chat/completions", normalized_base_url(&self.base_url)?);
-            let mut request = self.http_client.post(endpoint);
-            if let Some(api_key) = self
-                .api_key
-                .as_deref()
-                .filter(|value| !value.trim().is_empty())
-            {
-                request = request.bearer_auth(api_key);
-            }
-
-            let response = request
-                .header("content-type", "application/json")
-                .body(serde_json::to_vec(&body)?)
-                .send()
-                .await?;
-
-            let resp: serde_json::Value = ensure_provider_success("openai-compatible", response)
-                .await?
-                .json()
-                .await?;
-
-            let text = resp["choices"][0]["message"]["content"]
-                .as_str()
-                .ok_or_else(|| anyhow::anyhow!("OpenAI-compatible provider returned no content"))?
-                .to_string();
-
-            Ok(text)
+            send_chat_completion(
+                Arc::clone(&self.http_client),
+                ChatCompletionsRequest {
+                    provider: "openai-compatible",
+                    endpoint: format!("{}/chat/completions", normalized_base_url(&self.base_url)?),
+                    auth: self
+                        .api_key
+                        .as_deref()
+                        .filter(|value| !value.trim().is_empty())
+                        .map(|key| ChatCompletionsAuth::Bearer(key.to_string()))
+                        .unwrap_or(ChatCompletionsAuth::None),
+                    model: model.to_string(),
+                    system_prompt: prompt,
+                    user_prompt: source.to_string(),
+                    temperature: self.temperature,
+                    max_tokens: self.max_tokens,
+                },
+            )
+            .await
         })
     }
 }

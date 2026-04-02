@@ -57,7 +57,7 @@ impl ArtifactStore {
     }
 
     pub fn huggingface_path(&self, repo: &str, filename: &str) -> Result<PathBuf> {
-        huggingface_path(self.layout.huggingface_root(), repo, filename)
+        huggingface_path(&self.layout.huggingface_root, repo, filename)
     }
 
     pub(crate) async fn cached_download(

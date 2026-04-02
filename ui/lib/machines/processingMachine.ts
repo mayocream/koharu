@@ -1,7 +1,7 @@
 import { setup, assign, fromPromise, fromCallback } from 'xstate'
-import { fileOpen, directoryOpen, fileSave } from 'browser-fs-access'
 import type { QueryClient } from '@tanstack/react-query'
 import { ProgressBarStatus, getCurrentWindow } from '@/lib/backend'
+import { pickImageFiles, pickImageFolderFiles } from '@/lib/filePicker'
 import {
   getListDocumentsQueryKey,
   getGetDocumentQueryKey,
@@ -24,40 +24,35 @@ import type {
   LlmLoadRequest,
   ExportLayer,
   DocumentSummary,
+  ImportResult,
 } from '@/lib/api/schemas'
 
-// ---------------------------------------------------------------------------
-// Constants
-// ---------------------------------------------------------------------------
-
-const IMAGE_EXTENSIONS = ['.png', '.jpg', '.jpeg', '.webp']
-
-// ---------------------------------------------------------------------------
-// File picking helpers
-// ---------------------------------------------------------------------------
-
-const pickFiles = async (): Promise<File[] | null> => {
-  try {
-    return await fileOpen({
-      description: 'Documents',
-      mimeTypes: ['image/*'],
-      extensions: IMAGE_EXTENSIONS,
-      multiple: true,
-    })
-  } catch {
-    return null
-  }
+const importSelectedDocuments = async (
+  files: File[],
+  mode: 'replace' | 'append',
+): Promise<ImportResult> => {
+  return importDocuments(
+    {
+      files,
+    },
+    { mode },
+  )
 }
 
-const pickFolder = async (): Promise<File[] | null> => {
-  try {
-    const files = await directoryOpen({ recursive: true })
-    return files.filter((file) =>
-      IMAGE_EXTENSIONS.some((ext) => file.name.toLowerCase().endsWith(ext)),
-    )
-  } catch {
-    return null
-  }
+const saveBlob = async (blob: Blob, filename: string) => {
+  if (typeof document === 'undefined') return
+
+  const url = URL.createObjectURL(blob)
+  const link = document.createElement('a')
+  link.href = url
+  link.download = filename
+  link.style.display = 'none'
+  document.body.appendChild(link)
+  link.click()
+  window.setTimeout(() => {
+    URL.revokeObjectURL(url)
+    link.remove()
+  }, 0)
 }
 
 // ---------------------------------------------------------------------------
@@ -76,7 +71,11 @@ export type ProcessingContext = {
 }
 
 export type ProcessingEvent =
-  | { type: 'START_IMPORT'; mode: 'replace' | 'append'; source: 'files' | 'folder' }
+  | {
+      type: 'START_IMPORT'
+      mode: 'replace' | 'append'
+      source: 'files' | 'folder'
+    }
   | { type: 'START_DETECT'; documentId: string }
   | { type: 'START_RECOGNIZE'; documentId: string }
   | { type: 'START_INPAINT'; documentId: string }
@@ -84,9 +83,20 @@ export type ProcessingEvent =
   | { type: 'START_TRANSLATE'; documentId: string; options: TranslateRequest }
   | { type: 'START_PIPELINE'; request: PipelineJobRequest }
   | { type: 'START_LLM_LOAD'; request: LlmLoadRequest }
-  | { type: 'START_EXPORT'; documentId: string; format: string; params?: { layer?: ExportLayer | null } }
+  | {
+      type: 'START_EXPORT'
+      documentId: string
+      format: string
+      params?: { layer?: ExportLayer | null }
+    }
   | { type: 'START_BATCH_EXPORT'; layer: ExportLayer }
-  | { type: 'PROGRESS'; step?: string; current: number; total: number; overallPercent: number }
+  | {
+      type: 'PROGRESS'
+      step?: string
+      current: number
+      total: number
+      overallPercent: number
+    }
   | { type: 'CANCEL' }
   | { type: 'DONE' }
   | { type: 'ERROR'; message: string }
@@ -119,9 +129,12 @@ const importActor = fromPromise<
   number,
   { mode: 'replace' | 'append'; source: 'files' | 'folder' }
 >(async ({ input }) => {
-  const files = input.source === 'folder' ? await pickFolder() : await pickFiles()
-  if (!files?.length) throw new Error('__CANCELLED__')
-  const result = await importDocuments({ files }, { mode: input.mode })
+  const picked =
+    input.source === 'folder'
+      ? await pickImageFolderFiles()
+      : await pickImageFiles()
+  if (!picked) throw new Error('__CANCELLED__')
+  const result = await importSelectedDocuments(picked, input.mode)
   return result.totalCount
 })
 
@@ -157,13 +170,12 @@ const translateActor = fromPromise<
   await translateDocument(input.documentId, input.options)
 })
 
-const pipelineActor = fromPromise<
-  string,
-  { request: PipelineJobRequest }
->(async ({ input }) => {
-  const job = await startPipeline(input.request)
-  return job.id
-})
+const pipelineActor = fromPromise<string, { request: PipelineJobRequest }>(
+  async ({ input }) => {
+    const job = await startPipeline(input.request)
+    return job.id
+  },
+)
 
 const llmLoadActor = fromPromise<void, { request: LlmLoadRequest }>(
   async ({ input }) => {
@@ -185,14 +197,12 @@ const exportActor = fromPromise<
       getListDocumentsQueryKey(),
     ) ?? []
   const summary = documents.find((d) => d.id === input.documentId)
-  const blob = await exportDocument(input.documentId, input.format, input.params)
-  try {
-    await fileSave(blob, {
-      fileName: `${summary?.name ?? 'export'}_koharu.${input.format}`,
-    })
-  } catch {
-    // user cancelled save dialog -- not an error
-  }
+  const blob = await exportDocument(
+    input.documentId,
+    input.format,
+    input.params,
+  )
+  await saveBlob(blob, `${summary?.name ?? 'export'}_koharu.${input.format}`)
 })
 
 const batchExportActor = fromPromise<void, { layer: ExportLayer }>(
@@ -217,7 +227,10 @@ const jobPollingActor = fromCallback<ProcessingEvent, { jobId: string }>(
             step: job.step ?? undefined,
             current: single
               ? job.currentStepIndex
-              : job.currentDocument + (job.totalSteps > 0 ? job.currentStepIndex / job.totalSteps : 0),
+              : job.currentDocument +
+                (job.totalSteps > 0
+                  ? job.currentStepIndex / job.totalSteps
+                  : 0),
             total: single ? job.totalSteps : job.totalDocuments,
             overallPercent: job.overallPercent,
           })
@@ -227,7 +240,10 @@ const jobPollingActor = fromCallback<ProcessingEvent, { jobId: string }>(
           sendBack({ type: 'ERROR', message: job.error ?? 'Job failed' })
         }
       } catch (e) {
-        sendBack({ type: 'ERROR', message: (e as Error)?.message ?? 'Failed to poll job' })
+        sendBack({
+          type: 'ERROR',
+          message: (e as Error)?.message ?? 'Failed to poll job',
+        })
       }
     }, 1500)
     return () => clearInterval(interval)
@@ -246,7 +262,10 @@ const llmPollingActor = fromCallback<ProcessingEvent, Record<string, never>>(
         }
         // status === 'loading' → keep polling
       } catch (e) {
-        sendBack({ type: 'ERROR', message: (e as Error)?.message ?? 'Failed to poll LLM' })
+        sendBack({
+          type: 'ERROR',
+          message: (e as Error)?.message ?? 'Failed to poll LLM',
+        })
       }
     }, 1500)
     return () => clearInterval(interval)
@@ -280,7 +299,8 @@ export const processingMachine = setup({
   actions: {
     // --- progress bar ---
     setProgressBarNormal: () => setProgressBarValue(0),
-    updateProgressBar: ({ context }) => setProgressBarValue(context.overallPercent),
+    updateProgressBar: ({ context }) =>
+      setProgressBarValue(context.overallPercent),
     clearProgressBar: () => clearProgressBarValue(),
 
     // --- context reset ---
@@ -312,10 +332,12 @@ export const processingMachine = setup({
 
     // --- progress update ---
     updateProgress: assign({
-      step: ({ event }) => (event.type === 'PROGRESS' ? (event.step ?? null) : null),
+      step: ({ event }) =>
+        event.type === 'PROGRESS' ? (event.step ?? null) : null,
       current: ({ event }) => (event.type === 'PROGRESS' ? event.current : 0),
       total: ({ event }) => (event.type === 'PROGRESS' ? event.total : 0),
-      overallPercent: ({ event }) => (event.type === 'PROGRESS' ? event.overallPercent : 0),
+      overallPercent: ({ event }) =>
+        event.type === 'PROGRESS' ? event.overallPercent : 0,
     }),
 
     // --- error ---
@@ -546,7 +568,10 @@ export const processingMachine = setup({
       invoke: {
         src: 'translateActor',
         input: ({ context, event }) => {
-          const e = event as Extract<ProcessingEvent, { type: 'START_TRANSLATE' }>
+          const e = event as Extract<
+            ProcessingEvent,
+            { type: 'START_TRANSLATE' }
+          >
           return { documentId: context.documentId!, options: e.options }
         },
         onDone: {
@@ -579,7 +604,10 @@ export const processingMachine = setup({
           invoke: {
             src: 'pipelineActor',
             input: ({ event }) => {
-              const e = event as Extract<ProcessingEvent, { type: 'START_PIPELINE' }>
+              const e = event as Extract<
+                ProcessingEvent,
+                { type: 'START_PIPELINE' }
+              >
               return { request: e.request }
             },
             onDone: {
@@ -624,7 +652,10 @@ export const processingMachine = setup({
           invoke: {
             src: 'llmLoadActor',
             input: ({ event }) => {
-              const e = event as Extract<ProcessingEvent, { type: 'START_LLM_LOAD' }>
+              const e = event as Extract<
+                ProcessingEvent,
+                { type: 'START_LLM_LOAD' }
+              >
               return { request: e.request }
             },
             onDone: {
@@ -689,7 +720,10 @@ export const processingMachine = setup({
       invoke: {
         src: 'batchExportActor',
         input: ({ event }) => {
-          const e = event as Extract<ProcessingEvent, { type: 'START_BATCH_EXPORT' }>
+          const e = event as Extract<
+            ProcessingEvent,
+            { type: 'START_BATCH_EXPORT' }
+          >
           return { layer: e.layer }
         },
         onDone: {

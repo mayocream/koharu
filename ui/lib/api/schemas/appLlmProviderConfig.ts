@@ -4,7 +4,9 @@
  * OpenAPI spec version: 0.0.1
  */
 
-export interface ApiKeyResponse {
+export interface AppLlmProviderConfig {
   /** @nullable */
-  apiKey?: string | null;
+  baseUrl?: string | null
+  hasApiKey: boolean
+  id: string
 }

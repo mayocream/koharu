@@ -3,33 +3,33 @@
  * Do not edit manually.
  * OpenAPI spec version: 0.0.1
  */
-import type { FontPrediction } from './fontPrediction';
-import type { TextDirection } from './textDirection';
-import type { TextStyle } from './textStyle';
+import type { FontPrediction } from './fontPrediction'
+import type { TextDirection } from './textDirection'
+import type { TextStyle } from './textStyle'
 
 export interface TextBlockDetail {
-  confidence: number;
+  confidence: number
   /** @nullable */
-  detectedFontSizePx?: number | null;
+  detectedFontSizePx?: number | null
   /** @nullable */
-  detector?: string | null;
-  fontPrediction?: null | FontPrediction;
-  height: number;
-  id: string;
+  detector?: string | null
+  fontPrediction?: null | FontPrediction
+  height: number
+  id: string
   /** @nullable */
-  linePolygons?: number[][][] | null;
-  renderedDirection?: null | TextDirection;
+  linePolygons?: number[][][] | null
+  renderedDirection?: null | TextDirection
   /** @nullable */
-  rotationDeg?: number | null;
-  sourceDirection?: null | TextDirection;
+  rotationDeg?: number | null
+  sourceDirection?: null | TextDirection
   /** @nullable */
-  sourceLanguage?: string | null;
-  style?: null | TextStyle;
+  sourceLanguage?: string | null
+  style?: null | TextStyle
   /** @nullable */
-  text?: string | null;
+  text?: string | null
   /** @nullable */
-  translation?: string | null;
-  width: number;
-  x: number;
-  y: number;
+  translation?: string | null
+  width: number
+  x: number
+  y: number
 }

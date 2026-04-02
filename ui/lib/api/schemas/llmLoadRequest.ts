@@ -3,20 +3,10 @@
  * Do not edit manually.
  * OpenAPI spec version: 0.0.1
  */
+import type { LlmGenerationOptions } from './llmGenerationOptions'
+import type { LlmTarget } from './llmTarget'
 
 export interface LlmLoadRequest {
-  /** @nullable */
-  apiKey?: string | null;
-  /** @nullable */
-  baseUrl?: string | null;
-  /** @nullable */
-  customSystemPrompt?: string | null;
-  id: string;
-  /**
-     * @minimum 0
-     * @nullable
-     */
-  maxTokens?: number | null;
-  /** @nullable */
-  temperature?: number | null;
+  options?: null | LlmGenerationOptions
+  target: LlmTarget
 }

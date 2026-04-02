@@ -1,5 +1,5 @@
 use std::fs;
-use std::path::{Path, PathBuf};
+use std::path::PathBuf;
 
 use anyhow::{Context, Result};
 
@@ -10,16 +10,16 @@ const HUGGINGFACE_DIR: &str = "huggingface";
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Layout {
-    runtime_root: PathBuf,
-    models_root: PathBuf,
-    downloads_root: PathBuf,
-    huggingface_root: PathBuf,
+    pub(crate) runtime_root: PathBuf,
+    pub(crate) models_root: PathBuf,
+    pub(crate) downloads_root: PathBuf,
+    pub(crate) huggingface_root: PathBuf,
 }
 
 impl Layout {
     pub fn from_settings(settings: &Settings) -> Self {
-        let runtime_root = settings.runtime_root().to_path_buf();
-        let models_root = settings.models_root().to_path_buf();
+        let runtime_root = settings.runtime.path.clone().into_std_path_buf();
+        let models_root = settings.models.path.clone().into_std_path_buf();
         let downloads_root = runtime_root.join(DOWNLOADS_DIR);
         let huggingface_root = models_root.join(HUGGINGFACE_DIR);
 
@@ -31,35 +31,15 @@ impl Layout {
         }
     }
 
-    pub fn runtime_root(&self) -> &Path {
-        &self.runtime_root
-    }
-
-    pub fn models_root(&self) -> &Path {
-        &self.models_root
-    }
-
-    pub fn downloads_root(&self) -> &Path {
-        &self.downloads_root
-    }
-
-    pub fn huggingface_root(&self) -> &Path {
-        &self.huggingface_root
-    }
-
-    pub fn runtime_package_dir(&self, package: &str) -> PathBuf {
-        self.runtime_root.join(package)
-    }
-
     pub fn ensure_roots(&self) -> Result<()> {
-        ensure_dir(self.runtime_root())?;
-        ensure_dir(self.models_root())?;
-        ensure_dir(self.downloads_root())?;
-        ensure_dir(self.huggingface_root())?;
+        fs::create_dir_all(&self.runtime_root)
+            .with_context(|| format!("failed to create `{}`", self.runtime_root.display()))?;
+        fs::create_dir_all(&self.models_root)
+            .with_context(|| format!("failed to create `{}`", self.models_root.display()))?;
+        fs::create_dir_all(&self.downloads_root)
+            .with_context(|| format!("failed to create `{}`", self.downloads_root.display()))?;
+        fs::create_dir_all(&self.huggingface_root)
+            .with_context(|| format!("failed to create `{}`", self.huggingface_root.display()))?;
         Ok(())
     }
-}
-
-fn ensure_dir(path: &Path) -> Result<()> {
-    fs::create_dir_all(path).with_context(|| format!("failed to create `{}`", path.display()))
 }

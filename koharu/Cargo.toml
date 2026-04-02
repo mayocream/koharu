@@ -29,6 +29,7 @@ koharu-renderer = { workspace = true }
 koharu-rpc = { workspace = true }
 koharu-runtime = { workspace = true }
 anyhow = { workspace = true }
+camino = { workspace = true }
 clap = { workspace = true }
 dirs = { workspace = true }
 git-version = { workspace = true }
@@ -36,6 +37,7 @@ serde_json = { workspace = true }
 once_cell = { workspace = true }
 rfd = { workspace = true }
 tauri = { workspace = true }
+tauri-plugin-process = { workspace = true }
 tauri-plugin-updater = { workspace = true }
 tokio = { workspace = true }
 tracing = { workspace = true }

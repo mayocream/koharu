@@ -120,24 +120,24 @@ import エンドポイントは、`files` フィールドを繰り返し持つ m
 
 | Method | Path | 目的 |
 | --- | --- | --- |
-| `GET` | `/llm/models` | ローカルおよび API ベースの翻訳モデル一覧を取得する |
-| `GET` | `/llm/state` | 現在の LLM 状態を取得する |
-| `POST` | `/llm/load` | ローカルまたは API ベースのモデルを読み込む |
-| `POST` | `/llm/offload` | 現在のモデルをアンロードする |
-| `POST` | `/llm/ping` | OpenAI 互換 base URL を接続確認する |
+| `GET` | `/llm/catalog` | ローカル/プロバイダ別に整理された LLM カタログを取得する |
+| `GET` | `/llm` | 現在の LLM 状態を取得する |
+| `PUT` | `/llm` | ローカルまたはプロバイダ target を読み込む |
+| `DELETE` | `/llm` | 現在のモデルをアンロードする |
 
 実用上のリクエスト詳細:
 
-- `/llm/models` は `language` と `openaiCompatibleBaseUrl` の query parameter を任意で受け付けます
-- `/llm/load` は `id`、`apiKey`、`baseUrl`、`temperature`、`maxTokens`、`customSystemPrompt` を受け付けます
-- `/llm/ping` は `baseUrl` と任意の `apiKey` を受け付けます
+- `/llm/catalog` は任意で `language` を受け付けます
+- `PUT /llm` は `target` と任意の `options { temperature, maxTokens, customSystemPrompt }` を受け付けます
+- provider target は `{ kind: "provider", providerId, modelId }`、local target は `{ kind: "local", modelId }` です
 
-## プロバイダ API キー
+## プロバイダ設定
 
-| Method | Path | 目的 |
-| --- | --- | --- |
-| `GET` | `/providers/{provider}/api-key` | 保存済みの API キーを読み出す |
-| `PUT` | `/providers/{provider}/api-key` | プロバイダ API キーを保存または上書きする |
+プロバイダ設定は `GET /config` と `PUT /config` に統合されました。
+
+- `llm.providers` に `baseUrl` などの非シークレット設定を保存します
+- 読み出しでは生の API キーは返さず、`hasApiKey` のみ返します
+- API キーの設定/削除も `PUT /config` で行います
 
 現在の組み込み provider id は次です。
 
@@ -157,7 +157,7 @@ import エンドポイントは、`files` フィールドを繰り返し持つ m
 pipeline job リクエストには次を含められます。
 
 - `documentId` を指定すると 1 ページ対象、省略すると読み込み済み全ページ対象
-- `llmModelId`、`llmApiKey`、`llmBaseUrl`、`llmTemperature`、`llmMaxTokens`、`llmCustomSystemPrompt` などの LLM 設定
+- `llm { target, options }` による LLM 選択と任意の生成オプション
 - `shaderEffect`、`shaderStroke`、`fontFamily` などの render 設定
 - `language`
 

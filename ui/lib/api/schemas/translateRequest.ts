@@ -6,7 +6,7 @@
 
 export interface TranslateRequest {
   /** @nullable */
-  language?: string | null;
+  language?: string | null
   /** @nullable */
-  textBlockId?: string | null;
+  textBlockId?: string | null
 }

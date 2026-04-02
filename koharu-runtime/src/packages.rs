@@ -71,18 +71,6 @@ impl PackageCatalog {
             .filter(|package| (package.enabled)(runtime))
     }
 
-    pub fn requires_bootstrap(&self, runtime: &Runtime) -> Result<bool> {
-        for package in self.bootstrap_packages(runtime) {
-            if !(package.present)(runtime)
-                .with_context(|| format!("failed to inspect package `{}`", package.id))?
-            {
-                return Ok(true);
-            }
-        }
-
-        Ok(false)
-    }
-
     pub async fn prepare_bootstrap(&self, runtime: &Runtime) -> Result<()> {
         for package in self.bootstrap_packages(runtime) {
             (package.ensure)(runtime)

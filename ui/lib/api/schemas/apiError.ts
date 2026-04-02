@@ -5,7 +5,7 @@
  */
 
 export interface ApiError {
-  message: string;
+  message: string
   /** @minimum 0 */
-  status: number;
+  status: number
 }

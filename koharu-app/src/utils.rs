@@ -1,15 +1,14 @@
 use std::{io::Cursor, path::PathBuf};
 
 use image::{ImageFormat, RgbaImage};
-use koharu_core::commands::InpaintRegion;
-use koharu_core::{Document, SerializableDynamicImage};
+use koharu_core::{Document, Region, SerializableDynamicImage};
 use rayon::iter::{IntoParallelIterator, ParallelIterator};
 
 pub trait InpaintRegionExt {
     fn clamp(&self, width: u32, height: u32) -> Option<(u32, u32, u32, u32)>;
 }
 
-impl InpaintRegionExt for InpaintRegion {
+impl InpaintRegionExt for Region {
     fn clamp(&self, width: u32, height: u32) -> Option<(u32, u32, u32, u32)> {
         if width == 0 || height == 0 {
             return None;
@@ -27,7 +26,7 @@ impl InpaintRegionExt for InpaintRegion {
     }
 }
 
-pub(crate) fn encode_image(image: &SerializableDynamicImage, ext: &str) -> anyhow::Result<Vec<u8>> {
+pub fn encode_image(image: &SerializableDynamicImage, ext: &str) -> anyhow::Result<Vec<u8>> {
     let mut buf = Vec::new();
     let mut cursor = Cursor::new(&mut buf);
     let format = ImageFormat::from_extension(ext).unwrap_or(ImageFormat::Jpeg);
@@ -35,7 +34,7 @@ pub(crate) fn encode_image(image: &SerializableDynamicImage, ext: &str) -> anyho
     Ok(buf)
 }
 
-pub(crate) fn mime_from_ext(ext: &str) -> &'static str {
+pub fn mime_from_ext(ext: &str) -> &'static str {
     match ext {
         "png" => "image/png",
         "jpg" | "jpeg" => "image/jpeg",
@@ -44,11 +43,7 @@ pub(crate) fn mime_from_ext(ext: &str) -> &'static str {
     }
 }
 
-pub(crate) fn blank_rgba(
-    width: u32,
-    height: u32,
-    color: image::Rgba<u8>,
-) -> SerializableDynamicImage {
+pub fn blank_rgba(width: u32, height: u32, color: image::Rgba<u8>) -> SerializableDynamicImage {
     let blank = RgbaImage::from_pixel(width, height, color);
     image::DynamicImage::ImageRgba8(blank).into()
 }

@@ -3,14 +3,14 @@
  * Do not edit manually.
  * OpenAPI spec version: 0.0.1
  */
-import type { TextShaderEffect } from './textShaderEffect';
-import type { TextStrokeStyle } from './textStrokeStyle';
+import type { TextShaderEffect } from './textShaderEffect'
+import type { TextStrokeStyle } from './textStrokeStyle'
 
 export interface RenderRequest {
   /** @nullable */
-  fontFamily?: string | null;
-  shaderEffect?: null | TextShaderEffect;
-  shaderStroke?: null | TextStrokeStyle;
+  fontFamily?: string | null
+  shaderEffect?: null | TextShaderEffect
+  shaderStroke?: null | TextStrokeStyle
   /** @nullable */
-  textBlockId?: string | null;
+  textBlockId?: string | null
 }

@@ -1,4 +1,3 @@
-pub mod api;
 pub mod language;
 mod model;
 pub mod paddleocr_vl;

@@ -80,7 +80,6 @@ fn build_document() -> Document {
         image: to_serializable_rgba(original),
         width,
         height,
-        revision: 0,
         text_blocks: vec![
             TextBlock {
                 id: "hero-title".to_string(),

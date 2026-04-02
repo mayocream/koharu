@@ -3908,6 +3908,7 @@ name = "koharu"
 version = "0.41.4"
 dependencies = [
  "anyhow",
+ "camino",
  "clap",
  "dirs",
  "git-version",
@@ -3923,6 +3924,7 @@ dependencies = [
  "serde_json",
  "tauri",
  "tauri-build",
+ "tauri-plugin-process",
  "tauri-plugin-updater",
  "tokio",
  "tracing",
@@ -3937,6 +3939,8 @@ name = "koharu-app"
 version = "0.41.4"
 dependencies = [
  "anyhow",
+ "blake3",
+ "camino",
  "dirs",
  "image",
  "imageproc",
@@ -3945,13 +3949,13 @@ dependencies = [
  "koharu-ml",
  "koharu-renderer",
  "koharu-runtime",
- "once_cell",
+ "lru",
  "open",
  "rayon",
  "reqwest-middleware",
  "rfd",
  "serde",
- "serde_bytes",
+ "serde_json",
  "strum",
  "tempfile",
  "tokio",
@@ -4119,6 +4123,7 @@ version = "0.41.4"
 dependencies = [
  "anyhow",
  "axum",
+ "camino",
  "dirs",
  "flate2",
  "futures",
@@ -4322,6 +4327,15 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "0fae87c125b03c1d2c0150c90365d7d6bcc53fb73a9acaef207d2d065860f062"
 dependencies = [
  "imgref",
+]
+
+[[package]]
+name = "lru"
+version = "0.14.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "9f8cc7106155f10bdf99a6f379688f543ad6596a415375b36a59a054ceda1198"
+dependencies = [
+ "hashbrown 0.15.5",
 ]
 
 [[package]]
@@ -7638,6 +7652,16 @@ dependencies = [
  "tauri-utils",
  "toml 0.9.12+spec-1.1.0",
  "walkdir",
+]
+
+[[package]]
+name = "tauri-plugin-process"
+version = "2.3.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "d55511a7bf6cd70c8767b02c97bf8134fa434daf3926cfc1be0a0f94132d165a"
+dependencies = [
+ "tauri",
+ "tauri-plugin",
 ]
 
 [[package]]

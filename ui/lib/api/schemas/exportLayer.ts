@@ -4,10 +4,9 @@
  * OpenAPI spec version: 0.0.1
  */
 
-export type ExportLayer = typeof ExportLayer[keyof typeof ExportLayer];
-
+export type ExportLayer = (typeof ExportLayer)[keyof typeof ExportLayer]
 
 export const ExportLayer = {
   rendered: 'rendered',
   inpainted: 'inpainted',
-} as const;
+} as const

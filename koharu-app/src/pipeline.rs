@@ -1,4 +1,4 @@
-use std::str::FromStr;
+use std::collections::HashMap;
 use std::sync::{
     Arc,
     atomic::{AtomicBool, Ordering},
@@ -6,30 +6,28 @@ use std::sync::{
 use std::time::Duration;
 
 use koharu_core::commands::ProcessRequest;
-use koharu_core::events::{PipelineProgress, PipelineStatus, PipelineStep};
-use koharu_llm::ModelId;
-use once_cell::sync::Lazy;
-use tokio::sync::broadcast;
+use koharu_core::events::{PipelineStatus, PipelineStep};
+use koharu_core::{JobState, JobStatus};
+use tokio::sync::RwLock;
+use uuid::Uuid;
 
-use crate::{
-    AppResources,
-    state_tx::{self, ChangedField},
-};
+use crate::AppResources;
+use crate::llm::ensure_target_ready;
+
+pub type Jobs = Arc<RwLock<HashMap<String, JobState>>>;
 
 pub struct PipelineHandle {
     pub id: String,
     pub cancel: Arc<AtomicBool>,
 }
 
-static PIPELINE_TX: Lazy<broadcast::Sender<PipelineProgress>> =
-    Lazy::new(|| broadcast::channel(256).0);
-
-pub fn subscribe() -> broadcast::Receiver<PipelineProgress> {
-    PIPELINE_TX.subscribe()
-}
-
-fn emit(progress: PipelineProgress) {
-    let _ = PIPELINE_TX.send(progress);
+#[derive(Clone, Copy)]
+struct JobProgress {
+    current_document: usize,
+    total_documents: usize,
+    current_step_index: usize,
+    total_steps: usize,
+    overall_percent: u8,
 }
 
 fn compute_percent(doc: usize, step: usize, total_docs: usize, total_steps: usize) -> u8 {
@@ -41,58 +39,142 @@ fn compute_percent(doc: usize, step: usize, total_docs: usize, total_steps: usiz
     ((done_units as f64 / total_units as f64) * 100.0).round() as u8
 }
 
-pub async fn run_pipeline(
+async fn update_job(jobs: &Jobs, job: JobState) {
+    let terminal = !matches!(job.status, JobStatus::Running);
+    let mut guard = jobs.write().await;
+    if terminal {
+        guard.remove(&job.id);
+    } else {
+        guard.insert(job.id.clone(), job);
+    }
+}
+
+fn make_job_state(
+    job_id: &str,
+    status: PipelineStatus,
+    step: Option<PipelineStep>,
+    progress: JobProgress,
+) -> JobState {
+    let (job_status, error) = match status {
+        PipelineStatus::Running => (JobStatus::Running, None),
+        PipelineStatus::Completed => (JobStatus::Completed, None),
+        PipelineStatus::Cancelled => (JobStatus::Cancelled, None),
+        PipelineStatus::Failed(message) => (JobStatus::Failed, Some(message)),
+    };
+
+    JobState {
+        id: job_id.to_string(),
+        kind: "pipeline".to_string(),
+        status: job_status,
+        step: step.map(|step| step.to_string()),
+        current_document: progress.current_document,
+        total_documents: progress.total_documents,
+        current_step_index: progress.current_step_index,
+        total_steps: progress.total_steps,
+        overall_percent: progress.overall_percent,
+        error,
+    }
+}
+
+pub async fn process(
+    state: AppResources,
+    payload: ProcessRequest,
+    jobs: Jobs,
+) -> anyhow::Result<String> {
+    {
+        let guard = state.pipeline.read().await;
+        if guard.is_some() {
+            anyhow::bail!("A processing pipeline is already running");
+        }
+    }
+
+    let job_id = Uuid::new_v4().to_string();
+    let cancel = Arc::new(AtomicBool::new(false));
+    {
+        let mut guard = state.pipeline.write().await;
+        *guard = Some(PipelineHandle {
+            id: job_id.clone(),
+            cancel: cancel.clone(),
+        });
+    }
+
+    let resources = state.clone();
+    let job_id_for_task = job_id.clone();
+    tokio::spawn(async move {
+        run_pipeline(resources, payload, cancel, job_id_for_task, jobs).await;
+    });
+
+    Ok(job_id)
+}
+
+pub async fn process_cancel(state: AppResources) -> anyhow::Result<()> {
+    let guard = state.pipeline.read().await;
+    if let Some(handle) = guard.as_ref() {
+        handle.cancel.store(true, Ordering::Relaxed);
+    }
+    Ok(())
+}
+
+async fn run_pipeline(
     resources: AppResources,
     request: ProcessRequest,
     cancel: Arc<AtomicBool>,
     job_id: String,
+    jobs: Jobs,
 ) {
-    let result = run_pipeline_inner(&resources, &request, &cancel, &job_id).await;
+    let result = run_pipeline_inner(&resources, &request, &cancel, &job_id, &jobs).await;
 
-    let total_docs = match request.index {
+    let total_docs = match request.document_id {
         Some(_) => 1,
-        None => resources.state.read().await.documents.len(),
+        None => resources
+            .cache
+            .list_documents()
+            .map(|entries| entries.len())
+            .unwrap_or(0),
     };
 
-    match result {
-        Ok(()) if cancel.load(Ordering::Relaxed) => {
-            emit(PipelineProgress {
-                job_id: job_id.clone(),
-                status: PipelineStatus::Cancelled,
-                step: None,
+    let final_state = match result {
+        Ok(()) if cancel.load(Ordering::Relaxed) => make_job_state(
+            &job_id,
+            PipelineStatus::Cancelled,
+            None,
+            JobProgress {
                 current_document: total_docs,
                 total_documents: total_docs,
                 current_step_index: 0,
                 total_steps: PipelineStep::ALL.len(),
                 overall_percent: 0,
-            });
-        }
-        Ok(()) => {
-            emit(PipelineProgress {
-                job_id: job_id.clone(),
-                status: PipelineStatus::Completed,
-                step: None,
+            },
+        ),
+        Ok(()) => make_job_state(
+            &job_id,
+            PipelineStatus::Completed,
+            None,
+            JobProgress {
                 current_document: total_docs,
                 total_documents: total_docs,
                 current_step_index: PipelineStep::ALL.len(),
                 total_steps: PipelineStep::ALL.len(),
                 overall_percent: 100,
-            });
-        }
+            },
+        ),
         Err(err) => {
             tracing::error!("Pipeline failed: {err:#}");
-            emit(PipelineProgress {
-                job_id: job_id.clone(),
-                status: PipelineStatus::Failed(err.to_string()),
-                step: None,
-                current_document: 0,
-                total_documents: total_docs,
-                current_step_index: 0,
-                total_steps: PipelineStep::ALL.len(),
-                overall_percent: 0,
-            });
+            make_job_state(
+                &job_id,
+                PipelineStatus::Failed(err.to_string()),
+                None,
+                JobProgress {
+                    current_document: 0,
+                    total_documents: total_docs,
+                    current_step_index: 0,
+                    total_steps: PipelineStep::ALL.len(),
+                    overall_percent: 0,
+                },
+            )
         }
-    }
+    };
+    update_job(&jobs, final_state).await;
 
     let mut guard = resources.pipeline.write().await;
     *guard = None;
@@ -103,97 +185,69 @@ async fn run_pipeline_inner(
     req: &ProcessRequest,
     cancel: &Arc<AtomicBool>,
     job_id: &str,
+    jobs: &Jobs,
 ) -> anyhow::Result<()> {
-    let total_docs = {
-        let guard = res.state.read().await;
-        let len = guard.documents.len();
-        match req.index {
-            Some(i) if i >= len => anyhow::bail!("Document index {i} out of range (have {len})"),
-            Some(_) => 1,
-            None => len,
+    let entries = res.cache.list_documents()?;
+    let page_ids: Vec<String> = match req.document_id.as_deref() {
+        Some(id) => {
+            if !entries.iter().any(|p| p.id == id) {
+                anyhow::bail!("Document not found: {id}");
+            }
+            vec![id.to_string()]
         }
+        None => entries.into_iter().map(|p| p.id).collect(),
     };
 
+    let total_docs = page_ids.len();
     if total_docs == 0 {
         return Ok(());
     }
 
-    if let Some(model_id) = &req.llm_model_id
-        && !res.llm.ready().await
-    {
-        if model_id.contains(':') {
-            let (provider_id, model_part) = model_id.split_once(':').unwrap();
-            res.llm
-                .load_api(
-                    provider_id,
-                    model_part,
-                    koharu_llm::providers::ProviderConfig {
-                        http_client: res.runtime.http_client(),
-                        api_key: req.llm_api_key.clone(),
-                        base_url: req.llm_base_url.clone(),
-                        temperature: req.llm_temperature,
-                        max_tokens: req.llm_max_tokens,
-                        custom_system_prompt: req.llm_custom_system_prompt.clone(),
-                    },
-                )
-                .await?;
-        } else {
-            let id = ModelId::from_str(model_id)?;
-            res.llm.load(id).await;
-            for _ in 0..300 {
-                if res.llm.ready().await {
-                    break;
-                }
-                tokio::time::sleep(Duration::from_millis(100)).await;
-                if cancel.load(Ordering::Relaxed) {
-                    return Ok(());
-                }
-            }
-            if !res.llm.ready().await {
-                anyhow::bail!("LLM failed to load within timeout");
-            }
-        }
+    if let Some(llm) = &req.llm {
+        ensure_target_ready(res, &llm.target, llm.options.as_ref()).await?;
     }
 
-    let start_index = req.index.unwrap_or(0);
-    let end_index = req.index.map(|i| i + 1).unwrap_or(total_docs);
     let total_steps = PipelineStep::ALL.len();
 
-    for (doc_ordinal, doc_index) in (start_index..end_index).enumerate() {
+    for (doc_ordinal, page_id) in page_ids.iter().enumerate() {
+        let mut doc = res.cache.get(page_id).await?;
+
         for (step_ordinal, step) in PipelineStep::ALL.iter().enumerate() {
             if cancel.load(Ordering::Relaxed) {
                 return Ok(());
             }
 
             let overall = compute_percent(doc_ordinal, step_ordinal, total_docs, total_steps);
-            emit(PipelineProgress {
-                job_id: job_id.to_string(),
-                status: PipelineStatus::Running,
-                step: Some(*step),
-                current_document: doc_ordinal,
-                total_documents: total_docs,
-                current_step_index: step_ordinal,
-                total_steps,
-                overall_percent: overall,
-            });
+            update_job(
+                jobs,
+                make_job_state(
+                    job_id,
+                    PipelineStatus::Running,
+                    Some(*step),
+                    JobProgress {
+                        current_document: doc_ordinal,
+                        total_documents: total_docs,
+                        current_step_index: step_ordinal,
+                        total_steps,
+                        overall_percent: overall,
+                    },
+                ),
+            )
+            .await;
 
             tokio::task::yield_now().await;
             tokio::time::sleep(Duration::from_millis(1)).await;
 
-            let mut snapshot = state_tx::read_doc(&res.state, doc_index).await?;
-
             match step {
-                PipelineStep::Detect => res.ml.detect(&mut snapshot).await?,
-                PipelineStep::Ocr => res.ml.ocr(&mut snapshot).await?,
-                PipelineStep::Inpaint => res.ml.inpaint(&mut snapshot).await?,
+                PipelineStep::Detect => res.ml.detect(&mut doc).await?,
+                PipelineStep::Ocr => res.ml.ocr(&mut doc).await?,
+                PipelineStep::Inpaint => res.ml.inpaint(&mut doc).await?,
                 PipelineStep::LlmGenerate => {
-                    res.llm
-                        .translate(&mut snapshot, req.language.as_deref())
-                        .await?;
+                    res.llm.translate(&mut doc, req.language.as_deref()).await?;
                 }
                 PipelineStep::Render => {
                     res.renderer.render(
-                        &mut snapshot,
+                        &mut doc,
                         None,
                         req.shader_effect.unwrap_or_default(),
                         req.shader_stroke.clone(),
@@ -202,15 +256,11 @@ async fn run_pipeline_inner(
                 }
             }
 
-            let changed = match step {
-                PipelineStep::Detect => &[ChangedField::TextBlocks, ChangedField::Segment][..],
-                PipelineStep::Ocr => &[ChangedField::TextBlocks][..],
-                PipelineStep::Inpaint => &[ChangedField::Inpainted][..],
-                PipelineStep::LlmGenerate => &[ChangedField::TextBlocks][..],
-                PipelineStep::Render => &[ChangedField::TextBlocks, ChangedField::Rendered][..],
-            };
-            state_tx::update_doc(&res.state, doc_index, snapshot, changed).await?;
+            // Save after each step (crash-safe)
+            res.cache.put(&doc).await?;
         }
+        // Evict from cache to free memory
+        res.cache.evict(page_id).await;
     }
 
     Ok(())

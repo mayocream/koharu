@@ -12,9 +12,7 @@ export function useCanvasZoom() {
     query: { enabled: !!documentId },
   })
 
-  const summary = document
-    ? `${document.width} x ${document.height}`
-    : '--'
+  const summary = document ? `${document.width} x ${document.height}` : '--'
 
   const applyScale = (value: number) => {
     setAutoFitEnabled(false)
