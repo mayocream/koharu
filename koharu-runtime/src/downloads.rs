@@ -71,6 +71,7 @@ impl Downloads {
 
         let api = ApiBuilder::from_cache(self.huggingface_cache.clone())
             .with_progress(false)
+            .high() // high concurrency
             .build()
             .context("failed to build HF Hub API")?;
         let progress = HfProgress::new(self.tx.clone(), &self.progress, filename);

@@ -2,7 +2,7 @@
 
 import { useEffect, useMemo, useState } from 'react'
 import { useTranslation } from 'react-i18next'
-import { useQuery, useQueryClient } from '@tanstack/react-query'
+import { useQuery } from '@tanstack/react-query'
 import { motion } from 'motion/react'
 import {
   ScanIcon,
@@ -31,13 +31,7 @@ import {
   useGetLlm,
   getGetLlmCatalogQueryKey,
   getLlmCatalog,
-  unloadLlm,
 } from '@/lib/api/llm/llm'
-import { translateDocument } from '@/lib/api/processing/processing'
-import {
-  getGetDocumentQueryKey,
-  getListDocumentsQueryKey,
-} from '@/lib/api/documents/documents'
 import type {
   LlmCatalog,
   LlmCatalogModel,
@@ -75,21 +69,12 @@ function useLlmCatalogQuery() {
 
 const flattenCatalogModels = (catalog?: LlmCatalog): SelectableLlmModel[] => [
   ...(catalog?.localModels ?? []).map((model) => ({ model })),
-  ...((catalog?.providers ?? []).flatMap((provider) =>
-    provider.models.map((model) => ({ model, provider })),
-  ) ?? []),
+  ...(catalog?.providers ?? [])
+    .filter((provider) => provider.status === 'ready')
+    .flatMap((provider) =>
+      provider.models.map((model) => ({ model, provider })),
+    ),
 ]
-
-const providerWarningText = (provider?: LlmProviderCatalog) => {
-  if (!provider) return null
-  if (provider.status === 'missing_configuration') {
-    return `${provider.name} is missing required configuration in Settings.`
-  }
-  if (provider.status === 'discovery_failed') {
-    return provider.error ?? `${provider.name} model discovery failed.`
-  }
-  return null
-}
 
 export function CanvasToolbar() {
   return (
@@ -102,43 +87,21 @@ export function CanvasToolbar() {
 }
 
 function WorkflowButtons() {
-  const queryClient = useQueryClient()
   const { send, isProcessing, state } = useProcessing()
   const { data: llmState } = useGetLlm()
   const llmReady = llmState?.status === 'ready'
-  const [generating, setGenerating] = useState(false)
   const { t } = useTranslation()
 
   const isDetecting = state.matches('detecting')
   const isOcr = state.matches('recognizing')
   const isInpainting = state.matches('inpainting')
   const isRendering = state.matches('rendering')
+  const isTranslating = state.matches('translating')
 
   const requireDocumentId = () => {
     const id = useEditorUiStore.getState().currentDocumentId
     if (!id) throw new Error('No current document selected')
     return id
-  }
-
-  const handleTranslate = async () => {
-    const documentId = useEditorUiStore.getState().currentDocumentId
-    if (!documentId) return
-    const selectedLanguage = useEditorUiStore.getState().selectedLanguage
-    setGenerating(true)
-    try {
-      await translateDocument(documentId, { language: selectedLanguage })
-      await queryClient.invalidateQueries({
-        queryKey: getGetDocumentQueryKey(documentId),
-      })
-      await queryClient.invalidateQueries({
-        queryKey: getListDocumentsQueryKey(),
-      })
-      useEditorUiStore.getState().setShowTextBlocksOverlay(true)
-    } catch (error) {
-      console.error(error)
-    } finally {
-      setGenerating(false)
-    }
   }
 
   return (
@@ -184,11 +147,19 @@ function WorkflowButtons() {
       <Button
         variant='ghost'
         size='xs'
-        onClick={handleTranslate}
-        disabled={!llmReady || generating}
+        onClick={() => {
+          const documentId = requireDocumentId()
+          const selectedLanguage = useEditorUiStore.getState().selectedLanguage
+          send({
+            type: 'START_TRANSLATE',
+            documentId,
+            options: { language: selectedLanguage },
+          })
+        }}
+        disabled={!llmReady || isTranslating || isProcessing}
         data-testid='toolbar-translate'
       >
-        {generating ? (
+        {isTranslating ? (
           <LoaderCircleIcon className='size-4 animate-spin' />
         ) : (
           <LanguagesIcon className='size-4' />
@@ -260,8 +231,10 @@ function LlmStatusPopover() {
   )
   const { data: llmState } = useGetLlm()
   const llmReady = llmState?.status === 'ready'
-  const llmLoading = llmState?.status === 'loading'
-  const { send } = useProcessing()
+  const { send, state } = useProcessing()
+  const llmLoading = state.matches('loadingLlm')
+  const llmUnloading = state.matches('unloadingLlm')
+  const busy = llmLoading || llmUnloading
   const { t } = useTranslation()
 
   const selectedModel = useMemo(
@@ -271,17 +244,14 @@ function LlmStatusPopover() {
       ),
     [llmModels, selectedTarget],
   )
-  const selectedProvider = selectedModel?.provider
   const selectedTargetKey = selectedTarget
     ? llmTargetKey(selectedTarget)
     : undefined
   const selectedModelLanguages = selectedModel?.model.languages ?? []
   const selectedIsLoaded =
     llmReady && sameLlmTarget(llmState?.target, selectedTarget)
-  const providerWarning = providerWarningText(selectedProvider)
 
-  const handleSetSelectedModel = async (key: string) => {
-    await unloadLlm()
+  const handleSetSelectedModel = (key: string) => {
     const nextSelection = llmModels.find(
       ({ model }) => llmTargetKey(model.target) === key,
     )
@@ -304,12 +274,12 @@ function LlmStatusPopover() {
     useEditorUiStore.setState({ selectedLanguage: language })
   }
 
-  const handleToggleLoadUnload = async () => {
+  const handleToggleLoadUnload = () => {
     const currentSelectedTarget = useEditorUiStore.getState().selectedTarget
     if (!currentSelectedTarget) return
 
-    if (llmReady && sameLlmTarget(llmState?.target, currentSelectedTarget)) {
-      await unloadLlm()
+    if (selectedIsLoaded) {
+      send({ type: 'START_LLM_UNLOAD' })
       return
     }
 
@@ -356,21 +326,37 @@ function LlmStatusPopover() {
         <button
           data-testid='llm-trigger'
           data-llm-ready={llmReady ? 'true' : 'false'}
-          data-llm-loading={llmLoading ? 'true' : 'false'}
+          data-llm-loading={busy ? 'true' : 'false'}
           className={`flex h-6 cursor-pointer items-center gap-1.5 rounded-full px-2.5 text-[11px] font-medium shadow-sm transition hover:opacity-80 ${
             llmReady
               ? 'bg-rose-400 text-white ring-1 ring-rose-400/30'
-              : 'bg-muted text-muted-foreground ring-border/50 ring-1'
+              : busy
+                ? 'bg-amber-400 text-white ring-1 ring-amber-400/30'
+                : 'bg-muted text-muted-foreground ring-border/50 ring-1'
           }`}
         >
           <motion.span
             className={`size-1.5 rounded-full ${
-              llmReady ? 'bg-white' : 'bg-muted-foreground/40'
-            }`}
-            animate={llmReady ? { opacity: [1, 0.5, 1] } : { opacity: 1 }}
-            transition={
               llmReady
-                ? { duration: 2, repeat: Infinity, ease: 'easeInOut' }
+                ? 'bg-white'
+                : busy
+                  ? 'bg-white'
+                  : 'bg-muted-foreground/40'
+            }`}
+            animate={
+              llmReady
+                ? { opacity: [1, 0.5, 1] }
+                : busy
+                  ? { opacity: [1, 0.4, 1] }
+                  : { opacity: 1 }
+            }
+            transition={
+              llmReady || busy
+                ? {
+                    duration: busy ? 1 : 2,
+                    repeat: Infinity,
+                    ease: 'easeInOut',
+                  }
                 : {}
             }
           />
@@ -410,10 +396,6 @@ function LlmStatusPopover() {
             </SelectContent>
           </Select>
 
-          {providerWarning ? (
-            <p className='text-xs text-amber-500'>{providerWarning}</p>
-          ) : null}
-
           {selectedModelLanguages.length > 0 ? (
             <Select
               value={llmSelectedLanguage ?? selectedModelLanguages[0]}
@@ -442,19 +424,17 @@ function LlmStatusPopover() {
           <Button
             data-testid='llm-load-toggle'
             data-llm-ready={selectedIsLoaded ? 'true' : 'false'}
-            data-llm-loading={llmLoading ? 'true' : 'false'}
+            data-llm-loading={busy ? 'true' : 'false'}
             variant='outline'
             size='sm'
-            onClick={() => {
-              void handleToggleLoadUnload()
-            }}
-            disabled={!selectedTarget || llmLoading || !!providerWarning}
+            onClick={handleToggleLoadUnload}
+            disabled={!selectedTarget || busy}
             className='w-full gap-1.5 text-xs'
           >
-            {llmLoading ? (
+            {busy ? (
               <LoaderCircleIcon className='size-3.5 animate-spin' />
             ) : null}
-            {selectedIsLoaded ? t('llm.unload') : t('llm.load')}
+            {selectedIsLoaded || llmUnloading ? t('llm.unload') : t('llm.load')}
           </Button>
         </div>
       </PopoverContent>

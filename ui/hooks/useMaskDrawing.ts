@@ -13,6 +13,7 @@ import {
 } from '@/lib/api/documents/documents'
 import { convertToImageBitmap } from '@/lib/util'
 import { useEditorUiStore } from '@/lib/stores/editorUiStore'
+import { normalizeErrorMessage } from '@/lib/errors'
 import type { ToolMode } from '@/types'
 import type { MappedDocument } from '@/hooks/useTextBlocks'
 import type { PointerToDocumentFn } from '@/hooks/usePointerToDocument'
@@ -85,7 +86,7 @@ export function useMaskDrawing({
             data: Array.from(fullPng),
           })
         } catch (e) {
-          console.error(e)
+          useEditorUiStore.getState().showError(normalizeErrorMessage(e))
         }
       },
       onFinalize: async (_patch, region) => {
@@ -121,7 +122,7 @@ export function useMaskDrawing({
               await invalidateDocument(documentId)
               useEditorUiStore.getState().setShowInpaintedImage(true)
             } catch (e) {
-              console.error(e)
+              useEditorUiStore.getState().showError(normalizeErrorMessage(e))
             }
           })
       },
