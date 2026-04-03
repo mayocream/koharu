@@ -297,6 +297,24 @@
     "localLlmTesting": "テスト中...",
     "localLlmTestSuccess": "接続成功。{{count}} 個のモデルが見つかりました。レイテンシ: {{latency}}ms",
     "localLlmTestFailed": "接続失敗: {{error}}",
-    "localLlmAdvanced": "詳細設定"
+    "localLlmAdvanced": "詳細設定",
+    "appConfig": "アプリ設定",
+    "storage": "ストレージ",
+    "renderingFont": "レンダリングフォント",
+    "renderingFontDescription": "翻訳テキストを画像にレンダリングする際に使用するフォント。",
+    "providersDescription": "LLM プロバイダーの API キーとエンドポイントを設定します。",
+    "loadingProviders": "プロバイダーを読み込み中...",
+    "apiKey": "API キー",
+    "apiKeyPlaceholderStored": "キー保存済み。新しいキーを入力して置き換え。",
+    "apiKeyPlaceholderEmpty": "API キーを入力",
+    "apiKeyStoredInKeychain": "キーチェーンに保存済み",
+    "apiKeyClear": "削除",
+    "apiKeySave": "保存",
+    "apiKeySaved": "保存しました！",
+    "dataPath": "データパス",
+    "dataPathDescription": "Koharu はモデル、ランタイムパッケージ、ページマニフェスト、画像 Blob をこのディレクトリに保存します。パスを変更するとアプリの再起動が必要です。",
+    "dataPathApply": "適用して再起動",
+    "dataPathApplying": "適用中...",
+    "dataPathDesktopOnly": "ストレージ設定はデスクトップアプリでのみ利用可能です。"
   }
 }

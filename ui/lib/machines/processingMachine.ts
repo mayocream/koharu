@@ -1,6 +1,7 @@
 import { setup, assign, fromPromise, fromCallback } from 'xstate'
 import type { QueryClient } from '@tanstack/react-query'
 import { ProgressBarStatus, getCurrentWindow } from '@/lib/backend'
+import { useEditorUiStore } from '@/lib/stores/editorUiStore'
 import { pickImageFiles, pickImageFolderFiles } from '@/lib/filePicker'
 import {
   getListDocumentsQueryKey,
@@ -16,7 +17,7 @@ import {
 } from '@/lib/api/processing/processing'
 import { startPipeline, cancelJob, getJob } from '@/lib/api/jobs/jobs'
 import { exportDocument, batchExport } from '@/lib/api/exports/exports'
-import { loadLlm, getLlm } from '@/lib/api/llm/llm'
+import { loadLlm, getLlm, getGetLlmQueryKey } from '@/lib/api/llm/llm'
 import type {
   RenderRequest,
   TranslateRequest,
@@ -126,7 +127,7 @@ const clearProgressBarValue = () => {
 // ---------------------------------------------------------------------------
 
 const importActor = fromPromise<
-  number,
+  ImportResult,
   { mode: 'replace' | 'append'; source: 'files' | 'folder' }
 >(async ({ input }) => {
   const picked =
@@ -134,8 +135,7 @@ const importActor = fromPromise<
       ? await pickImageFolderFiles()
       : await pickImageFiles()
   if (!picked) throw new Error('__CANCELLED__')
-  const result = await importSelectedDocuments(picked, input.mode)
-  return result.totalCount
+  return importSelectedDocuments(picked, input.mode)
 })
 
 const detectActor = fromPromise<void, { documentId: string }>(
@@ -477,7 +477,16 @@ export const processingMachine = setup({
         },
         onDone: {
           target: 'idle',
-          actions: ['invalidateDocumentList'],
+          actions: [
+            'invalidateDocumentList',
+            ({ event }) => {
+              const result = event.output as ImportResult
+              const firstId = result.documents?.[0]?.id
+              if (firstId) {
+                useEditorUiStore.getState().setCurrentDocumentId(firstId)
+              }
+            },
+          ],
         },
         onError: {
           target: 'idle',
@@ -678,6 +687,9 @@ export const processingMachine = setup({
             },
             DONE: {
               target: '#processing.idle',
+              actions: [({ context }) => {
+                context.queryClient.invalidateQueries({ queryKey: getGetLlmQueryKey() })
+              }],
             },
             ERROR: {
               target: '#processing.idle',

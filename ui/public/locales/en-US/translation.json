@@ -1,6 +1,8 @@
 {
   "common": {
-    "initializing": "Initializing..."
+    "initializing": "Initializing...",
+    "cancel": "Cancel",
+    "confirm": "Confirm"
   },
   "menu": {
     "file": "File",
@@ -297,6 +299,24 @@
     "localLlmTesting": "Testing...",
     "localLlmTestSuccess": "Connected. Found {{count}} model(s). Latency: {{latency}}ms",
     "localLlmTestFailed": "Connection failed: {{error}}",
-    "localLlmAdvanced": "Advanced"
+    "localLlmAdvanced": "Advanced",
+    "appConfig": "App Config",
+    "storage": "Storage",
+    "renderingFont": "Rendering Font",
+    "renderingFontDescription": "Font used when rendering translated text onto images.",
+    "providersDescription": "Configure API keys and endpoints for LLM providers.",
+    "loadingProviders": "Loading providers...",
+    "apiKey": "API Key",
+    "apiKeyPlaceholderStored": "Key stored. Enter new to replace.",
+    "apiKeyPlaceholderEmpty": "Enter API key",
+    "apiKeyStoredInKeychain": "Stored in keychain",
+    "apiKeyClear": "Clear",
+    "apiKeySave": "Save",
+    "apiKeySaved": "Saved!",
+    "dataPath": "Data Path",
+    "dataPathDescription": "Koharu stores models, runtime packages, page manifests, and image blobs under this directory. Changing the path requires an app restart.",
+    "dataPathApply": "Apply & Restart",
+    "dataPathApplying": "Applying...",
+    "dataPathDesktopOnly": "Storage settings are only available in the desktop app."
   }
 }
