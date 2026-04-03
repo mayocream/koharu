@@ -297,6 +297,24 @@
     "localLlmTesting": "測試中...",
     "localLlmTestSuccess": "已連線。找到 {{count}} 個模型。延遲：{{latency}}ms",
     "localLlmTestFailed": "連線失敗：{{error}}",
-    "localLlmAdvanced": "進階設定"
+    "localLlmAdvanced": "進階設定",
+    "appConfig": "應用程式設定",
+    "storage": "儲存空間",
+    "renderingFont": "渲染字型",
+    "renderingFontDescription": "將翻譯文字渲染至影像時使用的字型。",
+    "providersDescription": "設定 LLM 提供者的 API 金鑰與端點。",
+    "loadingProviders": "正在載入提供者...",
+    "apiKey": "API 金鑰",
+    "apiKeyPlaceholderStored": "金鑰已儲存。輸入新金鑰以取代。",
+    "apiKeyPlaceholderEmpty": "輸入 API 金鑰",
+    "apiKeyStoredInKeychain": "已儲存於鑰匙圈",
+    "apiKeyClear": "清除",
+    "apiKeySave": "儲存",
+    "apiKeySaved": "已儲存！",
+    "dataPath": "資料路徑",
+    "dataPathDescription": "Koharu 將模型、執行階段套件、頁面清單和影像資料儲存在此目錄下。變更路徑需要重新啟動應用程式。",
+    "dataPathApply": "套用並重新啟動",
+    "dataPathApplying": "正在套用...",
+    "dataPathDesktopOnly": "儲存空間設定僅在桌面應用程式中可用。"
   }
 }

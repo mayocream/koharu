@@ -297,6 +297,24 @@
     "localLlmTesting": "Probando...",
     "localLlmTestSuccess": "Conectado. {{count}} modelo(s) encontrados. Latencia: {{latency}}ms",
     "localLlmTestFailed": "Error de conexión: {{error}}",
-    "localLlmAdvanced": "Avanzado"
+    "localLlmAdvanced": "Avanzado",
+    "appConfig": "Configuración de la app",
+    "storage": "Almacenamiento",
+    "renderingFont": "Fuente de renderizado",
+    "renderingFontDescription": "Fuente utilizada al renderizar el texto traducido sobre las imágenes.",
+    "providersDescription": "Configura las claves API y los endpoints de los proveedores de LLM.",
+    "loadingProviders": "Cargando proveedores...",
+    "apiKey": "Clave API",
+    "apiKeyPlaceholderStored": "Clave guardada. Introduce una nueva para reemplazarla.",
+    "apiKeyPlaceholderEmpty": "Introduce la clave API",
+    "apiKeyStoredInKeychain": "Guardada en el llavero",
+    "apiKeyClear": "Eliminar",
+    "apiKeySave": "Guardar",
+    "apiKeySaved": "¡Guardada!",
+    "dataPath": "Ruta de datos",
+    "dataPathDescription": "Koharu almacena modelos, paquetes del runtime, manifiestos de páginas y blobs de imágenes en este directorio. Cambiar la ruta requiere reiniciar la aplicación.",
+    "dataPathApply": "Aplicar y reiniciar",
+    "dataPathApplying": "Aplicando...",
+    "dataPathDesktopOnly": "La configuración de almacenamiento solo está disponible en la aplicación de escritorio."
   }
 }

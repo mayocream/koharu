@@ -1,7 +1,6 @@
 'use client'
 
 import { useCallback, useEffect, useState } from 'react'
-import Link from 'next/link'
 import { MinusIcon, SquareIcon, XIcon, CopyIcon } from 'lucide-react'
 import { isTauri } from '@/lib/backend'
 import { useTranslation } from 'react-i18next'
@@ -38,6 +37,7 @@ import {
   MenubarSeparator,
   MenubarTrigger,
 } from '@/components/ui/menubar'
+import { SettingsDialog, type TabId } from '@/components/SettingsDialog'
 import { useProcessing } from '@/lib/machines'
 import { useEditorUiStore } from '@/lib/stores/editorUiStore'
 import { usePreferencesStore } from '@/lib/stores/preferencesStore'
@@ -63,6 +63,8 @@ const openExternal = (url: string) => {
 export function MenuBar() {
   const { t } = useTranslation()
   const { send } = useProcessing()
+  const [settingsOpen, setSettingsOpen] = useState(false)
+  const [settingsTab, setSettingsTab] = useState<TabId>('appearance')
 
   const buildPipelineRequest = (documentId?: string): PipelineJobRequest => {
     const { selectedTarget, selectedLanguage, renderEffect, renderStroke } =
@@ -246,10 +248,15 @@ export function MenuBar() {
               </MenubarItem>
             ))}
             <MenubarSeparator />
-            <MenubarItem className='text-[13px]' asChild>
-              <Link href='/settings' prefetch={false}>
-                {t('menu.settings')}
-              </Link>
+            <MenubarItem
+              className='text-[13px]'
+              onSelect={() => {
+
+                setSettingsTab('appearance')
+                setSettingsOpen(true)
+              }}
+            >
+              {t('menu.settings')}
             </MenubarItem>
           </MenubarContent>
         </MenubarMenu>
@@ -314,10 +321,15 @@ export function MenuBar() {
               </MenubarItem>
             ))}
             <MenubarSeparator />
-            <MenubarItem className='text-[13px]' asChild>
-              <Link href='/about' prefetch={false}>
-                {t('settings.about')}
-              </Link>
+            <MenubarItem
+              className='text-[13px]'
+              onSelect={() => {
+
+                setSettingsTab('about')
+                setSettingsOpen(true)
+              }}
+            >
+              {t('settings.about')}
             </MenubarItem>
           </MenubarContent>
         </MenubarMenu>
@@ -331,6 +343,12 @@ export function MenuBar() {
 
       {/* Window controls for Windows */}
       {isWindowsTauri && <WindowControls />}
+
+      <SettingsDialog
+        open={settingsOpen}
+        onOpenChange={setSettingsOpen}
+        defaultTab={settingsTab}
+      />
     </div>
   )
 }

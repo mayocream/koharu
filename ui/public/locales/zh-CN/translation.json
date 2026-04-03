@@ -297,6 +297,24 @@
     "localLlmTesting": "测试中...",
     "localLlmTestSuccess": "已连接。发现 {{count}} 个模型。延迟：{{latency}}ms",
     "localLlmTestFailed": "连接失败：{{error}}",
-    "localLlmAdvanced": "高级设置"
+    "localLlmAdvanced": "高级设置",
+    "appConfig": "应用配置",
+    "storage": "存储",
+    "renderingFont": "渲染字体",
+    "renderingFontDescription": "将翻译文本渲染到图像时使用的字体。",
+    "providersDescription": "配置 LLM 提供商的 API 密钥和端点。",
+    "loadingProviders": "正在加载提供商...",
+    "apiKey": "API 密钥",
+    "apiKeyPlaceholderStored": "密钥已保存。输入新密钥以替换。",
+    "apiKeyPlaceholderEmpty": "输入 API 密钥",
+    "apiKeyStoredInKeychain": "已保存在钥匙串中",
+    "apiKeyClear": "清除",
+    "apiKeySave": "保存",
+    "apiKeySaved": "已保存！",
+    "dataPath": "数据路径",
+    "dataPathDescription": "Koharu 将模型、运行时包、页面清单和图像数据存储在此目录下。更改路径需要重启应用。",
+    "dataPathApply": "应用并重启",
+    "dataPathApplying": "正在应用...",
+    "dataPathDesktopOnly": "存储设置仅在桌面应用中可用。"
   }
 }

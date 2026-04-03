@@ -297,6 +297,24 @@
     "localLlmTesting": "Test ediliyor...",
     "localLlmTestSuccess": "Bağlandı. {{count}} model bulundu. Gecikme: {{latency}}ms",
     "localLlmTestFailed": "Bağlantı başarısız: {{error}}",
-    "localLlmAdvanced": "Gelişmiş"
+    "localLlmAdvanced": "Gelişmiş",
+    "appConfig": "Uygulama Yapılandırması",
+    "storage": "Depolama",
+    "renderingFont": "Render Yazı Tipi",
+    "renderingFontDescription": "Çevrilmiş metni görsellere render ederken kullanılan yazı tipi.",
+    "providersDescription": "LLM sağlayıcılarının API anahtarlarını ve uç noktalarını yapılandırın.",
+    "loadingProviders": "Sağlayıcılar yükleniyor...",
+    "apiKey": "API Anahtarı",
+    "apiKeyPlaceholderStored": "Anahtar kaydedildi. Değiştirmek için yenisini girin.",
+    "apiKeyPlaceholderEmpty": "API anahtarını girin",
+    "apiKeyStoredInKeychain": "Anahtar zincirinde kaydedildi",
+    "apiKeyClear": "Sil",
+    "apiKeySave": "Kaydet",
+    "apiKeySaved": "Kaydedildi!",
+    "dataPath": "Veri Yolu",
+    "dataPathDescription": "Koharu modelleri, çalışma zamanı paketlerini, sayfa bildirimlerini ve görsel verilerini bu dizinde saklar. Yolu değiştirmek uygulamanın yeniden başlatılmasını gerektirir.",
+    "dataPathApply": "Uygula ve Yeniden Başlat",
+    "dataPathApplying": "Uygulanıyor...",
+    "dataPathDesktopOnly": "Depolama ayarları yalnızca masaüstü uygulamasında kullanılabilir."
   }
 }
