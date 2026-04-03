@@ -4,6 +4,8 @@
  * OpenAPI spec version: 0.0.1
  */
 
-export interface AppDataConfig {
-  path: string
+export interface TopFont {
+  /** @minimum 0 */
+  index: number
+  score: number
 }

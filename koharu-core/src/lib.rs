@@ -11,17 +11,37 @@ mod image;
 pub use commands::*;
 pub use effect::TextShaderEffect;
 pub use events::*;
-pub use font::{FontPrediction, NamedFontPrediction, TextDirection};
+pub use font::{FontPrediction, NamedFontPrediction, TextDirection, TopFont};
 pub use image::SerializableDynamicImage;
 pub use protocol::*;
 
-use std::path::PathBuf;
-
-use ::image::GenericImageView;
 use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
 use utoipa::ToSchema;
 use uuid::Uuid;
+
+/// A content-addressable reference to a blob (blake3 hash hex string).
+#[derive(Default, Debug, Clone, PartialEq, Eq, Hash, Serialize, Deserialize)]
+#[serde(transparent)]
+pub struct BlobRef(pub String);
+
+impl BlobRef {
+    pub fn new(hash: impl Into<String>) -> Self {
+        Self(hash.into())
+    }
+    pub fn hash(&self) -> &str {
+        &self.0
+    }
+    pub fn is_empty(&self) -> bool {
+        self.0.is_empty()
+    }
+}
+
+impl std::fmt::Display for BlobRef {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.write_str(&self.0)
+    }
+}
 
 fn new_text_block_id() -> String {
     Uuid::new_v4().to_string()
@@ -48,7 +68,7 @@ pub struct TextBlock {
     pub translation: Option<String>,
     pub style: Option<TextStyle>,
     pub font_prediction: Option<FontPrediction>,
-    pub rendered: Option<SerializableDynamicImage>,
+    pub rendered: Option<BlobRef>,
     #[serde(skip)]
     pub lock_layout_box: bool,
     #[serde(skip)]
@@ -145,57 +165,16 @@ pub struct TextStyle {
 #[serde(rename_all = "camelCase")]
 pub struct Document {
     pub id: String,
-    pub path: PathBuf,
     pub name: String,
-    pub image: SerializableDynamicImage,
     pub width: u32,
     pub height: u32,
+    pub source: BlobRef,
+    pub segment: Option<BlobRef>,
+    pub inpainted: Option<BlobRef>,
+    pub rendered: Option<BlobRef>,
+    pub brush_layer: Option<BlobRef>,
     pub text_blocks: Vec<TextBlock>,
-    pub segment: Option<SerializableDynamicImage>,
-    pub inpainted: Option<SerializableDynamicImage>,
-    pub rendered: Option<SerializableDynamicImage>,
-    pub brush_layer: Option<SerializableDynamicImage>,
 }
-
-impl Document {
-    pub fn open(path: PathBuf) -> anyhow::Result<Self> {
-        let bytes = std::fs::read(&path)?;
-
-        let documents = Self::from_bytes(path, bytes)?;
-        documents
-            .into_iter()
-            .next()
-            .ok_or_else(|| anyhow::anyhow!("No document found in file"))
-    }
-
-    pub fn from_bytes(path: impl Into<PathBuf>, bytes: Vec<u8>) -> anyhow::Result<Vec<Self>> {
-        let path = path.into();
-        Ok(vec![Self::image(path, bytes)?])
-    }
-
-    fn image(path: PathBuf, bytes: Vec<u8>) -> anyhow::Result<Self> {
-        let img = ::image::load_from_memory(&bytes)?;
-        let (width, height) = img.dimensions();
-        let id = blake3::hash(&bytes).to_hex().to_string();
-        let name = path
-            .file_stem()
-            .unwrap_or_default()
-            .to_string_lossy()
-            .to_string();
-        Ok(Document {
-            id,
-            path,
-            name,
-            image: SerializableDynamicImage(img),
-            width,
-            height,
-            ..Default::default()
-        })
-    }
-}
-
-/// Lightweight entry for a page — no decoded image data.
-/// Stored in global state; the full `Document` lives in the page cache.
 #[cfg(test)]
 mod tests {
     use super::TextBlock;

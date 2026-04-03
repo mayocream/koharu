@@ -17,7 +17,7 @@ use koharu_llm::safe::model::params::kv_overrides::ParamOverrideValue;
 use koharu_llm::safe::model::params::{LlamaModelParams, LlamaSplitMode};
 use koharu_llm::safe::sampling::LlamaSampler;
 use koharu_llm::safe::{LogOptions, ggml_time_us, send_logs_to_tracing};
-use koharu_runtime::{ComputePolicy, RuntimeManager, Settings};
+use koharu_runtime::{ComputePolicy, RuntimeManager, default_app_data_root};
 
 use std::ffi::CString;
 use std::io::Write;
@@ -130,7 +130,7 @@ impl Model {
         match self {
             Model::Local { path } => Ok(path),
             Model::HuggingFace { model, repo } => runtime
-                .artifacts()
+                .downloads()
                 .huggingface_model(&repo, &model)
                 .await
                 .with_context(|| "unable to download model"),
@@ -163,7 +163,7 @@ fn main() -> Result<()> {
         .build()
         .with_context(|| "unable to create tokio runtime")?;
     let runtime_manager = RuntimeManager::new(
-        Settings::default(),
+        default_app_data_root(),
         if disable_gpu {
             ComputePolicy::CpuOnly
         } else {

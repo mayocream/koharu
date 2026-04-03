@@ -126,11 +126,7 @@ async fn run_pipeline(
 
     let total_docs = match request.document_id {
         Some(_) => 1,
-        None => resources
-            .cache
-            .list_documents()
-            .map(|entries| entries.len())
-            .unwrap_or(0),
+        None => resources.storage.page_count().await,
     };
 
     let final_state = match result {
@@ -187,15 +183,13 @@ async fn run_pipeline_inner(
     job_id: &str,
     jobs: &Jobs,
 ) -> anyhow::Result<()> {
-    let entries = res.cache.list_documents()?;
     let page_ids: Vec<String> = match req.document_id.as_deref() {
         Some(id) => {
-            if !entries.iter().any(|p| p.id == id) {
-                anyhow::bail!("Document not found: {id}");
-            }
+            // Verify the document exists
+            res.storage.page(id).await?;
             vec![id.to_string()]
         }
-        None => entries.into_iter().map(|p| p.id).collect(),
+        None => res.storage.page_ids().await,
     };
 
     let total_docs = page_ids.len();
@@ -210,8 +204,6 @@ async fn run_pipeline_inner(
     let total_steps = PipelineStep::ALL.len();
 
     for (doc_ordinal, page_id) in page_ids.iter().enumerate() {
-        let mut doc = res.cache.get(page_id).await?;
-
         for (step_ordinal, step) in PipelineStep::ALL.iter().enumerate() {
             if cancel.load(Ordering::Relaxed) {
                 return Ok(());
@@ -239,28 +231,26 @@ async fn run_pipeline_inner(
             tokio::time::sleep(Duration::from_millis(1)).await;
 
             match step {
-                PipelineStep::Detect => res.ml.detect(&mut doc).await?,
-                PipelineStep::Ocr => res.ml.ocr(&mut doc).await?,
-                PipelineStep::Inpaint => res.ml.inpaint(&mut doc).await?,
+                PipelineStep::Detect => crate::ml::detect(res.clone(), page_id).await?,
+                PipelineStep::Ocr => crate::ml::ocr(res.clone(), page_id).await?,
+                PipelineStep::Inpaint => crate::ml::inpaint(res.clone(), page_id).await?,
                 PipelineStep::LlmGenerate => {
-                    res.llm.translate(&mut doc, req.language.as_deref()).await?;
+                    crate::llm::llm_generate(res.clone(), page_id, None, req.language.as_deref())
+                        .await?;
                 }
                 PipelineStep::Render => {
-                    res.renderer.render(
-                        &mut doc,
+                    crate::ml::render(
+                        res.clone(),
+                        page_id,
                         None,
-                        req.shader_effect.unwrap_or_default(),
+                        req.shader_effect,
                         req.shader_stroke.clone(),
                         req.font_family.as_deref(),
-                    )?;
+                    )
+                    .await?;
                 }
             }
-
-            // Save after each step (crash-safe)
-            res.cache.put(&doc).await?;
         }
-        // Evict from cache to free memory
-        res.cache.evict(page_id).await;
     }
 
     Ok(())

@@ -34,21 +34,21 @@ async fn font_detect_inference_on_dialog_fixture() -> Result<()> {
         pred.top_fonts.len()
     );
     assert!(
-        pred.top_fonts.windows(2).all(|w| w[0].1 >= w[1].1),
+        pred.top_fonts.windows(2).all(|w| w[0].score >= w[1].score),
         "top fonts should be sorted by probability: {:?}",
         pred.top_fonts
     );
     assert!(
         pred.top_fonts
             .iter()
-            .all(|(_, p)| p.is_finite() && *p >= 0.0),
+            .all(|tf| tf.score.is_finite() && tf.score >= 0.0),
         "font probabilities should be finite and non-negative: {:?}",
         pred.top_fonts
     );
     assert!(
         pred.named_fonts
             .iter()
-            .any(|nf| nf.index == pred.top_fonts[0].0),
+            .any(|nf| nf.index == pred.top_fonts[0].index),
         "top font should have a corresponding label, got: {:?}",
         pred.named_fonts
     );

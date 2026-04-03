@@ -15,7 +15,3 @@ publish.workspace = true
 koharu-core = { workspace = true }
 image = { workspace = true }
 thiserror = { workspace = true }
-
-[dev-dependencies]
-koharu-app = { workspace = true }
-psd = "0.3.5"

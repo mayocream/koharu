@@ -24,8 +24,6 @@ pub struct PackageRegistration {
     pub ensure: for<'a> fn(&'a Runtime) -> PackageFuture<'a>,
 }
 
-pub type Package = PackageRegistration;
-
 inventory::collect!(PackageRegistration);
 
 #[derive(Clone)]
@@ -62,17 +60,12 @@ impl PackageCatalog {
         self.packages.values().copied()
     }
 
-    pub fn bootstrap_packages<'a>(
-        &'a self,
-        runtime: &'a Runtime,
-    ) -> impl Iterator<Item = &'static PackageRegistration> + 'a {
-        self.all()
+    pub async fn prepare_bootstrap(&self, runtime: &Runtime) -> Result<()> {
+        for package in self
+            .all()
             .filter(|package| package.bootstrap)
             .filter(|package| (package.enabled)(runtime))
-    }
-
-    pub async fn prepare_bootstrap(&self, runtime: &Runtime) -> Result<()> {
-        for package in self.bootstrap_packages(runtime) {
+        {
             (package.ensure)(runtime)
                 .await
                 .with_context(|| format!("failed to prepare package `{}`", package.id))?;
@@ -98,12 +91,17 @@ macro_rules! declare_hf_model_package {
             }
 
             fn present(runtime: &$crate::Runtime) -> anyhow::Result<bool> {
-                Ok(runtime.artifacts().huggingface_path($repo, $file)?.exists())
+                Ok(
+                    $crate::hf_hub::Cache::new(runtime.root().join("models").join("huggingface"))
+                        .model($repo.to_string())
+                        .get($file)
+                        .is_some(),
+                )
             }
 
             fn ensure(runtime: &$crate::Runtime) -> $crate::packages::PackageFuture<'_> {
                 Box::pin(async move {
-                    runtime.artifacts().huggingface_model($repo, $file).await?;
+                    runtime.downloads().huggingface_model($repo, $file).await?;
                     Ok(())
                 })
             }

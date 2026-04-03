@@ -4,9 +4,7 @@ use strum::IntoEnumIterator;
 
 use koharu_llm::safe::llama_backend::LlamaBackend;
 use koharu_llm::{GenerateOptions, Language, Llm, ModelId};
-use koharu_runtime::{
-    ComputePolicy, DirectorySetting, RuntimeManager, Settings, default_app_data_root,
-};
+use koharu_runtime::{ComputePolicy, RuntimeManager, default_app_data_root};
 
 #[tokio::test]
 #[ignore] // Ignored because it requires downloading multiple large models.
@@ -17,17 +15,7 @@ async fn llm_generates_text_for_all_models() -> anyhow::Result<()> {
 
     let app_data_root = default_app_data_root();
 
-    let runtime = RuntimeManager::new(
-        Settings {
-            runtime: DirectorySetting {
-                path: app_data_root.join("runtime"),
-            },
-            models: DirectorySetting {
-                path: app_data_root.join("models"),
-            },
-        },
-        ComputePolicy::PreferGpu,
-    )?;
+    let runtime = RuntimeManager::new(app_data_root, ComputePolicy::PreferGpu)?;
     runtime.prepare().await?;
     koharu_llm::sys::initialize(&runtime)?;
     let backend = Arc::new(LlamaBackend::init()?);

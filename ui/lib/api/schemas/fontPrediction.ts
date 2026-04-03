@@ -5,6 +5,7 @@
  */
 import type { NamedFontPrediction } from './namedFontPrediction'
 import type { TextDirection } from './textDirection'
+import type { TopFont } from './topFont'
 
 export interface FontPrediction {
   angle_deg: number
@@ -15,5 +16,5 @@ export interface FontPrediction {
   stroke_color: number[]
   stroke_width_px: number
   text_color: number[]
-  top_fonts: [number, number][]
+  top_fonts: TopFont[]
 }

@@ -8,12 +8,6 @@ use windows::Win32::System::Console::{
     GetConsoleMode, GetStdHandle, STD_OUTPUT_HANDLE, SetConsoleMode,
 };
 
-use std::os::windows::ffi::OsStrExt;
-use windows_sys::Win32::System::LibraryLoader::{
-    AddDllDirectory, LOAD_LIBRARY_SEARCH_SYSTEM32, LOAD_LIBRARY_SEARCH_USER_DIRS,
-    SetDefaultDllDirectories,
-};
-
 const CLASS_NAME: &str = "Koharu.khr";
 // const THUMBNAIL_PROVIDER: &str = "{e357fccd-a995-4576-b01f-234630154e96}";
 
@@ -76,30 +70,5 @@ pub fn create_console_window() {
         if !attach_parent_console() {
             let _ = AllocConsole();
         }
-    }
-}
-
-pub fn add_dll_directory(path: &std::path::Path) -> Result<()> {
-    let wide = path
-        .as_os_str()
-        .encode_wide()
-        .chain(std::iter::once(0))
-        .collect::<Vec<_>>();
-    unsafe {
-        if SetDefaultDllDirectories(LOAD_LIBRARY_SEARCH_USER_DIRS | LOAD_LIBRARY_SEARCH_SYSTEM32)
-            == 0
-        {
-            anyhow::bail!(
-                "Failed to set default DLL directories: {}",
-                std::io::Error::last_os_error()
-            );
-        }
-        if AddDllDirectory(wide.as_ptr()).is_null() {
-            anyhow::bail!(
-                "Failed to add DLL directory: {}",
-                std::io::Error::last_os_error()
-            );
-        }
-        Ok(())
     }
 }

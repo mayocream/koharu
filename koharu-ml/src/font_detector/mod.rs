@@ -34,7 +34,7 @@ koharu_runtime::declare_hf_model_package!(
     order: 141,
 );
 
-pub use koharu_core::{FontPrediction, NamedFontPrediction, TextDirection};
+pub use koharu_core::{FontPrediction, NamedFontPrediction, TextDirection, TopFont};
 
 pub struct FontDetector {
     model: models::Model,
@@ -98,18 +98,23 @@ impl FontDetector {
 
         let mut predictions = Vec::with_capacity(images.len());
         for (row, width) in rows.into_iter().zip(original_sizes) {
-            let ranked = top_k_softmax(&row[..FONT_COUNT], top_k.min(FONT_COUNT));
+            let ranked: Vec<TopFont> = top_k_softmax(&row[..FONT_COUNT], top_k.min(FONT_COUNT))
+                .into_iter()
+                .map(|(index, score)| TopFont { index, score })
+                .collect();
 
             let named_fonts = ranked
                 .iter()
-                .filter_map(|(idx, prob)| {
-                    self.labels.entry(*idx).map(|label| NamedFontPrediction {
-                        index: *idx,
-                        name: label.name.clone(),
-                        language: label.language.clone(),
-                        probability: *prob,
-                        serif: label.serif,
-                    })
+                .filter_map(|tf| {
+                    self.labels
+                        .entry(tf.index)
+                        .map(|label| NamedFontPrediction {
+                            index: tf.index,
+                            name: label.name.clone(),
+                            language: label.language.clone(),
+                            probability: tf.score,
+                            serif: label.serif,
+                        })
                 })
                 .collect();
 

@@ -64,7 +64,6 @@ const mapTextBlock = (
 
 export type MappedDocument = {
   id: string
-  path: string
   name: string
   width: number
   height: number
@@ -78,7 +77,6 @@ export type MappedDocument = {
 
 const mapDocumentDetail = (detail: DocumentDetail): MappedDocument => ({
   id: detail.id,
-  path: detail.path,
   name: detail.name,
   width: detail.width,
   height: detail.height,

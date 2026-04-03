@@ -19,7 +19,7 @@ macro_rules! define_models {
                 use strum::EnumProperty;
                 let repo = self.get_str("repo").expect("repo property");
                 let filename = self.get_str("filename").expect("filename property");
-                runtime.artifacts().huggingface_model(repo, filename).await
+                runtime.downloads().huggingface_model(repo, filename).await
             }
         }
 
@@ -48,5 +48,5 @@ pub async fn model(
     repo: &str,
     filename: &str,
 ) -> anyhow::Result<std::path::PathBuf> {
-    runtime.artifacts().huggingface_model(repo, filename).await
+    runtime.downloads().huggingface_model(repo, filename).await
 }

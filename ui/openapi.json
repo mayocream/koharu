@@ -11,14 +11,7 @@
         "operationId": "getConfig",
         "responses": {
           "200": {
-            "description": "",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/AppConfig"
-                }
-              }
-            }
+            "description": ""
           },
           "503": {
             "description": "",
@@ -39,7 +32,26 @@
           "content": {
             "application/json": {
               "schema": {
-                "$ref": "#/components/schemas/AppConfigUpdate"
+                "type": "object",
+                "properties": {
+                  "data": {
+                    "oneOf": [
+                      {
+                        "$ref": "#/components/schemas/DataConfig"
+                      }
+                    ],
+                    "default": {
+                      "path": "C:\\Users\\Mayo\\AppData\\Local\\Koharu"
+                    }
+                  },
+                  "providers": {
+                    "type": "array",
+                    "items": {
+                      "$ref": "#/components/schemas/ProviderConfig"
+                    },
+                    "default": []
+                  }
+                }
               }
             }
           },
@@ -51,7 +63,26 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/AppConfig"
+                  "type": "object",
+                  "properties": {
+                    "data": {
+                      "oneOf": [
+                        {
+                          "$ref": "#/components/schemas/DataConfig"
+                        }
+                      ],
+                      "default": {
+                        "path": "C:\\Users\\Mayo\\AppData\\Local\\Koharu"
+                      }
+                    },
+                    "providers": {
+                      "type": "array",
+                      "items": {
+                        "$ref": "#/components/schemas/ProviderConfig"
+                      },
+                      "default": []
+                    }
+                  }
                 }
               }
             }
@@ -1360,103 +1391,6 @@
           }
         }
       },
-      "AppConfig": {
-        "type": "object",
-        "required": ["data"],
-        "properties": {
-          "data": {
-            "$ref": "#/components/schemas/AppDataConfig"
-          },
-          "llm": {
-            "$ref": "#/components/schemas/AppLlmConfig"
-          }
-        }
-      },
-      "AppConfigUpdate": {
-        "type": "object",
-        "required": ["data"],
-        "properties": {
-          "data": {
-            "$ref": "#/components/schemas/AppDataConfigUpdate"
-          },
-          "llm": {
-            "$ref": "#/components/schemas/AppLlmConfigUpdate"
-          }
-        }
-      },
-      "AppDataConfig": {
-        "type": "object",
-        "required": ["path"],
-        "properties": {
-          "path": {
-            "type": "string"
-          }
-        }
-      },
-      "AppDataConfigUpdate": {
-        "type": "object",
-        "required": ["path"],
-        "properties": {
-          "path": {
-            "type": "string"
-          }
-        }
-      },
-      "AppLlmConfig": {
-        "type": "object",
-        "properties": {
-          "providers": {
-            "type": "array",
-            "items": {
-              "$ref": "#/components/schemas/AppLlmProviderConfig"
-            }
-          }
-        }
-      },
-      "AppLlmConfigUpdate": {
-        "type": "object",
-        "properties": {
-          "providers": {
-            "type": "array",
-            "items": {
-              "$ref": "#/components/schemas/AppLlmProviderConfigUpdate"
-            }
-          }
-        }
-      },
-      "AppLlmProviderConfig": {
-        "type": "object",
-        "required": ["id", "hasApiKey"],
-        "properties": {
-          "baseUrl": {
-            "type": ["string", "null"]
-          },
-          "hasApiKey": {
-            "type": "boolean"
-          },
-          "id": {
-            "type": "string"
-          }
-        }
-      },
-      "AppLlmProviderConfigUpdate": {
-        "type": "object",
-        "required": ["id"],
-        "properties": {
-          "apiKey": {
-            "type": ["string", "null"]
-          },
-          "baseUrl": {
-            "type": ["string", "null"]
-          },
-          "clearApiKey": {
-            "type": "boolean"
-          },
-          "id": {
-            "type": "string"
-          }
-        }
-      },
       "BrushRegionRequest": {
         "type": "object",
         "required": ["data", "region"],
@@ -1496,17 +1430,18 @@
           }
         }
       },
+      "DataConfig": {
+        "type": "object",
+        "required": ["path"],
+        "properties": {
+          "path": {
+            "type": "string"
+          }
+        }
+      },
       "DocumentDetail": {
         "type": "object",
-        "required": [
-          "id",
-          "path",
-          "name",
-          "width",
-          "height",
-          "textBlocks",
-          "image"
-        ],
+        "required": ["id", "name", "width", "height", "textBlocks", "image"],
         "properties": {
           "brushLayer": {
             "type": ["array", "null"],
@@ -1541,9 +1476,6 @@
             }
           },
           "name": {
-            "type": "string"
-          },
-          "path": {
             "type": "string"
           },
           "rendered": {
@@ -1750,18 +1682,7 @@
           "top_fonts": {
             "type": "array",
             "items": {
-              "type": "array",
-              "items": false,
-              "prefixItems": [
-                {
-                  "type": "integer",
-                  "minimum": 0
-                },
-                {
-                  "type": "number",
-                  "format": "float"
-                }
-              ]
+              "$ref": "#/components/schemas/TopFont"
             }
           }
         }
@@ -2137,6 +2058,22 @@
           }
         }
       },
+      "ProviderConfig": {
+        "type": "object",
+        "required": ["id"],
+        "properties": {
+          "api_key": {
+            "type": ["string", "null"],
+            "description": "Populated from the keyring on `load()`, never written to config.toml.\nSerializes as `\"[REDACTED]\"` in API responses.\nPopulated from keyring on `load()`. Serializes as `\"[REDACTED]\"`."
+          },
+          "base_url": {
+            "type": ["string", "null"]
+          },
+          "id": {
+            "type": "string"
+          }
+        }
+      },
       "Region": {
         "type": "object",
         "required": ["x", "y", "width", "height"],
@@ -2464,6 +2401,20 @@
                 "$ref": "#/components/schemas/TextAlign"
               }
             ]
+          }
+        }
+      },
+      "TopFont": {
+        "type": "object",
+        "required": ["index", "score"],
+        "properties": {
+          "index": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "score": {
+            "type": "number",
+            "format": "float"
           }
         }
       },

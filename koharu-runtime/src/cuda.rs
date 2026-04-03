@@ -120,6 +120,38 @@ pub fn driver_version() -> Result<CudaDriverVersion> {
     }
 }
 
+/// Check whether the installed NVIDIA driver supports CUDA 13.1+.
+///
+/// Returns `true` when GPU compute should be used, `false` when the caller
+/// should fall back to CPU.  Warnings are emitted via `tracing::warn!`.
+pub fn check_cuda_driver_support() -> bool {
+    if !driver_library_available() {
+        return false;
+    }
+    match driver_version() {
+        Ok(version) if version.supports_cuda_13_1() => {
+            tracing::info!("NVIDIA driver reports CUDA {version} support");
+            true
+        }
+        Ok(version) => {
+            tracing::warn!(
+                "NVIDIA driver only supports CUDA {version}; \
+                 falling back to CPU. Update your NVIDIA driver to a version \
+                 that supports CUDA 13.1 or newer to enable GPU acceleration."
+            );
+            false
+        }
+        Err(err) => {
+            tracing::warn!(
+                "Could not verify NVIDIA driver support for CUDA 13.1: {err:#}; \
+                 falling back to CPU. Update your NVIDIA driver to a version \
+                 that supports CUDA 13.1 or newer to enable GPU acceleration."
+            );
+            false
+        }
+    }
+}
+
 pub(crate) fn package_enabled(runtime: &Runtime) -> bool {
     runtime.wants_gpu()
         && driver_library_available()
@@ -156,7 +188,11 @@ pub(crate) async fn ensure_ready(runtime: &Runtime) -> Result<()> {
 
         for wheel in WHEELS {
             let asset = select_wheel(runtime, wheel).await?;
-            let archive = archive::fetch(runtime, &asset.url, &asset.filename).await?;
+            let archive = runtime
+                .downloads()
+                .cached_download(&asset.url, &asset.filename)
+                .await
+                .with_context(|| format!("failed to download `{}`", asset.url))?;
             archive::extract(
                 &archive,
                 &install_dir,
@@ -207,7 +243,7 @@ fn driver_library_available() -> bool {
 }
 
 fn install_dir(runtime: &Runtime) -> std::path::PathBuf {
-    runtime.layout().runtime_root.join("cuda")
+    runtime.root().join("runtime").join("cuda")
 }
 
 fn platform_tags() -> Result<&'static [&'static str]> {

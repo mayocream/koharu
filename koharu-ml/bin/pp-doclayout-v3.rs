@@ -7,7 +7,7 @@ use imageproc::{
     rect::Rect,
 };
 use koharu_ml::pp_doclayout_v3::PPDocLayoutV3;
-use koharu_runtime::{ComputePolicy, RuntimeManager, Settings};
+use koharu_runtime::{ComputePolicy, RuntimeManager, default_app_data_root};
 use tokio::runtime::Builder;
 
 #[path = "common.rs"]
@@ -175,7 +175,7 @@ fn main() -> Result<()> {
 async fn async_main() -> Result<()> {
     let cli = Cli::parse();
     let runtime = RuntimeManager::new(
-        Settings::default(),
+        default_app_data_root(),
         if cli.cpu {
             ComputePolicy::CpuOnly
         } else {

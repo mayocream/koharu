@@ -10,10 +10,10 @@ use axum::{
 };
 use koharu_app::{AppResources, config as app_config, edit, io, llm, ml, pipeline};
 use koharu_core::{
-    AppConfig, AppConfigUpdate, CreateTextBlock, Document, DocumentDetail, DocumentSummary,
-    DownloadState, ExportLayer, ExportResult, FontFaceInfo, JobState, JobStatus, LlmCatalog,
-    LlmLoadRequest, LlmState, MaskRegionRequest, MetaInfo, PipelineJobRequest, RenderRequest,
-    TextBlock, TextBlockDetail, TextBlockInput, TextBlockPatch, TranslateRequest,
+    CreateTextBlock, Document, DocumentDetail, DocumentSummary, DownloadState, ExportLayer,
+    ExportResult, FontFaceInfo, JobState, JobStatus, LlmCatalog, LlmLoadRequest, LlmState,
+    MaskRegionRequest, MetaInfo, PipelineJobRequest, RenderRequest, TextBlock, TextBlockDetail,
+    TextBlockInput, TextBlockPatch, TranslateRequest,
 };
 use koharu_psd::{PsdExportOptions, TextLayerMode};
 use serde::{Deserialize, Serialize};
@@ -167,13 +167,12 @@ struct ExportBatchRequest {
     operation_id = "getConfig",
     tag = "system",
     responses(
-        (status = 200, body = AppConfig),
+        (status = 200),
         (status = 503, body = ApiError),
     ),
 )]
-async fn get_config() -> ApiResult<Json<AppConfig>> {
-    let stored = app_config::load().map_err(ApiError::internal)?;
-    let config = app_config::to_public_config(&stored).map_err(ApiError::internal)?;
+async fn get_config() -> ApiResult<Json<app_config::AppConfig>> {
+    let config = app_config::load().map_err(ApiError::internal)?;
     Ok(Json(config))
 }
 
@@ -182,20 +181,19 @@ async fn get_config() -> ApiResult<Json<AppConfig>> {
     path = "/config",
     operation_id = "updateConfig",
     tag = "system",
-    request_body = AppConfigUpdate,
+    request_body = inline(app_config::AppConfig),
     responses(
-        (status = 200, body = AppConfig),
+        (status = 200, body = inline(app_config::AppConfig)),
         (status = 400, body = ApiError),
     ),
 )]
-async fn update_config(Json(config): Json<AppConfigUpdate>) -> ApiResult<Json<AppConfig>> {
-    let current = app_config::load().map_err(ApiError::internal)?;
-    let stored = app_config::from_public_update(config.clone()).map_err(ApiError::from)?;
-    app_config::move_app_data_if_needed(&current, &stored).map_err(ApiError::internal)?;
-    app_config::save(&stored).map_err(ApiError::internal)?;
-    app_config::apply_secret_updates(&config).map_err(ApiError::from)?;
-    let saved = app_config::to_public_config(&stored).map_err(ApiError::internal)?;
-    Ok(Json(saved))
+async fn update_config(
+    Json(config): Json<app_config::AppConfig>,
+) -> ApiResult<Json<app_config::AppConfig>> {
+    app_config::sync_secrets(&config).map_err(ApiError::from)?;
+    app_config::save(&config).map_err(ApiError::internal)?;
+    let reloaded = app_config::load().map_err(ApiError::internal)?;
+    Ok(Json(reloaded))
 }
 
 #[utoipa::path(
@@ -251,10 +249,7 @@ async fn list_fonts(State(state): State<ApiState>) -> ApiResult<Json<Vec<FontFac
 )]
 async fn list_documents(State(state): State<ApiState>) -> ApiResult<Json<Vec<DocumentSummary>>> {
     let resources = state.resources()?;
-    let documents = resources
-        .cache
-        .list_documents()
-        .map_err(ApiError::internal)?;
+    let documents = resources.storage.list_pages().await;
     Ok(Json(documents))
 }
 
@@ -275,39 +270,33 @@ async fn get_document(
     Path(document_id): Path<String>,
 ) -> ApiResult<Json<DocumentDetail>> {
     let resources = state.resources()?;
-    let doc = resources
-        .cache
-        .get(&document_id)
-        .await
-        .map_err(|_| ApiError::not_found("Document not found"))?;
+    let doc = find_document(&resources, &document_id).await?;
 
-    let image = serde_bytes::ByteBuf::from(
-        koharu_app::utils::encode_image(&doc.image, "webp").map_err(ApiError::internal)?,
-    );
-    let segment = doc
-        .segment
-        .as_ref()
-        .map(|s| koharu_app::utils::encode_image(s, "webp").map(serde_bytes::ByteBuf::from))
-        .transpose()
+    let load_layer =
+        |blob_ref: &Option<koharu_core::BlobRef>| -> ApiResult<Option<serde_bytes::ByteBuf>> {
+            blob_ref
+                .as_ref()
+                .map(|r| {
+                    let bytes = resources
+                        .storage
+                        .images
+                        .load_bytes(r)
+                        .map_err(ApiError::internal)?;
+                    Ok(serde_bytes::ByteBuf::from(bytes))
+                })
+                .transpose()
+        };
+
+    let image_bytes = resources
+        .storage
+        .images
+        .load_bytes(&doc.source)
         .map_err(ApiError::internal)?;
-    let inpainted = doc
-        .inpainted
-        .as_ref()
-        .map(|s| koharu_app::utils::encode_image(s, "webp").map(serde_bytes::ByteBuf::from))
-        .transpose()
-        .map_err(ApiError::internal)?;
-    let brush_layer = doc
-        .brush_layer
-        .as_ref()
-        .map(|s| koharu_app::utils::encode_image(s, "webp").map(serde_bytes::ByteBuf::from))
-        .transpose()
-        .map_err(ApiError::internal)?;
-    let rendered = doc
-        .rendered
-        .as_ref()
-        .map(|s| koharu_app::utils::encode_image(s, "webp").map(serde_bytes::ByteBuf::from))
-        .transpose()
-        .map_err(ApiError::internal)?;
+    let image = serde_bytes::ByteBuf::from(image_bytes);
+    let segment = load_layer(&doc.segment)?;
+    let inpainted = load_layer(&doc.inpainted)?;
+    let brush_layer = load_layer(&doc.brush_layer)?;
+    let rendered = load_layer(&doc.rendered)?;
 
     let text_blocks = doc
         .text_blocks
@@ -316,9 +305,8 @@ async fn get_document(
         .collect();
 
     let detail = DocumentDetail {
-        id: doc.id.clone(),
-        path: doc.path.to_string_lossy().to_string(),
-        name: doc.name.clone(),
+        id: doc.id,
+        name: doc.name,
         width: doc.width,
         height: doc.height,
         text_blocks,
@@ -357,15 +345,16 @@ async fn get_document_thumbnail(
 ) -> ApiResult<Response> {
     let size = query.size.unwrap_or(200).min(800);
     let resources = state.resources()?;
-    let doc = resources
-        .cache
-        .get(&document_id)
-        .await
-        .map_err(|_| ApiError::not_found("Document not found"))?;
-    let source = doc.rendered.as_ref().unwrap_or(&doc.image);
-    let thumbnail = source.thumbnail(size, size);
+    let doc = find_document(&resources, &document_id).await?;
+    let source_ref = doc.rendered.as_ref().unwrap_or(&doc.source);
+    let source_img = resources
+        .storage
+        .images
+        .load(source_ref)
+        .map_err(ApiError::internal)?;
+    let thumbnail = source_img.thumbnail(size, size);
     let bytes =
-        koharu_app::utils::encode_image(&thumbnail.into(), "webp").map_err(ApiError::internal)?;
+        koharu_app::utils::encode_image_dynamic(&thumbnail, "webp").map_err(ApiError::internal)?;
     Ok(binary_response(bytes, "image/webp", None))
 }
 
@@ -425,10 +414,7 @@ async fn import_documents(
         }
     }
 
-    let documents = resources
-        .cache
-        .list_documents()
-        .map_err(ApiError::internal)?;
+    let documents = resources.storage.list_pages().await;
 
     Ok(Json(koharu_core::ImportResult {
         total_count: documents.len(),
@@ -673,11 +659,6 @@ async fn create_text_block(
     Json(request): Json<CreateTextBlock>,
 ) -> ApiResult<Json<TextBlockDetail>> {
     let resources = state.resources()?;
-    let mut doc = resources
-        .cache
-        .get(&document_id)
-        .await
-        .map_err(|_| ApiError::not_found("Document not found"))?;
 
     let mut block = TextBlock {
         x: request.x,
@@ -688,19 +669,20 @@ async fn create_text_block(
         ..Default::default()
     };
     block.set_layout_seed(block.x, block.y, block.width, block.height);
-    doc.text_blocks.push(block);
-    let detail = doc
-        .text_blocks
-        .last()
-        .map(TextBlockDetail::from)
-        .ok_or_else(|| ApiError::internal(anyhow::anyhow!("Failed to append text block")))?;
-    resources
-        .cache
-        .put(&doc)
-        .await
-        .map_err(ApiError::internal)?;
 
-    Ok(Json(detail))
+    let mut detail = None;
+    resources
+        .storage
+        .update_page(&document_id, |page| {
+            page.text_blocks.push(block);
+            detail = page.text_blocks.last().map(TextBlockDetail::from);
+        })
+        .await
+        .map_err(ApiError::from)?;
+
+    detail
+        .map(Json)
+        .ok_or_else(|| ApiError::internal(anyhow::anyhow!("Failed to append text block")))
 }
 
 #[utoipa::path(
@@ -723,72 +705,65 @@ async fn put_text_blocks(
 ) -> ApiResult<StatusCode> {
     let resources = state.resources()?;
 
-    let mut doc = resources
-        .cache
-        .get(&document_id)
-        .await
-        .map_err(|_| ApiError::not_found("Document not found"))?;
-
     let mut any_changed = false;
 
-    // Build a set of incoming IDs for deletion detection
-    let incoming_ids: std::collections::HashSet<&str> = inputs
-        .iter()
-        .filter_map(|input| input.id.as_deref())
-        .collect();
+    resources
+        .storage
+        .update_page(&document_id, |doc| {
+            // Build a set of incoming IDs for deletion detection
+            let incoming_ids: std::collections::HashSet<&str> = inputs
+                .iter()
+                .filter_map(|input| input.id.as_deref())
+                .collect();
 
-    // Delete blocks not present in the incoming array
-    let before_len = doc.text_blocks.len();
-    doc.text_blocks
-        .retain(|block| incoming_ids.contains(block.id.as_str()));
-    if doc.text_blocks.len() != before_len {
-        any_changed = true;
-    }
+            // Delete blocks not present in the incoming array
+            let before_len = doc.text_blocks.len();
+            doc.text_blocks
+                .retain(|block| incoming_ids.contains(block.id.as_str()));
+            if doc.text_blocks.len() != before_len {
+                any_changed = true;
+            }
 
-    for input in &inputs {
-        if let Some(ref id) = input.id {
-            // Update existing block
-            if let Some(block) = doc.text_blocks.iter_mut().find(|b| &b.id == id) {
-                let patch = TextBlockPatch {
-                    text: input.text.clone(),
-                    translation: input.translation.clone(),
-                    x: Some(input.x),
-                    y: Some(input.y),
-                    width: Some(input.width),
-                    height: Some(input.height),
-                    style: input.style.clone(),
-                };
-                let had_render = block.rendered.is_some();
-                apply_text_block_patch(block, patch);
-                // Content changed if the render was invalidated
-                if had_render && block.rendered.is_none() {
+            for input in &inputs {
+                if let Some(ref id) = input.id {
+                    // Update existing block
+                    if let Some(block) = doc.text_blocks.iter_mut().find(|b| &b.id == id) {
+                        let patch = TextBlockPatch {
+                            text: input.text.clone(),
+                            translation: input.translation.clone(),
+                            x: Some(input.x),
+                            y: Some(input.y),
+                            width: Some(input.width),
+                            height: Some(input.height),
+                            style: input.style.clone(),
+                        };
+                        let had_render = block.rendered.is_some();
+                        apply_text_block_patch(block, patch);
+                        if had_render && block.rendered.is_none() {
+                            any_changed = true;
+                        }
+                    }
+                } else {
+                    // Create new block
+                    let mut block = TextBlock {
+                        x: input.x,
+                        y: input.y,
+                        width: input.width,
+                        height: input.height,
+                        text: input.text.clone(),
+                        translation: input.translation.clone(),
+                        style: input.style.clone(),
+                        confidence: 1.0,
+                        ..Default::default()
+                    };
+                    block.set_layout_seed(block.x, block.y, block.width, block.height);
+                    doc.text_blocks.push(block);
                     any_changed = true;
                 }
             }
-        } else {
-            // Create new block
-            let mut block = TextBlock {
-                x: input.x,
-                y: input.y,
-                width: input.width,
-                height: input.height,
-                text: input.text.clone(),
-                translation: input.translation.clone(),
-                style: input.style.clone(),
-                confidence: 1.0,
-                ..Default::default()
-            };
-            block.set_layout_seed(block.x, block.y, block.width, block.height);
-            doc.text_blocks.push(block);
-            any_changed = true;
-        }
-    }
-
-    resources
-        .cache
-        .put(&doc)
+        })
         .await
-        .map_err(ApiError::internal)?;
+        .map_err(ApiError::from)?;
 
     // Auto-render if any block content/geometry changed
     if any_changed {
@@ -820,25 +795,21 @@ async fn patch_text_block(
     Json(request): Json<TextBlockPatch>,
 ) -> ApiResult<Json<TextBlockDetail>> {
     let resources = state.resources()?;
-    let mut doc = resources
-        .cache
-        .get(&document_id)
-        .await
-        .map_err(|_| ApiError::not_found("Document not found"))?;
-    let block = doc
-        .text_blocks
-        .iter_mut()
-        .find(|block| block.id == text_block_id)
-        .ok_or_else(|| ApiError::not_found(format!("Text block not found: {text_block_id}")))?;
-    apply_text_block_patch(block, request);
-    let detail = TextBlockDetail::from(&*block);
+    let mut detail = None;
     resources
-        .cache
-        .put(&doc)
+        .storage
+        .update_page(&document_id, |doc| {
+            if let Some(block) = doc.text_blocks.iter_mut().find(|b| b.id == text_block_id) {
+                apply_text_block_patch(block, request);
+                detail = Some(TextBlockDetail::from(&*block));
+            }
+        })
         .await
-        .map_err(ApiError::internal)?;
+        .map_err(ApiError::from)?;
 
-    Ok(Json(detail))
+    detail
+        .map(Json)
+        .ok_or_else(|| ApiError::not_found(format!("Text block not found: {text_block_id}")))
 }
 
 #[utoipa::path(
@@ -861,23 +832,23 @@ async fn delete_text_block(
     Path((document_id, text_block_id)): Path<(String, String)>,
 ) -> ApiResult<StatusCode> {
     let resources = state.resources()?;
-    let mut doc = resources
-        .cache
-        .get(&document_id)
-        .await
-        .map_err(|_| ApiError::not_found("Document not found"))?;
-    let block_index = doc
-        .text_blocks
-        .iter()
-        .position(|block| block.id == text_block_id)
-        .ok_or_else(|| ApiError::not_found(format!("Text block not found: {text_block_id}")))?;
-    doc.text_blocks.remove(block_index);
+    let mut found = false;
     resources
-        .cache
-        .put(&doc)
+        .storage
+        .update_page(&document_id, |doc| {
+            if let Some(idx) = doc.text_blocks.iter().position(|b| b.id == text_block_id) {
+                doc.text_blocks.remove(idx);
+                found = true;
+            }
+        })
         .await
-        .map_err(ApiError::internal)?;
+        .map_err(ApiError::from)?;
 
+    if !found {
+        return Err(ApiError::not_found(format!(
+            "Text block not found: {text_block_id}"
+        )));
+    }
     Ok(StatusCode::NO_CONTENT)
 }
 
@@ -980,23 +951,15 @@ async fn start_pipeline(
     let resources = state.resources()?;
     // Validate document_id exists if provided
     if let Some(document_id) = request.document_id.as_deref() {
-        let entries = resources
-            .cache
-            .list_documents()
-            .map_err(ApiError::internal)?;
-        if !entries.iter().any(|d| d.id == document_id) {
-            return Err(ApiError::not_found(format!(
-                "Document not found: {document_id}"
-            )));
-        }
+        resources
+            .storage
+            .page(document_id)
+            .await
+            .map_err(|_| ApiError::not_found(format!("Document not found: {document_id}")))?;
     }
     let total_documents = match &request.document_id {
         Some(_) => 1,
-        None => resources
-            .cache
-            .list_documents()
-            .map_err(ApiError::internal)?
-            .len(),
+        None => resources.storage.page_count().await,
     };
 
     let job_id = pipeline::process(
@@ -1144,8 +1107,64 @@ async fn export_document(
     let document = find_document(&resources, &document_id).await?;
 
     if format == "psd" {
+        let source_img = resources
+            .storage
+            .images
+            .load(&document.source)
+            .map_err(ApiError::internal)?;
+        let segment_img = document
+            .segment
+            .as_ref()
+            .map(|r| resources.storage.images.load(r))
+            .transpose()
+            .map_err(ApiError::internal)?;
+        let inpainted_img = document
+            .inpainted
+            .as_ref()
+            .map(|r| resources.storage.images.load(r))
+            .transpose()
+            .map_err(ApiError::internal)?;
+        let rendered_img = document
+            .rendered
+            .as_ref()
+            .map(|r| resources.storage.images.load(r))
+            .transpose()
+            .map_err(ApiError::internal)?;
+        let brush_layer_img = document
+            .brush_layer
+            .as_ref()
+            .map(|r| resources.storage.images.load(r))
+            .transpose()
+            .map_err(ApiError::internal)?;
+
+        // Pre-resolve text block rendered images
+        let block_rendered: std::collections::HashMap<koharu_core::BlobRef, image::DynamicImage> =
+            document
+                .text_blocks
+                .iter()
+                .filter_map(|b| b.rendered.as_ref())
+                .filter_map(|r| {
+                    resources
+                        .storage
+                        .images
+                        .load(r)
+                        .ok()
+                        .map(|img| (r.clone(), img))
+                })
+                .collect();
+
+        let resolved = koharu_psd::ResolvedDocument {
+            document: &document,
+            source: &source_img,
+            segment: segment_img.as_ref(),
+            inpainted: inpainted_img.as_ref(),
+            rendered: rendered_img.as_ref(),
+            brush_layer: brush_layer_img.as_ref(),
+            block_images: &block_rendered,
+        };
+
         let data = koharu_psd::export_document(
-            &document,
+            &resolved,
             &PsdExportOptions {
                 text_layer_mode: TextLayerMode::Editable,
                 ..PsdExportOptions::default()
@@ -1160,16 +1179,13 @@ async fn export_document(
     }
 
     let layer = query.layer.unwrap_or(ExportLayer::Rendered);
-    let (image, filename) = export_target(&document, layer)?;
-    let ext = document
-        .path
-        .extension()
-        .and_then(|value| value.to_str())
-        .unwrap_or("jpg")
-        .to_ascii_lowercase();
-    let data = koharu_app::utils::encode_image(image, &ext).map_err(ApiError::internal)?;
-    let content_type = koharu_app::utils::mime_from_ext(&ext);
-    Ok(binary_response(data, content_type, Some(filename)))
+    let (blob_ref, filename) = export_layer_ref(&document, layer)?;
+    let data = resources
+        .storage
+        .images
+        .load_bytes(blob_ref)
+        .map_err(ApiError::internal)?;
+    Ok(binary_response(data, "image/webp", Some(filename)))
 }
 
 #[utoipa::path(
@@ -1197,8 +1213,8 @@ async fn batch_export(
 
 async fn find_document(resources: &AppResources, document_id: &str) -> ApiResult<Document> {
     resources
-        .cache
-        .get(document_id)
+        .storage
+        .page(document_id)
         .await
         .map_err(|_| ApiError::not_found(format!("Document not found: {document_id}")))
 }
@@ -1224,31 +1240,25 @@ fn binary_response(data: Vec<u8>, content_type: &str, filename: Option<String>) 
     response
 }
 
-fn export_target(
+fn export_layer_ref(
     document: &Document,
     layer: ExportLayer,
-) -> ApiResult<(&koharu_core::SerializableDynamicImage, String)> {
-    let ext = document
-        .path
-        .extension()
-        .and_then(|value| value.to_str())
-        .unwrap_or("jpg")
-        .to_ascii_lowercase();
-
+) -> ApiResult<(&koharu_core::BlobRef, String)> {
+    let ext = "webp";
     match layer {
         ExportLayer::Rendered => {
-            let image = document
+            let r = document
                 .rendered
                 .as_ref()
                 .ok_or_else(|| ApiError::not_found("No rendered image found"))?;
-            Ok((image, format!("{}_koharu.{ext}", document.name)))
+            Ok((r, format!("{}_koharu.{ext}", document.name)))
         }
         ExportLayer::Inpainted => {
-            let image = document
+            let r = document
                 .inpainted
                 .as_ref()
                 .ok_or_else(|| ApiError::not_found("No inpainted image found"))?;
-            Ok((image, format!("{}_inpainted.{ext}", document.name)))
+            Ok((r, format!("{}_inpainted.{ext}", document.name)))
         }
     }
 }
@@ -1325,7 +1335,7 @@ mod tests {
             width: 100.0,
             height: 50.0,
             rendered_direction: Some(TextDirection::Vertical),
-            rendered: Some(image::DynamicImage::new_rgba8(1, 1).into()),
+            rendered: Some(koharu_core::BlobRef::new("test")),
             ..Default::default()
         };
 

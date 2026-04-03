@@ -26,7 +26,9 @@ open = { workspace = true }
 rayon = { workspace = true }
 rfd = { workspace = true }
 reqwest-middleware = { workspace = true }
+secrecy = { workspace = true }
 serde = { workspace = true }
+utoipa = { workspace = true }
 strum = { workspace = true }
 tempfile = { workspace = true }
 tokio = { workspace = true }
@@ -36,4 +38,5 @@ url = { workspace = true }
 uuid = { workspace = true }
 blake3 = { workspace = true }
 lru = { workspace = true }
+petname = { workspace = true }
 serde_json = { workspace = true }

@@ -18,8 +18,14 @@ pub struct NamedFontPrediction {
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, ToSchema, JsonSchema)]
+pub struct TopFont {
+    pub index: usize,
+    pub score: f32,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, ToSchema, JsonSchema)]
 pub struct FontPrediction {
-    pub top_fonts: Vec<(usize, f32)>,
+    pub top_fonts: Vec<TopFont>,
     pub named_fonts: Vec<NamedFontPrediction>,
     pub direction: TextDirection,
     pub text_color: [u8; 3],

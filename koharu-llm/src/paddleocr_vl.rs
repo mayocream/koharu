@@ -381,7 +381,7 @@ pub async fn prefetch(runtime: &RuntimeManager) -> Result<()> {
 }
 
 async fn download_model_files(runtime: &RuntimeManager) -> Result<ModelFiles> {
-    let artifacts = runtime.artifacts();
+    let artifacts = runtime.downloads();
     let (model, mmproj) = tokio::try_join!(
         artifacts.huggingface_model(HF_REPO, MODEL_FILENAME),
         artifacts.huggingface_model(HF_REPO, MMPROJ_FILENAME),

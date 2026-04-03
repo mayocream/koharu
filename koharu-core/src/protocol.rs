@@ -20,66 +20,6 @@ pub struct MetaInfo {
     pub ml_device: String,
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize, Default, JsonSchema, ToSchema)]
-#[serde(rename_all = "camelCase")]
-pub struct AppConfig {
-    pub data: AppDataConfig,
-    #[serde(default)]
-    pub llm: AppLlmConfig,
-}
-
-#[derive(Debug, Clone, Serialize, Deserialize, Default, JsonSchema, ToSchema)]
-#[serde(rename_all = "camelCase")]
-pub struct AppConfigUpdate {
-    pub data: AppDataConfigUpdate,
-    #[serde(default)]
-    pub llm: AppLlmConfigUpdate,
-}
-
-#[derive(Debug, Clone, Serialize, Deserialize, Default, JsonSchema, ToSchema)]
-#[serde(rename_all = "camelCase")]
-pub struct AppDataConfig {
-    pub path: String,
-}
-
-#[derive(Debug, Clone, Serialize, Deserialize, Default, JsonSchema, ToSchema)]
-#[serde(rename_all = "camelCase")]
-pub struct AppDataConfigUpdate {
-    pub path: String,
-}
-
-#[derive(Debug, Clone, Serialize, Deserialize, Default, JsonSchema, ToSchema)]
-#[serde(rename_all = "camelCase")]
-pub struct AppLlmConfig {
-    #[serde(default)]
-    pub providers: Vec<AppLlmProviderConfig>,
-}
-
-#[derive(Debug, Clone, Serialize, Deserialize, Default, JsonSchema, ToSchema)]
-#[serde(rename_all = "camelCase")]
-pub struct AppLlmConfigUpdate {
-    #[serde(default)]
-    pub providers: Vec<AppLlmProviderConfigUpdate>,
-}
-
-#[derive(Debug, Clone, Serialize, Deserialize, Default, JsonSchema, ToSchema)]
-#[serde(rename_all = "camelCase")]
-pub struct AppLlmProviderConfig {
-    pub id: String,
-    pub base_url: Option<String>,
-    pub has_api_key: bool,
-}
-
-#[derive(Debug, Clone, Serialize, Deserialize, Default, JsonSchema, ToSchema)]
-#[serde(rename_all = "camelCase")]
-pub struct AppLlmProviderConfigUpdate {
-    pub id: String,
-    pub base_url: Option<String>,
-    pub api_key: Option<String>,
-    #[serde(default)]
-    pub clear_api_key: bool,
-}
-
 #[derive(Debug, Clone, Serialize, Deserialize, JsonSchema, ToSchema)]
 #[serde(rename_all = "camelCase")]
 pub struct DocumentSummary {
@@ -144,7 +84,6 @@ impl From<&TextBlock> for TextBlockDetail {
 #[serde(rename_all = "camelCase")]
 pub struct DocumentDetail {
     pub id: String,
-    pub path: String,
     pub name: String,
     pub width: u32,
     pub height: u32,
