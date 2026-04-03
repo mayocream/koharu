@@ -251,7 +251,6 @@ export function MenuBar() {
             <MenubarItem
               className='text-[13px]'
               onSelect={() => {
-
                 setSettingsTab('appearance')
                 setSettingsOpen(true)
               }}
@@ -324,7 +323,6 @@ export function MenuBar() {
             <MenubarItem
               className='text-[13px]'
               onSelect={() => {
-
                 setSettingsTab('about')
                 setSettingsOpen(true)
               }}

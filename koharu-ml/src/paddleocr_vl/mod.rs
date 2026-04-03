@@ -11,7 +11,7 @@ use serde::{Deserialize, Serialize};
 use tokenizers::Tokenizer;
 use tracing::instrument;
 
-use crate::{define_models, device, loading};
+use crate::{device, loading};
 
 mod config;
 mod model;
@@ -21,13 +21,36 @@ mod vision;
 use self::{config::Config as PaddleOcrVlConfig, model::PaddleOCRVLModel};
 
 const DEFAULT_MAX_NEW_TOKENS: usize = 128;
+const HF_REPO: &str = "PaddlePaddle/PaddleOCR-VL-1.5";
 
-define_models! {
-    ConfigJson => ("PaddlePaddle/PaddleOCR-VL-1.5", "config.json"),
-    PreprocessorConfigJson => ("PaddlePaddle/PaddleOCR-VL-1.5", "preprocessor_config.json"),
-    TokenizerJson => ("PaddlePaddle/PaddleOCR-VL-1.5", "tokenizer.json"),
-    Model => ("PaddlePaddle/PaddleOCR-VL-1.5", "model.safetensors"),
-}
+koharu_runtime::declare_hf_model_package!(
+    id: "model:paddleocr-vl-candle:config",
+    repo: "PaddlePaddle/PaddleOCR-VL-1.5",
+    file: "config.json",
+    bootstrap: false,
+    order: 150,
+);
+koharu_runtime::declare_hf_model_package!(
+    id: "model:paddleocr-vl-candle:preprocessor-config",
+    repo: "PaddlePaddle/PaddleOCR-VL-1.5",
+    file: "preprocessor_config.json",
+    bootstrap: false,
+    order: 151,
+);
+koharu_runtime::declare_hf_model_package!(
+    id: "model:paddleocr-vl-candle:tokenizer",
+    repo: "PaddlePaddle/PaddleOCR-VL-1.5",
+    file: "tokenizer.json",
+    bootstrap: false,
+    order: 152,
+);
+koharu_runtime::declare_hf_model_package!(
+    id: "model:paddleocr-vl-candle:weights",
+    repo: "PaddlePaddle/PaddleOCR-VL-1.5",
+    file: "model.safetensors",
+    bootstrap: false,
+    order: 153,
+);
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
@@ -173,14 +196,18 @@ pub struct PaddleOcrVl {
 
 impl PaddleOcrVl {
     pub async fn load(runtime: &RuntimeManager, cpu: bool) -> Result<Self> {
+        let downloads = runtime.downloads();
         let files = ModelFiles {
-            config: loading::resolve_manifest_path(Manifest::ConfigJson.get(runtime)).await?,
-            preprocessor: loading::resolve_manifest_path(
-                Manifest::PreprocessorConfigJson.get(runtime),
-            )
-            .await?,
-            tokenizer: loading::resolve_manifest_path(Manifest::TokenizerJson.get(runtime)).await?,
-            weights: loading::resolve_manifest_path(Manifest::Model.get(runtime)).await?,
+            config: downloads.huggingface_model(HF_REPO, "config.json").await?,
+            preprocessor: downloads
+                .huggingface_model(HF_REPO, "preprocessor_config.json")
+                .await?,
+            tokenizer: downloads
+                .huggingface_model(HF_REPO, "tokenizer.json")
+                .await?,
+            weights: downloads
+                .huggingface_model(HF_REPO, "model.safetensors")
+                .await?,
         };
         Self::load_from_files(files, cpu)
     }

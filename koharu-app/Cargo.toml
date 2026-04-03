@@ -18,6 +18,8 @@ koharu-renderer = { workspace = true }
 koharu-llm = { workspace = true }
 koharu-runtime = { workspace = true }
 anyhow = { workspace = true }
+inventory = { workspace = true }
+async-trait = { workspace = true }
 camino = { workspace = true }
 dirs = { workspace = true }
 image = { workspace = true }
@@ -38,5 +40,6 @@ url = { workspace = true }
 uuid = { workspace = true }
 blake3 = { workspace = true }
 lru = { workspace = true }
+petgraph = { workspace = true }
 petname = { workspace = true }
 serde_json = { workspace = true }

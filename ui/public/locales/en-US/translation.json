@@ -317,6 +317,14 @@
     "dataPathDescription": "Koharu stores models, runtime packages, page manifests, and image blobs under this directory. Changing the path requires an app restart.",
     "dataPathApply": "Apply & Restart",
     "dataPathApplying": "Applying...",
-    "dataPathDesktopOnly": "Storage settings are only available in the desktop app."
+    "dataPathDesktopOnly": "Storage settings are only available in the desktop app.",
+    "engines": "Engines",
+    "enginesDescription": "Select which ML engine to use for each pipeline stage.",
+    "detector": "Detector",
+    "segmenter": "Segmenter",
+    "ocr": "OCR",
+    "translator": "Translator",
+    "inpainter": "Inpainter",
+    "renderer": "Renderer"
   }
 }

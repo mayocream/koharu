@@ -315,6 +315,14 @@
     "dataPathDescription": "O Koharu armazena modelos, pacotes de runtime, manifestos de páginas e blobs de imagens neste diretório. Alterar o caminho requer reiniciar o aplicativo.",
     "dataPathApply": "Aplicar e Reiniciar",
     "dataPathApplying": "Aplicando...",
-    "dataPathDesktopOnly": "As configurações de armazenamento estão disponíveis apenas no aplicativo de desktop."
+    "dataPathDesktopOnly": "As configurações de armazenamento estão disponíveis apenas no aplicativo de desktop.",
+    "engines": "Motores",
+    "enginesDescription": "Selecione qual motor ML usar para cada etapa do pipeline.",
+    "detector": "Detector",
+    "segmenter": "Segmentador",
+    "ocr": "OCR",
+    "translator": "Tradutor",
+    "inpainter": "Inpainter",
+    "renderer": "Renderizador"
   }
 }

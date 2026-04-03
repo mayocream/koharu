@@ -11,14 +11,15 @@ pub mod paddleocr_vl;
 pub mod pp_doclayout_v3;
 
 use anyhow::Result;
-use candle_core::utils::metal_is_available;
+use candle_core::utils::{cuda_is_available, metal_is_available};
 
 pub use candle_core::Device;
+use koharu_runtime::check_cuda_driver_support;
 
 pub fn device(cpu: bool) -> Result<Device> {
     if cpu {
         Ok(Device::Cpu)
-    } else if cuda_is_available() {
+    } else if cuda_is_available() && check_cuda_driver_support() {
         Ok(Device::new_cuda(0)?)
     } else if metal_is_available() {
         Ok(Device::new_metal(0)?)
@@ -26,15 +27,4 @@ pub fn device(cpu: bool) -> Result<Device> {
         println!("CUDA and Metal are not available. Using CPU device.");
         Ok(Device::Cpu)
     }
-}
-
-pub fn cuda_is_available() -> bool {
-    (unsafe {
-        libloading::Library::new(if cfg!(target_os = "windows") {
-            "nvcuda.dll"
-        } else {
-            "libcuda.so"
-        })
-        .is_ok()
-    }) && cfg!(feature = "cuda")
 }

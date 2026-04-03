@@ -315,6 +315,14 @@
     "dataPathDescription": "Koharu 將模型、執行階段套件、頁面清單和影像資料儲存在此目錄下。變更路徑需要重新啟動應用程式。",
     "dataPathApply": "套用並重新啟動",
     "dataPathApplying": "正在套用...",
-    "dataPathDesktopOnly": "儲存空間設定僅在桌面應用程式中可用。"
+    "dataPathDesktopOnly": "儲存空間設定僅在桌面應用程式中可用。",
+    "engines": "引擎",
+    "enginesDescription": "為每個流水線階段選擇要使用的ML引擎。",
+    "detector": "偵測器",
+    "segmenter": "分割器",
+    "ocr": "OCR",
+    "translator": "翻譯器",
+    "inpainter": "修補器",
+    "renderer": "渲染器"
   }
 }

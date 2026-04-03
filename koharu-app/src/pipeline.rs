@@ -3,16 +3,13 @@ use std::sync::{
     Arc,
     atomic::{AtomicBool, Ordering},
 };
-use std::time::Duration;
 
-use koharu_core::commands::ProcessRequest;
-use koharu_core::events::{PipelineStatus, PipelineStep};
 use koharu_core::{JobState, JobStatus};
 use tokio::sync::RwLock;
 use uuid::Uuid;
 
 use crate::AppResources;
-use crate::llm::ensure_target_ready;
+use crate::engine;
 
 pub type Jobs = Arc<RwLock<HashMap<String, JobState>>>;
 
@@ -21,64 +18,9 @@ pub struct PipelineHandle {
     pub cancel: Arc<AtomicBool>,
 }
 
-#[derive(Clone, Copy)]
-struct JobProgress {
-    current_document: usize,
-    total_documents: usize,
-    current_step_index: usize,
-    total_steps: usize,
-    overall_percent: u8,
-}
-
-fn compute_percent(doc: usize, step: usize, total_docs: usize, total_steps: usize) -> u8 {
-    let done_units = doc * total_steps + step;
-    let total_units = total_docs * total_steps;
-    if total_units == 0 {
-        return 0;
-    }
-    ((done_units as f64 / total_units as f64) * 100.0).round() as u8
-}
-
-async fn update_job(jobs: &Jobs, job: JobState) {
-    let terminal = !matches!(job.status, JobStatus::Running);
-    let mut guard = jobs.write().await;
-    if terminal {
-        guard.remove(&job.id);
-    } else {
-        guard.insert(job.id.clone(), job);
-    }
-}
-
-fn make_job_state(
-    job_id: &str,
-    status: PipelineStatus,
-    step: Option<PipelineStep>,
-    progress: JobProgress,
-) -> JobState {
-    let (job_status, error) = match status {
-        PipelineStatus::Running => (JobStatus::Running, None),
-        PipelineStatus::Completed => (JobStatus::Completed, None),
-        PipelineStatus::Cancelled => (JobStatus::Cancelled, None),
-        PipelineStatus::Failed(message) => (JobStatus::Failed, Some(message)),
-    };
-
-    JobState {
-        id: job_id.to_string(),
-        kind: "pipeline".to_string(),
-        status: job_status,
-        step: step.map(|step| step.to_string()),
-        current_document: progress.current_document,
-        total_documents: progress.total_documents,
-        current_step_index: progress.current_step_index,
-        total_steps: progress.total_steps,
-        overall_percent: progress.overall_percent,
-        error,
-    }
-}
-
 pub async fn process(
     state: AppResources,
-    payload: ProcessRequest,
+    payload: koharu_core::commands::ProcessRequest,
     jobs: Jobs,
 ) -> anyhow::Result<String> {
     {
@@ -98,10 +40,9 @@ pub async fn process(
         });
     }
 
-    let resources = state.clone();
-    let job_id_for_task = job_id.clone();
+    let jid = job_id.clone();
     tokio::spawn(async move {
-        run_pipeline(resources, payload, cancel, job_id_for_task, jobs).await;
+        run(state, payload, cancel, jid, jobs).await;
     });
 
     Ok(job_id)
@@ -115,166 +56,146 @@ pub async fn process_cancel(state: AppResources) -> anyhow::Result<()> {
     Ok(())
 }
 
-async fn run_pipeline(
-    resources: AppResources,
-    request: ProcessRequest,
+async fn run(
+    res: AppResources,
+    request: koharu_core::commands::ProcessRequest,
     cancel: Arc<AtomicBool>,
     job_id: String,
     jobs: Jobs,
 ) {
-    let result = run_pipeline_inner(&resources, &request, &cancel, &job_id, &jobs).await;
+    let result = run_inner(&res, &request, &cancel, &job_id, &jobs).await;
 
     let total_docs = match request.document_id {
         Some(_) => 1,
-        None => resources.storage.page_count().await,
+        None => res.storage.page_count().await,
     };
+    let config = res.config.read().await.clone();
+    let total_steps = engine::resolve_pipeline(&config.pipeline).len();
 
-    let final_state = match result {
-        Ok(()) if cancel.load(Ordering::Relaxed) => make_job_state(
+    let final_job = match result {
+        Ok(()) if cancel.load(Ordering::Relaxed) => job_state(
             &job_id,
-            PipelineStatus::Cancelled,
+            JobStatus::Cancelled,
             None,
-            JobProgress {
-                current_document: total_docs,
-                total_documents: total_docs,
-                current_step_index: 0,
-                total_steps: PipelineStep::ALL.len(),
-                overall_percent: 0,
-            },
+            total_docs,
+            total_docs,
+            0,
+            total_steps,
+            0,
+            None,
         ),
-        Ok(()) => make_job_state(
+        Ok(()) => job_state(
             &job_id,
-            PipelineStatus::Completed,
+            JobStatus::Completed,
             None,
-            JobProgress {
-                current_document: total_docs,
-                total_documents: total_docs,
-                current_step_index: PipelineStep::ALL.len(),
-                total_steps: PipelineStep::ALL.len(),
-                overall_percent: 100,
-            },
+            total_docs,
+            total_docs,
+            total_steps,
+            total_steps,
+            100,
+            None,
         ),
         Err(err) => {
             tracing::error!("Pipeline failed: {err:#}");
-            make_job_state(
+            job_state(
                 &job_id,
-                PipelineStatus::Failed(err.to_string()),
+                JobStatus::Failed,
                 None,
-                JobProgress {
-                    current_document: 0,
-                    total_documents: total_docs,
-                    current_step_index: 0,
-                    total_steps: PipelineStep::ALL.len(),
-                    overall_percent: 0,
-                },
+                0,
+                total_docs,
+                0,
+                total_steps,
+                0,
+                Some(err.to_string()),
             )
         }
     };
-    update_job(&jobs, final_state).await;
-
-    let mut guard = resources.pipeline.write().await;
-    *guard = None;
+    jobs.write().await.insert(job_id.clone(), final_job);
+    *res.pipeline.write().await = None;
 }
 
-async fn run_pipeline_inner(
+async fn run_inner(
     res: &AppResources,
-    req: &ProcessRequest,
+    req: &koharu_core::commands::ProcessRequest,
     cancel: &Arc<AtomicBool>,
     job_id: &str,
     jobs: &Jobs,
 ) -> anyhow::Result<()> {
     let page_ids: Vec<String> = match req.document_id.as_deref() {
         Some(id) => {
-            // Verify the document exists
             res.storage.page(id).await?;
             vec![id.to_string()]
         }
         None => res.storage.page_ids().await,
     };
-
     let total_docs = page_ids.len();
     if total_docs == 0 {
         return Ok(());
     }
 
-    if let Some(llm) = &req.llm {
-        ensure_target_ready(res, &llm.target, llm.options.as_ref()).await?;
-    }
+    let config = res.config.read().await.clone();
+    let selection = engine::resolve_pipeline(&config.pipeline);
+    let total_steps = selection.len();
 
-    let total_steps = PipelineStep::ALL.len();
-
-    for (doc_ordinal, page_id) in page_ids.iter().enumerate() {
-        for (step_ordinal, step) in PipelineStep::ALL.iter().enumerate() {
-            if cancel.load(Ordering::Relaxed) {
-                return Ok(());
-            }
-
-            let overall = compute_percent(doc_ordinal, step_ordinal, total_docs, total_steps);
-            update_job(
-                jobs,
-                make_job_state(
-                    job_id,
-                    PipelineStatus::Running,
-                    Some(*step),
-                    JobProgress {
-                        current_document: doc_ordinal,
-                        total_documents: total_docs,
-                        current_step_index: step_ordinal,
-                        total_steps,
-                        overall_percent: overall,
-                    },
-                ),
-            )
-            .await;
-
-            tokio::task::yield_now().await;
-            tokio::time::sleep(Duration::from_millis(1)).await;
-
-            match step {
-                PipelineStep::Detect => crate::ml::detect(res.clone(), page_id).await?,
-                PipelineStep::Ocr => crate::ml::ocr(res.clone(), page_id).await?,
-                PipelineStep::Inpaint => crate::ml::inpaint(res.clone(), page_id).await?,
-                PipelineStep::LlmGenerate => {
-                    crate::llm::llm_generate(res.clone(), page_id, None, req.language.as_deref())
-                        .await?;
-                }
-                PipelineStep::Render => {
-                    crate::ml::render(
-                        res.clone(),
-                        page_id,
-                        None,
-                        req.shader_effect,
-                        req.shader_stroke.clone(),
-                        req.font_family.as_deref(),
-                    )
-                    .await?;
-                }
-            }
+    for (doc_idx, page_id) in page_ids.iter().enumerate() {
+        if cancel.load(Ordering::Relaxed) {
+            return Ok(());
         }
+
+        let job_id = job_id.to_string();
+        let jobs = jobs.clone();
+
+        engine::execute_pipeline(&selection, res, page_id, cancel, |step_idx, step_id| {
+            let pct = if total_docs * total_steps > 0 {
+                ((doc_idx * total_steps + step_idx) as f64 / (total_docs * total_steps) as f64
+                    * 100.0) as u8
+            } else {
+                0
+            };
+            let job = job_state(
+                &job_id,
+                JobStatus::Running,
+                Some(step_id.to_string()),
+                doc_idx,
+                total_docs,
+                step_idx,
+                total_steps,
+                pct,
+                None,
+            );
+            let jobs = jobs.clone();
+            async move {
+                jobs.write().await.insert(job.id.clone(), job);
+            }
+        })
+        .await?;
     }
 
     Ok(())
 }
 
-#[cfg(test)]
-mod tests {
-    use super::compute_percent;
-
-    #[test]
-    fn compute_percent_handles_zero_units() {
-        assert_eq!(compute_percent(0, 0, 0, 5), 0);
-        assert_eq!(compute_percent(0, 0, 2, 0), 0);
-    }
-
-    #[test]
-    fn compute_percent_progresses_monotonically() {
-        let total_docs = 2;
-        let total_steps = 5;
-        let first = compute_percent(0, 0, total_docs, total_steps);
-        let middle = compute_percent(0, 3, total_docs, total_steps);
-        let last = compute_percent(1, 4, total_docs, total_steps);
-        assert!(first < middle);
-        assert!(middle < last);
-        assert_eq!(last, 90);
+#[allow(clippy::too_many_arguments)]
+fn job_state(
+    id: &str,
+    status: JobStatus,
+    step: Option<String>,
+    doc: usize,
+    total_docs: usize,
+    step_idx: usize,
+    total_steps: usize,
+    pct: u8,
+    error: Option<String>,
+) -> JobState {
+    JobState {
+        id: id.to_string(),
+        kind: "pipeline".to_string(),
+        status,
+        step,
+        current_document: doc,
+        total_documents: total_docs,
+        current_step_index: step_idx,
+        total_steps,
+        overall_percent: pct,
+        error,
     }
 }

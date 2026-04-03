@@ -15,11 +15,9 @@ use koharu_core::TextBlock;
 use koharu_runtime::RuntimeManager;
 use tracing::instrument;
 
-use crate::{define_models, device, loading};
+use crate::{device, loading};
 
-define_models! {
-    Lama => ("mayocream/lama-manga", "lama-manga.safetensors"),
-}
+const HF_REPO: &str = "mayocream/lama-manga";
 
 koharu_runtime::declare_hf_model_package!(
     id: "model:lama:weights",
@@ -53,11 +51,13 @@ pub struct Lama {
 impl Lama {
     pub async fn load(runtime: &RuntimeManager, cpu: bool) -> Result<Self> {
         let device = device(cpu)?;
-        let model =
-            loading::load_buffered_safetensors(Manifest::Lama.get(runtime), &device, |vb| {
-                model::Lama::load(&vb)
-            })
+        let weights_path = runtime
+            .downloads()
+            .huggingface_model(HF_REPO, "lama-manga.safetensors")
             .await?;
+        let model = loading::load_buffered_safetensors_path(&weights_path, &device, |vb| {
+            model::Lama::load(&vb)
+        })?;
 
         Ok(Self { model, device })
     }

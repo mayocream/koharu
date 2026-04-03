@@ -14,11 +14,15 @@ const summarizeDownloads = (downloads?: DownloadState[] | null) => {
   for (const d of downloads) {
     total += d.total ?? 0
     downloaded += d.downloaded
-    if (d.status === 'started' || d.status === 'downloading') active = d.filename
+    if (d.status === 'started' || d.status === 'downloading')
+      active = d.filename
   }
   return {
     filename: active,
-    percent: total > 0 ? Math.min(100, Math.round((downloaded / total) * 100)) : undefined,
+    percent:
+      total > 0
+        ? Math.min(100, Math.round((downloaded / total) * 100))
+        : undefined,
   }
 }
 

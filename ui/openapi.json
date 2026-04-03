@@ -44,6 +44,21 @@
                       "path": "C:\\Users\\Mayo\\AppData\\Local\\Koharu"
                     }
                   },
+                  "pipeline": {
+                    "oneOf": [
+                      {
+                        "$ref": "#/components/schemas/PipelineConfig"
+                      }
+                    ],
+                    "default": {
+                      "detector": "pp-doclayout-v3",
+                      "inpainter": "lama-manga",
+                      "ocr": "paddle-ocr-vl-1.5",
+                      "renderer": "koharu-renderer",
+                      "segmenter": "comic-text-detector-seg",
+                      "translator": "llm"
+                    }
+                  },
                   "providers": {
                     "type": "array",
                     "items": {
@@ -73,6 +88,21 @@
                       ],
                       "default": {
                         "path": "C:\\Users\\Mayo\\AppData\\Local\\Koharu"
+                      }
+                    },
+                    "pipeline": {
+                      "oneOf": [
+                        {
+                          "$ref": "#/components/schemas/PipelineConfig"
+                        }
+                      ],
+                      "default": {
+                        "detector": "pp-doclayout-v3",
+                        "inpainter": "lama-manga",
+                        "ocr": "paddle-ocr-vl-1.5",
+                        "renderer": "koharu-renderer",
+                        "segmenter": "comic-text-detector-seg",
+                        "translator": "llm"
                       }
                     },
                     "providers": {
@@ -1003,6 +1033,70 @@
         }
       }
     },
+    "/engines": {
+      "get": {
+        "tags": ["system"],
+        "operationId": "getEngineCatalog",
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "required": [
+                    "detectors",
+                    "segmenters",
+                    "ocr",
+                    "translators",
+                    "inpainters",
+                    "renderers"
+                  ],
+                  "properties": {
+                    "detectors": {
+                      "type": "array",
+                      "items": {
+                        "$ref": "#/components/schemas/EngineCatalogEntry"
+                      }
+                    },
+                    "inpainters": {
+                      "type": "array",
+                      "items": {
+                        "$ref": "#/components/schemas/EngineCatalogEntry"
+                      }
+                    },
+                    "ocr": {
+                      "type": "array",
+                      "items": {
+                        "$ref": "#/components/schemas/EngineCatalogEntry"
+                      }
+                    },
+                    "renderers": {
+                      "type": "array",
+                      "items": {
+                        "$ref": "#/components/schemas/EngineCatalogEntry"
+                      }
+                    },
+                    "segmenters": {
+                      "type": "array",
+                      "items": {
+                        "$ref": "#/components/schemas/EngineCatalogEntry"
+                      }
+                    },
+                    "translators": {
+                      "type": "array",
+                      "items": {
+                        "$ref": "#/components/schemas/EngineCatalogEntry"
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/exports": {
       "post": {
         "tags": ["exports"],
@@ -1583,6 +1677,24 @@
           }
         }
       },
+      "EngineCatalogEntry": {
+        "type": "object",
+        "required": ["id", "name", "produces"],
+        "properties": {
+          "id": {
+            "type": "string"
+          },
+          "name": {
+            "type": "string"
+          },
+          "produces": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          }
+        }
+      },
       "ExportBatchRequest": {
         "type": "object",
         "properties": {
@@ -1992,6 +2104,36 @@
           },
           "serif": {
             "type": "boolean"
+          }
+        }
+      },
+      "PipelineConfig": {
+        "type": "object",
+        "description": "Engine selection for each pipeline stage.\nValues are engine IDs (e.g. \"pp-doclayout-v3\", \"comic-text-detector\").\nEmpty string means use default.",
+        "properties": {
+          "detector": {
+            "type": "string",
+            "default": "pp-doclayout-v3"
+          },
+          "inpainter": {
+            "type": "string",
+            "default": "lama-manga"
+          },
+          "ocr": {
+            "type": "string",
+            "default": "paddle-ocr-vl-1.5"
+          },
+          "renderer": {
+            "type": "string",
+            "default": "koharu-renderer"
+          },
+          "segmenter": {
+            "type": "string",
+            "default": "comic-text-detector-seg"
+          },
+          "translator": {
+            "type": "string",
+            "default": "llm"
           }
         }
       },

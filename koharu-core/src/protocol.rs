@@ -379,3 +379,22 @@ pub struct BrushRegionRequest {
 pub struct InpaintRegionRequest {
     pub region: Region,
 }
+
+#[derive(Debug, Clone, Serialize, Deserialize, JsonSchema, ToSchema)]
+#[serde(rename_all = "camelCase")]
+pub struct EngineCatalogEntry {
+    pub id: String,
+    pub name: String,
+    pub produces: Vec<String>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, JsonSchema, ToSchema)]
+#[serde(rename_all = "camelCase")]
+pub struct EngineCatalog {
+    pub detectors: Vec<EngineCatalogEntry>,
+    pub segmenters: Vec<EngineCatalogEntry>,
+    pub ocr: Vec<EngineCatalogEntry>,
+    pub translators: Vec<EngineCatalogEntry>,
+    pub inpainters: Vec<EngineCatalogEntry>,
+    pub renderers: Vec<EngineCatalogEntry>,
+}

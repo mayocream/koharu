@@ -493,6 +493,10 @@ impl Model {
         self.cpu
     }
 
+    pub fn backend(&self) -> Arc<LlamaBackend> {
+        self.backend.clone()
+    }
+
     pub async fn load_provider(
         &self,
         target: LlmTarget,
@@ -832,36 +836,6 @@ async fn load_target(
     }
 
     Ok(())
-}
-
-pub async fn ensure_target_ready(
-    state: &AppResources,
-    target: &LlmTarget,
-    options: Option<&LlmGenerationOptions>,
-) -> anyhow::Result<()> {
-    load_target(state, target, options).await?;
-    if target.kind != LlmTargetKind::Local {
-        return Ok(());
-    }
-
-    for _ in 0..300 {
-        let snapshot = state.llm.snapshot().await;
-        match snapshot.status {
-            LlmStateStatus::Ready if snapshot.target.as_ref() == Some(target) => return Ok(()),
-            LlmStateStatus::Failed if snapshot.target.as_ref() == Some(target) => {
-                anyhow::bail!(
-                    "{}",
-                    snapshot
-                        .error
-                        .unwrap_or_else(|| "LLM failed to load".to_string())
-                );
-            }
-            _ => {}
-        }
-        tokio::time::sleep(std::time::Duration::from_millis(100)).await;
-    }
-
-    anyhow::bail!("LLM failed to load within timeout");
 }
 
 pub async fn llm_catalog(

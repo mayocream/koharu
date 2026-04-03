@@ -11,7 +11,7 @@ use image::{DynamicImage, GenericImageView, GrayImage, RgbImage, imageops};
 use koharu_runtime::RuntimeManager;
 use tracing::instrument;
 
-use crate::{define_models, device, loading};
+use crate::{device, loading};
 
 pub use postprocess::{
     ComicTextDetection, Quad, crop_text_block_bbox, extract_text_block_regions,
@@ -39,11 +39,7 @@ struct PatchPlacement {
     actual_height: u32,
 }
 
-define_models! {
-    Yolov5 => ("mayocream/comic-text-detector", "yolo-v5.safetensors"),
-    Unet => ("mayocream/comic-text-detector", "unet.safetensors"),
-    DbNet => ("mayocream/comic-text-detector", "dbnet.safetensors"),
-}
+const HF_REPO: &str = "mayocream/comic-text-detector";
 
 koharu_runtime::declare_hf_model_package!(
     id: "model:comic-text-detector:yolo-v5",
@@ -58,6 +54,13 @@ koharu_runtime::declare_hf_model_package!(
     file: "unet.safetensors",
     bootstrap: true,
     order: 111,
+);
+koharu_runtime::declare_hf_model_package!(
+    id: "model:comic-text-detector:dbnet",
+    repo: "mayocream/comic-text-detector",
+    file: "dbnet.safetensors",
+    bootstrap: true,
+    order: 112,
 );
 
 pub struct ComicTextDetector {
@@ -85,25 +88,26 @@ impl ComicTextDetector {
         load_dbnet: bool,
     ) -> anyhow::Result<Self> {
         let device = device(cpu)?;
-        let yolo = loading::load_mmaped_safetensors(Manifest::Yolov5.get(runtime), &device, |vb| {
+        let downloads = runtime.downloads();
+        let yolo_path = downloads
+            .huggingface_model(HF_REPO, "yolo-v5.safetensors")
+            .await?;
+        let yolo = loading::load_mmaped_safetensors_path(&yolo_path, &device, |vb| {
             yolo_v5::YoloV5::load(vb, 2, 3)
-        })
-        .await?;
-        let unet = loading::load_mmaped_safetensors(
-            Manifest::Unet.get(runtime),
-            &device,
-            unet::UNet::load,
-        )
-        .await?;
+        })?;
+        let unet_path = downloads
+            .huggingface_model(HF_REPO, "unet.safetensors")
+            .await?;
+        let unet = loading::load_mmaped_safetensors_path(&unet_path, &device, unet::UNet::load)?;
         let dbnet = if load_dbnet {
-            Some(
-                loading::load_mmaped_safetensors(
-                    Manifest::DbNet.get(runtime),
-                    &device,
-                    dbnet::DbNet::load,
-                )
-                .await?,
-            )
+            let dbnet_path = downloads
+                .huggingface_model(HF_REPO, "dbnet.safetensors")
+                .await?;
+            Some(loading::load_mmaped_safetensors_path(
+                &dbnet_path,
+                &device,
+                dbnet::DbNet::load,
+            )?)
         } else {
             None
         };
@@ -658,8 +662,13 @@ fn stitch_mask_patch(
 }
 
 pub async fn prefetch_segmentation(runtime: &RuntimeManager) -> anyhow::Result<()> {
-    Manifest::Yolov5.get(runtime).await?;
-    Manifest::Unet.get(runtime).await?;
+    let downloads = runtime.downloads();
+    downloads
+        .huggingface_model(HF_REPO, "yolo-v5.safetensors")
+        .await?;
+    downloads
+        .huggingface_model(HF_REPO, "unet.safetensors")
+        .await?;
     Ok(())
 }
 

@@ -13,7 +13,7 @@ use rmcp::model::{
 use rmcp::{ServerHandler, tool, tool_handler, tool_router};
 use tokio::sync::RwLock;
 
-use koharu_app::{AppResources, edit, io, llm, ml, pipeline};
+use koharu_app::{AppResources, edit, engine, io, llm, pipeline};
 use koharu_core::commands::{
     AddTextBlockPayload, DocumentIdParam, ExportDocumentParams, FileEntry, InpaintRegionParams,
     LlmGenerateParams, LlmLoadParams, MaskMorphPayload, OpenDocumentsParams, OpenDocumentsPayload,
@@ -100,9 +100,10 @@ impl KoharuMcp {
     #[tool(description = "List available font families for text rendering")]
     async fn list_font_families(&self) -> Result<String, String> {
         let res = self.resources()?;
-        let fonts = ml::list_font_families(res)
+        let renderer = engine::get_renderer(&res)
             .await
             .map_err(|e| e.to_string())?;
+        let fonts = renderer.available_fonts().map_err(|e| e.to_string())?;
         Ok(fonts
             .into_iter()
             .map(|font| format!("{} ({})", font.family_name, font.post_script_name))
@@ -307,9 +308,17 @@ impl KoharuMcp {
     )]
     async fn detect(&self, Parameters(p): Parameters<DocumentIdParam>) -> Result<String, String> {
         let res = self.resources()?;
-        ml::detect(res.clone(), &p.document_id)
-            .await
-            .map_err(|e| e.to_string())?;
+        engine::run_many(
+            &[
+                "pp-doclayout-v3",
+                "comic-text-detector-seg",
+                "yuzumarker-font-detection",
+            ],
+            &res,
+            &p.document_id,
+        )
+        .await
+        .map_err(|e| e.to_string())?;
 
         let doc = io::get_document(res, &p.document_id)
             .await
@@ -330,7 +339,7 @@ impl KoharuMcp {
     )]
     async fn ocr(&self, Parameters(p): Parameters<DocumentIdParam>) -> Result<String, String> {
         let res = self.resources()?;
-        ml::ocr(res.clone(), &p.document_id)
+        engine::run_one("paddle-ocr-vl-1.5", &res, &p.document_id)
             .await
             .map_err(|e| e.to_string())?;
 
@@ -351,7 +360,7 @@ impl KoharuMcp {
     )]
     async fn inpaint(&self, Parameters(p): Parameters<DocumentIdParam>) -> Result<String, String> {
         let res = self.resources()?;
-        ml::inpaint(res, &p.document_id)
+        engine::run_one("lama-manga", &res, &p.document_id)
             .await
             .map_err(|e| e.to_string())?;
         Ok("Inpainting complete".to_string())
@@ -369,8 +378,8 @@ impl KoharuMcp {
             .transpose()
             .map_err(|e: anyhow::Error| e.to_string())?;
 
-        ml::render(
-            res,
+        engine::render_document(
+            &res,
             &p.document_id,
             p.text_block_index,
             effect,

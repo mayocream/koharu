@@ -12,15 +12,15 @@ use tracing::instrument;
 use model::{PreprocessorConfig, VisionEncoderDecoder, VisionEncoderDecoderConfig};
 use tokenizer::load_tokenizer;
 
-use crate::{define_models, device, loading};
+use crate::{device, loading};
 
-define_models! {
-    Config => ("mayocream/manga-ocr", "config.json"),
-    PreprocessorConfig => ("mayocream/manga-ocr", "preprocessor_config.json"),
-    Vocab => ("mayocream/manga-ocr", "vocab.txt"),
-    SpecialTokensMap => ("mayocream/manga-ocr", "special_tokens_map.json"),
-    Model => ("mayocream/manga-ocr", "model.safetensors"),
-}
+const HF_REPO: &str = "mayocream/manga-ocr";
+
+koharu_runtime::declare_hf_model_package!(id: "model:manga-ocr:config", repo: HF_REPO, file: "config.json", bootstrap: true, order: 200);
+koharu_runtime::declare_hf_model_package!(id: "model:manga-ocr:preprocessor", repo: HF_REPO, file: "preprocessor_config.json", bootstrap: true, order: 201);
+koharu_runtime::declare_hf_model_package!(id: "model:manga-ocr:vocab", repo: HF_REPO, file: "vocab.txt", bootstrap: true, order: 202);
+koharu_runtime::declare_hf_model_package!(id: "model:manga-ocr:special-tokens", repo: HF_REPO, file: "special_tokens_map.json", bootstrap: true, order: 203);
+koharu_runtime::declare_hf_model_package!(id: "model:manga-ocr:weights", repo: HF_REPO, file: "model.safetensors", bootstrap: true, order: 204);
 
 pub struct MangaOcr {
     model: VisionEncoderDecoder,
@@ -32,12 +32,15 @@ pub struct MangaOcr {
 impl MangaOcr {
     pub async fn load(runtime: &RuntimeManager, cpu: bool) -> Result<Self> {
         let device = device(cpu)?;
-        let config_path = loading::resolve_manifest_path(Manifest::Config.get(runtime)).await?;
-        let preprocessor_path =
-            loading::resolve_manifest_path(Manifest::PreprocessorConfig.get(runtime)).await?;
-        let vocab_path = loading::resolve_manifest_path(Manifest::Vocab.get(runtime)).await?;
-        let special_tokens_path =
-            loading::resolve_manifest_path(Manifest::SpecialTokensMap.get(runtime)).await?;
+        let hf = runtime.downloads();
+        let config_path = hf.huggingface_model(HF_REPO, "config.json").await?;
+        let preprocessor_path = hf
+            .huggingface_model(HF_REPO, "preprocessor_config.json")
+            .await?;
+        let vocab_path = hf.huggingface_model(HF_REPO, "vocab.txt").await?;
+        let special_tokens_path = hf
+            .huggingface_model(HF_REPO, "special_tokens_map.json")
+            .await?;
 
         let config: VisionEncoderDecoderConfig =
             loading::read_json(&config_path).context("failed to parse model config")?;
@@ -45,11 +48,10 @@ impl MangaOcr {
             .context("failed to parse preprocessor config")?;
         let tokenizer = load_tokenizer(None, &vocab_path, &special_tokens_path)?;
         let model_device = device.clone();
-        let model =
-            loading::load_mmaped_safetensors(Manifest::Model.get(runtime), &device, move |vb| {
-                VisionEncoderDecoder::from_config(config, vb, model_device.clone())
-            })
-            .await?;
+        let weights = hf.huggingface_model(HF_REPO, "model.safetensors").await?;
+        let model = loading::load_mmaped_safetensors_path(&weights, &device, move |vb| {
+            VisionEncoderDecoder::from_config(config, vb, model_device.clone())
+        })?;
 
         Ok(Self {
             model,

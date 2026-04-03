@@ -8,7 +8,8 @@ pub mod packages;
 mod runtime;
 
 pub use cuda::{
-    CudaDriverVersion, check_cuda_driver_support, driver_version as nvidia_driver_version,
+    CudaDriverVersion, check_cuda_driver_support, compute_capability,
+    driver_version as nvidia_driver_version,
 };
 pub use hf_hub;
 pub use inventory;
