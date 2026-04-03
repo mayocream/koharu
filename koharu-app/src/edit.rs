@@ -83,10 +83,12 @@ pub async fn update_text_blocks(
     document_id: &str,
     text_blocks: Vec<TextBlock>,
 ) -> anyhow::Result<()> {
-    let mut doc = state.cache.get(document_id).await?;
-    doc.text_blocks = text_blocks;
-    state.cache.put(&doc).await?;
-    Ok(())
+    state
+        .storage
+        .update_page(document_id, |page| {
+            page.text_blocks = text_blocks;
+        })
+        .await
 }
 
 pub struct UpdateTextBlockArgs {
@@ -107,72 +109,79 @@ pub async fn update_text_block(
     document_id: &str,
     args: UpdateTextBlockArgs,
 ) -> anyhow::Result<TextBlockInfo> {
-    let mut doc = state.cache.get(document_id).await?;
+    let mut info = None;
+    state
+        .storage
+        .update_page(document_id, |page| {
+            let block = match page.text_blocks.get_mut(args.text_block_index) {
+                Some(b) => b,
+                None => return,
+            };
+            let mut geometry_changed = false;
 
-    let block = doc
-        .text_blocks
-        .get_mut(args.text_block_index)
-        .ok_or_else(|| anyhow::anyhow!("Text block {} not found", args.text_block_index))?;
-    let mut geometry_changed = false;
+            if let Some(translation) = &args.translation {
+                block.translation = Some(translation.clone());
+            }
+            if let Some(x) = args.x {
+                block.x = x;
+                geometry_changed = true;
+            }
+            if let Some(y) = args.y {
+                block.y = y;
+                geometry_changed = true;
+            }
+            if let Some(width) = args.width {
+                block.width = width;
+                geometry_changed = true;
+                block.lock_layout_box = true;
+            }
+            if let Some(height) = args.height {
+                block.height = height;
+                geometry_changed = true;
+                block.lock_layout_box = true;
+            }
+            if geometry_changed {
+                block.set_layout_seed(block.x, block.y, block.width, block.height);
+            }
 
-    if let Some(translation) = args.translation {
-        block.translation = Some(translation);
-    }
-    if let Some(x) = args.x {
-        block.x = x;
-        geometry_changed = true;
-    }
-    if let Some(y) = args.y {
-        block.y = y;
-        geometry_changed = true;
-    }
-    if let Some(width) = args.width {
-        block.width = width;
-        geometry_changed = true;
-        block.lock_layout_box = true;
-    }
-    if let Some(height) = args.height {
-        block.height = height;
-        geometry_changed = true;
-        block.lock_layout_box = true;
-    }
-    if geometry_changed {
-        block.set_layout_seed(block.x, block.y, block.width, block.height);
-    }
+            if args.font_families.is_some()
+                || args.font_size.is_some()
+                || args.color.is_some()
+                || args.shader_effect.is_some()
+            {
+                let style = block.style.get_or_insert_with(|| TextStyle {
+                    font_families: Vec::new(),
+                    font_size: None,
+                    color: [0, 0, 0, 255],
+                    effect: None,
+                    stroke: None,
+                    text_align: None,
+                });
 
-    if args.font_families.is_some()
-        || args.font_size.is_some()
-        || args.color.is_some()
-        || args.shader_effect.is_some()
-    {
-        let style = block.style.get_or_insert_with(|| TextStyle {
-            font_families: Vec::new(),
-            font_size: None,
-            color: [0, 0, 0, 255],
-            effect: None,
-            stroke: None,
-            text_align: None,
-        });
+                if let Some(ref families) = args.font_families {
+                    style.font_families = families.clone();
+                }
+                if let Some(font_size) = args.font_size {
+                    style.font_size = Some(font_size);
+                }
+                if let Some(ref hex) = args.color
+                    && let Ok(c) = parse_hex_color(hex)
+                {
+                    style.color = c;
+                }
+                if let Some(ref effect) = args.shader_effect
+                    && let Ok(e) = effect.parse()
+                {
+                    style.effect = Some(e);
+                }
+            }
 
-        if let Some(families) = args.font_families {
-            style.font_families = families;
-        }
-        if let Some(font_size) = args.font_size {
-            style.font_size = Some(font_size);
-        }
-        if let Some(hex) = args.color {
-            style.color = parse_hex_color(&hex)?;
-        }
-        if let Some(effect) = args.shader_effect {
-            style.effect = Some(effect.parse()?);
-        }
-    }
-
-    block.rendered = None;
-    block.rendered_direction = None;
-    let info = to_block_info(args.text_block_index, block);
-    state.cache.put(&doc).await?;
-    Ok(info)
+            block.rendered = None;
+            block.rendered_direction = None;
+            info = Some(to_block_info(args.text_block_index, block));
+        })
+        .await?;
+    info.ok_or_else(|| anyhow::anyhow!("Text block {} not found", args.text_block_index))
 }
 
 pub async fn add_text_block(
@@ -183,20 +192,23 @@ pub async fn add_text_block(
     width: f32,
     height: f32,
 ) -> anyhow::Result<usize> {
-    let mut doc = state.cache.get(document_id).await?;
-
-    let mut block = TextBlock {
-        x,
-        y,
-        width,
-        height,
-        confidence: 1.0,
-        ..Default::default()
-    };
-    block.set_layout_seed(block.x, block.y, block.width, block.height);
-    doc.text_blocks.push(block);
-    let count = doc.text_blocks.len() - 1;
-    state.cache.put(&doc).await?;
+    let mut count = 0;
+    state
+        .storage
+        .update_page(document_id, |page| {
+            let mut block = TextBlock {
+                x,
+                y,
+                width,
+                height,
+                confidence: 1.0,
+                ..Default::default()
+            };
+            block.set_layout_seed(block.x, block.y, block.width, block.height);
+            page.text_blocks.push(block);
+            count = page.text_blocks.len() - 1;
+        })
+        .await?;
     Ok(count)
 }
 
@@ -205,14 +217,22 @@ pub async fn remove_text_block(
     document_id: &str,
     text_block_index: usize,
 ) -> anyhow::Result<usize> {
-    let mut doc = state.cache.get(document_id).await?;
-
-    if text_block_index >= doc.text_blocks.len() {
+    let mut count = 0;
+    let mut found = false;
+    state
+        .storage
+        .update_page(document_id, |page| {
+            if text_block_index >= page.text_blocks.len() {
+                return;
+            }
+            page.text_blocks.remove(text_block_index);
+            count = page.text_blocks.len();
+            found = true;
+        })
+        .await?;
+    if !found {
         anyhow::bail!("Text block {} not found", text_block_index);
     }
-    doc.text_blocks.remove(text_block_index);
-    let count = doc.text_blocks.len();
-    state.cache.put(&doc).await?;
     Ok(count)
 }
 
@@ -221,18 +241,27 @@ pub async fn dilate_mask(state: AppResources, document_id: &str, radius: u8) -> 
         anyhow::bail!("Radius must be 1-50");
     }
 
-    let mut doc = state.cache.get(document_id).await?;
+    let doc = state.storage.page(document_id).await?;
 
-    let segment = doc
+    let segment_ref = doc
         .segment
         .as_ref()
         .ok_or_else(|| anyhow::anyhow!("No segment mask. Run detect first."))?;
+    let segment = state.storage.images.load(segment_ref)?;
 
     let gray = segment.to_luma8();
     let dilated = imageproc::morphology::dilate(&gray, Norm::LInf, radius);
-    doc.segment = Some(SerializableDynamicImage(DynamicImage::ImageLuma8(dilated)));
-    state.cache.put(&doc).await?;
-    Ok(())
+    let new_ref = state
+        .storage
+        .images
+        .store_webp(&DynamicImage::ImageLuma8(dilated))?;
+
+    state
+        .storage
+        .update_page(document_id, |page| {
+            page.segment = Some(new_ref);
+        })
+        .await
 }
 
 pub async fn erode_mask(state: AppResources, document_id: &str, radius: u8) -> anyhow::Result<()> {
@@ -240,18 +269,27 @@ pub async fn erode_mask(state: AppResources, document_id: &str, radius: u8) -> a
         anyhow::bail!("Radius must be 1-50");
     }
 
-    let mut doc = state.cache.get(document_id).await?;
+    let doc = state.storage.page(document_id).await?;
 
-    let segment = doc
+    let segment_ref = doc
         .segment
         .as_ref()
         .ok_or_else(|| anyhow::anyhow!("No segment mask. Run detect first."))?;
+    let segment = state.storage.images.load(segment_ref)?;
 
     let gray = segment.to_luma8();
     let eroded = imageproc::morphology::erode(&gray, Norm::LInf, radius);
-    doc.segment = Some(SerializableDynamicImage(DynamicImage::ImageLuma8(eroded)));
-    state.cache.put(&doc).await?;
-    Ok(())
+    let new_ref = state
+        .storage
+        .images
+        .store_webp(&DynamicImage::ImageLuma8(eroded))?;
+
+    state
+        .storage
+        .update_page(document_id, |page| {
+            page.segment = Some(new_ref);
+        })
+        .await
 }
 
 pub async fn update_inpaint_mask(
@@ -260,15 +298,17 @@ pub async fn update_inpaint_mask(
     mask: &[u8],
     region: Option<Region>,
 ) -> anyhow::Result<()> {
-    let mut doc = state.cache.get(document_id).await?;
+    let doc = state.storage.page(document_id).await?;
 
     let update_image = image::load_from_memory(mask)?;
     let (doc_width, doc_height) = (doc.width, doc.height);
 
     let mut base_mask = doc
         .segment
-        .clone()
-        .unwrap_or_else(|| blank_rgba(doc_width, doc_height, image::Rgba([0, 0, 0, 255])))
+        .as_ref()
+        .map(|r| state.storage.images.load(r))
+        .transpose()?
+        .unwrap_or_else(|| blank_rgba(doc_width, doc_height, image::Rgba([0, 0, 0, 255])).into())
         .to_rgba8();
 
     match region {
@@ -315,9 +355,17 @@ pub async fn update_inpaint_mask(
         }
     }
 
-    doc.segment = Some(image::DynamicImage::ImageRgba8(base_mask).into());
-    state.cache.put(&doc).await?;
-    Ok(())
+    let new_ref = state
+        .storage
+        .images
+        .store_webp(&image::DynamicImage::ImageRgba8(base_mask))?;
+
+    state
+        .storage
+        .update_page(document_id, |page| {
+            page.segment = Some(new_ref);
+        })
+        .await
 }
 
 pub async fn update_brush_layer(
@@ -326,7 +374,7 @@ pub async fn update_brush_layer(
     patch: &[u8],
     brush_region: Region,
 ) -> anyhow::Result<()> {
-    let mut doc = state.cache.get(document_id).await?;
+    let doc = state.storage.page(document_id).await?;
 
     let (img_width, img_height) = (doc.width, doc.height);
     let Some((x0, y0, width, height)) = brush_region.clamp(img_width, img_height) else {
@@ -349,8 +397,10 @@ pub async fn update_brush_layer(
     let brush_rgba = patch_image.to_rgba8();
     let mut brush_layer = doc
         .brush_layer
-        .clone()
-        .unwrap_or_else(|| blank_rgba(img_width, img_height, image::Rgba([0, 0, 0, 0])))
+        .as_ref()
+        .map(|r| state.storage.images.load(r))
+        .transpose()?
+        .unwrap_or_else(|| blank_rgba(img_width, img_height, image::Rgba([0, 0, 0, 0])).into())
         .to_rgba8();
 
     for y in 0..height {
@@ -359,9 +409,17 @@ pub async fn update_brush_layer(
         }
     }
 
-    doc.brush_layer = Some(image::DynamicImage::ImageRgba8(brush_layer).into());
-    state.cache.put(&doc).await?;
-    Ok(())
+    let new_ref = state
+        .storage
+        .images
+        .store_webp(&image::DynamicImage::ImageRgba8(brush_layer))?;
+
+    state
+        .storage
+        .update_page(document_id, |page| {
+            page.brush_layer = Some(new_ref);
+        })
+        .await
 }
 
 #[instrument(level = "info", skip_all)]
@@ -370,12 +428,14 @@ pub async fn inpaint_partial(
     document_id: &str,
     inpaint_region: Region,
 ) -> anyhow::Result<()> {
-    let mut doc = state.cache.get(document_id).await?;
+    let doc = state.storage.page(document_id).await?;
 
-    let mask_image = doc
+    let segment_ref = doc
         .segment
         .as_ref()
         .ok_or_else(|| anyhow::anyhow!("Segment image not found"))?;
+    let mask_image = state.storage.images.load(segment_ref)?;
+    let source_image = state.storage.images.load(&doc.source)?;
 
     if inpaint_region.width == 0 || inpaint_region.height == 0 {
         return Ok(());
@@ -405,7 +465,8 @@ pub async fn inpaint_partial(
         return Ok(());
     }
 
-    let image_crop = SerializableDynamicImage(doc.image.crop_imm(x0, y0, crop_width, crop_height));
+    let image_crop =
+        SerializableDynamicImage(source_image.crop_imm(x0, y0, crop_width, crop_height));
     let mask_crop = SerializableDynamicImage(mask_image.crop_imm(x0, y0, crop_width, crop_height));
 
     let inpainted_crop = state
@@ -413,14 +474,28 @@ pub async fn inpaint_partial(
         .inpaint_raw(&image_crop, &mask_crop, Some(&localized_blocks))
         .await?;
 
-    let mut stitched = doc.inpainted.as_ref().unwrap_or(&doc.image).to_rgba8();
+    let inpainted_base = doc
+        .inpainted
+        .as_ref()
+        .map(|r| state.storage.images.load(r))
+        .transpose()?
+        .unwrap_or_else(|| source_image.clone());
+    let mut stitched = inpainted_base.to_rgba8();
 
     let patch = inpainted_crop.to_rgba8();
     paste_crop(&mut stitched, &patch, x0, y0);
 
-    doc.inpainted = Some(image::DynamicImage::ImageRgba8(stitched).into());
-    state.cache.put(&doc).await?;
-    Ok(())
+    let new_ref = state
+        .storage
+        .images
+        .store_webp(&image::DynamicImage::ImageRgba8(stitched))?;
+
+    state
+        .storage
+        .update_page(document_id, |page| {
+            page.inpainted = Some(new_ref);
+        })
+        .await
 }
 
 #[cfg(test)]

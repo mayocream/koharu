@@ -1,9 +1,19 @@
 use std::io::Write;
 
 use image::{DynamicImage, GrayImage, Rgba, RgbaImage, imageops::overlay};
-use koharu_core::{
-    Document, FontPrediction, SerializableDynamicImage, TextAlign, TextBlock, TextDirection,
-};
+use koharu_core::{BlobRef, Document, FontPrediction, TextAlign, TextBlock, TextDirection};
+
+/// A document with all blob refs resolved to in-memory images.
+pub struct ResolvedDocument<'a> {
+    pub document: &'a Document,
+    pub source: &'a DynamicImage,
+    pub segment: Option<&'a DynamicImage>,
+    pub inpainted: Option<&'a DynamicImage>,
+    pub rendered: Option<&'a DynamicImage>,
+    pub brush_layer: Option<&'a DynamicImage>,
+    /// Map from BlobRef to resolved DynamicImage for text block rendered images.
+    pub block_images: &'a std::collections::HashMap<BlobRef, DynamicImage>,
+}
 
 use crate::{
     descriptor::{
@@ -70,22 +80,23 @@ struct TextLayerMetadata {
 }
 
 pub fn export_document(
-    document: &Document,
+    resolved: &ResolvedDocument,
     options: &PsdExportOptions,
 ) -> Result<Vec<u8>, PsdExportError> {
     let mut bytes = Vec::new();
-    write_document(&mut bytes, document, options)?;
+    write_document(&mut bytes, resolved, options)?;
     Ok(bytes)
 }
 
 pub fn write_document<W: Write>(
     mut writer: W,
-    document: &Document,
+    resolved: &ResolvedDocument,
     options: &PsdExportOptions,
 ) -> Result<(), PsdExportError> {
+    let document = resolved.document;
     let (width, height) = document_dimensions(document)?;
-    let layers_bottom_to_top = collect_layers(document, options)?;
-    let composite = merged_composite(document, &layers_bottom_to_top, width, height);
+    let layers_bottom_to_top = collect_layers(resolved, options)?;
+    let composite = merged_composite(resolved, &layers_bottom_to_top, width, height);
     let layers_top_to_bottom: Vec<&ExportLayer> = layers_bottom_to_top.iter().rev().collect();
 
     let mut psd = PsdWriter::new();
@@ -104,16 +115,8 @@ pub fn write_document<W: Write>(
 }
 
 fn document_dimensions(document: &Document) -> Result<(u32, u32), PsdExportError> {
-    let width = if document.width > 0 {
-        document.width
-    } else {
-        document.image.width()
-    };
-    let height = if document.height > 0 {
-        document.height
-    } else {
-        document.image.height()
-    };
+    let width = document.width;
+    let height = document.height;
 
     if width == 0 || height == 0 {
         return Err(PsdExportError::MissingBaseImage);
@@ -138,14 +141,15 @@ fn write_header(writer: &mut PsdWriter, width: u32, height: u32) {
 }
 
 fn collect_layers(
-    document: &Document,
+    resolved: &ResolvedDocument,
     options: &PsdExportOptions,
 ) -> Result<Vec<ExportLayer>, PsdExportError> {
+    let document = resolved.document;
     let mut layers = Vec::new();
-    let include_inpainted = options.include_inpainted && document.inpainted.is_some();
+    let include_inpainted = options.include_inpainted && resolved.inpainted.is_some();
 
     if options.include_original {
-        let pixels = dynamic_to_rgba(&document.image);
+        let pixels = dynamic_to_rgba(resolved.source);
         validate_layer_pixels("Original Image", &pixels)?;
         layers.push(ExportLayer {
             name: "Original Image".to_string(),
@@ -157,11 +161,7 @@ fn collect_layers(
         });
     }
 
-    if let Some(image) = document
-        .inpainted
-        .as_ref()
-        .filter(|_| options.include_inpainted)
-    {
+    if let Some(image) = resolved.inpainted.filter(|_| options.include_inpainted) {
         let pixels = dynamic_to_rgba(image);
         validate_layer_pixels("Inpainted", &pixels)?;
         layers.push(ExportLayer {
@@ -174,11 +174,7 @@ fn collect_layers(
         });
     }
 
-    if let Some(mask) = document
-        .segment
-        .as_ref()
-        .filter(|_| options.include_segment_mask)
-    {
+    if let Some(mask) = resolved.segment.filter(|_| options.include_segment_mask) {
         let pixels = grayscale_mask_rgba(mask);
         validate_layer_pixels("Segmentation Mask", &pixels)?;
         layers.push(ExportLayer {
@@ -191,11 +187,7 @@ fn collect_layers(
         });
     }
 
-    if let Some(brush) = document
-        .brush_layer
-        .as_ref()
-        .filter(|_| options.include_brush_layer)
-    {
+    if let Some(brush) = resolved.brush_layer.filter(|_| options.include_brush_layer) {
         let pixels = dynamic_to_rgba(brush);
         validate_layer_pixels("Brush Layer", &pixels)?;
         layers.push(ExportLayer {
@@ -210,7 +202,12 @@ fn collect_layers(
 
     let mut text_index = 1i32;
     for block in &document.text_blocks {
-        if let Some(layer) = text_layer(block, text_index, options.text_layer_mode)? {
+        if let Some(layer) = text_layer(
+            block,
+            text_index,
+            options.text_layer_mode,
+            resolved.block_images,
+        )? {
             layers.push(layer);
             text_index += 1;
         }
@@ -223,6 +220,7 @@ fn text_layer(
     block: &TextBlock,
     index: i32,
     mode: TextLayerMode,
+    block_images: &std::collections::HashMap<BlobRef, DynamicImage>,
 ) -> Result<Option<ExportLayer>, PsdExportError> {
     let text = block.translation.clone().unwrap_or_default();
     let trimmed = text.trim();
@@ -233,13 +231,14 @@ fn text_layer(
     let left = block.x.trunc() as i32;
     let top = block.y.trunc() as i32;
 
-    let pixels = if let Some(rendered) = block.rendered.as_ref() {
-        dynamic_to_rgba(rendered)
-    } else {
-        let width = block.width.ceil().max(1.0) as u32;
-        let height = block.height.ceil().max(1.0) as u32;
-        RgbaImage::from_pixel(width, height, Rgba([0, 0, 0, 0]))
-    };
+    let pixels =
+        if let Some(rendered_img) = block.rendered.as_ref().and_then(|r| block_images.get(r)) {
+            dynamic_to_rgba(rendered_img)
+        } else {
+            let width = block.width.ceil().max(1.0) as u32;
+            let height = block.height.ceil().max(1.0) as u32;
+            RgbaImage::from_pixel(width, height, Rgba([0, 0, 0, 0]))
+        };
     validate_layer_pixels(&block.id, &pixels)?;
 
     let text = match mode {
@@ -328,11 +327,11 @@ fn validate_layer_pixels(layer: &str, pixels: &RgbaImage) -> Result<(), PsdExpor
     Ok(())
 }
 
-fn dynamic_to_rgba(image: &SerializableDynamicImage) -> RgbaImage {
+fn dynamic_to_rgba(image: &DynamicImage) -> RgbaImage {
     image.to_rgba8()
 }
 
-fn grayscale_mask_rgba(image: &SerializableDynamicImage) -> RgbaImage {
+fn grayscale_mask_rgba(image: &DynamicImage) -> RgbaImage {
     let mask: GrayImage = image.to_luma8();
     let mut rgba = RgbaImage::new(mask.width(), mask.height());
     for (x, y, pixel) in mask.enumerate_pixels() {
@@ -342,17 +341,13 @@ fn grayscale_mask_rgba(image: &SerializableDynamicImage) -> RgbaImage {
 }
 
 fn merged_composite(
-    document: &Document,
+    resolved: &ResolvedDocument,
     layers_bottom_to_top: &[ExportLayer],
     width: u32,
     height: u32,
 ) -> RgbaImage {
-    if let Some(rendered) = document.rendered.as_ref() {
-        return place_on_canvas(
-            &DynamicImage::from(rendered.clone()).to_rgba8(),
-            width,
-            height,
-        );
+    if let Some(rendered) = resolved.rendered {
+        return place_on_canvas(&rendered.to_rgba8(), width, height);
     }
 
     let mut canvas = RgbaImage::from_pixel(width, height, Rgba([0, 0, 0, 0]));

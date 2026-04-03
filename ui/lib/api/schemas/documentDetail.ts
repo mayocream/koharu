@@ -15,7 +15,6 @@ export interface DocumentDetail {
   /** @nullable */
   inpainted?: number[] | null
   name: string
-  path: string
   /** @nullable */
   rendered?: number[] | null
   /** @nullable */

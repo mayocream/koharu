@@ -1,224 +1,66 @@
 use std::sync::Arc;
 
 use anyhow::{Context, Result};
-use camino::Utf8PathBuf;
 use clap::Parser;
-use rfd::MessageDialog;
-use tauri::{AppHandle, Manager, WebviewWindowBuilder};
 use tokio::{net::TcpListener, sync::RwLock};
-use tracing_subscriber::fmt::format::FmtSpan;
 
 use koharu_app::{
-    AppResources,
-    blob_store::BlobStore,
-    config::{self as app_config},
-    llm,
-    manifest::ManifestStore,
-    ml,
-    page_cache::PageCache,
-    renderer::Renderer,
+    AppResources, config as app_config, llm, ml, renderer::Renderer, storage::Storage,
 };
 use koharu_llm::safe::llama_backend::LlamaBackend;
 use koharu_ml::{cuda_is_available, device};
 use koharu_rpc::{SharedState, server};
-use koharu_runtime::{ComputePolicy, DirectorySetting, RuntimeManager, Settings};
+use koharu_runtime::{ComputePolicy, RuntimeManager};
 
 #[derive(Parser)]
 #[command(version = crate::version::APP_VERSION, about)]
 struct Cli {
-    #[arg(
-        short,
-        long,
-        help = "Download dynamic libraries and exit",
-        default_value_t = false
-    )]
+    #[arg(short, long, help = "Download dynamic libraries and exit")]
     download: bool,
-    #[arg(
-        long,
-        help = "Force using CPU even if GPU is available",
-        default_value_t = false
-    )]
+    #[arg(long, help = "Force CPU even if GPU is available")]
     cpu: bool,
-    #[arg(
-        short,
-        long,
-        value_name = "PORT",
-        help = "Bind the HTTP server to a specific port instead of a random port"
-    )]
+    #[arg(short, long, value_name = "PORT", help = "Bind to a specific port")]
     port: Option<u16>,
-    #[arg(
-        long,
-        help = "Run in headless mode without starting the GUI",
-        default_value_t = false
-    )]
+    #[arg(long, help = "Run without GUI")]
     headless: bool,
-    #[arg(
-        long,
-        help = "Disable keyring and read API keys from environment variables instead (e.g. KOHARU_OPENAI_API_KEY)",
-        default_value_t = false
-    )]
+    #[arg(long, help = "Use env vars for API keys instead of keyring")]
     no_keyring: bool,
-    #[arg(
-        long,
-        help = "Enable debug mode with console output",
-        default_value_t = false
-    )]
+    #[arg(long, help = "Enable debug console output")]
     debug: bool,
-}
-
-fn initialize(headless: bool, _debug: bool) -> Result<()> {
-    #[cfg(target_os = "windows")]
-    {
-        let attached_to_parent = crate::windows::attach_parent_console();
-
-        if !attached_to_parent && (headless || _debug) {
-            crate::windows::create_console_window();
-        }
-
-        crate::windows::enable_ansi_support().ok();
-    }
-
-    tracing_subscriber::fmt()
-        .with_span_events(FmtSpan::CLOSE)
-        .with_env_filter(
-            tracing_subscriber::filter::EnvFilter::builder()
-                .with_default_directive(tracing::Level::INFO.into())
-                .from_env_lossy(),
-        )
-        .init();
-
-    if headless {
-        std::panic::set_hook(Box::new(|info| {
-            eprintln!("panic: {info}");
-        }));
-    } else {
-        std::panic::set_hook(Box::new(|info| {
-            let msg = info.to_string();
-            MessageDialog::new()
-                .set_level(rfd::MessageLevel::Error)
-                .set_title("Panic")
-                .set_description(&msg)
-                .show();
-            std::process::exit(1);
-        }));
-    }
-
-    Ok(())
-}
-
-async fn prefetch(cpu: bool) -> Result<()> {
-    let config = app_config::load()?;
-    let data_root = config.data.path.clone();
-    RuntimeManager::new(
-        Settings {
-            runtime: DirectorySetting {
-                path: data_root.join("runtime"),
-            },
-            models: DirectorySetting {
-                path: data_root.join("models"),
-            },
-        },
-        if cpu {
-            ComputePolicy::CpuOnly
-        } else {
-            ComputePolicy::PreferGpu
-        },
-    )?
-    .prepare()
-    .await
-    .context("Failed to initialize runtime and model packages")?;
-    Ok(())
-}
-
-fn build_llama_backend(runtime: &RuntimeManager) -> Result<Arc<LlamaBackend>> {
-    koharu_llm::sys::initialize(runtime)
-        .context("failed to initialize llama.cpp runtime bindings")?;
-    let backend = LlamaBackend::init().context("unable to initialize llama.cpp backend")?;
-    Ok(Arc::new(backend))
-}
-
-fn warning(headless: bool, title: &str, description: &str) {
-    tracing::warn!("{description}");
-
-    if headless {
-        return;
-    }
-
-    MessageDialog::new()
-        .set_level(rfd::MessageLevel::Warning)
-        .set_title(title)
-        .set_description(description)
-        .show();
 }
 
 async fn build_resources(
     runtime: RuntimeManager,
-    data_root: Utf8PathBuf,
+    data_root: camino::Utf8PathBuf,
     cpu: bool,
-    headless: bool,
 ) -> Result<AppResources> {
-    let mut cpu = cpu;
-
-    if !cpu && cuda_is_available() {
-        match koharu_runtime::nvidia_driver_version() {
-            Ok(version) if version.supports_cuda_13_1() => {
-                tracing::info!("NVIDIA driver reports CUDA {version} support");
-            }
-            Ok(version) => {
-                warning(
-                    headless,
-                    "NVIDIA Driver Update Recommended",
-                    &format!(
-                        "Your NVIDIA driver only supports CUDA {version}. Koharu will fall back to CPU. Please update your NVIDIA driver to a version that supports CUDA 13.1 or newer to enable GPU acceleration."
-                    ),
-                );
-                cpu = true;
-            }
-            Err(err) => {
-                warning(
-                    headless,
-                    "NVIDIA Driver Check Failed",
-                    &format!(
-                        "Koharu could not verify NVIDIA driver support for CUDA 13.1: {err:#}. Koharu will fall back to CPU. Please update your NVIDIA driver to a version that supports CUDA 13.1 or newer to enable GPU acceleration."
-                    ),
-                );
-                cpu = true;
-            }
-        }
-    }
+    let cpu = cpu || (cuda_is_available() && !koharu_runtime::check_cuda_driver_support());
 
     runtime
         .prepare()
         .await
-        .context("Failed to initialize runtime and model packages")?;
+        .context("Failed to prepare runtime")?;
 
     if !cpu && cuda_is_available() {
         #[cfg(target_os = "windows")]
-        {
-            if let Err(err) = crate::windows::register_khr() {
-                tracing::warn!(?err, "Failed to register .khr file association");
-            }
-        }
-
-        tracing::info!("CUDA is available and runtime packages were initialized");
+        crate::windows::register_khr().ok();
+        tracing::info!("CUDA available, runtime initialized");
     }
 
-    let llama_backend = build_llama_backend(&runtime)?;
+    koharu_llm::sys::initialize(&runtime).context("failed to init llama.cpp")?;
+    let backend = Arc::new(LlamaBackend::init().context("failed to init llama backend")?);
     let ml = Arc::new(
-        ml::Model::new(&runtime, cpu, Arc::clone(&llama_backend))
+        ml::Model::new(&runtime, cpu, Arc::clone(&backend))
             .await
-            .context("Failed to initialize ML model")?,
+            .context("Failed to init ML")?,
     );
-    let llm = Arc::new(llm::Model::new(runtime.clone(), cpu, llama_backend));
-    let renderer = Arc::new(Renderer::new().context("Failed to initialize renderer")?);
-
-    let blobs = BlobStore::new(data_root.join("blobs"))?;
-    let manifests = ManifestStore::new(data_root.join("pages"))?;
-    let cache = PageCache::new(blobs, manifests);
+    let llm = Arc::new(llm::Model::new(runtime.clone(), cpu, backend));
+    let renderer = Arc::new(Renderer::new().context("Failed to init renderer")?);
+    let storage = Arc::new(Storage::open(data_root.as_std_path())?);
 
     Ok(AppResources {
         runtime,
-        cache,
+        storage,
         ml,
         llm,
         renderer,
@@ -228,170 +70,122 @@ async fn build_resources(
     })
 }
 
-async fn initialize_resources(
-    resources: Arc<tokio::sync::OnceCell<AppResources>>,
-    runtime: RuntimeManager,
-    data_root: Utf8PathBuf,
-    cpu: bool,
-    headless: bool,
-) -> Result<()> {
-    if resources.get().is_some() {
-        return Ok(());
-    }
-
-    let settings = runtime.settings();
-    tracing::info!(
-        runtime_root = %settings.runtime.path,
-        models_root = %settings.models.path,
-        "initializing application resources"
-    );
-
-    resources
-        .get_or_try_init(|| {
-            let runtime = runtime.clone();
-            let data_root = data_root.clone();
-            async move { build_resources(runtime, data_root, cpu, headless).await }
-        })
-        .await?;
-
-    Ok(())
-}
-
-fn create_window(handle: &AppHandle, label: &str) -> Result<()> {
-    if handle.get_webview_window(label).is_some() {
-        return Ok(());
-    }
-
-    let window_config = handle
-        .config()
-        .app
-        .windows
-        .iter()
-        .find(|window| window.label == label)
-        .cloned()
-        .with_context(|| format!("window config `{label}` not found"))?;
-
-    WebviewWindowBuilder::from_config(handle, &window_config)
-        .with_context(|| format!("failed to build `{label}` window"))?
-        .build()
-        .with_context(|| format!("failed to create `{label}` window"))?;
-
-    if let Some(window) = handle.get_webview_window(label) {
-        window.show().ok();
-    }
-
-    Ok(())
-}
-
-fn show_main_window(handle: &AppHandle) -> Result<()> {
-    create_window(handle, "main")?;
-    if let Some(main_window) = handle.get_webview_window("main") {
-        main_window.show().ok();
-    }
-
-    Ok(())
-}
-
 pub async fn run() -> Result<()> {
-    let Cli {
-        download,
-        cpu,
-        port,
-        headless,
-        no_keyring,
-        debug,
-    } = Cli::parse();
+    let cli = Cli::parse();
 
-    if no_keyring {
+    // ── Platform & logging ───────────────────────────────────────────
+    #[cfg(target_os = "windows")]
+    {
+        let attached = crate::windows::attach_parent_console();
+        if !attached && (cli.headless || cli.debug) {
+            crate::windows::create_console_window();
+        }
+        crate::windows::enable_ansi_support().ok();
+    }
+
+    tracing_subscriber::fmt()
+        .with_span_events(tracing_subscriber::fmt::format::FmtSpan::CLOSE)
+        .with_env_filter(
+            tracing_subscriber::filter::EnvFilter::builder()
+                .with_default_directive(tracing::Level::INFO.into())
+                .from_env_lossy(),
+        )
+        .init();
+
+    if cli.headless {
+        std::panic::set_hook(Box::new(|info| eprintln!("panic: {info}")));
+    } else {
+        std::panic::set_hook(Box::new(|info| {
+            rfd::MessageDialog::new()
+                .set_level(rfd::MessageLevel::Error)
+                .set_title("Panic")
+                .set_description(info.to_string())
+                .show();
+            std::process::exit(1);
+        }));
+    }
+
+    if cli.no_keyring {
         koharu_llm::providers::disable_keyring();
     }
 
-    initialize(headless, debug)?;
-
-    if download {
-        prefetch(cpu).await?;
-        return Ok(());
-    }
-
+    // ── Config ───────────────────────────────────────────────────────
     let config = app_config::load()?;
     let data_root = config.data.path.clone();
-    let initial_runtime = RuntimeManager::new(
-        Settings {
-            runtime: DirectorySetting {
-                path: data_root.join("runtime"),
-            },
-            models: DirectorySetting {
-                path: data_root.join("models"),
-            },
-        },
-        if cpu {
-            ComputePolicy::CpuOnly
-        } else {
-            ComputePolicy::PreferGpu
-        },
-    )?;
-    let listener = TcpListener::bind(format!("127.0.0.1:{}", port.unwrap_or(0))).await?;
-    let api_port = listener.local_addr()?.port();
-    let resources = Arc::new(tokio::sync::OnceCell::new());
-    let shared = SharedState::new(Arc::clone(&resources), initial_runtime.clone());
-    let mut context = tauri::generate_context!();
-    let shared_assets = crate::assets::share_context_assets(&mut context);
+    let compute = if cli.cpu {
+        ComputePolicy::CpuOnly
+    } else {
+        ComputePolicy::PreferGpu
+    };
 
-    if headless {
-        let resolver =
-            server::asset_resolver([crate::assets::embedded_asset_resolver(shared_assets)]);
-        tauri::async_runtime::spawn({
-            let shared = shared.clone();
-            async move {
-                if let Err(err) = server::serve_with_listener(listener, shared, resolver).await {
-                    tracing::error!("Server error: {err:#}");
-                }
-            }
-        });
-        initialize_resources(
-            Arc::clone(&resources),
-            initial_runtime.clone(),
-            data_root.clone(),
-            cpu,
-            headless,
-        )
-        .await?;
+    if cli.download {
+        return RuntimeManager::new(data_root.as_std_path(), compute)?
+            .prepare()
+            .await
+            .context("Failed to download runtime packages");
+    }
+
+    // ── Server ───────────────────────────────────────────────────────
+    let runtime = RuntimeManager::new(data_root.as_std_path(), compute)?;
+    let default_port = if cfg!(debug_assertions) { 9999 } else { 0 };
+    let listener = TcpListener::bind(format!("127.0.0.1:{}", cli.port.unwrap_or(default_port))).await?;
+    let port = listener.local_addr()?.port();
+    let resources: Arc<tokio::sync::OnceCell<AppResources>> = Default::default();
+    let shared = SharedState::new(Arc::clone(&resources), runtime.clone());
+    let mut context = tauri::generate_context!();
+    let assets = crate::assets::from_context(&mut context);
+
+    tracing::info!(root = %runtime.root().display(), port, "starting server");
+
+    if cli.headless {
+        tauri::async_runtime::spawn(server::serve_with_listener(listener, shared, assets));
+        resources
+            .get_or_try_init(|| build_resources(runtime, data_root, cli.cpu))
+            .await?;
         tokio::signal::ctrl_c().await?;
         return Ok(());
     }
 
-    let embedded_resolver = crate::assets::embedded_asset_resolver(shared_assets);
+    // ── GUI ──────────────────────────────────────────────────────────
     tauri::Builder::default()
         .plugin(tauri_plugin_process::init())
-        .append_invoke_initialization_script(format!("window.__KOHARU_API_PORT__ = {api_port};"))
         .setup(move |app| {
-            let resolver = server::asset_resolver([
-                crate::assets::tauri_asset_resolver(app.asset_resolver()),
-                embedded_resolver,
-            ]);
-            tauri::async_runtime::spawn({
-                let shared = shared.clone();
-                async move {
-                    if let Err(err) = server::serve_with_listener(listener, shared, resolver).await
-                    {
-                        tracing::error!("Server error: {err:#}");
-                    }
+            tauri::async_runtime::spawn(server::serve_with_listener(listener, shared, assets));
+
+            tauri::async_runtime::spawn(async move {
+                if let Err(err) = resources
+                    .get_or_try_init(|| build_resources(runtime, data_root, cli.cpu))
+                    .await
+                {
+                    tracing::error!("Failed to build resources: {err:#}");
+                    std::process::exit(1);
                 }
             });
+
+            let url: tauri::Url = if cfg!(debug_assertions) {
+                // Dev: use Next.js dev server (rewrites proxy API to Axum)
+                app.config()
+                    .build
+                    .dev_url
+                    .clone()
+                    .expect("dev_url must be set in dev mode")
+            } else {
+                // Production: load from Axum server (same-origin for API)
+                format!("http://127.0.0.1:{port}").parse()?
+            };
+            let wc = app
+                .config()
+                .app
+                .windows
+                .iter()
+                .find(|w| w.label == "main")
+                .cloned()
+                .expect("main window config not found");
+            tauri::webview::WebviewWindowBuilder::from_config(app, &wc)?
+                .build()?
+                .navigate(url)?;
 
             let handle = app.handle().clone();
-            show_main_window(&handle)?;
-            tauri::async_runtime::spawn({
-                let resources = Arc::clone(&resources);
-                let runtime = initial_runtime.clone();
-                let data_root = data_root.clone();
-                async move {
-                    initialize_resources(resources, runtime, data_root, cpu, headless)
-                        .await
-                        .expect("failed to build app resources");
-                }
-            });
-
             tauri::async_runtime::spawn(async move {
                 handle
                     .plugin(tauri_plugin_updater::Builder::new().build())

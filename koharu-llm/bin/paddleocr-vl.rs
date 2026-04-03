@@ -6,7 +6,7 @@ use anyhow::{Context, Result, bail};
 use clap::{Parser, ValueEnum};
 use koharu_llm::paddleocr_vl::{PaddleOcrVl, PaddleOcrVlOutput, PaddleOcrVlTask};
 use koharu_llm::safe::llama_backend::LlamaBackend;
-use koharu_runtime::{ComputePolicy, RuntimeManager, Settings};
+use koharu_runtime::{ComputePolicy, RuntimeManager, default_app_data_root};
 
 #[derive(Debug, Clone, Copy, ValueEnum)]
 enum TaskArg {
@@ -114,7 +114,7 @@ async fn main() -> Result<()> {
     init_tracing();
     let cli = Cli::parse();
     let runtime = RuntimeManager::new(
-        Settings::default(),
+        default_app_data_root(),
         if cli.cpu {
             ComputePolicy::CpuOnly
         } else {

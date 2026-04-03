@@ -1,6 +1,6 @@
 use clap::Parser;
 use koharu_ml::lama::Lama;
-use koharu_runtime::{ComputePolicy, RuntimeManager, Settings};
+use koharu_runtime::{ComputePolicy, RuntimeManager, default_app_data_root};
 
 #[path = "common.rs"]
 mod common;
@@ -27,7 +27,7 @@ async fn main() -> anyhow::Result<()> {
     let cli = Cli::parse();
 
     let runtime = RuntimeManager::new(
-        Settings::default(),
+        default_app_data_root(),
         if cli.cpu {
             ComputePolicy::CpuOnly
         } else {

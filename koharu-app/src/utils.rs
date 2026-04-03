@@ -1,8 +1,7 @@
-use std::{io::Cursor, path::PathBuf};
+use std::io::Cursor;
 
-use image::{ImageFormat, RgbaImage};
-use koharu_core::{Document, Region, SerializableDynamicImage};
-use rayon::iter::{IntoParallelIterator, ParallelIterator};
+use image::{DynamicImage, ImageFormat, RgbaImage};
+use koharu_core::{Region, SerializableDynamicImage};
 
 pub trait InpaintRegionExt {
     fn clamp(&self, width: u32, height: u32) -> Option<(u32, u32, u32, u32)>;
@@ -34,6 +33,14 @@ pub fn encode_image(image: &SerializableDynamicImage, ext: &str) -> anyhow::Resu
     Ok(buf)
 }
 
+pub fn encode_image_dynamic(image: &DynamicImage, ext: &str) -> anyhow::Result<Vec<u8>> {
+    let mut buf = Vec::new();
+    let mut cursor = Cursor::new(&mut buf);
+    let format = ImageFormat::from_extension(ext).unwrap_or(ImageFormat::Jpeg);
+    image.write_to(&mut cursor, format)?;
+    Ok(buf)
+}
+
 pub fn mime_from_ext(ext: &str) -> &'static str {
     match ext {
         "png" => "image/png",
@@ -46,25 +53,4 @@ pub fn mime_from_ext(ext: &str) -> &'static str {
 pub fn blank_rgba(width: u32, height: u32, color: image::Rgba<u8>) -> SerializableDynamicImage {
     let blank = RgbaImage::from_pixel(width, height, color);
     image::DynamicImage::ImageRgba8(blank).into()
-}
-
-pub fn load_documents(inputs: Vec<(PathBuf, Vec<u8>)>) -> anyhow::Result<Vec<Document>> {
-    if inputs.is_empty() {
-        return Ok(vec![]);
-    }
-
-    let mut documents: Vec<_> = inputs
-        .into_par_iter()
-        .filter_map(|(path, bytes)| match Document::from_bytes(path, bytes) {
-            Ok(docs) => Some(docs),
-            Err(err) => {
-                tracing::warn!(?err, "Failed to parse document");
-                None
-            }
-        })
-        .flatten()
-        .collect();
-
-    documents.sort_by_key(|doc| doc.name.clone());
-    Ok(documents)
 }

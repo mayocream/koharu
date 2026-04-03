@@ -197,7 +197,7 @@ pub async fn prefetch(runtime: &RuntimeManager) -> Result<()> {
 
 async fn resolve_safetensors_path(runtime: &RuntimeManager) -> Result<PathBuf> {
     runtime
-        .artifacts()
+        .downloads()
         .huggingface_model(REPO, SAFETENSORS_FILENAME)
         .await
         .with_context(|| format!("failed to download {SAFETENSORS_FILENAME} from {REPO}"))

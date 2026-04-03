@@ -6,7 +6,7 @@ use imageproc::{
     rect::Rect,
 };
 use koharu_ml::comic_text_detector::ComicTextDetector;
-use koharu_runtime::{ComputePolicy, RuntimeManager, Settings};
+use koharu_runtime::{ComputePolicy, RuntimeManager, default_app_data_root};
 use tokio::runtime::Builder;
 
 #[path = "common.rs"]
@@ -85,7 +85,7 @@ async fn async_main() -> Result<()> {
     let cli = Cli::parse();
 
     let runtime = RuntimeManager::new(
-        Settings::default(),
+        default_app_data_root(),
         if cli.cpu {
             ComputePolicy::CpuOnly
         } else {

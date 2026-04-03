@@ -21,10 +21,10 @@ import type {
 
 import type {
   ApiError,
-  AppConfig,
-  AppConfigUpdate,
   FontFaceInfo,
   MetaInfo,
+  UpdateConfig200,
+  UpdateConfigBody,
 } from '../schemas'
 
 import { fetchApi } from '.././fetch'
@@ -35,8 +35,8 @@ export const getGetConfigUrl = () => {
   return `/api/v1/config`
 }
 
-export const getConfig = async (options?: RequestInit): Promise<AppConfig> => {
-  return fetchApi<AppConfig>(getGetConfigUrl(), {
+export const getConfig = async (options?: RequestInit): Promise<void> => {
+  return fetchApi<void>(getGetConfigUrl(), {
     ...options,
     method: 'GET',
   })
@@ -167,14 +167,14 @@ export const getUpdateConfigUrl = () => {
 }
 
 export const updateConfig = async (
-  appConfigUpdate: AppConfigUpdate,
+  updateConfigBody: UpdateConfigBody,
   options?: RequestInit,
-): Promise<AppConfig> => {
-  return fetchApi<AppConfig>(getUpdateConfigUrl(), {
+): Promise<UpdateConfig200> => {
+  return fetchApi<UpdateConfig200>(getUpdateConfigUrl(), {
     ...options,
     method: 'PUT',
     headers: { 'Content-Type': 'application/json', ...options?.headers },
-    body: JSON.stringify(appConfigUpdate),
+    body: JSON.stringify(updateConfigBody),
   })
 }
 
@@ -185,14 +185,14 @@ export const getUpdateConfigMutationOptions = <
   mutation?: UseMutationOptions<
     Awaited<ReturnType<typeof updateConfig>>,
     TError,
-    { data: AppConfigUpdate },
+    { data: UpdateConfigBody },
     TContext
   >
   request?: SecondParameter<typeof fetchApi>
 }): UseMutationOptions<
   Awaited<ReturnType<typeof updateConfig>>,
   TError,
-  { data: AppConfigUpdate },
+  { data: UpdateConfigBody },
   TContext
 > => {
   const mutationKey = ['updateConfig']
@@ -206,7 +206,7 @@ export const getUpdateConfigMutationOptions = <
 
   const mutationFn: MutationFunction<
     Awaited<ReturnType<typeof updateConfig>>,
-    { data: AppConfigUpdate }
+    { data: UpdateConfigBody }
   > = (props) => {
     const { data } = props ?? {}
 
@@ -219,7 +219,7 @@ export const getUpdateConfigMutationOptions = <
 export type UpdateConfigMutationResult = NonNullable<
   Awaited<ReturnType<typeof updateConfig>>
 >
-export type UpdateConfigMutationBody = AppConfigUpdate
+export type UpdateConfigMutationBody = UpdateConfigBody
 export type UpdateConfigMutationError = ApiError
 
 export const useUpdateConfig = <TError = ApiError, TContext = unknown>(
@@ -227,7 +227,7 @@ export const useUpdateConfig = <TError = ApiError, TContext = unknown>(
     mutation?: UseMutationOptions<
       Awaited<ReturnType<typeof updateConfig>>,
       TError,
-      { data: AppConfigUpdate },
+      { data: UpdateConfigBody },
       TContext
     >
     request?: SecondParameter<typeof fetchApi>
@@ -236,7 +236,7 @@ export const useUpdateConfig = <TError = ApiError, TContext = unknown>(
 ): UseMutationResult<
   Awaited<ReturnType<typeof updateConfig>>,
   TError,
-  { data: AppConfigUpdate },
+  { data: UpdateConfigBody },
   TContext
 > => {
   return useMutation(getUpdateConfigMutationOptions(options), queryClient)

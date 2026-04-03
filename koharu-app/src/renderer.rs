@@ -2,11 +2,8 @@ use std::sync::{Arc, Mutex};
 
 use anyhow::Result;
 use image::{DynamicImage, GrayImage, imageops};
-use rayon::iter::{IntoParallelRefMutIterator, ParallelIterator};
-
 use koharu_core::{
-    Document, FontFaceInfo, SerializableDynamicImage, TextAlign, TextBlock, TextShaderEffect,
-    TextStrokeStyle, TextStyle,
+    BlobRef, FontFaceInfo, TextAlign, TextBlock, TextShaderEffect, TextStrokeStyle, TextStyle,
 };
 
 use koharu_renderer::{
@@ -25,6 +22,16 @@ use koharu_renderer::{
         },
     },
 };
+
+use crate::storage;
+
+/// Grouped options for [`Renderer::render_to_blob`] to keep the arg count manageable.
+pub struct RenderTextOptions<'a> {
+    pub text_block_index: Option<usize>,
+    pub shader_effect: TextShaderEffect,
+    pub shader_stroke: Option<TextStrokeStyle>,
+    pub font_family: Option<&'a str>,
+}
 
 pub struct Renderer {
     fontbook: Arc<Mutex<FontBook>>,
@@ -65,63 +72,88 @@ impl Renderer {
         Ok(fonts)
     }
 
-    pub fn render(
+    /// Render text blocks and optionally compose the full rendered image.
+    /// Returns an optional BlobRef for the full rendered composite.
+    /// Text block `rendered` fields are updated in-place with BlobRefs to per-block images.
+    pub fn render_to_blob(
         &self,
-        document: &mut Document,
-        text_block_index: Option<usize>,
-        effect: TextShaderEffect,
-        stroke: Option<TextStrokeStyle>,
-        font_family: Option<&str>,
-    ) -> Result<()> {
-        let bubble_map = if let Some(inpainted) = &document.inpainted {
+        images: &storage::ImageCache,
+        source_img: &DynamicImage,
+        inpainted_img: Option<&DynamicImage>,
+        brush_layer_img: Option<&DynamicImage>,
+        text_blocks: &mut [TextBlock],
+        opts: RenderTextOptions<'_>,
+    ) -> Result<Option<BlobRef>> {
+        let bubble_map = if let Some(inpainted) = inpainted_img {
             inpainted.to_luma8()
         } else {
-            document.image.to_luma8()
+            source_img.to_luma8()
         };
 
-        let mut text_blocks = match text_block_index {
-            Some(index) => document
-                .text_blocks
+        let mut blocks_to_render: Vec<&mut TextBlock> = match opts.text_block_index {
+            Some(index) => text_blocks
                 .get_mut(index)
                 .map(|tb| vec![tb])
                 .ok_or_else(|| anyhow::anyhow!("Text block index out of bounds"))?,
-            None => document.text_blocks.iter_mut().collect(),
+            None => text_blocks.iter_mut().collect(),
         };
 
-        text_blocks.par_iter_mut().for_each(|text_block| {
-            let _ = self.render_text_block(
-                text_block,
-                effect,
-                stroke.clone(),
-                font_family,
-                Some(&bubble_map),
-            );
-        });
+        // Render each text block to a DynamicImage, then store as blob
+        // We collect rendered images per block, then store them
+        let block_renders: Vec<Option<(DynamicImage, usize)>> = blocks_to_render
+            .iter_mut()
+            .enumerate()
+            .map(|(i, text_block)| {
+                match self.render_text_block(
+                    text_block,
+                    opts.shader_effect,
+                    opts.shader_stroke.clone(),
+                    opts.font_family,
+                    Some(&bubble_map),
+                ) {
+                    Ok(Some(rendered_img)) => Some((rendered_img, i)),
+                    Ok(None) => None,
+                    Err(e) => {
+                        tracing::warn!("Failed to render text block: {e}");
+                        None
+                    }
+                }
+            })
+            .collect();
 
-        if let Some(inpainted) = &document.inpainted
-            && text_block_index.is_none()
+        // Store rendered block images as blobs
+        for (img, idx) in block_renders.iter().flatten() {
+            let blob_ref = images.store_webp(img)?;
+            blocks_to_render[*idx].rendered = Some(blob_ref);
+        }
+
+        // Compose the full rendered image if we have inpainted and rendering all blocks
+        if let Some(inpainted) = inpainted_img
+            && opts.text_block_index.is_none()
         {
             let mut rendered = inpainted.to_rgba8();
 
-            if let Some(brush_layer) = &document.brush_layer {
+            if let Some(brush_layer) = brush_layer_img {
                 let brush = brush_layer.to_rgba8();
                 imageops::overlay(&mut rendered, &brush, 0, 0);
             }
 
-            for text_block in text_blocks {
-                let Some(block) = text_block.rendered.as_ref() else {
+            for text_block in &blocks_to_render {
+                let Some(ref blob_ref) = text_block.rendered else {
                     continue;
                 };
+                let block_img = images.load(blob_ref)?;
                 imageops::overlay(
                     &mut rendered,
-                    &block.0,
+                    &block_img,
                     text_block.x as i64,
                     text_block.y as i64,
                 );
             }
-            document.rendered = Some(SerializableDynamicImage(DynamicImage::ImageRgba8(rendered)));
+            let rendered_ref = images.store_webp(&DynamicImage::ImageRgba8(rendered))?;
+            return Ok(Some(rendered_ref));
         }
-        Ok(())
+        Ok(None)
     }
 
     fn render_text_block(
@@ -131,12 +163,12 @@ impl Renderer {
         global_stroke: Option<TextStrokeStyle>,
         font_family: Option<&str>,
         bubble_map: Option<&GrayImage>,
-    ) -> Result<()> {
+    ) -> Result<Option<DynamicImage>> {
         let Some(translation) = text_block.translation.as_ref().cloned() else {
-            return Ok(());
+            return Ok(None);
         };
         if translation.is_empty() {
-            return Ok(());
+            return Ok(None);
         };
         let normalized_translation = normalize_translation_for_layout(&translation);
         let (seed_x, seed_y, seed_width, seed_height) = text_block.seed_layout_box();
@@ -282,7 +314,7 @@ impl Renderer {
             WritingMode::Horizontal => koharu_core::TextDirection::Horizontal,
             WritingMode::VerticalRl => koharu_core::TextDirection::Vertical,
         });
-        text_block.rendered = Some(SerializableDynamicImage(DynamicImage::ImageRgba8(rendered)));
+        // rendered field will be set by the caller with a BlobRef
         let persisted_style = text_block.style.get_or_insert_with(|| TextStyle {
             font_families: Vec::new(),
             font_size: None,
@@ -292,7 +324,7 @@ impl Renderer {
             text_align: None,
         });
         persisted_style.font_families = vec![font.post_script_name().to_string()];
-        Ok(())
+        Ok(Some(DynamicImage::ImageRgba8(rendered)))
     }
 
     fn select_font(&self, style: &TextStyle) -> Result<Font> {

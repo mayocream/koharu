@@ -3,7 +3,7 @@ use std::path::PathBuf;
 use anyhow::Result;
 use clap::Parser;
 use koharu_ml::font_detector::{FontDetector, ModelKind, TextDirection};
-use koharu_runtime::{ComputePolicy, RuntimeManager, Settings};
+use koharu_runtime::{ComputePolicy, RuntimeManager, default_app_data_root};
 
 #[derive(Parser, Debug)]
 #[command(
@@ -30,7 +30,7 @@ struct Args {
 async fn main() -> Result<()> {
     let args = Args::parse();
     let runtime = RuntimeManager::new(
-        Settings::default(),
+        default_app_data_root(),
         if args.cpu {
             ComputePolicy::CpuOnly
         } else {
@@ -47,8 +47,9 @@ async fn main() -> Result<()> {
     println!("Inference took: {:.2?}", start.elapsed());
 
     println!("Top fonts:");
-    for (idx, prob) in &pred.top_fonts {
-        let name = pred.named_fonts.iter().find(|f| f.index == *idx);
+    for tf in &pred.top_fonts {
+        let (idx, prob) = (tf.index, tf.score);
+        let name = pred.named_fonts.iter().find(|f| f.index == idx);
         if let Some(named) = name {
             if let Some(language) = &named.language {
                 println!("  #{idx} ({} | lang={language}): {prob:.4}", named.name);

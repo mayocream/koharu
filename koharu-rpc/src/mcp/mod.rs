@@ -4,7 +4,6 @@ use std::collections::HashMap;
 use std::path::PathBuf;
 use std::sync::Arc;
 
-use image::DynamicImage;
 use rmcp::handler::server::router::tool::ToolRouter;
 use rmcp::handler::server::wrapper::Parameters;
 use rmcp::model::{
@@ -53,10 +52,7 @@ impl KoharuMcp {
         resources: &AppResources,
         index: usize,
     ) -> Result<String, String> {
-        let entries = resources
-            .cache
-            .list_documents()
-            .map_err(|e| e.to_string())?;
+        let entries = resources.storage.list_pages().await;
         entries
             .get(index)
             .map(|page| page.id.clone())
@@ -146,14 +142,14 @@ impl KoharuMcp {
         let res = self
             .resources()
             .map_err(|e| ErrorData::internal_error(e, None))?;
-        let doc = io::get_document(res, &p.document_id)
+        let doc = io::get_document(res.clone(), &p.document_id)
             .await
             .map_err(|e| ErrorData::internal_error(e.to_string(), None))?;
 
         let max_size = p.max_size.unwrap_or(1024);
 
-        let img: &DynamicImage = match p.layer.as_str() {
-            "original" => &doc.image,
+        let blob_ref = match p.layer.as_str() {
+            "original" => &doc.source,
             "segment" => doc.segment.as_ref().ok_or_else(|| {
                 ErrorData::internal_error("No segment mask available. Run detect first.", None)
             })?,
@@ -173,7 +169,12 @@ impl KoharuMcp {
             }
         };
 
-        let b64 = encode_png_base64(img, max_size);
+        let img = res
+            .storage
+            .images
+            .load(blob_ref)
+            .map_err(|e| ErrorData::internal_error(e.to_string(), None))?;
+        let b64 = encode_png_base64(&img, max_size);
         Ok(CallToolResult::success(vec![
             Content::text(format!(
                 "Viewing '{}' layer of document '{}' ({}x{})",
@@ -193,7 +194,7 @@ impl KoharuMcp {
         let res = self
             .resources()
             .map_err(|e| ErrorData::internal_error(e, None))?;
-        let doc = io::get_document(res, &p.document_id)
+        let doc = io::get_document(res.clone(), &p.document_id)
             .await
             .map_err(|e| ErrorData::internal_error(e.to_string(), None))?;
 
@@ -202,8 +203,8 @@ impl KoharuMcp {
         })?;
 
         let layer = p.layer.as_deref().unwrap_or("original");
-        let source: &DynamicImage = match layer {
-            "original" => &doc.image,
+        let blob_ref = match layer {
+            "original" => &doc.source,
             "rendered" => doc.rendered.as_ref().ok_or_else(|| {
                 ErrorData::internal_error("No rendered image. Run render first.", None)
             })?,
@@ -214,6 +215,11 @@ impl KoharuMcp {
                 ));
             }
         };
+        let source = res
+            .storage
+            .images
+            .load(blob_ref)
+            .map_err(|e| ErrorData::internal_error(e.to_string(), None))?;
 
         let x = (block.x.max(0.0) as u32).min(doc.width.saturating_sub(1));
         let y = (block.y.max(0.0) as u32).min(doc.height.saturating_sub(1));
@@ -275,7 +281,7 @@ impl KoharuMcp {
             .await
             .map_err(|e| e.to_string())?;
 
-        let entries = res.cache.list_documents().map_err(|e| e.to_string())?;
+        let entries = res.storage.list_pages().await;
         let names: Vec<&str> = entries.iter().map(|d| d.name.as_str()).collect();
         Ok(format!("Loaded {count} document(s): {}", names.join(", ")))
     }

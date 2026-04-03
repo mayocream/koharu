@@ -6,8 +6,6 @@ use std::path::{Path, PathBuf};
 use anyhow::{Context, Result, bail};
 use flate2::read::GzDecoder;
 
-use crate::Runtime;
-
 const RUNTIME_LIB_EXTENSIONS: &[&str] = &[".dll", ".so", ".dylib"];
 
 pub(crate) enum ArchiveKind {
@@ -19,14 +17,6 @@ pub(crate) enum ArchiveKind {
 pub(crate) enum ExtractPolicy<'a> {
     RuntimeLibraries,
     Selected(&'a [&'a str]),
-}
-
-pub(crate) async fn fetch(runtime: &Runtime, url: &str, file_name: &str) -> Result<PathBuf> {
-    runtime
-        .artifacts()
-        .cached_download(url, file_name, &runtime.layout().downloads_root)
-        .await
-        .with_context(|| format!("failed to download `{url}`"))
 }
 
 pub(crate) fn detect_kind(file_name: &str) -> Result<ArchiveKind> {

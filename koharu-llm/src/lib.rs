@@ -81,7 +81,7 @@ impl ModelId {
 
     pub async fn get(&self, runtime: &RuntimeManager) -> anyhow::Result<PathBuf> {
         runtime
-            .artifacts()
+            .downloads()
             .huggingface_model(self.property("repo"), self.property("filename"))
             .await
     }

@@ -1,6 +1,6 @@
 use std::path::PathBuf;
 
-use anyhow::{Result, bail};
+use anyhow::{Context, Result, bail};
 
 use crate::Runtime;
 use crate::archive::{self, ExtractPolicy};
@@ -156,8 +156,8 @@ impl LlamaDistribution {
 
     fn install_dir(self, runtime: &Runtime) -> PathBuf {
         runtime
-            .layout()
-            .runtime_root
+            .root()
+            .join("runtime")
             .join("llama.cpp")
             .join(LLAMA_CPP_TAG)
             .join(self.id())
@@ -202,7 +202,11 @@ pub(crate) async fn ensure_ready(runtime: &Runtime) -> Result<()> {
 
         for asset in distribution.assets() {
             let url = format!("{RELEASE_BASE_URL}/{LLAMA_CPP_TAG}/{asset}");
-            let archive = archive::fetch(runtime, &url, asset).await?;
+            let archive = runtime
+                .downloads()
+                .cached_download(&url, asset)
+                .await
+                .with_context(|| format!("failed to download `{url}`"))?;
             let kind = archive::detect_kind(asset)?;
             archive::extract(
                 &archive,
@@ -266,18 +270,7 @@ mod tests {
 
     #[test]
     fn install_dir_includes_tag_and_id() {
-        let runtime = Runtime::new(
-            crate::Settings {
-                runtime: crate::DirectorySetting {
-                    path: camino::Utf8PathBuf::from("/tmp/rt"),
-                },
-                models: crate::DirectorySetting {
-                    path: camino::Utf8PathBuf::from("/tmp/models"),
-                },
-            },
-            crate::ComputePolicy::CpuOnly,
-        )
-        .unwrap();
+        let runtime = Runtime::new("/tmp/koharu-runtime", crate::ComputePolicy::CpuOnly).unwrap();
         let dir = LlamaDistribution::WindowsVulkanX64.install_dir(&runtime);
         assert!(
             dir.ends_with(

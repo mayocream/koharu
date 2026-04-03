@@ -5,7 +5,7 @@ use tracing_subscriber::fmt::format::FmtSpan;
 
 use koharu_llm::safe::llama_backend::LlamaBackend;
 use koharu_llm::{GenerateOptions, Language, Llm, ModelId};
-use koharu_runtime::{ComputePolicy, RuntimeManager, Settings};
+use koharu_runtime::{ComputePolicy, RuntimeManager, default_app_data_root};
 
 #[derive(Parser, Debug)]
 #[command(author, version, about)]
@@ -76,7 +76,7 @@ fn init_tracing() {
 
 fn build_runtime(cpu: bool) -> anyhow::Result<RuntimeManager> {
     RuntimeManager::new(
-        Settings::default(),
+        default_app_data_root(),
         if cpu {
             ComputePolicy::CpuOnly
         } else {

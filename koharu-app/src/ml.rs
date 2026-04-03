@@ -6,7 +6,7 @@ use std::{
 use anyhow::Result;
 use image::DynamicImage;
 use koharu_core::{
-    Document, FontFaceInfo, FontPrediction, SerializableDynamicImage, TextBlock, TextDirection,
+    FontFaceInfo, FontPrediction, SerializableDynamicImage, TextBlock, TextDirection,
     TextShaderEffect, TextStrokeStyle,
 };
 use koharu_llm::paddleocr_vl::{self as paddleocr_vl_llm, PaddleOcrVl, PaddleOcrVlTask};
@@ -19,6 +19,7 @@ use koharu_ml::font_detector::{self, FontDetector};
 use koharu_ml::lama::{self, Lama};
 use koharu_ml::pp_doclayout_v3::{self, LayoutRegion, PPDocLayoutV3};
 
+use crate::renderer::RenderTextOptions;
 use crate::AppResources;
 const NEAR_BLACK_THRESHOLD: u8 = 12;
 const GRAY_NEAR_BLACK_THRESHOLD: u8 = 60;
@@ -107,35 +108,37 @@ impl Model {
         })
     }
 
-    /// Detect text blocks and fonts in a document.
-    /// Sets `doc.text_blocks` (with font predictions/styles) and `doc.segment`.
-    pub async fn detect(&self, doc: &mut Document) -> Result<()> {
+    /// Detect text blocks and fonts — operates on image + text blocks directly.
+    pub async fn detect_on_image(
+        &self,
+        source_img: &SerializableDynamicImage,
+        text_blocks: &mut Vec<TextBlock>,
+    ) -> Result<DynamicImage> {
         let detect_started = Instant::now();
 
         let layout_started = Instant::now();
         let layout = self
             .layout_detector
-            .inference_one_fast(&doc.image, PP_DOCLAYOUT_THRESHOLD)?;
-        doc.text_blocks = build_text_blocks(&layout.regions);
+            .inference_one_fast(source_img, PP_DOCLAYOUT_THRESHOLD)?;
+        *text_blocks = build_text_blocks(&layout.regions);
         let layout_elapsed = layout_started.elapsed();
 
         let segmentation_started = Instant::now();
-        let probability_map = self.segmenter.inference_segmentation(&doc.image)?;
+        let probability_map = self.segmenter.inference_segmentation(source_img)?;
         let mask = comic_text_detector::refine_segmentation_mask(
-            &doc.image,
+            source_img,
             &probability_map,
-            &doc.text_blocks,
+            text_blocks,
         );
-        doc.segment = Some(DynamicImage::ImageLuma8(mask).into());
+        let segment_img = DynamicImage::ImageLuma8(mask);
         let segmentation_elapsed = segmentation_started.elapsed();
 
         let font_started = Instant::now();
-        if !doc.text_blocks.is_empty() {
-            let images: Vec<DynamicImage> = doc
-                .text_blocks
+        if !text_blocks.is_empty() {
+            let images: Vec<DynamicImage> = text_blocks
                 .iter()
                 .map(|block| {
-                    doc.image.crop_imm(
+                    source_img.crop_imm(
                         block.x as u32,
                         block.y as u32,
                         block.width as u32,
@@ -145,7 +148,7 @@ impl Model {
                 .collect();
 
             let font_predictions = self.detect_fonts(&images, 1).await?;
-            for (block, prediction) in doc.text_blocks.iter_mut().zip(font_predictions) {
+            for (block, prediction) in text_blocks.iter_mut().zip(font_predictions) {
                 block.font_prediction = Some(prediction);
                 block.style = None;
             }
@@ -153,7 +156,7 @@ impl Model {
         let font_elapsed = font_started.elapsed();
 
         tracing::info!(
-            text_blocks = doc.text_blocks.len(),
+            text_blocks = text_blocks.len(),
             layout_ms = layout_elapsed.as_millis(),
             segmentation_ms = segmentation_elapsed.as_millis(),
             font_ms = font_elapsed.as_millis(),
@@ -161,22 +164,24 @@ impl Model {
             "detect stage timings"
         );
 
-        Ok(())
+        Ok(segment_img)
     }
 
-    /// Run OCR on all text blocks in the document.
-    /// Updates `doc.text_blocks` with recognized text.
-    pub async fn ocr(&self, doc: &mut Document) -> Result<()> {
-        if doc.text_blocks.is_empty() {
+    /// Run OCR on all text blocks using a source image.
+    pub async fn ocr_on_image(
+        &self,
+        source_img: &SerializableDynamicImage,
+        text_blocks: &mut [TextBlock],
+    ) -> Result<()> {
+        if text_blocks.is_empty() {
             return Ok(());
         }
 
         let ocr_started = Instant::now();
         let crop_started = Instant::now();
-        let regions = doc
-            .text_blocks
+        let regions = text_blocks
             .iter()
-            .map(|block| crop_text_block_bbox(&doc.image, block))
+            .map(|block| crop_text_block_bbox(source_img, block))
             .collect::<Vec<_>>();
         let crop_elapsed = crop_started.elapsed();
 
@@ -189,13 +194,13 @@ impl Model {
         let inference_elapsed = inference_started.elapsed();
 
         for (block_index, output) in outputs.into_iter().enumerate() {
-            if let Some(block) = doc.text_blocks.get_mut(block_index) {
+            if let Some(block) = text_blocks.get_mut(block_index) {
                 block.text = Some(output.text);
             }
         }
 
         tracing::info!(
-            text_blocks = doc.text_blocks.len(),
+            text_blocks = text_blocks.len(),
             crop_ms = crop_elapsed.as_millis(),
             inference_ms = inference_elapsed.as_millis(),
             total_ms = ocr_started.elapsed().as_millis(),
@@ -205,24 +210,22 @@ impl Model {
         Ok(())
     }
 
-    /// Inpaint text regions in the document.
-    /// Uses the current `doc.segment` mask as the inpaint source, sets `doc.inpainted`.
-    pub async fn inpaint(&self, doc: &mut Document) -> Result<()> {
-        if doc.text_blocks.is_empty() {
+    /// Inpaint text regions using source image and segment mask.
+    pub async fn inpaint_on_image(
+        &self,
+        source_img: &SerializableDynamicImage,
+        segment_img: &SerializableDynamicImage,
+        text_blocks: &[TextBlock],
+    ) -> Result<DynamicImage> {
+        if text_blocks.is_empty() {
             tracing::debug!("skipping inpaint: no text blocks detected");
-            return Ok(());
+            anyhow::bail!("No text blocks to inpaint");
         }
 
-        let mask = doc
-            .segment
-            .as_ref()
-            .ok_or_else(|| anyhow::anyhow!("Segment image not found"))?;
         let result = self
             .lama
-            .inference_with_blocks(&doc.image, mask, Some(&doc.text_blocks))?;
-        doc.inpainted = Some(result.into());
-
-        Ok(())
+            .inference_with_blocks(source_img, segment_img, Some(text_blocks))?;
+        Ok(result)
     }
 
     /// Low-level inpaint: inpaint a specific image region with a mask.
@@ -364,31 +367,70 @@ fn overlap_area(a: [f32; 4], b: [f32; 4]) -> f32 {
 }
 
 // ---------------------------------------------------------------------------
-// Operations (merged from ops/vision.rs)
+// Operations
 // ---------------------------------------------------------------------------
 
 #[instrument(level = "info", skip_all)]
 pub async fn detect(state: AppResources, document_id: &str) -> Result<()> {
-    let mut doc = state.cache.get(document_id).await?;
-    state.ml.detect(&mut doc).await?;
-    state.cache.put(&doc).await?;
-    Ok(())
+    let doc = state.storage.page(document_id).await?;
+
+    let source_img: SerializableDynamicImage = state.storage.images.load(&doc.source)?.into();
+    let mut text_blocks = doc.text_blocks.clone();
+    let segment_img = state
+        .ml
+        .detect_on_image(&source_img, &mut text_blocks)
+        .await?;
+    let segment_ref = state.storage.images.store_webp(&segment_img)?;
+
+    state
+        .storage
+        .update_page(document_id, |page| {
+            page.text_blocks = text_blocks;
+            page.segment = Some(segment_ref);
+        })
+        .await
 }
 
 #[instrument(level = "info", skip_all)]
 pub async fn ocr(state: AppResources, document_id: &str) -> Result<()> {
-    let mut doc = state.cache.get(document_id).await?;
-    state.ml.ocr(&mut doc).await?;
-    state.cache.put(&doc).await?;
-    Ok(())
+    let doc = state.storage.page(document_id).await?;
+
+    let source_img: SerializableDynamicImage = state.storage.images.load(&doc.source)?.into();
+    let mut text_blocks = doc.text_blocks.clone();
+    state.ml.ocr_on_image(&source_img, &mut text_blocks).await?;
+
+    state
+        .storage
+        .update_page(document_id, |page| {
+            page.text_blocks = text_blocks;
+        })
+        .await
 }
 
 #[instrument(level = "info", skip_all)]
 pub async fn inpaint(state: AppResources, document_id: &str) -> Result<()> {
-    let mut doc = state.cache.get(document_id).await?;
-    state.ml.inpaint(&mut doc).await?;
-    state.cache.put(&doc).await?;
-    Ok(())
+    let doc = state.storage.page(document_id).await?;
+
+    let segment_ref = doc
+        .segment
+        .as_ref()
+        .ok_or_else(|| anyhow::anyhow!("Segment image not found"))?;
+
+    let source_img: SerializableDynamicImage = state.storage.images.load(&doc.source)?.into();
+    let segment_img: SerializableDynamicImage = state.storage.images.load(segment_ref)?.into();
+
+    let result = state
+        .ml
+        .inpaint_on_image(&source_img, &segment_img, &doc.text_blocks)
+        .await?;
+    let inpainted_ref = state.storage.images.store_webp(&result)?;
+
+    state
+        .storage
+        .update_page(document_id, |page| {
+            page.inpainted = Some(inpainted_ref);
+        })
+        .await
 }
 
 #[instrument(level = "info", skip_all)]
@@ -400,18 +442,44 @@ pub async fn render(
     shader_stroke: Option<TextStrokeStyle>,
     font_family: Option<&str>,
 ) -> Result<()> {
-    let mut doc = state.cache.get(document_id).await?;
+    let doc = state.storage.page(document_id).await?;
 
-    state.renderer.render(
-        &mut doc,
-        text_block_index,
-        shader_effect.unwrap_or_default(),
-        shader_stroke,
-        font_family,
+    let source_img = state.storage.images.load(&doc.source)?;
+    let inpainted_img = doc
+        .inpainted
+        .as_ref()
+        .map(|r| state.storage.images.load(r))
+        .transpose()?;
+    let brush_layer_img = doc
+        .brush_layer
+        .as_ref()
+        .map(|r| state.storage.images.load(r))
+        .transpose()?;
+
+    let mut text_blocks = doc.text_blocks.clone();
+    let rendered_ref = state.renderer.render_to_blob(
+        &state.storage.images,
+        &source_img,
+        inpainted_img.as_ref(),
+        brush_layer_img.as_ref(),
+        &mut text_blocks,
+        RenderTextOptions {
+            text_block_index,
+            shader_effect: shader_effect.unwrap_or_default(),
+            shader_stroke,
+            font_family,
+        },
     )?;
 
-    state.cache.put(&doc).await?;
-    Ok(())
+    state
+        .storage
+        .update_page(document_id, |page| {
+            page.text_blocks = text_blocks;
+            if let Some(r) = rendered_ref {
+                page.rendered = Some(r);
+            }
+        })
+        .await
 }
 
 pub async fn list_font_families(state: AppResources) -> Result<Vec<FontFaceInfo>> {

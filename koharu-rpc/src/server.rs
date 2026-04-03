@@ -18,28 +18,17 @@ use crate::mcp::KoharuMcp;
 use crate::shared::SharedState;
 use crate::tracker::Tracker;
 
-/// An asset returned by the resolver: raw bytes + MIME type.
-pub struct Asset {
-    pub bytes: Vec<u8>,
-    pub mime_type: String,
-}
+/// Resolves a URL path to `(bytes, mime_type)`. Used for serving static UI assets.
+pub type AssetResolver = Arc<dyn Fn(&str) -> Option<(Vec<u8>, String)> + Send + Sync>;
 
-/// A function that resolves a path to an asset.
-pub type SharedAssetResolver = Arc<dyn Fn(&str) -> Option<Asset> + Send + Sync>;
-
-pub fn asset_resolver<I>(resolvers: I) -> SharedAssetResolver
-where
-    I: IntoIterator<Item = SharedAssetResolver>,
-{
-    let resolvers = resolvers.into_iter().collect::<Vec<_>>();
-    Arc::new(move |path: &str| resolvers.iter().find_map(|resolver| resolver(path)))
-}
-
-fn build_router(shared: SharedState, resolver: SharedAssetResolver) -> Router {
+pub async fn serve_with_listener(
+    listener: TcpListener,
+    shared: SharedState,
+    assets: AssetResolver,
+) -> Result<()> {
     let tracker = Tracker::new(&shared);
-    let cors = CorsLayer::very_permissive();
 
-    let mcp_service = StreamableHttpService::new(
+    let mcp = StreamableHttpService::new(
         {
             let shared = shared.clone();
             move || Ok(KoharuMcp::new(shared.clone()))
@@ -51,45 +40,32 @@ fn build_router(shared: SharedState, resolver: SharedAssetResolver) -> Router {
         },
     );
 
-    Router::new()
+    let router = Router::new()
         .nest("/api/v1", api::router(shared.clone(), tracker))
-        .nest_service("/mcp", mcp_service)
-        .layer(cors)
+        .nest_service("/mcp", mcp)
+        .layer(CorsLayer::very_permissive())
         .fallback(move |uri: Uri| {
-            let resolver = resolver.clone();
-            async move { serve_asset(&resolver, uri) }
-        })
-}
+            let assets = assets.clone();
+            async move {
+                let path = uri.path().trim_start_matches('/');
+                let path = if path.is_empty() { "index.html" } else { path };
 
-fn serve_asset(resolver: &SharedAssetResolver, uri: Uri) -> Response {
-    let path = uri.path();
-    let target = if path == "/" {
-        "index.html"
-    } else {
-        path.trim_start_matches('/')
-    };
+                serve_file(&assets, path)
+                    .or_else(|| serve_file(&assets, "index.html"))
+                    .unwrap_or_else(|| (StatusCode::NOT_FOUND, "Not Found").into_response())
+            }
+        });
 
-    resolve_asset(resolver, target)
-        .or_else(|| resolve_asset(resolver, "index.html"))
-        .unwrap_or_else(|| (StatusCode::NOT_FOUND, "Not Found").into_response())
-}
-
-fn resolve_asset(resolver: &SharedAssetResolver, path: &str) -> Option<Response> {
-    let asset = resolver(path)?;
-    let mut response = Response::new(Body::from(asset.bytes));
-    if let Ok(ct) = HeaderValue::from_str(&asset.mime_type) {
-        response.headers_mut().insert(header::CONTENT_TYPE, ct);
-    }
-    Some(response)
-}
-
-pub async fn serve_with_listener(
-    listener: TcpListener,
-    shared: SharedState,
-    resolver: SharedAssetResolver,
-) -> Result<()> {
-    let router = build_router(shared, resolver);
     tracing::info!("HTTP server listening on http://{}", listener.local_addr()?);
     axum::serve(listener, router.into_make_service()).await?;
     Ok(())
+}
+
+fn serve_file(assets: &AssetResolver, path: &str) -> Option<Response> {
+    let (bytes, mime) = assets(path)?;
+    let mut response = Response::new(Body::from(bytes));
+    if let Ok(ct) = HeaderValue::from_str(&mime) {
+        response.headers_mut().insert(header::CONTENT_TYPE, ct);
+    }
+    Some(response)
 }

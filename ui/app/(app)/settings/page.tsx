@@ -25,13 +25,11 @@ import {
 import { isTauri } from '@/lib/backend'
 import { getConfig, getMeta, updateConfig } from '@/lib/api/system/system'
 import { getLlmCatalog } from '@/lib/api/llm/llm'
-import { toAppConfigUpdate } from '@/lib/appConfig'
 import { usePreferencesStore } from '@/lib/stores/preferencesStore'
 import { supportedLanguages } from '@/lib/i18n'
 import type {
-  AppConfig,
-  AppLlmProviderConfig,
-  AppLlmProviderConfigUpdate,
+  UpdateConfigBody,
+  ProviderConfig,
   LlmProviderCatalog,
 } from '@/lib/api/schemas'
 
@@ -45,22 +43,19 @@ const inputClass =
   'border-border bg-card text-foreground placeholder:text-muted-foreground focus:ring-primary w-full rounded-md border px-3 py-1.5 text-sm focus:ring-1 focus:outline-none'
 
 const getProviderConfig = (
-  config: AppConfig | null,
+  config: UpdateConfigBody | null,
   providerId: string,
-): AppLlmProviderConfig | undefined =>
-  config?.llm?.providers?.find((provider) => provider.id === providerId)
+): ProviderConfig | undefined =>
+  config?.providers?.find((provider) => provider.id === providerId)
 
 const upsertProviderConfig = (
-  config: AppConfig,
+  config: UpdateConfigBody,
   providerId: string,
-  updater: (provider: AppLlmProviderConfig) => AppLlmProviderConfig,
-): AppConfig => {
-  const providers = [...(config.llm?.providers ?? [])]
+  updater: (provider: ProviderConfig) => ProviderConfig,
+): UpdateConfigBody => {
+  const providers = [...(config.providers ?? [])]
   const index = providers.findIndex((provider) => provider.id === providerId)
-  const current =
-    index >= 0
-      ? providers[index]
-      : { id: providerId, baseUrl: null, hasApiKey: false }
+  const current = index >= 0 ? providers[index] : { id: providerId }
   const nextProvider = updater(current)
 
   if (index >= 0) {
@@ -71,9 +66,7 @@ const upsertProviderConfig = (
 
   return {
     ...config,
-    llm: {
-      providers,
-    },
+    providers,
   }
 }
 
@@ -98,7 +91,7 @@ export default function SettingsPage() {
   const setFontFamily = usePreferencesStore((state) => state.setFontFamily)
 
   const [deviceInfo, setDeviceInfo] = useState<{ mlDevice: string }>()
-  const [appConfig, setAppConfig] = useState<AppConfig | null>(null)
+  const [appConfig, setAppConfig] = useState<UpdateConfigBody | null>(null)
   const [providerCatalogs, setProviderCatalogs] = useState<
     LlmProviderCatalog[]
   >([])
@@ -112,7 +105,7 @@ export default function SettingsPage() {
     const loadPageState = async () => {
       try {
         const [config, catalog] = await Promise.all([
-          getConfig(),
+          getConfig() as unknown as Promise<UpdateConfigBody>,
           getLlmCatalog(),
         ])
         setAppConfig(config)
@@ -141,33 +134,19 @@ export default function SettingsPage() {
   }, [])
 
   useEffect(() => {
-    if (!appConfig) return
+    if (!appConfig?.data) return
     setDataPathDraft(appConfig.data.path)
     setDataPathError(null)
   }, [appConfig])
 
   const persistConfig = async (
-    nextConfig: AppConfig,
-    providerOverrides?: AppLlmProviderConfigUpdate[],
-  ): Promise<AppConfig | null> => {
+    nextConfig: UpdateConfigBody,
+  ): Promise<UpdateConfigBody | null> => {
     try {
-      const saved = await updateConfig(
-        toAppConfigUpdate(nextConfig, providerOverrides),
-      )
+      const saved = await updateConfig(nextConfig)
       const catalog = await getLlmCatalog()
       setAppConfig(saved)
       setProviderCatalogs(catalog.providers)
-      if (providerOverrides?.length) {
-        setApiKeyDrafts((current) => {
-          const next = { ...current }
-          for (const provider of providerOverrides) {
-            if (provider.apiKey !== undefined || provider.clearApiKey) {
-              delete next[provider.id]
-            }
-          }
-          return next
-        })
-      }
       return saved
     } catch (error) {
       console.error('Failed to save settings', error)
@@ -180,7 +159,7 @@ export default function SettingsPage() {
       current
         ? upsertProviderConfig(current, providerId, (provider) => ({
             ...provider,
-            baseUrl: value || null,
+            base_url: value || null,
           }))
         : current,
     )
@@ -207,7 +186,7 @@ export default function SettingsPage() {
       return
     }
 
-    if (nextPath === appConfig.data.path) {
+    if (nextPath === appConfig.data?.path) {
       setDataPathError(null)
       return
     }
@@ -216,7 +195,7 @@ export default function SettingsPage() {
       'Changing the app data path will move Koharu data to the new location and restart the app. Continue?',
     )
     if (!confirmed) {
-      setDataPathDraft(appConfig.data.path)
+      setDataPathDraft(appConfig.data?.path ?? '')
       setDataPathError(null)
       return
     }
@@ -258,24 +237,32 @@ export default function SettingsPage() {
     if (!appConfig) return
     const apiKey = apiKeyDrafts[providerId]?.trim()
     if (!apiKey) return
-    void persistConfig(appConfig, [
-      {
-        id: providerId,
-        apiKey,
-        clearApiKey: false,
-      },
-    ])
+    const nextConfig = upsertProviderConfig(appConfig, providerId, (p) => ({
+      ...p,
+      api_key: apiKey,
+    }))
+    void persistConfig(nextConfig).then(() => {
+      setApiKeyDrafts((current) => {
+        const next = { ...current }
+        delete next[providerId]
+        return next
+      })
+    })
   }
 
   const handleClearProviderApiKey = (providerId: string) => {
     if (!appConfig) return
-    void persistConfig(appConfig, [
-      {
-        id: providerId,
-        apiKey: null,
-        clearApiKey: true,
-      },
-    ])
+    const nextConfig = upsertProviderConfig(appConfig, providerId, (p) => ({
+      ...p,
+      api_key: null,
+    }))
+    void persistConfig(nextConfig).then(() => {
+      setApiKeyDrafts((current) => {
+        const next = { ...current }
+        delete next[providerId]
+        return next
+      })
+    })
   }
 
   return (
@@ -407,7 +394,7 @@ export default function SettingsPage() {
                     disabled={
                       !appConfig ||
                       isSavingDataPath ||
-                      dataPathDraft.trim() === appConfig.data.path
+                      dataPathDraft.trim() === appConfig.data?.path
                     }
                     className='bg-foreground text-background disabled:bg-muted disabled:text-muted-foreground rounded-md px-3 py-1.5 text-sm font-medium transition disabled:cursor-not-allowed'
                   >
@@ -483,7 +470,7 @@ export default function SettingsPage() {
                           </label>
                           <input
                             type='url'
-                            value={configured?.baseUrl ?? ''}
+                            value={configured?.base_url ?? ''}
                             onChange={(event) =>
                               handleProviderBaseUrlChange(
                                 provider.id,
@@ -517,7 +504,7 @@ export default function SettingsPage() {
                               handlePersistProviderApiKey(provider.id)
                             }
                             placeholder={
-                              configured?.hasApiKey
+                              configured?.api_key === '[REDACTED]'
                                 ? 'Stored in keychain. Enter a new key to replace it.'
                                 : 'Enter API key'
                             }
@@ -543,11 +530,11 @@ export default function SettingsPage() {
 
                         <div className='flex items-center justify-between gap-3 text-xs'>
                           <span className='text-muted-foreground'>
-                            {configured?.hasApiKey
+                            {configured?.api_key === '[REDACTED]'
                               ? 'API key stored in keychain'
                               : 'No API key stored'}
                           </span>
-                          {configured?.hasApiKey ? (
+                          {configured?.api_key === '[REDACTED]' ? (
                             <button
                               type='button'
                               onClick={() =>

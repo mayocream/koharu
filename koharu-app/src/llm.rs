@@ -3,7 +3,7 @@ use std::sync::Arc;
 
 use koharu_llm::providers::{
     AnyProvider, ProviderCatalogModels, ProviderConfig, all_provider_descriptors, build_provider,
-    discover_models, get_saved_api_key,
+    discover_models,
 };
 use tokio::sync::{RwLock, broadcast};
 use tracing::instrument;
@@ -682,9 +682,11 @@ async fn provider_catalog(state: &AppResources) -> anyhow::Result<Vec<LlmProvide
     let mut providers = Vec::new();
 
     for descriptor in all_provider_descriptors() {
-        let stored = config.llm.providers.get(descriptor.id);
-        let base_url = stored.and_then(|provider| provider.base_url.clone());
-        let api_key = get_saved_api_key(descriptor.id)?;
+        let stored = config.providers.iter().find(|p| p.id == descriptor.id);
+        let base_url = stored.and_then(|p| p.base_url.clone());
+        let api_key = stored
+            .and_then(|p| p.api_key.as_ref())
+            .map(|secret| secret.expose().to_owned());
         let has_api_key = api_key
             .as_deref()
             .is_some_and(|value| !value.trim().is_empty());
@@ -787,12 +789,14 @@ fn provider_config_from_settings(
         .as_deref()
         .ok_or_else(|| anyhow::anyhow!("provider targets require provider_id"))?;
     let config = app_config::load()?;
-    let stored = config.llm.providers.get(provider_id);
+    let stored = config.providers.iter().find(|p| p.id == provider_id);
 
     Ok(ProviderConfig {
         http_client: state.runtime.http_client(),
-        api_key: get_saved_api_key(provider_id)?,
-        base_url: stored.and_then(|provider| provider.base_url.clone()),
+        api_key: stored
+            .and_then(|p| p.api_key.as_ref())
+            .map(|secret| secret.expose().to_owned()),
+        base_url: stored.and_then(|p| p.base_url.clone()),
         temperature: options.and_then(|options| options.temperature),
         max_tokens: options.and_then(|options| options.max_tokens),
         custom_system_prompt: options.and_then(|options| options.custom_system_prompt.clone()),
@@ -891,7 +895,7 @@ pub async fn llm_generate(
     text_block_index: Option<usize>,
     language: Option<&str>,
 ) -> anyhow::Result<()> {
-    let mut doc = state.cache.get(document_id).await?;
+    let mut doc = state.storage.page(document_id).await?;
 
     match text_block_index {
         Some(block_index) => {
@@ -906,15 +910,20 @@ pub async fn llm_generate(
         }
     }
 
-    state.cache.put(&doc).await?;
-    Ok(())
+    let text_blocks = doc.text_blocks;
+    state
+        .storage
+        .update_page(document_id, |page| {
+            page.text_blocks = text_blocks;
+        })
+        .await
 }
 
 pub async fn get_document_for_llm(
     state: AppResources,
     document_id: &str,
 ) -> anyhow::Result<koharu_core::Document> {
-    state.cache.get(document_id).await
+    state.storage.page(document_id).await
 }
 
 #[cfg(test)]
