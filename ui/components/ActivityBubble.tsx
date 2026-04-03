@@ -233,12 +233,7 @@ function OperationCard({
 
 export function ActivityBubble() {
   const { t } = useTranslation()
-  const {
-    isProcessing,
-    state: machineState,
-    send,
-    canCancel,
-  } = useProcessing()
+  const { isProcessing, state: machineState, send, canCancel } = useProcessing()
   const uiError = useEditorUiStore((state) => state.error)
   const clearUiError = useEditorUiStore((state) => state.clearError)
 

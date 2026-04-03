@@ -22,6 +22,7 @@ import type {
 import type {
   ApiError,
   FontFaceInfo,
+  GetEngineCatalog200,
   MetaInfo,
   UpdateConfig200,
   UpdateConfigBody,
@@ -241,6 +242,157 @@ export const useUpdateConfig = <TError = ApiError, TContext = unknown>(
 > => {
   return useMutation(getUpdateConfigMutationOptions(options), queryClient)
 }
+export const getGetEngineCatalogUrl = () => {
+  return `/api/v1/engines`
+}
+
+export const getEngineCatalog = async (
+  options?: RequestInit,
+): Promise<GetEngineCatalog200> => {
+  return fetchApi<GetEngineCatalog200>(getGetEngineCatalogUrl(), {
+    ...options,
+    method: 'GET',
+  })
+}
+
+export const getGetEngineCatalogQueryKey = () => {
+  return [`/api/v1/engines`] as const
+}
+
+export const getGetEngineCatalogQueryOptions = <
+  TData = Awaited<ReturnType<typeof getEngineCatalog>>,
+  TError = unknown,
+>(options?: {
+  query?: Partial<
+    UseQueryOptions<Awaited<ReturnType<typeof getEngineCatalog>>, TError, TData>
+  >
+  request?: SecondParameter<typeof fetchApi>
+}) => {
+  const { query: queryOptions, request: requestOptions } = options ?? {}
+
+  const queryKey = queryOptions?.queryKey ?? getGetEngineCatalogQueryKey()
+
+  const queryFn: QueryFunction<
+    Awaited<ReturnType<typeof getEngineCatalog>>
+  > = ({ signal }) => getEngineCatalog({ signal, ...requestOptions })
+
+  return {
+    queryKey,
+    queryFn,
+    gcTime: 300000,
+    retry: 1,
+    ...queryOptions,
+  } as UseQueryOptions<
+    Awaited<ReturnType<typeof getEngineCatalog>>,
+    TError,
+    TData
+  > & { queryKey: DataTag<QueryKey, TData, TError> }
+}
+
+export type GetEngineCatalogQueryResult = NonNullable<
+  Awaited<ReturnType<typeof getEngineCatalog>>
+>
+export type GetEngineCatalogQueryError = unknown
+
+export function useGetEngineCatalog<
+  TData = Awaited<ReturnType<typeof getEngineCatalog>>,
+  TError = unknown,
+>(
+  options: {
+    query: Partial<
+      UseQueryOptions<
+        Awaited<ReturnType<typeof getEngineCatalog>>,
+        TError,
+        TData
+      >
+    > &
+      Pick<
+        DefinedInitialDataOptions<
+          Awaited<ReturnType<typeof getEngineCatalog>>,
+          TError,
+          Awaited<ReturnType<typeof getEngineCatalog>>
+        >,
+        'initialData'
+      >
+    request?: SecondParameter<typeof fetchApi>
+  },
+  queryClient?: QueryClient,
+): DefinedUseQueryResult<TData, TError> & {
+  queryKey: DataTag<QueryKey, TData, TError>
+}
+export function useGetEngineCatalog<
+  TData = Awaited<ReturnType<typeof getEngineCatalog>>,
+  TError = unknown,
+>(
+  options?: {
+    query?: Partial<
+      UseQueryOptions<
+        Awaited<ReturnType<typeof getEngineCatalog>>,
+        TError,
+        TData
+      >
+    > &
+      Pick<
+        UndefinedInitialDataOptions<
+          Awaited<ReturnType<typeof getEngineCatalog>>,
+          TError,
+          Awaited<ReturnType<typeof getEngineCatalog>>
+        >,
+        'initialData'
+      >
+    request?: SecondParameter<typeof fetchApi>
+  },
+  queryClient?: QueryClient,
+): UseQueryResult<TData, TError> & {
+  queryKey: DataTag<QueryKey, TData, TError>
+}
+export function useGetEngineCatalog<
+  TData = Awaited<ReturnType<typeof getEngineCatalog>>,
+  TError = unknown,
+>(
+  options?: {
+    query?: Partial<
+      UseQueryOptions<
+        Awaited<ReturnType<typeof getEngineCatalog>>,
+        TError,
+        TData
+      >
+    >
+    request?: SecondParameter<typeof fetchApi>
+  },
+  queryClient?: QueryClient,
+): UseQueryResult<TData, TError> & {
+  queryKey: DataTag<QueryKey, TData, TError>
+}
+
+export function useGetEngineCatalog<
+  TData = Awaited<ReturnType<typeof getEngineCatalog>>,
+  TError = unknown,
+>(
+  options?: {
+    query?: Partial<
+      UseQueryOptions<
+        Awaited<ReturnType<typeof getEngineCatalog>>,
+        TError,
+        TData
+      >
+    >
+    request?: SecondParameter<typeof fetchApi>
+  },
+  queryClient?: QueryClient,
+): UseQueryResult<TData, TError> & {
+  queryKey: DataTag<QueryKey, TData, TError>
+} {
+  const queryOptions = getGetEngineCatalogQueryOptions(options)
+
+  const query = useQuery(queryOptions, queryClient) as UseQueryResult<
+    TData,
+    TError
+  > & { queryKey: DataTag<QueryKey, TData, TError> }
+
+  return { ...query, queryKey: queryOptions.queryKey }
+}
+
 export const getListFontsUrl = () => {
   return `/api/v1/fonts`
 }

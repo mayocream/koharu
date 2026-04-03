@@ -12,15 +12,11 @@ use imageproc::contours::{BorderType, find_contours};
 use koharu_runtime::RuntimeManager;
 use serde::{Deserialize, Serialize};
 
-use crate::{define_models, device, loading};
+use crate::{device, loading};
 
 use self::model::{PPDocLayoutV3ForObjectDetection, PPDocLayoutV3Outputs};
 
-define_models! {
-    Config => ("PaddlePaddle/PP-DocLayoutV3_safetensors", "config.json"),
-    PreprocessorConfig => ("PaddlePaddle/PP-DocLayoutV3_safetensors", "preprocessor_config.json"),
-    Model => ("PaddlePaddle/PP-DocLayoutV3_safetensors", "model.safetensors"),
-}
+const HF_REPO: &str = "PaddlePaddle/PP-DocLayoutV3_safetensors";
 
 koharu_runtime::declare_hf_model_package!(
     id: "model:pp-doclayout-v3:config",
@@ -57,9 +53,11 @@ pub struct PPDocLayoutV3 {
 impl PPDocLayoutV3 {
     pub async fn load(runtime: &RuntimeManager, cpu: bool) -> Result<Self> {
         let device = device(cpu)?;
-        let config_path = loading::resolve_manifest_path(Manifest::Config.get(runtime)).await?;
-        let preprocessor_path =
-            loading::resolve_manifest_path(Manifest::PreprocessorConfig.get(runtime)).await?;
+        let downloads = runtime.downloads();
+        let config_path = downloads.huggingface_model(HF_REPO, "config.json").await?;
+        let preprocessor_path = downloads
+            .huggingface_model(HF_REPO, "preprocessor_config.json")
+            .await?;
         let config = loading::read_json::<PPDocLayoutV3Config>(&config_path)
             .with_context(|| format!("failed to load {}", config_path.display()))?;
         let preprocessor =
@@ -69,10 +67,12 @@ impl PPDocLayoutV3 {
             .to_dtype(DType::F32)?;
         let std = Tensor::from_slice(&preprocessor.image_std, (1, 3, 1, 1), &device)?
             .to_dtype(DType::F32)?;
-        let model = loading::load_mmaped_safetensors(Manifest::Model.get(runtime), &device, |vb| {
+        let weights_path = downloads
+            .huggingface_model(HF_REPO, "model.safetensors")
+            .await?;
+        let model = loading::load_mmaped_safetensors_path(&weights_path, &device, |vb| {
             PPDocLayoutV3ForObjectDetection::load(vb, &config, &device)
-        })
-        .await?;
+        })?;
 
         Ok(Self {
             model,

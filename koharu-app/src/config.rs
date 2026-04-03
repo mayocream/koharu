@@ -56,7 +56,35 @@ impl<'de> Deserialize<'de> for RedactedSecret {
 #[serde(default)]
 pub struct AppConfig {
     pub data: DataConfig,
+    pub pipeline: PipelineConfig,
     pub providers: Vec<ProviderConfig>,
+}
+
+/// Engine selection for each pipeline stage.
+/// Values are engine IDs (e.g. "pp-doclayout-v3", "comic-text-detector").
+/// Empty string means use default.
+#[derive(Debug, Clone, Serialize, Deserialize, ToSchema)]
+#[serde(default)]
+pub struct PipelineConfig {
+    pub detector: String,
+    pub segmenter: String,
+    pub ocr: String,
+    pub translator: String,
+    pub inpainter: String,
+    pub renderer: String,
+}
+
+impl Default for PipelineConfig {
+    fn default() -> Self {
+        Self {
+            detector: "pp-doclayout-v3".to_string(),
+            segmenter: "comic-text-detector-seg".to_string(),
+            ocr: "paddle-ocr-vl-1.5".to_string(),
+            translator: "llm".to_string(),
+            inpainter: "lama-manga".to_string(),
+            renderer: "koharu-renderer".to_string(),
+        }
+    }
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, ToSchema)]

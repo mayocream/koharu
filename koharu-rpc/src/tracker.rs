@@ -79,13 +79,7 @@ fn spawn_download_listener(inner: Arc<Inner>, shared: SharedState) {
 }
 
 async fn update_job_state(inner: &Arc<Inner>, job: JobState) {
-    let terminal = !matches!(job.status, koharu_core::JobStatus::Running);
-    let mut jobs = inner.jobs.write().await;
-    if terminal {
-        jobs.remove(&job.id);
-    } else {
-        jobs.insert(job.id.clone(), job);
-    }
+    inner.jobs.write().await.insert(job.id.clone(), job);
 }
 
 async fn update_download_state(inner: &Arc<Inner>, download: DownloadState) {

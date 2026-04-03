@@ -315,6 +315,14 @@
     "dataPathDescription": "Koharu는 모델, 런타임 패키지, 페이지 매니페스트 및 이미지 데이터를 이 디렉토리에 저장합니다. 경로를 변경하면 앱을 다시 시작해야 합니다.",
     "dataPathApply": "적용 후 재시작",
     "dataPathApplying": "적용 중...",
-    "dataPathDesktopOnly": "저장소 설정은 데스크톱 앱에서만 사용할 수 있습니다."
+    "dataPathDesktopOnly": "저장소 설정은 데스크톱 앱에서만 사용할 수 있습니다.",
+    "engines": "엔진",
+    "enginesDescription": "각 파이프라인 단계에서 사용할 ML 엔진을 선택합니다.",
+    "detector": "검출기",
+    "segmenter": "세그멘터",
+    "ocr": "OCR",
+    "translator": "번역기",
+    "inpainter": "인페인터",
+    "renderer": "렌더러"
   }
 }

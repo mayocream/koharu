@@ -10,9 +10,14 @@ use crate::loader::{add_runtime_search_path, preload_library};
 
 const CUDA_SUCCESS: i32 = 0;
 const CUDA_13_1_DRIVER_VERSION: i32 = 13010;
+const CU_DEVICE_ATTRIBUTE_COMPUTE_CAPABILITY_MAJOR: i32 = 75;
+const CU_DEVICE_ATTRIBUTE_COMPUTE_CAPABILITY_MINOR: i32 = 76;
+const MIN_COMPUTE_CAPABILITY: (i32, i32) = (7, 5); // Turing (RTX 20xx) and above
 
 type CuInit = unsafe extern "C" fn(flags: u32) -> i32;
 type CuDriverGetVersion = unsafe extern "C" fn(driver_version: *mut i32) -> i32;
+type CuDeviceGet = unsafe extern "C" fn(device: *mut i32, ordinal: i32) -> i32;
+type CuDeviceGetAttribute = unsafe extern "C" fn(pi: *mut i32, attrib: i32, dev: i32) -> i32;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
 pub struct CudaDriverVersion {
@@ -120,6 +125,64 @@ pub fn driver_version() -> Result<CudaDriverVersion> {
     }
 }
 
+/// Query the compute capability of CUDA device 0.
+///
+/// Returns `(major, minor)` e.g. `(7, 5)` for Turing, `(8, 6)` for Ampere.
+pub fn compute_capability() -> Result<(i32, i32)> {
+    let library_name = if cfg!(target_os = "windows") {
+        "nvcuda.dll"
+    } else {
+        "libcuda.so"
+    };
+
+    unsafe {
+        let library = Library::new(library_name)
+            .with_context(|| format!("failed to load `{library_name}`"))?;
+        let cu_init = *library
+            .get::<CuInit>(b"cuInit\0")
+            .context("cuInit not found")?;
+        let cu_device_get = *library
+            .get::<CuDeviceGet>(b"cuDeviceGet\0")
+            .context("cuDeviceGet not found")?;
+        let cu_device_get_attribute = *library
+            .get::<CuDeviceGetAttribute>(b"cuDeviceGetAttribute\0")
+            .context("cuDeviceGetAttribute not found")?;
+
+        let status = cu_init(0);
+        if status != CUDA_SUCCESS {
+            bail!("cuInit failed with error code {status}");
+        }
+
+        let mut dev = 0;
+        let status = cu_device_get(&mut dev, 0);
+        if status != CUDA_SUCCESS {
+            bail!("cuDeviceGet failed with error code {status}");
+        }
+
+        let mut major = 0;
+        let status = cu_device_get_attribute(
+            &mut major,
+            CU_DEVICE_ATTRIBUTE_COMPUTE_CAPABILITY_MAJOR,
+            dev,
+        );
+        if status != CUDA_SUCCESS {
+            bail!("cuDeviceGetAttribute(MAJOR) failed with error code {status}");
+        }
+
+        let mut minor = 0;
+        let status = cu_device_get_attribute(
+            &mut minor,
+            CU_DEVICE_ATTRIBUTE_COMPUTE_CAPABILITY_MINOR,
+            dev,
+        );
+        if status != CUDA_SUCCESS {
+            bail!("cuDeviceGetAttribute(MINOR) failed with error code {status}");
+        }
+
+        Ok((major, minor))
+    }
+}
+
 /// Check whether the installed NVIDIA driver supports CUDA 13.1+.
 ///
 /// Returns `true` when GPU compute should be used, `false` when the caller
@@ -128,10 +191,11 @@ pub fn check_cuda_driver_support() -> bool {
     if !driver_library_available() {
         return false;
     }
+
+    // Check driver version
     match driver_version() {
         Ok(version) if version.supports_cuda_13_1() => {
             tracing::info!("NVIDIA driver reports CUDA {version} support");
-            true
         }
         Ok(version) => {
             tracing::warn!(
@@ -139,14 +203,35 @@ pub fn check_cuda_driver_support() -> bool {
                  falling back to CPU. Update your NVIDIA driver to a version \
                  that supports CUDA 13.1 or newer to enable GPU acceleration."
             );
-            false
+            return false;
         }
         Err(err) => {
             tracing::warn!(
                 "Could not verify NVIDIA driver support for CUDA 13.1: {err:#}; \
-                 falling back to CPU. Update your NVIDIA driver to a version \
-                 that supports CUDA 13.1 or newer to enable GPU acceleration."
+                 falling back to CPU."
             );
+            return false;
+        }
+    }
+
+    // Check GPU compute capability (need >= 7.5 / Turing)
+    match compute_capability() {
+        Ok((major, minor)) if (major, minor) >= MIN_COMPUTE_CAPABILITY => {
+            tracing::info!("GPU compute capability: {major}.{minor}");
+            true
+        }
+        Ok((major, minor)) => {
+            tracing::warn!(
+                "GPU compute capability {major}.{minor} is below the minimum \
+                 required {}.{}; falling back to CPU. A Turing (RTX 20xx) or \
+                 newer GPU is required for GPU acceleration.",
+                MIN_COMPUTE_CAPABILITY.0,
+                MIN_COMPUTE_CAPABILITY.1,
+            );
+            false
+        }
+        Err(err) => {
+            tracing::warn!("Could not query GPU compute capability: {err:#}; falling back to CPU.");
             false
         }
     }

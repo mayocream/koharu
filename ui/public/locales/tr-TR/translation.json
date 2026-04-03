@@ -315,6 +315,14 @@
     "dataPathDescription": "Koharu modelleri, çalışma zamanı paketlerini, sayfa bildirimlerini ve görsel verilerini bu dizinde saklar. Yolu değiştirmek uygulamanın yeniden başlatılmasını gerektirir.",
     "dataPathApply": "Uygula ve Yeniden Başlat",
     "dataPathApplying": "Uygulanıyor...",
-    "dataPathDesktopOnly": "Depolama ayarları yalnızca masaüstü uygulamasında kullanılabilir."
+    "dataPathDesktopOnly": "Depolama ayarları yalnızca masaüstü uygulamasında kullanılabilir.",
+    "engines": "Motorlar",
+    "enginesDescription": "Her işlem hattı aşaması için kullanılacak ML motorunu seçin.",
+    "detector": "Algılayıcı",
+    "segmenter": "Bölümleyici",
+    "ocr": "OCR",
+    "translator": "Çevirici",
+    "inpainter": "İnpaint Motoru",
+    "renderer": "Render Motoru"
   }
 }

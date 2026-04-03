@@ -15,6 +15,7 @@ import {
   KeyIcon,
   FolderIcon,
   InfoIcon,
+  CpuIcon,
 } from 'lucide-react'
 import {
   Dialog,
@@ -48,7 +49,12 @@ import {
   AlertDialogTitle,
 } from '@/components/ui/alert-dialog'
 import { isTauri } from '@/lib/backend'
-import { getConfig, getMeta, updateConfig } from '@/lib/api/system/system'
+import {
+  getConfig,
+  getEngineCatalog,
+  getMeta,
+  updateConfig,
+} from '@/lib/api/system/system'
 import { getLlmCatalog, getGetLlmCatalogQueryKey } from '@/lib/api/llm/llm'
 import { usePreferencesStore } from '@/lib/stores/preferencesStore'
 import { supportedLanguages } from '@/lib/i18n'
@@ -56,6 +62,7 @@ import type {
   UpdateConfigBody,
   ProviderConfig,
   LlmProviderCatalog,
+  GetEngineCatalog200,
 } from '@/lib/api/schemas'
 
 const GITHUB_REPO = 'mayocream/koharu'
@@ -64,6 +71,7 @@ type VersionStatus = 'loading' | 'latest' | 'outdated' | 'error'
 
 const TABS = [
   { id: 'appearance', icon: PaletteIcon, labelKey: 'settings.appearance' },
+  { id: 'engines', icon: CpuIcon, labelKey: 'settings.engines' },
   { id: 'providers', icon: KeyIcon, labelKey: 'settings.apiKeys' },
   { id: 'storage', icon: FolderIcon, labelKey: 'settings.storage' },
   { id: 'about', icon: InfoIcon, labelKey: 'settings.about' },
@@ -97,6 +105,8 @@ export function SettingsDialog({
   const [dataPathDraft, setDataPathDraft] = useState('')
   const [dataPathError, setDataPathError] = useState<string | null>(null)
   const [isSavingDataPath, setIsSavingDataPath] = useState(false)
+  const [engineCatalog, setEngineCatalog] =
+    useState<GetEngineCatalog200 | null>(null)
   const [appVersion, setAppVersion] = useState<string>()
   const [latestVersion, setLatestVersion] = useState<string>()
   const [versionStatus, setVersionStatus] = useState<VersionStatus>('loading')
@@ -105,12 +115,14 @@ export function SettingsDialog({
     if (!open) return
     void (async () => {
       try {
-        const [config, catalog] = await Promise.all([
+        const [config, catalog, engines] = await Promise.all([
           getConfig() as unknown as Promise<UpdateConfigBody>,
           getLlmCatalog(),
+          getEngineCatalog(),
         ])
         setAppConfig(config)
         setProviderCatalogs(catalog.providers)
+        setEngineCatalog(engines)
       } catch {}
     })()
   }, [open])
@@ -224,6 +236,17 @@ export function SettingsDialog({
           <ScrollArea className='min-h-0 flex-1'>
             <div className='p-6'>
               {tab === 'appearance' && <AppearancePane />}
+              {tab === 'engines' && engineCatalog && appConfig && (
+                <EnginesPane
+                  catalog={engineCatalog}
+                  pipeline={appConfig.pipeline ?? {}}
+                  onChange={(pipeline) => {
+                    const next = { ...appConfig, pipeline }
+                    setAppConfig(next)
+                    void persistConfig(next)
+                  }}
+                />
+              )}
               {tab === 'providers' && (
                 <ProvidersPane
                   catalogs={providerCatalogs}
@@ -364,6 +387,77 @@ function AppearancePane() {
           placeholder='e.g. Noto Sans CJK'
         />
       </Section>
+    </div>
+  )
+}
+
+// ── Engines ──────────────────────────────────────────────────────
+
+function EnginesPane({
+  catalog,
+  pipeline,
+  onChange,
+}: {
+  catalog: GetEngineCatalog200
+  pipeline: import('@/lib/api/schemas').PipelineConfig
+  onChange: (pipeline: import('@/lib/api/schemas').PipelineConfig) => void
+}) {
+  const { t } = useTranslation()
+
+  const sections = [
+    {
+      label: t('settings.detector'),
+      key: 'detector' as const,
+      engines: catalog.detectors,
+    },
+    {
+      label: t('settings.segmenter'),
+      key: 'segmenter' as const,
+      engines: catalog.segmenters,
+    },
+    { label: t('settings.ocr'), key: 'ocr' as const, engines: catalog.ocr },
+    {
+      label: t('settings.translator'),
+      key: 'translator' as const,
+      engines: catalog.translators,
+    },
+    {
+      label: t('settings.inpainter'),
+      key: 'inpainter' as const,
+      engines: catalog.inpainters,
+    },
+    {
+      label: t('settings.renderer'),
+      key: 'renderer' as const,
+      engines: catalog.renderers,
+    },
+  ]
+
+  return (
+    <div className='space-y-4'>
+      <p className='text-muted-foreground text-xs'>
+        {t('settings.enginesDescription')}
+      </p>
+      {sections.map(({ label, key, engines }) => (
+        <div key={key} className='space-y-1.5'>
+          <Label className='text-xs'>{label}</Label>
+          <Select
+            value={pipeline[key] ?? engines[0]?.id ?? ''}
+            onValueChange={(v) => onChange({ ...pipeline, [key]: v })}
+          >
+            <SelectTrigger className='w-full'>
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+              {engines.map((e) => (
+                <SelectItem key={e.id} value={e.id}>
+                  {e.name}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+        </div>
+      ))}
     </div>
   )
 }
@@ -607,7 +701,9 @@ function AboutPane({
         <div className='space-y-3 text-sm'>
           <InfoRow label={t('settings.aboutVersion')}>
             <div className='flex flex-col items-end gap-0.5'>
-              <span className='font-mono text-xs font-medium'>{version || '...'}</span>
+              <span className='font-mono text-xs font-medium'>
+                {version || '...'}
+              </span>
               {status === 'loading' && (
                 <LoaderIcon className='text-muted-foreground size-3.5 animate-spin' />
               )}

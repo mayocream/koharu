@@ -17,7 +17,12 @@ import {
 } from '@/lib/api/processing/processing'
 import { startPipeline, cancelJob, getJob } from '@/lib/api/jobs/jobs'
 import { exportDocument, batchExport } from '@/lib/api/exports/exports'
-import { loadLlm, unloadLlm, getLlm, getGetLlmQueryKey } from '@/lib/api/llm/llm'
+import {
+  loadLlm,
+  unloadLlm,
+  getLlm,
+  getGetLlmQueryKey,
+} from '@/lib/api/llm/llm'
 import { normalizeErrorMessage } from '@/lib/errors'
 import type {
   RenderRequest,
@@ -187,7 +192,11 @@ const pipelineActor = fromPromise<string, { request: PipelineJobRequest }>(
 
 const translateBlockActor = fromPromise<
   void,
-  { documentId: string; options: TranslateRequest; renderOptions: RenderRequest }
+  {
+    documentId: string
+    options: TranslateRequest
+    renderOptions: RenderRequest
+  }
 >(async ({ input }) => {
   await translateDocument(input.documentId, input.options)
   await renderDocument(input.documentId, input.renderOptions)
@@ -386,9 +395,9 @@ export const processingMachine = setup({
     // --- surface error to UI toast ---
     surfaceError: ({ context }) => {
       if (context.error) {
-        useEditorUiStore.getState().showError(
-          normalizeErrorMessage(context.error),
-        )
+        useEditorUiStore
+          .getState()
+          .showError(normalizeErrorMessage(context.error))
       }
     },
 
@@ -760,9 +769,13 @@ export const processingMachine = setup({
             },
             DONE: {
               target: '#processing.idle',
-              actions: [({ context }) => {
-                context.queryClient.invalidateQueries({ queryKey: getGetLlmQueryKey() })
-              }],
+              actions: [
+                ({ context }) => {
+                  context.queryClient.invalidateQueries({
+                    queryKey: getGetLlmQueryKey(),
+                  })
+                },
+              ],
             },
             ERROR: {
               target: '#processing.idle',
@@ -780,9 +793,13 @@ export const processingMachine = setup({
         input: () => ({}),
         onDone: {
           target: 'idle',
-          actions: [({ context }) => {
-            context.queryClient.invalidateQueries({ queryKey: getGetLlmQueryKey() })
-          }],
+          actions: [
+            ({ context }) => {
+              context.queryClient.invalidateQueries({
+                queryKey: getGetLlmQueryKey(),
+              })
+            },
+          ],
         },
         onError: {
           target: 'idle',

@@ -4,11 +4,9 @@ use anyhow::{Context, Result};
 use clap::Parser;
 use tokio::{net::TcpListener, sync::RwLock};
 
-use koharu_app::{
-    AppResources, config as app_config, llm, ml, renderer::Renderer, storage::Storage,
-};
+use koharu_app::{AppResources, config as app_config, engine, llm, storage::Storage};
 use koharu_llm::safe::llama_backend::LlamaBackend;
-use koharu_ml::{cuda_is_available, device};
+use koharu_ml::{Device, device};
 use koharu_rpc::{SharedState, server};
 use koharu_runtime::{ComputePolicy, RuntimeManager};
 
@@ -34,36 +32,31 @@ async fn build_resources(
     data_root: camino::Utf8PathBuf,
     cpu: bool,
 ) -> Result<AppResources> {
-    let cpu = cpu || (cuda_is_available() && !koharu_runtime::check_cuda_driver_support());
+    let cpu = matches!(device(cpu)?, Device::Cpu);
 
     runtime
         .prepare()
         .await
         .context("Failed to prepare runtime")?;
 
-    if !cpu && cuda_is_available() {
-        #[cfg(target_os = "windows")]
-        crate::windows::register_khr().ok();
-        tracing::info!("CUDA available, runtime initialized");
-    }
+    #[cfg(target_os = "windows")]
+    crate::windows::register_khr().ok();
 
+    // FIXME: llama.cpp might not need when a external LLM provider is used, but currently it's required to initialize the safe backend
     koharu_llm::sys::initialize(&runtime).context("failed to init llama.cpp")?;
     let backend = Arc::new(LlamaBackend::init().context("failed to init llama backend")?);
-    let ml = Arc::new(
-        ml::Model::new(&runtime, cpu, Arc::clone(&backend))
-            .await
-            .context("Failed to init ML")?,
-    );
+
     let llm = Arc::new(llm::Model::new(runtime.clone(), cpu, backend));
-    let renderer = Arc::new(Renderer::new().context("Failed to init renderer")?);
     let storage = Arc::new(Storage::open(data_root.as_std_path())?);
+    let registry = Arc::new(engine::Registry::new());
+    let config = app_config::load().unwrap_or_default();
 
     Ok(AppResources {
         runtime,
         storage,
-        ml,
+        registry,
+        config: Arc::new(RwLock::new(config)),
         llm,
-        renderer,
         device: device(cpu)?,
         pipeline: Arc::new(RwLock::new(None)),
         version: crate::version::current(),
@@ -128,7 +121,8 @@ pub async fn run() -> Result<()> {
     // ── Server ───────────────────────────────────────────────────────
     let runtime = RuntimeManager::new(data_root.as_std_path(), compute)?;
     let default_port = if cfg!(debug_assertions) { 9999 } else { 0 };
-    let listener = TcpListener::bind(format!("127.0.0.1:{}", cli.port.unwrap_or(default_port))).await?;
+    let listener =
+        TcpListener::bind(format!("127.0.0.1:{}", cli.port.unwrap_or(default_port))).await?;
     let port = listener.local_addr()?.port();
     let resources: Arc<tokio::sync::OnceCell<AppResources>> = Default::default();
     let shared = SharedState::new(Arc::clone(&resources), runtime.clone());

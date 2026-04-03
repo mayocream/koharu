@@ -315,6 +315,14 @@
     "dataPathDescription": "Koharu はモデル、ランタイムパッケージ、ページマニフェスト、画像 Blob をこのディレクトリに保存します。パスを変更するとアプリの再起動が必要です。",
     "dataPathApply": "適用して再起動",
     "dataPathApplying": "適用中...",
-    "dataPathDesktopOnly": "ストレージ設定はデスクトップアプリでのみ利用可能です。"
+    "dataPathDesktopOnly": "ストレージ設定はデスクトップアプリでのみ利用可能です。",
+    "engines": "エンジン",
+    "enginesDescription": "各パイプライン段階で使用するMLエンジンを選択します。",
+    "detector": "検出器",
+    "segmenter": "セグメンター",
+    "ocr": "OCR",
+    "translator": "翻訳器",
+    "inpainter": "インペインター",
+    "renderer": "レンダラー"
   }
 }

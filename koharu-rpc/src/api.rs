@@ -8,7 +8,7 @@ use axum::{
     },
     response::{IntoResponse, Response},
 };
-use koharu_app::{AppResources, config as app_config, edit, io, llm, ml, pipeline};
+use koharu_app::{AppResources, config as app_config, edit, engine, io, llm, pipeline};
 use koharu_core::{
     CreateTextBlock, Document, DocumentDetail, DocumentSummary, DownloadState, ExportLayer,
     ExportResult, FontFaceInfo, JobState, JobStatus, LlmCatalog, LlmLoadRequest, LlmState,
@@ -64,6 +64,7 @@ pub fn api() -> (axum::Router<ApiState>, utoipa::openapi::OpenApi) {
         .routes(routes!(get_meta))
         .routes(routes!(list_fonts))
         .routes(routes!(get_config, update_config))
+        .routes(routes!(get_engine_catalog))
         .split_for_parts()
 }
 
@@ -188,12 +189,30 @@ async fn get_config() -> ApiResult<Json<app_config::AppConfig>> {
     ),
 )]
 async fn update_config(
+    State(state): State<ApiState>,
     Json(config): Json<app_config::AppConfig>,
 ) -> ApiResult<Json<app_config::AppConfig>> {
     app_config::sync_secrets(&config).map_err(ApiError::from)?;
     app_config::save(&config).map_err(ApiError::internal)?;
     let reloaded = app_config::load().map_err(ApiError::internal)?;
+    if let Ok(resources) = state.resources() {
+        *resources.config.write().await = reloaded.clone();
+        resources.registry.clear().await;
+    }
     Ok(Json(reloaded))
+}
+
+#[utoipa::path(
+    get,
+    path = "/engines",
+    operation_id = "getEngineCatalog",
+    tag = "system",
+    responses(
+        (status = 200, body = inline(koharu_core::EngineCatalog)),
+    ),
+)]
+async fn get_engine_catalog() -> Json<koharu_core::EngineCatalog> {
+    Json(engine::catalog())
 }
 
 #[utoipa::path(
@@ -227,9 +246,10 @@ async fn get_meta(State(state): State<ApiState>) -> ApiResult<Json<MetaInfo>> {
 )]
 async fn list_fonts(State(state): State<ApiState>) -> ApiResult<Json<Vec<FontFaceInfo>>> {
     let resources = state.resources()?;
-    let fonts = ml::list_font_families(resources)
+    let renderer = engine::get_renderer(&resources)
         .await
         .map_err(ApiError::from)?;
+    let fonts = renderer.available_fonts().map_err(ApiError::from)?;
     Ok(Json(fonts))
 }
 
@@ -443,7 +463,16 @@ async fn detect_document(
     Path(document_id): Path<String>,
 ) -> ApiResult<StatusCode> {
     let resources = state.resources()?;
-    ml::detect(resources, &document_id).await?;
+    let pipeline = resources.config.read().await.pipeline.clone();
+    let mut detect_engines = vec![pipeline.detector.clone()];
+    if let Ok(det) = engine::Registry::find(&pipeline.detector)
+        && !det.produces.contains(&engine::Artifact::Segment)
+    {
+        detect_engines.push(pipeline.segmenter.clone());
+    }
+    detect_engines.push("yuzumarker-font-detection".to_string());
+    let refs: Vec<&str> = detect_engines.iter().map(|s| s.as_str()).collect();
+    engine::run_many(&refs, &resources, &document_id).await?;
     Ok(StatusCode::NO_CONTENT)
 }
 
@@ -464,7 +493,8 @@ async fn recognize_document(
     Path(document_id): Path<String>,
 ) -> ApiResult<StatusCode> {
     let resources = state.resources()?;
-    ml::ocr(resources, &document_id).await?;
+    let ocr = resources.config.read().await.pipeline.ocr.clone();
+    engine::run_one(&ocr, &resources, &document_id).await?;
     Ok(StatusCode::NO_CONTENT)
 }
 
@@ -485,7 +515,8 @@ async fn inpaint_document(
     Path(document_id): Path<String>,
 ) -> ApiResult<StatusCode> {
     let resources = state.resources()?;
-    ml::inpaint(resources, &document_id).await?;
+    let inpainter = resources.config.read().await.pipeline.inpainter.clone();
+    engine::run_one(&inpainter, &resources, &document_id).await?;
     Ok(StatusCode::NO_CONTENT)
 }
 
@@ -515,8 +546,8 @@ async fn render_document(
         .map(|id| find_text_block_index(&document, id))
         .transpose()?;
 
-    ml::render(
-        resources,
+    engine::render_document(
+        &resources,
         &document_id,
         text_block_index,
         request.shader_effect,
@@ -767,7 +798,7 @@ async fn put_text_blocks(
 
     // Auto-render if any block content/geometry changed
     if any_changed {
-        let _ = ml::render(resources, &document_id, None, None, None, None).await;
+        let _ = engine::render_document(&resources, &document_id, None, None, None, None).await;
     }
 
     Ok(StatusCode::NO_CONTENT)

@@ -13,15 +13,14 @@ use tracing::instrument;
 
 use model::{Mit48pxModel, RawPrediction};
 
-use crate::{comic_text_detector::extract_text_block_regions, define_models, device, loading};
+use crate::{comic_text_detector::extract_text_block_regions, device, loading};
 
 const OCR_CHUNK_SIZE: usize = 16;
+const HF_REPO: &str = "mayocream/mit48px-ocr";
 
-define_models! {
-    Config => ("mayocream/mit48px-ocr", "config.json"),
-    Dictionary => ("mayocream/mit48px-ocr", "alphabet-all-v7.txt"),
-    Model => ("mayocream/mit48px-ocr", "model.safetensors"),
-}
+koharu_runtime::declare_hf_model_package!(id: "model:mit48px-ocr:config", repo: HF_REPO, file: "config.json", bootstrap: true, order: 210);
+koharu_runtime::declare_hf_model_package!(id: "model:mit48px-ocr:dictionary", repo: HF_REPO, file: "alphabet-all-v7.txt", bootstrap: true, order: 211);
+koharu_runtime::declare_hf_model_package!(id: "model:mit48px-ocr:weights", repo: HF_REPO, file: "model.safetensors", bootstrap: true, order: 212);
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Mit48pxConfig {
@@ -81,10 +80,11 @@ pub struct Mit48pxOcr {
 
 impl Mit48pxOcr {
     pub async fn load(runtime: &RuntimeManager, cpu: bool) -> Result<Self> {
+        let hf = runtime.downloads();
         let files = ModelFiles {
-            config: loading::resolve_manifest_path(Manifest::Config.get(runtime)).await?,
-            dictionary: loading::resolve_manifest_path(Manifest::Dictionary.get(runtime)).await?,
-            weights: loading::resolve_manifest_path(Manifest::Model.get(runtime)).await?,
+            config: hf.huggingface_model(HF_REPO, "config.json").await?,
+            dictionary: hf.huggingface_model(HF_REPO, "alphabet-all-v7.txt").await?,
+            weights: hf.huggingface_model(HF_REPO, "model.safetensors").await?,
         };
         Self::load_from_files(files, cpu)
     }

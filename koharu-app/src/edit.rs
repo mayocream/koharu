@@ -469,10 +469,18 @@ pub async fn inpaint_partial(
         SerializableDynamicImage(source_image.crop_imm(x0, y0, crop_width, crop_height));
     let mask_crop = SerializableDynamicImage(mask_image.crop_imm(x0, y0, crop_width, crop_height));
 
-    let inpainted_crop = state
-        .ml
-        .inpaint_raw(&image_crop, &mask_crop, Some(&localized_blocks))
+    let lama = state
+        .registry
+        .model("lama", || async {
+            koharu_ml::lama::Lama::load(
+                &state.runtime,
+                matches!(state.device, koharu_ml::Device::Cpu),
+            )
+            .await
+        })
         .await?;
+    let result = lama.inference_with_blocks(&image_crop, &mask_crop, Some(&localized_blocks))?;
+    let inpainted_crop = SerializableDynamicImage(result);
 
     let inpainted_base = doc
         .inpainted
