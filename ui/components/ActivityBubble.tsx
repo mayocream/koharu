@@ -238,7 +238,6 @@ export function ActivityBubble() {
     state: machineState,
     send,
     canCancel,
-    error: machineError,
   } = useProcessing()
   const uiError = useEditorUiStore((state) => state.error)
   const clearUiError = useEditorUiStore((state) => state.clearError)
@@ -261,13 +260,7 @@ export function ActivityBubble() {
           : undefined,
     }))
 
-  // Show machine errors as well as UI errors
-  const errorMessage = machineError ?? uiError?.message
-  const clearError = machineError
-    ? () => {
-        /* machine clears on next operation */
-      }
-    : clearUiError
+  const errorMessage = uiError?.message
 
   if (!errorMessage && !isProcessing && activeDownloads.length === 0)
     return null
@@ -275,7 +268,7 @@ export function ActivityBubble() {
   return (
     <div className='pointer-events-auto fixed right-6 bottom-6 z-100 flex w-80 max-w-[calc(100%-1.5rem)] flex-col gap-3'>
       {errorMessage && (
-        <ErrorCard message={errorMessage} onDismiss={clearError} t={t} />
+        <ErrorCard message={errorMessage} onDismiss={clearUiError} t={t} />
       )}
       {isProcessing && (
         <OperationCard

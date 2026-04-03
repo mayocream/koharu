@@ -1,21 +1,14 @@
 'use client'
 
-import { useState } from 'react'
 import { useTranslation } from 'react-i18next'
-import { useQueryClient } from '@tanstack/react-query'
 import { motion } from 'motion/react'
 import { TextBlock } from '@/types'
 import { Languages, LoaderCircleIcon, Trash2Icon } from 'lucide-react'
 import { useTextBlocks } from '@/hooks/useTextBlocks'
 import { useGetLlm } from '@/lib/api/llm/llm'
-import { translateDocument } from '@/lib/api/processing/processing'
-import { renderDocument } from '@/lib/api/processing/processing'
-import {
-  getGetDocumentQueryKey,
-  getListDocumentsQueryKey,
-} from '@/lib/api/documents/documents'
 import { useEditorUiStore } from '@/lib/stores/editorUiStore'
 import { usePreferencesStore } from '@/lib/stores/preferencesStore'
+import { useProcessing } from '@/lib/machines'
 import {
   Accordion,
   AccordionContent,
@@ -32,7 +25,6 @@ import { DraftTextarea } from '@/components/ui/draft-textarea'
 import { ScrollArea } from '@/components/ui/scroll-area'
 
 export function TextBlocksPanel() {
-  const queryClient = useQueryClient()
   const {
     document,
     textBlocks,
@@ -44,8 +36,8 @@ export function TextBlocksPanel() {
   const { t } = useTranslation()
   const { data: llm } = useGetLlm()
   const llmReady = llm?.status === 'ready'
-  const [generatingIndex, setGeneratingIndex] = useState<number | null>(null)
-  const generating = generatingIndex !== null
+  const { send, isProcessing, state } = useProcessing()
+  const isTranslatingBlock = state.matches('translatingBlock')
 
   if (!document) {
     return (
@@ -58,46 +50,30 @@ export function TextBlocksPanel() {
   const accordionValue =
     selectedBlockIndex !== undefined ? selectedBlockIndex.toString() : ''
 
-  const invalidateDocument = async (documentId: string) => {
-    await queryClient.invalidateQueries({
-      queryKey: getGetDocumentQueryKey(documentId),
-    })
-    await queryClient.invalidateQueries({
-      queryKey: getListDocumentsQueryKey(),
-    })
-  }
-
-  const handleGenerate = async (blockIndex: number) => {
+  const handleGenerate = (blockIndex: number) => {
     const documentId = useEditorUiStore.getState().currentDocumentId
     if (!documentId) return
     const selectedLanguage = useEditorUiStore.getState().selectedLanguage
     const textBlockId = document.textBlocks[blockIndex]?.id
-    setGeneratingIndex(blockIndex)
-    try {
-      await translateDocument(documentId, {
+    const { renderEffect, renderStroke } = useEditorUiStore.getState()
+    const { fontFamily } = usePreferencesStore.getState()
+    send({
+      type: 'START_TRANSLATE_BLOCK',
+      documentId,
+      options: {
         textBlockId,
         language: selectedLanguage,
-      })
-      await invalidateDocument(documentId)
-      useEditorUiStore.getState().setShowTextBlocksOverlay(true)
-      // Re-render the block's sprite
-      const { renderEffect, renderStroke } = useEditorUiStore.getState()
-      const { fontFamily } = usePreferencesStore.getState()
-      await renderDocument(documentId, {
+      },
+      renderOptions: {
         shaderEffect: renderEffect,
         shaderStroke: renderStroke,
         fontFamily,
-      })
-      await invalidateDocument(documentId)
-    } catch (error) {
-      console.error(error)
-    } finally {
-      setGeneratingIndex(null)
-    }
+      },
+    })
   }
 
   const handleDelete = async (blockIndex: number) => {
-    if (generating) return
+    if (isProcessing) return
     await removeBlock(blockIndex)
   }
 
@@ -144,9 +120,9 @@ export function TextBlocksPanel() {
                   selected={index === selectedBlockIndex}
                   onChange={(updates) => void replaceBlock(index, updates)}
                   onDelete={() => void handleDelete(index)}
-                  onGenerate={() => void handleGenerate(index)}
-                  generationInFlight={generating}
-                  generating={generatingIndex === index}
+                  onGenerate={() => handleGenerate(index)}
+                  processing={isProcessing}
+                  translating={isTranslatingBlock}
                   llmReady={llmReady}
                 />
               ))}
@@ -164,9 +140,9 @@ type BlockCardProps = {
   selected: boolean
   onChange: (updates: Partial<TextBlock>) => void
   onDelete: () => void | Promise<void>
-  onGenerate: () => void | Promise<void>
-  generationInFlight: boolean
-  generating: boolean
+  onGenerate: () => void
+  processing: boolean
+  translating: boolean
   llmReady: boolean
 }
 
@@ -177,8 +153,8 @@ function BlockCard({
   onChange,
   onDelete,
   onGenerate,
-  generationInFlight,
-  generating,
+  processing,
+  translating,
   llmReady,
 }: BlockCardProps) {
   const { t } = useTranslation()
@@ -261,7 +237,7 @@ function BlockCard({
                         aria-label={t('workspace.deleteBlock')}
                         variant='ghost'
                         size='icon-xs'
-                        disabled={generationInFlight}
+                        disabled={processing}
                         onClick={onDelete}
                         className='size-5 text-rose-600 hover:text-rose-600'
                       >
@@ -278,11 +254,11 @@ function BlockCard({
                         data-testid={`textblock-generate-${index}`}
                         variant='ghost'
                         size='icon-xs'
-                        disabled={!llmReady || generationInFlight}
+                        disabled={!llmReady || processing}
                         onClick={onGenerate}
                         className='size-5'
                       >
-                        {generating ? (
+                        {translating ? (
                           <LoaderCircleIcon className='size-3 animate-spin' />
                         ) : (
                           <Languages className='size-3' />

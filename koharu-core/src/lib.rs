@@ -47,7 +47,7 @@ fn new_text_block_id() -> String {
     Uuid::new_v4().to_string()
 }
 
-#[derive(Default, Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct TextBlock {
     #[serde(default = "new_text_block_id")]
@@ -79,6 +79,36 @@ pub struct TextBlock {
     pub layout_seed_width: Option<f32>,
     #[serde(skip)]
     pub layout_seed_height: Option<f32>,
+}
+
+impl Default for TextBlock {
+    fn default() -> Self {
+        Self {
+            id: new_text_block_id(),
+            x: 0.0,
+            y: 0.0,
+            width: 0.0,
+            height: 0.0,
+            confidence: 0.0,
+            line_polygons: None,
+            source_direction: None,
+            rendered_direction: None,
+            source_language: None,
+            rotation_deg: None,
+            detected_font_size_px: None,
+            detector: None,
+            text: None,
+            translation: None,
+            style: None,
+            font_prediction: None,
+            rendered: None,
+            lock_layout_box: false,
+            layout_seed_x: None,
+            layout_seed_y: None,
+            layout_seed_width: None,
+            layout_seed_height: None,
+        }
+    }
 }
 
 impl TextBlock {

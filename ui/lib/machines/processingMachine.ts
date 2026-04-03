@@ -17,7 +17,8 @@ import {
 } from '@/lib/api/processing/processing'
 import { startPipeline, cancelJob, getJob } from '@/lib/api/jobs/jobs'
 import { exportDocument, batchExport } from '@/lib/api/exports/exports'
-import { loadLlm, getLlm, getGetLlmQueryKey } from '@/lib/api/llm/llm'
+import { loadLlm, unloadLlm, getLlm, getGetLlmQueryKey } from '@/lib/api/llm/llm'
+import { normalizeErrorMessage } from '@/lib/errors'
 import type {
   RenderRequest,
   TranslateRequest,
@@ -82,8 +83,15 @@ export type ProcessingEvent =
   | { type: 'START_INPAINT'; documentId: string }
   | { type: 'START_RENDER'; documentId: string; options: RenderRequest }
   | { type: 'START_TRANSLATE'; documentId: string; options: TranslateRequest }
+  | {
+      type: 'START_TRANSLATE_BLOCK'
+      documentId: string
+      options: TranslateRequest
+      renderOptions: RenderRequest
+    }
   | { type: 'START_PIPELINE'; request: PipelineJobRequest }
   | { type: 'START_LLM_LOAD'; request: LlmLoadRequest }
+  | { type: 'START_LLM_UNLOAD' }
   | {
       type: 'START_EXPORT'
       documentId: string
@@ -177,11 +185,23 @@ const pipelineActor = fromPromise<string, { request: PipelineJobRequest }>(
   },
 )
 
+const translateBlockActor = fromPromise<
+  void,
+  { documentId: string; options: TranslateRequest; renderOptions: RenderRequest }
+>(async ({ input }) => {
+  await translateDocument(input.documentId, input.options)
+  await renderDocument(input.documentId, input.renderOptions)
+})
+
 const llmLoadActor = fromPromise<void, { request: LlmLoadRequest }>(
   async ({ input }) => {
     await loadLlm(input.request)
   },
 )
+
+const llmUnloadActor = fromPromise<void, Record<string, never>>(async () => {
+  await unloadLlm()
+})
 
 const exportActor = fromPromise<
   void,
@@ -289,8 +309,10 @@ export const processingMachine = setup({
     inpaintActor,
     renderActor,
     translateActor,
+    translateBlockActor,
     pipelineActor,
     llmLoadActor,
+    llmUnloadActor,
     exportActor,
     batchExportActor,
     jobPollingActor,
@@ -360,6 +382,15 @@ export const processingMachine = setup({
         return msg === '__CANCELLED__' ? null : (msg ?? 'Import failed')
       },
     }),
+
+    // --- surface error to UI toast ---
+    surfaceError: ({ context }) => {
+      if (context.error) {
+        useEditorUiStore.getState().showError(
+          normalizeErrorMessage(context.error),
+        )
+      }
+    },
 
     // --- job id ---
     setJobIdFromOutput: assign({
@@ -446,12 +477,20 @@ export const processingMachine = setup({
           target: 'translating',
           actions: ['resetContext', 'setDocumentIdFromEvent'],
         },
+        START_TRANSLATE_BLOCK: {
+          target: 'translatingBlock',
+          actions: ['resetContext', 'setDocumentIdFromEvent'],
+        },
         START_PIPELINE: {
           target: 'pipeline',
           actions: ['resetContext', 'setPipelineDocumentId'],
         },
         START_LLM_LOAD: {
           target: 'loadingLlm',
+          actions: ['resetContext'],
+        },
+        START_LLM_UNLOAD: {
+          target: 'unloadingLlm',
           actions: ['resetContext'],
         },
         START_EXPORT: {
@@ -490,7 +529,7 @@ export const processingMachine = setup({
         },
         onError: {
           target: 'idle',
-          actions: ['setImportError'],
+          actions: ['setImportError', 'surfaceError'],
         },
       },
     },
@@ -508,7 +547,7 @@ export const processingMachine = setup({
         },
         onError: {
           target: 'idle',
-          actions: ['setErrorFromInvoke'],
+          actions: ['setErrorFromInvoke', 'surfaceError'],
         },
       },
     },
@@ -526,7 +565,7 @@ export const processingMachine = setup({
         },
         onError: {
           target: 'idle',
-          actions: ['setErrorFromInvoke'],
+          actions: ['setErrorFromInvoke', 'surfaceError'],
         },
       },
     },
@@ -544,7 +583,7 @@ export const processingMachine = setup({
         },
         onError: {
           target: 'idle',
-          actions: ['setErrorFromInvoke'],
+          actions: ['setErrorFromInvoke', 'surfaceError'],
         },
       },
     },
@@ -565,7 +604,7 @@ export const processingMachine = setup({
         },
         onError: {
           target: 'idle',
-          actions: ['setErrorFromInvoke'],
+          actions: ['setErrorFromInvoke', 'surfaceError'],
         },
       },
     },
@@ -585,11 +624,45 @@ export const processingMachine = setup({
         },
         onDone: {
           target: 'idle',
-          actions: ['invalidateDocument'],
+          actions: [
+            'invalidateDocument',
+            () => useEditorUiStore.getState().setShowTextBlocksOverlay(true),
+          ],
         },
         onError: {
           target: 'idle',
-          actions: ['setErrorFromInvoke'],
+          actions: ['setErrorFromInvoke', 'surfaceError'],
+        },
+      },
+    },
+
+    // -----------------------------------------------------------------------
+    translatingBlock: {
+      entry: 'setProgressBarNormal',
+      exit: 'clearProgressBar',
+      invoke: {
+        src: 'translateBlockActor',
+        input: ({ context, event }) => {
+          const e = event as Extract<
+            ProcessingEvent,
+            { type: 'START_TRANSLATE_BLOCK' }
+          >
+          return {
+            documentId: context.documentId!,
+            options: e.options,
+            renderOptions: e.renderOptions,
+          }
+        },
+        onDone: {
+          target: 'idle',
+          actions: [
+            'invalidateDocument',
+            () => useEditorUiStore.getState().setShowTextBlocksOverlay(true),
+          ],
+        },
+        onError: {
+          target: 'idle',
+          actions: ['setErrorFromInvoke', 'surfaceError'],
         },
       },
     },
@@ -625,7 +698,7 @@ export const processingMachine = setup({
             },
             onError: {
               target: '#processing.idle',
-              actions: ['setErrorFromInvoke'],
+              actions: ['setErrorFromInvoke', 'surfaceError'],
             },
           },
         },
@@ -644,7 +717,7 @@ export const processingMachine = setup({
             },
             ERROR: {
               target: '#processing.idle',
-              actions: ['setErrorFromEvent'],
+              actions: ['setErrorFromEvent', 'surfaceError'],
             },
           },
         },
@@ -672,7 +745,7 @@ export const processingMachine = setup({
             },
             onError: {
               target: '#processing.idle',
-              actions: ['setErrorFromInvoke'],
+              actions: ['setErrorFromInvoke', 'surfaceError'],
             },
           },
         },
@@ -693,9 +766,27 @@ export const processingMachine = setup({
             },
             ERROR: {
               target: '#processing.idle',
-              actions: ['setErrorFromEvent'],
+              actions: ['setErrorFromEvent', 'surfaceError'],
             },
           },
+        },
+      },
+    },
+
+    // -----------------------------------------------------------------------
+    unloadingLlm: {
+      invoke: {
+        src: 'llmUnloadActor',
+        input: () => ({}),
+        onDone: {
+          target: 'idle',
+          actions: [({ context }) => {
+            context.queryClient.invalidateQueries({ queryKey: getGetLlmQueryKey() })
+          }],
+        },
+        onError: {
+          target: 'idle',
+          actions: ['setErrorFromInvoke', 'surfaceError'],
         },
       },
     },
@@ -720,7 +811,7 @@ export const processingMachine = setup({
         },
         onError: {
           target: 'idle',
-          actions: ['setErrorFromInvoke'],
+          actions: ['setErrorFromInvoke', 'surfaceError'],
         },
       },
     },
@@ -743,7 +834,7 @@ export const processingMachine = setup({
         },
         onError: {
           target: 'idle',
-          actions: ['setErrorFromInvoke'],
+          actions: ['setErrorFromInvoke', 'surfaceError'],
         },
       },
     },
