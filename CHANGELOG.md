@@ -1,3 +1,38 @@
+## [0.42.0](https://github.com/mayocream/koharu/compare/0.41.4..0.42.0) - 2026-04-04
+
+### ⛰️  Features
+
+- *(ui)* Settings dialog, i18n, and initialization screen - ([290904d](https://github.com/mayocream/koharu/commit/290904db966c5fe293d972353a17803c5cad8015))
+- Sort manga reading order - ([18f2b42](https://github.com/mayocream/koharu/commit/18f2b42ebaa50fb23655bc116fae11ff40999f2c))
+- Blob API, bubble/AOT-inpainting models, and rendering redesign - ([004a94a](https://github.com/mayocream/koharu/commit/004a94a005c3c3a0ffaa14dd411af578ab2237be))
+- Custom tracing layer and log suppression - ([aa91dbd](https://github.com/mayocream/koharu/commit/aa91dbd7e36268b09224c810ce6b23fd34652eab))
+- Pluggable engine system with DAG pipeline - ([c84cfad](https://github.com/mayocream/koharu/commit/c84cfad0751e43bf980179d856a9146885bbb971))
+- Add Portuguese (pt-BR) translations ([#317](https://github.com/mayocream/koharu/issues/317)) - ([ed6e4ac](https://github.com/mayocream/koharu/commit/ed6e4ac157687af3d6810bcbfd4d1f2e2f3420fe))
+- Disabling keyring using --no-keyring ([#308](https://github.com/mayocream/koharu/issues/308)) - ([f470146](https://github.com/mayocream/koharu/commit/f470146e1b017f225e9ef797df942ed5c5a27f81))
+- Add Korean (ko-KR) locale and translate ([#316](https://github.com/mayocream/koharu/issues/316)) - ([1d1b3df](https://github.com/mayocream/koharu/commit/1d1b3df09d49874584aa8e8cb42f0d2796c918b1))
+- Add Turkish UI localization ([#315](https://github.com/mayocream/koharu/issues/315)) - ([4a99909](https://github.com/mayocream/koharu/commit/4a99909118c103dde880176c7edb4324a53d0b98))
+
+### 🚜 Refactor
+
+- *(ui)* Centralize error handling with XState - ([e29b31e](https://github.com/mayocream/koharu/commit/e29b31ebdf6bcdc760f60df889cccfbfe8681b95))
+- Simplify Tauri setup and dev server - ([f301793](https://github.com/mayocream/koharu/commit/f3017931daee53999bbf878038e6260d6599b7a5))
+- Rewrite backend storage, config, and runtime - ([ed48490](https://github.com/mayocream/koharu/commit/ed48490d715a13039fabf839573029adc119f2fe))
+- OpenAPI codegen with utoipa and Orval - ([1502ac0](https://github.com/mayocream/koharu/commit/1502ac04d2b53b85a9aaae6067a3c5917a3d6d8f))
+
+### ⚡ Performance
+
+- Improve ctd - ([ae85e1a](https://github.com/mayocream/koharu/commit/ae85e1ac57b12e04c69b005af943a2faeee9c44b))
+
+### ⚙️ Miscellaneous Tasks
+
+- Remove macos warnings - ([58e5391](https://github.com/mayocream/koharu/commit/58e539104d4c60621f549f31fec2b5f944e96199))
+
+## New Contributors ❤️
+
+* @gabrieljcodes made their first contribution in [#317](https://github.com/mayocream/koharu/pull/317)
+* @DevNergis made their first contribution in [#316](https://github.com/mayocream/koharu/pull/316)
+* @toufudealer made their first contribution in [#315](https://github.com/mayocream/koharu/pull/315)
+
 ## [0.41.4](https://github.com/mayocream/koharu/compare/0.41.3..0.41.4) - 2026-03-30
 
 ### ⚙️ Miscellaneous Tasks
