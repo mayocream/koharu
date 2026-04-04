@@ -133,6 +133,11 @@ export function MenuBar() {
       testId: 'menu-file-export-psd',
     },
     {
+      label: t('menu.saveKhr', { defaultValue: 'Save Project' }),
+      onSelect: () => send({ type: 'START_EXPORT_PROJECT' }),
+      testId: 'menu-file-save-project',
+    },
+    {
       label: t('menu.exportAllInpainted'),
       onSelect: () => send({ type: 'START_BATCH_EXPORT', layer: 'inpainted' }),
       testId: 'menu-file-export-all-inpainted',

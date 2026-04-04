@@ -3,18 +3,18 @@
  * Do not edit manually.
  * OpenAPI spec version: 0.0.1
  */
-import type { NamedFontPrediction } from './namedFontPrediction'
-import type { TextDirection } from './textDirection'
-import type { TopFont } from './topFont'
+import type { NamedFontPrediction } from './namedFontPrediction';
+import type { TextDirection } from './textDirection';
+import type { TopFont } from './topFont';
 
 export interface FontPrediction {
-  angle_deg: number
-  direction: TextDirection
-  font_size_px: number
-  line_height: number
-  named_fonts: NamedFontPrediction[]
-  stroke_color: number[]
-  stroke_width_px: number
-  text_color: number[]
-  top_fonts: TopFont[]
+  angle_deg: number;
+  direction: TextDirection;
+  font_size_px: number;
+  line_height: number;
+  named_fonts: NamedFontPrediction[];
+  stroke_color: number[];
+  stroke_width_px: number;
+  text_color: number[];
+  top_fonts: TopFont[];
 }

@@ -5,8 +5,8 @@
  */
 
 export type GetLlmCatalogParams = {
-  /**
-   * @nullable
-   */
-  language?: string | null
-}
+/**
+ * @nullable
+ */
+language?: string | null;
+};

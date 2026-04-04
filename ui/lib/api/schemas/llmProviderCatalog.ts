@@ -3,19 +3,19 @@
  * Do not edit manually.
  * OpenAPI spec version: 0.0.1
  */
-import type { LlmCatalogModel } from './llmCatalogModel'
-import type { LlmProviderCatalogStatus } from './llmProviderCatalogStatus'
+import type { LlmCatalogModel } from './llmCatalogModel';
+import type { LlmProviderCatalogStatus } from './llmProviderCatalogStatus';
 
 export interface LlmProviderCatalog {
   /** @nullable */
-  baseUrl?: string | null
+  baseUrl?: string | null;
   /** @nullable */
-  error?: string | null
-  hasApiKey: boolean
-  id: string
-  models: LlmCatalogModel[]
-  name: string
-  requiresApiKey: boolean
-  requiresBaseUrl: boolean
-  status: LlmProviderCatalogStatus
+  error?: string | null;
+  hasApiKey: boolean;
+  id: string;
+  models: LlmCatalogModel[];
+  name: string;
+  requiresApiKey: boolean;
+  requiresBaseUrl: boolean;
+  status: LlmProviderCatalogStatus;
 }

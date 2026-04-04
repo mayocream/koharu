@@ -3,18 +3,18 @@
  * Do not edit manually.
  * OpenAPI spec version: 0.0.1
  */
-import type { TextStyle } from './textStyle'
+import type { TextStyle } from './textStyle';
 
 export interface TextBlockInput {
-  height: number
+  height: number;
   /** @nullable */
-  id?: string | null
-  style?: null | TextStyle
+  id?: string | null;
+  style?: null | TextStyle;
   /** @nullable */
-  text?: string | null
+  text?: string | null;
   /** @nullable */
-  translation?: string | null
-  width: number
-  x: number
-  y: number
+  translation?: string | null;
+  width: number;
+  x: number;
+  y: number;
 }

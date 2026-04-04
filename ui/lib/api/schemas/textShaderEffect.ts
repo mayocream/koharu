@@ -5,6 +5,6 @@
  */
 
 export interface TextShaderEffect {
-  bold?: boolean
-  italic?: boolean
+  bold?: boolean;
+  italic?: boolean;
 }

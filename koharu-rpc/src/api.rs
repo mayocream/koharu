@@ -8,7 +8,7 @@ use axum::{
     },
     response::{IntoResponse, Response},
 };
-use koharu_app::{AppResources, config as app_config, edit, engine, io, llm, pipeline};
+use koharu_app::{AppResources, config as app_config, edit, engine, io, llm, ops, pipeline};
 use koharu_core::{
     CreateTextBlock, Document, DocumentDetail, DocumentSummary, DownloadState, ExportLayer,
     ExportResult, FontFaceInfo, JobState, JobStatus, LlmCatalog, LlmLoadRequest, LlmState,
@@ -56,6 +56,7 @@ pub fn api() -> (axum::Router<ApiState>, utoipa::openapi::OpenApi) {
         .routes(routes!(patch_text_block, delete_text_block))
         .routes(routes!(export_document))
         .routes(routes!(batch_export))
+        .routes(routes!(export_project))
         .routes(routes!(get_llm, load_llm, unload_llm))
         .routes(routes!(get_llm_catalog))
         .routes(routes!(start_pipeline))
@@ -1261,6 +1262,25 @@ async fn batch_export(
     Ok(Json(ExportResult { count }))
 }
 
+#[utoipa::path(
+    post,
+    path = "/exports/project",
+    operation_id = "exportProject",
+    tag = "exports",
+    responses(
+        (status = 200, body = koharu_core::ExportProjectResult),
+        (status = 503, body = ApiError),
+    ),
+)]
+#[tracing::instrument(level = "info", skip_all)]
+async fn export_project(
+    State(state): State<ApiState>,
+) -> ApiResult<Json<koharu_core::ExportProjectResult>> {
+    let resources = state.resources()?;
+    let result = ops::project::export_project(resources).await?;
+    Ok(Json(result))
+}
+
 async fn find_document(resources: &AppResources, document_id: &str) -> ApiResult<Document> {
     resources
         .storage
@@ -1375,6 +1395,12 @@ fn apply_text_block_patch(block: &mut TextBlock, patch: TextBlockPatch) -> bool 
     {
         block.lock_layout_box = true;
     }
+
+    if invalidate_render {
+        block.rendered = None;
+        block.rendered_direction = None;
+    }
+
     invalidate_render
 }
 

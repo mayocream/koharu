@@ -3,262 +3,222 @@
  * Do not edit manually.
  * OpenAPI spec version: 0.0.1
  */
-import { useMutation } from '@tanstack/react-query'
+import {
+  useMutation
+} from '@tanstack/react-query';
 import type {
   MutationFunction,
   QueryClient,
   UseMutationOptions,
-  UseMutationResult,
-} from '@tanstack/react-query'
+  UseMutationResult
+} from '@tanstack/react-query';
 
 import type {
   ApiError,
   BrushRegionRequest,
   InpaintRegionRequest,
-  MaskRegionRequest,
-} from '../schemas'
+  MaskRegionRequest
+} from '../schemas';
 
-import { fetchApi } from '.././fetch'
+import { fetchApi } from '.././fetch';
 
-type SecondParameter<T extends (...args: never) => unknown> = Parameters<T>[1]
 
-export const getUpdateBrushLayerUrl = (documentId: string) => {
+type SecondParameter<T extends (...args: never) => unknown> = Parameters<T>[1];
+
+
+
+export const getUpdateBrushLayerUrl = (documentId: string,) => {
+
+
+
+
   return `/api/v1/documents/${documentId}/brush-layer`
 }
 
-export const updateBrushLayer = async (
-  documentId: string,
-  brushRegionRequest: BrushRegionRequest,
-  options?: RequestInit,
-): Promise<void> => {
-  return fetchApi<void>(getUpdateBrushLayerUrl(documentId), {
+export const updateBrushLayer = async (documentId: string,
+    brushRegionRequest: BrushRegionRequest, options?: RequestInit): Promise<void> => {
+
+  return fetchApi<void>(getUpdateBrushLayerUrl(documentId),
+  {
     ...options,
     method: 'PUT',
     headers: { 'Content-Type': 'application/json', ...options?.headers },
-    body: JSON.stringify(brushRegionRequest),
-  })
-}
-
-export const getUpdateBrushLayerMutationOptions = <
-  TError = ApiError,
-  TContext = unknown,
->(options?: {
-  mutation?: UseMutationOptions<
-    Awaited<ReturnType<typeof updateBrushLayer>>,
-    TError,
-    { documentId: string; data: BrushRegionRequest },
-    TContext
-  >
-  request?: SecondParameter<typeof fetchApi>
-}): UseMutationOptions<
-  Awaited<ReturnType<typeof updateBrushLayer>>,
-  TError,
-  { documentId: string; data: BrushRegionRequest },
-  TContext
-> => {
-  const mutationKey = ['updateBrushLayer']
-  const { mutation: mutationOptions, request: requestOptions } = options
-    ? options.mutation &&
-      'mutationKey' in options.mutation &&
-      options.mutation.mutationKey
-      ? options
-      : { ...options, mutation: { ...options.mutation, mutationKey } }
-    : { mutation: { mutationKey }, request: undefined }
-
-  const mutationFn: MutationFunction<
-    Awaited<ReturnType<typeof updateBrushLayer>>,
-    { documentId: string; data: BrushRegionRequest }
-  > = (props) => {
-    const { documentId, data } = props ?? {}
-
-    return updateBrushLayer(documentId, data, requestOptions)
+    body: JSON.stringify(
+      brushRegionRequest,)
   }
+);}
 
-  return { mutationFn, ...mutationOptions }
-}
 
-export type UpdateBrushLayerMutationResult = NonNullable<
-  Awaited<ReturnType<typeof updateBrushLayer>>
->
-export type UpdateBrushLayerMutationBody = BrushRegionRequest
-export type UpdateBrushLayerMutationError = ApiError
 
-export const useUpdateBrushLayer = <TError = ApiError, TContext = unknown>(
-  options?: {
-    mutation?: UseMutationOptions<
-      Awaited<ReturnType<typeof updateBrushLayer>>,
-      TError,
-      { documentId: string; data: BrushRegionRequest },
-      TContext
-    >
-    request?: SecondParameter<typeof fetchApi>
-  },
-  queryClient?: QueryClient,
-): UseMutationResult<
-  Awaited<ReturnType<typeof updateBrushLayer>>,
-  TError,
-  { documentId: string; data: BrushRegionRequest },
-  TContext
-> => {
-  return useMutation(getUpdateBrushLayerMutationOptions(options), queryClient)
-}
-export const getInpaintRegionUrl = (documentId: string) => {
+
+export const getUpdateBrushLayerMutationOptions = <TError = ApiError,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof updateBrushLayer>>, TError,{documentId: string;data: BrushRegionRequest}, TContext>, request?: SecondParameter<typeof fetchApi>}
+): UseMutationOptions<Awaited<ReturnType<typeof updateBrushLayer>>, TError,{documentId: string;data: BrushRegionRequest}, TContext> => {
+
+const mutationKey = ['updateBrushLayer'];
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof updateBrushLayer>>, {documentId: string;data: BrushRegionRequest}> = (props) => {
+          const {documentId,data} = props ?? {};
+
+          return  updateBrushLayer(documentId,data,requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type UpdateBrushLayerMutationResult = NonNullable<Awaited<ReturnType<typeof updateBrushLayer>>>
+    export type UpdateBrushLayerMutationBody = BrushRegionRequest
+    export type UpdateBrushLayerMutationError = ApiError
+
+    export const useUpdateBrushLayer = <TError = ApiError,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof updateBrushLayer>>, TError,{documentId: string;data: BrushRegionRequest}, TContext>, request?: SecondParameter<typeof fetchApi>}
+ , queryClient?: QueryClient): UseMutationResult<
+        Awaited<ReturnType<typeof updateBrushLayer>>,
+        TError,
+        {documentId: string;data: BrushRegionRequest},
+        TContext
+      > => {
+      return useMutation(getUpdateBrushLayerMutationOptions(options), queryClient);
+    }
+    export const getInpaintRegionUrl = (documentId: string,) => {
+
+
+
+
   return `/api/v1/documents/${documentId}/inpaint-region`
 }
 
-export const inpaintRegion = async (
-  documentId: string,
-  inpaintRegionRequest: InpaintRegionRequest,
-  options?: RequestInit,
-): Promise<void> => {
-  return fetchApi<void>(getInpaintRegionUrl(documentId), {
+export const inpaintRegion = async (documentId: string,
+    inpaintRegionRequest: InpaintRegionRequest, options?: RequestInit): Promise<void> => {
+
+  return fetchApi<void>(getInpaintRegionUrl(documentId),
+  {
     ...options,
     method: 'POST',
     headers: { 'Content-Type': 'application/json', ...options?.headers },
-    body: JSON.stringify(inpaintRegionRequest),
-  })
-}
-
-export const getInpaintRegionMutationOptions = <
-  TError = ApiError,
-  TContext = unknown,
->(options?: {
-  mutation?: UseMutationOptions<
-    Awaited<ReturnType<typeof inpaintRegion>>,
-    TError,
-    { documentId: string; data: InpaintRegionRequest },
-    TContext
-  >
-  request?: SecondParameter<typeof fetchApi>
-}): UseMutationOptions<
-  Awaited<ReturnType<typeof inpaintRegion>>,
-  TError,
-  { documentId: string; data: InpaintRegionRequest },
-  TContext
-> => {
-  const mutationKey = ['inpaintRegion']
-  const { mutation: mutationOptions, request: requestOptions } = options
-    ? options.mutation &&
-      'mutationKey' in options.mutation &&
-      options.mutation.mutationKey
-      ? options
-      : { ...options, mutation: { ...options.mutation, mutationKey } }
-    : { mutation: { mutationKey }, request: undefined }
-
-  const mutationFn: MutationFunction<
-    Awaited<ReturnType<typeof inpaintRegion>>,
-    { documentId: string; data: InpaintRegionRequest }
-  > = (props) => {
-    const { documentId, data } = props ?? {}
-
-    return inpaintRegion(documentId, data, requestOptions)
+    body: JSON.stringify(
+      inpaintRegionRequest,)
   }
+);}
 
-  return { mutationFn, ...mutationOptions }
-}
 
-export type InpaintRegionMutationResult = NonNullable<
-  Awaited<ReturnType<typeof inpaintRegion>>
->
-export type InpaintRegionMutationBody = InpaintRegionRequest
-export type InpaintRegionMutationError = ApiError
 
-export const useInpaintRegion = <TError = ApiError, TContext = unknown>(
-  options?: {
-    mutation?: UseMutationOptions<
-      Awaited<ReturnType<typeof inpaintRegion>>,
-      TError,
-      { documentId: string; data: InpaintRegionRequest },
-      TContext
-    >
-    request?: SecondParameter<typeof fetchApi>
-  },
-  queryClient?: QueryClient,
-): UseMutationResult<
-  Awaited<ReturnType<typeof inpaintRegion>>,
-  TError,
-  { documentId: string; data: InpaintRegionRequest },
-  TContext
-> => {
-  return useMutation(getInpaintRegionMutationOptions(options), queryClient)
-}
-export const getUpdateMaskUrl = (documentId: string) => {
+
+export const getInpaintRegionMutationOptions = <TError = ApiError,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof inpaintRegion>>, TError,{documentId: string;data: InpaintRegionRequest}, TContext>, request?: SecondParameter<typeof fetchApi>}
+): UseMutationOptions<Awaited<ReturnType<typeof inpaintRegion>>, TError,{documentId: string;data: InpaintRegionRequest}, TContext> => {
+
+const mutationKey = ['inpaintRegion'];
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof inpaintRegion>>, {documentId: string;data: InpaintRegionRequest}> = (props) => {
+          const {documentId,data} = props ?? {};
+
+          return  inpaintRegion(documentId,data,requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type InpaintRegionMutationResult = NonNullable<Awaited<ReturnType<typeof inpaintRegion>>>
+    export type InpaintRegionMutationBody = InpaintRegionRequest
+    export type InpaintRegionMutationError = ApiError
+
+    export const useInpaintRegion = <TError = ApiError,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof inpaintRegion>>, TError,{documentId: string;data: InpaintRegionRequest}, TContext>, request?: SecondParameter<typeof fetchApi>}
+ , queryClient?: QueryClient): UseMutationResult<
+        Awaited<ReturnType<typeof inpaintRegion>>,
+        TError,
+        {documentId: string;data: InpaintRegionRequest},
+        TContext
+      > => {
+      return useMutation(getInpaintRegionMutationOptions(options), queryClient);
+    }
+    export const getUpdateMaskUrl = (documentId: string,) => {
+
+
+
+
   return `/api/v1/documents/${documentId}/mask`
 }
 
-export const updateMask = async (
-  documentId: string,
-  maskRegionRequest: MaskRegionRequest,
-  options?: RequestInit,
-): Promise<void> => {
-  return fetchApi<void>(getUpdateMaskUrl(documentId), {
+export const updateMask = async (documentId: string,
+    maskRegionRequest: MaskRegionRequest, options?: RequestInit): Promise<void> => {
+
+  return fetchApi<void>(getUpdateMaskUrl(documentId),
+  {
     ...options,
     method: 'PUT',
     headers: { 'Content-Type': 'application/json', ...options?.headers },
-    body: JSON.stringify(maskRegionRequest),
-  })
-}
-
-export const getUpdateMaskMutationOptions = <
-  TError = ApiError,
-  TContext = unknown,
->(options?: {
-  mutation?: UseMutationOptions<
-    Awaited<ReturnType<typeof updateMask>>,
-    TError,
-    { documentId: string; data: MaskRegionRequest },
-    TContext
-  >
-  request?: SecondParameter<typeof fetchApi>
-}): UseMutationOptions<
-  Awaited<ReturnType<typeof updateMask>>,
-  TError,
-  { documentId: string; data: MaskRegionRequest },
-  TContext
-> => {
-  const mutationKey = ['updateMask']
-  const { mutation: mutationOptions, request: requestOptions } = options
-    ? options.mutation &&
-      'mutationKey' in options.mutation &&
-      options.mutation.mutationKey
-      ? options
-      : { ...options, mutation: { ...options.mutation, mutationKey } }
-    : { mutation: { mutationKey }, request: undefined }
-
-  const mutationFn: MutationFunction<
-    Awaited<ReturnType<typeof updateMask>>,
-    { documentId: string; data: MaskRegionRequest }
-  > = (props) => {
-    const { documentId, data } = props ?? {}
-
-    return updateMask(documentId, data, requestOptions)
+    body: JSON.stringify(
+      maskRegionRequest,)
   }
+);}
 
-  return { mutationFn, ...mutationOptions }
-}
 
-export type UpdateMaskMutationResult = NonNullable<
-  Awaited<ReturnType<typeof updateMask>>
->
-export type UpdateMaskMutationBody = MaskRegionRequest
-export type UpdateMaskMutationError = ApiError
 
-export const useUpdateMask = <TError = ApiError, TContext = unknown>(
-  options?: {
-    mutation?: UseMutationOptions<
-      Awaited<ReturnType<typeof updateMask>>,
-      TError,
-      { documentId: string; data: MaskRegionRequest },
-      TContext
-    >
-    request?: SecondParameter<typeof fetchApi>
-  },
-  queryClient?: QueryClient,
-): UseMutationResult<
-  Awaited<ReturnType<typeof updateMask>>,
-  TError,
-  { documentId: string; data: MaskRegionRequest },
-  TContext
-> => {
-  return useMutation(getUpdateMaskMutationOptions(options), queryClient)
-}
+
+export const getUpdateMaskMutationOptions = <TError = ApiError,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof updateMask>>, TError,{documentId: string;data: MaskRegionRequest}, TContext>, request?: SecondParameter<typeof fetchApi>}
+): UseMutationOptions<Awaited<ReturnType<typeof updateMask>>, TError,{documentId: string;data: MaskRegionRequest}, TContext> => {
+
+const mutationKey = ['updateMask'];
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof updateMask>>, {documentId: string;data: MaskRegionRequest}> = (props) => {
+          const {documentId,data} = props ?? {};
+
+          return  updateMask(documentId,data,requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type UpdateMaskMutationResult = NonNullable<Awaited<ReturnType<typeof updateMask>>>
+    export type UpdateMaskMutationBody = MaskRegionRequest
+    export type UpdateMaskMutationError = ApiError
+
+    export const useUpdateMask = <TError = ApiError,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof updateMask>>, TError,{documentId: string;data: MaskRegionRequest}, TContext>, request?: SecondParameter<typeof fetchApi>}
+ , queryClient?: QueryClient): UseMutationResult<
+        Awaited<ReturnType<typeof updateMask>>,
+        TError,
+        {documentId: string;data: MaskRegionRequest},
+        TContext
+      > => {
+      return useMutation(getUpdateMaskMutationOptions(options), queryClient);
+    }

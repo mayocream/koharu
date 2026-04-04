@@ -287,6 +287,48 @@ impl Storage {
         let content = toml::to_string_pretty(project).context("serialize project")?;
         std::fs::write(&path, content).context("write project")
     }
+
+    /// Export the project and all referenced images to a .khr file (zip format)
+    pub async fn export_khr(&self, output_path: &Path) -> Result<()> {
+        let project = self.project.read().await;
+
+        let file = std::fs::File::create(output_path)?;
+        let mut zip = zip::ZipWriter::new(file);
+        let options = zip::write::SimpleFileOptions::default()
+            .compression_method(zip::CompressionMethod::Deflated);
+
+        // 1. Write project.toml
+        let project_toml = toml::to_string_pretty(&*project).context("serialize project")?;
+        zip.start_file("project.toml", options.clone())?;
+        use std::io::Write;
+        zip.write_all(project_toml.as_bytes())?;
+
+        // 2. Gather all image blobs used by pages
+        let mut blobs = std::collections::HashSet::new();
+        for page in &project.pages {
+            blobs.insert(page.source.clone());
+            if let Some(r) = &page.segment { blobs.insert(r.clone()); }
+            if let Some(r) = &page.inpainted { blobs.insert(r.clone()); }
+            if let Some(r) = &page.rendered { blobs.insert(r.clone()); }
+            if let Some(r) = &page.brush_layer { blobs.insert(r.clone()); }
+            for block in &page.text_blocks {
+                if let Some(r) = &block.rendered { blobs.insert(r.clone()); }
+            }
+        }
+
+        // 3. Write blobs into "blobs/" directory
+        for blob in blobs {
+            if blob.is_empty() { continue; }
+            if let Ok(bytes) = self.images.load_bytes(&blob) {
+                zip.start_file(format!("blobs/{}", blob.hash()), options.clone())?;
+                zip.write_all(&bytes)?;
+            }
+        }
+
+        zip.finish()?;
+
+        Ok(())
+    }
 }
 
 fn list_documents(project: &Project) -> Vec<DocumentSummary> {

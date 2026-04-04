@@ -3,10 +3,10 @@
  * Do not edit manually.
  * OpenAPI spec version: 0.0.1
  */
-import type { LlmGenerationOptions } from './llmGenerationOptions'
-import type { LlmTarget } from './llmTarget'
+import type { LlmGenerationOptions } from './llmGenerationOptions';
+import type { LlmTarget } from './llmTarget';
 
 export interface LlmLoadRequest {
-  options?: null | LlmGenerationOptions
-  target: LlmTarget
+  options?: null | LlmGenerationOptions;
+  target: LlmTarget;
 }

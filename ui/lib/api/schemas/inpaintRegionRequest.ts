@@ -3,8 +3,8 @@
  * Do not edit manually.
  * OpenAPI spec version: 0.0.1
  */
-import type { Region } from './region'
+import type { Region } from './region';
 
 export interface InpaintRegionRequest {
-  region: Region
+  region: Region;
 }

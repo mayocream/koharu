@@ -3,7 +3,10 @@
  * Do not edit manually.
  * OpenAPI spec version: 0.0.1
  */
-import { useMutation, useQuery } from '@tanstack/react-query'
+import {
+  useMutation,
+  useQuery
+} from '@tanstack/react-query';
 import type {
   DataTag,
   DefinedInitialDataOptions,
@@ -16,8 +19,8 @@ import type {
   UseMutationOptions,
   UseMutationResult,
   UseQueryOptions,
-  UseQueryResult,
-} from '@tanstack/react-query'
+  UseQueryResult
+} from '@tanstack/react-query';
 
 import type {
   ApiError,
@@ -25,634 +28,441 @@ import type {
   GetEngineCatalog200,
   MetaInfo,
   UpdateConfig200,
-  UpdateConfigBody,
-} from '../schemas'
+  UpdateConfigBody
+} from '../schemas';
 
-import { fetchApi } from '.././fetch'
+import { fetchApi } from '.././fetch';
 
-type SecondParameter<T extends (...args: never) => unknown> = Parameters<T>[1]
+
+type SecondParameter<T extends (...args: never) => unknown> = Parameters<T>[1];
+
+
 
 export const getGetConfigUrl = () => {
+
+
+
+
   return `/api/v1/config`
 }
 
-export const getConfig = async (options?: RequestInit): Promise<void> => {
-  return fetchApi<void>(getGetConfigUrl(), {
+export const getConfig = async ( options?: RequestInit): Promise<void> => {
+
+  return fetchApi<void>(getGetConfigUrl(),
+  {
     ...options,
-    method: 'GET',
-  })
-}
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+
 
 export const getGetConfigQueryKey = () => {
-  return [`/api/v1/config`] as const
+    return [
+    `/api/v1/config`
+    ] as const;
+    }
+
+
+export const getGetConfigQueryOptions = <TData = Awaited<ReturnType<typeof getConfig>>, TError = ApiError>( options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof getConfig>>, TError, TData>>, request?: SecondParameter<typeof fetchApi>}
+) => {
+
+const {query: queryOptions, request: requestOptions} = options ?? {};
+
+  const queryKey =  queryOptions?.queryKey ?? getGetConfigQueryKey();
+
+
+
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof getConfig>>> = ({ signal }) => getConfig({ signal, ...requestOptions });
+
+
+
+
+
+   return  { queryKey, queryFn,   gcTime: 300000, retry: 1,  ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof getConfig>>, TError, TData> & { queryKey: DataTag<QueryKey, TData, TError> }
 }
 
-export const getGetConfigQueryOptions = <
-  TData = Awaited<ReturnType<typeof getConfig>>,
-  TError = ApiError,
->(options?: {
-  query?: Partial<
-    UseQueryOptions<Awaited<ReturnType<typeof getConfig>>, TError, TData>
-  >
-  request?: SecondParameter<typeof fetchApi>
-}) => {
-  const { query: queryOptions, request: requestOptions } = options ?? {}
-
-  const queryKey = queryOptions?.queryKey ?? getGetConfigQueryKey()
-
-  const queryFn: QueryFunction<Awaited<ReturnType<typeof getConfig>>> = ({
-    signal,
-  }) => getConfig({ signal, ...requestOptions })
-
-  return {
-    queryKey,
-    queryFn,
-    gcTime: 300000,
-    retry: 1,
-    ...queryOptions,
-  } as UseQueryOptions<Awaited<ReturnType<typeof getConfig>>, TError, TData> & {
-    queryKey: DataTag<QueryKey, TData, TError>
-  }
-}
-
-export type GetConfigQueryResult = NonNullable<
-  Awaited<ReturnType<typeof getConfig>>
->
+export type GetConfigQueryResult = NonNullable<Awaited<ReturnType<typeof getConfig>>>
 export type GetConfigQueryError = ApiError
 
-export function useGetConfig<
-  TData = Awaited<ReturnType<typeof getConfig>>,
-  TError = ApiError,
->(
-  options: {
-    query: Partial<
-      UseQueryOptions<Awaited<ReturnType<typeof getConfig>>, TError, TData>
-    > &
-      Pick<
+
+export function useGetConfig<TData = Awaited<ReturnType<typeof getConfig>>, TError = ApiError>(
+  options: { query:Partial<UseQueryOptions<Awaited<ReturnType<typeof getConfig>>, TError, TData>> & Pick<
         DefinedInitialDataOptions<
           Awaited<ReturnType<typeof getConfig>>,
           TError,
           Awaited<ReturnType<typeof getConfig>>
-        >,
-        'initialData'
-      >
-    request?: SecondParameter<typeof fetchApi>
-  },
-  queryClient?: QueryClient,
-): DefinedUseQueryResult<TData, TError> & {
-  queryKey: DataTag<QueryKey, TData, TError>
-}
-export function useGetConfig<
-  TData = Awaited<ReturnType<typeof getConfig>>,
-  TError = ApiError,
->(
-  options?: {
-    query?: Partial<
-      UseQueryOptions<Awaited<ReturnType<typeof getConfig>>, TError, TData>
-    > &
-      Pick<
+        > , 'initialData'
+      >, request?: SecondParameter<typeof fetchApi>}
+ , queryClient?: QueryClient
+  ):  DefinedUseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> }
+export function useGetConfig<TData = Awaited<ReturnType<typeof getConfig>>, TError = ApiError>(
+  options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof getConfig>>, TError, TData>> & Pick<
         UndefinedInitialDataOptions<
           Awaited<ReturnType<typeof getConfig>>,
           TError,
           Awaited<ReturnType<typeof getConfig>>
-        >,
-        'initialData'
-      >
-    request?: SecondParameter<typeof fetchApi>
-  },
-  queryClient?: QueryClient,
-): UseQueryResult<TData, TError> & {
-  queryKey: DataTag<QueryKey, TData, TError>
-}
-export function useGetConfig<
-  TData = Awaited<ReturnType<typeof getConfig>>,
-  TError = ApiError,
->(
-  options?: {
-    query?: Partial<
-      UseQueryOptions<Awaited<ReturnType<typeof getConfig>>, TError, TData>
-    >
-    request?: SecondParameter<typeof fetchApi>
-  },
-  queryClient?: QueryClient,
-): UseQueryResult<TData, TError> & {
-  queryKey: DataTag<QueryKey, TData, TError>
-}
+        > , 'initialData'
+      >, request?: SecondParameter<typeof fetchApi>}
+ , queryClient?: QueryClient
+  ):  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> }
+export function useGetConfig<TData = Awaited<ReturnType<typeof getConfig>>, TError = ApiError>(
+  options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof getConfig>>, TError, TData>>, request?: SecondParameter<typeof fetchApi>}
+ , queryClient?: QueryClient
+  ):  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> }
 
-export function useGetConfig<
-  TData = Awaited<ReturnType<typeof getConfig>>,
-  TError = ApiError,
->(
-  options?: {
-    query?: Partial<
-      UseQueryOptions<Awaited<ReturnType<typeof getConfig>>, TError, TData>
-    >
-    request?: SecondParameter<typeof fetchApi>
-  },
-  queryClient?: QueryClient,
-): UseQueryResult<TData, TError> & {
-  queryKey: DataTag<QueryKey, TData, TError>
-} {
+export function useGetConfig<TData = Awaited<ReturnType<typeof getConfig>>, TError = ApiError>(
+  options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof getConfig>>, TError, TData>>, request?: SecondParameter<typeof fetchApi>}
+ , queryClient?: QueryClient
+ ):  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> } {
+
   const queryOptions = getGetConfigQueryOptions(options)
 
-  const query = useQuery(queryOptions, queryClient) as UseQueryResult<
-    TData,
-    TError
-  > & { queryKey: DataTag<QueryKey, TData, TError> }
+  const query = useQuery(queryOptions, queryClient) as  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> };
 
-  return { ...query, queryKey: queryOptions.queryKey }
+  return { ...query, queryKey: queryOptions.queryKey };
 }
 
+
+
+
 export const getUpdateConfigUrl = () => {
+
+
+
+
   return `/api/v1/config`
 }
 
-export const updateConfig = async (
-  updateConfigBody: UpdateConfigBody,
-  options?: RequestInit,
-): Promise<UpdateConfig200> => {
-  return fetchApi<UpdateConfig200>(getUpdateConfigUrl(), {
+export const updateConfig = async (updateConfigBody: UpdateConfigBody, options?: RequestInit): Promise<UpdateConfig200> => {
+
+  return fetchApi<UpdateConfig200>(getUpdateConfigUrl(),
+  {
     ...options,
     method: 'PUT',
     headers: { 'Content-Type': 'application/json', ...options?.headers },
-    body: JSON.stringify(updateConfigBody),
-  })
-}
-
-export const getUpdateConfigMutationOptions = <
-  TError = ApiError,
-  TContext = unknown,
->(options?: {
-  mutation?: UseMutationOptions<
-    Awaited<ReturnType<typeof updateConfig>>,
-    TError,
-    { data: UpdateConfigBody },
-    TContext
-  >
-  request?: SecondParameter<typeof fetchApi>
-}): UseMutationOptions<
-  Awaited<ReturnType<typeof updateConfig>>,
-  TError,
-  { data: UpdateConfigBody },
-  TContext
-> => {
-  const mutationKey = ['updateConfig']
-  const { mutation: mutationOptions, request: requestOptions } = options
-    ? options.mutation &&
-      'mutationKey' in options.mutation &&
-      options.mutation.mutationKey
-      ? options
-      : { ...options, mutation: { ...options.mutation, mutationKey } }
-    : { mutation: { mutationKey }, request: undefined }
-
-  const mutationFn: MutationFunction<
-    Awaited<ReturnType<typeof updateConfig>>,
-    { data: UpdateConfigBody }
-  > = (props) => {
-    const { data } = props ?? {}
-
-    return updateConfig(data, requestOptions)
+    body: JSON.stringify(
+      updateConfigBody,)
   }
+);}
 
-  return { mutationFn, ...mutationOptions }
-}
 
-export type UpdateConfigMutationResult = NonNullable<
-  Awaited<ReturnType<typeof updateConfig>>
->
-export type UpdateConfigMutationBody = UpdateConfigBody
-export type UpdateConfigMutationError = ApiError
 
-export const useUpdateConfig = <TError = ApiError, TContext = unknown>(
-  options?: {
-    mutation?: UseMutationOptions<
-      Awaited<ReturnType<typeof updateConfig>>,
-      TError,
-      { data: UpdateConfigBody },
-      TContext
-    >
-    request?: SecondParameter<typeof fetchApi>
-  },
-  queryClient?: QueryClient,
-): UseMutationResult<
-  Awaited<ReturnType<typeof updateConfig>>,
-  TError,
-  { data: UpdateConfigBody },
-  TContext
-> => {
-  return useMutation(getUpdateConfigMutationOptions(options), queryClient)
-}
-export const getGetEngineCatalogUrl = () => {
+
+export const getUpdateConfigMutationOptions = <TError = ApiError,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof updateConfig>>, TError,{data: UpdateConfigBody}, TContext>, request?: SecondParameter<typeof fetchApi>}
+): UseMutationOptions<Awaited<ReturnType<typeof updateConfig>>, TError,{data: UpdateConfigBody}, TContext> => {
+
+const mutationKey = ['updateConfig'];
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof updateConfig>>, {data: UpdateConfigBody}> = (props) => {
+          const {data} = props ?? {};
+
+          return  updateConfig(data,requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type UpdateConfigMutationResult = NonNullable<Awaited<ReturnType<typeof updateConfig>>>
+    export type UpdateConfigMutationBody = UpdateConfigBody
+    export type UpdateConfigMutationError = ApiError
+
+    export const useUpdateConfig = <TError = ApiError,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof updateConfig>>, TError,{data: UpdateConfigBody}, TContext>, request?: SecondParameter<typeof fetchApi>}
+ , queryClient?: QueryClient): UseMutationResult<
+        Awaited<ReturnType<typeof updateConfig>>,
+        TError,
+        {data: UpdateConfigBody},
+        TContext
+      > => {
+      return useMutation(getUpdateConfigMutationOptions(options), queryClient);
+    }
+    export const getGetEngineCatalogUrl = () => {
+
+
+
+
   return `/api/v1/engines`
 }
 
-export const getEngineCatalog = async (
-  options?: RequestInit,
-): Promise<GetEngineCatalog200> => {
-  return fetchApi<GetEngineCatalog200>(getGetEngineCatalogUrl(), {
+export const getEngineCatalog = async ( options?: RequestInit): Promise<GetEngineCatalog200> => {
+
+  return fetchApi<GetEngineCatalog200>(getGetEngineCatalogUrl(),
+  {
     ...options,
-    method: 'GET',
-  })
-}
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+
 
 export const getGetEngineCatalogQueryKey = () => {
-  return [`/api/v1/engines`] as const
+    return [
+    `/api/v1/engines`
+    ] as const;
+    }
+
+
+export const getGetEngineCatalogQueryOptions = <TData = Awaited<ReturnType<typeof getEngineCatalog>>, TError = unknown>( options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof getEngineCatalog>>, TError, TData>>, request?: SecondParameter<typeof fetchApi>}
+) => {
+
+const {query: queryOptions, request: requestOptions} = options ?? {};
+
+  const queryKey =  queryOptions?.queryKey ?? getGetEngineCatalogQueryKey();
+
+
+
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof getEngineCatalog>>> = ({ signal }) => getEngineCatalog({ signal, ...requestOptions });
+
+
+
+
+
+   return  { queryKey, queryFn,   gcTime: 300000, retry: 1,  ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof getEngineCatalog>>, TError, TData> & { queryKey: DataTag<QueryKey, TData, TError> }
 }
 
-export const getGetEngineCatalogQueryOptions = <
-  TData = Awaited<ReturnType<typeof getEngineCatalog>>,
-  TError = unknown,
->(options?: {
-  query?: Partial<
-    UseQueryOptions<Awaited<ReturnType<typeof getEngineCatalog>>, TError, TData>
-  >
-  request?: SecondParameter<typeof fetchApi>
-}) => {
-  const { query: queryOptions, request: requestOptions } = options ?? {}
-
-  const queryKey = queryOptions?.queryKey ?? getGetEngineCatalogQueryKey()
-
-  const queryFn: QueryFunction<
-    Awaited<ReturnType<typeof getEngineCatalog>>
-  > = ({ signal }) => getEngineCatalog({ signal, ...requestOptions })
-
-  return {
-    queryKey,
-    queryFn,
-    gcTime: 300000,
-    retry: 1,
-    ...queryOptions,
-  } as UseQueryOptions<
-    Awaited<ReturnType<typeof getEngineCatalog>>,
-    TError,
-    TData
-  > & { queryKey: DataTag<QueryKey, TData, TError> }
-}
-
-export type GetEngineCatalogQueryResult = NonNullable<
-  Awaited<ReturnType<typeof getEngineCatalog>>
->
+export type GetEngineCatalogQueryResult = NonNullable<Awaited<ReturnType<typeof getEngineCatalog>>>
 export type GetEngineCatalogQueryError = unknown
 
-export function useGetEngineCatalog<
-  TData = Awaited<ReturnType<typeof getEngineCatalog>>,
-  TError = unknown,
->(
-  options: {
-    query: Partial<
-      UseQueryOptions<
-        Awaited<ReturnType<typeof getEngineCatalog>>,
-        TError,
-        TData
-      >
-    > &
-      Pick<
+
+export function useGetEngineCatalog<TData = Awaited<ReturnType<typeof getEngineCatalog>>, TError = unknown>(
+  options: { query:Partial<UseQueryOptions<Awaited<ReturnType<typeof getEngineCatalog>>, TError, TData>> & Pick<
         DefinedInitialDataOptions<
           Awaited<ReturnType<typeof getEngineCatalog>>,
           TError,
           Awaited<ReturnType<typeof getEngineCatalog>>
-        >,
-        'initialData'
-      >
-    request?: SecondParameter<typeof fetchApi>
-  },
-  queryClient?: QueryClient,
-): DefinedUseQueryResult<TData, TError> & {
-  queryKey: DataTag<QueryKey, TData, TError>
-}
-export function useGetEngineCatalog<
-  TData = Awaited<ReturnType<typeof getEngineCatalog>>,
-  TError = unknown,
->(
-  options?: {
-    query?: Partial<
-      UseQueryOptions<
-        Awaited<ReturnType<typeof getEngineCatalog>>,
-        TError,
-        TData
-      >
-    > &
-      Pick<
+        > , 'initialData'
+      >, request?: SecondParameter<typeof fetchApi>}
+ , queryClient?: QueryClient
+  ):  DefinedUseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> }
+export function useGetEngineCatalog<TData = Awaited<ReturnType<typeof getEngineCatalog>>, TError = unknown>(
+  options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof getEngineCatalog>>, TError, TData>> & Pick<
         UndefinedInitialDataOptions<
           Awaited<ReturnType<typeof getEngineCatalog>>,
           TError,
           Awaited<ReturnType<typeof getEngineCatalog>>
-        >,
-        'initialData'
-      >
-    request?: SecondParameter<typeof fetchApi>
-  },
-  queryClient?: QueryClient,
-): UseQueryResult<TData, TError> & {
-  queryKey: DataTag<QueryKey, TData, TError>
-}
-export function useGetEngineCatalog<
-  TData = Awaited<ReturnType<typeof getEngineCatalog>>,
-  TError = unknown,
->(
-  options?: {
-    query?: Partial<
-      UseQueryOptions<
-        Awaited<ReturnType<typeof getEngineCatalog>>,
-        TError,
-        TData
-      >
-    >
-    request?: SecondParameter<typeof fetchApi>
-  },
-  queryClient?: QueryClient,
-): UseQueryResult<TData, TError> & {
-  queryKey: DataTag<QueryKey, TData, TError>
-}
+        > , 'initialData'
+      >, request?: SecondParameter<typeof fetchApi>}
+ , queryClient?: QueryClient
+  ):  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> }
+export function useGetEngineCatalog<TData = Awaited<ReturnType<typeof getEngineCatalog>>, TError = unknown>(
+  options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof getEngineCatalog>>, TError, TData>>, request?: SecondParameter<typeof fetchApi>}
+ , queryClient?: QueryClient
+  ):  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> }
 
-export function useGetEngineCatalog<
-  TData = Awaited<ReturnType<typeof getEngineCatalog>>,
-  TError = unknown,
->(
-  options?: {
-    query?: Partial<
-      UseQueryOptions<
-        Awaited<ReturnType<typeof getEngineCatalog>>,
-        TError,
-        TData
-      >
-    >
-    request?: SecondParameter<typeof fetchApi>
-  },
-  queryClient?: QueryClient,
-): UseQueryResult<TData, TError> & {
-  queryKey: DataTag<QueryKey, TData, TError>
-} {
+export function useGetEngineCatalog<TData = Awaited<ReturnType<typeof getEngineCatalog>>, TError = unknown>(
+  options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof getEngineCatalog>>, TError, TData>>, request?: SecondParameter<typeof fetchApi>}
+ , queryClient?: QueryClient
+ ):  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> } {
+
   const queryOptions = getGetEngineCatalogQueryOptions(options)
 
-  const query = useQuery(queryOptions, queryClient) as UseQueryResult<
-    TData,
-    TError
-  > & { queryKey: DataTag<QueryKey, TData, TError> }
+  const query = useQuery(queryOptions, queryClient) as  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> };
 
-  return { ...query, queryKey: queryOptions.queryKey }
+  return { ...query, queryKey: queryOptions.queryKey };
 }
 
+
+
+
 export const getListFontsUrl = () => {
+
+
+
+
   return `/api/v1/fonts`
 }
 
-export const listFonts = async (
-  options?: RequestInit,
-): Promise<FontFaceInfo[]> => {
-  return fetchApi<FontFaceInfo[]>(getListFontsUrl(), {
+export const listFonts = async ( options?: RequestInit): Promise<FontFaceInfo[]> => {
+
+  return fetchApi<FontFaceInfo[]>(getListFontsUrl(),
+  {
     ...options,
-    method: 'GET',
-  })
-}
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+
 
 export const getListFontsQueryKey = () => {
-  return [`/api/v1/fonts`] as const
+    return [
+    `/api/v1/fonts`
+    ] as const;
+    }
+
+
+export const getListFontsQueryOptions = <TData = Awaited<ReturnType<typeof listFonts>>, TError = ApiError>( options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof listFonts>>, TError, TData>>, request?: SecondParameter<typeof fetchApi>}
+) => {
+
+const {query: queryOptions, request: requestOptions} = options ?? {};
+
+  const queryKey =  queryOptions?.queryKey ?? getListFontsQueryKey();
+
+
+
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof listFonts>>> = ({ signal }) => listFonts({ signal, ...requestOptions });
+
+
+
+
+
+   return  { queryKey, queryFn,   gcTime: 300000, retry: 1,  ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof listFonts>>, TError, TData> & { queryKey: DataTag<QueryKey, TData, TError> }
 }
 
-export const getListFontsQueryOptions = <
-  TData = Awaited<ReturnType<typeof listFonts>>,
-  TError = ApiError,
->(options?: {
-  query?: Partial<
-    UseQueryOptions<Awaited<ReturnType<typeof listFonts>>, TError, TData>
-  >
-  request?: SecondParameter<typeof fetchApi>
-}) => {
-  const { query: queryOptions, request: requestOptions } = options ?? {}
-
-  const queryKey = queryOptions?.queryKey ?? getListFontsQueryKey()
-
-  const queryFn: QueryFunction<Awaited<ReturnType<typeof listFonts>>> = ({
-    signal,
-  }) => listFonts({ signal, ...requestOptions })
-
-  return {
-    queryKey,
-    queryFn,
-    gcTime: 300000,
-    retry: 1,
-    ...queryOptions,
-  } as UseQueryOptions<Awaited<ReturnType<typeof listFonts>>, TError, TData> & {
-    queryKey: DataTag<QueryKey, TData, TError>
-  }
-}
-
-export type ListFontsQueryResult = NonNullable<
-  Awaited<ReturnType<typeof listFonts>>
->
+export type ListFontsQueryResult = NonNullable<Awaited<ReturnType<typeof listFonts>>>
 export type ListFontsQueryError = ApiError
 
-export function useListFonts<
-  TData = Awaited<ReturnType<typeof listFonts>>,
-  TError = ApiError,
->(
-  options: {
-    query: Partial<
-      UseQueryOptions<Awaited<ReturnType<typeof listFonts>>, TError, TData>
-    > &
-      Pick<
+
+export function useListFonts<TData = Awaited<ReturnType<typeof listFonts>>, TError = ApiError>(
+  options: { query:Partial<UseQueryOptions<Awaited<ReturnType<typeof listFonts>>, TError, TData>> & Pick<
         DefinedInitialDataOptions<
           Awaited<ReturnType<typeof listFonts>>,
           TError,
           Awaited<ReturnType<typeof listFonts>>
-        >,
-        'initialData'
-      >
-    request?: SecondParameter<typeof fetchApi>
-  },
-  queryClient?: QueryClient,
-): DefinedUseQueryResult<TData, TError> & {
-  queryKey: DataTag<QueryKey, TData, TError>
-}
-export function useListFonts<
-  TData = Awaited<ReturnType<typeof listFonts>>,
-  TError = ApiError,
->(
-  options?: {
-    query?: Partial<
-      UseQueryOptions<Awaited<ReturnType<typeof listFonts>>, TError, TData>
-    > &
-      Pick<
+        > , 'initialData'
+      >, request?: SecondParameter<typeof fetchApi>}
+ , queryClient?: QueryClient
+  ):  DefinedUseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> }
+export function useListFonts<TData = Awaited<ReturnType<typeof listFonts>>, TError = ApiError>(
+  options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof listFonts>>, TError, TData>> & Pick<
         UndefinedInitialDataOptions<
           Awaited<ReturnType<typeof listFonts>>,
           TError,
           Awaited<ReturnType<typeof listFonts>>
-        >,
-        'initialData'
-      >
-    request?: SecondParameter<typeof fetchApi>
-  },
-  queryClient?: QueryClient,
-): UseQueryResult<TData, TError> & {
-  queryKey: DataTag<QueryKey, TData, TError>
-}
-export function useListFonts<
-  TData = Awaited<ReturnType<typeof listFonts>>,
-  TError = ApiError,
->(
-  options?: {
-    query?: Partial<
-      UseQueryOptions<Awaited<ReturnType<typeof listFonts>>, TError, TData>
-    >
-    request?: SecondParameter<typeof fetchApi>
-  },
-  queryClient?: QueryClient,
-): UseQueryResult<TData, TError> & {
-  queryKey: DataTag<QueryKey, TData, TError>
-}
+        > , 'initialData'
+      >, request?: SecondParameter<typeof fetchApi>}
+ , queryClient?: QueryClient
+  ):  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> }
+export function useListFonts<TData = Awaited<ReturnType<typeof listFonts>>, TError = ApiError>(
+  options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof listFonts>>, TError, TData>>, request?: SecondParameter<typeof fetchApi>}
+ , queryClient?: QueryClient
+  ):  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> }
 
-export function useListFonts<
-  TData = Awaited<ReturnType<typeof listFonts>>,
-  TError = ApiError,
->(
-  options?: {
-    query?: Partial<
-      UseQueryOptions<Awaited<ReturnType<typeof listFonts>>, TError, TData>
-    >
-    request?: SecondParameter<typeof fetchApi>
-  },
-  queryClient?: QueryClient,
-): UseQueryResult<TData, TError> & {
-  queryKey: DataTag<QueryKey, TData, TError>
-} {
+export function useListFonts<TData = Awaited<ReturnType<typeof listFonts>>, TError = ApiError>(
+  options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof listFonts>>, TError, TData>>, request?: SecondParameter<typeof fetchApi>}
+ , queryClient?: QueryClient
+ ):  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> } {
+
   const queryOptions = getListFontsQueryOptions(options)
 
-  const query = useQuery(queryOptions, queryClient) as UseQueryResult<
-    TData,
-    TError
-  > & { queryKey: DataTag<QueryKey, TData, TError> }
+  const query = useQuery(queryOptions, queryClient) as  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> };
 
-  return { ...query, queryKey: queryOptions.queryKey }
+  return { ...query, queryKey: queryOptions.queryKey };
 }
 
+
+
+
 export const getGetMetaUrl = () => {
+
+
+
+
   return `/api/v1/meta`
 }
 
-export const getMeta = async (options?: RequestInit): Promise<MetaInfo> => {
-  return fetchApi<MetaInfo>(getGetMetaUrl(), {
+export const getMeta = async ( options?: RequestInit): Promise<MetaInfo> => {
+
+  return fetchApi<MetaInfo>(getGetMetaUrl(),
+  {
     ...options,
-    method: 'GET',
-  })
-}
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+
 
 export const getGetMetaQueryKey = () => {
-  return [`/api/v1/meta`] as const
+    return [
+    `/api/v1/meta`
+    ] as const;
+    }
+
+
+export const getGetMetaQueryOptions = <TData = Awaited<ReturnType<typeof getMeta>>, TError = ApiError>( options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof getMeta>>, TError, TData>>, request?: SecondParameter<typeof fetchApi>}
+) => {
+
+const {query: queryOptions, request: requestOptions} = options ?? {};
+
+  const queryKey =  queryOptions?.queryKey ?? getGetMetaQueryKey();
+
+
+
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof getMeta>>> = ({ signal }) => getMeta({ signal, ...requestOptions });
+
+
+
+
+
+   return  { queryKey, queryFn,   gcTime: 300000, retry: 1,  ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof getMeta>>, TError, TData> & { queryKey: DataTag<QueryKey, TData, TError> }
 }
 
-export const getGetMetaQueryOptions = <
-  TData = Awaited<ReturnType<typeof getMeta>>,
-  TError = ApiError,
->(options?: {
-  query?: Partial<
-    UseQueryOptions<Awaited<ReturnType<typeof getMeta>>, TError, TData>
-  >
-  request?: SecondParameter<typeof fetchApi>
-}) => {
-  const { query: queryOptions, request: requestOptions } = options ?? {}
-
-  const queryKey = queryOptions?.queryKey ?? getGetMetaQueryKey()
-
-  const queryFn: QueryFunction<Awaited<ReturnType<typeof getMeta>>> = ({
-    signal,
-  }) => getMeta({ signal, ...requestOptions })
-
-  return {
-    queryKey,
-    queryFn,
-    gcTime: 300000,
-    retry: 1,
-    ...queryOptions,
-  } as UseQueryOptions<Awaited<ReturnType<typeof getMeta>>, TError, TData> & {
-    queryKey: DataTag<QueryKey, TData, TError>
-  }
-}
-
-export type GetMetaQueryResult = NonNullable<
-  Awaited<ReturnType<typeof getMeta>>
->
+export type GetMetaQueryResult = NonNullable<Awaited<ReturnType<typeof getMeta>>>
 export type GetMetaQueryError = ApiError
 
-export function useGetMeta<
-  TData = Awaited<ReturnType<typeof getMeta>>,
-  TError = ApiError,
->(
-  options: {
-    query: Partial<
-      UseQueryOptions<Awaited<ReturnType<typeof getMeta>>, TError, TData>
-    > &
-      Pick<
+
+export function useGetMeta<TData = Awaited<ReturnType<typeof getMeta>>, TError = ApiError>(
+  options: { query:Partial<UseQueryOptions<Awaited<ReturnType<typeof getMeta>>, TError, TData>> & Pick<
         DefinedInitialDataOptions<
           Awaited<ReturnType<typeof getMeta>>,
           TError,
           Awaited<ReturnType<typeof getMeta>>
-        >,
-        'initialData'
-      >
-    request?: SecondParameter<typeof fetchApi>
-  },
-  queryClient?: QueryClient,
-): DefinedUseQueryResult<TData, TError> & {
-  queryKey: DataTag<QueryKey, TData, TError>
-}
-export function useGetMeta<
-  TData = Awaited<ReturnType<typeof getMeta>>,
-  TError = ApiError,
->(
-  options?: {
-    query?: Partial<
-      UseQueryOptions<Awaited<ReturnType<typeof getMeta>>, TError, TData>
-    > &
-      Pick<
+        > , 'initialData'
+      >, request?: SecondParameter<typeof fetchApi>}
+ , queryClient?: QueryClient
+  ):  DefinedUseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> }
+export function useGetMeta<TData = Awaited<ReturnType<typeof getMeta>>, TError = ApiError>(
+  options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof getMeta>>, TError, TData>> & Pick<
         UndefinedInitialDataOptions<
           Awaited<ReturnType<typeof getMeta>>,
           TError,
           Awaited<ReturnType<typeof getMeta>>
-        >,
-        'initialData'
-      >
-    request?: SecondParameter<typeof fetchApi>
-  },
-  queryClient?: QueryClient,
-): UseQueryResult<TData, TError> & {
-  queryKey: DataTag<QueryKey, TData, TError>
-}
-export function useGetMeta<
-  TData = Awaited<ReturnType<typeof getMeta>>,
-  TError = ApiError,
->(
-  options?: {
-    query?: Partial<
-      UseQueryOptions<Awaited<ReturnType<typeof getMeta>>, TError, TData>
-    >
-    request?: SecondParameter<typeof fetchApi>
-  },
-  queryClient?: QueryClient,
-): UseQueryResult<TData, TError> & {
-  queryKey: DataTag<QueryKey, TData, TError>
-}
+        > , 'initialData'
+      >, request?: SecondParameter<typeof fetchApi>}
+ , queryClient?: QueryClient
+  ):  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> }
+export function useGetMeta<TData = Awaited<ReturnType<typeof getMeta>>, TError = ApiError>(
+  options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof getMeta>>, TError, TData>>, request?: SecondParameter<typeof fetchApi>}
+ , queryClient?: QueryClient
+  ):  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> }
 
-export function useGetMeta<
-  TData = Awaited<ReturnType<typeof getMeta>>,
-  TError = ApiError,
->(
-  options?: {
-    query?: Partial<
-      UseQueryOptions<Awaited<ReturnType<typeof getMeta>>, TError, TData>
-    >
-    request?: SecondParameter<typeof fetchApi>
-  },
-  queryClient?: QueryClient,
-): UseQueryResult<TData, TError> & {
-  queryKey: DataTag<QueryKey, TData, TError>
-} {
+export function useGetMeta<TData = Awaited<ReturnType<typeof getMeta>>, TError = ApiError>(
+  options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof getMeta>>, TError, TData>>, request?: SecondParameter<typeof fetchApi>}
+ , queryClient?: QueryClient
+ ):  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> } {
+
   const queryOptions = getGetMetaQueryOptions(options)
 
-  const query = useQuery(queryOptions, queryClient) as UseQueryResult<
-    TData,
-    TError
-  > & { queryKey: DataTag<QueryKey, TData, TError> }
+  const query = useQuery(queryOptions, queryClient) as  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> };
 
-  return { ...query, queryKey: queryOptions.queryKey }
+  return { ...query, queryKey: queryOptions.queryKey };
 }

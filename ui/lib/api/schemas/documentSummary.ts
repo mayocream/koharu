@@ -5,16 +5,16 @@
  */
 
 export interface DocumentSummary {
-  hasBrushLayer: boolean
-  hasInpainted: boolean
-  hasRendered: boolean
-  hasSegment: boolean
+  hasBrushLayer: boolean;
+  hasInpainted: boolean;
+  hasRendered: boolean;
+  hasSegment: boolean;
   /** @minimum 0 */
-  height: number
-  id: string
-  name: string
+  height: number;
+  id: string;
+  name: string;
   /** @minimum 0 */
-  textBlockCount: number
+  textBlockCount: number;
   /** @minimum 0 */
-  width: number
+  width: number;
 }

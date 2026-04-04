@@ -4,10 +4,11 @@
  * OpenAPI spec version: 0.0.1
  */
 
-export type TextAlign = (typeof TextAlign)[keyof typeof TextAlign]
+export type TextAlign = typeof TextAlign[keyof typeof TextAlign];
+
 
 export const TextAlign = {
   left: 'left',
   center: 'center',
   right: 'right',
-} as const
+} as const;

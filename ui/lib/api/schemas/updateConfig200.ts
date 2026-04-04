@@ -3,12 +3,12 @@
  * Do not edit manually.
  * OpenAPI spec version: 0.0.1
  */
-import type { DataConfig } from './dataConfig'
-import type { PipelineConfig } from './pipelineConfig'
-import type { ProviderConfig } from './providerConfig'
+import type { DataConfig } from './dataConfig';
+import type { PipelineConfig } from './pipelineConfig';
+import type { ProviderConfig } from './providerConfig';
 
 export type UpdateConfig200 = {
-  data?: DataConfig
-  pipeline?: PipelineConfig
-  providers?: ProviderConfig[]
-}
+  data?: DataConfig;
+  pipeline?: PipelineConfig;
+  providers?: ProviderConfig[];
+};

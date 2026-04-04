@@ -5,6 +5,6 @@
  */
 
 export interface MetaInfo {
-  mlDevice: string
-  version: string
+  mlDevice: string;
+  version: string;
 }

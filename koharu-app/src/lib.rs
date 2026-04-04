@@ -6,6 +6,7 @@ pub mod llm;
 pub mod pipeline;
 pub mod renderer;
 pub mod storage;
+pub mod ops;
 pub mod utils;
 
 use std::sync::Arc;

@@ -4,9 +4,10 @@
  * OpenAPI spec version: 0.0.1
  */
 
-export type LlmTargetKind = (typeof LlmTargetKind)[keyof typeof LlmTargetKind]
+export type LlmTargetKind = typeof LlmTargetKind[keyof typeof LlmTargetKind];
+
 
 export const LlmTargetKind = {
   local: 'local',
   provider: 'provider',
-} as const
+} as const;

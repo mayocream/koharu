@@ -5,9 +5,9 @@
  */
 
 export type GetDocumentThumbnailParams = {
-  /**
-   * @minimum 0
-   * @nullable
-   */
-  size?: number | null
-}
+/**
+ * @minimum 0
+ * @nullable
+ */
+size?: number | null;
+};

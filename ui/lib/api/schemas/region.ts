@@ -6,11 +6,11 @@
 
 export interface Region {
   /** @minimum 0 */
-  height: number
+  height: number;
   /** @minimum 0 */
-  width: number
+  width: number;
   /** @minimum 0 */
-  x: number
+  x: number;
   /** @minimum 0 */
-  y: number
+  y: number;
 }

@@ -6,12 +6,12 @@
 
 export interface LlmGenerationOptions {
   /** @nullable */
-  customSystemPrompt?: string | null
+  customSystemPrompt?: string | null;
   /**
-   * @minimum 0
-   * @nullable
-   */
-  maxTokens?: number | null
+     * @minimum 0
+     * @nullable
+     */
+  maxTokens?: number | null;
   /** @nullable */
-  temperature?: number | null
+  temperature?: number | null;
 }

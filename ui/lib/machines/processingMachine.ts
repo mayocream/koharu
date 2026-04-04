@@ -104,6 +104,7 @@ export type ProcessingEvent =
       params?: { layer?: ExportLayer | null }
     }
   | { type: 'START_BATCH_EXPORT'; layer: ExportLayer }
+  | { type: 'START_EXPORT_PROJECT' }
   | {
       type: 'PROGRESS'
       step?: string
@@ -240,6 +241,11 @@ const batchExportActor = fromPromise<void, { layer: ExportLayer }>(
   },
 )
 
+const exportProjectActor = fromPromise<void, void>(async () => {
+  const { exportProject } = await import('@/lib/api/exports/exports')
+  await exportProject()
+})
+
 // ---------------------------------------------------------------------------
 // Polling actors (replace SSE)
 // ---------------------------------------------------------------------------
@@ -324,6 +330,7 @@ export const processingMachine = setup({
     llmUnloadActor,
     exportActor,
     batchExportActor,
+    exportProjectActor,
     jobPollingActor,
     llmPollingActor,
   },
@@ -508,6 +515,10 @@ export const processingMachine = setup({
         },
         START_BATCH_EXPORT: {
           target: 'batchExporting',
+          actions: ['resetContext'],
+        },
+        START_EXPORT_PROJECT: {
+          target: 'exportingProject',
           actions: ['resetContext'],
         },
       },
@@ -823,6 +834,23 @@ export const processingMachine = setup({
             queryClient: context.queryClient,
           }
         },
+        onDone: {
+          target: 'idle',
+        },
+        onError: {
+          target: 'idle',
+          actions: ['setErrorFromInvoke', 'surfaceError'],
+        },
+      },
+    },
+
+    // -----------------------------------------------------------------------
+    exportingProject: {
+      entry: 'setProgressBarNormal',
+      exit: 'clearProgressBar',
+      invoke: {
+        src: 'exportProjectActor',
+        input: () => ({}),
         onDone: {
           target: 'idle',
         },

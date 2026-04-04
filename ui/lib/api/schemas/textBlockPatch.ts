@@ -3,20 +3,20 @@
  * Do not edit manually.
  * OpenAPI spec version: 0.0.1
  */
-import type { TextStyle } from './textStyle'
+import type { TextStyle } from './textStyle';
 
 export interface TextBlockPatch {
   /** @nullable */
-  height?: number | null
-  style?: null | TextStyle
+  height?: number | null;
+  style?: null | TextStyle;
   /** @nullable */
-  text?: string | null
+  text?: string | null;
   /** @nullable */
-  translation?: string | null
+  translation?: string | null;
   /** @nullable */
-  width?: number | null
+  width?: number | null;
   /** @nullable */
-  x?: number | null
+  x?: number | null;
   /** @nullable */
-  y?: number | null
+  y?: number | null;
 }

@@ -3,7 +3,9 @@
  * Do not edit manually.
  * OpenAPI spec version: 0.0.1
  */
-import { useQuery } from '@tanstack/react-query'
+import {
+  useQuery
+} from '@tanstack/react-query';
 import type {
   DataTag,
   DefinedInitialDataOptions,
@@ -13,153 +15,105 @@ import type {
   QueryKey,
   UndefinedInitialDataOptions,
   UseQueryOptions,
-  UseQueryResult,
-} from '@tanstack/react-query'
+  UseQueryResult
+} from '@tanstack/react-query';
 
-import type { ApiError } from '../schemas'
+import type {
+  ApiError
+} from '../schemas';
 
-import { fetchApi } from '.././fetch'
+import { fetchApi } from '.././fetch';
 
-type SecondParameter<T extends (...args: never) => unknown> = Parameters<T>[1]
 
-export const getGetBlobUrl = (hash: string) => {
+type SecondParameter<T extends (...args: never) => unknown> = Parameters<T>[1];
+
+
+
+export const getGetBlobUrl = (hash: string,) => {
+
+
+
+
   return `/api/v1/blobs/${hash}`
 }
 
-export const getBlob = async (
-  hash: string,
-  options?: RequestInit,
-): Promise<Blob> => {
-  return fetchApi<Blob>(getGetBlobUrl(hash), {
+export const getBlob = async (hash: string, options?: RequestInit): Promise<Blob> => {
+
+  return fetchApi<Blob>(getGetBlobUrl(hash),
+  {
     ...options,
-    method: 'GET',
-  })
-}
+    method: 'GET'
 
-export const getGetBlobQueryKey = (hash: string) => {
-  return [`/api/v1/blobs/${hash}`] as const
-}
 
-export const getGetBlobQueryOptions = <
-  TData = Awaited<ReturnType<typeof getBlob>>,
-  TError = ApiError,
->(
-  hash: string,
-  options?: {
-    query?: Partial<
-      UseQueryOptions<Awaited<ReturnType<typeof getBlob>>, TError, TData>
-    >
-    request?: SecondParameter<typeof fetchApi>
-  },
-) => {
-  const { query: queryOptions, request: requestOptions } = options ?? {}
-
-  const queryKey = queryOptions?.queryKey ?? getGetBlobQueryKey(hash)
-
-  const queryFn: QueryFunction<Awaited<ReturnType<typeof getBlob>>> = ({
-    signal,
-  }) => getBlob(hash, { signal, ...requestOptions })
-
-  return {
-    queryKey,
-    queryFn,
-    enabled: !!hash,
-    gcTime: 300000,
-    retry: 1,
-    ...queryOptions,
-  } as UseQueryOptions<Awaited<ReturnType<typeof getBlob>>, TError, TData> & {
-    queryKey: DataTag<QueryKey, TData, TError>
   }
+);}
+
+
+
+
+
+export const getGetBlobQueryKey = (hash: string,) => {
+    return [
+    `/api/v1/blobs/${hash}`
+    ] as const;
+    }
+
+
+export const getGetBlobQueryOptions = <TData = Awaited<ReturnType<typeof getBlob>>, TError = ApiError>(hash: string, options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof getBlob>>, TError, TData>>, request?: SecondParameter<typeof fetchApi>}
+) => {
+
+const {query: queryOptions, request: requestOptions} = options ?? {};
+
+  const queryKey =  queryOptions?.queryKey ?? getGetBlobQueryKey(hash);
+
+
+
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof getBlob>>> = ({ signal }) => getBlob(hash, { signal, ...requestOptions });
+
+
+
+
+
+   return  { queryKey, queryFn, enabled: !!(hash),  gcTime: 300000, retry: 1,  ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof getBlob>>, TError, TData> & { queryKey: DataTag<QueryKey, TData, TError> }
 }
 
-export type GetBlobQueryResult = NonNullable<
-  Awaited<ReturnType<typeof getBlob>>
->
+export type GetBlobQueryResult = NonNullable<Awaited<ReturnType<typeof getBlob>>>
 export type GetBlobQueryError = ApiError
 
-export function useGetBlob<
-  TData = Awaited<ReturnType<typeof getBlob>>,
-  TError = ApiError,
->(
-  hash: string,
-  options: {
-    query: Partial<
-      UseQueryOptions<Awaited<ReturnType<typeof getBlob>>, TError, TData>
-    > &
-      Pick<
+
+export function useGetBlob<TData = Awaited<ReturnType<typeof getBlob>>, TError = ApiError>(
+ hash: string, options: { query:Partial<UseQueryOptions<Awaited<ReturnType<typeof getBlob>>, TError, TData>> & Pick<
         DefinedInitialDataOptions<
           Awaited<ReturnType<typeof getBlob>>,
           TError,
           Awaited<ReturnType<typeof getBlob>>
-        >,
-        'initialData'
-      >
-    request?: SecondParameter<typeof fetchApi>
-  },
-  queryClient?: QueryClient,
-): DefinedUseQueryResult<TData, TError> & {
-  queryKey: DataTag<QueryKey, TData, TError>
-}
-export function useGetBlob<
-  TData = Awaited<ReturnType<typeof getBlob>>,
-  TError = ApiError,
->(
-  hash: string,
-  options?: {
-    query?: Partial<
-      UseQueryOptions<Awaited<ReturnType<typeof getBlob>>, TError, TData>
-    > &
-      Pick<
+        > , 'initialData'
+      >, request?: SecondParameter<typeof fetchApi>}
+ , queryClient?: QueryClient
+  ):  DefinedUseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> }
+export function useGetBlob<TData = Awaited<ReturnType<typeof getBlob>>, TError = ApiError>(
+ hash: string, options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof getBlob>>, TError, TData>> & Pick<
         UndefinedInitialDataOptions<
           Awaited<ReturnType<typeof getBlob>>,
           TError,
           Awaited<ReturnType<typeof getBlob>>
-        >,
-        'initialData'
-      >
-    request?: SecondParameter<typeof fetchApi>
-  },
-  queryClient?: QueryClient,
-): UseQueryResult<TData, TError> & {
-  queryKey: DataTag<QueryKey, TData, TError>
-}
-export function useGetBlob<
-  TData = Awaited<ReturnType<typeof getBlob>>,
-  TError = ApiError,
->(
-  hash: string,
-  options?: {
-    query?: Partial<
-      UseQueryOptions<Awaited<ReturnType<typeof getBlob>>, TError, TData>
-    >
-    request?: SecondParameter<typeof fetchApi>
-  },
-  queryClient?: QueryClient,
-): UseQueryResult<TData, TError> & {
-  queryKey: DataTag<QueryKey, TData, TError>
-}
+        > , 'initialData'
+      >, request?: SecondParameter<typeof fetchApi>}
+ , queryClient?: QueryClient
+  ):  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> }
+export function useGetBlob<TData = Awaited<ReturnType<typeof getBlob>>, TError = ApiError>(
+ hash: string, options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof getBlob>>, TError, TData>>, request?: SecondParameter<typeof fetchApi>}
+ , queryClient?: QueryClient
+  ):  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> }
 
-export function useGetBlob<
-  TData = Awaited<ReturnType<typeof getBlob>>,
-  TError = ApiError,
->(
-  hash: string,
-  options?: {
-    query?: Partial<
-      UseQueryOptions<Awaited<ReturnType<typeof getBlob>>, TError, TData>
-    >
-    request?: SecondParameter<typeof fetchApi>
-  },
-  queryClient?: QueryClient,
-): UseQueryResult<TData, TError> & {
-  queryKey: DataTag<QueryKey, TData, TError>
-} {
-  const queryOptions = getGetBlobQueryOptions(hash, options)
+export function useGetBlob<TData = Awaited<ReturnType<typeof getBlob>>, TError = ApiError>(
+ hash: string, options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof getBlob>>, TError, TData>>, request?: SecondParameter<typeof fetchApi>}
+ , queryClient?: QueryClient
+ ):  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> } {
 
-  const query = useQuery(queryOptions, queryClient) as UseQueryResult<
-    TData,
-    TError
-  > & { queryKey: DataTag<QueryKey, TData, TError> }
+  const queryOptions = getGetBlobQueryOptions(hash,options)
 
-  return { ...query, queryKey: queryOptions.queryKey }
+  const query = useQuery(queryOptions, queryClient) as  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> };
+
+  return { ...query, queryKey: queryOptions.queryKey };
 }

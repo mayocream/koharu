@@ -3,7 +3,10 @@
  * Do not edit manually.
  * OpenAPI spec version: 0.0.1
  */
-import { useMutation, useQuery } from '@tanstack/react-query'
+import {
+  useMutation,
+  useQuery
+} from '@tanstack/react-query';
 import type {
   DataTag,
   DefinedInitialDataOptions,
@@ -16,452 +19,335 @@ import type {
   UseMutationOptions,
   UseMutationResult,
   UseQueryOptions,
-  UseQueryResult,
-} from '@tanstack/react-query'
+  UseQueryResult
+} from '@tanstack/react-query';
 
 import type {
   ApiError,
   GetLlmCatalogParams,
   LlmCatalog,
   LlmLoadRequest,
-  LlmState,
-} from '../schemas'
+  LlmState
+} from '../schemas';
 
-import { fetchApi } from '.././fetch'
+import { fetchApi } from '.././fetch';
 
-type SecondParameter<T extends (...args: never) => unknown> = Parameters<T>[1]
+
+type SecondParameter<T extends (...args: never) => unknown> = Parameters<T>[1];
+
+
 
 export const getGetLlmUrl = () => {
+
+
+
+
   return `/api/v1/llm`
 }
 
-export const getLlm = async (options?: RequestInit): Promise<LlmState> => {
-  return fetchApi<LlmState>(getGetLlmUrl(), {
+export const getLlm = async ( options?: RequestInit): Promise<LlmState> => {
+
+  return fetchApi<LlmState>(getGetLlmUrl(),
+  {
     ...options,
-    method: 'GET',
-  })
-}
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+
 
 export const getGetLlmQueryKey = () => {
-  return [`/api/v1/llm`] as const
-}
+    return [
+    `/api/v1/llm`
+    ] as const;
+    }
 
-export const getGetLlmQueryOptions = <
-  TData = Awaited<ReturnType<typeof getLlm>>,
-  TError = ApiError,
->(options?: {
-  query?: Partial<
-    UseQueryOptions<Awaited<ReturnType<typeof getLlm>>, TError, TData>
-  >
-  request?: SecondParameter<typeof fetchApi>
-}) => {
-  const { query: queryOptions, request: requestOptions } = options ?? {}
 
-  const queryKey = queryOptions?.queryKey ?? getGetLlmQueryKey()
+export const getGetLlmQueryOptions = <TData = Awaited<ReturnType<typeof getLlm>>, TError = ApiError>( options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof getLlm>>, TError, TData>>, request?: SecondParameter<typeof fetchApi>}
+) => {
 
-  const queryFn: QueryFunction<Awaited<ReturnType<typeof getLlm>>> = ({
-    signal,
-  }) => getLlm({ signal, ...requestOptions })
+const {query: queryOptions, request: requestOptions} = options ?? {};
 
-  return {
-    queryKey,
-    queryFn,
-    gcTime: 300000,
-    retry: 1,
-    ...queryOptions,
-  } as UseQueryOptions<Awaited<ReturnType<typeof getLlm>>, TError, TData> & {
-    queryKey: DataTag<QueryKey, TData, TError>
-  }
+  const queryKey =  queryOptions?.queryKey ?? getGetLlmQueryKey();
+
+
+
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof getLlm>>> = ({ signal }) => getLlm({ signal, ...requestOptions });
+
+
+
+
+
+   return  { queryKey, queryFn,   gcTime: 300000, retry: 1,  ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof getLlm>>, TError, TData> & { queryKey: DataTag<QueryKey, TData, TError> }
 }
 
 export type GetLlmQueryResult = NonNullable<Awaited<ReturnType<typeof getLlm>>>
 export type GetLlmQueryError = ApiError
 
-export function useGetLlm<
-  TData = Awaited<ReturnType<typeof getLlm>>,
-  TError = ApiError,
->(
-  options: {
-    query: Partial<
-      UseQueryOptions<Awaited<ReturnType<typeof getLlm>>, TError, TData>
-    > &
-      Pick<
+
+export function useGetLlm<TData = Awaited<ReturnType<typeof getLlm>>, TError = ApiError>(
+  options: { query:Partial<UseQueryOptions<Awaited<ReturnType<typeof getLlm>>, TError, TData>> & Pick<
         DefinedInitialDataOptions<
           Awaited<ReturnType<typeof getLlm>>,
           TError,
           Awaited<ReturnType<typeof getLlm>>
-        >,
-        'initialData'
-      >
-    request?: SecondParameter<typeof fetchApi>
-  },
-  queryClient?: QueryClient,
-): DefinedUseQueryResult<TData, TError> & {
-  queryKey: DataTag<QueryKey, TData, TError>
-}
-export function useGetLlm<
-  TData = Awaited<ReturnType<typeof getLlm>>,
-  TError = ApiError,
->(
-  options?: {
-    query?: Partial<
-      UseQueryOptions<Awaited<ReturnType<typeof getLlm>>, TError, TData>
-    > &
-      Pick<
+        > , 'initialData'
+      >, request?: SecondParameter<typeof fetchApi>}
+ , queryClient?: QueryClient
+  ):  DefinedUseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> }
+export function useGetLlm<TData = Awaited<ReturnType<typeof getLlm>>, TError = ApiError>(
+  options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof getLlm>>, TError, TData>> & Pick<
         UndefinedInitialDataOptions<
           Awaited<ReturnType<typeof getLlm>>,
           TError,
           Awaited<ReturnType<typeof getLlm>>
-        >,
-        'initialData'
-      >
-    request?: SecondParameter<typeof fetchApi>
-  },
-  queryClient?: QueryClient,
-): UseQueryResult<TData, TError> & {
-  queryKey: DataTag<QueryKey, TData, TError>
-}
-export function useGetLlm<
-  TData = Awaited<ReturnType<typeof getLlm>>,
-  TError = ApiError,
->(
-  options?: {
-    query?: Partial<
-      UseQueryOptions<Awaited<ReturnType<typeof getLlm>>, TError, TData>
-    >
-    request?: SecondParameter<typeof fetchApi>
-  },
-  queryClient?: QueryClient,
-): UseQueryResult<TData, TError> & {
-  queryKey: DataTag<QueryKey, TData, TError>
-}
+        > , 'initialData'
+      >, request?: SecondParameter<typeof fetchApi>}
+ , queryClient?: QueryClient
+  ):  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> }
+export function useGetLlm<TData = Awaited<ReturnType<typeof getLlm>>, TError = ApiError>(
+  options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof getLlm>>, TError, TData>>, request?: SecondParameter<typeof fetchApi>}
+ , queryClient?: QueryClient
+  ):  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> }
 
-export function useGetLlm<
-  TData = Awaited<ReturnType<typeof getLlm>>,
-  TError = ApiError,
->(
-  options?: {
-    query?: Partial<
-      UseQueryOptions<Awaited<ReturnType<typeof getLlm>>, TError, TData>
-    >
-    request?: SecondParameter<typeof fetchApi>
-  },
-  queryClient?: QueryClient,
-): UseQueryResult<TData, TError> & {
-  queryKey: DataTag<QueryKey, TData, TError>
-} {
+export function useGetLlm<TData = Awaited<ReturnType<typeof getLlm>>, TError = ApiError>(
+  options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof getLlm>>, TError, TData>>, request?: SecondParameter<typeof fetchApi>}
+ , queryClient?: QueryClient
+ ):  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> } {
+
   const queryOptions = getGetLlmQueryOptions(options)
 
-  const query = useQuery(queryOptions, queryClient) as UseQueryResult<
-    TData,
-    TError
-  > & { queryKey: DataTag<QueryKey, TData, TError> }
+  const query = useQuery(queryOptions, queryClient) as  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> };
 
-  return { ...query, queryKey: queryOptions.queryKey }
+  return { ...query, queryKey: queryOptions.queryKey };
 }
 
+
+
+
 export const getLoadLlmUrl = () => {
+
+
+
+
   return `/api/v1/llm`
 }
 
-export const loadLlm = async (
-  llmLoadRequest: LlmLoadRequest,
-  options?: RequestInit,
-): Promise<LlmState> => {
-  return fetchApi<LlmState>(getLoadLlmUrl(), {
+export const loadLlm = async (llmLoadRequest: LlmLoadRequest, options?: RequestInit): Promise<LlmState> => {
+
+  return fetchApi<LlmState>(getLoadLlmUrl(),
+  {
     ...options,
     method: 'PUT',
     headers: { 'Content-Type': 'application/json', ...options?.headers },
-    body: JSON.stringify(llmLoadRequest),
-  })
-}
-
-export const getLoadLlmMutationOptions = <
-  TError = ApiError,
-  TContext = unknown,
->(options?: {
-  mutation?: UseMutationOptions<
-    Awaited<ReturnType<typeof loadLlm>>,
-    TError,
-    { data: LlmLoadRequest },
-    TContext
-  >
-  request?: SecondParameter<typeof fetchApi>
-}): UseMutationOptions<
-  Awaited<ReturnType<typeof loadLlm>>,
-  TError,
-  { data: LlmLoadRequest },
-  TContext
-> => {
-  const mutationKey = ['loadLlm']
-  const { mutation: mutationOptions, request: requestOptions } = options
-    ? options.mutation &&
-      'mutationKey' in options.mutation &&
-      options.mutation.mutationKey
-      ? options
-      : { ...options, mutation: { ...options.mutation, mutationKey } }
-    : { mutation: { mutationKey }, request: undefined }
-
-  const mutationFn: MutationFunction<
-    Awaited<ReturnType<typeof loadLlm>>,
-    { data: LlmLoadRequest }
-  > = (props) => {
-    const { data } = props ?? {}
-
-    return loadLlm(data, requestOptions)
+    body: JSON.stringify(
+      llmLoadRequest,)
   }
+);}
 
-  return { mutationFn, ...mutationOptions }
-}
 
-export type LoadLlmMutationResult = NonNullable<
-  Awaited<ReturnType<typeof loadLlm>>
->
-export type LoadLlmMutationBody = LlmLoadRequest
-export type LoadLlmMutationError = ApiError
 
-export const useLoadLlm = <TError = ApiError, TContext = unknown>(
-  options?: {
-    mutation?: UseMutationOptions<
-      Awaited<ReturnType<typeof loadLlm>>,
-      TError,
-      { data: LlmLoadRequest },
-      TContext
-    >
-    request?: SecondParameter<typeof fetchApi>
-  },
-  queryClient?: QueryClient,
-): UseMutationResult<
-  Awaited<ReturnType<typeof loadLlm>>,
-  TError,
-  { data: LlmLoadRequest },
-  TContext
-> => {
-  return useMutation(getLoadLlmMutationOptions(options), queryClient)
-}
-export const getUnloadLlmUrl = () => {
+
+export const getLoadLlmMutationOptions = <TError = ApiError,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof loadLlm>>, TError,{data: LlmLoadRequest}, TContext>, request?: SecondParameter<typeof fetchApi>}
+): UseMutationOptions<Awaited<ReturnType<typeof loadLlm>>, TError,{data: LlmLoadRequest}, TContext> => {
+
+const mutationKey = ['loadLlm'];
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof loadLlm>>, {data: LlmLoadRequest}> = (props) => {
+          const {data} = props ?? {};
+
+          return  loadLlm(data,requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type LoadLlmMutationResult = NonNullable<Awaited<ReturnType<typeof loadLlm>>>
+    export type LoadLlmMutationBody = LlmLoadRequest
+    export type LoadLlmMutationError = ApiError
+
+    export const useLoadLlm = <TError = ApiError,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof loadLlm>>, TError,{data: LlmLoadRequest}, TContext>, request?: SecondParameter<typeof fetchApi>}
+ , queryClient?: QueryClient): UseMutationResult<
+        Awaited<ReturnType<typeof loadLlm>>,
+        TError,
+        {data: LlmLoadRequest},
+        TContext
+      > => {
+      return useMutation(getLoadLlmMutationOptions(options), queryClient);
+    }
+    export const getUnloadLlmUrl = () => {
+
+
+
+
   return `/api/v1/llm`
 }
 
-export const unloadLlm = async (options?: RequestInit): Promise<LlmState> => {
-  return fetchApi<LlmState>(getUnloadLlmUrl(), {
+export const unloadLlm = async ( options?: RequestInit): Promise<LlmState> => {
+
+  return fetchApi<LlmState>(getUnloadLlmUrl(),
+  {
     ...options,
-    method: 'DELETE',
-  })
-}
+    method: 'DELETE'
 
-export const getUnloadLlmMutationOptions = <
-  TError = ApiError,
-  TContext = unknown,
->(options?: {
-  mutation?: UseMutationOptions<
-    Awaited<ReturnType<typeof unloadLlm>>,
-    TError,
-    void,
-    TContext
-  >
-  request?: SecondParameter<typeof fetchApi>
-}): UseMutationOptions<
-  Awaited<ReturnType<typeof unloadLlm>>,
-  TError,
-  void,
-  TContext
-> => {
-  const mutationKey = ['unloadLlm']
-  const { mutation: mutationOptions, request: requestOptions } = options
-    ? options.mutation &&
-      'mutationKey' in options.mutation &&
-      options.mutation.mutationKey
-      ? options
-      : { ...options, mutation: { ...options.mutation, mutationKey } }
-    : { mutation: { mutationKey }, request: undefined }
 
-  const mutationFn: MutationFunction<
-    Awaited<ReturnType<typeof unloadLlm>>,
-    void
-  > = () => {
-    return unloadLlm(requestOptions)
   }
+);}
 
-  return { mutationFn, ...mutationOptions }
-}
 
-export type UnloadLlmMutationResult = NonNullable<
-  Awaited<ReturnType<typeof unloadLlm>>
->
 
-export type UnloadLlmMutationError = ApiError
 
-export const useUnloadLlm = <TError = ApiError, TContext = unknown>(
-  options?: {
-    mutation?: UseMutationOptions<
-      Awaited<ReturnType<typeof unloadLlm>>,
-      TError,
-      void,
-      TContext
-    >
-    request?: SecondParameter<typeof fetchApi>
-  },
-  queryClient?: QueryClient,
-): UseMutationResult<
-  Awaited<ReturnType<typeof unloadLlm>>,
-  TError,
-  void,
-  TContext
-> => {
-  return useMutation(getUnloadLlmMutationOptions(options), queryClient)
-}
-export const getGetLlmCatalogUrl = (params?: GetLlmCatalogParams) => {
-  const normalizedParams = new URLSearchParams()
+export const getUnloadLlmMutationOptions = <TError = ApiError,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof unloadLlm>>, TError,void, TContext>, request?: SecondParameter<typeof fetchApi>}
+): UseMutationOptions<Awaited<ReturnType<typeof unloadLlm>>, TError,void, TContext> => {
+
+const mutationKey = ['unloadLlm'];
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof unloadLlm>>, void> = () => {
+
+
+          return  unloadLlm(requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type UnloadLlmMutationResult = NonNullable<Awaited<ReturnType<typeof unloadLlm>>>
+
+    export type UnloadLlmMutationError = ApiError
+
+    export const useUnloadLlm = <TError = ApiError,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof unloadLlm>>, TError,void, TContext>, request?: SecondParameter<typeof fetchApi>}
+ , queryClient?: QueryClient): UseMutationResult<
+        Awaited<ReturnType<typeof unloadLlm>>,
+        TError,
+        void,
+        TContext
+      > => {
+      return useMutation(getUnloadLlmMutationOptions(options), queryClient);
+    }
+    export const getGetLlmCatalogUrl = (params?: GetLlmCatalogParams,) => {
+  const normalizedParams = new URLSearchParams();
 
   Object.entries(params || {}).forEach(([key, value]) => {
+
     if (value !== undefined) {
       normalizedParams.append(key, value === null ? 'null' : value.toString())
     }
-  })
+  });
 
-  const stringifiedParams = normalizedParams.toString()
+  const stringifiedParams = normalizedParams.toString();
 
-  return stringifiedParams.length > 0
-    ? `/api/v1/llm/catalog?${stringifiedParams}`
-    : `/api/v1/llm/catalog`
+  return stringifiedParams.length > 0 ? `/api/v1/llm/catalog?${stringifiedParams}` : `/api/v1/llm/catalog`
 }
 
-export const getLlmCatalog = async (
-  params?: GetLlmCatalogParams,
-  options?: RequestInit,
-): Promise<LlmCatalog> => {
-  return fetchApi<LlmCatalog>(getGetLlmCatalogUrl(params), {
+export const getLlmCatalog = async (params?: GetLlmCatalogParams, options?: RequestInit): Promise<LlmCatalog> => {
+
+  return fetchApi<LlmCatalog>(getGetLlmCatalogUrl(params),
+  {
     ...options,
-    method: 'GET',
-  })
-}
+    method: 'GET'
 
-export const getGetLlmCatalogQueryKey = (params?: GetLlmCatalogParams) => {
-  return [`/api/v1/llm/catalog`, ...(params ? [params] : [])] as const
-}
 
-export const getGetLlmCatalogQueryOptions = <
-  TData = Awaited<ReturnType<typeof getLlmCatalog>>,
-  TError = ApiError,
->(
-  params?: GetLlmCatalogParams,
-  options?: {
-    query?: Partial<
-      UseQueryOptions<Awaited<ReturnType<typeof getLlmCatalog>>, TError, TData>
-    >
-    request?: SecondParameter<typeof fetchApi>
-  },
+  }
+);}
+
+
+
+
+
+export const getGetLlmCatalogQueryKey = (params?: GetLlmCatalogParams,) => {
+    return [
+    `/api/v1/llm/catalog`, ...(params ? [params] : [])
+    ] as const;
+    }
+
+
+export const getGetLlmCatalogQueryOptions = <TData = Awaited<ReturnType<typeof getLlmCatalog>>, TError = ApiError>(params?: GetLlmCatalogParams, options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof getLlmCatalog>>, TError, TData>>, request?: SecondParameter<typeof fetchApi>}
 ) => {
-  const { query: queryOptions, request: requestOptions } = options ?? {}
 
-  const queryKey = queryOptions?.queryKey ?? getGetLlmCatalogQueryKey(params)
+const {query: queryOptions, request: requestOptions} = options ?? {};
 
-  const queryFn: QueryFunction<Awaited<ReturnType<typeof getLlmCatalog>>> = ({
-    signal,
-  }) => getLlmCatalog(params, { signal, ...requestOptions })
+  const queryKey =  queryOptions?.queryKey ?? getGetLlmCatalogQueryKey(params);
 
-  return {
-    queryKey,
-    queryFn,
-    gcTime: 300000,
-    retry: 1,
-    ...queryOptions,
-  } as UseQueryOptions<
-    Awaited<ReturnType<typeof getLlmCatalog>>,
-    TError,
-    TData
-  > & { queryKey: DataTag<QueryKey, TData, TError> }
+
+
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof getLlmCatalog>>> = ({ signal }) => getLlmCatalog(params, { signal, ...requestOptions });
+
+
+
+
+
+   return  { queryKey, queryFn,   gcTime: 300000, retry: 1,  ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof getLlmCatalog>>, TError, TData> & { queryKey: DataTag<QueryKey, TData, TError> }
 }
 
-export type GetLlmCatalogQueryResult = NonNullable<
-  Awaited<ReturnType<typeof getLlmCatalog>>
->
+export type GetLlmCatalogQueryResult = NonNullable<Awaited<ReturnType<typeof getLlmCatalog>>>
 export type GetLlmCatalogQueryError = ApiError
 
-export function useGetLlmCatalog<
-  TData = Awaited<ReturnType<typeof getLlmCatalog>>,
-  TError = ApiError,
->(
-  params: undefined | GetLlmCatalogParams,
-  options: {
-    query: Partial<
-      UseQueryOptions<Awaited<ReturnType<typeof getLlmCatalog>>, TError, TData>
-    > &
-      Pick<
+
+export function useGetLlmCatalog<TData = Awaited<ReturnType<typeof getLlmCatalog>>, TError = ApiError>(
+ params: undefined |  GetLlmCatalogParams, options: { query:Partial<UseQueryOptions<Awaited<ReturnType<typeof getLlmCatalog>>, TError, TData>> & Pick<
         DefinedInitialDataOptions<
           Awaited<ReturnType<typeof getLlmCatalog>>,
           TError,
           Awaited<ReturnType<typeof getLlmCatalog>>
-        >,
-        'initialData'
-      >
-    request?: SecondParameter<typeof fetchApi>
-  },
-  queryClient?: QueryClient,
-): DefinedUseQueryResult<TData, TError> & {
-  queryKey: DataTag<QueryKey, TData, TError>
-}
-export function useGetLlmCatalog<
-  TData = Awaited<ReturnType<typeof getLlmCatalog>>,
-  TError = ApiError,
->(
-  params?: GetLlmCatalogParams,
-  options?: {
-    query?: Partial<
-      UseQueryOptions<Awaited<ReturnType<typeof getLlmCatalog>>, TError, TData>
-    > &
-      Pick<
+        > , 'initialData'
+      >, request?: SecondParameter<typeof fetchApi>}
+ , queryClient?: QueryClient
+  ):  DefinedUseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> }
+export function useGetLlmCatalog<TData = Awaited<ReturnType<typeof getLlmCatalog>>, TError = ApiError>(
+ params?: GetLlmCatalogParams, options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof getLlmCatalog>>, TError, TData>> & Pick<
         UndefinedInitialDataOptions<
           Awaited<ReturnType<typeof getLlmCatalog>>,
           TError,
           Awaited<ReturnType<typeof getLlmCatalog>>
-        >,
-        'initialData'
-      >
-    request?: SecondParameter<typeof fetchApi>
-  },
-  queryClient?: QueryClient,
-): UseQueryResult<TData, TError> & {
-  queryKey: DataTag<QueryKey, TData, TError>
-}
-export function useGetLlmCatalog<
-  TData = Awaited<ReturnType<typeof getLlmCatalog>>,
-  TError = ApiError,
->(
-  params?: GetLlmCatalogParams,
-  options?: {
-    query?: Partial<
-      UseQueryOptions<Awaited<ReturnType<typeof getLlmCatalog>>, TError, TData>
-    >
-    request?: SecondParameter<typeof fetchApi>
-  },
-  queryClient?: QueryClient,
-): UseQueryResult<TData, TError> & {
-  queryKey: DataTag<QueryKey, TData, TError>
-}
+        > , 'initialData'
+      >, request?: SecondParameter<typeof fetchApi>}
+ , queryClient?: QueryClient
+  ):  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> }
+export function useGetLlmCatalog<TData = Awaited<ReturnType<typeof getLlmCatalog>>, TError = ApiError>(
+ params?: GetLlmCatalogParams, options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof getLlmCatalog>>, TError, TData>>, request?: SecondParameter<typeof fetchApi>}
+ , queryClient?: QueryClient
+  ):  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> }
 
-export function useGetLlmCatalog<
-  TData = Awaited<ReturnType<typeof getLlmCatalog>>,
-  TError = ApiError,
->(
-  params?: GetLlmCatalogParams,
-  options?: {
-    query?: Partial<
-      UseQueryOptions<Awaited<ReturnType<typeof getLlmCatalog>>, TError, TData>
-    >
-    request?: SecondParameter<typeof fetchApi>
-  },
-  queryClient?: QueryClient,
-): UseQueryResult<TData, TError> & {
-  queryKey: DataTag<QueryKey, TData, TError>
-} {
-  const queryOptions = getGetLlmCatalogQueryOptions(params, options)
+export function useGetLlmCatalog<TData = Awaited<ReturnType<typeof getLlmCatalog>>, TError = ApiError>(
+ params?: GetLlmCatalogParams, options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof getLlmCatalog>>, TError, TData>>, request?: SecondParameter<typeof fetchApi>}
+ , queryClient?: QueryClient
+ ):  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> } {
 
-  const query = useQuery(queryOptions, queryClient) as UseQueryResult<
-    TData,
-    TError
-  > & { queryKey: DataTag<QueryKey, TData, TError> }
+  const queryOptions = getGetLlmCatalogQueryOptions(params,options)
 
-  return { ...query, queryKey: queryOptions.queryKey }
+  const query = useQuery(queryOptions, queryClient) as  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> };
+
+  return { ...query, queryKey: queryOptions.queryKey };
 }

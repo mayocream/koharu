@@ -4,11 +4,11 @@
  * OpenAPI spec version: 0.0.1
  */
 
-export type LlmProviderCatalogStatus =
-  (typeof LlmProviderCatalogStatus)[keyof typeof LlmProviderCatalogStatus]
+export type LlmProviderCatalogStatus = typeof LlmProviderCatalogStatus[keyof typeof LlmProviderCatalogStatus];
+
 
 export const LlmProviderCatalogStatus = {
   ready: 'ready',
   missing_configuration: 'missing_configuration',
   discovery_failed: 'discovery_failed',
-} as const
+} as const;
