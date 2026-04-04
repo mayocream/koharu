@@ -319,6 +319,8 @@
     "engines": "Motores",
     "enginesDescription": "Selecciona qué motor ML usar para cada etapa del pipeline.",
     "detector": "Detector",
+    "bubbleDetector": "Bubble Detector",
+    "fontDetector": "Font Detector",
     "segmenter": "Segmentador",
     "ocr": "OCR",
     "translator": "Traductor",

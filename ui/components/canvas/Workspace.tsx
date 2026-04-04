@@ -20,13 +20,12 @@ import {
 } from '@/components/canvas/canvasViewport'
 import { ToolRail } from '@/components/canvas/ToolRail'
 import { CanvasToolbar } from '@/components/canvas/CanvasToolbar'
-import { TextBlockAnnotations } from '@/components/canvas/TextBlockAnnotations'
-import { TextBlockSpriteLayer } from '@/components/canvas/TextBlockSpriteLayer'
+import { TextBlockLayer } from '@/components/canvas/TextBlockLayer'
 import { useCanvasZoom } from '@/hooks/useCanvasZoom'
 import { usePointerToDocument } from '@/hooks/usePointerToDocument'
 import { useBlockDrafting } from '@/hooks/useBlockDrafting'
 import { useBlockContextMenu } from '@/hooks/useBlockContextMenu'
-import { useTextBlocks } from '@/hooks/useTextBlocks'
+import { useTextBlocks, useDocumentLayer } from '@/hooks/useTextBlocks'
 import { useMaskDrawing } from '@/hooks/useMaskDrawing'
 import { useRenderBrushDrawing } from '@/hooks/useRenderBrushDrawing'
 import { useBrushLayerDisplay } from '@/hooks/useBrushLayerDisplay'
@@ -63,6 +62,32 @@ export function Workspace() {
     removeBlock,
   } = useTextBlocks()
 
+  const imageData = useDocumentLayer(
+    currentDocument?.id,
+    'image',
+    currentDocument?.image,
+  )
+  const segmentData = useDocumentLayer(
+    currentDocument?.id,
+    'segment',
+    currentDocument?.segment,
+  )
+  const inpaintedData = useDocumentLayer(
+    currentDocument?.id,
+    'inpainted',
+    currentDocument?.inpainted,
+  )
+  const brushLayerData = useDocumentLayer(
+    currentDocument?.id,
+    'brushLayer',
+    currentDocument?.brushLayer,
+  )
+  const renderedData = useDocumentLayer(
+    currentDocument?.id,
+    'rendered',
+    currentDocument?.rendered,
+  )
+
   useEffect(() => {
     if (currentDocument) {
       setCanvasDocumentSize(currentDocument.width, currentDocument.height)
@@ -92,12 +117,14 @@ export function Workspace() {
   const maskDrawing = useMaskDrawing({
     mode,
     currentDocument,
+    segmentData,
     pointerToDocument,
     showMask: showSegmentationMask,
     enabled: maskPointerEnabled,
   })
   const brushLayerDisplay = useBrushLayerDisplay({
     currentDocument,
+    brushLayerData,
     visible: showBrushLayer,
   })
   const brushDrawing = useRenderBrushDrawing({
@@ -292,8 +319,8 @@ export function Workspace() {
                     >
                       <div className='absolute inset-0'>
                         <Image
-                          data={currentDocument.image}
-                          dataKey={`${currentDocument.id}-base`}
+                          data={imageData}
+                          dataKey={currentDocument.image}
                           transition={false}
                         />
                         <canvas
@@ -310,10 +337,10 @@ export function Workspace() {
                           }}
                           {...maskBindings}
                         />
-                        {currentDocument?.inpainted && (
+                        {inpaintedData && (
                           <Image
                             data-testid='workspace-inpainted-image'
-                            data={currentDocument.inpainted}
+                            data={inpaintedData}
                             visible={showInpaintedImage}
                             transition={false}
                           />
@@ -349,24 +376,18 @@ export function Workspace() {
                           {...brushBindings}
                         />
                         {showTextBlocksOverlay && (
-                          <TextBlockSpriteLayer
-                            blocks={currentDocument?.textBlocks}
-                            scale={scaleRatio}
-                            visible={!showRenderedImage}
-                            style={{ zIndex: 30 }}
-                          />
-                        )}
-                        {showTextBlocksOverlay && (
-                          <TextBlockAnnotations
+                          <TextBlockLayer
                             selectedIndex={selectedBlockIndex}
                             onSelect={setSelectedBlockIndex}
+                            showSprites={!showRenderedImage}
+                            scale={scaleRatio}
                             style={{ zIndex: 30 }}
                           />
                         )}
-                        {currentDocument.rendered && showRenderedImage && (
+                        {renderedData && showRenderedImage && (
                           <Image
                             data-testid='workspace-rendered-image'
-                            data={currentDocument.rendered}
+                            data={renderedData}
                             transition={false}
                             style={{ zIndex: 40 }}
                           />

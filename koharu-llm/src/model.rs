@@ -117,7 +117,7 @@ impl Llm {
         let prompt = self
             .prompt_renderer
             .format_chat_prompt(prompt.to_string(), target_language)?;
-        tracing::info!("Generating with prompt:\n{}", prompt);
+        tracing::debug!("Generating with prompt:\n{}", prompt);
 
         let prompt_tokens = self
             .model

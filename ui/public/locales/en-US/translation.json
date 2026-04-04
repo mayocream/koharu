@@ -321,6 +321,8 @@
     "engines": "Engines",
     "enginesDescription": "Select which ML engine to use for each pipeline stage.",
     "detector": "Detector",
+    "bubbleDetector": "Bubble Detector",
+    "fontDetector": "Font Detector",
     "segmenter": "Segmenter",
     "ocr": "OCR",
     "translator": "Translator",

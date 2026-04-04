@@ -34,17 +34,28 @@ export function Image({
 
   // Simple path without transitions (used for static base image to avoid extra paints)
   const [plainSrc, setPlainSrc] = useState<string | null>(null)
+  const plainSrcRef = useRef<string | null>(null)
   useEffect(() => {
     if (!transition) {
       if (!dataDep || !data) {
+        revokeObjectUrlLater(plainSrcRef.current)
+        plainSrcRef.current = null
         setPlainSrc(null)
         return
       }
-      const blob = convertToBlob(data)
-      const url = URL.createObjectURL(blob)
-      cancelObjectUrlRevoke(url)
-      setPlainSrc(url)
-      return () => revokeObjectUrlLater(url)
+      let cancelled = false
+      convertToBlob(data).then((blob) => {
+        if (cancelled) return
+        const prev = plainSrcRef.current
+        const url = URL.createObjectURL(blob)
+        cancelObjectUrlRevoke(url)
+        plainSrcRef.current = url
+        setPlainSrc(url)
+        revokeObjectUrlLater(prev)
+      })
+      return () => {
+        cancelled = true
+      }
     }
     setPlainSrc(null)
     return
@@ -126,49 +137,46 @@ export function Image({
       return
     }
 
-    const blob = convertToBlob(data)
-    const objectUrl = URL.createObjectURL(blob)
-    cancelObjectUrlRevoke(objectUrl)
     let cancelled = false
 
-    const preload = new window.Image()
-    preload.onload = () => {
-      if (cancelled) {
-        cleanupUrl(objectUrl)
-        return
-      }
+    convertToBlob(data).then((blob) => {
+      if (cancelled) return
+      const objectUrl = URL.createObjectURL(blob)
+      cancelObjectUrlRevoke(objectUrl)
 
-      // First image, render immediately
-      if (!currentSrcRef.current) {
-        currentSrcRef.current = objectUrl
-        setCurrentSrc(objectUrl)
-        return
-      }
-
-      // Subsequent images: queue and cross-fade
-      setNextSrc((prev) => {
-        if (prev && prev !== currentSrcRef.current) {
-          cleanupUrl(prev)
+      const preload = new window.Image()
+      preload.onload = () => {
+        if (cancelled) {
+          cleanupUrl(objectUrl)
+          return
         }
-        return objectUrl
-      })
 
-      setCrossfade(false)
-      requestAnimationFrame(() => {
-        requestAnimationFrame(() => setCrossfade(true))
-      })
-    }
+        // First image, render immediately
+        if (!currentSrcRef.current) {
+          currentSrcRef.current = objectUrl
+          setCurrentSrc(objectUrl)
+          return
+        }
 
-    preload.src = objectUrl
+        // Subsequent images: queue and cross-fade
+        setNextSrc((prev) => {
+          if (prev && prev !== currentSrcRef.current) {
+            cleanupUrl(prev)
+          }
+          return objectUrl
+        })
+
+        setCrossfade(false)
+        requestAnimationFrame(() => {
+          requestAnimationFrame(() => setCrossfade(true))
+        })
+      }
+
+      preload.src = objectUrl
+    })
 
     return () => {
       cancelled = true
-      if (
-        objectUrl !== currentSrcRef.current &&
-        objectUrl !== nextSrcRef.current
-      ) {
-        cleanupUrl(objectUrl)
-      }
     }
   }, [data, dataDep, cleanupUrl])
 

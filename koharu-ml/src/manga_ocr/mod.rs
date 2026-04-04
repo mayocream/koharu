@@ -16,11 +16,11 @@ use crate::{device, loading};
 
 const HF_REPO: &str = "mayocream/manga-ocr";
 
-koharu_runtime::declare_hf_model_package!(id: "model:manga-ocr:config", repo: HF_REPO, file: "config.json", bootstrap: true, order: 200);
-koharu_runtime::declare_hf_model_package!(id: "model:manga-ocr:preprocessor", repo: HF_REPO, file: "preprocessor_config.json", bootstrap: true, order: 201);
-koharu_runtime::declare_hf_model_package!(id: "model:manga-ocr:vocab", repo: HF_REPO, file: "vocab.txt", bootstrap: true, order: 202);
-koharu_runtime::declare_hf_model_package!(id: "model:manga-ocr:special-tokens", repo: HF_REPO, file: "special_tokens_map.json", bootstrap: true, order: 203);
-koharu_runtime::declare_hf_model_package!(id: "model:manga-ocr:weights", repo: HF_REPO, file: "model.safetensors", bootstrap: true, order: 204);
+koharu_runtime::declare_hf_model_package!(id: "model:manga-ocr:config", repo: HF_REPO, file: "config.json", bootstrap: false, order: 200);
+koharu_runtime::declare_hf_model_package!(id: "model:manga-ocr:preprocessor", repo: HF_REPO, file: "preprocessor_config.json", bootstrap: false, order: 201);
+koharu_runtime::declare_hf_model_package!(id: "model:manga-ocr:vocab", repo: HF_REPO, file: "vocab.txt", bootstrap: false, order: 202);
+koharu_runtime::declare_hf_model_package!(id: "model:manga-ocr:special-tokens", repo: HF_REPO, file: "special_tokens_map.json", bootstrap: false, order: 203);
+koharu_runtime::declare_hf_model_package!(id: "model:manga-ocr:weights", repo: HF_REPO, file: "model.safetensors", bootstrap: false, order: 204);
 
 pub struct MangaOcr {
     model: VisionEncoderDecoder,

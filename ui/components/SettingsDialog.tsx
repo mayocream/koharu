@@ -411,6 +411,16 @@ function EnginesPane({
       engines: catalog.detectors,
     },
     {
+      label: t('settings.bubbleDetector'),
+      key: 'bubble_detector' as const,
+      engines: catalog.bubbleDetectors,
+    },
+    {
+      label: t('settings.fontDetector'),
+      key: 'font_detector' as const,
+      engines: catalog.fontDetectors,
+    },
+    {
       label: t('settings.segmenter'),
       key: 'segmenter' as const,
       engines: catalog.segmenters,

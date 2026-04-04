@@ -67,6 +67,10 @@ pub struct AppConfig {
 #[serde(default)]
 pub struct PipelineConfig {
     pub detector: String,
+    #[serde(default)]
+    pub bubble_detector: String,
+    #[serde(default)]
+    pub font_detector: String,
     pub segmenter: String,
     pub ocr: String,
     pub translator: String,
@@ -77,11 +81,13 @@ pub struct PipelineConfig {
 impl Default for PipelineConfig {
     fn default() -> Self {
         Self {
-            detector: "pp-doclayout-v3".to_string(),
+            detector: "comic-text-bubble-detector".to_string(),
+            bubble_detector: "comic-text-bubble-detector".to_string(),
+            font_detector: "yuzumarker-font-detection".to_string(),
             segmenter: "comic-text-detector-seg".to_string(),
             ocr: "paddle-ocr-vl-1.5".to_string(),
             translator: "llm".to_string(),
-            inpainter: "lama-manga".to_string(),
+            inpainter: "aot-inpainting".to_string(),
             renderer: "koharu-renderer".to_string(),
         }
     }

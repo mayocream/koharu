@@ -1,5 +1,8 @@
 mod hf_hub;
+mod inpainting;
 
+pub mod aot_inpainting;
+pub mod comic_text_bubble_detector;
 pub mod comic_text_detector;
 pub mod font_detector;
 pub mod lama;
@@ -9,6 +12,8 @@ pub mod manga_text_segmentation_2025;
 pub mod mit48px_ocr;
 pub mod paddleocr_vl;
 pub mod pp_doclayout_v3;
+pub mod probability_map;
+pub mod speech_bubble_segmentation;
 
 use anyhow::Result;
 use candle_core::utils::{cuda_is_available, metal_is_available};

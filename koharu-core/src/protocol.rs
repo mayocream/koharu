@@ -54,6 +54,9 @@ pub struct TextBlockDetail {
     pub translation: Option<String>,
     pub style: Option<TextStyle>,
     pub font_prediction: Option<FontPrediction>,
+    /// Blob hash for the rendered text block sprite.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub rendered: Option<String>,
 }
 
 impl From<&TextBlock> for TextBlockDetail {
@@ -76,6 +79,7 @@ impl From<&TextBlock> for TextBlockDetail {
             translation: block.translation.clone(),
             style: block.style.clone(),
             font_prediction: block.font_prediction.clone(),
+            rendered: block.rendered.as_ref().map(|r| r.hash().to_string()),
         }
     }
 }
@@ -88,20 +92,20 @@ pub struct DocumentDetail {
     pub width: u32,
     pub height: u32,
     pub text_blocks: Vec<TextBlockDetail>,
-    #[schema(value_type = Vec<u8>)]
-    pub image: serde_bytes::ByteBuf,
+    /// Blob hash for the source image layer.
+    pub image: String,
+    /// Blob hash for the segmentation mask layer.
     #[serde(skip_serializing_if = "Option::is_none")]
-    #[schema(value_type = Option<Vec<u8>>)]
-    pub segment: Option<serde_bytes::ByteBuf>,
+    pub segment: Option<String>,
+    /// Blob hash for the inpainted layer.
     #[serde(skip_serializing_if = "Option::is_none")]
-    #[schema(value_type = Option<Vec<u8>>)]
-    pub inpainted: Option<serde_bytes::ByteBuf>,
+    pub inpainted: Option<String>,
+    /// Blob hash for the brush layer.
     #[serde(skip_serializing_if = "Option::is_none")]
-    #[schema(value_type = Option<Vec<u8>>)]
-    pub brush_layer: Option<serde_bytes::ByteBuf>,
+    pub brush_layer: Option<String>,
+    /// Blob hash for the rendered composite layer.
     #[serde(skip_serializing_if = "Option::is_none")]
-    #[schema(value_type = Option<Vec<u8>>)]
-    pub rendered: Option<serde_bytes::ByteBuf>,
+    pub rendered: Option<String>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, JsonSchema, ToSchema)]
@@ -392,6 +396,8 @@ pub struct EngineCatalogEntry {
 #[serde(rename_all = "camelCase")]
 pub struct EngineCatalog {
     pub detectors: Vec<EngineCatalogEntry>,
+    pub bubble_detectors: Vec<EngineCatalogEntry>,
+    pub font_detectors: Vec<EngineCatalogEntry>,
     pub segmenters: Vec<EngineCatalogEntry>,
     pub ocr: Vec<EngineCatalogEntry>,
     pub translators: Vec<EngineCatalogEntry>,

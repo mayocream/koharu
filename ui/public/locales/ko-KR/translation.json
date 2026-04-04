@@ -319,6 +319,8 @@
     "engines": "엔진",
     "enginesDescription": "각 파이프라인 단계에서 사용할 ML 엔진을 선택합니다.",
     "detector": "검출기",
+    "bubbleDetector": "Bubble Detector",
+    "fontDetector": "Font Detector",
     "segmenter": "세그멘터",
     "ocr": "OCR",
     "translator": "번역기",

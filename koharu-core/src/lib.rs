@@ -69,16 +69,8 @@ pub struct TextBlock {
     pub style: Option<TextStyle>,
     pub font_prediction: Option<FontPrediction>,
     pub rendered: Option<BlobRef>,
-    #[serde(skip)]
+    #[serde(default)]
     pub lock_layout_box: bool,
-    #[serde(skip)]
-    pub layout_seed_x: Option<f32>,
-    #[serde(skip)]
-    pub layout_seed_y: Option<f32>,
-    #[serde(skip)]
-    pub layout_seed_width: Option<f32>,
-    #[serde(skip)]
-    pub layout_seed_height: Option<f32>,
 }
 
 impl Default for TextBlock {
@@ -103,38 +95,6 @@ impl Default for TextBlock {
             font_prediction: None,
             rendered: None,
             lock_layout_box: false,
-            layout_seed_x: None,
-            layout_seed_y: None,
-            layout_seed_width: None,
-            layout_seed_height: None,
-        }
-    }
-}
-
-impl TextBlock {
-    pub fn set_layout_seed(&mut self, x: f32, y: f32, width: f32, height: f32) {
-        self.layout_seed_x = Some(x);
-        self.layout_seed_y = Some(y);
-        self.layout_seed_width = Some(width.max(1.0));
-        self.layout_seed_height = Some(height.max(1.0));
-    }
-
-    pub fn seed_layout_box(&mut self) -> (f32, f32, f32, f32) {
-        match (
-            self.layout_seed_x,
-            self.layout_seed_y,
-            self.layout_seed_width,
-            self.layout_seed_height,
-        ) {
-            (Some(x), Some(y), Some(width), Some(height))
-                if width.is_finite() && height.is_finite() && width > 0.0 && height > 0.0 =>
-            {
-                (x, y, width, height)
-            }
-            _ => {
-                self.set_layout_seed(self.x, self.y, self.width, self.height);
-                (self.x, self.y, self.width.max(1.0), self.height.max(1.0))
-            }
         }
     }
 }
@@ -191,6 +151,16 @@ pub struct TextStyle {
     pub text_align: Option<TextAlign>,
 }
 
+#[derive(Debug, Clone, Copy, Serialize, Deserialize, JsonSchema, ToSchema)]
+#[serde(rename_all = "camelCase")]
+pub struct BubbleRegion {
+    pub x: f32,
+    pub y: f32,
+    pub width: f32,
+    pub height: f32,
+    pub confidence: f32,
+}
+
 #[derive(Default, Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct Document {
@@ -204,34 +174,8 @@ pub struct Document {
     pub rendered: Option<BlobRef>,
     pub brush_layer: Option<BlobRef>,
     pub text_blocks: Vec<TextBlock>,
+    #[serde(default)]
+    pub bubbles: Vec<BubbleRegion>,
 }
 #[cfg(test)]
-mod tests {
-    use super::TextBlock;
-
-    #[test]
-    fn seed_layout_box_stays_stable_until_explicit_reset() {
-        let mut block = TextBlock {
-            x: 10.0,
-            y: 20.0,
-            width: 30.0,
-            height: 40.0,
-            ..Default::default()
-        };
-
-        let first = block.seed_layout_box();
-        assert_eq!(first, (10.0, 20.0, 30.0, 40.0));
-
-        block.x = 100.0;
-        block.y = 200.0;
-        block.width = 300.0;
-        block.height = 400.0;
-
-        let second = block.seed_layout_box();
-        assert_eq!(second, first);
-
-        block.set_layout_seed(block.x, block.y, block.width, block.height);
-        let third = block.seed_layout_box();
-        assert_eq!(third, (100.0, 200.0, 300.0, 400.0));
-    }
-}
+mod tests {}

@@ -42,6 +42,7 @@ pub fn api() -> (axum::Router<ApiState>, utoipa::openapi::OpenApi) {
     OpenApiRouter::default()
         .routes(routes!(list_documents, import_documents))
         .routes(routes!(get_document))
+        .routes(routes!(get_blob))
         .routes(routes!(get_document_thumbnail))
         .routes(routes!(detect_document))
         .routes(routes!(recognize_document))
@@ -285,38 +286,13 @@ async fn list_documents(State(state): State<ApiState>) -> ApiResult<Json<Vec<Doc
         (status = 503, body = ApiError),
     ),
 )]
+#[tracing::instrument(level = "info", skip_all, fields(document_id = %document_id))]
 async fn get_document(
     State(state): State<ApiState>,
     Path(document_id): Path<String>,
 ) -> ApiResult<Json<DocumentDetail>> {
     let resources = state.resources()?;
     let doc = find_document(&resources, &document_id).await?;
-
-    let load_layer =
-        |blob_ref: &Option<koharu_core::BlobRef>| -> ApiResult<Option<serde_bytes::ByteBuf>> {
-            blob_ref
-                .as_ref()
-                .map(|r| {
-                    let bytes = resources
-                        .storage
-                        .images
-                        .load_bytes(r)
-                        .map_err(ApiError::internal)?;
-                    Ok(serde_bytes::ByteBuf::from(bytes))
-                })
-                .transpose()
-        };
-
-    let image_bytes = resources
-        .storage
-        .images
-        .load_bytes(&doc.source)
-        .map_err(ApiError::internal)?;
-    let image = serde_bytes::ByteBuf::from(image_bytes);
-    let segment = load_layer(&doc.segment)?;
-    let inpainted = load_layer(&doc.inpainted)?;
-    let brush_layer = load_layer(&doc.brush_layer)?;
-    let rendered = load_layer(&doc.rendered)?;
 
     let text_blocks = doc
         .text_blocks
@@ -330,11 +306,11 @@ async fn get_document(
         width: doc.width,
         height: doc.height,
         text_blocks,
-        image,
-        segment,
-        inpainted,
-        brush_layer,
-        rendered,
+        image: doc.source.hash().to_string(),
+        segment: doc.segment.as_ref().map(|r| r.hash().to_string()),
+        inpainted: doc.inpainted.as_ref().map(|r| r.hash().to_string()),
+        brush_layer: doc.brush_layer.as_ref().map(|r| r.hash().to_string()),
+        rendered: doc.rendered.as_ref().map(|r| r.hash().to_string()),
     };
 
     Ok(Json(detail))
@@ -391,6 +367,7 @@ async fn get_document_thumbnail(
         (status = 503, body = ApiError),
     ),
 )]
+#[tracing::instrument(level = "info", skip_all)]
 async fn import_documents(
     State(state): State<ApiState>,
     Query(query): Query<ImportQuery>,
@@ -458,6 +435,7 @@ async fn import_documents(
         (status = 503, body = ApiError),
     ),
 )]
+#[tracing::instrument(level = "info", skip_all)]
 async fn detect_document(
     State(state): State<ApiState>,
     Path(document_id): Path<String>,
@@ -488,6 +466,7 @@ async fn detect_document(
         (status = 503, body = ApiError),
     ),
 )]
+#[tracing::instrument(level = "info", skip_all)]
 async fn recognize_document(
     State(state): State<ApiState>,
     Path(document_id): Path<String>,
@@ -510,6 +489,7 @@ async fn recognize_document(
         (status = 503, body = ApiError),
     ),
 )]
+#[tracing::instrument(level = "info", skip_all)]
 async fn inpaint_document(
     State(state): State<ApiState>,
     Path(document_id): Path<String>,
@@ -533,6 +513,7 @@ async fn inpaint_document(
         (status = 503, body = ApiError),
     ),
 )]
+#[tracing::instrument(level = "info", skip_all)]
 async fn render_document(
     State(state): State<ApiState>,
     Path(document_id): Path<String>,
@@ -572,6 +553,7 @@ async fn render_document(
         (status = 503, body = ApiError),
     ),
 )]
+#[tracing::instrument(level = "info", skip_all)]
 async fn translate_document(
     State(state): State<ApiState>,
     Path(document_id): Path<String>,
@@ -613,6 +595,7 @@ async fn translate_document(
         (status = 503, body = ApiError),
     ),
 )]
+#[tracing::instrument(level = "info", skip_all)]
 async fn update_mask(
     State(state): State<ApiState>,
     Path(document_id): Path<String>,
@@ -635,6 +618,7 @@ async fn update_mask(
         (status = 503, body = ApiError),
     ),
 )]
+#[tracing::instrument(level = "info", skip_all)]
 async fn update_brush_layer(
     State(state): State<ApiState>,
     Path(document_id): Path<String>,
@@ -657,6 +641,7 @@ async fn update_brush_layer(
         (status = 503, body = ApiError),
     ),
 )]
+#[tracing::instrument(level = "info", skip_all)]
 async fn inpaint_region(
     State(state): State<ApiState>,
     Path(document_id): Path<String>,
@@ -684,6 +669,7 @@ async fn inpaint_region(
         (status = 503, body = ApiError),
     ),
 )]
+#[tracing::instrument(level = "info", skip_all)]
 async fn create_text_block(
     State(state): State<ApiState>,
     Path(document_id): Path<String>,
@@ -691,7 +677,7 @@ async fn create_text_block(
 ) -> ApiResult<Json<TextBlockDetail>> {
     let resources = state.resources()?;
 
-    let mut block = TextBlock {
+    let block = TextBlock {
         x: request.x,
         y: request.y,
         width: request.width,
@@ -699,7 +685,6 @@ async fn create_text_block(
         confidence: 1.0,
         ..Default::default()
     };
-    block.set_layout_seed(block.x, block.y, block.width, block.height);
 
     let mut detail = None;
     resources
@@ -729,6 +714,7 @@ async fn create_text_block(
         (status = 503, body = ApiError),
     ),
 )]
+#[tracing::instrument(level = "info", skip_all)]
 async fn put_text_blocks(
     State(state): State<ApiState>,
     Path(document_id): Path<String>,
@@ -776,7 +762,7 @@ async fn put_text_blocks(
                     }
                 } else {
                     // Create new block
-                    let mut block = TextBlock {
+                    let block = TextBlock {
                         x: input.x,
                         y: input.y,
                         width: input.width,
@@ -787,7 +773,7 @@ async fn put_text_blocks(
                         confidence: 1.0,
                         ..Default::default()
                     };
-                    block.set_layout_seed(block.x, block.y, block.width, block.height);
+
                     doc.text_blocks.push(block);
                     any_changed = true;
                 }
@@ -815,6 +801,7 @@ async fn put_text_blocks(
         (status = 503, body = ApiError),
     ),
 )]
+#[tracing::instrument(level = "info", skip_all)]
 async fn patch_text_block(
     State(state): State<ApiState>,
     Path((document_id, text_block_id)): Path<(String, String)>,
@@ -822,16 +809,30 @@ async fn patch_text_block(
 ) -> ApiResult<Json<TextBlockDetail>> {
     let resources = state.resources()?;
     let mut detail = None;
+    let mut needs_render = false;
+    let mut block_index = None;
     resources
         .storage
         .update_page(&document_id, |doc| {
-            if let Some(block) = doc.text_blocks.iter_mut().find(|b| b.id == text_block_id) {
-                apply_text_block_patch(block, request);
+            if let Some((idx, block)) = doc
+                .text_blocks
+                .iter_mut()
+                .enumerate()
+                .find(|(_, b)| b.id == text_block_id)
+            {
+                needs_render = apply_text_block_patch(block, request);
                 detail = Some(TextBlockDetail::from(&*block));
+                block_index = Some(idx);
             }
         })
         .await
         .map_err(ApiError::from)?;
+
+    if needs_render && let Some(idx) = block_index {
+        engine::render_document(&resources, &document_id, Some(idx), None, None, None)
+            .await
+            .map_err(ApiError::internal)?;
+    }
 
     detail
         .map(Json)
@@ -853,6 +854,7 @@ async fn patch_text_block(
         (status = 503, body = ApiError),
     ),
 )]
+#[tracing::instrument(level = "info", skip_all)]
 async fn delete_text_block(
     State(state): State<ApiState>,
     Path((document_id, text_block_id)): Path<(String, String)>,
@@ -930,6 +932,7 @@ async fn get_llm(State(state): State<ApiState>) -> ApiResult<Json<LlmState>> {
         (status = 503, body = ApiError),
     ),
 )]
+#[tracing::instrument(level = "info", skip_all)]
 async fn load_llm(
     State(state): State<ApiState>,
     Json(request): Json<LlmLoadRequest>,
@@ -949,6 +952,7 @@ async fn load_llm(
         (status = 503, body = ApiError),
     ),
 )]
+#[tracing::instrument(level = "info", skip_all)]
 async fn unload_llm(State(state): State<ApiState>) -> ApiResult<Json<LlmState>> {
     let resources = state.resources()?;
     llm::llm_offload(resources.clone()).await?;
@@ -970,6 +974,7 @@ async fn unload_llm(State(state): State<ApiState>) -> ApiResult<Json<LlmState>> 
         (status = 503, body = ApiError),
     ),
 )]
+#[tracing::instrument(level = "info", skip_all)]
 async fn start_pipeline(
     State(state): State<ApiState>,
     Json(request): Json<PipelineJobRequest>,
@@ -1124,6 +1129,7 @@ async fn list_downloads(State(state): State<ApiState>) -> Json<Vec<DownloadState
         (status = 503, body = ApiError),
     ),
 )]
+#[tracing::instrument(level = "info", skip_all)]
 async fn export_document(
     State(state): State<ApiState>,
     Path((document_id, format)): Path<(String, String)>,
@@ -1206,12 +1212,29 @@ async fn export_document(
 
     let layer = query.layer.unwrap_or(ExportLayer::Rendered);
     let (blob_ref, filename) = export_layer_ref(&document, layer)?;
-    let data = resources
-        .storage
-        .images
-        .load_bytes(blob_ref)
-        .map_err(ApiError::internal)?;
-    Ok(binary_response(data, "image/webp", Some(filename)))
+    let data = if resources.storage.images.is_raw_rgba(blob_ref) {
+        let img = resources
+            .storage
+            .images
+            .load(blob_ref)
+            .map_err(ApiError::internal)?;
+        let mut buf = std::io::Cursor::new(Vec::new());
+        img.write_to(&mut buf, image::ImageFormat::Png)
+            .map_err(|e| ApiError::internal(e.into()))?;
+        buf.into_inner()
+    } else {
+        resources
+            .storage
+            .images
+            .load_bytes(blob_ref)
+            .map_err(ApiError::internal)?
+    };
+    let mime = if data.starts_with(b"\x89PNG") {
+        "image/png"
+    } else {
+        "image/webp"
+    };
+    Ok(binary_response(data, mime, Some(filename)))
 }
 
 #[utoipa::path(
@@ -1225,6 +1248,7 @@ async fn export_document(
         (status = 503, body = ApiError),
     ),
 )]
+#[tracing::instrument(level = "info", skip_all)]
 async fn batch_export(
     State(state): State<ApiState>,
     Json(request): Json<ExportBatchRequest>,
@@ -1270,29 +1294,51 @@ fn export_layer_ref(
     document: &Document,
     layer: ExportLayer,
 ) -> ApiResult<(&koharu_core::BlobRef, String)> {
-    let ext = "webp";
     match layer {
         ExportLayer::Rendered => {
             let r = document
                 .rendered
                 .as_ref()
                 .ok_or_else(|| ApiError::not_found("No rendered image found"))?;
-            Ok((r, format!("{}_koharu.{ext}", document.name)))
+            Ok((r, format!("{}_koharu.png", document.name)))
         }
         ExportLayer::Inpainted => {
             let r = document
                 .inpainted
                 .as_ref()
                 .ok_or_else(|| ApiError::not_found("No inpainted image found"))?;
-            Ok((r, format!("{}_inpainted.{ext}", document.name)))
+            Ok((r, format!("{}_inpainted.png", document.name)))
         }
     }
 }
 
-fn apply_text_block_patch(block: &mut TextBlock, patch: TextBlockPatch) {
+#[utoipa::path(
+    get,
+    path = "/blobs/{hash}",
+    operation_id = "getBlob",
+    tag = "blobs",
+    params(("hash" = String, Path,)),
+    responses(
+        (status = 200, content_type = "application/octet-stream", body = inline(Vec<u8>)),
+        (status = 404, body = ApiError),
+        (status = 503, body = ApiError),
+    ),
+)]
+async fn get_blob(State(state): State<ApiState>, Path(hash): Path<String>) -> ApiResult<Response> {
+    let resources = state.resources()?;
+    let blob_ref = koharu_core::BlobRef::new(hash);
+    let data = resources
+        .storage
+        .images
+        .load_bytes(&blob_ref)
+        .map_err(|_| ApiError::not_found("Blob not found"))?;
+    Ok(binary_response(data, "application/octet-stream", None))
+}
+
+/// Returns `true` if the patch invalidated the rendered sprite.
+fn apply_text_block_patch(block: &mut TextBlock, patch: TextBlockPatch) -> bool {
     let previous_width = block.width;
     let previous_height = block.height;
-    let mut geometry_changed = false;
     let mut invalidate_render = false;
 
     if let Some(text) = patch.text {
@@ -1304,30 +1350,18 @@ fn apply_text_block_patch(block: &mut TextBlock, patch: TextBlockPatch) {
         invalidate_render = true;
     }
     if let Some(x) = patch.x {
-        if (block.x - x).abs() > f32::EPSILON {
-            geometry_changed = true;
-        }
         block.x = x;
         invalidate_render = true;
     }
     if let Some(y) = patch.y {
-        if (block.y - y).abs() > f32::EPSILON {
-            geometry_changed = true;
-        }
         block.y = y;
         invalidate_render = true;
     }
     if let Some(width) = patch.width {
-        if (block.width - width).abs() > f32::EPSILON {
-            geometry_changed = true;
-        }
         block.width = width;
         invalidate_render = true;
     }
     if let Some(height) = patch.height {
-        if (block.height - height).abs() > f32::EPSILON {
-            geometry_changed = true;
-        }
         block.height = height;
         invalidate_render = true;
     }
@@ -1336,18 +1370,12 @@ fn apply_text_block_patch(block: &mut TextBlock, patch: TextBlockPatch) {
         invalidate_render = true;
     }
 
-    if geometry_changed {
-        block.set_layout_seed(block.x, block.y, block.width, block.height);
-    }
     if (previous_width - block.width).abs() > f32::EPSILON
         || (previous_height - block.height).abs() > f32::EPSILON
     {
         block.lock_layout_box = true;
     }
-    if invalidate_render {
-        block.rendered = None;
-        block.rendered_direction = None;
-    }
+    invalidate_render
 }
 
 #[cfg(test)]

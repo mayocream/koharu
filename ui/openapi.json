@@ -5,6 +5,59 @@
     "version": ""
   },
   "paths": {
+    "/blobs/{hash}": {
+      "get": {
+        "tags": ["blobs"],
+        "operationId": "getBlob",
+        "parameters": [
+          {
+            "name": "hash",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/octet-stream": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "type": "integer",
+                    "format": "int32",
+                    "minimum": 0
+                  }
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/config": {
       "get": {
         "tags": ["system"],
@@ -51,8 +104,10 @@
                       }
                     ],
                     "default": {
-                      "detector": "pp-doclayout-v3",
-                      "inpainter": "lama-manga",
+                      "bubble_detector": "comic-text-bubble-detector",
+                      "detector": "comic-text-bubble-detector",
+                      "font_detector": "yuzumarker-font-detection",
+                      "inpainter": "aot-inpainting",
                       "ocr": "paddle-ocr-vl-1.5",
                       "renderer": "koharu-renderer",
                       "segmenter": "comic-text-detector-seg",
@@ -97,8 +152,10 @@
                         }
                       ],
                       "default": {
-                        "detector": "pp-doclayout-v3",
-                        "inpainter": "lama-manga",
+                        "bubble_detector": "comic-text-bubble-detector",
+                        "detector": "comic-text-bubble-detector",
+                        "font_detector": "yuzumarker-font-detection",
+                        "inpainter": "aot-inpainting",
                         "ocr": "paddle-ocr-vl-1.5",
                         "renderer": "koharu-renderer",
                         "segmenter": "comic-text-detector-seg",
@@ -1046,6 +1103,8 @@
                   "type": "object",
                   "required": [
                     "detectors",
+                    "bubbleDetectors",
+                    "fontDetectors",
                     "segmenters",
                     "ocr",
                     "translators",
@@ -1053,7 +1112,19 @@
                     "renderers"
                   ],
                   "properties": {
+                    "bubbleDetectors": {
+                      "type": "array",
+                      "items": {
+                        "$ref": "#/components/schemas/EngineCatalogEntry"
+                      }
+                    },
                     "detectors": {
+                      "type": "array",
+                      "items": {
+                        "$ref": "#/components/schemas/EngineCatalogEntry"
+                      }
+                    },
+                    "fontDetectors": {
                       "type": "array",
                       "items": {
                         "$ref": "#/components/schemas/EngineCatalogEntry"
@@ -1538,12 +1609,8 @@
         "required": ["id", "name", "width", "height", "textBlocks", "image"],
         "properties": {
           "brushLayer": {
-            "type": ["array", "null"],
-            "items": {
-              "type": "integer",
-              "format": "int32",
-              "minimum": 0
-            }
+            "type": ["string", "null"],
+            "description": "Blob hash for the brush layer."
           },
           "height": {
             "type": "integer",
@@ -1554,39 +1621,23 @@
             "type": "string"
           },
           "image": {
-            "type": "array",
-            "items": {
-              "type": "integer",
-              "format": "int32",
-              "minimum": 0
-            }
+            "type": "string",
+            "description": "Blob hash for the source image layer."
           },
           "inpainted": {
-            "type": ["array", "null"],
-            "items": {
-              "type": "integer",
-              "format": "int32",
-              "minimum": 0
-            }
+            "type": ["string", "null"],
+            "description": "Blob hash for the inpainted layer."
           },
           "name": {
             "type": "string"
           },
           "rendered": {
-            "type": ["array", "null"],
-            "items": {
-              "type": "integer",
-              "format": "int32",
-              "minimum": 0
-            }
+            "type": ["string", "null"],
+            "description": "Blob hash for the rendered composite layer."
           },
           "segment": {
-            "type": ["array", "null"],
-            "items": {
-              "type": "integer",
-              "format": "int32",
-              "minimum": 0
-            }
+            "type": ["string", "null"],
+            "description": "Blob hash for the segmentation mask layer."
           },
           "textBlocks": {
             "type": "array",
@@ -2111,13 +2162,21 @@
         "type": "object",
         "description": "Engine selection for each pipeline stage.\nValues are engine IDs (e.g. \"pp-doclayout-v3\", \"comic-text-detector\").\nEmpty string means use default.",
         "properties": {
+          "bubble_detector": {
+            "type": "string",
+            "default": "comic-text-bubble-detector"
+          },
           "detector": {
             "type": "string",
-            "default": "pp-doclayout-v3"
+            "default": "comic-text-bubble-detector"
+          },
+          "font_detector": {
+            "type": "string",
+            "default": "yuzumarker-font-detection"
           },
           "inpainter": {
             "type": "string",
-            "default": "lama-manga"
+            "default": "aot-inpainting"
           },
           "ocr": {
             "type": "string",
@@ -2321,6 +2380,10 @@
                 }
               }
             }
+          },
+          "rendered": {
+            "type": ["string", "null"],
+            "description": "Blob hash for the rendered text block sprite."
           },
           "renderedDirection": {
             "oneOf": [

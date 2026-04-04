@@ -78,6 +78,7 @@ fn paste_crop(stitched: &mut image::RgbaImage, patch: &image::RgbaImage, x0: u32
     image::imageops::replace(stitched, patch, i64::from(x0), i64::from(y0));
 }
 
+#[tracing::instrument(level = "info", skip_all)]
 pub async fn update_text_blocks(
     state: AppResources,
     document_id: &str,
@@ -104,6 +105,7 @@ pub struct UpdateTextBlockArgs {
     pub shader_effect: Option<String>,
 }
 
+#[tracing::instrument(level = "info", skip_all)]
 pub async fn update_text_block(
     state: AppResources,
     document_id: &str,
@@ -117,31 +119,22 @@ pub async fn update_text_block(
                 Some(b) => b,
                 None => return,
             };
-            let mut geometry_changed = false;
-
             if let Some(translation) = &args.translation {
                 block.translation = Some(translation.clone());
             }
             if let Some(x) = args.x {
                 block.x = x;
-                geometry_changed = true;
             }
             if let Some(y) = args.y {
                 block.y = y;
-                geometry_changed = true;
             }
             if let Some(width) = args.width {
                 block.width = width;
-                geometry_changed = true;
                 block.lock_layout_box = true;
             }
             if let Some(height) = args.height {
                 block.height = height;
-                geometry_changed = true;
                 block.lock_layout_box = true;
-            }
-            if geometry_changed {
-                block.set_layout_seed(block.x, block.y, block.width, block.height);
             }
 
             if args.font_families.is_some()
@@ -184,6 +177,7 @@ pub async fn update_text_block(
     info.ok_or_else(|| anyhow::anyhow!("Text block {} not found", args.text_block_index))
 }
 
+#[tracing::instrument(level = "info", skip_all)]
 pub async fn add_text_block(
     state: AppResources,
     document_id: &str,
@@ -196,7 +190,7 @@ pub async fn add_text_block(
     state
         .storage
         .update_page(document_id, |page| {
-            let mut block = TextBlock {
+            let block = TextBlock {
                 x,
                 y,
                 width,
@@ -204,7 +198,6 @@ pub async fn add_text_block(
                 confidence: 1.0,
                 ..Default::default()
             };
-            block.set_layout_seed(block.x, block.y, block.width, block.height);
             page.text_blocks.push(block);
             count = page.text_blocks.len() - 1;
         })
@@ -212,6 +205,7 @@ pub async fn add_text_block(
     Ok(count)
 }
 
+#[tracing::instrument(level = "info", skip_all)]
 pub async fn remove_text_block(
     state: AppResources,
     document_id: &str,
@@ -292,6 +286,7 @@ pub async fn erode_mask(state: AppResources, document_id: &str, radius: u8) -> a
         .await
 }
 
+#[tracing::instrument(level = "info", skip_all)]
 pub async fn update_inpaint_mask(
     state: AppResources,
     document_id: &str,
@@ -368,6 +363,7 @@ pub async fn update_inpaint_mask(
         .await
 }
 
+#[tracing::instrument(level = "info", skip_all)]
 pub async fn update_brush_layer(
     state: AppResources,
     document_id: &str,

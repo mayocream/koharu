@@ -319,6 +319,8 @@
     "engines": "エンジン",
     "enginesDescription": "各パイプライン段階で使用するMLエンジンを選択します。",
     "detector": "検出器",
+    "bubbleDetector": "Bubble Detector",
+    "fontDetector": "Font Detector",
     "segmenter": "セグメンター",
     "ocr": "OCR",
     "translator": "翻訳器",

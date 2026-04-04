@@ -67,7 +67,8 @@ export type TextBlock = {
   translation?: string
   style?: TextStyle
   fontPrediction?: FontPrediction
-  rendered?: Uint8Array
+  /** Blob hash for the rendered text block sprite. */
+  rendered?: string
 }
 
 export type ToolMode = 'select' | 'block' | 'brush' | 'repairBrush' | 'eraser'

@@ -232,6 +232,11 @@ export function RenderControlsPanel() {
   const currentStrokeColorHex = colorToHex(currentStroke.color)
   const currentStrokeWidth = currentStroke.widthPx ?? DEFAULT_STROKE_WIDTH
   const fontLabel = t('render.fontLabel')
+  const fontSizeLabel = t('render.fontSizeLabel', { defaultValue: 'Size' })
+  const currentFontSize =
+    selectedBlock?.style?.fontSize ??
+    selectedBlock?.fontPrediction?.font_size_px ??
+    selectedBlock?.detectedFontSizePx
   const effectLabel = t('render.effectLabel')
   const strokeLabel = t('render.effectBorder')
   const strokeColorLabel = t('render.strokeColorLabel')
@@ -438,6 +443,73 @@ export function RenderControlsPanel() {
               {t('render.fontColorLabel')}
             </TooltipContent>
           </Tooltip>
+        </div>
+      </div>
+
+      <div className='grid w-full min-w-0 grid-cols-[3.5rem_minmax(0,1fr)] items-center gap-1.5'>
+        <span className='text-muted-foreground text-[10px] font-medium tracking-wide uppercase'>
+          {fontSizeLabel}
+        </span>
+
+        <div className='flex min-w-0 items-center gap-1'>
+          <div className='border-input bg-background flex w-auto min-w-0 shrink-0 items-center rounded-md border shadow-xs'>
+            <Button
+              type='button'
+              variant='ghost'
+              size='icon-sm'
+              aria-label={`${fontSizeLabel} -`}
+              className='size-7 rounded-r-none border-r'
+              disabled={selectedBlockIndex === undefined}
+              onClick={() => {
+                const next = Math.max(
+                  6,
+                  Math.round((currentFontSize ?? 16) - 1),
+                )
+                applyStyleToSelected({ fontSize: next })
+              }}
+            >
+              <MinusIcon className='size-3' />
+            </Button>
+
+            <Input
+              type='number'
+              step='1'
+              min='6'
+              max='300'
+              inputMode='numeric'
+              className='h-7 w-14 min-w-0 [appearance:textfield] rounded-none border-0 px-1.5 text-center text-[11px] shadow-none focus-visible:ring-0 [&::-webkit-inner-spin-button]:appearance-none [&::-webkit-outer-spin-button]:appearance-none'
+              data-testid='render-font-size'
+              disabled={selectedBlockIndex === undefined}
+              value={
+                currentFontSize !== undefined ? Math.round(currentFontSize) : ''
+              }
+              placeholder='auto'
+              onChange={(event) => {
+                const parsed = Number.parseInt(event.target.value, 10)
+                if (!Number.isFinite(parsed) || parsed < 1) return
+                applyStyleToSelected({ fontSize: Math.min(300, parsed) })
+              }}
+            />
+
+            <Button
+              type='button'
+              variant='ghost'
+              size='icon-sm'
+              aria-label={`${fontSizeLabel} +`}
+              className='size-7 rounded-l-none border-l'
+              disabled={selectedBlockIndex === undefined}
+              onClick={() => {
+                const next = Math.min(
+                  300,
+                  Math.round((currentFontSize ?? 16) + 1),
+                )
+                applyStyleToSelected({ fontSize: next })
+              }}
+            >
+              <PlusIcon className='size-3' />
+            </Button>
+          </div>
+          <span className='text-muted-foreground text-[10px]'>px</span>
         </div>
       </div>
 

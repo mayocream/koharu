@@ -59,6 +59,7 @@ pub async fn get_thumbnail(
     })
 }
 
+#[tracing::instrument(level = "info", skip_all)]
 pub async fn open_documents(
     state: AppResources,
     payload: OpenDocumentsPayload,
@@ -71,6 +72,7 @@ pub async fn open_documents(
     Ok(pages.len())
 }
 
+#[tracing::instrument(level = "info", skip_all)]
 pub async fn add_documents(
     state: AppResources,
     payload: OpenDocumentsPayload,
@@ -83,6 +85,7 @@ pub async fn add_documents(
     Ok(state.storage.page_count().await)
 }
 
+#[tracing::instrument(level = "info", skip_all)]
 pub async fn export_document(state: AppResources, document_id: &str) -> anyhow::Result<FileResult> {
     let doc = state.storage.page(document_id).await?;
 

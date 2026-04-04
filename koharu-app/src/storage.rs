@@ -3,7 +3,7 @@ use std::path::{Path, PathBuf};
 use std::sync::Mutex;
 
 use anyhow::{Context, Result};
-use image::DynamicImage;
+use image::{DynamicImage, RgbaImage};
 use lru::LruCache;
 use serde::{Deserialize, Serialize};
 use tokio::sync::RwLock;
@@ -79,7 +79,7 @@ impl ImageCache {
             }
         }
         let bytes = self.blobs.get(r)?;
-        let img = image::load_from_memory(&bytes)?;
+        let img = decode_blob(&bytes)?;
         self.cache.lock().unwrap().put(r.clone(), img.clone());
         Ok(img)
     }
@@ -99,10 +99,47 @@ impl ImageCache {
         Ok(r)
     }
 
+    /// Store a DynamicImage as raw RGBA bytes with a 12-byte header.
+    /// Near-zero encoding cost compared to WebP/PNG.
+    #[tracing::instrument(level = "info", skip(self, img))]
+    pub fn store_raw(&self, img: &DynamicImage) -> Result<BlobRef> {
+        let rgba = img.to_rgba8();
+        let (w, h) = (rgba.width(), rgba.height());
+        let pixels = rgba.as_raw();
+        let mut buf = Vec::with_capacity(12 + pixels.len());
+        buf.extend_from_slice(b"RGBA");
+        buf.extend_from_slice(&w.to_le_bytes());
+        buf.extend_from_slice(&h.to_le_bytes());
+        buf.extend_from_slice(pixels);
+        let r = self.blobs.put(&buf)?;
+        self.cache.lock().unwrap().put(r.clone(), img.clone());
+        Ok(r)
+    }
+
     /// Store raw bytes (e.g. an imported image in its original format).
     pub fn store_bytes(&self, data: &[u8]) -> Result<BlobRef> {
         self.blobs.put(data)
     }
+
+    /// Check if a blob is in our raw RGBA format (vs a standard image format).
+    pub fn is_raw_rgba(&self, r: &BlobRef) -> bool {
+        self.blobs
+            .get(r)
+            .map(|bytes| bytes.len() >= 4 && &bytes[..4] == b"RGBA")
+            .unwrap_or(false)
+    }
+}
+
+/// Decode a blob: raw RGBA (our format) or standard image format.
+fn decode_blob(bytes: &[u8]) -> Result<DynamicImage> {
+    if bytes.len() >= 12 && &bytes[..4] == b"RGBA" {
+        let w = u32::from_le_bytes(bytes[4..8].try_into().unwrap());
+        let h = u32::from_le_bytes(bytes[8..12].try_into().unwrap());
+        let pixels = bytes[12..].to_vec();
+        let img = RgbaImage::from_raw(w, h, pixels).context("invalid raw RGBA blob dimensions")?;
+        return Ok(DynamicImage::ImageRgba8(img));
+    }
+    Ok(image::load_from_memory(bytes)?)
 }
 
 // ── Project ─────────────────────────────────────────────────────────
@@ -179,6 +216,7 @@ impl Storage {
     }
 
     /// Update a page in-place and auto-save the project.
+    #[tracing::instrument(level = "info", skip(self, f))]
     pub async fn update_page(&self, id: &str, f: impl FnOnce(&mut Document)) -> Result<()> {
         let mut project = self.project.write().await;
         let page = project
