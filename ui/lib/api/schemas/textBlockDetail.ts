@@ -18,6 +18,17 @@ export interface TextBlockDetail {
   id: string
   /** @nullable */
   linePolygons?: number[][][] | null
+  /** @nullable */
+  renderHeight?: number | null
+  /** @nullable */
+  renderWidth?: number | null
+  /**
+   * Actual render area position/size (when bubble expansion is used).
+   * @nullable
+   */
+  renderX?: number | null
+  /** @nullable */
+  renderY?: number | null
   /**
    * Blob hash for the rendered text block sprite.
    * @nullable

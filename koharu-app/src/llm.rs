@@ -26,17 +26,19 @@ use crate::config as app_config;
 
 pub use koharu_llm::prefetch;
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-struct BlockStartTag {
-    offset: usize,
-    len: usize,
-    id: usize,
-}
-
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-struct BlockEndTag {
-    offset: usize,
-    len: usize,
+/// Matches a `<|N|>` tag, returning (full match length, 0-based index).
+fn parse_block_tag(text: &str) -> Option<(usize, usize)> {
+    let bytes = text.as_bytes();
+    if bytes.get(0..2)? != b"<|" {
+        return None;
+    }
+    let end = text[2..].find("|>")?;
+    let num_str = &text[2..2 + end];
+    let id_1based: usize = num_str.parse().ok()?;
+    if id_1based == 0 {
+        return None;
+    }
+    Some((2 + end + 2, id_1based - 1))
 }
 
 #[allow(clippy::large_enum_variant)]
@@ -125,18 +127,6 @@ fn state_target(state: &State) -> Option<LlmTarget> {
     }
 }
 
-fn escape_block_text(text: &str) -> String {
-    text.replace('&', "&amp;")
-        .replace('<', "&lt;")
-        .replace('>', "&gt;")
-}
-
-fn unescape_block_text(text: &str) -> String {
-    text.replace("&lt;", "<")
-        .replace("&gt;", ">")
-        .replace("&amp;", "&")
-}
-
 fn strip_wrapping_quotes(text: &str) -> String {
     let mut current = text.trim();
 
@@ -194,22 +184,29 @@ fn format_document_blocks(blocks: &[TextBlock]) -> String {
         .enumerate()
         .map(|(idx, block)| {
             let text = block.text.as_deref().unwrap_or("<empty>");
-            format!(
-                r#"<block id="{idx}">
-{}
-</block>"#,
-                escape_block_text(text)
-            )
+            format!("<|{}|>{}", idx + 1, text)
         })
         .collect::<Vec<_>>()
         .join("\n")
+}
+
+fn find_next_tag(text: &str) -> Option<(usize, usize, usize)> {
+    let mut pos = 0;
+    while let Some(rel) = text[pos..].find("<|") {
+        let offset = pos + rel;
+        if let Some((len, id)) = parse_block_tag(&text[offset..]) {
+            return Some((offset, len, id));
+        }
+        pos = offset + 1;
+    }
+    None
 }
 
 fn parse_tagged_blocks(
     translation: &str,
     expected_blocks: usize,
 ) -> anyhow::Result<Option<Vec<String>>> {
-    if find_next_block_start_tag(translation).is_none() {
+    if find_next_tag(translation).is_none() {
         return Ok(None);
     }
 
@@ -219,42 +216,29 @@ fn parse_tagged_blocks(
     let mut parsed_count = 0usize;
     let mut ignored_count = 0usize;
 
-    while let Some(start_tag) = find_next_block_start_tag(cursor) {
+    while let Some((offset, len, id)) = find_next_tag(cursor) {
         found_any = true;
-        cursor = &cursor[start_tag.offset + start_tag.len..];
+        cursor = &cursor[offset + len..];
 
-        let id = start_tag.id;
+        // Find content: everything until the next tag or end of string
+        let content_end = find_next_tag(cursor)
+            .map(|(next_offset, _, _)| next_offset)
+            .unwrap_or(cursor.len());
+        let content = cursor[..content_end].trim().to_string();
+
         if id >= expected_blocks {
             ignored_count += 1;
             tracing::warn!("Ignoring translated block id {id} for {expected_blocks} source blocks");
-            let closing_tag = find_next_block_end_tag(cursor);
-            let boundary = block_boundary(cursor, closing_tag.map(|tag| tag.offset));
-            cursor = if closing_tag.map(|tag| tag.offset) == Some(boundary) {
-                let closing_len = closing_tag.map(|tag| tag.len).unwrap_or(0);
-                &cursor[boundary + closing_len..]
+        } else {
+            if blocks[id].is_empty() {
+                parsed_count += 1;
             } else {
-                &cursor[boundary..]
-            };
-            continue;
+                tracing::warn!("Translated block id {id} appeared more than once, keeping latest");
+            }
+            blocks[id] = content;
         }
 
-        let closing_tag = find_next_block_end_tag(cursor);
-        let block_end = block_boundary(cursor, closing_tag.map(|tag| tag.offset));
-        let content = unescape_block_text(cursor[..block_end].trim());
-
-        if blocks[id].is_empty() {
-            parsed_count += 1;
-        } else {
-            tracing::warn!("Translated block id {id} appeared more than once, keeping latest");
-        }
-        blocks[id] = content;
-
-        cursor = if closing_tag.map(|tag| tag.offset) == Some(block_end) {
-            let closing_len = closing_tag.map(|tag| tag.len).unwrap_or(0);
-            &cursor[block_end + closing_len..]
-        } else {
-            &cursor[block_end..]
-        };
+        cursor = &cursor[content_end..];
     }
 
     if !found_any {
@@ -297,151 +281,6 @@ fn split_legacy_lines(translation: &str, expected_blocks: usize) -> anyhow::Resu
     Ok(translations)
 }
 
-fn block_boundary(cursor: &str, closing_tag: Option<usize>) -> usize {
-    let next_block_start = find_next_block_start_tag(cursor).map(|tag| tag.offset);
-    match (closing_tag, next_block_start) {
-        (Some(close), Some(next)) => close.min(next),
-        (Some(close), None) => close,
-        (None, Some(next)) => next,
-        (None, None) => cursor.len(),
-    }
-}
-
-fn find_next_block_start_tag(text: &str) -> Option<BlockStartTag> {
-    let mut search_from = 0usize;
-    while let Some(rel_start) = text[search_from..].find('<') {
-        let offset = search_from + rel_start;
-        if let Some((len, id)) = parse_block_start_tag(&text[offset..]) {
-            return Some(BlockStartTag { offset, len, id });
-        }
-        search_from = offset + 1;
-    }
-    None
-}
-
-fn parse_block_start_tag(text: &str) -> Option<(usize, usize)> {
-    let bytes = text.as_bytes();
-    if bytes.first().copied()? != b'<' {
-        return None;
-    }
-
-    let mut index = 1usize;
-    skip_ascii_whitespace(bytes, &mut index);
-    if !consume_ascii_keyword(bytes, &mut index, "block") {
-        return None;
-    }
-
-    let mut parsed_id = None;
-    loop {
-        skip_ascii_whitespace(bytes, &mut index);
-        match bytes.get(index).copied()? {
-            b'>' => return parsed_id.map(|id| (index + 1, id)),
-            b'/' if bytes.get(index + 1).copied() == Some(b'>') => {
-                return parsed_id.map(|id| (index + 2, id));
-            }
-            _ => {}
-        }
-
-        let name_start = index;
-        while matches!(
-            bytes.get(index).copied(),
-            Some(b'a'..=b'z' | b'A'..=b'Z' | b'0'..=b'9' | b'_' | b'-')
-        ) {
-            index += 1;
-        }
-        if index == name_start {
-            return None;
-        }
-        let attr_name = &text[name_start..index];
-
-        skip_ascii_whitespace(bytes, &mut index);
-        if bytes.get(index).copied()? != b'=' {
-            return None;
-        }
-        index += 1;
-        skip_ascii_whitespace(bytes, &mut index);
-
-        let attr_value = match bytes.get(index).copied()? {
-            b'"' | b'\'' => {
-                let quote = bytes[index];
-                index += 1;
-                let value_start = index;
-                while bytes.get(index).copied()? != quote {
-                    index += 1;
-                }
-                let value = &text[value_start..index];
-                index += 1;
-                value
-            }
-            _ => {
-                let value_start = index;
-                while matches!(bytes.get(index).copied(), Some(byte) if !byte.is_ascii_whitespace() && byte != b'>')
-                {
-                    index += 1;
-                }
-                &text[value_start..index]
-            }
-        };
-
-        if attr_name.eq_ignore_ascii_case("id") {
-            parsed_id = attr_value.parse::<usize>().ok();
-        }
-    }
-}
-
-fn find_next_block_end_tag(text: &str) -> Option<BlockEndTag> {
-    let mut search_from = 0usize;
-    while let Some(rel_start) = text[search_from..].find('<') {
-        let offset = search_from + rel_start;
-        if let Some(len) = parse_block_end_tag(&text[offset..]) {
-            return Some(BlockEndTag { offset, len });
-        }
-        search_from = offset + 1;
-    }
-    None
-}
-
-fn parse_block_end_tag(text: &str) -> Option<usize> {
-    let bytes = text.as_bytes();
-    if bytes.first().copied()? != b'<' {
-        return None;
-    }
-
-    let mut index = 1usize;
-    skip_ascii_whitespace(bytes, &mut index);
-    if bytes.get(index).copied()? != b'/' {
-        return None;
-    }
-    index += 1;
-    skip_ascii_whitespace(bytes, &mut index);
-    if !consume_ascii_keyword(bytes, &mut index, "block") {
-        return None;
-    }
-    skip_ascii_whitespace(bytes, &mut index);
-    if bytes.get(index).copied()? != b'>' {
-        return None;
-    }
-    Some(index + 1)
-}
-
-fn skip_ascii_whitespace(bytes: &[u8], index: &mut usize) {
-    while matches!(bytes.get(*index).copied(), Some(byte) if byte.is_ascii_whitespace()) {
-        *index += 1;
-    }
-}
-
-fn consume_ascii_keyword(bytes: &[u8], index: &mut usize, keyword: &str) -> bool {
-    let end = *index + keyword.len();
-    let Some(slice) = bytes.get(*index..end) else {
-        return false;
-    };
-    if !slice.eq_ignore_ascii_case(keyword.as_bytes()) {
-        return false;
-    }
-    *index = end;
-    true
-}
-
 impl Translatable for Document {
     fn get_source(&self) -> anyhow::Result<String> {
         Ok(format_document_blocks(&self.text_blocks))
@@ -466,12 +305,7 @@ impl Translatable for TextBlock {
             .text
             .clone()
             .ok_or_else(|| anyhow::anyhow!("No source text found"))?;
-        Ok(format!(
-            r#"<block id="0">
-{}
-</block>"#,
-            escape_block_text(&source)
-        ))
+        Ok(format!("<|1|>{}", source))
     }
 
     fn set_translation(&mut self, translation: String) -> anyhow::Result<()> {
@@ -929,10 +763,7 @@ mod tests {
         };
 
         let source = doc.get_source()?;
-        assert_eq!(
-            source,
-            "<block id=\"0\">\nHello\n</block>\n<block id=\"1\">\n1 &lt; 2\nA &amp; B\n</block>"
-        );
+        assert_eq!(source, "<|1|>Hello\n<|2|>1 < 2\nA & B");
 
         Ok(())
     }
@@ -944,9 +775,7 @@ mod tests {
             ..Default::default()
         };
 
-        doc.set_translation(
-            "<block id=\"1\">\nSecond line\nnext\n</block>\n<block id=\"0\">\nFirst &lt;done&gt;\n</block>".to_string(),
-        )?;
+        doc.set_translation("<|2|>Second line\nnext\n<|1|>First <done>".to_string())?;
 
         assert_eq!(
             doc.text_blocks[0].translation.as_deref(),
@@ -967,10 +796,7 @@ mod tests {
             ..Default::default()
         };
 
-        doc.set_translation(
-            "<block id=\"0\">\n\"Hello\"\n</block>\n<block id=\"1\">\n“World”\n</block>"
-                .to_string(),
-        )?;
+        doc.set_translation("<|1|>\"Hello\"\n<|2|>\u{201c}World\u{201d}".to_string())?;
 
         assert_eq!(doc.text_blocks[0].translation.as_deref(), Some("Hello"));
         assert_eq!(doc.text_blocks[1].translation.as_deref(), Some("World"));
@@ -997,15 +823,13 @@ mod tests {
     }
 
     #[test]
-    fn document_translation_allows_missing_closing_tags() -> anyhow::Result<()> {
+    fn document_translation_parses_consecutive_tags() -> anyhow::Result<()> {
         let mut doc = Document {
             text_blocks: vec![TextBlock::default(), TextBlock::default()],
             ..Default::default()
         };
 
-        doc.set_translation(
-            "<block id=\"0\">\nFirst line\n<block id=\"1\">\nSecond line".to_string(),
-        )?;
+        doc.set_translation("<|1|>First line\n<|2|>Second line".to_string())?;
 
         assert_eq!(
             doc.text_blocks[0].translation.as_deref(),
@@ -1020,14 +844,13 @@ mod tests {
     }
 
     #[test]
-    fn document_translation_uses_end_of_text_when_last_closing_tag_is_missing() -> anyhow::Result<()>
-    {
+    fn document_translation_uses_end_of_text_for_last_block() -> anyhow::Result<()> {
         let mut doc = Document {
             text_blocks: vec![TextBlock::default()],
             ..Default::default()
         };
 
-        doc.set_translation("<block id=\"0\">\nFinal line".to_string())?;
+        doc.set_translation("<|1|>Final line".to_string())?;
 
         assert_eq!(
             doc.text_blocks[0].translation.as_deref(),
@@ -1044,45 +867,9 @@ mod tests {
             ..Default::default()
         };
 
-        doc.set_translation(
-            "<block id=\"0\">\nKept\n</block>\n<block id=\"1\">\nIgnored\n</block>".to_string(),
-        )?;
+        doc.set_translation("<|1|>Kept\n<|2|>Ignored".to_string())?;
 
         assert_eq!(doc.text_blocks[0].translation.as_deref(), Some("Kept"));
-
-        Ok(())
-    }
-
-    #[test]
-    fn document_translation_accepts_relaxed_block_tag_formatting() -> anyhow::Result<()> {
-        let mut doc = Document {
-            text_blocks: vec![TextBlock::default(), TextBlock::default()],
-            ..Default::default()
-        };
-
-        doc.set_translation(
-            "<block id = '1' >\nSecond\n</ block>\n<Block id=0>\nFirst\n</BLOCK>".to_string(),
-        )?;
-
-        assert_eq!(doc.text_blocks[0].translation.as_deref(), Some("First"));
-        assert_eq!(doc.text_blocks[1].translation.as_deref(), Some("Second"));
-
-        Ok(())
-    }
-
-    #[test]
-    fn document_translation_accepts_unquoted_block_ids() -> anyhow::Result<()> {
-        let mut doc = Document {
-            text_blocks: vec![TextBlock::default()],
-            ..Default::default()
-        };
-
-        doc.set_translation("<block id=0>\nOnly first\n</block>".to_string())?;
-
-        assert_eq!(
-            doc.text_blocks[0].translation.as_deref(),
-            Some("Only first")
-        );
 
         Ok(())
     }
@@ -1094,7 +881,7 @@ mod tests {
             ..Default::default()
         };
 
-        doc.set_translation("<block id=\"0\">\nOnly first\n</block>".to_string())?;
+        doc.set_translation("<|1|>Only first".to_string())?;
 
         assert_eq!(
             doc.text_blocks[0].translation.as_deref(),
@@ -1108,7 +895,7 @@ mod tests {
     #[test]
     fn text_block_translation_strips_wrapping_quotes() -> anyhow::Result<()> {
         let mut block = TextBlock::default();
-        block.set_translation("“quoted”".to_string())?;
+        block.set_translation("\u{201c}quoted\u{201d}".to_string())?;
         assert_eq!(block.translation.as_deref(), Some("quoted"));
         Ok(())
     }
@@ -1121,7 +908,7 @@ mod tests {
         };
 
         let source = block.get_source()?;
-        assert_eq!(source, "<block id=\"0\">\n1 &lt; 2\nA &amp; B\n</block>");
+        assert_eq!(source, "<|1|>1 < 2\nA & B");
 
         Ok(())
     }
@@ -1129,10 +916,8 @@ mod tests {
     #[test]
     fn text_block_translation_extracts_tagged_block_content() -> anyhow::Result<()> {
         let mut block = TextBlock::default();
-        block.set_translation(
-            "Sure.\n<block id=\"0\">\nTranslated &lt;line&gt;\n</block>\nDone.".to_string(),
-        )?;
-        assert_eq!(block.translation.as_deref(), Some("Translated <line>"));
+        block.set_translation("Sure.\n<|1|>Translated text".to_string())?;
+        assert_eq!(block.translation.as_deref(), Some("Translated text"));
         Ok(())
     }
 
@@ -1150,8 +935,23 @@ mod tests {
     #[test]
     fn text_block_translation_keeps_japanese_dialogue_quotes() -> anyhow::Result<()> {
         let mut block = TextBlock::default();
-        block.set_translation("「quoted」".to_string())?;
-        assert_eq!(block.translation.as_deref(), Some("「quoted」"));
+        block.set_translation("\u{300c}quoted\u{300d}".to_string())?;
+        assert_eq!(block.translation.as_deref(), Some("\u{300c}quoted\u{300d}"));
         Ok(())
+    }
+
+    #[test]
+    fn parse_block_tag_parses_valid_tags() {
+        assert_eq!(parse_block_tag("<|1|>"), Some((5, 0)));
+        assert_eq!(parse_block_tag("<|2|>"), Some((5, 1)));
+        assert_eq!(parse_block_tag("<|10|>"), Some((6, 9)));
+    }
+
+    #[test]
+    fn parse_block_tag_rejects_invalid_tags() {
+        assert_eq!(parse_block_tag("<|0|>"), None);
+        assert_eq!(parse_block_tag("<|abc|>"), None);
+        assert_eq!(parse_block_tag("<block>"), None);
+        assert_eq!(parse_block_tag("hello"), None);
     }
 }

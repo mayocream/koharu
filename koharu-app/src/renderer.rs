@@ -153,17 +153,25 @@ impl Renderer {
             .fontbook
             .lock()
             .map_err(|_| anyhow::anyhow!("Failed to lock fontbook"))?;
+        let mut seen = std::collections::HashSet::new();
         let mut fonts = fontbook
             .all_families()
             .into_iter()
             .filter(|face| !face.post_script_name.is_empty())
-            .map(|face| FontFaceInfo {
-                family_name: face
+            .filter_map(|face| {
+                let family_name = face
                     .families
                     .first()
                     .map(|(family, _)| family.clone())
-                    .unwrap_or_else(|| face.post_script_name.clone()),
-                post_script_name: face.post_script_name,
+                    .unwrap_or_else(|| face.post_script_name.clone());
+                if seen.insert(family_name.clone()) {
+                    Some(FontFaceInfo {
+                        family_name,
+                        post_script_name: face.post_script_name,
+                    })
+                } else {
+                    None
+                }
             })
             .collect::<Vec<_>>();
         fonts.sort();
@@ -201,6 +209,10 @@ impl Renderer {
             None => clustered_sizes,
         };
 
+        // Bubble expansion disabled — causes text to fly away from block position.
+        // Bubbles are used for font size estimation via detection, not layout.
+        let render_areas: Vec<Option<LayoutBox>> = vec![None; blocks_to_render.len()];
+
         let block_renders: Vec<Option<(DynamicImage, usize)>> = {
             use rayon::prelude::*;
             let span = tracing::info_span!("render_blocks", count = blocks_to_render.len());
@@ -212,12 +224,13 @@ impl Renderer {
                 .map(|(i, text_block)| {
                     let _guard = parent_span.enter();
                     let base_font_size = render_font_sizes.get(i).copied().flatten();
+                    let bubble_area = render_areas.get(i).copied().flatten();
                     match self.render_text_block(
                         text_block,
                         opts.shader_effect,
                         opts.shader_stroke.clone(),
                         opts.font_family,
-                        opts.bubbles,
+                        bubble_area,
                         base_font_size,
                         min_font,
                     ) {
@@ -256,12 +269,9 @@ impl Renderer {
                     continue;
                 };
                 let block_img = images.load(blob_ref)?;
-                imageops::overlay(
-                    &mut rendered,
-                    &block_img,
-                    text_block.x as i64,
-                    text_block.y as i64,
-                );
+                let rx = text_block.render_x.unwrap_or(text_block.x);
+                let ry = text_block.render_y.unwrap_or(text_block.y);
+                imageops::overlay(&mut rendered, &block_img, rx as i64, ry as i64);
             }
             let rendered_ref = images.store_raw(&DynamicImage::from(rendered))?;
             return Ok(Some(rendered_ref));
@@ -276,7 +286,7 @@ impl Renderer {
         effect: TextShaderEffect,
         global_stroke: Option<TextStrokeStyle>,
         font_family: Option<&str>,
-        bubbles: &[koharu_core::BubbleRegion],
+        bubble_area: Option<LayoutBox>,
         base_font_size: Option<f32>,
         min_font_size: f32,
     ) -> Result<Option<DynamicImage>> {
@@ -340,23 +350,16 @@ impl Renderer {
             }
         });
         let block_box = layout_box_from_block(&layout_source_block);
-        let bubble_box = find_best_bubble(text_block, bubbles);
-        // Use whichever is larger — bubble or text block box.
-        let layout_box = match bubble_box {
-            Some(bb) => LayoutBox {
-                x: block_box.x.min(bb.x),
-                y: block_box.y.min(bb.y),
-                width: block_box.width.max(bb.width),
-                height: block_box.height.max(bb.height),
-            },
-            None => block_box,
+        let (layout_box, bubble_expanded) = match bubble_area {
+            Some(area) => (area, true),
+            None => (block_box, false),
         };
 
-        // Determine base font size: user-set > clustered detected.
-        // If neither is available, skip rendering (no font size info).
-        let Some(effective_base_size) = style.font_size.or(base_font_size) else {
-            return Ok(None);
-        };
+        // Determine base font size: user-set > clustered detected > fallback.
+        let effective_base_size = style.font_size.or(base_font_size).unwrap_or_else(|| {
+            // Fallback: estimate from layout box height.
+            (layout_box.height * 0.3).clamp(min_font_size, 60.0)
+        });
 
         let layout_builder = TextLayout::new(&font, None)
             .with_fallback_fonts(&self.symbol_fallbacks)
@@ -383,6 +386,7 @@ impl Renderer {
             style.stroke.as_ref(),
             global_stroke.as_ref(),
             layout.font_size,
+            color,
         );
         let rendered = {
             let _s = tracing::info_span!("rasterize").entered();
@@ -399,14 +403,22 @@ impl Renderer {
             )?
         };
 
-        text_block.x = layout_box.x;
-        text_block.y = layout_box.y;
-        text_block.width = layout_box.width;
-        text_block.height = layout_box.height;
         text_block.rendered_direction = Some(match writing_mode {
             WritingMode::Horizontal => koharu_core::TextDirection::Horizontal,
             WritingMode::VerticalRl => koharu_core::TextDirection::Vertical,
         });
+        // Store actual render area when bubble expansion was used.
+        if bubble_expanded {
+            text_block.render_x = Some(layout_box.x.round());
+            text_block.render_y = Some(layout_box.y.round());
+            text_block.render_width = Some(layout_box.width.round());
+            text_block.render_height = Some(layout_box.height.round());
+        } else {
+            text_block.render_x = None;
+            text_block.render_y = None;
+            text_block.render_width = None;
+            text_block.render_height = None;
+        }
         // rendered field will be set by the caller with a BlobRef
         let persisted_style = text_block.style.get_or_insert_with(|| TextStyle {
             font_families: Vec::new(),
@@ -455,18 +467,41 @@ fn apply_default_font_families(font_families: &mut Vec<String>, text: &str) {
     }
 }
 
+fn colors_too_similar(a: [u8; 4], b: [u8; 4]) -> bool {
+    let dr = (a[0] as i32 - b[0] as i32).abs();
+    let dg = (a[1] as i32 - b[1] as i32).abs();
+    let db = (a[2] as i32 - b[2] as i32).abs();
+    dr + dg + db < 60
+}
+
+fn contrasting_stroke_color(text_color: [u8; 4]) -> [u8; 4] {
+    let luminance =
+        0.299 * text_color[0] as f32 + 0.587 * text_color[1] as f32 + 0.114 * text_color[2] as f32;
+    if luminance > 128.0 {
+        [0, 0, 0, 255]
+    } else {
+        [255, 255, 255, 255]
+    }
+}
+
 fn resolve_stroke_style(
     block: &TextBlock,
     block_stroke: Option<&TextStrokeStyle>,
     global_stroke: Option<&TextStrokeStyle>,
     font_size: f32,
+    text_color: [u8; 4],
 ) -> Option<RenderStrokeOptions> {
     if let Some(stroke) = block_stroke {
         if !stroke.enabled {
             return None;
         }
+        let color = if colors_too_similar(text_color, stroke.color) {
+            contrasting_stroke_color(text_color)
+        } else {
+            stroke.color
+        };
         return Some(RenderStrokeOptions {
-            color: stroke.color,
+            color,
             width_px: stroke
                 .width_px
                 .unwrap_or_else(|| default_stroke_width(font_size)),
@@ -477,8 +512,13 @@ fn resolve_stroke_style(
         if !stroke.enabled {
             return None;
         }
+        let color = if colors_too_similar(text_color, stroke.color) {
+            contrasting_stroke_color(text_color)
+        } else {
+            stroke.color
+        };
         return Some(RenderStrokeOptions {
-            color: stroke.color,
+            color,
             width_px: stroke
                 .width_px
                 .unwrap_or_else(|| default_stroke_width(font_size)),
@@ -488,19 +528,24 @@ fn resolve_stroke_style(
     if let Some(pred) = &block.font_prediction
         && pred.stroke_width_px > 0.0
     {
+        let pred_stroke = [
+            pred.stroke_color[0],
+            pred.stroke_color[1],
+            pred.stroke_color[2],
+            255,
+        ];
         return Some(RenderStrokeOptions {
-            color: [
-                pred.stroke_color[0],
-                pred.stroke_color[1],
-                pred.stroke_color[2],
-                255,
-            ],
+            color: if colors_too_similar(text_color, pred_stroke) {
+                contrasting_stroke_color(text_color)
+            } else {
+                pred_stroke
+            },
             width_px: pred.stroke_width_px,
         });
     }
 
     Some(RenderStrokeOptions {
-        color: [255, 255, 255, 255],
+        color: contrasting_stroke_color(text_color),
         width_px: default_stroke_width(font_size),
     })
 }
@@ -598,47 +643,88 @@ fn face_post_script_name(faces: &[FaceInfo], candidate: &str) -> Option<String> 
         .filter(|post_script_name| !post_script_name.is_empty())
 }
 
-/// Find the bubble with the best IoU overlap for a text block.
-/// Returns the bubble's bbox as a LayoutBox if a good match is found.
+#[allow(dead_code)]
+fn compute_render_areas(
+    blocks: &[&mut TextBlock],
+    bubbles: &[koharu_core::BubbleRegion],
+) -> Vec<Option<LayoutBox>> {
+    // First pass: compute bubble-expanded area for each block.
+    let mut areas: Vec<Option<LayoutBox>> = blocks
+        .iter()
+        .map(|block| {
+            if block.lock_layout_box {
+                return None;
+            }
+            let bubble = find_best_bubble(block, bubbles)?;
+            let pad_x = bubble.width * 0.05;
+            let pad_y = bubble.height * 0.05;
+            Some(LayoutBox {
+                x: (bubble.x + pad_x).round(),
+                y: (bubble.y + pad_y).round(),
+                width: (bubble.width - pad_x * 2.0).round().max(1.0),
+                height: (bubble.height - pad_y * 2.0).round().max(1.0),
+            })
+        })
+        .collect();
+
+    // Second pass: if any two expanded areas overlap, fall back both to block dims.
+    for i in 0..areas.len() {
+        for j in (i + 1)..areas.len() {
+            let (Some(a), Some(b)) = (areas[i], areas[j]) else {
+                continue;
+            };
+            let overlap_x = (a.x + a.width).min(b.x + b.width) - a.x.max(b.x);
+            let overlap_y = (a.y + a.height).min(b.y + b.height) - a.y.max(b.y);
+            if overlap_x > 0.0 && overlap_y > 0.0 {
+                areas[i] = None;
+                areas[j] = None;
+                break;
+            }
+        }
+    }
+
+    areas
+}
+
+#[allow(dead_code)]
 fn find_best_bubble(block: &TextBlock, bubbles: &[koharu_core::BubbleRegion]) -> Option<LayoutBox> {
     if bubbles.is_empty() {
         return None;
     }
-
+    // Block center must be inside the bubble.
+    let cx = block.x + block.width * 0.5;
+    let cy = block.y + block.height * 0.5;
     let block_area = (block.width * block.height).max(1.0);
     let mut best: Option<(f32, &koharu_core::BubbleRegion)> = None;
-
     for bubble in bubbles {
+        // Check containment: block center inside bubble.
+        if cx < bubble.x
+            || cx > bubble.x + bubble.width
+            || cy < bubble.y
+            || cy > bubble.y + bubble.height
+        {
+            continue;
+        }
         let bubble_area = (bubble.width * bubble.height).max(1.0);
-
-        // Intersection
         let ix0 = block.x.max(bubble.x);
         let iy0 = block.y.max(bubble.y);
         let ix1 = (block.x + block.width).min(bubble.x + bubble.width);
         let iy1 = (block.y + block.height).min(bubble.y + bubble.height);
         let inter = (ix1 - ix0).max(0.0) * (iy1 - iy0).max(0.0);
-
-        // IoU
         let union = block_area + bubble_area - inter;
         let iou = if union > 0.0 { inter / union } else { 0.0 };
-
-        if let Some((best_iou, _)) = &best {
-            if iou > *best_iou {
-                best = Some((iou, bubble));
-            }
-        } else if iou > 0.0 {
-            best = Some((iou, bubble));
+        match &best {
+            Some((best_iou, _)) if iou > *best_iou => best = Some((iou, bubble)),
+            None if iou > 0.0 => best = Some((iou, bubble)),
+            _ => {}
         }
     }
-
-    // Require minimum overlap to avoid false matches
-    best.filter(|(iou, _)| *iou > 0.05)
-        .map(|(_, bubble)| LayoutBox {
-            x: bubble.x,
-            y: bubble.y,
-            width: bubble.width,
-            height: bubble.height,
-        })
+    best.filter(|(iou, _)| *iou > 0.1).map(|(_, b)| LayoutBox {
+        x: b.x,
+        y: b.y,
+        width: b.width,
+        height: b.height,
+    })
 }
 
 #[cfg(test)]

@@ -44,6 +44,10 @@ const mapTextBlock = (
   style: block.style as TextBlock['style'],
   fontPrediction: block.fontPrediction as TextBlock['fontPrediction'],
   rendered: block.rendered ?? undefined,
+  renderX: block.renderX ?? undefined,
+  renderY: block.renderY ?? undefined,
+  renderWidth: block.renderWidth ?? undefined,
+  renderHeight: block.renderHeight ?? undefined,
 })
 
 export type MappedDocument = {

@@ -46,7 +46,7 @@ pub struct PromptRenderer {
     eos_token: String,
 }
 
-const BLOCK_TAG_INSTRUCTIONS: &str = "If the input contains <block id=\"N\">...</block>, translate only the text inside each block. Keep every block tag exactly unchanged, including ids, order, and block count. Do not merge blocks, split blocks, or add any text outside the blocks.";
+const BLOCK_TAG_INSTRUCTIONS: &str = "The input uses numbered tags like <|1|>, <|2|>, etc. to mark each text block. Translate only the text after each tag. Keep every tag exactly unchanged, including numbers and order. Output the same tags followed by the translated text. Do not merge, split, or reorder blocks.";
 
 pub fn system_prompt(target_language: Language) -> String {
     format!(
@@ -132,8 +132,8 @@ mod tests {
     fn system_prompt_mentions_target_language_and_block_rules() {
         let prompt = system_prompt(Language::Korean);
         assert!(prompt.contains("natural Korean"));
-        assert!(prompt.contains("<block id=\"N\">...</block>"));
-        assert!(prompt.contains("Do not merge blocks"));
+        assert!(prompt.contains("<|1|>, <|2|>"));
+        assert!(prompt.contains("Do not merge"));
     }
 
     #[test]
