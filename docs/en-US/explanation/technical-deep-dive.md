@@ -4,19 +4,20 @@ title: Technical Deep Dive
 
 # Technical Deep Dive
 
-This page explains the technical side of Koharu's manga pipeline: what each model does, how the stages fit together, and why layout analysis, segmentation masks, OCR, inpainting, and translation are handled separately.
+This page explains the technical side of Koharu's manga pipeline: what each model does, how the stages fit together, and why text and bubble detection, segmentation masks, OCR, inpainting, and translation are handled separately.
 
 ## The page pipeline in implementation terms
 
 ```mermaid
 flowchart TD
-    A[Input page] --> B[PP-DocLayoutV3]
-    A --> C[comic-text-detector]
-    B --> D[Text blocks]
+    A[Input page] --> B[comic-text-bubble-detector]
+    A --> C[comic-text-detector-seg]
+    B --> D[Text blocks + bubbles]
     C --> E[Segmentation mask]
     A --> F[YuzuMarker font detector]
+    D --> C
     D --> G[PaddleOCR-VL crop OCR]
-    E --> H[LaMa inpainting]
+    E --> H[AOT inpainting]
     G --> I[Local or remote LLM]
     F --> J[Renderer style hints]
     H --> K[Renderer]
@@ -27,7 +28,7 @@ flowchart TD
 
 At the code level, the public pipeline steps are `Detect -> OCR -> Inpaint -> LLM Generate -> Render`, but the detect stage is already doing three distinct jobs:
 
-- page layout analysis
+- text and bubble detection
 - text foreground segmentation
 - font and color estimation
 
@@ -37,22 +38,24 @@ That design is deliberate. A manga translation tool needs both page structure an
 
 | Component | Default model | Model type | Main job in Koharu |
 | --- | --- | --- | --- |
-| Layout analysis | [PP-DocLayoutV3](https://huggingface.co/PaddlePaddle/PP-DocLayoutV3_safetensors) | document layout detector | find text-like regions, labels, confidence, and reading order |
+| Text and bubble detection | [comic-text-bubble-detector](https://huggingface.co/ogkalu/comic-text-and-bubble-detector) | object detector | find text blocks and speech bubble regions |
 | Segmentation | [comic-text-detector](https://github.com/dmMaze/comic-text-detector) | text segmentation network | produce a dense text mask for cleanup |
 | OCR | [PaddleOCR-VL-1.5](https://huggingface.co/PaddlePaddle/PaddleOCR-VL-1.5) | vision-language model | read cropped text regions into Unicode text |
-| Inpainting | [lama-manga](https://huggingface.co/mayocream/lama-manga) / [LaMa](https://github.com/advimman/lama) | image inpainting network | fill masked regions after text removal |
+| Inpainting | [aot-inpainting](https://huggingface.co/mayocream/aot-inpainting) / [manga-image-translator](https://github.com/zyddnys/manga-image-translator) | image inpainting network | fill masked regions after text removal |
 | Font hints | [YuzuMarker.FontDetection](https://huggingface.co/fffonion/yuzumarker-font-detection) | image classifier / regressor | estimate font family, colors, and stroke hints |
 | Translation | local GGUF model via [llama.cpp](https://github.com/ggml-org/llama.cpp) or remote API | decoder-only LLM in most local setups | translate OCR text into the target language |
 
-## Why layout analysis matters on manga pages
+Optional built-in alternatives remain available. The main ones are [PP-DocLayoutV3](https://huggingface.co/PaddlePaddle/PP-DocLayoutV3_safetensors) as an alternative detector and layout-analysis engine, [speech-bubble-segmentation](https://huggingface.co/mayocream/speech-bubble-segmentation) as a dedicated bubble detector, and [lama-manga](https://huggingface.co/mayocream/lama-manga) as an alternative inpainter.
 
-Layout analysis is not just "find boxes around text". On manga pages it has to answer several structural questions:
+## Why text and bubble detection matters on manga pages
+
+Detection is not just "find boxes around text". On manga pages it has to answer several structural questions:
 
 - which regions are text-like at all
-- where the reading order probably is
+- where speech bubbles are
 - whether a block is tall enough to behave like vertical text
 - which boxes should be deduplicated before OCR
-- which parts of the page are captions, bubble text, titles, or other layout categories
+- which regions should become editable `TextBlock` records
 
 This matters because manga is visually dense:
 
@@ -61,17 +64,16 @@ This matters because manga is visually dense:
 - vertical Japanese and horizontal Latin text can coexist on the same page
 - the region that should be read is not always the same shape as the pixels that should be erased
 
-Koharu uses layout output to create `TextBlock` records first, then uses those blocks to drive OCR and later rendering.
+Koharu uses the detector output to create `TextBlock` records first, then uses those blocks to drive OCR and later rendering. Bubble regions are kept as separate geometry so the UI and later tooling can still reason about the speech-balloon area.
 
-In the current implementation, the layout stage:
+In the current implementation, the default detect stage:
 
-- runs `PP-DocLayoutV3::inference_one_fast(...)`
-- keeps regions whose labels look text-like
-- converts them into `TextBlock` values
-- deduplicates heavily overlapping regions
-- infers vertical vs horizontal source direction from aspect ratio
+- runs the Candle port of `ogkalu/comic-text-and-bubble-detector`
+- converts text detections into `TextBlock` values
+- converts bubble detections into `BubbleRegion` values
+- sorts text blocks into manga reading order before OCR
 
-So layout analysis is the structural backbone of the rest of the pipeline.
+If you prefer a document-layout-style detector, `PP-DocLayoutV3` is still available as an alternative engine. It is just no longer the default.
 
 ## What a segmentation mask is
 
@@ -96,24 +98,22 @@ flowchart LR
 In Koharu, the segmentation path is intentionally separate from layout:
 
 - `comic-text-detector` produces a grayscale probability map
-- Koharu refines that map with post-processing
-- the refined result becomes `doc.segment`
-- LaMa then uses `doc.segment` as the erase and fill mask for inpainting
+- Koharu thresholds and dilates that map with lightweight post-processing
+- the resulting binary mask becomes `doc.segment`
+- `aot-inpainting` then uses `doc.segment` as the erase and fill mask for inpainting
 
-The refinement step matters because raw segmentation probabilities are usually soft and noisy. Koharu thresholds the prediction, tries block-aware refinement, and dilates the final binary mask so the cleanup covers text edges and outlines instead of leaving halos behind.
+The cleanup step still matters because raw segmentation probabilities are usually soft and noisy. Koharu thresholds the prediction and dilates the final binary mask so the cleanup covers text edges and outlines instead of leaving halos behind.
 
 ## How the vision models work in theory
 
-### Layout analysis: detector plus reading-order reasoning
+### Joint detection: text blocks and bubble regions in one pass
 
-[PP-DocLayoutV3](https://huggingface.co/PaddlePaddle/PP-DocLayoutV3) is a layout model built for document parsing under skew, warping, and other non-planar distortions. Its model card highlights two properties that are especially relevant to manga-style pages:
+[ogkalu/comic-text-and-bubble-detector](https://huggingface.co/ogkalu/comic-text-and-bubble-detector) is the default detector because it directly predicts the two region types the rest of the pipeline cares about most:
 
-- it predicts multi-point geometry instead of only axis-aligned two-point boxes
-- it predicts logical reading order in the same forward pass
+- text-like regions that should become `TextBlock`s
+- speech-bubble regions that should stay available to the editor and downstream tooling
 
-Koharu's Rust port mirrors that shape: the `pp_doclayout_v3` module contains an `HGNetV2` backbone plus attention-based encoder and decoder blocks, and the inference result exposes `label`, `score`, `bbox`, `polygon_points`, and `order`.
-
-Conceptually, this is closer to object detection plus layout parsing than to OCR itself.
+Koharu's Candle port maps those detections into document data structures and then sorts the text blocks into manga reading order before OCR. Conceptually, this is closer to page object detection than to OCR itself.
 
 ### Segmentation: dense per-pixel text prediction
 
@@ -123,9 +123,9 @@ Koharu's `comic-text-detector` path is a segmentation-first design. The Rust por
 - a U-Net decoder for mask prediction
 - an optional DBNet head for full detection mode
 
-The default page pipeline uses the segmentation-only path because Koharu already gets layout boxes from `PP-DocLayoutV3`. That means Koharu combines:
+The default page pipeline uses the segmentation-only path because Koharu already gets text blocks from `comic-text-bubble-detector`. That means Koharu combines:
 
-- one model that is good at page structure
+- one model that is good at page-level region detection
 - one model that is good at pixel-level text foreground
 
 This is a better fit for cleanup than relying on boxes alone.
@@ -152,34 +152,24 @@ Koharu's implementation follows that pattern closely:
 
 So OCR in Koharu is not a classic CTC-only recognizer. It is a small document-oriented VLM being used in a tightly scoped OCR task.
 
-### Inpainting: why LaMa uses Fourier convolutions
+### Inpainting: why the default is now AOT
 
-[LaMa](https://github.com/advimman/lama) is an inpainting model designed for large masked regions. Its paper title is explicit about the key idea: *Resolution-robust Large Mask Inpainting with Fourier Convolutions*.
+The default inpainter is the AOT model from [manga-image-translator](https://github.com/zyddnys/manga-image-translator), exposed in Koharu as `aot-inpainting`. It is a masked-image inpainting network built around gated convolutions and repeated context-mixing blocks with multiple dilation rates.
 
 The important intuition is:
 
-- ordinary convolutions are local
-- text removal often needs long-range context from the rest of the bubble or background
-- frequency-domain operations can capture wider context efficiently
+- text removal needs more than a rectangular crop fill
+- the model needs both local edge detail and wider context from the bubble or background
+- repeated multi-dilation blocks are a practical way to mix that context without changing the rest of the pipeline contract
 
-This is where FFT comes in.
+Koharu's Candle port follows the upstream inference shape closely:
 
-#### What FFT means here
+1. resize large pages down to a configurable max side
+2. pad the working image to a multiple-of-8 shape
+3. feed the masked RGB image plus a binary text mask into the network
+4. composite the predicted pixels back into the original image size
 
-FFT stands for **Fast Fourier Transform**. It is a fast algorithm for moving between:
-
-- the spatial domain, where pixels live
-- the frequency domain, where repeating patterns and large-scale structure are easier to manipulate
-
-In Koharu's LaMa port, the `FourierUnit` does exactly that:
-
-1. apply `rfft2` to feature maps
-2. process the real and imaginary channels with learned `1x1` convolutions
-3. apply `irfft2` to return to image space
-
-Koharu even implements custom `rfft2` and `irfft2` ops for CPU, CUDA, and Metal backends so the same spectral block can run across hardware targets.
-
-For manga cleanup, this matters because the missing region is often not just a tiny scratch. It may be an entire speech bubble interior with gradients, screentones, and inked edges. Fourier-style global mixing helps the model preserve larger structures while filling the hole.
+`lama-manga` is still available as an alternative engine if you want LaMa's Fourier-based behavior, but it is no longer the default.
 
 ## Local LLMs and model type
 
@@ -203,21 +193,26 @@ Koharu keeps the image understanding steps local even when you choose a remote t
 
 Some details that are easy to miss if you only read the high-level docs:
 
-- the detect stage currently loads `ComicTextDetector::load_segmentation_only(...)`, not the full DBNet-backed detection mode
-- the segmentation mask is refined against the current detected text blocks before inpainting
+- the default detect stage is `comic-text-bubble-detector`, not `PP-DocLayoutV3`
+- `comic-text-detector-seg` still loads the segmentation-only `comic-text-detector` path for `doc.segment`
+- the segmentation mask is currently built from thresholding plus dilation, not the older block-aware refinement path
 - OCR runs on cropped text-block images, not the original whole page
 - the OCR wrapper uses the multimodal llama.cpp path and the task prompt `OCR:`
 - inpainting consumes `doc.segment`, so bad masks lead directly to bad cleanup
+- the default inpainter is `aot-inpainting`, while `lama-manga` remains selectable as an alternative
 - font prediction is normalized before rendering so near-black and near-white colors snap to cleaner values
 
 ## Recommended reading
 
 ### Official model and project references
 
-- [PP-DocLayoutV3 model card](https://huggingface.co/PaddlePaddle/PP-DocLayoutV3)
+- [comic-text-and-bubble-detector model card](https://huggingface.co/ogkalu/comic-text-and-bubble-detector)
 - [PaddleOCR-VL-1.5 model card](https://huggingface.co/PaddlePaddle/PaddleOCR-VL-1.5)
 - [PaddleOCR-VL architecture docs in Hugging Face Transformers](https://huggingface.co/docs/transformers/en/model_doc/paddleocr_vl)
 - [comic-text-detector repository](https://github.com/dmMaze/comic-text-detector)
+- [manga-image-translator repository](https://github.com/zyddnys/manga-image-translator)
+- [YuzuMarker.FontDetection model card](https://huggingface.co/fffonion/yuzumarker-font-detection)
+- [PP-DocLayoutV3 model card](https://huggingface.co/PaddlePaddle/PP-DocLayoutV3)
 - [LaMa repository](https://github.com/advimman/lama)
 - [llama.cpp](https://github.com/ggml-org/llama.cpp)
 

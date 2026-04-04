@@ -12,32 +12,41 @@ If you want the architecture-level explanation of how these pieces fit together,
 
 Koharu automatically downloads the required vision models when you use them for the first time.
 
-The default stack includes:
+The current default stack includes:
 
-- [PP-DocLayoutV3](https://huggingface.co/PaddlePaddle/PP-DocLayoutV3_safetensors) for text detection and layout analysis
-- [comic-text-detector](https://huggingface.co/mayocream/comic-text-detector) for text segmentation
+- [comic-text-bubble-detector](https://huggingface.co/ogkalu/comic-text-and-bubble-detector) for joint text-block and speech-bubble detection
+- [comic-text-detector](https://huggingface.co/mayocream/comic-text-detector) for text segmentation masks
 - [PaddleOCR-VL-1.5](https://huggingface.co/PaddlePaddle/PaddleOCR-VL-1.5) for OCR text recognition
-- [lama-manga](https://huggingface.co/mayocream/lama-manga) for inpainting
+- [aot-inpainting](https://huggingface.co/mayocream/aot-inpainting) for default inpainting
 - [YuzuMarker.FontDetection](https://huggingface.co/fffonion/yuzumarker-font-detection) for font and color detection
 
-Converted model weights are hosted on [Hugging Face](https://huggingface.co/mayocream) in safetensors format for Rust compatibility and performance.
+Some models are used directly from upstream Hugging Face repos, while converted safetensors weights are hosted on [Hugging Face](https://huggingface.co/mayocream) when Koharu needs a Rust-friendly bundle.
 
 ### What each vision model is
 
 | Model | Model type | Why Koharu uses it |
 | --- | --- | --- |
-| `PP-DocLayoutV3` | layout detector | finds text-like regions and reading order |
+| `comic-text-bubble-detector` | object detector | finds text blocks and speech bubble regions in one pass |
 | `comic-text-detector` | segmentation network | produces a text mask for cleanup |
 | `PaddleOCR-VL-1.5` | vision-language model | reads cropped text into text tokens |
-| `lama-manga` | inpainting network | reconstructs the image after text removal |
+| `aot-inpainting` | inpainting network | reconstructs masked image regions after text removal |
 | `YuzuMarker.FontDetection` | classifier / regressor | estimates font and style hints for rendering |
 
-The important design choice is that Koharu does not use a single model for every page task. Layout, segmentation, OCR, and inpainting all need different output shapes:
+The important design choice is that Koharu does not use a single model for every page task. Detection, segmentation, OCR, and inpainting all need different output shapes:
 
-- layout wants regions and order
+- joint detection wants text blocks and bubble regions
 - segmentation wants per-pixel masks
 - OCR wants text
 - inpainting wants restored pixels
+
+### Optional built-in alternatives
+
+You can swap individual stages in **Settings > Engines**. Built-in alternatives include:
+
+- [PP-DocLayoutV3](https://huggingface.co/PaddlePaddle/PP-DocLayoutV3_safetensors) as an alternative detector and layout-analysis engine
+- [speech-bubble-segmentation](https://huggingface.co/mayocream/speech-bubble-segmentation) as a dedicated bubble detector
+- [Manga OCR](https://huggingface.co/mayocream/manga-ocr) and [MIT 48px OCR](https://huggingface.co/mayocream/mit48px-ocr) as alternative OCR engines
+- [lama-manga](https://huggingface.co/mayocream/lama-manga) as an alternative inpainter
 
 ## Local LLMs
 

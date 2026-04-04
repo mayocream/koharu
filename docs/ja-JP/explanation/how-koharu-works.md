@@ -4,19 +4,20 @@ title: Koharu の仕組み
 
 # Koharu の仕組み
 
-Koharu は、漫画翻訳のためのページパイプラインを中心に設計されています。ユーザーから見た操作はシンプルですが、実装ではレイアウト解析、segmentation、OCR、inpainting、翻訳、レンダリングを意図的に別段階に分けています。
+Koharu は、漫画翻訳のためのページパイプラインを中心に設計されています。ユーザーから見た操作はシンプルですが、実装では joint detection、segmentation、OCR、inpainting、翻訳、レンダリングを意図的に別段階に分けています。
 
 ## パイプラインの全体像
 
 ```mermaid
 flowchart LR
     A[Input manga page] --> B[Detect stage]
-    B --> B1[Layout analysis]
+    B --> B1[Text blocks and bubble regions]
     B --> B2[Segmentation mask]
     B --> B3[Font hints]
     B1 --> C[OCR stage]
     B2 --> D[Inpaint stage]
     C --> E[LLM translation stage]
+    B3 --> F
     D --> F[Render stage]
     E --> F
     F --> G[Localized page or PSD export]
@@ -32,8 +33,8 @@ flowchart LR
 
 重要なのは、`Detect` がすでに複数モデルから成る段階だということです。
 
-- `PP-DocLayoutV3` はテキストらしいレイアウト領域と読み順を見つけます
-- `comic-text-detector` はピクセル単位のテキスト確率マップを作ります
+- `comic-text-bubble-detector` はテキストブロックと吹き出し領域を見つけます
+- `comic-text-detector-seg` はクリーンアップ用の per-pixel mask を作ります
 - `YuzuMarker.FontDetection` は後段のレンダリングに使うフォントや色のヒントを推定します
 
 この分割によって、Koharu は「ページ上のどこにテキストがあるか」を決めるモデルと、「どのピクセルを実際に消すべきか」を決めるモデルを分けて使えます。
@@ -42,9 +43,9 @@ flowchart LR
 
 | 段階 | 主なモデル | 主な出力 |
 | --- | --- | --- |
-| Detect | `PP-DocLayoutV3`, `comic-text-detector`, `YuzuMarker.FontDetection` | テキストブロック、segmentation mask、フォントヒント |
+| Detect | `comic-text-bubble-detector`, `comic-text-detector-seg`, `YuzuMarker.FontDetection` | テキストブロック、吹き出し領域、segmentation mask、フォントヒント |
 | OCR | `PaddleOCR-VL-1.5` | 各ブロックの認識済み元テキスト |
-| Inpaint | `lama-manga` | 元の文字を消したページ |
+| Inpaint | `aot-inpainting` | 元の文字を消したページ |
 | LLM Generate | ローカル GGUF LLM またはリモートプロバイダ | 翻訳済みテキスト |
 | Render | Koharu renderer | 最終的なローカライズ済みページまたは export |
 
@@ -57,20 +58,20 @@ flowchart LR
 - テキストが作画、スクリーントーン、スピード線、コマ枠に重なる
 - 読み順は単なるピクセル情報ではなく、ページ構造そのものの一部
 
-そのため、1 つのモデルだけでは足りないことが多くなります。Koharu はまずレイアウトを推定し、次に切り出し領域へ OCR をかけ、segmentation mask を使ってクリーンアップし、その後で初めて LLM に翻訳を依頼します。
+そのため、1 つのモデルだけでは足りないことが多くなります。Koharu はまずテキストブロックと吹き出しを見つけ、次に切り出し領域へ OCR をかけ、segmentation mask を使ってクリーンアップし、その後で LLM に翻訳を依頼します。
 
 ## 実装の形
 
-ソースコード上では、パイプラインの入口は `koharu-app/src/pipeline.rs` にあり、vision スタックの調整は `koharu-app/src/ml.rs` で行われています。
+ソースコード上では、エンジンの登録とパイプライン実行は `koharu-app/src/engine.rs` にあり、既定エンジンの選択は `koharu-app/src/config.rs` にあります。
 
 実装上、重要な点は次の通りです。
 
-- detect 段階では先に `PP-DocLayoutV3` を走らせ、テキストらしいラベルを `TextBlock` に変換する
-- 重なりすぎた box は OCR 前に重複除去される
-- テキスト方向は領域の縦横比から推定され、縦書き漫画テキストを早い段階で扱える
-- OCR はページ全体ではなく、切り出したテキスト領域に対して実行される
-- inpainting は単なる矩形ではなく、現在の segmentation mask を使う
-- リモート LLM プロバイダを選んだ場合でも、送るのはページ画像ではなく OCR テキスト
+- 既定の detect エンジンは `comic-text-bubble-detector` で、1 回の推論で `TextBlock` と吹き出し領域を書き込みます
+- `comic-text-detector-seg` は text block が揃った後に走り、最終 mask を `doc.segment` として保存します
+- OCR はページ全体ではなく、切り出したテキスト領域に対して実行されます
+- inpainting は単なる矩形ではなく、現在の segmentation mask を使います
+- リモート LLM プロバイダを選んだ場合でも、送るのはページ画像ではなく OCR テキストです
+- **Settings > Engines** では他の段階を差し替えても残りのパイプラインはそのまま使えます
 
 ## このスタックが重要な理由
 
@@ -92,6 +93,4 @@ Koharu は次を使っています。
 
 ## もっと技術寄りの説明が欲しい場合
 
-モデル種別、segmentation mask の理屈、FFT ベースの inpainting、Wikipedia 図表と公式 model card への参照を含む詳細説明は [技術的な詳細解説](technical-deep-dive.md) を参照してください。レンダラ内部、縦書き挙動、現在のレイアウト上の限界については [テキストレンダリングと縦書き CJK レイアウト](text-rendering-and-vertical-cjk-layout.md) にあります。
-
-
+モデル種別、segmentation mask の理屈、AOT inpainting、公式 model card への参照を含む詳しい説明は [技術的な詳細解説](technical-deep-dive.md) を参照してください。レンダラ内部、縦書き挙動、現在のレイアウト上の限界については [テキストレンダリングと縦書き CJK レイアウト](text-rendering-and-vertical-cjk-layout.md) にあります。

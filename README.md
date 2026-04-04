@@ -20,7 +20,7 @@ Under the hood, Koharu uses [candle](https://github.com/huggingface/candle) and 
 
 ## Features
 
-- Automatic speech bubble detection and segmentation
+- Automatic text block detection, speech bubble detection, and segmentation masks
 - OCR for manga text recognition
 - Inpainting to remove original text from images
 - LLM-powered translation
@@ -124,15 +124,22 @@ Koharu uses a mix of computer vision and language models rather than trying to s
 
 Koharu uses several pre-trained models for different parts of the pipeline:
 
-- [PP-DocLayoutV3](https://huggingface.co/PaddlePaddle/PP-DocLayoutV3_safetensors) for text detection and layout analysis
-- [comic-text-detector](https://huggingface.co/mayocream/comic-text-detector) for text segmentation
+- [comic-text-bubble-detector](https://huggingface.co/ogkalu/comic-text-and-bubble-detector) for joint text block and speech bubble detection
+- [comic-text-detector](https://huggingface.co/mayocream/comic-text-detector) for text segmentation masks
 - [PaddleOCR-VL-1.5](https://huggingface.co/PaddlePaddle/PaddleOCR-VL-1.5) for OCR text recognition
-- [lama-manga](https://huggingface.co/mayocream/lama-manga) for inpainting
+- [aot-inpainting](https://huggingface.co/mayocream/aot-inpainting) for default inpainting
 - [YuzuMarker.FontDetection](https://huggingface.co/fffonion/yuzumarker-font-detection) for font and color detection
+
+Optional built-in alternatives available in **Settings > Engines** include:
+
+- [PP-DocLayoutV3](https://huggingface.co/PaddlePaddle/PP-DocLayoutV3_safetensors) as an alternative detector and layout-analysis engine
+- [speech-bubble-segmentation](https://huggingface.co/mayocream/speech-bubble-segmentation) as a dedicated speech bubble detector
+- [Manga OCR](https://huggingface.co/mayocream/manga-ocr) and [MIT 48px OCR](https://huggingface.co/mayocream/mit48px-ocr) as alternative OCR engines
+- [lama-manga](https://huggingface.co/mayocream/lama-manga) as an alternative inpainter
 
 The models are downloaded automatically when you run Koharu for the first time.
 
-We convert the upstream weights to safetensors format for better compatibility and runtime behavior in Rust. The converted weights are hosted on [Hugging Face](https://huggingface.co/mayocream).
+Some models are consumed directly from upstream Hugging Face repos, while Rust-friendly safetensors conversions are hosted on [Hugging Face](https://huggingface.co/mayocream) when Koharu needs a converted bundle.
 
 For a closer look at the pipeline, see [Models and Providers](https://koharu.rs/explanation/models-and-providers/) and the [Technical Deep Dive](https://koharu.rs/explanation/technical-deep-dive/).
 

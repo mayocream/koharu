@@ -4,40 +4,49 @@ title: モデルとプロバイダ
 
 # モデルとプロバイダ
 
-Koharu は vision モデルと language モデルの両方を使います。vision スタックはページを整え、language スタックは翻訳を担当します。
+Koharu は vision モデルと language モデルの両方を使います。vision スタックがページを整え、language スタックが翻訳を担当します。
 
-これらがアーキテクチャ上どう組み合わさっているかを知りたい場合は、このページのあとに [技術的な詳細解説](technical-deep-dive.md) を読んでください。
+これらがアーキテクチャ上でどう組み合わさっているかを知りたい場合は、このページのあとに [技術的な詳細解説](technical-deep-dive.md) を読んでください。
 
 ## Vision モデル
 
 Koharu は、必要な vision モデルを初回利用時に自動でダウンロードします。
 
-既定のスタックには次が含まれます。
+現在の既定スタックには次が含まれます。
 
-- テキスト検出とレイアウト解析用の [PP-DocLayoutV3](https://huggingface.co/PaddlePaddle/PP-DocLayoutV3_safetensors)
-- テキスト segmentation 用の [comic-text-detector](https://huggingface.co/mayocream/comic-text-detector)
+- テキストブロックと吹き出しを同時に検出する [comic-text-bubble-detector](https://huggingface.co/ogkalu/comic-text-and-bubble-detector)
+- テキスト segmentation mask を作る [comic-text-detector](https://huggingface.co/mayocream/comic-text-detector)
 - OCR テキスト認識用の [PaddleOCR-VL-1.5](https://huggingface.co/PaddlePaddle/PaddleOCR-VL-1.5)
-- inpainting 用の [lama-manga](https://huggingface.co/mayocream/lama-manga)
+- 既定の inpainting 用の [aot-inpainting](https://huggingface.co/mayocream/aot-inpainting)
 - フォントと色検出用の [YuzuMarker.FontDetection](https://huggingface.co/fffonion/yuzumarker-font-detection)
 
-変換済みのモデル重みは、Rust での互換性と性能のために、[Hugging Face](https://huggingface.co/mayocream) 上で safetensors 形式で公開されています。
+一部のモデルは upstream の Hugging Face リポジトリをそのまま使い、Rust で扱いやすい safetensors 変換が必要なものは [Hugging Face](https://huggingface.co/mayocream) で配布しています。
 
 ### 各 vision モデルの役割
 
 | モデル | モデル種別 | Koharu で使う理由 |
 | --- | --- | --- |
-| `PP-DocLayoutV3` | レイアウト検出器 | テキストらしい領域と読み順を見つける |
+| `comic-text-bubble-detector` | object detector | テキストブロックと吹き出し領域を 1 回で見つける |
 | `comic-text-detector` | segmentation network | クリーンアップ用の text mask を作る |
 | `PaddleOCR-VL-1.5` | vision-language model | 切り出したテキストを文字列へ読む |
-| `lama-manga` | inpainting network | 文字除去後の画像を補完する |
+| `aot-inpainting` | inpainting network | 文字除去後の masked 領域を補完する |
 | `YuzuMarker.FontDetection` | classifier / regressor | レンダリング用のフォントやスタイルのヒントを推定する |
 
-重要なのは、Koharu がページ上の全作業を 1 つのモデルに任せていないことです。レイアウト、segmentation、OCR、inpainting はそれぞれ出力形が異なります。
+重要なのは、Koharu がページ上の全作業を 1 つのモデルに任せていないことです。検出、segmentation、OCR、inpainting はそれぞれ欲しい出力が異なります。
 
-- レイアウトが欲しいのは領域と順序
+- joint detection が欲しいのはテキストブロックと吹き出し領域
 - segmentation が欲しいのはピクセル単位の mask
 - OCR が欲しいのは文字列
 - inpainting が欲しいのは補完されたピクセル
+
+### 組み込みの代替エンジン
+
+**Settings > Engines** では段階ごとにエンジンを差し替えられます。主な代替候補は次の通りです。
+
+- 代替の検出 / レイアウト解析エンジンとしての [PP-DocLayoutV3](https://huggingface.co/PaddlePaddle/PP-DocLayoutV3_safetensors)
+- 専用の吹き出し検出エンジンとしての [speech-bubble-segmentation](https://huggingface.co/mayocream/speech-bubble-segmentation)
+- 代替 OCR としての [Manga OCR](https://huggingface.co/mayocream/manga-ocr) と [MIT 48px OCR](https://huggingface.co/mayocream/mit48px-ocr)
+- 代替 inpainter としての [lama-manga](https://huggingface.co/mayocream/lama-manga)
 
 ## ローカル LLM
 

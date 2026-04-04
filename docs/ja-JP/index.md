@@ -494,7 +494,7 @@ hide:
         </div>
         <div class="kh-download-hero">
           <a class="kh-download-button" href="https://github.com/mayocream/koharu/releases/latest">
-            Windows 版をダウンロード&nbsp;&nbsp;<span class="kh-download-button__version">0.40.1</span>
+            Windows 版をダウンロード&nbsp;&nbsp;<span class="kh-download-button__version">0.42.1</span>
           </a>
           <div class="kh-download-hero__subtext">
             Koharu は無料のオープンソースソフトウェアです。
