@@ -50,6 +50,14 @@ export function TextBlockLayer({
         pointerEvents: 'none',
       }}
     >
+      {showSprites &&
+        textBlocks.map((block, index) => (
+          <BlockSprite
+            key={`sprite-${block.id ?? index}`}
+            block={block}
+            scale={scale}
+          />
+        ))}
       {textBlocks.map((block, index) => (
         <TextBlockItem
           key={block.id ?? `fallback-${index}`}
@@ -58,7 +66,6 @@ export function TextBlockLayer({
           scale={scale}
           selected={index === selectedIndex}
           interactive={interactive}
-          showSprite={showSprites}
           onSelect={onSelect}
           onUpdate={(updates) => void replaceBlock(index, updates)}
         />
@@ -73,7 +80,6 @@ type TextBlockItemProps = {
   scale: number
   selected: boolean
   interactive: boolean
-  showSprite?: boolean
   onSelect: (index: number) => void
   onUpdate: (updates: Partial<TextBlock>) => void
 }
@@ -93,7 +99,6 @@ function TextBlockItem({
   scale,
   selected,
   interactive,
-  showSprite,
   onSelect,
   onUpdate,
 }: TextBlockItemProps) {
@@ -213,9 +218,6 @@ function TextBlockItem({
         cursor: interactive ? 'move' : 'default',
       }}
     >
-      {/* Sprite image at natural size */}
-      {showSprite && <BlockSprite hash={block.rendered} />}
-
       {/* Annotation border */}
       <div
         className={`absolute inset-0 rounded ${
@@ -242,15 +244,23 @@ function TextBlockItem({
   )
 }
 
-function BlockSprite({ hash }: { hash?: string }) {
-  const { data: src } = useBlobImage(hash)
+function BlockSprite({ block, scale }: { block: TextBlock; scale: number }) {
+  const { data: src } = useBlobImage(block.rendered)
   if (!src) return null
+  const x = (block.renderX ?? block.x) * scale
+  const y = (block.renderY ?? block.y) * scale
   return (
     <img
       alt=''
       src={src}
       draggable={false}
-      className='pointer-events-none absolute top-0 left-0 select-none'
+      className='pointer-events-none absolute select-none'
+      style={{
+        top: 0,
+        left: 0,
+        transformOrigin: 'top left',
+        transform: `translate(${x}px, ${y}px) scale(${scale})`,
+      }}
     />
   )
 }

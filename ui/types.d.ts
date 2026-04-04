@@ -69,6 +69,11 @@ export type TextBlock = {
   fontPrediction?: FontPrediction
   /** Blob hash for the rendered text block sprite. */
   rendered?: string
+  /** Actual render area (when bubble expansion is used). */
+  renderX?: number
+  renderY?: number
+  renderWidth?: number
+  renderHeight?: number
 }
 
 export type ToolMode = 'select' | 'block' | 'brush' | 'repairBrush' | 'eraser'

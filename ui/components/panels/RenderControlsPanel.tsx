@@ -29,13 +29,7 @@ import {
   TooltipContent,
   TooltipTrigger,
 } from '@/components/ui/tooltip'
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from '@/components/ui/select'
+import { FontSelect } from '@/components/ui/font-select'
 import { useEditorUiStore } from '@/lib/stores/editorUiStore'
 import { usePreferencesStore } from '@/lib/stores/preferencesStore'
 import { useListFonts } from '@/lib/api/system/system'
@@ -349,7 +343,8 @@ export function RenderControlsPanel() {
   ]
 
   return (
-    <div className='flex w-full min-w-0 flex-col gap-1.5'>
+    <div className='flex w-full min-w-0 flex-col gap-2'>
+      {/* Scope indicator */}
       <div className='flex items-center justify-end'>
         <span
           data-testid='render-scope-indicator'
@@ -362,16 +357,30 @@ export function RenderControlsPanel() {
         </span>
       </div>
 
-      <div className='grid w-full min-w-0 grid-cols-[3.5rem_minmax(0,1fr)] items-center gap-1.5'>
-        <span className='text-muted-foreground text-[10px] font-medium tracking-wide uppercase'>
-          {fontLabel}
-        </span>
-
+      {/* Font + Color */}
+      <div className='flex flex-col gap-0.5'>
+        <div className='flex items-baseline justify-between'>
+          <span className='text-muted-foreground text-[10px] font-medium uppercase'>
+            {fontLabel}
+          </span>
+          <span className='text-muted-foreground text-[10px] font-medium uppercase'>
+            {t('render.fontColorLabel')}
+          </span>
+        </div>
         <div className='flex min-w-0 items-center gap-1.5'>
           <div className='min-w-0 flex-1'>
-            <Select
+            <FontSelect
+              data-testid='render-font-select'
               value={currentFont}
-              onValueChange={(value) => {
+              options={fontOptions}
+              disabled={fontOptions.length === 0}
+              placeholder={t('render.fontPlaceholder')}
+              triggerStyle={
+                currentFontFamilyName
+                  ? { fontFamily: currentFontFamilyName }
+                  : undefined
+              }
+              onChange={(value) => {
                 const nextFamilies = mergeFontFamilies(
                   value,
                   selectedBlock?.style?.fontFamilies,
@@ -390,135 +399,92 @@ export function RenderControlsPanel() {
                 }))
                 void updateTextBlocks(nextBlocks)
               }}
-              disabled={fontOptions.length === 0}
-            >
-              <SelectTrigger
-                data-testid='render-font-select'
-                size='sm'
-                className='h-7 w-full min-w-0 text-xs'
-                style={
-                  currentFontFamilyName
-                    ? { fontFamily: currentFontFamilyName }
-                    : undefined
-                }
-              >
-                <SelectValue placeholder={t('render.fontPlaceholder')} />
-              </SelectTrigger>
-              <SelectContent position='popper'>
-                {fontOptions.map((font, index) => (
-                  <SelectItem
-                    key={font.postScriptName}
-                    value={font.postScriptName}
-                    style={{ fontFamily: font.familyName }}
-                    data-testid={`render-font-option-${index}`}
-                  >
-                    {font.familyName}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
+            />
           </div>
-
-          <Tooltip>
-            <TooltipTrigger asChild>
-              <div>
-                <ColorPicker
-                  value={currentColorHex}
-                  disabled={!hasBlocks}
-                  triggerTestId='render-color-trigger'
-                  pickerTestId='render-color-picker'
-                  swatchTestId='render-color-swatch'
-                  inputTestId='render-color-input'
-                  pickButtonTestId='render-color-pick'
-                  onChange={(hex) => {
-                    const nextColor = hexToColor(hex, currentColor[3] ?? 255)
-                    if (applyStyleToSelected({ color: nextColor })) return
-                    applyStyleToAll({ color: nextColor })
-                  }}
-                  className='h-7 w-7'
-                />
-              </div>
-            </TooltipTrigger>
-            <TooltipContent side='bottom' sideOffset={4}>
-              {t('render.fontColorLabel')}
-            </TooltipContent>
-          </Tooltip>
+          <ColorPicker
+            value={currentColorHex}
+            disabled={!hasBlocks}
+            triggerTestId='render-color-trigger'
+            pickerTestId='render-color-picker'
+            swatchTestId='render-color-swatch'
+            inputTestId='render-color-input'
+            pickButtonTestId='render-color-pick'
+            onChange={(hex) => {
+              const nextColor = hexToColor(hex, currentColor[3] ?? 255)
+              if (applyStyleToSelected({ color: nextColor })) return
+              applyStyleToAll({ color: nextColor })
+            }}
+            className='size-7'
+          />
         </div>
       </div>
 
-      <div className='grid w-full min-w-0 grid-cols-[3.5rem_minmax(0,1fr)] items-center gap-1.5'>
-        <span className='text-muted-foreground text-[10px] font-medium tracking-wide uppercase'>
+      {/* Size / Effect / Align */}
+      <div className='grid w-full grid-cols-[minmax(0,1fr)_auto_auto] items-end gap-x-2'>
+        <span className='text-muted-foreground text-[10px] font-medium uppercase'>
           {fontSizeLabel}
         </span>
-
-        <div className='flex min-w-0 items-center gap-1'>
-          <div className='border-input bg-background flex w-auto min-w-0 shrink-0 items-center rounded-md border shadow-xs'>
-            <Button
-              type='button'
-              variant='ghost'
-              size='icon-sm'
-              aria-label={`${fontSizeLabel} -`}
-              className='size-7 rounded-r-none border-r'
-              disabled={selectedBlockIndex === undefined}
-              onClick={() => {
-                const next = Math.max(
-                  6,
-                  Math.round((currentFontSize ?? 16) - 1),
-                )
-                applyStyleToSelected({ fontSize: next })
-              }}
-            >
-              <MinusIcon className='size-3' />
-            </Button>
-
-            <Input
-              type='number'
-              step='1'
-              min='6'
-              max='300'
-              inputMode='numeric'
-              className='h-7 w-14 min-w-0 [appearance:textfield] rounded-none border-0 px-1.5 text-center text-[11px] shadow-none focus-visible:ring-0 [&::-webkit-inner-spin-button]:appearance-none [&::-webkit-outer-spin-button]:appearance-none'
-              data-testid='render-font-size'
-              disabled={selectedBlockIndex === undefined}
-              value={
-                currentFontSize !== undefined ? Math.round(currentFontSize) : ''
-              }
-              placeholder='auto'
-              onChange={(event) => {
-                const parsed = Number.parseInt(event.target.value, 10)
-                if (!Number.isFinite(parsed) || parsed < 1) return
-                applyStyleToSelected({ fontSize: Math.min(300, parsed) })
-              }}
-            />
-
-            <Button
-              type='button'
-              variant='ghost'
-              size='icon-sm'
-              aria-label={`${fontSizeLabel} +`}
-              className='size-7 rounded-l-none border-l'
-              disabled={selectedBlockIndex === undefined}
-              onClick={() => {
-                const next = Math.min(
-                  300,
-                  Math.round((currentFontSize ?? 16) + 1),
-                )
-                applyStyleToSelected({ fontSize: next })
-              }}
-            >
-              <PlusIcon className='size-3' />
-            </Button>
-          </div>
-          <span className='text-muted-foreground text-[10px]'>px</span>
-        </div>
-      </div>
-
-      <div className='grid w-full min-w-0 grid-cols-[3.5rem_minmax(0,1fr)] items-center gap-1.5'>
-        <span className='text-muted-foreground text-[10px] font-medium tracking-wide uppercase'>
+        <span className='text-muted-foreground text-[10px] font-medium uppercase'>
           {effectLabel}
         </span>
+        <span className='text-muted-foreground text-[10px] font-medium uppercase'>
+          {alignLabel}
+        </span>
 
-        <div className='flex min-w-0 flex-wrap items-center gap-1'>
+        <div className='border-input bg-background flex min-w-0 items-center rounded-md border shadow-xs'>
+          <Button
+            type='button'
+            variant='ghost'
+            size='icon-sm'
+            aria-label={`${fontSizeLabel} -`}
+            className='size-7 shrink-0 rounded-r-none border-r'
+            disabled={selectedBlockIndex === undefined}
+            onClick={() => {
+              const next = Math.max(6, Math.round((currentFontSize ?? 16) - 1))
+              applyStyleToSelected({ fontSize: next })
+            }}
+          >
+            <MinusIcon className='size-3' />
+          </Button>
+          <Input
+            type='number'
+            step='1'
+            min='6'
+            max='300'
+            inputMode='numeric'
+            className='h-7 min-w-0 flex-1 [appearance:textfield] rounded-none border-0 px-1 text-center text-xs shadow-none focus-visible:ring-0 [&::-webkit-inner-spin-button]:appearance-none [&::-webkit-outer-spin-button]:appearance-none'
+            data-testid='render-font-size'
+            disabled={selectedBlockIndex === undefined}
+            value={
+              currentFontSize !== undefined ? Math.round(currentFontSize) : ''
+            }
+            placeholder='auto'
+            onChange={(event) => {
+              const parsed = Number.parseInt(event.target.value, 10)
+              if (!Number.isFinite(parsed) || parsed < 1) return
+              applyStyleToSelected({ fontSize: Math.min(300, parsed) })
+            }}
+          />
+          <Button
+            type='button'
+            variant='ghost'
+            size='icon-sm'
+            aria-label={`${fontSizeLabel} +`}
+            className='size-7 shrink-0 rounded-l-none border-l'
+            disabled={selectedBlockIndex === undefined}
+            onClick={() => {
+              const next = Math.min(
+                300,
+                Math.round((currentFontSize ?? 16) + 1),
+              )
+              applyStyleToSelected({ fontSize: next })
+            }}
+          >
+            <PlusIcon className='size-3' />
+          </Button>
+        </div>
+
+        <div className='flex items-center gap-1'>
           {effectItems.map((item) => {
             const active = currentEffect[item.key]
             const Icon = item.Icon
@@ -531,7 +497,7 @@ export function RenderControlsPanel() {
                     aria-label={item.label}
                     data-testid={`render-effect-toggle-${item.key}`}
                     className={cn(
-                      'size-7',
+                      'size-7 shrink-0',
                       active &&
                         'bg-primary text-primary-foreground border-primary hover:bg-primary/90',
                     )}
@@ -555,14 +521,8 @@ export function RenderControlsPanel() {
             )
           })}
         </div>
-      </div>
 
-      <div className='grid w-full min-w-0 grid-cols-[3.5rem_minmax(0,1fr)] items-center gap-1.5'>
-        <span className='text-muted-foreground text-[10px] font-medium tracking-wide uppercase'>
-          {alignLabel}
-        </span>
-
-        <div className='flex min-w-0 flex-wrap items-center gap-1'>
+        <div className='flex items-center gap-1'>
           {textAlignItems.map((item) => {
             const active = currentTextAlign === item.value
             const Icon = item.Icon
@@ -576,7 +536,7 @@ export function RenderControlsPanel() {
                     data-testid={`render-align-${item.value}`}
                     disabled={!hasBlocks}
                     className={cn(
-                      'size-7',
+                      'size-7 shrink-0',
                       active &&
                         'bg-primary text-primary-foreground border-primary hover:bg-primary/90',
                     )}
@@ -598,12 +558,12 @@ export function RenderControlsPanel() {
         </div>
       </div>
 
-      <div className='grid w-full min-w-0 grid-cols-[3.5rem_minmax(0,1fr)] items-center gap-1.5'>
-        <span className='text-muted-foreground text-[10px] font-medium tracking-wide uppercase'>
+      {/* Border / Stroke */}
+      <div className='flex flex-col gap-0.5'>
+        <span className='text-muted-foreground text-[10px] font-medium uppercase'>
           {strokeLabel}
         </span>
-
-        <div className='flex min-w-0 flex-wrap items-center gap-1'>
+        <div className='flex min-w-0 items-center gap-1'>
           <Tooltip>
             <TooltipTrigger asChild>
               <Button
@@ -648,7 +608,7 @@ export function RenderControlsPanel() {
                       color: hexToColor(hex, currentStroke.color[3] ?? 255),
                     })
                   }}
-                  className='h-7 w-7'
+                  className='size-7'
                 />
               </div>
             </TooltipTrigger>
@@ -657,60 +617,53 @@ export function RenderControlsPanel() {
             </TooltipContent>
           </Tooltip>
 
-          <Tooltip>
-            <TooltipTrigger asChild>
-              <div className='border-input bg-background flex w-auto min-w-0 shrink-0 items-center rounded-md border shadow-xs'>
-                <Button
-                  type='button'
-                  variant='ghost'
-                  size='icon-sm'
-                  aria-label={`${strokeWidthLabel} -`}
-                  className='size-7 rounded-r-none border-r'
-                  onClick={() =>
-                    updateStrokeWidth(currentStrokeWidth - STROKE_WIDTH_STEP)
-                  }
-                >
-                  <MinusIcon className='size-3' />
-                </Button>
+          <div className='border-input bg-background flex min-w-0 flex-1 items-center rounded-md border shadow-xs'>
+            <Button
+              type='button'
+              variant='ghost'
+              size='icon-sm'
+              aria-label={`${strokeWidthLabel} -`}
+              className='size-7 shrink-0 rounded-r-none border-r'
+              onClick={() =>
+                updateStrokeWidth(currentStrokeWidth - STROKE_WIDTH_STEP)
+              }
+            >
+              <MinusIcon className='size-3' />
+            </Button>
 
-                <Input
-                  type='number'
-                  step={String(STROKE_WIDTH_STEP)}
-                  min={String(MIN_STROKE_WIDTH)}
-                  max={String(MAX_STROKE_WIDTH)}
-                  inputMode='decimal'
-                  className='h-7 w-14 min-w-0 [appearance:textfield] rounded-none border-0 px-1.5 text-center text-[11px] shadow-none focus-visible:ring-0 [&::-webkit-inner-spin-button]:appearance-none [&::-webkit-outer-spin-button]:appearance-none'
-                  data-testid='render-stroke-width'
-                  value={
-                    Number.isFinite(currentStrokeWidth)
-                      ? currentStrokeWidth
-                      : DEFAULT_STROKE_WIDTH
-                  }
-                  onChange={(event) => {
-                    const parsed = Number.parseFloat(event.target.value)
-                    if (!Number.isFinite(parsed)) return
-                    updateStrokeWidth(parsed)
-                  }}
-                />
+            <Input
+              type='number'
+              step={String(STROKE_WIDTH_STEP)}
+              min={String(MIN_STROKE_WIDTH)}
+              max={String(MAX_STROKE_WIDTH)}
+              inputMode='decimal'
+              className='h-7 min-w-0 flex-1 [appearance:textfield] rounded-none border-0 px-1 text-center text-xs shadow-none focus-visible:ring-0 [&::-webkit-inner-spin-button]:appearance-none [&::-webkit-outer-spin-button]:appearance-none'
+              data-testid='render-stroke-width'
+              value={
+                Number.isFinite(currentStrokeWidth)
+                  ? currentStrokeWidth
+                  : DEFAULT_STROKE_WIDTH
+              }
+              onChange={(event) => {
+                const parsed = Number.parseFloat(event.target.value)
+                if (!Number.isFinite(parsed)) return
+                updateStrokeWidth(parsed)
+              }}
+            />
 
-                <Button
-                  type='button'
-                  variant='ghost'
-                  size='icon-sm'
-                  aria-label={`${strokeWidthLabel} +`}
-                  className='size-7 rounded-l-none border-l'
-                  onClick={() =>
-                    updateStrokeWidth(currentStrokeWidth + STROKE_WIDTH_STEP)
-                  }
-                >
-                  <PlusIcon className='size-3' />
-                </Button>
-              </div>
-            </TooltipTrigger>
-            <TooltipContent side='bottom' sideOffset={4}>
-              {strokeWidthLabel}
-            </TooltipContent>
-          </Tooltip>
+            <Button
+              type='button'
+              variant='ghost'
+              size='icon-sm'
+              aria-label={`${strokeWidthLabel} +`}
+              className='size-7 shrink-0 rounded-l-none border-l'
+              onClick={() =>
+                updateStrokeWidth(currentStrokeWidth + STROKE_WIDTH_STEP)
+              }
+            >
+              <PlusIcon className='size-3' />
+            </Button>
+          </div>
         </div>
       </div>
     </div>

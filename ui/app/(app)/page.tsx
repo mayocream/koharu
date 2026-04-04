@@ -43,7 +43,7 @@ export default function Page() {
         onLayoutChanged={onLayoutChanged}
         className='flex min-h-0 flex-1'
       >
-        <Panel id='left' defaultSize={220} minSize={160} maxSize={360}>
+        <Panel id='left' defaultSize={180} minSize={120} maxSize={300}>
           <Navigator />
         </Panel>
         <Separator className='bg-border/40 hover:bg-border w-1 transition-colors' />
@@ -56,7 +56,7 @@ export default function Page() {
           </AppErrorBoundary>
         </Panel>
         <Separator className='bg-border/40 hover:bg-border w-1 transition-colors' />
-        <Panel id='right' defaultSize={320} minSize={320} maxSize={460}>
+        <Panel id='right' defaultSize={280} minSize={260} maxSize={400}>
           <AppErrorBoundary>
             <Panels />
           </AppErrorBoundary>

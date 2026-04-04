@@ -71,6 +71,16 @@ pub struct TextBlock {
     pub rendered: Option<BlobRef>,
     #[serde(default)]
     pub lock_layout_box: bool,
+    /// Actual render area — set by renderer when bubble expansion is used.
+    /// Frontend and composite use these for sprite positioning when present.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub render_x: Option<f32>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub render_y: Option<f32>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub render_width: Option<f32>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub render_height: Option<f32>,
 }
 
 impl Default for TextBlock {
@@ -95,6 +105,10 @@ impl Default for TextBlock {
             font_prediction: None,
             rendered: None,
             lock_layout_box: false,
+            render_x: None,
+            render_y: None,
+            render_width: None,
+            render_height: None,
         }
     }
 }

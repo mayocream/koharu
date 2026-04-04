@@ -57,6 +57,15 @@ pub struct TextBlockDetail {
     /// Blob hash for the rendered text block sprite.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub rendered: Option<String>,
+    /// Actual render area position/size (when bubble expansion is used).
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub render_x: Option<f32>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub render_y: Option<f32>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub render_width: Option<f32>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub render_height: Option<f32>,
 }
 
 impl From<&TextBlock> for TextBlockDetail {
@@ -80,6 +89,10 @@ impl From<&TextBlock> for TextBlockDetail {
             style: block.style.clone(),
             font_prediction: block.font_prediction.clone(),
             rendered: block.rendered.as_ref().map(|r| r.hash().to_string()),
+            render_x: block.render_x,
+            render_y: block.render_y,
+            render_width: block.render_width,
+            render_height: block.render_height,
         }
     }
 }

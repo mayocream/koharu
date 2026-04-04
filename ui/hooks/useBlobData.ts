@@ -23,7 +23,7 @@ export function useBlobData(hash: string | undefined): Uint8Array | undefined {
     enabled: !!hash,
     placeholderData: keepPreviousData,
   })
-  return data
+  return hash ? data : undefined
 }
 
 const blobImageQueryOptions = (hash: string) => ({

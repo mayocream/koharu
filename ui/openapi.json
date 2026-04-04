@@ -2381,6 +2381,23 @@
               }
             }
           },
+          "renderHeight": {
+            "type": ["number", "null"],
+            "format": "float"
+          },
+          "renderWidth": {
+            "type": ["number", "null"],
+            "format": "float"
+          },
+          "renderX": {
+            "type": ["number", "null"],
+            "format": "float",
+            "description": "Actual render area position/size (when bubble expansion is used)."
+          },
+          "renderY": {
+            "type": ["number", "null"],
+            "format": "float"
+          },
           "rendered": {
             "type": ["string", "null"],
             "description": "Blob hash for the rendered text block sprite."

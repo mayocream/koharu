@@ -56,7 +56,10 @@ export function Panels() {
           className='min-h-0 flex-1 px-2 pb-2 data-[state=inactive]:hidden'
           data-testid='panels-layout'
         >
-          <ScrollArea className='h-full' viewportClassName='pr-1'>
+          <ScrollArea
+            className='h-full'
+            viewportClassName='pr-1 [&>div]:!block'
+          >
             <div className='pt-1'>
               <RenderControlsPanel />
             </div>

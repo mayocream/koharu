@@ -1,5 +1,6 @@
 'use client'
 
+import { useRef, useState, useCallback, useEffect } from 'react'
 import { HexColorInput, HexColorPicker } from 'react-colorful'
 import { Button } from '@/components/ui/button'
 import {
@@ -43,6 +44,21 @@ export function ColorPicker({
   inputTestId,
   pickButtonTestId,
 }: ColorPickerProps) {
+  const [localColor, setLocalColor] = useState(value)
+  const dragging = useRef(false)
+
+  // Sync external value when not dragging
+  useEffect(() => {
+    if (!dragging.current) setLocalColor(value)
+  }, [value])
+
+  const handlePointerUp = useCallback(() => {
+    if (dragging.current) {
+      dragging.current = false
+      onChange(localColor)
+    }
+  }, [localColor, onChange])
+
   const canUseEyeDropper =
     typeof window !== 'undefined' &&
     typeof (window as EyeDropperWindow).EyeDropper === 'function'
@@ -54,7 +70,9 @@ export function ColorPicker({
     try {
       const eyeDropper = new EyeDropperCtor()
       const result = await eyeDropper.open()
-      onChange(normalizeHex(result.sRGBHex))
+      const color = normalizeHex(result.sRGBHex)
+      setLocalColor(color)
+      onChange(color)
     } catch (error) {
       const maybeDomException = error as DOMException | undefined
       if (maybeDomException?.name === 'AbortError') return
@@ -76,29 +94,38 @@ export function ColorPicker({
           <div
             data-testid={swatchTestId}
             className='size-4 rounded-sm'
-            style={{ backgroundColor: value }}
+            style={{ backgroundColor: localColor }}
           />
         </button>
       </PopoverTrigger>
       <PopoverContent className='w-64 p-3' sideOffset={8}>
         <div className='space-y-3'>
-          <div data-testid={pickerTestId}>
+          {/* eslint-disable-next-line jsx-a11y/no-static-element-interactions */}
+          <div data-testid={pickerTestId} onPointerUp={handlePointerUp}>
             <HexColorPicker
-              color={value}
-              onChange={(color) => onChange(normalizeHex(color))}
+              color={localColor}
+              onChange={(color) => {
+                const normalized = normalizeHex(color)
+                dragging.current = true
+                setLocalColor(normalized)
+              }}
             />
           </div>
 
           <div className='flex items-center gap-2'>
             <HexColorInput
-              color={value}
+              color={localColor}
               prefixed
               data-testid={inputTestId}
               spellCheck={false}
               disabled={disabled}
               aria-label='Hex color code'
               className='border-input bg-background focus-visible:border-ring focus-visible:ring-ring/50 h-8 min-w-0 flex-1 rounded-md border px-2 font-mono text-xs uppercase shadow-xs transition outline-none focus-visible:ring-[3px]'
-              onChange={(color) => onChange(normalizeHex(color))}
+              onChange={(color) => {
+                const normalized = normalizeHex(color)
+                setLocalColor(normalized)
+                onChange(normalized)
+              }}
             />
 
             {canUseEyeDropper && (
