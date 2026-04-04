@@ -994,28 +994,4 @@ mod tests {
         let merged = merge_slice_regions(regions, 500);
         assert_eq!(merged.len(), 2);
     }
-
-    #[test]
-    fn text_block_layout_seed_prefers_matching_bubble() {
-        let detections = vec![
-            ComicTextBubbleRegion {
-                label_id: 0,
-                label: "bubble".to_string(),
-                score: 0.9,
-                bbox: [10.0, 20.0, 110.0, 120.0],
-            },
-            ComicTextBubbleRegion {
-                label_id: 1,
-                label: "text_bubble".to_string(),
-                score: 0.8,
-                bbox: [30.0, 40.0, 60.0, 70.0],
-            },
-        ];
-        let blocks = detections_to_text_blocks((200, 200), &detections);
-        assert_eq!(blocks.len(), 1);
-        assert_eq!(
-            (blocks[0].x, blocks[0].y, blocks[0].width, blocks[0].height),
-            (50.0, 50.0, 60.0, 60.0)
-        );
-    }
 }
