@@ -2,7 +2,6 @@ use std::ffi::CString;
 use std::num::NonZeroU32;
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
-use std::sync::Once;
 use std::time::Instant;
 
 use anyhow::{Context, Result, bail};
@@ -21,7 +20,6 @@ use crate::safe::mtmd::{
 };
 use crate::safe::sampling::LlamaSampler;
 use crate::safe::token::LlamaToken;
-use crate::safe::{LogOptions, send_logs_to_tracing};
 
 const HF_REPO: &str = "PaddlePaddle/PaddleOCR-VL-1.5-GGUF";
 const MODEL_FILENAME: &str = "PaddleOCR-VL-1.5.gguf";
@@ -45,8 +43,6 @@ koharu_runtime::declare_hf_model_package!(
     bootstrap: true,
     order: 121,
 );
-
-static LOGGING_READY: Once = Once::new();
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
@@ -144,10 +140,6 @@ impl PaddleOcrVl {
         crate::sys::initialize(runtime)
             .context("failed to initialize llama.cpp runtime bindings")?;
 
-        LOGGING_READY.call_once(|| {
-            send_logs_to_tracing(LogOptions::default().with_logs_enabled(true));
-        });
-
         let model_params = model_params(cpu, backend.as_ref());
         let model = LlamaModel::load_from_file(backend.as_ref(), &files.model, &model_params)
             .with_context(|| format!("unable to load model from `{}`", files.model.display()))?;
@@ -167,7 +159,7 @@ impl PaddleOcrVl {
             &model,
             &MtmdContextParams {
                 use_gpu: !cpu && backend.as_ref().supports_gpu_offload(),
-                print_timings: true,
+                print_timings: false,
                 n_threads: num_cpus::get().try_into().unwrap_or(i32::MAX),
                 media_marker: CString::new(DEFAULT_MEDIA_MARKER)
                     .expect("default media marker contains no null bytes"),

@@ -3,6 +3,8 @@ use std::sync::Arc;
 use anyhow::{Context, Result};
 use clap::Parser;
 use tokio::{net::TcpListener, sync::RwLock};
+use tracing_subscriber::layer::SubscriberExt;
+use tracing_subscriber::util::SubscriberInitExt;
 
 use koharu_app::{AppResources, config as app_config, engine, llm, storage::Storage};
 use koharu_llm::safe::llama_backend::LlamaBackend;
@@ -45,6 +47,7 @@ async fn build_resources(
     // FIXME: llama.cpp might not need when a external LLM provider is used, but currently it's required to initialize the safe backend
     koharu_llm::sys::initialize(&runtime).context("failed to init llama.cpp")?;
     let backend = Arc::new(LlamaBackend::init().context("failed to init llama backend")?);
+    koharu_llm::suppress_native_logs();
 
     let llm = Arc::new(llm::Model::new(runtime.clone(), cpu, backend));
     let storage = Arc::new(Storage::open(data_root.as_std_path())?);
@@ -76,13 +79,13 @@ pub async fn run() -> Result<()> {
         crate::windows::enable_ansi_support().ok();
     }
 
-    tracing_subscriber::fmt()
-        .with_span_events(tracing_subscriber::fmt::format::FmtSpan::CLOSE)
-        .with_env_filter(
+    tracing_subscriber::registry()
+        .with(
             tracing_subscriber::filter::EnvFilter::builder()
                 .with_default_directive(tracing::Level::INFO.into())
                 .from_env_lossy(),
         )
+        .with(crate::tracing_fmt::TimingLayer::new())
         .init();
 
     if cli.headless {

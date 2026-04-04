@@ -70,6 +70,7 @@ impl ImageCache {
     }
 
     /// Load a decoded image, using cache. Returns cloned DynamicImage.
+    #[tracing::instrument(level = "info", skip(self))]
     pub fn load(&self, r: &BlobRef) -> Result<DynamicImage> {
         {
             let mut cache = self.cache.lock().unwrap();
@@ -89,6 +90,7 @@ impl ImageCache {
     }
 
     /// Encode a DynamicImage as WebP, store in blob store, cache it, return ref.
+    #[tracing::instrument(level = "info", skip(self, img))]
     pub fn store_webp(&self, img: &DynamicImage) -> Result<BlobRef> {
         let mut buf = std::io::Cursor::new(Vec::new());
         img.write_to(&mut buf, image::ImageFormat::WebP)?;

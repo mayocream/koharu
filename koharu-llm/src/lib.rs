@@ -15,6 +15,25 @@ pub use language::{Language, language_from_tag, supported_locales};
 pub use model::{GenerateOptions, Llm};
 pub use prompt::{ChatMessage, ChatRole};
 
+/// Suppress all llama.cpp / ggml / mtmd / clip native log output.
+/// Must be called after `LlamaBackend::init()`.
+pub fn suppress_native_logs() {
+    unsafe extern "C" fn void_log(
+        _: sys::ggml_log_level,
+        _: *const std::os::raw::c_char,
+        _: *mut std::os::raw::c_void,
+    ) {
+    }
+    unsafe {
+        // Suppress llama.cpp + ggml logs
+        sys::llama_log_set(Some(void_log), std::ptr::null_mut());
+        // Suppress mtmd / clip logs (separate logger)
+        sys::mtmd_log_set(Some(void_log), std::ptr::null_mut());
+        // Suppress mtmd-helper logs (yet another separate logger)
+        sys::mtmd_helper_log_set(Some(void_log), std::ptr::null_mut());
+    }
+}
+
 #[derive(
     Debug,
     Clone,
