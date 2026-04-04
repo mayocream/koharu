@@ -451,7 +451,8 @@ impl Engine for CtdFullEngine {
                 .images
                 .store_webp(&DynamicImage::ImageLuma8(det.mask))?
         };
-        let blocks = det.text_blocks;
+        let mut blocks = det.text_blocks;
+        sort_manga_reading_order(&mut blocks);
         Ok(Patch::apply(move |doc| {
             doc.text_blocks = blocks;
             doc.segment = Some(blob);
@@ -532,7 +533,8 @@ impl Engine for ComicTextBubbleDetectorEngine {
             let _s = tracing::info_span!("inference").entered();
             self.0.inference(&source)?
         };
-        let blocks = det.text_blocks;
+        let mut blocks = det.text_blocks;
+        sort_manga_reading_order(&mut blocks);
         let bubbles: Vec<koharu_core::BubbleRegion> = det
             .detections
             .iter()
@@ -1076,6 +1078,102 @@ fn overlap(a: [f32; 4], b: [f32; 4]) -> f32 {
     let w = a[2].min(b[2]) - a[0].max(b[0]);
     let h = a[3].min(b[3]) - a[1].max(b[1]);
     if w > 0.0 && h > 0.0 { w * h } else { 0.0 }
+}
+
+// ---------------------------------------------------------------------------
+// Reading order — right-to-left columns, top-to-bottom within each column
+// ---------------------------------------------------------------------------
+
+/// Sort text blocks in manga reading order (right-to-left, top-to-bottom).
+/// Groups blocks into vertical columns by x-overlap, sorts columns right-to-left,
+/// and sorts blocks within each column top-to-bottom.
+fn sort_manga_reading_order(blocks: &mut [TextBlock]) {
+    if blocks.len() <= 1 {
+        return;
+    }
+
+    // Assign each block to a column. Two blocks share a column if their
+    // x-ranges overlap by at least 30% of the smaller block's width.
+    let mut column_ids: Vec<usize> = vec![0; blocks.len()];
+    let mut next_col = 0usize;
+
+    // Sort by x descending first for stable column assignment (rightmost first).
+    let mut indices: Vec<usize> = (0..blocks.len()).collect();
+    indices.sort_by(|&a, &b| {
+        blocks[b]
+            .x
+            .partial_cmp(&blocks[a].x)
+            .unwrap_or(std::cmp::Ordering::Equal)
+    });
+
+    for &i in &indices {
+        let bx0 = blocks[i].x;
+        let bx1 = bx0 + blocks[i].width;
+        let bw = blocks[i].width.max(1.0);
+
+        // Try to find an existing column this block belongs to.
+        let mut found = None;
+        for &j in &indices {
+            if j == i {
+                continue;
+            }
+            if column_ids[j] == 0 && j > i {
+                continue; // not assigned yet
+            }
+            let jx0 = blocks[j].x;
+            let jx1 = jx0 + blocks[j].width;
+            let jw = blocks[j].width.max(1.0);
+            let overlap_w = (bx1.min(jx1) - bx0.max(jx0)).max(0.0);
+            if overlap_w / bw.min(jw) >= 0.3 {
+                found = Some(column_ids[j]);
+                break;
+            }
+        }
+
+        column_ids[i] = match found {
+            Some(col) => col,
+            None => {
+                next_col += 1;
+                next_col
+            }
+        };
+    }
+
+    // Sort: primary = column center x descending (right-to-left),
+    //        secondary = block y ascending (top-to-bottom).
+    // Compute column center x.
+    let mut col_centers: std::collections::HashMap<usize, (f32, usize)> =
+        std::collections::HashMap::new();
+    for (i, &col) in column_ids.iter().enumerate() {
+        let cx = blocks[i].x + blocks[i].width * 0.5;
+        let entry = col_centers.entry(col).or_insert((0.0, 0));
+        entry.0 += cx;
+        entry.1 += 1;
+    }
+    let col_avg_x: std::collections::HashMap<usize, f32> = col_centers
+        .iter()
+        .map(|(&col, &(sum, count))| (col, sum / count.max(1) as f32))
+        .collect();
+
+    // Build sortable (col_x_desc, y_asc) keys.
+    let mut order: Vec<usize> = (0..blocks.len()).collect();
+    order.sort_by(|&a, &b| {
+        let ca = col_avg_x.get(&column_ids[a]).copied().unwrap_or(0.0);
+        let cb = col_avg_x.get(&column_ids[b]).copied().unwrap_or(0.0);
+        // Right-to-left: higher x first
+        cb.partial_cmp(&ca)
+            .unwrap_or(std::cmp::Ordering::Equal)
+            .then_with(|| {
+                blocks[a]
+                    .y
+                    .partial_cmp(&blocks[b].y)
+                    .unwrap_or(std::cmp::Ordering::Equal)
+            })
+    });
+
+    // Apply the permutation in-place.
+    let sorted: Vec<TextBlock> = order.iter().map(|&i| blocks[i].clone()).collect();
+    blocks.clone_from_slice(&sorted);
 }
 
 // ---------------------------------------------------------------------------
