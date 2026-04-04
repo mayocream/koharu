@@ -1,3 +1,10 @@
+## [0.42.1](https://github.com/mayocream/koharu/compare/0.42.0..0.42.1) - 2026-04-04
+
+### 🐛 Bug Fixes
+
+- Tauri remote url - ([770a477](https://github.com/mayocream/koharu/commit/770a477213d15bcc81cb6cc59fdb3c2b93482216))
+
+
 ## [0.42.0](https://github.com/mayocream/koharu/compare/0.41.4..0.42.0) - 2026-04-04
 
 ### ⛰️  Features
