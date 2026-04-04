@@ -129,7 +129,6 @@ jobs:
           releaseDraft: false
           prerelease: false
           args: ${{ matrix.args }}
-          generateReleaseNotes: true
           uploadUpdaterJson: true
           uploadUpdaterSignatures: true
           uploadPlainBinary: true
