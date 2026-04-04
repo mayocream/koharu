@@ -18,7 +18,7 @@ If your platform is not covered by a release build, use [Build From Source](buil
 
 ## What gets installed locally
 
-Koharu is a local-first app. In practice, the desktop binary is only part of the installation footprint. The first real run also creates a per-user local data directory for:
+Koharu is a local-first application. In practice, the desktop binary is only part of the install footprint. The first real run also creates a per-user local data directory for:
 
 - runtime libraries used by llama.cpp and GPU backends
 - downloaded vision and OCR models
@@ -34,7 +34,7 @@ On first run, Koharu may:
 - download the default vision and OCR models used by detection, segmentation, OCR, inpainting, and font estimation
 - wait to download local translation LLMs until you actually select them in Settings
 
-This is normal and can take time depending on your connection and hardware.
+This is normal and can take a while depending on your connection and hardware.
 
 If you want to prefetch those runtime dependencies ahead of time, run Koharu once with `--download`. That path initializes the runtime packages and default vision stack, then exits without opening the GUI.
 
@@ -53,7 +53,7 @@ Some practical details matter:
 - Vulkan is mainly the fallback GPU path for OCR and local LLM inference
 - if Koharu cannot verify that your NVIDIA driver supports CUDA 13.1, it falls back to CPU
 
-For CUDA-capable systems, Koharu bundles and initializes the runtime pieces it needs instead of requiring you to wire every library path by hand.
+On CUDA-capable systems, Koharu bundles and initializes the runtime pieces it needs instead of requiring you to configure every library path manually.
 
 !!! note
 

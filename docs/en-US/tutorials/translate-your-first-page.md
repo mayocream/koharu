@@ -4,7 +4,7 @@ title: Translate Your First Page
 
 # Translate Your First Page
 
-This tutorial walks through the normal Koharu workflow for a single manga page: import, detect, recognize, translate, review, and export.
+This tutorial walks through the standard Koharu workflow for a single manga page: import, detect, recognize, translate, review, and export.
 
 ## Before you begin
 
@@ -107,7 +107,7 @@ The usual fixes are:
 - switch to a stronger translation model
 - export PSD and finish the page with manual lettering cleanup
 
-Koharu works best when you treat the pipeline as a fast first pass, then use manual review where the page needs it.
+Koharu works best when you treat the pipeline as a fast first pass and then apply manual review where the page needs it.
 
 ## Next steps
 

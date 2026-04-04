@@ -28,7 +28,7 @@ That is why desktop editing, headless automation, and MCP tooling stay aligned.
 
 Launch Koharu normally from your installed application.
 
-Even in desktop mode, Koharu still starts a local HTTP server internally. The embedded window talks to that local server rather than calling the pipeline directly.
+Even in desktop mode, Koharu still starts a local HTTP server internally. The embedded window talks to that local server instead of calling the pipeline directly.
 
 This is the default mode and is the best choice for most users.
 
@@ -72,13 +72,13 @@ When Koharu is running on a fixed port, the main endpoints are:
 
 Replace `9999` with the port you chose.
 
-Because Koharu binds to loopback, these endpoints are local by default. If you want remote access from another machine, you need to expose that port yourself through your own network setup.
+Because Koharu binds to loopback, these endpoints are local by default. If you want access from another machine, you need to expose that port yourself through your own network setup.
 
 For endpoint-level details, see [HTTP API Reference](../reference/http-api.md).
 
 ## Connect to the MCP server
 
-Koharu includes a built-in MCP server using the same loaded documents, models, and page pipeline as the rest of the app.
+Koharu includes a built-in MCP server that uses the same loaded documents, models, and page pipeline as the rest of the app.
 
 Point your MCP client or agent at:
 
@@ -144,7 +144,7 @@ On Windows, debug and headless runs also influence how Koharu attaches to or cre
 
 ## Running without keyring
 
-By default Koharu stores API keys in the system keyring. In container or CI environments where there is no persistent keyring, you can pass `--no-keyring` to skip it and supply API keys through environment variables instead.
+By default, Koharu stores API keys in the system keyring. In container or CI environments where there is no persistent keyring, you can pass `--no-keyring` to skip it and supply API keys through environment variables instead.
 
 The variable name for each provider follows the pattern `KOHARU_<PROVIDER>_API_KEY`:
 

@@ -6,7 +6,7 @@ title: Use OpenAI-Compatible APIs
 
 Koharu can translate through APIs that follow the OpenAI Chat Completions shape. That includes local servers such as LM Studio and hosted routers such as OpenRouter.
 
-This page is specifically about the current OpenAI-compatible path in Koharu. It is different from Koharu's built-in OpenAI, Gemini, Claude, and DeepSeek provider presets.
+This page covers Koharu's current OpenAI-compatible integration. It is separate from Koharu's built-in OpenAI, Gemini, Claude, and DeepSeek provider presets.
 
 ## What Koharu expects from a compatible endpoint
 
@@ -25,7 +25,7 @@ Some implementation details matter:
 - a compatible model only appears in Koharu's LLM picker after both `Base URL` and `Model name` are filled in
 - each configured preset shows up as its own selectable source in the LLM picker
 
-That means OpenAI-compatible here really means OpenAI API-compatible, not just "can be used with OpenAI tools in general."
+So "OpenAI-compatible" here means OpenAI API-compatible, not just "works with OpenAI-adjacent tooling."
 
 ## Where to configure it in Koharu
 
@@ -113,7 +113,7 @@ If the server only implements `Responses` or some custom schema, Koharu's curren
 
 ## How model selection works in practice
 
-Koharu does not treat these endpoints as one generic remote bucket. Instead, each configured preset becomes its own LLM entry source.
+Koharu does not treat these endpoints as one generic remote bucket. Each configured preset becomes its own LLM entry source.
 
 For example:
 

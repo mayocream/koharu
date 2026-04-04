@@ -4,7 +4,7 @@ title: How-To Guides
 
 # How-To Guides
 
-How-to guides focus on specific jobs you may want to complete with Koharu.
+How-to guides focus on concrete tasks you may want to complete with Koharu.
 
 ## Common tasks
 
@@ -14,5 +14,5 @@ How-to guides focus on specific jobs you may want to complete with Koharu.
 - [Configure MCP Clients](configure-mcp-clients.md): connect Antigravity, Claude Desktop, or Claude Code to Koharu's local MCP endpoint
 - [Use OpenAI-Compatible APIs](use-openai-compatible-api.md): connect LM Studio, OpenRouter, and other OpenAI-style chat-completions endpoints
 - [Export Pages and Manage Projects](export-and-manage-projects.md): rendered images, PSD handoff, and page-set management
-- [Build From Source](build-from-source.md): local developer build flow with Bun, Tauri, and platform features
+- [Build From Source](build-from-source.md): local build flow with Bun, Tauri, and platform features
 - [Troubleshooting](troubleshooting.md): common startup, download, GPU, pipeline, and connectivity failures

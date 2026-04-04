@@ -14,7 +14,7 @@ Theme options:
 - `Dark`
 - `System`
 
-The app uses the selected theme immediately through the frontend theme provider.
+The app applies the selected theme immediately through the frontend theme provider.
 
 ## Language
 

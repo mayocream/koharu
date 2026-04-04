@@ -4,7 +4,7 @@ title: Explanation
 
 # Explanation
 
-Explanation pages describe how Koharu is put together and why it behaves the way it does.
+These pages describe how Koharu is built and why the runtime behaves the way it does.
 
 ## Topics
 

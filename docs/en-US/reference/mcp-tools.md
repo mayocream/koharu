@@ -73,7 +73,7 @@ Valid `view_text_block` layers:
 | `render` | draw translated text back onto the page | `index`, optional `text_block_index`, `shader_effect`, `font_family` |
 | `process` | start detect -> OCR -> inpaint -> translate -> render | optional `document_id`, `llm_target`, `language`, `shader_effect`, `font_family` |
 
-`process` is the coarse-grained convenience tool. If you need more control or easier debugging, use the stage tools separately.
+`process` is the coarse-grained convenience tool. If you need finer control or easier debugging, use the stage tools separately.
 
 ## LLM tools
 

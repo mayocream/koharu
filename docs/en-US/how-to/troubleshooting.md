@@ -4,7 +4,7 @@ title: Troubleshooting
 
 # Troubleshooting
 
-This page covers the most common Koharu problems that follow from the current implementation: first-run downloads, runtime initialization, GPU fallback, headless and MCP access, pipeline-stage ordering, and source-build setup.
+This page covers the most common Koharu problems in the current implementation: first-run downloads, runtime initialization, GPU fallback, headless and MCP access, pipeline-stage ordering, and source-build setup.
 
 ## Before you start
 
@@ -47,7 +47,7 @@ koharu.exe --cpu
 koharu.exe --debug
 ```
 
-If `--cpu` works and the normal launch does not, the problem is usually in the GPU path rather than the general app startup path.
+If `--cpu` works and the normal launch does not, the problem is usually in the GPU path rather than general app startup.
 
 ## Model or runtime downloads fail
 
@@ -70,7 +70,7 @@ What to check:
 - whether retrying `--download` succeeds
 - whether another process or security tool is locking files in the local runtime directory
 
-If downloads keep failing, test on a different network first. That quickly distinguishes a machine-local problem from an upstream reachability issue.
+If downloads keep failing, test on a different network first. That is the fastest way to separate a machine-local problem from an upstream reachability issue.
 
 ## Koharu falls back to CPU even though you have an NVIDIA GPU
 
@@ -93,7 +93,7 @@ If the driver is old or the CUDA check fails, Koharu deliberately prefers CPU ov
 
 ## OCR, inpainting, or export says something is missing
 
-Some errors are just pipeline ordering problems.
+Some errors are simply pipeline ordering problems.
 
 Common examples from the current API and MCP layer:
 
@@ -131,7 +131,7 @@ Try this:
 3. fix obvious bad blocks before running the rest of the pipeline
 4. rerun later stages after the structural fixes
 
-If the structure is wrong, translation quality usually gets worse downstream because OCR and rendering both depend on the block geometry.
+If the structure is wrong, translation quality usually gets worse downstream because OCR and rendering both depend on block geometry.
 
 ## Headless mode starts, but you cannot open the Web UI
 
