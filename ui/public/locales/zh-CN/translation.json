@@ -319,6 +319,8 @@
     "engines": "引擎",
     "enginesDescription": "为每个流水线阶段选择要使用的ML引擎。",
     "detector": "检测器",
+    "bubbleDetector": "Bubble Detector",
+    "fontDetector": "Font Detector",
     "segmenter": "分割器",
     "ocr": "OCR",
     "translator": "翻译器",

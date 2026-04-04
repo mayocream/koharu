@@ -6,19 +6,32 @@
 import type { TextBlockDetail } from './textBlockDetail'
 
 export interface DocumentDetail {
-  /** @nullable */
-  brushLayer?: number[] | null
+  /**
+   * Blob hash for the brush layer.
+   * @nullable
+   */
+  brushLayer?: string | null
   /** @minimum 0 */
   height: number
   id: string
-  image: number[]
-  /** @nullable */
-  inpainted?: number[] | null
+  /** Blob hash for the source image layer. */
+  image: string
+  /**
+   * Blob hash for the inpainted layer.
+   * @nullable
+   */
+  inpainted?: string | null
   name: string
-  /** @nullable */
-  rendered?: number[] | null
-  /** @nullable */
-  segment?: number[] | null
+  /**
+   * Blob hash for the rendered composite layer.
+   * @nullable
+   */
+  rendered?: string | null
+  /**
+   * Blob hash for the segmentation mask layer.
+   * @nullable
+   */
+  segment?: string | null
   textBlocks: TextBlockDetail[]
   /** @minimum 0 */
   width: number

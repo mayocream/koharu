@@ -288,7 +288,7 @@ impl PaddleOcrVl {
             }
         }
 
-        tracing::info!(
+        tracing::debug!(
             task = ?task,
             original_width,
             original_height,

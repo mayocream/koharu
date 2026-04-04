@@ -263,7 +263,11 @@ fn parse_tagged_blocks(
 
     if parsed_count != expected_blocks || ignored_count != 0 {
         tracing::warn!(
-            "Translated block count mismatch: expected {expected_blocks}, got {parsed_count}, ignored {ignored_count}"
+            expected_blocks,
+            parsed_count,
+            ignored_count,
+            output = translation,
+            "translated block count mismatch"
         );
     }
 
@@ -278,8 +282,10 @@ fn split_legacy_lines(translation: &str, expected_blocks: usize) -> anyhow::Resu
 
     if translations.len() != expected_blocks {
         tracing::warn!(
-            "Translated line count mismatch: expected {expected_blocks}, got {}",
-            translations.len()
+            expected_blocks,
+            got = translations.len(),
+            output = translation,
+            "translated line count mismatch"
         );
     }
 

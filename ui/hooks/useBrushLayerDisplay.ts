@@ -6,11 +6,13 @@ import type { MappedDocument } from '@/hooks/useTextBlocks'
 
 type BrushLayerDisplayOptions = {
   currentDocument: MappedDocument | null
+  brushLayerData?: Uint8Array
   visible: boolean
 }
 
 export function useBrushLayerDisplay({
   currentDocument,
+  brushLayerData,
   visible,
 }: BrushLayerDisplayOptions) {
   const canvasRef = useRef<HTMLCanvasElement | null>(null)
@@ -39,18 +41,15 @@ export function useBrushLayerDisplay({
     }
 
     let cancelled = false
-    const brushLayer = currentDocument.brushLayer
 
-    if (visible && brushLayer) {
+    if (visible && brushLayerData) {
       void (async () => {
         try {
-          const bitmap = await convertToImageBitmap(brushLayer)
+          const bitmap = await convertToImageBitmap(brushLayerData)
           if (cancelled) {
             bitmap.close()
             return
           }
-          // Keep the previous buffer visible until the new bitmap is ready,
-          // then swap to avoid a flicker during brush/eraser updates.
           ctx?.save()
           ctx?.clearRect(0, 0, canvas.width, canvas.height)
           ctx?.drawImage(
@@ -77,7 +76,7 @@ export function useBrushLayerDisplay({
     currentDocument?.id,
     currentDocument?.width,
     currentDocument?.height,
-    currentDocument?.brushLayer,
+    brushLayerData,
     visible,
   ])
 

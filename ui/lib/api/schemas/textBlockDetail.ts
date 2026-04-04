@@ -18,6 +18,11 @@ export interface TextBlockDetail {
   id: string
   /** @nullable */
   linePolygons?: number[][][] | null
+  /**
+   * Blob hash for the rendered text block sprite.
+   * @nullable
+   */
+  rendered?: string | null
   renderedDirection?: null | TextDirection
   /** @nullable */
   rotationDeg?: number | null

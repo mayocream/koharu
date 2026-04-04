@@ -33,6 +33,7 @@ use crate::AppResources;
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub enum Artifact {
     TextBlocks,
+    Bubbles,
     Segment,
     FontPredictions,
     OcrText,
@@ -45,6 +46,7 @@ impl Artifact {
     pub fn ready(&self, doc: &Document) -> bool {
         match self {
             Self::TextBlocks => !doc.text_blocks.is_empty(),
+            Self::Bubbles => !doc.bubbles.is_empty(),
             Self::Segment => doc.segment.is_some(),
             Self::FontPredictions => doc.text_blocks.iter().all(|b| b.font_prediction.is_some()),
             Self::OcrText => {
@@ -208,6 +210,14 @@ pub fn catalog() -> koharu_core::EngineCatalog {
             .iter()
             .map(entry)
             .collect(),
+        bubble_detectors: Registry::providers(Artifact::Bubbles)
+            .iter()
+            .map(entry)
+            .collect(),
+        font_detectors: Registry::providers(Artifact::FontPredictions)
+            .iter()
+            .map(entry)
+            .collect(),
         segmenters: Registry::providers(Artifact::Segment)
             .iter()
             .map(entry)
@@ -232,30 +242,28 @@ pub fn catalog() -> koharu_core::EngineCatalog {
 }
 
 /// Resolve pipeline config to a list of engine IDs.
+/// Collects all non-empty engine IDs, deduplicates, and lets the DAG sort order.
 pub fn resolve_pipeline(config: &crate::config::PipelineConfig) -> Vec<&'static str> {
+    let candidates = [
+        &config.detector,
+        &config.bubble_detector,
+        &config.font_detector,
+        &config.segmenter,
+        &config.ocr,
+        &config.translator,
+        &config.inpainter,
+        &config.renderer,
+    ];
     let mut ids: Vec<&str> = Vec::new();
     let mut seen = std::collections::HashSet::new();
-
-    let add = |ids: &mut Vec<&str>, seen: &mut std::collections::HashSet<&str>, id: &str| {
-        if let Ok(info) = Registry::find(id)
+    for id in candidates {
+        if !id.is_empty()
+            && let Ok(info) = Registry::find(id)
             && seen.insert(info.id)
         {
             ids.push(info.id);
         }
-    };
-
-    add(&mut ids, &mut seen, &config.detector);
-    // If detector doesn't produce Segment, add segmenter
-    if let Ok(det) = Registry::find(&config.detector)
-        && !det.produces.contains(&Artifact::Segment)
-    {
-        add(&mut ids, &mut seen, &config.segmenter);
     }
-    add(&mut ids, &mut seen, "yuzumarker-font-detection");
-    add(&mut ids, &mut seen, &config.ocr);
-    add(&mut ids, &mut seen, &config.translator);
-    add(&mut ids, &mut seen, &config.inpainter);
-    add(&mut ids, &mut seen, &config.renderer);
     ids
 }
 
@@ -370,12 +378,12 @@ pub async fn run_many(ids: &[&str], res: &AppResources, page_id: &str) -> Result
 
 /// Default engine selection for a full pipeline.
 pub const DEFAULT_PIPELINE: &[&str] = &[
-    "pp-doclayout-v3",
+    "comic-text-bubble-detector",
     "comic-text-detector-seg",
     "yuzumarker-font-detection",
     "paddle-ocr-vl-1.5",
     "llm",
-    "lama-manga",
+    "aot-inpainting",
     "koharu-renderer",
 ];
 
@@ -503,6 +511,111 @@ inventory::submit! {
         load: |res| Box::pin(async move {
             let m = koharu_ml::comic_text_detector::ComicTextDetector::load_segmentation_only(&res.runtime, matches!(res.device, koharu_ml::Device::Cpu)).await?;
             Ok(Box::new(CtdSegmentEngine(m)) as Box<dyn Engine>)
+        }),
+    }
+}
+
+// --- Comic Text & Bubble Detector (ogkalu RT-DETR) -------------------------
+
+struct ComicTextBubbleDetectorEngine(
+    koharu_ml::comic_text_bubble_detector::ComicTextBubbleDetector,
+);
+
+#[async_trait]
+impl Engine for ComicTextBubbleDetectorEngine {
+    async fn run(&self, doc: &Document, res: &AppResources) -> Result<Patch> {
+        let source = {
+            let _s = tracing::info_span!("load_image").entered();
+            res.storage.images.load(&doc.source)?
+        };
+        let det = {
+            let _s = tracing::info_span!("inference").entered();
+            self.0.inference(&source)?
+        };
+        let blocks = det.text_blocks;
+        let bubbles: Vec<koharu_core::BubbleRegion> = det
+            .detections
+            .iter()
+            .filter(|r| r.is_bubble())
+            .map(|r| {
+                let [x1, y1, x2, y2] = r.bbox;
+                koharu_core::BubbleRegion {
+                    x: x1.max(0.0),
+                    y: y1.max(0.0),
+                    width: (x2 - x1).max(0.0),
+                    height: (y2 - y1).max(0.0),
+                    confidence: r.score,
+                }
+            })
+            .collect();
+        Ok(Patch::apply(move |doc| {
+            doc.text_blocks = blocks;
+            doc.bubbles = bubbles;
+        }))
+    }
+}
+
+inventory::submit! {
+    EngineInfo {
+        id: "comic-text-bubble-detector",
+        name: "Comic Text & Bubble Detector",
+        needs: &[],
+        produces: &[Artifact::TextBlocks, Artifact::Bubbles],
+        load: |res| Box::pin(async move {
+            let m = koharu_ml::comic_text_bubble_detector::ComicTextBubbleDetector::load(
+                &res.runtime,
+                matches!(res.device, koharu_ml::Device::Cpu),
+            ).await?;
+            Ok(Box::new(ComicTextBubbleDetectorEngine(m)) as Box<dyn Engine>)
+        }),
+    }
+}
+
+// --- Speech Bubble Segmentation (YOLOv8-seg) --------------------------------
+
+struct SpeechBubbleSegEngine(koharu_ml::speech_bubble_segmentation::SpeechBubbleSegmentation);
+
+#[async_trait]
+impl Engine for SpeechBubbleSegEngine {
+    async fn run(&self, doc: &Document, res: &AppResources) -> Result<Patch> {
+        let source = {
+            let _s = tracing::info_span!("load_image").entered();
+            res.storage.images.load(&doc.source)?
+        };
+        let result = {
+            let _s = tracing::info_span!("inference").entered();
+            self.0.inference(&source)?
+        };
+        let bubbles: Vec<koharu_core::BubbleRegion> = result
+            .regions
+            .iter()
+            .map(|r| {
+                let [x1, y1, x2, y2] = r.bbox;
+                koharu_core::BubbleRegion {
+                    x: x1.max(0.0),
+                    y: y1.max(0.0),
+                    width: (x2 - x1).max(0.0),
+                    height: (y2 - y1).max(0.0),
+                    confidence: r.score,
+                }
+            })
+            .collect();
+        Ok(Patch::apply(move |doc| doc.bubbles = bubbles))
+    }
+}
+
+inventory::submit! {
+    EngineInfo {
+        id: "speech-bubble-segmentation",
+        name: "Speech Bubble Segmentation",
+        needs: &[],
+        produces: &[Artifact::Bubbles],
+        load: |res| Box::pin(async move {
+            let m = koharu_ml::speech_bubble_segmentation::SpeechBubbleSegmentation::load(
+                &res.runtime,
+                matches!(res.device, koharu_ml::Device::Cpu),
+            ).await?;
+            Ok(Box::new(SpeechBubbleSegEngine(m)) as Box<dyn Engine>)
         }),
     }
 }
@@ -766,6 +879,51 @@ inventory::submit! {
     }
 }
 
+// --- AOT Inpainting -------------------------------------------------------
+
+struct AotInpaintEngine(koharu_ml::aot_inpainting::AotInpainting);
+
+#[async_trait]
+impl Engine for AotInpaintEngine {
+    async fn run(&self, doc: &Document, res: &AppResources) -> Result<Patch> {
+        let seg_ref = doc
+            .segment
+            .as_ref()
+            .ok_or_else(|| anyhow::anyhow!("no segment mask"))?;
+        let (source, segment) = {
+            let _s = tracing::info_span!("load_image").entered();
+            let source = res.storage.images.load(&doc.source)?;
+            let segment = res.storage.images.load(seg_ref)?;
+            (source, segment)
+        };
+        let result = {
+            let _s = tracing::info_span!("inference").entered();
+            self.0.inference(&source, &segment)?
+        };
+        let blob = {
+            let _s = tracing::info_span!("save").entered();
+            res.storage.images.store_webp(&result)?
+        };
+        Ok(Patch::apply(|doc| doc.inpainted = Some(blob)))
+    }
+}
+
+inventory::submit! {
+    EngineInfo {
+        id: "aot-inpainting",
+        name: "AOT Inpainting",
+        needs: &[Artifact::Segment],
+        produces: &[Artifact::Inpainted],
+        load: |res| Box::pin(async move {
+            let m = koharu_ml::aot_inpainting::AotInpainting::load(
+                &res.runtime,
+                matches!(res.device, koharu_ml::Device::Cpu),
+            ).await?;
+            Ok(Box::new(AotInpaintEngine(m)) as Box<dyn Engine>)
+        }),
+    }
+}
+
 // --- Koharu Renderer ------------------------------------------------------
 
 struct KoharuRenderEngine;
@@ -826,6 +984,7 @@ pub async fn render_document(
         .map(|r| res.storage.images.load(r))
         .transpose()?;
     let mut blocks = doc.text_blocks.clone();
+    let bubbles = doc.bubbles.clone();
     let rendered_ref = renderer.render_to_blob(
         &res.storage.images,
         &source,
@@ -837,6 +996,9 @@ pub async fn render_document(
             shader_effect: shader_effect.unwrap_or_default(),
             shader_stroke,
             font_family,
+            bubbles: &bubbles,
+            image_width: doc.width,
+            image_height: doc.height,
         },
     )?;
     res.storage
@@ -1004,9 +1166,9 @@ mod tests {
         let order = build_order(&infos).unwrap();
         let ids: Vec<&str> = order.iter().map(|&i| infos[i].id).collect();
         let pos = |id: &str| ids.iter().position(|&s| s == id).unwrap();
-        assert!(pos("pp-doclayout-v3") < pos("comic-text-detector-seg"));
-        assert!(pos("pp-doclayout-v3") < pos("yuzumarker-font-detection"));
-        assert!(pos("comic-text-detector-seg") < pos("lama-manga"));
-        assert!(pos("lama-manga") < pos("koharu-renderer"));
+        assert!(pos("comic-text-bubble-detector") < pos("comic-text-detector-seg"));
+        assert!(pos("comic-text-bubble-detector") < pos("yuzumarker-font-detection"));
+        assert!(pos("comic-text-detector-seg") < pos("aot-inpainting"));
+        assert!(pos("aot-inpainting") < pos("koharu-renderer"));
     }
 }

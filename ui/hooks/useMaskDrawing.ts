@@ -22,6 +22,7 @@ import { useCanvasDrawing } from '@/hooks/useCanvasDrawing'
 type MaskDrawingOptions = {
   mode: ToolMode
   currentDocument: MappedDocument | null
+  segmentData?: Uint8Array
   pointerToDocument: PointerToDocumentFn
   showMask: boolean
   enabled: boolean
@@ -30,6 +31,7 @@ type MaskDrawingOptions = {
 export function useMaskDrawing({
   mode,
   currentDocument,
+  segmentData,
   pointerToDocument,
   showMask,
   enabled,
@@ -63,10 +65,10 @@ export function useMaskDrawing({
         // Fill black then draw existing segment mask on top
         ctx.fillStyle = '#000'
         ctx.fillRect(0, 0, doc.width, doc.height)
-        if (doc.segment) {
+        if (segmentData) {
           void (async () => {
             try {
-              const bitmap = await convertToImageBitmap(doc.segment!)
+              const bitmap = await convertToImageBitmap(segmentData)
               ctx.save()
               ctx.clearRect(0, 0, doc.width, doc.height)
               ctx.drawImage(bitmap, 0, 0, doc.width, doc.height)

@@ -80,6 +80,10 @@ name = "comic-text-detector"
 path = "bin/comic-text-detector.rs"
 
 [[bin]]
+name = "comic-text-bubble-detector"
+path = "bin/comic-text-bubble-detector.rs"
+
+[[bin]]
 name = "lama"
 path = "bin/lama.rs"
 
@@ -106,3 +110,11 @@ path = "bin/pp-doclayout-v3.rs"
 [[bin]]
 name = "manga-text-segmentation-2025"
 path = "bin/manga-text-segmentation-2025.rs"
+
+[[bin]]
+name = "speech-bubble-segmentation"
+path = "bin/speech-bubble-segmentation.rs"
+
+[[bin]]
+name = "aot-inpainting"
+path = "bin/aot-inpainting.rs"

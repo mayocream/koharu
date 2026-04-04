@@ -8,10 +8,10 @@ use std::{
 use anyhow::{Context, Result};
 use candle_core::{DType, Device, IndexOp, Tensor};
 use candle_nn::ops::sigmoid;
-use image::{DynamicImage, GrayImage, imageops::FilterType};
+use image::{DynamicImage, imageops::FilterType};
 use koharu_runtime::RuntimeManager;
 
-use crate::{device, loading};
+use crate::{device, loading, probability_map::ProbabilityMap};
 
 const REPO: &str = "mayocream/manga-text-segmentation-2025";
 const SAFETENSORS_FILENAME: &str = "model.safetensors";
@@ -19,40 +19,6 @@ const IMAGENET_MEAN: [f32; 3] = [0.485, 0.456, 0.406];
 const IMAGENET_STD: [f32; 3] = [0.229, 0.224, 0.225];
 const GPU_MAX_PIXELS: u64 = 1_536 * 1_536;
 const CPU_MAX_PIXELS: u64 = 1_280 * 1_280;
-
-#[derive(Debug, Clone)]
-pub struct ProbabilityMap {
-    pub width: u32,
-    pub height: u32,
-    pub values: Vec<f32>,
-}
-
-impl ProbabilityMap {
-    pub fn to_gray_image(&self) -> Result<GrayImage> {
-        let bytes = self
-            .values
-            .iter()
-            .copied()
-            .map(|value| (value.clamp(0.0, 1.0) * 255.0).round() as u8)
-            .collect::<Vec<_>>();
-        GrayImage::from_raw(self.width, self.height, bytes)
-            .context("failed to build probability map image")
-    }
-
-    pub fn threshold(&self, threshold: f32) -> Result<GrayImage> {
-        let bytes = self
-            .values
-            .iter()
-            .copied()
-            .map(|value| if value >= threshold { 255 } else { 0 })
-            .collect::<Vec<_>>();
-        GrayImage::from_raw(self.width, self.height, bytes).context("failed to build mask image")
-    }
-
-    pub fn max_value(&self) -> f32 {
-        self.values.iter().copied().fold(0.0, f32::max)
-    }
-}
 
 #[derive(Debug)]
 pub struct MangaTextSegmentation {

@@ -18,9 +18,9 @@ use crate::{comic_text_detector::extract_text_block_regions, device, loading};
 const OCR_CHUNK_SIZE: usize = 16;
 const HF_REPO: &str = "mayocream/mit48px-ocr";
 
-koharu_runtime::declare_hf_model_package!(id: "model:mit48px-ocr:config", repo: HF_REPO, file: "config.json", bootstrap: true, order: 210);
-koharu_runtime::declare_hf_model_package!(id: "model:mit48px-ocr:dictionary", repo: HF_REPO, file: "alphabet-all-v7.txt", bootstrap: true, order: 211);
-koharu_runtime::declare_hf_model_package!(id: "model:mit48px-ocr:weights", repo: HF_REPO, file: "model.safetensors", bootstrap: true, order: 212);
+koharu_runtime::declare_hf_model_package!(id: "model:mit48px-ocr:config", repo: HF_REPO, file: "config.json", bootstrap: false, order: 210);
+koharu_runtime::declare_hf_model_package!(id: "model:mit48px-ocr:dictionary", repo: HF_REPO, file: "alphabet-all-v7.txt", bootstrap: false, order: 211);
+koharu_runtime::declare_hf_model_package!(id: "model:mit48px-ocr:weights", repo: HF_REPO, file: "model.safetensors", bootstrap: false, order: 212);
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Mit48pxConfig {

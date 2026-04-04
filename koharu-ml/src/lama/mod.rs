@@ -4,7 +4,7 @@ mod model;
 use anyhow::{Result, bail};
 use candle_core::{DType, Device, Tensor};
 use image::{
-    DynamicImage, GenericImageView, GrayImage, Luma, Rgb, RgbImage, Rgba, RgbaImage,
+    DynamicImage, GenericImageView, GrayImage, Luma, Rgb, RgbImage,
     imageops::{crop_imm, replace},
 };
 use imageproc::{
@@ -15,7 +15,11 @@ use koharu_core::TextBlock;
 use koharu_runtime::RuntimeManager;
 use tracing::instrument;
 
-use crate::{device, loading};
+use crate::{
+    device,
+    inpainting::{binarize_mask, extract_alpha, restore_alpha_channel},
+    loading,
+};
 
 const HF_REPO: &str = "mayocream/lama-manga";
 
@@ -23,7 +27,7 @@ koharu_runtime::declare_hf_model_package!(
     id: "model:lama:weights",
     repo: "mayocream/lama-manga",
     file: "lama-manga.safetensors",
-    bootstrap: true,
+    bootstrap: false,
     order: 130,
 );
 
@@ -34,8 +38,6 @@ const BALLOON_WINDOW_ASPECT_RATIO: f64 = 1.0;
 const SIMPLE_BG_THRESHOLD_LOW_VARIANCE: f64 = 10.0;
 const SIMPLE_BG_THRESHOLD_HIGH_VARIANCE: f64 = 7.0;
 const SIMPLE_BG_CHANNEL_STD_SWITCH: f64 = 1.0;
-const ALPHA_RING_RADIUS: u8 = 7;
-
 type Xyxy = [u32; 4];
 
 struct BalloonMasks {
@@ -231,65 +233,6 @@ impl Lama {
             .ok_or_else(|| anyhow::anyhow!("failed to create image buffer from model output"))?;
         Ok(DynamicImage::ImageRgb8(image))
     }
-}
-
-fn binarize_mask(mask: &DynamicImage) -> GrayImage {
-    let mut binary = mask.to_luma8();
-    for pixel in binary.pixels_mut() {
-        pixel.0[0] = if pixel.0[0] > 127 { 255 } else { 0 };
-    }
-    binary
-}
-
-fn extract_alpha(image: &RgbaImage) -> GrayImage {
-    let (width, height) = image.dimensions();
-    let mut alpha = GrayImage::new(width, height);
-    for (x, y, pixel) in image.enumerate_pixels() {
-        alpha.put_pixel(x, y, Luma([pixel.0[3]]));
-    }
-    alpha
-}
-
-fn restore_alpha_channel(
-    image: &RgbImage,
-    original_alpha: &GrayImage,
-    mask: &GrayImage,
-) -> RgbaImage {
-    let mut result = RgbaImage::new(image.width(), image.height());
-    let mut alpha = original_alpha.clone();
-
-    let mask_dilated = dilate(mask, Norm::LInf, ALPHA_RING_RADIUS);
-    let mut surrounding_alpha = Vec::new();
-    for (x, y, pixel) in mask_dilated.enumerate_pixels() {
-        if pixel.0[0] > 0 && mask.get_pixel(x, y).0[0] == 0 {
-            surrounding_alpha.push(original_alpha.get_pixel(x, y).0[0]);
-        }
-    }
-
-    if let Some(median_alpha) = median_u8(&surrounding_alpha)
-        && median_alpha < 128
-    {
-        for (x, y, pixel) in mask.enumerate_pixels() {
-            if pixel.0[0] > 0 {
-                alpha.put_pixel(x, y, Luma([median_alpha]));
-            }
-        }
-    }
-
-    for (x, y, pixel) in image.enumerate_pixels() {
-        result.put_pixel(
-            x,
-            y,
-            Rgba([
-                pixel.0[0],
-                pixel.0[1],
-                pixel.0[2],
-                alpha.get_pixel(x, y).0[0],
-            ]),
-        );
-    }
-
-    result
 }
 
 fn block_xyxy(block: &TextBlock, width: u32, height: u32) -> Option<Xyxy> {
@@ -581,10 +524,6 @@ fn median_channel(values: &[u8]) -> Option<f64> {
     }
 }
 
-fn median_u8(values: &[u8]) -> Option<u8> {
-    median_channel(values).map(|value| value as u8)
-}
-
 fn color_stddev(image: &RgbImage, mask: &GrayImage, median: [f64; 3]) -> [f64; 3] {
     let mut sum_sq = [0.0; 3];
     let mut count = 0.0;
@@ -627,14 +566,16 @@ fn stddev3(values: [f64; 3]) -> f64 {
 #[cfg(test)]
 mod tests {
     use super::{
-        ALPHA_RING_RADIUS, BALLOON_WINDOW_ASPECT_RATIO, BALLOON_WINDOW_RATIO, clear_mask_bbox,
-        count_nonzero, enlarge_window, extract_balloon_mask, restore_alpha_channel,
-        try_fill_balloon,
+        BALLOON_WINDOW_ASPECT_RATIO, BALLOON_WINDOW_RATIO, clear_mask_bbox, count_nonzero,
+        enlarge_window, extract_balloon_mask, try_fill_balloon,
     };
+    use crate::inpainting::restore_alpha_channel;
     use image::{GrayImage, Luma, Rgb, RgbImage};
     use imageproc::drawing::draw_hollow_rect_mut;
     use imageproc::rect::Rect;
     use koharu_core::TextBlock;
+
+    const ALPHA_RING_RADIUS: u8 = 7;
 
     #[test]
     fn enlarge_window_matches_ratio_1_7_reference() {

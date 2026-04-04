@@ -1,7 +1,7 @@
 use std::sync::{Arc, Mutex};
 
 use anyhow::Result;
-use image::{DynamicImage, GrayImage, imageops};
+use image::{DynamicImage, imageops};
 use koharu_core::{
     BlobRef, FontFaceInfo, TextAlign, TextBlock, TextShaderEffect, TextStrokeStyle, TextStyle,
 };
@@ -11,11 +11,7 @@ use koharu_renderer::{
     layout::{LayoutRun, TextLayout, WritingMode},
     renderer::{RenderOptions, RenderStrokeOptions, TinySkiaRenderer},
     text::{
-        latin::{
-            LayoutBox, expand_latin_layout_box_relaxed, expand_latin_layout_box_strict,
-            is_expanded_layout_box, latin_layout_underfilled, latin_width_overflow_factor,
-            layout_box_area, layout_box_from_block, pick_better_latin_candidate,
-        },
+        latin::{LayoutBox, layout_box_from_block},
         script::{
             font_families_for_text, is_latin_only, normalize_translation_for_layout,
             writing_mode_for_block,
@@ -31,6 +27,108 @@ pub struct RenderTextOptions<'a> {
     pub shader_effect: TextShaderEffect,
     pub shader_stroke: Option<TextStrokeStyle>,
     pub font_family: Option<&'a str>,
+    pub bubbles: &'a [koharu_core::BubbleRegion],
+    pub image_width: u32,
+    pub image_height: u32,
+}
+
+// ---------------------------------------------------------------------------
+// Font size calculation
+// ---------------------------------------------------------------------------
+
+/// Minimum font size based on image dimensions.
+/// Assumes ~150 PPI for manga: a 1800px wide page ≈ 12in, min readable ≈ 8pt ≈ 11px.
+fn min_font_size_for_image(image_width: u32, image_height: u32) -> f32 {
+    let max_dim = image_width.max(image_height) as f32;
+    // Scale: 1800px → 11px min, 3600px → 14px min, 900px → 8px min
+    (max_dim / 160.0).clamp(6.0, 20.0)
+}
+
+/// Get the detected font size for a text block (from font prediction or block metadata).
+fn detected_font_size(block: &TextBlock) -> Option<f32> {
+    block
+        .font_prediction
+        .as_ref()
+        .map(|fp| fp.font_size_px)
+        .or(block.detected_font_size_px)
+        .filter(|&s| s > 0.0)
+}
+
+/// Cluster similar font sizes (within ±20%) and average each cluster.
+/// Returns a vec of averaged sizes, one per input block (in the same order).
+fn cluster_font_sizes(blocks: &[TextBlock]) -> Vec<Option<f32>> {
+    let sizes: Vec<Option<f32>> = blocks.iter().map(detected_font_size).collect();
+
+    // Collect (index, size) for blocks with a detected size.
+    let mut with_size: Vec<(usize, f32)> = sizes
+        .iter()
+        .enumerate()
+        .filter_map(|(i, s)| s.map(|s| (i, s)))
+        .collect();
+    with_size.sort_by(|a, b| a.1.partial_cmp(&b.1).unwrap_or(std::cmp::Ordering::Equal));
+
+    let mut result = sizes.clone();
+
+    // Greedy clustering: walk sorted sizes, group within ±20%.
+    let mut used = vec![false; with_size.len()];
+    for i in 0..with_size.len() {
+        if used[i] {
+            continue;
+        }
+        let mut cluster_sum = with_size[i].1;
+        let mut cluster_indices = vec![with_size[i].0];
+        used[i] = true;
+
+        for j in (i + 1)..with_size.len() {
+            if used[j] {
+                continue;
+            }
+            // Within ±20% of the cluster's first element
+            if (with_size[j].1 - with_size[i].1).abs() / with_size[i].1 <= 0.2 {
+                cluster_sum += with_size[j].1;
+                cluster_indices.push(with_size[j].0);
+                used[j] = true;
+            }
+        }
+
+        let avg = cluster_sum / cluster_indices.len() as f32;
+        for &idx in &cluster_indices {
+            result[idx] = Some(avg);
+        }
+    }
+
+    result
+}
+
+/// Calculate the font size for a block given a constraint box and text.
+/// Starts at `base_size`, shrinks if text doesn't fit, clamps at `min_size`.
+fn fit_font_size<'a>(
+    layout_builder: &TextLayout<'a>,
+    text: &str,
+    constraint_width: f32,
+    constraint_height: f32,
+    base_size: f32,
+    min_size: f32,
+) -> Result<LayoutRun<'a>> {
+    // Try the base size first.
+    let mut size = base_size.round().max(min_size);
+    loop {
+        let layout = layout_builder
+            .clone()
+            .with_font_size(size)
+            .with_max_width(constraint_width)
+            .with_max_height(constraint_height)
+            .run(text)?;
+        if layout.width <= constraint_width && layout.height <= constraint_height {
+            return Ok(layout);
+        }
+        if size <= min_size {
+            // At min size, allow overflow.
+            return Ok(layout);
+        }
+        // Shrink by 1px and retry.
+        size = (size - 1.0).max(min_size);
+    }
 }
 
 pub struct Renderer {
@@ -75,20 +173,19 @@ impl Renderer {
     /// Render text blocks and optionally compose the full rendered image.
     /// Returns an optional BlobRef for the full rendered composite.
     /// Text block `rendered` fields are updated in-place with BlobRefs to per-block images.
+    #[tracing::instrument(level = "info", skip_all)]
     pub fn render_to_blob(
         &self,
         images: &storage::ImageCache,
-        source_img: &DynamicImage,
+        _source_img: &DynamicImage,
         inpainted_img: Option<&DynamicImage>,
         brush_layer_img: Option<&DynamicImage>,
         text_blocks: &mut [TextBlock],
         opts: RenderTextOptions<'_>,
     ) -> Result<Option<BlobRef>> {
-        let bubble_map = if let Some(inpainted) = inpainted_img {
-            inpainted.to_luma8()
-        } else {
-            source_img.to_luma8()
-        };
+        // Compute clustered font sizes across all blocks for consistency.
+        let clustered_sizes = cluster_font_sizes(text_blocks);
+        let min_font = min_font_size_for_image(opts.image_width, opts.image_height);
 
         let mut blocks_to_render: Vec<&mut TextBlock> = match opts.text_block_index {
             Some(index) => text_blocks
@@ -98,39 +195,55 @@ impl Renderer {
             None => text_blocks.iter_mut().collect(),
         };
 
-        // Render each text block to a DynamicImage, then store as blob
-        // We collect rendered images per block, then store them
-        let block_renders: Vec<Option<(DynamicImage, usize)>> = blocks_to_render
-            .iter_mut()
-            .enumerate()
-            .map(|(i, text_block)| {
-                match self.render_text_block(
-                    text_block,
-                    opts.shader_effect,
-                    opts.shader_stroke.clone(),
-                    opts.font_family,
-                    Some(&bubble_map),
-                ) {
-                    Ok(Some(rendered_img)) => Some((rendered_img, i)),
-                    Ok(None) => None,
-                    Err(e) => {
-                        tracing::warn!("Failed to render text block: {e}");
-                        None
-                    }
-                }
-            })
-            .collect();
+        // Map block indices to their clustered font sizes.
+        let render_font_sizes: Vec<Option<f32>> = match opts.text_block_index {
+            Some(index) => vec![clustered_sizes.get(index).copied().flatten()],
+            None => clustered_sizes,
+        };
 
-        // Store rendered block images as blobs
-        for (img, idx) in block_renders.iter().flatten() {
-            let blob_ref = images.store_webp(img)?;
-            blocks_to_render[*idx].rendered = Some(blob_ref);
+        let block_renders: Vec<Option<(DynamicImage, usize)>> = {
+            use rayon::prelude::*;
+            let span = tracing::info_span!("render_blocks", count = blocks_to_render.len());
+            let _s = span.enter();
+            let parent_span = span.clone();
+            blocks_to_render
+                .par_iter_mut()
+                .enumerate()
+                .map(|(i, text_block)| {
+                    let _guard = parent_span.enter();
+                    let base_font_size = render_font_sizes.get(i).copied().flatten();
+                    match self.render_text_block(
+                        text_block,
+                        opts.shader_effect,
+                        opts.shader_stroke.clone(),
+                        opts.font_family,
+                        opts.bubbles,
+                        base_font_size,
+                        min_font,
+                    ) {
+                        Ok(Some(rendered_img)) => Some((rendered_img, i)),
+                        Ok(None) => None,
+                        Err(e) => {
+                            tracing::warn!("Failed to render text block: {e}");
+                            None
+                        }
+                    }
+                })
+                .collect()
+        };
+
+        {
+            let _s = tracing::info_span!("store_block_blobs").entered();
+            for (img, idx) in block_renders.iter().flatten() {
+                let blob_ref = images.store_raw(img)?;
+                blocks_to_render[*idx].rendered = Some(blob_ref);
+            }
         }
 
-        // Compose the full rendered image if we have inpainted and rendering all blocks
         if let Some(inpainted) = inpainted_img
             && opts.text_block_index.is_none()
         {
+            let _s = tracing::info_span!("compose").entered();
             let mut rendered = inpainted.to_rgba8();
 
             if let Some(brush_layer) = brush_layer_img {
@@ -150,19 +263,22 @@ impl Renderer {
                     text_block.y as i64,
                 );
             }
-            let rendered_ref = images.store_webp(&DynamicImage::ImageRgba8(rendered))?;
+            let rendered_ref = images.store_raw(&DynamicImage::from(rendered))?;
             return Ok(Some(rendered_ref));
         }
         Ok(None)
     }
 
+    #[allow(clippy::too_many_arguments)]
     fn render_text_block(
         &self,
         text_block: &mut TextBlock,
         effect: TextShaderEffect,
         global_stroke: Option<TextStrokeStyle>,
         font_family: Option<&str>,
-        bubble_map: Option<&GrayImage>,
+        bubbles: &[koharu_core::BubbleRegion],
+        base_font_size: Option<f32>,
+        min_font_size: f32,
     ) -> Result<Option<DynamicImage>> {
         let Some(translation) = text_block.translation.as_ref().cloned() else {
             return Ok(None);
@@ -171,12 +287,11 @@ impl Renderer {
             return Ok(None);
         };
         let normalized_translation = normalize_translation_for_layout(&translation);
-        let (seed_x, seed_y, seed_width, seed_height) = text_block.seed_layout_box();
         let layout_source_block = TextBlock {
-            x: seed_x,
-            y: seed_y,
-            width: seed_width,
-            height: seed_height,
+            x: text_block.x,
+            y: text_block.y,
+            width: text_block.width.max(1.0),
+            height: text_block.height.max(1.0),
             translation: Some(translation.clone()),
             source_direction: text_block.source_direction,
             rendered_direction: text_block.rendered_direction,
@@ -194,7 +309,10 @@ impl Renderer {
 
         apply_global_font_family(&mut style.font_families, font_family);
         apply_default_font_families(&mut style.font_families, &normalized_translation);
-        let font = self.select_font(&style)?;
+        let font = {
+            let _s = tracing::info_span!("select_font").entered();
+            self.select_font(&style)?
+        };
         let block_effect = style.effect.unwrap_or(effect);
         let color = text_block
             .style
@@ -212,10 +330,8 @@ impl Renderer {
             })
             .unwrap_or([0, 0, 0, 255]);
         let writing_mode = writing_mode_for_block(&layout_source_block);
-        let english_layout =
-            english_layout_behavior(text_block, &normalized_translation, writing_mode);
-        let english_horizontal_layout = english_layout != EnglishLayoutBehavior::Disabled;
-        let auto_expand_english_layout = english_layout == EnglishLayoutBehavior::AutoExpand;
+        let english_horizontal_layout =
+            writing_mode == WritingMode::Horizontal && is_latin_only(&normalized_translation);
         let text_align = style.text_align.unwrap_or({
             if english_horizontal_layout {
                 TextAlign::Center
@@ -223,67 +339,41 @@ impl Renderer {
                 TextAlign::Left
             }
         });
-        let original_layout_box = layout_box_from_block(&layout_source_block);
-        let mut layout_box = if auto_expand_english_layout {
-            bubble_map
-                .map(|map| expand_latin_layout_box_strict(&layout_source_block, map))
-                .unwrap_or(original_layout_box)
-        } else {
-            original_layout_box
+        let block_box = layout_box_from_block(&layout_source_block);
+        let bubble_box = find_best_bubble(text_block, bubbles);
+        // Use whichever is larger — bubble or text block box.
+        let layout_box = match bubble_box {
+            Some(bb) => LayoutBox {
+                x: block_box.x.min(bb.x),
+                y: block_box.y.min(bb.y),
+                width: block_box.width.max(bb.width),
+                height: block_box.height.max(bb.height),
+            },
+            None => block_box,
         };
 
-        let build_layout = |box_for_layout: LayoutBox, allow_expanded_overflow: bool| {
-            let expanded_box = is_expanded_layout_box(box_for_layout, original_layout_box);
-            let overflow = if english_horizontal_layout {
-                if expanded_box {
-                    latin_width_overflow_factor(true, allow_expanded_overflow)
-                } else {
-                    latin_width_overflow_factor(false, allow_expanded_overflow)
-                }
-            } else {
-                1.0
-            };
-            let max_width = if box_for_layout.width.is_finite() && box_for_layout.width > 0.0 {
-                box_for_layout.width * overflow
-            } else {
-                box_for_layout.width
-            };
-
-            TextLayout::new(&font, None)
-                .with_fallback_fonts(&self.symbol_fallbacks)
-                .with_max_height(box_for_layout.height)
-                .with_max_width(max_width)
-                .with_writing_mode(writing_mode)
-                .run(&normalized_translation)
+        // Determine base font size: user-set > clustered detected.
+        // If neither is available, skip rendering (no font size info).
+        let Some(effective_base_size) = style.font_size.or(base_font_size) else {
+            return Ok(None);
         };
 
-        let mut layout = build_layout(layout_box, false)?;
-        if auto_expand_english_layout {
-            let underfilled = latin_layout_underfilled(&layout, layout_box.height);
-            if underfilled {
-                let relaxed_box = bubble_map
-                    .map(|map| expand_latin_layout_box_relaxed(&layout_source_block, map))
-                    .unwrap_or(layout_box);
-                let relaxed_candidate =
-                    if layout_box_area(relaxed_box) > layout_box_area(layout_box) * 1.06 {
-                        build_layout(relaxed_box, true)
-                            .ok()
-                            .map(|layout| (layout, relaxed_box))
-                    } else {
-                        None
-                    };
+        let layout_builder = TextLayout::new(&font, None)
+            .with_fallback_fonts(&self.symbol_fallbacks)
+            .with_writing_mode(writing_mode);
 
-                let overflow_candidate = build_layout(layout_box, true)
-                    .ok()
-                    .map(|layout| (layout, layout_box));
-                if let Some((candidate_layout, candidate_box)) =
-                    pick_better_latin_candidate(&layout, relaxed_candidate, overflow_candidate)
-                {
-                    layout = candidate_layout;
-                    layout_box = candidate_box;
-                }
-            }
-
+        let mut layout = {
+            let _s = tracing::info_span!("layout").entered();
+            fit_font_size(
+                &layout_builder,
+                &normalized_translation,
+                layout_box.width,
+                layout_box.height,
+                effective_base_size,
+                min_font_size,
+            )?
+        };
+        if english_horizontal_layout {
             center_layout_vertically(&mut layout, layout_box.height);
         }
         align_layout_horizontally(&mut layout, writing_mode, layout_box.width, text_align);
@@ -294,17 +384,20 @@ impl Renderer {
             global_stroke.as_ref(),
             layout.font_size,
         );
-        let rendered = self.renderer.render(
-            &layout,
-            writing_mode,
-            &RenderOptions {
-                font_size: layout.font_size,
-                color,
-                effect: block_effect,
-                stroke: resolved_stroke,
-                ..Default::default()
-            },
-        )?;
+        let rendered = {
+            let _s = tracing::info_span!("rasterize").entered();
+            self.renderer.render(
+                &layout,
+                writing_mode,
+                &RenderOptions {
+                    font_size: layout.font_size,
+                    color,
+                    effect: block_effect,
+                    stroke: resolved_stroke,
+                    ..Default::default()
+                },
+            )?
+        };
 
         text_block.x = layout_box.x;
         text_block.y = layout_box.y;
@@ -341,31 +434,6 @@ impl Renderer {
                 anyhow::anyhow!("no font found for candidates: {:?}", style.font_families)
             })?;
         fontbook.query(&post_script_name)
-    }
-}
-
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-enum EnglishLayoutBehavior {
-    Disabled,
-    AutoExpand,
-    LockedToManualSize,
-}
-
-fn english_layout_behavior(
-    text_block: &TextBlock,
-    normalized_translation: &str,
-    writing_mode: WritingMode,
-) -> EnglishLayoutBehavior {
-    let is_english_horizontal =
-        writing_mode == WritingMode::Horizontal && is_latin_only(normalized_translation);
-    if !is_english_horizontal {
-        return EnglishLayoutBehavior::Disabled;
-    }
-
-    if text_block.lock_layout_box {
-        EnglishLayoutBehavior::LockedToManualSize
-    } else {
-        EnglishLayoutBehavior::AutoExpand
     }
 }
 
@@ -530,13 +598,56 @@ fn face_post_script_name(faces: &[FaceInfo], candidate: &str) -> Option<String> 
         .filter(|post_script_name| !post_script_name.is_empty())
 }
 
+/// Find the bubble with the best IoU overlap for a text block.
+/// Returns the bubble's bbox as a LayoutBox if a good match is found.
+fn find_best_bubble(block: &TextBlock, bubbles: &[koharu_core::BubbleRegion]) -> Option<LayoutBox> {
+    if bubbles.is_empty() {
+        return None;
+    }
+
+    let block_area = (block.width * block.height).max(1.0);
+    let mut best: Option<(f32, &koharu_core::BubbleRegion)> = None;
+
+    for bubble in bubbles {
+        let bubble_area = (bubble.width * bubble.height).max(1.0);
+
+        // Intersection
+        let ix0 = block.x.max(bubble.x);
+        let iy0 = block.y.max(bubble.y);
+        let ix1 = (block.x + block.width).min(bubble.x + bubble.width);
+        let iy1 = (block.y + block.height).min(bubble.y + bubble.height);
+        let inter = (ix1 - ix0).max(0.0) * (iy1 - iy0).max(0.0);
+
+        // IoU
+        let union = block_area + bubble_area - inter;
+        let iou = if union > 0.0 { inter / union } else { 0.0 };
+
+        if let Some((best_iou, _)) = &best {
+            if iou > *best_iou {
+                best = Some((iou, bubble));
+            }
+        } else if iou > 0.0 {
+            best = Some((iou, bubble));
+        }
+    }
+
+    // Require minimum overlap to avoid false matches
+    best.filter(|(iou, _)| *iou > 0.05)
+        .map(|(_, bubble)| LayoutBox {
+            x: bubble.x,
+            y: bubble.y,
+            width: bubble.width,
+            height: bubble.height,
+        })
+}
+
 #[cfg(test)]
 mod tests {
     use super::{
-        EnglishLayoutBehavior, align_layout_horizontally, apply_default_font_families,
-        apply_global_font_family, center_layout_vertically, english_layout_behavior,
+        align_layout_horizontally, apply_default_font_families, apply_global_font_family,
+        center_layout_vertically,
     };
-    use koharu_core::{TextAlign, TextBlock};
+    use koharu_core::TextAlign;
     use koharu_renderer::layout::{LayoutLine, LayoutRun, WritingMode};
 
     #[test]
@@ -672,29 +783,5 @@ mod tests {
         apply_default_font_families(&mut font_families, "hello");
 
         assert_eq!(font_families, vec!["Global Font".to_string()]);
-    }
-
-    #[test]
-    fn english_layout_auto_expands_by_default() {
-        let block = TextBlock::default();
-        let behavior = english_layout_behavior(&block, "HELLO WORLD", WritingMode::Horizontal);
-        assert_eq!(behavior, EnglishLayoutBehavior::AutoExpand);
-    }
-
-    #[test]
-    fn english_layout_stops_auto_expand_after_manual_resize() {
-        let block = TextBlock {
-            lock_layout_box: true,
-            ..Default::default()
-        };
-        let behavior = english_layout_behavior(&block, "HELLO WORLD", WritingMode::Horizontal);
-        assert_eq!(behavior, EnglishLayoutBehavior::LockedToManualSize);
-    }
-
-    #[test]
-    fn non_english_layout_never_uses_english_expansion_logic() {
-        let block = TextBlock::default();
-        let behavior = english_layout_behavior(&block, "こんにちは", WritingMode::Horizontal);
-        assert_eq!(behavior, EnglishLayoutBehavior::Disabled);
     }
 }

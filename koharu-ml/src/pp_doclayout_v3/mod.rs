@@ -22,21 +22,21 @@ koharu_runtime::declare_hf_model_package!(
     id: "model:pp-doclayout-v3:config",
     repo: "PaddlePaddle/PP-DocLayoutV3_safetensors",
     file: "config.json",
-    bootstrap: true,
+    bootstrap: false,
     order: 100,
 );
 koharu_runtime::declare_hf_model_package!(
     id: "model:pp-doclayout-v3:preprocessor-config",
     repo: "PaddlePaddle/PP-DocLayoutV3_safetensors",
     file: "preprocessor_config.json",
-    bootstrap: true,
+    bootstrap: false,
     order: 101,
 );
 koharu_runtime::declare_hf_model_package!(
     id: "model:pp-doclayout-v3:weights",
     repo: "PaddlePaddle/PP-DocLayoutV3_safetensors",
     file: "model.safetensors",
-    bootstrap: true,
+    bootstrap: false,
     order: 102,
 );
 

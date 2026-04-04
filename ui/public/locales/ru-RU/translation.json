@@ -319,6 +319,8 @@
     "engines": "Движки",
     "enginesDescription": "Выберите ML-движок для каждого этапа конвейера.",
     "detector": "Детектор",
+    "bubbleDetector": "Bubble Detector",
+    "fontDetector": "Font Detector",
     "segmenter": "Сегментатор",
     "ocr": "OCR",
     "translator": "Переводчик",
