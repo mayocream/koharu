@@ -137,7 +137,7 @@ tower-http = { version = "0.6", features = ["cors"] }
 criterion = { version = "0.8", features = ["html_reports"] }
 git-version = "0.3"
 keyring = "3.6"
-lru = "0.14"
+lru = "0.16"
 petgraph = "0.7"
 petname = "2"
 tauri-plugin-process = "2.3"
