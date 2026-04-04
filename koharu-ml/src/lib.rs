@@ -14,17 +14,19 @@ use anyhow::Result;
 use candle_core::utils::{cuda_is_available, metal_is_available};
 
 pub use candle_core::Device;
-use koharu_runtime::check_cuda_driver_support;
+
+static GPU_SUPPORTED: std::sync::OnceLock<bool> = std::sync::OnceLock::new();
 
 pub fn device(cpu: bool) -> Result<Device> {
     if cpu {
         Ok(Device::Cpu)
-    } else if cuda_is_available() && check_cuda_driver_support() {
+    } else if cuda_is_available()
+        && *GPU_SUPPORTED.get_or_init(koharu_runtime::check_cuda_driver_support)
+    {
         Ok(Device::new_cuda(0)?)
     } else if metal_is_available() {
         Ok(Device::new_metal(0)?)
     } else {
-        println!("CUDA and Metal are not available. Using CPU device.");
         Ok(Device::Cpu)
     }
 }

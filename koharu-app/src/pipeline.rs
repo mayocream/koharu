@@ -56,6 +56,7 @@ pub async fn process_cancel(state: AppResources) -> anyhow::Result<()> {
     Ok(())
 }
 
+#[tracing::instrument(level = "info", skip_all, fields(%job_id))]
 async fn run(
     res: AppResources,
     request: koharu_core::commands::ProcessRequest,
@@ -64,6 +65,10 @@ async fn run(
     jobs: Jobs,
 ) {
     let result = run_inner(&res, &request, &cancel, &job_id, &jobs).await;
+
+    if let Err(err) = &result {
+        tracing::error!(error = %err, "pipeline failed");
+    }
 
     let total_docs = match request.document_id {
         Some(_) => 1,
@@ -95,25 +100,23 @@ async fn run(
             100,
             None,
         ),
-        Err(err) => {
-            tracing::error!("Pipeline failed: {err:#}");
-            job_state(
-                &job_id,
-                JobStatus::Failed,
-                None,
-                0,
-                total_docs,
-                0,
-                total_steps,
-                0,
-                Some(err.to_string()),
-            )
-        }
+        Err(err) => job_state(
+            &job_id,
+            JobStatus::Failed,
+            None,
+            0,
+            total_docs,
+            0,
+            total_steps,
+            0,
+            Some(err.to_string()),
+        ),
     };
     jobs.write().await.insert(job_id.clone(), final_job);
     *res.pipeline.write().await = None;
 }
 
+#[tracing::instrument(level = "info", skip_all, fields(pages))]
 async fn run_inner(
     res: &AppResources,
     req: &koharu_core::commands::ProcessRequest,
@@ -129,6 +132,7 @@ async fn run_inner(
         None => res.storage.page_ids().await,
     };
     let total_docs = page_ids.len();
+    tracing::Span::current().record("pages", total_docs);
     if total_docs == 0 {
         return Ok(());
     }

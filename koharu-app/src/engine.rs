@@ -22,6 +22,7 @@ use koharu_core::Document;
 use petgraph::algo::toposort;
 use petgraph::graph::DiGraph;
 use tokio::sync::RwLock;
+use tracing::Instrument;
 
 use crate::AppResources;
 
@@ -136,7 +137,11 @@ impl Registry {
             return Ok(engine.clone());
         }
         let info = Self::find(id)?;
-        let engine: Arc<dyn Engine> = Arc::from((info.load)(res).await?);
+        let engine: Arc<dyn Engine> = Arc::from(
+            async { (info.load)(res).await }
+                .instrument(tracing::info_span!("engine_load", engine = id))
+                .await?,
+        );
         self.engines.write().await.insert(info.id, engine.clone());
         Ok(engine)
     }
@@ -160,6 +165,7 @@ impl Registry {
     }
 
     /// Drop all cached engines and models, freeing GPU memory.
+    #[tracing::instrument(level = "info", skip_all)]
     pub async fn clear(&self) {
         self.engines.write().await.clear();
         self.models.write().await.clear();
@@ -319,21 +325,28 @@ where
         let info = infos[i];
         let doc = res.storage.page(page_id).await?;
         if info.produces.iter().all(|a| a.ready(&doc)) {
+            tracing::info!(step = info.id, "skipped");
             continue;
         }
         on_step(seq, info.id).await;
-        let engine = res.registry.get(info.id, res).await?;
-        let patch = engine.run(&doc, res).await?;
-        if let Some(f) = patch.take() {
-            res.storage.update_page(page_id, f).await?;
+        async {
+            let engine = res.registry.get(info.id, res).await?;
+            let patch = engine.run(&doc, res).await?;
+            if let Some(f) = patch.take() {
+                res.storage.update_page(page_id, f).await?;
+            }
+            Ok::<_, anyhow::Error>(())
         }
+        .instrument(tracing::info_span!("step", engine = info.id))
+        .await?;
     }
     Ok(())
 }
 
 /// Run a single engine by id.
+#[tracing::instrument(level = "info", skip_all, fields(engine = id))]
 pub async fn run_one(id: &str, res: &AppResources, page_id: &str) -> Result<()> {
-    let _info = Registry::find(id)?; // validates the id exists
+    let _info = Registry::find(id)?;
     let doc = res.storage.page(page_id).await?;
     let engine = res.registry.get(id, res).await?;
     let patch = engine.run(&doc, res).await?;
@@ -383,9 +396,15 @@ struct PpDocLayoutEngine(koharu_ml::pp_doclayout_v3::PPDocLayoutV3);
 #[async_trait]
 impl Engine for PpDocLayoutEngine {
     async fn run(&self, doc: &Document, res: &AppResources) -> Result<Patch> {
-        let source: SerializableDynamicImage = res.storage.images.load(&doc.source)?.into();
-        let layout = self.0.inference_one_fast(&source, 0.25)?;
-        let blocks = build_text_blocks(&layout.regions);
+        let source: SerializableDynamicImage = {
+            let _s = tracing::info_span!("load_image").entered();
+            res.storage.images.load(&doc.source)?.into()
+        };
+        let blocks = {
+            let _s = tracing::info_span!("inference").entered();
+            let layout = self.0.inference_one_fast(&source, 0.25)?;
+            build_text_blocks(&layout.regions)
+        };
         Ok(Patch::apply(|doc| doc.text_blocks = blocks))
     }
 }
@@ -410,12 +429,20 @@ struct CtdFullEngine(koharu_ml::comic_text_detector::ComicTextDetector);
 #[async_trait]
 impl Engine for CtdFullEngine {
     async fn run(&self, doc: &Document, res: &AppResources) -> Result<Patch> {
-        let source: SerializableDynamicImage = res.storage.images.load(&doc.source)?.into();
-        let det = self.0.inference(&source)?;
-        let blob = res
-            .storage
-            .images
-            .store_webp(&DynamicImage::ImageLuma8(det.mask))?;
+        let source: SerializableDynamicImage = {
+            let _s = tracing::info_span!("load_image").entered();
+            res.storage.images.load(&doc.source)?.into()
+        };
+        let det = {
+            let _s = tracing::info_span!("inference").entered();
+            self.0.inference(&source)?
+        };
+        let blob = {
+            let _s = tracing::info_span!("save").entered();
+            res.storage
+                .images
+                .store_webp(&DynamicImage::ImageLuma8(det.mask))?
+        };
         let blocks = det.text_blocks;
         Ok(Patch::apply(move |doc| {
             doc.text_blocks = blocks;
@@ -444,17 +471,25 @@ struct CtdSegmentEngine(koharu_ml::comic_text_detector::ComicTextDetector);
 #[async_trait]
 impl Engine for CtdSegmentEngine {
     async fn run(&self, doc: &Document, res: &AppResources) -> Result<Patch> {
-        let source: SerializableDynamicImage = res.storage.images.load(&doc.source)?.into();
-        let prob = self.0.inference_segmentation(&source)?;
-        let mask = koharu_ml::comic_text_detector::refine_segmentation_mask(
-            &source,
-            &prob,
-            &doc.text_blocks,
-        );
-        let blob = res
-            .storage
-            .images
-            .store_webp(&DynamicImage::ImageLuma8(mask))?;
+        let source: SerializableDynamicImage = {
+            let _s = tracing::info_span!("load_image").entered();
+            res.storage.images.load(&doc.source)?.into()
+        };
+        let mask = {
+            let _s = tracing::info_span!("inference").entered();
+            let prob = self.0.inference_segmentation(&source)?;
+            koharu_ml::comic_text_detector::refine_segmentation_mask(
+                &source,
+                &prob,
+                &doc.text_blocks,
+            )
+        };
+        let blob = {
+            let _s = tracing::info_span!("save").entered();
+            res.storage
+                .images
+                .store_webp(&DynamicImage::ImageLuma8(mask))?
+        };
         Ok(Patch::apply(|doc| doc.segment = Some(blob)))
     }
 }
@@ -482,13 +517,20 @@ impl Engine for FontDetectEngine {
         if doc.text_blocks.is_empty() {
             return Ok(Patch::none());
         }
-        let source: SerializableDynamicImage = res.storage.images.load(&doc.source)?.into();
-        let crops: Vec<DynamicImage> = doc
-            .text_blocks
-            .iter()
-            .map(|b| source.crop_imm(b.x as u32, b.y as u32, b.width as u32, b.height as u32))
-            .collect();
-        let mut preds = self.0.inference(&crops, 1)?;
+        let (source, crops) = {
+            let _s = tracing::info_span!("load_image").entered();
+            let source: SerializableDynamicImage = res.storage.images.load(&doc.source)?.into();
+            let crops: Vec<DynamicImage> = doc
+                .text_blocks
+                .iter()
+                .map(|b| source.crop_imm(b.x as u32, b.y as u32, b.width as u32, b.height as u32))
+                .collect();
+            (source, crops)
+        };
+        let mut preds = {
+            let _s = tracing::info_span!("inference", blocks = crops.len()).entered();
+            self.0.inference(&crops, 1)?
+        };
         for p in &mut preds {
             normalize_font_prediction(p);
         }
@@ -497,6 +539,7 @@ impl Engine for FontDetectEngine {
             block.font_prediction = Some(pred);
             block.style = None;
         }
+        let _ = source; // keep alive
         Ok(Patch::apply(|doc| doc.text_blocks = blocks))
     }
 }
@@ -524,13 +567,18 @@ impl Engine for PaddleOcrEngine {
         if doc.text_blocks.is_empty() {
             return Ok(Patch::none());
         }
-        let source: SerializableDynamicImage = res.storage.images.load(&doc.source)?.into();
-        let regions: Vec<_> = doc
-            .text_blocks
-            .iter()
-            .map(|b| koharu_ml::comic_text_detector::crop_text_block_bbox(&source, b))
-            .collect();
+        let (source, regions) = {
+            let _s = tracing::info_span!("load_image").entered();
+            let source: SerializableDynamicImage = res.storage.images.load(&doc.source)?.into();
+            let regions: Vec<_> = doc
+                .text_blocks
+                .iter()
+                .map(|b| koharu_ml::comic_text_detector::crop_text_block_bbox(&source, b))
+                .collect();
+            (source, regions)
+        };
         let outputs = {
+            let _s = tracing::info_span!("inference", blocks = regions.len()).entered();
             let mut ocr = self
                 .0
                 .lock()
@@ -545,6 +593,7 @@ impl Engine for PaddleOcrEngine {
         for (block, out) in blocks.iter_mut().zip(outputs) {
             block.text = Some(out.text);
         }
+        let _ = source;
         Ok(Patch::apply(|doc| doc.text_blocks = blocks))
     }
 }
@@ -573,13 +622,18 @@ impl Engine for MangaOcrEngine {
         if doc.text_blocks.is_empty() {
             return Ok(Patch::none());
         }
-        let source: SerializableDynamicImage = res.storage.images.load(&doc.source)?.into();
-        let crops: Vec<DynamicImage> = doc
-            .text_blocks
-            .iter()
-            .map(|b| koharu_ml::comic_text_detector::crop_text_block_bbox(&source, b))
-            .collect();
-        let texts = self.0.inference(&crops)?;
+        let crops = {
+            let _s = tracing::info_span!("load_image").entered();
+            let source: SerializableDynamicImage = res.storage.images.load(&doc.source)?.into();
+            doc.text_blocks
+                .iter()
+                .map(|b| koharu_ml::comic_text_detector::crop_text_block_bbox(&source, b))
+                .collect::<Vec<_>>()
+        };
+        let texts = {
+            let _s = tracing::info_span!("inference", blocks = crops.len()).entered();
+            self.0.inference(&crops)?
+        };
         let mut blocks = doc.text_blocks.clone();
         for (block, text) in blocks.iter_mut().zip(texts) {
             block.text = Some(text);
@@ -611,8 +665,14 @@ impl Engine for Mit48pxOcrEngine {
         if doc.text_blocks.is_empty() {
             return Ok(Patch::none());
         }
-        let source: SerializableDynamicImage = res.storage.images.load(&doc.source)?.into();
-        let preds = self.0.inference_text_blocks(&source, &doc.text_blocks)?;
+        let source: SerializableDynamicImage = {
+            let _s = tracing::info_span!("load_image").entered();
+            res.storage.images.load(&doc.source)?.into()
+        };
+        let preds = {
+            let _s = tracing::info_span!("inference", blocks = doc.text_blocks.len()).entered();
+            self.0.inference_text_blocks(&source, &doc.text_blocks)?
+        };
         let mut blocks = doc.text_blocks.clone();
         for (block, pred) in blocks.iter_mut().zip(preds) {
             block.text = Some(pred.text);
@@ -642,7 +702,10 @@ struct LlmTranslateEngine;
 impl Engine for LlmTranslateEngine {
     async fn run(&self, doc: &Document, res: &AppResources) -> Result<Patch> {
         let mut page = doc.clone();
-        res.llm.translate(&mut page, None).await?;
+        let block_count = page.text_blocks.len();
+        async { res.llm.translate(&mut page, None).await }
+            .instrument(tracing::info_span!("inference", blocks = block_count))
+            .await?;
         let blocks = page.text_blocks;
         Ok(Patch::apply(|doc| doc.text_blocks = blocks))
     }
@@ -671,12 +734,21 @@ impl Engine for LamaInpaintEngine {
             .segment
             .as_ref()
             .ok_or_else(|| anyhow::anyhow!("no segment mask"))?;
-        let source: SerializableDynamicImage = res.storage.images.load(&doc.source)?.into();
-        let segment: SerializableDynamicImage = res.storage.images.load(seg_ref)?.into();
-        let result = self
-            .0
-            .inference_with_blocks(&source, &segment, Some(&doc.text_blocks))?;
-        let blob = res.storage.images.store_webp(&result)?;
+        let (source, segment) = {
+            let _s = tracing::info_span!("load_image").entered();
+            let source: SerializableDynamicImage = res.storage.images.load(&doc.source)?.into();
+            let segment: SerializableDynamicImage = res.storage.images.load(seg_ref)?.into();
+            (source, segment)
+        };
+        let result = {
+            let _s = tracing::info_span!("inference").entered();
+            self.0
+                .inference_with_blocks(&source, &segment, Some(&doc.text_blocks))?
+        };
+        let blob = {
+            let _s = tracing::info_span!("save").entered();
+            res.storage.images.store_webp(&result)?
+        };
         Ok(Patch::apply(|doc| doc.inpainted = Some(blob)))
     }
 }
@@ -731,6 +803,7 @@ pub async fn get_renderer(res: &AppResources) -> Result<Arc<Renderer>> {
         .await
 }
 
+#[tracing::instrument(level = "info", skip_all, fields(document_id))]
 pub async fn render_document(
     res: &AppResources,
     document_id: &str,

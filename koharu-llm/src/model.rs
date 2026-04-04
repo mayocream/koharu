@@ -1,7 +1,6 @@
 use std::num::NonZeroU32;
 use std::path::PathBuf;
 use std::sync::Arc;
-use std::sync::Once;
 use std::time::Instant;
 
 use anyhow::{Context, Result};
@@ -16,10 +15,7 @@ use crate::safe::model::params::LlamaModelParams;
 use crate::safe::model::{AddBos, LlamaModel};
 use crate::safe::sampling::LlamaSampler;
 use crate::safe::token::LlamaToken;
-use crate::safe::{LogOptions, send_logs_to_tracing};
 use crate::{Language, ModelId};
-
-static LOGGING_READY: Once = Once::new();
 
 const DEFAULT_GPU_LAYERS: u32 = 1000;
 const MAX_UBATCH: u32 = 512;
@@ -82,10 +78,6 @@ impl Llm {
         model_path: PathBuf,
         backend: Arc<LlamaBackend>,
     ) -> Result<Self> {
-        LOGGING_READY.call_once(|| {
-            send_logs_to_tracing(LogOptions::default().with_logs_enabled(true));
-        });
-
         let model_params = model_params(cpu, backend.as_ref());
         let model = LlamaModel::load_from_file(backend.as_ref(), &model_path, &model_params)
             .with_context(|| format!("unable to load model from `{}`", model_path.display()))?;

@@ -796,11 +796,6 @@ async fn put_text_blocks(
         .await
         .map_err(ApiError::from)?;
 
-    // Auto-render if any block content/geometry changed
-    if any_changed {
-        let _ = engine::render_document(&resources, &document_id, None, None, None, None).await;
-    }
-
     Ok(StatusCode::NO_CONTENT)
 }
 
