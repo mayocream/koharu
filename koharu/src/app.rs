@@ -34,12 +34,13 @@ async fn build_resources(
     data_root: camino::Utf8PathBuf,
     cpu: bool,
 ) -> Result<AppResources> {
-    let cpu = matches!(device(cpu)?, Device::Cpu);
-
     runtime
         .prepare()
         .await
         .context("Failed to prepare runtime")?;
+
+    let selected_device = device(cpu)?;
+    let cpu = matches!(&selected_device, Device::Cpu);
 
     #[cfg(target_os = "windows")]
     crate::windows::register_khr().ok();
@@ -60,7 +61,7 @@ async fn build_resources(
         registry,
         config: Arc::new(RwLock::new(config)),
         llm,
-        device: device(cpu)?,
+        device: selected_device,
         pipeline: Arc::new(RwLock::new(None)),
         version: crate::version::current(),
     })
