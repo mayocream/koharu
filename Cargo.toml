@@ -77,7 +77,7 @@ inventory = "0.3"
 url = { version = "2.5", features = ["serde"] }
 arc-swap = "1.7"
 camino = { version = "1.1", features = ["serde1"] }
-indexmap = "2.11"
+indexmap = "2.13"
 flate2 = { version = "1.0", default-features = false, features = [
     "zlib-ng-compat",
 ] }
