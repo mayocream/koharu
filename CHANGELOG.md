@@ -1,3 +1,14 @@
+## [0.42.2](https://github.com/mayocream/koharu/compare/0.42.1..0.42.2) - 2026-04-04
+
+### 🐛 Bug Fixes
+
+- Cuda startup failure - ([766662b](https://github.com/mayocream/koharu/commit/766662beaa293e54e98bdf6c35c5447830a25525))
+
+### 📚 Documentation
+
+- Reflect new models - ([873236b](https://github.com/mayocream/koharu/commit/873236b7a0225475e7c9a43c349dfa2300163142))
+
+
 ## [0.42.1](https://github.com/mayocream/koharu/compare/0.42.0..0.42.1) - 2026-04-04
 
 ### 🐛 Bug Fixes
