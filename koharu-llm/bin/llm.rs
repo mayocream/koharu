@@ -110,7 +110,7 @@ async fn main() -> anyhow::Result<()> {
         ..args.model.default_generate_options()
     };
 
-    let out = llm.generate(&args.prompt, &opts, target_language)?;
+    let out = llm.generate(&args.prompt, &opts, target_language, None)?;
 
     println!("{}", out);
     println!(

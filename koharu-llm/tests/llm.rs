@@ -27,7 +27,7 @@ async fn llm_generates_text_for_all_models() -> anyhow::Result<()> {
             ..model.default_generate_options()
         };
 
-        let generated = llm.generate(prompt, &opts, Language::English)?;
+        let generated = llm.generate(prompt, &opts, Language::English, None)?;
         assert!(
             !generated.trim().is_empty(),
             "model {model:?} should return some text"
