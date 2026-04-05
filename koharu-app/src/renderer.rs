@@ -608,7 +608,11 @@ fn align_layout_horizontally(
     layout.width = target_width;
 }
 
-fn align_layout_vertically(layout: &mut LayoutRun<'_>, container_height: f32, valign: VerticalAlign) {
+fn align_layout_vertically(
+    layout: &mut LayoutRun<'_>,
+    container_height: f32,
+    valign: VerticalAlign,
+) {
     if !container_height.is_finite() || container_height <= 0.0 || layout.lines.is_empty() {
         return;
     }
