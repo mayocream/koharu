@@ -240,7 +240,7 @@ export function Workspace() {
         },
       },
       wheel: {
-        preventDefault: true,
+        preventDefault: false,
       },
       pinch: {
         threshold: 0.1,
