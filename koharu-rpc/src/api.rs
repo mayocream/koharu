@@ -169,7 +169,7 @@ struct ExportBatchRequest {
     operation_id = "getConfig",
     tag = "system",
     responses(
-        (status = 200),
+        (status = 200, body = inline(app_config::AppConfig)),
         (status = 503, body = ApiError),
     ),
 )]

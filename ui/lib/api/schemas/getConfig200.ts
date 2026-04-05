@@ -8,7 +8,7 @@ import type { HttpConfig } from './httpConfig'
 import type { PipelineConfig } from './pipelineConfig'
 import type { ProviderConfig } from './providerConfig'
 
-export type UpdateConfig200 = {
+export type GetConfig200 = {
   data?: DataConfig
   http?: HttpConfig
   pipeline?: PipelineConfig

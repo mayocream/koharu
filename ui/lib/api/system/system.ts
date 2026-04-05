@@ -22,6 +22,7 @@ import type {
 import type {
   ApiError,
   FontFaceInfo,
+  GetConfig200,
   GetEngineCatalog200,
   MetaInfo,
   UpdateConfig200,
@@ -36,8 +37,10 @@ export const getGetConfigUrl = () => {
   return `/api/v1/config`
 }
 
-export const getConfig = async (options?: RequestInit): Promise<void> => {
-  return fetchApi<void>(getGetConfigUrl(), {
+export const getConfig = async (
+  options?: RequestInit,
+): Promise<GetConfig200> => {
+  return fetchApi<GetConfig200>(getGetConfigUrl(), {
     ...options,
     method: 'GET',
   })

@@ -56,6 +56,7 @@ impl<'de> Deserialize<'de> for RedactedSecret {
 #[serde(default)]
 pub struct AppConfig {
     pub data: DataConfig,
+    pub http: HttpConfig,
     pub pipeline: PipelineConfig,
     pub providers: Vec<ProviderConfig>,
 }
@@ -100,6 +101,14 @@ pub struct DataConfig {
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, ToSchema)]
+#[serde(default)]
+pub struct HttpConfig {
+    pub connect_timeout: u64,
+    pub read_timeout: u64,
+    pub max_retries: u32,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, ToSchema)]
 pub struct ProviderConfig {
     pub id: String,
     #[serde(skip_serializing_if = "Option::is_none")]
@@ -116,6 +125,16 @@ impl Default for DataConfig {
     fn default() -> Self {
         Self {
             path: default_app_data_root(),
+        }
+    }
+}
+
+impl Default for HttpConfig {
+    fn default() -> Self {
+        Self {
+            connect_timeout: 20,
+            read_timeout: 300,
+            max_retries: 3,
         }
     }
 }
@@ -201,7 +220,25 @@ mod tests {
         .unwrap();
 
         assert_eq!(config.data.path, "/tmp/test");
+        assert_eq!(config.http.connect_timeout, 20);
+        assert_eq!(config.http.read_timeout, 300);
+        assert_eq!(config.http.max_retries, 3);
         assert!(config.providers.is_empty());
+    }
+
+    #[test]
+    fn partial_http_config_uses_defaults_for_missing_fields() {
+        let config: AppConfig = toml::from_str(
+            r#"
+                [http]
+                connect_timeout = 45
+            "#,
+        )
+        .unwrap();
+
+        assert_eq!(config.http.connect_timeout, 45);
+        assert_eq!(config.http.read_timeout, 300);
+        assert_eq!(config.http.max_retries, 3);
     }
 
     #[test]

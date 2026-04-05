@@ -16,6 +16,8 @@ use reqwest_retry::{RetryTransientMiddleware, policies::ExponentialBackoff};
 use tokio::io::{AsyncWriteExt, BufWriter};
 use tokio::sync::broadcast;
 
+use crate::runtime::RuntimeHttpConfig;
+
 const USER_AGENT: &str = concat!(env!("CARGO_PKG_NAME"), "/", env!("CARGO_PKG_VERSION"));
 
 // ---------------------------------------------------------------------------
@@ -32,16 +34,20 @@ pub struct Downloads {
 }
 
 impl Downloads {
-    pub(crate) fn new(downloads_root: PathBuf, huggingface_root: PathBuf) -> Result<Self> {
+    pub(crate) fn new(
+        downloads_root: PathBuf,
+        huggingface_root: PathBuf,
+        http: &RuntimeHttpConfig,
+    ) -> Result<Self> {
         let base = reqwest::Client::builder()
             .user_agent(USER_AGENT)
-            .connect_timeout(Duration::from_secs(20))
-            .read_timeout(Duration::from_secs(60))
+            .connect_timeout(Duration::from_secs(http.connect_timeout_secs))
+            .read_timeout(Duration::from_secs(http.read_timeout_secs))
             .build()?;
         let client = Arc::new(
             ClientBuilder::new(base)
                 .with(RetryTransientMiddleware::new_with_policy(
-                    ExponentialBackoff::builder().build_with_max_retries(3),
+                    ExponentialBackoff::builder().build_with_max_retries(http.max_retries),
                 ))
                 .build(),
         );

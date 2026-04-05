@@ -4,11 +4,13 @@
  * OpenAPI spec version: 0.0.1
  */
 import type { DataConfig } from './dataConfig'
+import type { HttpConfig } from './httpConfig'
 import type { PipelineConfig } from './pipelineConfig'
 import type { ProviderConfig } from './providerConfig'
 
 export type UpdateConfigBody = {
   data?: DataConfig
+  http?: HttpConfig
   pipeline?: PipelineConfig
   providers?: ProviderConfig[]
 }

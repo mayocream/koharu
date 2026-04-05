@@ -64,7 +64,62 @@
         "operationId": "getConfig",
         "responses": {
           "200": {
-            "description": ""
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "data": {
+                      "oneOf": [
+                        {
+                          "$ref": "#/components/schemas/DataConfig"
+                        }
+                      ],
+                      "default": {
+                        "path": "C:\\Users\\Mayo\\AppData\\Local\\Koharu"
+                      }
+                    },
+                    "http": {
+                      "oneOf": [
+                        {
+                          "$ref": "#/components/schemas/HttpConfig"
+                        }
+                      ],
+                      "default": {
+                        "connect_timeout": 20,
+                        "max_retries": 3,
+                        "read_timeout": 300
+                      }
+                    },
+                    "pipeline": {
+                      "oneOf": [
+                        {
+                          "$ref": "#/components/schemas/PipelineConfig"
+                        }
+                      ],
+                      "default": {
+                        "bubble_detector": "comic-text-bubble-detector",
+                        "detector": "comic-text-bubble-detector",
+                        "font_detector": "yuzumarker-font-detection",
+                        "inpainter": "aot-inpainting",
+                        "ocr": "paddle-ocr-vl-1.5",
+                        "renderer": "koharu-renderer",
+                        "segmenter": "comic-text-detector-seg",
+                        "translator": "llm"
+                      }
+                    },
+                    "providers": {
+                      "type": "array",
+                      "items": {
+                        "$ref": "#/components/schemas/ProviderConfig"
+                      },
+                      "default": []
+                    }
+                  }
+                }
+              }
+            }
           },
           "503": {
             "description": "",
@@ -95,6 +150,18 @@
                     ],
                     "default": {
                       "path": "C:\\Users\\Mayo\\AppData\\Local\\Koharu"
+                    }
+                  },
+                  "http": {
+                    "oneOf": [
+                      {
+                        "$ref": "#/components/schemas/HttpConfig"
+                      }
+                    ],
+                    "default": {
+                      "connect_timeout": 20,
+                      "max_retries": 3,
+                      "read_timeout": 300
                     }
                   },
                   "pipeline": {
@@ -143,6 +210,18 @@
                       ],
                       "default": {
                         "path": "C:\\Users\\Mayo\\AppData\\Local\\Koharu"
+                      }
+                    },
+                    "http": {
+                      "oneOf": [
+                        {
+                          "$ref": "#/components/schemas/HttpConfig"
+                        }
+                      ],
+                      "default": {
+                        "connect_timeout": 20,
+                        "max_retries": 3,
+                        "read_timeout": 300
                       }
                     },
                     "pipeline": {
@@ -1847,6 +1926,29 @@
             "items": {
               "$ref": "#/components/schemas/TopFont"
             }
+          }
+        }
+      },
+      "HttpConfig": {
+        "type": "object",
+        "properties": {
+          "connect_timeout": {
+            "type": "integer",
+            "format": "int64",
+            "default": 20,
+            "minimum": 0
+          },
+          "max_retries": {
+            "type": "integer",
+            "format": "int32",
+            "default": 3,
+            "minimum": 0
+          },
+          "read_timeout": {
+            "type": "integer",
+            "format": "int64",
+            "default": 300,
+            "minimum": 0
           }
         }
       },

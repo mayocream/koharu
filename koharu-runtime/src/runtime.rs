@@ -15,6 +15,23 @@ pub enum ComputePolicy {
     CpuOnly,
 }
 
+#[derive(Debug, Clone)]
+pub struct RuntimeHttpConfig {
+    pub connect_timeout_secs: u64,
+    pub read_timeout_secs: u64,
+    pub max_retries: u32,
+}
+
+impl Default for RuntimeHttpConfig {
+    fn default() -> Self {
+        Self {
+            connect_timeout_secs: 20,
+            read_timeout_secs: 300,
+            max_retries: 3,
+        }
+    }
+}
+
 pub fn default_app_data_root() -> Utf8PathBuf {
     let root = dirs::data_local_dir()
         .or_else(dirs::data_dir)
@@ -38,10 +55,19 @@ struct RuntimeInner {
 
 impl Runtime {
     pub fn new(root: impl Into<PathBuf>, compute: ComputePolicy) -> Result<Self> {
+        Self::new_with_http(root, compute, RuntimeHttpConfig::default())
+    }
+
+    pub fn new_with_http(
+        root: impl Into<PathBuf>,
+        compute: ComputePolicy,
+        http: RuntimeHttpConfig,
+    ) -> Result<Self> {
         let root = root.into();
         let downloads = Downloads::new(
             root.join("runtime").join(".downloads"),
             root.join("models").join("huggingface"),
+            &http,
         )?;
 
         Ok(Self {
