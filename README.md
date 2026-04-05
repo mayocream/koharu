@@ -24,7 +24,7 @@ Under the hood, Koharu uses [candle](https://github.com/huggingface/candle) and 
 - OCR for manga dialogue, captions, and other page text
 - Inpainting to remove source lettering from the page
 - Translation with local or remote LLM backends
-- Vertical CJK layout and text rendering
+- Vertical CJK layout and text rendering with automatic contrasting black/white default outlines
 - Layered PSD export with editable text
 - Local HTTP API and MCP server for automation
 
@@ -73,6 +73,12 @@ koharu.exe --port 4000 --headless
 You can then open the Web UI at `http://localhost:4000`.
 
 For runtime modes, ports, and local endpoints, see [Run GUI, Headless, and MCP Modes](https://koharu.rs/how-to/run-gui-headless-and-mcp/).
+
+### Runtime settings
+
+`Settings > Runtime` controls the shared local data path plus HTTP connect timeout, read timeout, and retry count used by downloads and provider requests.
+
+Those values are loaded at startup, so applying changes saves the config and restarts the app.
 
 ## GPU acceleration
 
@@ -149,21 +155,34 @@ Koharu supports both local and remote LLM backends. When possible, it also tries
 
 #### Local LLMs
 
-Koharu supports quantized GGUF models through [llama.cpp](https://github.com/ggml-org/llama.cpp). These models run on your machine and are downloaded on demand when you select them in Settings. Suggested models:
+Koharu supports quantized GGUF models through [llama.cpp](https://github.com/ggml-org/llama.cpp). These models run on your machine and are downloaded on demand when you select them in Settings.
+
+If you want general-purpose local models first, the built-in picker includes:
+
+- Gemma 4 instruct: [gemma4-e2b-it](https://huggingface.co/unsloth/gemma-4-E2B-it-GGUF), [gemma4-e4b-it](https://huggingface.co/unsloth/gemma-4-E4B-it-GGUF), [gemma4-26b-a4b-it](https://huggingface.co/unsloth/gemma-4-26B-A4B-it-GGUF), [gemma4-31b-it](https://huggingface.co/unsloth/gemma-4-31B-it-GGUF)
+- Qwen 3.5: [qwen3.5-0.8b](https://huggingface.co/unsloth/Qwen3.5-0.8B-GGUF), [qwen3.5-2b](https://huggingface.co/unsloth/Qwen3.5-2B-GGUF), [qwen3.5-4b](https://huggingface.co/unsloth/Qwen3.5-4B-GGUF), [qwen3.5-9b](https://huggingface.co/unsloth/Qwen3.5-9B-GGUF), [qwen3.5-27b](https://huggingface.co/unsloth/Qwen3.5-27B-GGUF), [qwen3.5-35b-a3b](https://huggingface.co/unsloth/Qwen3.5-35B-A3B-GGUF)
+
+If you want uncensored / NSFW-capable local models, the built-in picker also includes:
+
+- Gemma 4 uncensored: [gemma4-e2b-uncensored](https://huggingface.co/HauhauCS/Gemma-4-E2B-Uncensored-HauhauCS-Aggressive), [gemma4-e4b-uncensored](https://huggingface.co/HauhauCS/Gemma-4-E4B-Uncensored-HauhauCS-Aggressive)
+- Qwen 3.5 uncensored: [qwen3.5-2b-uncensored](https://huggingface.co/HauhauCS/Qwen3.5-2B-Uncensored-HauhauCS-Aggressive), [qwen3.5-4b-uncensored](https://huggingface.co/HauhauCS/Qwen3.5-4B-Uncensored-HauhauCS-Aggressive), [qwen3.5-9b-uncensored](https://huggingface.co/HauhauCS/Qwen3.5-9B-Uncensored-HauhauCS-Aggressive), [qwen3.5-27b-uncensored](https://huggingface.co/HauhauCS/Qwen3.5-27B-Uncensored-HauhauCS-Aggressive), [qwen3.5-35b-a3b-uncensored](https://huggingface.co/HauhauCS/Qwen3.5-35B-A3B-Uncensored-HauhauCS-Aggressive)
+
+If you want fine-tuned translation models, built-in options include:
 
 For translating to English:
 
 - [vntl-llama3-8b-v2](https://huggingface.co/lmg-anon/vntl-llama3-8b-v2-gguf): around 8.5 GB in Q8_0, best when translation quality matters more than speed or memory use
-- [lfm2-350m-enjp-mt](https://huggingface.co/LiquidAI/LFM2-350M-ENJP-MT-GGUF): very small and easy to run on CPUs or low-memory GPUs, good for quick previews and low-spec machines
+- [lfm2.5-1.2b-instruct](https://huggingface.co/LiquidAI/LFM2.5-1.2B-Instruct-GGUF): a smaller multilingual instruct model that is easier to run on CPUs or low-memory GPUs
+- [sugoi-14b-ultra](https://huggingface.co/sugoitoolkit/Sugoi-14B-Ultra-GGUF) and [sugoi-32b-ultra](https://huggingface.co/sugoitoolkit/Sugoi-32B-Ultra-GGUF): larger translation-oriented options when you have more VRAM or RAM available
 
 For translating to Chinese:
 
 - [sakura-galtransl-7b-v3.7](https://huggingface.co/SakuraLLM/Sakura-GalTransl-7B-v3.7): around 6.3 GB, a good balance of quality and speed on 8 GB GPUs
 - [sakura-1.5b-qwen2.5-v1.0](https://huggingface.co/shing3232/Sakura-1.5B-Qwen2.5-v1.0-GGUF-IMX): lighter and faster, useful on mid-range GPUs or CPU-only setups
 
-For other languages, you can use:
+For broader language coverage:
 
-- [hunyuan-7b-mt-v1.0](https://huggingface.co/Mungert/Hunyuan-MT-7B-GGUF): around 6.3 GB, with decent multilingual translation quality
+- [hunyuan-mt-7b](https://huggingface.co/Mungert/Hunyuan-MT-7B-GGUF): around 6.3 GB, with broad multilingual translation coverage
 
 LLMs are downloaded on demand when you pick a model in Settings. If you are constrained by memory, start with a smaller model. If you have the VRAM or RAM budget, the 7B and 8B models generally produce better translations.
 
@@ -176,6 +195,14 @@ Koharu can also translate through remote or self-hosted API providers instead of
 - Claude
 - DeepSeek
 - OpenAI Compatible, including LM Studio, OpenRouter, or any endpoint that exposes the OpenAI-style `/v1/models` and `/v1/chat/completions` APIs
+
+Current built-in remote model defaults:
+
+- OpenAI: `gpt-5-mini` (`GPT-5 mini`)
+- Gemini: `gemini-3.1-flash-lite-preview` (`Gemini 3.1 Flash-Lite Preview`)
+- Claude: `claude-haiku-4-5` (`Claude Haiku 4.5`)
+- DeepSeek: `deepseek-chat` (`DeepSeek-V3.2-Chat`)
+- OpenAI Compatible: models are discovered from the configured endpoint
 
 Remote providers are configured in **Settings > API Keys**. OpenAI-compatible providers also need a custom base URL. API keys are optional for local servers such as LM Studio, but are usually required for hosted services such as OpenRouter.
 

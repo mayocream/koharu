@@ -37,21 +37,21 @@ http://127.0.0.1:<PORT>/api/v1
 
 ### 元信息与字体
 
-| 方法 | 路径 | 用途 |
-| --- | --- | --- |
-| `GET` | `/meta` | 获取应用版本与当前 ML 后端 |
-| `GET` | `/fonts` | 列出可用于渲染的字体族 |
+| 方法  | 路径     | 用途                       |
+| ----- | -------- | -------------------------- |
+| `GET` | `/meta`  | 获取应用版本与当前 ML 后端 |
+| `GET` | `/fonts` | 列出可用于渲染的字体族     |
 
 ### 文档
 
-| 方法 | 路径 | 用途 |
-| --- | --- | --- |
-| `GET` | `/documents` | 列出已加载文档 |
-| `POST` | `/documents/import?mode=replace` | 用上传图片替换当前文档集 |
-| `POST` | `/documents/import?mode=append` | 将上传图片追加到当前文档集 |
-| `GET` | `/documents/{documentId}` | 获取一个文档及其全部文本块元数据 |
-| `GET` | `/documents/{documentId}/thumbnail` | 获取缩略图 |
-| `GET` | `/documents/{documentId}/layers/{layer}` | 获取指定图层 |
+| 方法   | 路径                                     | 用途                             |
+| ------ | ---------------------------------------- | -------------------------------- |
+| `GET`  | `/documents`                             | 列出已加载文档                   |
+| `POST` | `/documents/import?mode=replace`         | 用上传图片替换当前文档集         |
+| `POST` | `/documents/import?mode=append`          | 将上传图片追加到当前文档集       |
+| `GET`  | `/documents/{documentId}`                | 获取一个文档及其全部文本块元数据 |
+| `GET`  | `/documents/{documentId}/thumbnail`      | 获取缩略图                       |
+| `GET`  | `/documents/{documentId}/layers/{layer}` | 获取指定图层                     |
 
 导入接口使用 multipart form data，并通过重复的 `files` 字段传入文件。
 
@@ -65,16 +65,16 @@ http://127.0.0.1:<PORT>/api/v1
 
 ### 页面管线
 
-| 方法 | 路径 | 用途 |
-| --- | --- | --- |
-| `POST` | `/documents/{documentId}/detect` | 检测文本块和版面结构 |
-| `POST` | `/documents/{documentId}/ocr` | 对检测出的文本块执行 OCR |
-| `POST` | `/documents/{documentId}/inpaint` | 使用当前掩码去除原始文字 |
-| `POST` | `/documents/{documentId}/render` | 渲染译文 |
-| `POST` | `/documents/{documentId}/translate` | 翻译单个文本块或整页 |
-| `PUT` | `/documents/{documentId}/mask-region` | 替换或更新分割掩码局部区域 |
-| `PUT` | `/documents/{documentId}/brush-region` | 向 brush 图层写入一个局部补丁 |
-| `POST` | `/documents/{documentId}/inpaint-region` | 仅对指定矩形区域重新修复 |
+| 方法   | 路径                                     | 用途                          |
+| ------ | ---------------------------------------- | ----------------------------- |
+| `POST` | `/documents/{documentId}/detect`         | 检测文本块和版面结构          |
+| `POST` | `/documents/{documentId}/ocr`            | 对检测出的文本块执行 OCR      |
+| `POST` | `/documents/{documentId}/inpaint`        | 使用当前掩码去除原始文字      |
+| `POST` | `/documents/{documentId}/render`         | 渲染译文                      |
+| `POST` | `/documents/{documentId}/translate`      | 翻译单个文本块或整页          |
+| `PUT`  | `/documents/{documentId}/mask-region`    | 替换或更新分割掩码局部区域    |
+| `PUT`  | `/documents/{documentId}/brush-region`   | 向 brush 图层写入一个局部补丁 |
+| `POST` | `/documents/{documentId}/inpaint-region` | 仅对指定矩形区域重新修复      |
 
 常用请求细节：
 
@@ -86,11 +86,11 @@ http://127.0.0.1:<PORT>/api/v1
 
 ### 文本块
 
-| 方法 | 路径 | 用途 |
-| --- | --- | --- |
-| `POST` | `/documents/{documentId}/text-blocks` | 通过 `x`、`y`、`width`、`height` 创建文本块 |
-| `PATCH` | `/documents/{documentId}/text-blocks/{textBlockId}` | 更新文本、译文、框几何或样式 |
-| `DELETE` | `/documents/{documentId}/text-blocks/{textBlockId}` | 删除文本块 |
+| 方法     | 路径                                                | 用途                                        |
+| -------- | --------------------------------------------------- | ------------------------------------------- |
+| `POST`   | `/documents/{documentId}/text-blocks`               | 通过 `x`、`y`、`width`、`height` 创建文本块 |
+| `PATCH`  | `/documents/{documentId}/text-blocks/{textBlockId}` | 更新文本、译文、框几何或样式                |
+| `DELETE` | `/documents/{documentId}/text-blocks/{textBlockId}` | 删除文本块                                  |
 
 当前文本块 patch 结构包含：
 
@@ -106,24 +106,24 @@ http://127.0.0.1:<PORT>/api/v1
 
 ### 导出
 
-| 方法 | 路径 | 用途 |
-| --- | --- | --- |
-| `GET` | `/documents/{documentId}/export?layer=rendered` | 导出单张渲染图 |
-| `GET` | `/documents/{documentId}/export?layer=inpainted` | 导出单张修复图 |
-| `GET` | `/documents/{documentId}/export/psd` | 导出单个分层 PSD |
-| `POST` | `/exports?layer=rendered` | 批量导出所有渲染页面 |
-| `POST` | `/exports?layer=inpainted` | 批量导出所有修复页面 |
+| 方法   | 路径                                             | 用途                 |
+| ------ | ------------------------------------------------ | -------------------- |
+| `GET`  | `/documents/{documentId}/export?layer=rendered`  | 导出单张渲染图       |
+| `GET`  | `/documents/{documentId}/export?layer=inpainted` | 导出单张修复图       |
+| `GET`  | `/documents/{documentId}/export/psd`             | 导出单个分层 PSD     |
+| `POST` | `/exports?layer=rendered`                        | 批量导出所有渲染页面 |
+| `POST` | `/exports?layer=inpainted`                       | 批量导出所有修复页面 |
 
 单文档导出端点返回二进制文件内容。批量导出返回 JSON，其中包含写出的文件数量。
 
 ### LLM 控制
 
-| 方法 | 路径 | 用途 |
-| --- | --- | --- |
-| `GET` | `/llm/catalog` | 获取按本地/提供商分组的 LLM 目录 |
-| `GET` | `/llm` | 获取当前 LLM 状态 |
-| `PUT` | `/llm` | 加载本地或提供商 target |
-| `DELETE` | `/llm` | 卸载当前模型 |
+| 方法     | 路径           | 用途                             |
+| -------- | -------------- | -------------------------------- |
+| `GET`    | `/llm/catalog` | 获取按本地/提供商分组的 LLM 目录 |
+| `GET`    | `/llm`         | 获取当前 LLM 状态                |
+| `PUT`    | `/llm`         | 加载本地或提供商 target          |
+| `DELETE` | `/llm`         | 卸载当前模型                     |
 
 常用请求细节：
 
@@ -149,10 +149,10 @@ http://127.0.0.1:<PORT>/api/v1
 
 ### 管线任务
 
-| 方法 | 路径 | 用途 |
-| --- | --- | --- |
-| `POST` | `/jobs/pipeline` | 启动完整处理任务 |
-| `DELETE` | `/jobs/{jobId}` | 取消一个正在运行的任务 |
+| 方法     | 路径             | 用途                   |
+| -------- | ---------------- | ---------------------- |
+| `POST`   | `/jobs/pipeline` | 启动完整处理任务       |
+| `DELETE` | `/jobs/{jobId}`  | 取消一个正在运行的任务 |
 
 管线任务请求可以包含：
 
@@ -187,7 +187,7 @@ GET /events
 1. `POST /documents/import?mode=replace`
 2. `POST /documents/{documentId}/detect`
 3. `POST /documents/{documentId}/ocr`
-4. `POST /llm/load`
+4. `PUT /llm`
 5. `POST /documents/{documentId}/translate`
 6. `POST /documents/{documentId}/inpaint`
 7. `POST /documents/{documentId}/render`

@@ -4,128 +4,82 @@ title: Settings Reference
 
 # Settings Reference
 
-Koharu's Settings screen exposes appearance, language, device, provider, and local-LLM configuration. This page documents the current settings surface as implemented in the app.
+Koharu's Settings screen currently exposes five main areas:
+
+- `Appearance`
+- `Engines`
+- `API Keys`
+- `Runtime`
+- `About`
+
+This page documents the current settings surface as implemented in the app.
 
 ## Appearance
 
-Theme options:
+The `Appearance` tab currently includes:
 
-- `Light`
-- `Dark`
-- `System`
+- theme: `Light`, `Dark`, or `System`
+- UI language from the bundled translation list
+- `Rendering Font`, which is used when Koharu renders translated text onto the page
 
-The app applies the selected theme immediately through the frontend theme provider.
+Theme, language, and rendering-font changes apply immediately in the frontend.
 
-## Language
+## Engines
 
-The current UI locale list comes from the bundled translation resources.
+The `Engines` tab selects the backend used for each pipeline stage:
 
-Currently shipped locales are:
+- `Detector`
+- `Bubble Detector`
+- `Font Detector`
+- `Segmenter`
+- `OCR`
+- `Translator`
+- `Inpainter`
+- `Renderer`
 
-- `en-US`
-- `es-ES`
-- `ja-JP`
-- `ru-RU`
-- `zh-CN`
-- `zh-TW`
-
-Changing the UI language updates the frontend locale and also influences language-aware LLM model listing in the current implementation.
-
-## Device
-
-The Settings screen shows the current ML compute backend as `ML Compute`.
-
-This value comes from the app metadata endpoint and reflects the runtime backend Koharu is currently using, such as CPU or a GPU-backed path.
+These values are stored in the shared app config and save immediately when changed.
 
 ## API Keys
 
-The current built-in provider key section covers:
+The `API Keys` tab currently covers these built-in providers:
 
 - `OpenAI`
 - `Gemini`
 - `Claude`
 - `DeepSeek`
+- `OpenAI Compatible`
 
-Important behavior:
+Current behavior:
 
-- API keys are stored through the local keyring integration rather than plain frontend storage
-- Gemini is marked as a free-tier provider in the current UI
-- the password-style input is only a visibility toggle in the UI, not a different storage mode
+- provider API keys are stored through the system keyring rather than plain text in `config.toml`
+- provider base URLs are stored in the app config
+- `OpenAI Compatible` requires a custom `Base URL`
+- the app discovers models dynamically for `OpenAI Compatible` by querying the configured endpoint
+- clearing a key removes it from the keyring
 
-## Local LLM and OpenAI-compatible providers
+The API response intentionally redacts saved keys rather than returning the raw secret.
 
-This section is used for local servers such as Ollama and LM Studio, and for custom OpenAI-compatible endpoints.
+## Runtime
 
-### Presets
+The `Runtime` tab groups restart-required settings that affect the shared local runtime:
 
-Current presets:
+- `Data Path`
+- `HTTP Connect Timeout`
+- `HTTP Read Timeout`
+- `HTTP Max Retries`
 
-- `Ollama`
-- `LM Studio`
-- `Preset 1`
-- `Preset 2`
+Current behavior:
 
-Default base URLs:
+- `Data Path` controls where Koharu stores runtime packages, downloaded models, page manifests, and image blobs
+- `HTTP Connect Timeout` sets how long Koharu waits while establishing HTTP connections
+- `HTTP Read Timeout` sets how long Koharu waits while reading HTTP responses
+- `HTTP Max Retries` controls automatic retries for transient HTTP failures
+- these HTTP values are used by the shared runtime HTTP client for downloads and provider-backed requests
+- applying changes saves the config and restarts the desktop app because the runtime client is built at startup
 
-- Ollama: `http://localhost:11434/v1`
-- LM Studio: `http://127.0.0.1:1234/v1`
-- Preset 1: empty until configured
-- Preset 2: empty until configured
+## About
 
-Each preset stores its own:
-
-- `Base URL`
-- `API Key`
-- `Model name`
-- `Temperature`
-- `Max tokens`
-- `Custom system prompt`
-
-That lets you keep several compatible backends configured and switch between them from the same settings screen.
-
-### Required fields for the model picker
-
-In the current implementation, a preset-backed OpenAI-compatible model only becomes selectable when both of these are filled in:
-
-- `Base URL`
-- `Model name`
-
-An empty preset does not appear as a usable model entry.
-
-### Advanced fields
-
-The expandable advanced section currently exposes:
-
-- `Temperature`
-- `Max tokens`
-- `Custom system prompt`
-
-Behavior notes:
-
-- leaving `Temperature` or `Max tokens` empty sends no override
-- leaving `Custom system prompt` empty uses Koharu's default manga translation system prompt
-- the reset button clears only the custom prompt override for the current preset
-
-### Test Connection
-
-`Test Connection` is a connectivity check for the current preset.
-
-The current implementation:
-
-- sends a request to Koharu's `/llm/ping` path
-- checks the preset `Base URL`
-- optionally includes the preset API key
-- reports success or failure inline
-- shows model count and latency on success
-- uses a 5-second timeout for the underlying compatible-model listing
-
-This is a connectivity test, not a model load.
-
-## About page
-
-Settings links to a separate About page.
-
-The About screen currently shows:
+The `About` tab currently shows:
 
 - the current app version
 - whether a newer GitHub release exists
@@ -138,11 +92,11 @@ In packaged app mode, the version check compares the local app version against t
 
 The current settings behavior is split across storage layers:
 
+- `config.toml` stores shared app config such as `data`, `http`, `pipeline`, and provider `baseUrl`
 - provider API keys are stored through the system keyring
-- local LLM preset config is persisted in Koharu's frontend preferences store
-- theme and other UI preferences also persist locally
+- theme, language, and rendering-font preferences are stored in the frontend preferences layer
 
-That means clearing frontend preferences is not the same as clearing saved provider API keys.
+That means clearing frontend preferences is not the same as clearing saved provider API keys or shared runtime config.
 
 ## Related pages
 

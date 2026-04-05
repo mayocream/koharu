@@ -37,21 +37,21 @@ http://127.0.0.1:<PORT>/api/v1
 
 ### Meta とフォント
 
-| Method | Path | 目的 |
-| --- | --- | --- |
-| `GET` | `/meta` | アプリバージョンと有効な ML バックエンドを取得する |
-| `GET` | `/fonts` | レンダリングに使える font family を一覧する |
+| Method | Path     | 目的                                               |
+| ------ | -------- | -------------------------------------------------- |
+| `GET`  | `/meta`  | アプリバージョンと有効な ML バックエンドを取得する |
+| `GET`  | `/fonts` | レンダリングに使える font family を一覧する        |
 
 ### Documents
 
-| Method | Path | 目的 |
-| --- | --- | --- |
-| `GET` | `/documents` | 読み込み済みドキュメント一覧を取得する |
-| `POST` | `/documents/import?mode=replace` | アップロード画像で現在のドキュメント集合を置き換える |
-| `POST` | `/documents/import?mode=append` | アップロード画像を現在のドキュメント集合に追加する |
-| `GET` | `/documents/{documentId}` | 1 件のドキュメントと全 text-block 情報を取得する |
-| `GET` | `/documents/{documentId}/thumbnail` | サムネイル画像を取得する |
-| `GET` | `/documents/{documentId}/layers/{layer}` | 1 つの画像レイヤーを取得する |
+| Method | Path                                     | 目的                                                 |
+| ------ | ---------------------------------------- | ---------------------------------------------------- |
+| `GET`  | `/documents`                             | 読み込み済みドキュメント一覧を取得する               |
+| `POST` | `/documents/import?mode=replace`         | アップロード画像で現在のドキュメント集合を置き換える |
+| `POST` | `/documents/import?mode=append`          | アップロード画像を現在のドキュメント集合に追加する   |
+| `GET`  | `/documents/{documentId}`                | 1 件のドキュメントと全 text-block 情報を取得する     |
+| `GET`  | `/documents/{documentId}/thumbnail`      | サムネイル画像を取得する                             |
+| `GET`  | `/documents/{documentId}/layers/{layer}` | 1 つの画像レイヤーを取得する                         |
 
 import エンドポイントは、`files` フィールドを繰り返し持つ multipart form data を使います。
 
@@ -65,16 +65,16 @@ import エンドポイントは、`files` フィールドを繰り返し持つ m
 
 ### ページパイプライン
 
-| Method | Path | 目的 |
-| --- | --- | --- |
-| `POST` | `/documents/{documentId}/detect` | テキストブロックとレイアウトを検出する |
-| `POST` | `/documents/{documentId}/ocr` | 検出済み text block に OCR をかける |
-| `POST` | `/documents/{documentId}/inpaint` | 現在の mask を使って元文字を除去する |
-| `POST` | `/documents/{documentId}/render` | 翻訳済みテキストを描画する |
-| `POST` | `/documents/{documentId}/translate` | 1 ブロックまたはページ全体を翻訳する |
-| `PUT` | `/documents/{documentId}/mask-region` | segmentation mask の一部を置換または更新する |
-| `PUT` | `/documents/{documentId}/brush-region` | brush layer に patch を書き込む |
-| `POST` | `/documents/{documentId}/inpaint-region` | 矩形領域だけを再 inpaint する |
+| Method | Path                                     | 目的                                         |
+| ------ | ---------------------------------------- | -------------------------------------------- |
+| `POST` | `/documents/{documentId}/detect`         | テキストブロックとレイアウトを検出する       |
+| `POST` | `/documents/{documentId}/ocr`            | 検出済み text block に OCR をかける          |
+| `POST` | `/documents/{documentId}/inpaint`        | 現在の mask を使って元文字を除去する         |
+| `POST` | `/documents/{documentId}/render`         | 翻訳済みテキストを描画する                   |
+| `POST` | `/documents/{documentId}/translate`      | 1 ブロックまたはページ全体を翻訳する         |
+| `PUT`  | `/documents/{documentId}/mask-region`    | segmentation mask の一部を置換または更新する |
+| `PUT`  | `/documents/{documentId}/brush-region`   | brush layer に patch を書き込む              |
+| `POST` | `/documents/{documentId}/inpaint-region` | 矩形領域だけを再 inpaint する                |
 
 実用上のリクエスト詳細:
 
@@ -86,11 +86,11 @@ import エンドポイントは、`files` フィールドを繰り返し持つ m
 
 ## Text blocks
 
-| Method | Path | 目的 |
-| --- | --- | --- |
-| `POST` | `/documents/{documentId}/text-blocks` | `x`, `y`, `width`, `height` から新しい text block を作る |
-| `PATCH` | `/documents/{documentId}/text-blocks/{textBlockId}` | テキスト、翻訳、box geometry、style を patch する |
-| `DELETE` | `/documents/{documentId}/text-blocks/{textBlockId}` | text block を削除する |
+| Method   | Path                                                | 目的                                                     |
+| -------- | --------------------------------------------------- | -------------------------------------------------------- |
+| `POST`   | `/documents/{documentId}/text-blocks`               | `x`, `y`, `width`, `height` から新しい text block を作る |
+| `PATCH`  | `/documents/{documentId}/text-blocks/{textBlockId}` | テキスト、翻訳、box geometry、style を patch する        |
+| `DELETE` | `/documents/{documentId}/text-blocks/{textBlockId}` | text block を削除する                                    |
 
 現在の text-block patch には次の項目があります。
 
@@ -106,24 +106,24 @@ import エンドポイントは、`files` フィールドを繰り返し持つ m
 
 ## Export
 
-| Method | Path | 目的 |
-| --- | --- | --- |
-| `GET` | `/documents/{documentId}/export?layer=rendered` | rendered image を 1 件書き出す |
-| `GET` | `/documents/{documentId}/export?layer=inpainted` | inpainted image を 1 件書き出す |
-| `GET` | `/documents/{documentId}/export/psd` | レイヤー付き PSD を 1 件書き出す |
-| `POST` | `/exports?layer=rendered` | 全 rendered ページを書き出す |
-| `POST` | `/exports?layer=inpainted` | 全 inpainted ページを書き出す |
+| Method | Path                                             | 目的                             |
+| ------ | ------------------------------------------------ | -------------------------------- |
+| `GET`  | `/documents/{documentId}/export?layer=rendered`  | rendered image を 1 件書き出す   |
+| `GET`  | `/documents/{documentId}/export?layer=inpainted` | inpainted image を 1 件書き出す  |
+| `GET`  | `/documents/{documentId}/export/psd`             | レイヤー付き PSD を 1 件書き出す |
+| `POST` | `/exports?layer=rendered`                        | 全 rendered ページを書き出す     |
+| `POST` | `/exports?layer=inpainted`                       | 全 inpainted ページを書き出す    |
 
 単一ドキュメント用 export エンドポイントはバイナリファイル内容を返します。一括 export は、書き出した件数を含む JSON を返します。
 
 ## LLM 制御
 
-| Method | Path | 目的 |
-| --- | --- | --- |
-| `GET` | `/llm/catalog` | ローカル/プロバイダ別に整理された LLM カタログを取得する |
-| `GET` | `/llm` | 現在の LLM 状態を取得する |
-| `PUT` | `/llm` | ローカルまたはプロバイダ target を読み込む |
-| `DELETE` | `/llm` | 現在のモデルをアンロードする |
+| Method   | Path           | 目的                                                     |
+| -------- | -------------- | -------------------------------------------------------- |
+| `GET`    | `/llm/catalog` | ローカル/プロバイダ別に整理された LLM カタログを取得する |
+| `GET`    | `/llm`         | 現在の LLM 状態を取得する                                |
+| `PUT`    | `/llm`         | ローカルまたはプロバイダ target を読み込む               |
+| `DELETE` | `/llm`         | 現在のモデルをアンロードする                             |
 
 実用上のリクエスト詳細:
 
@@ -133,11 +133,13 @@ import エンドポイントは、`files` フィールドを繰り返し持つ m
 
 ## プロバイダ設定
 
-プロバイダ設定は `GET /config` と `PUT /config` に統合されました。
+プロバイダ設定とランタイム設定は `GET /config` と `PUT /config` に統合されています。
 
-- `llm.providers` に `baseUrl` などの非シークレット設定を保存します
-- 読み出しでは生の API キーは返さず、`hasApiKey` のみ返します
-- API キーの設定/削除も `PUT /config` で行います
+- 現在の config ボディはトップレベルに `data`、`http`、`pipeline`、`providers` を持ちます
+- `providers` には `id` や `base_url` などの値を保存します
+- 保存済み API キーは生値ではなく、マスク済みプレースホルダとして返されます
+- `http { connect_timeout, read_timeout, max_retries }` はダウンロードや provider リクエストに使う共有ランタイム HTTP クライアントを制御します
+- `pipeline` には各パイプライン段階で選ばれた engine id が保存されます
 
 現在の組み込み provider id は次です。
 
@@ -149,10 +151,10 @@ import エンドポイントは、`files` フィールドを繰り返し持つ m
 
 ## パイプライン job
 
-| Method | Path | 目的 |
-| --- | --- | --- |
-| `POST` | `/jobs/pipeline` | フル処理 job を開始する |
-| `DELETE` | `/jobs/{jobId}` | 実行中の pipeline job をキャンセルする |
+| Method   | Path             | 目的                                   |
+| -------- | ---------------- | -------------------------------------- |
+| `POST`   | `/jobs/pipeline` | フル処理 job を開始する                |
+| `DELETE` | `/jobs/{jobId}`  | 実行中の pipeline job をキャンセルする |
 
 pipeline job リクエストには次を含められます。
 
@@ -187,7 +189,7 @@ GET /events
 1. `POST /documents/import?mode=replace`
 2. `POST /documents/{documentId}/detect`
 3. `POST /documents/{documentId}/ocr`
-4. `POST /llm/load`
+4. `PUT /llm`
 5. `POST /documents/{documentId}/translate`
 6. `POST /documents/{documentId}/inpaint`
 7. `POST /documents/{documentId}/render`

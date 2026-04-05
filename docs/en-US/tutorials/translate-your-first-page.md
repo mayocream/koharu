@@ -80,6 +80,7 @@ Koharu helps with text layout and vertical CJK rendering, but the final page sti
 - tone and character voice
 - line breaks and bubble fit
 - font choice and stroke readability
+  Koharu's default stroke choice now auto-picks a black or white outline for contrast, but you can still override it manually when the page needs something else.
 - blocks whose source OCR looked uncertain
 
 If a translation reads correctly but still looks cramped, adjust the text block or styling before exporting.

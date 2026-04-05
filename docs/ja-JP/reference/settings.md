@@ -4,145 +4,99 @@ title: 設定リファレンス
 
 # 設定リファレンス
 
-Koharu の設定画面では、外観、言語、デバイス、プロバイダ、ローカル LLM の設定を扱えます。このページでは、現在アプリに実装されている設定項目をまとめます。
+現在の Koharu の Settings 画面は、主に次の 5 セクションで構成されています。
 
-## 外観
+- `Appearance`
+- `Engines`
+- `API Keys`
+- `Runtime`
+- `About`
 
-テーマの選択肢:
+このページでは、現在のアプリ実装に基づく設定項目をまとめます。
 
-- `Light`
-- `Dark`
-- `System`
+## Appearance
 
-アプリは選択したテーマをフロントエンドのテーマプロバイダ経由で即座に反映します。
+`Appearance` タブには現在次が含まれます。
 
-## 言語
+- テーマ: `Light` / `Dark` / `System`
+- 同梱済み翻訳リソースから選ぶ UI 言語
+- 翻訳テキスト描画に使う `Rendering Font`
 
-現在の UI ロケール一覧は、同梱されている翻訳リソースから読み込まれます。
+テーマ、言語、描画フォントの変更はフロントエンド側で即時反映されます。
 
-現在同梱されているロケール:
+## Engines
 
-- `en-US`
-- `es-ES`
-- `ja-JP`
-- `ru-RU`
-- `zh-CN`
-- `zh-TW`
+`Engines` タブでは、各パイプライン段階で使うバックエンドを選択します。
 
-UI 言語を変更すると、フロントエンドのロケールが更新され、現在の実装では言語に応じた LLM モデル一覧にも影響します。
+- `Detector`
+- `Bubble Detector`
+- `Font Detector`
+- `Segmenter`
+- `OCR`
+- `Translator`
+- `Inpainter`
+- `Renderer`
 
-## デバイス
+これらの値は共有アプリ設定に保存され、変更時に即時保存されます。
 
-設定画面には、現在の ML 計算バックエンドが `ML Compute` として表示されます。
+## API Keys
 
-この値はアプリのメタデータエンドポイントから取得され、CPU や GPU バックエンドなど、Koharu が実際に使っているランタイム経路を反映します。
-
-## API キー
-
-現在の組み込みプロバイダのキー設定対象:
+`API Keys` タブで現在扱う組み込み provider は次の通りです。
 
 - `OpenAI`
 - `Gemini`
 - `Claude`
 - `DeepSeek`
+- `OpenAI Compatible`
 
-重要な挙動:
+現在の挙動:
 
-- API キーは単純なフロントエンド保存ではなく、ローカルの keyring 連携を通じて保存されます
-- 現在の UI では Gemini は無料枠プロバイダとして表示されます
-- パスワード風の入力欄は UI 上の表示切り替えであり、別の保存方式ではありません
+- provider の API キーは `config.toml` ではなくシステム keyring に保存されます
+- provider の `Base URL` は共有アプリ設定に保存されます
+- `OpenAI Compatible` ではカスタム `Base URL` が必須です
+- `OpenAI Compatible` のモデル一覧は設定済みエンドポイントへの問い合わせで動的取得されます
+- キーをクリアすると keyring から削除されます
 
-## ローカル LLM と OpenAI 互換プロバイダ
+API レスポンスでは保存済みキーは生値ではなく、マスク済みの値として返されます。
 
-このセクションは、Ollama や LM Studio のようなローカルサーバーや、独自の OpenAI 互換エンドポイントに使います。
+## Runtime
 
-### プリセット
+`Runtime` タブでは、共有ローカルランタイムに影響する再起動必須の設定をまとめています。
 
-現在のプリセット:
+- `Data Path`
+- `HTTP Connect Timeout`
+- `HTTP Read Timeout`
+- `HTTP Max Retries`
 
-- `Ollama`
-- `LM Studio`
-- `Preset 1`
-- `Preset 2`
+現在の挙動:
 
-既定の Base URL:
+- `Data Path` はランタイムパッケージ、ダウンロード済みモデル、ページマニフェスト、画像 blob の保存先です
+- `HTTP Connect Timeout` は HTTP 接続確立の待機時間です
+- `HTTP Read Timeout` は HTTP レスポンス読み取りの待機時間です
+- `HTTP Max Retries` は一時的な HTTP 障害への自動再試行回数です
+- これらの HTTP 値はダウンロードや provider リクエストに使う共有ランタイム HTTP クライアントに適用されます
+- これらの値は起動時に読み込まれるため、適用時は設定保存後にデスクトップアプリを再起動します
 
-- Ollama: `http://localhost:11434/v1`
-- LM Studio: `http://127.0.0.1:1234/v1`
-- Preset 1: empty until configured
-- Preset 2: empty until configured
+## About
 
-各プリセットごとに次を保持します。
+`About` タブには現在次が表示されます。
 
-- `Base URL`
-- `API Key`
-- `Model name`
-- `Temperature`
-- `Max tokens`
-- `Custom system prompt`
+- 現在のアプリバージョン
+- より新しい GitHub リリースの有無
+- 作者リンク
+- リポジトリリンク
 
-これにより、複数の互換バックエンドを同時に設定し、同じ設定画面から切り替えられます。
-
-### モデルピッカーに必要な項目
-
-現在の実装では、プリセット経由の OpenAI 互換モデルは次の両方が埋まっている場合にのみ選択可能になります。
-
-- `Base URL`
-- `Model name`
-
-空のプリセットは利用可能なモデル項目として表示されません。
-
-### 詳細項目
-
-展開可能な詳細セクションで現在設定できる項目:
-
-- `Temperature`
-- `Max tokens`
-- `Custom system prompt`
-
-挙動メモ:
-
-- `Temperature` や `Max tokens` を空にすると、上書き値は送信されません
-- `Custom system prompt` を空にすると、Koharu の既定の漫画翻訳用システムプロンプトが使われます
-- リセットボタンは現在のプリセットに対するカスタムプロンプト上書きのみを消去します
-
-### Test Connection
-
-`Test Connection` は、現在のプリセットに対する接続確認です。
-
-現在の実装:
-
-- sends a request to Koharu's `/llm/ping` path
-- checks the preset `Base URL`
-- optionally includes the preset API key
-- reports success or failure inline
-- shows model count and latency on success
-- uses a 5-second timeout for the underlying compatible-model listing
-
-これは接続テストであり、モデル読み込みではありません。
-
-## About ページ
-
-設定画面からは別の About ページに移動できます。
-
-About 画面には現在次が表示されます。
-
-- the current app version
-- whether a newer GitHub release exists
-- the author link
-- the repository link
-
-パッケージ済みアプリでは、バージョン確認はローカルのアプリ版と `mayocream/koharu` の最新 GitHub リリースを比較します。
+パッケージ済みアプリでは、`mayocream/koharu` の最新 GitHub リリースとローカル版を比較して更新状態を判定します。
 
 ## 永続化の仕組み
 
 現在の設定保存は複数の層に分かれています。
 
-- provider API keys are stored through the system keyring
-- local LLM preset config is persisted in Koharu's frontend preferences store
-- theme and other UI preferences also persist locally
+- `config.toml` には `data`、`http`、`pipeline`、provider の `baseUrl` など共有設定が保存されます
+- provider API キーはシステム keyring に保存されます
+- テーマ、言語、描画フォントはフロントエンドの preferences 層に保存されます
 
-つまり、フロントエンド設定を消しても、保存済みのプロバイダ API キーまで消えるわけではありません。
+つまり、フロントエンドの preferences を消しても、保存済みの provider API キーや共有ランタイム設定までは消えません。
 
 ## 関連ページ
 
