@@ -128,9 +128,6 @@ const fallbackFontFace = (value?: string): FontFaceInfo | undefined => {
   }
 }
 
-const hasExplicitFontFamilies = (style?: TextStyle) =>
-  (style?.fontFamilies?.length ?? 0) > 0
-
 const normalizeEffect = (effect?: Partial<RenderEffect>): RenderEffect => ({
   italic: effect?.italic ?? false,
   bold: effect?.bold ?? false,
@@ -214,9 +211,6 @@ export function RenderControlsPanel() {
     selectedBlockIndex !== undefined
       ? textBlocks[selectedBlockIndex]
       : undefined
-  const selectedBlockHasExplicitFont = hasExplicitFontFamilies(
-    selectedBlock?.style,
-  )
   const firstBlock = textBlocks[0]
   const hasBlocks = textBlocks.length > 0
   const fontCandidates = uniqueFontFaces(
@@ -329,17 +323,6 @@ export function RenderControlsPanel() {
     return [nextFont, ...base.filter((family) => family !== nextFont)]
   }
 
-  const updateDocumentDefaultFont = (value: string) => {
-    if (!documentId) return
-    void updateDocumentStyle(documentId, {
-      defaultFont: value,
-    }).then(() =>
-      queryClient.invalidateQueries({
-        queryKey: getGetDocumentQueryKey(documentId),
-      }),
-    )
-  }
-
   const applyStrokeSetting = (nextStroke: RenderStroke) => {
     const normalized = normalizeStroke(nextStroke)
     if (applyStyleToSelected({ stroke: normalized })) return
@@ -427,17 +410,21 @@ export function RenderControlsPanel() {
                   value,
                   selectedBlock?.style?.fontFamilies,
                 )
-                // Blocks without an explicit font inherit the document default,
-                // so changing their font should update that default instead.
-                if (selectedBlockHasExplicitFont) {
-                  if (applyStyleToSelected({ fontFamilies: nextFamilies }))
-                    return
+                // Always update document default font when font changes
+                if (documentId) {
+                  void updateDocumentStyle(documentId, {
+                    defaultFont: value,
+                  }).then(() =>
+                    queryClient.invalidateQueries({
+                      queryKey: getGetDocumentQueryKey(documentId),
+                    }),
+                  )
                 }
-                updateDocumentDefaultFont(value)
+                if (applyStyleToSelected({ fontFamilies: nextFamilies })) return
               }}
             />
           </div>
-          {selectedBlockHasExplicitFont ? (
+          {selectedBlock?.style?.fontFamilies?.length ? (
             <button
               type='button'
               className='text-muted-foreground hover:text-foreground text-[9px]'
