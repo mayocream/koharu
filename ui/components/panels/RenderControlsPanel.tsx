@@ -32,7 +32,11 @@ import {
 import { FontSelect } from '@/components/ui/font-select'
 import { useEditorUiStore } from '@/lib/stores/editorUiStore'
 import { useListFonts, useGetGoogleFontsCatalog } from '@/lib/api/system/system'
-import { updateDocumentStyle } from '@/lib/api/documents/documents'
+import {
+  getGetDocumentQueryKey,
+  updateDocumentStyle,
+} from '@/lib/api/documents/documents'
+import { useQueryClient } from '@tanstack/react-query'
 import { cn } from '@/lib/utils'
 
 const DEFAULT_COLOR: RgbaColor = [0, 0, 0, 255]
@@ -201,6 +205,7 @@ export function RenderControlsPanel() {
   } = useTextBlocks()
   const documentId = currentDocument?.id
   const documentFont = currentDocument?.style?.defaultFont ?? undefined
+  const queryClient = useQueryClient()
   const { t } = useTranslation()
   const selectedBlock =
     selectedBlockIndex !== undefined
@@ -408,7 +413,13 @@ export function RenderControlsPanel() {
                 if (applyStyleToSelected({ fontFamilies: nextFamilies })) return
                 // Set as document default font
                 if (documentId) {
-                  void updateDocumentStyle(documentId, { defaultFont: value })
+                  void updateDocumentStyle(documentId, {
+                    defaultFont: value,
+                  }).then(() =>
+                    queryClient.invalidateQueries({
+                      queryKey: getGetDocumentQueryKey(documentId),
+                    }),
+                  )
                 }
               }}
             />
