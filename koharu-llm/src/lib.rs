@@ -92,6 +92,24 @@ pub enum ModelId {
     )]
     HunyuanMT7B,
     #[strum(
+        serialize = "sugoi-14b-ultra",
+        props(
+            repo = "sugoitoolkit/Sugoi-14B-Ultra-GGUF",
+            filename = "Sugoi-14B-Ultra-Q8_0.gguf",
+            languages = "en-US"
+        )
+    )]
+    Sugoi14bUltra,
+    #[strum(
+        serialize = "sugoi-32b-ultra",
+        props(
+            repo = "sugoitoolkit/Sugoi-32B-Ultra-GGUF",
+            filename = "Sugoi-32B-Ultra-Q4_K_M.gguf",
+            languages = "en-US"
+        )
+    )]
+    Sugoi32bUltra,
+    #[strum(
         serialize = "gemma4-e2b-it",
         props(
             repo = "unsloth/gemma-4-E2B-it-GGUF",
@@ -127,6 +145,24 @@ pub enum ModelId {
         )
     )]
     Gemma4_31bIt,
+    #[strum(
+        serialize = "gemma4-e2b-uncensored",
+        props(
+            repo = "HauhauCS/Gemma-4-E2B-Uncensored-HauhauCS-Aggressive",
+            filename = "Gemma-4-E2B-Uncensored-HauhauCS-Aggressive-Q8_K_P.gguf",
+            languages = "*"
+        )
+    )]
+    Gemma4E2bUncensored,
+    #[strum(
+        serialize = "gemma4-e4b-uncensored",
+        props(
+            repo = "HauhauCS/Gemma-4-E4B-Uncensored-HauhauCS-Aggressive",
+            filename = "Gemma-4-E4B-Uncensored-HauhauCS-Aggressive-Q4_K_M.gguf",
+            languages = "*"
+        )
+    )]
+    Gemma4E4bUncensored,
     #[strum(
         serialize = "qwen3.5-0.8b",
         props(
@@ -181,6 +217,51 @@ pub enum ModelId {
         )
     )]
     Qwen3_5_35bA3b,
+    #[strum(
+        serialize = "qwen3.5-2b-uncensored",
+        props(
+            repo = "HauhauCS/Qwen3.5-2B-Uncensored-HauhauCS-Aggressive",
+            filename = "Qwen3.5-2B-Uncensored-HauhauCS-Aggressive-Q8_0.gguf",
+            languages = "*"
+        )
+    )]
+    Qwen3_5_2bUncensored,
+    #[strum(
+        serialize = "qwen3.5-4b-uncensored",
+        props(
+            repo = "HauhauCS/Qwen3.5-4B-Uncensored-HauhauCS-Aggressive",
+            filename = "Qwen3.5-4B-Uncensored-HauhauCS-Aggressive-Q8_0.gguf",
+            languages = "*"
+        )
+    )]
+    Qwen3_5_4bUncensored,
+    #[strum(
+        serialize = "qwen3.5-9b-uncensored",
+        props(
+            repo = "HauhauCS/Qwen3.5-9B-Uncensored-HauhauCS-Aggressive",
+            filename = "Qwen3.5-9B-Uncensored-HauhauCS-Aggressive-Q8_0.gguf",
+            languages = "*"
+        )
+    )]
+    Qwen3_5_9bUncensored,
+    #[strum(
+        serialize = "qwen3.5-27b-uncensored",
+        props(
+            repo = "HauhauCS/Qwen3.5-27B-Uncensored-HauhauCS-Aggressive",
+            filename = "Qwen3.5-27B-Uncensored-HauhauCS-Aggressive-Q4_K_M.gguf",
+            languages = "*"
+        )
+    )]
+    Qwen3_5_27bUncensored,
+    #[strum(
+        serialize = "qwen3.5-35b-a3b-uncensored",
+        props(
+            repo = "HauhauCS/Qwen3.5-35B-A3B-Uncensored-HauhauCS-Aggressive",
+            filename = "Qwen3.5-35B-A3B-Uncensored-HauhauCS-Aggressive-Q8_0.gguf",
+            languages = "*"
+        )
+    )]
+    Qwen3_5_35bA3bUncensored,
 }
 
 impl ModelId {
@@ -205,7 +286,12 @@ impl ModelId {
                 ..Default::default()
             },
             // Gemma 4: temp=1.0, top_p=0.95, top_k=64
-            Self::Gemma4E2bIt | Self::Gemma4E4bIt | Self::Gemma4_26bA4bIt | Self::Gemma4_31bIt => {
+            Self::Gemma4E2bIt
+            | Self::Gemma4E4bIt
+            | Self::Gemma4_26bA4bIt
+            | Self::Gemma4_31bIt
+            | Self::Gemma4E2bUncensored
+            | Self::Gemma4E4bUncensored => {
                 GenerateOptions {
                     temperature: 1.0,
                     top_k: Some(64),
@@ -220,13 +306,27 @@ impl ModelId {
             | Self::Qwen3_5_4b
             | Self::Qwen3_5_9b
             | Self::Qwen3_5_27b
-            | Self::Qwen3_5_35bA3b => GenerateOptions {
+            | Self::Qwen3_5_35bA3b
+            | Self::Qwen3_5_2bUncensored
+            | Self::Qwen3_5_4bUncensored
+            | Self::Qwen3_5_9bUncensored
+            | Self::Qwen3_5_27bUncensored
+            | Self::Qwen3_5_35bA3bUncensored => GenerateOptions {
                 temperature: 1.0,
                 top_k: Some(20),
                 top_p: Some(1.0),
                 min_p: Some(0.0),
                 presence_penalty: 2.0,
                 repeat_penalty: 1.0,
+                ..Default::default()
+            },
+            // Sugoi: temp=0.1, top_k=40, top_p=0.95, min_p=0.05, repeat=1.1
+            Self::Sugoi14bUltra | Self::Sugoi32bUltra => GenerateOptions {
+                temperature: 0.1,
+                top_k: Some(40),
+                top_p: Some(0.95),
+                min_p: Some(0.05),
+                repeat_penalty: 1.1,
                 ..Default::default()
             },
             // Default for other models
