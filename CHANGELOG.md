@@ -1,3 +1,10 @@
+## [0.42.4](https://github.com/mayocream/koharu/compare/0.42.3..0.42.4) - 2026-04-05
+
+### 🐛 Bug Fixes
+
+- Http timeouts - ([676495f](https://github.com/mayocream/koharu/commit/676495f96179907b162a57f6453808e7f2c97ab7))
+
+
 ## [0.42.3](https://github.com/mayocream/koharu/compare/0.42.2..0.42.3) - 2026-04-05
 
 ### 🐛 Bug Fixes
