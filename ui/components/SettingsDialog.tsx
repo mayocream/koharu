@@ -13,7 +13,7 @@ import {
   LoaderIcon,
   PaletteIcon,
   KeyIcon,
-  FolderIcon,
+  HardDriveIcon,
   InfoIcon,
   CpuIcon,
 } from 'lucide-react'
@@ -73,7 +73,7 @@ const TABS = [
   { id: 'appearance', icon: PaletteIcon, labelKey: 'settings.appearance' },
   { id: 'engines', icon: CpuIcon, labelKey: 'settings.engines' },
   { id: 'providers', icon: KeyIcon, labelKey: 'settings.apiKeys' },
-  { id: 'storage', icon: FolderIcon, labelKey: 'settings.storage' },
+  { id: 'runtime', icon: HardDriveIcon, labelKey: 'settings.runtime' },
   { id: 'about', icon: InfoIcon, labelKey: 'settings.about' },
 ] as const
 
@@ -350,7 +350,7 @@ export function SettingsDialog({
                   }}
                 />
               )}
-              {tab === 'storage' && (
+              {tab === 'runtime' && (
                 <StoragePane
                   dataPath={dataPathDraft}
                   httpConnectTimeout={httpConnectTimeoutDraft}
@@ -711,8 +711,8 @@ function StoragePane({
   return (
     <>
       <Section
-        title={t('settings.storage')}
-        description={t('settings.storageDescription')}
+        title={t('settings.runtime')}
+        description={t('settings.runtimeDescription')}
       >
         <div className='space-y-1.5'>
           <Label className='text-xs'>{t('settings.dataPath')}</Label>
