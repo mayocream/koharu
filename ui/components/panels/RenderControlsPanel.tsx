@@ -410,8 +410,7 @@ export function RenderControlsPanel() {
                   value,
                   selectedBlock?.style?.fontFamilies,
                 )
-                if (applyStyleToSelected({ fontFamilies: nextFamilies })) return
-                // Set as document default font
+                // Always update document default font when font changes
                 if (documentId) {
                   void updateDocumentStyle(documentId, {
                     defaultFont: value,
@@ -421,6 +420,7 @@ export function RenderControlsPanel() {
                     }),
                   )
                 }
+                if (applyStyleToSelected({ fontFamilies: nextFamilies })) return
               }}
             />
           </div>
