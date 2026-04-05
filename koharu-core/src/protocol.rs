@@ -352,6 +352,7 @@ pub struct RenderRequest {
 pub struct TranslateRequest {
     pub text_block_id: Option<String>,
     pub language: Option<String>,
+    pub system_prompt: Option<String>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, JsonSchema, ToSchema)]

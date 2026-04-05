@@ -8,6 +8,15 @@ use keyring::Entry;
 use reqwest_middleware::ClientWithMiddleware;
 
 use crate::Language;
+use crate::prompt::{BLOCK_TAG_INSTRUCTIONS, system_prompt};
+
+/// Resolve the effective system prompt: custom (with block instructions appended) or default.
+pub(crate) fn resolve_system_prompt(custom: Option<&str>, target_language: Language) -> String {
+    match custom {
+        Some(p) if !p.trim().is_empty() => format!("{p} {BLOCK_TAG_INSTRUCTIONS}"),
+        _ => system_prompt(target_language),
+    }
+}
 
 mod chat_completions;
 pub mod claude;
@@ -140,6 +149,7 @@ pub trait AnyProvider: Send + Sync {
         source: &'a str,
         target_language: Language,
         model: &'a str,
+        custom_system_prompt: Option<&'a str>,
     ) -> Pin<Box<dyn Future<Output = anyhow::Result<String>> + Send + 'a>>;
 }
 
@@ -150,7 +160,6 @@ pub struct ProviderConfig {
     pub base_url: Option<String>,
     pub temperature: Option<f64>,
     pub max_tokens: Option<u32>,
-    pub custom_system_prompt: Option<String>,
 }
 
 const OPENAI_MODELS: &[ProviderModelDescriptor] = &[ProviderModelDescriptor {
@@ -332,7 +341,6 @@ fn build_openai_compatible_provider(
         api_key: config.api_key,
         temperature: config.temperature,
         max_tokens: config.max_tokens,
-        custom_system_prompt: config.custom_system_prompt,
     }))
 }
 

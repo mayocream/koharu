@@ -9,6 +9,8 @@ type PreferencesState = {
     color: string
   }
   setBrushConfig: (config: Partial<PreferencesState['brushConfig']>) => void
+  customSystemPrompt?: string
+  setCustomSystemPrompt: (prompt?: string) => void
   resetPreferences: () => void
 }
 
@@ -30,6 +32,7 @@ export const usePreferencesStore = create<PreferencesState>()(
             ...config,
           },
         })),
+      setCustomSystemPrompt: (prompt) => set({ customSystemPrompt: prompt }),
       resetPreferences: () => set({ ...initialPreferences }),
     }),
     {
@@ -49,6 +52,7 @@ export const usePreferencesStore = create<PreferencesState>()(
       },
       partialize: (state) => ({
         brushConfig: state.brushConfig,
+        customSystemPrompt: state.customSystemPrompt,
       }),
     },
   ),

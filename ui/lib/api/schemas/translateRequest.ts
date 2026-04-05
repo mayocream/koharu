@@ -8,5 +8,7 @@ export interface TranslateRequest {
   /** @nullable */
   language?: string | null
   /** @nullable */
+  systemPrompt?: string | null
+  /** @nullable */
   textBlockId?: string | null
 }

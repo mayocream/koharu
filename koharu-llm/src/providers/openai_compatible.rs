@@ -4,10 +4,10 @@ use std::future::Future;
 use std::pin::Pin;
 use std::sync::Arc;
 
-use crate::{Language, prompt::system_prompt};
+use crate::Language;
 
 use super::chat_completions::{ChatCompletionsAuth, ChatCompletionsRequest, send_chat_completion};
-use super::{AnyProvider, ensure_provider_success};
+use super::{AnyProvider, ensure_provider_success, resolve_system_prompt};
 
 #[derive(Debug, Clone)]
 pub struct OpenAiCompatibleProvider {
@@ -16,7 +16,6 @@ pub struct OpenAiCompatibleProvider {
     pub api_key: Option<String>,
     pub temperature: Option<f64>,
     pub max_tokens: Option<u32>,
-    pub custom_system_prompt: Option<String>,
 }
 
 #[derive(Deserialize)]
@@ -72,12 +71,10 @@ impl AnyProvider for OpenAiCompatibleProvider {
         source: &'a str,
         target_language: Language,
         model: &'a str,
+        custom_system_prompt: Option<&'a str>,
     ) -> Pin<Box<dyn Future<Output = anyhow::Result<String>> + Send + 'a>> {
         Box::pin(async move {
-            let prompt = match &self.custom_system_prompt {
-                Some(p) if !p.trim().is_empty() => p.clone(),
-                _ => system_prompt(target_language),
-            };
+            let prompt = resolve_system_prompt(custom_system_prompt, target_language);
             send_chat_completion(
                 Arc::clone(&self.http_client),
                 ChatCompletionsRequest {

@@ -440,6 +440,7 @@ impl Model {
         &self,
         doc: &mut impl Translatable,
         target_language: Option<&str>,
+        custom_system_prompt: Option<&str>,
     ) -> anyhow::Result<()> {
         let target_language = target_language
             .and_then(Language::parse)
@@ -453,11 +454,16 @@ impl Model {
         let translation = match &mut *guard {
             State::ReadyLocal(llm) => {
                 let opts = llm.id().default_generate_options();
-                llm.generate(&source, &opts, target_language)
+                llm.generate(&source, &opts, target_language, custom_system_prompt)
             }
             State::ReadyProvider { target, provider } => {
                 provider
-                    .translate(&source, target_language, &target.model_id)
+                    .translate(
+                        &source,
+                        target_language,
+                        &target.model_id,
+                        custom_system_prompt,
+                    )
                     .await
             }
             State::Loading { .. } => Err(anyhow::anyhow!("Model is still loading")),
@@ -553,7 +559,6 @@ async fn provider_catalog(state: &AppResources) -> anyhow::Result<Vec<LlmProvide
                             base_url: base_url.clone(),
                             temperature: None,
                             max_tokens: None,
-                            custom_system_prompt: None,
                         },
                     )?
                     .await;
@@ -634,7 +639,6 @@ fn provider_config_from_settings(
         base_url: stored.and_then(|p| p.base_url.clone()),
         temperature: options.and_then(|options| options.temperature),
         max_tokens: options.and_then(|options| options.max_tokens),
-        custom_system_prompt: options.and_then(|options| options.custom_system_prompt.clone()),
     })
 }
 
@@ -696,6 +700,7 @@ pub async fn llm_generate(
     document_id: &str,
     text_block_index: Option<usize>,
     language: Option<&str>,
+    system_prompt: Option<&str>,
 ) -> anyhow::Result<()> {
     let mut doc = state.storage.page(document_id).await?;
 
@@ -705,10 +710,16 @@ pub async fn llm_generate(
                 .text_blocks
                 .get_mut(block_index)
                 .ok_or_else(|| anyhow::anyhow!("Text block not found"))?;
-            state.llm.translate(text_block, language).await?;
+            state
+                .llm
+                .translate(text_block, language, system_prompt)
+                .await?;
         }
         None => {
-            state.llm.translate(&mut doc, language).await?;
+            state
+                .llm
+                .translate(&mut doc, language, system_prompt)
+                .await?;
         }
     }
 

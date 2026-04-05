@@ -756,6 +756,7 @@ async fn translate_document(
         &document_id,
         text_block_index,
         request.language.as_deref(),
+        request.system_prompt.as_deref(),
     )
     .await?;
 

@@ -46,11 +46,11 @@ pub struct PromptRenderer {
     eos_token: String,
 }
 
-const BLOCK_TAG_INSTRUCTIONS: &str = "The input uses numbered tags like [1], [2], etc. to mark each text block. Translate only the text after each tag. Keep every tag exactly unchanged, including numbers and order. Output the same tags followed by the translated text. Do not merge, split, or reorder blocks.";
+pub const BLOCK_TAG_INSTRUCTIONS: &str = "The input uses numbered tags like [1], [2], etc. to mark each text block. Translate only the text after each tag. Keep every tag exactly unchanged, including numbers and order. Output the same tags followed by the translated text. Do not merge, split, or reorder blocks.";
 
 pub fn system_prompt(target_language: Language) -> String {
     format!(
-        "You are a professional manga translator. Translate Japanese manga dialogue into natural {} that fits inside speech bubbles. Preserve character voice, emotional tone, relationship nuance, emphasis, and sound effects naturally. Keep the wording concise. Do not add notes, explanations, or romanization. {BLOCK_TAG_INSTRUCTIONS}",
+        "You are a professional manga translator. Translate manga dialogue into natural {} that fits inside speech bubbles. Preserve character voice, emotional tone, relationship nuance, emphasis, and sound effects naturally. Keep the wording concise. Do not add notes, explanations, or romanization. {BLOCK_TAG_INSTRUCTIONS}",
         target_language
     )
 }
@@ -69,21 +69,31 @@ impl PromptRenderer {
         }
     }
 
-    fn messages(&self, text: impl Into<String>, target_language: Language) -> Vec<ChatMessage> {
+    fn messages(
+        &self,
+        text: impl Into<String>,
+        target_language: Language,
+        custom_prompt: Option<&str>,
+    ) -> Vec<ChatMessage> {
         let text = text.into();
+        let sys = match custom_prompt {
+            Some(p) if !p.trim().is_empty() => {
+                format!("{p} {BLOCK_TAG_INSTRUCTIONS}")
+            }
+            _ => system_prompt(target_language),
+        };
 
         match self.model_id {
             ModelId::VntlLlama3_8Bv2 => vec![
-                ChatMessage::new(ChatRole::System, system_prompt(target_language)),
+                ChatMessage::new(ChatRole::System, sys),
                 ChatMessage::new(ChatRole::Name(Language::Japanese.to_string()), text),
                 ChatMessage::new(ChatRole::Name(target_language.to_string()), String::new()),
             ],
-            ModelId::HunyuanMT7B => vec![ChatMessage::new(
-                ChatRole::User,
-                format!("{}\n\n{}", system_prompt(target_language), text),
-            )],
+            ModelId::HunyuanMT7B => {
+                vec![ChatMessage::new(ChatRole::User, format!("{sys}\n\n{text}"))]
+            }
             _ => vec![
-                ChatMessage::new(ChatRole::System, system_prompt(target_language)),
+                ChatMessage::new(ChatRole::System, sys),
                 ChatMessage::new(ChatRole::User, text),
             ],
         }
@@ -93,8 +103,9 @@ impl PromptRenderer {
         &self,
         prompt: String,
         target_language: Language,
+        custom_prompt: Option<&str>,
     ) -> anyhow::Result<String> {
-        let messages = self.messages(prompt, target_language);
+        let messages = self.messages(prompt, target_language, custom_prompt);
         let tmpl = self.env.template_from_str(&self.template)?;
 
         let prompt = tmpl
@@ -134,7 +145,8 @@ mod tests {
             "<|begin_of_text|>".to_string(),
             "<|end_of_text|>".to_string(),
         );
-        let formatted = renderer.format_chat_prompt("hello".to_string(), Language::English)?;
+        let formatted =
+            renderer.format_chat_prompt("hello".to_string(), Language::English, None)?;
         let expected = format!(
             "<|begin_of_text|><|start_header_id|>Metadata<|end_header_id|>\n\n{}<|eot_id|><|start_header_id|>Japanese<|end_header_id|>\n\nhello<|eot_id|><|start_header_id|>English<|end_header_id|>\n\n",
             system_prompt(Language::English)
@@ -152,7 +164,7 @@ mod tests {
             "<s>".to_string(),
             "</s>".to_string(),
         );
-        let formatted = renderer.format_chat_prompt("hello".to_string(), Language::Korean)?;
+        let formatted = renderer.format_chat_prompt("hello".to_string(), Language::Korean, None)?;
         let expected = format!(
             "<|im_start|>system {}<|im_end|> <|im_start|>user hello<|im_end|> <|im_start|>assistant ",
             system_prompt(Language::Korean)
@@ -170,7 +182,7 @@ mod tests {
             "<s>".to_string(),
             "</s>".to_string(),
         );
-        let formatted = renderer.format_chat_prompt("hello".to_string(), Language::Korean)?;
+        let formatted = renderer.format_chat_prompt("hello".to_string(), Language::Korean, None)?;
         assert_eq!(
             formatted,
             format!("{}\n\nhello", system_prompt(Language::Korean))

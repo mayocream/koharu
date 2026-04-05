@@ -5,9 +5,9 @@ use std::sync::Arc;
 use reqwest_middleware::ClientWithMiddleware;
 use serde::Serialize;
 
-use crate::{Language, prompt::system_prompt};
+use crate::Language;
 
-use super::{AnyProvider, ensure_provider_success};
+use super::{AnyProvider, ensure_provider_success, resolve_system_prompt};
 
 pub struct GeminiProvider {
     pub http_client: Arc<ClientWithMiddleware>,
@@ -41,6 +41,7 @@ impl AnyProvider for GeminiProvider {
         source: &'a str,
         target_language: Language,
         model: &'a str,
+        custom_system_prompt: Option<&'a str>,
     ) -> Pin<Box<dyn Future<Output = anyhow::Result<String>> + Send + 'a>> {
         Box::pin(async move {
             let url = format!(
@@ -51,7 +52,7 @@ impl AnyProvider for GeminiProvider {
             let body = GenerateRequest {
                 system_instruction: SystemInstruction {
                     parts: vec![Part {
-                        text: system_prompt(target_language),
+                        text: resolve_system_prompt(custom_system_prompt, target_language),
                     }],
                 },
                 contents: vec![Content {

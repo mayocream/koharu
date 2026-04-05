@@ -818,7 +818,7 @@ impl Engine for LlmTranslateEngine {
     async fn run(&self, doc: &Document, res: &AppResources) -> Result<Patch> {
         let mut page = doc.clone();
         let block_count = page.text_blocks.len();
-        async { res.llm.translate(&mut page, None).await }
+        async { res.llm.translate(&mut page, None, None).await }
             .instrument(tracing::info_span!("inference", blocks = block_count))
             .await?;
         let blocks = page.text_blocks;

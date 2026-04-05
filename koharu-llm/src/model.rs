@@ -113,14 +113,17 @@ impl Llm {
         prompt: &str,
         opts: &GenerateOptions,
         target_language: Language,
+        system_prompt: Option<&str>,
     ) -> Result<String> {
         if opts.max_tokens == 0 {
             return Ok(String::new());
         }
 
-        let prompt = self
-            .prompt_renderer
-            .format_chat_prompt(prompt.to_string(), target_language)?;
+        let prompt = self.prompt_renderer.format_chat_prompt(
+            prompt.to_string(),
+            target_language,
+            system_prompt,
+        )?;
         tracing::debug!("Generating with prompt:\n{}", prompt);
 
         let prompt_tokens = self

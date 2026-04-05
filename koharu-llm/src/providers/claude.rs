@@ -5,9 +5,9 @@ use std::sync::Arc;
 use reqwest_middleware::ClientWithMiddleware;
 use serde::Serialize;
 
-use crate::{Language, prompt::system_prompt};
+use crate::Language;
 
-use super::{AnyProvider, ensure_provider_success};
+use super::{AnyProvider, ensure_provider_success, resolve_system_prompt};
 
 pub struct ClaudeProvider {
     pub http_client: Arc<ClientWithMiddleware>,
@@ -34,12 +34,13 @@ impl AnyProvider for ClaudeProvider {
         source: &'a str,
         target_language: Language,
         model: &'a str,
+        custom_system_prompt: Option<&'a str>,
     ) -> Pin<Box<dyn Future<Output = anyhow::Result<String>> + Send + 'a>> {
         Box::pin(async move {
             let body = MessagesRequest {
                 model,
                 max_tokens: 8192,
-                system: system_prompt(target_language),
+                system: resolve_system_prompt(custom_system_prompt, target_language),
                 messages: vec![UserMessage {
                     role: "user",
                     content: source.to_string(),

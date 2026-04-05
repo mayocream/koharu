@@ -14,6 +14,7 @@ import {
 } from 'lucide-react'
 import { Separator } from '@/components/ui/separator'
 import { Button } from '@/components/ui/button'
+import { Textarea } from '@/components/ui/textarea'
 import {
   Select,
   SelectContent,
@@ -27,6 +28,7 @@ import {
   PopoverTrigger,
 } from '@/components/ui/popover'
 import { useEditorUiStore } from '@/lib/stores/editorUiStore'
+import { usePreferencesStore } from '@/lib/stores/preferencesStore'
 import { useGetLlm, useGetLlmCatalog } from '@/lib/api/llm/llm'
 import type {
   LlmCatalog,
@@ -40,7 +42,6 @@ type SelectableLlmModel = {
   model: LlmCatalogModel
   provider?: LlmProviderCatalog
 }
-
 
 const flattenCatalogModels = (catalog?: LlmCatalog): SelectableLlmModel[] => [
   ...(catalog?.localModels ?? []).map((model) => ({ model })),
@@ -125,10 +126,14 @@ function WorkflowButtons() {
         onClick={() => {
           const documentId = requireDocumentId()
           const selectedLanguage = useEditorUiStore.getState().selectedLanguage
+          const { customSystemPrompt } = usePreferencesStore.getState()
           send({
             type: 'START_TRANSLATE',
             documentId,
-            options: { language: selectedLanguage },
+            options: {
+              language: selectedLanguage,
+              systemPrompt: customSystemPrompt,
+            },
           })
         }}
         disabled={!llmReady || isTranslating || isProcessing}
@@ -199,6 +204,12 @@ function LlmStatusPopover() {
     [llmCatalog],
   )
   const selectedTarget = useEditorUiStore((state) => state.selectedTarget)
+  const customSystemPrompt = usePreferencesStore(
+    (state) => state.customSystemPrompt,
+  )
+  const setCustomSystemPrompt = usePreferencesStore(
+    (state) => state.setCustomSystemPrompt,
+  )
   const llmSelectedLanguage = useEditorUiStore(
     (state) => state.selectedLanguage,
   )
@@ -336,79 +347,117 @@ function LlmStatusPopover() {
           LLM
         </button>
       </PopoverTrigger>
-      <PopoverContent align='end' className='w-72' data-testid='llm-popover'>
-        <div className='space-y-3 text-sm'>
-          <p className='text-muted-foreground text-xs font-medium uppercase'>
-            {t('panels.llm')}
-          </p>
-
-          <Select
-            value={selectedTargetKey}
-            onValueChange={handleSetSelectedModel}
-          >
-            <SelectTrigger data-testid='llm-model-select' className='w-full'>
-              <SelectValue placeholder={t('llm.selectPlaceholder')} />
-            </SelectTrigger>
-            <SelectContent position='popper'>
-              {llmModels.map(({ model, provider }, index) => (
-                <SelectItem
-                  key={llmTargetKey(model.target)}
-                  value={llmTargetKey(model.target)}
-                  data-testid={`llm-model-option-${index}`}
-                >
-                  <span className='flex items-center gap-2'>
-                    {provider ? (
-                      <span className='bg-primary/10 text-primary rounded px-1 py-0.5 text-[10px] leading-none font-semibold uppercase'>
-                        {provider.name}
-                      </span>
-                    ) : null}
-                    {model.name}
-                  </span>
-                </SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
-
-          {selectedModelLanguages.length > 0 ? (
+      <PopoverContent
+        align='end'
+        className='w-[280px] p-0'
+        data-testid='llm-popover'
+      >
+        {/* Model + load */}
+        <div className='flex flex-col gap-1 px-3 pt-3 pb-2.5'>
+          <span className='text-muted-foreground text-[10px] font-medium uppercase'>
+            {t('llm.model', { defaultValue: 'Model' })}
+          </span>
+          <div className='flex items-center gap-1.5'>
             <Select
-              value={llmSelectedLanguage ?? selectedModelLanguages[0]}
-              onValueChange={handleSetSelectedLanguage}
+              value={selectedTargetKey}
+              onValueChange={handleSetSelectedModel}
             >
               <SelectTrigger
-                data-testid='llm-language-select'
-                className='w-full'
+                data-testid='llm-model-select'
+                className='min-w-0 flex-1'
               >
-                <SelectValue placeholder={t('llm.languagePlaceholder')} />
+                <SelectValue placeholder={t('llm.selectPlaceholder')} />
               </SelectTrigger>
               <SelectContent position='popper'>
-                {selectedModelLanguages.map((language, index) => (
+                {llmModels.map(({ model, provider }, index) => (
                   <SelectItem
-                    key={language}
-                    value={language}
-                    data-testid={`llm-language-option-${index}`}
+                    key={llmTargetKey(model.target)}
+                    value={llmTargetKey(model.target)}
+                    data-testid={`llm-model-option-${index}`}
                   >
-                    {t(`llm.languages.${language}`)}
+                    <span className='flex items-center gap-1.5'>
+                      {provider ? (
+                        <span className='bg-primary/10 text-primary rounded px-1 py-0.5 text-[9px] leading-none font-semibold uppercase'>
+                          {provider.name}
+                        </span>
+                      ) : null}
+                      {model.name}
+                    </span>
                   </SelectItem>
                 ))}
               </SelectContent>
             </Select>
-          ) : null}
+            <Button
+              data-testid='llm-load-toggle'
+              data-llm-ready={selectedIsLoaded ? 'true' : 'false'}
+              data-llm-loading={busy ? 'true' : 'false'}
+              variant={selectedIsLoaded ? 'ghost' : 'default'}
+              size='sm'
+              onClick={handleToggleLoadUnload}
+              disabled={!selectedTarget || busy}
+              className='h-6 shrink-0 gap-1 px-2 text-[11px]'
+            >
+              {busy ? (
+                <LoaderCircleIcon className='size-3 animate-spin' />
+              ) : null}
+              {selectedIsLoaded || llmUnloading
+                ? t('llm.unload')
+                : t('llm.load')}
+            </Button>
+          </div>
+        </div>
 
-          <Button
-            data-testid='llm-load-toggle'
-            data-llm-ready={selectedIsLoaded ? 'true' : 'false'}
-            data-llm-loading={busy ? 'true' : 'false'}
-            variant='outline'
-            size='sm'
-            onClick={handleToggleLoadUnload}
-            disabled={!selectedTarget || busy}
-            className='w-full gap-1.5 text-xs'
-          >
-            {busy ? (
-              <LoaderCircleIcon className='size-3.5 animate-spin' />
+        <div className='px-3'>
+          <Separator />
+        </div>
+
+        {/* Language + prompt */}
+        <div className='flex flex-col gap-1 px-3 pt-2.5 pb-3'>
+          <span className='text-muted-foreground text-[10px] font-medium uppercase'>
+            {t('llm.translationSettings', {
+              defaultValue: 'Translation',
+            })}
+          </span>
+
+          <div className='flex flex-col gap-1.5'>
+            {selectedModelLanguages.length > 0 ? (
+              <Select
+                value={llmSelectedLanguage ?? selectedModelLanguages[0]}
+                onValueChange={handleSetSelectedLanguage}
+              >
+                <SelectTrigger
+                  data-testid='llm-language-select'
+                  className='w-full'
+                >
+                  <SelectValue placeholder={t('llm.languagePlaceholder')} />
+                </SelectTrigger>
+                <SelectContent position='popper'>
+                  {selectedModelLanguages.map((language, index) => (
+                    <SelectItem
+                      key={language}
+                      value={language}
+                      data-testid={`llm-language-option-${index}`}
+                    >
+                      {t(`llm.languages.${language}`)}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
             ) : null}
-            {selectedIsLoaded || llmUnloading ? t('llm.unload') : t('llm.load')}
-          </Button>
+
+            <Textarea
+              data-testid='llm-system-prompt'
+              value={customSystemPrompt ?? ''}
+              onChange={(e) =>
+                setCustomSystemPrompt(e.target.value || undefined)
+              }
+              placeholder={t('llm.systemPromptPlaceholder', {
+                defaultValue: 'Custom system prompt (optional)',
+              })}
+              rows={5}
+              className='min-h-0 resize-y text-xs'
+            />
+          </div>
         </div>
       </PopoverContent>
     </Popover>

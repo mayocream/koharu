@@ -2987,6 +2987,9 @@
           "language": {
             "type": ["string", "null"]
           },
+          "systemPrompt": {
+            "type": ["string", "null"]
+          },
           "textBlockId": {
             "type": ["string", "null"]
           }
