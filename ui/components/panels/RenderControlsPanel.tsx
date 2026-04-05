@@ -6,6 +6,9 @@ import {
   AlignCenterIcon,
   AlignLeftIcon,
   AlignRightIcon,
+  AlignVerticalSpaceAroundIcon,
+  ArrowDownIcon,
+  ArrowUpFromLineIcon,
   BoldIcon,
   ItalicIcon,
   MinusIcon,
@@ -19,6 +22,7 @@ import {
   RgbaColor,
   TextAlign,
   TextStyle,
+  VerticalAlign,
 } from '@/types'
 import type { FontFaceInfo } from '@/lib/api/schemas'
 import { Button } from '@/components/ui/button'
@@ -293,6 +297,7 @@ export function RenderControlsPanel() {
     effect: updates.effect ?? style?.effect,
     stroke: updates.stroke ?? style?.stroke,
     textAlign: updates.textAlign ?? style?.textAlign,
+    verticalAlign: updates.verticalAlign ?? style?.verticalAlign,
   })
 
   const applyStyleToSelected = (updates: Partial<TextStyle>) => {
@@ -364,6 +369,31 @@ export function RenderControlsPanel() {
       value: 'right',
       label: t('render.alignRight'),
       Icon: AlignRightIcon,
+    },
+  ]
+
+  const currentVerticalAlign: VerticalAlign =
+    selectedBlock?.style?.verticalAlign ?? 'center'
+
+  const verticalAlignItems: {
+    value: VerticalAlign
+    label: string
+    Icon: ComponentType<{ className?: string }>
+  }[] = [
+    {
+      value: 'top',
+      label: t('render.valignTop', { defaultValue: 'Top' }),
+      Icon: ArrowUpFromLineIcon,
+    },
+    {
+      value: 'center',
+      label: t('render.valignCenter', { defaultValue: 'Middle' }),
+      Icon: AlignVerticalSpaceAroundIcon,
+    },
+    {
+      value: 'bottom',
+      label: t('render.valignBottom', { defaultValue: 'Bottom' }),
+      Icon: ArrowDownIcon,
     },
   ]
 
@@ -452,8 +482,8 @@ export function RenderControlsPanel() {
         </div>
       </div>
 
-      {/* Size / Effect / Align */}
-      <div className='grid w-full grid-cols-[minmax(0,1fr)_auto_auto] items-end gap-x-2'>
+      {/* Size / Effect / Align / VAlign */}
+      <div className='grid w-full grid-cols-[minmax(0,1fr)_auto_auto_auto] items-end gap-x-2'>
         <span className='text-muted-foreground text-[10px] font-medium uppercase'>
           {fontSizeLabel}
         </span>
@@ -462,6 +492,9 @@ export function RenderControlsPanel() {
         </span>
         <span className='text-muted-foreground text-[10px] font-medium uppercase'>
           {alignLabel}
+        </span>
+        <span className='text-muted-foreground text-[10px] font-medium uppercase'>
+          {t('render.valignLabel', { defaultValue: 'V' })}
         </span>
 
         <div className='border-input bg-background flex min-w-0 items-center rounded-md border shadow-xs'>
@@ -577,6 +610,41 @@ export function RenderControlsPanel() {
                       if (applyStyleToSelected({ textAlign: item.value }))
                         return
                       applyStyleToAll({ textAlign: item.value })
+                    }}
+                  >
+                    <Icon className='size-3.5' />
+                  </Button>
+                </TooltipTrigger>
+                <TooltipContent side='bottom' sideOffset={4}>
+                  {item.label}
+                </TooltipContent>
+              </Tooltip>
+            )
+          })}
+        </div>
+
+        <div className='flex items-center gap-1'>
+          {verticalAlignItems.map((item) => {
+            const active = currentVerticalAlign === item.value
+            const Icon = item.Icon
+            return (
+              <Tooltip key={item.value}>
+                <TooltipTrigger asChild>
+                  <Button
+                    variant='outline'
+                    size='icon-sm'
+                    aria-label={item.label}
+                    data-testid={`render-valign-${item.value}`}
+                    disabled={!hasBlocks}
+                    className={cn(
+                      'size-7 shrink-0',
+                      active &&
+                        'bg-primary text-primary-foreground border-primary hover:bg-primary/90',
+                    )}
+                    onClick={() => {
+                      if (applyStyleToSelected({ verticalAlign: item.value }))
+                        return
+                      applyStyleToAll({ verticalAlign: item.value })
                     }}
                   >
                     <Icon className='size-3.5' />

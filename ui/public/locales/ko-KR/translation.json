@@ -172,7 +172,11 @@
     "fontColorLabel": "글꼴 색상",
     "fontScopeGlobal": "전역",
     "fontScopeBlock": "블록별",
-    "fontScopeBlockIndex": "블록 {{index}}"
+    "fontScopeBlockIndex": "블록 {{index}}",
+    "valignLabel": "세로정렬",
+    "valignTop": "위",
+    "valignCenter": "가운데",
+    "valignBottom": "아래"
   },
   "textBlocks": {
     "emptyPrompt": "텍스트 블록을 보려면 이미지를 열어주세요.",

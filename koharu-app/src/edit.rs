@@ -149,6 +149,7 @@ pub async fn update_text_block(
                     effect: None,
                     stroke: None,
                     text_align: None,
+                    vertical_align: None,
                 });
 
                 if let Some(ref families) = args.font_families {

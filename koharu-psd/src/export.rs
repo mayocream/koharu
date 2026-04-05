@@ -819,6 +819,7 @@ mod tests {
                 effect: None,
                 stroke: None,
                 text_align: None,
+                vertical_align: None,
             }),
             ..Default::default()
         };

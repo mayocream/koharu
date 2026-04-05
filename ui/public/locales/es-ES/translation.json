@@ -172,7 +172,11 @@
     "effectBold": "Negrita",
     "effectBorder": "Borde",
     "strokeColorLabel": "Color del borde",
-    "strokeWidthLabel": "Grosor del borde"
+    "strokeWidthLabel": "Grosor del borde",
+    "valignLabel": "Alineación V",
+    "valignTop": "Arriba",
+    "valignCenter": "Centro",
+    "valignBottom": "Abajo"
   },
   "textBlocks": {
     "emptyPrompt": "Abre una imagen para ver los bloques de texto.",

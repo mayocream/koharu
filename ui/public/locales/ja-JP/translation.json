@@ -172,7 +172,11 @@
     "effectBold": "太字",
     "effectBorder": "縁取り",
     "strokeColorLabel": "縁取りの色",
-    "strokeWidthLabel": "縁取りの太さ"
+    "strokeWidthLabel": "縁取りの太さ",
+    "valignLabel": "縦揃え",
+    "valignTop": "上",
+    "valignCenter": "中央",
+    "valignBottom": "下"
   },
   "textBlocks": {
     "emptyPrompt": "画像を開くとテキストブロックが表示されます。",

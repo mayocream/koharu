@@ -155,6 +155,17 @@ pub enum TextAlign {
     Right,
 }
 
+#[derive(
+    Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, Default, ToSchema, JsonSchema,
+)]
+#[serde(rename_all = "camelCase")]
+pub enum VerticalAlign {
+    #[default]
+    Top,
+    Center,
+    Bottom,
+}
+
 #[derive(Debug, Clone, Serialize, Deserialize, ToSchema, JsonSchema)]
 #[serde(rename_all = "camelCase")]
 pub struct TextStyle {
@@ -165,6 +176,8 @@ pub struct TextStyle {
     pub stroke: Option<TextStrokeStyle>,
     #[serde(default)]
     pub text_align: Option<TextAlign>,
+    #[serde(default)]
+    pub vertical_align: Option<VerticalAlign>,
 }
 
 #[derive(Debug, Clone, Copy, Serialize, Deserialize, JsonSchema, ToSchema)]

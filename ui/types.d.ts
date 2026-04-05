@@ -13,6 +13,8 @@ export type RenderStroke = {
 
 export type TextAlign = 'left' | 'center' | 'right'
 
+export type VerticalAlign = 'top' | 'center' | 'bottom'
+
 export type NamedFontPrediction = {
   index: number
   name: string
@@ -42,6 +44,7 @@ export type TextStyle = {
   effect?: RenderEffect
   stroke?: RenderStroke
   textAlign?: TextAlign
+  verticalAlign?: VerticalAlign
 }
 
 export type TextBlock = {
@@ -69,6 +72,8 @@ export type TextBlock = {
   fontPrediction?: FontPrediction
   /** Blob hash for the rendered text block sprite. */
   rendered?: string
+  /** Whether the layout box is locked (user has resized). */
+  lockLayoutBox?: boolean
   /** Actual render area (when bubble expansion is used). */
   renderX?: number
   renderY?: number
