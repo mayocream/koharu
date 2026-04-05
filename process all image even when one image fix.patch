@@ -1,0 +1,102 @@
+diff --git a/ui/components/ActivityBubble.tsx b/ui/components/ActivityBubble.tsx
+index a1ae438..f33634e 100644
+--- a/ui/components/ActivityBubble.tsx
++++ b/ui/components/ActivityBubble.tsx
+@@ -188,9 +188,19 @@ function OperationCard({
+ 
+   const title = getOperationTitle(machineState, t)
+ 
++  const operationType = machineState.matches('loadingLlm')
++    ? 'llm-load'
++    : machineState.matches('pipeline')
++      ? (ctx.documentId ? 'process-current' : 'process-all')
++      : undefined
++
+   return (
+     <BubbleCard>
+-      <div data-testid='operation-card' className='flex items-start gap-3'>
++      <div
++        data-testid='operation-card'
++        data-operation-type={operationType}
++        className='flex items-start gap-3'
++      >
+         <div className='bg-primary mt-1 h-2.5 w-2.5 rounded-full shadow-[0_0_0_6px_hsl(var(--primary)/0.16)]' />
+         <div className='flex-1'>
+           <div className='flex items-start justify-between gap-2'>
+diff --git a/ui/lib/machines/processingMachine.ts b/ui/lib/machines/processingMachine.ts
+index 48184fe..5a5880e 100644
+--- a/ui/lib/machines/processingMachine.ts
++++ b/ui/lib/machines/processingMachine.ts
+@@ -244,25 +244,27 @@ const batchExportActor = fromPromise<void, { layer: ExportLayer }>(
+ // Polling actors (replace SSE)
+ // ---------------------------------------------------------------------------
+ 
+-const jobPollingActor = fromCallback<ProcessingEvent, { jobId: string }>(
+-  ({ sendBack, input }) => {
+-    const interval = setInterval(async () => {
+-      try {
+-        const job = await getJob(input.jobId)
+-        if (job.status === 'running') {
+-          const single = job.totalDocuments <= 1
+-          sendBack({
+-            type: 'PROGRESS',
+-            step: job.step ?? undefined,
+-            current: single
+-              ? job.currentStepIndex
+-              : job.currentDocument +
+-                (job.totalSteps > 0
+-                  ? job.currentStepIndex / job.totalSteps
+-                  : 0),
+-            total: single ? job.totalSteps : job.totalDocuments,
+-            overallPercent: job.overallPercent,
+-          })
++const jobPollingActor = fromCallback<
++  ProcessingEvent,
++  { jobId: string; isAll: boolean }
++>(({ sendBack, input }) => {
++  const interval = setInterval(async () => {
++    try {
++      const job = await getJob(input.jobId)
++      if (job.status === 'running') {
++        const single = !input.isAll && job.totalDocuments <= 1
++        sendBack({
++          type: 'PROGRESS',
++          step: job.step ?? undefined,
++          current: single
++            ? job.currentStepIndex
++            : job.currentDocument +
++              (job.totalSteps > 0
++                ? job.currentStepIndex / job.totalSteps
++                : 0),
++          total: single ? job.totalSteps : job.totalDocuments,
++          overallPercent: job.overallPercent,
++        })
+         } else if (job.status === 'completed') {
+           sendBack({ type: 'DONE' })
+         } else {
+@@ -436,6 +438,13 @@ export const processingMachine = setup({
+         context.queryClient.invalidateQueries({
+           queryKey: getGetDocumentQueryKey(context.documentId),
+         })
++      } else {
++        const currentId = useEditorUiStore.getState().currentDocumentId
++        if (currentId) {
++          context.queryClient.invalidateQueries({
++            queryKey: getGetDocumentQueryKey(currentId),
++          })
++        }
+       }
+       context.queryClient.invalidateQueries({
+         queryKey: getListDocumentsQueryKey(),
+@@ -714,7 +723,10 @@ export const processingMachine = setup({
+         running: {
+           invoke: {
+             src: 'jobPollingActor',
+-            input: ({ context }) => ({ jobId: context.jobId! }),
++            input: ({ context }) => ({
++              jobId: context.jobId!,
++              isAll: context.documentId === null,
++            }),
+           },
+           on: {
+             PROGRESS: {
