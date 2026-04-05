@@ -291,15 +291,13 @@ impl ModelId {
             | Self::Gemma4_26bA4bIt
             | Self::Gemma4_31bIt
             | Self::Gemma4E2bUncensored
-            | Self::Gemma4E4bUncensored => {
-                GenerateOptions {
-                    temperature: 1.0,
-                    top_k: Some(64),
-                    top_p: Some(0.95),
-                    repeat_penalty: 1.0,
-                    ..Default::default()
-                }
-            }
+            | Self::Gemma4E4bUncensored => GenerateOptions {
+                temperature: 1.0,
+                top_k: Some(64),
+                top_p: Some(0.95),
+                repeat_penalty: 1.0,
+                ..Default::default()
+            },
             // Qwen3.5 non-thinking: temp=1.0, top_k=20, top_p=1.0, presence=2.0
             Self::Qwen3_5_0_8b
             | Self::Qwen3_5_2b
