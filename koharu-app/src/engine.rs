@@ -933,7 +933,7 @@ struct KoharuRenderEngine;
 #[async_trait]
 impl Engine for KoharuRenderEngine {
     async fn run(&self, doc: &Document, res: &AppResources) -> Result<Patch> {
-        render_document(res, &doc.id, None, None, None, None).await?;
+        render_document(res, &doc.id, None, None, None).await?;
         Ok(Patch::none())
     }
 }
@@ -970,10 +970,10 @@ pub async fn render_document(
     text_block_index: Option<usize>,
     shader_effect: Option<TextShaderEffect>,
     shader_stroke: Option<TextStrokeStyle>,
-    font_family: Option<&str>,
 ) -> Result<()> {
     let renderer = get_renderer(res).await?;
     let doc = res.storage.page(document_id).await?;
+    let document_font = doc.style.as_ref().and_then(|s| s.default_font.as_deref());
     let source = res.storage.images.load(&doc.source)?;
     let inpainted = doc
         .inpainted
@@ -997,7 +997,7 @@ pub async fn render_document(
             text_block_index,
             shader_effect: shader_effect.unwrap_or_default(),
             shader_stroke,
-            font_family,
+            document_font,
             bubbles: &bubbles,
             image_width: doc.width,
             image_height: doc.height,

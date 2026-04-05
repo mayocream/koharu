@@ -74,7 +74,6 @@ pub struct ProcessRequest {
     pub language: Option<String>,
     pub shader_effect: Option<TextShaderEffect>,
     pub shader_stroke: Option<TextStrokeStyle>,
-    pub font_family: Option<String>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, JsonSchema)]
@@ -112,7 +111,6 @@ pub struct RenderParams {
     pub document_id: String,
     pub text_block_index: Option<usize>,
     pub shader_effect: Option<String>,
-    pub font_family: Option<String>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, JsonSchema)]
@@ -128,7 +126,6 @@ pub struct ProcessParams {
     pub llm_target: Option<crate::LlmTarget>,
     pub language: Option<String>,
     pub shader_effect: Option<String>,
-    pub font_family: Option<String>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, JsonSchema)]
@@ -283,7 +280,6 @@ mod tests {
                 color: [255, 255, 255, 255],
                 width_px: Some(2.0),
             }),
-            font_family: Some("Noto Sans".to_string()),
         });
         round_trip(&ViewImageParams {
             document_id: "abc123".to_string(),
@@ -306,7 +302,6 @@ mod tests {
             document_id: "abc123".to_string(),
             text_block_index: Some(0),
             shader_effect: Some("bold".to_string()),
-            font_family: Some("Noto Sans".to_string()),
         });
         round_trip(&ProcessParams {
             document_id: Some("abc123".to_string()),
@@ -317,7 +312,6 @@ mod tests {
             }),
             language: Some("zh-CN".to_string()),
             shader_effect: Some("italic,bold".to_string()),
-            font_family: Some("Noto Sans".to_string()),
         });
         round_trip(&UpdateTextBlockPayload {
             index: 1,

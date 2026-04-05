@@ -1,9 +1,10 @@
 use std::sync::{Arc, Mutex};
 
-use anyhow::Result;
+use anyhow::{Context, Result};
 use image::{DynamicImage, imageops};
 use koharu_core::{
-    BlobRef, FontFaceInfo, TextAlign, TextBlock, TextShaderEffect, TextStrokeStyle, TextStyle,
+    BlobRef, FontFaceInfo, FontSource, TextAlign, TextBlock, TextShaderEffect, TextStrokeStyle,
+    TextStyle,
 };
 
 use koharu_renderer::{
@@ -19,6 +20,7 @@ use koharu_renderer::{
     },
 };
 
+use crate::google_fonts::GoogleFontService;
 use crate::storage;
 
 /// Grouped options for [`Renderer::render_to_blob`] to keep the arg count manageable.
@@ -26,7 +28,7 @@ pub struct RenderTextOptions<'a> {
     pub text_block_index: Option<usize>,
     pub shader_effect: TextShaderEffect,
     pub shader_stroke: Option<TextStrokeStyle>,
-    pub font_family: Option<&'a str>,
+    pub document_font: Option<&'a str>,
     pub bubbles: &'a [koharu_core::BubbleRegion],
     pub image_width: u32,
     pub image_height: u32,
@@ -135,16 +137,23 @@ pub struct Renderer {
     fontbook: Arc<Mutex<FontBook>>,
     renderer: TinySkiaRenderer,
     symbol_fallbacks: Vec<Font>,
+    pub google_fonts: Arc<GoogleFontService>,
 }
 
 impl Renderer {
     pub fn new() -> Result<Self> {
         let mut fontbook = FontBook::new();
         let symbol_fallbacks = load_symbol_fallbacks(&mut fontbook);
+        let app_data_root = koharu_runtime::default_app_data_root();
+        let google_fonts = Arc::new(
+            GoogleFontService::new(&app_data_root)
+                .context("failed to initialize Google Fonts service")?,
+        );
         Ok(Self {
             fontbook: Arc::new(Mutex::new(fontbook)),
             renderer: TinySkiaRenderer::new()?,
             symbol_fallbacks,
+            google_fonts,
         })
     }
 
@@ -168,12 +177,30 @@ impl Renderer {
                     Some(FontFaceInfo {
                         family_name,
                         post_script_name: face.post_script_name,
+                        source: FontSource::System,
+                        category: None,
+                        cached: true,
                     })
                 } else {
                     None
                 }
             })
             .collect::<Vec<_>>();
+
+        // Google Fonts (from catalog)
+        let catalog = self.google_fonts.catalog();
+        for entry in &catalog.fonts {
+            if seen.insert(entry.family.clone()) {
+                fonts.push(FontFaceInfo {
+                    family_name: entry.family.clone(),
+                    post_script_name: entry.family.clone(),
+                    source: FontSource::Google,
+                    category: Some(entry.category.clone()),
+                    cached: false,
+                });
+            }
+        }
+
         fonts.sort();
         Ok(fonts)
     }
@@ -229,7 +256,7 @@ impl Renderer {
                         text_block,
                         opts.shader_effect,
                         opts.shader_stroke.clone(),
-                        opts.font_family,
+                        opts.document_font,
                         bubble_area,
                         base_font_size,
                         min_font,
@@ -285,7 +312,7 @@ impl Renderer {
         text_block: &mut TextBlock,
         effect: TextShaderEffect,
         global_stroke: Option<TextStrokeStyle>,
-        font_family: Option<&str>,
+        document_font: Option<&str>,
         bubble_area: Option<LayoutBox>,
         base_font_size: Option<f32>,
         min_font_size: f32,
@@ -317,7 +344,12 @@ impl Renderer {
             text_align: None,
         });
 
-        apply_global_font_family(&mut style.font_families, font_family);
+        // Font cascade: per-block → document default → script fallback
+        if style.font_families.is_empty()
+            && let Some(font) = document_font
+        {
+            style.font_families.push(font.to_string());
+        }
         apply_default_font_families(&mut style.font_families, &normalized_translation);
         let font = {
             let _s = tracing::info_span!("select_font").entered();
@@ -420,7 +452,7 @@ impl Renderer {
             text_block.render_height = None;
         }
         // rendered field will be set by the caller with a BlobRef
-        let persisted_style = text_block.style.get_or_insert_with(|| TextStyle {
+        let _persisted_style = text_block.style.get_or_insert_with(|| TextStyle {
             font_families: Vec::new(),
             font_size: None,
             color,
@@ -428,7 +460,7 @@ impl Renderer {
             stroke: None,
             text_align: None,
         });
-        persisted_style.font_families = vec![font.post_script_name().to_string()];
+        // font_families is NOT set here — it only contains user-explicit choices
         Ok(Some(DynamicImage::ImageRgba8(rendered)))
     }
 
@@ -437,28 +469,34 @@ impl Renderer {
             .fontbook
             .lock()
             .map_err(|_| anyhow::anyhow!("Failed to lock fontbook"))?;
-        let faces = fontbook.all_families();
-        let post_script_name = style
-            .font_families
-            .iter()
-            .find_map(|candidate| face_post_script_name(&faces, candidate))
-            .ok_or_else(|| {
-                anyhow::anyhow!("no font found for candidates: {:?}", style.font_families)
-            })?;
-        fontbook.query(&post_script_name)
+
+        // Try each candidate through the full resolution chain before moving
+        // to the next.  This ensures a global font (first in the list) is
+        // resolved from the disk cache even when a previously-loaded font
+        // appears later in the list.
+        for candidate in &style.font_families {
+            // Already loaded in FontBook (system font or previously loaded Google Font)?
+            let faces = fontbook.all_families();
+            if let Some(psn) = face_post_script_name(&faces, candidate) {
+                return fontbook.query(&psn);
+            }
+
+            // Try Google Fonts disk cache
+            if let Some(data) = self.google_fonts.read_cached_file(candidate)? {
+                let font = fontbook.load_from_bytes(data)?;
+                return Ok(font);
+            }
+        }
+
+        Err(anyhow::anyhow!(
+            "no font found for candidates: {:?}",
+            style.font_families
+        ))
     }
 }
 
 fn default_stroke_width(font_size: f32) -> f32 {
     (font_size * 0.10).clamp(1.2, 8.0)
-}
-
-fn apply_global_font_family(font_families: &mut Vec<String>, font_family: Option<&str>) {
-    if font_families.is_empty()
-        && let Some(font_family) = font_family
-    {
-        font_families.push(font_family.to_string());
-    }
 }
 
 fn apply_default_font_families(font_families: &mut Vec<String>, text: &str) {
@@ -705,8 +743,8 @@ fn find_best_bubble(block: &TextBlock, bubbles: &[koharu_core::BubbleRegion]) ->
 #[cfg(test)]
 mod tests {
     use super::{
-        align_layout_horizontally, apply_default_font_families, apply_global_font_family,
-        center_layout_vertically, resolve_stroke_style,
+        align_layout_horizontally, apply_default_font_families, center_layout_vertically,
+        resolve_stroke_style,
     };
     use koharu_core::{FontPrediction, TextAlign, TextBlock, TextStrokeStyle};
     use koharu_renderer::layout::{LayoutLine, LayoutRun, WritingMode};
@@ -816,34 +854,10 @@ mod tests {
     }
 
     #[test]
-    fn explicit_block_font_should_not_be_overridden_by_global_font() {
-        let mut font_families = vec!["Block Font".to_string()];
-        apply_global_font_family(&mut font_families, Some("Global Font"));
-
-        assert_eq!(font_families, vec!["Block Font".to_string()]);
-    }
-
-    #[test]
-    fn global_font_should_fill_empty_block_font_list() {
-        let mut font_families = Vec::new();
-        apply_global_font_family(&mut font_families, Some("Global Font"));
-        assert_eq!(font_families, vec!["Global Font".to_string()]);
-    }
-
-    #[test]
     fn default_font_families_should_fill_empty_list() {
         let mut font_families = Vec::new();
         apply_default_font_families(&mut font_families, "hello");
         assert!(!font_families.is_empty());
-    }
-
-    #[test]
-    fn global_font_should_be_applied_before_default_script_fonts() {
-        let mut font_families = Vec::new();
-        apply_global_font_family(&mut font_families, Some("Global Font"));
-        apply_default_font_families(&mut font_families, "hello");
-
-        assert_eq!(font_families, vec!["Global Font".to_string()]);
     }
 
     #[test]

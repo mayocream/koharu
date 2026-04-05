@@ -1,5 +1,6 @@
 pub mod commands;
 pub mod events;
+pub mod google_fonts;
 pub mod parse;
 pub mod protocol;
 pub mod views;
@@ -12,6 +13,7 @@ pub use commands::*;
 pub use effect::TextShaderEffect;
 pub use events::*;
 pub use font::{FontPrediction, NamedFontPrediction, TextDirection, TopFont};
+pub use google_fonts::{FontSource, GoogleFontCatalog, GoogleFontEntry, GoogleFontVariant};
 pub use image::SerializableDynamicImage;
 pub use protocol::*;
 
@@ -175,6 +177,13 @@ pub struct BubbleRegion {
     pub confidence: f32,
 }
 
+#[derive(Default, Debug, Clone, Serialize, Deserialize, ToSchema, JsonSchema)]
+#[serde(rename_all = "camelCase")]
+pub struct DocumentStyle {
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub default_font: Option<String>,
+}
+
 #[derive(Default, Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct Document {
@@ -190,6 +199,8 @@ pub struct Document {
     pub text_blocks: Vec<TextBlock>,
     #[serde(default)]
     pub bubbles: Vec<BubbleRegion>,
+    #[serde(default)]
+    pub style: Option<DocumentStyle>,
 }
 #[cfg(test)]
 mod tests {}

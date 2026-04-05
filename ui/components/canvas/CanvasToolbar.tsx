@@ -38,7 +38,6 @@ import type {
   LlmProviderCatalog,
 } from '@/lib/api/schemas'
 import { useProcessing } from '@/lib/machines'
-import { usePreferencesStore } from '@/lib/stores/preferencesStore'
 import { llmTargetKey, sameLlmTarget } from '@/lib/llmTargets'
 import i18n from '@/lib/i18n'
 
@@ -194,14 +193,12 @@ function WorkflowButtons() {
         onClick={() => {
           const documentId = requireDocumentId()
           const { renderEffect, renderStroke } = useEditorUiStore.getState()
-          const { fontFamily } = usePreferencesStore.getState()
           send({
             type: 'START_RENDER',
             documentId,
             options: {
               shaderEffect: renderEffect,
               shaderStroke: renderStroke,
-              fontFamily,
             },
           })
         }}

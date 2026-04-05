@@ -11,6 +11,10 @@ use crate::{FontPrediction, TextBlock, TextShaderEffect, TextStrokeStyle, TextSt
 pub struct FontFaceInfo {
     pub family_name: String,
     pub post_script_name: String,
+    pub source: crate::google_fonts::FontSource,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub category: Option<String>,
+    pub cached: bool,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, JsonSchema, ToSchema)]
@@ -119,6 +123,8 @@ pub struct DocumentDetail {
     /// Blob hash for the rendered composite layer.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub rendered: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub style: Option<crate::DocumentStyle>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, JsonSchema, ToSchema)]
@@ -339,7 +345,6 @@ pub struct RenderRequest {
     pub text_block_id: Option<String>,
     pub shader_effect: Option<TextShaderEffect>,
     pub shader_stroke: Option<TextStrokeStyle>,
-    pub font_family: Option<String>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, JsonSchema, ToSchema)]
@@ -365,7 +370,6 @@ pub struct PipelineJobRequest {
     pub language: Option<String>,
     pub shader_effect: Option<TextShaderEffect>,
     pub shader_stroke: Option<TextStrokeStyle>,
-    pub font_family: Option<String>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, JsonSchema, ToSchema)]

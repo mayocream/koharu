@@ -73,12 +73,12 @@ pub fn font_families_for_text(text: &str) -> Vec<String> {
             &["Noto Sans"]
         }
     } else {
+        // Google Fonts candidates (downloaded on demand) + platform fallbacks
         #[cfg(target_os = "windows")]
         {
             &[
-                "CC Wild Words",
-                "Wild Words",
-                "Anime Ace 2.0 BB",
+                "Comic Neue",
+                "Bangers",
                 "Comic Sans MS",
                 "Trebuchet MS",
                 "Segoe UI",
@@ -88,9 +88,8 @@ pub fn font_families_for_text(text: &str) -> Vec<String> {
         #[cfg(target_os = "macos")]
         {
             &[
-                "CC Wild Words",
-                "Wild Words",
-                "Anime Ace 2.0 BB",
+                "Comic Neue",
+                "Bangers",
                 "Chalkboard SE",
                 "Noteworthy",
                 "SF Pro",
@@ -100,10 +99,8 @@ pub fn font_families_for_text(text: &str) -> Vec<String> {
         #[cfg(not(any(target_os = "windows", target_os = "macos")))]
         {
             &[
-                "CC Wild Words",
-                "Wild Words",
-                "Anime Ace 2.0 BB",
                 "Comic Neue",
+                "Bangers",
                 "Noto Sans",
                 "DejaVu Sans",
                 "Liberation Sans",

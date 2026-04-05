@@ -378,16 +378,9 @@ impl KoharuMcp {
             .transpose()
             .map_err(|e: anyhow::Error| e.to_string())?;
 
-        engine::render_document(
-            &res,
-            &p.document_id,
-            p.text_block_index,
-            effect,
-            None,
-            p.font_family.as_deref(),
-        )
-        .await
-        .map_err(|e| e.to_string())?;
+        engine::render_document(&res, &p.document_id, p.text_block_index, effect, None)
+            .await
+            .map_err(|e| e.to_string())?;
 
         Ok("Render complete".to_string())
     }
@@ -482,7 +475,6 @@ impl KoharuMcp {
                 language: p.language,
                 shader_effect: effect,
                 shader_stroke: None,
-                font_family: p.font_family,
             },
             jobs,
         )

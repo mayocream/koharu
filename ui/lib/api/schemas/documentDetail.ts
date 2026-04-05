@@ -3,6 +3,7 @@
  * Do not edit manually.
  * OpenAPI spec version: 0.0.1
  */
+import type { DocumentStyle } from './documentStyle'
 import type { TextBlockDetail } from './textBlockDetail'
 
 export interface DocumentDetail {
@@ -32,6 +33,7 @@ export interface DocumentDetail {
    * @nullable
    */
   segment?: string | null
+  style?: null | DocumentStyle
   textBlocks: TextBlockDetail[]
   /** @minimum 0 */
   width: number

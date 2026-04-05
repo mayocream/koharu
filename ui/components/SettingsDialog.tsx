@@ -56,7 +56,6 @@ import {
   updateConfig,
 } from '@/lib/api/system/system'
 import { getLlmCatalog, getGetLlmCatalogQueryKey } from '@/lib/api/llm/llm'
-import { usePreferencesStore } from '@/lib/stores/preferencesStore'
 import { supportedLanguages } from '@/lib/i18n'
 import type {
   UpdateConfigBody,
@@ -405,9 +404,6 @@ function AppearancePane() {
   const { t, i18n } = useTranslation()
   const { theme, setTheme } = useTheme()
   const locales = useMemo(() => supportedLanguages, [])
-  const fontFamily = usePreferencesStore((s) => s.fontFamily)
-  const setFontFamily = usePreferencesStore((s) => s.setFontFamily)
-
   return (
     <div className='space-y-8'>
       <Section title={t('settings.theme')}>
@@ -442,18 +438,6 @@ function AppearancePane() {
             ))}
           </SelectContent>
         </Select>
-      </Section>
-
-      <Section
-        title={t('settings.renderingFont')}
-        description={t('settings.renderingFontDescription')}
-      >
-        <Input
-          type='text'
-          value={fontFamily ?? ''}
-          onChange={(e) => setFontFamily(e.target.value || undefined)}
-          placeholder='e.g. Noto Sans CJK'
-        />
       </Section>
     </div>
   )

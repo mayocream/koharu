@@ -816,6 +816,65 @@
         }
       }
     },
+    "/documents/{document_id}/style": {
+      "patch": {
+        "tags": ["documents"],
+        "operationId": "updateDocumentStyle",
+        "parameters": [
+          {
+            "name": "document_id",
+            "in": "path",
+            "description": "Document ID",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/UpdateDocumentStyleRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/UpdateDocumentStyleRequest"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/documents/{document_id}/text-blocks": {
       "put": {
         "tags": ["text-blocks"],
@@ -1316,6 +1375,128 @@
         }
       }
     },
+    "/fonts/google/catalog": {
+      "get": {
+        "tags": ["system"],
+        "operationId": "getGoogleFontsCatalog",
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/GoogleFontCatalogResponse"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/fonts/google/{family}/fetch": {
+      "post": {
+        "tags": ["system"],
+        "operationId": "fetchGoogleFont",
+        "parameters": [
+          {
+            "name": "family",
+            "in": "path",
+            "description": "Font family name",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/FontFaceInfo"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/fonts/google/{family}/file": {
+      "get": {
+        "tags": ["system"],
+        "operationId": "getGoogleFontFile",
+        "parameters": [
+          {
+            "name": "family",
+            "in": "path",
+            "description": "Font family name",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Font file bytes",
+            "content": {
+              "font/ttf": {}
+            }
+          },
+          "404": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/jobs": {
       "get": {
         "tags": ["jobs"],
@@ -1718,6 +1899,16 @@
             "type": ["string", "null"],
             "description": "Blob hash for the segmentation mask layer."
           },
+          "style": {
+            "oneOf": [
+              {
+                "type": "null"
+              },
+              {
+                "$ref": "#/components/schemas/DocumentStyle"
+              }
+            ]
+          },
           "textBlocks": {
             "type": "array",
             "items": {
@@ -1728,6 +1919,14 @@
             "type": "integer",
             "format": "int32",
             "minimum": 0
+          }
+        }
+      },
+      "DocumentStyle": {
+        "type": "object",
+        "properties": {
+          "defaultFont": {
+            "type": ["string", "null"]
           }
         }
       },
@@ -1856,13 +2055,22 @@
       },
       "FontFaceInfo": {
         "type": "object",
-        "required": ["familyName", "postScriptName"],
+        "required": ["familyName", "postScriptName", "source", "cached"],
         "properties": {
+          "cached": {
+            "type": "boolean"
+          },
+          "category": {
+            "type": ["string", "null"]
+          },
           "familyName": {
             "type": "string"
           },
           "postScriptName": {
             "type": "string"
+          },
+          "source": {
+            "$ref": "#/components/schemas/FontSource"
           }
         }
       },
@@ -1925,6 +2133,49 @@
             "type": "array",
             "items": {
               "$ref": "#/components/schemas/TopFont"
+            }
+          }
+        }
+      },
+      "FontSource": {
+        "type": "string",
+        "enum": ["system", "google"]
+      },
+      "GoogleFontCatalogEntry": {
+        "type": "object",
+        "required": ["family", "category", "subsets", "cached"],
+        "properties": {
+          "cached": {
+            "type": "boolean"
+          },
+          "category": {
+            "type": "string"
+          },
+          "family": {
+            "type": "string"
+          },
+          "subsets": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          }
+        }
+      },
+      "GoogleFontCatalogResponse": {
+        "type": "object",
+        "required": ["fonts", "recommended"],
+        "properties": {
+          "fonts": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/GoogleFontCatalogEntry"
+            }
+          },
+          "recommended": {
+            "type": "array",
+            "items": {
+              "type": "string"
             }
           }
         }
@@ -2304,9 +2555,6 @@
           "documentId": {
             "type": ["string", "null"]
           },
-          "fontFamily": {
-            "type": ["string", "null"]
-          },
           "language": {
             "type": ["string", "null"]
           },
@@ -2406,9 +2654,6 @@
       "RenderRequest": {
         "type": "object",
         "properties": {
-          "fontFamily": {
-            "type": ["string", "null"]
-          },
           "shaderEffect": {
             "oneOf": [
               {
@@ -2753,6 +2998,14 @@
             "type": ["string", "null"]
           },
           "textBlockId": {
+            "type": ["string", "null"]
+          }
+        }
+      },
+      "UpdateDocumentStyleRequest": {
+        "type": "object",
+        "properties": {
+          "defaultFont": {
             "type": ["string", "null"]
           }
         }

@@ -1,6 +1,6 @@
 'use client'
 
-import type { ComponentType } from 'react'
+import { type ComponentType, useMemo } from 'react'
 import { useTranslation } from 'react-i18next'
 import {
   AlignCenterIcon,
@@ -31,8 +31,8 @@ import {
 } from '@/components/ui/tooltip'
 import { FontSelect } from '@/components/ui/font-select'
 import { useEditorUiStore } from '@/lib/stores/editorUiStore'
-import { usePreferencesStore } from '@/lib/stores/preferencesStore'
-import { useListFonts } from '@/lib/api/system/system'
+import { useListFonts, useGetGoogleFontsCatalog } from '@/lib/api/system/system'
+import { updateDocumentStyle } from '@/lib/api/documents/documents'
 import { cn } from '@/lib/utils'
 
 const DEFAULT_COLOR: RgbaColor = [0, 0, 0, 255]
@@ -40,6 +40,8 @@ const DEFAULT_FONT_FACES: FontFaceInfo[] = [
   {
     familyName: 'Arial',
     postScriptName: 'ArialMT',
+    source: 'system',
+    cached: true,
   },
 ]
 const DEFAULT_EFFECT: RenderEffect = {
@@ -117,6 +119,8 @@ const fallbackFontFace = (value?: string): FontFaceInfo | undefined => {
   return {
     familyName: normalized,
     postScriptName: normalized,
+    source: 'system',
+    cached: true,
   }
 }
 
@@ -177,10 +181,26 @@ export function RenderControlsPanel() {
   const setRenderEffect = useEditorUiStore((state) => state.setRenderEffect)
   const setRenderStroke = useEditorUiStore((state) => state.setRenderStroke)
   const { data: availableFonts = [] } = useListFonts()
-  const fontFamily = usePreferencesStore((state) => state.fontFamily)
-  const setFontFamily = usePreferencesStore((state) => state.setFontFamily)
-  const { textBlocks, selectedBlockIndex, replaceBlock, updateTextBlocks } =
-    useTextBlocks()
+  const { data: catalog } = useGetGoogleFontsCatalog()
+  const sortedFonts = useMemo(() => {
+    if (!availableFonts) return []
+    const recommended = new Set(catalog?.recommended ?? [])
+    return [...availableFonts].sort((a, b) => {
+      const aRec = recommended.has(a.familyName) ? 0 : 1
+      const bRec = recommended.has(b.familyName) ? 0 : 1
+      if (aRec !== bRec) return aRec - bRec
+      return a.familyName.localeCompare(b.familyName)
+    })
+  }, [availableFonts, catalog])
+  const {
+    document: currentDocument,
+    textBlocks,
+    selectedBlockIndex,
+    replaceBlock,
+    updateTextBlocks,
+  } = useTextBlocks()
+  const documentId = currentDocument?.id
+  const documentFont = currentDocument?.style?.defaultFont ?? undefined
   const { t } = useTranslation()
   const selectedBlock =
     selectedBlockIndex !== undefined
@@ -190,8 +210,8 @@ export function RenderControlsPanel() {
   const hasBlocks = textBlocks.length > 0
   const fontCandidates = uniqueFontFaces(
     [
-      ...availableFonts,
-      ...(fontFamily ? [fallbackFontFace(fontFamily)] : []),
+      ...sortedFonts,
+      ...(documentFont ? [fallbackFontFace(documentFont)] : []),
       ...(selectedBlock?.style?.fontFamilies
         ?.slice(0, 1)
         ?.map(fallbackFontFace) ?? []),
@@ -206,7 +226,7 @@ export function RenderControlsPanel() {
   const fontOptions = fontCandidates
   const currentFontCandidate =
     selectedBlock?.style?.fontFamilies?.[0] ??
-    fontFamily ??
+    documentFont ??
     firstBlock?.style?.fontFamilies?.[0] ??
     (hasBlocks ? fallbackFontFaces[0]?.postScriptName : '')
   const currentFontFace =
@@ -386,21 +406,23 @@ export function RenderControlsPanel() {
                   selectedBlock?.style?.fontFamilies,
                 )
                 if (applyStyleToSelected({ fontFamilies: nextFamilies })) return
-                setFontFamily(value)
-                if (!hasBlocks) return
-                const nextBlocks = textBlocks.map((block) => ({
-                  ...block,
-                  style: buildStyle(block, block.style, {
-                    fontFamilies: mergeFontFamilies(
-                      value,
-                      block.style?.fontFamilies,
-                    ),
-                  }),
-                }))
-                void updateTextBlocks(nextBlocks)
+                // Set as document default font
+                if (documentId) {
+                  void updateDocumentStyle(documentId, { defaultFont: value })
+                }
               }}
             />
           </div>
+          {selectedBlock?.style?.fontFamilies?.length ? (
+            <button
+              type='button'
+              className='text-muted-foreground hover:text-foreground text-[9px]'
+              onClick={() => applyStyleToSelected({ fontFamilies: [] })}
+              title='Reset to document default'
+            >
+              ✕
+            </button>
+          ) : null}
           <ColorPicker
             value={currentColorHex}
             disabled={!hasBlocks}

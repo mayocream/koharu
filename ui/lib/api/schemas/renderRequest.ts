@@ -7,8 +7,6 @@ import type { TextShaderEffect } from './textShaderEffect'
 import type { TextStrokeStyle } from './textStrokeStyle'
 
 export interface RenderRequest {
-  /** @nullable */
-  fontFamily?: string | null
   shaderEffect?: null | TextShaderEffect
   shaderStroke?: null | TextStrokeStyle
   /** @nullable */

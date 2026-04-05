@@ -7,7 +7,6 @@ import { Languages, LoaderCircleIcon, Trash2Icon } from 'lucide-react'
 import { useTextBlocks } from '@/hooks/useTextBlocks'
 import { useGetLlm } from '@/lib/api/llm/llm'
 import { useEditorUiStore } from '@/lib/stores/editorUiStore'
-import { usePreferencesStore } from '@/lib/stores/preferencesStore'
 import { useProcessing } from '@/lib/machines'
 import {
   Accordion,
@@ -56,7 +55,6 @@ export function TextBlocksPanel() {
     const selectedLanguage = useEditorUiStore.getState().selectedLanguage
     const textBlockId = document.textBlocks[blockIndex]?.id
     const { renderEffect, renderStroke } = useEditorUiStore.getState()
-    const { fontFamily } = usePreferencesStore.getState()
     send({
       type: 'START_TRANSLATE_BLOCK',
       documentId,
@@ -67,7 +65,6 @@ export function TextBlocksPanel() {
       renderOptions: {
         shaderEffect: renderEffect,
         shaderStroke: renderStroke,
-        fontFamily,
       },
     })
   }

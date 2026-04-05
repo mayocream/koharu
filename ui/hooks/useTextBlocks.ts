@@ -62,6 +62,7 @@ export type MappedDocument = {
   inpainted?: string
   brushLayer?: string
   rendered?: string
+  style?: { defaultFont?: string | null }
 }
 
 const mapDocumentDetail = (detail: DocumentDetail): MappedDocument => ({
@@ -75,6 +76,7 @@ const mapDocumentDetail = (detail: DocumentDetail): MappedDocument => ({
   inpainted: detail.inpainted ?? undefined,
   brushLayer: detail.brushLayer ?? undefined,
   rendered: detail.rendered ?? undefined,
+  style: detail.style ?? undefined,
 })
 
 const toTextBlockInput = (block: TextBlock): TextBlockInput => ({

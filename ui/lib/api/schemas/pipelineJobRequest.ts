@@ -11,8 +11,6 @@ export interface PipelineJobRequest {
   /** @nullable */
   documentId?: string | null
   /** @nullable */
-  fontFamily?: string | null
-  /** @nullable */
   language?: string | null
   llm?: null | PipelineLlmRequest
   shaderEffect?: null | TextShaderEffect

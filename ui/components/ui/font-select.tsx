@@ -1,6 +1,6 @@
 'use client'
 
-import { useRef, useState, useMemo, useCallback } from 'react'
+import { useRef, useState, useMemo, useCallback, useEffect } from 'react'
 import { useVirtualizer } from '@tanstack/react-virtual'
 import { CheckIcon, ChevronDownIcon } from 'lucide-react'
 import {
@@ -8,8 +8,9 @@ import {
   PopoverContent,
   PopoverTrigger,
 } from '@/components/ui/popover'
-import { ScrollArea } from '@/components/ui/scroll-area'
+import { ScrollArea, ScrollBar } from '@/components/ui/scroll-area'
 import { cn } from '@/lib/utils'
+import { fetchGoogleFont } from '@/lib/api/system/system'
 
 const ITEM_HEIGHT = 28
 const MAX_VISIBLE = 10
@@ -17,7 +18,12 @@ const MAX_VISIBLE = 10
 type FontOption = {
   familyName: string
   postScriptName: string
+  source: 'system' | 'google'
+  category?: string | null
+  cached: boolean
 }
+
+type FontLoadState = 'idle' | 'loading' | 'ready' | 'error'
 
 type FontSelectProps = {
   value: string
@@ -29,6 +35,93 @@ type FontSelectProps = {
   triggerStyle?: React.CSSProperties
   onChange: (value: string) => void
   'data-testid'?: string
+}
+
+function useGoogleFontPreview(
+  family: string,
+  source: string,
+  isVisible: boolean,
+) {
+  const [state, setState] = useState<FontLoadState>(
+    source === 'system' ? 'ready' : 'idle',
+  )
+  const stateRef = useRef(state)
+  stateRef.current = state
+
+  useEffect(() => {
+    if (source !== 'google' || !isVisible || stateRef.current !== 'idle') return
+
+    let cancelled = false
+    setState('loading')
+
+    fetchGoogleFont(encodeURIComponent(family))
+      .then(() => {
+        if (cancelled) return
+        const url = `/api/v1/fonts/google/${encodeURIComponent(family)}/file`
+        const face = new FontFace(family, `url(${url})`)
+        return face.load()
+      })
+      .then((face) => {
+        if (cancelled || !face) return
+        document.fonts.add(face)
+        setState('ready')
+      })
+      .catch(() => {
+        if (!cancelled) setState('error')
+      })
+
+    return () => {
+      cancelled = true
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [family, source, isVisible])
+
+  return state
+}
+
+function FontRow({
+  font,
+  selected,
+  style,
+  isVisible,
+  onClick,
+}: {
+  font: FontOption
+  selected: boolean
+  style: React.CSSProperties
+  isVisible: boolean
+  onClick: () => void
+}) {
+  const loadState = useGoogleFontPreview(
+    font.familyName,
+    font.source,
+    isVisible,
+  )
+
+  return (
+    <button
+      type='button'
+      className={cn(
+        'hover:bg-accent hover:text-accent-foreground absolute left-0 flex w-full cursor-default items-center gap-1.5 rounded-sm px-2 text-xs select-none',
+        selected && 'bg-accent',
+      )}
+      style={{
+        ...style,
+        fontFamily: loadState === 'ready' ? font.familyName : undefined,
+      }}
+      onClick={onClick}
+    >
+      <span className='flex size-3 shrink-0 items-center justify-center'>
+        {selected && <CheckIcon className='size-3' />}
+      </span>
+      <span className='truncate'>{font.familyName}</span>
+      {font.source === 'google' && (
+        <span className='text-muted-foreground ml-auto shrink-0 text-[9px]'>
+          {loadState === 'loading' ? '...' : 'G'}
+        </span>
+      )}
+    </button>
+  )
 }
 
 export function FontSelect({
@@ -44,14 +137,23 @@ export function FontSelect({
 }: FontSelectProps) {
   const [open, setOpen] = useState(false)
   const [search, setSearch] = useState('')
+  const [categoryFilter, setCategoryFilter] = useState<string | null>(null)
   const scrollRef = useRef<HTMLDivElement>(null)
   const inputRef = useRef<HTMLInputElement>(null)
 
   const filtered = useMemo(() => {
-    if (!search) return options
-    const lower = search.toLowerCase()
-    return options.filter((f) => f.familyName.toLowerCase().includes(lower))
-  }, [options, search])
+    let result = options
+    if (categoryFilter) {
+      result = result.filter(
+        (f) => f.source === 'system' || f.category === categoryFilter,
+      )
+    }
+    if (search) {
+      const lower = search.toLowerCase()
+      result = result.filter((f) => f.familyName.toLowerCase().includes(lower))
+    }
+    return result
+  }, [options, search, categoryFilter])
 
   const virtualizer = useVirtualizer({
     count: filtered.length,
@@ -111,6 +213,42 @@ export function FontSelect({
           placeholder='Search fonts…'
           className='placeholder:text-muted-foreground w-full border-b bg-transparent px-2 py-1.5 text-xs outline-none'
         />
+        <ScrollArea className='border-b'>
+          <div className='flex gap-0.5 px-1.5 py-1'>
+            {['all', 'hand', 'display', 'sans', 'serif', 'mono'].map(
+              (cat, i) => {
+                const full = [
+                  'all',
+                  'handwriting',
+                  'display',
+                  'sans-serif',
+                  'serif',
+                  'monospace',
+                ][i]
+                const active =
+                  cat === 'all' ? !categoryFilter : categoryFilter === full
+                return (
+                  <button
+                    key={cat}
+                    type='button'
+                    className={cn(
+                      'shrink-0 rounded-full px-1.5 py-px text-[9px]',
+                      active
+                        ? 'bg-primary text-primary-foreground'
+                        : 'bg-muted text-muted-foreground hover:bg-accent',
+                    )}
+                    onClick={() =>
+                      setCategoryFilter(cat === 'all' ? null : full)
+                    }
+                  >
+                    {cat.charAt(0).toUpperCase() + cat.slice(1)}
+                  </button>
+                )
+              },
+            )}
+          </div>
+          <ScrollBar orientation='horizontal' />
+        </ScrollArea>
         <ScrollArea
           className='relative'
           style={{ height: listHeight }}
@@ -127,29 +265,18 @@ export function FontSelect({
               const selected =
                 font.postScriptName === value || font.familyName === value
               return (
-                <button
+                <FontRow
                   key={vi.key}
-                  type='button'
-                  className={cn(
-                    'hover:bg-accent hover:text-accent-foreground absolute left-0 flex w-full cursor-default items-center gap-1.5 rounded-sm px-2 text-xs select-none',
-                    selected && 'bg-accent',
-                  )}
-                  style={{
-                    height: ITEM_HEIGHT,
-                    top: vi.start,
-                    fontFamily: font.familyName,
-                  }}
+                  font={font}
+                  selected={selected}
+                  style={{ height: ITEM_HEIGHT, top: vi.start }}
+                  isVisible={true}
                   onClick={() => {
                     onChange(font.postScriptName)
                     setOpen(false)
                     setSearch('')
                   }}
-                >
-                  <span className='flex size-3 shrink-0 items-center justify-center'>
-                    {selected && <CheckIcon className='size-3' />}
-                  </span>
-                  <span className='truncate'>{font.familyName}</span>
-                </button>
+                />
               )
             })}
           </div>

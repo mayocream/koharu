@@ -30,6 +30,8 @@ target/
 
 # Datasets
 data/
+!koharu-app/data/
+!koharu-app/data/google-fonts-catalog.json
 
 # model results
 runs/

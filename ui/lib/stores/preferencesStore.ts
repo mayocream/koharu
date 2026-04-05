@@ -9,8 +9,6 @@ type PreferencesState = {
     color: string
   }
   setBrushConfig: (config: Partial<PreferencesState['brushConfig']>) => void
-  fontFamily?: string
-  setFontFamily: (font?: string) => void
   resetPreferences: () => void
 }
 
@@ -19,7 +17,6 @@ const initialPreferences = {
     size: 36,
     color: '#ffffff',
   },
-  fontFamily: undefined as string | undefined,
 }
 
 export const usePreferencesStore = create<PreferencesState>()(
@@ -33,7 +30,6 @@ export const usePreferencesStore = create<PreferencesState>()(
             ...config,
           },
         })),
-      setFontFamily: (font) => set({ fontFamily: font }),
       resetPreferences: () => set({ ...initialPreferences }),
     }),
     {
@@ -53,7 +49,6 @@ export const usePreferencesStore = create<PreferencesState>()(
       },
       partialize: (state) => ({
         brushConfig: state.brushConfig,
-        fontFamily: state.fontFamily,
       }),
     },
   ),

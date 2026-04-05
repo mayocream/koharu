@@ -27,6 +27,7 @@ import type {
   ImportDocumentsBody,
   ImportDocumentsParams,
   ImportResult,
+  UpdateDocumentStyleRequest,
 } from '../schemas'
 
 import { fetchApi } from '.././fetch'
@@ -406,6 +407,92 @@ export function useGetDocument<
   return { ...query, queryKey: queryOptions.queryKey }
 }
 
+export const getUpdateDocumentStyleUrl = (documentId: string) => {
+  return `/api/v1/documents/${documentId}/style`
+}
+
+export const updateDocumentStyle = async (
+  documentId: string,
+  updateDocumentStyleRequest: UpdateDocumentStyleRequest,
+  options?: RequestInit,
+): Promise<UpdateDocumentStyleRequest> => {
+  return fetchApi<UpdateDocumentStyleRequest>(
+    getUpdateDocumentStyleUrl(documentId),
+    {
+      ...options,
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json', ...options?.headers },
+      body: JSON.stringify(updateDocumentStyleRequest),
+    },
+  )
+}
+
+export const getUpdateDocumentStyleMutationOptions = <
+  TError = ApiError,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof updateDocumentStyle>>,
+    TError,
+    { documentId: string; data: UpdateDocumentStyleRequest },
+    TContext
+  >
+  request?: SecondParameter<typeof fetchApi>
+}): UseMutationOptions<
+  Awaited<ReturnType<typeof updateDocumentStyle>>,
+  TError,
+  { documentId: string; data: UpdateDocumentStyleRequest },
+  TContext
+> => {
+  const mutationKey = ['updateDocumentStyle']
+  const { mutation: mutationOptions, request: requestOptions } = options
+    ? options.mutation &&
+      'mutationKey' in options.mutation &&
+      options.mutation.mutationKey
+      ? options
+      : { ...options, mutation: { ...options.mutation, mutationKey } }
+    : { mutation: { mutationKey }, request: undefined }
+
+  const mutationFn: MutationFunction<
+    Awaited<ReturnType<typeof updateDocumentStyle>>,
+    { documentId: string; data: UpdateDocumentStyleRequest }
+  > = (props) => {
+    const { documentId, data } = props ?? {}
+
+    return updateDocumentStyle(documentId, data, requestOptions)
+  }
+
+  return { mutationFn, ...mutationOptions }
+}
+
+export type UpdateDocumentStyleMutationResult = NonNullable<
+  Awaited<ReturnType<typeof updateDocumentStyle>>
+>
+export type UpdateDocumentStyleMutationBody = UpdateDocumentStyleRequest
+export type UpdateDocumentStyleMutationError = ApiError
+
+export const useUpdateDocumentStyle = <TError = ApiError, TContext = unknown>(
+  options?: {
+    mutation?: UseMutationOptions<
+      Awaited<ReturnType<typeof updateDocumentStyle>>,
+      TError,
+      { documentId: string; data: UpdateDocumentStyleRequest },
+      TContext
+    >
+    request?: SecondParameter<typeof fetchApi>
+  },
+  queryClient?: QueryClient,
+): UseMutationResult<
+  Awaited<ReturnType<typeof updateDocumentStyle>>,
+  TError,
+  { documentId: string; data: UpdateDocumentStyleRequest },
+  TContext
+> => {
+  return useMutation(
+    getUpdateDocumentStyleMutationOptions(options),
+    queryClient,
+  )
+}
 export const getGetDocumentThumbnailUrl = (
   documentId: string,
   params?: GetDocumentThumbnailParams,

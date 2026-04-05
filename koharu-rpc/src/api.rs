@@ -42,6 +42,7 @@ pub fn api() -> (axum::Router<ApiState>, utoipa::openapi::OpenApi) {
     OpenApiRouter::default()
         .routes(routes!(list_documents, import_documents))
         .routes(routes!(get_document))
+        .routes(routes!(update_document_style))
         .routes(routes!(get_blob))
         .routes(routes!(get_document_thumbnail))
         .routes(routes!(detect_document))
@@ -64,6 +65,8 @@ pub fn api() -> (axum::Router<ApiState>, utoipa::openapi::OpenApi) {
         .routes(routes!(list_downloads))
         .routes(routes!(get_meta))
         .routes(routes!(list_fonts))
+        .routes(routes!(get_google_fonts_catalog))
+        .routes(routes!(fetch_google_font, get_google_font_file))
         .routes(routes!(get_config, update_config))
         .routes(routes!(get_engine_catalog))
         .split_for_parts()
@@ -255,6 +258,154 @@ async fn list_fonts(State(state): State<ApiState>) -> ApiResult<Json<Vec<FontFac
 }
 
 // ---------------------------------------------------------------------------
+// Google Fonts
+// ---------------------------------------------------------------------------
+
+#[derive(Debug, Clone, Serialize, Deserialize, utoipa::ToSchema)]
+#[serde(rename_all = "camelCase")]
+struct GoogleFontCatalogResponse {
+    fonts: Vec<GoogleFontCatalogEntry>,
+    recommended: Vec<String>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, utoipa::ToSchema)]
+#[serde(rename_all = "camelCase")]
+struct GoogleFontCatalogEntry {
+    family: String,
+    category: String,
+    subsets: Vec<String>,
+    cached: bool,
+}
+
+#[utoipa::path(
+    get,
+    path = "/fonts/google/catalog",
+    operation_id = "getGoogleFontsCatalog",
+    tag = "system",
+    responses(
+        (status = 200, body = GoogleFontCatalogResponse),
+        (status = 503, body = ApiError),
+    ),
+)]
+async fn get_google_fonts_catalog(
+    State(state): State<ApiState>,
+) -> ApiResult<Json<GoogleFontCatalogResponse>> {
+    let resources = state.resources()?;
+    let renderer = engine::get_renderer(&resources)
+        .await
+        .map_err(ApiError::from)?;
+    let service = &renderer.google_fonts;
+    let catalog = service.catalog();
+
+    let mut fonts = Vec::with_capacity(catalog.fonts.len());
+    for entry in &catalog.fonts {
+        fonts.push(GoogleFontCatalogEntry {
+            family: entry.family.clone(),
+            category: entry.category.clone(),
+            subsets: entry.subsets.clone(),
+            cached: service.is_cached(&entry.family).await,
+        });
+    }
+
+    let recommended = service
+        .recommended_families()
+        .iter()
+        .map(|s| s.to_string())
+        .collect();
+
+    Ok(Json(GoogleFontCatalogResponse { fonts, recommended }))
+}
+
+#[utoipa::path(
+    post,
+    path = "/fonts/google/{family}/fetch",
+    operation_id = "fetchGoogleFont",
+    tag = "system",
+    params(
+        ("family" = String, Path, description = "Font family name"),
+    ),
+    responses(
+        (status = 200, body = FontFaceInfo),
+        (status = 404, body = ApiError),
+        (status = 503, body = ApiError),
+    ),
+)]
+async fn fetch_google_font(
+    State(state): State<ApiState>,
+    Path(family): Path<String>,
+) -> ApiResult<Json<FontFaceInfo>> {
+    let resources = state.resources()?;
+    let renderer = engine::get_renderer(&resources)
+        .await
+        .map_err(ApiError::from)?;
+    let service = &renderer.google_fonts;
+
+    let entry = service.find_entry(&family).ok_or_else(|| {
+        ApiError::new(
+            StatusCode::NOT_FOUND,
+            format!("font family not found: {family}"),
+        )
+    })?;
+
+    let http = resources.runtime.http_client();
+    service
+        .fetch_family(&family, &http)
+        .await
+        .map_err(ApiError::from)?;
+
+    let category = Some(entry.category.clone());
+
+    Ok(Json(FontFaceInfo {
+        family_name: family.clone(),
+        post_script_name: family,
+        source: koharu_core::FontSource::Google,
+        category,
+        cached: true,
+    }))
+}
+
+#[utoipa::path(
+    get,
+    path = "/fonts/google/{family}/file",
+    operation_id = "getGoogleFontFile",
+    tag = "system",
+    params(
+        ("family" = String, Path, description = "Font family name"),
+    ),
+    responses(
+        (status = 200, description = "Font file bytes", content_type = "font/ttf"),
+        (status = 404, body = ApiError),
+        (status = 503, body = ApiError),
+    ),
+)]
+async fn get_google_font_file(
+    State(state): State<ApiState>,
+    Path(family): Path<String>,
+) -> Result<Response, ApiError> {
+    let resources = state.resources()?;
+    let renderer = engine::get_renderer(&resources)
+        .await
+        .map_err(ApiError::from)?;
+    let service = &renderer.google_fonts;
+
+    let data = service
+        .read_cached_file(&family)
+        .map_err(ApiError::from)?
+        .ok_or_else(|| {
+            ApiError::new(
+                StatusCode::NOT_FOUND,
+                format!("font not cached: {family}. Call fetch first."),
+            )
+        })?;
+
+    Ok(Response::builder()
+        .status(StatusCode::OK)
+        .header(CONTENT_TYPE, HeaderValue::from_static("font/ttf"))
+        .body(Body::from(data))
+        .unwrap())
+}
+
+// ---------------------------------------------------------------------------
 // Documents
 // ---------------------------------------------------------------------------
 
@@ -272,6 +423,45 @@ async fn list_documents(State(state): State<ApiState>) -> ApiResult<Json<Vec<Doc
     let resources = state.resources()?;
     let documents = resources.storage.list_pages().await;
     Ok(Json(documents))
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, utoipa::ToSchema)]
+#[serde(rename_all = "camelCase")]
+struct UpdateDocumentStyleRequest {
+    #[serde(default)]
+    pub default_font: Option<String>,
+}
+
+#[utoipa::path(
+    patch,
+    path = "/documents/{document_id}/style",
+    operation_id = "updateDocumentStyle",
+    tag = "documents",
+    params(
+        ("document_id" = String, Path, description = "Document ID"),
+    ),
+    request_body = UpdateDocumentStyleRequest,
+    responses(
+        (status = 200, body = UpdateDocumentStyleRequest),
+        (status = 404, body = ApiError),
+        (status = 503, body = ApiError),
+    ),
+)]
+async fn update_document_style(
+    State(state): State<ApiState>,
+    Path(document_id): Path<String>,
+    Json(request): Json<UpdateDocumentStyleRequest>,
+) -> ApiResult<Json<UpdateDocumentStyleRequest>> {
+    let resources = state.resources()?;
+    resources
+        .storage
+        .update_page(&document_id, |doc| {
+            let style = doc.style.get_or_insert_with(Default::default);
+            style.default_font = request.default_font.clone();
+        })
+        .await
+        .map_err(ApiError::from)?;
+    Ok(Json(request))
 }
 
 #[utoipa::path(
@@ -311,6 +501,7 @@ async fn get_document(
         inpainted: doc.inpainted.as_ref().map(|r| r.hash().to_string()),
         brush_layer: doc.brush_layer.as_ref().map(|r| r.hash().to_string()),
         rendered: doc.rendered.as_ref().map(|r| r.hash().to_string()),
+        style: doc.style.clone(),
     };
 
     Ok(Json(detail))
@@ -533,7 +724,6 @@ async fn render_document(
         text_block_index,
         request.shader_effect,
         request.shader_stroke,
-        request.font_family.as_deref(),
     )
     .await?;
 
@@ -829,7 +1019,7 @@ async fn patch_text_block(
         .map_err(ApiError::from)?;
 
     if needs_render && let Some(idx) = block_index {
-        engine::render_document(&resources, &document_id, Some(idx), None, None, None)
+        engine::render_document(&resources, &document_id, Some(idx), None, None)
             .await
             .map_err(ApiError::internal)?;
     }
@@ -1001,7 +1191,6 @@ async fn start_pipeline(
             language: request.language,
             shader_effect: request.shader_effect,
             shader_stroke: request.shader_stroke,
-            font_family: request.font_family,
         },
         state.tracker.jobs(),
     )

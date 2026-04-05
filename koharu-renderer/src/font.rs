@@ -124,6 +124,19 @@ impl FontBook {
         self.load_font(id)
     }
 
+    /// Loads a font from raw bytes (e.g., downloaded from Google Fonts).
+    /// Returns the loaded Font on success.
+    pub fn load_from_bytes(&mut self, data: Vec<u8>) -> anyhow::Result<Font> {
+        let data: Arc<dyn AsRef<[u8]> + Send + Sync> = Arc::new(data);
+        let source = fontdb::Source::Binary(data);
+        let ids = self.database.load_font_source(source);
+        let id = ids
+            .into_iter()
+            .next()
+            .context("font data contained no valid faces")?;
+        self.load_font(id)
+    }
+
     fn load_font(&mut self, id: ID) -> anyhow::Result<Font> {
         if let Some(font) = self.cache.get(&id) {
             return Ok(font.clone());

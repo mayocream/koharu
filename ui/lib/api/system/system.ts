@@ -24,6 +24,7 @@ import type {
   FontFaceInfo,
   GetConfig200,
   GetEngineCatalog200,
+  GoogleFontCatalogResponse,
   MetaInfo,
   UpdateConfig200,
   UpdateConfigBody,
@@ -520,6 +521,403 @@ export function useListFonts<
   queryKey: DataTag<QueryKey, TData, TError>
 } {
   const queryOptions = getListFontsQueryOptions(options)
+
+  const query = useQuery(queryOptions, queryClient) as UseQueryResult<
+    TData,
+    TError
+  > & { queryKey: DataTag<QueryKey, TData, TError> }
+
+  return { ...query, queryKey: queryOptions.queryKey }
+}
+
+export const getGetGoogleFontsCatalogUrl = () => {
+  return `/api/v1/fonts/google/catalog`
+}
+
+export const getGoogleFontsCatalog = async (
+  options?: RequestInit,
+): Promise<GoogleFontCatalogResponse> => {
+  return fetchApi<GoogleFontCatalogResponse>(getGetGoogleFontsCatalogUrl(), {
+    ...options,
+    method: 'GET',
+  })
+}
+
+export const getGetGoogleFontsCatalogQueryKey = () => {
+  return [`/api/v1/fonts/google/catalog`] as const
+}
+
+export const getGetGoogleFontsCatalogQueryOptions = <
+  TData = Awaited<ReturnType<typeof getGoogleFontsCatalog>>,
+  TError = ApiError,
+>(options?: {
+  query?: Partial<
+    UseQueryOptions<
+      Awaited<ReturnType<typeof getGoogleFontsCatalog>>,
+      TError,
+      TData
+    >
+  >
+  request?: SecondParameter<typeof fetchApi>
+}) => {
+  const { query: queryOptions, request: requestOptions } = options ?? {}
+
+  const queryKey = queryOptions?.queryKey ?? getGetGoogleFontsCatalogQueryKey()
+
+  const queryFn: QueryFunction<
+    Awaited<ReturnType<typeof getGoogleFontsCatalog>>
+  > = ({ signal }) => getGoogleFontsCatalog({ signal, ...requestOptions })
+
+  return {
+    queryKey,
+    queryFn,
+    gcTime: 300000,
+    retry: 1,
+    ...queryOptions,
+  } as UseQueryOptions<
+    Awaited<ReturnType<typeof getGoogleFontsCatalog>>,
+    TError,
+    TData
+  > & { queryKey: DataTag<QueryKey, TData, TError> }
+}
+
+export type GetGoogleFontsCatalogQueryResult = NonNullable<
+  Awaited<ReturnType<typeof getGoogleFontsCatalog>>
+>
+export type GetGoogleFontsCatalogQueryError = ApiError
+
+export function useGetGoogleFontsCatalog<
+  TData = Awaited<ReturnType<typeof getGoogleFontsCatalog>>,
+  TError = ApiError,
+>(
+  options: {
+    query: Partial<
+      UseQueryOptions<
+        Awaited<ReturnType<typeof getGoogleFontsCatalog>>,
+        TError,
+        TData
+      >
+    > &
+      Pick<
+        DefinedInitialDataOptions<
+          Awaited<ReturnType<typeof getGoogleFontsCatalog>>,
+          TError,
+          Awaited<ReturnType<typeof getGoogleFontsCatalog>>
+        >,
+        'initialData'
+      >
+    request?: SecondParameter<typeof fetchApi>
+  },
+  queryClient?: QueryClient,
+): DefinedUseQueryResult<TData, TError> & {
+  queryKey: DataTag<QueryKey, TData, TError>
+}
+export function useGetGoogleFontsCatalog<
+  TData = Awaited<ReturnType<typeof getGoogleFontsCatalog>>,
+  TError = ApiError,
+>(
+  options?: {
+    query?: Partial<
+      UseQueryOptions<
+        Awaited<ReturnType<typeof getGoogleFontsCatalog>>,
+        TError,
+        TData
+      >
+    > &
+      Pick<
+        UndefinedInitialDataOptions<
+          Awaited<ReturnType<typeof getGoogleFontsCatalog>>,
+          TError,
+          Awaited<ReturnType<typeof getGoogleFontsCatalog>>
+        >,
+        'initialData'
+      >
+    request?: SecondParameter<typeof fetchApi>
+  },
+  queryClient?: QueryClient,
+): UseQueryResult<TData, TError> & {
+  queryKey: DataTag<QueryKey, TData, TError>
+}
+export function useGetGoogleFontsCatalog<
+  TData = Awaited<ReturnType<typeof getGoogleFontsCatalog>>,
+  TError = ApiError,
+>(
+  options?: {
+    query?: Partial<
+      UseQueryOptions<
+        Awaited<ReturnType<typeof getGoogleFontsCatalog>>,
+        TError,
+        TData
+      >
+    >
+    request?: SecondParameter<typeof fetchApi>
+  },
+  queryClient?: QueryClient,
+): UseQueryResult<TData, TError> & {
+  queryKey: DataTag<QueryKey, TData, TError>
+}
+
+export function useGetGoogleFontsCatalog<
+  TData = Awaited<ReturnType<typeof getGoogleFontsCatalog>>,
+  TError = ApiError,
+>(
+  options?: {
+    query?: Partial<
+      UseQueryOptions<
+        Awaited<ReturnType<typeof getGoogleFontsCatalog>>,
+        TError,
+        TData
+      >
+    >
+    request?: SecondParameter<typeof fetchApi>
+  },
+  queryClient?: QueryClient,
+): UseQueryResult<TData, TError> & {
+  queryKey: DataTag<QueryKey, TData, TError>
+} {
+  const queryOptions = getGetGoogleFontsCatalogQueryOptions(options)
+
+  const query = useQuery(queryOptions, queryClient) as UseQueryResult<
+    TData,
+    TError
+  > & { queryKey: DataTag<QueryKey, TData, TError> }
+
+  return { ...query, queryKey: queryOptions.queryKey }
+}
+
+export const getFetchGoogleFontUrl = (family: string) => {
+  return `/api/v1/fonts/google/${family}/fetch`
+}
+
+export const fetchGoogleFont = async (
+  family: string,
+  options?: RequestInit,
+): Promise<FontFaceInfo> => {
+  return fetchApi<FontFaceInfo>(getFetchGoogleFontUrl(family), {
+    ...options,
+    method: 'POST',
+  })
+}
+
+export const getFetchGoogleFontMutationOptions = <
+  TError = ApiError,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof fetchGoogleFont>>,
+    TError,
+    { family: string },
+    TContext
+  >
+  request?: SecondParameter<typeof fetchApi>
+}): UseMutationOptions<
+  Awaited<ReturnType<typeof fetchGoogleFont>>,
+  TError,
+  { family: string },
+  TContext
+> => {
+  const mutationKey = ['fetchGoogleFont']
+  const { mutation: mutationOptions, request: requestOptions } = options
+    ? options.mutation &&
+      'mutationKey' in options.mutation &&
+      options.mutation.mutationKey
+      ? options
+      : { ...options, mutation: { ...options.mutation, mutationKey } }
+    : { mutation: { mutationKey }, request: undefined }
+
+  const mutationFn: MutationFunction<
+    Awaited<ReturnType<typeof fetchGoogleFont>>,
+    { family: string }
+  > = (props) => {
+    const { family } = props ?? {}
+
+    return fetchGoogleFont(family, requestOptions)
+  }
+
+  return { mutationFn, ...mutationOptions }
+}
+
+export type FetchGoogleFontMutationResult = NonNullable<
+  Awaited<ReturnType<typeof fetchGoogleFont>>
+>
+
+export type FetchGoogleFontMutationError = ApiError
+
+export const useFetchGoogleFont = <TError = ApiError, TContext = unknown>(
+  options?: {
+    mutation?: UseMutationOptions<
+      Awaited<ReturnType<typeof fetchGoogleFont>>,
+      TError,
+      { family: string },
+      TContext
+    >
+    request?: SecondParameter<typeof fetchApi>
+  },
+  queryClient?: QueryClient,
+): UseMutationResult<
+  Awaited<ReturnType<typeof fetchGoogleFont>>,
+  TError,
+  { family: string },
+  TContext
+> => {
+  return useMutation(getFetchGoogleFontMutationOptions(options), queryClient)
+}
+export const getGetGoogleFontFileUrl = (family: string) => {
+  return `/api/v1/fonts/google/${family}/file`
+}
+
+export const getGoogleFontFile = async (
+  family: string,
+  options?: RequestInit,
+): Promise<Blob> => {
+  return fetchApi<Blob>(getGetGoogleFontFileUrl(family), {
+    ...options,
+    method: 'GET',
+  })
+}
+
+export const getGetGoogleFontFileQueryKey = (family: string) => {
+  return [`/api/v1/fonts/google/${family}/file`] as const
+}
+
+export const getGetGoogleFontFileQueryOptions = <
+  TData = Awaited<ReturnType<typeof getGoogleFontFile>>,
+  TError = ApiError,
+>(
+  family: string,
+  options?: {
+    query?: Partial<
+      UseQueryOptions<
+        Awaited<ReturnType<typeof getGoogleFontFile>>,
+        TError,
+        TData
+      >
+    >
+    request?: SecondParameter<typeof fetchApi>
+  },
+) => {
+  const { query: queryOptions, request: requestOptions } = options ?? {}
+
+  const queryKey =
+    queryOptions?.queryKey ?? getGetGoogleFontFileQueryKey(family)
+
+  const queryFn: QueryFunction<
+    Awaited<ReturnType<typeof getGoogleFontFile>>
+  > = ({ signal }) => getGoogleFontFile(family, { signal, ...requestOptions })
+
+  return {
+    queryKey,
+    queryFn,
+    enabled: !!family,
+    gcTime: 300000,
+    retry: 1,
+    ...queryOptions,
+  } as UseQueryOptions<
+    Awaited<ReturnType<typeof getGoogleFontFile>>,
+    TError,
+    TData
+  > & { queryKey: DataTag<QueryKey, TData, TError> }
+}
+
+export type GetGoogleFontFileQueryResult = NonNullable<
+  Awaited<ReturnType<typeof getGoogleFontFile>>
+>
+export type GetGoogleFontFileQueryError = ApiError
+
+export function useGetGoogleFontFile<
+  TData = Awaited<ReturnType<typeof getGoogleFontFile>>,
+  TError = ApiError,
+>(
+  family: string,
+  options: {
+    query: Partial<
+      UseQueryOptions<
+        Awaited<ReturnType<typeof getGoogleFontFile>>,
+        TError,
+        TData
+      >
+    > &
+      Pick<
+        DefinedInitialDataOptions<
+          Awaited<ReturnType<typeof getGoogleFontFile>>,
+          TError,
+          Awaited<ReturnType<typeof getGoogleFontFile>>
+        >,
+        'initialData'
+      >
+    request?: SecondParameter<typeof fetchApi>
+  },
+  queryClient?: QueryClient,
+): DefinedUseQueryResult<TData, TError> & {
+  queryKey: DataTag<QueryKey, TData, TError>
+}
+export function useGetGoogleFontFile<
+  TData = Awaited<ReturnType<typeof getGoogleFontFile>>,
+  TError = ApiError,
+>(
+  family: string,
+  options?: {
+    query?: Partial<
+      UseQueryOptions<
+        Awaited<ReturnType<typeof getGoogleFontFile>>,
+        TError,
+        TData
+      >
+    > &
+      Pick<
+        UndefinedInitialDataOptions<
+          Awaited<ReturnType<typeof getGoogleFontFile>>,
+          TError,
+          Awaited<ReturnType<typeof getGoogleFontFile>>
+        >,
+        'initialData'
+      >
+    request?: SecondParameter<typeof fetchApi>
+  },
+  queryClient?: QueryClient,
+): UseQueryResult<TData, TError> & {
+  queryKey: DataTag<QueryKey, TData, TError>
+}
+export function useGetGoogleFontFile<
+  TData = Awaited<ReturnType<typeof getGoogleFontFile>>,
+  TError = ApiError,
+>(
+  family: string,
+  options?: {
+    query?: Partial<
+      UseQueryOptions<
+        Awaited<ReturnType<typeof getGoogleFontFile>>,
+        TError,
+        TData
+      >
+    >
+    request?: SecondParameter<typeof fetchApi>
+  },
+  queryClient?: QueryClient,
+): UseQueryResult<TData, TError> & {
+  queryKey: DataTag<QueryKey, TData, TError>
+}
+
+export function useGetGoogleFontFile<
+  TData = Awaited<ReturnType<typeof getGoogleFontFile>>,
+  TError = ApiError,
+>(
+  family: string,
+  options?: {
+    query?: Partial<
+      UseQueryOptions<
+        Awaited<ReturnType<typeof getGoogleFontFile>>,
+        TError,
+        TData
+      >
+    >
+    request?: SecondParameter<typeof fetchApi>
+  },
+  queryClient?: QueryClient,
+): UseQueryResult<TData, TError> & {
+  queryKey: DataTag<QueryKey, TData, TError>
+} {
+  const queryOptions = getGetGoogleFontFileQueryOptions(family, options)
 
   const query = useQuery(queryOptions, queryClient) as UseQueryResult<
     TData,
