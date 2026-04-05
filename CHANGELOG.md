@@ -1,3 +1,26 @@
+## [0.43.0](https://github.com/mayocream/koharu/compare/0.42.4..0.43.0) - 2026-04-05
+
+### ⛰️  Features
+
+- Custom system prompt - ([d3e6b06](https://github.com/mayocream/koharu/commit/d3e6b0650c24552367e073fe9e446bd8c7acdea2))
+- Add uncensored LLMs - ([7814d1e](https://github.com/mayocream/koharu/commit/7814d1efad9d66a801521ef693d3136553f38be4))
+- Add gemma4 and qwen3.5 models - ([e6262e4](https://github.com/mayocream/koharu/commit/e6262e49e92ce7b7cac853df9d31835faa3b9a98))
+- Replce lfm2-350m-enjp-mt with lfm2.5-1.2b-instruct - ([4d2e5ef](https://github.com/mayocream/koharu/commit/4d2e5ef42905fa4aa0c8f7294f3fc58c1e002272))
+- Update llama.cpp to b8665 - ([cd86637](https://github.com/mayocream/koharu/commit/cd866371a074cfb374cd5f6a5327e98f6c2ccb82))
+- Google fonts - ([177767f](https://github.com/mayocream/koharu/commit/177767f1132208a2c909f5446f5fcfa01dec6ef9))
+
+### 🐛 Bug Fixes
+
+- *(ui)* Invalidate stale font style - ([d12cec0](https://github.com/mayocream/koharu/commit/d12cec0c299d6e4295691c55f39598d173bf9ead))
+- Scroll on canvas - ([bfc0aef](https://github.com/mayocream/koharu/commit/bfc0aefa9f20118608b183df070e72ebb39810d7))
+
+### ⚙️ Miscellaneous Tasks
+
+- *(ui)* Rename section name - ([d6bf317](https://github.com/mayocream/koharu/commit/d6bf31729d8acea7f8c2691bee639b89a9e2f5ce))
+- Format code - ([04b9034](https://github.com/mayocream/koharu/commit/04b90343d5c564729f41eca1bb2ef9b1bcb2c2c1))
+- Format code - ([65bb821](https://github.com/mayocream/koharu/commit/65bb821e1a79aafca46a288ac1b51bccc43ef90c))
+
+
 ## [0.42.4](https://github.com/mayocream/koharu/compare/0.42.3..0.42.4) - 2026-04-05
 
 ### 🐛 Bug Fixes
