@@ -14,15 +14,11 @@ import {
   inpaintDocument,
   renderDocument,
   translateDocument,
+  getGetTranslateReadyQueryKey,
 } from '@/lib/api/processing/processing'
 import { startPipeline, cancelJob, getJob } from '@/lib/api/jobs/jobs'
 import { exportDocument, batchExport } from '@/lib/api/exports/exports'
-import {
-  loadLlm,
-  unloadLlm,
-  getLlm,
-  getGetLlmQueryKey,
-} from '@/lib/api/llm/llm'
+import { loadLlm, unloadLlm, getLlm, getGetLlmQueryKey } from '@/lib/api/llm/llm'
 import { normalizeErrorMessage } from '@/lib/errors'
 import type {
   RenderRequest,
@@ -789,6 +785,9 @@ export const processingMachine = setup({
                   context.queryClient.invalidateQueries({
                     queryKey: getGetLlmQueryKey(),
                   })
+                  context.queryClient.invalidateQueries({
+                    queryKey: getGetTranslateReadyQueryKey(),
+                  })
                 },
               ],
             },
@@ -812,6 +811,9 @@ export const processingMachine = setup({
             ({ context }) => {
               context.queryClient.invalidateQueries({
                 queryKey: getGetLlmQueryKey(),
+              })
+              context.queryClient.invalidateQueries({
+                queryKey: getGetTranslateReadyQueryKey(),
               })
             },
           ],

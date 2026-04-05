@@ -52,9 +52,11 @@ import { isTauri } from '@/lib/backend'
 import {
   getConfig,
   getEngineCatalog,
+  getGetConfigQueryKey,
   getMeta,
   updateConfig,
 } from '@/lib/api/system/system'
+import { getGetTranslateReadyQueryKey } from '@/lib/api/processing/processing'
 import { getLlmCatalog, getGetLlmCatalogQueryKey } from '@/lib/api/llm/llm'
 import { supportedLanguages } from '@/lib/i18n'
 import type {
@@ -101,9 +103,11 @@ export function SettingsDialog({
   }, [defaultTab, open])
 
   const [appConfig, setAppConfig] = useState<UpdateConfigBody | null>(null)
-  const [providerCatalogs, setProviderCatalogs] = useState<
+  const [llmProviderCatalogs, setLlmProviderCatalogs] = useState<
     LlmProviderCatalog[]
   >([])
+  const [translationProviderCatalogs, setTranslationProviderCatalogs] =
+    useState<LlmProviderCatalog[]>([])
   const [apiKeyDrafts, setApiKeyDrafts] = useState<Record<string, string>>({})
   const [dataPathDraft, setDataPathDraft] = useState('')
   const [httpConnectTimeoutDraft, setHttpConnectTimeoutDraft] = useState('')
@@ -129,7 +133,8 @@ export function SettingsDialog({
           getEngineCatalog(),
         ])
         setAppConfig(config)
-        setProviderCatalogs(catalog.providers)
+        setLlmProviderCatalogs(catalog.providers)
+        setTranslationProviderCatalogs(catalog.translationProviders ?? [])
         setEngineCatalog(engines)
       } catch {}
     })()
@@ -176,8 +181,11 @@ export function SettingsDialog({
       const saved = await updateConfig(next)
       const catalog = await getLlmCatalog()
       setAppConfig(saved)
-      setProviderCatalogs(catalog.providers)
+      setLlmProviderCatalogs(catalog.providers)
+      setTranslationProviderCatalogs(catalog.translationProviders ?? [])
       queryClient.invalidateQueries({ queryKey: getGetLlmCatalogQueryKey() })
+      queryClient.invalidateQueries({ queryKey: getGetTranslateReadyQueryKey() })
+      queryClient.invalidateQueries({ queryKey: getGetConfigQueryKey() })
       return saved
     } catch {
       return null
@@ -301,7 +309,8 @@ export function SettingsDialog({
               )}
               {tab === 'providers' && (
                 <ProvidersPane
-                  catalogs={providerCatalogs}
+                  llmCatalogs={llmProviderCatalogs}
+                  translationCatalogs={translationProviderCatalogs}
                   config={appConfig}
                   drafts={apiKeyDrafts}
                   onBaseUrlChange={(id, v) =>
@@ -527,7 +536,8 @@ function EnginesPane({
 // ── Providers ─────────────────────────────────────────────────────
 
 function ProvidersPane({
-  catalogs,
+  llmCatalogs,
+  translationCatalogs,
   config,
   drafts,
   onBaseUrlChange,
@@ -536,7 +546,8 @@ function ProvidersPane({
   onSaveKey,
   onClearKey,
 }: {
-  catalogs: LlmProviderCatalog[]
+  llmCatalogs: LlmProviderCatalog[]
+  translationCatalogs: LlmProviderCatalog[]
   config: UpdateConfigBody | null
   drafts: Record<string, string>
   onBaseUrlChange: (id: string, v: string) => void
@@ -547,115 +558,125 @@ function ProvidersPane({
 }) {
   const { t } = useTranslation()
 
-  if (!catalogs.length)
+  if (!llmCatalogs.length && !translationCatalogs.length)
     return (
       <p className='text-muted-foreground py-12 text-center text-sm'>
         {t('settings.loadingProviders')}
       </p>
     )
 
+  const providerAccordion = (catalogs: LlmProviderCatalog[]) =>
+    catalogs.map((provider) => {
+      const cfg = config?.providers?.find((p) => p.id === provider.id)
+      const draft = drafts[provider.id] ?? ''
+      const hasDraft = draft.trim().length > 0
+      const statusColor =
+        provider.status === 'ready'
+          ? 'bg-green-500'
+          : provider.status === 'missing_configuration'
+            ? 'bg-amber-400'
+            : provider.status === 'discovery_failed'
+              ? 'bg-red-500'
+              : 'bg-muted-foreground'
+
+      return (
+        <AccordionItem
+          key={provider.id}
+          value={provider.id}
+          className='border-border'
+        >
+          <AccordionTrigger className='px-1 py-3 hover:no-underline'>
+            <div className='flex items-center gap-2.5'>
+              <span
+                className={`size-2 shrink-0 rounded-full ${statusColor}`}
+              />
+              <span className='text-sm font-medium'>{provider.name}</span>
+            </div>
+          </AccordionTrigger>
+          <AccordionContent className='space-y-4 px-1 pt-1 pb-4'>
+            {provider.error && (
+              <p className='text-muted-foreground text-xs'>{provider.error}</p>
+            )}
+
+            {provider.requiresBaseUrl && (
+              <div className='space-y-1.5'>
+                <Label className='text-xs'>
+                  {t('settings.localLlmBaseUrl')}
+                </Label>
+                <Input
+                  type='url'
+                  value={cfg?.base_url ?? ''}
+                  onChange={(e) => onBaseUrlChange(provider.id, e.target.value)}
+                  onBlur={onBaseUrlBlur}
+                  placeholder='https://api.example.com/v1'
+                />
+              </div>
+            )}
+
+            <div className='space-y-1.5'>
+              <Label className='text-xs'>{t('settings.apiKey')}</Label>
+              <div className='flex gap-2'>
+                <Input
+                  type='password'
+                  value={draft}
+                  onChange={(e) => onApiKeyChange(provider.id, e.target.value)}
+                  onKeyDown={(e) => {
+                    if (e.key === 'Enter' && hasDraft) onSaveKey(provider.id)
+                  }}
+                  placeholder={
+                    cfg?.api_key === '[REDACTED]'
+                      ? t('settings.apiKeyPlaceholderStored')
+                      : t('settings.apiKeyPlaceholderEmpty')
+                  }
+                  className='[&::-ms-reveal]:hidden'
+                />
+                {hasDraft ? (
+                  <Button size='sm' onClick={() => onSaveKey(provider.id)}>
+                    {t('settings.apiKeySave')}
+                  </Button>
+                ) : cfg?.api_key === '[REDACTED]' ? (
+                  <Button
+                    variant='destructive'
+                    size='sm'
+                    onClick={() => onClearKey(provider.id)}
+                  >
+                    {t('settings.apiKeyClear')}
+                  </Button>
+                ) : null}
+              </div>
+            </div>
+          </AccordionContent>
+        </AccordionItem>
+      )
+    })
+
   return (
     <div className='space-y-6'>
-      <Section
-        title={t('settings.apiKeys')}
-        description={t('settings.providersDescription')}
-      >
-        <Accordion type='multiple' className='-mx-1'>
-          {catalogs.map((provider) => {
-            const cfg = config?.providers?.find((p) => p.id === provider.id)
-            const draft = drafts[provider.id] ?? ''
-            const hasDraft = draft.trim().length > 0
-            const statusColor =
-              provider.status === 'ready'
-                ? 'bg-green-500'
-                : provider.status === 'missing_configuration'
-                  ? 'bg-amber-400'
-                  : provider.status === 'discovery_failed'
-                    ? 'bg-red-500'
-                    : 'bg-muted-foreground'
-
-            return (
-              <AccordionItem
-                key={provider.id}
-                value={provider.id}
-                className='border-border'
-              >
-                <AccordionTrigger className='px-1 py-3 hover:no-underline'>
-                  <div className='flex items-center gap-2.5'>
-                    <span
-                      className={`size-2 shrink-0 rounded-full ${statusColor}`}
-                    />
-                    <span className='text-sm font-medium'>{provider.name}</span>
-                  </div>
-                </AccordionTrigger>
-                <AccordionContent className='space-y-4 px-1 pt-1 pb-4'>
-                  {provider.error && (
-                    <p className='text-muted-foreground text-xs'>
-                      {provider.error}
-                    </p>
-                  )}
-
-                  {provider.requiresBaseUrl && (
-                    <div className='space-y-1.5'>
-                      <Label className='text-xs'>
-                        {t('settings.localLlmBaseUrl')}
-                      </Label>
-                      <Input
-                        type='url'
-                        value={cfg?.base_url ?? ''}
-                        onChange={(e) =>
-                          onBaseUrlChange(provider.id, e.target.value)
-                        }
-                        onBlur={onBaseUrlBlur}
-                        placeholder='https://api.example.com/v1'
-                      />
-                    </div>
-                  )}
-
-                  <div className='space-y-1.5'>
-                    <Label className='text-xs'>{t('settings.apiKey')}</Label>
-                    <div className='flex gap-2'>
-                      <Input
-                        type='password'
-                        value={draft}
-                        onChange={(e) =>
-                          onApiKeyChange(provider.id, e.target.value)
-                        }
-                        onKeyDown={(e) => {
-                          if (e.key === 'Enter' && hasDraft)
-                            onSaveKey(provider.id)
-                        }}
-                        placeholder={
-                          cfg?.api_key === '[REDACTED]'
-                            ? t('settings.apiKeyPlaceholderStored')
-                            : t('settings.apiKeyPlaceholderEmpty')
-                        }
-                        className='[&::-ms-reveal]:hidden'
-                      />
-                      {hasDraft ? (
-                        <Button
-                          size='sm'
-                          onClick={() => onSaveKey(provider.id)}
-                        >
-                          {t('settings.apiKeySave')}
-                        </Button>
-                      ) : cfg?.api_key === '[REDACTED]' ? (
-                        <Button
-                          variant='destructive'
-                          size='sm'
-                          onClick={() => onClearKey(provider.id)}
-                        >
-                          {t('settings.apiKeyClear')}
-                        </Button>
-                      ) : null}
-                    </div>
-                  </div>
-                </AccordionContent>
-              </AccordionItem>
-            )
+      {llmCatalogs.length > 0 && (
+        <Section
+          title={t('settings.apiKeys')}
+          description={t('settings.providersDescription')}
+        >
+          <Accordion type='multiple' className='-mx-1'>
+            {providerAccordion(llmCatalogs)}
+          </Accordion>
+        </Section>
+      )}
+      {translationCatalogs.length > 0 && (
+        <Section
+          title={t('settings.translationApis', {
+            defaultValue: 'Translation APIs',
           })}
-        </Accordion>
-      </Section>
+          description={t('settings.translationApisDescription', {
+            defaultValue:
+              'Keys for DeepL or Google Cloud Translation when using them as the translator.',
+          })}
+        >
+          <Accordion type='multiple' className='-mx-1'>
+            {providerAccordion(translationCatalogs)}
+          </Accordion>
+        </Section>
+      )}
     </div>
   )
 }

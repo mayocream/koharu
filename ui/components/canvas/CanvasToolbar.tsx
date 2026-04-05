@@ -30,6 +30,8 @@ import {
 import { useEditorUiStore } from '@/lib/stores/editorUiStore'
 import { usePreferencesStore } from '@/lib/stores/preferencesStore'
 import { useGetLlm, useGetLlmCatalog } from '@/lib/api/llm/llm'
+import { useGetTranslateReady } from '@/lib/api/processing/processing'
+import { useGetConfig } from '@/lib/api/system/system'
 import type {
   LlmCatalog,
   LlmCatalogModel,
@@ -37,6 +39,21 @@ import type {
 } from '@/lib/api/schemas'
 import { useProcessing } from '@/lib/machines'
 import { llmTargetKey, sameLlmTarget } from '@/lib/llmTargets'
+import {
+  effectiveTranslationLanguage,
+  translationTargetLocalesFromCatalog,
+} from '@/lib/translationTargetLocales'
+import {
+  isPipelineMachineTranslator,
+  PIPELINE_TRANSLATOR_DEEPL,
+  PIPELINE_TRANSLATOR_GOOGLE,
+} from '@/lib/pipelineTranslator'
+import {
+  DEEPL_SELECT_OMIT,
+  deepLTranslateOptionsForRequest,
+  deeplSelectValue,
+  deeplStoredFromSelect,
+} from '@/lib/deeplTranslateRequest'
 
 type SelectableLlmModel = {
   model: LlmCatalogModel
@@ -64,8 +81,10 @@ export function CanvasToolbar() {
 
 function WorkflowButtons() {
   const { send, isProcessing, state } = useProcessing()
-  const { data: llmState } = useGetLlm()
-  const llmReady = llmState?.status === 'ready'
+  const { data: translateReadyState } = useGetTranslateReady()
+  const { data: llmCatalog } = useGetLlmCatalog()
+  const { data: appConfig } = useGetConfig()
+  const translateReady = translateReadyState?.ready ?? false
   const { t } = useTranslation()
 
   const isDetecting = state.matches('detecting')
@@ -125,18 +144,27 @@ function WorkflowButtons() {
         size='xs'
         onClick={() => {
           const documentId = requireDocumentId()
-          const selectedLanguage = useEditorUiStore.getState().selectedLanguage
-          const { customSystemPrompt } = usePreferencesStore.getState()
+          const { selectedLanguage } = useEditorUiStore.getState()
+          const prefs = usePreferencesStore.getState()
+          const { customSystemPrompt } = prefs
+          const deepl = deepLTranslateOptionsForRequest(
+            appConfig?.pipeline?.translator,
+            prefs,
+          )
           send({
             type: 'START_TRANSLATE',
             documentId,
             options: {
-              language: selectedLanguage,
+              language: effectiveTranslationLanguage(
+                llmCatalog,
+                selectedLanguage,
+              ),
               systemPrompt: customSystemPrompt,
+              ...(deepl ? { deepl } : {}),
             },
           })
         }}
-        disabled={!llmReady || isTranslating || isProcessing}
+        disabled={!translateReady || isTranslating || isProcessing}
         data-testid='toolbar-translate'
       >
         {isTranslating ? (
@@ -199,6 +227,9 @@ function WorkflowButtons() {
 
 function LlmStatusPopover() {
   const { data: llmCatalog } = useGetLlmCatalog()
+  const { data: appConfig } = useGetConfig()
+  const pipelineTranslator = appConfig?.pipeline?.translator
+  const machineTranslator = isPipelineMachineTranslator(pipelineTranslator)
   const llmModels = useMemo(
     () => flattenCatalogModels(llmCatalog),
     [llmCatalog],
@@ -210,16 +241,35 @@ function LlmStatusPopover() {
   const setCustomSystemPrompt = usePreferencesStore(
     (state) => state.setCustomSystemPrompt,
   )
+  const deeplFormality = usePreferencesStore((s) => s.deeplFormality)
+  const deeplModelType = usePreferencesStore((s) => s.deeplModelType)
+  const setDeeplFormality = usePreferencesStore((s) => s.setDeeplFormality)
+  const setDeeplModelType = usePreferencesStore((s) => s.setDeeplModelType)
   const llmSelectedLanguage = useEditorUiStore(
     (state) => state.selectedLanguage,
   )
   const { data: llmState } = useGetLlm()
+  const { data: translateReadyState } = useGetTranslateReady()
   const llmReady = llmState?.status === 'ready'
+  const translateReady = translateReadyState?.ready ?? false
+  const triggerReady =
+    llmReady || (machineTranslator && translateReady)
   const { send, state } = useProcessing()
   const llmLoading = state.matches('loadingLlm')
   const llmUnloading = state.matches('unloadingLlm')
   const busy = llmLoading || llmUnloading
   const { t } = useTranslation()
+
+  const triggerLabel = useMemo(() => {
+    switch (pipelineTranslator) {
+      case PIPELINE_TRANSLATOR_GOOGLE:
+        return t('llm.translatorTrigger.google', { defaultValue: 'Google' })
+      case PIPELINE_TRANSLATOR_DEEPL:
+        return t('llm.translatorTrigger.deepl', { defaultValue: 'DeepL' })
+      default:
+        return t('llm.translatorTrigger.llm', { defaultValue: 'LLM' })
+    }
+  }, [pipelineTranslator, t])
 
   const selectedModel = useMemo(
     () =>
@@ -232,8 +282,17 @@ function LlmStatusPopover() {
     ? llmTargetKey(selectedTarget)
     : undefined
   const selectedModelLanguages = selectedModel?.model.languages ?? []
+  const translationLocales = useMemo(() => {
+    if (machineTranslator) {
+      return translationTargetLocalesFromCatalog(llmCatalog)
+    }
+    if (selectedModelLanguages.length > 0) return selectedModelLanguages
+    return translationTargetLocalesFromCatalog(llmCatalog)
+  }, [machineTranslator, llmCatalog, selectedModelLanguages])
   const selectedIsLoaded =
-    llmReady && sameLlmTarget(llmState?.target, selectedTarget)
+    !machineTranslator &&
+    llmReady &&
+    sameLlmTarget(llmState?.target, selectedTarget)
 
   const handleSetSelectedModel = (key: string) => {
     const nextSelection = llmModels.find(
@@ -241,7 +300,10 @@ function LlmStatusPopover() {
     )
     if (!nextSelection) return
 
-    const nextLanguages = nextSelection.model.languages
+    const nextLanguages =
+      nextSelection.model.languages.length > 0
+        ? nextSelection.model.languages
+        : translationTargetLocalesFromCatalog(llmCatalog)
     const nextLanguage =
       llmSelectedLanguage && nextLanguages.includes(llmSelectedLanguage)
         ? llmSelectedLanguage
@@ -254,7 +316,7 @@ function LlmStatusPopover() {
   }
 
   const handleSetSelectedLanguage = (language: string) => {
-    if (!selectedModelLanguages.includes(language)) return
+    if (!translationLocales.includes(language)) return
     useEditorUiStore.setState({ selectedLanguage: language })
   }
 
@@ -284,10 +346,17 @@ function LlmStatusPopover() {
     const nextModel = hasCurrent ? selectedModel?.model : llmModels[0]?.model
     if (!nextModel) return
 
-    const nextLanguages = nextModel.languages
+    const catalogLocales = translationTargetLocalesFromCatalog(llmCatalog)
+    const nextLanguages = machineTranslator
+      ? catalogLocales
+      : nextModel.languages.length > 0
+        ? nextModel.languages
+        : catalogLocales
+
+    const currentLang = useEditorUiStore.getState().selectedLanguage
     const nextLanguage =
-      llmSelectedLanguage && nextLanguages.includes(llmSelectedLanguage)
-        ? llmSelectedLanguage
+      currentLang && nextLanguages.includes(currentLang)
+        ? currentLang
         : nextLanguages[0]
 
     const currentState = useEditorUiStore.getState()
@@ -302,17 +371,24 @@ function LlmStatusPopover() {
       selectedTarget: nextModel.target,
       selectedLanguage: nextLanguage,
     })
-  }, [llmModels, llmSelectedLanguage, selectedModel?.model, selectedTarget])
+  }, [
+    machineTranslator,
+    llmCatalog,
+    llmModels,
+    selectedModel?.model,
+    selectedTarget,
+  ])
 
   return (
     <Popover>
       <PopoverTrigger asChild>
         <button
           data-testid='llm-trigger'
-          data-llm-ready={llmReady ? 'true' : 'false'}
+          data-pipeline-translator={pipelineTranslator ?? 'llm'}
+          data-llm-ready={triggerReady ? 'true' : 'false'}
           data-llm-loading={busy ? 'true' : 'false'}
-          className={`flex h-6 cursor-pointer items-center gap-1.5 rounded-full px-2.5 text-[11px] font-medium shadow-sm transition hover:opacity-80 ${
-            llmReady
+          className={`flex h-6 max-w-[140px] cursor-pointer items-center gap-1.5 rounded-full px-2.5 text-[11px] font-medium shadow-sm transition hover:opacity-80 ${
+            triggerReady
               ? 'bg-rose-400 text-white ring-1 ring-rose-400/30'
               : busy
                 ? 'bg-amber-400 text-white ring-1 ring-amber-400/30'
@@ -320,22 +396,22 @@ function LlmStatusPopover() {
           }`}
         >
           <motion.span
-            className={`size-1.5 rounded-full ${
-              llmReady
+            className={`size-1.5 shrink-0 rounded-full ${
+              triggerReady
                 ? 'bg-white'
                 : busy
                   ? 'bg-white'
                   : 'bg-muted-foreground/40'
             }`}
             animate={
-              llmReady
+              triggerReady
                 ? { opacity: [1, 0.5, 1] }
                 : busy
                   ? { opacity: [1, 0.4, 1] }
                   : { opacity: 1 }
             }
             transition={
-              llmReady || busy
+              triggerReady || busy
                 ? {
                     duration: busy ? 1 : 2,
                     repeat: Infinity,
@@ -344,75 +420,80 @@ function LlmStatusPopover() {
                 : {}
             }
           />
-          LLM
+          <span className='min-w-0 truncate'>{triggerLabel}</span>
         </button>
       </PopoverTrigger>
       <PopoverContent
         align='end'
-        className='w-[280px] p-0'
+        className='w-[min(100vw-2rem,300px)] p-0'
         data-testid='llm-popover'
       >
-        {/* Model + load */}
-        <div className='flex flex-col gap-1 px-3 pt-3 pb-2.5'>
-          <span className='text-muted-foreground text-[10px] font-medium uppercase'>
-            {t('llm.model', { defaultValue: 'Model' })}
-          </span>
-          <div className='flex items-center gap-1.5'>
-            <Select
-              value={selectedTargetKey}
-              onValueChange={handleSetSelectedModel}
-            >
-              <SelectTrigger
-                data-testid='llm-model-select'
-                className='min-w-0 flex-1'
-              >
-                <SelectValue placeholder={t('llm.selectPlaceholder')} />
-              </SelectTrigger>
-              <SelectContent position='popper'>
-                {llmModels.map(({ model, provider }, index) => (
-                  <SelectItem
-                    key={llmTargetKey(model.target)}
-                    value={llmTargetKey(model.target)}
-                    data-testid={`llm-model-option-${index}`}
+        {!machineTranslator ? (
+          <>
+            <div className='flex flex-col gap-1 px-3 pt-3 pb-2.5'>
+              <span className='text-muted-foreground text-[10px] font-medium uppercase'>
+                {t('llm.model', { defaultValue: 'Model' })}
+              </span>
+              <div className='flex items-center gap-1.5'>
+                <Select
+                  value={selectedTargetKey}
+                  onValueChange={handleSetSelectedModel}
+                >
+                  <SelectTrigger
+                    data-testid='llm-model-select'
+                    className='min-w-0 flex-1'
                   >
-                    <span className='flex items-center gap-1.5'>
-                      {provider ? (
-                        <span className='bg-primary/10 text-primary rounded px-1 py-0.5 text-[9px] leading-none font-semibold uppercase'>
-                          {provider.name}
+                    <SelectValue placeholder={t('llm.selectPlaceholder')} />
+                  </SelectTrigger>
+                  <SelectContent position='popper'>
+                    {llmModels.map(({ model, provider }, index) => (
+                      <SelectItem
+                        key={llmTargetKey(model.target)}
+                        value={llmTargetKey(model.target)}
+                        data-testid={`llm-model-option-${index}`}
+                      >
+                        <span className='flex items-center gap-1.5'>
+                          {provider ? (
+                            <span className='bg-primary/10 text-primary rounded px-1 py-0.5 text-[9px] leading-none font-semibold uppercase'>
+                              {provider.name}
+                            </span>
+                          ) : null}
+                          {model.name}
                         </span>
-                      ) : null}
-                      {model.name}
-                    </span>
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-            <Button
-              data-testid='llm-load-toggle'
-              data-llm-ready={selectedIsLoaded ? 'true' : 'false'}
-              data-llm-loading={busy ? 'true' : 'false'}
-              variant={selectedIsLoaded ? 'ghost' : 'default'}
-              size='sm'
-              onClick={handleToggleLoadUnload}
-              disabled={!selectedTarget || busy}
-              className='h-6 shrink-0 gap-1 px-2 text-[11px]'
-            >
-              {busy ? (
-                <LoaderCircleIcon className='size-3 animate-spin' />
-              ) : null}
-              {selectedIsLoaded || llmUnloading
-                ? t('llm.unload')
-                : t('llm.load')}
-            </Button>
-          </div>
-        </div>
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+                <Button
+                  data-testid='llm-load-toggle'
+                  data-llm-ready={selectedIsLoaded ? 'true' : 'false'}
+                  data-llm-loading={busy ? 'true' : 'false'}
+                  variant={selectedIsLoaded ? 'ghost' : 'default'}
+                  size='sm'
+                  onClick={handleToggleLoadUnload}
+                  disabled={!selectedTarget || busy}
+                  className='h-6 shrink-0 gap-1 px-2 text-[11px]'
+                >
+                  {busy ? (
+                    <LoaderCircleIcon className='size-3 animate-spin' />
+                  ) : null}
+                  {selectedIsLoaded || llmUnloading
+                    ? t('llm.unload')
+                    : t('llm.load')}
+                </Button>
+              </div>
+            </div>
 
-        <div className='px-3'>
-          <Separator />
-        </div>
+            <div className='px-3'>
+              <Separator />
+            </div>
+          </>
+        ) : null}
 
         {/* Language + prompt */}
-        <div className='flex flex-col gap-1 px-3 pt-2.5 pb-3'>
+        <div
+          className={`flex flex-col gap-1 px-3 pb-3 ${machineTranslator ? 'pt-3' : 'pt-2.5'}`}
+        >
           <span className='text-muted-foreground text-[10px] font-medium uppercase'>
             {t('llm.translationSettings', {
               defaultValue: 'Translation',
@@ -420,9 +501,9 @@ function LlmStatusPopover() {
           </span>
 
           <div className='flex flex-col gap-1.5'>
-            {selectedModelLanguages.length > 0 ? (
+            {translationLocales.length > 0 ? (
               <Select
-                value={llmSelectedLanguage ?? selectedModelLanguages[0]}
+                value={llmSelectedLanguage ?? translationLocales[0]}
                 onValueChange={handleSetSelectedLanguage}
               >
                 <SelectTrigger
@@ -432,7 +513,7 @@ function LlmStatusPopover() {
                   <SelectValue placeholder={t('llm.languagePlaceholder')} />
                 </SelectTrigger>
                 <SelectContent position='popper'>
-                  {selectedModelLanguages.map((language, index) => (
+                  {translationLocales.map((language, index) => (
                     <SelectItem
                       key={language}
                       value={language}
@@ -445,18 +526,103 @@ function LlmStatusPopover() {
               </Select>
             ) : null}
 
-            <Textarea
-              data-testid='llm-system-prompt'
-              value={customSystemPrompt ?? ''}
-              onChange={(e) =>
-                setCustomSystemPrompt(e.target.value || undefined)
-              }
-              placeholder={t('llm.systemPromptPlaceholder', {
-                defaultValue: 'Custom system prompt (optional)',
-              })}
-              rows={5}
-              className='min-h-0 resize-y text-xs'
-            />
+            {!machineTranslator ? (
+              <Textarea
+                data-testid='llm-system-prompt'
+                value={customSystemPrompt ?? ''}
+                onChange={(e) =>
+                  setCustomSystemPrompt(e.target.value || undefined)
+                }
+                placeholder={t('llm.systemPromptPlaceholder', {
+                  defaultValue: 'Custom system prompt (optional)',
+                })}
+                rows={5}
+                className='min-h-0 resize-y text-xs'
+              />
+            ) : pipelineTranslator === PIPELINE_TRANSLATOR_DEEPL ? (
+              <div className='flex flex-col gap-2'>
+                <span className='text-muted-foreground text-[10px] font-medium uppercase'>
+                  {t('llm.deeplOptions', { defaultValue: 'DeepL options' })}
+                </span>
+                <div className='flex flex-col gap-1'>
+                  <span className='text-muted-foreground text-[9px]'>
+                    {t('llm.deeplFormality', { defaultValue: 'Formality' })}
+                  </span>
+                  <Select
+                    value={deeplSelectValue(deeplFormality)}
+                    onValueChange={(v) =>
+                      setDeeplFormality(deeplStoredFromSelect(v))
+                    }
+                  >
+                    <SelectTrigger
+                      data-testid='deepl-formality-select'
+                      className='w-full'
+                    >
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent position='popper'>
+                      <SelectItem value={DEEPL_SELECT_OMIT}>
+                        {t('llm.deeplFormalityDefault', {
+                          defaultValue: 'Default (API)',
+                        })}
+                      </SelectItem>
+                      <SelectItem value='default'>default</SelectItem>
+                      <SelectItem value='more'>more</SelectItem>
+                      <SelectItem value='less'>less</SelectItem>
+                      <SelectItem value='prefer_more'>prefer_more</SelectItem>
+                      <SelectItem value='prefer_less'>prefer_less</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
+                <div className='flex flex-col gap-1'>
+                  <span className='text-muted-foreground text-[9px]'>
+                    {t('llm.deeplModelType', { defaultValue: 'Model type' })}
+                  </span>
+                  <Select
+                    value={deeplSelectValue(deeplModelType)}
+                    onValueChange={(v) =>
+                      setDeeplModelType(deeplStoredFromSelect(v))
+                    }
+                  >
+                    <SelectTrigger
+                      data-testid='deepl-model-type-select'
+                      className='w-full'
+                    >
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent position='popper'>
+                      <SelectItem value={DEEPL_SELECT_OMIT}>
+                        {t('llm.deeplModelDefault', {
+                          defaultValue: 'Default (API)',
+                        })}
+                      </SelectItem>
+                      <SelectItem value='quality_optimized'>
+                        quality_optimized
+                      </SelectItem>
+                      <SelectItem value='prefer_quality_optimized'>
+                        prefer_quality_optimized
+                      </SelectItem>
+                      <SelectItem value='latency_optimized'>
+                        latency_optimized
+                      </SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
+                <p className='text-muted-foreground text-[10px] leading-snug'>
+                  {t('llm.deeplOptionsHint', {
+                    defaultValue:
+                      'Formality applies only to some target languages. DeepL returns an error if unsupported.',
+                  })}
+                </p>
+              </div>
+            ) : (
+              <p className='text-muted-foreground text-[10px] leading-snug'>
+                {t('llm.machineTranslatorHint', {
+                  defaultValue:
+                    'API translation ignores the local model. Change translator in Settings → Engines.',
+                })}
+              </p>
+            )}
           </div>
         </div>
       </PopoverContent>

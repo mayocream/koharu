@@ -38,10 +38,13 @@ import {
   MenubarTrigger,
 } from '@/components/ui/menubar'
 import { SettingsDialog, type TabId } from '@/components/SettingsDialog'
+import { useQueryClient } from '@tanstack/react-query'
 import { useProcessing } from '@/lib/machines'
 import { useEditorUiStore } from '@/lib/stores/editorUiStore'
 import { usePreferencesStore } from '@/lib/stores/preferencesStore'
-import type { PipelineJobRequest } from '@/lib/api/schemas'
+import { getGetLlmCatalogQueryKey } from '@/lib/api/llm/llm'
+import type { LlmCatalog, PipelineJobRequest } from '@/lib/api/schemas'
+import { effectiveTranslationLanguage } from '@/lib/translationTargetLocales'
 
 type MenuItem = {
   label: string
@@ -63,6 +66,7 @@ const openExternal = (url: string) => {
 export function MenuBar() {
   const { t } = useTranslation()
   const { send } = useProcessing()
+  const queryClient = useQueryClient()
   const [settingsOpen, setSettingsOpen] = useState(false)
   const [settingsTab, setSettingsTab] = useState<TabId>('appearance')
 
@@ -70,10 +74,13 @@ export function MenuBar() {
     const { selectedTarget, selectedLanguage, renderEffect, renderStroke } =
       useEditorUiStore.getState()
     const { customSystemPrompt } = usePreferencesStore.getState()
+    const catalog = queryClient.getQueryData<LlmCatalog>(
+      getGetLlmCatalogQueryKey(),
+    )
     return {
       documentId,
       llm: selectedTarget ? { target: selectedTarget } : undefined,
-      language: selectedLanguage,
+      language: effectiveTranslationLanguage(catalog, selectedLanguage),
       systemPrompt: customSystemPrompt,
       shaderEffect: renderEffect,
       shaderStroke: renderStroke,
@@ -250,6 +257,7 @@ export function MenuBar() {
             <MenubarSeparator />
             <MenubarItem
               className='text-[13px]'
+              data-testid='menu-settings'
               onSelect={() => {
                 setSettingsTab('appearance')
                 setSettingsOpen(true)

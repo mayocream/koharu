@@ -5,7 +5,11 @@ import { motion } from 'motion/react'
 import { TextBlock } from '@/types'
 import { Languages, LoaderCircleIcon, Trash2Icon } from 'lucide-react'
 import { useTextBlocks } from '@/hooks/useTextBlocks'
-import { useGetLlm } from '@/lib/api/llm/llm'
+import { useGetLlmCatalog } from '@/lib/api/llm/llm'
+import { useGetTranslateReady } from '@/lib/api/processing/processing'
+import { useGetConfig } from '@/lib/api/system/system'
+import { deepLTranslateOptionsForRequest } from '@/lib/deeplTranslateRequest'
+import { effectiveTranslationLanguage } from '@/lib/translationTargetLocales'
 import { useEditorUiStore } from '@/lib/stores/editorUiStore'
 import { usePreferencesStore } from '@/lib/stores/preferencesStore'
 import { useProcessing } from '@/lib/machines'
@@ -34,8 +38,10 @@ export function TextBlocksPanel() {
     removeBlock,
   } = useTextBlocks()
   const { t } = useTranslation()
-  const { data: llm } = useGetLlm()
-  const llmReady = llm?.status === 'ready'
+  const { data: translateReadyState } = useGetTranslateReady()
+  const { data: llmCatalog } = useGetLlmCatalog()
+  const { data: appConfig } = useGetConfig()
+  const translateReady = translateReadyState?.ready ?? false
   const { send, isProcessing, state } = useProcessing()
   const isTranslatingBlock = state.matches('translatingBlock')
 
@@ -53,17 +59,23 @@ export function TextBlocksPanel() {
   const handleGenerate = (blockIndex: number) => {
     const documentId = useEditorUiStore.getState().currentDocumentId
     if (!documentId) return
-    const selectedLanguage = useEditorUiStore.getState().selectedLanguage
+    const { selectedLanguage } = useEditorUiStore.getState()
     const textBlockId = document.textBlocks[blockIndex]?.id
     const { renderEffect, renderStroke } = useEditorUiStore.getState()
-    const { customSystemPrompt } = usePreferencesStore.getState()
+    const prefs = usePreferencesStore.getState()
+    const { customSystemPrompt } = prefs
+    const deepl = deepLTranslateOptionsForRequest(
+      appConfig?.pipeline?.translator,
+      prefs,
+    )
     send({
       type: 'START_TRANSLATE_BLOCK',
       documentId,
       options: {
         textBlockId,
-        language: selectedLanguage,
+        language: effectiveTranslationLanguage(llmCatalog, selectedLanguage),
         systemPrompt: customSystemPrompt,
+        ...(deepl ? { deepl } : {}),
       },
       renderOptions: {
         shaderEffect: renderEffect,
@@ -123,7 +135,7 @@ export function TextBlocksPanel() {
                   onGenerate={() => handleGenerate(index)}
                   processing={isProcessing}
                   translating={isTranslatingBlock}
-                  llmReady={llmReady}
+                  translateReady={translateReady}
                 />
               ))}
             </Accordion>
@@ -143,7 +155,7 @@ type BlockCardProps = {
   onGenerate: () => void
   processing: boolean
   translating: boolean
-  llmReady: boolean
+  translateReady: boolean
 }
 
 function BlockCard({
@@ -155,7 +167,7 @@ function BlockCard({
   onGenerate,
   processing,
   translating,
-  llmReady,
+  translateReady,
 }: BlockCardProps) {
   const { t } = useTranslation()
   const hasOcr = !!block.text?.trim()
@@ -254,7 +266,7 @@ function BlockCard({
                         data-testid={`textblock-generate-${index}`}
                         variant='ghost'
                         size='icon-xs'
-                        disabled={!llmReady || processing}
+                        disabled={!translateReady || processing}
                         onClick={onGenerate}
                         className='size-5'
                       >
