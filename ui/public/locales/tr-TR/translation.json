@@ -172,7 +172,11 @@
     "fontColorLabel": "Yazı rengi",
     "fontScopeGlobal": "Genel",
     "fontScopeBlock": "Blok bazında",
-    "fontScopeBlockIndex": "Blok {{index}}"
+    "fontScopeBlockIndex": "Blok {{index}}",
+    "valignLabel": "Dikey Hiza",
+    "valignTop": "Üst",
+    "valignCenter": "Orta",
+    "valignBottom": "Alt"
   },
   "textBlocks": {
     "emptyPrompt": "Metin bloklarını görmek için bir görsel açın.",

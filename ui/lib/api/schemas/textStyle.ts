@@ -6,6 +6,7 @@
 import type { TextAlign } from './textAlign'
 import type { TextShaderEffect } from './textShaderEffect'
 import type { TextStrokeStyle } from './textStrokeStyle'
+import type { VerticalAlign } from './verticalAlign'
 
 export interface TextStyle {
   color: number[]
@@ -15,4 +16,5 @@ export interface TextStyle {
   fontSize?: number | null
   stroke?: null | TextStrokeStyle
   textAlign?: null | TextAlign
+  verticalAlign?: null | VerticalAlign
 }

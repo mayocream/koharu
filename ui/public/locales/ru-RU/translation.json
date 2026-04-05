@@ -172,7 +172,11 @@
     "effectBold": "Жирный",
     "effectBorder": "Обводка",
     "strokeColorLabel": "Цвет обводки",
-    "strokeWidthLabel": "Толщина обводки"
+    "strokeWidthLabel": "Толщина обводки",
+    "valignLabel": "Верт. выр.",
+    "valignTop": "Верх",
+    "valignCenter": "Центр",
+    "valignBottom": "Низ"
   },
   "textBlocks": {
     "emptyPrompt": "Откройте изображение, чтобы увидеть текстовые блоки.",

@@ -172,7 +172,11 @@
     "fontColorLabel": "Cor da fonte",
     "fontScopeGlobal": "Global",
     "fontScopeBlock": "Por bloco",
-    "fontScopeBlockIndex": "Bloco {{index}}"
+    "fontScopeBlockIndex": "Bloco {{index}}",
+    "valignLabel": "Alinh. V",
+    "valignTop": "Superior",
+    "valignCenter": "Centro",
+    "valignBottom": "Inferior"
   },
   "textBlocks": {
     "emptyPrompt": "Abra uma imagem para ver os blocos de texto.",

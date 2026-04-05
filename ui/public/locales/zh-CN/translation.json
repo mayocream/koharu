@@ -172,7 +172,11 @@
     "effectBold": "粗体",
     "effectBorder": "描边",
     "strokeColorLabel": "描边颜色",
-    "strokeWidthLabel": "描边宽度"
+    "strokeWidthLabel": "描边宽度",
+    "valignLabel": "垂直对齐",
+    "valignTop": "顶部",
+    "valignCenter": "居中",
+    "valignBottom": "底部"
   },
   "textBlocks": {
     "emptyPrompt": "打开图像以查看文本块。",

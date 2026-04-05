@@ -174,7 +174,11 @@
     "fontColorLabel": "Font color",
     "fontScopeGlobal": "Global",
     "fontScopeBlock": "Per block",
-    "fontScopeBlockIndex": "Block {{index}}"
+    "fontScopeBlockIndex": "Block {{index}}",
+    "valignLabel": "V-Align",
+    "valignTop": "Top",
+    "valignCenter": "Middle",
+    "valignBottom": "Bottom"
   },
   "textBlocks": {
     "emptyPrompt": "Open an image to see text blocks.",

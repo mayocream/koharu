@@ -4,7 +4,7 @@ use anyhow::{Context, Result};
 use image::{DynamicImage, imageops};
 use koharu_core::{
     BlobRef, FontFaceInfo, FontSource, TextAlign, TextBlock, TextShaderEffect, TextStrokeStyle,
-    TextStyle,
+    TextStyle, VerticalAlign,
 };
 
 use koharu_renderer::{
@@ -342,6 +342,7 @@ impl Renderer {
             effect: None,
             stroke: None,
             text_align: None,
+            vertical_align: None,
         });
 
         // Font cascade: per-block → document default → script fallback
@@ -381,6 +382,7 @@ impl Renderer {
                 TextAlign::Left
             }
         });
+        let vertical_align = style.vertical_align.unwrap_or(VerticalAlign::Center);
         let block_box = layout_box_from_block(&layout_source_block);
         let (layout_box, bubble_expanded) = match bubble_area {
             Some(area) => (area, true),
@@ -408,9 +410,7 @@ impl Renderer {
                 min_font_size,
             )?
         };
-        if english_horizontal_layout {
-            center_layout_vertically(&mut layout, layout_box.height);
-        }
+        align_layout_vertically(&mut layout, layout_box.height, vertical_align);
         align_layout_horizontally(&mut layout, writing_mode, layout_box.width, text_align);
 
         let resolved_stroke = resolve_stroke_style(
@@ -459,6 +459,7 @@ impl Renderer {
             effect: None,
             stroke: None,
             text_align: None,
+            vertical_align: None,
         });
         // font_families is NOT set here — it only contains user-explicit choices
         Ok(Some(DynamicImage::ImageRgba8(rendered)))
@@ -607,11 +608,15 @@ fn align_layout_horizontally(
     layout.width = target_width;
 }
 
-fn center_layout_vertically(layout: &mut LayoutRun<'_>, container_height: f32) {
+fn align_layout_vertically(layout: &mut LayoutRun<'_>, container_height: f32, valign: VerticalAlign) {
     if !container_height.is_finite() || container_height <= 0.0 || layout.lines.is_empty() {
         return;
     }
-    let offset = ((container_height - layout.height) * 0.5).max(0.0);
+    let offset = match valign {
+        VerticalAlign::Top => 0.0,
+        VerticalAlign::Center => ((container_height - layout.height) * 0.5).max(0.0),
+        VerticalAlign::Bottom => (container_height - layout.height).max(0.0),
+    };
     if offset <= 0.0 {
         return;
     }
@@ -743,10 +748,10 @@ fn find_best_bubble(block: &TextBlock, bubbles: &[koharu_core::BubbleRegion]) ->
 #[cfg(test)]
 mod tests {
     use super::{
-        align_layout_horizontally, apply_default_font_families, center_layout_vertically,
+        align_layout_horizontally, align_layout_vertically, apply_default_font_families,
         resolve_stroke_style,
     };
-    use koharu_core::{FontPrediction, TextAlign, TextBlock, TextStrokeStyle};
+    use koharu_core::{FontPrediction, TextAlign, TextBlock, TextStrokeStyle, VerticalAlign};
     use koharu_renderer::layout::{LayoutLine, LayoutRun, WritingMode};
 
     #[test]
@@ -847,7 +852,7 @@ mod tests {
             font_size: 16.0,
         };
 
-        center_layout_vertically(&mut layout, 60.0);
+        align_layout_vertically(&mut layout, 60.0, VerticalAlign::Center);
 
         assert_eq!(layout.lines[0].baseline.1, 32.0);
         assert_eq!(layout.height, 60.0);
