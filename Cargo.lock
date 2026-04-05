@@ -3924,7 +3924,7 @@ dependencies = [
 
 [[package]]
 name = "koharu"
-version = "0.42.2"
+version = "0.42.3"
 dependencies = [
  "anyhow",
  "camino",
@@ -3956,7 +3956,7 @@ dependencies = [
 
 [[package]]
 name = "koharu-app"
-version = "0.42.2"
+version = "0.42.3"
 dependencies = [
  "anyhow",
  "async-trait",
@@ -3993,7 +3993,7 @@ dependencies = [
 
 [[package]]
 name = "koharu-core"
-version = "0.42.2"
+version = "0.42.3"
 dependencies = [
  "anyhow",
  "blake3",
@@ -4010,7 +4010,7 @@ dependencies = [
 
 [[package]]
 name = "koharu-llm"
-version = "0.42.2"
+version = "0.42.3"
 dependencies = [
  "anyhow",
  "bindgen",
@@ -4048,7 +4048,7 @@ dependencies = [
 
 [[package]]
 name = "koharu-ml"
-version = "0.42.2"
+version = "0.42.3"
 dependencies = [
  "anyhow",
  "candle-core",
@@ -4086,7 +4086,7 @@ dependencies = [
 
 [[package]]
 name = "koharu-psd"
-version = "0.42.2"
+version = "0.42.3"
 dependencies = [
  "image",
  "koharu-core",
@@ -4095,7 +4095,7 @@ dependencies = [
 
 [[package]]
 name = "koharu-renderer"
-version = "0.42.2"
+version = "0.42.3"
 dependencies = [
  "anyhow",
  "criterion",
@@ -4117,7 +4117,7 @@ dependencies = [
 
 [[package]]
 name = "koharu-rpc"
-version = "0.42.2"
+version = "0.42.3"
 dependencies = [
  "anyhow",
  "axum",
@@ -4143,7 +4143,7 @@ dependencies = [
 
 [[package]]
 name = "koharu-runtime"
-version = "0.42.2"
+version = "0.42.3"
 dependencies = [
  "anyhow",
  "axum",

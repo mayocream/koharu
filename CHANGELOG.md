@@ -1,3 +1,24 @@
+## [0.42.3](https://github.com/mayocream/koharu/compare/0.42.2..0.42.3) - 2026-04-05
+
+### 🐛 Bug Fixes
+
+- Predict stroke color - ([53617b6](https://github.com/mayocream/koharu/commit/53617b62c5d20f11011974f932c4d1a433a02199))
+- Pin libz-sys to 1.1.25 - ([cae9542](https://github.com/mayocream/koharu/commit/cae9542a3aaf49a0b3c9e0da917b4e70e7308102))
+
+### 📚 Documentation
+
+- Rephrase - ([7d27635](https://github.com/mayocream/koharu/commit/7d27635b6aa75950c691922ea9d6c81f77dcfcc8))
+
+### 🧪 Testing
+
+- Remove outdated - ([31f13dc](https://github.com/mayocream/koharu/commit/31f13dcf0ac1d37aa4eb76e6289c0f71a2781372))
+
+### ⚙️ Miscellaneous Tasks
+
+- Remove ts-rs env - ([ef5cb84](https://github.com/mayocream/koharu/commit/ef5cb84812aa687d4070a84e4fd75d1b48a46aab))
+- Disable github changelog - ([3847dcd](https://github.com/mayocream/koharu/commit/3847dcdde45a699b119a827ef9f016693b2447cf))
+
+
 ## [0.42.2](https://github.com/mayocream/koharu/compare/0.42.1..0.42.2) - 2026-04-04
 
 ### 🐛 Bug Fixes
