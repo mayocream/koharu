@@ -11,9 +11,9 @@ use axum::{
 use koharu_app::{AppResources, config as app_config, edit, engine, io, llm, pipeline};
 use koharu_core::{
     CreateTextBlock, Document, DocumentDetail, DocumentSummary, DownloadState, ExportLayer,
-    ExportResult, FontFaceInfo, JobState, LlmCatalog, LlmLoadRequest, LlmState, MaskRegionRequest,
-    MetaInfo, PipelineJobRequest, RenderRequest, TextBlock, TextBlockDetail, TextBlockInput,
-    TextBlockPatch, TranslateRequest,
+    ExportResult, FontFaceInfo, JobState, JobStatus, LlmCatalog, LlmLoadRequest, LlmState,
+    MaskRegionRequest, MetaInfo, PipelineJobRequest, RenderRequest, TextBlock, TextBlockDetail,
+    TextBlockInput, TextBlockPatch, TranslateReady, TranslateRequest,
 };
 use koharu_psd::{PsdExportOptions, TextLayerMode};
 use serde::{Deserialize, Serialize};
@@ -59,6 +59,7 @@ pub fn api() -> (axum::Router<ApiState>, utoipa::openapi::OpenApi) {
         .routes(routes!(batch_export))
         .routes(routes!(get_llm, load_llm, unload_llm))
         .routes(routes!(get_llm_catalog))
+        .routes(routes!(get_translate_ready))
         .routes(routes!(start_pipeline))
         .routes(routes!(list_jobs))
         .routes(routes!(get_job, cancel_job))
@@ -757,6 +758,7 @@ async fn translate_document(
         text_block_index,
         request.language.as_deref(),
         request.system_prompt.as_deref(),
+        request.deepl,
     )
     .await?;
 
@@ -1082,6 +1084,21 @@ async fn delete_text_block(
 async fn get_llm_catalog(State(state): State<ApiState>) -> ApiResult<Json<LlmCatalog>> {
     let resources = state.resources()?;
     Ok(Json(llm::llm_catalog(resources).await?))
+}
+
+#[utoipa::path(
+    get,
+    path = "/translation/ready",
+    operation_id = "getTranslateReady",
+    tag = "processing",
+    responses(
+        (status = 200, body = TranslateReady),
+        (status = 503, body = ApiError),
+    ),
+)]
+async fn get_translate_ready(State(state): State<ApiState>) -> ApiResult<Json<TranslateReady>> {
+    let resources = state.resources()?;
+    Ok(Json(llm::translate_ready(resources).await?))
 }
 
 #[utoipa::path(

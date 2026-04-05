@@ -271,6 +271,16 @@ pub struct LlmProviderCatalog {
 pub struct LlmCatalog {
     pub local_models: Vec<LlmCatalogModel>,
     pub providers: Vec<LlmProviderCatalog>,
+    /// DeepL / Google Cloud Translation API entries (same shape as LLM providers for Settings UI).
+    #[serde(default)]
+    pub translation_providers: Vec<LlmProviderCatalog>,
+}
+
+/// Whether the app can run translate (LLM loaded, or machine translation API configured).
+#[derive(Debug, Clone, Serialize, Deserialize, JsonSchema, ToSchema)]
+#[serde(rename_all = "camelCase")]
+pub struct TranslateReady {
+    pub ready: bool,
 }
 
 #[derive(Debug, Clone, Copy, Serialize, Deserialize, JsonSchema, ToSchema)]
@@ -348,12 +358,24 @@ pub struct RenderRequest {
     pub shader_stroke: Option<TextStrokeStyle>,
 }
 
+/// Optional DeepL `/v2/translate` parameters (`formality`, `model_type`).
+#[derive(Debug, Clone, Serialize, Deserialize, JsonSchema, ToSchema)]
+#[serde(rename_all = "camelCase")]
+pub struct DeeplTranslateOptions {
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub formality: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub model_type: Option<String>,
+}
+
 #[derive(Debug, Clone, Serialize, Deserialize, JsonSchema, ToSchema)]
 #[serde(rename_all = "camelCase")]
 pub struct TranslateRequest {
     pub text_block_id: Option<String>,
     pub language: Option<String>,
     pub system_prompt: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub deepl: Option<DeeplTranslateOptions>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, JsonSchema, ToSchema)]

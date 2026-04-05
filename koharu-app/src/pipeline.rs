@@ -16,6 +16,8 @@ pub type Jobs = Arc<RwLock<HashMap<String, JobState>>>;
 pub struct PipelineHandle {
     pub id: String,
     pub cancel: Arc<AtomicBool>,
+    /// Target locale for translation (from [`ProcessRequest::language`](koharu_core::commands::ProcessRequest)).
+    pub target_language: Option<String>,
 }
 
 #[derive(Debug, Default)]
@@ -104,6 +106,7 @@ pub async fn process(
         *guard = Some(PipelineHandle {
             id: job_id.clone(),
             cancel: cancel.clone(),
+            target_language: payload.language.clone(),
         });
     }
 

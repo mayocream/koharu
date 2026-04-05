@@ -433,6 +433,7 @@ impl KoharuMcp {
             p.text_block_index,
             p.language.as_deref(),
             None,
+            None,
         )
         .await
         .map_err(|e| e.to_string())?;

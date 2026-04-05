@@ -62,6 +62,20 @@ async function setupCuda() {
   )
 }
 
+/**
+ * CUDA 13+ (CCCL): nvcc-hosted `cl.exe` must use the standard-conforming preprocessor,
+ * otherwise cccl headers error with C1189 (traditional preprocessor).
+ * @see https://learn.microsoft.com/en-us/cpp/build/reference/zc-preprocessor
+ */
+function setupMsvcForCudaCccl() {
+  if (os.type() !== 'Windows_NT') return
+  const flag = '/Zc:preprocessor'
+  const cur = process.env.CL ?? ''
+  if (!cur.includes('Zc:preprocessor')) {
+    process.env.CL = cur ? `${cur} ${flag}` : flag
+  }
+}
+
 async function setupCl() {
   const vsRoots = [
     'C:/Program Files/Microsoft Visual Studio',
@@ -98,6 +112,7 @@ async function setupCl() {
 
 async function dev() {
   if (os.type() === 'Windows_NT') {
+    setupMsvcForCudaCccl()
     // First, try to check if nvcc is available
     await checkNvcc()
       // If not found, try to set up CUDA paths

@@ -958,6 +958,104 @@ inventory::submit! {
     }
 }
 
+// --- DeepL / Google machine translation -----------------------------------
+
+struct DeepLTranslateEngine;
+
+#[async_trait]
+impl Engine for DeepLTranslateEngine {
+    async fn run(
+        &self,
+        doc: &Document,
+        res: &AppResources,
+        _options: &PipelineRunOptions,
+    ) -> Result<Patch> {
+        let (api_key, base_url) =
+            crate::mt::load_credentials(res, crate::mt::DEEPL_PROVIDER_ID).await?;
+        let target_language = crate::mt::pipeline_target_language(res).await;
+        let mut page = doc.clone();
+        let block_count = page.text_blocks.len();
+        let client = res.runtime.http_client();
+        async {
+            crate::mt::translate_document_mt(
+                &client,
+                crate::mt::DEEPL_PROVIDER_ID,
+                &api_key,
+                base_url.as_deref(),
+                &mut page.text_blocks,
+                target_language.as_deref(),
+                None,
+                None,
+            )
+            .await
+        }
+        .instrument(tracing::info_span!("inference", blocks = block_count))
+        .await?;
+        let blocks = page.text_blocks;
+        Ok(Patch::apply(|d| d.text_blocks = blocks))
+    }
+}
+
+inventory::submit! {
+    EngineInfo {
+        id: "deepl",
+        name: "DeepL",
+        needs: &[Artifact::OcrText],
+        produces: &[Artifact::Translations],
+        load: |_res| Box::pin(async move {
+            Ok(Box::new(DeepLTranslateEngine) as Box<dyn Engine>)
+        }),
+    }
+}
+
+struct GoogleTranslateEngine;
+
+#[async_trait]
+impl Engine for GoogleTranslateEngine {
+    async fn run(
+        &self,
+        doc: &Document,
+        res: &AppResources,
+        _options: &PipelineRunOptions,
+    ) -> Result<Patch> {
+        let (api_key, base_url) =
+            crate::mt::load_credentials(res, crate::mt::GOOGLE_TRANSLATE_PROVIDER_ID).await?;
+        let target_language = crate::mt::pipeline_target_language(res).await;
+        let mut page = doc.clone();
+        let block_count = page.text_blocks.len();
+        let client = res.runtime.http_client();
+        async {
+            crate::mt::translate_document_mt(
+                &client,
+                crate::mt::GOOGLE_TRANSLATE_PROVIDER_ID,
+                &api_key,
+                base_url.as_deref(),
+                &mut page.text_blocks,
+                target_language.as_deref(),
+                None,
+                None,
+            )
+            .await
+        }
+        .instrument(tracing::info_span!("inference", blocks = block_count))
+        .await?;
+        let blocks = page.text_blocks;
+        Ok(Patch::apply(|d| d.text_blocks = blocks))
+    }
+}
+
+inventory::submit! {
+    EngineInfo {
+        id: "google-translate",
+        name: "Google Translate",
+        needs: &[Artifact::OcrText],
+        produces: &[Artifact::Translations],
+        load: |_res| Box::pin(async move {
+            Ok(Box::new(GoogleTranslateEngine) as Box<dyn Engine>)
+        }),
+    }
+}
+
 // --- Lama Inpainting ------------------------------------------------------
 
 struct LamaInpaintEngine(koharu_ml::lama::Lama);

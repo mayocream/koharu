@@ -9,9 +9,9 @@ use tokio::sync::{RwLock, broadcast};
 use tracing::instrument;
 
 use koharu_core::{
-    Document, LlmCatalog, LlmCatalogModel, LlmGenerationOptions, LlmLoadRequest,
-    LlmProviderCatalog, LlmProviderCatalogStatus, LlmState, LlmStateStatus, LlmTarget,
-    LlmTargetKind, TextBlock,
+    DeeplTranslateOptions, Document, LlmCatalog, LlmCatalogModel, LlmGenerationOptions,
+    LlmLoadRequest, LlmProviderCatalog, LlmProviderCatalogStatus, LlmState, LlmStateStatus,
+    LlmTarget, LlmTargetKind, TextBlock, TranslateReady,
 };
 use koharu_runtime::RuntimeManager;
 
@@ -626,6 +626,60 @@ async fn provider_catalog(state: &AppResources) -> anyhow::Result<Vec<LlmProvide
     Ok(providers)
 }
 
+async fn translation_provider_catalog(
+    _state: &AppResources,
+) -> anyhow::Result<Vec<LlmProviderCatalog>> {
+    let config = app_config::load()?;
+    let mut out = Vec::new();
+    for (id, name, requires_base_url) in [
+        (crate::mt::DEEPL_PROVIDER_ID, "DeepL", true),
+        (
+            crate::mt::GOOGLE_TRANSLATE_PROVIDER_ID,
+            "Google Cloud Translation",
+            false,
+        ),
+    ] {
+        let stored = config.providers.iter().find(|p| p.id == id);
+        let base_url = stored.and_then(|p| p.base_url.clone());
+        let api_key = stored
+            .and_then(|p| p.api_key.as_ref())
+            .map(|secret| secret.expose().to_owned());
+        let has_api_key = api_key
+            .as_deref()
+            .is_some_and(|value| !value.trim().is_empty());
+        let (status, error) = if !has_api_key {
+            (LlmProviderCatalogStatus::MissingConfiguration, None)
+        } else {
+            (LlmProviderCatalogStatus::Ready, None)
+        };
+        let models = if has_api_key {
+            vec![LlmCatalogModel {
+                target: LlmTarget {
+                    kind: LlmTargetKind::Provider,
+                    model_id: "mt".to_string(),
+                    provider_id: Some(id.to_string()),
+                },
+                name: format!("{name} (targets)"),
+                languages: supported_locales(),
+            }]
+        } else {
+            Vec::new()
+        };
+        out.push(LlmProviderCatalog {
+            id: id.to_string(),
+            name: name.to_string(),
+            requires_api_key: true,
+            requires_base_url,
+            has_api_key,
+            base_url,
+            status,
+            error,
+            models,
+        });
+    }
+    Ok(out)
+}
+
 fn static_provider_models(
     descriptor: &koharu_llm::providers::ProviderDescriptor,
 ) -> Vec<LlmCatalogModel> {
@@ -701,7 +755,25 @@ pub async fn llm_catalog(state: AppResources) -> anyhow::Result<LlmCatalog> {
     Ok(LlmCatalog {
         local_models: local_catalog_models(),
         providers: provider_catalog(&state).await?,
+        translation_providers: translation_provider_catalog(&state).await?,
     })
+}
+
+/// True when an LLM is loaded, or the selected pipeline translator is DeepL/Google with a saved API key.
+pub async fn translate_ready(state: AppResources) -> anyhow::Result<TranslateReady> {
+    if state.llm.ready().await {
+        return Ok(TranslateReady { ready: true });
+    }
+    let cfg = state.config.read().await;
+    let tid = cfg.pipeline.translator.as_str();
+    if !crate::mt::is_machine_translator(tid) {
+        return Ok(TranslateReady { ready: false });
+    }
+    let ok = koharu_llm::providers::get_saved_api_key(tid)
+        .ok()
+        .flatten()
+        .is_some_and(|k| !k.trim().is_empty());
+    Ok(TranslateReady { ready: ok })
 }
 
 #[instrument(level = "info", skip_all)]
@@ -725,25 +797,50 @@ pub async fn llm_generate(
     text_block_index: Option<usize>,
     language: Option<&str>,
     system_prompt: Option<&str>,
+    deepl: Option<DeeplTranslateOptions>,
 ) -> anyhow::Result<()> {
+    let translator = {
+        let cfg = state.config.read().await;
+        cfg.pipeline.translator.clone()
+    };
+
     let mut doc = state.storage.page(document_id).await?;
 
-    match text_block_index {
-        Some(block_index) => {
-            let text_block = doc
-                .text_blocks
-                .get_mut(block_index)
-                .ok_or_else(|| anyhow::anyhow!("Text block not found"))?;
-            state
-                .llm
-                .translate(text_block, language, system_prompt)
-                .await?;
-        }
-        None => {
-            state
-                .llm
-                .translate(&mut doc, language, system_prompt)
-                .await?;
+    if crate::mt::is_machine_translator(&translator) {
+        let (api_key, base_url) = crate::mt::load_credentials(&state, &translator).await?;
+        let client = state.runtime.http_client();
+        let deepl_opts = deepl
+            .as_ref()
+            .filter(|_| translator == crate::mt::DEEPL_PROVIDER_ID);
+        crate::mt::translate_document_mt(
+            &client,
+            &translator,
+            &api_key,
+            base_url.as_deref(),
+            &mut doc.text_blocks,
+            language,
+            text_block_index,
+            deepl_opts,
+        )
+        .await?;
+    } else {
+        match text_block_index {
+            Some(block_index) => {
+                let text_block = doc
+                    .text_blocks
+                    .get_mut(block_index)
+                    .ok_or_else(|| anyhow::anyhow!("Text block not found"))?;
+                state
+                    .llm
+                    .translate(text_block, language, system_prompt)
+                    .await?;
+            }
+            None => {
+                state
+                    .llm
+                    .translate(&mut doc, language, system_prompt)
+                    .await?;
+            }
         }
     }
 
