@@ -2,6 +2,7 @@ use minijinja::{Environment, context};
 use serde::Serialize;
 use strum::{Display, EnumString};
 
+use crate::jinja;
 use crate::{Language, ModelId};
 
 #[derive(Debug, Clone, PartialEq, Eq, Display, EnumString)]
@@ -57,11 +58,8 @@ pub fn system_prompt(target_language: Language) -> String {
 
 impl PromptRenderer {
     pub fn new(model_id: ModelId, template: String, bos_token: String, eos_token: String) -> Self {
-        let mut env = Environment::new();
-        env.add_filter("trim", |s: String| s.trim().to_string());
-
         Self {
-            env,
+            env: jinja::environment(),
             model_id,
             template,
             bos_token,
@@ -114,6 +112,8 @@ impl PromptRenderer {
                 bos_token => self.bos_token,
                 eos_token => self.eos_token,
                 add_generation_prompt => !matches!(self.model_id, ModelId::VntlLlama3_8Bv2),
+                // Translation mode should suppress chain-of-thought-capable chat templates.
+                enable_thinking => false,
             })
             .map_err(anyhow::Error::msg)?;
 
@@ -187,6 +187,21 @@ mod tests {
             formatted,
             format!("{}\n\nhello", system_prompt(Language::Korean))
         );
+
+        Ok(())
+    }
+
+    #[test]
+    fn qwen_prompt_format_disables_thinking_in_template_context() -> anyhow::Result<()> {
+        let renderer = PromptRenderer::new(
+            ModelId::Qwen3_5_9bUncensored,
+            r#"{% if add_generation_prompt %}{% if enable_thinking is defined and enable_thinking is false %}{{ '<think>\n\n</think>\n\n' }}{% else %}{{ '<think>\n' }}{% endif %}{% endif %}"#.to_string(),
+            "<s>".to_string(),
+            "</s>".to_string(),
+        );
+        let formatted =
+            renderer.format_chat_prompt("hello".to_string(), Language::English, None)?;
+        assert_eq!(formatted, "<think>\n\n</think>\n\n");
 
         Ok(())
     }

@@ -106,6 +106,7 @@ objc2-metal-performance-shaders-graph = "0.3"
 objc2-foundation = "0.3"
 indicatif = "0.18"
 minijinja = "2.19"
+minijinja-contrib = { version = "2.19", features = ["pycompat"] }
 windows = { version = "0.62", features = [
     "Win32",
     "Win32_System",

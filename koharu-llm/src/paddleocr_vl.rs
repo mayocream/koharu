@@ -7,9 +7,10 @@ use std::time::Instant;
 use anyhow::{Context, Result, bail};
 use image::DynamicImage;
 use koharu_runtime::RuntimeManager;
-use minijinja::{Environment, context};
+use minijinja::context;
 use serde::{Deserialize, Serialize};
 
+use crate::jinja;
 use crate::safe::context::params::{LlamaAttentionType, LlamaContextParams};
 use crate::safe::llama_backend::LlamaBackend;
 use crate::safe::llama_batch::LlamaBatch;
@@ -496,8 +497,7 @@ fn render_chat_prompt(
     eos_token: &str,
     task: PaddleOcrVlTask,
 ) -> Result<String> {
-    let mut env = Environment::new();
-    env.add_filter("trim", |s: String| s.trim().to_string());
+    let env = jinja::environment();
     let tmpl = env
         .template_from_str(chat_template)
         .map_err(anyhow::Error::msg)

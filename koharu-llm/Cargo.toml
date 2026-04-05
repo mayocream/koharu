@@ -38,6 +38,7 @@ koharu-core = { workspace = true }
 koharu-runtime = { workspace = true }
 libloading = { workspace = true }
 minijinja = { workspace = true }
+minijinja-contrib = { workspace = true }
 num_cpus = { workspace = true }
 reqwest = { workspace = true }
 reqwest-middleware = { workspace = true }

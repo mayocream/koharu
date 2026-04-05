@@ -201,14 +201,27 @@ fn format_document_blocks(blocks: &[TextBlock]) -> String {
 }
 
 fn find_next_tag(text: &str) -> Option<(usize, usize, usize)> {
-    let mut pos = 0;
-    while let Some(rel) = text[pos..].find('[') {
-        let offset = pos + rel;
+    let mut line_start = 0;
+
+    while line_start <= text.len() {
+        let line = &text[line_start..];
+        let indent = line
+            .as_bytes()
+            .iter()
+            .take_while(|&&byte| matches!(byte, b' ' | b'\t'))
+            .count();
+        let offset = line_start + indent;
+
         if let Some((len, id)) = parse_block_tag(&text[offset..]) {
             return Some((offset, len, id));
         }
-        pos = offset + 1;
+
+        let Some(next_newline) = line.find('\n') else {
+            break;
+        };
+        line_start += next_newline + 1;
     }
+
     None
 }
 
@@ -965,5 +978,22 @@ mod tests {
             strip_thinking_block("<think>long\nmultiline\nthought</think>\n[1]Result"),
             "[1]Result"
         );
+    }
+
+    #[test]
+    fn parse_tagged_blocks_ignores_inline_analysis_tags() -> anyhow::Result<()> {
+        let parsed =
+            parse_tagged_blocks("1. Analyze the Input Data:\n* [1] `1`\n* [2] `ねむ……`", 2)?;
+        assert_eq!(parsed, None);
+
+        Ok(())
+    }
+
+    #[test]
+    fn parse_tagged_blocks_accepts_real_tagged_lines_after_preamble() -> anyhow::Result<()> {
+        let parsed = parse_tagged_blocks("Sure.\n[1]Hello\n[2]World", 2)?;
+        assert_eq!(parsed, Some(vec!["Hello".to_string(), "World".to_string()]));
+
+        Ok(())
     }
 }

@@ -4027,6 +4027,7 @@ dependencies = [
  "koharu-runtime",
  "libloading 0.8.9",
  "minijinja",
+ "minijinja-contrib",
  "num_cpus",
  "proc-macro2",
  "quote",
@@ -4535,6 +4536,16 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "805bfd7352166bae857ee569628b52bcd85a1cecf7810861ebceb1686b72b75d"
 dependencies = [
  "memo-map",
+ "serde",
+]
+
+[[package]]
+name = "minijinja-contrib"
+version = "2.19.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "45092d80391870622fcf3bd82f5d2af18f99533ea60debb4bc9db0c76f0e809a"
+dependencies = [
+ "minijinja",
  "serde",
 ]
 
