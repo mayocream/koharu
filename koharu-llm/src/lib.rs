@@ -56,14 +56,14 @@ pub enum ModelId {
     )]
     VntlLlama3_8Bv2,
     #[strum(
-        serialize = "lfm2-350m-enjp-mt",
+        serialize = "lfm2.5-1.2b-instruct",
         props(
-            repo = "LiquidAI/LFM2-350M-ENJP-MT-GGUF",
-            filename = "LFM2-350M-ENJP-MT-Q8_0.gguf",
-            languages = "en-US"
+            repo = "LiquidAI/LFM2.5-1.2B-Instruct-GGUF",
+            filename = "LFM2.5-1.2B-Instruct-Q8_0.gguf",
+            languages = "en-US,ar-SA,zh-CN,fr-FR,de-DE,ja-JP,ko-KR,pt-PT,es-ES"
         )
     )]
-    Lfm2_350mEnjpMt,
+    Lfm2_5_1_2bInstruct,
     #[strum(
         serialize = "sakura-galtransl-7b-v3.7",
         props(

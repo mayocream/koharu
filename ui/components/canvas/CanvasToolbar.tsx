@@ -1,8 +1,8 @@
 'use client'
 
-import { useEffect, useMemo, useState } from 'react'
+import { useEffect, useMemo } from 'react'
 import { useTranslation } from 'react-i18next'
-import { useQuery } from '@tanstack/react-query'
+
 import { motion } from 'motion/react'
 import {
   ScanIcon,
@@ -27,11 +27,7 @@ import {
   PopoverTrigger,
 } from '@/components/ui/popover'
 import { useEditorUiStore } from '@/lib/stores/editorUiStore'
-import {
-  useGetLlm,
-  getGetLlmCatalogQueryKey,
-  getLlmCatalog,
-} from '@/lib/api/llm/llm'
+import { useGetLlm, useGetLlmCatalog } from '@/lib/api/llm/llm'
 import type {
   LlmCatalog,
   LlmCatalogModel,
@@ -39,32 +35,12 @@ import type {
 } from '@/lib/api/schemas'
 import { useProcessing } from '@/lib/machines'
 import { llmTargetKey, sameLlmTarget } from '@/lib/llmTargets'
-import i18n from '@/lib/i18n'
 
 type SelectableLlmModel = {
   model: LlmCatalogModel
   provider?: LlmProviderCatalog
 }
 
-function useLlmCatalogQuery() {
-  const [language, setLanguage] = useState(i18n.language)
-
-  useEffect(() => {
-    const handleLanguageChange = (nextLanguage: string) => {
-      setLanguage(nextLanguage)
-    }
-    i18n.on('languageChanged', handleLanguageChange)
-    return () => {
-      i18n.off('languageChanged', handleLanguageChange)
-    }
-  }, [])
-
-  return useQuery<LlmCatalog>({
-    queryKey: getGetLlmCatalogQueryKey({ language: language ?? 'default' }),
-    queryFn: async () => getLlmCatalog({ language }),
-    staleTime: 5 * 60 * 1000,
-  })
-}
 
 const flattenCatalogModels = (catalog?: LlmCatalog): SelectableLlmModel[] => [
   ...(catalog?.localModels ?? []).map((model) => ({ model })),
@@ -217,7 +193,7 @@ function WorkflowButtons() {
 }
 
 function LlmStatusPopover() {
-  const { data: llmCatalog } = useLlmCatalogQuery()
+  const { data: llmCatalog } = useGetLlmCatalog()
   const llmModels = useMemo(
     () => flattenCatalogModels(llmCatalog),
     [llmCatalog],

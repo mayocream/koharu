@@ -26,19 +26,19 @@ use crate::config as app_config;
 
 pub use koharu_llm::prefetch;
 
-/// Matches a `<|N|>` tag, returning (full match length, 0-based index).
+/// Matches a `[N]` tag, returning (full match length, 0-based index).
 fn parse_block_tag(text: &str) -> Option<(usize, usize)> {
     let bytes = text.as_bytes();
-    if bytes.get(0..2)? != b"<|" {
+    if bytes.first()? != &b'[' {
         return None;
     }
-    let end = text[2..].find("|>")?;
-    let num_str = &text[2..2 + end];
+    let end = text[1..].find(']')?;
+    let num_str = &text[1..1 + end];
     let id_1based: usize = num_str.parse().ok()?;
     if id_1based == 0 {
         return None;
     }
-    Some((2 + end + 2, id_1based - 1))
+    Some((1 + end + 1, id_1based - 1))
 }
 
 #[allow(clippy::large_enum_variant)]
@@ -178,13 +178,23 @@ fn strip_incomplete_corner_quotes(text: &str) -> String {
     current.to_string()
 }
 
+/// Strip `<think>...</think>` reasoning blocks produced by thinking models.
+fn strip_thinking_block(text: &str) -> &str {
+    if let Some(start) = text.find("<think>")
+        && let Some(end) = text[start..].find("</think>")
+    {
+        return text[start + end + "</think>".len()..].trim_start();
+    }
+    text
+}
+
 fn format_document_blocks(blocks: &[TextBlock]) -> String {
     blocks
         .iter()
         .enumerate()
         .map(|(idx, block)| {
             let text = block.text.as_deref().unwrap_or("<empty>");
-            format!("<|{}|>{}", idx + 1, text)
+            format!("[{}]{}", idx + 1, text)
         })
         .collect::<Vec<_>>()
         .join("\n")
@@ -192,7 +202,7 @@ fn format_document_blocks(blocks: &[TextBlock]) -> String {
 
 fn find_next_tag(text: &str) -> Option<(usize, usize, usize)> {
     let mut pos = 0;
-    while let Some(rel) = text[pos..].find("<|") {
+    while let Some(rel) = text[pos..].find('[') {
         let offset = pos + rel;
         if let Some((len, id)) = parse_block_tag(&text[offset..]) {
             return Some((offset, len, id));
@@ -287,9 +297,10 @@ impl Translatable for Document {
     }
 
     fn set_translation(&mut self, translation: String) -> anyhow::Result<()> {
-        let translations = match parse_tagged_blocks(&translation, self.text_blocks.len())? {
+        let translation = strip_thinking_block(&translation);
+        let translations = match parse_tagged_blocks(translation, self.text_blocks.len())? {
             Some(blocks) => blocks,
-            None => split_legacy_lines(&translation, self.text_blocks.len())?,
+            None => split_legacy_lines(translation, self.text_blocks.len())?,
         };
 
         for (block, translation) in self.text_blocks.iter_mut().zip(translations) {
@@ -305,13 +316,14 @@ impl Translatable for TextBlock {
             .text
             .clone()
             .ok_or_else(|| anyhow::anyhow!("No source text found"))?;
-        Ok(format!("<|1|>{}", source))
+        Ok(format!("[1]{}", source))
     }
 
     fn set_translation(&mut self, translation: String) -> anyhow::Result<()> {
-        let translation = match parse_tagged_blocks(&translation, 1)? {
+        let translation = strip_thinking_block(&translation);
+        let translation = match parse_tagged_blocks(translation, 1)? {
             Some(blocks) => blocks.into_iter().next().unwrap_or_default(),
-            None => translation,
+            None => translation.to_string(),
         };
         self.translation = Some(strip_wrapping_quotes(&translation));
         Ok(())
@@ -489,30 +501,8 @@ fn snapshot_from_state(state: &State) -> LlmState {
 // Operations (merged from ops/llm.rs)
 // ---------------------------------------------------------------------------
 
-fn sorted_local_models(is_cpu: bool, language: Option<&str>) -> Vec<ModelId> {
-    let mut models: Vec<ModelId> = ModelId::iter().collect();
-    let cpu_factor = if is_cpu { 10 } else { 1 };
-    let lang = language.unwrap_or("en");
-    let zh_locale_factor = if lang.starts_with("zh") { 10 } else { 1 };
-    let non_zh_en_locale_factor = if lang.starts_with("zh") || lang.starts_with("en") {
-        1
-    } else {
-        100
-    };
-
-    models.sort_by_key(|m| match m {
-        ModelId::VntlLlama3_8Bv2 => 100,
-        ModelId::Lfm2_350mEnjpMt => 200 / cpu_factor,
-        ModelId::SakuraGalTransl7Bv3_7 => 300 / zh_locale_factor,
-        ModelId::Sakura1_5bQwen2_5v1_0 => 400 / zh_locale_factor / cpu_factor,
-        ModelId::HunyuanMT7B => 500 / non_zh_en_locale_factor,
-    });
-    models
-}
-
-fn local_catalog_models(is_cpu: bool, language: Option<&str>) -> Vec<LlmCatalogModel> {
-    sorted_local_models(is_cpu, language)
-        .into_iter()
+fn local_catalog_models() -> Vec<LlmCatalogModel> {
+    ModelId::iter()
         .map(|model| LlmCatalogModel {
             target: local_target(model),
             name: model.to_string(),
@@ -678,12 +668,9 @@ async fn load_target(
     Ok(())
 }
 
-pub async fn llm_catalog(
-    state: AppResources,
-    language: Option<&str>,
-) -> anyhow::Result<LlmCatalog> {
+pub async fn llm_catalog(state: AppResources) -> anyhow::Result<LlmCatalog> {
     Ok(LlmCatalog {
-        local_models: local_catalog_models(state.llm.is_cpu(), language),
+        local_models: local_catalog_models(),
         providers: provider_catalog(&state).await?,
     })
 }
@@ -763,7 +750,7 @@ mod tests {
         };
 
         let source = doc.get_source()?;
-        assert_eq!(source, "<|1|>Hello\n<|2|>1 < 2\nA & B");
+        assert_eq!(source, "[1]Hello\n[2]1 < 2\nA & B");
 
         Ok(())
     }
@@ -775,7 +762,7 @@ mod tests {
             ..Default::default()
         };
 
-        doc.set_translation("<|2|>Second line\nnext\n<|1|>First <done>".to_string())?;
+        doc.set_translation("[2]Second line\nnext\n[1]First <done>".to_string())?;
 
         assert_eq!(
             doc.text_blocks[0].translation.as_deref(),
@@ -796,7 +783,7 @@ mod tests {
             ..Default::default()
         };
 
-        doc.set_translation("<|1|>\"Hello\"\n<|2|>\u{201c}World\u{201d}".to_string())?;
+        doc.set_translation("[1]\"Hello\"\n[2]\u{201c}World\u{201d}".to_string())?;
 
         assert_eq!(doc.text_blocks[0].translation.as_deref(), Some("Hello"));
         assert_eq!(doc.text_blocks[1].translation.as_deref(), Some("World"));
@@ -829,7 +816,7 @@ mod tests {
             ..Default::default()
         };
 
-        doc.set_translation("<|1|>First line\n<|2|>Second line".to_string())?;
+        doc.set_translation("[1]First line\n[2]Second line".to_string())?;
 
         assert_eq!(
             doc.text_blocks[0].translation.as_deref(),
@@ -850,7 +837,7 @@ mod tests {
             ..Default::default()
         };
 
-        doc.set_translation("<|1|>Final line".to_string())?;
+        doc.set_translation("[1]Final line".to_string())?;
 
         assert_eq!(
             doc.text_blocks[0].translation.as_deref(),
@@ -867,7 +854,7 @@ mod tests {
             ..Default::default()
         };
 
-        doc.set_translation("<|1|>Kept\n<|2|>Ignored".to_string())?;
+        doc.set_translation("[1]Kept\n[2]Ignored".to_string())?;
 
         assert_eq!(doc.text_blocks[0].translation.as_deref(), Some("Kept"));
 
@@ -881,7 +868,7 @@ mod tests {
             ..Default::default()
         };
 
-        doc.set_translation("<|1|>Only first".to_string())?;
+        doc.set_translation("[1]Only first".to_string())?;
 
         assert_eq!(
             doc.text_blocks[0].translation.as_deref(),
@@ -908,7 +895,7 @@ mod tests {
         };
 
         let source = block.get_source()?;
-        assert_eq!(source, "<|1|>1 < 2\nA & B");
+        assert_eq!(source, "[1]1 < 2\nA & B");
 
         Ok(())
     }
@@ -916,7 +903,7 @@ mod tests {
     #[test]
     fn text_block_translation_extracts_tagged_block_content() -> anyhow::Result<()> {
         let mut block = TextBlock::default();
-        block.set_translation("Sure.\n<|1|>Translated text".to_string())?;
+        block.set_translation("Sure.\n[1]Translated text".to_string())?;
         assert_eq!(block.translation.as_deref(), Some("Translated text"));
         Ok(())
     }
@@ -942,16 +929,29 @@ mod tests {
 
     #[test]
     fn parse_block_tag_parses_valid_tags() {
-        assert_eq!(parse_block_tag("<|1|>"), Some((5, 0)));
-        assert_eq!(parse_block_tag("<|2|>"), Some((5, 1)));
-        assert_eq!(parse_block_tag("<|10|>"), Some((6, 9)));
+        assert_eq!(parse_block_tag("[1]"), Some((3, 0)));
+        assert_eq!(parse_block_tag("[2]"), Some((3, 1)));
+        assert_eq!(parse_block_tag("[10]"), Some((4, 9)));
     }
 
     #[test]
     fn parse_block_tag_rejects_invalid_tags() {
-        assert_eq!(parse_block_tag("<|0|>"), None);
-        assert_eq!(parse_block_tag("<|abc|>"), None);
+        assert_eq!(parse_block_tag("[0]"), None);
+        assert_eq!(parse_block_tag("[abc]"), None);
         assert_eq!(parse_block_tag("<block>"), None);
         assert_eq!(parse_block_tag("hello"), None);
+    }
+
+    #[test]
+    fn strip_thinking_block_removes_think_tags() {
+        assert_eq!(
+            strip_thinking_block("<think>reasoning here</think>[1]Hello"),
+            "[1]Hello"
+        );
+        assert_eq!(strip_thinking_block("no thinking here"), "no thinking here");
+        assert_eq!(
+            strip_thinking_block("<think>long\nmultiline\nthought</think>\n[1]Result"),
+            "[1]Result"
+        );
     }
 }

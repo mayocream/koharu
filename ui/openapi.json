@@ -1737,16 +1737,6 @@
       "get": {
         "tags": ["llm"],
         "operationId": "getLlmCatalog",
-        "parameters": [
-          {
-            "name": "language",
-            "in": "query",
-            "required": false,
-            "schema": {
-              "type": ["string", "null"]
-            }
-          }
-        ],
         "responses": {
           "200": {
             "description": "",

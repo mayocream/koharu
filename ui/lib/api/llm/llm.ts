@@ -19,13 +19,7 @@ import type {
   UseQueryResult,
 } from '@tanstack/react-query'
 
-import type {
-  ApiError,
-  GetLlmCatalogParams,
-  LlmCatalog,
-  LlmLoadRequest,
-  LlmState,
-} from '../schemas'
+import type { ApiError, LlmCatalog, LlmLoadRequest, LlmState } from '../schemas'
 
 import { fetchApi } from '.././fetch'
 
@@ -311,55 +305,39 @@ export const useUnloadLlm = <TError = ApiError, TContext = unknown>(
 > => {
   return useMutation(getUnloadLlmMutationOptions(options), queryClient)
 }
-export const getGetLlmCatalogUrl = (params?: GetLlmCatalogParams) => {
-  const normalizedParams = new URLSearchParams()
-
-  Object.entries(params || {}).forEach(([key, value]) => {
-    if (value !== undefined) {
-      normalizedParams.append(key, value === null ? 'null' : value.toString())
-    }
-  })
-
-  const stringifiedParams = normalizedParams.toString()
-
-  return stringifiedParams.length > 0
-    ? `/api/v1/llm/catalog?${stringifiedParams}`
-    : `/api/v1/llm/catalog`
+export const getGetLlmCatalogUrl = () => {
+  return `/api/v1/llm/catalog`
 }
 
 export const getLlmCatalog = async (
-  params?: GetLlmCatalogParams,
   options?: RequestInit,
 ): Promise<LlmCatalog> => {
-  return fetchApi<LlmCatalog>(getGetLlmCatalogUrl(params), {
+  return fetchApi<LlmCatalog>(getGetLlmCatalogUrl(), {
     ...options,
     method: 'GET',
   })
 }
 
-export const getGetLlmCatalogQueryKey = (params?: GetLlmCatalogParams) => {
-  return [`/api/v1/llm/catalog`, ...(params ? [params] : [])] as const
+export const getGetLlmCatalogQueryKey = () => {
+  return [`/api/v1/llm/catalog`] as const
 }
 
 export const getGetLlmCatalogQueryOptions = <
   TData = Awaited<ReturnType<typeof getLlmCatalog>>,
   TError = ApiError,
->(
-  params?: GetLlmCatalogParams,
-  options?: {
-    query?: Partial<
-      UseQueryOptions<Awaited<ReturnType<typeof getLlmCatalog>>, TError, TData>
-    >
-    request?: SecondParameter<typeof fetchApi>
-  },
-) => {
+>(options?: {
+  query?: Partial<
+    UseQueryOptions<Awaited<ReturnType<typeof getLlmCatalog>>, TError, TData>
+  >
+  request?: SecondParameter<typeof fetchApi>
+}) => {
   const { query: queryOptions, request: requestOptions } = options ?? {}
 
-  const queryKey = queryOptions?.queryKey ?? getGetLlmCatalogQueryKey(params)
+  const queryKey = queryOptions?.queryKey ?? getGetLlmCatalogQueryKey()
 
   const queryFn: QueryFunction<Awaited<ReturnType<typeof getLlmCatalog>>> = ({
     signal,
-  }) => getLlmCatalog(params, { signal, ...requestOptions })
+  }) => getLlmCatalog({ signal, ...requestOptions })
 
   return {
     queryKey,
@@ -383,7 +361,6 @@ export function useGetLlmCatalog<
   TData = Awaited<ReturnType<typeof getLlmCatalog>>,
   TError = ApiError,
 >(
-  params: undefined | GetLlmCatalogParams,
   options: {
     query: Partial<
       UseQueryOptions<Awaited<ReturnType<typeof getLlmCatalog>>, TError, TData>
@@ -406,7 +383,6 @@ export function useGetLlmCatalog<
   TData = Awaited<ReturnType<typeof getLlmCatalog>>,
   TError = ApiError,
 >(
-  params?: GetLlmCatalogParams,
   options?: {
     query?: Partial<
       UseQueryOptions<Awaited<ReturnType<typeof getLlmCatalog>>, TError, TData>
@@ -429,7 +405,6 @@ export function useGetLlmCatalog<
   TData = Awaited<ReturnType<typeof getLlmCatalog>>,
   TError = ApiError,
 >(
-  params?: GetLlmCatalogParams,
   options?: {
     query?: Partial<
       UseQueryOptions<Awaited<ReturnType<typeof getLlmCatalog>>, TError, TData>
@@ -445,7 +420,6 @@ export function useGetLlmCatalog<
   TData = Awaited<ReturnType<typeof getLlmCatalog>>,
   TError = ApiError,
 >(
-  params?: GetLlmCatalogParams,
   options?: {
     query?: Partial<
       UseQueryOptions<Awaited<ReturnType<typeof getLlmCatalog>>, TError, TData>
@@ -456,7 +430,7 @@ export function useGetLlmCatalog<
 ): UseQueryResult<TData, TError> & {
   queryKey: DataTag<QueryKey, TData, TError>
 } {
-  const queryOptions = getGetLlmCatalogQueryOptions(params, options)
+  const queryOptions = getGetLlmCatalogQueryOptions(options)
 
   const query = useQuery(queryOptions, queryClient) as UseQueryResult<
     TData,

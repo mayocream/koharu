@@ -146,12 +146,6 @@ struct ImportQuery {
 
 #[derive(Debug, Deserialize, IntoParams)]
 #[serde(rename_all = "camelCase")]
-struct LlmCatalogQuery {
-    language: Option<String>,
-}
-
-#[derive(Debug, Deserialize, IntoParams)]
-#[serde(rename_all = "camelCase")]
 struct ExportQuery {
     layer: Option<ExportLayer>,
 }
@@ -1079,20 +1073,14 @@ async fn delete_text_block(
     path = "/llm/catalog",
     operation_id = "getLlmCatalog",
     tag = "llm",
-    params(LlmCatalogQuery),
     responses(
         (status = 200, body = LlmCatalog),
         (status = 503, body = ApiError),
     ),
 )]
-async fn get_llm_catalog(
-    State(state): State<ApiState>,
-    Query(query): Query<LlmCatalogQuery>,
-) -> ApiResult<Json<LlmCatalog>> {
+async fn get_llm_catalog(State(state): State<ApiState>) -> ApiResult<Json<LlmCatalog>> {
     let resources = state.resources()?;
-    Ok(Json(
-        llm::llm_catalog(resources, query.language.as_deref()).await?,
-    ))
+    Ok(Json(llm::llm_catalog(resources).await?))
 }
 
 #[utoipa::path(

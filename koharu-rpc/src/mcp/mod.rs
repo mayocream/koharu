@@ -116,9 +116,7 @@ impl KoharuMcp {
     )]
     async fn llm_list(&self) -> Result<String, String> {
         let res = self.resources()?;
-        let catalog = llm::llm_catalog(res, None)
-            .await
-            .map_err(|e| e.to_string())?;
+        let catalog = llm::llm_catalog(res).await.map_err(|e| e.to_string())?;
         serde_json::to_string_pretty(&catalog).map_err(|e| e.to_string())
     }
 
