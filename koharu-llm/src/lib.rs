@@ -91,6 +91,96 @@ pub enum ModelId {
         )
     )]
     HunyuanMT7B,
+    #[strum(
+        serialize = "gemma4-e2b-it",
+        props(
+            repo = "unsloth/gemma-4-E2B-it-GGUF",
+            filename = "gemma-4-e2b-it-Q8_0.gguf",
+            languages = "*"
+        )
+    )]
+    Gemma4E2bIt,
+    #[strum(
+        serialize = "gemma4-e4b-it",
+        props(
+            repo = "unsloth/gemma-4-E4B-it-GGUF",
+            filename = "gemma-4-e4b-it-Q8_0.gguf",
+            languages = "*"
+        )
+    )]
+    Gemma4E4bIt,
+    #[strum(
+        serialize = "gemma4-26b-a4b-it",
+        props(
+            repo = "unsloth/gemma-4-26B-A4B-it-GGUF",
+            filename = "gemma-4-26B-A4B-it-Q8_0.gguf",
+            languages = "*"
+        )
+    )]
+    Gemma4_26bA4bIt,
+    #[strum(
+        serialize = "gemma4-31b-it",
+        props(
+            repo = "unsloth/gemma-4-31B-it-GGUF",
+            filename = "gemma-4-31B-it-Q4_K_M.gguf",
+            languages = "*"
+        )
+    )]
+    Gemma4_31bIt,
+    #[strum(
+        serialize = "qwen3.5-0.8b",
+        props(
+            repo = "unsloth/Qwen3.5-0.8B-GGUF",
+            filename = "Qwen3.5-0.8B-Q8_0.gguf",
+            languages = "*"
+        )
+    )]
+    Qwen3_5_0_8b,
+    #[strum(
+        serialize = "qwen3.5-2b",
+        props(
+            repo = "unsloth/Qwen3.5-2B-GGUF",
+            filename = "Qwen3.5-2B-Q8_0.gguf",
+            languages = "*"
+        )
+    )]
+    Qwen3_5_2b,
+    #[strum(
+        serialize = "qwen3.5-4b",
+        props(
+            repo = "unsloth/Qwen3.5-4B-GGUF",
+            filename = "Qwen3.5-4B-Q8_0.gguf",
+            languages = "*"
+        )
+    )]
+    Qwen3_5_4b,
+    #[strum(
+        serialize = "qwen3.5-9b",
+        props(
+            repo = "unsloth/Qwen3.5-9B-GGUF",
+            filename = "Qwen3.5-9B-Q8_0.gguf",
+            languages = "*"
+        )
+    )]
+    Qwen3_5_9b,
+    #[strum(
+        serialize = "qwen3.5-27b",
+        props(
+            repo = "unsloth/Qwen3.5-27B-GGUF",
+            filename = "Qwen3.5-27B-Q4_K_M.gguf",
+            languages = "*"
+        )
+    )]
+    Qwen3_5_27b,
+    #[strum(
+        serialize = "qwen3.5-35b-a3b",
+        props(
+            repo = "unsloth/Qwen3.5-35B-A3B-GGUF",
+            filename = "Qwen3.5-35B-A3B-Q8_0.gguf",
+            languages = "*"
+        )
+    )]
+    Qwen3_5_35bA3b,
 }
 
 impl ModelId {
@@ -105,8 +195,51 @@ impl ModelId {
             .await
     }
 
+    pub fn default_generate_options(&self) -> GenerateOptions {
+        match self {
+            // LFM2.5: temp=0.1, top_k=50, repeat=1.05
+            Self::Lfm2_5_1_2bInstruct => GenerateOptions {
+                temperature: 0.1,
+                top_k: Some(50),
+                repeat_penalty: 1.05,
+                ..Default::default()
+            },
+            // Gemma 4: temp=1.0, top_p=0.95, top_k=64
+            Self::Gemma4E2bIt | Self::Gemma4E4bIt | Self::Gemma4_26bA4bIt | Self::Gemma4_31bIt => {
+                GenerateOptions {
+                    temperature: 1.0,
+                    top_k: Some(64),
+                    top_p: Some(0.95),
+                    repeat_penalty: 1.0,
+                    ..Default::default()
+                }
+            }
+            // Qwen3.5 non-thinking: temp=1.0, top_k=20, top_p=1.0, presence=2.0
+            Self::Qwen3_5_0_8b
+            | Self::Qwen3_5_2b
+            | Self::Qwen3_5_4b
+            | Self::Qwen3_5_9b
+            | Self::Qwen3_5_27b
+            | Self::Qwen3_5_35bA3b => GenerateOptions {
+                temperature: 1.0,
+                top_k: Some(20),
+                top_p: Some(1.0),
+                min_p: Some(0.0),
+                presence_penalty: 2.0,
+                repeat_penalty: 1.0,
+                ..Default::default()
+            },
+            // Default for other models
+            _ => GenerateOptions::default(),
+        }
+    }
+
     pub fn languages(&self) -> Vec<Language> {
-        self.property("languages")
+        let langs = self.property("languages");
+        if langs == "*" {
+            return Language::iter().collect();
+        }
+        langs
             .split(',')
             .map(|tag| Language::parse(tag).expect("invalid model language tag"))
             .collect()

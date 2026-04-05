@@ -24,13 +24,7 @@ async fn llm_generates_text_for_all_models() -> anyhow::Result<()> {
         let mut llm = Llm::load(&runtime, model, false, Arc::clone(&backend)).await?;
         let opts = GenerateOptions {
             max_tokens: 100,
-            temperature: 0.3,
-            top_k: None,
-            top_p: None,
-            seed: 1,
-            split_prompt: false,
-            repeat_penalty: 1.0,
-            repeat_last_n: 64,
+            ..model.default_generate_options()
         };
 
         let generated = llm.generate(prompt, &opts, Language::English)?;

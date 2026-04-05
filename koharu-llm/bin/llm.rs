@@ -107,6 +107,7 @@ async fn main() -> anyhow::Result<()> {
         split_prompt: args.split_prompt,
         repeat_penalty: args.repeat_penalty,
         repeat_last_n: args.repeat_last_n,
+        ..args.model.default_generate_options()
     };
 
     let out = llm.generate(&args.prompt, &opts, target_language)?;

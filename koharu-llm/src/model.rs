@@ -35,10 +35,12 @@ pub struct GenerateOptions {
     pub temperature: f64,
     pub top_k: Option<usize>,
     pub top_p: Option<f64>,
+    pub min_p: Option<f64>,
     pub seed: u64,
     pub split_prompt: bool,
     pub repeat_penalty: f32,
     pub repeat_last_n: usize,
+    pub presence_penalty: f32,
 }
 
 impl Default for GenerateOptions {
@@ -48,10 +50,12 @@ impl Default for GenerateOptions {
             temperature: 0.1,
             top_k: None,
             top_p: None,
+            min_p: None,
             seed: 299792458,
             split_prompt: false,
             repeat_penalty: 1.1,
             repeat_last_n: 64,
+            presence_penalty: 0.0,
         }
     }
 }
@@ -271,12 +275,14 @@ fn context_params(prompt_tokens: usize, max_tokens: usize) -> Result<LlamaContex
 fn build_sampler(opts: &GenerateOptions) -> LlamaSampler {
     let mut samplers = Vec::new();
 
-    if (opts.repeat_penalty - 1.0).abs() >= f32::EPSILON && opts.repeat_last_n > 0 {
+    let has_repeat = (opts.repeat_penalty - 1.0).abs() >= f32::EPSILON && opts.repeat_last_n > 0;
+    let has_presence = opts.presence_penalty.abs() >= f32::EPSILON;
+    if has_repeat || has_presence {
         samplers.push(LlamaSampler::penalties(
             i32::try_from(opts.repeat_last_n).unwrap_or(i32::MAX),
-            opts.repeat_penalty,
+            if has_repeat { opts.repeat_penalty } else { 1.0 },
             0.0,
-            0.0,
+            opts.presence_penalty,
         ));
     }
 
@@ -292,6 +298,9 @@ fn build_sampler(opts: &GenerateOptions) -> LlamaSampler {
     }
     if let Some(top_p) = opts.top_p {
         samplers.push(LlamaSampler::top_p(top_p as f32, 1));
+    }
+    if let Some(min_p) = opts.min_p.filter(|&v| v > 0.0) {
+        samplers.push(LlamaSampler::min_p(min_p as f32, 1));
     }
 
     samplers.push(LlamaSampler::temp(opts.temperature as f32));

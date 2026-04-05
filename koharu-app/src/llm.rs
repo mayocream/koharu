@@ -16,8 +16,8 @@ use koharu_core::{
 use koharu_runtime::RuntimeManager;
 
 use koharu_llm::{
-    GenerateOptions, Language, Llm, ModelId, language::tags as language_tags,
-    safe::llama_backend::LlamaBackend, supported_locales,
+    Language, Llm, ModelId, language::tags as language_tags, safe::llama_backend::LlamaBackend,
+    supported_locales,
 };
 use strum::IntoEnumIterator;
 
@@ -452,7 +452,8 @@ impl Model {
         let mut guard = self.state.write().await;
         let translation = match &mut *guard {
             State::ReadyLocal(llm) => {
-                llm.generate(&source, &GenerateOptions::default(), target_language)
+                let opts = llm.id().default_generate_options();
+                llm.generate(&source, &opts, target_language)
             }
             State::ReadyProvider { target, provider } => {
                 provider
