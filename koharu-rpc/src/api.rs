@@ -41,6 +41,7 @@ impl ApiState {
 pub fn api() -> (axum::Router<ApiState>, utoipa::openapi::OpenApi) {
     OpenApiRouter::default()
         .routes(routes!(list_documents, import_documents))
+        .routes(routes!(import_project))
         .routes(routes!(get_document))
         .routes(routes!(get_blob))
         .routes(routes!(get_document_thumbnail))
@@ -353,6 +354,25 @@ async fn get_document_thumbnail(
     let bytes =
         koharu_app::utils::encode_image_dynamic(&thumbnail, "webp").map_err(ApiError::internal)?;
     Ok(binary_response(bytes, "image/webp", None))
+}
+
+#[utoipa::path(
+    post,
+    path = "/imports/project",
+    operation_id = "importProject",
+    tag = "documents",
+    responses(
+        (status = 200, body = koharu_core::ImportProjectResult),
+        (status = 503, body = ApiError),
+    ),
+)]
+#[tracing::instrument(level = "info", skip_all)]
+async fn import_project(
+    State(state): State<ApiState>,
+) -> ApiResult<Json<koharu_core::ImportProjectResult>> {
+    let resources = state.resources()?;
+    let result = ops::project::import_project(resources).await?;
+    Ok(Json(result))
 }
 
 #[utoipa::path(

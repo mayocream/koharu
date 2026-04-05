@@ -105,6 +105,7 @@ export type ProcessingEvent =
     }
   | { type: 'START_BATCH_EXPORT'; layer: ExportLayer }
   | { type: 'START_EXPORT_PROJECT' }
+  | { type: 'START_IMPORT_PROJECT' }
   | {
       type: 'PROGRESS'
       step?: string
@@ -246,6 +247,11 @@ const exportProjectActor = fromPromise<void, void>(async () => {
   await exportProject()
 })
 
+const importProjectActor = fromPromise<void, void>(async () => {
+  const { importProject } = await import('@/lib/api/documents/documents')
+  await importProject()
+})
+
 // ---------------------------------------------------------------------------
 // Polling actors (replace SSE)
 // ---------------------------------------------------------------------------
@@ -331,6 +337,7 @@ export const processingMachine = setup({
     exportActor,
     batchExportActor,
     exportProjectActor,
+    importProjectActor,
     jobPollingActor,
     llmPollingActor,
   },
@@ -520,6 +527,28 @@ export const processingMachine = setup({
         START_EXPORT_PROJECT: {
           target: 'exportingProject',
           actions: ['resetContext'],
+        },
+        START_IMPORT_PROJECT: {
+          target: 'importingProject',
+          actions: ['resetContext'],
+        },
+      },
+    },
+
+    // -----------------------------------------------------------------------
+    importingProject: {
+      entry: 'setProgressBarNormal',
+      exit: 'clearProgressBar',
+      invoke: {
+        src: 'importProjectActor',
+        input: () => ({}),
+        onDone: {
+          target: 'idle',
+          actions: ['invalidateDocumentList'],
+        },
+        onError: {
+          target: 'idle',
+          actions: ['setErrorFromInvoke', 'surfaceError'],
         },
       },
     },

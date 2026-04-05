@@ -329,6 +329,45 @@ impl Storage {
 
         Ok(())
     }
+
+    /// Import a project from a .khr file
+    pub async fn import_khr(&self, input_path: &Path) -> Result<()> {
+        let file = std::fs::File::open(input_path)?;
+        let mut zip = zip::ZipArchive::new(file)?;
+
+        // 1. Read project.toml
+        let mut project_toml = String::new();
+        {
+            let mut project_file = zip.by_name("project.toml").context("Missing project.toml in archive")?;
+            use std::io::Read;
+            project_file.read_to_string(&mut project_toml)?;
+        }
+
+        let new_project: Project = toml::from_str(&project_toml).context("Invalid project.toml format")?;
+
+        // 2. Extract blobs
+        let mut i = 0;
+        while i < zip.len() {
+            let mut file = zip.by_index(i)?;
+            if file.name().starts_with("blobs/") && file.is_file() {
+                use std::io::Read;
+                let mut buffer = Vec::new();
+                file.read_to_end(&mut buffer)?;
+                // Insert directly into blob store
+                let _ = self.images.store_bytes(&buffer);
+            }
+            i += 1;
+        }
+
+        // 3. Update active project and persist
+        {
+            let mut current = self.project.write().await;
+            *current = new_project;
+            self.persist(&*current)?;
+        }
+
+        Ok(())
+    }
 }
 
 fn list_documents(project: &Project) -> Vec<DocumentSummary> {

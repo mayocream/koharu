@@ -29,6 +29,7 @@ import type {
   GetDocumentThumbnailParams,
   ImportDocumentsBody,
   ImportDocumentsParams,
+  ImportProjectResult,
   ImportResult
 } from '../schemas';
 
@@ -400,3 +401,70 @@ export function useGetDocumentThumbnail<TData = Awaited<ReturnType<typeof getDoc
 
   return { ...query, queryKey: queryOptions.queryKey };
 }
+
+
+
+
+export const getImportProjectUrl = () => {
+
+
+
+
+  return `/api/v1/imports/project`
+}
+
+export const importProject = async ( options?: RequestInit): Promise<ImportProjectResult> => {
+
+  return fetchApi<ImportProjectResult>(getImportProjectUrl(),
+  {
+    ...options,
+    method: 'POST'
+
+
+  }
+);}
+
+
+
+
+export const getImportProjectMutationOptions = <TError = ApiError,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof importProject>>, TError,void, TContext>, request?: SecondParameter<typeof fetchApi>}
+): UseMutationOptions<Awaited<ReturnType<typeof importProject>>, TError,void, TContext> => {
+
+const mutationKey = ['importProject'];
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof importProject>>, void> = () => {
+
+
+          return  importProject(requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type ImportProjectMutationResult = NonNullable<Awaited<ReturnType<typeof importProject>>>
+
+    export type ImportProjectMutationError = ApiError
+
+    export const useImportProject = <TError = ApiError,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof importProject>>, TError,void, TContext>, request?: SecondParameter<typeof fetchApi>}
+ , queryClient?: QueryClient): UseMutationResult<
+        Awaited<ReturnType<typeof importProject>>,
+        TError,
+        void,
+        TContext
+      > => {
+      return useMutation(getImportProjectMutationOptions(options), queryClient);
+    }

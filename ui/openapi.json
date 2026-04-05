@@ -1320,6 +1320,36 @@
         }
       }
     },
+    "/imports/project": {
+      "post": {
+        "tags": [
+          "documents"
+        ],
+        "operationId": "importProject",
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ImportProjectResult"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/jobs": {
       "get": {
         "tags": [
@@ -2030,6 +2060,21 @@
           "replace",
           "append"
         ]
+      },
+      "ImportProjectResult": {
+        "type": "object",
+        "required": [
+          "success",
+          "filename"
+        ],
+        "properties": {
+          "filename": {
+            "type": "string"
+          },
+          "success": {
+            "type": "boolean"
+          }
+        }
       },
       "ImportResult": {
         "type": "object",

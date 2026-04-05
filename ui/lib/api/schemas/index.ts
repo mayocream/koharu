@@ -25,6 +25,7 @@ export * from './getLlmCatalogParams';
 export * from './importDocumentsBody';
 export * from './importDocumentsParams';
 export * from './importMode';
+export * from './importProjectResult';
 export * from './importResult';
 export * from './inpaintRegionRequest';
 export * from './jobState';
