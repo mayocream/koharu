@@ -1,3 +1,18 @@
+## [0.43.1](https://github.com/mayocream/koharu/compare/0.43.0..0.43.1) - 2026-04-05
+
+### 🐛 Bug Fixes
+
+- Qwen3.5 template - ([eecfafe](https://github.com/mayocream/koharu/commit/eecfafe6a4f0aa1d87002e57a9f939c675dbcf63))
+
+### 📚 Documentation
+
+- List more LLMs - ([37162b9](https://github.com/mayocream/koharu/commit/37162b9565bde61940562a998b3699310e0d789f))
+
+### ⚙️ Miscellaneous Tasks
+
+- Fix tests - ([d530cbe](https://github.com/mayocream/koharu/commit/d530cbe1d530388c22d8b980edcc83db79e3ac63))
+
+
 ## [0.43.0](https://github.com/mayocream/koharu/compare/0.42.4..0.43.0) - 2026-04-05
 
 ### ⛰️  Features
