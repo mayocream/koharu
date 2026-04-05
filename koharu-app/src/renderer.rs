@@ -467,13 +467,6 @@ fn apply_default_font_families(font_families: &mut Vec<String>, text: &str) {
     }
 }
 
-fn colors_too_similar(a: [u8; 4], b: [u8; 4]) -> bool {
-    let dr = (a[0] as i32 - b[0] as i32).abs();
-    let dg = (a[1] as i32 - b[1] as i32).abs();
-    let db = (a[2] as i32 - b[2] as i32).abs();
-    dr + dg + db < 60
-}
-
 fn contrasting_stroke_color(text_color: [u8; 4]) -> [u8; 4] {
     let luminance =
         0.299 * text_color[0] as f32 + 0.587 * text_color[1] as f32 + 0.114 * text_color[2] as f32;
@@ -495,13 +488,8 @@ fn resolve_stroke_style(
         if !stroke.enabled {
             return None;
         }
-        let color = if colors_too_similar(text_color, stroke.color) {
-            contrasting_stroke_color(text_color)
-        } else {
-            stroke.color
-        };
         return Some(RenderStrokeOptions {
-            color,
+            color: stroke.color,
             width_px: stroke
                 .width_px
                 .unwrap_or_else(|| default_stroke_width(font_size)),
@@ -512,40 +500,27 @@ fn resolve_stroke_style(
         if !stroke.enabled {
             return None;
         }
-        let color = if colors_too_similar(text_color, stroke.color) {
-            contrasting_stroke_color(text_color)
-        } else {
-            stroke.color
-        };
         return Some(RenderStrokeOptions {
-            color,
+            color: stroke.color,
             width_px: stroke
                 .width_px
                 .unwrap_or_else(|| default_stroke_width(font_size)),
         });
     }
 
+    let auto_stroke_color = contrasting_stroke_color(text_color);
+
     if let Some(pred) = &block.font_prediction
         && pred.stroke_width_px > 0.0
     {
-        let pred_stroke = [
-            pred.stroke_color[0],
-            pred.stroke_color[1],
-            pred.stroke_color[2],
-            255,
-        ];
         return Some(RenderStrokeOptions {
-            color: if colors_too_similar(text_color, pred_stroke) {
-                contrasting_stroke_color(text_color)
-            } else {
-                pred_stroke
-            },
+            color: auto_stroke_color,
             width_px: pred.stroke_width_px,
         });
     }
 
     Some(RenderStrokeOptions {
-        color: contrasting_stroke_color(text_color),
+        color: auto_stroke_color,
         width_px: default_stroke_width(font_size),
     })
 }
@@ -731,9 +706,9 @@ fn find_best_bubble(block: &TextBlock, bubbles: &[koharu_core::BubbleRegion]) ->
 mod tests {
     use super::{
         align_layout_horizontally, apply_default_font_families, apply_global_font_family,
-        center_layout_vertically,
+        center_layout_vertically, resolve_stroke_style,
     };
-    use koharu_core::TextAlign;
+    use koharu_core::{FontPrediction, TextAlign, TextBlock, TextStrokeStyle};
     use koharu_renderer::layout::{LayoutLine, LayoutRun, WritingMode};
 
     #[test]
@@ -869,5 +844,76 @@ mod tests {
         apply_default_font_families(&mut font_families, "hello");
 
         assert_eq!(font_families, vec!["Global Font".to_string()]);
+    }
+
+    #[test]
+    fn default_stroke_color_uses_black_for_light_text() {
+        let stroke = resolve_stroke_style(
+            &TextBlock::default(),
+            None,
+            None,
+            16.0,
+            [255, 255, 255, 255],
+        )
+        .expect("default stroke should be present");
+
+        assert_eq!(stroke.color, [0, 0, 0, 255]);
+        assert_eq!(stroke.width_px, 1.6);
+    }
+
+    #[test]
+    fn predicted_stroke_width_keeps_auto_black_or_white_color() {
+        let block = TextBlock {
+            font_prediction: Some(FontPrediction {
+                stroke_color: [12, 34, 56],
+                stroke_width_px: 3.0,
+                ..Default::default()
+            }),
+            ..Default::default()
+        };
+
+        let stroke = resolve_stroke_style(&block, None, None, 18.0, [255, 255, 255, 255])
+            .expect("predicted stroke should be present");
+
+        assert_eq!(stroke.color, [0, 0, 0, 255]);
+        assert_eq!(stroke.width_px, 3.0);
+    }
+
+    #[test]
+    fn explicit_block_stroke_color_is_preserved_even_if_it_matches_text() {
+        let stroke = resolve_stroke_style(
+            &TextBlock::default(),
+            Some(&TextStrokeStyle {
+                enabled: true,
+                color: [255, 255, 255, 255],
+                width_px: Some(2.0),
+            }),
+            None,
+            18.0,
+            [255, 255, 255, 255],
+        )
+        .expect("explicit stroke should be present");
+
+        assert_eq!(stroke.color, [255, 255, 255, 255]);
+        assert_eq!(stroke.width_px, 2.0);
+    }
+
+    #[test]
+    fn explicit_global_stroke_color_is_preserved_even_if_it_matches_text() {
+        let stroke = resolve_stroke_style(
+            &TextBlock::default(),
+            None,
+            Some(&TextStrokeStyle {
+                enabled: true,
+                color: [0, 0, 0, 255],
+                width_px: Some(2.0),
+            }),
+            18.0,
+            [0, 0, 0, 255],
+        )
+        .expect("explicit global stroke should be present");
+
+        assert_eq!(stroke.color, [0, 0, 0, 255]);
+        assert_eq!(stroke.width_px, 2.0);
     }
 }

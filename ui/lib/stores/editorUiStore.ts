@@ -37,7 +37,7 @@ type EditorUiState = {
   selectedBlockIndex?: number
   autoFitEnabled: boolean
   renderEffect: RenderEffect
-  renderStroke: RenderStroke
+  renderStroke?: RenderStroke
   setTotalPages: (count: number) => void
   setCurrentDocumentId: (id: string | null) => void
   setScale: (scale: number) => void
@@ -50,7 +50,7 @@ type EditorUiState = {
   setSelectedBlockIndex: (index?: number) => void
   setAutoFitEnabled: (enabled: boolean) => void
   setRenderEffect: (effect: RenderEffect) => void
-  setRenderStroke: (stroke: RenderStroke) => void
+  setRenderStroke: (stroke?: RenderStroke) => void
 
   // --- llm ui ---
   selectedTarget?: LlmTarget
@@ -85,11 +85,7 @@ const initialState = {
     italic: false,
     bold: false,
   } as RenderEffect,
-  renderStroke: {
-    enabled: true,
-    color: [255, 255, 255, 255],
-    widthPx: undefined,
-  } as RenderStroke,
+  renderStroke: undefined as RenderStroke | undefined,
 
   // llm ui
   selectedTarget: undefined as LlmTarget | undefined,
