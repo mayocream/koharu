@@ -3,15 +3,28 @@
  * Do not edit manually.
  * OpenAPI spec version: 0.0.1
  */
-import { useMutation } from '@tanstack/react-query'
+import { useMutation, useQuery } from '@tanstack/react-query'
 import type {
+  DataTag,
+  DefinedInitialDataOptions,
+  DefinedUseQueryResult,
   MutationFunction,
   QueryClient,
+  QueryFunction,
+  QueryKey,
+  UndefinedInitialDataOptions,
   UseMutationOptions,
   UseMutationResult,
+  UseQueryOptions,
+  UseQueryResult,
 } from '@tanstack/react-query'
 
-import type { ApiError, RenderRequest, TranslateRequest } from '../schemas'
+import type {
+  ApiError,
+  RenderRequest,
+  TranslateRequest,
+  TranslateReady,
+} from '../schemas'
 
 import { fetchApi } from '.././fetch'
 
@@ -407,4 +420,161 @@ export const useTranslateDocument = <TError = ApiError, TContext = unknown>(
   TContext
 > => {
   return useMutation(getTranslateDocumentMutationOptions(options), queryClient)
+}
+
+export const getGetTranslateReadyUrl = () => {
+  return `/api/v1/translation/ready`
+}
+
+export const getTranslateReady = async (
+  options?: RequestInit,
+): Promise<TranslateReady> => {
+  return fetchApi<TranslateReady>(getGetTranslateReadyUrl(), {
+    ...options,
+    method: 'GET',
+  })
+}
+
+export const getGetTranslateReadyQueryKey = () => {
+  return [`/api/v1/translation/ready`] as const
+}
+
+export const getGetTranslateReadyQueryOptions = <
+  TData = Awaited<ReturnType<typeof getTranslateReady>>,
+  TError = ApiError,
+>(
+  options?: {
+    query?: Partial<
+      UseQueryOptions<
+        Awaited<ReturnType<typeof getTranslateReady>>,
+        TError,
+        TData
+      >
+    >
+    request?: SecondParameter<typeof fetchApi>
+  },
+) => {
+  const { query: queryOptions, request: requestOptions } = options ?? {}
+
+  const queryKey = queryOptions?.queryKey ?? getGetTranslateReadyQueryKey()
+
+  const queryFn: QueryFunction<
+    Awaited<ReturnType<typeof getTranslateReady>>
+  > = ({ signal }) => getTranslateReady({ signal, ...requestOptions })
+
+  return {
+    queryKey,
+    queryFn,
+    gcTime: 300000,
+    retry: 1,
+    ...queryOptions,
+  } as UseQueryOptions<
+    Awaited<ReturnType<typeof getTranslateReady>>,
+    TError,
+    TData
+  > & { queryKey: DataTag<QueryKey, TData, TError> }
+}
+
+export type GetTranslateReadyQueryResult = NonNullable<
+  Awaited<ReturnType<typeof getTranslateReady>>
+>
+export type GetTranslateReadyQueryError = ApiError
+
+export function useGetTranslateReady<
+  TData = Awaited<ReturnType<typeof getTranslateReady>>,
+  TError = ApiError,
+>(
+  options: {
+    query: Partial<
+      UseQueryOptions<
+        Awaited<ReturnType<typeof getTranslateReady>>,
+        TError,
+        TData
+      >
+    > &
+      Pick<
+        DefinedInitialDataOptions<
+          Awaited<ReturnType<typeof getTranslateReady>>,
+          TError,
+          Awaited<ReturnType<typeof getTranslateReady>>
+        >,
+        'initialData'
+      >
+    request?: SecondParameter<typeof fetchApi>
+  },
+  queryClient?: QueryClient,
+): DefinedUseQueryResult<TData, TError> & {
+  queryKey: DataTag<QueryKey, TData, TError>
+}
+export function useGetTranslateReady<
+  TData = Awaited<ReturnType<typeof getTranslateReady>>,
+  TError = ApiError,
+>(
+  options?: {
+    query?: Partial<
+      UseQueryOptions<
+        Awaited<ReturnType<typeof getTranslateReady>>,
+        TError,
+        TData
+      >
+    > &
+      Pick<
+        UndefinedInitialDataOptions<
+          Awaited<ReturnType<typeof getTranslateReady>>,
+          TError,
+          Awaited<ReturnType<typeof getTranslateReady>>
+        >,
+        'initialData'
+      >
+    request?: SecondParameter<typeof fetchApi>
+  },
+  queryClient?: QueryClient,
+): UseQueryResult<TData, TError> & {
+  queryKey: DataTag<QueryKey, TData, TError>
+}
+export function useGetTranslateReady<
+  TData = Awaited<ReturnType<typeof getTranslateReady>>,
+  TError = ApiError,
+>(
+  options?: {
+    query?: Partial<
+      UseQueryOptions<
+        Awaited<ReturnType<typeof getTranslateReady>>,
+        TError,
+        TData
+      >
+    >
+    request?: SecondParameter<typeof fetchApi>
+  },
+  queryClient?: QueryClient,
+): UseQueryResult<TData, TError> & {
+  queryKey: DataTag<QueryKey, TData, TError>
+}
+
+export function useGetTranslateReady<
+  TData = Awaited<ReturnType<typeof getTranslateReady>>,
+  TError = ApiError,
+>(
+  options?: {
+    query?: Partial<
+      UseQueryOptions<
+        Awaited<ReturnType<typeof getTranslateReady>>,
+        TError,
+        TData
+      >
+    >
+    request?: SecondParameter<typeof fetchApi>
+  },
+  queryClient?: QueryClient,
+): UseQueryResult<TData, TError> & {
+  queryKey: DataTag<QueryKey, TData, TError>
+} {
+  const queryOptions = getGetTranslateReadyQueryOptions(options)
+
+  const query = useQuery(queryOptions, queryClient) as UseQueryResult<
+    TData,
+    TError
+  > & { queryKey: DataTag<QueryKey, TData, TError> }
+
+  return { ...query, queryKey: queryOptions.queryKey }
 }

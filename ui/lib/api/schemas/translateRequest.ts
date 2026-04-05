@@ -4,6 +4,8 @@
  * OpenAPI spec version: 0.0.1
  */
 
+import type { DeeplTranslateOptions } from './deeplTranslateOptions'
+
 export interface TranslateRequest {
   /** @nullable */
   language?: string | null
@@ -11,4 +13,6 @@ export interface TranslateRequest {
   systemPrompt?: string | null
   /** @nullable */
   textBlockId?: string | null
+  /** @nullable */
+  deepl?: DeeplTranslateOptions | null
 }
