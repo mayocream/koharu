@@ -74,7 +74,11 @@ impl GoogleFontService {
     /// Downloads a font family's regular variant to disk cache.
     /// Returns the path to the cached .ttf file.
     /// No-op if already cached.
-    pub async fn fetch_family(&self, family: &str, http: &reqwest_middleware::ClientWithMiddleware) -> Result<Utf8PathBuf> {
+    pub async fn fetch_family(
+        &self,
+        family: &str,
+        http: &reqwest_middleware::ClientWithMiddleware,
+    ) -> Result<Utf8PathBuf> {
         // Check cache first
         {
             let cached = self.cached_families.lock().await;
