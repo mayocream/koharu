@@ -155,9 +155,25 @@ fn ensure_source_tree(out_dir: &Path, llama_cpp_tag: &str) -> Result<PathBuf> {
         fs::File::open(&tarball_path).context("failed to reopen downloaded source tarball")?;
     let decoder = GzDecoder::new(tarball);
     let mut archive = Archive::new(decoder);
-    archive
-        .unpack(&cache_dir)
-        .context("failed to extract llama.cpp source tarball")?;
+    // Extract selectively: skip benchmarks and other non-essential paths that
+    // contain very long filenames which exceed Windows' 260-char path limit.
+    for entry in archive
+        .entries()
+        .context("failed to read tarball entries")?
+    {
+        let mut entry = entry.context("failed to read tarball entry")?;
+        let path_str = entry
+            .path()
+            .context("failed to read entry path")?
+            .to_string_lossy()
+            .into_owned();
+        if path_str.contains("/benches/") || path_str.contains("/bench/") {
+            continue;
+        }
+        entry
+            .unpack_in(&cache_dir)
+            .with_context(|| format!("failed to unpack `{path_str}`"))?;
+    }
 
     if !source_root.join("include/llama.h").exists() {
         bail!(
@@ -230,7 +246,9 @@ fn generate_loader(
     spec: LoaderSpec<'_>,
 ) -> Result<()> {
     let builder = spec.function_patterns.iter().fold(
-        base_builder(header_path, include_dirs),
+        base_builder(header_path, include_dirs)
+            // Block functions using C FILE* which has no Rust equivalent in bindgen.
+            .blocklist_function("llama_model_load_from_file_ptr"),
         |builder, pattern| builder.allowlist_function(pattern),
     );
 

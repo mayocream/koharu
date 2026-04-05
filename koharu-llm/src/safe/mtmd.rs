@@ -217,8 +217,8 @@ impl MtmdContext {
     /// Get audio bitrate in Hz (e.g., 16000 for Whisper).
     /// Returns None if audio is not supported.
     #[must_use]
-    pub fn get_audio_bitrate(&self) -> Option<u32> {
-        let rate = unsafe { crate::sys::mtmd_get_audio_bitrate(self.context.as_ptr()) };
+    pub fn get_audio_sample_rate(&self) -> Option<u32> {
+        let rate = unsafe { crate::sys::mtmd_get_audio_sample_rate(self.context.as_ptr()) };
         (rate > 0).then_some(rate.unsigned_abs())
     }
 

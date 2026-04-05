@@ -56,15 +56,16 @@ impl LlamaDistribution {
         }
     }
 
-    fn assets(self) -> &'static [&'static str] {
+    fn assets(self) -> Vec<String> {
+        let tag = LLAMA_CPP_TAG;
         match self {
-            Self::WindowsCuda13X64 => &[
-                "llama-b8233-bin-win-cuda-13.1-x64.zip",
-                "cudart-llama-bin-win-cuda-13.1-x64.zip",
+            Self::WindowsCuda13X64 => vec![
+                format!("llama-{tag}-bin-win-cuda-13.1-x64.zip"),
+                "cudart-llama-bin-win-cuda-13.1-x64.zip".to_string(),
             ],
-            Self::WindowsVulkanX64 => &["llama-b8233-bin-win-vulkan-x64.zip"],
-            Self::LinuxVulkanX64 => &["llama-b8233-bin-ubuntu-vulkan-x64.tar.gz"],
-            Self::MacosArm64 => &["llama-b8233-bin-macos-arm64.tar.gz"],
+            Self::WindowsVulkanX64 => vec![format!("llama-{tag}-bin-win-vulkan-x64.zip")],
+            Self::LinuxVulkanX64 => vec![format!("llama-{tag}-bin-ubuntu-vulkan-x64.tar.gz")],
+            Self::MacosArm64 => vec![format!("llama-{tag}-bin-macos-arm64.tar.gz")],
         }
     }
 
@@ -200,7 +201,7 @@ pub(crate) async fn ensure_ready(runtime: &Runtime) -> Result<()> {
     if !install.is_current() {
         install.reset()?;
 
-        for asset in distribution.assets() {
+        for asset in &distribution.assets() {
             let url = format!("{RELEASE_BASE_URL}/{LLAMA_CPP_TAG}/{asset}");
             let archive = runtime
                 .downloads()
