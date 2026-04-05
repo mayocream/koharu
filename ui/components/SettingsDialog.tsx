@@ -282,7 +282,9 @@ export function SettingsDialog({
             {TABS.map(({ id, icon: Icon, labelKey }) => (
               <button
                 key={id}
+                type='button'
                 onClick={() => setTab(id)}
+                data-testid={`settings-tab-${id}`}
                 data-active={tab === id}
                 className='text-muted-foreground hover:text-foreground data-[active=true]:bg-accent data-[active=true]:text-accent-foreground flex items-center gap-3 rounded-lg px-3 py-2 text-sm transition'
               >
@@ -516,12 +518,19 @@ function EnginesPane({
             value={pipeline[key] ?? engines[0]?.id ?? ''}
             onValueChange={(v) => onChange({ ...pipeline, [key]: v })}
           >
-            <SelectTrigger className='w-full'>
+            <SelectTrigger
+              className='w-full'
+              data-testid={`settings-pipeline-${key}`}
+            >
               <SelectValue />
             </SelectTrigger>
             <SelectContent>
               {engines.map((e) => (
-                <SelectItem key={e.id} value={e.id}>
+                <SelectItem
+                  key={e.id}
+                  value={e.id}
+                  data-testid={`settings-pipeline-${key}-option-${e.id}`}
+                >
                   {e.name}
                 </SelectItem>
               ))}

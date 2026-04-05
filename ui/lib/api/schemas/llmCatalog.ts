@@ -9,4 +9,6 @@ import type { LlmProviderCatalog } from './llmProviderCatalog'
 export interface LlmCatalog {
   localModels: LlmCatalogModel[]
   providers: LlmProviderCatalog[]
+  /** DeepL / Google Cloud Translation API entries (same shape as LLM providers for Settings UI). */
+  translationProviders?: LlmProviderCatalog[]
 }

@@ -1,4 +1,10 @@
 export const selectors = {
+  settings: {
+    menuItem: 'menu-settings',
+    tabEngines: 'settings-tab-engines',
+    pipelineTranslator: 'settings-pipeline-translator',
+    pipelineTranslatorOptionLlm: 'settings-pipeline-translator-option-llm',
+  },
   menu: {
     fileTrigger: 'menu-file-trigger',
     fileOpen: 'menu-file-open',

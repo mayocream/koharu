@@ -48,6 +48,45 @@ export async function openLlmPopover(page: Page) {
   await expect(page.getByTestId(selectors.llm.popover)).toBeVisible()
 }
 
+const PIPELINE_TRANSLATOR_LLM = 'llm'
+
+/**
+ * E2E runs against a real app data dir; users may have switched the pipeline
+ * translator to DeepL/Google. Tests that load an LLM need the LLM translator.
+ */
+async function ensurePipelineTranslatorIsLlm(page: Page, timeout = 60_000) {
+  const trigger = page.getByTestId(selectors.llm.trigger)
+  const current = await trigger.getAttribute('data-pipeline-translator')
+  if (current === PIPELINE_TRANSLATOR_LLM) return
+
+  await page.getByTestId(selectors.menu.fileTrigger).click()
+  await page.getByTestId(selectors.settings.menuItem).click()
+  await expect(page.getByTestId(selectors.settings.tabEngines)).toBeVisible({
+    timeout,
+  })
+  await page.getByTestId(selectors.settings.tabEngines).click()
+
+  const translatorSelect = page.getByTestId(
+    selectors.settings.pipelineTranslator,
+  )
+  await expect(translatorSelect).toBeVisible({ timeout })
+  await translatorSelect.click()
+  await page
+    .getByTestId(selectors.settings.pipelineTranslatorOptionLlm)
+    .click()
+
+  await expect
+    .poll(async () => trigger.getAttribute('data-pipeline-translator'), {
+      timeout,
+    })
+    .toBe(PIPELINE_TRANSLATOR_LLM)
+
+  await page.keyboard.press('Escape')
+  await expect(page.getByTestId(selectors.settings.tabEngines)).toBeHidden({
+    timeout: 15_000,
+  })
+}
+
 async function assertLlmModelOptions(page: Page) {
   await page.getByTestId(selectors.llm.modelSelect).click()
   const firstOption = page.getByTestId(selectors.llm.modelOption(0))
@@ -65,6 +104,7 @@ async function assertLlmLanguageOptions(page: Page) {
 }
 
 export async function ensureLlmReady(page: Page, timeout = 60_000) {
+  await ensurePipelineTranslatorIsLlm(page, timeout)
   await openLlmPopover(page)
   await assertLlmModelOptions(page)
   await assertLlmLanguageOptions(page)
