@@ -301,6 +301,37 @@
             }
           }
         }
+      },
+      "delete": {
+        "tags": [
+          "documents"
+        ],
+        "operationId": "deleteDocuments",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/DeleteDocumentsRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "204": {
+            "description": ""
+          },
+          "503": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          }
+        }
       }
     },
     "/documents/{document_id}": {
@@ -1751,6 +1782,20 @@
           }
         }
       },
+      "DeleteDocumentsRequest": {
+        "type": "object",
+        "required": [
+          "documentIds"
+        ],
+        "properties": {
+          "documentIds": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          }
+        }
+      },
       "DocumentDetail": {
         "type": "object",
         "required": [
@@ -1930,6 +1975,15 @@
       "ExportBatchRequest": {
         "type": "object",
         "properties": {
+          "documentIds": {
+            "type": [
+              "array",
+              "null"
+            ],
+            "items": {
+              "type": "string"
+            }
+          },
           "layer": {
             "oneOf": [
               {
@@ -2502,6 +2556,15 @@
               "string",
               "null"
             ]
+          },
+          "documentIds": {
+            "type": [
+              "array",
+              "null"
+            ],
+            "items": {
+              "type": "string"
+            }
           },
           "fontFamily": {
             "type": [

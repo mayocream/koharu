@@ -24,6 +24,7 @@ import type {
 
 import type {
   ApiError,
+  DeleteDocumentsRequest,
   DocumentDetail,
   DocumentSummary,
   GetDocumentThumbnailParams,
@@ -205,6 +206,70 @@ const {mutation: mutationOptions, request: requestOptions} = options ?
         TContext
       > => {
       return useMutation(getImportDocumentsMutationOptions(options), queryClient);
+    }
+    export const getDeleteDocumentsUrl = () => {
+
+
+
+
+  return `/api/v1/documents`
+}
+
+export const deleteDocuments = async (deleteDocumentsRequest: DeleteDocumentsRequest, options?: RequestInit): Promise<void> => {
+
+  return fetchApi<void>(getDeleteDocumentsUrl(),
+  {
+    ...options,
+    method: 'DELETE',
+    headers: { 'Content-Type': 'application/json', ...options?.headers },
+    body: JSON.stringify(
+      deleteDocumentsRequest,)
+  }
+);}
+
+
+
+
+export const getDeleteDocumentsMutationOptions = <TError = ApiError,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof deleteDocuments>>, TError,{data: DeleteDocumentsRequest}, TContext>, request?: SecondParameter<typeof fetchApi>}
+): UseMutationOptions<Awaited<ReturnType<typeof deleteDocuments>>, TError,{data: DeleteDocumentsRequest}, TContext> => {
+
+const mutationKey = ['deleteDocuments'];
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof deleteDocuments>>, {data: DeleteDocumentsRequest}> = (props) => {
+          const {data} = props ?? {};
+
+          return  deleteDocuments(data,requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type DeleteDocumentsMutationResult = NonNullable<Awaited<ReturnType<typeof deleteDocuments>>>
+    export type DeleteDocumentsMutationBody = DeleteDocumentsRequest
+    export type DeleteDocumentsMutationError = ApiError
+
+    export const useDeleteDocuments = <TError = ApiError,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof deleteDocuments>>, TError,{data: DeleteDocumentsRequest}, TContext>, request?: SecondParameter<typeof fetchApi>}
+ , queryClient?: QueryClient): UseMutationResult<
+        Awaited<ReturnType<typeof deleteDocuments>>,
+        TError,
+        {data: DeleteDocumentsRequest},
+        TContext
+      > => {
+      return useMutation(getDeleteDocumentsMutationOptions(options), queryClient);
     }
     export const getGetDocumentUrl = (documentId: string,) => {
 

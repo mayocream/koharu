@@ -70,9 +70,10 @@ async fn run(
         tracing::error!(error = %err, "pipeline failed");
     }
 
-    let total_docs = match request.document_id {
-        Some(_) => 1,
-        None => res.storage.page_count().await,
+    let total_docs = match (&request.document_id, &request.document_ids) {
+        (Some(_), _) => 1,
+        (None, Some(ids)) => ids.len(),
+        (None, None) => res.storage.page_count().await,
     };
     let config = res.config.read().await.clone();
     let total_steps = engine::resolve_pipeline(&config.pipeline).len();
@@ -124,12 +125,13 @@ async fn run_inner(
     job_id: &str,
     jobs: &Jobs,
 ) -> anyhow::Result<()> {
-    let page_ids: Vec<String> = match req.document_id.as_deref() {
-        Some(id) => {
+    let page_ids: Vec<String> = match (&req.document_id, &req.document_ids) {
+        (Some(id), _) => {
             res.storage.page(id).await?;
             vec![id.to_string()]
         }
-        None => res.storage.page_ids().await,
+        (None, Some(ids)) => ids.clone(),
+        (None, None) => res.storage.page_ids().await,
     };
     let total_docs = page_ids.len();
     tracing::Span::current().record("pages", total_docs);

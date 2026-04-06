@@ -188,6 +188,13 @@ impl Storage {
             .ok_or_else(|| anyhow::anyhow!("Document not found: {id}"))
     }
 
+    /// Delete specific pages and auto-save the project.
+    pub async fn delete_pages(&self, ids: &[String]) -> Result<()> {
+        let mut project = self.project.write().await;
+        project.pages.retain(|p| !ids.contains(&p.id));
+        self.persist(&project)
+    }
+
     /// List all pages as summaries.
     pub async fn list_pages(&self) -> Vec<DocumentSummary> {
         list_documents(&*self.project.read().await)

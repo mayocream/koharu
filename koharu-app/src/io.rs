@@ -107,7 +107,7 @@ pub async fn export_document(state: AppResources, document_id: &str) -> anyhow::
     })
 }
 
-pub async fn export_all_inpainted(state: AppResources) -> anyhow::Result<usize> {
+pub async fn export_all_inpainted(state: AppResources, document_ids: Option<Vec<String>>) -> anyhow::Result<usize> {
     let Some(output_dir) = pick_output_dir().await? else {
         return Ok(0);
     };
@@ -115,6 +115,11 @@ pub async fn export_all_inpainted(state: AppResources) -> anyhow::Result<usize> 
     let pages = state.storage.with_project(|p| p.pages.clone()).await;
     let mut exported = 0usize;
     for doc in &pages {
+        if let Some(ref ids) = document_ids {
+            if !ids.contains(&doc.id) {
+                continue;
+            }
+        }
         let Some(ref inpainted_ref) = doc.inpainted else {
             continue;
         };
@@ -128,7 +133,7 @@ pub async fn export_all_inpainted(state: AppResources) -> anyhow::Result<usize> 
     Ok(exported)
 }
 
-pub async fn export_all_rendered(state: AppResources) -> anyhow::Result<usize> {
+pub async fn export_all_rendered(state: AppResources, document_ids: Option<Vec<String>>) -> anyhow::Result<usize> {
     let Some(output_dir) = pick_output_dir().await? else {
         return Ok(0);
     };
@@ -136,6 +141,11 @@ pub async fn export_all_rendered(state: AppResources) -> anyhow::Result<usize> {
     let pages = state.storage.with_project(|p| p.pages.clone()).await;
     let mut exported = 0usize;
     for doc in &pages {
+        if let Some(ref ids) = document_ids {
+            if !ids.contains(&doc.id) {
+                continue;
+            }
+        }
         let Some(ref rendered_ref) = doc.rendered else {
             continue;
         };

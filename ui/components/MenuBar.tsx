@@ -65,13 +65,17 @@ export function MenuBar() {
   const { send } = useProcessing()
   const [settingsOpen, setSettingsOpen] = useState(false)
   const [settingsTab, setSettingsTab] = useState<TabId>('appearance')
+  const selectedDocumentIds = useEditorUiStore(
+    (state) => state.selectedDocumentIds,
+  )
 
-  const buildPipelineRequest = (documentId?: string): PipelineJobRequest => {
+  const buildPipelineRequest = (documentId?: string, documentIds?: string[]): PipelineJobRequest => {
     const { selectedTarget, selectedLanguage, renderEffect, renderStroke } =
       useEditorUiStore.getState()
     const { fontFamily } = usePreferencesStore.getState()
     return {
       documentId,
+      documentIds,
       llm: selectedTarget ? { target: selectedTarget } : undefined,
       language: selectedLanguage,
       shaderEffect: renderEffect,
@@ -84,6 +88,10 @@ export function MenuBar() {
     const id = useEditorUiStore.getState().currentDocumentId
     if (!id) throw new Error('No current document selected')
     return id
+  }
+
+  const getSelectedDocumentIds = () => {
+    return Array.from(selectedDocumentIds)
   }
 
   const fileMenuItems: MenuItem[] = [
@@ -152,6 +160,26 @@ export function MenuBar() {
       onSelect: () => send({ type: 'START_BATCH_EXPORT', layer: 'rendered' }),
       testId: 'menu-file-export-all-rendered',
     },
+    {
+      label: t('menu.exportSelectedInpainted', { defaultValue: 'Export Selected Inpainted' }),
+      onSelect: () => {
+        const documentIds = getSelectedDocumentIds()
+        if (documentIds.length > 0) {
+          send({ type: 'START_BATCH_EXPORT', layer: 'inpainted', documentIds })
+        }
+      },
+      disabled: getSelectedDocumentIds().length === 0,
+    },
+    {
+      label: t('menu.exportSelectedRendered', { defaultValue: 'Export Selected Rendered' }),
+      onSelect: () => {
+        const documentIds = getSelectedDocumentIds()
+        if (documentIds.length > 0) {
+          send({ type: 'START_BATCH_EXPORT', layer: 'rendered', documentIds })
+        }
+      },
+      disabled: getSelectedDocumentIds().length === 0,
+    },
   ]
 
   const menus: MenuSection[] = [
@@ -190,6 +218,26 @@ export function MenuBar() {
           onSelect: () =>
             send({ type: 'START_PIPELINE', request: buildPipelineRequest() }),
           testId: 'menu-process-all',
+        },
+        {
+          label: t('menu.processSelected', { defaultValue: 'Process Selected' }),
+          onSelect: () => {
+            const documentIds = getSelectedDocumentIds()
+            if (documentIds.length > 0) {
+              send({ type: 'START_BATCH_PROCESS', request: buildPipelineRequest(undefined, documentIds) })
+            }
+          },
+          disabled: getSelectedDocumentIds().length === 0,
+        },
+        {
+          label: t('menu.deleteSelected', { defaultValue: 'Delete Selected' }),
+          onSelect: () => {
+            const documentIds = getSelectedDocumentIds()
+            if (documentIds.length > 0) {
+              send({ type: 'START_BATCH_DELETE', documentIds })
+            }
+          },
+          disabled: getSelectedDocumentIds().length === 0,
         },
       ],
     },

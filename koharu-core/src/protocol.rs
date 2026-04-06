@@ -361,6 +361,7 @@ pub struct PipelineLlmRequest {
 #[serde(rename_all = "camelCase")]
 pub struct PipelineJobRequest {
     pub document_id: Option<String>,
+    pub document_ids: Option<Vec<String>>,
     pub llm: Option<PipelineLlmRequest>,
     pub language: Option<String>,
     pub shader_effect: Option<TextShaderEffect>,
