@@ -2,15 +2,108 @@ use std::sync::Arc;
 
 use anyhow::{Context, Result};
 use clap::Parser;
+use serde::{Deserialize, Serialize};
 use tokio::{net::TcpListener, sync::RwLock};
 use tracing_subscriber::layer::SubscriberExt;
 use tracing_subscriber::util::SubscriberInitExt;
 
 use koharu_app::{AppResources, config as app_config, engine, llm, storage::Storage};
+use koharu_core::DocumentSummary;
+use koharu_llm::ModelId;
 use koharu_llm::safe::llama_backend::LlamaBackend;
 use koharu_ml::{Device, device};
 use koharu_rpc::{SharedState, server};
 use koharu_runtime::{ComputePolicy, RuntimeHttpConfig, RuntimeManager};
+
+use crate::chinese::ChineseVariant;
+
+/// Result of importing from URL
+#[derive(Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ImportUrlResult {
+    pub total_count: usize,
+    pub documents: Vec<DocumentSummary>,
+}
+
+/// Result of Chinese text conversion
+#[derive(Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ConvertChineseResult {
+    pub text: String,
+    pub from_variant: String,
+    pub to_variant: String,
+}
+
+/// Tauri command to convert Chinese text between variants
+#[tauri::command]
+fn convert_chinese(
+    text: String,
+    to_variant: ChineseVariant,
+) -> Result<ConvertChineseResult, String> {
+    // Assume input is Simplified Chinese (from manhuagui.com sources)
+    let converted = crate::chinese::convert_from_simplified(&text, to_variant)
+        .map_err(|e| e.to_string())?;
+
+    Ok(ConvertChineseResult {
+        text: converted,
+        from_variant: ChineseVariant::Simplified.display_name().to_string(),
+        to_variant: to_variant.display_name().to_string(),
+    })
+}
+
+/// Tauri command to get available Chinese variants
+#[tauri::command]
+fn get_chinese_variants() -> Vec<(String, String)> {
+    vec![
+        ("none".to_string(), ChineseVariant::None.display_name().to_string()),
+        ("simplified".to_string(), ChineseVariant::Simplified.display_name().to_string()),
+        ("traditional".to_string(), ChineseVariant::Traditional.display_name().to_string()),
+        ("traditional_tw".to_string(), ChineseVariant::TraditionalTw.display_name().to_string()),
+        ("traditional_twp".to_string(), ChineseVariant::TraditionalTwp.display_name().to_string()),
+        ("traditional_hk".to_string(), ChineseVariant::TraditionalHk.display_name().to_string()),
+    ]
+}
+
+/// Tauri command to import manga pages from a URL
+#[tauri::command]
+async fn import_from_url(
+    url: String,
+    app_handle: tauri::AppHandle,
+    state: tauri::State<'_, SharedState>,
+) -> Result<ImportUrlResult, String> {
+    import_from_url_impl(&url, &app_handle, &state)
+        .await
+        .map_err(|e| e.to_string())
+}
+
+async fn import_from_url_impl(
+    url: &str,
+    app_handle: &tauri::AppHandle,
+    state: &SharedState,
+) -> anyhow::Result<ImportUrlResult> {
+    // Scrape images from the URL
+    let files = crate::scraper::scrape_manhuagui(url, app_handle).await?;
+
+    if files.is_empty() {
+        anyhow::bail!("No images were downloaded");
+    }
+
+    // Get resources to access storage
+    let resources = state
+        .get()
+        .ok_or_else(|| anyhow::anyhow!("App resources not initialized"))?;
+
+    // Import the files into storage (replace mode)
+    let _imported = resources.storage.import_files(files, true).await?;
+
+    // Return the list of documents
+    let documents = resources.storage.list_pages().await;
+
+    Ok(ImportUrlResult {
+        total_count: documents.len(),
+        documents,
+    })
+}
 
 #[derive(Parser)]
 #[command(version = crate::version::APP_VERSION, about)]
@@ -142,9 +235,12 @@ pub async fn run() -> Result<()> {
 
     if cli.headless {
         tauri::async_runtime::spawn(server::serve_with_listener(listener, shared, assets));
-        resources
+        let res = resources
             .get_or_try_init(|| build_resources(runtime, data_root, cli.cpu))
             .await?;
+        // Auto-load Qwen3-8B model on startup
+        tracing::info!("Auto-loading Qwen3-8B model");
+        res.llm.load_local(ModelId::Qwen3_8b).await;
         tokio::signal::ctrl_c().await?;
         return Ok(());
     }
@@ -152,16 +248,25 @@ pub async fn run() -> Result<()> {
     // ── GUI ──────────────────────────────────────────────────────────
     tauri::Builder::default()
         .plugin(tauri_plugin_process::init())
+        .manage(shared.clone())
+        .invoke_handler(tauri::generate_handler![import_from_url, convert_chinese, get_chinese_variants])
         .setup(move |app| {
             tauri::async_runtime::spawn(server::serve_with_listener(listener, shared, assets));
 
             tauri::async_runtime::spawn(async move {
-                if let Err(err) = resources
+                match resources
                     .get_or_try_init(|| build_resources(runtime, data_root, cli.cpu))
                     .await
                 {
-                    tracing::error!("Failed to build resources: {err:#}");
-                    std::process::exit(1);
+                    Ok(res) => {
+                        // Auto-load Qwen3-8B model on startup
+                        tracing::info!("Auto-loading Qwen3-8B model");
+                        res.llm.load_local(ModelId::Qwen3_8b).await;
+                    }
+                    Err(err) => {
+                        tracing::error!("Failed to build resources: {err:#}");
+                        std::process::exit(1);
+                    }
                 }
             });
 

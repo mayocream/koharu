@@ -38,6 +38,7 @@ import {
   MenubarTrigger,
 } from '@/components/ui/menubar'
 import { SettingsDialog, type TabId } from '@/components/SettingsDialog'
+import { ImportUrlDialog } from '@/components/ImportUrlDialog'
 import { useProcessing } from '@/lib/machines'
 import { useEditorUiStore } from '@/lib/stores/editorUiStore'
 import { usePreferencesStore } from '@/lib/stores/preferencesStore'
@@ -65,6 +66,7 @@ export function MenuBar() {
   const { send } = useProcessing()
   const [settingsOpen, setSettingsOpen] = useState(false)
   const [settingsTab, setSettingsTab] = useState<TabId>('appearance')
+  const [importUrlOpen, setImportUrlOpen] = useState(false)
 
   const buildPipelineRequest = (documentId?: string): PipelineJobRequest => {
     const { selectedTarget, selectedLanguage, renderEffect, renderStroke } =
@@ -110,6 +112,11 @@ export function MenuBar() {
       onSelect: () =>
         send({ type: 'START_IMPORT', mode: 'append', source: 'folder' }),
       testId: 'menu-file-add-folder',
+    },
+    {
+      label: t('menu.importUrl'),
+      onSelect: () => setImportUrlOpen(true),
+      testId: 'menu-file-import-url',
     },
     {
       label: t('menu.export'),
@@ -346,6 +353,15 @@ export function MenuBar() {
         open={settingsOpen}
         onOpenChange={setSettingsOpen}
         defaultTab={settingsTab}
+      />
+
+      <ImportUrlDialog
+        open={importUrlOpen}
+        onOpenChange={setImportUrlOpen}
+        onSuccess={() => {
+          // Trigger document list refresh
+          send({ type: 'DONE' })
+        }}
       />
     </div>
   )

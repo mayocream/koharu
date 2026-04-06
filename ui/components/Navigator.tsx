@@ -10,6 +10,7 @@ import {
 import { useEditorUiStore } from '@/lib/stores/editorUiStore'
 import { Button } from '@/components/ui/button'
 import { ScrollArea } from '@/components/ui/scroll-area'
+import type { DocumentSummary } from '@/lib/api/schemas'
 
 const THUMBNAIL_DPR =
   typeof window !== 'undefined'
@@ -19,6 +20,16 @@ const THUMBNAIL_DPR =
 // Fixed row height: thumbnail (aspect 3:4 in ~150px width ≈ 200px) + page number + padding
 const ROW_HEIGHT = 230
 const OVERSCAN = 5
+
+type ProcessingStatus = 'none' | 'ready' | 'inpainted' | 'rendered'
+
+function getProcessingStatus(doc: DocumentSummary): ProcessingStatus {
+  if (doc.hasRendered) return 'rendered'
+  if (doc.hasInpainted) return 'inpainted'
+  // Ready for TTS when OCR text is available (textBlockCount > 0)
+  if (doc.textBlockCount > 0) return 'ready'
+  return 'none'
+}
 
 export function Navigator() {
   const { data: documents = [] } = useListDocuments()
@@ -86,7 +97,7 @@ export function Navigator() {
               >
                 <PagePreview
                   index={virtualRow.index}
-                  documentId={doc?.id}
+                  document={doc}
                   selected={doc?.id === currentDocumentId}
                   onSelect={() => doc && setCurrentDocumentId(doc.id)}
                 />
@@ -101,20 +112,36 @@ export function Navigator() {
 
 type PagePreviewProps = {
   index: number
-  documentId?: string
+  document?: DocumentSummary
   selected: boolean
   onSelect: () => void
 }
 
+const STATUS_COLORS: Record<ProcessingStatus, string> = {
+  none: 'bg-muted-foreground/30',
+  ready: 'bg-blue-500',
+  inpainted: 'bg-yellow-500',
+  rendered: 'bg-green-500',
+}
+
+const STATUS_LABELS: Record<ProcessingStatus, string> = {
+  none: '',
+  ready: 'R',
+  inpainted: 'I',
+  rendered: '✓',
+}
+
 function PagePreview({
   index,
-  documentId,
+  document,
   selected,
   onSelect,
 }: PagePreviewProps) {
-  const src = documentId
-    ? getGetDocumentThumbnailUrl(documentId, { size: 200 * THUMBNAIL_DPR })
+  const { t } = useTranslation()
+  const src = document
+    ? getGetDocumentThumbnailUrl(document.id, { size: 200 * THUMBNAIL_DPR })
     : undefined
+  const status = document ? getProcessingStatus(document) : 'none'
 
   return (
     <Button
@@ -125,7 +152,7 @@ function PagePreview({
       data-selected={selected}
       className='bg-card data-[selected=true]:border-primary flex h-full w-full flex-col gap-0.5 rounded border border-transparent p-1.5 text-left shadow-sm'
     >
-      <div className='flex min-h-0 flex-1 items-center justify-center overflow-hidden rounded'>
+      <div className='relative flex min-h-0 flex-1 items-center justify-center overflow-hidden rounded'>
         {src ? (
           <img
             src={src}
@@ -136,6 +163,13 @@ function PagePreview({
         ) : (
           <div className='bg-muted h-full w-full rounded' />
         )}
+        {/* Processing status indicator */}
+        <div
+          className={`absolute right-1 top-1 flex h-4 w-4 items-center justify-center rounded-full text-[8px] font-bold text-white ${STATUS_COLORS[status]}`}
+          title={t(`navigator.status.${status}`)}
+        >
+          {STATUS_LABELS[status]}
+        </div>
       </div>
       <div className='text-muted-foreground flex shrink-0 items-center text-xs'>
         <div className='text-foreground mx-auto font-semibold'>{index + 1}</div>

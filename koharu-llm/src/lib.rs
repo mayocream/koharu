@@ -48,41 +48,14 @@ pub fn suppress_native_logs() {
 )]
 pub enum ModelId {
     #[strum(
-        serialize = "vntl-llama3-8b-v2",
-        props(
-            repo = "lmg-anon/vntl-llama3-8b-v2-gguf",
-            filename = "vntl-llama3-8b-v2-hf-q8_0.gguf",
-            languages = "en-US"
-        )
-    )]
-    VntlLlama3_8Bv2,
-    #[strum(
         serialize = "lfm2.5-1.2b-instruct",
         props(
             repo = "LiquidAI/LFM2.5-1.2B-Instruct-GGUF",
             filename = "LFM2.5-1.2B-Instruct-Q8_0.gguf",
-            languages = "en-US,ar-SA,zh-CN,fr-FR,de-DE,ja-JP,ko-KR,pt-PT,es-ES"
+            languages = "en-US,ar-SA,zh-CN,fr-FR,de-DE,ko-KR,pt-PT,es-ES"
         )
     )]
     Lfm2_5_1_2bInstruct,
-    #[strum(
-        serialize = "sakura-galtransl-7b-v3.7",
-        props(
-            repo = "SakuraLLM/Sakura-GalTransl-7B-v3.7",
-            filename = "Sakura-Galtransl-7B-v3.7.gguf",
-            languages = "zh-CN"
-        )
-    )]
-    SakuraGalTransl7Bv3_7,
-    #[strum(
-        serialize = "sakura-1.5b-qwen2.5-v1.0",
-        props(
-            repo = "shing3232/Sakura-1.5B-Qwen2.5-v1.0-GGUF-IMX",
-            filename = "sakura-1.5b-qwen2.5-v1.0-Q5KS.gguf",
-            languages = "zh-CN"
-        )
-    )]
-    Sakura1_5bQwen2_5v1_0,
     #[strum(
         serialize = "hunyuan-mt-7b",
         props(
@@ -92,24 +65,6 @@ pub enum ModelId {
         )
     )]
     HunyuanMT7B,
-    #[strum(
-        serialize = "sugoi-14b-ultra",
-        props(
-            repo = "sugoitoolkit/Sugoi-14B-Ultra-GGUF",
-            filename = "Sugoi-14B-Ultra-Q8_0.gguf",
-            languages = "en-US"
-        )
-    )]
-    Sugoi14bUltra,
-    #[strum(
-        serialize = "sugoi-32b-ultra",
-        props(
-            repo = "sugoitoolkit/Sugoi-32B-Ultra-GGUF",
-            filename = "Sugoi-32B-Ultra-Q4_K_M.gguf",
-            languages = "en-US"
-        )
-    )]
-    Sugoi32bUltra,
     #[strum(
         serialize = "gemma4-e2b-it",
         props(
@@ -164,6 +119,27 @@ pub enum ModelId {
         )
     )]
     Gemma4E4bUncensored,
+    /// Qwen3-8B - Recommended for Chinese→English translation
+    /// Native Chinese understanding without needing fine-tuning
+    #[strum(
+        serialize = "qwen3-8b",
+        props(
+            repo = "unsloth/Qwen3-8B-GGUF",
+            filename = "Qwen3-8B-Q4_K_M.gguf",
+            languages = "*"
+        )
+    )]
+    Qwen3_8b,
+    /// Qwen3-14B - Higher quality Chinese→English for 16GB+ VRAM
+    #[strum(
+        serialize = "qwen3-14b",
+        props(
+            repo = "unsloth/Qwen3-14B-GGUF",
+            filename = "Qwen3-14B-Q4_K_M.gguf",
+            languages = "*"
+        )
+    )]
+    Qwen3_14b,
     #[strum(
         serialize = "qwen3.5-0.8b",
         props(
@@ -299,8 +275,10 @@ impl ModelId {
                 repeat_penalty: 1.0,
                 ..Default::default()
             },
-            // Qwen3.5 non-thinking: temp=1.0, top_k=20, top_p=1.0, presence=2.0
-            Self::Qwen3_5_0_8b
+            // Qwen3/3.5 non-thinking: temp=1.0, top_k=20, top_p=1.0, presence=2.0
+            Self::Qwen3_8b
+            | Self::Qwen3_14b
+            | Self::Qwen3_5_0_8b
             | Self::Qwen3_5_2b
             | Self::Qwen3_5_4b
             | Self::Qwen3_5_9b
@@ -317,15 +295,6 @@ impl ModelId {
                 min_p: Some(0.0),
                 presence_penalty: 2.0,
                 repeat_penalty: 1.0,
-                ..Default::default()
-            },
-            // Sugoi: temp=0.1, top_k=40, top_p=0.95, min_p=0.05, repeat=1.1
-            Self::Sugoi14bUltra | Self::Sugoi32bUltra => GenerateOptions {
-                temperature: 0.1,
-                top_k: Some(40),
-                top_p: Some(0.95),
-                min_p: Some(0.05),
-                repeat_penalty: 1.1,
                 ..Default::default()
             },
             // Default for other models

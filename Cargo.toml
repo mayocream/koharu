@@ -62,6 +62,7 @@ tauri-build = "2.5"
 tauri-plugin-updater = "2.10"
 blake3 = "1.8"
 rayon = "1.11"
+regex = "1.12"
 # disables `esaxx_fast` feature which is conflicting with `ort`
 tokenizers = { version = "0.22", default-features = false, features = ["onig"] }
 strum = { version = "0.28", features = ["derive"] }
@@ -134,6 +135,9 @@ utoipa = { version = "5", features = ["axum_extras"] }
 utoipa-axum = "0.2"
 uuid = { version = "1.18", features = ["v4", "serde"] }
 base64 = "0.22"
+rquickjs = { version = "0.9", features = ["full"] }
+rand = "0.8"
+ferrous-opencc = "0.3"
 tower-http = { version = "0.6", features = ["cors"] }
 criterion = { version = "0.8", features = ["html_reports"] }
 git-version = "0.3"

@@ -718,6 +718,7 @@ async fn render_document(
         text_block_index,
         request.shader_effect,
         request.shader_stroke,
+        request.language.as_deref(),
     )
     .await?;
 
@@ -1014,7 +1015,7 @@ async fn patch_text_block(
         .map_err(ApiError::from)?;
 
     if needs_render && let Some(idx) = block_index {
-        engine::render_document(&resources, &document_id, Some(idx), None, None)
+        engine::render_document(&resources, &document_id, Some(idx), None, None, None)
             .await
             .map_err(ApiError::internal)?;
     }

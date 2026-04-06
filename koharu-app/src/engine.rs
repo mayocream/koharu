@@ -81,7 +81,9 @@ impl Artifact {
     pub fn ready(&self, doc: &Document) -> bool {
         match self {
             Self::TextBlocks => !doc.text_blocks.is_empty(),
-            Self::Bubbles => !doc.bubbles.is_empty(),
+            // Bubbles is ready when either bubbles exist OR text blocks exist
+            // (pages with text but no bubble shapes are valid)
+            Self::Bubbles => !doc.bubbles.is_empty() || !doc.text_blocks.is_empty(),
             Self::Segment => doc.segment.is_some(),
             Self::FontPredictions => {
                 doc.text_blocks.is_empty()
@@ -1074,6 +1076,7 @@ impl Engine for KoharuRenderEngine {
             None,
             options.shader_effect,
             options.shader_stroke.clone(),
+            options.target_language.as_deref(),
         )
         .await?;
         Ok(Patch::none())
@@ -1112,6 +1115,7 @@ pub async fn render_document(
     text_block_index: Option<usize>,
     shader_effect: Option<TextShaderEffect>,
     shader_stroke: Option<TextStrokeStyle>,
+    target_language: Option<&str>,
 ) -> Result<()> {
     let renderer = get_renderer(res).await?;
     let doc = res.storage.page(document_id).await?;
@@ -1143,6 +1147,7 @@ pub async fn render_document(
             bubbles: &bubbles,
             image_width: doc.width,
             image_height: doc.height,
+            target_language,
         },
     )?;
     res.storage

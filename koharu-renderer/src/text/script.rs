@@ -35,6 +35,10 @@ pub fn normalize_translation_for_layout(text: &str) -> String {
 }
 
 pub fn font_families_for_text(text: &str) -> Vec<String> {
+    font_families_for_text_with_language(text, None)
+}
+
+pub fn font_families_for_text_with_language(text: &str, language: Option<&str>) -> Vec<String> {
     let script_map = CodePointMapData::<Script>::new();
     let has_cjk = text.chars().any(|c| {
         matches!(
@@ -46,18 +50,36 @@ pub fn font_families_for_text(text: &str) -> Vec<String> {
         .chars()
         .any(|c| matches!(script_map.get(c), Script::Arabic | Script::Hebrew));
 
+    // Determine if Traditional Chinese based on language code
+    let is_traditional_chinese = language
+        .map(|l| l.starts_with("zh-TW") || l.starts_with("zh-HK") || l.starts_with("yue"))
+        .unwrap_or(false);
+
     let names: &[&str] = if has_cjk {
         #[cfg(target_os = "windows")]
         {
-            &["Microsoft YaHei"]
+            if is_traditional_chinese {
+                &["Microsoft JhengHei"]
+            } else {
+                &["Microsoft YaHei"]
+            }
         }
         #[cfg(target_os = "macos")]
         {
-            &["PingFang SC"]
+            if is_traditional_chinese {
+                // Heiti TC is available via fontdb; PingFang TC may not be indexed
+                &["Heiti TC", "PingFang TC", "Songti TC"]
+            } else {
+                &["Heiti SC", "PingFang SC", "Songti SC"]
+            }
         }
         #[cfg(not(any(target_os = "windows", target_os = "macos")))]
         {
-            &["Noto Sans CJK SC"]
+            if is_traditional_chinese {
+                &["Noto Sans CJK TC"]
+            } else {
+                &["Noto Sans CJK SC"]
+            }
         }
     } else if has_arabic {
         #[cfg(target_os = "windows")]

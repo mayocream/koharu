@@ -52,6 +52,25 @@ type EditorUiState = {
   setRenderEffect: (effect: RenderEffect) => void
   setRenderStroke: (stroke?: RenderStroke) => void
 
+  // --- background processing progress ---
+  processingProgress: {
+    stage: 'detect' | 'ocr' | 'translate'
+    current: number
+    total: number
+  } | null
+  setProcessingProgress: (progress: {
+    stage: 'detect' | 'ocr' | 'translate'
+    current: number
+    total: number
+  } | null) => void
+
+  // --- prefetch progress ---
+  prefetchProgress: {
+    loaded: number
+    total: number
+  } | null
+  setPrefetchProgress: (progress: { loaded: number; total: number } | null) => void
+
   // --- llm ui ---
   selectedTarget?: LlmTarget
   selectedLanguage?: string
@@ -76,7 +95,7 @@ const initialState = {
   showSegmentationMask: false,
   showInpaintedImage: false,
   showBrushLayer: false,
-  showRenderedImage: false,
+  showRenderedImage: true,
   showTextBlocksOverlay: false,
   mode: 'select' as ToolMode,
   selectedBlockIndex: undefined as number | undefined,
@@ -89,7 +108,17 @@ const initialState = {
 
   // llm ui
   selectedTarget: undefined as LlmTarget | undefined,
-  selectedLanguage: undefined as string | undefined,
+  selectedLanguage: 'zh-TW' as string | undefined, // Default to Traditional Chinese (Taiwan)
+
+  // background processing progress
+  processingProgress: null as {
+    stage: 'detect' | 'ocr' | 'translate'
+    current: number
+    total: number
+  } | null,
+
+  // prefetch progress
+  prefetchProgress: null as { loaded: number; total: number } | null,
 
   // ui error
   error: undefined as { id: number; message: string } | undefined,
@@ -158,6 +187,12 @@ export const useEditorUiStore = create<EditorUiState>((set, get) => ({
   setAutoFitEnabled: (enabled) => set({ autoFitEnabled: enabled }),
   setRenderEffect: (effect) => set({ renderEffect: effect }),
   setRenderStroke: (stroke) => set({ renderStroke: stroke }),
+
+  // --- background processing progress actions ---
+  setProcessingProgress: (progress) => set({ processingProgress: progress }),
+
+  // --- prefetch progress actions ---
+  setPrefetchProgress: (progress) => set({ prefetchProgress: progress }),
 
   // --- llm ui actions ---
   setSelectedTarget: (selectedTarget) => set({ selectedTarget }),

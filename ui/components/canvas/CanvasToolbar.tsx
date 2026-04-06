@@ -281,14 +281,25 @@ function LlmStatusPopover() {
     const hasCurrent = llmModels.some(({ model }) =>
       sameLlmTarget(model.target, selectedTarget),
     )
-    const nextModel = hasCurrent ? selectedModel?.model : llmModels[0]?.model
+
+    let nextModel: LlmCatalogModel | undefined
+    if (hasCurrent) {
+      nextModel = selectedModel?.model
+    } else {
+      // Find qwen3-8b as the preferred default model
+      const qwen3Model = llmModels.find(({ model }) =>
+        model.name.toLowerCase().includes('qwen3'),
+      )
+      nextModel = qwen3Model?.model ?? llmModels[0]?.model
+    }
     if (!nextModel) return
 
     const nextLanguages = nextModel.languages
-    const nextLanguage =
-      llmSelectedLanguage && nextLanguages.includes(llmSelectedLanguage)
-        ? llmSelectedLanguage
-        : nextLanguages[0]
+    // Prefer zh-TW as the default language if supported
+    const preferredLanguage = llmSelectedLanguage ?? 'zh-TW'
+    const nextLanguage = nextLanguages.includes(preferredLanguage)
+      ? preferredLanguage
+      : nextLanguages[0]
 
     const currentState = useEditorUiStore.getState()
     if (

@@ -7,6 +7,7 @@ import { useEditorUiStore } from '@/lib/stores/editorUiStore'
 import { TextBlock } from '@/types'
 import { useTextBlocks } from '@/hooks/useTextBlocks'
 import { useBlobImage } from '@/hooks/useBlobData'
+import { useTextToSpeech } from '@/hooks/useTextToSpeech'
 
 type TextBlockLayerProps = {
   selectedIndex?: number
@@ -107,6 +108,7 @@ function TextBlockItem({
   const dragStart = useRef({ x: 0, y: 0, w: 0, h: 0 })
   const edgeRef = useRef<ResizeEdge | null>(null)
   const isResizeRef = useRef(false)
+  const { speak } = useTextToSpeech()
 
   const setBox = (x: number, y: number, w: number, h: number) => {
     const el = boxRef.current
@@ -122,6 +124,7 @@ function TextBlockItem({
       event?.stopPropagation()
       if (tap) {
         onSelect(index)
+        speak(block.translation ?? block.text ?? '')
         return
       }
 

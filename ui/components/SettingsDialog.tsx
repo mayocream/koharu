@@ -40,6 +40,9 @@ import { ScrollArea } from '@/components/ui/scroll-area'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
+import { Switch } from '@/components/ui/switch'
+import { Slider } from '@/components/ui/slider'
+import { usePreferencesStore } from '@/lib/stores/preferencesStore'
 import {
   AlertDialog,
   AlertDialogAction,
@@ -404,6 +407,10 @@ function AppearancePane() {
   const { t, i18n } = useTranslation()
   const { theme, setTheme } = useTheme()
   const locales = useMemo(() => supportedLanguages, [])
+  const ttsEnabled = usePreferencesStore((s) => s.ttsEnabled)
+  const ttsRate = usePreferencesStore((s) => s.ttsRate)
+  const setTtsEnabled = usePreferencesStore((s) => s.setTtsEnabled)
+  const setTtsRate = usePreferencesStore((s) => s.setTtsRate)
   return (
     <div className='space-y-8'>
       <Section title={t('settings.theme')}>
@@ -438,6 +445,24 @@ function AppearancePane() {
             ))}
           </SelectContent>
         </Select>
+      </Section>
+
+      <Section title={t('settings.textToSpeech')}>
+        <div className='flex items-center justify-between'>
+          <Label>{t('settings.ttsEnable')}</Label>
+          <Switch checked={ttsEnabled} onCheckedChange={setTtsEnabled} />
+        </div>
+        <div className='space-y-1.5'>
+          <Label className='text-xs'>{t('settings.ttsSpeed')}</Label>
+          <Slider
+            value={[ttsRate]}
+            onValueChange={([v]) => setTtsRate(v)}
+            min={0.5}
+            max={2}
+            step={0.1}
+          />
+          <p className='text-muted-foreground text-xs'>{ttsRate}x</p>
+        </div>
       </Section>
     </div>
   )

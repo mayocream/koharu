@@ -376,7 +376,7 @@ impl KoharuMcp {
             .transpose()
             .map_err(|e: anyhow::Error| e.to_string())?;
 
-        engine::render_document(&res, &p.document_id, p.text_block_index, effect, None)
+        engine::render_document(&res, &p.document_id, p.text_block_index, effect, None, p.language.as_deref())
             .await
             .map_err(|e| e.to_string())?;
 

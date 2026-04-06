@@ -10,6 +10,7 @@
     "addFile": "Add File...",
     "openFolder": "Open Folder...",
     "addFolder": "Add Folder...",
+    "importUrl": "Import from URL...",
     "save": "Save...",
     "export": "Export...",
     "exportPsd": "Export PSD...",
@@ -59,7 +60,13 @@
     "pages_one": "{{count}} page",
     "pages_other": "{{count}} pages",
     "empty": "No documents",
-    "prompt": "Select or import a page to begin"
+    "prompt": "Select or import a page to begin",
+    "status": {
+      "none": "Not processed",
+      "ready": "Ready for TTS",
+      "inpainted": "Inpainted",
+      "rendered": "Complete"
+    }
   },
   "panels": {
     "processing": "Processing",
@@ -194,7 +201,11 @@
   },
   "statusBar": {
     "zoom": "Zoom",
-    "canvas": "Canvas"
+    "canvas": "Canvas",
+    "caching": "Caching",
+    "detecting": "Detecting",
+    "ocr": "OCR",
+    "translating": "Translating"
   },
   "toolbar": {
     "brush": "Brush",
@@ -211,6 +222,28 @@
   },
   "download": {
     "title": "Downloading"
+  },
+  "urlImport": {
+    "title": "Import from URL",
+    "placeholder": "https://www.manhuagui.com/comic/...",
+    "description": "Paste a manga chapter URL to import all pages",
+    "importing": "Importing pages...",
+    "import": "Import",
+    "loadingPage": "Loading page...",
+    "extracting": "Extracting images...",
+    "downloading": "Downloading {{current}}/{{total}}",
+    "success": "Imported {{count}} pages",
+    "processing": "Processing...",
+    "processingStarting": "Starting detection and OCR...",
+    "processingStep": "Processing",
+    "processingPage": "Page {{current}} of {{total}}",
+    "processingFailed": "Processing failed",
+    "errorInvalidUrl": "Please enter a valid manhuagui.com chapter URL",
+    "errorNotSupported": "Only manhuagui.com URLs are supported",
+    "errorNoImages": "Could not find any images on this page",
+    "errorNetwork": "Network error. Please check your connection and try again.",
+    "errorTimeout": "Request timed out. The page may be slow or blocked.",
+    "errorGeneric": "Import failed: {{message}}"
   },
   "errors": {
     "title": "Error",
@@ -337,6 +370,9 @@
     "ocr": "OCR",
     "translator": "Translator",
     "inpainter": "Inpainter",
-    "renderer": "Renderer"
+    "renderer": "Renderer",
+    "textToSpeech": "Text to Speech",
+    "ttsEnable": "Read aloud on click",
+    "ttsSpeed": "Speech speed"
   }
 }

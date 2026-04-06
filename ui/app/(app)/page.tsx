@@ -6,6 +6,10 @@ import { Navigator } from '@/components/Navigator'
 import { ActivityBubble } from '@/components/ActivityBubble'
 import { AppInitializationSkeleton } from '@/components/AppInitializationSkeleton'
 import { useGetMeta } from '@/lib/api/system/system'
+import { useKeyboardNavigation } from '@/hooks/useKeyboardNavigation'
+import { usePrefetchProcessing } from '@/hooks/usePrefetchProcessing'
+import { usePrefetchAdjacentBlobs } from '@/hooks/usePrefetchAdjacentBlobs'
+import { useBackgroundProcessing } from '@/hooks/useBackgroundProcessing'
 import {
   Group,
   Panel,
@@ -17,6 +21,15 @@ import { AppErrorBoundary } from '@/components/AppErrorBoundary'
 const LAYOUT_ID = 'koharu-main-layout-v2'
 
 export default function Page() {
+  // Enable keyboard navigation (left/right arrows to navigate pages)
+  useKeyboardNavigation()
+  // Prefetch detection/OCR for nearby pages as user navigates
+  usePrefetchProcessing()
+  // Prefetch adjacent page blobs for faster navigation
+  usePrefetchAdjacentBlobs()
+  // Background processing: Detect → OCR for all pages
+  useBackgroundProcessing()
+
   const { defaultLayout, onLayoutChanged } = useDefaultLayout({
     id: LAYOUT_ID,
     panelIds: ['left', 'center', 'right'],

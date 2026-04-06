@@ -56,6 +56,7 @@ impl BlobStore {
 
 pub struct ImageCache {
     cache: Mutex<LruCache<BlobRef, DynamicImage>>,
+    bytes_cache: Mutex<LruCache<BlobRef, Vec<u8>>>,
     blobs: BlobStore,
 }
 
@@ -63,6 +64,9 @@ impl ImageCache {
     fn new(blobs: BlobStore) -> Self {
         Self {
             cache: Mutex::new(LruCache::new(
+                NonZeroUsize::new(IMAGE_CACHE_CAPACITY).unwrap(),
+            )),
+            bytes_cache: Mutex::new(LruCache::new(
                 NonZeroUsize::new(IMAGE_CACHE_CAPACITY).unwrap(),
             )),
             blobs,
@@ -78,15 +82,33 @@ impl ImageCache {
                 return Ok(img.clone());
             }
         }
-        let bytes = self.blobs.get(r)?;
+        // Check bytes cache first, fall back to disk
+        let bytes = {
+            let mut bytes_cache = self.bytes_cache.lock().unwrap();
+            if let Some(bytes) = bytes_cache.get(r) {
+                bytes.clone()
+            } else {
+                let bytes = self.blobs.get(r)?;
+                bytes_cache.put(r.clone(), bytes.clone());
+                bytes
+            }
+        };
         let img = decode_blob(&bytes)?;
         self.cache.lock().unwrap().put(r.clone(), img.clone());
         Ok(img)
     }
 
-    /// Read raw blob bytes for a ref.
+    /// Read raw blob bytes for a ref, using cache.
     pub fn load_bytes(&self, r: &BlobRef) -> Result<Vec<u8>> {
-        self.blobs.get(r)
+        {
+            let mut cache = self.bytes_cache.lock().unwrap();
+            if let Some(bytes) = cache.get(r) {
+                return Ok(bytes.clone());
+            }
+        }
+        let bytes = self.blobs.get(r)?;
+        self.bytes_cache.lock().unwrap().put(r.clone(), bytes.clone());
+        Ok(bytes)
     }
 
     /// Encode a DynamicImage as WebP, store in blob store, cache it, return ref.

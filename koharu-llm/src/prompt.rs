@@ -82,11 +82,6 @@ impl PromptRenderer {
         };
 
         match self.model_id {
-            ModelId::VntlLlama3_8Bv2 => vec![
-                ChatMessage::new(ChatRole::System, sys),
-                ChatMessage::new(ChatRole::Name(Language::Japanese.to_string()), text),
-                ChatMessage::new(ChatRole::Name(target_language.to_string()), String::new()),
-            ],
             ModelId::HunyuanMT7B => {
                 vec![ChatMessage::new(ChatRole::User, format!("{sys}\n\n{text}"))]
             }
@@ -111,17 +106,13 @@ impl PromptRenderer {
                 messages => messages,
                 bos_token => self.bos_token,
                 eos_token => self.eos_token,
-                add_generation_prompt => !matches!(self.model_id, ModelId::VntlLlama3_8Bv2),
+                add_generation_prompt => true,
                 // Translation mode should suppress chain-of-thought-capable chat templates.
                 enable_thinking => false,
             })
             .map_err(anyhow::Error::msg)?;
 
-        if self.model_id == ModelId::VntlLlama3_8Bv2 {
-            Ok(prompt.trim_end_matches("<|eot_id|>").to_string())
-        } else {
-            Ok(prompt)
-        }
+        Ok(prompt)
     }
 }
 
@@ -138,28 +129,9 @@ mod tests {
     }
 
     #[test]
-    fn vntl_prompt_format_keeps_named_role_patch() -> anyhow::Result<()> {
-        let renderer = PromptRenderer::new(
-            ModelId::VntlLlama3_8Bv2,
-            r#"{{- bos_token }} {%- if custom_tools is defined %} {%- set tools = custom_tools %} {%- endif %} {%- if not tools_in_user_message is defined %} {%- set tools_in_user_message = true %} {%- endif %} {%- if not date_string is defined %} {%- if strftime_now is defined %} {%- set date_string = strftime_now("%d %b %Y") %} {%- else %} {%- set date_string = "26 Jul 2024" %} {%- endif %} {%- endif %} {%- if not tools is defined %} {%- set tools = none %} {%- endif %} {%- if messages[0]['role'] == 'system' %} {%- set system_message = messages[0]['content']|trim %} {%- set messages = messages[1:] %} {%- else %} {%- set system_message = "" %} {%- endif %} {{- "<|start_header_id|>Metadata<|end_header_id|>\n\n" }} {{- system_message }} {{- "<|eot_id|>" }} {%- for message in messages %} {{- '<|start_header_id|>' + message['role'] + '<|end_header_id|>\n\n'+ message['content'] | trim + '<|eot_id|>' }} {%- endfor %} {%- if add_generation_prompt %} {{- '<|start_header_id|>assistant<|end_header_id|>\n\n' }} {%- endif %}"#.to_string(),
-            "<|begin_of_text|>".to_string(),
-            "<|end_of_text|>".to_string(),
-        );
-        let formatted =
-            renderer.format_chat_prompt("hello".to_string(), Language::English, None)?;
-        let expected = format!(
-            "<|begin_of_text|><|start_header_id|>Metadata<|end_header_id|>\n\n{}<|eot_id|><|start_header_id|>Japanese<|end_header_id|>\n\nhello<|eot_id|><|start_header_id|>English<|end_header_id|>\n\n",
-            system_prompt(Language::English)
-        );
-        assert_eq!(formatted, expected);
-
-        Ok(())
-    }
-
-    #[test]
     fn qwen_prompt_format_uses_shared_prompt() -> anyhow::Result<()> {
         let renderer = PromptRenderer::new(
-            ModelId::SakuraGalTransl7Bv3_7,
+            ModelId::Qwen3_8b,
             r#"{% for message in messages %}{% if message['role'] == 'user' %}{{'<|im_start|>user ' + message['content'] + '<|im_end|> '}}{% elif message['role'] == 'assistant' %}{{'<|im_start|>assistant ' + message['content'] + '<|im_end|> ' }}{% else %}{{ '<|im_start|>system ' + message['content'] + '<|im_end|> ' }}{% endif %}{% endfor %}{% if add_generation_prompt %}{{ '<|im_start|>assistant ' }}{% endif %}"#.to_string(),
             "<s>".to_string(),
             "</s>".to_string(),

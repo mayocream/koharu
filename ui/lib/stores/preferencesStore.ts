@@ -13,6 +13,10 @@ type PreferencesState = {
   setDefaultFont: (font?: string) => void
   customSystemPrompt?: string
   setCustomSystemPrompt: (prompt?: string) => void
+  ttsEnabled: boolean
+  ttsRate: number
+  setTtsEnabled: (enabled: boolean) => void
+  setTtsRate: (rate: number) => void
   resetPreferences: () => void
 }
 
@@ -21,6 +25,8 @@ const initialPreferences = {
     size: 36,
     color: '#ffffff',
   },
+  ttsEnabled: false,
+  ttsRate: 1.0,
 }
 
 export const usePreferencesStore = create<PreferencesState>()(
@@ -36,6 +42,8 @@ export const usePreferencesStore = create<PreferencesState>()(
         })),
       setDefaultFont: (font) => set({ defaultFont: font }),
       setCustomSystemPrompt: (prompt) => set({ customSystemPrompt: prompt }),
+      setTtsEnabled: (enabled) => set({ ttsEnabled: enabled }),
+      setTtsRate: (rate) => set({ ttsRate: rate }),
       resetPreferences: () => set({ ...initialPreferences }),
     }),
     {
@@ -57,6 +65,8 @@ export const usePreferencesStore = create<PreferencesState>()(
         brushConfig: state.brushConfig,
         defaultFont: state.defaultFont,
         customSystemPrompt: state.customSystemPrompt,
+        ttsEnabled: state.ttsEnabled,
+        ttsRate: state.ttsRate,
       }),
     },
   ),

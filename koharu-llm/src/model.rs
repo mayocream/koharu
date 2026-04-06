@@ -19,7 +19,6 @@ use crate::{Language, ModelId};
 
 const DEFAULT_GPU_LAYERS: u32 = 1000;
 const MAX_UBATCH: u32 = 512;
-const SAKURA_QWEN_CORRECT_EOS_ID: i32 = 151645;
 
 pub struct Llm {
     model_id: ModelId,
@@ -311,11 +310,8 @@ fn build_sampler(opts: &GenerateOptions) -> LlamaSampler {
     LlamaSampler::chain_simple(samplers)
 }
 
-fn eos_token_for(id: ModelId, model: &LlamaModel) -> (LlamaToken, String) {
-    let token = match id {
-        ModelId::Sakura1_5bQwen2_5v1_0 => LlamaToken::new(SAKURA_QWEN_CORRECT_EOS_ID),
-        _ => model.token_eos(),
-    };
+fn eos_token_for(_id: ModelId, model: &LlamaModel) -> (LlamaToken, String) {
+    let token = model.token_eos();
     (token, token_text(model, token))
 }
 

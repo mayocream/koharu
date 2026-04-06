@@ -112,6 +112,8 @@ pub struct RenderParams {
     pub document_id: String,
     pub text_block_index: Option<usize>,
     pub shader_effect: Option<String>,
+    /// Target language for font selection (e.g., "zh-TW" for Traditional Chinese)
+    pub language: Option<String>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, JsonSchema)]

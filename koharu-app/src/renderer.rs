@@ -14,7 +14,7 @@ use koharu_renderer::{
     text::{
         latin::{LayoutBox, layout_box_from_block},
         script::{
-            font_families_for_text, is_latin_only, normalize_translation_for_layout,
+            font_families_for_text_with_language, is_latin_only, normalize_translation_for_layout,
             writing_mode_for_block,
         },
     },
@@ -32,6 +32,8 @@ pub struct RenderTextOptions<'a> {
     pub bubbles: &'a [koharu_core::BubbleRegion],
     pub image_width: u32,
     pub image_height: u32,
+    /// Target language for font selection (e.g., "zh-TW" for Traditional Chinese)
+    pub target_language: Option<&'a str>,
 }
 
 // ---------------------------------------------------------------------------
@@ -260,6 +262,7 @@ impl Renderer {
                         bubble_area,
                         base_font_size,
                         min_font,
+                        opts.target_language,
                     ) {
                         Ok(Some(rendered_img)) => Some((rendered_img, i)),
                         Ok(None) => None,
@@ -316,6 +319,7 @@ impl Renderer {
         bubble_area: Option<LayoutBox>,
         base_font_size: Option<f32>,
         min_font_size: f32,
+        target_language: Option<&str>,
     ) -> Result<Option<DynamicImage>> {
         let Some(translation) = text_block.translation.as_ref().cloned() else {
             return Ok(None);
@@ -350,7 +354,7 @@ impl Renderer {
         {
             style.font_families.push(font.to_string());
         }
-        apply_default_font_families(&mut style.font_families, &normalized_translation);
+        apply_default_font_families(&mut style.font_families, &normalized_translation, target_language);
         let font = {
             let _s = tracing::info_span!("select_font").entered();
             self.select_font(&style)?
@@ -499,9 +503,9 @@ fn default_stroke_width(font_size: f32) -> f32 {
     (font_size * 0.10).clamp(1.2, 8.0)
 }
 
-fn apply_default_font_families(font_families: &mut Vec<String>, text: &str) {
+fn apply_default_font_families(font_families: &mut Vec<String>, text: &str, language: Option<&str>) {
     if font_families.is_empty() {
-        *font_families = font_families_for_text(text);
+        *font_families = font_families_for_text_with_language(text, language);
     }
 }
 
@@ -856,7 +860,7 @@ mod tests {
     #[test]
     fn default_font_families_should_fill_empty_list() {
         let mut font_families = Vec::new();
-        apply_default_font_families(&mut font_families, "hello");
+        apply_default_font_families(&mut font_families, "hello", None);
         assert!(!font_families.is_empty());
     }
 

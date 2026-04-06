@@ -22,6 +22,7 @@ include = [
 ]
 
 [dependencies]
+base64 = { workspace = true }
 koharu-app = { workspace = true }
 koharu-core = { workspace = true }
 koharu-ml = { workspace = true }
@@ -35,14 +36,22 @@ dirs = { workspace = true }
 git-version = { workspace = true }
 serde_json = { workspace = true }
 once_cell = { workspace = true }
+reqwest = { workspace = true }
 rfd = { workspace = true }
+serde = { workspace = true }
 tauri = { workspace = true }
+url = { workspace = true }
+uuid = { workspace = true }
 tauri-plugin-process = { workspace = true }
 tauri-plugin-updater = { workspace = true }
+rand = { workspace = true }
+regex = { workspace = true }
 tokio = { workspace = true }
 tracing = { workspace = true }
+rquickjs = { workspace = true }
 console = { workspace = true }
 tracing-subscriber = { workspace = true }
+ferrous-opencc = { workspace = true }
 
 [target.'cfg(target_os = "windows")'.dependencies]
 koharu-llm = { workspace = true }

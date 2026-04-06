@@ -346,6 +346,8 @@ pub struct RenderRequest {
     pub text_block_id: Option<String>,
     pub shader_effect: Option<TextShaderEffect>,
     pub shader_stroke: Option<TextStrokeStyle>,
+    /// Target language for font selection (e.g., "zh-TW" for Traditional Chinese)
+    pub language: Option<String>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, JsonSchema, ToSchema)]
