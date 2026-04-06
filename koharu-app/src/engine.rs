@@ -950,6 +950,7 @@ impl Engine for LlmTranslateEngine {
                     &translator,
                     ProviderConfig {
                         http_client: res.runtime.http_client(),
+                        http_client_raw: res.runtime.http_client_raw(),
                         api_key,
                         base_url,
                         temperature: None,

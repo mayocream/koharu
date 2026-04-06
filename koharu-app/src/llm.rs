@@ -753,6 +753,7 @@ pub async fn llm_generate(
                     &translator,
                     ProviderConfig {
                         http_client: state.runtime.http_client(),
+                        http_client_raw: state.runtime.http_client_raw(),
                         api_key,
                         base_url,
                         temperature: None,
