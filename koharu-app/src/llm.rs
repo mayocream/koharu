@@ -188,12 +188,16 @@ fn strip_thinking_block(text: &str) -> &str {
     text
 }
 
+fn has_meaningful_text(text: Option<&str>) -> bool {
+    text.is_some_and(|value| !value.trim().is_empty())
+}
+
 fn format_document_blocks(blocks: &[TextBlock]) -> String {
     blocks
         .iter()
         .enumerate()
         .map(|(idx, block)| {
-            let text = block.text.as_deref().unwrap_or("<empty>");
+            let text = block.text.as_deref().unwrap_or("");
             format!("[{}]{}", idx + 1, text)
         })
         .collect::<Vec<_>>()
@@ -306,6 +310,13 @@ fn split_legacy_lines(translation: &str, expected_blocks: usize) -> anyhow::Resu
 
 impl Translatable for Document {
     fn get_source(&self) -> anyhow::Result<String> {
+        if !self
+            .text_blocks
+            .iter()
+            .any(|block| has_meaningful_text(block.text.as_deref()))
+        {
+            return Ok(String::new());
+        }
         Ok(format_document_blocks(&self.text_blocks))
     }
 
@@ -922,6 +933,23 @@ mod tests {
         let source = block.get_source()?;
         assert_eq!(source, "[1]1 < 2\nA & B");
 
+        Ok(())
+    }
+
+    #[test]
+    fn document_source_skips_translation_when_all_blocks_are_empty() -> anyhow::Result<()> {
+        let doc = Document {
+            text_blocks: vec![
+                TextBlock::default(),
+                TextBlock {
+                    text: Some("   ".to_string()),
+                    ..Default::default()
+                },
+            ],
+            ..Default::default()
+        };
+
+        assert_eq!(doc.get_source()?, "");
         Ok(())
     }
 

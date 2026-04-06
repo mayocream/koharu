@@ -18,7 +18,7 @@ use std::sync::atomic::{AtomicBool, Ordering};
 
 use anyhow::{Result, bail};
 use async_trait::async_trait;
-use koharu_core::Document;
+use koharu_core::{Document, TextShaderEffect, TextStrokeStyle};
 use petgraph::algo::toposort;
 use petgraph::graph::DiGraph;
 use tokio::sync::RwLock;
@@ -42,19 +42,56 @@ pub enum Artifact {
     Rendered,
 }
 
+#[derive(Debug, Clone, Default)]
+pub struct PipelineRunOptions {
+    pub target_language: Option<String>,
+    pub system_prompt: Option<String>,
+    pub shader_effect: Option<TextShaderEffect>,
+    pub shader_stroke: Option<TextStrokeStyle>,
+}
+
+impl PipelineRunOptions {
+    pub fn from_process_request(req: &koharu_core::commands::ProcessRequest) -> Self {
+        Self {
+            target_language: req.language.clone(),
+            system_prompt: req.system_prompt.clone(),
+            shader_effect: req.shader_effect,
+            shader_stroke: req.shader_stroke.clone(),
+        }
+    }
+}
+
+fn has_non_empty_text(value: Option<&str>) -> bool {
+    value.is_some_and(|text| !text.trim().is_empty())
+}
+
+fn block_has_ocr_text(block: &koharu_core::TextBlock) -> bool {
+    has_non_empty_text(block.text.as_deref())
+}
+
+fn block_has_translation(block: &koharu_core::TextBlock) -> bool {
+    if !block_has_ocr_text(block) {
+        return true;
+    }
+
+    has_non_empty_text(block.translation.as_deref())
+}
+
 impl Artifact {
     pub fn ready(&self, doc: &Document) -> bool {
         match self {
             Self::TextBlocks => !doc.text_blocks.is_empty(),
             Self::Bubbles => !doc.bubbles.is_empty(),
             Self::Segment => doc.segment.is_some(),
-            Self::FontPredictions => doc.text_blocks.iter().all(|b| b.font_prediction.is_some()),
+            Self::FontPredictions => {
+                doc.text_blocks.is_empty()
+                    || doc.text_blocks.iter().all(|b| b.font_prediction.is_some())
+            }
             Self::OcrText => {
-                !doc.text_blocks.is_empty() && doc.text_blocks.iter().all(|b| b.text.is_some())
+                doc.text_blocks.is_empty() || doc.text_blocks.iter().all(block_has_ocr_text)
             }
             Self::Translations => {
-                !doc.text_blocks.is_empty()
-                    && doc.text_blocks.iter().all(|b| b.translation.is_some())
+                doc.text_blocks.is_empty() || doc.text_blocks.iter().all(block_has_translation)
             }
             Self::Inpainted => doc.inpainted.is_some(),
             Self::Rendered => doc.rendered.is_some(),
@@ -90,7 +127,12 @@ impl Patch {
 
 #[async_trait]
 pub trait Engine: Send + Sync + 'static {
-    async fn run(&self, doc: &Document, res: &AppResources) -> Result<Patch>;
+    async fn run(
+        &self,
+        doc: &Document,
+        res: &AppResources,
+        options: &PipelineRunOptions,
+    ) -> Result<Patch>;
 }
 
 // ---------------------------------------------------------------------------
@@ -314,6 +356,7 @@ pub async fn execute_pipeline<F, Fut>(
     res: &AppResources,
     page_id: &str,
     cancel: &AtomicBool,
+    options: &PipelineRunOptions,
     on_step: F,
 ) -> Result<()>
 where
@@ -339,10 +382,12 @@ where
         on_step(seq, info.id).await;
         async {
             let engine = res.registry.get(info.id, res).await?;
-            let patch = engine.run(&doc, res).await?;
+            let patch = engine.run(&doc, res, options).await?;
             if let Some(f) = patch.take() {
                 res.storage.update_page(page_id, f).await?;
             }
+            let updated = res.storage.page(page_id).await?;
+            verify_step_outputs(info, &updated)?;
             Ok::<_, anyhow::Error>(())
         }
         .instrument(tracing::info_span!("step", engine = info.id))
@@ -351,13 +396,33 @@ where
     Ok(())
 }
 
+fn verify_step_outputs(info: &EngineInfo, doc: &Document) -> Result<()> {
+    let missing = info
+        .produces
+        .iter()
+        .filter(|artifact| !artifact.ready(doc))
+        .map(|artifact| format!("{artifact:?}"))
+        .collect::<Vec<_>>();
+
+    if missing.is_empty() {
+        return Ok(());
+    }
+
+    bail!(
+        "step '{}' did not produce required artifacts: {}",
+        info.id,
+        missing.join(", ")
+    )
+}
+
 /// Run a single engine by id.
 #[tracing::instrument(level = "info", skip_all, fields(engine = id))]
 pub async fn run_one(id: &str, res: &AppResources, page_id: &str) -> Result<()> {
     let _info = Registry::find(id)?;
     let doc = res.storage.page(page_id).await?;
     let engine = res.registry.get(id, res).await?;
-    let patch = engine.run(&doc, res).await?;
+    let options = PipelineRunOptions::default();
+    let patch = engine.run(&doc, res, &options).await?;
     if let Some(f) = patch.take() {
         res.storage.update_page(page_id, f).await?;
     }
@@ -392,10 +457,7 @@ pub const DEFAULT_PIPELINE: &[&str] = &[
 // =========================================================================
 
 use image::DynamicImage;
-use koharu_core::{
-    FontPrediction, SerializableDynamicImage, TextBlock, TextDirection, TextShaderEffect,
-    TextStrokeStyle,
-};
+use koharu_core::{FontPrediction, SerializableDynamicImage, TextBlock, TextDirection};
 
 // --- PP-DocLayout V3 (detector) -------------------------------------------
 
@@ -403,7 +465,12 @@ struct PpDocLayoutEngine(koharu_ml::pp_doclayout_v3::PPDocLayoutV3);
 
 #[async_trait]
 impl Engine for PpDocLayoutEngine {
-    async fn run(&self, doc: &Document, res: &AppResources) -> Result<Patch> {
+    async fn run(
+        &self,
+        doc: &Document,
+        res: &AppResources,
+        _options: &PipelineRunOptions,
+    ) -> Result<Patch> {
         let source: SerializableDynamicImage = {
             let _s = tracing::info_span!("load_image").entered();
             res.storage.images.load(&doc.source)?.into()
@@ -436,7 +503,12 @@ struct CtdFullEngine(koharu_ml::comic_text_detector::ComicTextDetector);
 
 #[async_trait]
 impl Engine for CtdFullEngine {
-    async fn run(&self, doc: &Document, res: &AppResources) -> Result<Patch> {
+    async fn run(
+        &self,
+        doc: &Document,
+        res: &AppResources,
+        _options: &PipelineRunOptions,
+    ) -> Result<Patch> {
         let source: SerializableDynamicImage = {
             let _s = tracing::info_span!("load_image").entered();
             res.storage.images.load(&doc.source)?.into()
@@ -479,7 +551,12 @@ struct CtdSegmentEngine(koharu_ml::comic_text_detector::ComicTextDetector);
 
 #[async_trait]
 impl Engine for CtdSegmentEngine {
-    async fn run(&self, doc: &Document, res: &AppResources) -> Result<Patch> {
+    async fn run(
+        &self,
+        doc: &Document,
+        res: &AppResources,
+        _options: &PipelineRunOptions,
+    ) -> Result<Patch> {
         let source: SerializableDynamicImage = {
             let _s = tracing::info_span!("load_image").entered();
             res.storage.images.load(&doc.source)?.into()
@@ -524,7 +601,12 @@ struct ComicTextBubbleDetectorEngine(
 
 #[async_trait]
 impl Engine for ComicTextBubbleDetectorEngine {
-    async fn run(&self, doc: &Document, res: &AppResources) -> Result<Patch> {
+    async fn run(
+        &self,
+        doc: &Document,
+        res: &AppResources,
+        _options: &PipelineRunOptions,
+    ) -> Result<Patch> {
         let source = {
             let _s = tracing::info_span!("load_image").entered();
             res.storage.images.load(&doc.source)?
@@ -579,7 +661,12 @@ struct SpeechBubbleSegEngine(koharu_ml::speech_bubble_segmentation::SpeechBubble
 
 #[async_trait]
 impl Engine for SpeechBubbleSegEngine {
-    async fn run(&self, doc: &Document, res: &AppResources) -> Result<Patch> {
+    async fn run(
+        &self,
+        doc: &Document,
+        res: &AppResources,
+        _options: &PipelineRunOptions,
+    ) -> Result<Patch> {
         let source = {
             let _s = tracing::info_span!("load_image").entered();
             res.storage.images.load(&doc.source)?
@@ -628,7 +715,12 @@ struct FontDetectEngine(koharu_ml::font_detector::FontDetector);
 
 #[async_trait]
 impl Engine for FontDetectEngine {
-    async fn run(&self, doc: &Document, res: &AppResources) -> Result<Patch> {
+    async fn run(
+        &self,
+        doc: &Document,
+        res: &AppResources,
+        _options: &PipelineRunOptions,
+    ) -> Result<Patch> {
         if doc.text_blocks.is_empty() {
             return Ok(Patch::none());
         }
@@ -678,7 +770,12 @@ struct PaddleOcrEngine(std::sync::Mutex<koharu_llm::paddleocr_vl::PaddleOcrVl>);
 
 #[async_trait]
 impl Engine for PaddleOcrEngine {
-    async fn run(&self, doc: &Document, res: &AppResources) -> Result<Patch> {
+    async fn run(
+        &self,
+        doc: &Document,
+        res: &AppResources,
+        _options: &PipelineRunOptions,
+    ) -> Result<Patch> {
         if doc.text_blocks.is_empty() {
             return Ok(Patch::none());
         }
@@ -733,7 +830,12 @@ struct MangaOcrEngine(koharu_ml::manga_ocr::MangaOcr);
 
 #[async_trait]
 impl Engine for MangaOcrEngine {
-    async fn run(&self, doc: &Document, res: &AppResources) -> Result<Patch> {
+    async fn run(
+        &self,
+        doc: &Document,
+        res: &AppResources,
+        _options: &PipelineRunOptions,
+    ) -> Result<Patch> {
         if doc.text_blocks.is_empty() {
             return Ok(Patch::none());
         }
@@ -776,7 +878,12 @@ struct Mit48pxOcrEngine(koharu_ml::mit48px_ocr::Mit48pxOcr);
 
 #[async_trait]
 impl Engine for Mit48pxOcrEngine {
-    async fn run(&self, doc: &Document, res: &AppResources) -> Result<Patch> {
+    async fn run(
+        &self,
+        doc: &Document,
+        res: &AppResources,
+        _options: &PipelineRunOptions,
+    ) -> Result<Patch> {
         if doc.text_blocks.is_empty() {
             return Ok(Patch::none());
         }
@@ -815,12 +922,25 @@ struct LlmTranslateEngine;
 
 #[async_trait]
 impl Engine for LlmTranslateEngine {
-    async fn run(&self, doc: &Document, res: &AppResources) -> Result<Patch> {
+    async fn run(
+        &self,
+        doc: &Document,
+        res: &AppResources,
+        options: &PipelineRunOptions,
+    ) -> Result<Patch> {
         let mut page = doc.clone();
         let block_count = page.text_blocks.len();
-        async { res.llm.translate(&mut page, None, None).await }
-            .instrument(tracing::info_span!("inference", blocks = block_count))
-            .await?;
+        async {
+            res.llm
+                .translate(
+                    &mut page,
+                    options.target_language.as_deref(),
+                    options.system_prompt.as_deref(),
+                )
+                .await
+        }
+        .instrument(tracing::info_span!("inference", blocks = block_count))
+        .await?;
         let blocks = page.text_blocks;
         Ok(Patch::apply(|doc| doc.text_blocks = blocks))
     }
@@ -844,7 +964,12 @@ struct LamaInpaintEngine(koharu_ml::lama::Lama);
 
 #[async_trait]
 impl Engine for LamaInpaintEngine {
-    async fn run(&self, doc: &Document, res: &AppResources) -> Result<Patch> {
+    async fn run(
+        &self,
+        doc: &Document,
+        res: &AppResources,
+        _options: &PipelineRunOptions,
+    ) -> Result<Patch> {
         let seg_ref = doc
             .segment
             .as_ref()
@@ -887,7 +1012,12 @@ struct AotInpaintEngine(koharu_ml::aot_inpainting::AotInpainting);
 
 #[async_trait]
 impl Engine for AotInpaintEngine {
-    async fn run(&self, doc: &Document, res: &AppResources) -> Result<Patch> {
+    async fn run(
+        &self,
+        doc: &Document,
+        res: &AppResources,
+        _options: &PipelineRunOptions,
+    ) -> Result<Patch> {
         let seg_ref = doc
             .segment
             .as_ref()
@@ -932,8 +1062,20 @@ struct KoharuRenderEngine;
 
 #[async_trait]
 impl Engine for KoharuRenderEngine {
-    async fn run(&self, doc: &Document, res: &AppResources) -> Result<Patch> {
-        render_document(res, &doc.id, None, None, None).await?;
+    async fn run(
+        &self,
+        doc: &Document,
+        res: &AppResources,
+        options: &PipelineRunOptions,
+    ) -> Result<Patch> {
+        render_document(
+            res,
+            &doc.id,
+            None,
+            options.shader_effect,
+            options.shader_stroke.clone(),
+        )
+        .await?;
         Ok(Patch::none())
     }
 }
@@ -1085,95 +1227,158 @@ fn overlap(a: [f32; 4], b: [f32; 4]) -> f32 {
 // ---------------------------------------------------------------------------
 
 /// Sort text blocks in manga reading order (right-to-left, top-to-bottom).
-/// Groups blocks into vertical columns by x-overlap, sorts columns right-to-left,
-/// and sorts blocks within each column top-to-bottom.
+/// Uses a Recursive XY-Cut algorithm to divide the page into columns and rows based on whitespace gaps.
 fn sort_manga_reading_order(blocks: &mut [TextBlock]) {
+    #[derive(Debug, PartialEq, Clone, Copy)]
+    enum Axis {
+        X,
+        Y,
+    }
+
     if blocks.len() <= 1 {
         return;
     }
 
-    // Assign each block to a column. Two blocks share a column if their
-    // x-ranges overlap by at least 30% of the smaller block's width.
-    let mut column_ids: Vec<usize> = vec![0; blocks.len()];
-    let mut next_col = 0usize;
+    // Determine dynamic gap thresholds by calculating the median dimensions
+    // of all text blocks on the page.
+    let mut widths: Vec<f32> = blocks.iter().map(|b| b.width).collect();
+    let mut heights: Vec<f32> = blocks.iter().map(|b| b.height).collect();
 
-    // Sort by x descending first for stable column assignment (rightmost first).
-    let mut indices: Vec<usize> = (0..blocks.len()).collect();
-    indices.sort_by(|&a, &b| {
-        blocks[b]
-            .x
-            .partial_cmp(&blocks[a].x)
-            .unwrap_or(std::cmp::Ordering::Equal)
-    });
+    widths.sort_by(|a, b| a.partial_cmp(b).unwrap_or(std::cmp::Ordering::Equal));
+    heights.sort_by(|a, b| a.partial_cmp(b).unwrap_or(std::cmp::Ordering::Equal));
 
-    for &i in &indices {
-        let bx0 = blocks[i].x;
-        let bx1 = bx0 + blocks[i].width;
-        let bw = blocks[i].width.max(1.0);
+    let median_w = widths[widths.len() / 2].max(1.0);
+    let median_h = heights[heights.len() / 2].max(1.0);
 
-        // Try to find an existing column this block belongs to.
-        let mut found = None;
-        for &j in &indices {
-            if j == i {
-                continue;
-            }
-            if column_ids[j] == 0 && j > i {
-                continue; // not assigned yet
-            }
-            let jx0 = blocks[j].x;
-            let jx1 = jx0 + blocks[j].width;
-            let jw = blocks[j].width.max(1.0);
-            let overlap_w = (bx1.min(jx1) - bx0.max(jx0)).max(0.0);
-            if overlap_w / bw.min(jw) >= 0.3 {
-                found = Some(column_ids[j]);
-                break;
-            }
+    // Manga horizontal gutters are often tighter than vertical ones.
+    let min_gap_x = (median_w * 0.15).max(10.0);
+    let min_gap_y = (median_h * 0.10).max(8.0);
+
+    // Initiate recursive sorting directly on the mutable slice.
+    xy_cut_recursive(blocks, min_gap_x, min_gap_y);
+
+    fn xy_cut_recursive(blocks: &mut [TextBlock], min_gap_x: f32, min_gap_y: f32) {
+        if blocks.len() <= 1 {
+            return;
         }
 
-        column_ids[i] = match found {
-            Some(col) => col,
-            None => {
-                next_col += 1;
-                next_col
-            }
-        };
-    }
+        let cut_result = find_best_cut(blocks, min_gap_x, min_gap_y);
 
-    // Sort: primary = column center x descending (right-to-left),
-    //        secondary = block y ascending (top-to-bottom).
-    // Compute column center x.
-    let mut col_centers: std::collections::HashMap<usize, (f32, usize)> =
-        std::collections::HashMap::new();
-    for (i, &col) in column_ids.iter().enumerate() {
-        let cx = blocks[i].x + blocks[i].width * 0.5;
-        let entry = col_centers.entry(col).or_insert((0.0, 0));
-        entry.0 += cx;
-        entry.1 += 1;
-    }
-    let col_avg_x: std::collections::HashMap<usize, f32> = col_centers
-        .iter()
-        .map(|(&col, &(sum, count))| (col, sum / count.max(1) as f32))
-        .collect();
+        let Some((best_axis, best_gap)) = cut_result else {
+            // FALLBACK: Row-Aware sort for clusters that can't be cleanly cut.
+            let row_height = min_gap_y * 4.0;
 
-    // Build sortable (col_x_desc, y_asc) keys.
-    let mut order: Vec<usize> = (0..blocks.len()).collect();
-    order.sort_by(|&a, &b| {
-        let ca = col_avg_x.get(&column_ids[a]).copied().unwrap_or(0.0);
-        let cb = col_avg_x.get(&column_ids[b]).copied().unwrap_or(0.0);
-        // Right-to-left: higher x first
-        cb.partial_cmp(&ca)
-            .unwrap_or(std::cmp::Ordering::Equal)
-            .then_with(|| {
-                blocks[a]
-                    .y
-                    .partial_cmp(&blocks[b].y)
+            blocks.sort_by(|a, b| {
+                let row_a = (a.y / row_height).floor();
+                let row_b = (b.y / row_height).floor();
+
+                row_a
+                    .partial_cmp(&row_b)
                     .unwrap_or(std::cmp::Ordering::Equal)
-            })
-    });
+                    .then_with(|| b.x.partial_cmp(&a.x).unwrap_or(std::cmp::Ordering::Equal))
+            });
+            return;
+        };
 
-    // Apply the permutation in-place.
-    let sorted: Vec<TextBlock> = order.iter().map(|&i| blocks[i].clone()).collect();
-    blocks.clone_from_slice(&sorted);
+        let cut_coord = (best_gap.0 + best_gap.1) / 2.0;
+
+        // In-place stable partition to avoid recursively allocating new vectors.
+        // Rust's `bool` sorts `false` before `true`. By mapping items destined
+        // for the primary partition (Right or Top) to `false`, we separate
+        // the geometry cleanly into two contiguous segments.
+        blocks.sort_by_key(|block| {
+            if best_axis == Axis::X {
+                (block.x + block.width * 0.5) < cut_coord
+            } else {
+                (block.y + block.height * 0.5) > cut_coord
+            }
+        });
+
+        // Find where the split boundary lies
+        let group1_len = blocks
+            .iter()
+            .filter(|block| {
+                if best_axis == Axis::X {
+                    (block.x + block.width * 0.5) >= cut_coord
+                } else {
+                    (block.y + block.height * 0.5) <= cut_coord
+                }
+            })
+            .count();
+
+        if group1_len == 0 || group1_len == blocks.len() {
+            blocks.sort_by(|a, b| b.x.partial_cmp(&a.x).unwrap_or(std::cmp::Ordering::Equal));
+            return;
+        }
+
+        // Subdivide the slice bounds along the partition line and recurse.
+        let (left, right) = blocks.split_at_mut(group1_len);
+        xy_cut_recursive(left, min_gap_x, min_gap_y);
+        xy_cut_recursive(right, min_gap_x, min_gap_y);
+    }
+
+    fn find_best_cut(
+        blocks: &[TextBlock],
+        min_gap_x: f32,
+        min_gap_y: f32,
+    ) -> Option<(Axis, (f32, f32))> {
+        let mut x_intervals: Vec<(f32, f32)> =
+            blocks.iter().map(|b| (b.x, b.x + b.width)).collect();
+        let mut y_intervals: Vec<(f32, f32)> =
+            blocks.iter().map(|b| (b.y, b.y + b.height)).collect();
+
+        x_intervals.sort_by(|a, b| a.0.partial_cmp(&b.0).unwrap_or(std::cmp::Ordering::Equal));
+        y_intervals.sort_by(|a, b| a.0.partial_cmp(&b.0).unwrap_or(std::cmp::Ordering::Equal));
+
+        let gap_x = find_largest_gap(&x_intervals, min_gap_x);
+        let gap_y = find_largest_gap(&y_intervals, min_gap_y);
+
+        match (gap_x, gap_y) {
+            (Some(gx), Some(gy)) => {
+                let width_y = gy.1 - gy.0;
+                let width_x = gx.1 - gx.0;
+
+                // Evaluate projection dominance:
+                // Select the horizontal cut unless the vertical visual gap is overwhelmingly wider.
+                if width_y > 12.0 || width_y > (width_x * 0.4) {
+                    Some((Axis::Y, gy))
+                } else {
+                    Some((Axis::X, gx))
+                }
+            }
+            (None, Some(gy)) => Some((Axis::Y, gy)),
+            (Some(gx), None) => Some((Axis::X, gx)),
+            (None, None) => None,
+        }
+    }
+
+    fn find_largest_gap(intervals: &[(f32, f32)], min_gap: f32) -> Option<(f32, f32)> {
+        if intervals.is_empty() {
+            return None;
+        }
+
+        let mut largest_gap: Option<(f32, f32)> = None;
+        let mut current_max_end = intervals[0].1;
+
+        for interval in intervals.iter().skip(1) {
+            // A valid separation exists if the start of the current interval
+            // does not intersect the bounding maximum of all preceding intervals.
+            if interval.0 > current_max_end {
+                let gap_size = interval.0 - current_max_end;
+                if gap_size >= min_gap {
+                    if let Some(ref mut best_gap) = largest_gap {
+                        if gap_size > (best_gap.1 - best_gap.0) {
+                            *best_gap = (current_max_end, interval.0);
+                        }
+                    } else {
+                        largest_gap = Some((current_max_end, interval.0));
+                    }
+                }
+            }
+            current_max_end = current_max_end.max(interval.1);
+        }
+        largest_gap
+    }
 }
 
 // ---------------------------------------------------------------------------
@@ -1268,5 +1473,88 @@ mod tests {
         assert!(pos("comic-text-bubble-detector") < pos("yuzumarker-font-detection"));
         assert!(pos("comic-text-detector-seg") < pos("aot-inpainting"));
         assert!(pos("aot-inpainting") < pos("koharu-renderer"));
+    }
+
+    #[test]
+    fn translation_readiness_requires_non_empty_translations_for_non_empty_source_text() {
+        let empty_doc = Document::default();
+        assert!(Artifact::OcrText.ready(&empty_doc));
+        assert!(Artifact::Translations.ready(&empty_doc));
+
+        let mut doc = Document::default();
+        doc.text_blocks = vec![TextBlock {
+            text: Some("hello".to_string()),
+            translation: Some(String::new()),
+            ..Default::default()
+        }];
+
+        assert!(Artifact::OcrText.ready(&doc));
+        assert!(!Artifact::Translations.ready(&doc));
+
+        doc.text_blocks[0].translation = Some("hi".to_string());
+        assert!(Artifact::Translations.ready(&doc));
+    }
+
+    #[test]
+    fn verify_step_outputs_reports_missing_artifacts() {
+        let info = EngineInfo {
+            id: "llm",
+            name: "LLM",
+            needs: &[Artifact::OcrText],
+            produces: &[Artifact::Translations],
+            load: |_res| Box::pin(async move { unreachable!("not used in test") }),
+        };
+        let doc = Document {
+            text_blocks: vec![TextBlock {
+                text: Some("hello".to_string()),
+                translation: Some(String::new()),
+                ..Default::default()
+            }],
+            ..Default::default()
+        };
+
+        let err = verify_step_outputs(&info, &doc).expect_err("missing translations");
+        assert!(
+            err.to_string()
+                .contains("did not produce required artifacts")
+        );
+    }
+
+    #[test]
+    fn pipeline_run_options_copy_request_overrides() {
+        let req = koharu_core::commands::ProcessRequest {
+            document_id: Some("page-1".to_string()),
+            llm: None,
+            language: Some("es-ES".to_string()),
+            system_prompt: Some("Translate tersely".to_string()),
+            shader_effect: Some(TextShaderEffect {
+                italic: true,
+                bold: false,
+            }),
+            shader_stroke: Some(TextStrokeStyle {
+                enabled: false,
+                color: [0, 0, 0, 255],
+                width_px: Some(3.0),
+            }),
+        };
+
+        let options = PipelineRunOptions::from_process_request(&req);
+
+        assert_eq!(options.target_language.as_deref(), Some("es-ES"));
+        assert_eq!(options.system_prompt.as_deref(), Some("Translate tersely"));
+        assert_eq!(
+            options.shader_effect,
+            Some(TextShaderEffect {
+                italic: true,
+                bold: false,
+            })
+        );
+        assert_eq!(
+            options
+                .shader_stroke
+                .as_ref()
+                .and_then(|stroke| stroke.width_px),
+            Some(3.0)
+        );
     }
 }

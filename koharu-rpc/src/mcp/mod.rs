@@ -472,6 +472,7 @@ impl KoharuMcp {
                     options: None,
                 }),
                 language: p.language,
+                system_prompt: p.system_prompt,
                 shader_effect: effect,
                 shader_stroke: None,
             },

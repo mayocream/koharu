@@ -31,6 +31,7 @@ import {
 } from '@/components/ui/tooltip'
 import { FontSelect } from '@/components/ui/font-select'
 import { useEditorUiStore } from '@/lib/stores/editorUiStore'
+import { usePreferencesStore } from '@/lib/stores/preferencesStore'
 import { useListFonts, useGetGoogleFontsCatalog } from '@/lib/api/system/system'
 import {
   getGetDocumentQueryKey,
@@ -128,6 +129,9 @@ const fallbackFontFace = (value?: string): FontFaceInfo | undefined => {
   }
 }
 
+const hasExplicitFontFamilies = (style?: TextStyle) =>
+  (style?.fontFamilies?.length ?? 0) > 0
+
 const normalizeEffect = (effect?: Partial<RenderEffect>): RenderEffect => ({
   italic: effect?.italic ?? false,
   bold: effect?.bold ?? false,
@@ -204,13 +208,17 @@ export function RenderControlsPanel() {
     updateTextBlocks,
   } = useTextBlocks()
   const documentId = currentDocument?.id
-  const documentFont = currentDocument?.style?.defaultFont ?? undefined
+  const appDefaultFont = usePreferencesStore((state) => state.defaultFont)
+  const documentFont = currentDocument?.style?.defaultFont ?? appDefaultFont
   const queryClient = useQueryClient()
   const { t } = useTranslation()
   const selectedBlock =
     selectedBlockIndex !== undefined
       ? textBlocks[selectedBlockIndex]
       : undefined
+  const selectedBlockHasExplicitFont = hasExplicitFontFamilies(
+    selectedBlock?.style,
+  )
   const firstBlock = textBlocks[0]
   const hasBlocks = textBlocks.length > 0
   const fontCandidates = uniqueFontFaces(
@@ -323,6 +331,19 @@ export function RenderControlsPanel() {
     return [nextFont, ...base.filter((family) => family !== nextFont)]
   }
 
+  const updateDocumentDefaultFont = (value: string) => {
+    // Remember as app-level default for future documents
+    usePreferencesStore.getState().setDefaultFont(value)
+    if (!documentId) return
+    void updateDocumentStyle(documentId, {
+      defaultFont: value,
+    }).then(() =>
+      queryClient.invalidateQueries({
+        queryKey: getGetDocumentQueryKey(documentId),
+      }),
+    )
+  }
+
   const applyStrokeSetting = (nextStroke: RenderStroke) => {
     const normalized = normalizeStroke(nextStroke)
     if (applyStyleToSelected({ stroke: normalized })) return
@@ -410,21 +431,17 @@ export function RenderControlsPanel() {
                   value,
                   selectedBlock?.style?.fontFamilies,
                 )
-                if (applyStyleToSelected({ fontFamilies: nextFamilies })) return
-                // Set as document default font
-                if (documentId) {
-                  void updateDocumentStyle(documentId, {
-                    defaultFont: value,
-                  }).then(() =>
-                    queryClient.invalidateQueries({
-                      queryKey: getGetDocumentQueryKey(documentId),
-                    }),
-                  )
+                // Only persist a block override when the block already has one.
+                // Otherwise keep the block inheriting the document default.
+                if (selectedBlockHasExplicitFont) {
+                  if (applyStyleToSelected({ fontFamilies: nextFamilies }))
+                    return
                 }
+                updateDocumentDefaultFont(value)
               }}
             />
           </div>
-          {selectedBlock?.style?.fontFamilies?.length ? (
+          {selectedBlockHasExplicitFont ? (
             <button
               type='button'
               className='text-muted-foreground hover:text-foreground text-[9px]'

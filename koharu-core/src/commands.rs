@@ -72,6 +72,7 @@ pub struct ProcessRequest {
     pub document_id: Option<String>,
     pub llm: Option<crate::PipelineLlmRequest>,
     pub language: Option<String>,
+    pub system_prompt: Option<String>,
     pub shader_effect: Option<TextShaderEffect>,
     pub shader_stroke: Option<TextStrokeStyle>,
 }
@@ -125,6 +126,7 @@ pub struct ProcessParams {
     pub document_id: Option<String>,
     pub llm_target: Option<crate::LlmTarget>,
     pub language: Option<String>,
+    pub system_prompt: Option<String>,
     pub shader_effect: Option<String>,
 }
 
@@ -271,6 +273,7 @@ mod tests {
                 }),
             }),
             language: Some("zh-CN".to_string()),
+            system_prompt: Some("Translate manga".to_string()),
             shader_effect: Some(TextShaderEffect {
                 italic: true,
                 bold: true,
@@ -311,6 +314,7 @@ mod tests {
                 provider_id: None,
             }),
             language: Some("zh-CN".to_string()),
+            system_prompt: Some("Translate manga".to_string()),
             shader_effect: Some("italic,bold".to_string()),
         });
         round_trip(&UpdateTextBlockPayload {

@@ -113,6 +113,7 @@ export type ProcessingEvent =
     }
   | { type: 'CANCEL' }
   | { type: 'DONE' }
+  | { type: 'DONE_WITH_ERRORS'; message: string }
   | { type: 'ERROR'; message: string }
 
 export type ProcessingInput = {
@@ -244,40 +245,44 @@ const batchExportActor = fromPromise<void, { layer: ExportLayer }>(
 // Polling actors (replace SSE)
 // ---------------------------------------------------------------------------
 
-const jobPollingActor = fromCallback<ProcessingEvent, { jobId: string }>(
-  ({ sendBack, input }) => {
-    const interval = setInterval(async () => {
-      try {
-        const job = await getJob(input.jobId)
-        if (job.status === 'running') {
-          const single = job.totalDocuments <= 1
-          sendBack({
-            type: 'PROGRESS',
-            step: job.step ?? undefined,
-            current: single
-              ? job.currentStepIndex
-              : job.currentDocument +
-                (job.totalSteps > 0
-                  ? job.currentStepIndex / job.totalSteps
-                  : 0),
-            total: single ? job.totalSteps : job.totalDocuments,
-            overallPercent: job.overallPercent,
-          })
-        } else if (job.status === 'completed') {
-          sendBack({ type: 'DONE' })
-        } else {
-          sendBack({ type: 'ERROR', message: job.error ?? 'Job failed' })
-        }
-      } catch (e) {
+const jobPollingActor = fromCallback<
+  ProcessingEvent,
+  { jobId: string; isAll: boolean }
+>(({ sendBack, input }) => {
+  const interval = setInterval(async () => {
+    try {
+      const job = await getJob(input.jobId)
+      if (job.status === 'running') {
+        const single = !input.isAll && job.totalDocuments <= 1
         sendBack({
-          type: 'ERROR',
-          message: (e as Error)?.message ?? 'Failed to poll job',
+          type: 'PROGRESS',
+          step: job.step ?? undefined,
+          current: single
+            ? job.currentStepIndex
+            : job.currentDocument +
+              (job.totalSteps > 0 ? job.currentStepIndex / job.totalSteps : 0),
+          total: single ? job.totalSteps : job.totalDocuments,
+          overallPercent: job.overallPercent,
         })
+      } else if (job.status === 'completed') {
+        sendBack({ type: 'DONE' })
+      } else if (job.status === 'completed_with_errors') {
+        sendBack({
+          type: 'DONE_WITH_ERRORS',
+          message: job.error ?? 'Batch completed with errors',
+        })
+      } else {
+        sendBack({ type: 'ERROR', message: job.error ?? 'Job failed' })
       }
-    }, 1500)
-    return () => clearInterval(interval)
-  },
-)
+    } catch (e) {
+      sendBack({
+        type: 'ERROR',
+        message: (e as Error)?.message ?? 'Failed to poll job',
+      })
+    }
+  }, 1500)
+  return () => clearInterval(interval)
+})
 
 const llmPollingActor = fromCallback<ProcessingEvent, Record<string, never>>(
   ({ sendBack }) => {
@@ -375,6 +380,7 @@ export const processingMachine = setup({
     setErrorFromEvent: assign({
       error: ({ event }) => {
         if (event.type === 'ERROR') return event.message
+        if (event.type === 'DONE_WITH_ERRORS') return event.message
         return null
       },
     }),
@@ -432,9 +438,11 @@ export const processingMachine = setup({
       })
     },
     invalidateAll: ({ context }) => {
-      if (context.documentId) {
+      const documentId =
+        context.documentId ?? useEditorUiStore.getState().currentDocumentId
+      if (documentId) {
         context.queryClient.invalidateQueries({
-          queryKey: getGetDocumentQueryKey(context.documentId),
+          queryKey: getGetDocumentQueryKey(documentId),
         })
       }
       context.queryClient.invalidateQueries({
@@ -714,7 +722,10 @@ export const processingMachine = setup({
         running: {
           invoke: {
             src: 'jobPollingActor',
-            input: ({ context }) => ({ jobId: context.jobId! }),
+            input: ({ context }) => ({
+              jobId: context.jobId!,
+              isAll: context.documentId === null,
+            }),
           },
           on: {
             PROGRESS: {
@@ -723,6 +734,10 @@ export const processingMachine = setup({
             DONE: {
               target: '#processing.idle',
               actions: ['invalidateAll'],
+            },
+            DONE_WITH_ERRORS: {
+              target: '#processing.idle',
+              actions: ['invalidateAll', 'setErrorFromEvent', 'surfaceError'],
             },
             ERROR: {
               target: '#processing.idle',

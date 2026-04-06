@@ -9,6 +9,7 @@ export type JobStatus = (typeof JobStatus)[keyof typeof JobStatus]
 export const JobStatus = {
   running: 'running',
   completed: 'completed',
+  completed_with_errors: 'completed_with_errors',
   cancelled: 'cancelled',
   failed: 'failed',
 } as const
