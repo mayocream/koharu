@@ -31,6 +31,7 @@ import {
 } from '@/components/ui/tooltip'
 import { FontSelect } from '@/components/ui/font-select'
 import { useEditorUiStore } from '@/lib/stores/editorUiStore'
+import { usePreferencesStore } from '@/lib/stores/preferencesStore'
 import { useListFonts, useGetGoogleFontsCatalog } from '@/lib/api/system/system'
 import {
   getGetDocumentQueryKey,
@@ -207,7 +208,8 @@ export function RenderControlsPanel() {
     updateTextBlocks,
   } = useTextBlocks()
   const documentId = currentDocument?.id
-  const documentFont = currentDocument?.style?.defaultFont ?? undefined
+  const appDefaultFont = usePreferencesStore((state) => state.defaultFont)
+  const documentFont = currentDocument?.style?.defaultFont ?? appDefaultFont
   const queryClient = useQueryClient()
   const { t } = useTranslation()
   const selectedBlock =
@@ -330,6 +332,8 @@ export function RenderControlsPanel() {
   }
 
   const updateDocumentDefaultFont = (value: string) => {
+    // Remember as app-level default for future documents
+    usePreferencesStore.getState().setDefaultFont(value)
     if (!documentId) return
     void updateDocumentStyle(documentId, {
       defaultFont: value,
