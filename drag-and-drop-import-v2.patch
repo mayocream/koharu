@@ -1,5 +1,54 @@
-﻿diff --git a/koharu-rpc/src/api.rs b/koharu-rpc/src/api.rs
-index 855e9e2..6169554 100644
+diff --git a/koharu-app/src/storage.rs b/koharu-app/src/storage.rs
+index f76b2e1..75b9a7d 100644
+--- a/koharu-app/src/storage.rs
++++ b/koharu-app/src/storage.rs
+@@ -244,8 +244,9 @@ impl Storage {
+         replace: bool,
+     ) -> Result<Vec<Document>> {
+         use rayon::iter::{IntoParallelIterator, ParallelIterator};
++        use std::collections::HashSet;
+ 
+-        let pages: Vec<Document> = files
++        let mut pages: Vec<Document> = files
+             .into_par_iter()
+             .filter_map(|file| {
+                 let reader = image::ImageReader::new(std::io::Cursor::new(&file.data))
+@@ -269,7 +270,16 @@ impl Storage {
+             })
+             .collect();
+ 
++        // Document ids are content hashes, so keep only one entry per image payload.
++        let mut seen_ids = HashSet::new();
++        pages.retain(|page| seen_ids.insert(page.id.clone()));
++
+         let mut project = self.project.write().await;
++        if !replace {
++            let existing_ids: HashSet<&str> =
++                project.pages.iter().map(|page| page.id.as_str()).collect();
++            pages.retain(|page| !existing_ids.contains(page.id.as_str()));
++        }
+         if replace {
+             project.pages.clear();
+         }
+diff --git a/koharu-core/src/protocol.rs b/koharu-core/src/protocol.rs
+index 5393d4a..21ff0a6 100644
+--- a/koharu-core/src/protocol.rs
++++ b/koharu-core/src/protocol.rs
+@@ -173,6 +173,12 @@ pub enum ImportMode {
+ pub struct ImportResult {
+     pub total_count: usize,
+     pub documents: Vec<DocumentSummary>,
++    #[serde(default)]
++    pub imported_count: usize,
++    #[serde(default)]
++    pub skipped_count: usize,
++    #[serde(default)]
++    pub warnings: Vec<String>,
+ }
+ 
+ #[derive(Debug, Clone, Copy, Serialize, Deserialize, JsonSchema, ToSchema)]
+diff --git a/koharu-rpc/src/api.rs b/koharu-rpc/src/api.rs
+index 855e9e2..8751ac7 100644
 --- a/koharu-rpc/src/api.rs
 +++ b/koharu-rpc/src/api.rs
 @@ -11,9 +11,9 @@ use axum::{
@@ -23,14 +72,42 @@ index 855e9e2..6169554 100644
          .routes(routes!(get_document))
          .routes(routes!(update_document_style))
          .routes(routes!(get_blob))
-@@ -604,6 +605,69 @@ async fn import_documents(
-     }))
- }
+@@ -559,6 +560,7 @@ async fn import_documents(
+     mut multipart: Multipart,
+ ) -> ApiResult<Json<koharu_core::ImportResult>> {
+     let resources = state.resources()?;
++    let total_before = resources.storage.page_count().await;
+     let mut uploaded_files = Vec::new();
  
+     while let Some(field) = multipart
+@@ -597,10 +599,103 @@ async fn import_documents(
+     }
+ 
+     let documents = resources.storage.list_pages().await;
++    let imported_count = match query.mode.unwrap_or(koharu_core::ImportMode::Replace) {
++        koharu_core::ImportMode::Replace => documents.len(),
++        koharu_core::ImportMode::Append => documents.len().saturating_sub(total_before),
++    };
+ 
+     Ok(Json(koharu_core::ImportResult {
+         total_count: documents.len(),
+         documents,
++        imported_count,
++        skipped_count: 0,
++        warnings: Vec::new(),
++    }))
++}
++
 +#[derive(Debug, Deserialize, utoipa::ToSchema)]
 +#[serde(rename_all = "camelCase")]
 +struct ImportPathsRequest {
 +    paths: Vec<String>,
++}
++
++struct CollectedImportEntries {
++    files: Vec<koharu_core::FileEntry>,
++    skipped_count: usize,
++    warnings: Vec<String>,
 +}
 +
 +#[utoipa::path(
@@ -53,26 +130,36 @@ index 855e9e2..6169554 100644
 +    Json(request): Json<ImportPathsRequest>,
 +) -> ApiResult<Json<koharu_core::ImportResult>> {
 +    let resources = state.resources()?;
++    let total_before = resources.storage.page_count().await;
 +
 +    if request.paths.is_empty() {
 +        return Err(ApiError::bad_request("No files uploaded"));
 +    }
 +
-+    let files = request
-+        .paths
-+        .iter()
-+        .map(|path| {
-+            let data = std::fs::read(path).map_err(|error| ApiError::internal(error.into()))?;
-+            let name = std::path::Path::new(path)
-+                .file_name()
-+                .and_then(|name| name.to_str())
-+                .ok_or_else(|| ApiError::bad_request(format!("Invalid file path: {path}")))?
-+                .to_string();
-+            Ok(koharu_core::FileEntry { name, data })
-+        })
-+        .collect::<Result<Vec<_>, ApiError>>()?;
++    let collected = request.paths.iter().fold(
++        CollectedImportEntries {
++            files: Vec::new(),
++            skipped_count: 0,
++            warnings: Vec::new(),
++        },
++        |mut collected, path| {
++            let result = collect_image_entries_from_path(std::path::Path::new(path));
++            collected.files.extend(result.files);
++            collected.skipped_count += result.skipped_count;
++            collected.warnings.extend(result.warnings);
++            collected
++        },
++    );
 +
-+    let payload = OpenDocumentsPayload { files };
++    if collected.files.is_empty() {
++        return Err(ApiError::bad_request(
++            "No supported images were found in the dropped files or folders",
++        ));
++    }
++
++    let payload = OpenDocumentsPayload {
++        files: collected.files,
++    };
 +    match query.mode.unwrap_or(ImportMode::Append) {
 +        ImportMode::Replace => {
 +            io::open_documents(resources.clone(), payload).await?;
@@ -83,16 +170,119 @@ index 855e9e2..6169554 100644
 +    }
 +
 +    let documents = resources.storage.list_pages().await;
++    let imported_count = match query.mode.unwrap_or(ImportMode::Append) {
++        ImportMode::Replace => documents.len(),
++        ImportMode::Append => documents.len().saturating_sub(total_before),
++    };
 +
 +    Ok(Json(koharu_core::ImportResult {
 +        total_count: documents.len(),
 +        documents,
-+    }))
++        imported_count,
++        skipped_count: collected.skipped_count,
++        warnings: collected.warnings,
+     }))
+ }
+ 
+@@ -1468,6 +1563,98 @@ fn binary_response(data: Vec<u8>, content_type: &str, filename: Option<String>)
+     response
+ }
+ 
++fn collect_image_entries_from_path(path: &std::path::Path) -> CollectedImportEntries {
++    if path.is_dir() {
++        let mut entries = match std::fs::read_dir(path) {
++            Ok(entries) => match entries.collect::<Result<Vec<_>, _>>() {
++                Ok(entries) => entries,
++                Err(error) => {
++                    return CollectedImportEntries {
++                        files: Vec::new(),
++                        skipped_count: 1,
++                        warnings: vec![format!(
++                            "Skipped unreadable folder entry in {} ({error})",
++                            path.display()
++                        )],
++                    };
++                }
++            },
++            Err(error) => {
++                return CollectedImportEntries {
++                    files: Vec::new(),
++                    skipped_count: 1,
++                    warnings: vec![format!(
++                        "Skipped unreadable folder: {} ({error})",
++                        path.display()
++                    )],
++                };
++            }
++        };
++        entries.sort_by_key(|entry| entry.path());
++
++        let mut collected = CollectedImportEntries {
++            files: Vec::new(),
++            skipped_count: 0,
++            warnings: Vec::new(),
++        };
++        for entry in entries {
++            let result = collect_image_entries_from_path(&entry.path());
++            collected.files.extend(result.files);
++            collected.skipped_count += result.skipped_count;
++            collected.warnings.extend(result.warnings);
++        }
++        return collected;
++    }
++
++    if !is_supported_image_path(path) {
++        return CollectedImportEntries {
++            files: Vec::new(),
++            skipped_count: 1,
++            warnings: Vec::new(),
++        };
++    }
++
++    let data = match std::fs::read(path) {
++        Ok(data) => data,
++        Err(error) => {
++            return CollectedImportEntries {
++                files: Vec::new(),
++                skipped_count: 1,
++                warnings: vec![format!(
++                    "Skipped unreadable file: {} ({error})",
++                    path.display()
++                )],
++            };
++        }
++    };
++    let Some(name) = path.file_name().and_then(|name| name.to_str()) else {
++        return CollectedImportEntries {
++            files: Vec::new(),
++            skipped_count: 1,
++            warnings: vec![format!("Skipped invalid file path: {}", path.display())],
++        };
++    };
++
++    CollectedImportEntries {
++        files: vec![koharu_core::FileEntry {
++            name: name.to_string(),
++            data,
++        }],
++        skipped_count: 0,
++        warnings: Vec::new(),
++    }
 +}
 +
- // ---------------------------------------------------------------------------
- // Processing
- // ---------------------------------------------------------------------------
++fn is_supported_image_path(path: &std::path::Path) -> bool {
++    matches!(
++        path.extension()
++            .and_then(|ext| ext.to_str())
++            .map(|ext| ext.to_ascii_lowercase())
++            .as_deref(),
++        Some("png" | "jpg" | "jpeg" | "webp")
++    )
++}
++
+ fn export_layer_ref(
+     document: &Document,
+     layer: ExportLayer,
 diff --git a/ui/app/(app)/layout.tsx b/ui/app/(app)/layout.tsx
 index 5963d12..a1dae34 100644
 --- a/ui/app/(app)/layout.tsx
@@ -112,6 +302,35 @@ index 5963d12..a1dae34 100644
 +      <AppDropzone />
      </div>
    )
+ }
+diff --git a/ui/components/ActivityBubble.tsx b/ui/components/ActivityBubble.tsx
+index a1ae438..debb6a8 100644
+--- a/ui/components/ActivityBubble.tsx
++++ b/ui/components/ActivityBubble.tsx
+@@ -160,6 +160,9 @@ function OperationCard({
+     inpaint: t('mask.inpaint'),
+     llmGenerate: t('llm.generate'),
+     render: t('processing.render'),
++    preparingImport: 'Preparing import',
++    scanningFolders: 'Scanning dropped folders',
++    importingFiles: 'Importing files',
+   }
+ 
+   const stepLabel = ctx.step ? (stepLabels[ctx.step] ?? ctx.step) : undefined
+diff --git a/ui/lib/api/schemas/importResult.ts b/ui/lib/api/schemas/importResult.ts
+index 0b79cad..4725b2f 100644
+--- a/ui/lib/api/schemas/importResult.ts
++++ b/ui/lib/api/schemas/importResult.ts
+@@ -8,5 +8,10 @@ import type { DocumentSummary } from './documentSummary'
+ export interface ImportResult {
+   documents: DocumentSummary[]
+   /** @minimum 0 */
++  importedCount: number
++  /** @minimum 0 */
++  skippedCount: number
++  /** @minimum 0 */
+   totalCount: number
++  warnings: string[]
  }
 diff --git a/ui/lib/filePicker.ts b/ui/lib/filePicker.ts
 index 427b1f1..bb717ad 100644
@@ -150,7 +369,7 @@ index 427b1f1..bb717ad 100644
    } catch {
      return null // user cancelled
 diff --git a/ui/lib/machines/processingMachine.ts b/ui/lib/machines/processingMachine.ts
-index 48184fe..588a619 100644
+index 48184fe..358f2c6 100644
 --- a/ui/lib/machines/processingMachine.ts
 +++ b/ui/lib/machines/processingMachine.ts
 @@ -2,12 +2,17 @@ import { setup, assign, fromPromise, fromCallback } from 'xstate'
@@ -210,7 +429,7 @@ index 48184fe..588a619 100644
    | { type: 'START_DETECT'; documentId: string }
    | { type: 'START_RECOGNIZE'; documentId: string }
    | { type: 'START_INPAINT'; documentId: string }
-@@ -141,8 +170,24 @@ const clearProgressBarValue = () => {
+@@ -141,8 +170,27 @@ const clearProgressBarValue = () => {
  
  const importActor = fromPromise<
    ImportResult,
@@ -224,7 +443,10 @@ index 48184fe..588a619 100644
  >(async ({ input }) => {
 +  if (input.paths) {
 +    if (input.paths.length === 0) throw new Error('__CANCELLED__')
-+    return importDocumentsFromPaths(input.paths, input.mode)
++    return importDocumentsFromPaths(
++      Array.from(new Set(input.paths)),
++      input.mode,
++    )
 +  }
 +
 +  if (input.files) {
@@ -236,22 +458,73 @@ index 48184fe..588a619 100644
    const picked =
      input.source === 'folder'
        ? await pickImageFolderFiles()
-@@ -466,6 +511,14 @@ export const processingMachine = setup({
+@@ -344,6 +392,25 @@ export const processingMachine = setup({
+       overallPercent: () => 0,
+       error: () => null,
+     }),
++    setImportStepFromEvent: assign({
++      step: ({ event }) => {
++        if (event.type === 'START_IMPORT_PATHS') return 'scanningFolders'
++        if (event.type === 'START_IMPORT_FILES') return 'importingFiles'
++        if (event.type === 'START_IMPORT') return 'preparingImport'
++        return null
++      },
++      current: () => 0,
++      total: ({ event }) => {
++        if (event.type === 'START_IMPORT_PATHS') {
++          return Array.from(new Set(event.paths)).length
++        }
++        if (event.type === 'START_IMPORT_FILES') {
++          return filterImageFiles(event.files).length
++        }
++        return 0
++      },
++      overallPercent: () => 0,
++    }),
+     setDocumentIdFromEvent: assign({
+       documentId: ({ event }) => {
+         if ('documentId' in event && typeof event.documentId === 'string') {
+@@ -441,6 +508,22 @@ export const processingMachine = setup({
+         queryKey: getListDocumentsQueryKey(),
+       })
+     },
++    surfaceImportWarnings: ({ event }) => {
++      const result = (event as { output?: ImportResult }).output
++      if (!result) return
++      if (result.skippedCount === 0 && result.warnings.length === 0) return
++
++      const preview = result.warnings.slice(0, 3).join(' ')
++      const suffix =
++        result.warnings.length > 3
++          ? ` Plus ${result.warnings.length - 3} more.`
++          : ''
++      useEditorUiStore
++        .getState()
++        .showError(
++          `Imported ${result.importedCount} image${result.importedCount === 1 ? '' : 's'}, skipped ${result.skippedCount}.${preview ? ` ${preview}` : ''}${suffix}`,
++        )
++    },
+   },
+   guards: {
+     hasJobId: ({ context }) => context.jobId != null,
+@@ -464,7 +547,15 @@ export const processingMachine = setup({
+       on: {
+         START_IMPORT: {
            target: 'importing',
-           actions: ['resetContext'],
-         },
+-          actions: ['resetContext'],
++          actions: ['resetContext', 'setImportStepFromEvent'],
++        },
 +        START_IMPORT_FILES: {
 +          target: 'importing',
-+          actions: ['resetContext'],
++          actions: ['resetContext', 'setImportStepFromEvent'],
 +        },
 +        START_IMPORT_PATHS: {
 +          target: 'importing',
-+          actions: ['resetContext'],
-+        },
++          actions: ['resetContext', 'setImportStepFromEvent'],
+         },
          START_DETECT: {
            target: 'detecting',
-           actions: ['resetContext', 'setDocumentIdFromEvent'],
-@@ -520,8 +573,19 @@ export const processingMachine = setup({
+@@ -520,8 +611,19 @@ export const processingMachine = setup({
        invoke: {
          src: 'importActor',
          input: ({ event }) => {
@@ -273,3 +546,11 @@ index 48184fe..588a619 100644
          },
          onDone: {
            target: 'idle',
+@@ -534,6 +636,7 @@ export const processingMachine = setup({
+                 useEditorUiStore.getState().setCurrentDocumentId(firstId)
+               }
+             },
++            'surfaceImportWarnings',
+           ],
+         },
+         onError: {
