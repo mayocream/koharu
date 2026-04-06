@@ -4,7 +4,7 @@
 
 ML-powered manga translator, written in **Rust**.
 
-Koharu introduces a local-first workflow for manga translation, utilizing the power of ML to automate the process. It combines the capabilities of object detection, OCR, inpainting, and LLMs to create a seamless translation experience.
+Koharu introduces a local-first workflow for manga translation, utilizing the power of ML to automate the process. It combines the capabilities of [object detection](https://en.wikipedia.org/wiki/Object_detection), [OCR](https://en.wikipedia.org/wiki/Optical_character_recognition), [inpainting](https://en.wikipedia.org/wiki/Inpainting), and [large language models](https://en.wikipedia.org/wiki/Large_language_model) to create a seamless translation experience.
 
 Under the hood, Koharu uses [candle](https://github.com/huggingface/candle) and [llama.cpp](https://github.com/ggml-org/llama.cpp) for high-performance inference, with [Tauri](https://github.com/tauri-apps/tauri) for the desktop app. All components are written in Rust, ensuring safety and speed.
 
@@ -21,11 +21,11 @@ Under the hood, Koharu uses [candle](https://github.com/huggingface/candle) and 
 ## Features
 
 - Automatic detection of text regions, speech bubbles, and cleanup masks
-- OCR for manga dialogue, captions, and other page text
-- Inpainting to remove source lettering from the page
+- [OCR](https://en.wikipedia.org/wiki/Optical_character_recognition) for manga dialogue, captions, and other page text
+- [Inpainting](https://en.wikipedia.org/wiki/Inpainting) to remove source lettering from the page
 - Translation with local or remote LLM backends
-- Vertical CJK layout and text rendering
-- Layered PSD export with editable text
+- Vertical [CJK](https://en.wikipedia.org/wiki/CJK_characters) layout and text rendering
+- Layered [PSD](https://en.wikipedia.org/wiki/Adobe_Photoshop#File_format) export with editable text
 - Local HTTP API and MCP server for automation
 
 For installation and first-run guidance, see [Install Koharu](https://koharu.rs/how-to/install-koharu/) and [Translate Your First Page](https://koharu.rs/tutorials/translate-your-first-page/).
@@ -90,9 +90,9 @@ The catalog includes a small set of comic-friendly recommended families. Once ca
 
 ### Text Rendering
 
-Koharu uses a dedicated text renderer rather than browser or OS text primitives. The stack combines [HarfRust](https://crates.io/crates/harfrust) for [HarfBuzz](https://harfbuzz.github.io/)-style OpenType shaping, [ICU4X](https://github.com/unicode-org/icu4x) line segmentation, custom layout engine, real font metrics and glyph bounds from [`skrifa`](https://github.com/googlefonts/fontations/tree/main/skrifa), and [`tiny-skia`](https://github.com/linebender/tiny-skia) for rasterization.
+Koharu uses a dedicated text renderer rather than browser or OS text primitives. The stack combines [HarfRust](https://crates.io/crates/harfrust) for [HarfBuzz](https://harfbuzz.github.io/)-style [OpenType](https://en.wikipedia.org/wiki/OpenType) shaping, [ICU4X](https://github.com/unicode-org/icu4x) line segmentation, custom layout engine, real [font metrics](https://en.wikipedia.org/wiki/Typeface) and [glyph](https://en.wikipedia.org/wiki/Glyph) bounds from [`skrifa`](https://github.com/googlefonts/fontations/tree/main/skrifa), and [`tiny-skia`](https://github.com/linebender/tiny-skia) for [rasterization](https://en.wikipedia.org/wiki/Rasterisation).
 
-The renderer is tuned for manga lettering rather than generic UI text. It supports vertical CJK and horizontal Latin layout, script-aware normalization, font fallback, vertical punctuation centering, automatic size fitting against layout constraints, and manga-oriented stroke and effect passes before compositing text back onto the page.
+The renderer is tuned for manga lettering rather than generic UI text. It supports vertical [CJK](https://en.wikipedia.org/wiki/CJK_characters) and horizontal [Latin](https://en.wikipedia.org/wiki/Latin_script) layout, script-aware normalization, font fallback, vertical punctuation centering, automatic size fitting against layout constraints, and manga-oriented stroke and effect passes before compositing text back onto the page.
 
 ## GPU Acceleration
 
