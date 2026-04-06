@@ -1,0 +1,458 @@
+diff --git a/koharu-app/src/llm.rs b/koharu-app/src/llm.rs
+index 3ea2c70..660dc16 100644
+--- a/koharu-app/src/llm.rs
++++ b/koharu-app/src/llm.rs
+@@ -521,12 +521,14 @@ fn snapshot_from_state(state: &State) -> LlmState {
+ // Operations (merged from ops/llm.rs)
+ // ---------------------------------------------------------------------------
+ 
+-fn local_catalog_models() -> Vec<LlmCatalogModel> {
++fn local_catalog_models(runtime: &RuntimeManager) -> Vec<LlmCatalogModel> {
+     ModelId::iter()
+         .map(|model| LlmCatalogModel {
+             target: local_target(model),
+             name: model.to_string(),
+             languages: language_tags(&model.languages()),
++            downloaded: model.is_downloaded(runtime),
++            download_size: Some(model.download_size().to_string()),
+         })
+         .collect()
+ }
+@@ -586,6 +588,8 @@ async fn provider_catalog(state: &AppResources) -> anyhow::Result<Vec<LlmProvide
+                                     target: provider_target(descriptor.id, &model.id),
+                                     name: model.name,
+                                     languages: supported_locales(),
++                                    downloaded: false,
++                                    download_size: None,
+                                 })
+                                 .collect(),
+                         ),
+@@ -625,6 +629,8 @@ fn static_provider_models(
+                 target: provider_target(descriptor.id, model.id),
+                 name: model.name.to_string(),
+                 languages: supported_locales(),
++                downloaded: false,
++                download_size: None,
+             })
+             .collect(),
+         ProviderCatalogModels::Dynamic(_) => Vec::new(),
+@@ -688,7 +694,7 @@ async fn load_target(
+ 
+ pub async fn llm_catalog(state: AppResources) -> anyhow::Result<LlmCatalog> {
+     Ok(LlmCatalog {
+-        local_models: local_catalog_models(),
++        local_models: local_catalog_models(&state.runtime),
+         providers: provider_catalog(&state).await?,
+     })
+ }
+diff --git a/koharu-core/src/protocol.rs b/koharu-core/src/protocol.rs
+index f5b1163..5393d4a 100644
+--- a/koharu-core/src/protocol.rs
++++ b/koharu-core/src/protocol.rs
+@@ -242,6 +242,9 @@ pub struct LlmCatalogModel {
+     pub target: LlmTarget,
+     pub name: String,
+     pub languages: Vec<String>,
++    pub downloaded: bool,
++    #[serde(default, skip_serializing_if = "Option::is_none")]
++    pub download_size: Option<String>,
+ }
+ 
+ #[derive(Debug, Clone, Copy, Serialize, Deserialize, JsonSchema, ToSchema)]
+diff --git a/koharu-llm/src/lib.rs b/koharu-llm/src/lib.rs
+index cdec1b9..50ec3ac 100644
+--- a/koharu-llm/src/lib.rs
++++ b/koharu-llm/src/lib.rs
+@@ -52,7 +52,8 @@ pub enum ModelId {
+         props(
+             repo = "lmg-anon/vntl-llama3-8b-v2-gguf",
+             filename = "vntl-llama3-8b-v2-hf-q8_0.gguf",
+-            languages = "en-US"
++            languages = "en-US",
++            download_size = "~8 GB"
+         )
+     )]
+     VntlLlama3_8Bv2,
+@@ -61,7 +62,8 @@ pub enum ModelId {
+         props(
+             repo = "LiquidAI/LFM2.5-1.2B-Instruct-GGUF",
+             filename = "LFM2.5-1.2B-Instruct-Q8_0.gguf",
+-            languages = "en-US,ar-SA,zh-CN,fr-FR,de-DE,ja-JP,ko-KR,pt-PT,es-ES"
++            languages = "en-US,ar-SA,zh-CN,fr-FR,de-DE,ja-JP,ko-KR,pt-PT,es-ES",
++            download_size = "~1.3 GB"
+         )
+     )]
+     Lfm2_5_1_2bInstruct,
+@@ -70,7 +72,8 @@ pub enum ModelId {
+         props(
+             repo = "SakuraLLM/Sakura-GalTransl-7B-v3.7",
+             filename = "Sakura-Galtransl-7B-v3.7.gguf",
+-            languages = "zh-CN"
++            languages = "zh-CN",
++            download_size = "~7.5 GB"
+         )
+     )]
+     SakuraGalTransl7Bv3_7,
+@@ -79,7 +82,8 @@ pub enum ModelId {
+         props(
+             repo = "shing3232/Sakura-1.5B-Qwen2.5-v1.0-GGUF-IMX",
+             filename = "sakura-1.5b-qwen2.5-v1.0-Q5KS.gguf",
+-            languages = "zh-CN"
++            languages = "zh-CN",
++            download_size = "~1.2 GB"
+         )
+     )]
+     Sakura1_5bQwen2_5v1_0,
+@@ -88,7 +92,8 @@ pub enum ModelId {
+         props(
+             repo = "Mungert/Hunyuan-MT-7B-GGUF",
+             filename = "Hunyuan-MT-7B-q6_k_m.gguf",
+-            languages = "zh-CN,en-US,fr-FR,pt-PT,pt-BR,es-ES,ja-JP,tr-TR,ru-RU,ar-SA,ko-KR,th-TH,it-IT,de-DE,vi-VN,ms-MY,id-ID,fil-PH,hi-IN,zh-TW,pl-PL,cs-CZ,nl-NL,km-KH,my-MM,fa-IR,gu-IN,ur-PK,te-IN,mr-IN,he-IL,bn-BD,ta-IN,uk-UA,bo-CN,kk-KZ,mn-MN,ug-CN,yue-HK"
++            languages = "zh-CN,en-US,fr-FR,pt-PT,pt-BR,es-ES,ja-JP,tr-TR,ru-RU,ar-SA,ko-KR,th-TH,it-IT,de-DE,vi-VN,ms-MY,id-ID,fil-PH,hi-IN,zh-TW,pl-PL,cs-CZ,nl-NL,km-KH,my-MM,fa-IR,gu-IN,ur-PK,te-IN,mr-IN,he-IL,bn-BD,ta-IN,uk-UA,bo-CN,kk-KZ,mn-MN,ug-CN,yue-HK",
++            download_size = "~6.1 GB"
+         )
+     )]
+     HunyuanMT7B,
+@@ -97,7 +102,8 @@ pub enum ModelId {
+         props(
+             repo = "sugoitoolkit/Sugoi-14B-Ultra-GGUF",
+             filename = "Sugoi-14B-Ultra-Q8_0.gguf",
+-            languages = "en-US"
++            languages = "en-US",
++            download_size = "~14 GB"
+         )
+     )]
+     Sugoi14bUltra,
+@@ -106,7 +112,8 @@ pub enum ModelId {
+         props(
+             repo = "sugoitoolkit/Sugoi-32B-Ultra-GGUF",
+             filename = "Sugoi-32B-Ultra-Q4_K_M.gguf",
+-            languages = "en-US"
++            languages = "en-US",
++            download_size = "~19 GB"
+         )
+     )]
+     Sugoi32bUltra,
+@@ -115,7 +122,8 @@ pub enum ModelId {
+         props(
+             repo = "unsloth/gemma-4-E2B-it-GGUF",
+             filename = "gemma-4-e2b-it-Q8_0.gguf",
+-            languages = "*"
++            languages = "*",
++            download_size = "~2.4 GB"
+         )
+     )]
+     Gemma4E2bIt,
+@@ -124,7 +132,8 @@ pub enum ModelId {
+         props(
+             repo = "unsloth/gemma-4-E4B-it-GGUF",
+             filename = "gemma-4-e4b-it-Q8_0.gguf",
+-            languages = "*"
++            languages = "*",
++            download_size = "~4.8 GB"
+         )
+     )]
+     Gemma4E4bIt,
+@@ -133,7 +142,8 @@ pub enum ModelId {
+         props(
+             repo = "unsloth/gemma-4-26B-A4B-it-GGUF",
+             filename = "gemma-4-26B-A4B-it-Q8_0.gguf",
+-            languages = "*"
++            languages = "*",
++            download_size = "~15 GB"
+         )
+     )]
+     Gemma4_26bA4bIt,
+@@ -142,7 +152,8 @@ pub enum ModelId {
+         props(
+             repo = "unsloth/gemma-4-31B-it-GGUF",
+             filename = "gemma-4-31B-it-Q4_K_M.gguf",
+-            languages = "*"
++            languages = "*",
++            download_size = "~18 GB"
+         )
+     )]
+     Gemma4_31bIt,
+@@ -151,7 +162,8 @@ pub enum ModelId {
+         props(
+             repo = "HauhauCS/Gemma-4-E2B-Uncensored-HauhauCS-Aggressive",
+             filename = "Gemma-4-E2B-Uncensored-HauhauCS-Aggressive-Q8_K_P.gguf",
+-            languages = "*"
++            languages = "*",
++            download_size = "~2.6 GB"
+         )
+     )]
+     Gemma4E2bUncensored,
+@@ -160,7 +172,8 @@ pub enum ModelId {
+         props(
+             repo = "HauhauCS/Gemma-4-E4B-Uncensored-HauhauCS-Aggressive",
+             filename = "Gemma-4-E4B-Uncensored-HauhauCS-Aggressive-Q4_K_M.gguf",
+-            languages = "*"
++            languages = "*",
++            download_size = "~3.1 GB"
+         )
+     )]
+     Gemma4E4bUncensored,
+@@ -169,7 +182,8 @@ pub enum ModelId {
+         props(
+             repo = "unsloth/Qwen3.5-0.8B-GGUF",
+             filename = "Qwen3.5-0.8B-Q8_0.gguf",
+-            languages = "*"
++            languages = "*",
++            download_size = "~0.9 GB"
+         )
+     )]
+     Qwen3_5_0_8b,
+@@ -178,7 +192,8 @@ pub enum ModelId {
+         props(
+             repo = "unsloth/Qwen3.5-2B-GGUF",
+             filename = "Qwen3.5-2B-Q8_0.gguf",
+-            languages = "*"
++            languages = "*",
++            download_size = "~2.1 GB"
+         )
+     )]
+     Qwen3_5_2b,
+@@ -187,7 +202,8 @@ pub enum ModelId {
+         props(
+             repo = "unsloth/Qwen3.5-4B-GGUF",
+             filename = "Qwen3.5-4B-Q8_0.gguf",
+-            languages = "*"
++            languages = "*",
++            download_size = "~4.3 GB"
+         )
+     )]
+     Qwen3_5_4b,
+@@ -196,7 +212,8 @@ pub enum ModelId {
+         props(
+             repo = "unsloth/Qwen3.5-9B-GGUF",
+             filename = "Qwen3.5-9B-Q8_0.gguf",
+-            languages = "*"
++            languages = "*",
++            download_size = "~9.6 GB"
+         )
+     )]
+     Qwen3_5_9b,
+@@ -205,7 +222,8 @@ pub enum ModelId {
+         props(
+             repo = "unsloth/Qwen3.5-27B-GGUF",
+             filename = "Qwen3.5-27B-Q4_K_M.gguf",
+-            languages = "*"
++            languages = "*",
++            download_size = "~16 GB"
+         )
+     )]
+     Qwen3_5_27b,
+@@ -214,7 +232,8 @@ pub enum ModelId {
+         props(
+             repo = "unsloth/Qwen3.5-35B-A3B-GGUF",
+             filename = "Qwen3.5-35B-A3B-Q8_0.gguf",
+-            languages = "*"
++            languages = "*",
++            download_size = "~22 GB"
+         )
+     )]
+     Qwen3_5_35bA3b,
+@@ -223,7 +242,8 @@ pub enum ModelId {
+         props(
+             repo = "HauhauCS/Qwen3.5-2B-Uncensored-HauhauCS-Aggressive",
+             filename = "Qwen3.5-2B-Uncensored-HauhauCS-Aggressive-Q8_0.gguf",
+-            languages = "*"
++            languages = "*",
++            download_size = "~2.1 GB"
+         )
+     )]
+     Qwen3_5_2bUncensored,
+@@ -232,7 +252,8 @@ pub enum ModelId {
+         props(
+             repo = "HauhauCS/Qwen3.5-4B-Uncensored-HauhauCS-Aggressive",
+             filename = "Qwen3.5-4B-Uncensored-HauhauCS-Aggressive-Q8_0.gguf",
+-            languages = "*"
++            languages = "*",
++            download_size = "~4.3 GB"
+         )
+     )]
+     Qwen3_5_4bUncensored,
+@@ -241,7 +262,8 @@ pub enum ModelId {
+         props(
+             repo = "HauhauCS/Qwen3.5-9B-Uncensored-HauhauCS-Aggressive",
+             filename = "Qwen3.5-9B-Uncensored-HauhauCS-Aggressive-Q8_0.gguf",
+-            languages = "*"
++            languages = "*",
++            download_size = "~9.6 GB"
+         )
+     )]
+     Qwen3_5_9bUncensored,
+@@ -250,7 +272,8 @@ pub enum ModelId {
+         props(
+             repo = "HauhauCS/Qwen3.5-27B-Uncensored-HauhauCS-Aggressive",
+             filename = "Qwen3.5-27B-Uncensored-HauhauCS-Aggressive-Q4_K_M.gguf",
+-            languages = "*"
++            languages = "*",
++            download_size = "~16 GB"
+         )
+     )]
+     Qwen3_5_27bUncensored,
+@@ -259,7 +282,8 @@ pub enum ModelId {
+         props(
+             repo = "HauhauCS/Qwen3.5-35B-A3B-Uncensored-HauhauCS-Aggressive",
+             filename = "Qwen3.5-35B-A3B-Uncensored-HauhauCS-Aggressive-Q8_0.gguf",
+-            languages = "*"
++            languages = "*",
++            download_size = "~22 GB"
+         )
+     )]
+     Qwen3_5_35bA3bUncensored,
+@@ -270,10 +294,29 @@ impl ModelId {
+         self.get_str(name).expect("missing model property")
+     }
+ 
++    pub fn repo(&self) -> &'static str {
++        self.property("repo")
++    }
++
++    pub fn filename(&self) -> &'static str {
++        self.property("filename")
++    }
++
++    pub fn download_size(&self) -> &'static str {
++        self.property("download_size")
++    }
++
++    pub fn is_downloaded(&self, runtime: &RuntimeManager) -> bool {
++        runtime
++            .downloads()
++            .cached_huggingface_model(self.repo(), self.filename())
++            .is_some()
++    }
++
+     pub async fn get(&self, runtime: &RuntimeManager) -> anyhow::Result<PathBuf> {
+         runtime
+             .downloads()
+-            .huggingface_model(self.property("repo"), self.property("filename"))
++            .huggingface_model(self.repo(), self.filename())
+             .await
+     }
+ 
+diff --git a/koharu-runtime/src/downloads.rs b/koharu-runtime/src/downloads.rs
+index 9327fc4..4892986 100644
+--- a/koharu-runtime/src/downloads.rs
++++ b/koharu-runtime/src/downloads.rs
+@@ -69,9 +69,13 @@ impl Downloads {
+         self.tx.subscribe()
+     }
+ 
++    pub fn cached_huggingface_model(&self, repo: &str, filename: &str) -> Option<PathBuf> {
++        self.huggingface_cache.model(repo.to_string()).get(filename)
++    }
++
+     /// Download a HuggingFace model file, using the local cache first.
+     pub async fn huggingface_model(&self, repo: &str, filename: &str) -> Result<PathBuf> {
+-        if let Some(path) = self.huggingface_cache.model(repo.to_string()).get(filename) {
++        if let Some(path) = self.cached_huggingface_model(repo, filename) {
+             return Ok(path);
+         }
+ 
+diff --git a/ui/components/canvas/CanvasToolbar.tsx b/ui/components/canvas/CanvasToolbar.tsx
+index 5173cb3..2bd95fa 100644
+--- a/ui/components/canvas/CanvasToolbar.tsx
++++ b/ui/components/canvas/CanvasToolbar.tsx
+@@ -43,6 +43,9 @@ type SelectableLlmModel = {
+   provider?: LlmProviderCatalog
+ }
+ 
++const modelBadgeClassName =
++  'rounded px-1 py-0.5 text-[9px] leading-none font-semibold uppercase'
++
+ const flattenCatalogModels = (catalog?: LlmCatalog): SelectableLlmModel[] => [
+   ...(catalog?.localModels ?? []).map((model) => ({ model })),
+   ...(catalog?.providers ?? [])
+@@ -234,6 +237,12 @@ function LlmStatusPopover() {
+   const selectedModelLanguages = selectedModel?.model.languages ?? []
+   const selectedIsLoaded =
+     llmReady && sameLlmTarget(llmState?.target, selectedTarget)
++  const selectedDownloadSize = selectedModel?.model.downloadSize
++  const selectedRequiresDownload =
++    !!selectedModel &&
++    !selectedModel.provider &&
++    !selectedModel.model.downloaded &&
++    !selectedIsLoaded
+ 
+   const handleSetSelectedModel = (key: string) => {
+     const nextSelection = llmModels.find(
+@@ -377,9 +386,19 @@ function LlmStatusPopover() {
+                   >
+                     <span className='flex items-center gap-1.5'>
+                       {provider ? (
+-                        <span className='bg-primary/10 text-primary rounded px-1 py-0.5 text-[9px] leading-none font-semibold uppercase'>
++                        <span
++                          className={`bg-primary/10 text-primary ${modelBadgeClassName}`}
++                        >
+                           {provider.name}
+                         </span>
++                      ) : model.downloaded ? (
++                        <span
++                          className={`bg-emerald-500/10 text-emerald-600 ${modelBadgeClassName}`}
++                        >
++                          {t('llm.downloadedBadge', {
++                            defaultValue: 'Downloaded',
++                          })}
++                        </span>
+                       ) : null}
+                       {model.name}
+                     </span>
+@@ -395,14 +414,29 @@ function LlmStatusPopover() {
+               size='sm'
+               onClick={handleToggleLoadUnload}
+               disabled={!selectedTarget || busy}
+-              className='h-6 shrink-0 gap-1 px-2 text-[11px]'
++              className='h-auto min-h-6 shrink-0 gap-1 px-2 py-1 text-[11px]'
+             >
+               {busy ? (
+                 <LoaderCircleIcon className='size-3 animate-spin' />
+               ) : null}
+-              {selectedIsLoaded || llmUnloading
+-                ? t('llm.unload')
+-                : t('llm.load')}
++              {selectedIsLoaded || llmUnloading ? (
++                t('llm.unload')
++              ) : selectedRequiresDownload ? (
++                <span className='flex flex-col items-start leading-tight'>
++                  <span>
++                    {t('llm.downloadAndLoad', {
++                      defaultValue: 'Download & Load',
++                    })}
++                  </span>
++                  {selectedDownloadSize ? (
++                    <span className='text-[9px] opacity-80'>
++                      {selectedDownloadSize}
++                    </span>
++                  ) : null}
++                </span>
++              ) : (
++                t('llm.load')
++              )}
+             </Button>
+           </div>
+         </div>
+diff --git a/ui/lib/api/schemas/llmCatalogModel.ts b/ui/lib/api/schemas/llmCatalogModel.ts
+index ff0b353..c3c026f 100644
+--- a/ui/lib/api/schemas/llmCatalogModel.ts
++++ b/ui/lib/api/schemas/llmCatalogModel.ts
+@@ -3,10 +3,12 @@
+  * Do not edit manually.
+  * OpenAPI spec version: 0.0.1
+  */
+-import type { LlmTarget } from './llmTarget'
++import type { LlmTarget } from './llmTarget';
+ 
+ export interface LlmCatalogModel {
+-  languages: string[]
+-  name: string
+-  target: LlmTarget
++  downloaded: boolean;
++  downloadSize?: string;
++  languages: string[];
++  name: string;
++  target: LlmTarget;
+ }
