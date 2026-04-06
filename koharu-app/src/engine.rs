@@ -1002,31 +1002,6 @@ inventory::submit! {
     }
 }
 
-// Aliases so users can select these in Settings → Engines without adding a new engine type.
-inventory::submit! {
-    EngineInfo {
-        id: DEEPL_ID,
-        name: "DeepL",
-        needs: &[Artifact::OcrText],
-        produces: &[Artifact::Translations],
-        load: |_res| Box::pin(async move {
-            Ok(Box::new(LlmTranslateEngine) as Box<dyn Engine>)
-        }),
-    }
-}
-
-inventory::submit! {
-    EngineInfo {
-        id: GOOGLE_TRANSLATE_ID,
-        name: "Google Cloud Translation",
-        needs: &[Artifact::OcrText],
-        produces: &[Artifact::Translations],
-        load: |_res| Box::pin(async move {
-            Ok(Box::new(LlmTranslateEngine) as Box<dyn Engine>)
-        }),
-    }
-}
-
 // --- Lama Inpainting ------------------------------------------------------
 
 struct LamaInpaintEngine(koharu_ml::lama::Lama);
