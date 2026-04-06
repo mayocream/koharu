@@ -245,7 +245,50 @@ impl Storage {
     ) -> Result<Vec<Document>> {
         use rayon::iter::{IntoParallelIterator, ParallelIterator};
 
-        let pages: Vec<Document> = files
+        // Flatten files by unpacking archives (.zip, .cbz) in memory.
+        let mut flat_files = Vec::new();
+        for file in files {
+            let path = Path::new(&file.name);
+            let ext = path.extension().and_then(|s| s.to_str()).unwrap_or("").to_lowercase();
+            if ext == "zip" || ext == "cbz" {
+                match zip::ZipArchive::new(std::io::Cursor::new(&file.data)) {
+                    Ok(mut archive) => {
+                        for i in 0..archive.len() {
+                            if let Ok(mut zf) = archive.by_index(i) {
+                                if zf.is_file() {
+                                    let zf_name = zf.name().to_string();
+                                    let zf_path = Path::new(&zf_name);
+                                    let zf_ext = zf_path.extension().and_then(|s| s.to_str()).unwrap_or("").to_lowercase();
+                                    if matches!(zf_ext.as_str(), "png" | "jpg" | "jpeg" | "webp") {
+                                        use std::io::Read;
+                                        let mut buf = Vec::new();
+                                        if zf.read_to_end(&mut buf).is_ok() {
+                                            // Limit extraction size to 100MB per image to prevent OOM
+                                            if buf.len() > 100 * 1024 * 1024 {
+                                                tracing::warn!("Skipping enormous file inside archive: {}", zf_name);
+                                                continue;
+                                            }
+                                            // Replace slashes with underscores for a flat, descriptive name
+                                            let name = zf_name.replace('/', "_").replace('\\', "_");
+                                            flat_files.push(koharu_core::FileEntry { name, data: buf });
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    }
+                    Err(e) => {
+                        tracing::warn!("Failed to read archive {}: {e}", file.name);
+                        // Fallback to normal if it's somehow not actually a zip
+                        flat_files.push(file);
+                    }
+                }
+            } else {
+                flat_files.push(file);
+            }
+        }
+
+        let pages: Vec<Document> = flat_files
             .into_par_iter()
             .filter_map(|file| {
                 let reader = image::ImageReader::new(std::io::Cursor::new(&file.data))

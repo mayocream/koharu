@@ -3,14 +3,15 @@
 import { fileOpen, directoryOpen } from 'browser-fs-access'
 
 const IMAGE_EXTENSIONS = ['.png', '.jpg', '.jpeg', '.webp']
+const ARCHIVE_EXTENSIONS = ['.zip', '.cbz']
 
 export const pickImageFiles = async (): Promise<File[] | null> => {
   try {
     const files = await fileOpen({
-      mimeTypes: ['image/*'],
-      extensions: IMAGE_EXTENSIONS,
+      mimeTypes: ['image/*', 'application/zip', 'application/x-cbz'],
+      extensions: [...IMAGE_EXTENSIONS, ...ARCHIVE_EXTENSIONS],
       multiple: true,
-      description: 'Select images',
+      description: 'Select images or archives',
     })
     const result = Array.isArray(files) ? files : [files]
     return result.length > 0 ? result : null
