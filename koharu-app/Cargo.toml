@@ -43,3 +43,4 @@ lru = { workspace = true }
 petgraph = { workspace = true }
 petname = { workspace = true }
 serde_json = { workspace = true }
+zip.workspace = true

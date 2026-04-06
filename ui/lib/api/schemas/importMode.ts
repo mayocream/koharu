@@ -4,9 +4,10 @@
  * OpenAPI spec version: 0.0.1
  */
 
-export type ImportMode = (typeof ImportMode)[keyof typeof ImportMode]
+export type ImportMode = typeof ImportMode[keyof typeof ImportMode];
+
 
 export const ImportMode = {
   replace: 'replace',
   append: 'append',
-} as const
+} as const;

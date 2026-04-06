@@ -6,6 +6,6 @@
 
 export interface TopFont {
   /** @minimum 0 */
-  index: number
-  score: number
+  index: number;
+  score: number;
 }

@@ -3,10 +3,10 @@
  * Do not edit manually.
  * OpenAPI spec version: 0.0.1
  */
-import type { DocumentSummary } from './documentSummary'
+import type { DocumentSummary } from './documentSummary';
 
 export interface ImportResult {
-  documents: DocumentSummary[]
+  documents: DocumentSummary[];
   /** @minimum 0 */
-  totalCount: number
+  totalCount: number;
 }

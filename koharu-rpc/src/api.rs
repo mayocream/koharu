@@ -8,7 +8,7 @@ use axum::{
     },
     response::{IntoResponse, Response},
 };
-use koharu_app::{AppResources, config as app_config, edit, engine, io, llm, pipeline};
+use koharu_app::{AppResources, config as app_config, edit, engine, io, llm, ops, pipeline};
 use koharu_core::{
     CreateTextBlock, Document, DocumentDetail, DocumentSummary, DownloadState, ExportLayer,
     ExportResult, FontFaceInfo, JobState, JobStatus, LlmCatalog, LlmLoadRequest, LlmState,
@@ -41,6 +41,7 @@ impl ApiState {
 pub fn api() -> (axum::Router<ApiState>, utoipa::openapi::OpenApi) {
     OpenApiRouter::default()
         .routes(routes!(list_documents, import_documents))
+        .routes(routes!(import_project))
         .routes(routes!(get_document))
         .routes(routes!(get_blob))
         .routes(routes!(get_document_thumbnail))
@@ -56,6 +57,7 @@ pub fn api() -> (axum::Router<ApiState>, utoipa::openapi::OpenApi) {
         .routes(routes!(patch_text_block, delete_text_block))
         .routes(routes!(export_document))
         .routes(routes!(batch_export))
+        .routes(routes!(export_project))
         .routes(routes!(get_llm, load_llm, unload_llm))
         .routes(routes!(get_llm_catalog))
         .routes(routes!(start_pipeline))
@@ -352,6 +354,25 @@ async fn get_document_thumbnail(
     let bytes =
         koharu_app::utils::encode_image_dynamic(&thumbnail, "webp").map_err(ApiError::internal)?;
     Ok(binary_response(bytes, "image/webp", None))
+}
+
+#[utoipa::path(
+    post,
+    path = "/imports/project",
+    operation_id = "importProject",
+    tag = "documents",
+    responses(
+        (status = 200, body = koharu_core::ImportProjectResult),
+        (status = 503, body = ApiError),
+    ),
+)]
+#[tracing::instrument(level = "info", skip_all)]
+async fn import_project(
+    State(state): State<ApiState>,
+) -> ApiResult<Json<koharu_core::ImportProjectResult>> {
+    let resources = state.resources()?;
+    let result = ops::project::import_project(resources).await?;
+    Ok(Json(result))
 }
 
 #[utoipa::path(
@@ -1261,6 +1282,25 @@ async fn batch_export(
     Ok(Json(ExportResult { count }))
 }
 
+#[utoipa::path(
+    post,
+    path = "/exports/project",
+    operation_id = "exportProject",
+    tag = "exports",
+    responses(
+        (status = 200, body = koharu_core::ExportProjectResult),
+        (status = 503, body = ApiError),
+    ),
+)]
+#[tracing::instrument(level = "info", skip_all)]
+async fn export_project(
+    State(state): State<ApiState>,
+) -> ApiResult<Json<koharu_core::ExportProjectResult>> {
+    let resources = state.resources()?;
+    let result = ops::project::export_project(resources).await?;
+    Ok(Json(result))
+}
+
 async fn find_document(resources: &AppResources, document_id: &str) -> ApiResult<Document> {
     resources
         .storage
@@ -1375,6 +1415,12 @@ fn apply_text_block_patch(block: &mut TextBlock, patch: TextBlockPatch) -> bool 
     {
         block.lock_layout_box = true;
     }
+
+    if invalidate_render {
+        block.rendered = None;
+        block.rendered_direction = None;
+    }
+
     invalidate_render
 }
 

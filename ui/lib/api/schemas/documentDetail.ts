@@ -3,36 +3,36 @@
  * Do not edit manually.
  * OpenAPI spec version: 0.0.1
  */
-import type { TextBlockDetail } from './textBlockDetail'
+import type { TextBlockDetail } from './textBlockDetail';
 
 export interface DocumentDetail {
   /**
-   * Blob hash for the brush layer.
-   * @nullable
-   */
-  brushLayer?: string | null
+     * Blob hash for the brush layer.
+     * @nullable
+     */
+  brushLayer?: string | null;
   /** @minimum 0 */
-  height: number
-  id: string
+  height: number;
+  id: string;
   /** Blob hash for the source image layer. */
-  image: string
+  image: string;
   /**
-   * Blob hash for the inpainted layer.
-   * @nullable
-   */
-  inpainted?: string | null
-  name: string
+     * Blob hash for the inpainted layer.
+     * @nullable
+     */
+  inpainted?: string | null;
+  name: string;
   /**
-   * Blob hash for the rendered composite layer.
-   * @nullable
-   */
-  rendered?: string | null
+     * Blob hash for the rendered composite layer.
+     * @nullable
+     */
+  rendered?: string | null;
   /**
-   * Blob hash for the segmentation mask layer.
-   * @nullable
-   */
-  segment?: string | null
-  textBlocks: TextBlockDetail[]
+     * Blob hash for the segmentation mask layer.
+     * @nullable
+     */
+  segment?: string | null;
+  textBlocks: TextBlockDetail[];
   /** @minimum 0 */
-  width: number
+  width: number;
 }

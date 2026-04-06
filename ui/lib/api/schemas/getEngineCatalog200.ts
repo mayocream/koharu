@@ -3,15 +3,15 @@
  * Do not edit manually.
  * OpenAPI spec version: 0.0.1
  */
-import type { EngineCatalogEntry } from './engineCatalogEntry'
+import type { EngineCatalogEntry } from './engineCatalogEntry';
 
 export type GetEngineCatalog200 = {
-  bubbleDetectors: EngineCatalogEntry[]
-  detectors: EngineCatalogEntry[]
-  fontDetectors: EngineCatalogEntry[]
-  inpainters: EngineCatalogEntry[]
-  ocr: EngineCatalogEntry[]
-  renderers: EngineCatalogEntry[]
-  segmenters: EngineCatalogEntry[]
-  translators: EngineCatalogEntry[]
-}
+  bubbleDetectors: EngineCatalogEntry[];
+  detectors: EngineCatalogEntry[];
+  fontDetectors: EngineCatalogEntry[];
+  inpainters: EngineCatalogEntry[];
+  ocr: EngineCatalogEntry[];
+  renderers: EngineCatalogEntry[];
+  segmenters: EngineCatalogEntry[];
+  translators: EngineCatalogEntry[];
+};

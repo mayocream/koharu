@@ -2,6 +2,7 @@ pub mod commands;
 pub mod events;
 pub mod parse;
 pub mod protocol;
+pub mod project;
 pub mod views;
 
 mod effect;
@@ -14,6 +15,7 @@ pub use events::*;
 pub use font::{FontPrediction, NamedFontPrediction, TextDirection, TopFont};
 pub use image::SerializableDynamicImage;
 pub use protocol::*;
+pub use project::*;
 
 use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};

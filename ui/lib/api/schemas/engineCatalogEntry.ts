@@ -5,7 +5,7 @@
  */
 
 export interface EngineCatalogEntry {
-  id: string
-  name: string
-  produces: string[]
+  id: string;
+  name: string;
+  produces: string[];
 }

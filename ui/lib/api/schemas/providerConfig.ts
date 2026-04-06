@@ -11,8 +11,8 @@ export interface ProviderConfig {
   Populated from keyring on `load()`. Serializes as `"[REDACTED]"`.
      * @nullable
      */
-  api_key?: string | null
+  api_key?: string | null;
   /** @nullable */
-  base_url?: string | null
-  id: string
+  base_url?: string | null;
+  id: string;
 }

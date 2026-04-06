@@ -5,5 +5,5 @@
  */
 
 export interface DataConfig {
-  path: string
+  path: string;
 }

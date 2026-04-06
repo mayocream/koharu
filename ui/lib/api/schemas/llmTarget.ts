@@ -3,11 +3,11 @@
  * Do not edit manually.
  * OpenAPI spec version: 0.0.1
  */
-import type { LlmTargetKind } from './llmTargetKind'
+import type { LlmTargetKind } from './llmTargetKind';
 
 export interface LlmTarget {
-  kind: LlmTargetKind
-  modelId: string
+  kind: LlmTargetKind;
+  modelId: string;
   /** @nullable */
-  providerId?: string | null
+  providerId?: string | null;
 }

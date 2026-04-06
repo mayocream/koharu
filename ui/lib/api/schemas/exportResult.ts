@@ -6,5 +6,5 @@
 
 export interface ExportResult {
   /** @minimum 0 */
-  count: number
+  count: number;
 }

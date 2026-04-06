@@ -104,6 +104,8 @@ export type ProcessingEvent =
       params?: { layer?: ExportLayer | null }
     }
   | { type: 'START_BATCH_EXPORT'; layer: ExportLayer }
+  | { type: 'START_EXPORT_PROJECT' }
+  | { type: 'START_IMPORT_PROJECT' }
   | {
       type: 'PROGRESS'
       step?: string
@@ -240,6 +242,16 @@ const batchExportActor = fromPromise<void, { layer: ExportLayer }>(
   },
 )
 
+const exportProjectActor = fromPromise<void, void>(async () => {
+  const { exportProject } = await import('@/lib/api/exports/exports')
+  await exportProject()
+})
+
+const importProjectActor = fromPromise<void, void>(async () => {
+  const { importProject } = await import('@/lib/api/documents/documents')
+  await importProject()
+})
+
 // ---------------------------------------------------------------------------
 // Polling actors (replace SSE)
 // ---------------------------------------------------------------------------
@@ -324,6 +336,8 @@ export const processingMachine = setup({
     llmUnloadActor,
     exportActor,
     batchExportActor,
+    exportProjectActor,
+    importProjectActor,
     jobPollingActor,
     llmPollingActor,
   },
@@ -509,6 +523,32 @@ export const processingMachine = setup({
         START_BATCH_EXPORT: {
           target: 'batchExporting',
           actions: ['resetContext'],
+        },
+        START_EXPORT_PROJECT: {
+          target: 'exportingProject',
+          actions: ['resetContext'],
+        },
+        START_IMPORT_PROJECT: {
+          target: 'importingProject',
+          actions: ['resetContext'],
+        },
+      },
+    },
+
+    // -----------------------------------------------------------------------
+    importingProject: {
+      entry: 'setProgressBarNormal',
+      exit: 'clearProgressBar',
+      invoke: {
+        src: 'importProjectActor',
+        input: () => ({}),
+        onDone: {
+          target: 'idle',
+          actions: ['invalidateDocumentList'],
+        },
+        onError: {
+          target: 'idle',
+          actions: ['setErrorFromInvoke', 'surfaceError'],
         },
       },
     },
@@ -823,6 +863,23 @@ export const processingMachine = setup({
             queryClient: context.queryClient,
           }
         },
+        onDone: {
+          target: 'idle',
+        },
+        onError: {
+          target: 'idle',
+          actions: ['setErrorFromInvoke', 'surfaceError'],
+        },
+      },
+    },
+
+    // -----------------------------------------------------------------------
+    exportingProject: {
+      entry: 'setProgressBarNormal',
+      exit: 'clearProgressBar',
+      invoke: {
+        src: 'exportProjectActor',
+        input: () => ({}),
         onDone: {
           target: 'idle',
         },

@@ -3,10 +3,10 @@
  * Do not edit manually.
  * OpenAPI spec version: 0.0.1
  */
-import type { LlmCatalogModel } from './llmCatalogModel'
-import type { LlmProviderCatalog } from './llmProviderCatalog'
+import type { LlmCatalogModel } from './llmCatalogModel';
+import type { LlmProviderCatalog } from './llmProviderCatalog';
 
 export interface LlmCatalog {
-  localModels: LlmCatalogModel[]
-  providers: LlmProviderCatalog[]
+  localModels: LlmCatalogModel[];
+  providers: LlmProviderCatalog[];
 }

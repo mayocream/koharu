@@ -3,16 +3,16 @@
  * Do not edit manually.
  * OpenAPI spec version: 0.0.1
  */
-import type { TextAlign } from './textAlign'
-import type { TextShaderEffect } from './textShaderEffect'
-import type { TextStrokeStyle } from './textStrokeStyle'
+import type { TextAlign } from './textAlign';
+import type { TextShaderEffect } from './textShaderEffect';
+import type { TextStrokeStyle } from './textStrokeStyle';
 
 export interface TextStyle {
-  color: number[]
-  effect?: null | TextShaderEffect
-  fontFamilies: string[]
+  color: number[];
+  effect?: null | TextShaderEffect;
+  fontFamilies: string[];
   /** @nullable */
-  fontSize?: number | null
-  stroke?: null | TextStrokeStyle
-  textAlign?: null | TextAlign
+  fontSize?: number | null;
+  stroke?: null | TextStrokeStyle;
+  textAlign?: null | TextAlign;
 }

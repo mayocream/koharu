@@ -6,10 +6,10 @@
 
 export interface NamedFontPrediction {
   /** @minimum 0 */
-  index: number
+  index: number;
   /** @nullable */
-  language?: string | null
-  name: string
-  probability: number
-  serif: boolean
+  language?: string | null;
+  name: string;
+  probability: number;
+  serif: boolean;
 }

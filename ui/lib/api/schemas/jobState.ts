@@ -3,24 +3,24 @@
  * Do not edit manually.
  * OpenAPI spec version: 0.0.1
  */
-import type { JobStatus } from './jobStatus'
+import type { JobStatus } from './jobStatus';
 
 export interface JobState {
   /** @minimum 0 */
-  currentDocument: number
+  currentDocument: number;
   /** @minimum 0 */
-  currentStepIndex: number
+  currentStepIndex: number;
   /** @nullable */
-  error?: string | null
-  id: string
-  kind: string
+  error?: string | null;
+  id: string;
+  kind: string;
   /** @minimum 0 */
-  overallPercent: number
-  status: JobStatus
+  overallPercent: number;
+  status: JobStatus;
   /** @nullable */
-  step?: string | null
+  step?: string | null;
   /** @minimum 0 */
-  totalDocuments: number
+  totalDocuments: number;
   /** @minimum 0 */
-  totalSteps: number
+  totalSteps: number;
 }

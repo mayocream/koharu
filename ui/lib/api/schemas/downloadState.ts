@@ -3,19 +3,19 @@
  * Do not edit manually.
  * OpenAPI spec version: 0.0.1
  */
-import type { TransferStatus } from './transferStatus'
+import type { TransferStatus } from './transferStatus';
 
 export interface DownloadState {
   /** @minimum 0 */
-  downloaded: number
+  downloaded: number;
   /** @nullable */
-  error?: string | null
-  filename: string
-  id: string
-  status: TransferStatus
+  error?: string | null;
+  filename: string;
+  id: string;
+  status: TransferStatus;
   /**
-   * @minimum 0
-   * @nullable
-   */
-  total?: number | null
+     * @minimum 0
+     * @nullable
+     */
+  total?: number | null;
 }

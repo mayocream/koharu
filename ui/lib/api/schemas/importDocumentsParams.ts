@@ -3,8 +3,8 @@
  * Do not edit manually.
  * OpenAPI spec version: 0.0.1
  */
-import type { ImportMode } from './importMode'
+import type { ImportMode } from './importMode';
 
 export type ImportDocumentsParams = {
-  mode?: null | ImportMode
-}
+mode?: null | ImportMode;
+};

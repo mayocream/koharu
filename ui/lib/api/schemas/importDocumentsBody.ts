@@ -5,5 +5,5 @@
  */
 
 export type ImportDocumentsBody = {
-  files: Blob[]
-}
+  files: Blob[];
+};

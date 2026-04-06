@@ -5,8 +5,8 @@
  */
 
 export interface TextStrokeStyle {
-  color?: number[]
-  enabled?: boolean
+  color?: number[];
+  enabled?: boolean;
   /** @nullable */
-  widthPx?: number | null
+  widthPx?: number | null;
 }
