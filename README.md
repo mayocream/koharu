@@ -88,6 +88,12 @@ Google Fonts are fetched on demand from a bundled catalog. Koharu caches downloa
 
 The catalog includes a small set of comic-friendly recommended families. Once cached, a Google Font behaves like any other local render font.
 
+### Text Rendering
+
+Koharu uses a dedicated text renderer rather than browser or OS text primitives. The stack combines [HarfRust](https://crates.io/crates/harfrust) for [HarfBuzz](https://harfbuzz.github.io/)-style OpenType shaping, [ICU4X](https://github.com/unicode-org/icu4x) line segmentation, custom layout engine, real font metrics and glyph bounds from [`skrifa`](https://github.com/googlefonts/fontations/tree/main/skrifa), and [`tiny-skia`](https://github.com/linebender/tiny-skia) for rasterization.
+
+The renderer is tuned for manga lettering rather than generic UI text. It supports vertical CJK and horizontal Latin layout, script-aware normalization, font fallback, vertical punctuation centering, automatic size fitting against layout constraints, and manga-oriented stroke and effect passes before compositing text back onto the page.
+
 ## GPU Acceleration
 
 Koharu supports CUDA, Metal, and Vulkan. CPU fallback is always available when the accelerated path is unavailable or not worth the setup cost on your system.
