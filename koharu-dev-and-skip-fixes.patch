@@ -1,0 +1,221 @@
+diff --git a/koharu-app/src/pipeline.rs b/koharu-app/src/pipeline.rs
+index 3a801b6..2439698 100644
+--- a/koharu-app/src/pipeline.rs
++++ b/koharu-app/src/pipeline.rs
+@@ -139,6 +139,26 @@ async fn run_inner(
+ 
+     let config = res.config.read().await.clone();
+     let selection = engine::resolve_pipeline(&config.pipeline);
++    let skip_empty_pages = config.pipeline.skip_empty_pages;
++    let detector_selection = selection.iter().try_fold(Vec::new(), |mut ids, &id| {
++        if engine::Registry::find(id)?
++            .produces
++            .contains(&engine::Artifact::TextBlocks)
++        {
++            ids.push(id);
++        }
++        Ok::<_, anyhow::Error>(ids)
++    })?;
++    let infos: Vec<_> = selection
++        .iter()
++        .map(|id| engine::Registry::find(id))
++        .collect::<anyhow::Result<Vec<_>>>()?;
++    let order = engine::build_order(&infos)?;
++    let step_indices: HashMap<_, _> = order
++        .into_iter()
++        .enumerate()
++        .map(|(step_idx, info_idx)| (infos[info_idx].id, step_idx))
++        .collect();
+     let total_steps = selection.len();
+ 
+     for (doc_idx, page_id) in page_ids.iter().enumerate() {
+@@ -146,21 +166,68 @@ async fn run_inner(
+             return Ok(());
+         }
+ 
++        res.storage
++            .update_page(page_id, |page| {
++                page.detected = false;
++                page.text_blocks.clear();
++                page.bubbles.clear();
++                page.segment = None;
++                page.inpainted = None;
++                page.rendered = None;
++            })
++            .await?;
++
+         let job_id = job_id.to_string();
+         let jobs = jobs.clone();
+ 
+-        engine::execute_pipeline(&selection, res, page_id, cancel, |step_idx, step_id| {
+-            let pct = if total_docs * total_steps > 0 {
+-                ((doc_idx * total_steps + step_idx) as f64 / (total_docs * total_steps) as f64
+-                    * 100.0) as u8
+-            } else {
+-                0
+-            };
++        if skip_empty_pages && !detector_selection.is_empty() {
++            engine::execute_pipeline(&detector_selection, res, page_id, cancel, |_, step_id| {
++                let step_idx = step_indices[step_id];
++                let pct = progress_percent(doc_idx, step_idx, total_docs, total_steps);
++                let job = job_state(
++                    &job_id,
++                    JobStatus::Running,
++                    Some(step_id.to_string()),
++                    doc_idx + 1,
++                    total_docs,
++                    step_idx,
++                    total_steps,
++                    pct,
++                    None,
++                );
++                let jobs = jobs.clone();
++                async move {
++                    jobs.write().await.insert(job.id.clone(), job);
++                }
++            })
++            .await?;
++
++            let page = res.storage.page(page_id).await?;
++            if page.detected && page.text_blocks.is_empty() {
++                let job = job_state(
++                    &job_id,
++                    JobStatus::Running,
++                    Some("Skipped".to_string()),
++                    doc_idx + 1,
++                    total_docs,
++                    total_steps,
++                    total_steps,
++                    progress_percent(doc_idx + 1, 0, total_docs, total_steps),
++                    None,
++                );
++                jobs.write().await.insert(job.id.clone(), job);
++                continue;
++            }
++        }
++
++        engine::execute_pipeline(&selection, res, page_id, cancel, |_, step_id| {
++            let step_idx = step_indices[step_id];
++            let pct = progress_percent(doc_idx, step_idx, total_docs, total_steps);
+             let job = job_state(
+                 &job_id,
+                 JobStatus::Running,
+                 Some(step_id.to_string()),
+-                doc_idx,
++                doc_idx + 1,
+                 total_docs,
+                 step_idx,
+                 total_steps,
+@@ -178,6 +245,15 @@ async fn run_inner(
+     Ok(())
+ }
+ 
++fn progress_percent(doc_idx: usize, step_idx: usize, total_docs: usize, total_steps: usize) -> u8 {
++    if total_docs * total_steps > 0 {
++        ((doc_idx * total_steps + step_idx) as f64 / (total_docs * total_steps) as f64 * 100.0)
++            as u8
++    } else {
++        0
++    }
++}
++
+ #[allow(clippy::too_many_arguments)]
+ fn job_state(
+     id: &str,
+diff --git a/koharu-ml/src/comic_text_bubble_detector/mod.rs b/koharu-ml/src/comic_text_bubble_detector/mod.rs
+index 934841f..f2a1538 100644
+--- a/koharu-ml/src/comic_text_bubble_detector/mod.rs
++++ b/koharu-ml/src/comic_text_bubble_detector/mod.rs
+@@ -15,6 +15,7 @@ use self::model::{RTDetrV2ForObjectDetection, RTDetrV2Outputs};
+ 
+ const HF_REPO: &str = "ogkalu/comic-text-and-bubble-detector";
+ const DEFAULT_CONFIDENCE_THRESHOLD: f32 = 0.3;
++const MIN_TEXT_BLOCK_CONFIDENCE: f32 = 0.5;
+ const DETECTOR_NAME: &str = "comic-text-bubble-detector";
+ 
+ koharu_runtime::declare_hf_model_package!(
+@@ -473,6 +474,9 @@ fn detections_to_text_blocks(
+     let image_height = image_height as f32;
+     let mut blocks = Vec::with_capacity(text_boxes.len());
+     for text_region in text_boxes {
++        if text_region.score < MIN_TEXT_BLOCK_CONFIDENCE {
++            continue;
++        }
+         let bbox = clamp_box(text_region.bbox, image_width, image_height);
+         let width = (bbox[2] - bbox[0]).max(1.0);
+         let height = (bbox[3] - bbox[1]).max(1.0);
+@@ -994,4 +998,18 @@ mod tests {
+         let merged = merge_slice_regions(regions, 500);
+         assert_eq!(merged.len(), 2);
+     }
++
++    #[test]
++    fn detections_to_text_blocks_filters_low_confidence_text() {
++        let blocks = detections_to_text_blocks(
++            (1000, 1000),
++            &[ComicTextBubbleRegion {
++                label_id: 1,
++                label: "text".to_string(),
++                score: 0.4,
++                bbox: [100.0, 100.0, 200.0, 200.0],
++            }],
++        );
++        assert!(blocks.is_empty());
++    }
+ }
+diff --git a/koharu/tauri.windows.conf.json b/koharu/tauri.windows.conf.json
+index cdbd20c..f233779 100644
+--- a/koharu/tauri.windows.conf.json
++++ b/koharu/tauri.windows.conf.json
+@@ -1,9 +1,4 @@
+-{
+-  "$schema": "../node_modules/@tauri-apps/cli/config.schema.json",
+-  "identifier": "Koharu",
+-  "build": {
+-    "features": [
+-      "cuda"
+-    ]
+-  }
++{
++  "$schema": "../node_modules/@tauri-apps/cli/config.schema.json",
++  "identifier": "Koharu"
+ }
+diff --git a/scripts/dev.ts b/scripts/dev.ts
+index 317f2e0..a5232ca 100644
+--- a/scripts/dev.ts
++++ b/scripts/dev.ts
+@@ -18,8 +18,9 @@ async function pathExists(target: string) {
+ async function checkNvcc() {
+   try {
+     await exec('nvcc --version', { env: process.env })
++    return true
+   } catch {
+-    throw new Error('nvcc not found')
++    return false
+   }
+ }
+ 
+@@ -89,14 +90,15 @@ async function setupCl() {
+ 
+ async function dev() {
+   if (os.type() === 'Windows_NT') {
+-    // First, try to check if nvcc is available
+-    await checkNvcc()
+-      // If not found, try to set up CUDA paths
+-      .catch(async () => {
+-        await setupCuda()
+-        // Check again after setup
+-        await checkNvcc()
+-      })
++    if (!(await checkNvcc())) {
++      await setupCuda()
++        .then(checkNvcc)
++        .catch(() => false)
++
++      if (!(await checkNvcc())) {
++        console.warn('NVCC not found, continuing without CUDA toolchain')
++      }
++    }
+ 
+     // Setup cl.exe path
+     await setupCl()
