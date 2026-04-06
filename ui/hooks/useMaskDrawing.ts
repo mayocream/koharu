@@ -53,14 +53,14 @@ export function useMaskDrawing({
     [queryClient],
   )
 
-  const { canvasRef, bind } = useCanvasDrawing(
+  const { canvasRef, bind: rawBind } = useCanvasDrawing(
     currentDocument,
     pointerToDocument,
     {
       getColor: () => (isEraseMode ? '#000000' : '#ffffff'),
       blendMode: 'source-over',
       getBrushSize: () => usePreferencesStore.getState().brushConfig.size,
-      enabled: isActive,
+      enabled: showMask,
       onCanvasInit: (ctx, doc) => {
         // Fill black then draw existing segment mask on top
         ctx.fillStyle = '#000'
@@ -130,6 +130,9 @@ export function useMaskDrawing({
       },
     },
   )
+
+  // Only allow drawing on the mask if the specific tools are active
+  const bind = isActive ? rawBind : () => ({})
 
   return { canvasRef, visible: showMask, bind }
 }
