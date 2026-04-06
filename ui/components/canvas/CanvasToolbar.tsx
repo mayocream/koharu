@@ -43,6 +43,9 @@ type SelectableLlmModel = {
   provider?: LlmProviderCatalog
 }
 
+const modelBadgeClassName =
+  'rounded px-1 py-0.5 text-[9px] leading-none font-semibold uppercase'
+
 const flattenCatalogModels = (catalog?: LlmCatalog): SelectableLlmModel[] => [
   ...(catalog?.localModels ?? []).map((model) => ({ model })),
   ...(catalog?.providers ?? [])
@@ -234,6 +237,12 @@ function LlmStatusPopover() {
   const selectedModelLanguages = selectedModel?.model.languages ?? []
   const selectedIsLoaded =
     llmReady && sameLlmTarget(llmState?.target, selectedTarget)
+  const selectedDownloadSize = selectedModel?.model.downloadSize
+  const selectedRequiresDownload =
+    !!selectedModel &&
+    !selectedModel.provider &&
+    !selectedModel.model.downloaded &&
+    !selectedIsLoaded
 
   const handleSetSelectedModel = (key: string) => {
     const nextSelection = llmModels.find(
@@ -377,8 +386,18 @@ function LlmStatusPopover() {
                   >
                     <span className='flex items-center gap-1.5'>
                       {provider ? (
-                        <span className='bg-primary/10 text-primary rounded px-1 py-0.5 text-[9px] leading-none font-semibold uppercase'>
+                        <span
+                          className={`bg-primary/10 text-primary ${modelBadgeClassName}`}
+                        >
                           {provider.name}
+                        </span>
+                      ) : model.downloaded ? (
+                        <span
+                          className={`bg-emerald-500/10 text-emerald-600 ${modelBadgeClassName}`}
+                        >
+                          {t('llm.downloadedBadge', {
+                            defaultValue: 'Downloaded',
+                          })}
                         </span>
                       ) : null}
                       {model.name}
@@ -395,14 +414,29 @@ function LlmStatusPopover() {
               size='sm'
               onClick={handleToggleLoadUnload}
               disabled={!selectedTarget || busy}
-              className='h-6 shrink-0 gap-1 px-2 text-[11px]'
+              className='h-auto min-h-6 shrink-0 gap-1 px-2 py-1 text-[11px]'
             >
               {busy ? (
                 <LoaderCircleIcon className='size-3 animate-spin' />
               ) : null}
-              {selectedIsLoaded || llmUnloading
-                ? t('llm.unload')
-                : t('llm.load')}
+              {selectedIsLoaded || llmUnloading ? (
+                t('llm.unload')
+              ) : selectedRequiresDownload ? (
+                <span className='flex flex-col items-start leading-tight'>
+                  <span>
+                    {t('llm.downloadAndLoad', {
+                      defaultValue: 'Download & Load',
+                    })}
+                  </span>
+                  {selectedDownloadSize ? (
+                    <span className='text-[9px] opacity-80'>
+                      {selectedDownloadSize}
+                    </span>
+                  ) : null}
+                </span>
+              ) : (
+                t('llm.load')
+              )}
             </Button>
           </div>
         </div>

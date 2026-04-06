@@ -242,6 +242,9 @@ pub struct LlmCatalogModel {
     pub target: LlmTarget,
     pub name: String,
     pub languages: Vec<String>,
+    pub downloaded: bool,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub download_size: Option<String>,
 }
 
 #[derive(Debug, Clone, Copy, Serialize, Deserialize, JsonSchema, ToSchema)]

@@ -69,9 +69,13 @@ impl Downloads {
         self.tx.subscribe()
     }
 
+    pub fn cached_huggingface_model(&self, repo: &str, filename: &str) -> Option<PathBuf> {
+        self.huggingface_cache.model(repo.to_string()).get(filename)
+    }
+
     /// Download a HuggingFace model file, using the local cache first.
     pub async fn huggingface_model(&self, repo: &str, filename: &str) -> Result<PathBuf> {
-        if let Some(path) = self.huggingface_cache.model(repo.to_string()).get(filename) {
+        if let Some(path) = self.cached_huggingface_model(repo, filename) {
             return Ok(path);
         }
 

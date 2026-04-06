@@ -521,12 +521,14 @@ fn snapshot_from_state(state: &State) -> LlmState {
 // Operations (merged from ops/llm.rs)
 // ---------------------------------------------------------------------------
 
-fn local_catalog_models() -> Vec<LlmCatalogModel> {
+fn local_catalog_models(runtime: &RuntimeManager) -> Vec<LlmCatalogModel> {
     ModelId::iter()
         .map(|model| LlmCatalogModel {
             target: local_target(model),
             name: model.to_string(),
             languages: language_tags(&model.languages()),
+            downloaded: model.is_downloaded(runtime),
+            download_size: Some(model.download_size().to_string()),
         })
         .collect()
 }
@@ -586,6 +588,8 @@ async fn provider_catalog(state: &AppResources) -> anyhow::Result<Vec<LlmProvide
                                     target: provider_target(descriptor.id, &model.id),
                                     name: model.name,
                                     languages: supported_locales(),
+                                    downloaded: false,
+                                    download_size: None,
                                 })
                                 .collect(),
                         ),
@@ -625,6 +629,8 @@ fn static_provider_models(
                 target: provider_target(descriptor.id, model.id),
                 name: model.name.to_string(),
                 languages: supported_locales(),
+                downloaded: false,
+                download_size: None,
             })
             .collect(),
         ProviderCatalogModels::Dynamic(_) => Vec::new(),
@@ -688,7 +694,7 @@ async fn load_target(
 
 pub async fn llm_catalog(state: AppResources) -> anyhow::Result<LlmCatalog> {
     Ok(LlmCatalog {
-        local_models: local_catalog_models(),
+        local_models: local_catalog_models(&state.runtime),
         providers: provider_catalog(&state).await?,
     })
 }

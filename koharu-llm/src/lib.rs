@@ -52,7 +52,8 @@ pub enum ModelId {
         props(
             repo = "lmg-anon/vntl-llama3-8b-v2-gguf",
             filename = "vntl-llama3-8b-v2-hf-q8_0.gguf",
-            languages = "en-US"
+            languages = "en-US",
+            download_size = "~8 GB"
         )
     )]
     VntlLlama3_8Bv2,
@@ -61,7 +62,8 @@ pub enum ModelId {
         props(
             repo = "LiquidAI/LFM2.5-1.2B-Instruct-GGUF",
             filename = "LFM2.5-1.2B-Instruct-Q8_0.gguf",
-            languages = "en-US,ar-SA,zh-CN,fr-FR,de-DE,ja-JP,ko-KR,pt-PT,es-ES"
+            languages = "en-US,ar-SA,zh-CN,fr-FR,de-DE,ja-JP,ko-KR,pt-PT,es-ES",
+            download_size = "~1.3 GB"
         )
     )]
     Lfm2_5_1_2bInstruct,
@@ -70,7 +72,8 @@ pub enum ModelId {
         props(
             repo = "SakuraLLM/Sakura-GalTransl-7B-v3.7",
             filename = "Sakura-Galtransl-7B-v3.7.gguf",
-            languages = "zh-CN"
+            languages = "zh-CN",
+            download_size = "~7.5 GB"
         )
     )]
     SakuraGalTransl7Bv3_7,
@@ -79,7 +82,8 @@ pub enum ModelId {
         props(
             repo = "shing3232/Sakura-1.5B-Qwen2.5-v1.0-GGUF-IMX",
             filename = "sakura-1.5b-qwen2.5-v1.0-Q5KS.gguf",
-            languages = "zh-CN"
+            languages = "zh-CN",
+            download_size = "~1.2 GB"
         )
     )]
     Sakura1_5bQwen2_5v1_0,
@@ -88,7 +92,8 @@ pub enum ModelId {
         props(
             repo = "Mungert/Hunyuan-MT-7B-GGUF",
             filename = "Hunyuan-MT-7B-q6_k_m.gguf",
-            languages = "zh-CN,en-US,fr-FR,pt-PT,pt-BR,es-ES,ja-JP,tr-TR,ru-RU,ar-SA,ko-KR,th-TH,it-IT,de-DE,vi-VN,ms-MY,id-ID,fil-PH,hi-IN,zh-TW,pl-PL,cs-CZ,nl-NL,km-KH,my-MM,fa-IR,gu-IN,ur-PK,te-IN,mr-IN,he-IL,bn-BD,ta-IN,uk-UA,bo-CN,kk-KZ,mn-MN,ug-CN,yue-HK"
+            languages = "zh-CN,en-US,fr-FR,pt-PT,pt-BR,es-ES,ja-JP,tr-TR,ru-RU,ar-SA,ko-KR,th-TH,it-IT,de-DE,vi-VN,ms-MY,id-ID,fil-PH,hi-IN,zh-TW,pl-PL,cs-CZ,nl-NL,km-KH,my-MM,fa-IR,gu-IN,ur-PK,te-IN,mr-IN,he-IL,bn-BD,ta-IN,uk-UA,bo-CN,kk-KZ,mn-MN,ug-CN,yue-HK",
+            download_size = "~6.1 GB"
         )
     )]
     HunyuanMT7B,
@@ -97,7 +102,8 @@ pub enum ModelId {
         props(
             repo = "sugoitoolkit/Sugoi-14B-Ultra-GGUF",
             filename = "Sugoi-14B-Ultra-Q8_0.gguf",
-            languages = "en-US"
+            languages = "en-US",
+            download_size = "~14 GB"
         )
     )]
     Sugoi14bUltra,
@@ -106,7 +112,8 @@ pub enum ModelId {
         props(
             repo = "sugoitoolkit/Sugoi-32B-Ultra-GGUF",
             filename = "Sugoi-32B-Ultra-Q4_K_M.gguf",
-            languages = "en-US"
+            languages = "en-US",
+            download_size = "~19 GB"
         )
     )]
     Sugoi32bUltra,
@@ -115,7 +122,8 @@ pub enum ModelId {
         props(
             repo = "unsloth/gemma-4-E2B-it-GGUF",
             filename = "gemma-4-e2b-it-Q8_0.gguf",
-            languages = "*"
+            languages = "*",
+            download_size = "~2.4 GB"
         )
     )]
     Gemma4E2bIt,
@@ -124,7 +132,8 @@ pub enum ModelId {
         props(
             repo = "unsloth/gemma-4-E4B-it-GGUF",
             filename = "gemma-4-e4b-it-Q8_0.gguf",
-            languages = "*"
+            languages = "*",
+            download_size = "~4.8 GB"
         )
     )]
     Gemma4E4bIt,
@@ -133,7 +142,8 @@ pub enum ModelId {
         props(
             repo = "unsloth/gemma-4-26B-A4B-it-GGUF",
             filename = "gemma-4-26B-A4B-it-Q8_0.gguf",
-            languages = "*"
+            languages = "*",
+            download_size = "~15 GB"
         )
     )]
     Gemma4_26bA4bIt,
@@ -142,7 +152,8 @@ pub enum ModelId {
         props(
             repo = "unsloth/gemma-4-31B-it-GGUF",
             filename = "gemma-4-31B-it-Q4_K_M.gguf",
-            languages = "*"
+            languages = "*",
+            download_size = "~18 GB"
         )
     )]
     Gemma4_31bIt,
@@ -151,7 +162,8 @@ pub enum ModelId {
         props(
             repo = "HauhauCS/Gemma-4-E2B-Uncensored-HauhauCS-Aggressive",
             filename = "Gemma-4-E2B-Uncensored-HauhauCS-Aggressive-Q8_K_P.gguf",
-            languages = "*"
+            languages = "*",
+            download_size = "~2.6 GB"
         )
     )]
     Gemma4E2bUncensored,
@@ -160,7 +172,8 @@ pub enum ModelId {
         props(
             repo = "HauhauCS/Gemma-4-E4B-Uncensored-HauhauCS-Aggressive",
             filename = "Gemma-4-E4B-Uncensored-HauhauCS-Aggressive-Q4_K_M.gguf",
-            languages = "*"
+            languages = "*",
+            download_size = "~3.1 GB"
         )
     )]
     Gemma4E4bUncensored,
@@ -169,7 +182,8 @@ pub enum ModelId {
         props(
             repo = "unsloth/Qwen3.5-0.8B-GGUF",
             filename = "Qwen3.5-0.8B-Q8_0.gguf",
-            languages = "*"
+            languages = "*",
+            download_size = "~0.9 GB"
         )
     )]
     Qwen3_5_0_8b,
@@ -178,7 +192,8 @@ pub enum ModelId {
         props(
             repo = "unsloth/Qwen3.5-2B-GGUF",
             filename = "Qwen3.5-2B-Q8_0.gguf",
-            languages = "*"
+            languages = "*",
+            download_size = "~2.1 GB"
         )
     )]
     Qwen3_5_2b,
@@ -187,7 +202,8 @@ pub enum ModelId {
         props(
             repo = "unsloth/Qwen3.5-4B-GGUF",
             filename = "Qwen3.5-4B-Q8_0.gguf",
-            languages = "*"
+            languages = "*",
+            download_size = "~4.3 GB"
         )
     )]
     Qwen3_5_4b,
@@ -196,7 +212,8 @@ pub enum ModelId {
         props(
             repo = "unsloth/Qwen3.5-9B-GGUF",
             filename = "Qwen3.5-9B-Q8_0.gguf",
-            languages = "*"
+            languages = "*",
+            download_size = "~9.6 GB"
         )
     )]
     Qwen3_5_9b,
@@ -205,7 +222,8 @@ pub enum ModelId {
         props(
             repo = "unsloth/Qwen3.5-27B-GGUF",
             filename = "Qwen3.5-27B-Q4_K_M.gguf",
-            languages = "*"
+            languages = "*",
+            download_size = "~16 GB"
         )
     )]
     Qwen3_5_27b,
@@ -214,7 +232,8 @@ pub enum ModelId {
         props(
             repo = "unsloth/Qwen3.5-35B-A3B-GGUF",
             filename = "Qwen3.5-35B-A3B-Q8_0.gguf",
-            languages = "*"
+            languages = "*",
+            download_size = "~22 GB"
         )
     )]
     Qwen3_5_35bA3b,
@@ -223,7 +242,8 @@ pub enum ModelId {
         props(
             repo = "HauhauCS/Qwen3.5-2B-Uncensored-HauhauCS-Aggressive",
             filename = "Qwen3.5-2B-Uncensored-HauhauCS-Aggressive-Q8_0.gguf",
-            languages = "*"
+            languages = "*",
+            download_size = "~2.1 GB"
         )
     )]
     Qwen3_5_2bUncensored,
@@ -232,7 +252,8 @@ pub enum ModelId {
         props(
             repo = "HauhauCS/Qwen3.5-4B-Uncensored-HauhauCS-Aggressive",
             filename = "Qwen3.5-4B-Uncensored-HauhauCS-Aggressive-Q8_0.gguf",
-            languages = "*"
+            languages = "*",
+            download_size = "~4.3 GB"
         )
     )]
     Qwen3_5_4bUncensored,
@@ -241,7 +262,8 @@ pub enum ModelId {
         props(
             repo = "HauhauCS/Qwen3.5-9B-Uncensored-HauhauCS-Aggressive",
             filename = "Qwen3.5-9B-Uncensored-HauhauCS-Aggressive-Q8_0.gguf",
-            languages = "*"
+            languages = "*",
+            download_size = "~9.6 GB"
         )
     )]
     Qwen3_5_9bUncensored,
@@ -250,7 +272,8 @@ pub enum ModelId {
         props(
             repo = "HauhauCS/Qwen3.5-27B-Uncensored-HauhauCS-Aggressive",
             filename = "Qwen3.5-27B-Uncensored-HauhauCS-Aggressive-Q4_K_M.gguf",
-            languages = "*"
+            languages = "*",
+            download_size = "~16 GB"
         )
     )]
     Qwen3_5_27bUncensored,
@@ -259,7 +282,8 @@ pub enum ModelId {
         props(
             repo = "HauhauCS/Qwen3.5-35B-A3B-Uncensored-HauhauCS-Aggressive",
             filename = "Qwen3.5-35B-A3B-Uncensored-HauhauCS-Aggressive-Q8_0.gguf",
-            languages = "*"
+            languages = "*",
+            download_size = "~22 GB"
         )
     )]
     Qwen3_5_35bA3bUncensored,
@@ -270,10 +294,29 @@ impl ModelId {
         self.get_str(name).expect("missing model property")
     }
 
+    pub fn repo(&self) -> &'static str {
+        self.property("repo")
+    }
+
+    pub fn filename(&self) -> &'static str {
+        self.property("filename")
+    }
+
+    pub fn download_size(&self) -> &'static str {
+        self.property("download_size")
+    }
+
+    pub fn is_downloaded(&self, runtime: &RuntimeManager) -> bool {
+        runtime
+            .downloads()
+            .cached_huggingface_model(self.repo(), self.filename())
+            .is_some()
+    }
+
     pub async fn get(&self, runtime: &RuntimeManager) -> anyhow::Result<PathBuf> {
         runtime
             .downloads()
-            .huggingface_model(self.property("repo"), self.property("filename"))
+            .huggingface_model(self.repo(), self.filename())
             .await
     }
 
