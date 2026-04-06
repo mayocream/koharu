@@ -2275,7 +2275,13 @@
       },
       "JobStatus": {
         "type": "string",
-        "enum": ["running", "completed", "cancelled", "failed"]
+        "enum": [
+          "running",
+          "completed",
+          "completed_with_errors",
+          "cancelled",
+          "failed"
+        ]
       },
       "LlmCatalog": {
         "type": "object",

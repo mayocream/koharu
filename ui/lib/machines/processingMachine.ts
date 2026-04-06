@@ -113,6 +113,7 @@ export type ProcessingEvent =
     }
   | { type: 'CANCEL' }
   | { type: 'DONE' }
+  | { type: 'DONE_WITH_ERRORS'; message: string }
   | { type: 'ERROR'; message: string }
 
 export type ProcessingInput = {
@@ -265,6 +266,11 @@ const jobPollingActor = fromCallback<ProcessingEvent, { jobId: string }>(
           })
         } else if (job.status === 'completed') {
           sendBack({ type: 'DONE' })
+        } else if (job.status === 'completed_with_errors') {
+          sendBack({
+            type: 'DONE_WITH_ERRORS',
+            message: job.error ?? 'Batch completed with errors',
+          })
         } else {
           sendBack({ type: 'ERROR', message: job.error ?? 'Job failed' })
         }
@@ -375,6 +381,7 @@ export const processingMachine = setup({
     setErrorFromEvent: assign({
       error: ({ event }) => {
         if (event.type === 'ERROR') return event.message
+        if (event.type === 'DONE_WITH_ERRORS') return event.message
         return null
       },
     }),
@@ -723,6 +730,10 @@ export const processingMachine = setup({
             DONE: {
               target: '#processing.idle',
               actions: ['invalidateAll'],
+            },
+            DONE_WITH_ERRORS: {
+              target: '#processing.idle',
+              actions: ['invalidateAll', 'setErrorFromEvent', 'surfaceError'],
             },
             ERROR: {
               target: '#processing.idle',

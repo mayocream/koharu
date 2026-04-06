@@ -278,6 +278,7 @@ pub struct LlmCatalog {
 pub enum JobStatus {
     Running,
     Completed,
+    CompletedWithErrors,
     Cancelled,
     Failed,
 }
@@ -380,6 +381,17 @@ pub struct Region {
     pub y: u32,
     pub width: u32,
     pub height: u32,
+}
+
+#[cfg(test)]
+mod tests {
+    use super::JobStatus;
+
+    #[test]
+    fn job_status_serializes_completed_with_errors_in_snake_case() {
+        let encoded = serde_json::to_string(&JobStatus::CompletedWithErrors).expect("serialize");
+        assert_eq!(encoded, "\"completed_with_errors\"");
+    }
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, JsonSchema, ToSchema)]

@@ -18,27 +18,107 @@ pub struct PipelineHandle {
     pub cancel: Arc<AtomicBool>,
 }
 
+#[derive(Debug, Default)]
+struct BatchReport {
+    total_docs: usize,
+    processed_docs: usize,
+    page_errors: Vec<PageError>,
+}
+
+#[derive(Debug)]
+struct PageError {
+    page_id: String,
+    message: String,
+}
+
+impl BatchReport {
+    fn new(total_docs: usize) -> Self {
+        Self {
+            total_docs,
+            ..Self::default()
+        }
+    }
+
+    fn successful_docs(&self) -> usize {
+        self.processed_docs.saturating_sub(self.page_errors.len())
+    }
+
+    fn push_page_error(&mut self, page_id: &str, message: String) {
+        self.page_errors.push(PageError {
+            page_id: page_id.to_string(),
+            message,
+        });
+    }
+
+    fn error_summary(&self) -> Option<String> {
+        if self.page_errors.is_empty() {
+            return None;
+        }
+
+        let preview = self
+            .page_errors
+            .iter()
+            .take(3)
+            .map(|error| {
+                let message = error.message.replace('\n', " ");
+                format!("{}: {}", error.page_id, message)
+            })
+            .collect::<Vec<_>>();
+
+        let mut summary = format!(
+            "{} of {} page{} failed:\n{}",
+            self.page_errors.len(),
+            self.total_docs,
+            if self.total_docs == 1 { "" } else { "s" },
+            preview.join("\n")
+        );
+
+        let omitted = self.page_errors.len().saturating_sub(preview.len());
+        if omitted > 0 {
+            summary.push_str(&format!("\n...and {omitted} more"));
+        }
+
+        Some(summary)
+    }
+}
+
 pub async fn process(
     state: AppResources,
     payload: koharu_core::commands::ProcessRequest,
     jobs: Jobs,
 ) -> anyhow::Result<String> {
-    {
-        let guard = state.pipeline.read().await;
-        if guard.is_some() {
-            anyhow::bail!("A processing pipeline is already running");
-        }
-    }
+    let total_docs = match payload.document_id.as_deref() {
+        Some(_) => 1,
+        None => state.storage.page_count().await,
+    };
+    let config = state.config.read().await.clone();
+    let total_steps = engine::resolve_pipeline(&config.pipeline).len();
 
     let job_id = Uuid::new_v4().to_string();
     let cancel = Arc::new(AtomicBool::new(false));
     {
         let mut guard = state.pipeline.write().await;
+        if guard.is_some() {
+            anyhow::bail!("A processing pipeline is already running");
+        }
         *guard = Some(PipelineHandle {
             id: job_id.clone(),
             cancel: cancel.clone(),
         });
     }
+
+    let initial_job = job_state(
+        &job_id,
+        JobStatus::Running,
+        None,
+        0,
+        total_docs,
+        0,
+        total_steps,
+        0,
+        None,
+    );
+    jobs.write().await.insert(job_id.clone(), initial_job);
 
     let jid = job_id.clone();
     tokio::spawn(async move {
@@ -78,18 +158,18 @@ async fn run(
     let total_steps = engine::resolve_pipeline(&config.pipeline).len();
 
     let final_job = match result {
-        Ok(()) if cancel.load(Ordering::Relaxed) => job_state(
+        Ok(report) if cancel.load(Ordering::Relaxed) => job_state(
             &job_id,
             JobStatus::Cancelled,
             None,
-            total_docs,
+            report.processed_docs.min(total_docs),
             total_docs,
             0,
             total_steps,
             0,
             None,
         ),
-        Ok(()) => job_state(
+        Ok(report) if report.page_errors.is_empty() => job_state(
             &job_id,
             JobStatus::Completed,
             None,
@@ -99,6 +179,28 @@ async fn run(
             total_steps,
             100,
             None,
+        ),
+        Ok(report) if report.successful_docs() > 0 => job_state(
+            &job_id,
+            JobStatus::CompletedWithErrors,
+            None,
+            total_docs,
+            total_docs,
+            total_steps,
+            total_steps,
+            100,
+            report.error_summary(),
+        ),
+        Ok(report) => job_state(
+            &job_id,
+            JobStatus::Failed,
+            None,
+            report.processed_docs.min(total_docs),
+            total_docs,
+            total_steps,
+            total_steps,
+            100,
+            report.error_summary(),
         ),
         Err(err) => job_state(
             &job_id,
@@ -123,7 +225,7 @@ async fn run_inner(
     cancel: &Arc<AtomicBool>,
     job_id: &str,
     jobs: &Jobs,
-) -> anyhow::Result<()> {
+) -> anyhow::Result<BatchReport> {
     let page_ids: Vec<String> = match req.document_id.as_deref() {
         Some(id) => {
             res.storage.page(id).await?;
@@ -132,9 +234,10 @@ async fn run_inner(
         None => res.storage.page_ids().await,
     };
     let total_docs = page_ids.len();
+    let mut report = BatchReport::new(total_docs);
     tracing::Span::current().record("pages", total_docs);
     if total_docs == 0 {
-        return Ok(());
+        return Ok(report);
     }
 
     let config = res.config.read().await.clone();
@@ -143,13 +246,13 @@ async fn run_inner(
 
     for (doc_idx, page_id) in page_ids.iter().enumerate() {
         if cancel.load(Ordering::Relaxed) {
-            return Ok(());
+            return Ok(report);
         }
 
         let job_id = job_id.to_string();
         let jobs = jobs.clone();
 
-        engine::execute_pipeline(&selection, res, page_id, cancel, |step_idx, step_id| {
+        match engine::execute_pipeline(&selection, res, page_id, cancel, |step_idx, step_id| {
             let pct = if total_docs * total_steps > 0 {
                 ((doc_idx * total_steps + step_idx) as f64 / (total_docs * total_steps) as f64
                     * 100.0) as u8
@@ -172,10 +275,24 @@ async fn run_inner(
                 jobs.write().await.insert(job.id.clone(), job);
             }
         })
-        .await?;
+        .await
+        {
+            Ok(()) => {
+                report.processed_docs = doc_idx + 1;
+            }
+            Err(err) => {
+                if cancel.load(Ordering::Relaxed) {
+                    return Ok(report);
+                }
+
+                report.processed_docs = doc_idx + 1;
+                tracing::error!(page_id, error = %err, "page pipeline failed");
+                report.push_page_error(page_id, err.to_string());
+            }
+        }
     }
 
-    Ok(())
+    Ok(report)
 }
 
 #[allow(clippy::too_many_arguments)]
@@ -201,5 +318,26 @@ fn job_state(
         total_steps,
         overall_percent: pct,
         error,
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::BatchReport;
+
+    #[test]
+    fn batch_report_summarizes_page_errors() {
+        let mut report = BatchReport::new(4);
+        report.processed_docs = 4;
+        report.push_page_error("page-1", "step 'llm' failed".to_string());
+        report.push_page_error("page-2", "step 'render' failed\nwith details".to_string());
+        report.push_page_error("page-3", "step 'ocr' failed".to_string());
+        report.push_page_error("page-4", "step 'font' failed".to_string());
+
+        let summary = report.error_summary().expect("summary");
+        assert!(summary.contains("4 of 4 pages failed"));
+        assert!(summary.contains("page-1: step 'llm' failed"));
+        assert!(summary.contains("page-2: step 'render' failed with details"));
+        assert!(summary.contains("...and 1 more"));
     }
 }

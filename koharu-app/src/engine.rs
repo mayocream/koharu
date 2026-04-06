@@ -42,19 +42,37 @@ pub enum Artifact {
     Rendered,
 }
 
+fn has_non_empty_text(value: Option<&str>) -> bool {
+    value.is_some_and(|text| !text.trim().is_empty())
+}
+
+fn block_has_ocr_text(block: &koharu_core::TextBlock) -> bool {
+    has_non_empty_text(block.text.as_deref())
+}
+
+fn block_has_translation(block: &koharu_core::TextBlock) -> bool {
+    if !block_has_ocr_text(block) {
+        return true;
+    }
+
+    has_non_empty_text(block.translation.as_deref())
+}
+
 impl Artifact {
     pub fn ready(&self, doc: &Document) -> bool {
         match self {
             Self::TextBlocks => !doc.text_blocks.is_empty(),
             Self::Bubbles => !doc.bubbles.is_empty(),
             Self::Segment => doc.segment.is_some(),
-            Self::FontPredictions => doc.text_blocks.iter().all(|b| b.font_prediction.is_some()),
+            Self::FontPredictions => {
+                doc.text_blocks.is_empty()
+                    || doc.text_blocks.iter().all(|b| b.font_prediction.is_some())
+            }
             Self::OcrText => {
-                !doc.text_blocks.is_empty() && doc.text_blocks.iter().all(|b| b.text.is_some())
+                doc.text_blocks.is_empty() || doc.text_blocks.iter().all(block_has_ocr_text)
             }
             Self::Translations => {
-                !doc.text_blocks.is_empty()
-                    && doc.text_blocks.iter().all(|b| b.translation.is_some())
+                doc.text_blocks.is_empty() || doc.text_blocks.iter().all(block_has_translation)
             }
             Self::Inpainted => doc.inpainted.is_some(),
             Self::Rendered => doc.rendered.is_some(),
@@ -343,12 +361,33 @@ where
             if let Some(f) = patch.take() {
                 res.storage.update_page(page_id, f).await?;
             }
+            let updated = res.storage.page(page_id).await?;
+            verify_step_outputs(info, &updated)?;
             Ok::<_, anyhow::Error>(())
         }
         .instrument(tracing::info_span!("step", engine = info.id))
         .await?;
     }
     Ok(())
+}
+
+fn verify_step_outputs(info: &EngineInfo, doc: &Document) -> Result<()> {
+    let missing = info
+        .produces
+        .iter()
+        .filter(|artifact| !artifact.ready(doc))
+        .map(|artifact| format!("{artifact:?}"))
+        .collect::<Vec<_>>();
+
+    if missing.is_empty() {
+        return Ok(());
+    }
+
+    bail!(
+        "step '{}' did not produce required artifacts: {}",
+        info.id,
+        missing.join(", ")
+    )
 }
 
 /// Run a single engine by id.
@@ -1268,5 +1307,50 @@ mod tests {
         assert!(pos("comic-text-bubble-detector") < pos("yuzumarker-font-detection"));
         assert!(pos("comic-text-detector-seg") < pos("aot-inpainting"));
         assert!(pos("aot-inpainting") < pos("koharu-renderer"));
+    }
+
+    #[test]
+    fn translation_readiness_requires_non_empty_translations_for_non_empty_source_text() {
+        let empty_doc = Document::default();
+        assert!(Artifact::OcrText.ready(&empty_doc));
+        assert!(Artifact::Translations.ready(&empty_doc));
+
+        let mut doc = Document::default();
+        doc.text_blocks = vec![TextBlock {
+            text: Some("hello".to_string()),
+            translation: Some(String::new()),
+            ..Default::default()
+        }];
+
+        assert!(Artifact::OcrText.ready(&doc));
+        assert!(!Artifact::Translations.ready(&doc));
+
+        doc.text_blocks[0].translation = Some("hi".to_string());
+        assert!(Artifact::Translations.ready(&doc));
+    }
+
+    #[test]
+    fn verify_step_outputs_reports_missing_artifacts() {
+        let info = EngineInfo {
+            id: "llm",
+            name: "LLM",
+            needs: &[Artifact::OcrText],
+            produces: &[Artifact::Translations],
+            load: |_res| Box::pin(async move { unreachable!("not used in test") }),
+        };
+        let doc = Document {
+            text_blocks: vec![TextBlock {
+                text: Some("hello".to_string()),
+                translation: Some(String::new()),
+                ..Default::default()
+            }],
+            ..Default::default()
+        };
+
+        let err = verify_step_outputs(&info, &doc).expect_err("missing translations");
+        assert!(
+            err.to_string()
+                .contains("did not produce required artifacts")
+        );
     }
 }
