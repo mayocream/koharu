@@ -168,13 +168,20 @@ function PagePreview({
     : undefined
 
   return (
-    <Button
-      variant='ghost'
+    <div
+      role='button'
+      tabIndex={0}
       onClick={onSelect}
+      onKeyDown={(e) => {
+        if (e.key === 'Enter' || e.key === ' ') {
+          e.preventDefault()
+          onSelect()
+        }
+      }}
       data-testid={`navigator-page-${index}`}
       data-page-index={index}
       data-selected={selected}
-      className='bg-card data-[selected=true]:border-primary flex h-full w-full flex-col gap-0.5 rounded border border-transparent p-1.5 text-left shadow-sm'
+      className='bg-card data-[selected=true]:border-primary focus-visible:ring-ring hover:bg-accent hover:text-accent-foreground flex h-full w-full cursor-pointer flex-col gap-0.5 rounded border border-transparent p-1.5 text-left shadow-sm transition-colors focus-visible:ring-1 focus-visible:outline-none disabled:pointer-events-none disabled:opacity-50 [&_svg]:pointer-events-none [&_svg]:size-4 [&_svg]:shrink-0'
     >
       <div className='flex min-h-0 flex-1 items-center justify-center overflow-hidden rounded'>
         {src ? (
@@ -200,6 +207,6 @@ function PagePreview({
         </div>
         <div className='text-foreground font-semibold'>{index + 1}</div>
       </div>
-    </Button>
+    </div>
   )
 }
