@@ -28,6 +28,7 @@ type EditorUiState = {
   documentsVersion: number
   currentDocumentId: string | null
   selectedDocumentIds: Set<string>
+  selectionAnchorIndex: number | null
   scale: number
   showSegmentationMask: boolean
   showInpaintedImage: boolean
@@ -55,6 +56,15 @@ type EditorUiState = {
   toggleDocumentSelection: (id: string) => void
   selectAllDocuments: (ids: string[]) => void
   clearDocumentSelection: () => void
+  handleDocumentSelection: (
+    id: string,
+    index: number,
+    allDocuments: { id: string }[],
+    options: {
+      shiftKey: boolean
+      ctrlKey: boolean // metaKey on Mac
+    }
+  ) => void
 
   // --- llm ui ---
   selectedTarget?: LlmTarget
@@ -77,6 +87,7 @@ const initialState = {
   documentsVersion: 0,
   currentDocumentId: null as string | null,
   selectedDocumentIds: new Set<string>(),
+  selectionAnchorIndex: null as number | null,
   scale: 100,
   showSegmentationMask: false,
   showInpaintedImage: false,
@@ -116,15 +127,20 @@ export const useEditorUiStore = create<EditorUiState>((set, get) => ({
         documentsVersion: state.documentsVersion + 1,
         currentDocumentId: null,
         selectedDocumentIds: new Set<string>(),
+        selectionAnchorIndex: null,
         selectedBlockIndex: undefined,
       }
     })
   },
   setCurrentDocumentId: (id) =>
-    set(() => ({
-      currentDocumentId: id,
-      selectedBlockIndex: undefined,
-    })),
+    set((state) => {
+      // Find the index if we have documents? Not easily possible here without passing them.
+      // We'll update the anchor index in handleDocumentSelection instead.
+      return {
+        currentDocumentId: id,
+        selectedBlockIndex: undefined,
+      }
+    }),
   setScale: (scale) => {
     const clamped = Math.max(10, Math.min(100, Math.round(scale)))
     set({ scale: clamped })
@@ -179,7 +195,48 @@ export const useEditorUiStore = create<EditorUiState>((set, get) => ({
       return { selectedDocumentIds: next }
     }),
   selectAllDocuments: (ids) => set({ selectedDocumentIds: new Set(ids) }),
-  clearDocumentSelection: () => set({ selectedDocumentIds: new Set() }),
+  clearDocumentSelection: () =>
+    set({ selectedDocumentIds: new Set(), selectionAnchorIndex: null }),
+
+  handleDocumentSelection: (id, index, allDocuments, { shiftKey, ctrlKey }) => {
+    set((state) => {
+      const nextSelected = new Set(state.selectedDocumentIds)
+      let nextAnchor = state.selectionAnchorIndex
+
+      if (shiftKey && nextAnchor !== null) {
+        // Range selection
+        if (!ctrlKey) {
+          nextSelected.clear()
+        }
+        const start = Math.min(nextAnchor, index)
+        const end = Math.max(nextAnchor, index)
+        for (let i = start; i <= end; i++) {
+          const docId = allDocuments[i]?.id
+          if (docId) nextSelected.add(docId)
+        }
+      } else if (ctrlKey) {
+        // Toggle single item
+        if (nextSelected.has(id)) {
+          nextSelected.delete(id)
+        } else {
+          nextSelected.add(id)
+        }
+        nextAnchor = index
+      } else {
+        // Normal click: select exactly one, make it the anchor
+        nextSelected.clear()
+        nextSelected.add(id)
+        nextAnchor = index
+      }
+
+      return {
+        currentDocumentId: id,
+        selectedDocumentIds: nextSelected,
+        selectionAnchorIndex: nextAnchor,
+        selectedBlockIndex: undefined, // Normal behavior when selecting a document
+      }
+    })
+  },
 
   // --- llm ui actions ---
   setSelectedTarget: (selectedTarget) => set({ selectedTarget }),
