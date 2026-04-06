@@ -1,3 +1,26 @@
+## [0.43.2](https://github.com/mayocream/koharu/compare/0.43.1..0.43.2) - 2026-04-06
+
+### ⛰️  Features
+
+- Change sort_manga_read_order algorithm for better ordering ([#349](https://github.com/mayocream/koharu/issues/349)) - ([3b31ecc](https://github.com/mayocream/koharu/commit/3b31eccee898a89eb2879928b25371a48c2d4851))
+
+### 🐛 Bug Fixes
+
+- *(ui)* Keep process-all semantics for single-image batches - ([5f99fbf](https://github.com/mayocream/koharu/commit/5f99fbf071b89987c12c8ee36a0c520a44c10fa6))
+- Store app-level global font - ([a2eeb1c](https://github.com/mayocream/koharu/commit/a2eeb1c6628001d85ec7b2b75805c1f46b78e5ca))
+- Cl path error on dev script, ([#348](https://github.com/mayocream/koharu/issues/348)) - ([d0885a8](https://github.com/mayocream/koharu/commit/d0885a8fbd36a60924feba55004e6a5085dedd4d))
+- Preserve font inheritance when editing defaults - ([215a5b6](https://github.com/mayocream/koharu/commit/215a5b6e74c70519f1d145b32605f51232503e86))
+- Persist font selection to document default when block is selected - ([434d27f](https://github.com/mayocream/koharu/commit/434d27fb691574f00b0f79f559ffa899d69e3fb9))
+- Apply selected global font - ([142fb63](https://github.com/mayocream/koharu/commit/142fb6360749de4a2e15d02661af344cbb42b6b1))
+- Batch procssing pipeline - ([537f088](https://github.com/mayocream/koharu/commit/537f088bba316f7f4006cd7d099c7a0e69328bd0))
+- Enhance pipeline processing - ([d8e3bce](https://github.com/mayocream/koharu/commit/d8e3bced01de2e560309a41c9c54a02d95aa58d5))
+
+## New Contributors ❤️
+
+* @liksunrice made their first contribution in [#349](https://github.com/mayocream/koharu/pull/349)
+* @louisoes05-png made their first contribution
+* @cyphercodes made their first contribution
+
 ## [0.43.1](https://github.com/mayocream/koharu/compare/0.43.0..0.43.1) - 2026-04-05
 
 ### 🐛 Bug Fixes
