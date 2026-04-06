@@ -30,6 +30,9 @@ export function Navigator() {
   const setCurrentDocumentId = useEditorUiStore(
     (state) => state.setCurrentDocumentId,
   )
+  const handleDocumentSelection = useEditorUiStore(
+    (state) => state.handleDocumentSelection,
+  )
   const toggleDocumentSelection = useEditorUiStore(
     (state) => state.toggleDocumentSelection,
   )
@@ -132,7 +135,14 @@ export function Navigator() {
                   documentId={doc?.id}
                   selected={doc?.id === currentDocumentId}
                   checked={doc ? selectedDocumentIds.has(doc.id) : false}
-                  onSelect={() => doc && setCurrentDocumentId(doc.id)}
+                  onSelect={(e) => {
+                    if (!doc) return
+                    // Use native selection logic with Shift/Ctrl modifiers
+                    handleDocumentSelection(doc.id, virtualRow.index, documents, {
+                      shiftKey: e.shiftKey,
+                      ctrlKey: e.ctrlKey || e.metaKey,
+                    })
+                  }}
                   onToggleCheck={() => doc && toggleDocumentSelection(doc.id)}
                 />
               </div>
@@ -151,7 +161,7 @@ type PagePreviewProps = {
   documentId?: string
   selected: boolean
   checked: boolean
-  onSelect: () => void
+  onSelect: (e: React.MouseEvent | React.KeyboardEvent) => void
   onToggleCheck: () => void
 }
 
@@ -175,7 +185,7 @@ function PagePreview({
       onKeyDown={(e) => {
         if (e.key === 'Enter' || e.key === ' ') {
           e.preventDefault()
-          onSelect()
+          onSelect(e)
         }
       }}
       data-testid={`navigator-page-${index}`}
