@@ -45,6 +45,9 @@ pub fn font_families_for_text(text: &str) -> Vec<String> {
     let has_arabic = text
         .chars()
         .any(|c| matches!(script_map.get(c), Script::Arabic | Script::Hebrew));
+    let has_thai = text
+        .chars()
+        .any(|c| matches!(script_map.get(c), Script::Thai | Script::Lao | Script::Khmer | Script::Myanmar));
 
     let names: &[&str] = if has_cjk {
         #[cfg(target_os = "windows")]
@@ -71,6 +74,19 @@ pub fn font_families_for_text(text: &str) -> Vec<String> {
         #[cfg(not(any(target_os = "windows", target_os = "macos")))]
         {
             &["Noto Sans"]
+        }
+    } else if has_thai {
+        #[cfg(target_os = "windows")]
+        {
+            &["Leelawadee UI", "Leelawadee", "Tahoma"]
+        }
+        #[cfg(target_os = "macos")]
+        {
+            &["Thonburi", "Ayuthaya"]
+        }
+        #[cfg(not(any(target_os = "windows", target_os = "macos")))]
+        {
+            &["Noto Sans Thai", "Noto Sans"]
         }
     } else {
         // Google Fonts candidates (downloaded on demand) + platform fallbacks
