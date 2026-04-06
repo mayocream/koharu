@@ -1097,11 +1097,11 @@ fn sort_manga_reading_order(blocks: &mut [TextBlock]) {
         return;
     }
 
-    // Determine dynamic gap thresholds by calculating the median dimensions 
+    // Determine dynamic gap thresholds by calculating the median dimensions
     // of all text blocks on the page.
     let mut widths: Vec<f32> = blocks.iter().map(|b| b.width).collect();
     let mut heights: Vec<f32> = blocks.iter().map(|b| b.height).collect();
-    
+
     widths.sort_by(|a, b| a.partial_cmp(b).unwrap_or(std::cmp::Ordering::Equal));
     heights.sort_by(|a, b| a.partial_cmp(b).unwrap_or(std::cmp::Ordering::Equal));
 
@@ -1121,16 +1121,17 @@ fn sort_manga_reading_order(blocks: &mut [TextBlock]) {
         }
 
         let cut_result = find_best_cut(blocks, min_gap_x, min_gap_y);
-        
+
         let Some((best_axis, best_gap)) = cut_result else {
             // FALLBACK: Row-Aware sort for clusters that can't be cleanly cut.
-            let row_height = min_gap_y * 4.0; 
+            let row_height = min_gap_y * 4.0;
 
             blocks.sort_by(|a, b| {
                 let row_a = (a.y / row_height).floor();
                 let row_b = (b.y / row_height).floor();
 
-                row_a.partial_cmp(&row_b)
+                row_a
+                    .partial_cmp(&row_b)
                     .unwrap_or(std::cmp::Ordering::Equal)
                     .then_with(|| b.x.partial_cmp(&a.x).unwrap_or(std::cmp::Ordering::Equal))
             });
@@ -1140,8 +1141,8 @@ fn sort_manga_reading_order(blocks: &mut [TextBlock]) {
         let cut_coord = (best_gap.0 + best_gap.1) / 2.0;
 
         // In-place stable partition to avoid recursively allocating new vectors.
-        // Rust's `bool` sorts `false` before `true`. By mapping items destined 
-        // for the primary partition (Right or Top) to `false`, we separate 
+        // Rust's `bool` sorts `false` before `true`. By mapping items destined
+        // for the primary partition (Right or Top) to `false`, we separate
         // the geometry cleanly into two contiguous segments.
         blocks.sort_by_key(|block| {
             if best_axis == Axis::X {
@@ -1152,13 +1153,16 @@ fn sort_manga_reading_order(blocks: &mut [TextBlock]) {
         });
 
         // Find where the split boundary lies
-        let group1_len = blocks.iter().filter(|block| {
-            if best_axis == Axis::X {
-                (block.x + block.width * 0.5) >= cut_coord
-            } else {
-                (block.y + block.height * 0.5) <= cut_coord
-            }
-        }).count();
+        let group1_len = blocks
+            .iter()
+            .filter(|block| {
+                if best_axis == Axis::X {
+                    (block.x + block.width * 0.5) >= cut_coord
+                } else {
+                    (block.y + block.height * 0.5) <= cut_coord
+                }
+            })
+            .count();
 
         if group1_len == 0 || group1_len == blocks.len() {
             blocks.sort_by(|a, b| b.x.partial_cmp(&a.x).unwrap_or(std::cmp::Ordering::Equal));
@@ -1171,9 +1175,15 @@ fn sort_manga_reading_order(blocks: &mut [TextBlock]) {
         xy_cut_recursive(right, min_gap_x, min_gap_y);
     }
 
-    fn find_best_cut(blocks: &[TextBlock], min_gap_x: f32, min_gap_y: f32) -> Option<(Axis, (f32, f32))> {
-        let mut x_intervals: Vec<(f32, f32)> = blocks.iter().map(|b| (b.x, b.x + b.width)).collect();
-        let mut y_intervals: Vec<(f32, f32)> = blocks.iter().map(|b| (b.y, b.y + b.height)).collect();
+    fn find_best_cut(
+        blocks: &[TextBlock],
+        min_gap_x: f32,
+        min_gap_y: f32,
+    ) -> Option<(Axis, (f32, f32))> {
+        let mut x_intervals: Vec<(f32, f32)> =
+            blocks.iter().map(|b| (b.x, b.x + b.width)).collect();
+        let mut y_intervals: Vec<(f32, f32)> =
+            blocks.iter().map(|b| (b.y, b.y + b.height)).collect();
 
         x_intervals.sort_by(|a, b| a.0.partial_cmp(&b.0).unwrap_or(std::cmp::Ordering::Equal));
         y_intervals.sort_by(|a, b| a.0.partial_cmp(&b.0).unwrap_or(std::cmp::Ordering::Equal));
@@ -1201,13 +1211,15 @@ fn sort_manga_reading_order(blocks: &mut [TextBlock]) {
     }
 
     fn find_largest_gap(intervals: &[(f32, f32)], min_gap: f32) -> Option<(f32, f32)> {
-        if intervals.is_empty() { return None; }
+        if intervals.is_empty() {
+            return None;
+        }
 
         let mut largest_gap: Option<(f32, f32)> = None;
         let mut current_max_end = intervals[0].1;
 
         for interval in intervals.iter().skip(1) {
-            // A valid separation exists if the start of the current interval 
+            // A valid separation exists if the start of the current interval
             // does not intersect the bounding maximum of all preceding intervals.
             if interval.0 > current_max_end {
                 let gap_size = interval.0 - current_max_end;
