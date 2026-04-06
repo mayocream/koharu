@@ -3,7 +3,7 @@ index 3a801b6..2439698 100644
 --- a/koharu-app/src/pipeline.rs
 +++ b/koharu-app/src/pipeline.rs
 @@ -139,6 +139,26 @@ async fn run_inner(
- 
+
      let config = res.config.read().await.clone();
      let selection = engine::resolve_pipeline(&config.pipeline);
 +    let skip_empty_pages = config.pipeline.skip_empty_pages;
