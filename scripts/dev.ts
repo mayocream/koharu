@@ -63,20 +63,29 @@ async function setupCuda() {
 }
 
 async function setupCl() {
-  const vsRoot = 'C:/Program Files/Microsoft Visual Studio'
-  const vsVersions = await readdir(vsRoot).catch(() => [])
+  const vsRoots = [
+    'C:/Program Files/Microsoft Visual Studio',
+    'C:/Program Files (x86)/Microsoft Visual Studio',
+  ]
+  const editions = ['Community', 'Professional', 'Enterprise', 'BuildTools']
 
-  for (const vsVersion of vsVersions) {
-    const vcPath = path.join(vsRoot, vsVersion, 'Community/VC/Tools/MSVC')
-    if (await pathExists(vcPath)) {
-      const msvcVersions = await readdir(vcPath)
-      for (const msvcVersion of msvcVersions) {
-        const binPath = path.join(vcPath, msvcVersion, 'bin/Hostx64/x64')
-        if (await pathExists(binPath)) {
-          process.env.PATH = `${binPath}${path.delimiter}${process.env.PATH}`
+  for (const vsRoot of vsRoots) {
+    const vsVersions = await readdir(vsRoot).catch(() => [])
 
-          console.log(`Added cl.exe to PATH: ${binPath}`)
-          return
+    for (const vsVersion of vsVersions) {
+      for (const edition of editions) {
+        const vcPath = path.join(vsRoot, vsVersion, edition, 'VC/Tools/MSVC')
+        if (await pathExists(vcPath)) {
+          const msvcVersions = await readdir(vcPath)
+          for (const msvcVersion of msvcVersions) {
+            const binPath = path.join(vcPath, msvcVersion, 'bin/Hostx64/x64')
+            if (await pathExists(binPath)) {
+              process.env.PATH = `${binPath}${path.delimiter}${process.env.PATH}`
+
+              console.log(`Added cl.exe to PATH: ${binPath}`)
+              return
+            }
+          }
         }
       }
     }
