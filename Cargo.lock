@@ -4044,6 +4044,7 @@ dependencies = [
  "tracing",
  "tracing-core",
  "tracing-subscriber",
+ "url",
  "zip 8.5.0",
 ]
 
