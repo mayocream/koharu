@@ -1,0 +1,275 @@
+﻿diff --git a/koharu-rpc/src/api.rs b/koharu-rpc/src/api.rs
+index 855e9e2..6169554 100644
+--- a/koharu-rpc/src/api.rs
++++ b/koharu-rpc/src/api.rs
+@@ -11,9 +11,9 @@ use axum::{
+ use koharu_app::{AppResources, config as app_config, edit, engine, io, llm, pipeline};
+ use koharu_core::{
+     CreateTextBlock, Document, DocumentDetail, DocumentSummary, DownloadState, ExportLayer,
+-    ExportResult, FontFaceInfo, JobState, JobStatus, LlmCatalog, LlmLoadRequest, LlmState,
+-    MaskRegionRequest, MetaInfo, PipelineJobRequest, RenderRequest, TextBlock, TextBlockDetail,
+-    TextBlockInput, TextBlockPatch, TranslateRequest,
++    ExportResult, FontFaceInfo, ImportMode, JobState, JobStatus, LlmCatalog, LlmLoadRequest,
++    LlmState, MaskRegionRequest, MetaInfo, OpenDocumentsPayload, PipelineJobRequest, RenderRequest,
++    TextBlock, TextBlockDetail, TextBlockInput, TextBlockPatch, TranslateRequest,
+ };
+ use koharu_psd::{PsdExportOptions, TextLayerMode};
+ use serde::{Deserialize, Serialize};
+@@ -41,6 +41,7 @@ impl ApiState {
+ pub fn api() -> (axum::Router<ApiState>, utoipa::openapi::OpenApi) {
+     OpenApiRouter::default()
+         .routes(routes!(list_documents, import_documents))
++        .routes(routes!(import_documents_from_paths))
+         .routes(routes!(get_document))
+         .routes(routes!(update_document_style))
+         .routes(routes!(get_blob))
+@@ -604,6 +605,69 @@ async fn import_documents(
+     }))
+ }
+ 
++#[derive(Debug, Deserialize, utoipa::ToSchema)]
++#[serde(rename_all = "camelCase")]
++struct ImportPathsRequest {
++    paths: Vec<String>,
++}
++
++#[utoipa::path(
++    post,
++    path = "/documents/import-from-paths",
++    operation_id = "importDocumentsFromPaths",
++    tag = "documents",
++    params(ImportQuery),
++    request_body = ImportPathsRequest,
++    responses(
++        (status = 200, body = koharu_core::ImportResult),
++        (status = 400, body = ApiError),
++        (status = 503, body = ApiError),
++    ),
++)]
++#[tracing::instrument(level = "info", skip_all)]
++async fn import_documents_from_paths(
++    State(state): State<ApiState>,
++    Query(query): Query<ImportQuery>,
++    Json(request): Json<ImportPathsRequest>,
++) -> ApiResult<Json<koharu_core::ImportResult>> {
++    let resources = state.resources()?;
++
++    if request.paths.is_empty() {
++        return Err(ApiError::bad_request("No files uploaded"));
++    }
++
++    let files = request
++        .paths
++        .iter()
++        .map(|path| {
++            let data = std::fs::read(path).map_err(|error| ApiError::internal(error.into()))?;
++            let name = std::path::Path::new(path)
++                .file_name()
++                .and_then(|name| name.to_str())
++                .ok_or_else(|| ApiError::bad_request(format!("Invalid file path: {path}")))?
++                .to_string();
++            Ok(koharu_core::FileEntry { name, data })
++        })
++        .collect::<Result<Vec<_>, ApiError>>()?;
++
++    let payload = OpenDocumentsPayload { files };
++    match query.mode.unwrap_or(ImportMode::Append) {
++        ImportMode::Replace => {
++            io::open_documents(resources.clone(), payload).await?;
++        }
++        ImportMode::Append => {
++            io::add_documents(resources.clone(), payload).await?;
++        }
++    }
++
++    let documents = resources.storage.list_pages().await;
++
++    Ok(Json(koharu_core::ImportResult {
++        total_count: documents.len(),
++        documents,
++    }))
++}
++
+ // ---------------------------------------------------------------------------
+ // Processing
+ // ---------------------------------------------------------------------------
+diff --git a/ui/app/(app)/layout.tsx b/ui/app/(app)/layout.tsx
+index 5963d12..a1dae34 100644
+--- a/ui/app/(app)/layout.tsx
++++ b/ui/app/(app)/layout.tsx
+@@ -1,12 +1,14 @@
+ 'use client'
+ 
++import { AppDropzone } from '@/components/AppDropzone'
+ import { MenuBar } from '@/components/MenuBar'
+ 
+ export default function AppLayout({ children }: { children: React.ReactNode }) {
+   return (
+-    <div className='bg-background flex h-screen w-screen flex-col overflow-hidden'>
++    <div className='bg-background relative flex h-screen w-screen flex-col overflow-hidden'>
+       <MenuBar />
+       {children}
++      <AppDropzone />
+     </div>
+   )
+ }
+diff --git a/ui/lib/filePicker.ts b/ui/lib/filePicker.ts
+index 427b1f1..bb717ad 100644
+--- a/ui/lib/filePicker.ts
++++ b/ui/lib/filePicker.ts
+@@ -4,6 +4,11 @@ import { fileOpen, directoryOpen } from 'browser-fs-access'
+ 
+ const IMAGE_EXTENSIONS = ['.png', '.jpg', '.jpeg', '.webp']
+ 
++export const filterImageFiles = (files: Iterable<File>): File[] =>
++  Array.from(files).filter((file) =>
++    IMAGE_EXTENSIONS.some((ext) => file.name.toLowerCase().endsWith(ext)),
++  )
++
+ export const pickImageFiles = async (): Promise<File[] | null> => {
+   try {
+     const files = await fileOpen({
+@@ -12,7 +17,7 @@ export const pickImageFiles = async (): Promise<File[] | null> => {
+       multiple: true,
+       description: 'Select images',
+     })
+-    const result = Array.isArray(files) ? files : [files]
++    const result = filterImageFiles(Array.isArray(files) ? files : [files])
+     return result.length > 0 ? result : null
+   } catch {
+     return null // user cancelled
+@@ -22,9 +27,7 @@ export const pickImageFiles = async (): Promise<File[] | null> => {
+ export const pickImageFolderFiles = async (): Promise<File[] | null> => {
+   try {
+     const files = await directoryOpen({ recursive: true })
+-    const images = files.filter((f) =>
+-      IMAGE_EXTENSIONS.some((ext) => f.name.toLowerCase().endsWith(ext)),
+-    )
++    const images = filterImageFiles(files)
+     return images.length > 0 ? images : null
+   } catch {
+     return null // user cancelled
+diff --git a/ui/lib/machines/processingMachine.ts b/ui/lib/machines/processingMachine.ts
+index 48184fe..588a619 100644
+--- a/ui/lib/machines/processingMachine.ts
++++ b/ui/lib/machines/processingMachine.ts
+@@ -2,12 +2,17 @@ import { setup, assign, fromPromise, fromCallback } from 'xstate'
+ import type { QueryClient } from '@tanstack/react-query'
+ import { ProgressBarStatus, getCurrentWindow } from '@/lib/backend'
+ import { useEditorUiStore } from '@/lib/stores/editorUiStore'
+-import { pickImageFiles, pickImageFolderFiles } from '@/lib/filePicker'
++import {
++  pickImageFiles,
++  pickImageFolderFiles,
++  filterImageFiles,
++} from '@/lib/filePicker'
+ import {
+   getListDocumentsQueryKey,
+   getGetDocumentQueryKey,
+   importDocuments,
+ } from '@/lib/api/documents/documents'
++import { fetchApi } from '@/lib/api/fetch'
+ import {
+   detectDocument,
+   recognizeDocument,
+@@ -46,6 +51,20 @@ const importSelectedDocuments = async (
+   )
+ }
+ 
++const importDocumentsFromPaths = async (
++  paths: string[],
++  mode: 'replace' | 'append',
++): Promise<ImportResult> => {
++  return fetchApi<ImportResult>(
++    `/api/v1/documents/import-from-paths?mode=${mode}`,
++    {
++      method: 'POST',
++      headers: { 'Content-Type': 'application/json' },
++      body: JSON.stringify({ paths }),
++    },
++  )
++}
++
+ const saveBlob = async (blob: Blob, filename: string) => {
+   if (typeof document === 'undefined') return
+ 
+@@ -83,6 +102,16 @@ export type ProcessingEvent =
+       mode: 'replace' | 'append'
+       source: 'files' | 'folder'
+     }
++  | {
++      type: 'START_IMPORT_FILES'
++      mode: 'replace' | 'append'
++      files: File[]
++    }
++  | {
++      type: 'START_IMPORT_PATHS'
++      mode: 'replace' | 'append'
++      paths: string[]
++    }
+   | { type: 'START_DETECT'; documentId: string }
+   | { type: 'START_RECOGNIZE'; documentId: string }
+   | { type: 'START_INPAINT'; documentId: string }
+@@ -141,8 +170,24 @@ const clearProgressBarValue = () => {
+ 
+ const importActor = fromPromise<
+   ImportResult,
+-  { mode: 'replace' | 'append'; source: 'files' | 'folder' }
++  {
++    mode: 'replace' | 'append'
++    source?: 'files' | 'folder'
++    files?: File[]
++    paths?: string[]
++  }
+ >(async ({ input }) => {
++  if (input.paths) {
++    if (input.paths.length === 0) throw new Error('__CANCELLED__')
++    return importDocumentsFromPaths(input.paths, input.mode)
++  }
++
++  if (input.files) {
++    const files = filterImageFiles(input.files)
++    if (files.length === 0) throw new Error('__CANCELLED__')
++    return importSelectedDocuments(files, input.mode)
++  }
++
+   const picked =
+     input.source === 'folder'
+       ? await pickImageFolderFiles()
+@@ -466,6 +511,14 @@ export const processingMachine = setup({
+           target: 'importing',
+           actions: ['resetContext'],
+         },
++        START_IMPORT_FILES: {
++          target: 'importing',
++          actions: ['resetContext'],
++        },
++        START_IMPORT_PATHS: {
++          target: 'importing',
++          actions: ['resetContext'],
++        },
+         START_DETECT: {
+           target: 'detecting',
+           actions: ['resetContext', 'setDocumentIdFromEvent'],
+@@ -520,8 +573,19 @@ export const processingMachine = setup({
+       invoke: {
+         src: 'importActor',
+         input: ({ event }) => {
+-          const e = event as Extract<ProcessingEvent, { type: 'START_IMPORT' }>
+-          return { mode: e.mode, source: e.source }
++          if (event.type === 'START_IMPORT') {
++            return { mode: event.mode, source: event.source }
++          }
++
++          if (event.type === 'START_IMPORT_FILES') {
++            return { mode: event.mode, files: event.files }
++          }
++
++          const e = event as Extract<
++            ProcessingEvent,
++            { type: 'START_IMPORT_PATHS' }
++          >
++          return { mode: e.mode, paths: e.paths }
+         },
+         onDone: {
+           target: 'idle',
