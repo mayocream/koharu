@@ -24,9 +24,6 @@ use petgraph::graph::DiGraph;
 use tokio::sync::RwLock;
 use tracing::Instrument;
 
-use koharu_llm::Language;
-use koharu_llm::providers::{DEEPL_ID, GOOGLE_TRANSLATE_ID, ProviderConfig, build_provider};
-
 use crate::AppResources;
 
 // ---------------------------------------------------------------------------
@@ -931,57 +928,16 @@ impl Engine for LlmTranslateEngine {
         res: &AppResources,
         options: &PipelineRunOptions,
     ) -> Result<Patch> {
-        let translator = {
-            let cfg = res.config.read().await;
-            cfg.pipeline.translator.clone()
-        };
         let mut page = doc.clone();
         let block_count = page.text_blocks.len();
         async {
-            if translator == DEEPL_ID || translator == GOOGLE_TRANSLATE_ID {
-                let cfg = crate::config::load()?;
-                let stored = cfg.providers.iter().find(|p| p.id == translator);
-                let api_key = stored
-                    .and_then(|p| p.api_key.as_ref())
-                    .map(|secret| secret.expose().to_owned());
-                let base_url = stored.and_then(|p| p.base_url.clone());
-
-                let provider = build_provider(
-                    &translator,
-                    ProviderConfig {
-                        http_client: res.runtime.http_client(),
-                        http_client_raw: res.runtime.http_client_raw(),
-                        api_key,
-                        base_url,
-                        temperature: None,
-                        max_tokens: None,
-                    },
-                )?;
-
-                let lang = options
-                    .target_language
-                    .as_deref()
-                    .and_then(Language::parse)
-                    .unwrap_or(Language::English);
-
-                for b in &mut page.text_blocks {
-                    let src = b.text.as_deref().map(str::trim).unwrap_or("");
-                    if src.is_empty() {
-                        continue;
-                    }
-                    let t = provider.translate(src, lang, "default", None).await?;
-                    b.translation = Some(t.trim().to_string());
-                }
-                Ok(())
-            } else {
-                res.llm
-                    .translate(
-                        &mut page,
-                        options.target_language.as_deref(),
-                        options.system_prompt.as_deref(),
-                    )
-                    .await
-            }
+            crate::llm::translate_via_pipeline_translator(
+                res,
+                &mut page,
+                options.target_language.as_deref(),
+                options.system_prompt.as_deref(),
+            )
+            .await
         }
         .instrument(tracing::info_span!("inference", blocks = block_count))
         .await?;
