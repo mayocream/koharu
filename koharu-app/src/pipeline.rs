@@ -243,6 +243,20 @@ async fn run_inner(
     let config = res.config.read().await.clone();
     let selection = engine::resolve_pipeline(&config.pipeline);
     let total_steps = selection.len();
+    let run_options = engine::PipelineRunOptions::from_process_request(req);
+
+    if selection.contains(&"llm")
+        && let Some(llm) = req.llm.as_ref()
+    {
+        crate::llm::llm_load(
+            res.clone(),
+            koharu_core::LlmLoadRequest {
+                target: llm.target.clone(),
+                options: llm.options.clone(),
+            },
+        )
+        .await?;
+    }
 
     for (doc_idx, page_id) in page_ids.iter().enumerate() {
         if cancel.load(Ordering::Relaxed) {
@@ -252,29 +266,36 @@ async fn run_inner(
         let job_id = job_id.to_string();
         let jobs = jobs.clone();
 
-        match engine::execute_pipeline(&selection, res, page_id, cancel, |step_idx, step_id| {
-            let pct = if total_docs * total_steps > 0 {
-                ((doc_idx * total_steps + step_idx) as f64 / (total_docs * total_steps) as f64
-                    * 100.0) as u8
-            } else {
-                0
-            };
-            let job = job_state(
-                &job_id,
-                JobStatus::Running,
-                Some(step_id.to_string()),
-                doc_idx,
-                total_docs,
-                step_idx,
-                total_steps,
-                pct,
-                None,
-            );
-            let jobs = jobs.clone();
-            async move {
-                jobs.write().await.insert(job.id.clone(), job);
-            }
-        })
+        match engine::execute_pipeline(
+            &selection,
+            res,
+            page_id,
+            cancel,
+            &run_options,
+            |step_idx, step_id| {
+                let pct = if total_docs * total_steps > 0 {
+                    ((doc_idx * total_steps + step_idx) as f64 / (total_docs * total_steps) as f64
+                        * 100.0) as u8
+                } else {
+                    0
+                };
+                let job = job_state(
+                    &job_id,
+                    JobStatus::Running,
+                    Some(step_id.to_string()),
+                    doc_idx,
+                    total_docs,
+                    step_idx,
+                    total_steps,
+                    pct,
+                    None,
+                );
+                let jobs = jobs.clone();
+                async move {
+                    jobs.write().await.insert(job.id.clone(), job);
+                }
+            },
+        )
         .await
         {
             Ok(()) => {

@@ -2583,6 +2583,9 @@
                 "$ref": "#/components/schemas/TextStrokeStyle"
               }
             ]
+          },
+          "systemPrompt": {
+            "type": ["string", "null"]
           }
         }
       },

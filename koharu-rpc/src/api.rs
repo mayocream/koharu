@@ -1173,6 +1173,7 @@ async fn start_pipeline(
             document_id: request.document_id.clone(),
             llm: request.llm.clone(),
             language: request.language,
+            system_prompt: request.system_prompt,
             shader_effect: request.shader_effect,
             shader_stroke: request.shader_stroke,
         },

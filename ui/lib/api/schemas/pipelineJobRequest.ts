@@ -15,4 +15,6 @@ export interface PipelineJobRequest {
   llm?: null | PipelineLlmRequest
   shaderEffect?: null | TextShaderEffect
   shaderStroke?: null | TextStrokeStyle
+  /** @nullable */
+  systemPrompt?: string | null
 }

@@ -370,6 +370,7 @@ pub struct PipelineJobRequest {
     pub document_id: Option<String>,
     pub llm: Option<PipelineLlmRequest>,
     pub language: Option<String>,
+    pub system_prompt: Option<String>,
     pub shader_effect: Option<TextShaderEffect>,
     pub shader_stroke: Option<TextStrokeStyle>,
 }

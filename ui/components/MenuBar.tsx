@@ -40,6 +40,7 @@ import {
 import { SettingsDialog, type TabId } from '@/components/SettingsDialog'
 import { useProcessing } from '@/lib/machines'
 import { useEditorUiStore } from '@/lib/stores/editorUiStore'
+import { usePreferencesStore } from '@/lib/stores/preferencesStore'
 import type { PipelineJobRequest } from '@/lib/api/schemas'
 
 type MenuItem = {
@@ -68,10 +69,12 @@ export function MenuBar() {
   const buildPipelineRequest = (documentId?: string): PipelineJobRequest => {
     const { selectedTarget, selectedLanguage, renderEffect, renderStroke } =
       useEditorUiStore.getState()
+    const { customSystemPrompt } = usePreferencesStore.getState()
     return {
       documentId,
       llm: selectedTarget ? { target: selectedTarget } : undefined,
       language: selectedLanguage,
+      systemPrompt: customSystemPrompt,
       shaderEffect: renderEffect,
       shaderStroke: renderStroke,
     }
