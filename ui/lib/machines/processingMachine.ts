@@ -17,6 +17,7 @@ import {
 } from '@/lib/api/processing/processing'
 import { startPipeline, cancelJob, getJob } from '@/lib/api/jobs/jobs'
 import { exportDocument, batchExport } from '@/lib/api/exports/exports'
+import { deleteDocuments } from '@/lib/api/documents/documents'
 import {
   loadLlm,
   unloadLlm,
@@ -95,6 +96,7 @@ export type ProcessingEvent =
       renderOptions: RenderRequest
     }
   | { type: 'START_PIPELINE'; request: PipelineJobRequest }
+  | { type: 'START_BATCH_PROCESS'; request: PipelineJobRequest }
   | { type: 'START_LLM_LOAD'; request: LlmLoadRequest }
   | { type: 'START_LLM_UNLOAD' }
   | {
@@ -103,7 +105,8 @@ export type ProcessingEvent =
       format: string
       params?: { layer?: ExportLayer | null }
     }
-  | { type: 'START_BATCH_EXPORT'; layer: ExportLayer }
+  | { type: 'START_BATCH_EXPORT'; layer: ExportLayer; documentIds?: string[] }
+  | { type: 'START_BATCH_DELETE'; documentIds: string[] }
   | { type: 'START_EXPORT_PROJECT' }
   | { type: 'START_IMPORT_PROJECT' }
   | {
@@ -192,6 +195,12 @@ const pipelineActor = fromPromise<string, { request: PipelineJobRequest }>(
   },
 )
 
+const batchDeleteActor = fromPromise<void, { documentIds: string[] }>(
+  async ({ input }) => {
+    await deleteDocuments({ documentIds: input.documentIds })
+  },
+)
+
 const translateBlockActor = fromPromise<
   void,
   {
@@ -236,11 +245,12 @@ const exportActor = fromPromise<
   await saveBlob(blob, `${summary?.name ?? 'export'}_koharu.${input.format}`)
 })
 
-const batchExportActor = fromPromise<void, { layer: ExportLayer }>(
-  async ({ input }) => {
-    await batchExport({ layer: input.layer })
-  },
-)
+const batchExportActor = fromPromise<
+  void,
+  { layer: ExportLayer; documentIds?: string[] }
+>(async ({ input }) => {
+  await batchExport({ layer: input.layer, documentIds: input.documentIds })
+})
 
 const exportProjectActor = fromPromise<void, void>(async () => {
   const { exportProject } = await import('@/lib/api/exports/exports')
@@ -336,6 +346,7 @@ export const processingMachine = setup({
     llmUnloadActor,
     exportActor,
     batchExportActor,
+    batchDeleteActor,
     exportProjectActor,
     importProjectActor,
     jobPollingActor,
@@ -368,7 +379,7 @@ export const processingMachine = setup({
     }),
     setPipelineDocumentId: assign({
       documentId: ({ event }) => {
-        if (event.type === 'START_PIPELINE') {
+        if (event.type === 'START_PIPELINE' || event.type === 'START_BATCH_PROCESS') {
           return event.request.documentId ?? null
         }
         return null
@@ -508,6 +519,10 @@ export const processingMachine = setup({
           target: 'pipeline',
           actions: ['resetContext', 'setPipelineDocumentId'],
         },
+        START_BATCH_PROCESS: {
+          target: 'pipeline',
+          actions: ['resetContext', 'setPipelineDocumentId'],
+        },
         START_LLM_LOAD: {
           target: 'loadingLlm',
           actions: ['resetContext'],
@@ -522,6 +537,10 @@ export const processingMachine = setup({
         },
         START_BATCH_EXPORT: {
           target: 'batchExporting',
+          actions: ['resetContext'],
+        },
+        START_BATCH_DELETE: {
+          target: 'batchDeleting',
           actions: ['resetContext'],
         },
         START_EXPORT_PROJECT: {
@@ -737,7 +756,7 @@ export const processingMachine = setup({
             input: ({ event }) => {
               const e = event as Extract<
                 ProcessingEvent,
-                { type: 'START_PIPELINE' }
+                { type: 'START_PIPELINE' | 'START_BATCH_PROCESS' }
               >
               return { request: e.request }
             },
@@ -901,10 +920,46 @@ export const processingMachine = setup({
             ProcessingEvent,
             { type: 'START_BATCH_EXPORT' }
           >
-          return { layer: e.layer }
+          return { layer: e.layer, documentIds: e.documentIds }
         },
         onDone: {
           target: 'idle',
+        },
+        onError: {
+          target: 'idle',
+          actions: ['setErrorFromInvoke', 'surfaceError'],
+        },
+      },
+    },
+
+    // -----------------------------------------------------------------------
+    batchDeleting: {
+      entry: 'setProgressBarNormal',
+      exit: 'clearProgressBar',
+      invoke: {
+        src: 'batchDeleteActor',
+        input: ({ event }) => {
+          const e = event as Extract<
+            ProcessingEvent,
+            { type: 'START_BATCH_DELETE' }
+          >
+          return { documentIds: e.documentIds }
+        },
+        onDone: {
+          target: 'idle',
+          actions: [
+            'invalidateDocumentList',
+            ({ event }) => {
+              // The event we receive here is the invoke.done event, but we can't easily read the original input.
+              // We'll just read from the store before we clear.
+              const store = useEditorUiStore.getState()
+              const ids = store.selectedDocumentIds
+              if (store.currentDocumentId && ids.has(store.currentDocumentId)) {
+                store.setCurrentDocumentId(null)
+              }
+              store.clearDocumentSelection()
+            }
+          ],
         },
         onError: {
           target: 'idle',

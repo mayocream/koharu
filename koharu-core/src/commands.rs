@@ -70,6 +70,7 @@ pub struct LlmGenerateParams {
 #[serde(rename_all = "camelCase")]
 pub struct ProcessRequest {
     pub document_id: Option<String>,
+    pub document_ids: Option<Vec<String>>,
     pub llm: Option<crate::PipelineLlmRequest>,
     pub language: Option<String>,
     pub shader_effect: Option<TextShaderEffect>,
@@ -261,6 +262,7 @@ mod tests {
         });
         round_trip(&ProcessRequest {
             document_id: Some("abc123".to_string()),
+            document_ids: None,
             llm: Some(crate::PipelineLlmRequest {
                 target: crate::LlmTarget {
                     kind: crate::LlmTargetKind::Provider,

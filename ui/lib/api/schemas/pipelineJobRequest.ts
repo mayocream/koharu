@@ -11,6 +11,8 @@ export interface PipelineJobRequest {
   /** @nullable */
   documentId?: string | null;
   /** @nullable */
+  documentIds?: string[] | null;
+  /** @nullable */
   fontFamily?: string | null;
   /** @nullable */
   language?: string | null;

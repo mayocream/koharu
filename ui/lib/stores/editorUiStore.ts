@@ -27,6 +27,7 @@ type EditorUiState = {
   totalPages: number
   documentsVersion: number
   currentDocumentId: string | null
+  selectedDocumentIds: Set<string>
   scale: number
   showSegmentationMask: boolean
   showInpaintedImage: boolean
@@ -51,6 +52,9 @@ type EditorUiState = {
   setAutoFitEnabled: (enabled: boolean) => void
   setRenderEffect: (effect: RenderEffect) => void
   setRenderStroke: (stroke: RenderStroke) => void
+  toggleDocumentSelection: (id: string) => void
+  selectAllDocuments: (ids: string[]) => void
+  clearDocumentSelection: () => void
 
   // --- llm ui ---
   selectedTarget?: LlmTarget
@@ -72,6 +76,7 @@ const initialState = {
   totalPages: 0,
   documentsVersion: 0,
   currentDocumentId: null as string | null,
+  selectedDocumentIds: new Set<string>(),
   scale: 100,
   showSegmentationMask: false,
   showInpaintedImage: false,
@@ -110,6 +115,7 @@ export const useEditorUiStore = create<EditorUiState>((set, get) => ({
         totalPages: count,
         documentsVersion: state.documentsVersion + 1,
         currentDocumentId: null,
+        selectedDocumentIds: new Set<string>(),
         selectedBlockIndex: undefined,
       }
     })
@@ -162,6 +168,18 @@ export const useEditorUiStore = create<EditorUiState>((set, get) => ({
   setAutoFitEnabled: (enabled) => set({ autoFitEnabled: enabled }),
   setRenderEffect: (effect) => set({ renderEffect: effect }),
   setRenderStroke: (stroke) => set({ renderStroke: stroke }),
+  toggleDocumentSelection: (id) =>
+    set((state) => {
+      const next = new Set(state.selectedDocumentIds)
+      if (next.has(id)) {
+        next.delete(id)
+      } else {
+        next.add(id)
+      }
+      return { selectedDocumentIds: next }
+    }),
+  selectAllDocuments: (ids) => set({ selectedDocumentIds: new Set(ids) }),
+  clearDocumentSelection: () => set({ selectedDocumentIds: new Set() }),
 
   // --- llm ui actions ---
   setSelectedTarget: (selectedTarget) => set({ selectedTarget }),
@@ -193,5 +211,6 @@ export const useEditorUiStore = create<EditorUiState>((set, get) => ({
       totalPages: get().totalPages,
       documentsVersion: get().documentsVersion,
       currentDocumentId: get().currentDocumentId,
+      selectedDocumentIds: get().selectedDocumentIds,
     })),
 }))

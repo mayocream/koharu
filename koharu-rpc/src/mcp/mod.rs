@@ -475,6 +475,7 @@ impl KoharuMcp {
             res,
             ProcessRequest {
                 document_id: p.document_id,
+                document_ids: None,
                 llm: p.llm_target.map(|target| PipelineLlmRequest {
                     target,
                     options: None,

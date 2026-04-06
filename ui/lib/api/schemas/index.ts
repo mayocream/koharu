@@ -8,6 +8,7 @@ export * from './apiError';
 export * from './brushRegionRequest';
 export * from './createTextBlock';
 export * from './dataConfig';
+export * from './deleteDocumentsRequest';
 export * from './documentDetail';
 export * from './documentSummary';
 export * from './downloadState';

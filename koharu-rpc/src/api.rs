@@ -43,6 +43,7 @@ pub fn api() -> (axum::Router<ApiState>, utoipa::openapi::OpenApi) {
         .routes(routes!(list_documents, import_documents))
         .routes(routes!(import_project))
         .routes(routes!(get_document))
+        .routes(routes!(delete_documents))
         .routes(routes!(get_blob))
         .routes(routes!(get_document_thumbnail))
         .routes(routes!(detect_document))
@@ -159,6 +160,7 @@ struct ExportQuery {
 #[serde(rename_all = "camelCase")]
 struct ExportBatchRequest {
     layer: Option<ExportLayer>,
+    document_ids: Option<Vec<String>>,
 }
 
 // ---------------------------------------------------------------------------
@@ -274,6 +276,37 @@ async fn list_documents(State(state): State<ApiState>) -> ApiResult<Json<Vec<Doc
     let resources = state.resources()?;
     let documents = resources.storage.list_pages().await;
     Ok(Json(documents))
+}
+
+#[derive(Debug, Deserialize, utoipa::ToSchema)]
+#[serde(rename_all = "camelCase")]
+pub struct DeleteDocumentsRequest {
+    pub document_ids: Vec<String>,
+}
+
+#[utoipa::path(
+    delete,
+    path = "/documents",
+    operation_id = "deleteDocuments",
+    tag = "documents",
+    request_body = DeleteDocumentsRequest,
+    responses(
+        (status = 204),
+        (status = 503, body = ApiError),
+    ),
+)]
+#[tracing::instrument(level = "info", skip_all)]
+async fn delete_documents(
+    State(state): State<ApiState>,
+    Json(request): Json<DeleteDocumentsRequest>,
+) -> ApiResult<StatusCode> {
+    let resources = state.resources()?;
+    resources
+        .storage
+        .delete_pages(&request.document_ids)
+        .await
+        .map_err(ApiError::from)?;
+    Ok(StatusCode::NO_CONTENT)
 }
 
 #[utoipa::path(
@@ -1009,15 +1042,17 @@ async fn start_pipeline(
             .await
             .map_err(|_| ApiError::not_found(format!("Document not found: {document_id}")))?;
     }
-    let total_documents = match &request.document_id {
-        Some(_) => 1,
-        None => resources.storage.page_count().await,
+    let total_documents = match (&request.document_id, &request.document_ids) {
+        (Some(_), _) => 1,
+        (None, Some(ids)) => ids.len(),
+        (None, None) => resources.storage.page_count().await,
     };
 
     let job_id = pipeline::process(
         resources.clone(),
         koharu_core::ProcessRequest {
             document_id: request.document_id.clone(),
+            document_ids: request.document_ids.clone(),
             llm: request.llm.clone(),
             language: request.language,
             shader_effect: request.shader_effect,
@@ -1276,8 +1311,8 @@ async fn batch_export(
 ) -> ApiResult<Json<ExportResult>> {
     let resources = state.resources()?;
     let count = match request.layer.unwrap_or(ExportLayer::Rendered) {
-        ExportLayer::Rendered => io::export_all_rendered(resources).await?,
-        ExportLayer::Inpainted => io::export_all_inpainted(resources).await?,
+        ExportLayer::Rendered => io::export_all_rendered(resources, request.document_ids).await?,
+        ExportLayer::Inpainted => io::export_all_inpainted(resources, request.document_ids).await?,
     };
     Ok(Json(ExportResult { count }))
 }

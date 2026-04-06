@@ -6,5 +6,7 @@
 import type { ExportLayer } from './exportLayer';
 
 export interface ExportBatchRequest {
+  /** @nullable */
+  documentIds?: string[] | null;
   layer?: null | ExportLayer;
 }
