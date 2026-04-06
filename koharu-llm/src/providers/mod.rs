@@ -160,6 +160,7 @@ pub trait AnyProvider: Send + Sync {
 #[derive(Clone)]
 pub struct ProviderConfig {
     pub http_client: Arc<ClientWithMiddleware>,
+    pub http_client_raw: reqwest::Client,
     pub api_key: Option<String>,
     pub base_url: Option<String>,
     pub temperature: Option<f64>,
@@ -370,9 +371,10 @@ fn build_openai_compatible_provider(
 }
 
 fn build_deepl_mt_provider(config: ProviderConfig) -> anyhow::Result<Box<dyn AnyProvider>> {
+    let api_key = required_api_key(&config, DEEPL_ID)?;
     Ok(Box::new(deepl_mt::DeeplMtProvider {
-        http_client: Arc::clone(&config.http_client),
-        api_key: required_api_key(&config, DEEPL_ID)?,
+        http_client: config.http_client_raw,
+        api_key,
         base_url: config.base_url,
     }))
 }

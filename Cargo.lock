@@ -4044,7 +4044,6 @@ dependencies = [
  "tracing",
  "tracing-core",
  "tracing-subscriber",
- "url",
  "zip 8.5.0",
 ]
 
@@ -6335,6 +6334,7 @@ dependencies = [
  "rustls-platform-verifier",
  "serde",
  "serde_json",
+ "serde_urlencoded",
  "sync_wrapper",
  "tokio",
  "tokio-rustls",

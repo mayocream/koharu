@@ -580,6 +580,7 @@ async fn provider_catalog(state: &AppResources) -> anyhow::Result<Vec<LlmProvide
                         descriptor.id,
                         ProviderConfig {
                             http_client: state.runtime.http_client(),
+                            http_client_raw: state.runtime.http_client_raw(),
                             api_key,
                             base_url: base_url.clone(),
                             temperature: None,
@@ -658,6 +659,7 @@ fn provider_config_from_settings(
 
     Ok(ProviderConfig {
         http_client: state.runtime.http_client(),
+        http_client_raw: state.runtime.http_client_raw(),
         api_key: stored
             .and_then(|p| p.api_key.as_ref())
             .map(|secret| secret.expose().to_owned()),

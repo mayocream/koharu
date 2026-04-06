@@ -2,17 +2,16 @@
 
 use std::future::Future;
 use std::pin::Pin;
-use std::sync::Arc;
 
 use anyhow::Context;
-use reqwest_middleware::ClientWithMiddleware;
 use serde::Deserialize;
 
 use crate::Language;
 
 use super::AnyProvider;
 
-const DEFAULT_BASE_URL: &str = "https://api.deepl.com";
+const DEFAULT_BASE_URL_PAID: &str = "https://api.deepl.com";
+const DEFAULT_BASE_URL_FREE: &str = "https://api-free.deepl.com";
 
 #[derive(Debug, Deserialize)]
 struct DeeplResponse {
@@ -24,11 +23,22 @@ struct DeeplTranslation {
     text: String,
 }
 
-fn normalize_base_url(base: Option<&str>) -> String {
+fn is_free_api_key(api_key: &str) -> bool {
+    // DeepL free keys typically end with ":fx".
+    api_key.trim_end().ends_with(":fx")
+}
+
+fn normalize_base_url(base: Option<&str>, api_key: &str) -> String {
     base.map(str::trim)
         .filter(|s| !s.is_empty())
         .map(|s| s.trim_end_matches('/').to_string())
-        .unwrap_or_else(|| DEFAULT_BASE_URL.to_string())
+        .unwrap_or_else(|| {
+            if is_free_api_key(api_key) {
+                DEFAULT_BASE_URL_FREE.to_string()
+            } else {
+                DEFAULT_BASE_URL_PAID.to_string()
+            }
+        })
 }
 
 fn deepl_target_lang(language: Language) -> &'static str {
@@ -77,7 +87,7 @@ fn deepl_target_lang(language: Language) -> &'static str {
 }
 
 pub struct DeeplMtProvider {
-    pub http_client: Arc<ClientWithMiddleware>,
+    pub http_client: reqwest::Client,
     pub api_key: String,
     pub base_url: Option<String>,
 }
@@ -91,22 +101,17 @@ impl AnyProvider for DeeplMtProvider {
         _custom_system_prompt: Option<&'a str>,
     ) -> Pin<Box<dyn Future<Output = anyhow::Result<String>> + Send + 'a>> {
         Box::pin(async move {
-            let root = normalize_base_url(self.base_url.as_deref());
+            let root = normalize_base_url(self.base_url.as_deref(), &self.api_key);
             let url = format!("{root}/v2/translate");
-
-            let encoded = {
-                let mut ser = url::form_urlencoded::Serializer::new(String::new());
-                ser.append_pair("text", source);
-                ser.append_pair("target_lang", deepl_target_lang(target_language));
-                ser.finish()
-            };
 
             let response = self
                 .http_client
                 .post(&url)
                 .header("Authorization", format!("DeepL-Auth-Key {}", self.api_key))
-                .header("Content-Type", "application/x-www-form-urlencoded")
-                .body(encoded)
+                .form(&[
+                    ("text", source),
+                    ("target_lang", deepl_target_lang(target_language)),
+                ])
                 .send()
                 .await
                 .context("DeepL translate request")?;

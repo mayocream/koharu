@@ -92,6 +92,10 @@ impl Runtime {
         self.inner.downloads.client()
     }
 
+    pub fn http_client_raw(&self) -> reqwest::Client {
+        self.inner.downloads.base_client()
+    }
+
     pub fn subscribe_downloads(&self) -> broadcast::Receiver<koharu_core::DownloadProgress> {
         self.inner.downloads.subscribe()
     }
