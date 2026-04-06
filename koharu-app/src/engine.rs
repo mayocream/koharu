@@ -1227,95 +1227,158 @@ fn overlap(a: [f32; 4], b: [f32; 4]) -> f32 {
 // ---------------------------------------------------------------------------
 
 /// Sort text blocks in manga reading order (right-to-left, top-to-bottom).
-/// Groups blocks into vertical columns by x-overlap, sorts columns right-to-left,
-/// and sorts blocks within each column top-to-bottom.
+/// Uses a Recursive XY-Cut algorithm to divide the page into columns and rows based on whitespace gaps.
 fn sort_manga_reading_order(blocks: &mut [TextBlock]) {
+    #[derive(Debug, PartialEq, Clone, Copy)]
+    enum Axis {
+        X,
+        Y,
+    }
+
     if blocks.len() <= 1 {
         return;
     }
 
-    // Assign each block to a column. Two blocks share a column if their
-    // x-ranges overlap by at least 30% of the smaller block's width.
-    let mut column_ids: Vec<usize> = vec![0; blocks.len()];
-    let mut next_col = 0usize;
+    // Determine dynamic gap thresholds by calculating the median dimensions
+    // of all text blocks on the page.
+    let mut widths: Vec<f32> = blocks.iter().map(|b| b.width).collect();
+    let mut heights: Vec<f32> = blocks.iter().map(|b| b.height).collect();
 
-    // Sort by x descending first for stable column assignment (rightmost first).
-    let mut indices: Vec<usize> = (0..blocks.len()).collect();
-    indices.sort_by(|&a, &b| {
-        blocks[b]
-            .x
-            .partial_cmp(&blocks[a].x)
-            .unwrap_or(std::cmp::Ordering::Equal)
-    });
+    widths.sort_by(|a, b| a.partial_cmp(b).unwrap_or(std::cmp::Ordering::Equal));
+    heights.sort_by(|a, b| a.partial_cmp(b).unwrap_or(std::cmp::Ordering::Equal));
 
-    for &i in &indices {
-        let bx0 = blocks[i].x;
-        let bx1 = bx0 + blocks[i].width;
-        let bw = blocks[i].width.max(1.0);
+    let median_w = widths[widths.len() / 2].max(1.0);
+    let median_h = heights[heights.len() / 2].max(1.0);
 
-        // Try to find an existing column this block belongs to.
-        let mut found = None;
-        for &j in &indices {
-            if j == i {
-                continue;
-            }
-            if column_ids[j] == 0 && j > i {
-                continue; // not assigned yet
-            }
-            let jx0 = blocks[j].x;
-            let jx1 = jx0 + blocks[j].width;
-            let jw = blocks[j].width.max(1.0);
-            let overlap_w = (bx1.min(jx1) - bx0.max(jx0)).max(0.0);
-            if overlap_w / bw.min(jw) >= 0.3 {
-                found = Some(column_ids[j]);
-                break;
-            }
+    // Manga horizontal gutters are often tighter than vertical ones.
+    let min_gap_x = (median_w * 0.15).max(10.0);
+    let min_gap_y = (median_h * 0.10).max(8.0);
+
+    // Initiate recursive sorting directly on the mutable slice.
+    xy_cut_recursive(blocks, min_gap_x, min_gap_y);
+
+    fn xy_cut_recursive(blocks: &mut [TextBlock], min_gap_x: f32, min_gap_y: f32) {
+        if blocks.len() <= 1 {
+            return;
         }
 
-        column_ids[i] = match found {
-            Some(col) => col,
-            None => {
-                next_col += 1;
-                next_col
-            }
-        };
-    }
+        let cut_result = find_best_cut(blocks, min_gap_x, min_gap_y);
 
-    // Sort: primary = column center x descending (right-to-left),
-    //        secondary = block y ascending (top-to-bottom).
-    // Compute column center x.
-    let mut col_centers: std::collections::HashMap<usize, (f32, usize)> =
-        std::collections::HashMap::new();
-    for (i, &col) in column_ids.iter().enumerate() {
-        let cx = blocks[i].x + blocks[i].width * 0.5;
-        let entry = col_centers.entry(col).or_insert((0.0, 0));
-        entry.0 += cx;
-        entry.1 += 1;
-    }
-    let col_avg_x: std::collections::HashMap<usize, f32> = col_centers
-        .iter()
-        .map(|(&col, &(sum, count))| (col, sum / count.max(1) as f32))
-        .collect();
+        let Some((best_axis, best_gap)) = cut_result else {
+            // FALLBACK: Row-Aware sort for clusters that can't be cleanly cut.
+            let row_height = min_gap_y * 4.0;
 
-    // Build sortable (col_x_desc, y_asc) keys.
-    let mut order: Vec<usize> = (0..blocks.len()).collect();
-    order.sort_by(|&a, &b| {
-        let ca = col_avg_x.get(&column_ids[a]).copied().unwrap_or(0.0);
-        let cb = col_avg_x.get(&column_ids[b]).copied().unwrap_or(0.0);
-        // Right-to-left: higher x first
-        cb.partial_cmp(&ca)
-            .unwrap_or(std::cmp::Ordering::Equal)
-            .then_with(|| {
-                blocks[a]
-                    .y
-                    .partial_cmp(&blocks[b].y)
+            blocks.sort_by(|a, b| {
+                let row_a = (a.y / row_height).floor();
+                let row_b = (b.y / row_height).floor();
+
+                row_a
+                    .partial_cmp(&row_b)
                     .unwrap_or(std::cmp::Ordering::Equal)
-            })
-    });
+                    .then_with(|| b.x.partial_cmp(&a.x).unwrap_or(std::cmp::Ordering::Equal))
+            });
+            return;
+        };
 
-    // Apply the permutation in-place.
-    let sorted: Vec<TextBlock> = order.iter().map(|&i| blocks[i].clone()).collect();
-    blocks.clone_from_slice(&sorted);
+        let cut_coord = (best_gap.0 + best_gap.1) / 2.0;
+
+        // In-place stable partition to avoid recursively allocating new vectors.
+        // Rust's `bool` sorts `false` before `true`. By mapping items destined
+        // for the primary partition (Right or Top) to `false`, we separate
+        // the geometry cleanly into two contiguous segments.
+        blocks.sort_by_key(|block| {
+            if best_axis == Axis::X {
+                (block.x + block.width * 0.5) < cut_coord
+            } else {
+                (block.y + block.height * 0.5) > cut_coord
+            }
+        });
+
+        // Find where the split boundary lies
+        let group1_len = blocks
+            .iter()
+            .filter(|block| {
+                if best_axis == Axis::X {
+                    (block.x + block.width * 0.5) >= cut_coord
+                } else {
+                    (block.y + block.height * 0.5) <= cut_coord
+                }
+            })
+            .count();
+
+        if group1_len == 0 || group1_len == blocks.len() {
+            blocks.sort_by(|a, b| b.x.partial_cmp(&a.x).unwrap_or(std::cmp::Ordering::Equal));
+            return;
+        }
+
+        // Subdivide the slice bounds along the partition line and recurse.
+        let (left, right) = blocks.split_at_mut(group1_len);
+        xy_cut_recursive(left, min_gap_x, min_gap_y);
+        xy_cut_recursive(right, min_gap_x, min_gap_y);
+    }
+
+    fn find_best_cut(
+        blocks: &[TextBlock],
+        min_gap_x: f32,
+        min_gap_y: f32,
+    ) -> Option<(Axis, (f32, f32))> {
+        let mut x_intervals: Vec<(f32, f32)> =
+            blocks.iter().map(|b| (b.x, b.x + b.width)).collect();
+        let mut y_intervals: Vec<(f32, f32)> =
+            blocks.iter().map(|b| (b.y, b.y + b.height)).collect();
+
+        x_intervals.sort_by(|a, b| a.0.partial_cmp(&b.0).unwrap_or(std::cmp::Ordering::Equal));
+        y_intervals.sort_by(|a, b| a.0.partial_cmp(&b.0).unwrap_or(std::cmp::Ordering::Equal));
+
+        let gap_x = find_largest_gap(&x_intervals, min_gap_x);
+        let gap_y = find_largest_gap(&y_intervals, min_gap_y);
+
+        match (gap_x, gap_y) {
+            (Some(gx), Some(gy)) => {
+                let width_y = gy.1 - gy.0;
+                let width_x = gx.1 - gx.0;
+
+                // Evaluate projection dominance:
+                // Select the horizontal cut unless the vertical visual gap is overwhelmingly wider.
+                if width_y > 12.0 || width_y > (width_x * 0.4) {
+                    Some((Axis::Y, gy))
+                } else {
+                    Some((Axis::X, gx))
+                }
+            }
+            (None, Some(gy)) => Some((Axis::Y, gy)),
+            (Some(gx), None) => Some((Axis::X, gx)),
+            (None, None) => None,
+        }
+    }
+
+    fn find_largest_gap(intervals: &[(f32, f32)], min_gap: f32) -> Option<(f32, f32)> {
+        if intervals.is_empty() {
+            return None;
+        }
+
+        let mut largest_gap: Option<(f32, f32)> = None;
+        let mut current_max_end = intervals[0].1;
+
+        for interval in intervals.iter().skip(1) {
+            // A valid separation exists if the start of the current interval
+            // does not intersect the bounding maximum of all preceding intervals.
+            if interval.0 > current_max_end {
+                let gap_size = interval.0 - current_max_end;
+                if gap_size >= min_gap {
+                    if let Some(ref mut best_gap) = largest_gap {
+                        if gap_size > (best_gap.1 - best_gap.0) {
+                            *best_gap = (current_max_end, interval.0);
+                        }
+                    } else {
+                        largest_gap = Some((current_max_end, interval.0));
+                    }
+                }
+            }
+            current_max_end = current_max_end.max(interval.1);
+        }
+        largest_gap
+    }
 }
 
 // ---------------------------------------------------------------------------
