@@ -85,6 +85,10 @@ type SettingsDialogProps = {
   defaultTab?: TabId
 }
 
+const DEFAULT_HTTP_CONNECT_TIMEOUT = 20
+const DEFAULT_HTTP_READ_TIMEOUT = 300
+const DEFAULT_HTTP_MAX_RETRIES = 3
+
 export function SettingsDialog({
   open,
   onOpenChange,
@@ -103,8 +107,13 @@ export function SettingsDialog({
   >([])
   const [apiKeyDrafts, setApiKeyDrafts] = useState<Record<string, string>>({})
   const [dataPathDraft, setDataPathDraft] = useState('')
-  const [dataPathError, setDataPathError] = useState<string | null>(null)
-  const [isSavingDataPath, setIsSavingDataPath] = useState(false)
+  const [httpConnectTimeoutDraft, setHttpConnectTimeoutDraft] = useState('')
+  const [httpReadTimeoutDraft, setHttpReadTimeoutDraft] = useState('')
+  const [httpMaxRetriesDraft, setHttpMaxRetriesDraft] = useState('')
+  const [storageSettingsError, setStorageSettingsError] = useState<
+    string | null
+  >(null)
+  const [isSavingStorageSettings, setIsSavingStorageSettings] = useState(false)
   const [engineCatalog, setEngineCatalog] =
     useState<GetEngineCatalog200 | null>(null)
   const [appVersion, setAppVersion] = useState<string>()
@@ -116,7 +125,7 @@ export function SettingsDialog({
     void (async () => {
       try {
         const [config, catalog, engines] = await Promise.all([
-          getConfig() as unknown as Promise<UpdateConfigBody>,
+          getConfig(),
           getLlmCatalog(),
           getEngineCatalog(),
         ])
@@ -149,10 +158,18 @@ export function SettingsDialog({
   }, [open])
 
   useEffect(() => {
-    if (appConfig?.data) {
-      setDataPathDraft(appConfig.data.path)
-      setDataPathError(null)
-    }
+    if (!appConfig?.data) return
+    setDataPathDraft(appConfig.data.path)
+    setHttpConnectTimeoutDraft(
+      String(appConfig.http?.connect_timeout ?? DEFAULT_HTTP_CONNECT_TIMEOUT),
+    )
+    setHttpReadTimeoutDraft(
+      String(appConfig.http?.read_timeout ?? DEFAULT_HTTP_READ_TIMEOUT),
+    )
+    setHttpMaxRetriesDraft(
+      String(appConfig.http?.max_retries ?? DEFAULT_HTTP_MAX_RETRIES),
+    )
+    setStorageSettingsError(null)
   }, [appConfig])
 
   const persistConfig = async (next: UpdateConfigBody) => {
@@ -181,31 +198,67 @@ export function SettingsDialog({
     setAppConfig({ ...appConfig, providers })
   }
 
-  const handleApplyDataPath = async () => {
+  const handleApplyStorageSettings = async () => {
     if (!appConfig) return
     const path = dataPathDraft.trim()
     if (!path) {
-      setDataPathError('Required')
+      setStorageSettingsError('Required')
       return
     }
-    if (path === appConfig.data?.path) return
-    setIsSavingDataPath(true)
-    setDataPathError(null)
-    const saved = await persistConfig({ ...appConfig, data: { path } })
-    setIsSavingDataPath(false)
+    const connectTimeout = Number.parseInt(httpConnectTimeoutDraft.trim(), 10)
+    if (!Number.isInteger(connectTimeout) || connectTimeout <= 0) {
+      setStorageSettingsError('Invalid HTTP connect timeout')
+      return
+    }
+    const readTimeout = Number.parseInt(httpReadTimeoutDraft.trim(), 10)
+    if (!Number.isInteger(readTimeout) || readTimeout <= 0) {
+      setStorageSettingsError('Invalid HTTP read timeout')
+      return
+    }
+    const maxRetries = Number.parseInt(httpMaxRetriesDraft.trim(), 10)
+    if (!Number.isInteger(maxRetries) || maxRetries < 0) {
+      setStorageSettingsError('Invalid HTTP max retries')
+      return
+    }
+
+    setIsSavingStorageSettings(true)
+    setStorageSettingsError(null)
+    const saved = await persistConfig({
+      ...appConfig,
+      data: { path },
+      http: {
+        connect_timeout: connectTimeout,
+        read_timeout: readTimeout,
+        max_retries: maxRetries,
+      },
+    })
+    setIsSavingStorageSettings(false)
     if (!saved) {
-      setDataPathError('Failed')
+      setStorageSettingsError('Failed')
       return
     }
-    if (isTauri()) {
-      try {
-        const { relaunch } = await import('@tauri-apps/plugin-process')
-        await relaunch()
-      } catch {
-        setDataPathError('Restart manually')
-      }
+    if (!isTauri()) {
+      setStorageSettingsError('Restart manually')
+      return
+    }
+    try {
+      const { relaunch } = await import('@tauri-apps/plugin-process')
+      await relaunch()
+    } catch {
+      setStorageSettingsError('Restart manually')
     }
   }
+
+  const storageSettingsUnchanged =
+    dataPathDraft.trim() === appConfig?.data?.path &&
+    httpConnectTimeoutDraft.trim() ===
+      String(
+        appConfig?.http?.connect_timeout ?? DEFAULT_HTTP_CONNECT_TIMEOUT,
+      ) &&
+    httpReadTimeoutDraft.trim() ===
+      String(appConfig?.http?.read_timeout ?? DEFAULT_HTTP_READ_TIMEOUT) &&
+    httpMaxRetriesDraft.trim() ===
+      String(appConfig?.http?.max_retries ?? DEFAULT_HTTP_MAX_RETRIES)
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
@@ -300,14 +353,29 @@ export function SettingsDialog({
               {tab === 'storage' && (
                 <StoragePane
                   dataPath={dataPathDraft}
-                  error={dataPathError}
-                  saving={isSavingDataPath}
-                  unchanged={dataPathDraft.trim() === appConfig?.data?.path}
+                  httpConnectTimeout={httpConnectTimeoutDraft}
+                  httpReadTimeout={httpReadTimeoutDraft}
+                  httpMaxRetries={httpMaxRetriesDraft}
+                  error={storageSettingsError}
+                  saving={isSavingStorageSettings}
+                  unchanged={storageSettingsUnchanged}
                   onPathChange={(v) => {
                     setDataPathDraft(v)
-                    setDataPathError(null)
+                    setStorageSettingsError(null)
                   }}
-                  onApply={() => void handleApplyDataPath()}
+                  onHttpConnectTimeoutChange={(v) => {
+                    setHttpConnectTimeoutDraft(v)
+                    setStorageSettingsError(null)
+                  }}
+                  onHttpReadTimeoutChange={(v) => {
+                    setHttpReadTimeoutDraft(v)
+                    setStorageSettingsError(null)
+                  }}
+                  onHttpMaxRetriesChange={(v) => {
+                    setHttpMaxRetriesDraft(v)
+                    setStorageSettingsError(null)
+                  }}
+                  onApply={() => void handleApplyStorageSettings()}
                 />
               )}
               {tab === 'about' && (
@@ -612,17 +680,29 @@ function ProvidersPane({
 
 function StoragePane({
   dataPath,
+  httpConnectTimeout,
+  httpReadTimeout,
+  httpMaxRetries,
   error,
   saving,
   unchanged,
   onPathChange,
+  onHttpConnectTimeoutChange,
+  onHttpReadTimeoutChange,
+  onHttpMaxRetriesChange,
   onApply,
 }: {
   dataPath: string
+  httpConnectTimeout: string
+  httpReadTimeout: string
+  httpMaxRetries: string
   error: string | null
   saving: boolean
   unchanged: boolean
   onPathChange: (v: string) => void
+  onHttpConnectTimeoutChange: (v: string) => void
+  onHttpReadTimeoutChange: (v: string) => void
+  onHttpMaxRetriesChange: (v: string) => void
   onApply: () => void
 }) {
   const { t } = useTranslation()
@@ -631,14 +711,70 @@ function StoragePane({
   return (
     <>
       <Section
-        title={t('settings.dataPath')}
-        description={t('settings.dataPathDescription')}
+        title={t('settings.storage')}
+        description={t('settings.storageDescription')}
       >
-        <Input
-          type='text'
-          value={dataPath}
-          onChange={(e) => onPathChange(e.target.value)}
-        />
+        <div className='space-y-1.5'>
+          <Label className='text-xs'>{t('settings.dataPath')}</Label>
+          <Input
+            type='text'
+            value={dataPath}
+            onChange={(e) => onPathChange(e.target.value)}
+          />
+          <p className='text-muted-foreground text-xs leading-relaxed'>
+            {t('settings.dataPathDescription')}
+          </p>
+        </div>
+
+        <div className='grid gap-4 md:grid-cols-2'>
+          <div className='space-y-1.5'>
+            <Label className='text-xs'>
+              {t('settings.httpConnectTimeout')}
+            </Label>
+            <Input
+              type='number'
+              min='1'
+              step='1'
+              inputMode='numeric'
+              value={httpConnectTimeout}
+              onChange={(e) => onHttpConnectTimeoutChange(e.target.value)}
+            />
+            <p className='text-muted-foreground text-xs leading-relaxed'>
+              {t('settings.httpConnectTimeoutDescription')}
+            </p>
+          </div>
+
+          <div className='space-y-1.5'>
+            <Label className='text-xs'>{t('settings.httpReadTimeout')}</Label>
+            <Input
+              type='number'
+              min='1'
+              step='1'
+              inputMode='numeric'
+              value={httpReadTimeout}
+              onChange={(e) => onHttpReadTimeoutChange(e.target.value)}
+            />
+            <p className='text-muted-foreground text-xs leading-relaxed'>
+              {t('settings.httpReadTimeoutDescription')}
+            </p>
+          </div>
+        </div>
+
+        <div className='space-y-1.5'>
+          <Label className='text-xs'>{t('settings.httpMaxRetries')}</Label>
+          <Input
+            type='number'
+            min='0'
+            step='1'
+            inputMode='numeric'
+            value={httpMaxRetries}
+            onChange={(e) => onHttpMaxRetriesChange(e.target.value)}
+          />
+          <p className='text-muted-foreground text-xs leading-relaxed'>
+            {t('settings.httpMaxRetriesDescription')}
+          </p>
+        </div>
+
         {error && <p className='text-destructive text-xs'>{error}</p>}
         <div className='flex justify-end pt-1'>
           <Button
@@ -646,17 +782,17 @@ function StoragePane({
             disabled={!dataPath.trim() || saving || unchanged}
           >
             {saving
-              ? t('settings.dataPathApplying')
-              : t('settings.dataPathApply')}
+              ? t('settings.restartApplying')
+              : t('settings.restartApply')}
           </Button>
         </div>
       </Section>
 
       <AlertDialog open={confirmOpen} onOpenChange={setConfirmOpen}>
         <AlertDialogContent>
-          <AlertDialogTitle>{t('settings.dataPathApply')}</AlertDialogTitle>
+          <AlertDialogTitle>{t('settings.restartApply')}</AlertDialogTitle>
           <AlertDialogDescription>
-            {t('settings.dataPathDescription')}
+            {t('settings.restartRequiredDescription')}
           </AlertDialogDescription>
           <div className='flex justify-end gap-2'>
             <AlertDialogCancel>{t('common.cancel')}</AlertDialogCancel>
@@ -666,7 +802,7 @@ function StoragePane({
                 onApply()
               }}
             >
-              {t('settings.dataPathApply')}
+              {t('settings.restartApply')}
             </AlertDialogAction>
           </div>
         </AlertDialogContent>

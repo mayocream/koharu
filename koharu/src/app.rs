@@ -10,7 +10,7 @@ use koharu_app::{AppResources, config as app_config, engine, llm, storage::Stora
 use koharu_llm::safe::llama_backend::LlamaBackend;
 use koharu_ml::{Device, device};
 use koharu_rpc::{SharedState, server};
-use koharu_runtime::{ComputePolicy, RuntimeManager};
+use koharu_runtime::{ComputePolicy, RuntimeHttpConfig, RuntimeManager};
 
 #[derive(Parser)]
 #[command(version = crate::version::APP_VERSION, about)]
@@ -109,6 +109,11 @@ pub async fn run() -> Result<()> {
     // ── Config ───────────────────────────────────────────────────────
     let config = app_config::load()?;
     let data_root = config.data.path.clone();
+    let http = RuntimeHttpConfig {
+        connect_timeout_secs: config.http.connect_timeout.max(1),
+        read_timeout_secs: config.http.read_timeout.max(1),
+        max_retries: config.http.max_retries,
+    };
     let compute = if cli.cpu {
         ComputePolicy::CpuOnly
     } else {
@@ -116,14 +121,14 @@ pub async fn run() -> Result<()> {
     };
 
     if cli.download {
-        return RuntimeManager::new(data_root.as_std_path(), compute)?
+        return RuntimeManager::new_with_http(data_root.as_std_path(), compute, http.clone())?
             .prepare()
             .await
             .context("Failed to download runtime packages");
     }
 
     // ── Server ───────────────────────────────────────────────────────
-    let runtime = RuntimeManager::new(data_root.as_std_path(), compute)?;
+    let runtime = RuntimeManager::new_with_http(data_root.as_std_path(), compute, http)?;
     let default_port = if cfg!(debug_assertions) { 9999 } else { 0 };
     let listener =
         TcpListener::bind(format!("127.0.0.1:{}", cli.port.unwrap_or(default_port))).await?;
