@@ -18,8 +18,9 @@ async function pathExists(target: string) {
 async function checkNvcc() {
   try {
     await exec('nvcc --version', { env: process.env })
+    return true
   } catch {
-    throw new Error('nvcc not found')
+    return false
   }
 }
 
@@ -89,14 +90,15 @@ async function setupCl() {
 
 async function dev() {
   if (os.type() === 'Windows_NT') {
-    // First, try to check if nvcc is available
-    await checkNvcc()
-      // If not found, try to set up CUDA paths
-      .catch(async () => {
-        await setupCuda()
-        // Check again after setup
-        await checkNvcc()
-      })
+    if (!(await checkNvcc())) {
+      await setupCuda()
+        .then(checkNvcc)
+        .catch(() => false)
+
+      if (!(await checkNvcc())) {
+        console.warn('NVCC not found, continuing without CUDA toolchain')
+      }
+    }
 
     // Setup cl.exe path
     await setupCl()

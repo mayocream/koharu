@@ -15,6 +15,7 @@ use self::model::{RTDetrV2ForObjectDetection, RTDetrV2Outputs};
 
 const HF_REPO: &str = "ogkalu/comic-text-and-bubble-detector";
 const DEFAULT_CONFIDENCE_THRESHOLD: f32 = 0.3;
+const MIN_TEXT_BLOCK_CONFIDENCE: f32 = 0.5;
 const DETECTOR_NAME: &str = "comic-text-bubble-detector";
 
 koharu_runtime::declare_hf_model_package!(
@@ -473,6 +474,9 @@ fn detections_to_text_blocks(
     let image_height = image_height as f32;
     let mut blocks = Vec::with_capacity(text_boxes.len());
     for text_region in text_boxes {
+        if text_region.score < MIN_TEXT_BLOCK_CONFIDENCE {
+            continue;
+        }
         let bbox = clamp_box(text_region.bbox, image_width, image_height);
         let width = (bbox[2] - bbox[0]).max(1.0);
         let height = (bbox[3] - bbox[1]).max(1.0);
@@ -993,5 +997,19 @@ mod tests {
         ];
         let merged = merge_slice_regions(regions, 500);
         assert_eq!(merged.len(), 2);
+    }
+
+    #[test]
+    fn detections_to_text_blocks_filters_low_confidence_text() {
+        let blocks = detections_to_text_blocks(
+            (1000, 1000),
+            &[ComicTextBubbleRegion {
+                label_id: 1,
+                label: "text".to_string(),
+                score: 0.4,
+                bbox: [100.0, 100.0, 200.0, 200.0],
+            }],
+        );
+        assert!(blocks.is_empty());
     }
 }
