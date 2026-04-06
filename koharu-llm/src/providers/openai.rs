@@ -7,6 +7,7 @@ use reqwest_middleware::ClientWithMiddleware;
 use crate::Language;
 
 use super::AnyProvider;
+use super::TranslateOptions;
 use super::chat_completions::{ChatCompletionsAuth, ChatCompletionsRequest, send_chat_completion};
 use super::resolve_system_prompt;
 
@@ -22,6 +23,7 @@ impl AnyProvider for OpenAiProvider {
         target_language: Language,
         model: &'a str,
         custom_system_prompt: Option<&'a str>,
+        _options: Option<&'a TranslateOptions>,
     ) -> Pin<Box<dyn Future<Output = anyhow::Result<String>> + Send + 'a>> {
         Box::pin(async move {
             send_chat_completion(

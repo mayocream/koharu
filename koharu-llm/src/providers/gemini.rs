@@ -7,7 +7,7 @@ use serde::Serialize;
 
 use crate::Language;
 
-use super::{AnyProvider, ensure_provider_success, resolve_system_prompt};
+use super::{AnyProvider, TranslateOptions, ensure_provider_success, resolve_system_prompt};
 
 pub struct GeminiProvider {
     pub http_client: Arc<ClientWithMiddleware>,
@@ -42,6 +42,7 @@ impl AnyProvider for GeminiProvider {
         target_language: Language,
         model: &'a str,
         custom_system_prompt: Option<&'a str>,
+        _options: Option<&'a TranslateOptions>,
     ) -> Pin<Box<dyn Future<Output = anyhow::Result<String>> + Send + 'a>> {
         Box::pin(async move {
             let url = format!(

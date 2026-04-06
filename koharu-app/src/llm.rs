@@ -487,6 +487,7 @@ impl Model {
                         target_language,
                         &target.model_id,
                         custom_system_prompt,
+                        None,
                     )
                     .await
             }
@@ -631,12 +632,11 @@ async fn translation_provider_catalog(
 ) -> anyhow::Result<Vec<LlmProviderCatalog>> {
     let config = app_config::load()?;
     let mut out = Vec::new();
-    for (id, name, requires_base_url) in [
-        (crate::mt::DEEPL_PROVIDER_ID, "DeepL", true),
+    for (id, name) in [
+        (koharu_llm::providers::DEEPL_ID, "DeepL"),
         (
-            crate::mt::GOOGLE_TRANSLATE_PROVIDER_ID,
+            koharu_llm::providers::GOOGLE_TRANSLATE_ID,
             "Google Cloud Translation",
-            false,
         ),
     ] {
         let stored = config.providers.iter().find(|p| p.id == id);
@@ -669,7 +669,7 @@ async fn translation_provider_catalog(
             id: id.to_string(),
             name: name.to_string(),
             requires_api_key: true,
-            requires_base_url,
+            requires_base_url: false,
             has_api_key,
             base_url,
             status,
@@ -766,7 +766,7 @@ pub async fn translate_ready(state: AppResources) -> anyhow::Result<TranslateRea
     }
     let cfg = state.config.read().await;
     let tid = cfg.pipeline.translator.as_str();
-    if !crate::mt::is_machine_translator(tid) {
+    if !koharu_llm::providers::TRANSLATION_PROVIDER_IDS.contains(&tid) {
         return Ok(TranslateReady { ready: false });
     }
     let ok = koharu_llm::providers::get_saved_api_key(tid)
@@ -806,23 +806,95 @@ pub async fn llm_generate(
 
     let mut doc = state.storage.page(document_id).await?;
 
-    if crate::mt::is_machine_translator(&translator) {
-        let (api_key, base_url) = crate::mt::load_credentials(&state, &translator).await?;
-        let client = state.runtime.http_client();
-        let deepl_opts = deepl
-            .as_ref()
-            .filter(|_| translator == crate::mt::DEEPL_PROVIDER_ID);
-        crate::mt::translate_document_mt(
-            &client,
+    if koharu_llm::providers::TRANSLATION_PROVIDER_IDS.contains(&translator.as_str()) {
+        let lang = language
+            .and_then(Language::parse)
+            .unwrap_or(Language::English);
+        let cfg = app_config::load()?;
+        let stored = cfg.providers.iter().find(|p| p.id == translator);
+        let api_key = stored
+            .and_then(|p| p.api_key.as_ref())
+            .map(|secret| secret.expose().to_owned());
+        let base_url = stored.and_then(|p| p.base_url.clone());
+
+        let provider = koharu_llm::providers::build_provider(
             &translator,
-            &api_key,
-            base_url.as_deref(),
-            &mut doc.text_blocks,
-            language,
-            text_block_index,
-            deepl_opts,
-        )
-        .await?;
+            ProviderConfig {
+                http_client: state.runtime.http_client(),
+                api_key,
+                base_url,
+                temperature: None,
+                max_tokens: None,
+            },
+        )?;
+
+        let source_lang = text_block_index
+            .and_then(|i| doc.text_blocks.get(i))
+            .and_then(|b| b.source_language.as_deref().map(str::trim))
+            .filter(|s| !s.is_empty())
+            .or_else(|| {
+                doc.text_blocks
+                    .iter()
+                    .find_map(|b| b.source_language.as_deref().map(str::trim))
+                    .filter(|s| !s.is_empty())
+            })
+            .map(|s| s.to_string());
+
+        let mt_opts = koharu_llm::providers::TranslateOptions {
+            source_language: source_lang,
+            deepl_formality: deepl
+                .as_ref()
+                .and_then(|d| d.formality.as_deref().map(str::trim))
+                .filter(|s| !s.is_empty())
+                .map(|s| s.to_string()),
+            deepl_model_type: deepl
+                .as_ref()
+                .and_then(|d| d.model_type.as_deref().map(str::trim))
+                .filter(|s| !s.is_empty())
+                .map(|s| s.to_string()),
+        };
+
+        let indices: Vec<usize> = match text_block_index {
+            Some(i) if i < doc.text_blocks.len() => {
+                if doc.text_blocks[i]
+                    .text
+                    .as_deref()
+                    .map(str::trim)
+                    .is_some_and(|s| !s.is_empty())
+                {
+                    vec![i]
+                } else {
+                    vec![]
+                }
+            }
+            _ => doc
+                .text_blocks
+                .iter()
+                .enumerate()
+                .filter(|(_, b)| {
+                    b.text
+                        .as_deref()
+                        .map(str::trim)
+                        .is_some_and(|s| !s.is_empty())
+                })
+                .map(|(i, _)| i)
+                .collect(),
+        };
+
+        if !indices.is_empty() {
+            let texts: Vec<String> = indices
+                .iter()
+                .map(|&i| doc.text_blocks[i].text.clone().unwrap_or_default())
+                .collect();
+            let translated = provider
+                .translate_batch(&texts, lang, "default", None, Some(&mt_opts))
+                .await?;
+            for (idx, &block_i) in indices.iter().enumerate() {
+                if let Some(t) = translated.get(idx) {
+                    doc.text_blocks[block_i].translation = Some(t.trim().to_string());
+                }
+            }
+        }
     } else {
         match text_block_index {
             Some(block_index) => {

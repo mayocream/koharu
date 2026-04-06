@@ -24,6 +24,11 @@ use petgraph::graph::DiGraph;
 use tokio::sync::RwLock;
 use tracing::Instrument;
 
+use koharu_llm::Language;
+use koharu_llm::providers::{
+    DEEPL_ID, GOOGLE_TRANSLATE_ID, TRANSLATION_PROVIDER_IDS, TranslateOptions, build_provider,
+};
+
 use crate::AppResources;
 
 // ---------------------------------------------------------------------------
@@ -928,16 +933,94 @@ impl Engine for LlmTranslateEngine {
         res: &AppResources,
         options: &PipelineRunOptions,
     ) -> Result<Patch> {
+        let translator = {
+            let cfg = res.config.read().await;
+            cfg.pipeline.translator.clone()
+        };
         let mut page = doc.clone();
         let block_count = page.text_blocks.len();
         async {
-            res.llm
-                .translate(
-                    &mut page,
-                    options.target_language.as_deref(),
-                    options.system_prompt.as_deref(),
-                )
-                .await
+            if TRANSLATION_PROVIDER_IDS.contains(&translator.as_str()) {
+                let config = crate::config::load()?;
+                let stored = config.providers.iter().find(|p| p.id == translator);
+                let api_key = stored
+                    .and_then(|p| p.api_key.as_ref())
+                    .map(|secret| secret.expose().to_owned());
+                let base_url = stored.and_then(|p| p.base_url.clone());
+
+                let provider = build_provider(
+                    &translator,
+                    koharu_llm::providers::ProviderConfig {
+                        http_client: res.runtime.http_client(),
+                        api_key,
+                        base_url,
+                        temperature: None,
+                        max_tokens: None,
+                    },
+                )?;
+
+                let lang = options
+                    .target_language
+                    .as_deref()
+                    .and_then(Language::parse)
+                    .unwrap_or(Language::English);
+
+                let texts: Vec<String> = page
+                    .text_blocks
+                    .iter()
+                    .filter_map(|b| {
+                        b.text
+                            .as_deref()
+                            .map(str::trim)
+                            .filter(|s| !s.is_empty())
+                            .map(|s| s.to_string())
+                    })
+                    .collect();
+
+                if texts.is_empty() {
+                    return Ok(());
+                }
+
+                let src = page
+                    .text_blocks
+                    .iter()
+                    .find_map(|b| b.source_language.as_deref().map(str::trim))
+                    .filter(|s| !s.is_empty())
+                    .map(|s| s.to_string());
+
+                let mt_opts = TranslateOptions {
+                    source_language: src,
+                    deepl_formality: None,
+                    deepl_model_type: None,
+                };
+
+                let translated = provider
+                    .translate_batch(&texts, lang, "default", None, Some(&mt_opts))
+                    .await?;
+
+                let mut ti = 0usize;
+                for b in &mut page.text_blocks {
+                    if b.text
+                        .as_deref()
+                        .map(str::trim)
+                        .is_some_and(|s| !s.is_empty())
+                    {
+                        if let Some(t) = translated.get(ti) {
+                            b.translation = Some(t.trim().to_string());
+                        }
+                        ti += 1;
+                    }
+                }
+                Ok(())
+            } else {
+                res.llm
+                    .translate(
+                        &mut page,
+                        options.target_language.as_deref(),
+                        options.system_prompt.as_deref(),
+                    )
+                    .await
+            }
         }
         .instrument(tracing::info_span!("inference", blocks = block_count))
         .await?;
@@ -958,100 +1041,30 @@ inventory::submit! {
     }
 }
 
-// --- DeepL / Google machine translation -----------------------------------
+// --- DeepL / Google translation (provider-routed) -------------------------
 
-struct DeepLTranslateEngine;
-
-#[async_trait]
-impl Engine for DeepLTranslateEngine {
-    async fn run(
-        &self,
-        doc: &Document,
-        res: &AppResources,
-        _options: &PipelineRunOptions,
-    ) -> Result<Patch> {
-        let (api_key, base_url) =
-            crate::mt::load_credentials(res, crate::mt::DEEPL_PROVIDER_ID).await?;
-        let target_language = crate::mt::pipeline_target_language(res).await;
-        let mut page = doc.clone();
-        let block_count = page.text_blocks.len();
-        let client = res.runtime.http_client();
-        async {
-            crate::mt::translate_document_mt(
-                &client,
-                crate::mt::DEEPL_PROVIDER_ID,
-                &api_key,
-                base_url.as_deref(),
-                &mut page.text_blocks,
-                target_language.as_deref(),
-                None,
-                None,
-            )
-            .await
-        }
-        .instrument(tracing::info_span!("inference", blocks = block_count))
-        .await?;
-        let blocks = page.text_blocks;
-        Ok(Patch::apply(|d| d.text_blocks = blocks))
-    }
-}
-
+// Keep these IDs in the engine catalog so users can pick them in Settings → Engines.
+// The implementation is shared with `LlmTranslateEngine` and routed via the provider system.
 inventory::submit! {
     EngineInfo {
-        id: "deepl",
+        id: DEEPL_ID,
         name: "DeepL",
         needs: &[Artifact::OcrText],
         produces: &[Artifact::Translations],
         load: |_res| Box::pin(async move {
-            Ok(Box::new(DeepLTranslateEngine) as Box<dyn Engine>)
+            Ok(Box::new(LlmTranslateEngine) as Box<dyn Engine>)
         }),
-    }
-}
-
-struct GoogleTranslateEngine;
-
-#[async_trait]
-impl Engine for GoogleTranslateEngine {
-    async fn run(
-        &self,
-        doc: &Document,
-        res: &AppResources,
-        _options: &PipelineRunOptions,
-    ) -> Result<Patch> {
-        let (api_key, base_url) =
-            crate::mt::load_credentials(res, crate::mt::GOOGLE_TRANSLATE_PROVIDER_ID).await?;
-        let target_language = crate::mt::pipeline_target_language(res).await;
-        let mut page = doc.clone();
-        let block_count = page.text_blocks.len();
-        let client = res.runtime.http_client();
-        async {
-            crate::mt::translate_document_mt(
-                &client,
-                crate::mt::GOOGLE_TRANSLATE_PROVIDER_ID,
-                &api_key,
-                base_url.as_deref(),
-                &mut page.text_blocks,
-                target_language.as_deref(),
-                None,
-                None,
-            )
-            .await
-        }
-        .instrument(tracing::info_span!("inference", blocks = block_count))
-        .await?;
-        let blocks = page.text_blocks;
-        Ok(Patch::apply(|d| d.text_blocks = blocks))
     }
 }
 
 inventory::submit! {
     EngineInfo {
-        id: "google-translate",
-        name: "Google Translate",
+        id: GOOGLE_TRANSLATE_ID,
+        name: "Google Cloud Translation",
         needs: &[Artifact::OcrText],
         produces: &[Artifact::Translations],
         load: |_res| Box::pin(async move {
-            Ok(Box::new(GoogleTranslateEngine) as Box<dyn Engine>)
+            Ok(Box::new(LlmTranslateEngine) as Box<dyn Engine>)
         }),
     }
 }
