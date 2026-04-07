@@ -36,7 +36,7 @@ pub fn refine_segmentation_mask(
         .map(|b| expanded_text_block_crop_bounds(width, height, b))
         .collect();
 
-    // Apply a threshold mask: Pixels are preserved exclusively if their probability 
+    // Apply a threshold mask: Pixels are preserved exclusively if their probability
     // exceeds the core threshold (60) and they reside within a known TextBlock geometry.
     let base = GrayImage::from_fn(width, height, |x, y| {
         let is_within_any_block = expanded_bounds
@@ -296,8 +296,6 @@ fn vector_norm(vector: [f32; 2]) -> f32 {
     (vector[0] * vector[0] + vector[1] * vector[1]).sqrt()
 }
 
-
-
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -328,11 +326,11 @@ mod tests {
                 Luma([0])
             }
         });
-        
+
         let block = TextBlock {
             x: 10.0,
             y: 11.0,
-            width: 4.0, // Limits to roughly [10, 11] to [14, 15] 
+            width: 4.0, // Limits to roughly [10, 11] to [14, 15]
             height: 4.0,
             detected_font_size_px: Some(4.0),
             ..Default::default()
@@ -340,7 +338,7 @@ mod tests {
 
         let mask = refine_segmentation_mask(&image, &pred_mask, &[block]);
         let without_blocks = refine_segmentation_mask(&image, &pred_mask, &[]);
-        
+
         // Assert providing bounding blocks saves the mask within bounds
         assert_ne!(mask, without_blocks);
         // The exact box coordinate pixel
