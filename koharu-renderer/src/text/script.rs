@@ -50,7 +50,12 @@ pub(crate) fn detect_scripts(text: &str) -> ScriptFlags {
             | Script::Katakana
             | Script::Hangul
             | Script::Bopomofo => has_cjk = true,
-            Script::Arabic | Script::Hebrew => has_arabic = true,
+            Script::Arabic
+            | Script::Hebrew
+            | Script::Syriac
+            | Script::Thaana
+            | Script::Nko
+            | Script::Adlam => has_arabic = true,
             Script::Thai | Script::Lao | Script::Khmer | Script::Myanmar => has_thai = true,
             _ => {}
         }
@@ -58,11 +63,19 @@ pub(crate) fn detect_scripts(text: &str) -> ScriptFlags {
             break;
         }
     }
-    ScriptFlags { has_cjk, has_arabic, has_thai }
+    ScriptFlags {
+        has_cjk,
+        has_arabic,
+        has_thai,
+    }
 }
 
 pub fn font_families_for_text(text: &str) -> Vec<String> {
-    let ScriptFlags { has_cjk, has_arabic, has_thai } = detect_scripts(text);
+    let ScriptFlags {
+        has_cjk,
+        has_arabic,
+        has_thai,
+    } = detect_scripts(text);
 
     let names: &[&str] = if has_cjk {
         #[cfg(target_os = "windows")]
