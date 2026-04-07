@@ -250,6 +250,7 @@ pub(crate) fn package_enabled(runtime: &Runtime) -> bool {
             .unwrap_or(false)
 }
 
+#[cfg(all(target_os = "windows", target_arch = "x86_64"))]
 pub(crate) fn llama_cuda_enabled(runtime: &Runtime) -> bool {
     runtime.wants_gpu()
         && driver_library_available()

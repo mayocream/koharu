@@ -21,9 +21,9 @@ enum LlamaDistribution {
 
 impl LlamaDistribution {
     #[allow(clippy::needless_return)]
-    fn detect(runtime: &Runtime) -> Result<Self> {
+    fn detect(_runtime: &Runtime) -> Result<Self> {
         #[cfg(all(target_os = "windows", target_arch = "x86_64"))]
-        return Ok(Self::windows_x64(runtime));
+        return Ok(Self::windows_x64(_runtime));
 
         #[cfg(all(target_os = "linux", target_arch = "x86_64"))]
         return Ok(Self::LinuxVulkanX64);
