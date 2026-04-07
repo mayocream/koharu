@@ -45,6 +45,8 @@ async fn main() -> anyhow::Result<()> {
             ComputePolicy::PreferGpu
         },
     )?;
+    runtime.prepare().await?;
+
     let model = if let Some(model_dir) = &cli.model_dir {
         Mit48pxOcr::load_from_dir(model_dir, cli.cpu)?
     } else {

@@ -66,6 +66,8 @@ async fn async_main() -> Result<()> {
             ComputePolicy::PreferGpu
         },
     )?;
+    runtime.prepare().await?;
+
     let model = match (&cli.config_path, &cli.weights_path) {
         (Some(config_path), Some(weights_path)) => {
             SpeechBubbleSegmentation::load_from_paths(config_path, weights_path, cli.cpu)?

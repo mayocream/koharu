@@ -34,6 +34,8 @@ async fn main() -> anyhow::Result<()> {
             ComputePolicy::PreferGpu
         },
     )?;
+    runtime.prepare().await?;
+
     let model = Lama::load(&runtime, cli.cpu).await?;
     let image = image::open(&cli.input)?;
     let mask = image::open(&cli.mask)?;

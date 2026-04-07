@@ -6,6 +6,7 @@ mod llama;
 mod loader;
 pub mod packages;
 mod runtime;
+mod zluda;
 
 pub use cuda::{
     CudaDriverVersion, check_cuda_driver_support, compute_capability,

@@ -30,6 +30,8 @@ async fn main() -> anyhow::Result<()> {
             ComputePolicy::PreferGpu
         },
     )?;
+    runtime.prepare().await?;
+
     let model = MangaOcr::load(&runtime, cli.cpu).await?;
     let output = model
         .inference(&images)?

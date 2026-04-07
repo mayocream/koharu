@@ -2,5 +2,7 @@
 # refer: https://stackoverflow.com/questions/43577885/is-there-a-cargo-environment-variable-for-the-workspace-directory
 CARGO_WORKSPACE_DIR = { value = "", relative = true }
 LLAMA_CPP_TAG = "b8665"
-# CUDA 13.1 requires C++17
+# CUDA 13.0 requires C++17
 NVCC_PREPEND_FLAGS = "-std=c++17"
+# override nvidia-smi compute capability
+CUDA_COMPUTE_CAP = "75"

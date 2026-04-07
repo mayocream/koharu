@@ -37,6 +37,8 @@ async fn main() -> Result<()> {
             ComputePolicy::PreferGpu
         },
     )?;
+    runtime.prepare().await?;
+
     let detector = FontDetector::load_with_kind(&runtime, args.cpu, args.model).await?;
     let image = image::open(&args.input)?;
     let start = std::time::Instant::now();

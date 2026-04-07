@@ -69,6 +69,8 @@ async fn main() -> anyhow::Result<()> {
             ComputePolicy::PreferGpu
         },
     )?;
+    runtime.prepare().await?;
+
     let mut model = if let Some(model_dir) = &cli.model_dir {
         PaddleOcrVl::load_from_dir(model_dir, cli.cpu)?
     } else {

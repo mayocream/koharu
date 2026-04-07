@@ -7,7 +7,6 @@ on:
 
 env:
   CARGO_TERM_COLOR: always
-  CUDA_COMPUTE_CAP: 75
 
 jobs:
   build:
@@ -38,12 +37,12 @@ jobs:
       - uses: Jimver/cuda-toolkit@master
         if: matrix.os == 'ubuntu-latest'
         with:
-          cuda: '13.1.0'
+          cuda: '13.0.0'
           log-file-suffix: '${{ matrix.os }}.txt'
       - uses: Jimver/cuda-toolkit@master
         if: matrix.os == 'windows-latest'
         with:
-          cuda: '13.1.0'
+          cuda: '13.0.0'
           method: 'network'
           sub-packages: '["nvcc", "cudart", "crt", "thrust", "nvvm", "cublas", "cublas_dev", "cufft", "cufft_dev", "curand", "curand_dev", "nvrtc", "nvrtc_dev"]'
           log-file-suffix: '${{ matrix.os }}.txt'

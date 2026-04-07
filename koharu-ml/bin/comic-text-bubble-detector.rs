@@ -272,6 +272,8 @@ async fn async_main() -> Result<()> {
             ComputePolicy::PreferGpu
         },
     )?;
+    runtime.prepare().await?;
+
     let model = ComicTextBubbleDetector::load(&runtime, cli.cpu).await?;
     let bytes = std::fs::read(&cli.input)?;
     let format = image::guess_format(&bytes)?;

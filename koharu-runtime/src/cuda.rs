@@ -9,6 +9,7 @@ use crate::install::InstallState;
 use crate::loader::{add_runtime_search_path, preload_library};
 
 const CUDA_SUCCESS: i32 = 0;
+const CUDA_13_0_DRIVER_VERSION: i32 = 13000;
 const CUDA_13_1_DRIVER_VERSION: i32 = 13010;
 const CU_DEVICE_ATTRIBUTE_COMPUTE_CAPABILITY_MAJOR: i32 = 75;
 const CU_DEVICE_ATTRIBUTE_COMPUTE_CAPABILITY_MINOR: i32 = 76;
@@ -44,12 +45,12 @@ struct WheelSpec {
 
 const WHEELS: &[WheelSpec] = &[
     WheelSpec {
-        package: "nvidia-cuda-runtime/13.1.80",
+        package: "nvidia-cuda-runtime/13.0.96",
         windows_dylibs: &["cudart64_13.dll"],
         linux_dylibs: &["libcudart.so.13"],
     },
     WheelSpec {
-        package: "nvidia-cublas/13.2.1.1",
+        package: "nvidia-cublas/13.0.2.14",
         windows_dylibs: &["cublasLt64_13.dll", "cublas64_13.dll"],
         linux_dylibs: &["libcublasLt.so.13", "libcublas.so.13"],
     },
@@ -80,6 +81,10 @@ impl CudaDriverVersion {
 
     pub const fn minor(self) -> i32 {
         (self.raw % 1000) / 10
+    }
+
+    pub const fn supports_cuda_13_0(self) -> bool {
+        self.raw >= CUDA_13_0_DRIVER_VERSION
     }
 
     pub const fn supports_cuda_13_1(self) -> bool {
@@ -183,7 +188,7 @@ pub fn compute_capability() -> Result<(i32, i32)> {
     }
 }
 
-/// Check whether the installed NVIDIA driver supports CUDA 13.1+.
+/// Check whether the installed NVIDIA driver supports CUDA 13.0+.
 ///
 /// Returns `true` when GPU compute should be used, `false` when the caller
 /// should fall back to CPU.  Warnings are emitted via `tracing::warn!`.
@@ -194,20 +199,20 @@ pub fn check_cuda_driver_support() -> bool {
 
     // Check driver version
     match driver_version() {
-        Ok(version) if version.supports_cuda_13_1() => {
+        Ok(version) if version.supports_cuda_13_0() => {
             tracing::info!("NVIDIA driver reports CUDA {version} support");
         }
         Ok(version) => {
             tracing::warn!(
                 "NVIDIA driver only supports CUDA {version}; \
                  falling back to CPU. Update your NVIDIA driver to a version \
-                 that supports CUDA 13.1 or newer to enable GPU acceleration."
+                 that supports CUDA 13.0 or newer to enable GPU acceleration."
             );
             return false;
         }
         Err(err) => {
             tracing::warn!(
-                "Could not verify NVIDIA driver support for CUDA 13.1: {err:#}; \
+                "Could not verify NVIDIA driver support for CUDA 13.0: {err:#}; \
                  falling back to CPU."
             );
             return false;
@@ -238,6 +243,14 @@ pub fn check_cuda_driver_support() -> bool {
 }
 
 pub(crate) fn package_enabled(runtime: &Runtime) -> bool {
+    runtime.wants_gpu()
+        && driver_library_available()
+        && driver_version()
+            .map(|version| version.supports_cuda_13_0())
+            .unwrap_or(false)
+}
+
+pub(crate) fn llama_cuda_enabled(runtime: &Runtime) -> bool {
     runtime.wants_gpu()
         && driver_library_available()
         && driver_version()
@@ -450,6 +463,14 @@ mod tests {
         assert_eq!(version.major(), 13);
         assert_eq!(version.minor(), 1);
         assert_eq!(version.to_string(), "13.1");
+    }
+
+    #[test]
+    fn checks_cuda_13_0_threshold() {
+        assert!(CudaDriverVersion::from_raw(13010).supports_cuda_13_0());
+        assert!(CudaDriverVersion::from_raw(13020).supports_cuda_13_0());
+        assert!(CudaDriverVersion::from_raw(13000).supports_cuda_13_0());
+        assert!(!CudaDriverVersion::from_raw(12080).supports_cuda_13_0());
     }
 
     #[test]
