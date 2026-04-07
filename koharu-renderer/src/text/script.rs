@@ -34,23 +34,35 @@ pub fn normalize_translation_for_layout(text: &str) -> String {
     }
 }
 
-pub fn font_families_for_text(text: &str) -> Vec<String> {
+pub(crate) struct ScriptFlags {
+    pub has_cjk: bool,
+    pub has_arabic: bool,
+    pub has_thai: bool,
+}
+
+pub(crate) fn detect_scripts(text: &str) -> ScriptFlags {
     let script_map = CodePointMapData::<Script>::new();
-    let has_cjk = text.chars().any(|c| {
-        matches!(
-            script_map.get(c),
-            Script::Han | Script::Hiragana | Script::Katakana | Script::Hangul | Script::Bopomofo
-        )
-    });
-    let has_arabic = text
-        .chars()
-        .any(|c| matches!(script_map.get(c), Script::Arabic | Script::Hebrew));
-    let has_thai = text.chars().any(|c| {
-        matches!(
-            script_map.get(c),
-            Script::Thai | Script::Lao | Script::Khmer | Script::Myanmar
-        )
-    });
+    let (mut has_cjk, mut has_arabic, mut has_thai) = (false, false, false);
+    for c in text.chars() {
+        match script_map.get(c) {
+            Script::Han
+            | Script::Hiragana
+            | Script::Katakana
+            | Script::Hangul
+            | Script::Bopomofo => has_cjk = true,
+            Script::Arabic | Script::Hebrew => has_arabic = true,
+            Script::Thai | Script::Lao | Script::Khmer | Script::Myanmar => has_thai = true,
+            _ => {}
+        }
+        if has_cjk && has_arabic && has_thai {
+            break;
+        }
+    }
+    ScriptFlags { has_cjk, has_arabic, has_thai }
+}
+
+pub fn font_families_for_text(text: &str) -> Vec<String> {
+    let ScriptFlags { has_cjk, has_arabic, has_thai } = detect_scripts(text);
 
     let names: &[&str] = if has_cjk {
         #[cfg(target_os = "windows")]
@@ -167,6 +179,8 @@ mod tests {
     fn font_family_selection_returns_candidates() {
         assert!(!font_families_for_text("hello").is_empty());
         assert!(!font_families_for_text("你好").is_empty());
+        assert!(!font_families_for_text("مرحبا").is_empty());
+        assert!(!font_families_for_text("สวัสดี").is_empty());
     }
 
     #[test]
