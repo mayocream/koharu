@@ -30,27 +30,50 @@ pub fn refine_segmentation_mask(
     let width = pred_mask.width();
     let height = pred_mask.height();
 
+    if blocks.is_empty() {
+        return GrayImage::new(width, height);
+    }
+
     // Extract expanded bounding boxes globally to validate intersection constraints.
     let expanded_bounds: Vec<[u32; 4]> = blocks
         .iter()
         .map(|b| expanded_text_block_crop_bounds(width, height, b))
         .collect();
 
-    // Apply a threshold mask: Pixels are preserved exclusively if their probability
-    // exceeds the core threshold (60) and they reside within a known TextBlock geometry.
-    let base = GrayImage::from_fn(width, height, |x, y| {
-        let is_within_any_block = expanded_bounds
-            .iter()
-            .any(|&[x1, y1, x2, y2]| x >= x1 && x < x2 && y >= y1 && y < y2);
+    // Rasterize the union of expanded text block bounds once to avoid an
+    // O(width * height * blocks) per-pixel rectangle membership test.
+    let mut in_bounds_mask = GrayImage::new(width, height);
+    for &[x1, y1, x2, y2] in &expanded_bounds {
+        for y in y1..y2 {
+            for x in x1..x2 {
+                in_bounds_mask.put_pixel(x, y, Luma([255]));
+            }
+        }
+    }
 
-        if is_within_any_block && pred_mask.get_pixel(x, y)[0] > 60 {
+    // Apply a threshold mask: Pixels are preserved exclusively if their probability
+    // exceeds the core threshold (`super::BINARY_THRESHOLD`) and they reside within a known TextBlock geometry.
+    let base = GrayImage::from_fn(width, height, |x, y| {
+        if in_bounds_mask.get_pixel(x, y)[0] != 0
+            && pred_mask.get_pixel(x, y)[0] > super::BINARY_THRESHOLD
+        {
             Luma([255])
         } else {
             Luma([0])
         }
     });
 
-    dilate(&base, Norm::L1, FINAL_MASK_DILATE_RADIUS)
+    let dilated = dilate(&base, Norm::L1, FINAL_MASK_DILATE_RADIUS);
+
+    // Final clipping pass: Ensure the dilated mask never escapes the block boundaries
+    // even if it thickens beyond its original source pixel edges.
+    GrayImage::from_fn(width, height, |x, y| {
+        if in_bounds_mask.get_pixel(x, y)[0] != 0 {
+            *dilated.get_pixel(x, y)
+        } else {
+            Luma([0])
+        }
+    })
 }
 
 pub fn crop_text_block_bbox(image: &DynamicImage, block: &TextBlock) -> DynamicImage {
@@ -341,8 +364,12 @@ mod tests {
 
         // Assert providing bounding blocks saves the mask within bounds
         assert_ne!(mask, without_blocks);
-        // The exact box coordinate pixel
-        assert!(mask.get_pixel(12, 13)[0] > 0);
+        // Assert pixel INSIDE the block is preserved
+        assert_eq!(mask.get_pixel(12, 13)[0], 255);
+        // Assert pixel OUTSIDE the block (but inside high-prob region) is cleared
+        assert_eq!(mask.get_pixel(20, 13)[0], 0);
+        // Assert pixel JUST OUTSIDE the block boundary is cleared
+        assert_eq!(mask.get_pixel(15, 13)[0], 0);
     }
 
     #[test]
