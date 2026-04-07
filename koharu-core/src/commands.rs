@@ -122,6 +122,12 @@ pub struct DocumentIdParam {
 
 #[derive(Debug, Clone, Serialize, Deserialize, JsonSchema)]
 #[serde(rename_all = "camelCase")]
+pub struct DocumentIndexParam {
+    pub index: usize,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, JsonSchema)]
+#[serde(rename_all = "camelCase")]
 pub struct ProcessParams {
     pub document_id: Option<String>,
     pub llm_target: Option<crate::LlmTarget>,
