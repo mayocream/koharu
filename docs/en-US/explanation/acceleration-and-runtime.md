@@ -4,16 +4,16 @@ title: Acceleration and Runtime
 
 # Acceleration and Runtime
 
-Koharu supports multiple runtime paths so it can run well on a wide range of hardware.
+Koharu supports multiple runtime backends so the same pipeline can run across a wide range of hardware.
 
 ## CUDA on NVIDIA GPUs
 
-CUDA is the main GPU acceleration path on systems with supported NVIDIA hardware.
+CUDA is the primary GPU backend on systems with supported NVIDIA hardware.
 
 - Koharu supports NVIDIA GPUs with compute capability 7.5 or higher
 - Koharu bundles CUDA toolkit 13.1
 
-On first run, the required dynamic libraries are extracted to the application data directory.
+On first run, Koharu extracts the required dynamic libraries into the application data directory.
 
 !!! note
 
@@ -21,13 +21,13 @@ On first run, the required dynamic libraries are extracted to the application da
 
 ## Metal on Apple Silicon
 
-On macOS, Koharu supports Metal acceleration for Apple Silicon devices such as M1 and M2 systems.
+On macOS, Koharu supports Metal acceleration on Apple Silicon systems such as the M1 and M2 families.
 
 ## Vulkan on Windows and Linux
 
-Vulkan is supported on Windows and Linux for OCR and LLM inference as an alternative GPU acceleration path when CUDA or Metal are not available.
+On Windows and Linux, Vulkan is available as an alternative GPU path for OCR and LLM inference when CUDA or Metal are not available.
 
-AMD and Intel GPUs can use Vulkan for acceleration, but detection and inpainting models still rely on CUDA or Metal.
+AMD and Intel GPUs can benefit from Vulkan, but detection and inpainting still depend on CUDA or Metal.
 
 ## CPU fallback
 
@@ -43,10 +43,10 @@ koharu.exe --cpu
 
 ## Why fallback matters
 
-Fallback behavior makes Koharu usable on more machines, but it changes the experience:
+Fallback behavior makes Koharu usable on more machines, but it changes the performance profile:
 
 - GPU inference is much faster when supported
 - CPU mode is more compatible but can be substantially slower
 - Smaller local LLMs are often the best choice on CPU-only systems
 
-For exact model choices, see [Models and Providers](models-and-providers.md).
+For model selection guidance, see [Models and Providers](models-and-providers.md).

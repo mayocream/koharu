@@ -4,7 +4,7 @@ title: Build From Source
 
 # Build From Source
 
-If you want to compile Koharu locally instead of using a prebuilt release, start with the repository's Bun wrapper. It matches the normal developer workflow and handles platform-specific setup that a direct Tauri call does not.
+If you want to compile Koharu locally instead of using a prebuilt release, start with the repository's Bun wrapper. It matches the project's build flow and handles platform-specific setup that a direct Tauri invocation does not.
 
 ## What the build includes
 
@@ -46,7 +46,7 @@ bun install
 bun run build
 ```
 
-This is the normal source-build path for most users. It runs the repository's Bun helper, which then launches Tauri with the project's expected build flow.
+This is the standard source-build path for most users. It runs the repository's Bun helper and then launches Tauri with the build flow the project expects.
 
 On Windows, that wrapper also tries to discover `nvcc` and `cl.exe` automatically before starting the build.
 
@@ -57,7 +57,7 @@ The main binaries are written to `target/release`:
 
 ## Development build
 
-If you are actively working on the app instead of producing a release-style binary, use:
+If you are actively working on the app rather than producing a release-style binary, use:
 
 ```bash
 bun run dev
@@ -79,7 +79,7 @@ Unlike `bun run build`, this path does not go through the repository's Windows h
 
 ## Direct Rust builds
 
-If you only want to build the Rust crate directly and intentionally bypass the Bun and Tauri wrapper, use `bun cargo` rather than calling `cargo` yourself.
+If you only want to build the Rust crate directly and intentionally bypass the Bun and Tauri wrapper, use `bun cargo` rather than invoking `cargo` yourself.
 
 Examples:
 
@@ -91,7 +91,7 @@ bun cargo build --release -p koharu --features=cuda
 bun cargo build --release -p koharu --features=metal
 ```
 
-This is useful for lower-level Rust work, but `bun run build` remains the better choice for a normal desktop app build because it preserves the full Tauri packaging flow.
+This is useful for lower-level Rust work, but `bun run build` remains the better choice for a normal desktop build because it preserves the full Tauri packaging flow.
 
 ## What happens at runtime after the build
 

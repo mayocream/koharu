@@ -4,9 +4,9 @@ title: Contributing
 
 # Contributing
 
-Koharu accepts contributions to the Rust workspace, the Tauri app shell, the Next.js UI, the ML pipeline, MCP integrations, tests, and documentation.
+Koharu accepts contributions across the Rust workspace, the Tauri app shell, the Next.js UI, the ML pipeline, MCP integrations, tests, and documentation.
 
-This guide focuses on the current repository workflow so you can make changes that match CI and are easy to review.
+This guide focuses on the repository workflow that matches CI and keeps changes easy to review.
 
 ## Before you start
 
@@ -40,7 +40,7 @@ If you are not sure where a change belongs:
 
 ## Set up the repository
 
-Install JS dependencies first:
+Install JavaScript dependencies first:
 
 ```bash
 bun install
@@ -58,7 +58,7 @@ For active development, use:
 bun run dev
 ```
 
-The dev command runs the Tauri app in dev mode and keeps the local server on a fixed port for UI development and e2e tests.
+The dev command runs the Tauri app in development mode and keeps the local server on a fixed port for UI work and e2e tests.
 
 ## Use the repo's preferred local commands
 
@@ -113,7 +113,7 @@ If you changed docs:
 - `zensical build -f docs/zensical.ja-JP.toml`
 - `zensical build -f docs/zensical.zh-CN.toml`
 
-You do not always need to run every command in this list for every PR, but you should run enough to cover the code paths you touched.
+You do not need to run every command in this list for every PR, but you should cover the code paths you touched.
 
 ## E2E tests
 

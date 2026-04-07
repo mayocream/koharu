@@ -4,7 +4,7 @@ title: Keyboard Shortcuts
 
 # Keyboard Shortcuts
 
-These are the default controls documented for the editor.
+These are the default editor controls currently documented in the app.
 
 | Shortcut | Action |
 | --- | --- |

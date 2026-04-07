@@ -1,8 +1,6 @@
 [env]
 # refer: https://stackoverflow.com/questions/43577885/is-there-a-cargo-environment-variable-for-the-workspace-directory
 CARGO_WORKSPACE_DIR = { value = "", relative = true }
-TS_RS_EXPORT_DIR = { value = "ui/lib/generated/protocol", relative = true }
-TS_RS_LARGE_INT = "number"
 LLAMA_CPP_TAG = "b8233"
 # CUDA 13.1 requires C++17
 NVCC_PREPEND_FLAGS = "-std=c++17"

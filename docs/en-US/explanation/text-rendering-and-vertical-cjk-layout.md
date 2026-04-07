@@ -5,11 +5,11 @@ description: How Koharu's text renderer works, why text rendering is difficult, 
 
 # Text Rendering and Vertical CJK Layout
 
-Text rendering is one of the hardest parts of a manga translator. Detection, OCR, and inpainting decide what should happen to the page, but the renderer decides whether the result still looks like a manga page instead of a debug overlay.
+Text rendering is one of the hardest parts of a manga translator. Detection, OCR, and inpainting decide what should happen to the page, but the renderer decides whether the result still reads like a finished manga page instead of a debug overlay.
 
-A good outside reference here is Aria Desires's [Text Rendering Hates You](https://faultlore.com/blah/text-hates-you/). Its main point applies directly to Koharu: text rendering is not a clean linear problem, and there is no universally perfect answer. Layout, shaping, font fallback, rasterization, and composition all push on each other.
+A useful outside reference is Aria Desires's [Text Rendering Hates You](https://faultlore.com/blah/text-hates-you/). The core point applies directly to Koharu: text rendering is not a clean linear problem, and there is no universally correct answer. Layout, shaping, font fallback, rasterization, and composition all affect one another.
 
-Koharu does not try to be a full desktop publishing engine. It tries to be very good at the specific kinds of text layout manga pages need most, especially vertical CJK bubble text.
+Koharu does not try to be a full desktop publishing engine. It aims to be very good at the text layout patterns manga pages need most, especially vertical CJK bubble text.
 
 ## Why this problem is hard
 
@@ -23,7 +23,7 @@ flowchart LR
     D --> E[Composition]
 ```
 
-That picture is useful, but in practice the stages do not stay independent:
+That breakdown is useful, but in practice the stages do not stay independent:
 
 - you cannot know the final line breaks until you know shaped advances
 - you cannot shape reliably without knowing the writing direction and OpenType features
@@ -31,7 +31,7 @@ That picture is useful, but in practice the stages do not stay independent:
 - you cannot just draw code points one by one because real text is shaped into glyph runs
 - you cannot assume that a bubble's box is the same thing as the renderer's true ink bounds
 
-Vertical manga text makes this harder again:
+Vertical manga text makes the problem harder again:
 
 - columns flow top-to-bottom, but the columns themselves flow right-to-left
 - punctuation often needs vertical alternates or recentering
@@ -40,7 +40,7 @@ Vertical manga text makes this harder again:
 
 ## What Koharu actually does
 
-At the implementation level, the renderer lives in the `koharu-renderer` crate and the main orchestration happens in `koharu-app/src/renderer.rs`, `src/layout.rs`, `src/shape.rs`, `src/segment.rs`, and `src/renderer.rs`.
+At the implementation level, the renderer lives in the `koharu-renderer` crate, and the main orchestration happens in `koharu-app/src/renderer.rs`, `src/layout.rs`, `src/shape.rs`, `src/segment.rs`, and `src/renderer.rs`.
 
 The pipeline for one translated `TextBlock` is roughly:
 
@@ -72,14 +72,14 @@ Koharu does not blindly force all CJK text into vertical mode. The current heuri
 - if the translation contains CJK text and the block is taller than it is wide, use `VerticalRl`
 - otherwise, keep the block horizontal
 
-That means vertical layout is tied to both:
+That means vertical layout depends on both:
 
 - script detection
 - the geometry of the detected or user-adjusted text box
 
 This is simple on purpose. It matches a large share of manga bubble text, and it avoids turning every mixed-script caption into vertical text just because it contains one Japanese character.
 
-It is also a heuristic, not a universal writing-mode engine. That matters for edge cases and is one of the current limits of the renderer.
+It is still a heuristic, not a general writing-mode engine. That matters for edge cases and is one of the current limits of the renderer.
 
 ## How vertical CJK is implemented
 
@@ -96,7 +96,7 @@ When Koharu shapes vertical text, it enables the OpenType features:
 - `vert`
 - `vrt2`
 
-These are the standard vertical alternates used by fonts that actually support vertical writing. This is one of the biggest reasons the renderer can produce convincing vertical CJK layout instead of looking like rotated horizontal text.
+These are the standard vertical alternates exposed by fonts that actually support vertical writing. This is one of the main reasons the renderer can produce convincing vertical CJK layout instead of looking like rotated horizontal text.
 
 If the font has proper vertical glyph substitutions, Koharu can use them. If the font does not, the result degrades to whatever the font provides.
 
@@ -127,7 +127,7 @@ This covers cases such as:
 - brackets and corner marks
 - middle dots and similar marks
 
-This is not a cosmetic extra. It is one of the reasons the current vertical path looks much more deliberate than a generic text renderer.
+This is not cosmetic. It is one of the reasons the current vertical path looks more intentional than a generic text renderer.
 
 ### 5. Emphasis punctuation is normalized
 
@@ -145,7 +145,7 @@ This is important because:
 - vertical punctuation and alternate glyph forms can have surprising extents
 - outline and bitmap glyphs need to land in the same final surface reliably
 
-In practice, this bounds pass is one of the pieces that makes the renderer feel stable instead of constantly shaving off the top, bottom, or right edge of the text.
+In practice, this bounds pass is one of the reasons the renderer feels stable instead of constantly clipping the top, bottom, or right edge of the text.
 
 ## Why the output is good on manga bubbles
 
@@ -163,7 +163,7 @@ That combination is why the renderer can produce vertical CJK text that looks in
 
 ## How perfect is it?
 
-It is strong for the common manga cases. It is not a perfect Japanese typesetting engine.
+It is strong for common manga cases. It is not a full Japanese typesetting engine.
 
 That distinction matters.
 
@@ -176,7 +176,7 @@ Koharu is best understood as:
 
 ## Current limits
 
-The codebase is fairly honest about where the renderer is still incomplete.
+The codebase is fairly clear about where the renderer is still incomplete.
 
 ### Writing mode is heuristic
 
@@ -222,12 +222,12 @@ Koharu instead pushes vertical handling back into the shaping and layout stages.
 
 ## External reference worth reading
 
-[Text Rendering Hates You](https://faultlore.com/blah/text-hates-you/) is useful because it explains the renderer problem in a language-agnostic way. The specific stack in Koharu is different from a browser engine, but the same core lessons show up here:
+[Text Rendering Hates You](https://faultlore.com/blah/text-hates-you/) is useful because it explains the renderer problem in a language-agnostic way. Koharu's stack is different from a browser engine, but the same core lessons show up here:
 
 - shaping is not optional
 - fallback fonts are unavoidable
 - layout and shaping depend on each other
 - "perfect" text rendering is mostly a story people tell before they implement it
 
-If you want the short version: Koharu's renderer is careful precisely because text rendering really does hate you.
+If you want the short version: Koharu's renderer is careful because text rendering is a coupled systems problem, not a final paint step.
 

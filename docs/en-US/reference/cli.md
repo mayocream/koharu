@@ -4,7 +4,7 @@ title: CLI Reference
 
 # CLI Reference
 
-This page covers the command-line options exposed by Koharu's desktop binary.
+This page documents the command-line options exposed by Koharu's desktop binary.
 
 Koharu uses the same binary for:
 
@@ -36,7 +36,7 @@ koharu.exe [OPTIONS]
 
 ## Behavior notes
 
-Some flags change more than just startup appearance:
+Some flags affect more than startup appearance:
 
 - without `--port`, Koharu chooses a random local port
 - with `--headless`, Koharu skips the Tauri window but still serves the Web UI and API
@@ -88,7 +88,7 @@ Start with explicit debug logging:
 koharu --debug
 ```
 
-Use without keyring
+Use without keyring:
 
 ```bash
 KOHARU_OPENAI_API_KEY=[key] koharu --no-keyring

@@ -6,11 +6,11 @@ title: Models and Providers
 
 Koharu uses both vision models and language models. The vision stack prepares the page; the language stack handles translation.
 
-If you want the architecture-level explanation of how these pieces fit together, read [Technical Deep Dive](technical-deep-dive.md) after this page.
+If you want the architecture-level view of how these pieces fit together, read [Technical Deep Dive](technical-deep-dive.md) after this page.
 
 ## Vision models
 
-Koharu automatically downloads the required vision models when you use them for the first time.
+Koharu downloads required vision models automatically the first time you use them.
 
 The current default stack includes:
 
@@ -20,7 +20,7 @@ The current default stack includes:
 - [aot-inpainting](https://huggingface.co/mayocream/aot-inpainting) for default inpainting
 - [YuzuMarker.FontDetection](https://huggingface.co/fffonion/yuzumarker-font-detection) for font and color detection
 
-Some models are used directly from upstream Hugging Face repos, while converted safetensors weights are hosted on [Hugging Face](https://huggingface.co/mayocream) when Koharu needs a Rust-friendly bundle.
+Some models are used directly from upstream Hugging Face repos, while converted `safetensors` weights are hosted on [Hugging Face](https://huggingface.co/mayocream) when Koharu needs a Rust-friendly bundle.
 
 ### What each vision model is
 
@@ -32,7 +32,7 @@ Some models are used directly from upstream Hugging Face repos, while converted 
 | `aot-inpainting` | inpainting network | reconstructs masked image regions after text removal |
 | `YuzuMarker.FontDetection` | classifier / regressor | estimates font and style hints for rendering |
 
-The important design choice is that Koharu does not use a single model for every page task. Detection, segmentation, OCR, and inpainting all need different output shapes:
+The important design choice is that Koharu does not use one model for every page task. Detection, segmentation, OCR, and inpainting all need different output shapes:
 
 - joint detection wants text blocks and bubble regions
 - segmentation wants per-pixel masks
@@ -52,7 +52,7 @@ You can swap individual stages in **Settings > Engines**. Built-in alternatives 
 
 Koharu supports local GGUF models through [llama.cpp](https://github.com/ggml-org/llama.cpp). These models run on your machine and are downloaded on demand when you select them in the LLM picker.
 
-In practice, the local models are usually quantized decoder-only transformers. GGUF is the file format; `llama.cpp` is the inference runtime.
+In practice, the local models are usually quantized decoder-only transformers. GGUF is the model format; `llama.cpp` is the inference runtime.
 
 ### Suggested local models for English output
 
@@ -70,7 +70,7 @@ In practice, the local models are usually quantized decoder-only transformers. G
 
 ## Remote providers
 
-Koharu can translate through remote or self-hosted APIs instead of downloading a local model.
+Koharu can also translate through remote or self-hosted APIs instead of downloading a local model.
 
 Supported providers include:
 
@@ -104,7 +104,7 @@ Use remote providers when you want:
 
 ## Background reading
 
-For theory and diagrams behind the model categories on this page, see:
+For background theory behind the model categories on this page, see:
 
 - [Technical Deep Dive](technical-deep-dive.md)
 - [Fourier transform on Wikipedia](https://en.wikipedia.org/wiki/Fourier_transform)

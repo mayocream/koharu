@@ -4,7 +4,7 @@ title: Configure MCP Clients
 
 # Configure MCP Clients
 
-Koharu exposes a built-in MCP server over local Streamable HTTP. This page shows how to connect MCP clients to it, with detailed setup for Antigravity, Claude Desktop, and Claude Code.
+Koharu exposes a built-in MCP server over local Streamable HTTP. This page shows how to connect MCP clients to it, with concrete setup for Antigravity, Claude Desktop, and Claude Code.
 
 ## What Koharu exposes over MCP
 
@@ -16,7 +16,7 @@ Koharu's MCP server is the same local runtime used by the desktop app and headle
 - LLM model listing, loading, unloading, and translation
 - text-block editing and export
 
-That means an MCP client can drive the same manga workflow that Koharu's GUI uses.
+That means an MCP client can drive the same manga workflow as Koharu's GUI.
 
 ## 1. Start Koharu on a stable port
 
@@ -108,7 +108,7 @@ If that works, move on to page actions such as:
 
 ## Claude Desktop
 
-Claude Desktop's current local MCP config is command-based. Because Koharu exposes a local HTTP MCP endpoint rather than a packaged desktop extension, the practical config-file path is to use a small bridge process that connects Claude Desktop to `http://127.0.0.1:9999/mcp`.
+Claude Desktop's current local MCP config is command-based. Because Koharu exposes a local HTTP MCP endpoint rather than a packaged desktop extension, the practical approach is to use a small bridge process that connects Claude Desktop to `http://127.0.0.1:9999/mcp`.
 
 This guide uses `mcp-remote` for that bridge.
 
@@ -188,7 +188,7 @@ Then move to actual page work:
 
 ## Claude Code
 
-If by "Claude" you mean Claude Code, the safest setup for Koharu's local `http://127.0.0.1` MCP endpoint is also to use the same stdio bridge pattern.
+If by "Claude" you mean Claude Code, the safest setup for Koharu's local `http://127.0.0.1` MCP endpoint is to use the same stdio bridge pattern.
 
 ### Add it to your user config
 

@@ -10,11 +10,11 @@ Koharu exposes a local HTTP API under:
 http://127.0.0.1:<PORT>/api/v1
 ```
 
-This is the same API used by the desktop UI and headless Web UI.
+This is the same API used by the desktop UI and the headless Web UI.
 
 ## Runtime model
 
-Important behavior from the current implementation:
+Important current behavior:
 
 - the API is served by the same process as the GUI or headless runtime
 - the server binds to `127.0.0.1` by default
@@ -23,7 +23,7 @@ Important behavior from the current implementation:
 
 ## Common response shapes
 
-Frequently used types include:
+Frequently used response types include:
 
 - `MetaInfo`: app version and ML device
 - `DocumentSummary`: document id, name, size, revision, layer availability, and text-block count

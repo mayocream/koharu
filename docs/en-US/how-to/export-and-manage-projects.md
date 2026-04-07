@@ -4,7 +4,7 @@ title: Export Pages and Manage Projects
 
 # Export Pages and Manage Projects
 
-Koharu's workflow is page-based. You import image pages, run the pipeline, review text blocks, and then export either flattened output or a layered handoff file for manual finishing.
+Koharu's workflow is page-based. You import one or more page images, run the pipeline, review text blocks, and then export either flattened output or a layered handoff file for manual finishing.
 
 ## Supported page inputs
 
@@ -50,7 +50,7 @@ When exported, Koharu uses an `_inpainted` filename suffix.
 
 Koharu can also export a layered Photoshop PSD.
 
-PSD export is the handoff format for users who want to keep working in Photoshop or a PSD-compatible editor after the ML pipeline is done.
+PSD export is the handoff format for users who want to keep working in Photoshop or a PSD-compatible editor after the ML pipeline has done its first pass.
 
 In the current implementation, PSD export uses editable text layers by default and can include:
 
@@ -99,7 +99,7 @@ This is the main way to manage a chapter or batch job inside the app today.
 
 ## Recommended workflow
 
-If you care about polish, a good pattern is:
+If you care about polish, a practical pattern is:
 
 1. run detection, OCR, translation, and render in Koharu
 2. export a rendered image for quick review

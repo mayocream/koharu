@@ -4,7 +4,7 @@ title: Reference
 
 # Reference
 
-Reference pages collect factual details you may want to look up quickly.
+Reference pages collect factual details you may want to look up quickly while working with Koharu.
 
 ## Available references
 
