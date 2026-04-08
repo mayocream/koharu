@@ -28,7 +28,6 @@ const USER_AGENT: &str = concat!(env!("CARGO_PKG_NAME"), "/", env!("CARGO_PKG_VE
 pub struct Downloads {
     downloads_root: PathBuf,
     huggingface_cache: Cache,
-    base_client: reqwest::Client,
     client: Arc<ClientWithMiddleware>,
     tx: broadcast::Sender<DownloadProgress>,
     progress: Arc<MultiProgress>,
@@ -56,7 +55,6 @@ impl Downloads {
         Ok(Self {
             downloads_root,
             huggingface_cache: Cache::new(huggingface_root),
-            base_client: base,
             client,
             tx: broadcast::channel(256).0,
             progress: Arc::new(MultiProgress::new()),
@@ -65,10 +63,6 @@ impl Downloads {
 
     pub fn client(&self) -> Arc<ClientWithMiddleware> {
         Arc::clone(&self.client)
-    }
-
-    pub fn base_client(&self) -> reqwest::Client {
-        self.base_client.clone()
     }
 
     pub fn subscribe(&self) -> broadcast::Receiver<DownloadProgress> {

@@ -20,17 +20,15 @@ pub(crate) fn resolve_system_prompt(custom: Option<&str>, target_language: Langu
 
 mod chat_completions;
 pub mod claude;
-pub mod deepl_mt;
+pub mod deepl;
 pub mod deepseek;
 pub mod gemini;
-pub mod google_translate_mt;
+pub mod google_translate;
 pub mod openai;
 pub mod openai_compatible;
 
 const API_KEY_SERVICE: &str = "koharu";
 pub const OPENAI_COMPATIBLE_ID: &str = "openai-compatible";
-pub const DEEPL_ID: &str = "deepl";
-pub const GOOGLE_TRANSLATE_ID: &str = "google-translate";
 
 static NO_KEYRING: AtomicBool = AtomicBool::new(false);
 
@@ -160,7 +158,6 @@ pub trait AnyProvider: Send + Sync {
 #[derive(Clone)]
 pub struct ProviderConfig {
     pub http_client: Arc<ClientWithMiddleware>,
-    pub http_client_raw: reqwest::Client,
     pub api_key: Option<String>,
     pub base_url: Option<String>,
     pub temperature: Option<f64>,
@@ -188,8 +185,8 @@ const DEEPSEEK_MODELS: &[ProviderModelDescriptor] = &[ProviderModelDescriptor {
 }];
 
 const MT_MODELS: &[ProviderModelDescriptor] = &[ProviderModelDescriptor {
-    id: "default",
-    name: "Default",
+    id: "mt",
+    name: "Machine Translation",
 }];
 
 const PROVIDERS: &[ProviderDescriptor] = &[
@@ -226,7 +223,7 @@ const PROVIDERS: &[ProviderDescriptor] = &[
         build: build_deepseek_provider,
     },
     ProviderDescriptor {
-        id: DEEPL_ID,
+        id: "deepl",
         name: "DeepL",
         requires_api_key: true,
         requires_base_url: false,
@@ -234,7 +231,7 @@ const PROVIDERS: &[ProviderDescriptor] = &[
         build: build_deepl_mt_provider,
     },
     ProviderDescriptor {
-        id: GOOGLE_TRANSLATE_ID,
+        id: "google-translate",
         name: "Google Cloud Translation",
         requires_api_key: true,
         requires_base_url: false,
@@ -371,10 +368,9 @@ fn build_openai_compatible_provider(
 }
 
 fn build_deepl_mt_provider(config: ProviderConfig) -> anyhow::Result<Box<dyn AnyProvider>> {
-    let api_key = required_api_key(&config, DEEPL_ID)?;
-    Ok(Box::new(deepl_mt::DeeplMtProvider {
-        http_client: config.http_client_raw,
-        api_key,
+    Ok(Box::new(deepl::DeeplMtProvider {
+        http_client: Arc::clone(&config.http_client),
+        api_key: required_api_key(&config, "deepl")?,
         base_url: config.base_url,
     }))
 }
@@ -382,9 +378,9 @@ fn build_deepl_mt_provider(config: ProviderConfig) -> anyhow::Result<Box<dyn Any
 fn build_google_translate_mt_provider(
     config: ProviderConfig,
 ) -> anyhow::Result<Box<dyn AnyProvider>> {
-    Ok(Box::new(google_translate_mt::GoogleTranslateMtProvider {
+    Ok(Box::new(google_translate::GoogleTranslateMtProvider {
         http_client: Arc::clone(&config.http_client),
-        api_key: required_api_key(&config, GOOGLE_TRANSLATE_ID)?,
+        api_key: required_api_key(&config, "google-translate")?,
     }))
 }
 

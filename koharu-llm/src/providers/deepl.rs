@@ -2,9 +2,12 @@
 
 use std::future::Future;
 use std::pin::Pin;
+use std::sync::Arc;
 
 use anyhow::Context;
+use reqwest_middleware::ClientWithMiddleware;
 use serde::Deserialize;
+use url::form_urlencoded::Serializer;
 
 use crate::Language;
 
@@ -87,7 +90,7 @@ fn deepl_target_lang(language: Language) -> &'static str {
 }
 
 pub struct DeeplMtProvider {
-    pub http_client: reqwest::Client,
+    pub http_client: Arc<ClientWithMiddleware>,
     pub api_key: String,
     pub base_url: Option<String>,
 }
@@ -103,15 +106,17 @@ impl AnyProvider for DeeplMtProvider {
         Box::pin(async move {
             let root = normalize_base_url(self.base_url.as_deref(), &self.api_key);
             let url = format!("{root}/v2/translate");
+            let body = Serializer::new(String::new())
+                .append_pair("text", source)
+                .append_pair("target_lang", deepl_target_lang(target_language))
+                .finish();
 
             let response = self
                 .http_client
                 .post(&url)
                 .header("Authorization", format!("DeepL-Auth-Key {}", self.api_key))
-                .form(&[
-                    ("text", source),
-                    ("target_lang", deepl_target_lang(target_language)),
-                ])
+                .header("Content-Type", "application/x-www-form-urlencoded")
+                .body(body)
                 .send()
                 .await
                 .context("DeepL translate request")?;

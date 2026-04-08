@@ -4281,6 +4281,7 @@ dependencies = [
  "tracing-core",
  "tracing-subscriber",
  "zip 8.5.1",
+ "url",
 ]
 
 [[package]]

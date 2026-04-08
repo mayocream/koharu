@@ -931,13 +931,13 @@ impl Engine for LlmTranslateEngine {
         let mut page = doc.clone();
         let block_count = page.text_blocks.len();
         async {
-            crate::llm::translate_via_pipeline_translator(
-                res,
-                &mut page,
-                options.target_language.as_deref(),
-                options.system_prompt.as_deref(),
-            )
-            .await
+            res.llm
+                .translate(
+                    &mut page,
+                    options.target_language.as_deref(),
+                    options.system_prompt.as_deref(),
+                )
+                .await
         }
         .instrument(tracing::info_span!("inference", blocks = block_count))
         .await?;
