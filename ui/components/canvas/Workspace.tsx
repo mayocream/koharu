@@ -105,6 +105,8 @@ function useBrushCursor(
     window.addEventListener('scroll', refresh, true)
     window.addEventListener('resize', refresh)
 
+    refresh()
+
     return () => {
       resizeObserver.disconnect()
       canvas.removeEventListener('pointermove', handleMove)
@@ -113,7 +115,7 @@ function useBrushCursor(
       window.removeEventListener('scroll', refresh, true)
       window.removeEventListener('resize', refresh)
     }
-  }, [isBrushMode, currentDocumentId, scaleRatio])
+  }, [isBrushMode, currentDocumentId])
 
   return { brushCursorRef, isBrushMode, brushSize }
 }
@@ -180,7 +182,7 @@ export function Workspace() {
   const canvasRef = useRef<HTMLDivElement | null>(null)
   const handleViewportRef = useCallback((el: HTMLDivElement | null) => {
     viewportRef.current = el
-    if (el) setCanvasViewport(el)
+    setCanvasViewport(el)
   }, [])
   const pointerToDocument = usePointerToDocument(scaleRatio, canvasRef)
   const { draftBlock, bind: bindBlockDraft } = useBlockDrafting({
