@@ -69,6 +69,7 @@ const MODES: ModeDefinition[] = [
 export function ToolRail() {
   const mode = useEditorUiStore((state) => state.mode)
   const setMode = useEditorUiStore((state) => state.setMode)
+  const shortcuts = usePreferencesStore((state) => state.shortcuts)
   const { t } = useTranslation()
 
   return (
@@ -106,7 +107,9 @@ export function ToolRail() {
                 </Button>
               </TooltipTrigger>
               <TooltipContent side='right' sideOffset={8}>
-                {label}
+                {shortcuts[item.value as keyof typeof shortcuts]
+                  ? `${label} (${shortcuts[item.value as keyof typeof shortcuts].toUpperCase()})`
+                  : label}
               </TooltipContent>
             </Tooltip>
           )
@@ -129,6 +132,7 @@ function BrushToolWithPopover({
 }) {
   const {
     brushConfig: { size: brushSize, color: brushColor },
+    shortcuts,
     setBrushConfig,
   } = usePreferencesStore()
   const { t } = useTranslation()
@@ -152,7 +156,9 @@ function BrushToolWithPopover({
           </PopoverTrigger>
         </TooltipTrigger>
         <TooltipContent side='right' sideOffset={8}>
-          {label}
+          {shortcuts[item.value as keyof typeof shortcuts]
+            ? `${label} (${shortcuts[item.value as keyof typeof shortcuts].toUpperCase()})`
+            : label}
         </TooltipContent>
       </Tooltip>
       <PopoverContent side='right' align='start' className='w-56'>
@@ -173,9 +179,17 @@ function BrushToolWithPopover({
                   setBrushConfig({ size: vals[0] ?? brushSize })
                 }
               />
-              <span className='text-muted-foreground w-10 text-right tabular-nums'>
-                {brushSize}px
-              </span>
+              <Tooltip>
+                <TooltipTrigger asChild>
+                  <span className='text-muted-foreground w-10 cursor-help text-right tabular-nums'>
+                    {brushSize}px
+                  </span>
+                </TooltipTrigger>
+                <TooltipContent side='bottom'>
+                  {t('toolbar.brushSize')} ({shortcuts.decreaseBrushSize}{' '}
+                  {shortcuts.increaseBrushSize})
+                </TooltipContent>
+              </Tooltip>
             </div>
           </div>
           <div className='space-y-2'>

@@ -13,6 +13,16 @@ type PreferencesState = {
   setDefaultFont: (font?: string) => void
   customSystemPrompt?: string
   setCustomSystemPrompt: (prompt?: string) => void
+  shortcuts: {
+    select: string
+    block: string
+    brush: string
+    eraser: string
+    repairBrush: string
+    increaseBrushSize: string
+    decreaseBrushSize: string
+  }
+  setShortcuts: (shortcuts: Partial<PreferencesState['shortcuts']>) => void
   resetPreferences: () => void
 }
 
@@ -20,6 +30,15 @@ const initialPreferences = {
   brushConfig: {
     size: 36,
     color: '#ffffff',
+  },
+  shortcuts: {
+    select: 'v',
+    block: 'm',
+    brush: 'b',
+    eraser: 'e',
+    repairBrush: 'r',
+    increaseBrushSize: ']',
+    decreaseBrushSize: '[',
   },
 }
 
@@ -36,6 +55,13 @@ export const usePreferencesStore = create<PreferencesState>()(
         })),
       setDefaultFont: (font) => set({ defaultFont: font }),
       setCustomSystemPrompt: (prompt) => set({ customSystemPrompt: prompt }),
+      setShortcuts: (shortcuts) =>
+        set((state) => ({
+          shortcuts: {
+            ...state.shortcuts,
+            ...shortcuts,
+          },
+        })),
       resetPreferences: () => set({ ...initialPreferences }),
     }),
     {
@@ -57,6 +83,7 @@ export const usePreferencesStore = create<PreferencesState>()(
         brushConfig: state.brushConfig,
         defaultFont: state.defaultFont,
         customSystemPrompt: state.customSystemPrompt,
+        shortcuts: state.shortcuts,
       }),
     },
   ),

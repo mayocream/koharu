@@ -29,8 +29,9 @@ import { useTextBlocks, useDocumentLayer } from '@/hooks/useTextBlocks'
 import { useMaskDrawing } from '@/hooks/useMaskDrawing'
 import { useRenderBrushDrawing } from '@/hooks/useRenderBrushDrawing'
 import { useBrushLayerDisplay } from '@/hooks/useBrushLayerDisplay'
+import { useBrushCursor } from '@/hooks/useBrushCursor'
+import { useKeyboardShortcuts } from '@/hooks/useKeyboardShortcuts'
 import { useEditorUiStore } from '@/lib/stores/editorUiStore'
-import { usePreferencesStore } from '@/lib/stores/preferencesStore'
 import {
   resolvePinchMemoScaleRatio,
   resolvePinchNextScaleRatio,
@@ -38,89 +39,8 @@ import {
 
 const BRUSH_CURSOR = 'none'
 
-function useBrushCursor(
-  canvasRef: React.RefObject<HTMLDivElement | null>,
-  mode: string,
-  scaleRatio: number,
-  currentDocumentId?: string,
-) {
-  const brushCursorRef = useRef<HTMLDivElement>(null)
-  const cachedRectRef = useRef<DOMRect | null>(null)
-  const mousePosRef = useRef<{ x: number; y: number } | null>(null)
-  const brushSize = usePreferencesStore((state) => state.brushConfig.size)
-
-  const isBrushMode = useMemo(
-    () => mode === 'brush' || mode === 'repairBrush' || mode === 'eraser',
-    [mode],
-  )
-
-  useEffect(() => {
-    cachedRectRef.current = null
-    const canvas = canvasRef.current
-    const cursor = brushCursorRef.current
-    if (!canvas || !cursor) return
-
-    if (!isBrushMode) {
-      cursor.style.opacity = '0'
-      return
-    }
-
-    const updatePos = (clientX: number, clientY: number) => {
-      const rect = cachedRectRef.current || canvas.getBoundingClientRect()
-      if (!cachedRectRef.current) cachedRectRef.current = rect
-      const x = clientX - rect.left
-      const y = clientY - rect.top
-      cursor.style.transform = `translate(${x}px, ${y}px) translate(-50%, -50%)`
-    }
-
-    const refresh = () => {
-      cachedRectRef.current = canvas.getBoundingClientRect()
-      if (mousePosRef.current) {
-        updatePos(mousePosRef.current.x, mousePosRef.current.y)
-      }
-    }
-
-    const handleMove = (e: PointerEvent) => {
-      mousePosRef.current = { x: e.clientX, y: e.clientY }
-      updatePos(e.clientX, e.clientY)
-    }
-
-    const handleEnter = () => {
-      refresh()
-      cursor.style.opacity = '1'
-    }
-
-    const handleLeave = () => {
-      cursor.style.opacity = '0'
-    }
-
-    const resizeObserver = new ResizeObserver(() => {
-      refresh()
-    })
-    resizeObserver.observe(canvas)
-
-    canvas.addEventListener('pointermove', handleMove)
-    canvas.addEventListener('pointerenter', handleEnter)
-    canvas.addEventListener('pointerleave', handleLeave)
-    window.addEventListener('scroll', refresh, true)
-    window.addEventListener('resize', refresh)
-
-    refresh()
-
-    return () => {
-      resizeObserver.disconnect()
-      canvas.removeEventListener('pointermove', handleMove)
-      canvas.removeEventListener('pointerenter', handleEnter)
-      canvas.removeEventListener('pointerleave', handleLeave)
-      window.removeEventListener('scroll', refresh, true)
-      window.removeEventListener('resize', refresh)
-    }
-  }, [isBrushMode, currentDocumentId])
-
-  return { brushCursorRef, isBrushMode, brushSize }
-}
-
 export function Workspace() {
+  useKeyboardShortcuts()
   const scale = useEditorUiStore((state) => state.scale)
   const showSegmentationMask = useEditorUiStore(
     (state) => state.showSegmentationMask,
@@ -198,7 +118,6 @@ export function Workspace() {
   const { brushCursorRef, isBrushMode, brushSize } = useBrushCursor(
     canvasRef,
     mode,
-    scaleRatio,
     currentDocument?.id,
   )
 
