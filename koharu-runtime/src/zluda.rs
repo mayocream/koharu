@@ -1,4 +1,4 @@
-#[cfg(any(target_os = "windows", test))]
+#[cfg(target_os = "windows")]
 const RELEASE_BASE_URL: &str = "https://github.com/vosen/ZLUDA/releases/download";
 #[cfg(any(target_os = "windows", test))]
 const RELEASE_TAG: &str = "v6-preview.63";
