@@ -134,13 +134,11 @@ export function MenuBar() {
     {
       label: t('menu.exportAllInpainted'),
       onSelect: () => send({ type: 'START_BATCH_EXPORT', layer: 'inpainted' }),
-      disabled: !hasDocument,
       testId: 'menu-file-export-all-inpainted',
     },
     {
       label: t('menu.exportAllRendered'),
       onSelect: () => send({ type: 'START_BATCH_EXPORT', layer: 'rendered' }),
-      disabled: !hasDocument,
       testId: 'menu-file-export-all-rendered',
     },
   ]
@@ -182,7 +180,6 @@ export function MenuBar() {
           label: t('menu.processAll'),
           onSelect: () =>
             send({ type: 'START_PIPELINE', request: buildPipelineRequest() }),
-          disabled: !hasDocument,
           testId: 'menu-process-all',
         },
       ],
