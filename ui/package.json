@@ -38,6 +38,7 @@
     "browser-fs-access": "^0.38.0",
     "class-variance-authority": "^0.7.1",
     "clsx": "^2.1.1",
+    "heic2any": "^0.0.4",
     "i18next": "^25.10.10",
     "i18next-browser-languagedetector": "^8.2.1",
     "i18next-localstorage-backend": "^4.3.1",
@@ -59,7 +60,6 @@
     "tailwind-merge": "^3.5.0",
     "xstate": "^5.30.0",
     "zod": "^4.3.6",
-    "heic2any": "^0.0.4",
     "zustand": "^5.0.12"
   },
   "devDependencies": {
