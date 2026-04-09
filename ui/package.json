@@ -59,6 +59,7 @@
     "tailwind-merge": "^3.5.0",
     "xstate": "^5.30.0",
     "zod": "^4.3.6",
+    "heic2any": "^0.0.4",
     "zustand": "^5.0.12"
   },
   "devDependencies": {
