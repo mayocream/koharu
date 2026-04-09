@@ -61,6 +61,7 @@ export function MenuBar() {
   const { send } = useProcessing()
   const [settingsOpen, setSettingsOpen] = useState(false)
   const [settingsTab, setSettingsTab] = useState<TabId>('appearance')
+  const hasDocument = useEditorUiStore((state) => state.currentDocumentId !== null)
 
   const buildPipelineRequest = (documentId?: string): PipelineJobRequest => {
     const { selectedTarget, selectedLanguage, renderEffect, renderStroke } =
@@ -116,6 +117,7 @@ export function MenuBar() {
           format: 'webp',
           params: { layer: 'rendered' },
         }),
+      disabled: !hasDocument,
       testId: 'menu-file-export',
     },
     {
@@ -126,16 +128,19 @@ export function MenuBar() {
           documentId: requireDocumentId(),
           format: 'psd',
         }),
+      disabled: !hasDocument,
       testId: 'menu-file-export-psd',
     },
     {
       label: t('menu.exportAllInpainted'),
       onSelect: () => send({ type: 'START_BATCH_EXPORT', layer: 'inpainted' }),
+      disabled: !hasDocument,
       testId: 'menu-file-export-all-inpainted',
     },
     {
       label: t('menu.exportAllRendered'),
       onSelect: () => send({ type: 'START_BATCH_EXPORT', layer: 'rendered' }),
+      disabled: !hasDocument,
       testId: 'menu-file-export-all-rendered',
     },
   ]
@@ -161,6 +166,7 @@ export function MenuBar() {
               request: buildPipelineRequest(documentId),
             })
           },
+          disabled: !hasDocument,
           testId: 'menu-process-current',
         },
         {
@@ -169,12 +175,14 @@ export function MenuBar() {
             const documentId = requireDocumentId()
             send({ type: 'START_INPAINT', documentId })
           },
+          disabled: !hasDocument,
           testId: 'menu-process-rerender',
         },
         {
           label: t('menu.processAll'),
           onSelect: () =>
             send({ type: 'START_PIPELINE', request: buildPipelineRequest() }),
+          disabled: !hasDocument,
           testId: 'menu-process-all',
         },
       ],

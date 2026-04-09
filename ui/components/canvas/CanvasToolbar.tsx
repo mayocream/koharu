@@ -66,6 +66,7 @@ function WorkflowButtons() {
   const { send, isProcessing, state } = useProcessing()
   const { data: llmState } = useGetLlm()
   const llmReady = llmState?.status === 'ready'
+  const hasDocument = useEditorUiStore((state) => state.currentDocumentId !== null)
   const { t } = useTranslation()
 
   const isDetecting = state.matches('detecting')
@@ -89,7 +90,7 @@ function WorkflowButtons() {
           send({ type: 'START_DETECT', documentId: requireDocumentId() })
         }
         data-testid='toolbar-detect'
-        disabled={isDetecting || isProcessing}
+        disabled={!hasDocument || isDetecting || isProcessing}
       >
         {isDetecting ? (
           <LoaderCircleIcon className='size-4 animate-spin' />
@@ -108,7 +109,7 @@ function WorkflowButtons() {
           send({ type: 'START_RECOGNIZE', documentId: requireDocumentId() })
         }
         data-testid='toolbar-ocr'
-        disabled={isOcr || isProcessing}
+        disabled={!hasDocument || isOcr || isProcessing}
       >
         {isOcr ? (
           <LoaderCircleIcon className='size-4 animate-spin' />
@@ -136,7 +137,7 @@ function WorkflowButtons() {
             },
           })
         }}
-        disabled={!llmReady || isTranslating || isProcessing}
+        disabled={!hasDocument || !llmReady || isTranslating || isProcessing}
         data-testid='toolbar-translate'
       >
         {isTranslating ? (
@@ -156,7 +157,7 @@ function WorkflowButtons() {
           send({ type: 'START_INPAINT', documentId: requireDocumentId() })
         }
         data-testid='toolbar-inpaint'
-        disabled={isInpainting || isProcessing}
+        disabled={!hasDocument || isInpainting || isProcessing}
       >
         {isInpainting ? (
           <LoaderCircleIcon className='size-4 animate-spin' />
@@ -184,7 +185,7 @@ function WorkflowButtons() {
           })
         }}
         data-testid='toolbar-render'
-        disabled={isRendering || isProcessing}
+        disabled={!hasDocument || isRendering || isProcessing}
       >
         {isRendering ? (
           <LoaderCircleIcon className='size-4 animate-spin' />
