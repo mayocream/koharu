@@ -1,6 +1,6 @@
 'use client'
 
-import { useEffect, useRef } from 'react'
+import { useEffect, useRef, useMemo, useCallback } from 'react'
 import type React from 'react'
 import * as ScrollAreaPrimitive from '@radix-ui/react-scroll-area'
 import { useGesture } from '@use-gesture/react'
@@ -30,13 +30,93 @@ import { useMaskDrawing } from '@/hooks/useMaskDrawing'
 import { useRenderBrushDrawing } from '@/hooks/useRenderBrushDrawing'
 import { useBrushLayerDisplay } from '@/hooks/useBrushLayerDisplay'
 import { useEditorUiStore } from '@/lib/stores/editorUiStore'
+import { usePreferencesStore } from '@/lib/stores/preferencesStore'
 import {
   resolvePinchMemoScaleRatio,
   resolvePinchNextScaleRatio,
 } from '@/components/canvas/zoomGestures'
 
-const BRUSH_CURSOR =
-  'url(\'data:image/svg+xml,%3Csvg xmlns="http://www.w3.org/2000/svg" width="16" height="16"%3E%3Ccircle cx="8" cy="8" r="4" stroke="black" stroke-width="1.5" fill="white"/%3E%3C/svg%3E\') 8 8, crosshair'
+const BRUSH_CURSOR = 'none'
+
+function useBrushCursor(
+  canvasRef: React.RefObject<HTMLDivElement | null>,
+  mode: string,
+  scaleRatio: number,
+  currentDocumentId?: string,
+) {
+  const brushCursorRef = useRef<HTMLDivElement>(null)
+  const cachedRectRef = useRef<DOMRect | null>(null)
+  const mousePosRef = useRef<{ x: number; y: number } | null>(null)
+  const brushSize = usePreferencesStore((state) => state.brushConfig.size)
+
+  const isBrushMode = useMemo(
+    () => mode === 'brush' || mode === 'repairBrush' || mode === 'eraser',
+    [mode],
+  )
+
+  useEffect(() => {
+    cachedRectRef.current = null
+    const canvas = canvasRef.current
+    const cursor = brushCursorRef.current
+    if (!canvas || !cursor) return
+
+    if (!isBrushMode) {
+      cursor.style.opacity = '0'
+      return
+    }
+
+    const updatePos = (clientX: number, clientY: number) => {
+      const rect = cachedRectRef.current || canvas.getBoundingClientRect()
+      if (!cachedRectRef.current) cachedRectRef.current = rect
+      const x = clientX - rect.left
+      const y = clientY - rect.top
+      cursor.style.transform = `translate(${x}px, ${y}px) translate(-50%, -50%)`
+    }
+
+    const refresh = () => {
+      cachedRectRef.current = canvas.getBoundingClientRect()
+      if (mousePosRef.current) {
+        updatePos(mousePosRef.current.x, mousePosRef.current.y)
+      }
+    }
+
+    const handleMove = (e: PointerEvent) => {
+      mousePosRef.current = { x: e.clientX, y: e.clientY }
+      updatePos(e.clientX, e.clientY)
+    }
+
+    const handleEnter = () => {
+      refresh()
+      cursor.style.opacity = '1'
+    }
+
+    const handleLeave = () => {
+      cursor.style.opacity = '0'
+    }
+
+    const resizeObserver = new ResizeObserver(() => {
+      refresh()
+    })
+    resizeObserver.observe(canvas)
+
+    canvas.addEventListener('pointermove', handleMove)
+    canvas.addEventListener('pointerenter', handleEnter)
+    canvas.addEventListener('pointerleave', handleLeave)
+    window.addEventListener('scroll', refresh, true)
+    window.addEventListener('resize', refresh)
+
+    return () => {
+      resizeObserver.disconnect()
+      canvas.removeEventListener('pointermove', handleMove)
+      canvas.removeEventListener('pointerenter', handleEnter)
+      canvas.removeEventListener('pointerleave', handleLeave)
+      window.removeEventListener('scroll', refresh, true)
+      window.removeEventListener('resize', refresh)
+    }
+  }, [isBrushMode, currentDocumentId, scaleRatio])
+
+  return { brushCursorRef, isBrushMode, brushSize }
+}
 
 export function Workspace() {
   const scale = useEditorUiStore((state) => state.scale)
@@ -98,6 +178,10 @@ export function Workspace() {
   const { setScale: applyScale } = useCanvasZoom()
   const scaleRatio = scale / 100
   const canvasRef = useRef<HTMLDivElement | null>(null)
+  const handleViewportRef = useCallback((el: HTMLDivElement | null) => {
+    viewportRef.current = el
+    if (el) setCanvasViewport(el)
+  }, [])
   const pointerToDocument = usePointerToDocument(scaleRatio, canvasRef)
   const { draftBlock, bind: bindBlockDraft } = useBlockDrafting({
     mode,
@@ -108,12 +192,26 @@ export function Workspace() {
       void appendBlock(block)
     },
   })
-  const maskPointerEnabled =
-    mode === 'repairBrush' ||
-    (mode === 'eraser' && (showSegmentationMask || !showBrushLayer))
-  const brushPointerEnabled =
-    mode === 'brush' ||
-    (mode === 'eraser' && !showSegmentationMask && showBrushLayer)
+
+  const { brushCursorRef, isBrushMode, brushSize } = useBrushCursor(
+    canvasRef,
+    mode,
+    scaleRatio,
+    currentDocument?.id,
+  )
+
+  const maskPointerEnabled = useMemo(
+    () =>
+      mode === 'repairBrush' ||
+      (mode === 'eraser' && (showSegmentationMask || !showBrushLayer)),
+    [mode, showSegmentationMask, showBrushLayer],
+  )
+  const brushPointerEnabled = useMemo(
+    () =>
+      mode === 'brush' ||
+      (mode === 'eraser' && !showSegmentationMask && showBrushLayer),
+    [mode, showSegmentationMask, showBrushLayer],
+  )
   const maskDrawing = useMaskDrawing({
     mode,
     currentDocument,
@@ -265,20 +363,21 @@ export function Workspace() {
     handleContextMenu(event)
   }
 
-  const isBrushMode =
-    mode === 'brush' || mode === 'repairBrush' || mode === 'eraser'
-  const canvasCursor = isBrushMode
-    ? BRUSH_CURSOR
-    : mode === 'block'
-      ? 'cell'
-      : 'default'
+  const canvasCursor = useMemo(
+    () => (isBrushMode ? BRUSH_CURSOR : mode === 'block' ? 'cell' : 'default'),
+    [isBrushMode, mode],
+  )
 
-  const canvasDimensions = currentDocument
-    ? {
-        width: currentDocument.width * scaleRatio,
-        height: currentDocument.height * scaleRatio,
-      }
-    : { width: 0, height: 0 }
+  const canvasDimensions = useMemo(
+    () =>
+      currentDocument
+        ? {
+            width: currentDocument.width * scaleRatio,
+            height: currentDocument.height * scaleRatio,
+          }
+        : { width: 0, height: 0 },
+    [currentDocument?.width, currentDocument?.height, scaleRatio],
+  )
 
   return (
     <div className='bg-muted flex min-h-0 min-w-0 flex-1'>
@@ -287,10 +386,7 @@ export function Workspace() {
         <CanvasToolbar />
         <ScrollAreaPrimitive.Root className='flex min-h-0 min-w-0 flex-1'>
           <ScrollAreaPrimitive.Viewport
-            ref={(el) => {
-              viewportRef.current = el
-              setCanvasViewport(el)
-            }}
+            ref={handleViewportRef}
             data-testid='workspace-viewport'
             className='grid size-full place-content-center-safe'
           >
@@ -317,6 +413,15 @@ export function Workspace() {
                       onContextMenuCapture={handleCanvasContextMenu}
                       {...blockDraftBindings}
                     >
+                      <div
+                        ref={brushCursorRef}
+                        className='pointer-events-none absolute z-50 rounded-full border border-white shadow-[0_0_0_1px_rgba(0,0,0,0.5),0_1px_3px_rgba(0,0,0,0.3)] transition-opacity duration-75'
+                        style={{
+                          opacity: 0,
+                          width: brushSize * scaleRatio,
+                          height: brushSize * scaleRatio,
+                        }}
+                      />
                       <div className='absolute inset-0'>
                         <Image
                           data={imageData}
