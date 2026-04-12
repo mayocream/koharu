@@ -1,6 +1,6 @@
 'use client'
 
-import { useEffect, useMemo } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 
 import { motion } from 'motion/react'
@@ -14,6 +14,7 @@ import {
 } from 'lucide-react'
 import { Separator } from '@/components/ui/separator'
 import { Button } from '@/components/ui/button'
+import { Input } from '@/components/ui/input'
 import { Textarea } from '@/components/ui/textarea'
 import {
   Select,
@@ -52,6 +53,27 @@ const flattenCatalogModels = (catalog?: LlmCatalog): SelectableLlmModel[] => [
     ),
 ]
 
+const filterCatalogModels = (
+  models: SelectableLlmModel[],
+  query: string,
+): SelectableLlmModel[] => {
+  const normalized = query.trim().toLowerCase()
+  if (!normalized) return models
+
+  return models.filter(({ model, provider }) => {
+    const candidates = [
+      model.name,
+      model.target.modelId,
+      model.target.providerId,
+      provider?.name,
+      provider?.id,
+    ]
+    return candidates.some((candidate) =>
+      candidate?.toLowerCase().includes(normalized),
+    )
+  })
+}
+
 export function CanvasToolbar() {
   return (
     <div className='border-border/60 bg-card text-foreground flex items-center gap-2 border-b px-3 py-2 text-xs'>
@@ -66,7 +88,9 @@ function WorkflowButtons() {
   const { send, isProcessing, state } = useProcessing()
   const { data: llmState } = useGetLlm()
   const llmReady = llmState?.status === 'ready'
-  const hasDocument = useEditorUiStore((state) => state.currentDocumentId !== null)
+  const hasDocument = useEditorUiStore(
+    (state) => state.currentDocumentId !== null,
+  )
   const { t } = useTranslation()
 
   const isDetecting = state.matches('detecting')
@@ -200,6 +224,8 @@ function WorkflowButtons() {
 
 function LlmStatusPopover() {
   const { data: llmCatalog } = useGetLlmCatalog()
+  const [popoverOpen, setPopoverOpen] = useState(false)
+  const [modelSearchQuery, setModelSearchQuery] = useState('')
   const llmModels = useMemo(
     () => flattenCatalogModels(llmCatalog),
     [llmCatalog],
@@ -229,6 +255,10 @@ function LlmStatusPopover() {
       ),
     [llmModels, selectedTarget],
   )
+  const filteredLlmModels = useMemo(
+    () => filterCatalogModels(llmModels, modelSearchQuery),
+    [llmModels, modelSearchQuery],
+  )
   const selectedTargetKey = selectedTarget
     ? llmTargetKey(selectedTarget)
     : undefined
@@ -252,6 +282,7 @@ function LlmStatusPopover() {
       selectedTarget: nextSelection.model.target,
       selectedLanguage: nextLanguage,
     })
+    setModelSearchQuery('')
   }
 
   const handleSetSelectedLanguage = (language: string) => {
@@ -306,7 +337,13 @@ function LlmStatusPopover() {
   }, [llmModels, llmSelectedLanguage, selectedModel?.model, selectedTarget])
 
   return (
-    <Popover>
+    <Popover
+      open={popoverOpen}
+      onOpenChange={(nextOpen) => {
+        setPopoverOpen(nextOpen)
+        if (!nextOpen) setModelSearchQuery('')
+      }}
+    >
       <PopoverTrigger asChild>
         <button
           data-testid='llm-trigger'
@@ -358,6 +395,15 @@ function LlmStatusPopover() {
           <span className='text-muted-foreground text-[10px] font-medium uppercase'>
             {t('llm.model', { defaultValue: 'Model' })}
           </span>
+          <Input
+            data-testid='llm-model-search'
+            value={modelSearchQuery}
+            onChange={(event) => setModelSearchQuery(event.target.value)}
+            placeholder={t('llm.modelSearchPlaceholder', {
+              defaultValue: 'Search models',
+            })}
+            className='h-7 text-xs'
+          />
           <div className='flex items-center gap-1.5'>
             <Select
               value={selectedTargetKey}
@@ -370,22 +416,33 @@ function LlmStatusPopover() {
                 <SelectValue placeholder={t('llm.selectPlaceholder')} />
               </SelectTrigger>
               <SelectContent position='popper'>
-                {llmModels.map(({ model, provider }, index) => (
-                  <SelectItem
-                    key={llmTargetKey(model.target)}
-                    value={llmTargetKey(model.target)}
-                    data-testid={`llm-model-option-${index}`}
+                {filteredLlmModels.length > 0 ? (
+                  filteredLlmModels.map(({ model, provider }, index) => (
+                    <SelectItem
+                      key={llmTargetKey(model.target)}
+                      value={llmTargetKey(model.target)}
+                      data-testid={`llm-model-option-${index}`}
+                    >
+                      <span className='flex items-center gap-1.5'>
+                        {provider ? (
+                          <span className='bg-primary/10 text-primary rounded px-1 py-0.5 text-[9px] leading-none font-semibold uppercase'>
+                            {provider.name}
+                          </span>
+                        ) : null}
+                        {model.name}
+                      </span>
+                    </SelectItem>
+                  ))
+                ) : (
+                  <div
+                    data-testid='llm-model-empty'
+                    className='text-muted-foreground px-2 py-2 text-xs'
                   >
-                    <span className='flex items-center gap-1.5'>
-                      {provider ? (
-                        <span className='bg-primary/10 text-primary rounded px-1 py-0.5 text-[9px] leading-none font-semibold uppercase'>
-                          {provider.name}
-                        </span>
-                      ) : null}
-                      {model.name}
-                    </span>
-                  </SelectItem>
-                ))}
+                    {t('llm.modelSearchNoResults', {
+                      defaultValue: 'No models found',
+                    })}
+                  </div>
+                )}
               </SelectContent>
             </Select>
             <Button
