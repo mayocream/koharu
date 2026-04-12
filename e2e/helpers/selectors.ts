@@ -46,8 +46,10 @@ export const selectors = {
   llm: {
     trigger: 'llm-trigger',
     popover: 'llm-popover',
+    modelSearch: 'llm-model-search',
     modelSelect: 'llm-model-select',
     modelOption: (index: number) => `llm-model-option-${index}`,
+    modelEmpty: 'llm-model-empty',
     languageSelect: 'llm-language-select',
     languageOption: (index: number) => `llm-language-option-${index}`,
     loadToggle: 'llm-load-toggle',

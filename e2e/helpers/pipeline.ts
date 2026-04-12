@@ -49,6 +49,15 @@ export async function openLlmPopover(page: Page) {
 }
 
 async function assertLlmModelOptions(page: Page) {
+  await page
+    .getByTestId(selectors.llm.modelSearch)
+    .fill('___definitely_not_a_model___')
+  await page.getByTestId(selectors.llm.modelSelect).click()
+  await expect(page.getByTestId(selectors.llm.modelEmpty)).toBeVisible({
+    timeout: 30_000,
+  })
+  await page.keyboard.press('Escape')
+  await page.getByTestId(selectors.llm.modelSearch).fill('')
   await page.getByTestId(selectors.llm.modelSelect).click()
   const firstOption = page.getByTestId(selectors.llm.modelOption(0))
   await expect(firstOption).toBeVisible({ timeout: 60_000 })
@@ -96,7 +105,9 @@ export async function generateTranslationForBlock(
   blockIndex = 0,
   timeout = 45_000,
 ) {
-  const field = page.getByTestId(selectors.panels.textBlockTranslation(blockIndex))
+  const field = page.getByTestId(
+    selectors.panels.textBlockTranslation(blockIndex),
+  )
   const previous = await field.inputValue()
   await page.getByTestId(selectors.panels.textBlockGenerate(blockIndex)).click()
 
@@ -114,7 +125,11 @@ export async function startProcessCurrent(page: Page) {
 }
 
 export async function startProcessAll(page: Page) {
-  await openMenuItem(page, selectors.menu.processTrigger, selectors.menu.processAll)
+  await openMenuItem(
+    page,
+    selectors.menu.processTrigger,
+    selectors.menu.processAll,
+  )
 }
 
 export async function waitForOperationStart(
@@ -140,12 +155,17 @@ export async function waitForOperationProgressAdvance(
   timeout = 45_000,
 ) {
   const card = page.getByTestId(selectors.operations.card)
-  const initialCurrent = Number((await card.getAttribute('data-current')) ?? '0')
+  const initialCurrent = Number(
+    (await card.getAttribute('data-current')) ?? '0',
+  )
   await expect
-    .poll(async () => {
-      const raw = await card.getAttribute('data-current')
-      const value = Number(raw ?? '0')
-      return Number.isFinite(value) ? value : 0
-    }, { timeout })
+    .poll(
+      async () => {
+        const raw = await card.getAttribute('data-current')
+        const value = Number(raw ?? '0')
+        return Number.isFinite(value) ? value : 0
+      },
+      { timeout },
+    )
     .toBeGreaterThan(initialCurrent)
 }
