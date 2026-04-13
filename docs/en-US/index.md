@@ -111,11 +111,6 @@ hide:
     box-shadow: none;
   }
 
-  .kh-download-button__version {
-    color: color-mix(in srgb, var(--kh-pink-ink) 72%, var(--kh-muted));
-    font-weight: 700;
-  }
-
   .kh-hero {
     padding: 0.8rem 0 0;
   }
@@ -494,7 +489,7 @@ hide:
         </div>
         <div class="kh-download-hero">
           <a class="kh-download-button" href="https://github.com/mayocream/koharu/releases/latest">
-            Download for Windows&nbsp;&nbsp;<span class="kh-download-button__version">0.42.1</span>
+            Download
           </a>
           <div class="kh-download-hero__subtext">
             Free and open source.
