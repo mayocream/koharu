@@ -141,7 +141,7 @@ git-version = "0.3"
 keyring = "3.6"
 lru = "0.16"
 petgraph = "0.8"
-petname = "2"
+petname = "3"
 tauri-plugin-process = "2.3"
 sentry = { version = "0.47", features = ["tracing"] }
 
