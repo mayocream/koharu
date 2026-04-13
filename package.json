@@ -3,7 +3,7 @@
     "@playwright/test": "^1.59.1",
     "@tauri-apps/cli": "^2.10.1",
     "git-cliff": "^2.12.0",
-    "prettier": "^3.8.1",
+    "prettier": "^3.8.2",
     "prettier-plugin-tailwindcss": "^0.7.2"
   },
   "scripts": {
