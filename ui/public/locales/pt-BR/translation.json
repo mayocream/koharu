@@ -2,6 +2,7 @@
   "common": {
     "initializing": "Inicializando...",
     "cancel": "Cancelar",
+    "confirm": "Confirmar",
     "save": "Salvar",
     "saved": "Salvo!"
   },
