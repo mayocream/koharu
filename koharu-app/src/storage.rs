@@ -389,10 +389,14 @@ fn assign_missing_orders(pages: &mut [Document], start: u32) {
         .map(|(i, _)| i)
         .collect();
     zero_indices.sort_by(|&a, &b| {
-        pages[a]
-            .name
-            .cmp(&pages[b].name)
-            .then_with(|| pages[a].id.cmp(&pages[b].id))
+        match (
+            pages[a].name.parse::<u32>().ok(),
+            pages[b].name.parse::<u32>().ok(),
+        ) {
+            (Some(a_num), Some(b_num)) => a_num.cmp(&b_num),
+            _ => pages[a].name.cmp(&pages[b].name),
+        }
+        .then_with(|| pages[a].id.cmp(&pages[b].id))
     });
     for (offset, idx) in zero_indices.into_iter().enumerate() {
         pages[idx].order = start + offset as u32;
@@ -426,6 +430,38 @@ mod tests {
         assert_eq!(pages.iter().find(|p| p.name == "alpha").unwrap().order, 1);
         assert_eq!(pages.iter().find(|p| p.name == "beta").unwrap().order, 2);
         assert_eq!(pages.iter().find(|p| p.name == "gamma").unwrap().order, 3);
+    }
+
+    #[test]
+    fn assign_missing_orders_sets_numeral_names() {
+        let mut pages = vec![
+            make_page("c", "10", 0),
+            make_page("a", "1", 0),
+            make_page("b", "2", 0),
+        ];
+        assign_missing_orders(&mut pages, 1);
+        assert_eq!(pages.iter().find(|p| p.name == "1").unwrap().order, 1);
+        assert_eq!(pages.iter().find(|p| p.name == "2").unwrap().order, 2);
+        assert_eq!(pages.iter().find(|p| p.name == "10").unwrap().order, 3);
+    }
+
+    #[test]
+    fn assign_missing_orders_sets_mixed_names() {
+        let mut pages = vec![
+            make_page("c", "10", 0),
+            make_page("d", "alpha", 0),
+            make_page("a", "1", 0),
+            make_page("f", "gamma", 0),
+            make_page("b", "2", 0),
+            make_page("e", "beta", 0),
+        ];
+        assign_missing_orders(&mut pages, 1);
+        assert_eq!(pages.iter().find(|p| p.name == "1").unwrap().order, 1);
+        assert_eq!(pages.iter().find(|p| p.name == "2").unwrap().order, 2);
+        assert_eq!(pages.iter().find(|p| p.name == "10").unwrap().order, 3);
+        assert_eq!(pages.iter().find(|p| p.name == "alpha").unwrap().order, 4);
+        assert_eq!(pages.iter().find(|p| p.name == "beta").unwrap().order, 5);
+        assert_eq!(pages.iter().find(|p| p.name == "gamma").unwrap().order, 6);
     }
 
     #[test]
