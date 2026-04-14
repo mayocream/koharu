@@ -42,4 +42,5 @@ blake3 = { workspace = true }
 lru = { workspace = true }
 petgraph = { workspace = true }
 petname = { workspace = true }
+natord = { workspace = true }
 serde_json = { workspace = true }
