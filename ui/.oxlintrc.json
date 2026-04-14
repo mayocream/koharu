@@ -134,5 +134,10 @@
     "builtin": true
   },
   "globals": {},
-  "ignorePatterns": []
+  "ignorePatterns": [
+    ".next/",
+    "out/",
+    "dist/",
+    "coverage/"
+  ]
 }
