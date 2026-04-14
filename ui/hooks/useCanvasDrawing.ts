@@ -174,7 +174,6 @@ export function useCanvasDrawing(
     }
     ctx?.clearRect(0, 0, canvas.width, canvas.height)
 
-    let cancelled = false
     if (config.onCanvasInit && ctx) {
       const result = config.onCanvasInit(ctx, currentDocument)
       if (result && typeof (result as any).then === 'function') {
@@ -183,7 +182,6 @@ export function useCanvasDrawing(
     }
 
     return () => {
-      cancelled = true
       drawingRef.current = false
       lastPointRef.current = null
       boundsRef.current = null

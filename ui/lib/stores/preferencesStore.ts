@@ -64,7 +64,7 @@ export const usePreferencesStore = create<PreferencesState>()(
           },
         })),
       resetShortcuts: () =>
-        set((state) => ({
+        set(() => ({
           shortcuts: {
             ...initialPreferences.shortcuts,
           },

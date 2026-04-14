@@ -10,7 +10,7 @@
     "dev": "bun run scripts/dev.ts tauri dev -- --profile=release-with-debug",
     "build": "bun run scripts/dev.ts tauri build --no-bundle",
     "cargo": "bun run scripts/dev.ts cargo",
-    "lint": "bun run --filter ui lint",
+    "lint:ui": "bun run --filter ui lint",
     "format": "prettier --write ui/ --ignore-path ui/.gitignore",
     "test:e2e": "playwright test"
   },
