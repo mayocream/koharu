@@ -7,7 +7,7 @@
     "build": "next build",
     "start": "next start",
     "generate:api": "orval",
-    "lint": "oxlint --deny-warnings"
+    "lint": "oxlint -c oxlintrc.json --deny-warnings"
   },
   "dependencies": {
     "@dnd-kit/core": "^6.3.1",

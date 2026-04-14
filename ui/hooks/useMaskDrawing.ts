@@ -97,7 +97,6 @@ export function useMaskDrawing({
         // Compute the inpaint region with margin
         const brushSize = usePreferencesStore.getState().brushConfig.size
         const width = Math.max(brushSize, region.width)
-        const _height = Math.max(brushSize, region.height)
         const margin = Math.min(width * 0.2, 32)
         const doc = currentDocument!
         const x0 = Math.max(0, Math.floor(region.x - margin))
