@@ -138,6 +138,7 @@
     ".next/",
     "out/",
     "dist/",
+    "build/",
     "coverage/"
   ]
 }
