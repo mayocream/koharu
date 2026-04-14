@@ -62,7 +62,7 @@ tauri-build = "2.5"
 tauri-plugin-opener = "2.5"
 tauri-plugin-updater = "2.10"
 blake3 = "1.8"
-rayon = "1.11"
+rayon = "1.12"
 # disables `esaxx_fast` feature which is conflicting with `ort`
 tokenizers = { version = "0.22", default-features = false, features = ["onig"] }
 strum = { version = "0.28", features = ["derive"] }
