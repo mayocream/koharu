@@ -61,10 +61,6 @@ fn extract_zip(archive_path: &Path, output_dir: &Path, policy: ExtractPolicy<'_>
         }
 
         let out_path = output_dir.join(file_name);
-        // Prefer a root-level DLL over a nested duplicate with the same basename.
-        if out_path.exists() && entry.name().contains('/') {
-            continue;
-        }
         let mut out_file = fs::File::create(&out_path)
             .with_context(|| format!("failed to create `{}`", out_path.display()))?;
         io::copy(&mut entry, &mut out_file)
@@ -100,16 +96,6 @@ fn extract_tar_gz(archive_path: &Path, output_dir: &Path, policy: ExtractPolicy<
         }
 
         let entry_type = entry.header().entry_type();
-        // Prefer a root-level DLL over a nested duplicate with the same basename.
-        if output_dir.join(&file_name).exists()
-            && entry
-                .path()
-                .context("failed to read tar entry path")?
-                .to_string_lossy()
-                .contains('/')
-        {
-            continue;
-        }
         if entry_type.is_symlink() {
             let Some(target_name) = entry
                 .link_name()
