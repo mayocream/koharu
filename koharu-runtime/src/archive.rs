@@ -17,8 +17,6 @@ pub(crate) enum ArchiveKind {
 pub(crate) enum ExtractPolicy<'a> {
     RuntimeLibraries,
     Selected(&'a [&'a str]),
-    #[cfg(any(target_os = "windows", test))]
-    SelectedPaths(&'a [&'a str]),
 }
 
 pub(crate) fn detect_kind(file_name: &str) -> Result<ArchiveKind> {
@@ -125,18 +123,13 @@ fn selected_output_name(entry_name: &str, policy: ExtractPolicy<'_>) -> Option<S
     let file_name = entry_basename(entry_name)?;
     let selected = match policy {
         ExtractPolicy::RuntimeLibraries => looks_like_runtime_library(&file_name),
-        ExtractPolicy::Selected(wanted) => wanted
-            .iter()
-            .any(|candidate| file_name.eq_ignore_ascii_case(candidate)),
-        #[cfg(any(target_os = "windows", test))]
-        ExtractPolicy::SelectedPaths(wanted) => wanted
-            .iter()
-            .any(|candidate| entry_path_eq(entry_name, candidate)),
+        ExtractPolicy::Selected(wanted) => wanted.iter().any(|candidate| {
+            file_name.eq_ignore_ascii_case(candidate) || entry_path_eq(entry_name, candidate)
+        }),
     };
     selected.then_some(file_name)
 }
 
-#[cfg(any(target_os = "windows", test))]
 fn entry_path_eq(entry_name: &str, candidate: &str) -> bool {
     fn normalize(path: &str) -> String {
         path.replace('\\', "/").trim_start_matches("./").to_owned()
@@ -272,7 +265,7 @@ mod tests {
     }
 
     #[test]
-    fn extract_selected_paths_filters_by_archive_path() {
+    fn extract_selected_filters_by_archive_path() {
         let tempdir = tempfile::tempdir().unwrap();
         let archive_path = tempdir.path().join("test.zip");
         let output_dir = tempdir.path().join("out");
@@ -291,7 +284,7 @@ mod tests {
             &archive_path,
             &output_dir,
             ArchiveKind::Zip,
-            ExtractPolicy::SelectedPaths(&["zluda/nvcuda.dll"]),
+            ExtractPolicy::Selected(&["zluda/nvcuda.dll"]),
         )
         .unwrap();
 

@@ -112,7 +112,7 @@ mod platform {
             &archive,
             install_dir,
             ArchiveKind::Zip,
-            ExtractPolicy::SelectedPaths(ZLUDA_DLL_PATHS),
+            ExtractPolicy::Selected(ZLUDA_DLL_PATHS),
         )?;
 
         install.commit()
