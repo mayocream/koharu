@@ -62,7 +62,7 @@ mod platform {
         let install_dir = install_dir(runtime);
         let source_id = source_id();
         let install = InstallState::new(&install_dir, &source_id);
-        Ok(install.is_current() && ZLUDA_DLLS.iter().all(|dll| install_dir.join(dll).exists()))
+        Ok(install.is_current() && required_dlls_present(&install_dir))
     }
 
     pub(crate) async fn package_prepare(runtime: &Runtime) -> Result<()> {

@@ -17,6 +17,9 @@ pub(crate) enum ArchiveKind {
 pub(crate) enum ExtractPolicy<'a> {
     RuntimeLibraries,
     Selected(&'a [&'a str]),
+    // Matches full archive entry paths, but extraction still flattens to the
+    // entry basename when writing into `output_dir`.
+    #[cfg_attr(not(target_os = "windows"), allow(dead_code))]
     SelectedPaths(&'a [&'a str]),
 }
 
