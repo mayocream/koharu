@@ -1,8 +1,22 @@
-# Koharu
+<h1 align="center">Koharu</h1>
 
-[Documentation](https://koharu.rs)
+<p align="center">ML-powered manga translator, written in <b>Rust</b>.</p>
 
-ML-powered manga translator, written in **Rust**.
+<p align="center">
+<img alt="GitHub Downloads (all assets, all releases)" src="https://img.shields.io/github/downloads/mayocream/koharu/total?style=for-the-badge&link=https%3A%2F%2Fgithub.com%2Fmayocream%2Fkoharu%2Freleases%2Flatest">
+</p>
+
+<p align="center">
+<a href="https://trendshift.io/repositories/20649" target="_blank"><img src="https://trendshift.io/api/badge/repositories/20649" alt="mayocream%2Fkoharu | Trendshift" style="width: 250px; height: 55px;" width="250" height="55"/></a>
+</p>
+
+<p align="center">
+<a href="https://koharu.rs/how-to/install-koharu/" target="_blank">Getting Started</a> · <a href="https://koharu.rs/how-to/" target="_blank">Docs</a> · <a href="https://github.com/mayocream/koharu/issues" target="_blank">Bug reports</a> · <a href="https://discord.gg/mHvHkxGnUY" target="_blank">Discord</a>
+</p>
+
+<p align="center">
+<a href="https://koharu.rs/ja-JP/" target="_blank">日本語</a> | <a href="https://koharu.rs/zh-CN/" target="_blank">简体中文</a>
+</p>
 
 Koharu introduces a local-first workflow for manga translation, utilizing the power of ML to automate the process. It combines the capabilities of object detection, OCR, inpainting, and LLMs to create a seamless translation experience.
 
