@@ -17,9 +17,7 @@ pub(crate) enum ArchiveKind {
 pub(crate) enum ExtractPolicy<'a> {
     RuntimeLibraries,
     Selected(&'a [&'a str]),
-    // Matches full archive entry paths, but extraction still flattens to the
-    // entry basename when writing into `output_dir`.
-    #[cfg_attr(not(target_os = "windows"), allow(dead_code))]
+    #[cfg(any(target_os = "windows", test))]
     SelectedPaths(&'a [&'a str]),
 }
 
@@ -130,6 +128,7 @@ fn selected_output_name(entry_name: &str, policy: ExtractPolicy<'_>) -> Option<S
         ExtractPolicy::Selected(wanted) => wanted
             .iter()
             .any(|candidate| file_name.eq_ignore_ascii_case(candidate)),
+        #[cfg(any(target_os = "windows", test))]
         ExtractPolicy::SelectedPaths(wanted) => wanted
             .iter()
             .any(|candidate| entry_path_eq(entry_name, candidate)),
@@ -137,6 +136,7 @@ fn selected_output_name(entry_name: &str, policy: ExtractPolicy<'_>) -> Option<S
     selected.then_some(file_name)
 }
 
+#[cfg(any(target_os = "windows", test))]
 fn entry_path_eq(entry_name: &str, candidate: &str) -> bool {
     fn normalize(path: &str) -> String {
         path.replace('\\', "/").trim_start_matches("./").to_owned()
@@ -269,5 +269,32 @@ mod tests {
         assert!(looks_like_runtime_library("libllama.so.0.0.8233"));
         assert!(looks_like_runtime_library("libggml-metal.0.9.7.dylib"));
         assert!(!looks_like_runtime_library("README.md"));
+    }
+
+    #[test]
+    fn extract_selected_paths_filters_by_archive_path() {
+        let tempdir = tempfile::tempdir().unwrap();
+        let archive_path = tempdir.path().join("test.zip");
+        let output_dir = tempdir.path().join("out");
+        fs::create_dir_all(&output_dir).unwrap();
+
+        let file = fs::File::create(&archive_path).unwrap();
+        let mut zip = zip::ZipWriter::new(file);
+        let options = zip::write::SimpleFileOptions::default();
+        zip.start_file("nvcuda.dll", options).unwrap();
+        zip.write_all(b"root").unwrap();
+        zip.start_file("zluda/nvcuda.dll", options).unwrap();
+        zip.write_all(b"nested").unwrap();
+        zip.finish().unwrap();
+
+        extract(
+            &archive_path,
+            &output_dir,
+            ArchiveKind::Zip,
+            ExtractPolicy::SelectedPaths(&["zluda/nvcuda.dll"]),
+        )
+        .unwrap();
+
+        assert_eq!(fs::read(output_dir.join("nvcuda.dll")).unwrap(), b"nested");
     }
 }
