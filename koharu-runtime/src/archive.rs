@@ -17,6 +17,7 @@ pub(crate) enum ArchiveKind {
 pub(crate) enum ExtractPolicy<'a> {
     RuntimeLibraries,
     Selected(&'a [&'a str]),
+    SelectedPaths(&'a [&'a str]),
 }
 
 pub(crate) fn detect_kind(file_name: &str) -> Result<ArchiveKind> {
@@ -53,13 +54,9 @@ fn extract_zip(archive_path: &Path, output_dir: &Path, policy: ExtractPolicy<'_>
             continue;
         }
 
-        let Some(file_name) = entry_basename(entry.name()) else {
+        let Some(file_name) = selected_output_name(entry.name(), policy) else {
             continue;
         };
-        if !should_extract(&file_name, policy) {
-            continue;
-        }
-
         let out_path = output_dir.join(file_name);
         // Prefer a root-level DLL over a nested duplicate with the same basename.
         if out_path.exists() && entry.name().contains('/') {
@@ -85,29 +82,15 @@ fn extract_tar_gz(archive_path: &Path, output_dir: &Path, policy: ExtractPolicy<
         .with_context(|| format!("failed to read tar `{}`", archive_path.display()))?
     {
         let mut entry = entry.context("failed to read tar entry")?;
-        let Some(file_name) = entry_basename(
-            entry
-                .path()
-                .context("failed to read tar entry path")?
-                .as_os_str()
-                .to_string_lossy()
-                .as_ref(),
-        ) else {
+        let entry_path = entry.path().context("failed to read tar entry path")?;
+        let entry_name = entry_path.as_os_str().to_string_lossy().into_owned();
+        let Some(file_name) = selected_output_name(&entry_name, policy) else {
             continue;
         };
-        if !should_extract(&file_name, policy) {
-            continue;
-        }
 
         let entry_type = entry.header().entry_type();
         // Prefer a root-level DLL over a nested duplicate with the same basename.
-        if output_dir.join(&file_name).exists()
-            && entry
-                .path()
-                .context("failed to read tar entry path")?
-                .to_string_lossy()
-                .contains('/')
-        {
+        if output_dir.join(&file_name).exists() && entry_name.contains('/') {
             continue;
         }
         if entry_type.is_symlink() {
@@ -137,13 +120,26 @@ fn extract_tar_gz(archive_path: &Path, output_dir: &Path, policy: ExtractPolicy<
     materialize_aliases(&aliases)
 }
 
-fn should_extract(file_name: &str, policy: ExtractPolicy<'_>) -> bool {
-    match policy {
-        ExtractPolicy::RuntimeLibraries => looks_like_runtime_library(file_name),
+fn selected_output_name(entry_name: &str, policy: ExtractPolicy<'_>) -> Option<String> {
+    let file_name = entry_basename(entry_name)?;
+    let selected = match policy {
+        ExtractPolicy::RuntimeLibraries => looks_like_runtime_library(&file_name),
         ExtractPolicy::Selected(wanted) => wanted
             .iter()
             .any(|candidate| file_name.eq_ignore_ascii_case(candidate)),
+        ExtractPolicy::SelectedPaths(wanted) => wanted
+            .iter()
+            .any(|candidate| entry_path_eq(entry_name, candidate)),
+    };
+    selected.then_some(file_name)
+}
+
+fn entry_path_eq(entry_name: &str, candidate: &str) -> bool {
+    fn normalize(path: &str) -> String {
+        path.replace('\\', "/").trim_start_matches("./").to_owned()
     }
+
+    normalize(entry_name).eq_ignore_ascii_case(&normalize(candidate))
 }
 
 fn entry_basename(entry_name: &str) -> Option<String> {

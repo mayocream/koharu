@@ -5,12 +5,23 @@ const RELEASE_TAG: &str = "v6-preview.64";
 #[cfg(any(target_os = "windows", test))]
 const ZLUDA_ASSET_NAME: &str = "zluda-windows-8251f1e.zip";
 #[cfg(any(target_os = "windows", test))]
+// Bump this when extraction behavior changes but the upstream asset name stays the same.
+const ZLUDA_EXTRACT_REVISION: u32 = 2;
+#[cfg(any(target_os = "windows", test))]
 const ZLUDA_DLLS: &[&str] = &[
     "nvcudart_hybrid64.dll",
     "nvcuda.dll",
     "cublasLt64_13.dll",
     "cublas64_13.dll",
     "cufft64_12.dll",
+];
+#[cfg(any(target_os = "windows", test))]
+const ZLUDA_DLL_PATHS: &[&str] = &[
+    "zluda/nvcudart_hybrid64.dll",
+    "zluda/nvcuda.dll",
+    "zluda/cublasLt64_13.dll",
+    "zluda/cublas64_13.dll",
+    "zluda/cufft64_12.dll",
 ];
 
 #[cfg(target_os = "windows")]
@@ -24,7 +35,9 @@ mod platform {
     use crate::install::InstallState;
     use crate::loader::{add_runtime_search_path, preload_library};
 
-    use super::{RELEASE_BASE_URL, RELEASE_TAG, ZLUDA_ASSET_NAME, ZLUDA_DLLS, source_id};
+    use super::{
+        RELEASE_BASE_URL, RELEASE_TAG, ZLUDA_ASSET_NAME, ZLUDA_DLL_PATHS, ZLUDA_DLLS, source_id,
+    };
 
     const HIP_ROOT_CANDIDATES: &[&str] = &[
         r"C:\hip_sdk",
@@ -83,7 +96,7 @@ mod platform {
     async fn install_if_needed(runtime: &Runtime, install_dir: &Path) -> Result<()> {
         let source_id = source_id();
         let install = InstallState::new(install_dir, &source_id);
-        if install.is_current() {
+        if install.is_current() && required_dlls_present(install_dir) {
             return Ok(());
         }
 
@@ -99,7 +112,7 @@ mod platform {
             &archive,
             install_dir,
             ArchiveKind::Zip,
-            ExtractPolicy::Selected(ZLUDA_DLLS),
+            ExtractPolicy::SelectedPaths(ZLUDA_DLL_PATHS),
         )?;
 
         install.commit()
@@ -107,6 +120,10 @@ mod platform {
 
     fn install_dir(runtime: &Runtime) -> PathBuf {
         runtime.root().join("runtime").join("zluda")
+    }
+
+    fn required_dlls_present(install_dir: &Path) -> bool {
+        ZLUDA_DLLS.iter().all(|dll| install_dir.join(dll).exists())
     }
 
     fn hip_root_dir() -> Option<PathBuf> {
@@ -152,7 +169,7 @@ pub(crate) use platform::{package_enabled, package_prepare, package_present};
 
 #[cfg(any(target_os = "windows", test))]
 fn source_id() -> String {
-    format!("zluda;tag={RELEASE_TAG};asset={ZLUDA_ASSET_NAME}")
+    format!("zluda;tag={RELEASE_TAG};asset={ZLUDA_ASSET_NAME};extract={ZLUDA_EXTRACT_REVISION}")
 }
 
 crate::declare_native_package!(
@@ -205,5 +222,12 @@ mod tests {
     fn runtime_extract_list_matches_preload_list() {
         assert_eq!(ZLUDA_DLLS.len(), 5);
         assert!(ZLUDA_DLLS.iter().all(|dll| dll.ends_with(".dll")));
+        assert_eq!(ZLUDA_DLL_PATHS.len(), ZLUDA_DLLS.len());
+        assert!(
+            ZLUDA_DLL_PATHS
+                .iter()
+                .zip(ZLUDA_DLLS)
+                .all(|(path, dll)| path.ends_with(dll))
+        );
     }
 }
