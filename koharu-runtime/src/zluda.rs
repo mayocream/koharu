@@ -6,7 +6,7 @@ const RELEASE_TAG: &str = "v6-preview.64";
 const ZLUDA_ASSET_NAME: &str = "zluda-windows-8251f1e.zip";
 #[cfg(any(target_os = "windows", test))]
 // Bump this when extraction behavior changes but the upstream asset name stays the same.
-const ZLUDA_EXTRACT_REVISION: u32 = 2;
+const ZLUDA_EXTRACT_REVISION: u32 = 3;
 #[cfg(any(target_os = "windows", test))]
 const ZLUDA_DLLS: &[&str] = &[
     "nvcudart_hybrid64.dll",
@@ -18,13 +18,12 @@ const ZLUDA_DLLS: &[&str] = &[
 
 #[cfg(target_os = "windows")]
 mod platform {
-    use std::fs;
-    use std::io;
     use std::path::{Path, PathBuf};
 
     use anyhow::{Context, Result, anyhow};
 
     use crate::Runtime;
+    use crate::archive::{self, ArchiveKind, ExtractPolicy};
     use crate::install::InstallState;
     use crate::loader::{add_runtime_search_path, preload_library};
 
@@ -99,22 +98,12 @@ mod platform {
             .cached_download(&url, ZLUDA_ASSET_NAME)
             .await
             .with_context(|| format!("failed to download `{url}`"))?;
-        let file = fs::File::open(&archive)
-            .with_context(|| format!("failed to open `{}`", archive.display()))?;
-        let mut archive = zip::ZipArchive::new(file)
-            .with_context(|| format!("failed to read zip `{}`", archive.display()))?;
-
-        for dll in ZLUDA_DLLS {
-            let entry_name = format!("zluda/{dll}");
-            let mut entry = archive
-                .by_name(&entry_name)
-                .with_context(|| format!("required ZLUDA library `{entry_name}` missing"))?;
-            let out_path = install_dir.join(dll);
-            let mut out_file = fs::File::create(&out_path)
-                .with_context(|| format!("failed to create `{}`", out_path.display()))?;
-            io::copy(&mut entry, &mut out_file)
-                .with_context(|| format!("failed to extract `{}`", out_path.display()))?;
-        }
+        archive::extract(
+            &archive,
+            install_dir,
+            ArchiveKind::Zip,
+            ExtractPolicy::Selected(ZLUDA_DLLS),
+        )?;
 
         install.commit()
     }

@@ -1,3 +1,4 @@
+use std::collections::HashMap;
 use std::ffi::OsStr;
 use std::fs;
 use std::io;
@@ -46,6 +47,7 @@ fn extract_zip(archive_path: &Path, output_dir: &Path, policy: ExtractPolicy<'_>
         .with_context(|| format!("failed to open `{}`", archive_path.display()))?;
     let mut archive = zip::ZipArchive::new(file)
         .with_context(|| format!("failed to read zip `{}`", archive_path.display()))?;
+    let mut best_depths = HashMap::new();
 
     for index in 0..archive.len() {
         let mut entry = archive.by_index(index)?;
@@ -57,6 +59,9 @@ fn extract_zip(archive_path: &Path, output_dir: &Path, policy: ExtractPolicy<'_>
             continue;
         };
         if !should_extract(&file_name, policy) {
+            continue;
+        }
+        if !remember_shallower_path(&mut best_depths, &file_name, entry.name()) {
             continue;
         }
 
@@ -75,28 +80,29 @@ fn extract_tar_gz(archive_path: &Path, output_dir: &Path, policy: ExtractPolicy<
         .with_context(|| format!("failed to open `{}`", archive_path.display()))?;
     let mut archive = tar::Archive::new(GzDecoder::new(file));
     let mut aliases = Vec::new();
+    let mut best_depths = HashMap::new();
 
     for entry in archive
         .entries()
         .with_context(|| format!("failed to read tar `{}`", archive_path.display()))?
     {
         let mut entry = entry.context("failed to read tar entry")?;
-        let Some(file_name) = entry_basename(
-            entry
-                .path()
-                .context("failed to read tar entry path")?
-                .as_os_str()
-                .to_string_lossy()
-                .as_ref(),
-        ) else {
+        let entry_path = entry.path().context("failed to read tar entry path")?;
+        let entry_name = entry_path.to_string_lossy().into_owned();
+        let Some(file_name) = entry_basename(&entry_name) else {
             continue;
         };
         if !should_extract(&file_name, policy) {
             continue;
         }
+        if !remember_shallower_path(&mut best_depths, &file_name, &entry_name) {
+            continue;
+        }
 
         let entry_type = entry.header().entry_type();
+        let out_path = output_dir.join(&file_name);
         if entry_type.is_symlink() {
+            aliases.retain(|(alias_path, _)| alias_path != &out_path);
             let Some(target_name) = entry
                 .link_name()
                 .context("failed to read tar symlink target")?
@@ -105,7 +111,11 @@ fn extract_tar_gz(archive_path: &Path, output_dir: &Path, policy: ExtractPolicy<
             else {
                 continue;
             };
-            aliases.push((output_dir.join(&file_name), output_dir.join(target_name)));
+            if out_path.exists() {
+                fs::remove_file(&out_path)
+                    .with_context(|| format!("failed to replace `{}`", out_path.display()))?;
+            }
+            aliases.push((out_path, output_dir.join(target_name)));
             continue;
         }
 
@@ -113,7 +123,6 @@ fn extract_tar_gz(archive_path: &Path, output_dir: &Path, policy: ExtractPolicy<
             continue;
         }
 
-        let out_path = output_dir.join(&file_name);
         let mut out_file = fs::File::create(&out_path)
             .with_context(|| format!("failed to create `{}`", out_path.display()))?;
         io::copy(&mut entry, &mut out_file)
@@ -130,6 +139,32 @@ fn should_extract(file_name: &str, policy: ExtractPolicy<'_>) -> bool {
             .iter()
             .any(|candidate| file_name.eq_ignore_ascii_case(candidate)),
     }
+}
+
+fn entry_depth(entry_name: &str) -> usize {
+    entry_name
+        .replace('\\', "/")
+        .trim_start_matches("./")
+        .trim_start_matches('/')
+        .matches('/')
+        .count()
+}
+
+fn remember_shallower_path(
+    best_depths: &mut HashMap<String, usize>,
+    file_name: &str,
+    entry_name: &str,
+) -> bool {
+    let key = file_name.to_ascii_lowercase();
+    let depth = entry_depth(entry_name);
+    if best_depths
+        .get(&key)
+        .is_some_and(|best_depth| depth >= *best_depth)
+    {
+        return false;
+    }
+    best_depths.insert(key, depth);
+    true
 }
 
 fn entry_basename(entry_name: &str) -> Option<String> {
@@ -248,6 +283,71 @@ mod tests {
             b"cuda"
         );
         assert!(!output_dir.join("ignored.txt").exists());
+    }
+
+    #[test]
+    fn extract_zip_prefers_shallower_archive_path() {
+        let tempdir = tempfile::tempdir().unwrap();
+        let archive_path = tempdir.path().join("test.zip");
+        let output_dir = tempdir.path().join("out");
+        fs::create_dir_all(&output_dir).unwrap();
+
+        let file = fs::File::create(&archive_path).unwrap();
+        let mut zip = zip::ZipWriter::new(file);
+        let options = zip::write::SimpleFileOptions::default();
+        zip.start_file("zluda/trace/nvcuda.dll", options).unwrap();
+        zip.write_all(b"low").unwrap();
+        zip.start_file("zluda/nvcuda.dll", options).unwrap();
+        zip.write_all(b"mid").unwrap();
+        zip.start_file("nvcuda.dll", options).unwrap();
+        zip.write_all(b"high").unwrap();
+        zip.finish().unwrap();
+
+        extract(
+            &archive_path,
+            &output_dir,
+            ArchiveKind::Zip,
+            ExtractPolicy::Selected(&["nvcuda.dll"]),
+        )
+        .unwrap();
+
+        assert_eq!(fs::read(output_dir.join("nvcuda.dll")).unwrap(), b"high");
+    }
+
+    #[test]
+    fn extract_tar_gz_prefers_shallower_archive_path() {
+        let tempdir = tempfile::tempdir().unwrap();
+        let archive_path = tempdir.path().join("test.tar.gz");
+        let output_dir = tempdir.path().join("out");
+        fs::create_dir_all(&output_dir).unwrap();
+
+        let file = fs::File::create(&archive_path).unwrap();
+        let encoder = flate2::write::GzEncoder::new(file, flate2::Compression::default());
+        let mut tar = tar::Builder::new(encoder);
+
+        for (path, contents) in [
+            ("zluda/trace/nvcuda.dll", b"low".as_slice()),
+            ("zluda/nvcuda.dll", b"mid".as_slice()),
+            ("nvcuda.dll", b"high".as_slice()),
+        ] {
+            let mut header = tar::Header::new_gnu();
+            header.set_size(contents.len() as u64);
+            header.set_mode(0o644);
+            header.set_cksum();
+            tar.append_data(&mut header, path, contents).unwrap();
+        }
+
+        tar.into_inner().unwrap().finish().unwrap();
+
+        extract(
+            &archive_path,
+            &output_dir,
+            ArchiveKind::TarGz,
+            ExtractPolicy::Selected(&["nvcuda.dll"]),
+        )
+        .unwrap();
+
+        assert_eq!(fs::read(output_dir.join("nvcuda.dll")).unwrap(), b"high");
     }
 
     #[test]
