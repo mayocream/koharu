@@ -11,6 +11,7 @@
     "correctness": "error"
   },
   "rules": {
+    "react/exhaustive-deps": "warn",
     "no-useless-catch": "warn",
     "typescript/no-useless-empty-export": "warn",
     "unicorn/no-empty-file": "warn",
