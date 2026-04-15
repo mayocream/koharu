@@ -256,6 +256,9 @@ You can download the latest release of Koharu from the [releases page](https://g
 
 We provide prebuilt binaries for Windows, macOS, and Linux. For the standard install flow, see [Install Koharu](https://koharu.rs/how-to/install-koharu/). If something goes wrong, see [Troubleshooting](https://koharu.rs/how-to/troubleshooting/).
 
+Koharu can run offline with local models once the required runtimes, models, and fonts are already present on disk.
+For portable deployments, place a `config.toml` next to the binary to keep the default config, runtime, and model directories beside the app.
+
 ## Development
 
 To build Koharu from source, follow the steps below.

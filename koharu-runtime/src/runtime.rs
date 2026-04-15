@@ -32,7 +32,16 @@ impl Default for RuntimeHttpConfig {
     }
 }
 
+// FIXME: move this function to a more appropriate place, e.g. a `config` module
 pub fn default_app_data_root() -> Utf8PathBuf {
+    if let Ok(exe) = std::env::current_exe()
+        && let Some(root) = exe.parent()
+        && root.join("config.toml").is_file()
+    {
+        return Utf8PathBuf::from_path_buf(root.to_path_buf())
+            .unwrap_or_else(|path| Utf8PathBuf::from(path.to_string_lossy().into_owned()));
+    }
+
     let root = dirs::data_local_dir()
         .or_else(dirs::data_dir)
         .unwrap_or_else(std::env::temp_dir)
