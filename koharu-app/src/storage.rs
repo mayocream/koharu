@@ -389,8 +389,7 @@ fn assign_missing_orders(pages: &mut [Document], start: u32) {
         .map(|(i, _)| i)
         .collect();
     zero_indices.sort_by(|&a, &b| {
-        natord::compare(&pages[a].name, &pages[b].name)
-            .then_with(|| pages[a].id.cmp(&pages[b].id))
+        natord::compare(&pages[a].name, &pages[b].name).then_with(|| pages[a].id.cmp(&pages[b].id))
     });
     for (offset, idx) in zero_indices.into_iter().enumerate() {
         pages[idx].order = start + offset as u32;
