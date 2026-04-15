@@ -490,6 +490,23 @@ mod tests {
         assert_eq!(result[1].name, "beta");
     }
 
+    #[test]
+    fn list_documents_natural_sorts_numeric_and_mixed_numeric_names_on_ties() {
+        let project = Project {
+            name: "test".to_string(),
+            pages: vec![
+                make_page("a", "10", 1),
+                make_page("b", "2", 1),
+                make_page("c", "1", 1),
+                make_page("d", "page 10", 1),
+                make_page("e", "page 2", 1),
+            ],
+        };
+        let result = list_documents(&project);
+        let names: Vec<&str> = result.iter().map(|d| d.name.as_str()).collect();
+        assert_eq!(names, ["1", "2", "10", "page 2", "page 10"]);
+    }
+
     // ── reorder_pages ───────────────────────────────────────────────
 
     fn open_test_storage(pages: Vec<Document>) -> (Storage, tempfile::TempDir) {
