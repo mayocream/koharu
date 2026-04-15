@@ -15,29 +15,20 @@ const ZLUDA_DLLS: &[&str] = &[
     "cublas64_13.dll",
     "cufft64_12.dll",
 ];
-#[cfg(any(target_os = "windows", test))]
-const ZLUDA_DLL_PATHS: &[&str] = &[
-    "zluda/nvcudart_hybrid64.dll",
-    "zluda/nvcuda.dll",
-    "zluda/cublasLt64_13.dll",
-    "zluda/cublas64_13.dll",
-    "zluda/cufft64_12.dll",
-];
 
 #[cfg(target_os = "windows")]
 mod platform {
+    use std::fs;
+    use std::io;
     use std::path::{Path, PathBuf};
 
     use anyhow::{Context, Result, anyhow};
 
     use crate::Runtime;
-    use crate::archive::{self, ArchiveKind, ExtractPolicy};
     use crate::install::InstallState;
     use crate::loader::{add_runtime_search_path, preload_library};
 
-    use super::{
-        RELEASE_BASE_URL, RELEASE_TAG, ZLUDA_ASSET_NAME, ZLUDA_DLL_PATHS, ZLUDA_DLLS, source_id,
-    };
+    use super::{RELEASE_BASE_URL, RELEASE_TAG, ZLUDA_ASSET_NAME, ZLUDA_DLLS, source_id};
 
     const HIP_ROOT_CANDIDATES: &[&str] = &[
         r"C:\hip_sdk",
@@ -62,7 +53,7 @@ mod platform {
         let install_dir = install_dir(runtime);
         let source_id = source_id();
         let install = InstallState::new(&install_dir, &source_id);
-        Ok(install.is_current() && required_dlls_present(&install_dir))
+        Ok(install.is_current() && ZLUDA_DLLS.iter().all(|dll| install_dir.join(dll).exists()))
     }
 
     pub(crate) async fn package_prepare(runtime: &Runtime) -> Result<()> {
@@ -96,7 +87,7 @@ mod platform {
     async fn install_if_needed(runtime: &Runtime, install_dir: &Path) -> Result<()> {
         let source_id = source_id();
         let install = InstallState::new(install_dir, &source_id);
-        if install.is_current() && required_dlls_present(install_dir) {
+        if install.is_current() && ZLUDA_DLLS.iter().all(|dll| install_dir.join(dll).exists()) {
             return Ok(());
         }
 
@@ -108,22 +99,28 @@ mod platform {
             .cached_download(&url, ZLUDA_ASSET_NAME)
             .await
             .with_context(|| format!("failed to download `{url}`"))?;
-        archive::extract(
-            &archive,
-            install_dir,
-            ArchiveKind::Zip,
-            ExtractPolicy::Selected(ZLUDA_DLL_PATHS),
-        )?;
+        let file = fs::File::open(&archive)
+            .with_context(|| format!("failed to open `{}`", archive.display()))?;
+        let mut archive = zip::ZipArchive::new(file)
+            .with_context(|| format!("failed to read zip `{}`", archive.display()))?;
+
+        for dll in ZLUDA_DLLS {
+            let entry_name = format!("zluda/{dll}");
+            let mut entry = archive
+                .by_name(&entry_name)
+                .with_context(|| format!("required ZLUDA library `{entry_name}` missing"))?;
+            let out_path = install_dir.join(dll);
+            let mut out_file = fs::File::create(&out_path)
+                .with_context(|| format!("failed to create `{}`", out_path.display()))?;
+            io::copy(&mut entry, &mut out_file)
+                .with_context(|| format!("failed to extract `{}`", out_path.display()))?;
+        }
 
         install.commit()
     }
 
     fn install_dir(runtime: &Runtime) -> PathBuf {
         runtime.root().join("runtime").join("zluda")
-    }
-
-    fn required_dlls_present(install_dir: &Path) -> bool {
-        ZLUDA_DLLS.iter().all(|dll| install_dir.join(dll).exists())
     }
 
     fn hip_root_dir() -> Option<PathBuf> {
@@ -222,12 +219,5 @@ mod tests {
     fn runtime_extract_list_matches_preload_list() {
         assert_eq!(ZLUDA_DLLS.len(), 5);
         assert!(ZLUDA_DLLS.iter().all(|dll| dll.ends_with(".dll")));
-        assert_eq!(ZLUDA_DLL_PATHS.len(), ZLUDA_DLLS.len());
-        assert!(
-            ZLUDA_DLL_PATHS
-                .iter()
-                .zip(ZLUDA_DLLS)
-                .all(|(path, dll)| path.ends_with(dll))
-        );
     }
 }

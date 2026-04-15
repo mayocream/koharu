@@ -53,9 +53,13 @@ fn extract_zip(archive_path: &Path, output_dir: &Path, policy: ExtractPolicy<'_>
             continue;
         }
 
-        let Some(file_name) = selected_output_name(entry.name(), policy) else {
+        let Some(file_name) = entry_basename(entry.name()) else {
             continue;
         };
+        if !should_extract(&file_name, policy) {
+            continue;
+        }
+
         let out_path = output_dir.join(file_name);
         // Prefer a root-level DLL over a nested duplicate with the same basename.
         if out_path.exists() && entry.name().contains('/') {
@@ -81,15 +85,29 @@ fn extract_tar_gz(archive_path: &Path, output_dir: &Path, policy: ExtractPolicy<
         .with_context(|| format!("failed to read tar `{}`", archive_path.display()))?
     {
         let mut entry = entry.context("failed to read tar entry")?;
-        let entry_path = entry.path().context("failed to read tar entry path")?;
-        let entry_name = entry_path.as_os_str().to_string_lossy().into_owned();
-        let Some(file_name) = selected_output_name(&entry_name, policy) else {
+        let Some(file_name) = entry_basename(
+            entry
+                .path()
+                .context("failed to read tar entry path")?
+                .as_os_str()
+                .to_string_lossy()
+                .as_ref(),
+        ) else {
             continue;
         };
+        if !should_extract(&file_name, policy) {
+            continue;
+        }
 
         let entry_type = entry.header().entry_type();
         // Prefer a root-level DLL over a nested duplicate with the same basename.
-        if output_dir.join(&file_name).exists() && entry_name.contains('/') {
+        if output_dir.join(&file_name).exists()
+            && entry
+                .path()
+                .context("failed to read tar entry path")?
+                .to_string_lossy()
+                .contains('/')
+        {
             continue;
         }
         if entry_type.is_symlink() {
@@ -119,23 +137,13 @@ fn extract_tar_gz(archive_path: &Path, output_dir: &Path, policy: ExtractPolicy<
     materialize_aliases(&aliases)
 }
 
-fn selected_output_name(entry_name: &str, policy: ExtractPolicy<'_>) -> Option<String> {
-    let file_name = entry_basename(entry_name)?;
-    let selected = match policy {
-        ExtractPolicy::RuntimeLibraries => looks_like_runtime_library(&file_name),
-        ExtractPolicy::Selected(wanted) => wanted.iter().any(|candidate| {
-            file_name.eq_ignore_ascii_case(candidate) || entry_path_eq(entry_name, candidate)
-        }),
-    };
-    selected.then_some(file_name)
-}
-
-fn entry_path_eq(entry_name: &str, candidate: &str) -> bool {
-    fn normalize(path: &str) -> String {
-        path.replace('\\', "/").trim_start_matches("./").to_owned()
+fn should_extract(file_name: &str, policy: ExtractPolicy<'_>) -> bool {
+    match policy {
+        ExtractPolicy::RuntimeLibraries => looks_like_runtime_library(file_name),
+        ExtractPolicy::Selected(wanted) => wanted
+            .iter()
+            .any(|candidate| file_name.eq_ignore_ascii_case(candidate)),
     }
-
-    normalize(entry_name).eq_ignore_ascii_case(&normalize(candidate))
 }
 
 fn entry_basename(entry_name: &str) -> Option<String> {
@@ -262,32 +270,5 @@ mod tests {
         assert!(looks_like_runtime_library("libllama.so.0.0.8233"));
         assert!(looks_like_runtime_library("libggml-metal.0.9.7.dylib"));
         assert!(!looks_like_runtime_library("README.md"));
-    }
-
-    #[test]
-    fn extract_selected_filters_by_archive_path() {
-        let tempdir = tempfile::tempdir().unwrap();
-        let archive_path = tempdir.path().join("test.zip");
-        let output_dir = tempdir.path().join("out");
-        fs::create_dir_all(&output_dir).unwrap();
-
-        let file = fs::File::create(&archive_path).unwrap();
-        let mut zip = zip::ZipWriter::new(file);
-        let options = zip::write::SimpleFileOptions::default();
-        zip.start_file("nvcuda.dll", options).unwrap();
-        zip.write_all(b"root").unwrap();
-        zip.start_file("zluda/nvcuda.dll", options).unwrap();
-        zip.write_all(b"nested").unwrap();
-        zip.finish().unwrap();
-
-        extract(
-            &archive_path,
-            &output_dir,
-            ArchiveKind::Zip,
-            ExtractPolicy::Selected(&["zluda/nvcuda.dll"]),
-        )
-        .unwrap();
-
-        assert_eq!(fs::read(output_dir.join("nvcuda.dll")).unwrap(), b"nested");
     }
 }
