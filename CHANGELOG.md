@@ -1,3 +1,30 @@
+## [0.44.2](https://github.com/mayocream/koharu/compare/0.44.1..0.44.2) - 2026-04-14
+
+### 🐛 Bug Fixes
+
+- Upgrade zluda to v6-preview.64 - ([23d97e5](https://github.com/mayocream/koharu/commit/23d97e552fb9d460ceb0d772c7823518efb36eef))
+
+
+## [0.44.1](https://github.com/mayocream/koharu/compare/0.44.0..0.44.1) - 2026-04-14
+
+### 🐛 Bug Fixes
+
+- Sentry setup - ([7fa180b](https://github.com/mayocream/koharu/commit/7fa180b2ae343e625097602a8710afd97c394170))
+
+### ⚙️ Miscellaneous Tasks
+
+- Add oxc linting to CI and fix warnings ([#435](https://github.com/mayocream/koharu/issues/435)) - ([fbe8535](https://github.com/mayocream/koharu/commit/fbe853584b3279b8a94b18a5ab3b1d5c89019d9e))
+- Add confirmation message to Portuguese translations ([#430](https://github.com/mayocream/koharu/issues/430)) - ([07963ad](https://github.com/mayocream/koharu/commit/07963ad23145378efe21ecebf39d045be683804b))
+- Fix welcome workflow - ([94ae12b](https://github.com/mayocream/koharu/commit/94ae12b9ac46f002bbfca1a09ea6a0ea397fc3a9))
+- Add OXLint for linting the UI code ([#432](https://github.com/mayocream/koharu/issues/432)) - ([9912409](https://github.com/mayocream/koharu/commit/9912409f080469b05eba02413f13897396531d70))
+- Add Docker deployment ([#401](https://github.com/mayocream/koharu/issues/401)) - ([ff9f95c](https://github.com/mayocream/koharu/commit/ff9f95caae675a6f1b3b7734fecf974b22fd7ba2))
+- Add missing SENTRY_AUTH_TOKEN - ([82e8c46](https://github.com/mayocream/koharu/commit/82e8c461162847d10771894de49e172cdce24702))
+
+## New Contributors ❤️
+
+* @josebrunoleite made their first contribution in [#430](https://github.com/mayocream/koharu/pull/430)
+* @AxalotLDev made their first contribution in [#401](https://github.com/mayocream/koharu/pull/401)
+
 ## [0.44.0](https://github.com/mayocream/koharu/compare/0.43.2..0.44.0) - 2026-04-13
 
 ### ⛰️  Features

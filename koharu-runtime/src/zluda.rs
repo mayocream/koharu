@@ -1,9 +1,9 @@
 #[cfg(target_os = "windows")]
 const RELEASE_BASE_URL: &str = "https://github.com/vosen/ZLUDA/releases/download";
 #[cfg(any(target_os = "windows", test))]
-const RELEASE_TAG: &str = "v6-preview.63";
+const RELEASE_TAG: &str = "v6-preview.64";
 #[cfg(any(target_os = "windows", test))]
-const ZLUDA_ASSET_NAME: &str = "zluda-windows-e070320.zip";
+const ZLUDA_ASSET_NAME: &str = "zluda-windows-8251f1e.zip";
 #[cfg(any(target_os = "windows", test))]
 const ZLUDA_DLLS: &[&str] = &[
     "nvcudart_hybrid64.dll",
