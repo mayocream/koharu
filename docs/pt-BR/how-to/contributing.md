@@ -112,6 +112,7 @@ Se você alterou a documentação:
 - `zensical build -f docs/zensical.toml -c`
 - `zensical build -f docs/zensical.ja-JP.toml`
 - `zensical build -f docs/zensical.zh-CN.toml`
+- `zensical build -f docs/zensical.pt-BR.toml`
 
 Você não precisa rodar todos os comandos desta lista para cada PR, mas deve cobrir os caminhos de código que tocou.
 
