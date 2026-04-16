@@ -1,19 +1,19 @@
 'use client'
 
 import i18n, { type Resource } from 'i18next'
-import { initReactI18next } from 'react-i18next'
 import LanguageDetector from 'i18next-browser-languagedetector'
 import LocalStorageBackend from 'i18next-localstorage-backend'
+import { initReactI18next } from 'react-i18next'
 
 import enUS from '@/public/locales/en-US/translation.json'
-import zhCN from '@/public/locales/zh-CN/translation.json'
-import zhTW from '@/public/locales/zh-TW/translation.json'
-import jaJP from '@/public/locales/ja-JP/translation.json'
-import ruRU from '@/public/locales/ru-RU/translation.json'
 import esES from '@/public/locales/es-ES/translation.json'
-import trTR from '@/public/locales/tr-TR/translation.json'
+import jaJP from '@/public/locales/ja-JP/translation.json'
 import koKR from '@/public/locales/ko-KR/translation.json'
 import ptBR from '@/public/locales/pt-BR/translation.json'
+import ruRU from '@/public/locales/ru-RU/translation.json'
+import trTR from '@/public/locales/tr-TR/translation.json'
+import zhCN from '@/public/locales/zh-CN/translation.json'
+import zhTW from '@/public/locales/zh-TW/translation.json'
 
 export const resources = {
   'en-US': { translation: enUS },

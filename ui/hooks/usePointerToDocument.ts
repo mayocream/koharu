@@ -4,14 +4,9 @@ import type React from 'react'
 
 export type DocumentPointer = { x: number; y: number }
 
-export type PointerEventLike =
-  | React.PointerEvent<Element>
-  | React.MouseEvent<Element>
-  | MouseEvent
+export type PointerEventLike = React.PointerEvent<Element> | React.MouseEvent<Element> | MouseEvent
 
-export type PointerToDocumentFn = (
-  event: PointerEventLike,
-) => DocumentPointer | null
+export type PointerToDocumentFn = (event: PointerEventLike) => DocumentPointer | null
 
 export function usePointerToDocument(
   scaleRatio: number,

@@ -1,58 +1,53 @@
 'use client'
 
-import { useEffect, useRef, useMemo, useCallback } from 'react'
-import type React from 'react'
 import * as ScrollAreaPrimitive from '@radix-ui/react-scroll-area'
 import { useGesture } from '@use-gesture/react'
+import { useEffect, useRef, useMemo, useCallback } from 'react'
+import type React from 'react'
+import { useTranslation } from 'react-i18next'
+
+import { CanvasToolbar } from '@/components/canvas/CanvasToolbar'
+import {
+  setCanvasViewport,
+  setCanvasDocumentSize,
+  fitCanvasToViewport,
+} from '@/components/canvas/canvasViewport'
+import { TextBlockLayer } from '@/components/canvas/TextBlockLayer'
+import { ToolRail } from '@/components/canvas/ToolRail'
+import {
+  resolvePinchMemoScaleRatio,
+  resolvePinchNextScaleRatio,
+} from '@/components/canvas/zoomGestures'
+import { Image } from '@/components/Image'
 import {
   ContextMenu,
   ContextMenuContent,
   ContextMenuItem,
   ContextMenuTrigger,
 } from '@/components/ui/context-menu'
-import { useTranslation } from 'react-i18next'
-import { listen } from '@/lib/backend'
-import { Image } from '@/components/Image'
-import {
-  setCanvasViewport,
-  setCanvasDocumentSize,
-  fitCanvasToViewport,
-} from '@/components/canvas/canvasViewport'
-import { ToolRail } from '@/components/canvas/ToolRail'
-import { CanvasToolbar } from '@/components/canvas/CanvasToolbar'
-import { TextBlockLayer } from '@/components/canvas/TextBlockLayer'
-import { useCanvasZoom } from '@/hooks/useCanvasZoom'
-import { usePointerToDocument } from '@/hooks/usePointerToDocument'
-import { useBlockDrafting } from '@/hooks/useBlockDrafting'
 import { useBlockContextMenu } from '@/hooks/useBlockContextMenu'
-import { useTextBlocks, useDocumentLayer } from '@/hooks/useTextBlocks'
-import { useMaskDrawing } from '@/hooks/useMaskDrawing'
-import { useRenderBrushDrawing } from '@/hooks/useRenderBrushDrawing'
-import { useBrushLayerDisplay } from '@/hooks/useBrushLayerDisplay'
+import { useBlockDrafting } from '@/hooks/useBlockDrafting'
 import { useBrushCursor } from '@/hooks/useBrushCursor'
+import { useBrushLayerDisplay } from '@/hooks/useBrushLayerDisplay'
+import { useCanvasZoom } from '@/hooks/useCanvasZoom'
 import { useKeyboardShortcuts } from '@/hooks/useKeyboardShortcuts'
+import { useMaskDrawing } from '@/hooks/useMaskDrawing'
+import { usePointerToDocument } from '@/hooks/usePointerToDocument'
+import { useRenderBrushDrawing } from '@/hooks/useRenderBrushDrawing'
+import { useTextBlocks, useDocumentLayer } from '@/hooks/useTextBlocks'
+import { listen } from '@/lib/backend'
 import { useEditorUiStore } from '@/lib/stores/editorUiStore'
-import {
-  resolvePinchMemoScaleRatio,
-  resolvePinchNextScaleRatio,
-} from '@/components/canvas/zoomGestures'
 
 const BRUSH_CURSOR = 'none'
 
 export function Workspace() {
   useKeyboardShortcuts()
   const scale = useEditorUiStore((state) => state.scale)
-  const showSegmentationMask = useEditorUiStore(
-    (state) => state.showSegmentationMask,
-  )
-  const showInpaintedImage = useEditorUiStore(
-    (state) => state.showInpaintedImage,
-  )
+  const showSegmentationMask = useEditorUiStore((state) => state.showSegmentationMask)
+  const showInpaintedImage = useEditorUiStore((state) => state.showInpaintedImage)
   const showBrushLayer = useEditorUiStore((state) => state.showBrushLayer)
   const showRenderedImage = useEditorUiStore((state) => state.showRenderedImage)
-  const showTextBlocksOverlay = useEditorUiStore(
-    (state) => state.showTextBlocksOverlay,
-  )
+  const showTextBlocksOverlay = useEditorUiStore((state) => state.showTextBlocksOverlay)
   const mode = useEditorUiStore((state) => state.mode)
   const autoFitEnabled = useEditorUiStore((state) => state.autoFitEnabled)
   const {
@@ -64,16 +59,8 @@ export function Workspace() {
     removeBlock,
   } = useTextBlocks()
 
-  const imageData = useDocumentLayer(
-    currentDocument?.id,
-    'image',
-    currentDocument?.image,
-  )
-  const segmentData = useDocumentLayer(
-    currentDocument?.id,
-    'segment',
-    currentDocument?.segment,
-  )
+  const imageData = useDocumentLayer(currentDocument?.id, 'image', currentDocument?.image)
+  const segmentData = useDocumentLayer(currentDocument?.id, 'segment', currentDocument?.segment)
   const inpaintedData = useDocumentLayer(
     currentDocument?.id,
     'inpainted',
@@ -84,11 +71,7 @@ export function Workspace() {
     'brushLayer',
     currentDocument?.brushLayer,
   )
-  const renderedData = useDocumentLayer(
-    currentDocument?.id,
-    'rendered',
-    currentDocument?.rendered,
-  )
+  const renderedData = useDocumentLayer(currentDocument?.id, 'rendered', currentDocument?.rendered)
 
   useEffect(() => {
     if (currentDocument) {
@@ -123,14 +106,11 @@ export function Workspace() {
 
   const maskPointerEnabled = useMemo(
     () =>
-      mode === 'repairBrush' ||
-      (mode === 'eraser' && (showSegmentationMask || !showBrushLayer)),
+      mode === 'repairBrush' || (mode === 'eraser' && (showSegmentationMask || !showBrushLayer)),
     [mode, showSegmentationMask, showBrushLayer],
   )
   const brushPointerEnabled = useMemo(
-    () =>
-      mode === 'brush' ||
-      (mode === 'eraser' && !showSegmentationMask && showBrushLayer),
+    () => mode === 'brush' || (mode === 'eraser' && !showSegmentationMask && showBrushLayer),
     [mode, showSegmentationMask, showBrushLayer],
   )
   const maskDrawing = useMaskDrawing({
@@ -163,19 +143,15 @@ export function Workspace() {
       fitCanvasToViewport()
     }
   }, [currentDocument?.id, autoFitEnabled])
-  const {
-    contextMenuBlockIndex,
-    handleContextMenu,
-    handleDeleteBlock,
-    clearContextMenu,
-  } = useBlockContextMenu({
-    currentDocument,
-    pointerToDocument,
-    selectBlock: setSelectedBlockIndex,
-    removeBlock: (index) => {
-      void removeBlock(index)
-    },
-  })
+  const { contextMenuBlockIndex, handleContextMenu, handleDeleteBlock, clearContextMenu } =
+    useBlockContextMenu({
+      currentDocument,
+      pointerToDocument,
+      selectBlock: setSelectedBlockIndex,
+      removeBlock: (index) => {
+        void removeBlock(index)
+      },
+    })
   const { t } = useTranslation()
 
   // Listen for Tauri resize events
@@ -241,10 +217,7 @@ export function Workspace() {
           memo,
           useEditorUiStore.getState().scale / 100,
         )
-        const nextScaleRatio = resolvePinchNextScaleRatio(
-          memoScaleRatio,
-          movementScale,
-        )
+        const nextScaleRatio = resolvePinchNextScaleRatio(memoScaleRatio, movementScale)
         applyScale(nextScaleRatio * 100)
         return memoScaleRatio
       },
@@ -272,9 +245,7 @@ export function Workspace() {
     },
   )
 
-  const handleCanvasPointerDownCapture = (
-    event: React.PointerEvent<HTMLDivElement>,
-  ) => {
+  const handleCanvasPointerDownCapture = (event: React.PointerEvent<HTMLDivElement>) => {
     if (mode !== 'block' && event.target === event.currentTarget) {
       clearSelection()
     }
@@ -301,7 +272,7 @@ export function Workspace() {
   )
 
   return (
-    <div className='bg-muted flex min-h-0 min-w-0 flex-1'>
+    <div className='flex min-h-0 min-w-0 flex-1 bg-muted'>
       <ToolRail />
       <div className='relative flex min-h-0 min-w-0 flex-1 flex-col'>
         <CanvasToolbar />
@@ -324,7 +295,7 @@ export function Workspace() {
                     <div
                       ref={canvasRef}
                       data-testid='workspace-canvas'
-                      className='border-border bg-card relative rounded border shadow-sm'
+                      className='relative rounded border border-border bg-card shadow-sm'
                       style={{
                         ...canvasDimensions,
                         cursor: canvasCursor,
@@ -392,9 +363,7 @@ export function Workspace() {
                             width: '100%',
                             height: '100%',
                             opacity: brushDrawing.visible ? 1 : 0,
-                            pointerEvents: brushPointerEnabled
-                              ? 'auto'
-                              : 'none',
+                            pointerEvents: brushPointerEnabled ? 'auto' : 'none',
                             touchAction: 'none',
                             zIndex: 20,
                             transition: 'opacity 120ms ease',
@@ -421,7 +390,7 @@ export function Workspace() {
                       </div>
                       {draftBlock && (
                         <div
-                          className='border-primary bg-primary/10 pointer-events-none absolute rounded border-2 border-dashed'
+                          className='pointer-events-none absolute rounded border-2 border-dashed border-primary bg-primary/10'
                           style={{
                             left: draftBlock.x * scaleRatio,
                             top: draftBlock.y * scaleRatio,
@@ -443,7 +412,7 @@ export function Workspace() {
                 </ContextMenuContent>
               </ContextMenu>
             ) : (
-              <div className='text-muted-foreground flex h-full w-full items-center justify-center text-sm'>
+              <div className='flex h-full w-full items-center justify-center text-sm text-muted-foreground'>
                 {t('workspace.importPrompt')}
               </div>
             )}
@@ -452,13 +421,13 @@ export function Workspace() {
             orientation='vertical'
             className='flex w-2 touch-none p-px select-none'
           >
-            <ScrollAreaPrimitive.Thumb className='bg-muted-foreground/40 flex-1 rounded' />
+            <ScrollAreaPrimitive.Thumb className='flex-1 rounded bg-muted-foreground/40' />
           </ScrollAreaPrimitive.Scrollbar>
           <ScrollAreaPrimitive.Scrollbar
             orientation='horizontal'
             className='flex h-2 touch-none p-px select-none'
           >
-            <ScrollAreaPrimitive.Thumb className='bg-muted-foreground/40 rounded' />
+            <ScrollAreaPrimitive.Thumb className='rounded bg-muted-foreground/40' />
           </ScrollAreaPrimitive.Scrollbar>
         </ScrollAreaPrimitive.Root>
       </div>

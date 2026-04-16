@@ -1,14 +1,12 @@
 'use client'
 
-import { useEffect, useRef, type RefObject } from 'react'
 import { useDrag } from '@use-gesture/react'
+import { useEffect, useRef, type RefObject } from 'react'
+
+import { type PointerToDocumentFn, type DocumentPointer } from '@/hooks/usePointerToDocument'
+import type { MappedDocument } from '@/hooks/useTextBlocks'
 import { blobToUint8Array } from '@/lib/util'
 import type { InpaintRegion } from '@/types'
-import type { MappedDocument } from '@/hooks/useTextBlocks'
-import {
-  type PointerToDocumentFn,
-  type DocumentPointer,
-} from '@/hooks/usePointerToDocument'
 
 // ---------------------------------------------------------------------------
 // Types
@@ -27,30 +25,21 @@ export type CanvasDrawingConfig = {
   getBrushSize: () => number
   onFinalize: (patch: Uint8Array, region: InpaintRegion) => Promise<void>
   /** Called after finalize with the full-canvas PNG and the patch region. */
-  onFinalizeFullCanvas?: (
-    fullPng: Uint8Array,
-    patchRegion: InpaintRegion,
-  ) => Promise<void>
+  onFinalizeFullCanvas?: (fullPng: Uint8Array, patchRegion: InpaintRegion) => Promise<void>
   enabled: boolean
   /** Optional second canvas to mirror strokes to. */
   targetCanvasRef?: RefObject<HTMLCanvasElement | null>
   /** When true, clear the drawing canvas after each stroke finalize. */
   clearAfterStroke?: boolean
   /** Called to set up the canvas content when the document changes (e.g. draw existing mask). */
-  onCanvasInit?: (
-    ctx: CanvasRenderingContext2D,
-    doc: MappedDocument,
-  ) => void | Promise<void>
+  onCanvasInit?: (ctx: CanvasRenderingContext2D, doc: MappedDocument) => void | Promise<void>
 }
 
 // ---------------------------------------------------------------------------
 // Helpers
 // ---------------------------------------------------------------------------
 
-const clampToDocument = (
-  point: DocumentPointer,
-  doc?: MappedDocument,
-): DocumentPointer => {
+const clampToDocument = (point: DocumentPointer, doc?: MappedDocument): DocumentPointer => {
   if (!doc) return point
   return {
     x: Math.max(0, Math.min(doc.width, point.x)),
@@ -58,11 +47,7 @@ const clampToDocument = (
   }
 }
 
-const expandBounds = (
-  bounds: Bounds,
-  point: DocumentPointer,
-  radius: number,
-): Bounds => ({
+const expandBounds = (bounds: Bounds, point: DocumentPointer, radius: number): Bounds => ({
   minX: Math.min(bounds.minX, point.x - radius),
   minY: Math.min(bounds.minY, point.y - radius),
   maxX: Math.max(bounds.maxX, point.x + radius),
@@ -107,12 +92,8 @@ const exportCanvasRegion = async (
   return blob ? blobToUint8Array(blob) : null
 }
 
-const exportFullCanvas = async (
-  canvas: HTMLCanvasElement,
-): Promise<Uint8Array | null> => {
-  const blob = await new Promise<Blob | null>((r) =>
-    canvas.toBlob(r, 'image/png'),
-  )
+const exportFullCanvas = async (canvas: HTMLCanvasElement): Promise<Uint8Array | null> => {
+  const blob = await new Promise<Blob | null>((r) => canvas.toBlob(r, 'image/png'))
   return blob ? blobToUint8Array(blob) : null
 }
 
@@ -165,8 +146,7 @@ export function useCanvasDrawing(
     }
 
     const needsResize =
-      canvas.width !== currentDocument.width ||
-      canvas.height !== currentDocument.height
+      canvas.width !== currentDocument.width || canvas.height !== currentDocument.height
 
     if (needsResize) {
       canvas.width = currentDocument.width
@@ -186,12 +166,7 @@ export function useCanvasDrawing(
       lastPointRef.current = null
       boundsRef.current = null
     }
-  }, [
-    currentDocument?.id,
-    currentDocument?.width,
-    currentDocument?.height,
-    config.enabled,
-  ])
+  }, [currentDocument?.id, currentDocument?.width, currentDocument?.height, config.enabled])
 
   const drawStroke = (from: DocumentPointer, to: DocumentPointer) => {
     const color = config.getColor()

@@ -1,6 +1,5 @@
 'use client'
 
-import { useCallback, useEffect, useMemo, useState } from 'react'
 import {
   DndContext,
   KeyboardSensor,
@@ -20,35 +19,27 @@ import {
 import { CSS } from '@dnd-kit/utilities'
 import { useQueryClient } from '@tanstack/react-query'
 import { GripVerticalIcon, Loader2Icon } from 'lucide-react'
+import { useCallback, useEffect, useMemo, useState } from 'react'
 import { useTranslation } from 'react-i18next'
+
+import { Button } from '@/components/ui/button'
+import { Dialog, DialogContent, DialogDescription, DialogTitle } from '@/components/ui/dialog'
 import {
   getGetDocumentThumbnailUrl,
   getListDocumentsQueryKey,
   useListDocuments,
   useReorderDocuments,
 } from '@/lib/api/documents/documents'
-import { Button } from '@/components/ui/button'
-import {
-  Dialog,
-  DialogContent,
-  DialogDescription,
-  DialogTitle,
-} from '@/components/ui/dialog'
 
 const THUMBNAIL_DPR =
-  typeof window !== 'undefined'
-    ? Math.min(Math.ceil(window.devicePixelRatio || 1), 3)
-    : 2
+  typeof window !== 'undefined' ? Math.min(Math.ceil(window.devicePixelRatio || 1), 3) : 2
 
 type PageManagerDialogProps = {
   open: boolean
   onOpenChange: (open: boolean) => void
 }
 
-export function PageManagerDialog({
-  open,
-  onOpenChange,
-}: PageManagerDialogProps) {
+export function PageManagerDialog({ open, onOpenChange }: PageManagerDialogProps) {
   const { data: documents = [] } = useListDocuments()
   const queryClient = useQueryClient()
   const { t } = useTranslation()
@@ -56,10 +47,7 @@ export function PageManagerDialog({
 
   const [orderedIds, setOrderedIds] = useState<string[]>([])
 
-  const docsById = useMemo(
-    () => Object.fromEntries(documents.map((d) => [d.id, d])),
-    [documents],
-  )
+  const docsById = useMemo(() => Object.fromEntries(documents.map((d) => [d.id, d])), [documents])
 
   useEffect(() => {
     if (open) {
@@ -116,9 +104,7 @@ export function PageManagerDialog({
         <div className='flex items-center justify-between px-6 pt-6 pb-2'>
           <div>
             <DialogTitle>{t('navigator.pageManager.title')}</DialogTitle>
-            <DialogDescription>
-              {t('navigator.pageManager.description')}
-            </DialogDescription>
+            <DialogDescription>{t('navigator.pageManager.description')}</DialogDescription>
           </div>
         </div>
 
@@ -128,28 +114,20 @@ export function PageManagerDialog({
             collisionDetection={closestCenter}
             onDragEnd={handleDragEnd}
           >
-            <SortableContext
-              items={orderedIds}
-              strategy={rectSortingStrategy}
-            >
+            <SortableContext items={orderedIds} strategy={rectSortingStrategy}>
               <div
                 data-testid='page-manager-grid'
                 className='grid grid-cols-3 gap-3 sm:grid-cols-4'
               >
                 {orderedIds.map((id, index) => (
-                  <SortablePageCard
-                    key={id}
-                    id={id}
-                    index={index}
-                    name={docsById[id]?.name}
-                  />
+                  <SortablePageCard key={id} id={id} index={index} name={docsById[id]?.name} />
                 ))}
               </div>
             </SortableContext>
           </DndContext>
         </div>
 
-        <div className='border-border flex items-center justify-end gap-2 border-t px-6 py-4'>
+        <div className='flex items-center justify-end gap-2 border-t border-border px-6 py-4'>
           <Button
             variant='outline'
             onClick={() => onOpenChange(false)}
@@ -162,9 +140,7 @@ export function PageManagerDialog({
             onClick={handleSave}
             disabled={!hasChanges || reorderMutation.isPending}
           >
-            {reorderMutation.isPending && (
-              <Loader2Icon className='mr-2 h-4 w-4 animate-spin' />
-            )}
+            {reorderMutation.isPending && <Loader2Icon className='mr-2 h-4 w-4 animate-spin' />}
             {t('common.save')}
           </Button>
         </div>
@@ -180,14 +156,9 @@ type SortablePageCardProps = {
 }
 
 function SortablePageCard({ id, index, name }: SortablePageCardProps) {
-  const {
-    attributes,
-    listeners,
-    setNodeRef,
-    transform,
-    transition,
-    isDragging,
-  } = useSortable({ id })
+  const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({
+    id,
+  })
 
   const style: React.CSSProperties = {
     transform: CSS.Transform.toString(transform),
@@ -215,8 +186,8 @@ function PageCard({ id, index, name, dragging }: PageCardProps) {
   return (
     <div
       data-testid={`page-manager-card-${index}`}
-      className={`bg-card flex flex-col items-center gap-1 rounded border p-2 shadow-sm select-none ${
-        dragging ? 'ring-primary ring-2 shadow-lg' : ''
+      className={`flex flex-col items-center gap-1 rounded border bg-card p-2 shadow-sm select-none ${
+        dragging ? 'shadow-lg ring-2 ring-primary' : ''
       }`}
     >
       <div className='flex aspect-3/4 w-full items-center justify-center overflow-hidden rounded'>
@@ -228,9 +199,9 @@ function PageCard({ id, index, name, dragging }: PageCardProps) {
           className='max-h-full max-w-full rounded object-contain'
         />
       </div>
-      <div className='text-muted-foreground flex w-full items-center justify-center gap-1 text-xs'>
+      <div className='flex w-full items-center justify-center gap-1 text-xs text-muted-foreground'>
         <GripVerticalIcon className='h-3.5 w-3.5 shrink-0' />
-        <span className='text-foreground font-semibold'>{index + 1}</span>
+        <span className='font-semibold text-foreground'>{index + 1}</span>
       </div>
     </div>
   )

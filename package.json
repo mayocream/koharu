@@ -1,20 +1,20 @@
 {
-  "devDependencies": {
-    "@playwright/test": "^1.59.1",
-    "@tauri-apps/cli": "^2.10.1",
-    "git-cliff": "^2.12.0",
-    "prettier": "^3.8.3",
-    "prettier-plugin-tailwindcss": "^0.7.2"
-  },
+  "workspaces": [
+    "ui/"
+  ],
   "scripts": {
     "dev": "bun run scripts/dev.ts tauri dev -- --profile=release-with-debug",
     "build": "bun run scripts/dev.ts tauri build --no-bundle",
     "cargo": "bun run scripts/dev.ts cargo",
     "lint:ui": "bun run --filter ui lint",
-    "format": "prettier --write ui/ --ignore-path ui/.gitignore",
+    "format": "oxfmt ui package.json .oxfmtrc.json .vscode",
+    "format:check": "oxfmt --check ui package.json .oxfmtrc.json .vscode",
     "test:e2e": "playwright test"
   },
-  "workspaces": [
-    "ui/"
-  ]
+  "devDependencies": {
+    "@playwright/test": "^1.59.1",
+    "@tauri-apps/cli": "^2.10.1",
+    "git-cliff": "^2.12.0",
+    "oxfmt": "^0.45.0"
+  }
 }

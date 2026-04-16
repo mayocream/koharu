@@ -2,6 +2,7 @@
 
 import { useQueryClient } from '@tanstack/react-query'
 import { createActorContext } from '@xstate/react'
+
 import { processingMachine } from './processingMachine'
 
 // ---------------------------------------------------------------------------
@@ -25,17 +26,10 @@ const ProcessingContext = createActorContext(processingMachine)
  * Provider wrapper that initialises the processing machine with the current
  * React Query client. Mount this once near the app root.
  */
-export function ProcessingProvider({
-  children,
-}: {
-  children: React.ReactNode
-}) {
+export function ProcessingProvider({ children }: { children: React.ReactNode }) {
   const queryClient = useQueryClient()
   return (
-    <ProcessingContext.Provider
-      logic={processingMachine}
-      options={{ input: { queryClient } }}
-    >
+    <ProcessingContext.Provider logic={processingMachine} options={{ input: { queryClient } }}>
       {children}
     </ProcessingContext.Provider>
   )

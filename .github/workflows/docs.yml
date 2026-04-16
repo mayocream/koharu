@@ -24,6 +24,7 @@ jobs:
       - run: zensical build -f docs/zensical.toml --clean
       - run: zensical build -f docs/zensical.ja-JP.toml
       - run: zensical build -f docs/zensical.zh-CN.toml
+      - run: zensical build -f docs/zensical.pt-BR.toml
       - uses: actions/upload-pages-artifact@v4
         with:
           path: docs/site

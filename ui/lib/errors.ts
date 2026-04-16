@@ -1,8 +1,8 @@
 'use client'
 
-import { useEditorUiStore } from '@/lib/stores/editorUiStore'
 import i18n from '@/lib/i18n'
 import { getProviderDisplayName, normalizeProviderId } from '@/lib/providers'
+import { useEditorUiStore } from '@/lib/stores/editorUiStore'
 
 const SURFACED_RPC_METHODS = new Set([
   'open_documents',
@@ -27,28 +27,21 @@ const SURFACED_RPC_METHODS = new Set([
 
 export const normalizeErrorMessage = (error: unknown) => {
   const rawMessage =
-    error instanceof Error
-      ? error.message
-      : typeof error === 'string'
-        ? error
-        : 'Unexpected error'
+    error instanceof Error ? error.message : typeof error === 'string' ? error : 'Unexpected error'
 
   if (rawMessage.startsWith('provider_quota_exceeded:')) {
     const provider = getProviderDisplayName(rawMessage.split(':', 2)[1])
     return i18n.t('errors.providerQuotaExceeded', { provider })
   }
 
-  const apiKeyRequiredMatch = rawMessage.match(
-    /^api_key is required for (.+)$/i,
-  )
+  const apiKeyRequiredMatch = rawMessage.match(/^api_key is required for (.+)$/i)
   if (apiKeyRequiredMatch) {
     const provider = getProviderDisplayName(apiKeyRequiredMatch[1])
     return i18n.t('errors.providerApiKeyRequired', { provider })
   }
 
   if (
-    rawMessage.trim().toLowerCase() ===
-    'base_url is required for the openai-compatible provider'
+    rawMessage.trim().toLowerCase() === 'base_url is required for the openai-compatible provider'
   ) {
     return i18n.t('errors.providerBaseUrlRequired', {
       provider: getProviderDisplayName('openai-compatible'),

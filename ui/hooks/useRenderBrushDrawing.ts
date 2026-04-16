@@ -1,18 +1,16 @@
 'use client'
 
-import type { RefObject } from 'react'
 import { useQueryClient } from '@tanstack/react-query'
-import { usePreferencesStore } from '@/lib/stores/preferencesStore'
-import { updateBrushLayer } from '@/lib/api/regions/regions'
-import {
-  getGetDocumentQueryKey,
-  getListDocumentsQueryKey,
-} from '@/lib/api/documents/documents'
-import { useEditorUiStore } from '@/lib/stores/editorUiStore'
-import type { ToolMode } from '@/types'
-import type { MappedDocument } from '@/hooks/useTextBlocks'
-import type { PointerToDocumentFn } from '@/hooks/usePointerToDocument'
+import type { RefObject } from 'react'
+
 import { useCanvasDrawing } from '@/hooks/useCanvasDrawing'
+import type { PointerToDocumentFn } from '@/hooks/usePointerToDocument'
+import type { MappedDocument } from '@/hooks/useTextBlocks'
+import { getGetDocumentQueryKey, getListDocumentsQueryKey } from '@/lib/api/documents/documents'
+import { updateBrushLayer } from '@/lib/api/regions/regions'
+import { useEditorUiStore } from '@/lib/stores/editorUiStore'
+import { usePreferencesStore } from '@/lib/stores/preferencesStore'
+import type { ToolMode } from '@/types'
 
 type RenderBrushOptions = {
   mode: ToolMode
@@ -34,8 +32,7 @@ export function useRenderBrushDrawing({
   const isErasing = action === 'erase'
 
   return useCanvasDrawing(currentDocument, pointerToDocument, {
-    getColor: () =>
-      isErasing ? '#000000' : usePreferencesStore.getState().brushConfig.color,
+    getColor: () => (isErasing ? '#000000' : usePreferencesStore.getState().brushConfig.color),
     blendMode: isErasing ? 'destination-out' : 'source-over',
     getBrushSize: () => usePreferencesStore.getState().brushConfig.size,
     enabled,

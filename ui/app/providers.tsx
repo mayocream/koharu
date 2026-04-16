@@ -1,12 +1,13 @@
 'use client'
 
+import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
+import { ThemeProvider } from 'next-themes'
 import { useEffect, type ReactNode } from 'react'
 import { I18nextProvider } from 'react-i18next'
-import { ThemeProvider } from 'next-themes'
-import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
+
 import ClientOnly from '@/components/ClientOnly'
-import { UpdaterProvider } from '@/components/Updater'
 import { TooltipProvider } from '@/components/ui/tooltip'
+import { UpdaterProvider } from '@/components/Updater'
 import i18n from '@/lib/i18n'
 import { ProcessingProvider } from '@/lib/machines'
 

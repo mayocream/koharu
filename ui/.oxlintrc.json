@@ -1,12 +1,6 @@
 {
   "$schema": "../node_modules/oxlint/configuration_schema.json",
-  "plugins": [
-    "eslint",
-    "typescript",
-    "unicorn",
-    "oxc",
-    "react"
-  ],
+  "plugins": ["eslint", "typescript", "unicorn", "oxc", "react"],
   "categories": {
     "correctness": "error"
   },
@@ -30,11 +24,5 @@
     "typescript/no-this-alias": "warn",
     "unicorn/prefer-string-starts-ends-with": "warn"
   },
-  "ignorePatterns": [
-    ".next/",
-    "out/",
-    "dist/",
-    "build/",
-    "coverage/"
-  ]
+  "ignorePatterns": [".next/", "out/", "dist/", "build/", "coverage/"]
 }

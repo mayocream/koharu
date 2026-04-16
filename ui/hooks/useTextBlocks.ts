@@ -1,21 +1,18 @@
 'use client'
 
-import { useCallback } from 'react'
 import { useQueryClient } from '@tanstack/react-query'
+import { useCallback } from 'react'
+
 import {
   useGetDocument,
   getGetDocumentQueryKey,
   getListDocumentsQueryKey,
 } from '@/lib/api/documents/documents'
 export { useBlobData, useDocumentLayer } from '@/hooks/useBlobData'
-import {
-  createTextBlock,
-  patchTextBlock,
-  putTextBlocks,
-} from '@/lib/api/text-blocks/text-blocks'
+import type { DocumentDetail, TextBlockInput } from '@/lib/api/schemas'
+import { createTextBlock, patchTextBlock, putTextBlocks } from '@/lib/api/text-blocks/text-blocks'
 import { useEditorUiStore } from '@/lib/stores/editorUiStore'
 import { TextBlock } from '@/types'
-import type { DocumentDetail, TextBlockInput } from '@/lib/api/schemas'
 
 const hasGeometryChange = (updates: Partial<TextBlock>) =>
   Object.prototype.hasOwnProperty.call(updates, 'x') ||
@@ -23,9 +20,7 @@ const hasGeometryChange = (updates: Partial<TextBlock>) =>
   Object.prototype.hasOwnProperty.call(updates, 'width') ||
   Object.prototype.hasOwnProperty.call(updates, 'height')
 
-const mapTextBlock = (
-  block: DocumentDetail['textBlocks'][number],
-): TextBlock => ({
+const mapTextBlock = (block: DocumentDetail['textBlocks'][number]): TextBlock => ({
   id: block.id,
   x: block.x,
   y: block.y,
@@ -103,12 +98,8 @@ export function useTextBlocks() {
   const queryClient = useQueryClient()
   const document = useCurrentDocument()
   const textBlocks = document?.textBlocks ?? []
-  const selectedBlockIndex = useEditorUiStore(
-    (state) => state.selectedBlockIndex,
-  )
-  const setSelectedBlockIndex = useEditorUiStore(
-    (state) => state.setSelectedBlockIndex,
-  )
+  const selectedBlockIndex = useEditorUiStore((state) => state.selectedBlockIndex)
+  const setSelectedBlockIndex = useEditorUiStore((state) => state.setSelectedBlockIndex)
 
   const invalidateDocument = useCallback(
     async (docId: string) => {

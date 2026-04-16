@@ -1,16 +1,13 @@
 'use client'
 
-import { useRef, useState, useMemo, useCallback, useEffect } from 'react'
 import { useVirtualizer } from '@tanstack/react-virtual'
 import { CheckIcon, ChevronDownIcon } from 'lucide-react'
-import {
-  Popover,
-  PopoverContent,
-  PopoverTrigger,
-} from '@/components/ui/popover'
+import { useRef, useState, useMemo, useCallback, useEffect } from 'react'
+
+import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover'
 import { ScrollArea, ScrollBar } from '@/components/ui/scroll-area'
-import { cn } from '@/lib/utils'
 import { fetchGoogleFont } from '@/lib/api/system/system'
+import { cn } from '@/lib/utils'
 
 const ITEM_HEIGHT = 28
 const MAX_VISIBLE = 10
@@ -37,14 +34,8 @@ type FontSelectProps = {
   'data-testid'?: string
 }
 
-function useGoogleFontPreview(
-  family: string,
-  source: string,
-  isVisible: boolean,
-) {
-  const [state, setState] = useState<FontLoadState>(
-    source === 'system' ? 'ready' : 'idle',
-  )
+function useGoogleFontPreview(family: string, source: string, isVisible: boolean) {
+  const [state, setState] = useState<FontLoadState>(source === 'system' ? 'ready' : 'idle')
   const stateRef = useRef(state)
   stateRef.current = state
 
@@ -92,17 +83,13 @@ function FontRow({
   isVisible: boolean
   onClick: () => void
 }) {
-  const loadState = useGoogleFontPreview(
-    font.familyName,
-    font.source,
-    isVisible,
-  )
+  const loadState = useGoogleFontPreview(font.familyName, font.source, isVisible)
 
   return (
     <button
       type='button'
       className={cn(
-        'hover:bg-accent hover:text-accent-foreground absolute left-0 flex w-full cursor-default items-center gap-1.5 rounded-sm px-2 text-xs select-none',
+        'absolute left-0 flex w-full cursor-default items-center gap-1.5 rounded-sm px-2 text-xs select-none hover:bg-accent hover:text-accent-foreground',
         selected && 'bg-accent',
       )}
       style={{
@@ -116,7 +103,7 @@ function FontRow({
       </span>
       <span className='truncate'>{font.familyName}</span>
       {font.source === 'google' && (
-        <span className='text-muted-foreground ml-auto shrink-0 text-[9px]'>
+        <span className='ml-auto shrink-0 text-[9px] text-muted-foreground'>
           {loadState === 'loading' ? '...' : 'G'}
         </span>
       )}
@@ -144,9 +131,7 @@ export function FontSelect({
   const filtered = useMemo(() => {
     let result = options
     if (categoryFilter) {
-      result = result.filter(
-        (f) => f.source === 'system' || f.category === categoryFilter,
-      )
+      result = result.filter((f) => f.source === 'system' || f.category === categoryFilter)
     }
     if (search) {
       const lower = search.toLowerCase()
@@ -190,7 +175,7 @@ export function FontSelect({
         disabled={disabled}
         data-testid={props['data-testid']}
         className={cn(
-          "border-input data-[placeholder]:text-muted-foreground [&_svg:not([class*='text-'])]:text-muted-foreground focus-visible:border-ring focus-visible:ring-ring/50 dark:bg-input/30 dark:hover:bg-input/50 flex h-7 w-full items-center justify-between gap-1.5 rounded-md border bg-transparent px-2 py-1 text-xs whitespace-nowrap shadow-xs transition-[color,box-shadow] outline-none focus-visible:ring-[3px] disabled:cursor-not-allowed disabled:opacity-50",
+          "flex h-7 w-full items-center justify-between gap-1.5 rounded-md border border-input bg-transparent px-2 py-1 text-xs whitespace-nowrap shadow-xs transition-[color,box-shadow] outline-none focus-visible:border-ring focus-visible:ring-[3px] focus-visible:ring-ring/50 disabled:cursor-not-allowed disabled:opacity-50 data-[placeholder]:text-muted-foreground dark:bg-input/30 dark:hover:bg-input/50 [&_svg:not([class*='text-'])]:text-muted-foreground",
           triggerClassName,
         )}
         style={triggerStyle}
@@ -211,49 +196,33 @@ export function FontSelect({
           value={search}
           onChange={(e) => setSearch(e.target.value)}
           placeholder='Search fonts…'
-          className='placeholder:text-muted-foreground w-full border-b bg-transparent px-2 py-1.5 text-xs outline-none'
+          className='w-full border-b bg-transparent px-2 py-1.5 text-xs outline-none placeholder:text-muted-foreground'
         />
         <ScrollArea className='border-b'>
           <div className='flex gap-0.5 px-1.5 py-1'>
-            {['all', 'hand', 'display', 'sans', 'serif', 'mono'].map(
-              (cat, i) => {
-                const full = [
-                  'all',
-                  'handwriting',
-                  'display',
-                  'sans-serif',
-                  'serif',
-                  'monospace',
-                ][i]
-                const active =
-                  cat === 'all' ? !categoryFilter : categoryFilter === full
-                return (
-                  <button
-                    key={cat}
-                    type='button'
-                    className={cn(
-                      'shrink-0 rounded-full px-1.5 py-px text-[9px]',
-                      active
-                        ? 'bg-primary text-primary-foreground'
-                        : 'bg-muted text-muted-foreground hover:bg-accent',
-                    )}
-                    onClick={() =>
-                      setCategoryFilter(cat === 'all' ? null : full)
-                    }
-                  >
-                    {cat.charAt(0).toUpperCase() + cat.slice(1)}
-                  </button>
-                )
-              },
-            )}
+            {['all', 'hand', 'display', 'sans', 'serif', 'mono'].map((cat, i) => {
+              const full = ['all', 'handwriting', 'display', 'sans-serif', 'serif', 'monospace'][i]
+              const active = cat === 'all' ? !categoryFilter : categoryFilter === full
+              return (
+                <button
+                  key={cat}
+                  type='button'
+                  className={cn(
+                    'shrink-0 rounded-full px-1.5 py-px text-[9px]',
+                    active
+                      ? 'bg-primary text-primary-foreground'
+                      : 'bg-muted text-muted-foreground hover:bg-accent',
+                  )}
+                  onClick={() => setCategoryFilter(cat === 'all' ? null : full)}
+                >
+                  {cat.charAt(0).toUpperCase() + cat.slice(1)}
+                </button>
+              )
+            })}
           </div>
           <ScrollBar orientation='horizontal' />
         </ScrollArea>
-        <ScrollArea
-          className='relative'
-          style={{ height: listHeight }}
-          viewportRef={viewportRef}
-        >
+        <ScrollArea className='relative' style={{ height: listHeight }} viewportRef={viewportRef}>
           <div
             style={{
               height: virtualizer.getTotalSize(),
@@ -262,8 +231,7 @@ export function FontSelect({
           >
             {virtualizer.getVirtualItems().map((vi) => {
               const font = filtered[vi.index]
-              const selected =
-                font.postScriptName === value || font.familyName === value
+              const selected = font.postScriptName === value || font.familyName === value
               return (
                 <FontRow
                   key={vi.key}
@@ -282,9 +250,7 @@ export function FontSelect({
           </div>
         </ScrollArea>
         {filtered.length === 0 && (
-          <div className='text-muted-foreground px-2 py-4 text-center text-xs'>
-            No fonts found
-          </div>
+          <div className='px-2 py-4 text-center text-xs text-muted-foreground'>No fonts found</div>
         )}
       </PopoverContent>
     </Popover>

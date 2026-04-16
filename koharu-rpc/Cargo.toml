@@ -35,4 +35,4 @@ tracing = { workspace = true }
 
 [[bin]]
 name = "openapi"
-path = "src/bin/openapi.rs"
+path = "bin/openapi.rs"

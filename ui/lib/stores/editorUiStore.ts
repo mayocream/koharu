@@ -1,8 +1,9 @@
 'use client'
 
 import { create } from 'zustand'
-import { RenderEffect, RenderStroke, ToolMode } from '@/types'
+
 import type { LlmTarget } from '@/lib/api/schemas'
+import { RenderEffect, RenderStroke, ToolMode } from '@/types'
 
 // ---------------------------------------------------------------------------
 // Error auto-dismiss timer

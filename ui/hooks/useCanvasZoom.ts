@@ -1,7 +1,7 @@
 'use client'
 
-import { useEditorUiStore } from '@/lib/stores/editorUiStore'
 import { useGetDocument } from '@/lib/api/documents/documents'
+import { useEditorUiStore } from '@/lib/stores/editorUiStore'
 
 export function useCanvasZoom() {
   const scale = useEditorUiStore((state) => state.scale)

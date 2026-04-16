@@ -1,18 +1,14 @@
 'use client'
 
-import { Panels } from '@/components/Panels'
+import { Group, Panel, Separator, useDefaultLayout } from 'react-resizable-panels'
+
+import { ActivityBubble } from '@/components/ActivityBubble'
+import { AppErrorBoundary } from '@/components/AppErrorBoundary'
+import { AppInitializationSkeleton } from '@/components/AppInitializationSkeleton'
 import { Workspace, StatusBar } from '@/components/Canvas'
 import { Navigator } from '@/components/Navigator'
-import { ActivityBubble } from '@/components/ActivityBubble'
-import { AppInitializationSkeleton } from '@/components/AppInitializationSkeleton'
+import { Panels } from '@/components/Panels'
 import { useGetMeta } from '@/lib/api/system/system'
-import {
-  Group,
-  Panel,
-  Separator,
-  useDefaultLayout,
-} from 'react-resizable-panels'
-import { AppErrorBoundary } from '@/components/AppErrorBoundary'
 
 const LAYOUT_ID = 'koharu-main-layout-v2'
 
@@ -46,7 +42,7 @@ export default function Page() {
         <Panel id='left' defaultSize={180} minSize={120} maxSize={300}>
           <Navigator />
         </Panel>
-        <Separator className='bg-border/40 hover:bg-border w-1 transition-colors' />
+        <Separator className='w-1 bg-border/40 transition-colors hover:bg-border' />
         <Panel id='center' minSize={480}>
           <AppErrorBoundary>
             <div className='flex h-full min-h-0 min-w-0 flex-1 flex-col overflow-hidden'>
@@ -55,7 +51,7 @@ export default function Page() {
             </div>
           </AppErrorBoundary>
         </Panel>
-        <Separator className='bg-border/40 hover:bg-border w-1 transition-colors' />
+        <Separator className='w-1 bg-border/40 transition-colors hover:bg-border' />
         <Panel id='right' defaultSize={280} minSize={260} maxSize={400}>
           <AppErrorBoundary>
             <Panels />

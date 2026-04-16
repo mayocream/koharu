@@ -1,10 +1,6 @@
 import type { Metadata } from 'next'
-import {
-  Inter,
-  Noto_Sans_JP,
-  Noto_Sans_SC,
-  Noto_Sans_TC,
-} from 'next/font/google'
+import { Inter, Noto_Sans_JP, Noto_Sans_SC, Noto_Sans_TC } from 'next/font/google'
+
 import './globals.css'
 import Providers from '@/app/providers'
 

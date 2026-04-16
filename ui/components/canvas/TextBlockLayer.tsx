@@ -1,12 +1,13 @@
 'use client'
 
-import { useRef } from 'react'
 import { useDrag } from '@use-gesture/react'
+import { useRef } from 'react'
 import { useHotkeys } from 'react-hotkeys-hook'
+
+import { useBlobImage } from '@/hooks/useBlobData'
+import { useTextBlocks } from '@/hooks/useTextBlocks'
 import { useEditorUiStore } from '@/lib/stores/editorUiStore'
 import { TextBlock } from '@/types'
-import { useTextBlocks } from '@/hooks/useTextBlocks'
-import { useBlobImage } from '@/hooks/useBlobData'
 
 type TextBlockLayerProps = {
   selectedIndex?: number
@@ -52,11 +53,7 @@ export function TextBlockLayer({
     >
       {showSprites &&
         textBlocks.map((block, index) => (
-          <BlockSprite
-            key={`sprite-${block.id ?? index}`}
-            block={block}
-            scale={scale}
-          />
+          <BlockSprite key={`sprite-${block.id ?? index}`} block={block} scale={scale} />
         ))}
       {textBlocks.map((block, index) => (
         <TextBlockItem
@@ -222,7 +219,7 @@ function TextBlockItem({
       <div
         className={`absolute inset-0 rounded ${
           selected
-            ? 'border-primary bg-primary/15 border-[3px]'
+            ? 'border-[3px] border-primary bg-primary/15'
             : 'border-2 border-rose-400/60 bg-rose-400/5'
         }`}
       />
@@ -237,9 +234,7 @@ function TextBlockItem({
       </div>
 
       {/* Resize handles */}
-      {selected && interactive && (
-        <ResizeHandles onEdgePointerDown={handleEdgePointerDown} />
-      )}
+      {selected && interactive && <ResizeHandles onEdgePointerDown={handleEdgePointerDown} />}
     </div>
   )
 }
@@ -265,11 +260,7 @@ function BlockSprite({ block, scale }: { block: TextBlock; scale: number }) {
   )
 }
 
-function ResizeHandles({
-  onEdgePointerDown,
-}: {
-  onEdgePointerDown: (edge: ResizeEdge) => void
-}) {
+function ResizeHandles({ onEdgePointerDown }: { onEdgePointerDown: (edge: ResizeEdge) => void }) {
   const s = RESIZE_HANDLE_SIZE
   const half = s / 2
 

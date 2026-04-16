@@ -8,20 +8,14 @@ function clampScaleRatio(scaleRatio: number) {
   return Math.max(MIN_SCALE_RATIO, Math.min(MAX_SCALE_RATIO, scaleRatio))
 }
 
-export function resolvePinchMemoScaleRatio(
-  memo: unknown,
-  currentScaleRatio: number,
-) {
+export function resolvePinchMemoScaleRatio(memo: unknown, currentScaleRatio: number) {
   if (typeof memo === 'number' && Number.isFinite(memo)) {
     return clampScaleRatio(memo)
   }
   return clampScaleRatio(currentScaleRatio)
 }
 
-export function resolvePinchNextScaleRatio(
-  memoScaleRatio: number,
-  movementScale: number,
-) {
+export function resolvePinchNextScaleRatio(memoScaleRatio: number, movementScale: number) {
   const baseScaleRatio = clampScaleRatio(memoScaleRatio)
   if (!Number.isFinite(movementScale) || movementScale <= 0) {
     return baseScaleRatio

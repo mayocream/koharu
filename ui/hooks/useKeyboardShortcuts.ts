@@ -1,9 +1,10 @@
 'use client'
 
 import { useEffect, useMemo } from 'react'
+
+import { getPlatform, formatShortcut, isModifierKey } from '@/lib/shortcutUtils'
 import { useEditorUiStore } from '@/lib/stores/editorUiStore'
 import { usePreferencesStore } from '@/lib/stores/preferencesStore'
-import { getPlatform, formatShortcut, isModifierKey } from '@/lib/shortcutUtils'
 
 export function useKeyboardShortcuts() {
   const setMode = useEditorUiStore((state) => state.setMode)
@@ -14,11 +15,7 @@ export function useKeyboardShortcuts() {
     const handleKeyDown = (event: KeyboardEvent) => {
       // Skip if user is typing in an input
       const target = event.target as HTMLElement
-      if (
-        target.tagName === 'INPUT' ||
-        target.tagName === 'TEXTAREA' ||
-        target.isContentEditable
-      ) {
+      if (target.tagName === 'INPUT' || target.tagName === 'TEXTAREA' || target.isContentEditable) {
         return
       }
 

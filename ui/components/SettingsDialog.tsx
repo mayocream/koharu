@@ -1,9 +1,6 @@
 'use client'
 
-import { useEffect, useMemo, useRef, useState, type ReactNode } from 'react'
 import { useQueryClient } from '@tanstack/react-query'
-import { useTheme } from 'next-themes'
-import { useTranslation } from 'react-i18next'
 import {
   SunIcon,
   MoonIcon,
@@ -21,29 +18,16 @@ import {
   RotateCcwIcon,
   AlertTriangleIcon,
 } from 'lucide-react'
-import {
-  Dialog,
-  DialogContent,
-  DialogTitle,
-  DialogDescription,
-} from '@/components/ui/dialog'
+import { useTheme } from 'next-themes'
+import { useEffect, useMemo, useRef, useState, type ReactNode } from 'react'
+import { useTranslation } from 'react-i18next'
+
 import {
   Accordion,
   AccordionItem,
   AccordionTrigger,
   AccordionContent,
 } from '@/components/ui/accordion'
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from '@/components/ui/select'
-import { ScrollArea } from '@/components/ui/scroll-area'
-import { Button } from '@/components/ui/button'
-import { Input } from '@/components/ui/input'
-import { Label } from '@/components/ui/label'
 import {
   AlertDialog,
   AlertDialogAction,
@@ -52,15 +36,29 @@ import {
   AlertDialogDescription,
   AlertDialogTitle,
 } from '@/components/ui/alert-dialog'
-import { useUpdater, type UpdaterStatus } from '@/components/Updater'
-import { isTauri, openExternalUrl } from '@/lib/backend'
+import { Button } from '@/components/ui/button'
+import { Dialog, DialogContent, DialogTitle, DialogDescription } from '@/components/ui/dialog'
+import { Input } from '@/components/ui/input'
+import { Label } from '@/components/ui/label'
+import { ScrollArea } from '@/components/ui/scroll-area'
 import {
-  getConfig,
-  getEngineCatalog,
-  getMeta,
-  updateConfig,
-} from '@/lib/api/system/system'
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from '@/components/ui/select'
+import { useUpdater, type UpdaterStatus } from '@/components/Updater'
 import { getLlmCatalog, getGetLlmCatalogQueryKey } from '@/lib/api/llm/llm'
+import type {
+  UpdateConfigBody,
+  ProviderConfig,
+  LlmProviderCatalog,
+  GetEngineCatalog200,
+} from '@/lib/api/schemas'
+import { getConfig, getEngineCatalog, getMeta, updateConfig } from '@/lib/api/system/system'
+import { isTauri, openExternalUrl } from '@/lib/backend'
+import { supportedLanguages } from '@/lib/i18n'
 import {
   getPlatform,
   formatShortcut,
@@ -68,14 +66,7 @@ import {
   areShortcutsEqual,
   isModifierKey,
 } from '@/lib/shortcutUtils'
-import { supportedLanguages } from '@/lib/i18n'
 import { usePreferencesStore } from '@/lib/stores/preferencesStore'
-import type {
-  UpdateConfigBody,
-  ProviderConfig,
-  LlmProviderCatalog,
-  GetEngineCatalog200,
-} from '@/lib/api/schemas'
 
 const GITHUB_REPO = 'mayocream/koharu'
 
@@ -113,20 +104,15 @@ export function SettingsDialog({
   }, [defaultTab, open])
 
   const [appConfig, setAppConfig] = useState<UpdateConfigBody | null>(null)
-  const [providerCatalogs, setProviderCatalogs] = useState<
-    LlmProviderCatalog[]
-  >([])
+  const [providerCatalogs, setProviderCatalogs] = useState<LlmProviderCatalog[]>([])
   const [apiKeyDrafts, setApiKeyDrafts] = useState<Record<string, string>>({})
   const [dataPathDraft, setDataPathDraft] = useState('')
   const [httpConnectTimeoutDraft, setHttpConnectTimeoutDraft] = useState('')
   const [httpReadTimeoutDraft, setHttpReadTimeoutDraft] = useState('')
   const [httpMaxRetriesDraft, setHttpMaxRetriesDraft] = useState('')
-  const [storageSettingsError, setStorageSettingsError] = useState<
-    string | null
-  >(null)
+  const [storageSettingsError, setStorageSettingsError] = useState<string | null>(null)
   const [isSavingStorageSettings, setIsSavingStorageSettings] = useState(false)
-  const [engineCatalog, setEngineCatalog] =
-    useState<GetEngineCatalog200 | null>(null)
+  const [engineCatalog, setEngineCatalog] = useState<GetEngineCatalog200 | null>(null)
   const [appVersion, setAppVersion] = useState<string>()
   const updater = useUpdater()
 
@@ -142,7 +128,7 @@ export function SettingsDialog({
         setAppConfig(config)
         setProviderCatalogs(catalog.providers)
         setEngineCatalog(engines)
-      } catch { }
+      } catch {}
     })()
   }, [open])
 
@@ -174,12 +160,8 @@ export function SettingsDialog({
     setHttpConnectTimeoutDraft(
       String(appConfig.http?.connect_timeout ?? DEFAULT_HTTP_CONNECT_TIMEOUT),
     )
-    setHttpReadTimeoutDraft(
-      String(appConfig.http?.read_timeout ?? DEFAULT_HTTP_READ_TIMEOUT),
-    )
-    setHttpMaxRetriesDraft(
-      String(appConfig.http?.max_retries ?? DEFAULT_HTTP_MAX_RETRIES),
-    )
+    setHttpReadTimeoutDraft(String(appConfig.http?.read_timeout ?? DEFAULT_HTTP_READ_TIMEOUT))
+    setHttpMaxRetriesDraft(String(appConfig.http?.max_retries ?? DEFAULT_HTTP_MAX_RETRIES))
     setStorageSettingsError(null)
   }, [appConfig])
 
@@ -196,10 +178,7 @@ export function SettingsDialog({
     }
   }
 
-  const upsertProvider = (
-    id: string,
-    updater: (p: ProviderConfig) => ProviderConfig,
-  ) => {
+  const upsertProvider = (id: string, updater: (p: ProviderConfig) => ProviderConfig) => {
     if (!appConfig) return
     const providers = [...(appConfig.providers ?? [])]
     const idx = providers.findIndex((p) => p.id === id)
@@ -263,13 +242,10 @@ export function SettingsDialog({
   const storageSettingsUnchanged =
     dataPathDraft.trim() === appConfig?.data?.path &&
     httpConnectTimeoutDraft.trim() ===
-    String(
-      appConfig?.http?.connect_timeout ?? DEFAULT_HTTP_CONNECT_TIMEOUT,
-    ) &&
+      String(appConfig?.http?.connect_timeout ?? DEFAULT_HTTP_CONNECT_TIMEOUT) &&
     httpReadTimeoutDraft.trim() ===
-    String(appConfig?.http?.read_timeout ?? DEFAULT_HTTP_READ_TIMEOUT) &&
-    httpMaxRetriesDraft.trim() ===
-    String(appConfig?.http?.max_retries ?? DEFAULT_HTTP_MAX_RETRIES)
+      String(appConfig?.http?.read_timeout ?? DEFAULT_HTTP_READ_TIMEOUT) &&
+    httpMaxRetriesDraft.trim() === String(appConfig?.http?.max_retries ?? DEFAULT_HTTP_MAX_RETRIES)
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
@@ -279,8 +255,8 @@ export function SettingsDialog({
 
         <div className='flex h-full'>
           {/* Sidebar */}
-          <nav className='bg-muted/30 border-border flex w-[180px] shrink-0 flex-col gap-1 border-r p-3'>
-            <p className='text-muted-foreground mb-3 px-3 text-[10px] font-semibold tracking-widest uppercase'>
+          <nav className='flex w-[180px] shrink-0 flex-col gap-1 border-r border-border bg-muted/30 p-3'>
+            <p className='mb-3 px-3 text-[10px] font-semibold tracking-widest text-muted-foreground uppercase'>
               {t('settings.title')}
             </p>
             {TABS.map(({ id, icon: Icon, labelKey }) => (
@@ -288,7 +264,7 @@ export function SettingsDialog({
                 key={id}
                 onClick={() => setTab(id)}
                 data-active={tab === id}
-                className='text-muted-foreground hover:text-foreground data-[active=true]:bg-accent data-[active=true]:text-accent-foreground flex items-center gap-3 rounded-lg px-3 py-2 text-sm transition'
+                className='flex items-center gap-3 rounded-lg px-3 py-2 text-sm text-muted-foreground transition hover:text-foreground data-[active=true]:bg-accent data-[active=true]:text-accent-foreground'
               >
                 <Icon className='size-4 shrink-0' />
                 {t(labelKey)}
@@ -322,12 +298,8 @@ export function SettingsDialog({
                       base_url: v || null,
                     }))
                   }
-                  onBaseUrlBlur={() =>
-                    appConfig && void persistConfig(appConfig)
-                  }
-                  onApiKeyChange={(id, v) =>
-                    setApiKeyDrafts((c) => ({ ...c, [id]: v }))
-                  }
+                  onBaseUrlBlur={() => appConfig && void persistConfig(appConfig)}
+                  onApiKeyChange={(id, v) => setApiKeyDrafts((c) => ({ ...c, [id]: v }))}
                   onSaveKey={(id) => {
                     const key = apiKeyDrafts[id]?.trim()
                     if (!key || !appConfig) return
@@ -349,8 +321,7 @@ export function SettingsDialog({
                     if (!appConfig) return
                     const providers = [...(appConfig.providers ?? [])]
                     const idx = providers.findIndex((p) => p.id === id)
-                    if (idx >= 0)
-                      providers[idx] = { ...providers[idx], api_key: null }
+                    if (idx >= 0) providers[idx] = { ...providers[idx], api_key: null }
                     void persistConfig({ ...appConfig, providers }).then(() =>
                       setApiKeyDrafts((c) => {
                         const n = { ...c }
@@ -428,7 +399,7 @@ function AppearancePane() {
               key={value}
               onClick={() => setTheme(value)}
               data-active={theme === value}
-              className='border-border bg-card text-muted-foreground hover:border-foreground/30 data-[active=true]:border-primary data-[active=true]:text-foreground flex flex-col items-center gap-2 rounded-xl border px-4 py-4 transition'
+              className='flex flex-col items-center gap-2 rounded-xl border border-border bg-card px-4 py-4 text-muted-foreground transition hover:border-foreground/30 data-[active=true]:border-primary data-[active=true]:text-foreground'
             >
               <Icon className='size-5' />
               <span className='text-xs font-medium'>{t(labelKey)}</span>
@@ -438,10 +409,7 @@ function AppearancePane() {
       </Section>
 
       <Section title={t('settings.language')}>
-        <Select
-          value={i18n.language}
-          onValueChange={(v) => i18n.changeLanguage(v)}
-        >
+        <Select value={i18n.language} onValueChange={(v) => i18n.changeLanguage(v)}>
           <SelectTrigger className='w-full'>
             <SelectValue />
           </SelectTrigger>
@@ -512,9 +480,7 @@ function EnginesPane({
 
   return (
     <div className='space-y-4'>
-      <p className='text-muted-foreground text-xs'>
-        {t('settings.enginesDescription')}
-      </p>
+      <p className='text-xs text-muted-foreground'>{t('settings.enginesDescription')}</p>
       {sections.map(({ label, key, engines }) => (
         <div key={key} className='space-y-1.5'>
           <Label className='text-xs'>{label}</Label>
@@ -564,17 +530,14 @@ function ProvidersPane({
 
   if (!catalogs.length)
     return (
-      <p className='text-muted-foreground py-12 text-center text-sm'>
+      <p className='py-12 text-center text-sm text-muted-foreground'>
         {t('settings.loadingProviders')}
       </p>
     )
 
   return (
     <div className='space-y-6'>
-      <Section
-        title={t('settings.apiKeys')}
-        description={t('settings.providersDescription')}
-      >
+      <Section title={t('settings.apiKeys')} description={t('settings.providersDescription')}>
         <Accordion type='multiple' className='-mx-1'>
           {catalogs.map((provider) => {
             const cfg = config?.providers?.find((p) => p.id === provider.id)
@@ -590,37 +553,25 @@ function ProvidersPane({
                     : 'bg-muted-foreground'
 
             return (
-              <AccordionItem
-                key={provider.id}
-                value={provider.id}
-                className='border-border'
-              >
+              <AccordionItem key={provider.id} value={provider.id} className='border-border'>
                 <AccordionTrigger className='px-1 py-3 hover:no-underline'>
                   <div className='flex items-center gap-2.5'>
-                    <span
-                      className={`size-2 shrink-0 rounded-full ${statusColor}`}
-                    />
+                    <span className={`size-2 shrink-0 rounded-full ${statusColor}`} />
                     <span className='text-sm font-medium'>{provider.name}</span>
                   </div>
                 </AccordionTrigger>
                 <AccordionContent className='space-y-4 px-1 pt-1 pb-4'>
                   {provider.error && (
-                    <p className='text-muted-foreground text-xs'>
-                      {provider.error}
-                    </p>
+                    <p className='text-xs text-muted-foreground'>{provider.error}</p>
                   )}
 
                   {provider.requiresBaseUrl && (
                     <div className='space-y-1.5'>
-                      <Label className='text-xs'>
-                        {t('settings.localLlmBaseUrl')}
-                      </Label>
+                      <Label className='text-xs'>{t('settings.localLlmBaseUrl')}</Label>
                       <Input
                         type='url'
                         value={cfg?.base_url ?? ''}
-                        onChange={(e) =>
-                          onBaseUrlChange(provider.id, e.target.value)
-                        }
+                        onChange={(e) => onBaseUrlChange(provider.id, e.target.value)}
                         onBlur={onBaseUrlBlur}
                         placeholder='https://api.example.com/v1'
                       />
@@ -633,12 +584,9 @@ function ProvidersPane({
                       <Input
                         type='password'
                         value={draft}
-                        onChange={(e) =>
-                          onApiKeyChange(provider.id, e.target.value)
-                        }
+                        onChange={(e) => onApiKeyChange(provider.id, e.target.value)}
                         onKeyDown={(e) => {
-                          if (e.key === 'Enter' && hasDraft)
-                            onSaveKey(provider.id)
+                          if (e.key === 'Enter' && hasDraft) onSaveKey(provider.id)
                         }}
                         placeholder={
                           cfg?.api_key === '[REDACTED]'
@@ -648,10 +596,7 @@ function ProvidersPane({
                         className='[&::-ms-reveal]:hidden'
                       />
                       {hasDraft ? (
-                        <Button
-                          size='sm'
-                          onClick={() => onSaveKey(provider.id)}
-                        >
+                        <Button size='sm' onClick={() => onSaveKey(provider.id)}>
                           {t('settings.apiKeySave')}
                         </Button>
                       ) : cfg?.api_key === '[REDACTED]' ? (
@@ -697,9 +642,7 @@ function KeybindsPane() {
   const { t } = useTranslation()
   const shortcuts = usePreferencesStore((state) => state.shortcuts)
   const setShortcuts = usePreferencesStore((state) => state.setShortcuts)
-  const resetShortcutsStore = usePreferencesStore(
-    (state) => state.resetShortcuts,
-  )
+  const resetShortcutsStore = usePreferencesStore((state) => state.resetShortcuts)
   const [pendingShortcuts, setPendingShortcuts] = useState(shortcuts)
   const [recordingKey, setRecordingKey] = useState<string | null>(null)
   const [error, setError] = useState<string | null>(null)
@@ -821,20 +764,14 @@ function KeybindsPane() {
   return (
     <div className='flex h-full flex-col gap-6'>
       <div className='grow space-y-6 overflow-y-auto pr-2'>
-        <Section
-          title={t('settings.keybinds')}
-          description={t('settings.keybindsDescription')}
-        >
-          <div className='bg-card border-border divide-border divide-y overflow-hidden rounded-xl border'>
+        <Section title={t('settings.keybinds')} description={t('settings.keybindsDescription')}>
+          <div className='divide-y divide-border overflow-hidden rounded-xl border border-border bg-card'>
             {SHORTCUT_ITEMS.map((item) => {
               const currentVal = pendingShortcuts[item.key]
               const hasConflict = (conflictCounts.get(currentVal) || 0) > 1
 
               return (
-                <div
-                  key={item.key}
-                  className='flex items-center justify-between px-4 py-3'
-                >
+                <div key={item.key} className='flex items-center justify-between px-4 py-3'>
                   <div className='flex items-center gap-2'>
                     <span className='text-sm'>{t(item.labelKey)}</span>
                     {hasConflict && (
@@ -863,11 +800,11 @@ function KeybindsPane() {
         </Section>
       </div>
 
-      <div className='border-border flex items-center justify-between border-t pt-4'>
+      <div className='flex items-center justify-between border-t border-border pt-4'>
         <Button
           variant='ghost'
           size='sm'
-          className='text-muted-foreground hover:text-foreground gap-2'
+          className='gap-2 text-muted-foreground hover:text-foreground'
           onClick={handleReset}
         >
           <RotateCcwIcon className='size-4' />
@@ -898,9 +835,7 @@ function KeybindsPane() {
       <AlertDialog open={resetConfirmOpen} onOpenChange={setResetConfirmOpen}>
         <AlertDialogContent>
           <AlertDialogTitle>{t('settings.shortcutReset')}</AlertDialogTitle>
-          <AlertDialogDescription>
-            {t('settings.shortcutResetDescription')}
-          </AlertDialogDescription>
+          <AlertDialogDescription>{t('settings.shortcutResetDescription')}</AlertDialogDescription>
           <div className='flex justify-end gap-2'>
             <AlertDialogCancel>{t('common.cancel')}</AlertDialogCancel>
             <AlertDialogAction onClick={handleConfirmReset}>
@@ -947,27 +882,18 @@ function StoragePane({
 
   return (
     <>
-      <Section
-        title={t('settings.runtime')}
-        description={t('settings.runtimeDescription')}
-      >
+      <Section title={t('settings.runtime')} description={t('settings.runtimeDescription')}>
         <div className='space-y-1.5'>
           <Label className='text-xs'>{t('settings.dataPath')}</Label>
-          <Input
-            type='text'
-            value={dataPath}
-            onChange={(e) => onPathChange(e.target.value)}
-          />
-          <p className='text-muted-foreground text-xs leading-relaxed'>
+          <Input type='text' value={dataPath} onChange={(e) => onPathChange(e.target.value)} />
+          <p className='text-xs leading-relaxed text-muted-foreground'>
             {t('settings.dataPathDescription')}
           </p>
         </div>
 
         <div className='grid gap-4 md:grid-cols-2'>
           <div className='space-y-1.5'>
-            <Label className='text-xs'>
-              {t('settings.httpConnectTimeout')}
-            </Label>
+            <Label className='text-xs'>{t('settings.httpConnectTimeout')}</Label>
             <Input
               type='number'
               min='1'
@@ -976,7 +902,7 @@ function StoragePane({
               value={httpConnectTimeout}
               onChange={(e) => onHttpConnectTimeoutChange(e.target.value)}
             />
-            <p className='text-muted-foreground text-xs leading-relaxed'>
+            <p className='text-xs leading-relaxed text-muted-foreground'>
               {t('settings.httpConnectTimeoutDescription')}
             </p>
           </div>
@@ -991,7 +917,7 @@ function StoragePane({
               value={httpReadTimeout}
               onChange={(e) => onHttpReadTimeoutChange(e.target.value)}
             />
-            <p className='text-muted-foreground text-xs leading-relaxed'>
+            <p className='text-xs leading-relaxed text-muted-foreground'>
               {t('settings.httpReadTimeoutDescription')}
             </p>
           </div>
@@ -1007,20 +933,18 @@ function StoragePane({
             value={httpMaxRetries}
             onChange={(e) => onHttpMaxRetriesChange(e.target.value)}
           />
-          <p className='text-muted-foreground text-xs leading-relaxed'>
+          <p className='text-xs leading-relaxed text-muted-foreground'>
             {t('settings.httpMaxRetriesDescription')}
           </p>
         </div>
 
-        {error && <p className='text-destructive text-xs'>{error}</p>}
+        {error && <p className='text-xs text-destructive'>{error}</p>}
         <div className='flex justify-end pt-1'>
           <Button
             onClick={() => setConfirmOpen(true)}
             disabled={!dataPath.trim() || saving || unchanged}
           >
-            {saving
-              ? t('settings.restartApplying')
-              : t('settings.restartApply')}
+            {saving ? t('settings.restartApplying') : t('settings.restartApply')}
           </Button>
         </div>
       </Section>
@@ -1067,30 +991,19 @@ function AboutPane({
 
   return (
     <div className='flex h-full flex-col items-center justify-center gap-5 py-8'>
-      <img
-        src='/icon-large.png'
-        alt='Koharu'
-        className='size-20'
-        draggable={false}
-      />
+      <img src='/icon-large.png' alt='Koharu' className='size-20' draggable={false} />
       <div className='text-center'>
-        <h2 className='text-foreground text-lg font-bold tracking-wide'>
-          Koharu
-        </h2>
-        <p className='text-muted-foreground mt-1 text-sm'>
-          {t('settings.aboutTagline')}
-        </p>
+        <h2 className='text-lg font-bold tracking-wide text-foreground'>Koharu</h2>
+        <p className='mt-1 text-sm text-muted-foreground'>{t('settings.aboutTagline')}</p>
       </div>
 
-      <div className='bg-card border-border w-full max-w-sm rounded-xl border p-4'>
+      <div className='w-full max-w-sm rounded-xl border border-border bg-card p-4'>
         <div className='space-y-3 text-sm'>
           <InfoRow label={t('settings.aboutVersion')}>
             <div className='flex flex-col items-end gap-0.5'>
-              <span className='font-mono text-xs font-medium'>
-                {version || '...'}
-              </span>
+              <span className='font-mono text-xs font-medium'>{version || '...'}</span>
               {status === 'loading' && (
-                <LoaderIcon className='text-muted-foreground size-3.5 animate-spin' />
+                <LoaderIcon className='size-3.5 animate-spin text-muted-foreground' />
               )}
               {status === 'latest' && (
                 <span className='flex items-center gap-1 text-xs text-green-500'>
@@ -1120,9 +1033,7 @@ function AboutPane({
             <Button
               variant='link'
               size='xs'
-              onClick={() =>
-                void openExternalUrl('https://github.com/mayocream')
-              }
+              onClick={() => void openExternalUrl('https://github.com/mayocream')}
             >
               Mayo
             </Button>
@@ -1131,9 +1042,7 @@ function AboutPane({
             <Button
               variant='link'
               size='xs'
-              onClick={() =>
-                void openExternalUrl(`https://github.com/${GITHUB_REPO}`)
-              }
+              onClick={() => void openExternalUrl(`https://github.com/${GITHUB_REPO}`)}
             >
               GitHub
             </Button>
@@ -1158,11 +1067,9 @@ function Section({
   return (
     <div className='space-y-3'>
       <div>
-        <h3 className='text-foreground text-sm font-semibold'>{title}</h3>
+        <h3 className='text-sm font-semibold text-foreground'>{title}</h3>
         {description && (
-          <p className='text-muted-foreground mt-0.5 text-xs leading-relaxed'>
-            {description}
-          </p>
+          <p className='mt-0.5 text-xs leading-relaxed text-muted-foreground'>{description}</p>
         )}
       </div>
       {children}

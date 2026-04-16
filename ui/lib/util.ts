@@ -1,9 +1,6 @@
 /** Extract a standalone ArrayBuffer from a Uint8Array view (msgpack may return views into a shared decode buffer). */
 export function toArrayBuffer(bytes: Uint8Array): ArrayBuffer {
-  return bytes.buffer.slice(
-    bytes.byteOffset,
-    bytes.byteOffset + bytes.byteLength,
-  ) as ArrayBuffer
+  return bytes.buffer.slice(bytes.byteOffset, bytes.byteOffset + bytes.byteLength) as ArrayBuffer
 }
 
 const RGBA_MAGIC = 0x41424752 // "RGBA" as little-endian u32
@@ -55,10 +52,7 @@ export async function blobToUint8Array(blob: Blob): Promise<Uint8Array> {
 
 const pendingObjectUrlRevokes = new Map<string, ReturnType<typeof setTimeout>>()
 
-export function revokeObjectUrlLater(
-  url: string | null | undefined,
-  delayMs = 30_000,
-) {
+export function revokeObjectUrlLater(url: string | null | undefined, delayMs = 30_000) {
   if (!url) return
   if (typeof URL === 'undefined' || typeof URL.revokeObjectURL !== 'function') {
     return

@@ -2,8 +2,9 @@
 
 import { useMemo } from 'react'
 import { useTranslation } from 'react-i18next'
-import { useListDownloads } from '@/lib/api/downloads/downloads'
+
 import { Progress } from '@/components/ui/progress'
+import { useListDownloads } from '@/lib/api/downloads/downloads'
 import type { DownloadState } from '@/lib/api/schemas'
 
 const summarizeDownloads = (downloads?: DownloadState[] | null) => {
@@ -14,15 +15,11 @@ const summarizeDownloads = (downloads?: DownloadState[] | null) => {
   for (const d of downloads) {
     total += d.total ?? 0
     downloaded += d.downloaded
-    if (d.status === 'started' || d.status === 'downloading')
-      active = d.filename
+    if (d.status === 'started' || d.status === 'downloading') active = d.filename
   }
   return {
     filename: active,
-    percent:
-      total > 0
-        ? Math.min(100, Math.round((downloaded / total) * 100))
-        : undefined,
+    percent: total > 0 ? Math.min(100, Math.round((downloaded / total) * 100)) : undefined,
   }
 }
 
@@ -35,7 +32,7 @@ export function AppInitializationSkeleton() {
   const progress = useMemo(() => summarizeDownloads(downloads), [downloads])
 
   return (
-    <div className='bg-background flex min-h-0 flex-1 items-center justify-center'>
+    <div className='flex min-h-0 flex-1 items-center justify-center bg-background'>
       <div className='flex flex-col items-center gap-6'>
         <img
           src='/icon-large.png'
@@ -45,16 +42,14 @@ export function AppInitializationSkeleton() {
         />
 
         <div className='flex flex-col items-center gap-1'>
-          <h1 className='text-foreground text-lg font-semibold tracking-widest uppercase'>
+          <h1 className='text-lg font-semibold tracking-widest text-foreground uppercase'>
             Koharu
           </h1>
-          <p className='text-muted-foreground text-xs'>
-            {t('common.initializing')}
-          </p>
+          <p className='text-xs text-muted-foreground'>{t('common.initializing')}</p>
         </div>
 
         <div className='w-56'>
-          <p className='text-muted-foreground mb-1.5 h-4 truncate text-center text-[11px]'>
+          <p className='mb-1.5 h-4 truncate text-center text-[11px] text-muted-foreground'>
             {progress?.filename ?? '\u00A0'}
           </p>
           <Progress

@@ -1,8 +1,9 @@
 'use client'
 
 import { useEffect, useRef } from 'react'
-import { convertToImageBitmap } from '@/lib/util'
+
 import type { MappedDocument } from '@/hooks/useTextBlocks'
+import { convertToImageBitmap } from '@/lib/util'
 
 type BrushLayerDisplayOptions = {
   currentDocument: MappedDocument | null
@@ -32,8 +33,7 @@ export function useBrushLayerDisplay({
     }
 
     const needsResize =
-      canvas.width !== currentDocument.width ||
-      canvas.height !== currentDocument.height
+      canvas.width !== currentDocument.width || canvas.height !== currentDocument.height
 
     if (needsResize) {
       canvas.width = currentDocument.width
@@ -52,13 +52,7 @@ export function useBrushLayerDisplay({
           }
           ctx?.save()
           ctx?.clearRect(0, 0, canvas.width, canvas.height)
-          ctx?.drawImage(
-            bitmap,
-            0,
-            0,
-            currentDocument.width,
-            currentDocument.height,
-          )
+          ctx?.drawImage(bitmap, 0, 0, currentDocument.width, currentDocument.height)
           ctx?.restore()
           bitmap.close()
         } catch (error) {
