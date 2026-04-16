@@ -136,14 +136,14 @@ e aguarda a API local subir antes de rodar os testes no navegador.
 
 ## Alterações na documentação
 
-A documentação fica em `docs/en-US/`, `docs/ja-JP/` e `docs/zh-CN/`, com `docs/zensical.toml` para o site padrão, `docs/zensical.ja-JP.toml` para o build em japonês e `docs/zensical.zh-CN.toml` para o build em chinês.
+A documentação fica em `docs/en-US/`, `docs/ja-JP/`, `docs/zh-CN/` e `docs/pt-BR/`, com `docs/zensical.toml` para o site padrão, `docs/zensical.ja-JP.toml` para o build em japonês, `docs/zensical.zh-CN.toml` para o build em chinês e `docs/zensical.pt-BR.toml` para o build em português do Brasil.
 
 Ao atualizar a documentação:
 
 - mantenha as instruções alinhadas com a implementação atual
 - prefira comandos concretos e caminhos reais em vez de conselhos genéricos
-- atualize a navegação em `docs/zensical.toml`, `docs/zensical.ja-JP.toml` ou `docs/zensical.zh-CN.toml` se adicionar uma nova página
-- faça o build local da documentação com `zensical build -f docs/zensical.toml -c`, depois `zensical build -f docs/zensical.ja-JP.toml` e então `zensical build -f docs/zensical.zh-CN.toml`
+- atualize a navegação em `docs/zensical.toml`, `docs/zensical.ja-JP.toml`, `docs/zensical.zh-CN.toml` ou `docs/zensical.pt-BR.toml` se adicionar uma nova página
+- faça o build local da documentação com `zensical build -f docs/zensical.toml -c`, depois `zensical build -f docs/zensical.ja-JP.toml`, então `zensical build -f docs/zensical.zh-CN.toml` e por fim `zensical build -f docs/zensical.pt-BR.toml`
 
 ## Expectativas de Pull Request
 
