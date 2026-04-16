@@ -233,6 +233,7 @@
     "gemini": "Gemini",
     "claude": "Claude",
     "deepseek": "DeepSeek",
+    "caiyun": "Caiyun",
     "unknown": "Provedor"
   },
   "bootstrap": {

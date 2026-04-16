@@ -17,7 +17,6 @@ use koharu_runtime::RuntimeManager;
 
 use koharu_llm::{
     Language, Llm, ModelId, language::tags as language_tags, safe::llama_backend::LlamaBackend,
-    supported_locales,
 };
 use strum::IntoEnumIterator;
 
@@ -596,7 +595,7 @@ async fn provider_catalog(state: &AppResources) -> anyhow::Result<Vec<LlmProvide
                                 .map(|model| LlmCatalogModel {
                                     target: provider_target(descriptor.id, &model.id),
                                     name: model.name,
-                                    languages: supported_locales(),
+                                    languages: descriptor.supported_languages.tags(),
                                 })
                                 .collect(),
                         ),
@@ -635,7 +634,7 @@ fn static_provider_models(
             .map(|model| LlmCatalogModel {
                 target: provider_target(descriptor.id, model.id),
                 name: model.name.to_string(),
-                languages: supported_locales(),
+                languages: descriptor.supported_languages.tags(),
             })
             .collect(),
         ProviderCatalogModels::Dynamic(_) => Vec::new(),
@@ -1023,5 +1022,27 @@ mod tests {
         assert_eq!(parsed, Some(vec!["Hello".to_string(), "World".to_string()]));
 
         Ok(())
+    }
+
+    #[test]
+    fn provider_supported_languages_expands_all_providers() {
+        let descriptor = koharu_llm::providers::find_provider_descriptor("openai")
+            .expect("openai provider descriptor");
+
+        assert_eq!(
+            descriptor.supported_languages.tags(),
+            koharu_llm::supported_locales()
+        );
+    }
+
+    #[test]
+    fn provider_supported_languages_keeps_caiyun_subset() {
+        let descriptor = koharu_llm::providers::find_provider_descriptor("caiyun")
+            .expect("caiyun provider descriptor");
+
+        assert_eq!(
+            descriptor.supported_languages.tags(),
+            language_tags(koharu_llm::providers::caiyun::SUPPORTED_TARGET_LANGUAGES)
+        );
     }
 }

@@ -7,8 +7,8 @@ use anyhow::Context;
 use keyring::Entry;
 use reqwest_middleware::ClientWithMiddleware;
 
-use crate::Language;
 use crate::prompt::{BLOCK_TAG_INSTRUCTIONS, system_prompt};
+use crate::{Language, language::tags as language_tags, supported_locales};
 
 /// Resolve the effective system prompt: custom (with block instructions appended) or default.
 pub(crate) fn resolve_system_prompt(custom: Option<&str>, target_language: Language) -> String {
@@ -18,6 +18,7 @@ pub(crate) fn resolve_system_prompt(custom: Option<&str>, target_language: Langu
     }
 }
 
+pub mod caiyun;
 mod chat_completions;
 pub mod claude;
 pub mod deepl;
@@ -52,11 +53,27 @@ pub enum ProviderCatalogModels {
     Dynamic(fn(ProviderConfig) -> ProviderDiscoveryFuture),
 }
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum ProviderSupportedLanguages {
+    All,
+    Limited(&'static [Language]),
+}
+
+impl ProviderSupportedLanguages {
+    pub fn tags(self) -> Vec<String> {
+        match self {
+            Self::All => supported_locales(),
+            Self::Limited(languages) => language_tags(languages),
+        }
+    }
+}
+
 pub struct ProviderDescriptor {
     pub id: &'static str,
     pub name: &'static str,
     pub requires_api_key: bool,
     pub requires_base_url: bool,
+    pub supported_languages: ProviderSupportedLanguages,
     pub models: ProviderCatalogModels,
     pub build: fn(ProviderConfig) -> anyhow::Result<Box<dyn AnyProvider>>,
 }
@@ -195,6 +212,7 @@ const PROVIDERS: &[ProviderDescriptor] = &[
         name: "OpenAI",
         requires_api_key: true,
         requires_base_url: false,
+        supported_languages: ProviderSupportedLanguages::All,
         models: ProviderCatalogModels::Static(OPENAI_MODELS),
         build: build_openai_provider,
     },
@@ -203,6 +221,7 @@ const PROVIDERS: &[ProviderDescriptor] = &[
         name: "Gemini",
         requires_api_key: true,
         requires_base_url: false,
+        supported_languages: ProviderSupportedLanguages::All,
         models: ProviderCatalogModels::Static(GEMINI_MODELS),
         build: build_gemini_provider,
     },
@@ -211,6 +230,7 @@ const PROVIDERS: &[ProviderDescriptor] = &[
         name: "Claude",
         requires_api_key: true,
         requires_base_url: false,
+        supported_languages: ProviderSupportedLanguages::All,
         models: ProviderCatalogModels::Static(CLAUDE_MODELS),
         build: build_claude_provider,
     },
@@ -219,6 +239,7 @@ const PROVIDERS: &[ProviderDescriptor] = &[
         name: "DeepSeek",
         requires_api_key: true,
         requires_base_url: false,
+        supported_languages: ProviderSupportedLanguages::All,
         models: ProviderCatalogModels::Static(DEEPSEEK_MODELS),
         build: build_deepseek_provider,
     },
@@ -227,6 +248,7 @@ const PROVIDERS: &[ProviderDescriptor] = &[
         name: "DeepL",
         requires_api_key: true,
         requires_base_url: false,
+        supported_languages: ProviderSupportedLanguages::All,
         models: ProviderCatalogModels::Static(MT_MODELS),
         build: build_deepl_mt_provider,
     },
@@ -235,14 +257,27 @@ const PROVIDERS: &[ProviderDescriptor] = &[
         name: "Google Cloud Translation",
         requires_api_key: true,
         requires_base_url: false,
+        supported_languages: ProviderSupportedLanguages::All,
         models: ProviderCatalogModels::Static(MT_MODELS),
         build: build_google_translate_mt_provider,
+    },
+    ProviderDescriptor {
+        id: "caiyun",
+        name: "Caiyun",
+        requires_api_key: true,
+        requires_base_url: false,
+        supported_languages: ProviderSupportedLanguages::Limited(
+            caiyun::SUPPORTED_TARGET_LANGUAGES,
+        ),
+        models: ProviderCatalogModels::Static(MT_MODELS),
+        build: build_caiyun_mt_provider,
     },
     ProviderDescriptor {
         id: OPENAI_COMPATIBLE_ID,
         name: "OpenAI-compatible",
         requires_api_key: false,
         requires_base_url: true,
+        supported_languages: ProviderSupportedLanguages::All,
         models: ProviderCatalogModels::Dynamic(discover_openai_compatible_models),
         build: build_openai_compatible_provider,
     },
@@ -381,6 +416,13 @@ fn build_google_translate_mt_provider(
     Ok(Box::new(google_translate::GoogleTranslateMtProvider {
         http_client: Arc::clone(&config.http_client),
         api_key: required_api_key(&config, "google-translate")?,
+    }))
+}
+
+fn build_caiyun_mt_provider(config: ProviderConfig) -> anyhow::Result<Box<dyn AnyProvider>> {
+    Ok(Box::new(caiyun::CaiyunMtProvider {
+        http_client: Arc::clone(&config.http_client),
+        api_key: required_api_key(&config, "caiyun")?,
     }))
 }
 
