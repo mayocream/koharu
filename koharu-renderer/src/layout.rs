@@ -326,17 +326,19 @@ impl<'a> TextLayout<'a> {
             let max_width_finite = self.max_width.is_some_and(|w| w.is_finite() && w > 0.0);
             if self.writing_mode.is_vertical() {
                 let actual_width = (max_x - min_x).max(0.0);
-                if max_width_finite && effective_alignment != TextAlign::Left {
-                    width = self.max_width.unwrap();
-                    let remaining = (width - actual_width).max(0.0);
-                    let offset = match effective_alignment {
-                        TextAlign::Center => remaining * 0.5,
-                        TextAlign::Right => remaining,
-                        TextAlign::Left => 0.0,
-                    };
-                    if offset > 0.0 {
-                        for line in &mut lines {
-                            line.baseline.0 += offset;
+                if max_width_finite {
+                    width = actual_width.max(self.max_width.unwrap());
+                    if effective_alignment != TextAlign::Left {
+                        let remaining = (width - actual_width).max(0.0);
+                        let offset = match effective_alignment {
+                            TextAlign::Center => remaining * 0.5,
+                            TextAlign::Right => remaining,
+                            TextAlign::Left => 0.0,
+                        };
+                        if offset > 0.0 {
+                            for line in &mut lines {
+                                line.baseline.0 += offset;
+                            }
                         }
                     }
                 } else {
@@ -735,6 +737,23 @@ mod tests {
         // The block is centered horizontally.
         assert!(layout.lines[0].baseline.0 > 40.0);
         assert!(layout.lines[0].baseline.0 < 60.0);
+
+        Ok(())
+    }
+
+    #[test]
+    fn vertical_layout_left_alignment_expands_width() -> anyhow::Result<()> {
+        let font = any_system_font();
+        let max_width = 100.0;
+        let layout = TextLayout::new(&font, Some(16.0))
+            .with_writing_mode(WritingMode::VerticalRl)
+            .with_max_width(max_width)
+            .with_alignment(koharu_core::TextAlign::Left)
+            .run("A")?;
+
+        assert_eq!(layout.width, max_width);
+        // The block should NOT be shifted horizontally.
+        assert!(layout.lines[0].baseline.0 < 20.0);
 
         Ok(())
     }
