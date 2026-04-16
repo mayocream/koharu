@@ -10,6 +10,7 @@ use skrifa::{
 use crate::font::{Font, font_key};
 use crate::shape::shape_segment_with_fallbacks;
 use crate::text::script::shaping_direction_for_text;
+use koharu_core::TextAlign;
 
 pub use crate::segment::{LineBreakOpportunity, LineBreaker, LineSegment};
 pub use crate::shape::{PositionedGlyph, ShapedRun, ShapingOptions, TextShaper};
@@ -66,6 +67,7 @@ pub struct TextLayout<'a> {
     font_size: Option<f32>,
     max_width: Option<f32>,
     max_height: Option<f32>,
+    alignment: Option<TextAlign>,
 }
 
 impl<'a> TextLayout<'a> {
@@ -78,6 +80,7 @@ impl<'a> TextLayout<'a> {
             font_size,
             max_width: None,
             max_height: None,
+            alignment: None,
         }
     }
 
@@ -108,6 +111,11 @@ impl<'a> TextLayout<'a> {
 
     pub fn with_max_height(mut self, height: f32) -> Self {
         self.max_height = Some(height);
+        self
+    }
+
+    pub fn with_alignment(mut self, alignment: TextAlign) -> Self {
+        self.alignment = Some(alignment);
         self
     }
 
@@ -174,8 +182,10 @@ impl<'a> TextLayout<'a> {
         let descent = -metrics.descent;
         let line_height = (ascent + descent + metrics.leading).max(font_size);
 
+        let (direction, script) = shaping_direction_for_text(text, self.writing_mode);
         let opts = ShapingOptions {
-            direction: shaping_direction_for_text(text, self.writing_mode),
+            direction,
+            script,
             font_size,
             features: if self.writing_mode.is_vertical() {
                 &[
@@ -193,6 +203,7 @@ impl<'a> TextLayout<'a> {
             self.max_width
         }
         .unwrap_or(f32::INFINITY);
+        let max_extent_finite = max_extent.is_finite() && max_extent > 0.0;
 
         let segments = line_breaker.line_segments(text);
 
@@ -273,6 +284,18 @@ impl<'a> TextLayout<'a> {
         // Baselines depend only on line index and metrics. For vertical text we compute absolute X
         // positions within the layout bounds (0..width) so the renderer can draw from the left.
         let line_count = lines.len();
+        let effective_alignment = self.alignment.unwrap_or_else(|| {
+            if self.writing_mode.is_vertical() {
+                TextAlign::Left
+            } else if max_extent_finite {
+                // Default to Center for established horizontal scripts (Latin, Arabic, etc.)
+                // to match the visual style of speech bubbles.
+                TextAlign::Center
+            } else {
+                TextAlign::Left
+            }
+        });
+
         for (i, line) in lines.iter_mut().enumerate() {
             line.baseline = if self.writing_mode.is_vertical() {
                 // Vertical-rl: first column is on the right, subsequent columns shift left.
@@ -289,7 +312,7 @@ impl<'a> TextLayout<'a> {
         // Compute a tight ink bounding box using per-glyph bounds from the font tables (via skrifa),
         // then translate baselines so the top-left ink origin is (0, 0). This avoids clipping without
         // having to measure Skia paths in the renderer.
-        let (mut width, mut height) = self.compute_bounds(&lines, line_height, descent);
+        let (mut width, mut height) = (0.0, 0.0);
         if let Some((mut min_x, mut min_y, mut max_x, mut max_y)) =
             self.ink_bounds(font_size, &lines)
         {
@@ -304,8 +327,48 @@ impl<'a> TextLayout<'a> {
                 line.baseline.0 -= min_x;
                 line.baseline.1 -= min_y;
             }
-            width = (max_x - min_x).max(0.0);
+            if self.writing_mode.is_vertical() {
+                width = (max_x - min_x).max(0.0);
+            } else {
+                width = (max_x - min_x).max(if max_extent.is_finite() {
+                    max_extent
+                } else {
+                    0.0
+                });
+            }
             height = (max_y - min_y).max(0.0);
+
+            // Center vertically if requested and we have a container height.
+            if !self.writing_mode.is_vertical()
+                && effective_alignment == TextAlign::Center
+                && let Some(max_h) = self.max_height.filter(|&h| h.is_finite() && h > 0.0)
+            {
+                let offset = (max_h - height).max(0.0) * 0.5;
+                if offset > 0.0 {
+                    for line in &mut lines {
+                        line.baseline.1 += offset;
+                    }
+                    height = height.max(max_h);
+                }
+            }
+
+            // Apply horizontal alignment if a finite max_width is set.
+            if !self.writing_mode.is_vertical()
+                && max_extent_finite
+                && effective_alignment != TextAlign::Left
+            {
+                for line in &mut lines {
+                    let remaining = (max_extent - line.advance).max(0.0);
+                    let offset = match effective_alignment {
+                        TextAlign::Left => 0.0,
+                        TextAlign::Center => remaining * 0.5,
+                        TextAlign::Right => remaining,
+                    };
+                    if offset > 0.0 {
+                        line.baseline.0 += offset;
+                    }
+                }
+            }
         }
 
         Ok(LayoutRun {
@@ -314,35 +377,6 @@ impl<'a> TextLayout<'a> {
             height,
             font_size,
         })
-    }
-
-    fn compute_bounds(
-        &self,
-        lines: &[LayoutLine<'a>],
-        line_height: f32,
-        descent: f32,
-    ) -> (f32, f32) {
-        if lines.is_empty() {
-            return (0.0, 0.0);
-        }
-
-        match self.writing_mode {
-            WritingMode::Horizontal => {
-                let w = lines.iter().map(|l| l.advance).fold(0.0f32, f32::max);
-                let h = (lines.len() - 1) as f32 * line_height + lines[0].baseline.1 + descent;
-                (w, h)
-            }
-            WritingMode::VerticalRl => {
-                // Each line is a column; `line_height` is used as the column pitch (width).
-                let w = lines.len() as f32 * line_height;
-                // Like horizontal layout, account for the baseline offset (top padding via ascent)
-                // and the descent so glyphs don't get clipped after converting to a Y-down canvas.
-                let h = lines.iter().map(|l| l.advance.abs()).fold(0.0f32, f32::max)
-                    + lines[0].baseline.1
-                    + descent;
-                (w, h)
-            }
-        }
     }
 
     fn ink_bounds(&self, font_size: f32, lines: &[LayoutLine<'a>]) -> Option<(f32, f32, f32, f32)> {
@@ -587,6 +621,11 @@ mod tests {
     }
 
     fn assert_approx_eq(actual: f32, expected: f32) {
+        if actual.is_infinite() && expected.is_infinite() {
+            if actual.is_sign_positive() == expected.is_sign_positive() {
+                return;
+            }
+        }
         let eps = 1e-4;
         assert!(
             (actual - expected).abs() <= eps,

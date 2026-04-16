@@ -62,8 +62,6 @@ const DEFAULT_STROKE_WIDTH = 1.6
 const MIN_STROKE_WIDTH = 0.2
 const MAX_STROKE_WIDTH = 24
 const STROKE_WIDTH_STEP = 0.1
-const LATIN_ONLY_PATTERN =
-  /^[\p{Script=Latin}\p{Script=Common}\p{Script=Inherited}]*$/u
 
 const clampByte = (value: number) =>
   Math.max(0, Math.min(255, Math.round(value)))
@@ -176,7 +174,9 @@ const resolveEffectiveTextAlign = (
     return block.style.textAlign
   }
 
-  if (block?.translation && LATIN_ONLY_PATTERN.test(block.translation)) {
+  if (block?.translation) {
+    // Default to Center for established horizontal scripts to match speech bubble aesthetics.
+    // Vertical text always defaults to Left.
     return 'center'
   }
 

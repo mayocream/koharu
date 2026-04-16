@@ -3,8 +3,7 @@ use std::sync::{Arc, Mutex};
 use anyhow::{Context, Result};
 use image::{DynamicImage, imageops};
 use koharu_core::{
-    BlobRef, FontFaceInfo, FontSource, TextAlign, TextBlock, TextShaderEffect, TextStrokeStyle,
-    TextStyle,
+    BlobRef, FontFaceInfo, FontSource, TextBlock, TextShaderEffect, TextStrokeStyle, TextStyle,
 };
 
 use koharu_renderer::{
@@ -14,8 +13,7 @@ use koharu_renderer::{
     text::{
         latin::{LayoutBox, layout_box_from_block},
         script::{
-            font_families_for_text, is_latin_only, normalize_translation_for_layout,
-            writing_mode_for_block,
+            font_families_for_text, normalize_translation_for_layout, writing_mode_for_block,
         },
     },
 };
@@ -372,15 +370,7 @@ impl Renderer {
             })
             .unwrap_or([0, 0, 0, 255]);
         let writing_mode = writing_mode_for_block(&layout_source_block);
-        let english_horizontal_layout =
-            writing_mode == WritingMode::Horizontal && is_latin_only(&normalized_translation);
-        let text_align = style.text_align.unwrap_or({
-            if english_horizontal_layout {
-                TextAlign::Center
-            } else {
-                TextAlign::Left
-            }
-        });
+        let text_align = style.text_align;
         let block_box = layout_box_from_block(&layout_source_block);
         let (layout_box, bubble_expanded) = match bubble_area {
             Some(area) => (area, true),
@@ -393,11 +383,15 @@ impl Renderer {
             (layout_box.height * 0.3).clamp(min_font_size, 60.0)
         });
 
-        let layout_builder = TextLayout::new(&font, None)
+        let mut layout_builder = TextLayout::new(&font, None)
             .with_fallback_fonts(&self.symbol_fallbacks)
             .with_writing_mode(writing_mode);
 
-        let mut layout = {
+        if let Some(align) = text_align {
+            layout_builder = layout_builder.with_alignment(align);
+        }
+
+        let layout = {
             let _s = tracing::info_span!("layout").entered();
             fit_font_size(
                 &layout_builder,
@@ -408,10 +402,6 @@ impl Renderer {
                 min_font_size,
             )?
         };
-        if english_horizontal_layout {
-            center_layout_vertically(&mut layout, layout_box.height);
-        }
-        align_layout_horizontally(&mut layout, writing_mode, layout_box.width, text_align);
 
         let resolved_stroke = resolve_stroke_style(
             text_block,
@@ -563,65 +553,6 @@ fn resolve_stroke_style(
     })
 }
 
-fn align_layout_horizontally(
-    layout: &mut LayoutRun<'_>,
-    writing_mode: WritingMode,
-    container_width: f32,
-    text_align: TextAlign,
-) {
-    if !container_width.is_finite() || container_width <= 0.0 {
-        return;
-    }
-
-    let target_width = layout.width.max(container_width);
-    if writing_mode.is_vertical() {
-        let remaining = (container_width - layout.width).max(0.0);
-        let offset = match text_align {
-            TextAlign::Left => 0.0,
-            TextAlign::Center => remaining * 0.5,
-            TextAlign::Right => remaining,
-        };
-        if offset > 0.0 {
-            for line in &mut layout.lines {
-                line.baseline.0 += offset;
-            }
-        }
-        layout.width = target_width;
-        return;
-    }
-
-    for line in &mut layout.lines {
-        if line.advance <= 0.0 {
-            continue;
-        }
-        let remaining = (container_width - line.advance).max(0.0);
-        let offset = match text_align {
-            TextAlign::Left => 0.0,
-            TextAlign::Center => remaining * 0.5,
-            TextAlign::Right => remaining,
-        };
-        if offset > 0.0 {
-            line.baseline.0 += offset;
-        }
-    }
-    layout.width = target_width;
-}
-
-fn center_layout_vertically(layout: &mut LayoutRun<'_>, container_height: f32) {
-    if !container_height.is_finite() || container_height <= 0.0 || layout.lines.is_empty() {
-        return;
-    }
-    let offset = ((container_height - layout.height) * 0.5).max(0.0);
-    if offset <= 0.0 {
-        return;
-    }
-
-    for line in &mut layout.lines {
-        line.baseline.1 += offset;
-    }
-    layout.height = layout.height.max(container_height);
-}
-
 fn load_symbol_fallbacks(fontbook: &mut FontBook) -> Vec<Font> {
     let candidates = [
         "Segoe UI Symbol",
@@ -742,11 +673,8 @@ fn find_best_bubble(block: &TextBlock, bubbles: &[koharu_core::BubbleRegion]) ->
 
 #[cfg(test)]
 mod tests {
-    use super::{
-        align_layout_horizontally, apply_default_font_families, center_layout_vertically,
-        resolve_stroke_style,
-    };
-    use koharu_core::{FontPrediction, TextAlign, TextBlock, TextStrokeStyle};
+    use super::{apply_default_font_families, resolve_stroke_style};
+    use koharu_core::{FontPrediction, TextBlock, TextStrokeStyle};
     use koharu_renderer::layout::{LayoutLine, LayoutRun, WritingMode};
 
     #[test]
@@ -805,54 +733,6 @@ mod tests {
     }
 
     #[test]
-    fn vertical_alignment_offsets_all_columns_as_a_group() {
-        let mut layout = LayoutRun {
-            lines: vec![
-                LayoutLine {
-                    baseline: (10.0, 12.0),
-                    ..Default::default()
-                },
-                LayoutLine {
-                    baseline: (30.0, 12.0),
-                    ..Default::default()
-                },
-            ],
-            width: 40.0,
-            height: 80.0,
-            font_size: 16.0,
-        };
-
-        align_layout_horizontally(
-            &mut layout,
-            WritingMode::VerticalRl,
-            100.0,
-            TextAlign::Center,
-        );
-
-        assert_eq!(layout.lines[0].baseline.0, 40.0);
-        assert_eq!(layout.lines[1].baseline.0, 60.0);
-        assert_eq!(layout.width, 100.0);
-    }
-
-    #[test]
-    fn vertical_centering_preserves_existing_behavior() {
-        let mut layout = LayoutRun {
-            lines: vec![LayoutLine {
-                advance: 40.0,
-                baseline: (0.0, 12.0),
-                ..Default::default()
-            }],
-            width: 40.0,
-            height: 20.0,
-            font_size: 16.0,
-        };
-
-        center_layout_vertically(&mut layout, 60.0);
-
-        assert_eq!(layout.lines[0].baseline.1, 32.0);
-        assert_eq!(layout.height, 60.0);
-    }
-
     #[test]
     fn default_font_families_should_fill_empty_list() {
         let mut font_families = Vec::new();
