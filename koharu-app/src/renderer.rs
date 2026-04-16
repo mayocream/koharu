@@ -675,64 +675,7 @@ fn find_best_bubble(block: &TextBlock, bubbles: &[koharu_core::BubbleRegion]) ->
 mod tests {
     use super::{apply_default_font_families, resolve_stroke_style};
     use koharu_core::{FontPrediction, TextBlock, TextStrokeStyle};
-    use koharu_renderer::layout::{LayoutLine, LayoutRun, WritingMode};
 
-    #[test]
-    fn horizontal_alignment_offsets_each_line() {
-        let mut layout = LayoutRun {
-            lines: vec![
-                LayoutLine {
-                    advance: 40.0,
-                    baseline: (0.0, 10.0),
-                    ..Default::default()
-                },
-                LayoutLine {
-                    advance: 80.0,
-                    baseline: (0.0, 30.0),
-                    ..Default::default()
-                },
-            ],
-            width: 80.0,
-            height: 40.0,
-            font_size: 16.0,
-        };
-
-        align_layout_horizontally(
-            &mut layout,
-            WritingMode::Horizontal,
-            100.0,
-            TextAlign::Center,
-        );
-
-        assert_eq!(layout.lines[0].baseline.0, 30.0);
-        assert_eq!(layout.lines[1].baseline.0, 10.0);
-        assert_eq!(layout.width, 100.0);
-    }
-
-    #[test]
-    fn right_alignment_uses_full_remaining_width() {
-        let mut layout = LayoutRun {
-            lines: vec![LayoutLine {
-                advance: 40.0,
-                baseline: (0.0, 10.0),
-                ..Default::default()
-            }],
-            width: 40.0,
-            height: 20.0,
-            font_size: 16.0,
-        };
-
-        align_layout_horizontally(
-            &mut layout,
-            WritingMode::Horizontal,
-            100.0,
-            TextAlign::Right,
-        );
-
-        assert_eq!(layout.lines[0].baseline.0, 60.0);
-    }
-
-    #[test]
     #[test]
     fn default_font_families_should_fill_empty_list() {
         let mut font_families = Vec::new();

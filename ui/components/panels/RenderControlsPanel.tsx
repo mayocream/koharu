@@ -18,6 +18,7 @@ import {
   RenderStroke,
   RgbaColor,
   TextAlign,
+  TextDirection,
   TextStyle,
 } from '@/types'
 import type { FontFaceInfo } from '@/lib/api/schemas'
@@ -167,6 +168,9 @@ const resolveEffectiveTextAlign = (
     | {
         style?: TextStyle
         translation?: string
+        height: number
+        width: number
+        renderedDirection?: TextDirection
       }
     | undefined,
 ): TextAlign => {
@@ -175,8 +179,7 @@ const resolveEffectiveTextAlign = (
   }
 
   if (block?.translation) {
-    // Default to Center for established horizontal scripts to match speech bubble aesthetics.
-    // Vertical text always defaults to Left.
+    // Default to Center for all translated scripts to match speech bubble aesthetics.
     return 'center'
   }
 

@@ -284,16 +284,12 @@ impl<'a> TextLayout<'a> {
         // Baselines depend only on line index and metrics. For vertical text we compute absolute X
         // positions within the layout bounds (0..width) so the renderer can draw from the left.
         let line_count = lines.len();
-        let effective_alignment = self.alignment.unwrap_or_else(|| {
-            if self.writing_mode.is_vertical() {
-                TextAlign::Left
-            } else if max_extent_finite {
-                // Default to Center for established horizontal scripts (Latin, Arabic, etc.)
-                // to match the visual style of speech bubbles.
-                TextAlign::Center
-            } else {
-                TextAlign::Left
-            }
+        let effective_alignment = self.alignment.unwrap_or(if max_extent_finite {
+            // Default to Center for established horizontal or vertical scripts
+            // to match the visual style of speech bubbles.
+            TextAlign::Center
+        } else {
+            TextAlign::Left
         });
 
         for (i, line) in lines.iter_mut().enumerate() {
@@ -327,7 +323,7 @@ impl<'a> TextLayout<'a> {
                 line.baseline.0 -= min_x;
                 line.baseline.1 -= min_y;
             }
-            let max_width_finite = self.max_width.map_or(false, |w| w.is_finite() && w > 0.0);
+            let max_width_finite = self.max_width.is_some_and(|w| w.is_finite() && w > 0.0);
             if self.writing_mode.is_vertical() {
                 let actual_width = (max_x - min_x).max(0.0);
                 if max_width_finite && effective_alignment != TextAlign::Left {
@@ -649,7 +645,6 @@ mod tests {
             "expected {expected}, got {actual}"
         );
     }
-
 
     #[test]
     fn layout_baselines_horizontal_follow_font_metrics() -> anyhow::Result<()> {
