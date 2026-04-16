@@ -14,8 +14,7 @@ use koharu_renderer::{
     text::{
         latin::{LayoutBox, layout_box_from_block},
         script::{
-            font_families_for_text, is_latin_only, normalize_translation_for_layout,
-            writing_mode_for_block,
+            font_families_for_text, normalize_translation_for_layout, writing_mode_for_block,
         },
     },
 };
@@ -372,10 +371,9 @@ impl Renderer {
             })
             .unwrap_or([0, 0, 0, 255]);
         let writing_mode = writing_mode_for_block(&layout_source_block);
-        let english_horizontal_layout =
-            writing_mode == WritingMode::Horizontal && is_latin_only(&normalized_translation);
+        let horizontal_layout = writing_mode == WritingMode::Horizontal;
         let text_align = style.text_align.unwrap_or({
-            if english_horizontal_layout {
+            if horizontal_layout {
                 TextAlign::Center
             } else {
                 TextAlign::Left
@@ -408,7 +406,7 @@ impl Renderer {
                 min_font_size,
             )?
         };
-        if english_horizontal_layout {
+        if horizontal_layout {
             center_layout_vertically(&mut layout, layout_box.height);
         }
         align_layout_horizontally(&mut layout, writing_mode, layout_box.width, text_align);
