@@ -1,8 +1,8 @@
 ---
-title: Troubleshooting
+title: Solução de problemas
 ---
 
-# Troubleshooting
+# Solução de problemas
 
 Esta página cobre os problemas mais comuns do Koharu na implementação atual: downloads na primeira execução, inicialização do runtime, fallback de GPU, acesso em headless e MCP, ordenação de estágios do pipeline e configuração para build a partir do código-fonte.
 
