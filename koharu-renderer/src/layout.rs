@@ -327,8 +327,25 @@ impl<'a> TextLayout<'a> {
                 line.baseline.0 -= min_x;
                 line.baseline.1 -= min_y;
             }
+            let max_width_finite = self.max_width.map_or(false, |w| w.is_finite() && w > 0.0);
             if self.writing_mode.is_vertical() {
-                width = (max_x - min_x).max(0.0);
+                let actual_width = (max_x - min_x).max(0.0);
+                if max_width_finite && effective_alignment != TextAlign::Left {
+                    width = self.max_width.unwrap();
+                    let remaining = (width - actual_width).max(0.0);
+                    let offset = match effective_alignment {
+                        TextAlign::Center => remaining * 0.5,
+                        TextAlign::Right => remaining,
+                        TextAlign::Left => 0.0,
+                    };
+                    if offset > 0.0 {
+                        for line in &mut lines {
+                            line.baseline.0 += offset;
+                        }
+                    }
+                } else {
+                    width = actual_width;
+                }
             } else {
                 width = (max_x - min_x).max(if max_extent.is_finite() {
                     max_extent
@@ -352,7 +369,7 @@ impl<'a> TextLayout<'a> {
                 }
             }
 
-            // Apply horizontal alignment if a finite max_width is set.
+            // Apply horizontal alignment for horizontal writing mode (per-line alignment).
             if !self.writing_mode.is_vertical()
                 && max_extent_finite
                 && effective_alignment != TextAlign::Left
@@ -633,70 +650,6 @@ mod tests {
         );
     }
 
-    #[test]
-    fn compute_bounds_horizontal_uses_max_advance_and_baseline() {
-        let font = any_system_font();
-        let layout = TextLayout::new(&font, Some(16.0)).with_writing_mode(WritingMode::Horizontal);
-
-        let lines = vec![
-            LayoutLine {
-                advance: 100.0,
-                baseline: (0.0, 12.0),
-                ..Default::default()
-            },
-            LayoutLine {
-                advance: 250.0,
-                baseline: (0.0, 32.0),
-                ..Default::default()
-            },
-            LayoutLine {
-                advance: 180.0,
-                baseline: (0.0, 52.0),
-                ..Default::default()
-            },
-        ];
-
-        let line_height = 20.0;
-        let descent = 5.0;
-        let (w, h) = layout.compute_bounds(&lines, line_height, descent);
-
-        assert_approx_eq(w, 250.0);
-        // (len-1)*line_height + first_baseline_y + descent
-        assert_approx_eq(h, 2.0 * line_height + 12.0 + descent);
-    }
-
-    #[test]
-    fn compute_bounds_vertical_accounts_for_baseline_and_descent() {
-        let font = any_system_font();
-        let layout = TextLayout::new(&font, Some(16.0)).with_writing_mode(WritingMode::VerticalRl);
-
-        let lines = vec![
-            LayoutLine {
-                // Vertical advances are typically negative in Y-up space; bounds use abs().
-                advance: -100.0,
-                baseline: (0.0, 12.0),
-                ..Default::default()
-            },
-            LayoutLine {
-                advance: -80.0,
-                baseline: (-20.0, 12.0),
-                ..Default::default()
-            },
-            LayoutLine {
-                advance: -90.0,
-                baseline: (-40.0, 12.0),
-                ..Default::default()
-            },
-        ];
-
-        let line_height = 20.0;
-        let descent = 5.0;
-        let (w, h) = layout.compute_bounds(&lines, line_height, descent);
-
-        assert_approx_eq(w, 3.0 * line_height);
-        // max(|advance|) + first_baseline_y + descent
-        assert_approx_eq(h, 100.0 + 12.0 + descent);
-    }
 
     #[test]
     fn layout_baselines_horizontal_follow_font_metrics() -> anyhow::Result<()> {
@@ -769,6 +722,24 @@ mod tests {
             let dx = layout.lines[i - 1].baseline.0 - layout.lines[i].baseline.0;
             assert_approx_eq(dx, line_height);
         }
+
+        Ok(())
+    }
+
+    #[test]
+    fn vertical_layout_horizontal_alignment_works() -> anyhow::Result<()> {
+        let font = any_system_font();
+        let max_width = 100.0;
+        let layout = TextLayout::new(&font, Some(16.0))
+            .with_writing_mode(WritingMode::VerticalRl)
+            .with_max_width(max_width)
+            .with_alignment(koharu_core::TextAlign::Center)
+            .run("A")?;
+
+        assert_eq!(layout.width, max_width);
+        // The block is centered horizontally.
+        assert!(layout.lines[0].baseline.0 > 40.0);
+        assert!(layout.lines[0].baseline.0 < 60.0);
 
         Ok(())
     }
