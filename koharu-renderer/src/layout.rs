@@ -326,10 +326,11 @@ impl<'a> TextLayout<'a> {
             let max_width_finite = self.max_width.is_some_and(|w| w.is_finite() && w > 0.0);
             if self.writing_mode.is_vertical() {
                 let actual_width = (max_x - min_x).max(0.0);
-                if max_width_finite {
-                    width = actual_width.max(self.max_width.unwrap());
-                    if effective_alignment != TextAlign::Left {
-                        let remaining = (width - actual_width).max(0.0);
+                if max_width_finite && effective_alignment != TextAlign::Left {
+                    let max_width = self.max_width.unwrap();
+                    width = actual_width.max(max_width);
+                    if max_width > actual_width {
+                        let remaining = max_width - actual_width;
                         let offset = match effective_alignment {
                             TextAlign::Center => remaining * 0.5,
                             TextAlign::Right => remaining,
