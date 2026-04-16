@@ -59,6 +59,7 @@ pub fn api() -> (axum::Router<ApiState>, utoipa::openapi::OpenApi) {
         .routes(routes!(export_document))
         .routes(routes!(batch_export))
         .routes(routes!(get_llm, load_llm, unload_llm))
+        .routes(routes!(delete_local_llm_model))
         .routes(routes!(get_llm_catalog))
         .routes(routes!(start_pipeline))
         .routes(routes!(list_jobs))
@@ -1164,6 +1165,30 @@ async fn unload_llm(State(state): State<ApiState>) -> ApiResult<Json<LlmState>> 
     let resources = state.resources()?;
     llm::llm_offload(resources.clone()).await?;
     Ok(Json(resources.llm.snapshot().await))
+}
+
+#[utoipa::path(
+    delete,
+    path = "/llm/local/{model_id}",
+    operation_id = "deleteLocalLlmModel",
+    tag = "llm",
+    params(
+        ("model_id" = String, Path, description = "Local model ID"),
+    ),
+    responses(
+        (status = 204),
+        (status = 400, body = ApiError),
+        (status = 503, body = ApiError),
+    ),
+)]
+#[tracing::instrument(level = "info", skip_all, fields(%model_id))]
+async fn delete_local_llm_model(
+    State(state): State<ApiState>,
+    Path(model_id): Path<String>,
+) -> ApiResult<StatusCode> {
+    let resources = state.resources()?;
+    llm::delete_local_model(resources, &model_id).await?;
+    Ok(StatusCode::NO_CONTENT)
 }
 
 // ---------------------------------------------------------------------------

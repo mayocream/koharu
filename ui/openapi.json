@@ -7,7 +7,9 @@
   "paths": {
     "/blobs/{hash}": {
       "get": {
-        "tags": ["blobs"],
+        "tags": [
+          "blobs"
+        ],
         "operationId": "getBlob",
         "parameters": [
           {
@@ -60,7 +62,9 @@
     },
     "/config": {
       "get": {
-        "tags": ["system"],
+        "tags": [
+          "system"
+        ],
         "operationId": "getConfig",
         "responses": {
           "200": {
@@ -77,7 +81,7 @@
                         }
                       ],
                       "default": {
-                        "path": "C:\\Users\\Mayo\\AppData\\Local\\Koharu"
+                        "path": "C:\\Users\\fffon\\AppData\\Local\\Koharu"
                       }
                     },
                     "http": {
@@ -134,7 +138,9 @@
         }
       },
       "put": {
-        "tags": ["system"],
+        "tags": [
+          "system"
+        ],
         "operationId": "updateConfig",
         "requestBody": {
           "content": {
@@ -149,7 +155,7 @@
                       }
                     ],
                     "default": {
-                      "path": "C:\\Users\\Mayo\\AppData\\Local\\Koharu"
+                      "path": "C:\\Users\\fffon\\AppData\\Local\\Koharu"
                     }
                   },
                   "http": {
@@ -209,7 +215,7 @@
                         }
                       ],
                       "default": {
-                        "path": "C:\\Users\\Mayo\\AppData\\Local\\Koharu"
+                        "path": "C:\\Users\\fffon\\AppData\\Local\\Koharu"
                       }
                     },
                     "http": {
@@ -268,7 +274,9 @@
     },
     "/documents": {
       "get": {
-        "tags": ["documents"],
+        "tags": [
+          "documents"
+        ],
         "operationId": "listDocuments",
         "responses": {
           "200": {
@@ -297,7 +305,9 @@
         }
       },
       "post": {
-        "tags": ["documents"],
+        "tags": [
+          "documents"
+        ],
         "operationId": "importDocuments",
         "parameters": [
           {
@@ -321,7 +331,9 @@
             "multipart/form-data": {
               "schema": {
                 "type": "object",
-                "required": ["files"],
+                "required": [
+                  "files"
+                ],
                 "properties": {
                   "files": {
                     "type": "array",
@@ -372,7 +384,9 @@
     },
     "/documents/order": {
       "put": {
-        "tags": ["documents"],
+        "tags": [
+          "documents"
+        ],
         "operationId": "reorderDocuments",
         "requestBody": {
           "content": {
@@ -423,7 +437,9 @@
     },
     "/documents/{document_id}": {
       "get": {
-        "tags": ["documents"],
+        "tags": [
+          "documents"
+        ],
         "operationId": "getDocument",
         "parameters": [
           {
@@ -471,7 +487,9 @@
     },
     "/documents/{document_id}/brush-layer": {
       "put": {
-        "tags": ["regions"],
+        "tags": [
+          "regions"
+        ],
         "operationId": "updateBrushLayer",
         "parameters": [
           {
@@ -522,7 +540,9 @@
     },
     "/documents/{document_id}/detect": {
       "post": {
-        "tags": ["processing"],
+        "tags": [
+          "processing"
+        ],
         "operationId": "detectDocument",
         "parameters": [
           {
@@ -563,7 +583,9 @@
     },
     "/documents/{document_id}/export/{format}": {
       "get": {
-        "tags": ["exports"],
+        "tags": [
+          "exports"
+        ],
         "operationId": "exportDocument",
         "parameters": [
           {
@@ -634,7 +656,9 @@
     },
     "/documents/{document_id}/inpaint": {
       "post": {
-        "tags": ["processing"],
+        "tags": [
+          "processing"
+        ],
         "operationId": "inpaintDocument",
         "parameters": [
           {
@@ -675,7 +699,9 @@
     },
     "/documents/{document_id}/inpaint-region": {
       "post": {
-        "tags": ["regions"],
+        "tags": [
+          "regions"
+        ],
         "operationId": "inpaintRegion",
         "parameters": [
           {
@@ -726,7 +752,9 @@
     },
     "/documents/{document_id}/mask": {
       "put": {
-        "tags": ["regions"],
+        "tags": [
+          "regions"
+        ],
         "operationId": "updateMask",
         "parameters": [
           {
@@ -777,7 +805,9 @@
     },
     "/documents/{document_id}/recognize": {
       "post": {
-        "tags": ["processing"],
+        "tags": [
+          "processing"
+        ],
         "operationId": "recognizeDocument",
         "parameters": [
           {
@@ -818,7 +848,9 @@
     },
     "/documents/{document_id}/render": {
       "post": {
-        "tags": ["processing"],
+        "tags": [
+          "processing"
+        ],
         "operationId": "renderDocument",
         "parameters": [
           {
@@ -869,7 +901,9 @@
     },
     "/documents/{document_id}/style": {
       "patch": {
-        "tags": ["documents"],
+        "tags": [
+          "documents"
+        ],
         "operationId": "updateDocumentStyle",
         "parameters": [
           {
@@ -928,7 +962,9 @@
     },
     "/documents/{document_id}/text-blocks": {
       "put": {
-        "tags": ["text-blocks"],
+        "tags": [
+          "text-blocks"
+        ],
         "operationId": "putTextBlocks",
         "parameters": [
           {
@@ -980,7 +1016,9 @@
         }
       },
       "post": {
-        "tags": ["text-blocks"],
+        "tags": [
+          "text-blocks"
+        ],
         "operationId": "createTextBlock",
         "parameters": [
           {
@@ -1038,7 +1076,9 @@
     },
     "/documents/{document_id}/text-blocks/{text_block_id}": {
       "delete": {
-        "tags": ["text-blocks"],
+        "tags": [
+          "text-blocks"
+        ],
         "operationId": "deleteTextBlock",
         "parameters": [
           {
@@ -1085,7 +1125,9 @@
         }
       },
       "patch": {
-        "tags": ["text-blocks"],
+        "tags": [
+          "text-blocks"
+        ],
         "operationId": "patchTextBlock",
         "parameters": [
           {
@@ -1151,7 +1193,9 @@
     },
     "/documents/{document_id}/thumbnail": {
       "get": {
-        "tags": ["documents"],
+        "tags": [
+          "documents"
+        ],
         "operationId": "getDocumentThumbnail",
         "parameters": [
           {
@@ -1167,7 +1211,10 @@
             "in": "query",
             "required": false,
             "schema": {
-              "type": ["integer", "null"],
+              "type": [
+                "integer",
+                "null"
+              ],
               "format": "int32",
               "minimum": 0
             }
@@ -1209,7 +1256,9 @@
     },
     "/documents/{document_id}/translate": {
       "post": {
-        "tags": ["processing"],
+        "tags": [
+          "processing"
+        ],
         "operationId": "translateDocument",
         "parameters": [
           {
@@ -1260,7 +1309,9 @@
     },
     "/downloads": {
       "get": {
-        "tags": ["downloads"],
+        "tags": [
+          "downloads"
+        ],
         "operationId": "listDownloads",
         "responses": {
           "200": {
@@ -1281,7 +1332,9 @@
     },
     "/engines": {
       "get": {
-        "tags": ["system"],
+        "tags": [
+          "system"
+        ],
         "operationId": "getEngineCatalog",
         "responses": {
           "200": {
@@ -1359,7 +1412,9 @@
     },
     "/exports": {
       "post": {
-        "tags": ["exports"],
+        "tags": [
+          "exports"
+        ],
         "operationId": "batchExport",
         "requestBody": {
           "content": {
@@ -1397,7 +1452,9 @@
     },
     "/fonts": {
       "get": {
-        "tags": ["system"],
+        "tags": [
+          "system"
+        ],
         "operationId": "listFonts",
         "responses": {
           "200": {
@@ -1428,7 +1485,9 @@
     },
     "/fonts/google/catalog": {
       "get": {
-        "tags": ["system"],
+        "tags": [
+          "system"
+        ],
         "operationId": "getGoogleFontsCatalog",
         "responses": {
           "200": {
@@ -1456,7 +1515,9 @@
     },
     "/fonts/google/{family}/fetch": {
       "post": {
-        "tags": ["system"],
+        "tags": [
+          "system"
+        ],
         "operationId": "fetchGoogleFont",
         "parameters": [
           {
@@ -1505,7 +1566,9 @@
     },
     "/fonts/google/{family}/file": {
       "get": {
-        "tags": ["system"],
+        "tags": [
+          "system"
+        ],
         "operationId": "getGoogleFontFile",
         "parameters": [
           {
@@ -1550,7 +1613,9 @@
     },
     "/jobs": {
       "get": {
-        "tags": ["jobs"],
+        "tags": [
+          "jobs"
+        ],
         "operationId": "listJobs",
         "responses": {
           "200": {
@@ -1571,7 +1636,9 @@
     },
     "/jobs/pipeline": {
       "post": {
-        "tags": ["jobs"],
+        "tags": [
+          "jobs"
+        ],
         "operationId": "startPipeline",
         "requestBody": {
           "content": {
@@ -1609,7 +1676,9 @@
     },
     "/jobs/{job_id}": {
       "get": {
-        "tags": ["jobs"],
+        "tags": [
+          "jobs"
+        ],
         "operationId": "getJob",
         "parameters": [
           {
@@ -1645,7 +1714,9 @@
         }
       },
       "delete": {
-        "tags": ["jobs"],
+        "tags": [
+          "jobs"
+        ],
         "operationId": "cancelJob",
         "parameters": [
           {
@@ -1686,7 +1757,9 @@
     },
     "/llm": {
       "get": {
-        "tags": ["llm"],
+        "tags": [
+          "llm"
+        ],
         "operationId": "getLlm",
         "responses": {
           "200": {
@@ -1712,7 +1785,9 @@
         }
       },
       "put": {
-        "tags": ["llm"],
+        "tags": [
+          "llm"
+        ],
         "operationId": "loadLlm",
         "requestBody": {
           "content": {
@@ -1758,7 +1833,9 @@
         }
       },
       "delete": {
-        "tags": ["llm"],
+        "tags": [
+          "llm"
+        ],
         "operationId": "unloadLlm",
         "responses": {
           "200": {
@@ -1786,7 +1863,9 @@
     },
     "/llm/catalog": {
       "get": {
-        "tags": ["llm"],
+        "tags": [
+          "llm"
+        ],
         "operationId": "getLlmCatalog",
         "responses": {
           "200": {
@@ -1812,9 +1891,55 @@
         }
       }
     },
+    "/llm/local/{model_id}": {
+      "delete": {
+        "tags": [
+          "llm"
+        ],
+        "operationId": "deleteLocalLlmModel",
+        "parameters": [
+          {
+            "name": "model_id",
+            "in": "path",
+            "description": "Local model ID",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": ""
+          },
+          "400": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/meta": {
       "get": {
-        "tags": ["system"],
+        "tags": [
+          "system"
+        ],
         "operationId": "getMeta",
         "responses": {
           "200": {
@@ -1845,7 +1970,10 @@
     "schemas": {
       "ApiError": {
         "type": "object",
-        "required": ["status", "message"],
+        "required": [
+          "status",
+          "message"
+        ],
         "properties": {
           "message": {
             "type": "string"
@@ -1859,7 +1987,10 @@
       },
       "BrushRegionRequest": {
         "type": "object",
-        "required": ["data", "region"],
+        "required": [
+          "data",
+          "region"
+        ],
         "properties": {
           "data": {
             "type": "array",
@@ -1876,7 +2007,12 @@
       },
       "CreateTextBlock": {
         "type": "object",
-        "required": ["x", "y", "width", "height"],
+        "required": [
+          "x",
+          "y",
+          "width",
+          "height"
+        ],
         "properties": {
           "height": {
             "type": "number",
@@ -1898,7 +2034,9 @@
       },
       "DataConfig": {
         "type": "object",
-        "required": ["path"],
+        "required": [
+          "path"
+        ],
         "properties": {
           "path": {
             "type": "string"
@@ -1907,10 +2045,20 @@
       },
       "DocumentDetail": {
         "type": "object",
-        "required": ["id", "name", "width", "height", "textBlocks", "image"],
+        "required": [
+          "id",
+          "name",
+          "width",
+          "height",
+          "textBlocks",
+          "image"
+        ],
         "properties": {
           "brushLayer": {
-            "type": ["string", "null"],
+            "type": [
+              "string",
+              "null"
+            ],
             "description": "Blob hash for the brush layer."
           },
           "height": {
@@ -1926,18 +2074,27 @@
             "description": "Blob hash for the source image layer."
           },
           "inpainted": {
-            "type": ["string", "null"],
+            "type": [
+              "string",
+              "null"
+            ],
             "description": "Blob hash for the inpainted layer."
           },
           "name": {
             "type": "string"
           },
           "rendered": {
-            "type": ["string", "null"],
+            "type": [
+              "string",
+              "null"
+            ],
             "description": "Blob hash for the rendered composite layer."
           },
           "segment": {
-            "type": ["string", "null"],
+            "type": [
+              "string",
+              "null"
+            ],
             "description": "Blob hash for the segmentation mask layer."
           },
           "style": {
@@ -1967,7 +2124,10 @@
         "type": "object",
         "properties": {
           "defaultFont": {
-            "type": ["string", "null"]
+            "type": [
+              "string",
+              "null"
+            ]
           }
         }
       },
@@ -2027,7 +2187,12 @@
       },
       "DownloadState": {
         "type": "object",
-        "required": ["id", "filename", "downloaded", "status"],
+        "required": [
+          "id",
+          "filename",
+          "downloaded",
+          "status"
+        ],
         "properties": {
           "downloaded": {
             "type": "integer",
@@ -2035,7 +2200,10 @@
             "minimum": 0
           },
           "error": {
-            "type": ["string", "null"]
+            "type": [
+              "string",
+              "null"
+            ]
           },
           "filename": {
             "type": "string"
@@ -2047,7 +2215,10 @@
             "$ref": "#/components/schemas/TransferStatus"
           },
           "total": {
-            "type": ["integer", "null"],
+            "type": [
+              "integer",
+              "null"
+            ],
             "format": "int64",
             "minimum": 0
           }
@@ -2055,7 +2226,11 @@
       },
       "EngineCatalogEntry": {
         "type": "object",
-        "required": ["id", "name", "produces"],
+        "required": [
+          "id",
+          "name",
+          "produces"
+        ],
         "properties": {
           "id": {
             "type": "string"
@@ -2088,11 +2263,16 @@
       },
       "ExportLayer": {
         "type": "string",
-        "enum": ["rendered", "inpainted"]
+        "enum": [
+          "rendered",
+          "inpainted"
+        ]
       },
       "ExportResult": {
         "type": "object",
-        "required": ["count"],
+        "required": [
+          "count"
+        ],
         "properties": {
           "count": {
             "type": "integer",
@@ -2102,13 +2282,21 @@
       },
       "FontFaceInfo": {
         "type": "object",
-        "required": ["familyName", "postScriptName", "source", "cached"],
+        "required": [
+          "familyName",
+          "postScriptName",
+          "source",
+          "cached"
+        ],
         "properties": {
           "cached": {
             "type": "boolean"
           },
           "category": {
-            "type": ["string", "null"]
+            "type": [
+              "string",
+              "null"
+            ]
           },
           "familyName": {
             "type": "string"
@@ -2186,11 +2374,19 @@
       },
       "FontSource": {
         "type": "string",
-        "enum": ["system", "google"]
+        "enum": [
+          "system",
+          "google"
+        ]
       },
       "GoogleFontCatalogEntry": {
         "type": "object",
-        "required": ["family", "category", "subsets", "cached"],
+        "required": [
+          "family",
+          "category",
+          "subsets",
+          "cached"
+        ],
         "properties": {
           "cached": {
             "type": "boolean"
@@ -2211,7 +2407,10 @@
       },
       "GoogleFontCatalogResponse": {
         "type": "object",
-        "required": ["fonts", "recommended"],
+        "required": [
+          "fonts",
+          "recommended"
+        ],
         "properties": {
           "fonts": {
             "type": "array",
@@ -2252,11 +2451,17 @@
       },
       "ImportMode": {
         "type": "string",
-        "enum": ["replace", "append"]
+        "enum": [
+          "replace",
+          "append"
+        ]
       },
       "ImportResult": {
         "type": "object",
-        "required": ["totalCount", "documents"],
+        "required": [
+          "totalCount",
+          "documents"
+        ],
         "properties": {
           "documents": {
             "type": "array",
@@ -2272,7 +2477,9 @@
       },
       "InpaintRegionRequest": {
         "type": "object",
-        "required": ["region"],
+        "required": [
+          "region"
+        ],
         "properties": {
           "region": {
             "$ref": "#/components/schemas/Region"
@@ -2301,7 +2508,10 @@
             "minimum": 0
           },
           "error": {
-            "type": ["string", "null"]
+            "type": [
+              "string",
+              "null"
+            ]
           },
           "id": {
             "type": "string"
@@ -2318,7 +2528,10 @@
             "$ref": "#/components/schemas/JobStatus"
           },
           "step": {
-            "type": ["string", "null"]
+            "type": [
+              "string",
+              "null"
+            ]
           },
           "totalDocuments": {
             "type": "integer",
@@ -2332,11 +2545,20 @@
       },
       "JobStatus": {
         "type": "string",
-        "enum": ["running", "completed", "completed_with_errors", "cancelled", "failed"]
+        "enum": [
+          "running",
+          "completed",
+          "completed_with_errors",
+          "cancelled",
+          "failed"
+        ]
       },
       "LlmCatalog": {
         "type": "object",
-        "required": ["localModels", "providers"],
+        "required": [
+          "localModels",
+          "providers"
+        ],
         "properties": {
           "localModels": {
             "type": "array",
@@ -2354,8 +2576,16 @@
       },
       "LlmCatalogModel": {
         "type": "object",
-        "required": ["target", "name", "languages"],
+        "required": [
+          "target",
+          "name",
+          "languages",
+          "downloaded"
+        ],
         "properties": {
+          "downloaded": {
+            "type": "boolean"
+          },
           "languages": {
             "type": "array",
             "items": {
@@ -2374,22 +2604,33 @@
         "type": "object",
         "properties": {
           "customSystemPrompt": {
-            "type": ["string", "null"]
+            "type": [
+              "string",
+              "null"
+            ]
           },
           "maxTokens": {
-            "type": ["integer", "null"],
+            "type": [
+              "integer",
+              "null"
+            ],
             "format": "int32",
             "minimum": 0
           },
           "temperature": {
-            "type": ["number", "null"],
+            "type": [
+              "number",
+              "null"
+            ],
             "format": "double"
           }
         }
       },
       "LlmLoadRequest": {
         "type": "object",
-        "required": ["target"],
+        "required": [
+          "target"
+        ],
         "properties": {
           "options": {
             "oneOf": [
@@ -2419,10 +2660,16 @@
         ],
         "properties": {
           "baseUrl": {
-            "type": ["string", "null"]
+            "type": [
+              "string",
+              "null"
+            ]
           },
           "error": {
-            "type": ["string", "null"]
+            "type": [
+              "string",
+              "null"
+            ]
           },
           "hasApiKey": {
             "type": "boolean"
@@ -2452,14 +2699,23 @@
       },
       "LlmProviderCatalogStatus": {
         "type": "string",
-        "enum": ["ready", "missing_configuration", "discovery_failed"]
+        "enum": [
+          "ready",
+          "missing_configuration",
+          "discovery_failed"
+        ]
       },
       "LlmState": {
         "type": "object",
-        "required": ["status"],
+        "required": [
+          "status"
+        ],
         "properties": {
           "error": {
-            "type": ["string", "null"]
+            "type": [
+              "string",
+              "null"
+            ]
           },
           "status": {
             "$ref": "#/components/schemas/LlmStateStatus"
@@ -2478,11 +2734,19 @@
       },
       "LlmStateStatus": {
         "type": "string",
-        "enum": ["empty", "loading", "ready", "failed"]
+        "enum": [
+          "empty",
+          "loading",
+          "ready",
+          "failed"
+        ]
       },
       "LlmTarget": {
         "type": "object",
-        "required": ["kind", "modelId"],
+        "required": [
+          "kind",
+          "modelId"
+        ],
         "properties": {
           "kind": {
             "$ref": "#/components/schemas/LlmTargetKind"
@@ -2491,17 +2755,25 @@
             "type": "string"
           },
           "providerId": {
-            "type": ["string", "null"]
+            "type": [
+              "string",
+              "null"
+            ]
           }
         }
       },
       "LlmTargetKind": {
         "type": "string",
-        "enum": ["local", "provider"]
+        "enum": [
+          "local",
+          "provider"
+        ]
       },
       "MaskRegionRequest": {
         "type": "object",
-        "required": ["data"],
+        "required": [
+          "data"
+        ],
         "properties": {
           "data": {
             "type": "array",
@@ -2525,7 +2797,10 @@
       },
       "MetaInfo": {
         "type": "object",
-        "required": ["version", "mlDevice"],
+        "required": [
+          "version",
+          "mlDevice"
+        ],
         "properties": {
           "mlDevice": {
             "type": "string"
@@ -2537,14 +2812,22 @@
       },
       "NamedFontPrediction": {
         "type": "object",
-        "required": ["index", "name", "probability", "serif"],
+        "required": [
+          "index",
+          "name",
+          "probability",
+          "serif"
+        ],
         "properties": {
           "index": {
             "type": "integer",
             "minimum": 0
           },
           "language": {
-            "type": ["string", "null"]
+            "type": [
+              "string",
+              "null"
+            ]
           },
           "name": {
             "type": "string"
@@ -2600,10 +2883,16 @@
         "type": "object",
         "properties": {
           "documentId": {
-            "type": ["string", "null"]
+            "type": [
+              "string",
+              "null"
+            ]
           },
           "language": {
-            "type": ["string", "null"]
+            "type": [
+              "string",
+              "null"
+            ]
           },
           "llm": {
             "oneOf": [
@@ -2636,13 +2925,18 @@
             ]
           },
           "systemPrompt": {
-            "type": ["string", "null"]
+            "type": [
+              "string",
+              "null"
+            ]
           }
         }
       },
       "PipelineLlmRequest": {
         "type": "object",
-        "required": ["target"],
+        "required": [
+          "target"
+        ],
         "properties": {
           "options": {
             "oneOf": [
@@ -2661,14 +2955,22 @@
       },
       "ProviderConfig": {
         "type": "object",
-        "required": ["id"],
+        "required": [
+          "id"
+        ],
         "properties": {
           "api_key": {
-            "type": ["string", "null"],
+            "type": [
+              "string",
+              "null"
+            ],
             "description": "Populated from the keyring on `load()`, never written to config.toml.\nSerializes as `\"[REDACTED]\"` in API responses.\nPopulated from keyring on `load()`. Serializes as `\"[REDACTED]\"`."
           },
           "base_url": {
-            "type": ["string", "null"]
+            "type": [
+              "string",
+              "null"
+            ]
           },
           "id": {
             "type": "string"
@@ -2677,7 +2979,12 @@
       },
       "Region": {
         "type": "object",
-        "required": ["x", "y", "width", "height"],
+        "required": [
+          "x",
+          "y",
+          "width",
+          "height"
+        ],
         "properties": {
           "height": {
             "type": "integer",
@@ -2725,13 +3032,18 @@
             ]
           },
           "textBlockId": {
-            "type": ["string", "null"]
+            "type": [
+              "string",
+              "null"
+            ]
           }
         }
       },
       "ReorderRequest": {
         "type": "object",
-        "required": ["ids"],
+        "required": [
+          "ids"
+        ],
         "properties": {
           "ids": {
             "type": "array",
@@ -2743,22 +3055,39 @@
       },
       "TextAlign": {
         "type": "string",
-        "enum": ["left", "center", "right"]
+        "enum": [
+          "left",
+          "center",
+          "right"
+        ]
       },
       "TextBlockDetail": {
         "type": "object",
-        "required": ["id", "x", "y", "width", "height", "confidence"],
+        "required": [
+          "id",
+          "x",
+          "y",
+          "width",
+          "height",
+          "confidence"
+        ],
         "properties": {
           "confidence": {
             "type": "number",
             "format": "float"
           },
           "detectedFontSizePx": {
-            "type": ["number", "null"],
+            "type": [
+              "number",
+              "null"
+            ],
             "format": "float"
           },
           "detector": {
-            "type": ["string", "null"]
+            "type": [
+              "string",
+              "null"
+            ]
           },
           "fontPrediction": {
             "oneOf": [
@@ -2778,7 +3107,10 @@
             "type": "string"
           },
           "linePolygons": {
-            "type": ["array", "null"],
+            "type": [
+              "array",
+              "null"
+            ],
             "items": {
               "type": "array",
               "items": {
@@ -2791,24 +3123,39 @@
             }
           },
           "renderHeight": {
-            "type": ["number", "null"],
+            "type": [
+              "number",
+              "null"
+            ],
             "format": "float"
           },
           "renderWidth": {
-            "type": ["number", "null"],
+            "type": [
+              "number",
+              "null"
+            ],
             "format": "float"
           },
           "renderX": {
-            "type": ["number", "null"],
+            "type": [
+              "number",
+              "null"
+            ],
             "format": "float",
             "description": "Actual render area position/size (when bubble expansion is used)."
           },
           "renderY": {
-            "type": ["number", "null"],
+            "type": [
+              "number",
+              "null"
+            ],
             "format": "float"
           },
           "rendered": {
-            "type": ["string", "null"],
+            "type": [
+              "string",
+              "null"
+            ],
             "description": "Blob hash for the rendered text block sprite."
           },
           "renderedDirection": {
@@ -2822,7 +3169,10 @@
             ]
           },
           "rotationDeg": {
-            "type": ["number", "null"],
+            "type": [
+              "number",
+              "null"
+            ],
             "format": "float"
           },
           "sourceDirection": {
@@ -2836,7 +3186,10 @@
             ]
           },
           "sourceLanguage": {
-            "type": ["string", "null"]
+            "type": [
+              "string",
+              "null"
+            ]
           },
           "style": {
             "oneOf": [
@@ -2849,10 +3202,16 @@
             ]
           },
           "text": {
-            "type": ["string", "null"]
+            "type": [
+              "string",
+              "null"
+            ]
           },
           "translation": {
-            "type": ["string", "null"]
+            "type": [
+              "string",
+              "null"
+            ]
           },
           "width": {
             "type": "number",
@@ -2870,14 +3229,22 @@
       },
       "TextBlockInput": {
         "type": "object",
-        "required": ["x", "y", "width", "height"],
+        "required": [
+          "x",
+          "y",
+          "width",
+          "height"
+        ],
         "properties": {
           "height": {
             "type": "number",
             "format": "float"
           },
           "id": {
-            "type": ["string", "null"]
+            "type": [
+              "string",
+              "null"
+            ]
           },
           "style": {
             "oneOf": [
@@ -2890,10 +3257,16 @@
             ]
           },
           "text": {
-            "type": ["string", "null"]
+            "type": [
+              "string",
+              "null"
+            ]
           },
           "translation": {
-            "type": ["string", "null"]
+            "type": [
+              "string",
+              "null"
+            ]
           },
           "width": {
             "type": "number",
@@ -2913,7 +3286,10 @@
         "type": "object",
         "properties": {
           "height": {
-            "type": ["number", "null"],
+            "type": [
+              "number",
+              "null"
+            ],
             "format": "float"
           },
           "style": {
@@ -2927,28 +3303,46 @@
             ]
           },
           "text": {
-            "type": ["string", "null"]
+            "type": [
+              "string",
+              "null"
+            ]
           },
           "translation": {
-            "type": ["string", "null"]
+            "type": [
+              "string",
+              "null"
+            ]
           },
           "width": {
-            "type": ["number", "null"],
+            "type": [
+              "number",
+              "null"
+            ],
             "format": "float"
           },
           "x": {
-            "type": ["number", "null"],
+            "type": [
+              "number",
+              "null"
+            ],
             "format": "float"
           },
           "y": {
-            "type": ["number", "null"],
+            "type": [
+              "number",
+              "null"
+            ],
             "format": "float"
           }
         }
       },
       "TextDirection": {
         "type": "string",
-        "enum": ["Horizontal", "Vertical"]
+        "enum": [
+          "Horizontal",
+          "Vertical"
+        ]
       },
       "TextShaderEffect": {
         "type": "object",
@@ -2976,14 +3370,20 @@
             "type": "boolean"
           },
           "widthPx": {
-            "type": ["number", "null"],
+            "type": [
+              "number",
+              "null"
+            ],
             "format": "float"
           }
         }
       },
       "TextStyle": {
         "type": "object",
-        "required": ["fontFamilies", "color"],
+        "required": [
+          "fontFamilies",
+          "color"
+        ],
         "properties": {
           "color": {
             "type": "array",
@@ -3010,7 +3410,10 @@
             }
           },
           "fontSize": {
-            "type": ["number", "null"],
+            "type": [
+              "number",
+              "null"
+            ],
             "format": "float"
           },
           "stroke": {
@@ -3037,7 +3440,10 @@
       },
       "TopFont": {
         "type": "object",
-        "required": ["index", "score"],
+        "required": [
+          "index",
+          "score"
+        ],
         "properties": {
           "index": {
             "type": "integer",
@@ -3051,19 +3457,33 @@
       },
       "TransferStatus": {
         "type": "string",
-        "enum": ["started", "downloading", "completed", "failed"]
+        "enum": [
+          "started",
+          "downloading",
+          "completed",
+          "failed"
+        ]
       },
       "TranslateRequest": {
         "type": "object",
         "properties": {
           "language": {
-            "type": ["string", "null"]
+            "type": [
+              "string",
+              "null"
+            ]
           },
           "systemPrompt": {
-            "type": ["string", "null"]
+            "type": [
+              "string",
+              "null"
+            ]
           },
           "textBlockId": {
-            "type": ["string", "null"]
+            "type": [
+              "string",
+              "null"
+            ]
           }
         }
       },
@@ -3071,7 +3491,10 @@
         "type": "object",
         "properties": {
           "defaultFont": {
-            "type": ["string", "null"]
+            "type": [
+              "string",
+              "null"
+            ]
           }
         }
       }

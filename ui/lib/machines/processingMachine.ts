@@ -1,14 +1,13 @@
-import type { QueryClient } from '@tanstack/react-query'
 import { setup, assign, fromPromise, fromCallback } from 'xstate'
-
+import type { QueryClient } from '@tanstack/react-query'
+import { ProgressBarStatus, getCurrentWindow } from '@/lib/backend'
+import { useEditorUiStore } from '@/lib/stores/editorUiStore'
+import { pickImageFiles, pickImageFolderFiles } from '@/lib/filePicker'
 import {
   getListDocumentsQueryKey,
   getGetDocumentQueryKey,
   importDocuments,
 } from '@/lib/api/documents/documents'
-import { exportDocument, batchExport } from '@/lib/api/exports/exports'
-import { startPipeline, cancelJob, getJob } from '@/lib/api/jobs/jobs'
-import { loadLlm, unloadLlm, getLlm, getGetLlmQueryKey } from '@/lib/api/llm/llm'
 import {
   detectDocument,
   recognizeDocument,
@@ -16,6 +15,16 @@ import {
   renderDocument,
   translateDocument,
 } from '@/lib/api/processing/processing'
+import { startPipeline, cancelJob, getJob } from '@/lib/api/jobs/jobs'
+import { exportDocument, batchExport } from '@/lib/api/exports/exports'
+import {
+  loadLlm,
+  unloadLlm,
+  getLlm,
+  getGetLlmQueryKey,
+  getGetLlmCatalogQueryKey,
+} from '@/lib/api/llm/llm'
+import { normalizeErrorMessage } from '@/lib/errors'
 import type {
   RenderRequest,
   TranslateRequest,
@@ -25,10 +34,6 @@ import type {
   DocumentSummary,
   ImportResult,
 } from '@/lib/api/schemas'
-import { ProgressBarStatus, getCurrentWindow } from '@/lib/backend'
-import { normalizeErrorMessage } from '@/lib/errors'
-import { pickImageFiles, pickImageFolderFiles } from '@/lib/filePicker'
-import { useEditorUiStore } from '@/lib/stores/editorUiStore'
 
 const importSelectedDocuments = async (
   files: File[],
@@ -140,39 +145,52 @@ const importActor = fromPromise<
   ImportResult,
   { mode: 'replace' | 'append'; source: 'files' | 'folder' }
 >(async ({ input }) => {
-  const picked = input.source === 'folder' ? await pickImageFolderFiles() : await pickImageFiles()
+  const picked =
+    input.source === 'folder'
+      ? await pickImageFolderFiles()
+      : await pickImageFiles()
   if (!picked) throw new Error('__CANCELLED__')
   return importSelectedDocuments(picked, input.mode)
 })
 
-const detectActor = fromPromise<void, { documentId: string }>(async ({ input }) => {
-  await detectDocument(input.documentId)
-})
-
-const recognizeActor = fromPromise<void, { documentId: string }>(async ({ input }) => {
-  await recognizeDocument(input.documentId)
-})
-
-const inpaintActor = fromPromise<void, { documentId: string }>(async ({ input }) => {
-  await inpaintDocument(input.documentId)
-})
-
-const renderActor = fromPromise<void, { documentId: string; options: RenderRequest }>(
+const detectActor = fromPromise<void, { documentId: string }>(
   async ({ input }) => {
-    await renderDocument(input.documentId, input.options)
+    await detectDocument(input.documentId)
   },
 )
 
-const translateActor = fromPromise<void, { documentId: string; options: TranslateRequest }>(
+const recognizeActor = fromPromise<void, { documentId: string }>(
   async ({ input }) => {
-    await translateDocument(input.documentId, input.options)
+    await recognizeDocument(input.documentId)
   },
 )
 
-const pipelineActor = fromPromise<string, { request: PipelineJobRequest }>(async ({ input }) => {
-  const job = await startPipeline(input.request)
-  return job.id
+const inpaintActor = fromPromise<void, { documentId: string }>(
+  async ({ input }) => {
+    await inpaintDocument(input.documentId)
+  },
+)
+
+const renderActor = fromPromise<
+  void,
+  { documentId: string; options: RenderRequest }
+>(async ({ input }) => {
+  await renderDocument(input.documentId, input.options)
 })
+
+const translateActor = fromPromise<
+  void,
+  { documentId: string; options: TranslateRequest }
+>(async ({ input }) => {
+  await translateDocument(input.documentId, input.options)
+})
+
+const pipelineActor = fromPromise<string, { request: PipelineJobRequest }>(
+  async ({ input }) => {
+    const job = await startPipeline(input.request)
+    return job.id
+  },
+)
 
 const translateBlockActor = fromPromise<
   void,
@@ -186,9 +204,11 @@ const translateBlockActor = fromPromise<
   await renderDocument(input.documentId, input.renderOptions)
 })
 
-const llmLoadActor = fromPromise<void, { request: LlmLoadRequest }>(async ({ input }) => {
-  await loadLlm(input.request)
-})
+const llmLoadActor = fromPromise<void, { request: LlmLoadRequest }>(
+  async ({ input }) => {
+    await loadLlm(input.request)
+  },
+)
 
 const llmUnloadActor = fromPromise<void, Record<string, never>>(async () => {
   await unloadLlm()
@@ -204,77 +224,88 @@ const exportActor = fromPromise<
   }
 >(async ({ input }) => {
   const documents =
-    input.queryClient.getQueryData<DocumentSummary[]>(getListDocumentsQueryKey()) ?? []
+    input.queryClient.getQueryData<DocumentSummary[]>(
+      getListDocumentsQueryKey(),
+    ) ?? []
   const summary = documents.find((d) => d.id === input.documentId)
-  const blob = await exportDocument(input.documentId, input.format, input.params)
+  const blob = await exportDocument(
+    input.documentId,
+    input.format,
+    input.params,
+  )
   await saveBlob(blob, `${summary?.name ?? 'export'}_koharu.${input.format}`)
 })
 
-const batchExportActor = fromPromise<void, { layer: ExportLayer }>(async ({ input }) => {
-  await batchExport({ layer: input.layer })
-})
+const batchExportActor = fromPromise<void, { layer: ExportLayer }>(
+  async ({ input }) => {
+    await batchExport({ layer: input.layer })
+  },
+)
 
 // ---------------------------------------------------------------------------
 // Polling actors (replace SSE)
 // ---------------------------------------------------------------------------
 
-const jobPollingActor = fromCallback<ProcessingEvent, { jobId: string; isAll: boolean }>(
-  ({ sendBack, input }) => {
+const jobPollingActor = fromCallback<
+  ProcessingEvent,
+  { jobId: string; isAll: boolean }
+>(({ sendBack, input }) => {
+  const interval = setInterval(async () => {
+    try {
+      const job = await getJob(input.jobId)
+      if (job.status === 'running') {
+        const single = !input.isAll && job.totalDocuments <= 1
+        sendBack({
+          type: 'PROGRESS',
+          step: job.step ?? undefined,
+          current: single
+            ? job.currentStepIndex
+            : job.currentDocument +
+              (job.totalSteps > 0 ? job.currentStepIndex / job.totalSteps : 0),
+          total: single ? job.totalSteps : job.totalDocuments,
+          overallPercent: job.overallPercent,
+        })
+      } else if (job.status === 'completed') {
+        sendBack({ type: 'DONE' })
+      } else if (job.status === 'completed_with_errors') {
+        sendBack({
+          type: 'DONE_WITH_ERRORS',
+          message: job.error ?? 'Batch completed with errors',
+        })
+      } else {
+        sendBack({ type: 'ERROR', message: job.error ?? 'Job failed' })
+      }
+    } catch (e) {
+      sendBack({
+        type: 'ERROR',
+        message: (e as Error)?.message ?? 'Failed to poll job',
+      })
+    }
+  }, 1500)
+  return () => clearInterval(interval)
+})
+
+const llmPollingActor = fromCallback<ProcessingEvent, Record<string, never>>(
+  ({ sendBack }) => {
     const interval = setInterval(async () => {
       try {
-        const job = await getJob(input.jobId)
-        if (job.status === 'running') {
-          const single = !input.isAll && job.totalDocuments <= 1
-          sendBack({
-            type: 'PROGRESS',
-            step: job.step ?? undefined,
-            current: single
-              ? job.currentStepIndex
-              : job.currentDocument +
-                (job.totalSteps > 0 ? job.currentStepIndex / job.totalSteps : 0),
-            total: single ? job.totalSteps : job.totalDocuments,
-            overallPercent: job.overallPercent,
-          })
-        } else if (job.status === 'completed') {
+        const llm = await getLlm()
+        if (llm.status === 'ready') {
           sendBack({ type: 'DONE' })
-        } else if (job.status === 'completed_with_errors') {
-          sendBack({
-            type: 'DONE_WITH_ERRORS',
-            message: job.error ?? 'Batch completed with errors',
-          })
-        } else {
-          sendBack({ type: 'ERROR', message: job.error ?? 'Job failed' })
+        } else if (llm.status === 'failed') {
+          sendBack({ type: 'ERROR', message: 'LLM load failed' })
         }
+        // status === 'loading' → keep polling
       } catch (e) {
         sendBack({
           type: 'ERROR',
-          message: (e as Error)?.message ?? 'Failed to poll job',
+          message: (e as Error)?.message ?? 'Failed to poll LLM',
         })
       }
     }, 1500)
     return () => clearInterval(interval)
   },
 )
-
-const llmPollingActor = fromCallback<ProcessingEvent, Record<string, never>>(({ sendBack }) => {
-  const interval = setInterval(async () => {
-    try {
-      const llm = await getLlm()
-      if (llm.status === 'ready') {
-        sendBack({ type: 'DONE' })
-      } else if (llm.status === 'failed') {
-        sendBack({ type: 'ERROR', message: 'LLM load failed' })
-      }
-      // status === 'loading' → keep polling
-    } catch (e) {
-      sendBack({
-        type: 'ERROR',
-        message: (e as Error)?.message ?? 'Failed to poll LLM',
-      })
-    }
-  }, 1500)
-  return () => clearInterval(interval)
-})
 
 // ---------------------------------------------------------------------------
 // Machine
@@ -305,7 +336,8 @@ export const processingMachine = setup({
   actions: {
     // --- progress bar ---
     setProgressBarNormal: () => setProgressBarValue(0),
-    updateProgressBar: ({ context }) => setProgressBarValue(context.overallPercent),
+    updateProgressBar: ({ context }) =>
+      setProgressBarValue(context.overallPercent),
     clearProgressBar: () => clearProgressBarValue(),
 
     // --- context reset ---
@@ -337,10 +369,12 @@ export const processingMachine = setup({
 
     // --- progress update ---
     updateProgress: assign({
-      step: ({ event }) => (event.type === 'PROGRESS' ? (event.step ?? null) : null),
+      step: ({ event }) =>
+        event.type === 'PROGRESS' ? (event.step ?? null) : null,
       current: ({ event }) => (event.type === 'PROGRESS' ? event.current : 0),
       total: ({ event }) => (event.type === 'PROGRESS' ? event.total : 0),
-      overallPercent: ({ event }) => (event.type === 'PROGRESS' ? event.overallPercent : 0),
+      overallPercent: ({ event }) =>
+        event.type === 'PROGRESS' ? event.overallPercent : 0,
     }),
 
     // --- error ---
@@ -368,7 +402,9 @@ export const processingMachine = setup({
     // --- surface error to UI toast ---
     surfaceError: ({ context }) => {
       if (context.error) {
-        useEditorUiStore.getState().showError(normalizeErrorMessage(context.error))
+        useEditorUiStore
+          .getState()
+          .showError(normalizeErrorMessage(context.error))
       }
     },
 
@@ -403,7 +439,8 @@ export const processingMachine = setup({
       })
     },
     invalidateAll: ({ context }) => {
-      const documentId = context.documentId ?? useEditorUiStore.getState().currentDocumentId
+      const documentId =
+        context.documentId ?? useEditorUiStore.getState().currentDocumentId
       if (documentId) {
         context.queryClient.invalidateQueries({
           queryKey: getGetDocumentQueryKey(documentId),
@@ -411,6 +448,14 @@ export const processingMachine = setup({
       }
       context.queryClient.invalidateQueries({
         queryKey: getListDocumentsQueryKey(),
+      })
+    },
+    invalidateLlmQueries: ({ context }) => {
+      context.queryClient.invalidateQueries({
+        queryKey: getGetLlmQueryKey(),
+      })
+      context.queryClient.invalidateQueries({
+        queryKey: getGetLlmCatalogQueryKey(),
       })
     },
   },
@@ -597,7 +642,10 @@ export const processingMachine = setup({
       invoke: {
         src: 'translateActor',
         input: ({ context, event }) => {
-          const e = event as Extract<ProcessingEvent, { type: 'START_TRANSLATE' }>
+          const e = event as Extract<
+            ProcessingEvent,
+            { type: 'START_TRANSLATE' }
+          >
           return { documentId: context.documentId!, options: e.options }
         },
         onDone: {
@@ -621,7 +669,10 @@ export const processingMachine = setup({
       invoke: {
         src: 'translateBlockActor',
         input: ({ context, event }) => {
-          const e = event as Extract<ProcessingEvent, { type: 'START_TRANSLATE_BLOCK' }>
+          const e = event as Extract<
+            ProcessingEvent,
+            { type: 'START_TRANSLATE_BLOCK' }
+          >
           return {
             documentId: context.documentId!,
             options: e.options,
@@ -661,12 +712,15 @@ export const processingMachine = setup({
           invoke: {
             src: 'pipelineActor',
             input: ({ event }) => {
-              const e = event as Extract<ProcessingEvent, { type: 'START_PIPELINE' }>
+              const e = event as Extract<
+                ProcessingEvent,
+                { type: 'START_PIPELINE' }
+              >
               return { request: e.request }
             },
             onDone: {
               target: 'running',
-              actions: ['setJobIdFromOutput'],
+              actions: ['setJobIdFromOutput', 'invalidateLlmQueries'],
             },
             onError: {
               target: '#processing.idle',
@@ -684,19 +738,32 @@ export const processingMachine = setup({
           },
           on: {
             PROGRESS: {
-              actions: ['updateProgress', 'updateProgressBar'],
+              actions: [
+                'updateProgress',
+                'updateProgressBar',
+                'invalidateLlmQueries',
+              ],
             },
             DONE: {
               target: '#processing.idle',
-              actions: ['invalidateAll'],
+              actions: ['invalidateAll', 'invalidateLlmQueries'],
             },
             DONE_WITH_ERRORS: {
               target: '#processing.idle',
-              actions: ['invalidateAll', 'setErrorFromEvent', 'surfaceError'],
+              actions: [
+                'invalidateAll',
+                'invalidateLlmQueries',
+                'setErrorFromEvent',
+                'surfaceError',
+              ],
             },
             ERROR: {
               target: '#processing.idle',
-              actions: ['setErrorFromEvent', 'surfaceError'],
+              actions: [
+                'invalidateLlmQueries',
+                'setErrorFromEvent',
+                'surfaceError',
+              ],
             },
           },
         },
@@ -713,7 +780,10 @@ export const processingMachine = setup({
           invoke: {
             src: 'llmLoadActor',
             input: ({ event }) => {
-              const e = event as Extract<ProcessingEvent, { type: 'START_LLM_LOAD' }>
+              const e = event as Extract<
+                ProcessingEvent,
+                { type: 'START_LLM_LOAD' }
+              >
               return { request: e.request }
             },
             onDone: {
@@ -736,13 +806,7 @@ export const processingMachine = setup({
             },
             DONE: {
               target: '#processing.idle',
-              actions: [
-                ({ context }) => {
-                  context.queryClient.invalidateQueries({
-                    queryKey: getGetLlmQueryKey(),
-                  })
-                },
-              ],
+              actions: ['invalidateLlmQueries'],
             },
             ERROR: {
               target: '#processing.idle',
@@ -760,13 +824,7 @@ export const processingMachine = setup({
         input: () => ({}),
         onDone: {
           target: 'idle',
-          actions: [
-            ({ context }) => {
-              context.queryClient.invalidateQueries({
-                queryKey: getGetLlmQueryKey(),
-              })
-            },
-          ],
+          actions: ['invalidateLlmQueries'],
         },
         onError: {
           target: 'idle',
@@ -807,7 +865,10 @@ export const processingMachine = setup({
       invoke: {
         src: 'batchExportActor',
         input: ({ event }) => {
-          const e = event as Extract<ProcessingEvent, { type: 'START_BATCH_EXPORT' }>
+          const e = event as Extract<
+            ProcessingEvent,
+            { type: 'START_BATCH_EXPORT' }
+          >
           return { layer: e.layer }
         },
         onDone: {

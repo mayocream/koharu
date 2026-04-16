@@ -532,16 +532,6 @@ fn snapshot_from_state(state: &State) -> LlmState {
 // Operations (merged from ops/llm.rs)
 // ---------------------------------------------------------------------------
 
-fn local_catalog_models() -> Vec<LlmCatalogModel> {
-    ModelId::iter()
-        .map(|model| LlmCatalogModel {
-            target: local_target(model),
-            name: model.to_string(),
-            languages: language_tags(&model.languages()),
-        })
-        .collect()
-}
-
 async fn provider_catalog(state: &AppResources) -> anyhow::Result<Vec<LlmProviderCatalog>> {
     let config = app_config::load()?;
     let mut providers = Vec::new();
@@ -597,6 +587,7 @@ async fn provider_catalog(state: &AppResources) -> anyhow::Result<Vec<LlmProvide
                                     target: provider_target(descriptor.id, &model.id),
                                     name: model.name,
                                     languages: supported_locales(),
+                                    downloaded: false,
                                 })
                                 .collect(),
                         ),
@@ -636,6 +627,7 @@ fn static_provider_models(
                 target: provider_target(descriptor.id, model.id),
                 name: model.name.to_string(),
                 languages: supported_locales(),
+                downloaded: false,
             })
             .collect(),
         ProviderCatalogModels::Dynamic(_) => Vec::new(),
@@ -699,7 +691,14 @@ async fn load_target(
 
 pub async fn llm_catalog(state: AppResources) -> anyhow::Result<LlmCatalog> {
     Ok(LlmCatalog {
-        local_models: local_catalog_models(),
+        local_models: ModelId::iter()
+            .map(|model| LlmCatalogModel {
+                target: local_target(model),
+                name: model.to_string(),
+                languages: language_tags(&model.languages()),
+                downloaded: model.is_downloaded(&state.runtime),
+            })
+            .collect(),
         providers: provider_catalog(&state).await?,
     })
 }
@@ -711,6 +710,29 @@ pub async fn llm_load(state: AppResources, payload: LlmLoadRequest) -> anyhow::R
 
 pub async fn llm_offload(state: AppResources) -> anyhow::Result<()> {
     state.llm.offload().await;
+    Ok(())
+}
+
+pub async fn delete_local_model(state: AppResources, model_id: &str) -> anyhow::Result<()> {
+    let model = ModelId::from_str(model_id)?;
+    let target = local_target(model);
+
+    if state.llm.current_target().await.as_ref() == Some(&target) {
+        state.llm.offload().await;
+    }
+
+    let repo_path = model.cache_repo_path(&state.runtime);
+    match tokio::fs::metadata(&repo_path).await {
+        Ok(metadata) if metadata.is_dir() => {
+            tokio::fs::remove_dir_all(&repo_path).await?;
+        }
+        Ok(_) => {
+            tokio::fs::remove_file(&repo_path).await?;
+        }
+        Err(error) if error.kind() == std::io::ErrorKind::NotFound => {}
+        Err(error) => return Err(error.into()),
+    }
+
     Ok(())
 }
 

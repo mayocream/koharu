@@ -270,10 +270,36 @@ impl ModelId {
         self.get_str(name).expect("missing model property")
     }
 
+    pub fn repo(&self) -> &'static str {
+        self.property("repo")
+    }
+
+    pub fn filename(&self) -> &'static str {
+        self.property("filename")
+    }
+
+    pub fn cached_path(&self, runtime: &RuntimeManager) -> Option<PathBuf> {
+        koharu_runtime::hf_hub::Cache::new(runtime.root().join("models").join("huggingface"))
+            .model(self.repo().to_string())
+            .get(self.filename())
+    }
+
+    pub fn is_downloaded(&self, runtime: &RuntimeManager) -> bool {
+        self.cached_path(runtime).is_some()
+    }
+
+    pub fn cache_repo_path(&self, runtime: &RuntimeManager) -> PathBuf {
+        runtime
+            .root()
+            .join("models")
+            .join("huggingface")
+            .join(koharu_runtime::hf_hub::Repo::model(self.repo().to_string()).folder_name())
+    }
+
     pub async fn get(&self, runtime: &RuntimeManager) -> anyhow::Result<PathBuf> {
         runtime
             .downloads()
-            .huggingface_model(self.property("repo"), self.property("filename"))
+            .huggingface_model(self.repo(), self.filename())
             .await
     }
 

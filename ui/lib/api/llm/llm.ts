@@ -359,3 +359,81 @@ export function useGetLlmCatalog<
 
   return { ...query, queryKey: queryOptions.queryKey }
 }
+
+export const getDeleteLocalLlmModelUrl = (modelId: string) => {
+  return `/api/v1/llm/local/${modelId}`
+}
+
+export const deleteLocalLlmModel = async (
+  modelId: string,
+  options?: RequestInit,
+): Promise<void> => {
+  return fetchApi<void>(getDeleteLocalLlmModelUrl(modelId), {
+    ...options,
+    method: 'DELETE',
+  })
+}
+
+export const getDeleteLocalLlmModelMutationOptions = <
+  TError = ApiError,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof deleteLocalLlmModel>>,
+    TError,
+    { modelId: string },
+    TContext
+  >
+  request?: SecondParameter<typeof fetchApi>
+}): UseMutationOptions<
+  Awaited<ReturnType<typeof deleteLocalLlmModel>>,
+  TError,
+  { modelId: string },
+  TContext
+> => {
+  const mutationKey = ['deleteLocalLlmModel']
+  const { mutation: mutationOptions, request: requestOptions } = options
+    ? options.mutation &&
+      'mutationKey' in options.mutation &&
+      options.mutation.mutationKey
+      ? options
+      : { ...options, mutation: { ...options.mutation, mutationKey } }
+    : { mutation: { mutationKey }, request: undefined }
+
+  const mutationFn: MutationFunction<
+    Awaited<ReturnType<typeof deleteLocalLlmModel>>,
+    { modelId: string }
+  > = (props) => {
+    const { modelId } = props ?? {}
+
+    return deleteLocalLlmModel(modelId, requestOptions)
+  }
+
+  return { mutationFn, ...mutationOptions }
+}
+
+export type DeleteLocalLlmModelMutationResult = NonNullable<
+  Awaited<ReturnType<typeof deleteLocalLlmModel>>
+>
+
+export type DeleteLocalLlmModelMutationError = ApiError
+
+export const useDeleteLocalLlmModel = <TError = ApiError, TContext = unknown>(
+  options?: {
+    mutation?: UseMutationOptions<
+      Awaited<ReturnType<typeof deleteLocalLlmModel>>,
+      TError,
+      { modelId: string },
+      TContext
+    >
+    request?: SecondParameter<typeof fetchApi>
+  },
+  queryClient?: QueryClient,
+): UseMutationResult<
+  Awaited<ReturnType<typeof deleteLocalLlmModel>>,
+  TError,
+  { modelId: string },
+  TContext
+> => {
+  return useMutation(getDeleteLocalLlmModelMutationOptions(options), queryClient)
+}
