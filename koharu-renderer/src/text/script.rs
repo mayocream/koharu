@@ -89,7 +89,7 @@ pub fn shaping_direction_for_text(
     if let Some(rtl) = flags.rtl_script {
         let tag = match rtl {
             IcuScript::Hebrew => b"Hebr",
-            IcuScript::Syriac => b"Syre",
+            IcuScript::Syriac => b"Syrc",
             IcuScript::Thaana => b"Thaa",
             IcuScript::Nko => b"Nkoo",
             IcuScript::Adlam => b"Adlm",
@@ -278,6 +278,13 @@ mod tests {
         let (dir, script) = shaping_direction_for_text("שלום", WritingMode::Horizontal);
         assert_eq!(dir, harfrust::Direction::RightToLeft);
         assert_eq!(script.unwrap().tag(), harfrust::Tag::new(b"Hebr"));
+    }
+
+    #[test]
+    fn syriac_text_uses_rtl_shaping_with_correct_tag() {
+        let (dir, script) = shaping_direction_for_text("ܐܒܓܕ", WritingMode::Horizontal);
+        assert_eq!(dir, harfrust::Direction::RightToLeft);
+        assert_eq!(script.unwrap().tag(), harfrust::Tag::new(b"Syrc"));
     }
 
     #[test]
