@@ -227,9 +227,7 @@ export function RenderControlsPanel() {
   const currentStroke = normalizeStroke(selectedBlock?.style?.stroke ?? renderStroke)
   const currentColor = selectedBlock
     ? resolveStyleColor(selectedBlock.style, selectedBlock, fallbackColor)
-    : hasBlocks
-      ? fallbackColor
-      : DEFAULT_COLOR
+    : fallbackColor
   const currentColorHex = colorToHex(currentColor)
   const currentStrokeColorHex = colorToHex(currentStroke.color)
   const currentStrokeWidth = currentStroke.widthPx ?? DEFAULT_STROKE_WIDTH
