@@ -18,7 +18,6 @@ import {
   RenderStroke,
   RgbaColor,
   TextAlign,
-  TextDirection,
   TextStyle,
 } from '@/types'
 import type { FontFaceInfo } from '@/lib/api/schemas'
@@ -168,9 +167,6 @@ const resolveEffectiveTextAlign = (
     | {
         style?: TextStyle
         translation?: string
-        height: number
-        width: number
-        renderedDirection?: TextDirection
       }
     | undefined,
 ): TextAlign => {
