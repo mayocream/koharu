@@ -2599,6 +2599,9 @@
       "PipelineJobRequest": {
         "type": "object",
         "properties": {
+          "defaultFont": {
+            "type": ["string", "null"]
+          },
           "documentId": {
             "type": ["string", "null"]
           },

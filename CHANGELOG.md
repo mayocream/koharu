@@ -1,3 +1,30 @@
+## [0.44.6](https://github.com/mayocream/koharu/compare/0.44.5..0.44.6) - 2026-04-16
+
+### ⛰️  Features
+
+- Add Caiyun translation provider ([#478](https://github.com/mayocream/koharu/issues/478)) - ([f7fca6d](https://github.com/mayocream/koharu/commit/f7fca6dfbe93125a800db7bb178d48e50c6e4207))
+
+### 🐛 Bug Fixes
+
+- RTL Support and Text Alignment Overhaul ([#475](https://github.com/mayocream/koharu/issues/475)) - ([5411daf](https://github.com/mayocream/koharu/commit/5411daf27b4e5600fd4ab4de314c3763cbd69b96))
+- Default font not being applied in processing ([#456](https://github.com/mayocream/koharu/issues/456)) - ([d0d1a56](https://github.com/mayocream/koharu/commit/d0d1a5688ba6d7ca70799cc86bc3865993f7b529))
+- Resolve black ([#000000](https://github.com/mayocream/koharu/issues/000000)) text color not applying in render controls ([#482](https://github.com/mayocream/koharu/issues/482)) - ([7748937](https://github.com/mayocream/koharu/commit/77489374ba96d92754ee4ceb430f1c8e5e68e872))
+- Incorrect sorting by image name ([#455](https://github.com/mayocream/koharu/issues/455)) - ([3bdf850](https://github.com/mayocream/koharu/commit/3bdf8506c67e15d51940573fbc42824fe926640a))
+
+### 📚 Documentation
+
+- Add Portuguese (pt-BR) docs and assets ([#476](https://github.com/mayocream/koharu/issues/476)) - ([15dba78](https://github.com/mayocream/koharu/commit/15dba783725b5d50fe2d917a4f5df1e598a6a516))
+
+### ⚙️ Miscellaneous Tasks
+
+- Build pt-BR docs and fix Portuguese wording ([#481](https://github.com/mayocream/koharu/issues/481)) - ([5edb16e](https://github.com/mayocream/koharu/commit/5edb16e1d91ad2fc466e0f69ce22cd0c96aefe87))
+- Replace prettier with oxfmt and apply formatting ([#472](https://github.com/mayocream/koharu/issues/472)) - ([19be246](https://github.com/mayocream/koharu/commit/19be246108f8c479ebde8f21c706bc83cd859ab7))
+
+## New Contributors ❤️
+
+* @RexGhidorah made their first contribution in [#456](https://github.com/mayocream/koharu/pull/456)
+* @Mooshieblob1 made their first contribution in [#482](https://github.com/mayocream/koharu/pull/482)
+
 ## [0.44.5](https://github.com/mayocream/koharu/compare/0.44.4..0.44.5) - 2026-04-15
 
 ### ⛰️  Features

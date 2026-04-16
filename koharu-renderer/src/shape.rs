@@ -1,5 +1,5 @@
 use anyhow::Result;
-use harfrust::{Direction, Feature, ShaperData, UnicodeBuffer};
+use harfrust::{Direction, Feature, Script, ShaperData, UnicodeBuffer};
 use skrifa::raw::TableProvider;
 
 use crate::font::{Font, select_font};
@@ -40,6 +40,7 @@ pub struct ShapedRun<'a> {
 #[derive(Debug, Clone)]
 pub struct ShapingOptions<'a> {
     pub direction: Direction,
+    pub script: Option<Script>,
     pub font_size: f32,
     pub features: &'a [Feature],
 }
@@ -67,6 +68,9 @@ impl TextShaper {
         let mut buffer = UnicodeBuffer::new();
         buffer.push_str(text);
         buffer.set_direction(options.direction);
+        if let Some(script) = options.script {
+            buffer.set_script(script);
+        }
         buffer.guess_segment_properties();
 
         let shaper_data = ShaperData::new(&font_ref);
@@ -263,6 +267,7 @@ mod tests {
         let shaper = TextShaper::new();
         let opts = ShapingOptions {
             direction: harfrust::Direction::LeftToRight,
+            script: None,
             font_size: 16.0,
             features: &[],
         };

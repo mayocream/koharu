@@ -67,7 +67,7 @@ export function MenuBar() {
   const buildPipelineRequest = (documentId?: string): PipelineJobRequest => {
     const { selectedTarget, selectedLanguage, renderEffect, renderStroke } =
       useEditorUiStore.getState()
-    const { customSystemPrompt } = usePreferencesStore.getState()
+    const { customSystemPrompt, defaultFont } = usePreferencesStore.getState()
     return {
       documentId,
       llm: selectedTarget ? { target: selectedTarget } : undefined,
@@ -75,6 +75,7 @@ export function MenuBar() {
       systemPrompt: customSystemPrompt,
       shaderEffect: renderEffect,
       shaderStroke: renderStroke,
+      defaultFont,
     }
   }
 

@@ -8,6 +8,7 @@ const PROVIDER_TRANSLATION_KEYS: Record<string, string> = {
   gemini: 'providers.gemini',
   claude: 'providers.claude',
   deepseek: 'providers.deepseek',
+  caiyun: 'providers.caiyun',
 }
 
 export const normalizeProviderId = (provider?: string | null) => {
@@ -29,6 +30,8 @@ export const normalizeProviderId = (provider?: string | null) => {
       return 'claude'
     case 'deepseek':
       return 'deepseek'
+    case 'caiyun':
+      return 'caiyun'
     default:
       return normalized
   }

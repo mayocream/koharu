@@ -1,5 +1,5 @@
-use harfrust::Direction;
-use icu::properties::{CodePointMapData, props::Script};
+use harfrust::{Direction, Script, Tag};
+use icu::properties::{CodePointMapData, props::Script as IcuScript};
 use koharu_core::TextBlock;
 
 use crate::layout::WritingMode;
@@ -18,11 +18,11 @@ pub fn writing_mode_for_block(text_block: &TextBlock) -> WritingMode {
 }
 
 pub fn is_latin_only(text: &str) -> bool {
-    let script_map = CodePointMapData::<Script>::new();
+    let script_map = CodePointMapData::<IcuScript>::new();
     text.chars().all(|c| {
         matches!(
             script_map.get(c),
-            Script::Latin | Script::Common | Script::Inherited
+            IcuScript::Latin | IcuScript::Common | IcuScript::Inherited
         )
     })
 }
@@ -37,56 +37,87 @@ pub fn normalize_translation_for_layout(text: &str) -> String {
 
 pub(crate) struct ScriptFlags {
     pub has_cjk: bool,
-    pub has_arabic: bool,
+    pub rtl_script: Option<IcuScript>,
     pub has_thai: bool,
 }
 
 pub(crate) fn detect_scripts(text: &str) -> ScriptFlags {
-    let script_map = CodePointMapData::<Script>::new();
-    let (mut has_cjk, mut has_arabic, mut has_thai) = (false, false, false);
+    let script_map = CodePointMapData::<IcuScript>::new();
+    let (mut has_cjk, mut rtl_script, mut has_thai) = (false, None, false);
     for c in text.chars() {
         match script_map.get(c) {
-            Script::Han
-            | Script::Hiragana
-            | Script::Katakana
-            | Script::Hangul
-            | Script::Bopomofo => has_cjk = true,
-            Script::Arabic
-            | Script::Hebrew
-            | Script::Syriac
-            | Script::Thaana
-            | Script::Nko
-            | Script::Adlam => has_arabic = true,
-            Script::Thai | Script::Lao | Script::Khmer | Script::Myanmar => has_thai = true,
+            IcuScript::Han
+            | IcuScript::Hiragana
+            | IcuScript::Katakana
+            | IcuScript::Hangul
+            | IcuScript::Bopomofo => has_cjk = true,
+            IcuScript::Arabic
+            | IcuScript::Hebrew
+            | IcuScript::Syriac
+            | IcuScript::Thaana
+            | IcuScript::Nko
+            | IcuScript::Adlam => {
+                if rtl_script.is_none() {
+                    rtl_script = Some(script_map.get(c));
+                }
+            }
+            IcuScript::Thai | IcuScript::Lao | IcuScript::Khmer | IcuScript::Myanmar => {
+                has_thai = true
+            }
             _ => {}
         }
-        if has_cjk && has_arabic && has_thai {
+        if has_cjk && rtl_script.is_some() && has_thai {
             break;
         }
     }
     ScriptFlags {
         has_cjk,
-        has_arabic,
+        rtl_script,
         has_thai,
     }
 }
 
-pub fn shaping_direction_for_text(text: &str, writing_mode: WritingMode) -> Direction {
+pub fn shaping_direction_for_text(
+    text: &str,
+    writing_mode: WritingMode,
+) -> (Direction, Option<Script>) {
     if writing_mode.is_vertical() {
-        return Direction::TopToBottom;
+        return (Direction::TopToBottom, None);
     }
 
-    if detect_scripts(text).has_arabic {
-        Direction::RightToLeft
+    let flags = detect_scripts(text);
+    if let Some(rtl) = flags.rtl_script {
+        let tag = match rtl {
+            IcuScript::Hebrew => b"Hebr",
+            IcuScript::Syriac => b"Syrc",
+            IcuScript::Thaana => b"Thaa",
+            IcuScript::Nko => b"Nkoo",
+            IcuScript::Adlam => b"Adlm",
+            _ => b"Arab",
+        };
+        (
+            Direction::RightToLeft,
+            Script::from_iso15924_tag(Tag::new(tag)),
+        )
+    } else if flags.has_thai {
+        (
+            Direction::LeftToRight,
+            Script::from_iso15924_tag(Tag::new(b"Thai")),
+        )
+    } else if flags.has_cjk {
+        (
+            Direction::LeftToRight,
+            Script::from_iso15924_tag(Tag::new(b"Hani")),
+        )
     } else {
-        Direction::LeftToRight
+        (Direction::LeftToRight, None)
     }
 }
 
 pub fn font_families_for_text(text: &str) -> Vec<String> {
     let ScriptFlags {
         has_cjk,
-        has_arabic,
+        rtl_script,
         has_thai,
     } = detect_scripts(text);
 
@@ -103,7 +134,7 @@ pub fn font_families_for_text(text: &str) -> Vec<String> {
         {
             &["Noto Sans CJK SC"]
         }
-    } else if has_arabic {
+    } else if rtl_script.is_some() {
         #[cfg(target_os = "windows")]
         {
             &["Segoe UI"]
@@ -169,11 +200,11 @@ pub fn font_families_for_text(text: &str) -> Vec<String> {
 }
 
 fn is_cjk_text(text: &str) -> bool {
-    let script_map = CodePointMapData::<Script>::new();
+    let script_map = CodePointMapData::<IcuScript>::new();
     text.chars().any(|c| {
         matches!(
             script_map.get(c),
-            Script::Han | Script::Hiragana | Script::Katakana | Script::Bopomofo
+            IcuScript::Han | IcuScript::Hiragana | IcuScript::Katakana | IcuScript::Bopomofo
         )
     })
 }
@@ -237,17 +268,29 @@ mod tests {
 
     #[test]
     fn arabic_text_uses_rtl_shaping() {
-        assert_eq!(
-            shaping_direction_for_text("مرحبا", WritingMode::Horizontal),
-            harfrust::Direction::RightToLeft
-        );
+        let (dir, script) = shaping_direction_for_text("مرحبا", WritingMode::Horizontal);
+        assert_eq!(dir, harfrust::Direction::RightToLeft);
+        assert_eq!(script.unwrap().tag(), harfrust::Tag::new(b"Arab"));
+    }
+
+    #[test]
+    fn hebrew_text_uses_rtl_shaping_with_correct_tag() {
+        let (dir, script) = shaping_direction_for_text("שלום", WritingMode::Horizontal);
+        assert_eq!(dir, harfrust::Direction::RightToLeft);
+        assert_eq!(script.unwrap().tag(), harfrust::Tag::new(b"Hebr"));
+    }
+
+    #[test]
+    fn syriac_text_uses_rtl_shaping_with_correct_tag() {
+        let (dir, script) = shaping_direction_for_text("ܐܒܓܕ", WritingMode::Horizontal);
+        assert_eq!(dir, harfrust::Direction::RightToLeft);
+        assert_eq!(script.unwrap().tag(), harfrust::Tag::new(b"Syrc"));
     }
 
     #[test]
     fn latin_text_stays_ltr_shaping() {
-        assert_eq!(
-            shaping_direction_for_text("HELLO", WritingMode::Horizontal),
-            harfrust::Direction::LeftToRight
-        );
+        let (dir, script) = shaping_direction_for_text("HELLO", WritingMode::Horizontal);
+        assert_eq!(dir, harfrust::Direction::LeftToRight);
+        assert!(script.is_none());
     }
 }

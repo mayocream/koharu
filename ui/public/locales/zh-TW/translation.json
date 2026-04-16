@@ -232,6 +232,7 @@
     "gemini": "Gemini",
     "claude": "Claude",
     "deepseek": "DeepSeek",
+    "caiyun": "彩雲",
     "unknown": "提供者"
   },
   "bootstrap": {
