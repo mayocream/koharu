@@ -2,11 +2,8 @@
 
 import type { CSSProperties } from 'react'
 import { useCallback, useEffect, useRef, useState } from 'react'
-import {
-  cancelObjectUrlRevoke,
-  convertToBlob,
-  revokeObjectUrlLater,
-} from '@/lib/util'
+
+import { cancelObjectUrlRevoke, convertToBlob, revokeObjectUrlLater } from '@/lib/util'
 
 type ImageProps = {
   data?: Uint8Array
@@ -213,10 +210,7 @@ export function Image({
           style={{
             ...baseStyle,
             opacity: nextSrc ? (crossfade ? 0 : opacity) : opacity,
-            transition:
-              nextSrc && crossfade
-                ? `opacity ${FADE_DURATION_MS}ms ease`
-                : undefined,
+            transition: nextSrc && crossfade ? `opacity ${FADE_DURATION_MS}ms ease` : undefined,
           }}
         />
       )}

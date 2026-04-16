@@ -1,10 +1,7 @@
 'use client'
 
 type ProgressTarget = {
-  setProgressBar: (options: {
-    status?: ProgressBarStatus
-    progress?: number
-  }) => Promise<void>
+  setProgressBar: (options: { status?: ProgressBarStatus; progress?: number }) => Promise<void>
 }
 
 export enum ProgressBarStatus {

@@ -2332,13 +2332,7 @@
       },
       "JobStatus": {
         "type": "string",
-        "enum": [
-          "running",
-          "completed",
-          "completed_with_errors",
-          "cancelled",
-          "failed"
-        ]
+        "enum": ["running", "completed", "completed_with_errors", "cancelled", "failed"]
       },
       "LlmCatalog": {
         "type": "object",
@@ -2737,9 +2731,7 @@
       },
       "ReorderRequest": {
         "type": "object",
-        "required": [
-          "ids"
-        ],
+        "required": ["ids"],
         "properties": {
           "ids": {
             "type": "array",

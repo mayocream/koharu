@@ -2,12 +2,9 @@
 
 import { useRef, useState, useCallback, useEffect } from 'react'
 import { HexColorInput, HexColorPicker } from 'react-colorful'
+
 import { Button } from '@/components/ui/button'
-import {
-  Popover,
-  PopoverContent,
-  PopoverTrigger,
-} from '@/components/ui/popover'
+import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover'
 import { cn } from '@/lib/utils'
 
 type ColorPickerProps = {
@@ -60,8 +57,7 @@ export function ColorPicker({
   }, [localColor, onChange])
 
   const canUseEyeDropper =
-    typeof window !== 'undefined' &&
-    typeof (window as EyeDropperWindow).EyeDropper === 'function'
+    typeof window !== 'undefined' && typeof (window as EyeDropperWindow).EyeDropper === 'function'
 
   const handlePickFromScreen = async () => {
     const EyeDropperCtor = (window as EyeDropperWindow).EyeDropper
@@ -87,7 +83,7 @@ export function ColorPicker({
           data-testid={triggerTestId}
           disabled={disabled}
           className={cn(
-            'border-input hover:border-border flex h-7 w-7 cursor-pointer items-center justify-center rounded-md border transition disabled:cursor-not-allowed disabled:opacity-50',
+            'flex h-7 w-7 cursor-pointer items-center justify-center rounded-md border border-input transition hover:border-border disabled:cursor-not-allowed disabled:opacity-50',
             className,
           )}
         >
@@ -120,7 +116,7 @@ export function ColorPicker({
               spellCheck={false}
               disabled={disabled}
               aria-label='Hex color code'
-              className='border-input bg-background focus-visible:border-ring focus-visible:ring-ring/50 h-8 min-w-0 flex-1 rounded-md border px-2 font-mono text-xs uppercase shadow-xs transition outline-none focus-visible:ring-[3px]'
+              className='h-8 min-w-0 flex-1 rounded-md border border-input bg-background px-2 font-mono text-xs uppercase shadow-xs transition outline-none focus-visible:border-ring focus-visible:ring-[3px] focus-visible:ring-ring/50'
               onChange={(color) => {
                 const normalized = normalizeHex(color)
                 setLocalColor(normalized)

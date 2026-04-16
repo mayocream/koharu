@@ -11,14 +11,13 @@ import type {
   UseMutationResult,
 } from '@tanstack/react-query'
 
+import { fetchApi } from '.././fetch'
 import type {
   ApiError,
   BrushRegionRequest,
   InpaintRegionRequest,
   MaskRegionRequest,
 } from '../schemas'
-
-import { fetchApi } from '.././fetch'
 
 type SecondParameter<T extends (...args: never) => unknown> = Parameters<T>[1]
 
@@ -58,9 +57,7 @@ export const getUpdateBrushLayerMutationOptions = <
 > => {
   const mutationKey = ['updateBrushLayer']
   const { mutation: mutationOptions, request: requestOptions } = options
-    ? options.mutation &&
-      'mutationKey' in options.mutation &&
-      options.mutation.mutationKey
+    ? options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey
       ? options
       : { ...options, mutation: { ...options.mutation, mutationKey } }
     : { mutation: { mutationKey }, request: undefined }
@@ -119,10 +116,7 @@ export const inpaintRegion = async (
   })
 }
 
-export const getInpaintRegionMutationOptions = <
-  TError = ApiError,
-  TContext = unknown,
->(options?: {
+export const getInpaintRegionMutationOptions = <TError = ApiError, TContext = unknown>(options?: {
   mutation?: UseMutationOptions<
     Awaited<ReturnType<typeof inpaintRegion>>,
     TError,
@@ -138,9 +132,7 @@ export const getInpaintRegionMutationOptions = <
 > => {
   const mutationKey = ['inpaintRegion']
   const { mutation: mutationOptions, request: requestOptions } = options
-    ? options.mutation &&
-      'mutationKey' in options.mutation &&
-      options.mutation.mutationKey
+    ? options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey
       ? options
       : { ...options, mutation: { ...options.mutation, mutationKey } }
     : { mutation: { mutationKey }, request: undefined }
@@ -157,9 +149,7 @@ export const getInpaintRegionMutationOptions = <
   return { mutationFn, ...mutationOptions }
 }
 
-export type InpaintRegionMutationResult = NonNullable<
-  Awaited<ReturnType<typeof inpaintRegion>>
->
+export type InpaintRegionMutationResult = NonNullable<Awaited<ReturnType<typeof inpaintRegion>>>
 export type InpaintRegionMutationBody = InpaintRegionRequest
 export type InpaintRegionMutationError = ApiError
 
@@ -199,10 +189,7 @@ export const updateMask = async (
   })
 }
 
-export const getUpdateMaskMutationOptions = <
-  TError = ApiError,
-  TContext = unknown,
->(options?: {
+export const getUpdateMaskMutationOptions = <TError = ApiError, TContext = unknown>(options?: {
   mutation?: UseMutationOptions<
     Awaited<ReturnType<typeof updateMask>>,
     TError,
@@ -218,9 +205,7 @@ export const getUpdateMaskMutationOptions = <
 > => {
   const mutationKey = ['updateMask']
   const { mutation: mutationOptions, request: requestOptions } = options
-    ? options.mutation &&
-      'mutationKey' in options.mutation &&
-      options.mutation.mutationKey
+    ? options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey
       ? options
       : { ...options, mutation: { ...options.mutation, mutationKey } }
     : { mutation: { mutationKey }, request: undefined }
@@ -237,9 +222,7 @@ export const getUpdateMaskMutationOptions = <
   return { mutationFn, ...mutationOptions }
 }
 
-export type UpdateMaskMutationResult = NonNullable<
-  Awaited<ReturnType<typeof updateMask>>
->
+export type UpdateMaskMutationResult = NonNullable<Awaited<ReturnType<typeof updateMask>>>
 export type UpdateMaskMutationBody = MaskRegionRequest
 export type UpdateMaskMutationError = ApiError
 

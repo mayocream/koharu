@@ -2,6 +2,7 @@
 
 import { useEffect, useRef, useMemo } from 'react'
 import type React from 'react'
+
 import { usePreferencesStore } from '@/lib/stores/preferencesStore'
 
 export function useBrushCursor(

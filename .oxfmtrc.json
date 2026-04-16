@@ -1,0 +1,22 @@
+{
+  "$schema": "./node_modules/oxfmt/configuration_schema.json",
+  "semi": false,
+  "singleQuote": true,
+  "jsxSingleQuote": true,
+  "sortImports": {
+    "internalPattern": ["@/"],
+    "newlinesBetween": true,
+    "groups": [
+      "builtin",
+      "external",
+      "internal",
+      ["parent", "sibling", "index"],
+      "style",
+      "unknown"
+    ]
+  },
+  "sortTailwindcss": {
+    "stylesheet": "ui/app/globals.css",
+    "functions": ["cn", "clsx", "cva", "tw"]
+  }
+}

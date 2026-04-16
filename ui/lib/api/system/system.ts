@@ -19,6 +19,7 @@ import type {
   UseQueryResult,
 } from '@tanstack/react-query'
 
+import { fetchApi } from '.././fetch'
 import type {
   ApiError,
   FontFaceInfo,
@@ -30,17 +31,13 @@ import type {
   UpdateConfigBody,
 } from '../schemas'
 
-import { fetchApi } from '.././fetch'
-
 type SecondParameter<T extends (...args: never) => unknown> = Parameters<T>[1]
 
 export const getGetConfigUrl = () => {
   return `/api/v1/config`
 }
 
-export const getConfig = async (
-  options?: RequestInit,
-): Promise<GetConfig200> => {
+export const getConfig = async (options?: RequestInit): Promise<GetConfig200> => {
   return fetchApi<GetConfig200>(getGetConfigUrl(), {
     ...options,
     method: 'GET',
@@ -55,18 +52,15 @@ export const getGetConfigQueryOptions = <
   TData = Awaited<ReturnType<typeof getConfig>>,
   TError = ApiError,
 >(options?: {
-  query?: Partial<
-    UseQueryOptions<Awaited<ReturnType<typeof getConfig>>, TError, TData>
-  >
+  query?: Partial<UseQueryOptions<Awaited<ReturnType<typeof getConfig>>, TError, TData>>
   request?: SecondParameter<typeof fetchApi>
 }) => {
   const { query: queryOptions, request: requestOptions } = options ?? {}
 
   const queryKey = queryOptions?.queryKey ?? getGetConfigQueryKey()
 
-  const queryFn: QueryFunction<Awaited<ReturnType<typeof getConfig>>> = ({
-    signal,
-  }) => getConfig({ signal, ...requestOptions })
+  const queryFn: QueryFunction<Awaited<ReturnType<typeof getConfig>>> = ({ signal }) =>
+    getConfig({ signal, ...requestOptions })
 
   return {
     queryKey,
@@ -79,19 +73,12 @@ export const getGetConfigQueryOptions = <
   }
 }
 
-export type GetConfigQueryResult = NonNullable<
-  Awaited<ReturnType<typeof getConfig>>
->
+export type GetConfigQueryResult = NonNullable<Awaited<ReturnType<typeof getConfig>>>
 export type GetConfigQueryError = ApiError
 
-export function useGetConfig<
-  TData = Awaited<ReturnType<typeof getConfig>>,
-  TError = ApiError,
->(
+export function useGetConfig<TData = Awaited<ReturnType<typeof getConfig>>, TError = ApiError>(
   options: {
-    query: Partial<
-      UseQueryOptions<Awaited<ReturnType<typeof getConfig>>, TError, TData>
-    > &
+    query: Partial<UseQueryOptions<Awaited<ReturnType<typeof getConfig>>, TError, TData>> &
       Pick<
         DefinedInitialDataOptions<
           Awaited<ReturnType<typeof getConfig>>,
@@ -106,14 +93,9 @@ export function useGetConfig<
 ): DefinedUseQueryResult<TData, TError> & {
   queryKey: DataTag<QueryKey, TData, TError>
 }
-export function useGetConfig<
-  TData = Awaited<ReturnType<typeof getConfig>>,
-  TError = ApiError,
->(
+export function useGetConfig<TData = Awaited<ReturnType<typeof getConfig>>, TError = ApiError>(
   options?: {
-    query?: Partial<
-      UseQueryOptions<Awaited<ReturnType<typeof getConfig>>, TError, TData>
-    > &
+    query?: Partial<UseQueryOptions<Awaited<ReturnType<typeof getConfig>>, TError, TData>> &
       Pick<
         UndefinedInitialDataOptions<
           Awaited<ReturnType<typeof getConfig>>,
@@ -128,14 +110,9 @@ export function useGetConfig<
 ): UseQueryResult<TData, TError> & {
   queryKey: DataTag<QueryKey, TData, TError>
 }
-export function useGetConfig<
-  TData = Awaited<ReturnType<typeof getConfig>>,
-  TError = ApiError,
->(
+export function useGetConfig<TData = Awaited<ReturnType<typeof getConfig>>, TError = ApiError>(
   options?: {
-    query?: Partial<
-      UseQueryOptions<Awaited<ReturnType<typeof getConfig>>, TError, TData>
-    >
+    query?: Partial<UseQueryOptions<Awaited<ReturnType<typeof getConfig>>, TError, TData>>
     request?: SecondParameter<typeof fetchApi>
   },
   queryClient?: QueryClient,
@@ -143,14 +120,9 @@ export function useGetConfig<
   queryKey: DataTag<QueryKey, TData, TError>
 }
 
-export function useGetConfig<
-  TData = Awaited<ReturnType<typeof getConfig>>,
-  TError = ApiError,
->(
+export function useGetConfig<TData = Awaited<ReturnType<typeof getConfig>>, TError = ApiError>(
   options?: {
-    query?: Partial<
-      UseQueryOptions<Awaited<ReturnType<typeof getConfig>>, TError, TData>
-    >
+    query?: Partial<UseQueryOptions<Awaited<ReturnType<typeof getConfig>>, TError, TData>>
     request?: SecondParameter<typeof fetchApi>
   },
   queryClient?: QueryClient,
@@ -159,10 +131,9 @@ export function useGetConfig<
 } {
   const queryOptions = getGetConfigQueryOptions(options)
 
-  const query = useQuery(queryOptions, queryClient) as UseQueryResult<
-    TData,
-    TError
-  > & { queryKey: DataTag<QueryKey, TData, TError> }
+  const query = useQuery(queryOptions, queryClient) as UseQueryResult<TData, TError> & {
+    queryKey: DataTag<QueryKey, TData, TError>
+  }
 
   return { ...query, queryKey: queryOptions.queryKey }
 }
@@ -183,10 +154,7 @@ export const updateConfig = async (
   })
 }
 
-export const getUpdateConfigMutationOptions = <
-  TError = ApiError,
-  TContext = unknown,
->(options?: {
+export const getUpdateConfigMutationOptions = <TError = ApiError, TContext = unknown>(options?: {
   mutation?: UseMutationOptions<
     Awaited<ReturnType<typeof updateConfig>>,
     TError,
@@ -202,9 +170,7 @@ export const getUpdateConfigMutationOptions = <
 > => {
   const mutationKey = ['updateConfig']
   const { mutation: mutationOptions, request: requestOptions } = options
-    ? options.mutation &&
-      'mutationKey' in options.mutation &&
-      options.mutation.mutationKey
+    ? options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey
       ? options
       : { ...options, mutation: { ...options.mutation, mutationKey } }
     : { mutation: { mutationKey }, request: undefined }
@@ -221,9 +187,7 @@ export const getUpdateConfigMutationOptions = <
   return { mutationFn, ...mutationOptions }
 }
 
-export type UpdateConfigMutationResult = NonNullable<
-  Awaited<ReturnType<typeof updateConfig>>
->
+export type UpdateConfigMutationResult = NonNullable<Awaited<ReturnType<typeof updateConfig>>>
 export type UpdateConfigMutationBody = UpdateConfigBody
 export type UpdateConfigMutationError = ApiError
 
@@ -250,9 +214,7 @@ export const getGetEngineCatalogUrl = () => {
   return `/api/v1/engines`
 }
 
-export const getEngineCatalog = async (
-  options?: RequestInit,
-): Promise<GetEngineCatalog200> => {
+export const getEngineCatalog = async (options?: RequestInit): Promise<GetEngineCatalog200> => {
   return fetchApi<GetEngineCatalog200>(getGetEngineCatalogUrl(), {
     ...options,
     method: 'GET',
@@ -267,18 +229,15 @@ export const getGetEngineCatalogQueryOptions = <
   TData = Awaited<ReturnType<typeof getEngineCatalog>>,
   TError = unknown,
 >(options?: {
-  query?: Partial<
-    UseQueryOptions<Awaited<ReturnType<typeof getEngineCatalog>>, TError, TData>
-  >
+  query?: Partial<UseQueryOptions<Awaited<ReturnType<typeof getEngineCatalog>>, TError, TData>>
   request?: SecondParameter<typeof fetchApi>
 }) => {
   const { query: queryOptions, request: requestOptions } = options ?? {}
 
   const queryKey = queryOptions?.queryKey ?? getGetEngineCatalogQueryKey()
 
-  const queryFn: QueryFunction<
-    Awaited<ReturnType<typeof getEngineCatalog>>
-  > = ({ signal }) => getEngineCatalog({ signal, ...requestOptions })
+  const queryFn: QueryFunction<Awaited<ReturnType<typeof getEngineCatalog>>> = ({ signal }) =>
+    getEngineCatalog({ signal, ...requestOptions })
 
   return {
     queryKey,
@@ -286,16 +245,12 @@ export const getGetEngineCatalogQueryOptions = <
     gcTime: 300000,
     retry: 1,
     ...queryOptions,
-  } as UseQueryOptions<
-    Awaited<ReturnType<typeof getEngineCatalog>>,
-    TError,
-    TData
-  > & { queryKey: DataTag<QueryKey, TData, TError> }
+  } as UseQueryOptions<Awaited<ReturnType<typeof getEngineCatalog>>, TError, TData> & {
+    queryKey: DataTag<QueryKey, TData, TError>
+  }
 }
 
-export type GetEngineCatalogQueryResult = NonNullable<
-  Awaited<ReturnType<typeof getEngineCatalog>>
->
+export type GetEngineCatalogQueryResult = NonNullable<Awaited<ReturnType<typeof getEngineCatalog>>>
 export type GetEngineCatalogQueryError = unknown
 
 export function useGetEngineCatalog<
@@ -303,13 +258,7 @@ export function useGetEngineCatalog<
   TError = unknown,
 >(
   options: {
-    query: Partial<
-      UseQueryOptions<
-        Awaited<ReturnType<typeof getEngineCatalog>>,
-        TError,
-        TData
-      >
-    > &
+    query: Partial<UseQueryOptions<Awaited<ReturnType<typeof getEngineCatalog>>, TError, TData>> &
       Pick<
         DefinedInitialDataOptions<
           Awaited<ReturnType<typeof getEngineCatalog>>,
@@ -329,13 +278,7 @@ export function useGetEngineCatalog<
   TError = unknown,
 >(
   options?: {
-    query?: Partial<
-      UseQueryOptions<
-        Awaited<ReturnType<typeof getEngineCatalog>>,
-        TError,
-        TData
-      >
-    > &
+    query?: Partial<UseQueryOptions<Awaited<ReturnType<typeof getEngineCatalog>>, TError, TData>> &
       Pick<
         UndefinedInitialDataOptions<
           Awaited<ReturnType<typeof getEngineCatalog>>,
@@ -355,13 +298,7 @@ export function useGetEngineCatalog<
   TError = unknown,
 >(
   options?: {
-    query?: Partial<
-      UseQueryOptions<
-        Awaited<ReturnType<typeof getEngineCatalog>>,
-        TError,
-        TData
-      >
-    >
+    query?: Partial<UseQueryOptions<Awaited<ReturnType<typeof getEngineCatalog>>, TError, TData>>
     request?: SecondParameter<typeof fetchApi>
   },
   queryClient?: QueryClient,
@@ -374,13 +311,7 @@ export function useGetEngineCatalog<
   TError = unknown,
 >(
   options?: {
-    query?: Partial<
-      UseQueryOptions<
-        Awaited<ReturnType<typeof getEngineCatalog>>,
-        TError,
-        TData
-      >
-    >
+    query?: Partial<UseQueryOptions<Awaited<ReturnType<typeof getEngineCatalog>>, TError, TData>>
     request?: SecondParameter<typeof fetchApi>
   },
   queryClient?: QueryClient,
@@ -389,10 +320,9 @@ export function useGetEngineCatalog<
 } {
   const queryOptions = getGetEngineCatalogQueryOptions(options)
 
-  const query = useQuery(queryOptions, queryClient) as UseQueryResult<
-    TData,
-    TError
-  > & { queryKey: DataTag<QueryKey, TData, TError> }
+  const query = useQuery(queryOptions, queryClient) as UseQueryResult<TData, TError> & {
+    queryKey: DataTag<QueryKey, TData, TError>
+  }
 
   return { ...query, queryKey: queryOptions.queryKey }
 }
@@ -401,9 +331,7 @@ export const getListFontsUrl = () => {
   return `/api/v1/fonts`
 }
 
-export const listFonts = async (
-  options?: RequestInit,
-): Promise<FontFaceInfo[]> => {
+export const listFonts = async (options?: RequestInit): Promise<FontFaceInfo[]> => {
   return fetchApi<FontFaceInfo[]>(getListFontsUrl(), {
     ...options,
     method: 'GET',
@@ -418,18 +346,15 @@ export const getListFontsQueryOptions = <
   TData = Awaited<ReturnType<typeof listFonts>>,
   TError = ApiError,
 >(options?: {
-  query?: Partial<
-    UseQueryOptions<Awaited<ReturnType<typeof listFonts>>, TError, TData>
-  >
+  query?: Partial<UseQueryOptions<Awaited<ReturnType<typeof listFonts>>, TError, TData>>
   request?: SecondParameter<typeof fetchApi>
 }) => {
   const { query: queryOptions, request: requestOptions } = options ?? {}
 
   const queryKey = queryOptions?.queryKey ?? getListFontsQueryKey()
 
-  const queryFn: QueryFunction<Awaited<ReturnType<typeof listFonts>>> = ({
-    signal,
-  }) => listFonts({ signal, ...requestOptions })
+  const queryFn: QueryFunction<Awaited<ReturnType<typeof listFonts>>> = ({ signal }) =>
+    listFonts({ signal, ...requestOptions })
 
   return {
     queryKey,
@@ -442,19 +367,12 @@ export const getListFontsQueryOptions = <
   }
 }
 
-export type ListFontsQueryResult = NonNullable<
-  Awaited<ReturnType<typeof listFonts>>
->
+export type ListFontsQueryResult = NonNullable<Awaited<ReturnType<typeof listFonts>>>
 export type ListFontsQueryError = ApiError
 
-export function useListFonts<
-  TData = Awaited<ReturnType<typeof listFonts>>,
-  TError = ApiError,
->(
+export function useListFonts<TData = Awaited<ReturnType<typeof listFonts>>, TError = ApiError>(
   options: {
-    query: Partial<
-      UseQueryOptions<Awaited<ReturnType<typeof listFonts>>, TError, TData>
-    > &
+    query: Partial<UseQueryOptions<Awaited<ReturnType<typeof listFonts>>, TError, TData>> &
       Pick<
         DefinedInitialDataOptions<
           Awaited<ReturnType<typeof listFonts>>,
@@ -469,14 +387,9 @@ export function useListFonts<
 ): DefinedUseQueryResult<TData, TError> & {
   queryKey: DataTag<QueryKey, TData, TError>
 }
-export function useListFonts<
-  TData = Awaited<ReturnType<typeof listFonts>>,
-  TError = ApiError,
->(
+export function useListFonts<TData = Awaited<ReturnType<typeof listFonts>>, TError = ApiError>(
   options?: {
-    query?: Partial<
-      UseQueryOptions<Awaited<ReturnType<typeof listFonts>>, TError, TData>
-    > &
+    query?: Partial<UseQueryOptions<Awaited<ReturnType<typeof listFonts>>, TError, TData>> &
       Pick<
         UndefinedInitialDataOptions<
           Awaited<ReturnType<typeof listFonts>>,
@@ -491,14 +404,9 @@ export function useListFonts<
 ): UseQueryResult<TData, TError> & {
   queryKey: DataTag<QueryKey, TData, TError>
 }
-export function useListFonts<
-  TData = Awaited<ReturnType<typeof listFonts>>,
-  TError = ApiError,
->(
+export function useListFonts<TData = Awaited<ReturnType<typeof listFonts>>, TError = ApiError>(
   options?: {
-    query?: Partial<
-      UseQueryOptions<Awaited<ReturnType<typeof listFonts>>, TError, TData>
-    >
+    query?: Partial<UseQueryOptions<Awaited<ReturnType<typeof listFonts>>, TError, TData>>
     request?: SecondParameter<typeof fetchApi>
   },
   queryClient?: QueryClient,
@@ -506,14 +414,9 @@ export function useListFonts<
   queryKey: DataTag<QueryKey, TData, TError>
 }
 
-export function useListFonts<
-  TData = Awaited<ReturnType<typeof listFonts>>,
-  TError = ApiError,
->(
+export function useListFonts<TData = Awaited<ReturnType<typeof listFonts>>, TError = ApiError>(
   options?: {
-    query?: Partial<
-      UseQueryOptions<Awaited<ReturnType<typeof listFonts>>, TError, TData>
-    >
+    query?: Partial<UseQueryOptions<Awaited<ReturnType<typeof listFonts>>, TError, TData>>
     request?: SecondParameter<typeof fetchApi>
   },
   queryClient?: QueryClient,
@@ -522,10 +425,9 @@ export function useListFonts<
 } {
   const queryOptions = getListFontsQueryOptions(options)
 
-  const query = useQuery(queryOptions, queryClient) as UseQueryResult<
-    TData,
-    TError
-  > & { queryKey: DataTag<QueryKey, TData, TError> }
+  const query = useQuery(queryOptions, queryClient) as UseQueryResult<TData, TError> & {
+    queryKey: DataTag<QueryKey, TData, TError>
+  }
 
   return { ...query, queryKey: queryOptions.queryKey }
 }
@@ -551,22 +453,15 @@ export const getGetGoogleFontsCatalogQueryOptions = <
   TData = Awaited<ReturnType<typeof getGoogleFontsCatalog>>,
   TError = ApiError,
 >(options?: {
-  query?: Partial<
-    UseQueryOptions<
-      Awaited<ReturnType<typeof getGoogleFontsCatalog>>,
-      TError,
-      TData
-    >
-  >
+  query?: Partial<UseQueryOptions<Awaited<ReturnType<typeof getGoogleFontsCatalog>>, TError, TData>>
   request?: SecondParameter<typeof fetchApi>
 }) => {
   const { query: queryOptions, request: requestOptions } = options ?? {}
 
   const queryKey = queryOptions?.queryKey ?? getGetGoogleFontsCatalogQueryKey()
 
-  const queryFn: QueryFunction<
-    Awaited<ReturnType<typeof getGoogleFontsCatalog>>
-  > = ({ signal }) => getGoogleFontsCatalog({ signal, ...requestOptions })
+  const queryFn: QueryFunction<Awaited<ReturnType<typeof getGoogleFontsCatalog>>> = ({ signal }) =>
+    getGoogleFontsCatalog({ signal, ...requestOptions })
 
   return {
     queryKey,
@@ -574,11 +469,9 @@ export const getGetGoogleFontsCatalogQueryOptions = <
     gcTime: 300000,
     retry: 1,
     ...queryOptions,
-  } as UseQueryOptions<
-    Awaited<ReturnType<typeof getGoogleFontsCatalog>>,
-    TError,
-    TData
-  > & { queryKey: DataTag<QueryKey, TData, TError> }
+  } as UseQueryOptions<Awaited<ReturnType<typeof getGoogleFontsCatalog>>, TError, TData> & {
+    queryKey: DataTag<QueryKey, TData, TError>
+  }
 }
 
 export type GetGoogleFontsCatalogQueryResult = NonNullable<
@@ -592,11 +485,7 @@ export function useGetGoogleFontsCatalog<
 >(
   options: {
     query: Partial<
-      UseQueryOptions<
-        Awaited<ReturnType<typeof getGoogleFontsCatalog>>,
-        TError,
-        TData
-      >
+      UseQueryOptions<Awaited<ReturnType<typeof getGoogleFontsCatalog>>, TError, TData>
     > &
       Pick<
         DefinedInitialDataOptions<
@@ -618,11 +507,7 @@ export function useGetGoogleFontsCatalog<
 >(
   options?: {
     query?: Partial<
-      UseQueryOptions<
-        Awaited<ReturnType<typeof getGoogleFontsCatalog>>,
-        TError,
-        TData
-      >
+      UseQueryOptions<Awaited<ReturnType<typeof getGoogleFontsCatalog>>, TError, TData>
     > &
       Pick<
         UndefinedInitialDataOptions<
@@ -644,11 +529,7 @@ export function useGetGoogleFontsCatalog<
 >(
   options?: {
     query?: Partial<
-      UseQueryOptions<
-        Awaited<ReturnType<typeof getGoogleFontsCatalog>>,
-        TError,
-        TData
-      >
+      UseQueryOptions<Awaited<ReturnType<typeof getGoogleFontsCatalog>>, TError, TData>
     >
     request?: SecondParameter<typeof fetchApi>
   },
@@ -663,11 +544,7 @@ export function useGetGoogleFontsCatalog<
 >(
   options?: {
     query?: Partial<
-      UseQueryOptions<
-        Awaited<ReturnType<typeof getGoogleFontsCatalog>>,
-        TError,
-        TData
-      >
+      UseQueryOptions<Awaited<ReturnType<typeof getGoogleFontsCatalog>>, TError, TData>
     >
     request?: SecondParameter<typeof fetchApi>
   },
@@ -677,10 +554,9 @@ export function useGetGoogleFontsCatalog<
 } {
   const queryOptions = getGetGoogleFontsCatalogQueryOptions(options)
 
-  const query = useQuery(queryOptions, queryClient) as UseQueryResult<
-    TData,
-    TError
-  > & { queryKey: DataTag<QueryKey, TData, TError> }
+  const query = useQuery(queryOptions, queryClient) as UseQueryResult<TData, TError> & {
+    queryKey: DataTag<QueryKey, TData, TError>
+  }
 
   return { ...query, queryKey: queryOptions.queryKey }
 }
@@ -699,10 +575,7 @@ export const fetchGoogleFont = async (
   })
 }
 
-export const getFetchGoogleFontMutationOptions = <
-  TError = ApiError,
-  TContext = unknown,
->(options?: {
+export const getFetchGoogleFontMutationOptions = <TError = ApiError, TContext = unknown>(options?: {
   mutation?: UseMutationOptions<
     Awaited<ReturnType<typeof fetchGoogleFont>>,
     TError,
@@ -718,9 +591,7 @@ export const getFetchGoogleFontMutationOptions = <
 > => {
   const mutationKey = ['fetchGoogleFont']
   const { mutation: mutationOptions, request: requestOptions } = options
-    ? options.mutation &&
-      'mutationKey' in options.mutation &&
-      options.mutation.mutationKey
+    ? options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey
       ? options
       : { ...options, mutation: { ...options.mutation, mutationKey } }
     : { mutation: { mutationKey }, request: undefined }
@@ -737,9 +608,7 @@ export const getFetchGoogleFontMutationOptions = <
   return { mutationFn, ...mutationOptions }
 }
 
-export type FetchGoogleFontMutationResult = NonNullable<
-  Awaited<ReturnType<typeof fetchGoogleFont>>
->
+export type FetchGoogleFontMutationResult = NonNullable<Awaited<ReturnType<typeof fetchGoogleFont>>>
 
 export type FetchGoogleFontMutationError = ApiError
 
@@ -766,10 +635,7 @@ export const getGetGoogleFontFileUrl = (family: string) => {
   return `/api/v1/fonts/google/${family}/file`
 }
 
-export const getGoogleFontFile = async (
-  family: string,
-  options?: RequestInit,
-): Promise<Blob> => {
+export const getGoogleFontFile = async (family: string, options?: RequestInit): Promise<Blob> => {
   return fetchApi<Blob>(getGetGoogleFontFileUrl(family), {
     ...options,
     method: 'GET',
@@ -786,24 +652,16 @@ export const getGetGoogleFontFileQueryOptions = <
 >(
   family: string,
   options?: {
-    query?: Partial<
-      UseQueryOptions<
-        Awaited<ReturnType<typeof getGoogleFontFile>>,
-        TError,
-        TData
-      >
-    >
+    query?: Partial<UseQueryOptions<Awaited<ReturnType<typeof getGoogleFontFile>>, TError, TData>>
     request?: SecondParameter<typeof fetchApi>
   },
 ) => {
   const { query: queryOptions, request: requestOptions } = options ?? {}
 
-  const queryKey =
-    queryOptions?.queryKey ?? getGetGoogleFontFileQueryKey(family)
+  const queryKey = queryOptions?.queryKey ?? getGetGoogleFontFileQueryKey(family)
 
-  const queryFn: QueryFunction<
-    Awaited<ReturnType<typeof getGoogleFontFile>>
-  > = ({ signal }) => getGoogleFontFile(family, { signal, ...requestOptions })
+  const queryFn: QueryFunction<Awaited<ReturnType<typeof getGoogleFontFile>>> = ({ signal }) =>
+    getGoogleFontFile(family, { signal, ...requestOptions })
 
   return {
     queryKey,
@@ -812,11 +670,9 @@ export const getGetGoogleFontFileQueryOptions = <
     gcTime: 300000,
     retry: 1,
     ...queryOptions,
-  } as UseQueryOptions<
-    Awaited<ReturnType<typeof getGoogleFontFile>>,
-    TError,
-    TData
-  > & { queryKey: DataTag<QueryKey, TData, TError> }
+  } as UseQueryOptions<Awaited<ReturnType<typeof getGoogleFontFile>>, TError, TData> & {
+    queryKey: DataTag<QueryKey, TData, TError>
+  }
 }
 
 export type GetGoogleFontFileQueryResult = NonNullable<
@@ -830,13 +686,7 @@ export function useGetGoogleFontFile<
 >(
   family: string,
   options: {
-    query: Partial<
-      UseQueryOptions<
-        Awaited<ReturnType<typeof getGoogleFontFile>>,
-        TError,
-        TData
-      >
-    > &
+    query: Partial<UseQueryOptions<Awaited<ReturnType<typeof getGoogleFontFile>>, TError, TData>> &
       Pick<
         DefinedInitialDataOptions<
           Awaited<ReturnType<typeof getGoogleFontFile>>,
@@ -857,13 +707,7 @@ export function useGetGoogleFontFile<
 >(
   family: string,
   options?: {
-    query?: Partial<
-      UseQueryOptions<
-        Awaited<ReturnType<typeof getGoogleFontFile>>,
-        TError,
-        TData
-      >
-    > &
+    query?: Partial<UseQueryOptions<Awaited<ReturnType<typeof getGoogleFontFile>>, TError, TData>> &
       Pick<
         UndefinedInitialDataOptions<
           Awaited<ReturnType<typeof getGoogleFontFile>>,
@@ -884,13 +728,7 @@ export function useGetGoogleFontFile<
 >(
   family: string,
   options?: {
-    query?: Partial<
-      UseQueryOptions<
-        Awaited<ReturnType<typeof getGoogleFontFile>>,
-        TError,
-        TData
-      >
-    >
+    query?: Partial<UseQueryOptions<Awaited<ReturnType<typeof getGoogleFontFile>>, TError, TData>>
     request?: SecondParameter<typeof fetchApi>
   },
   queryClient?: QueryClient,
@@ -904,13 +742,7 @@ export function useGetGoogleFontFile<
 >(
   family: string,
   options?: {
-    query?: Partial<
-      UseQueryOptions<
-        Awaited<ReturnType<typeof getGoogleFontFile>>,
-        TError,
-        TData
-      >
-    >
+    query?: Partial<UseQueryOptions<Awaited<ReturnType<typeof getGoogleFontFile>>, TError, TData>>
     request?: SecondParameter<typeof fetchApi>
   },
   queryClient?: QueryClient,
@@ -919,10 +751,9 @@ export function useGetGoogleFontFile<
 } {
   const queryOptions = getGetGoogleFontFileQueryOptions(family, options)
 
-  const query = useQuery(queryOptions, queryClient) as UseQueryResult<
-    TData,
-    TError
-  > & { queryKey: DataTag<QueryKey, TData, TError> }
+  const query = useQuery(queryOptions, queryClient) as UseQueryResult<TData, TError> & {
+    queryKey: DataTag<QueryKey, TData, TError>
+  }
 
   return { ...query, queryKey: queryOptions.queryKey }
 }
@@ -946,18 +777,15 @@ export const getGetMetaQueryOptions = <
   TData = Awaited<ReturnType<typeof getMeta>>,
   TError = ApiError,
 >(options?: {
-  query?: Partial<
-    UseQueryOptions<Awaited<ReturnType<typeof getMeta>>, TError, TData>
-  >
+  query?: Partial<UseQueryOptions<Awaited<ReturnType<typeof getMeta>>, TError, TData>>
   request?: SecondParameter<typeof fetchApi>
 }) => {
   const { query: queryOptions, request: requestOptions } = options ?? {}
 
   const queryKey = queryOptions?.queryKey ?? getGetMetaQueryKey()
 
-  const queryFn: QueryFunction<Awaited<ReturnType<typeof getMeta>>> = ({
-    signal,
-  }) => getMeta({ signal, ...requestOptions })
+  const queryFn: QueryFunction<Awaited<ReturnType<typeof getMeta>>> = ({ signal }) =>
+    getMeta({ signal, ...requestOptions })
 
   return {
     queryKey,
@@ -970,19 +798,12 @@ export const getGetMetaQueryOptions = <
   }
 }
 
-export type GetMetaQueryResult = NonNullable<
-  Awaited<ReturnType<typeof getMeta>>
->
+export type GetMetaQueryResult = NonNullable<Awaited<ReturnType<typeof getMeta>>>
 export type GetMetaQueryError = ApiError
 
-export function useGetMeta<
-  TData = Awaited<ReturnType<typeof getMeta>>,
-  TError = ApiError,
->(
+export function useGetMeta<TData = Awaited<ReturnType<typeof getMeta>>, TError = ApiError>(
   options: {
-    query: Partial<
-      UseQueryOptions<Awaited<ReturnType<typeof getMeta>>, TError, TData>
-    > &
+    query: Partial<UseQueryOptions<Awaited<ReturnType<typeof getMeta>>, TError, TData>> &
       Pick<
         DefinedInitialDataOptions<
           Awaited<ReturnType<typeof getMeta>>,
@@ -997,14 +818,9 @@ export function useGetMeta<
 ): DefinedUseQueryResult<TData, TError> & {
   queryKey: DataTag<QueryKey, TData, TError>
 }
-export function useGetMeta<
-  TData = Awaited<ReturnType<typeof getMeta>>,
-  TError = ApiError,
->(
+export function useGetMeta<TData = Awaited<ReturnType<typeof getMeta>>, TError = ApiError>(
   options?: {
-    query?: Partial<
-      UseQueryOptions<Awaited<ReturnType<typeof getMeta>>, TError, TData>
-    > &
+    query?: Partial<UseQueryOptions<Awaited<ReturnType<typeof getMeta>>, TError, TData>> &
       Pick<
         UndefinedInitialDataOptions<
           Awaited<ReturnType<typeof getMeta>>,
@@ -1019,14 +835,9 @@ export function useGetMeta<
 ): UseQueryResult<TData, TError> & {
   queryKey: DataTag<QueryKey, TData, TError>
 }
-export function useGetMeta<
-  TData = Awaited<ReturnType<typeof getMeta>>,
-  TError = ApiError,
->(
+export function useGetMeta<TData = Awaited<ReturnType<typeof getMeta>>, TError = ApiError>(
   options?: {
-    query?: Partial<
-      UseQueryOptions<Awaited<ReturnType<typeof getMeta>>, TError, TData>
-    >
+    query?: Partial<UseQueryOptions<Awaited<ReturnType<typeof getMeta>>, TError, TData>>
     request?: SecondParameter<typeof fetchApi>
   },
   queryClient?: QueryClient,
@@ -1034,14 +845,9 @@ export function useGetMeta<
   queryKey: DataTag<QueryKey, TData, TError>
 }
 
-export function useGetMeta<
-  TData = Awaited<ReturnType<typeof getMeta>>,
-  TError = ApiError,
->(
+export function useGetMeta<TData = Awaited<ReturnType<typeof getMeta>>, TError = ApiError>(
   options?: {
-    query?: Partial<
-      UseQueryOptions<Awaited<ReturnType<typeof getMeta>>, TError, TData>
-    >
+    query?: Partial<UseQueryOptions<Awaited<ReturnType<typeof getMeta>>, TError, TData>>
     request?: SecondParameter<typeof fetchApi>
   },
   queryClient?: QueryClient,
@@ -1050,10 +856,9 @@ export function useGetMeta<
 } {
   const queryOptions = getGetMetaQueryOptions(options)
 
-  const query = useQuery(queryOptions, queryClient) as UseQueryResult<
-    TData,
-    TError
-  > & { queryKey: DataTag<QueryKey, TData, TError> }
+  const query = useQuery(queryOptions, queryClient) as UseQueryResult<TData, TError> & {
+    queryKey: DataTag<QueryKey, TData, TError>
+  }
 
   return { ...query, queryKey: queryOptions.queryKey }
 }

@@ -1,13 +1,11 @@
 'use client'
 
-import { useRef, useState } from 'react'
 import { useDrag } from '@use-gesture/react'
-import { TextBlock, ToolMode } from '@/types'
+import { useRef, useState } from 'react'
+
+import type { PointerToDocumentFn, DocumentPointer } from '@/hooks/usePointerToDocument'
 import type { MappedDocument } from '@/hooks/useTextBlocks'
-import type {
-  PointerToDocumentFn,
-  DocumentPointer,
-} from '@/hooks/usePointerToDocument'
+import { TextBlock, ToolMode } from '@/types'
 
 type BlockDraftingOptions = {
   mode: ToolMode

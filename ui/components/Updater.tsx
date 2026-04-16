@@ -1,24 +1,14 @@
 'use client'
 
-import {
-  createContext,
-  useContext,
-  useEffect,
-  useState,
-  type ReactNode,
-} from 'react'
 import type { Update } from '@tauri-apps/plugin-updater'
+import { Download, RefreshCw, AlertCircle } from 'lucide-react'
+import { createContext, useContext, useEffect, useState, type ReactNode } from 'react'
+import { Trans, useTranslation } from 'react-i18next'
 import ReactMarkdown from 'react-markdown'
 import remarkGfm from 'remark-gfm'
-import { Trans, useTranslation } from 'react-i18next'
-import { Download, RefreshCw, AlertCircle } from 'lucide-react'
-import {
-  Dialog,
-  DialogContent,
-  DialogDescription,
-  DialogTitle,
-} from '@/components/ui/dialog'
+
 import { Button } from '@/components/ui/button'
+import { Dialog, DialogContent, DialogDescription, DialogTitle } from '@/components/ui/dialog'
 import { Progress } from '@/components/ui/progress'
 import { ScrollArea } from '@/components/ui/scroll-area'
 import { Separator } from '@/components/ui/separator'
@@ -197,19 +187,17 @@ function PromptView({
   return (
     <>
       <header className='flex items-center gap-3 px-6 pt-6 pb-4'>
-        <div className='bg-primary/10 text-primary flex size-10 items-center justify-center rounded-full'>
+        <div className='flex size-10 items-center justify-center rounded-full bg-primary/10 text-primary'>
           <Download className='size-5' />
         </div>
         <div className='flex flex-col gap-0.5'>
-          <DialogTitle className='text-base'>
-            {t('updater.available.title')}
-          </DialogTitle>
+          <DialogTitle className='text-base'>{t('updater.available.title')}</DialogTitle>
           <DialogDescription>
             <Trans
               i18nKey='updater.available.description'
               values={{ version: update.version }}
               components={{
-                strong: <span className='text-foreground font-medium' />,
+                strong: <span className='font-medium text-foreground' />,
               }}
             />
           </DialogDescription>
@@ -218,16 +206,12 @@ function PromptView({
       <Separator />
       {update.body ? (
         <ScrollArea className='h-64'>
-          <div className='prose prose-sm dark:prose-invert [&_a]:text-primary [&_h3]:text-muted-foreground max-w-none px-6 py-4 [&_h2]:mt-4 [&_h2]:mb-2 [&_h2]:text-sm [&_h2]:font-semibold [&_h3]:mt-3 [&_h3]:mb-1 [&_h3]:text-xs [&_h3]:font-semibold [&_h3]:tracking-wide [&_h3]:uppercase [&_li]:my-0.5 [&_p]:my-1.5 [&_ul]:my-1.5 [&_ul]:list-disc [&_ul]:pl-5'>
-            <ReactMarkdown remarkPlugins={[remarkGfm]}>
-              {update.body}
-            </ReactMarkdown>
+          <div className='prose prose-sm dark:prose-invert max-w-none px-6 py-4 [&_a]:text-primary [&_h2]:mt-4 [&_h2]:mb-2 [&_h2]:text-sm [&_h2]:font-semibold [&_h3]:mt-3 [&_h3]:mb-1 [&_h3]:text-xs [&_h3]:font-semibold [&_h3]:tracking-wide [&_h3]:text-muted-foreground [&_h3]:uppercase [&_li]:my-0.5 [&_p]:my-1.5 [&_ul]:my-1.5 [&_ul]:list-disc [&_ul]:pl-5'>
+            <ReactMarkdown remarkPlugins={[remarkGfm]}>{update.body}</ReactMarkdown>
           </div>
         </ScrollArea>
       ) : (
-        <div className='text-muted-foreground px-6 py-6 text-sm'>
-          {t('updater.noNotes')}
-        </div>
+        <div className='px-6 py-6 text-sm text-muted-foreground'>{t('updater.noNotes')}</div>
       )}
       <Separator />
       <footer className='flex justify-end gap-2 px-6 py-4'>
@@ -258,21 +242,17 @@ function DownloadingView({
   return (
     <div className='flex flex-col gap-4 p-6'>
       <div className='flex items-center gap-3'>
-        <div className='bg-primary/10 text-primary flex size-10 items-center justify-center rounded-full'>
+        <div className='flex size-10 items-center justify-center rounded-full bg-primary/10 text-primary'>
           <Download className='size-5 animate-pulse' />
         </div>
         <div className='flex flex-col gap-0.5'>
-          <DialogTitle className='text-base'>
-            {t('updater.downloading.title')}
-          </DialogTitle>
-          <DialogDescription>
-            {t('updater.downloading.subtitle', { version })}
-          </DialogDescription>
+          <DialogTitle className='text-base'>{t('updater.downloading.title')}</DialogTitle>
+          <DialogDescription>{t('updater.downloading.subtitle', { version })}</DialogDescription>
         </div>
       </div>
       <div className='space-y-2'>
         <Progress value={percent ?? undefined} />
-        <div className='text-muted-foreground flex justify-between text-xs tabular-nums'>
+        <div className='flex justify-between text-xs text-muted-foreground tabular-nums'>
           <span>
             {formatBytes(downloaded)}
             {total ? ` / ${formatBytes(total)}` : ''}
@@ -297,13 +277,11 @@ function ErrorView({
   return (
     <>
       <header className='flex items-center gap-3 px-6 pt-6 pb-4'>
-        <div className='bg-destructive/10 text-destructive flex size-10 items-center justify-center rounded-full'>
+        <div className='flex size-10 items-center justify-center rounded-full bg-destructive/10 text-destructive'>
           <AlertCircle className='size-5' />
         </div>
         <div className='flex flex-col gap-0.5'>
-          <DialogTitle className='text-base'>
-            {t('updater.error.title')}
-          </DialogTitle>
+          <DialogTitle className='text-base'>{t('updater.error.title')}</DialogTitle>
           <DialogDescription className='break-words'>
             {t('updater.error.description')}
           </DialogDescription>
@@ -311,7 +289,7 @@ function ErrorView({
       </header>
       <Separator />
       <ScrollArea className='max-h-40'>
-        <pre className='text-muted-foreground px-6 py-4 text-xs break-words whitespace-pre-wrap'>
+        <pre className='px-6 py-4 text-xs break-words whitespace-pre-wrap text-muted-foreground'>
           {message}
         </pre>
       </ScrollArea>

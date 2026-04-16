@@ -19,6 +19,7 @@ import type {
   UseQueryResult,
 } from '@tanstack/react-query'
 
+import { fetchApi } from '.././fetch'
 import type {
   ApiError,
   DocumentDetail,
@@ -31,17 +32,13 @@ import type {
   UpdateDocumentStyleRequest,
 } from '../schemas'
 
-import { fetchApi } from '.././fetch'
-
 type SecondParameter<T extends (...args: never) => unknown> = Parameters<T>[1]
 
 export const getListDocumentsUrl = () => {
   return `/api/v1/documents`
 }
 
-export const listDocuments = async (
-  options?: RequestInit,
-): Promise<DocumentSummary[]> => {
+export const listDocuments = async (options?: RequestInit): Promise<DocumentSummary[]> => {
   return fetchApi<DocumentSummary[]>(getListDocumentsUrl(), {
     ...options,
     method: 'GET',
@@ -56,18 +53,15 @@ export const getListDocumentsQueryOptions = <
   TData = Awaited<ReturnType<typeof listDocuments>>,
   TError = ApiError,
 >(options?: {
-  query?: Partial<
-    UseQueryOptions<Awaited<ReturnType<typeof listDocuments>>, TError, TData>
-  >
+  query?: Partial<UseQueryOptions<Awaited<ReturnType<typeof listDocuments>>, TError, TData>>
   request?: SecondParameter<typeof fetchApi>
 }) => {
   const { query: queryOptions, request: requestOptions } = options ?? {}
 
   const queryKey = queryOptions?.queryKey ?? getListDocumentsQueryKey()
 
-  const queryFn: QueryFunction<Awaited<ReturnType<typeof listDocuments>>> = ({
-    signal,
-  }) => listDocuments({ signal, ...requestOptions })
+  const queryFn: QueryFunction<Awaited<ReturnType<typeof listDocuments>>> = ({ signal }) =>
+    listDocuments({ signal, ...requestOptions })
 
   return {
     queryKey,
@@ -75,16 +69,12 @@ export const getListDocumentsQueryOptions = <
     gcTime: 300000,
     retry: 1,
     ...queryOptions,
-  } as UseQueryOptions<
-    Awaited<ReturnType<typeof listDocuments>>,
-    TError,
-    TData
-  > & { queryKey: DataTag<QueryKey, TData, TError> }
+  } as UseQueryOptions<Awaited<ReturnType<typeof listDocuments>>, TError, TData> & {
+    queryKey: DataTag<QueryKey, TData, TError>
+  }
 }
 
-export type ListDocumentsQueryResult = NonNullable<
-  Awaited<ReturnType<typeof listDocuments>>
->
+export type ListDocumentsQueryResult = NonNullable<Awaited<ReturnType<typeof listDocuments>>>
 export type ListDocumentsQueryError = ApiError
 
 export function useListDocuments<
@@ -92,9 +82,7 @@ export function useListDocuments<
   TError = ApiError,
 >(
   options: {
-    query: Partial<
-      UseQueryOptions<Awaited<ReturnType<typeof listDocuments>>, TError, TData>
-    > &
+    query: Partial<UseQueryOptions<Awaited<ReturnType<typeof listDocuments>>, TError, TData>> &
       Pick<
         DefinedInitialDataOptions<
           Awaited<ReturnType<typeof listDocuments>>,
@@ -114,9 +102,7 @@ export function useListDocuments<
   TError = ApiError,
 >(
   options?: {
-    query?: Partial<
-      UseQueryOptions<Awaited<ReturnType<typeof listDocuments>>, TError, TData>
-    > &
+    query?: Partial<UseQueryOptions<Awaited<ReturnType<typeof listDocuments>>, TError, TData>> &
       Pick<
         UndefinedInitialDataOptions<
           Awaited<ReturnType<typeof listDocuments>>,
@@ -136,9 +122,7 @@ export function useListDocuments<
   TError = ApiError,
 >(
   options?: {
-    query?: Partial<
-      UseQueryOptions<Awaited<ReturnType<typeof listDocuments>>, TError, TData>
-    >
+    query?: Partial<UseQueryOptions<Awaited<ReturnType<typeof listDocuments>>, TError, TData>>
     request?: SecondParameter<typeof fetchApi>
   },
   queryClient?: QueryClient,
@@ -151,9 +135,7 @@ export function useListDocuments<
   TError = ApiError,
 >(
   options?: {
-    query?: Partial<
-      UseQueryOptions<Awaited<ReturnType<typeof listDocuments>>, TError, TData>
-    >
+    query?: Partial<UseQueryOptions<Awaited<ReturnType<typeof listDocuments>>, TError, TData>>
     request?: SecondParameter<typeof fetchApi>
   },
   queryClient?: QueryClient,
@@ -162,10 +144,9 @@ export function useListDocuments<
 } {
   const queryOptions = getListDocumentsQueryOptions(options)
 
-  const query = useQuery(queryOptions, queryClient) as UseQueryResult<
-    TData,
-    TError
-  > & { queryKey: DataTag<QueryKey, TData, TError> }
+  const query = useQuery(queryOptions, queryClient) as UseQueryResult<TData, TError> & {
+    queryKey: DataTag<QueryKey, TData, TError>
+  }
 
   return { ...query, queryKey: queryOptions.queryKey }
 }
@@ -201,10 +182,7 @@ export const importDocuments = async (
   })
 }
 
-export const getImportDocumentsMutationOptions = <
-  TError = ApiError,
-  TContext = unknown,
->(options?: {
+export const getImportDocumentsMutationOptions = <TError = ApiError, TContext = unknown>(options?: {
   mutation?: UseMutationOptions<
     Awaited<ReturnType<typeof importDocuments>>,
     TError,
@@ -220,9 +198,7 @@ export const getImportDocumentsMutationOptions = <
 > => {
   const mutationKey = ['importDocuments']
   const { mutation: mutationOptions, request: requestOptions } = options
-    ? options.mutation &&
-      'mutationKey' in options.mutation &&
-      options.mutation.mutationKey
+    ? options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey
       ? options
       : { ...options, mutation: { ...options.mutation, mutationKey } }
     : { mutation: { mutationKey }, request: undefined }
@@ -239,9 +215,7 @@ export const getImportDocumentsMutationOptions = <
   return { mutationFn, ...mutationOptions }
 }
 
-export type ImportDocumentsMutationResult = NonNullable<
-  Awaited<ReturnType<typeof importDocuments>>
->
+export type ImportDocumentsMutationResult = NonNullable<Awaited<ReturnType<typeof importDocuments>>>
 export type ImportDocumentsMutationBody = ImportDocumentsBody
 export type ImportDocumentsMutationError = ApiError
 
@@ -300,9 +274,7 @@ export const getReorderDocumentsMutationOptions = <
 > => {
   const mutationKey = ['reorderDocuments']
   const { mutation: mutationOptions, request: requestOptions } = options
-    ? options.mutation &&
-      'mutationKey' in options.mutation &&
-      options.mutation.mutationKey
+    ? options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey
       ? options
       : { ...options, mutation: { ...options.mutation, mutationKey } }
     : { mutation: { mutationKey }, request: undefined }
@@ -369,9 +341,7 @@ export const getGetDocumentQueryOptions = <
 >(
   documentId: string,
   options?: {
-    query?: Partial<
-      UseQueryOptions<Awaited<ReturnType<typeof getDocument>>, TError, TData>
-    >
+    query?: Partial<UseQueryOptions<Awaited<ReturnType<typeof getDocument>>, TError, TData>>
     request?: SecondParameter<typeof fetchApi>
   },
 ) => {
@@ -379,9 +349,8 @@ export const getGetDocumentQueryOptions = <
 
   const queryKey = queryOptions?.queryKey ?? getGetDocumentQueryKey(documentId)
 
-  const queryFn: QueryFunction<Awaited<ReturnType<typeof getDocument>>> = ({
-    signal,
-  }) => getDocument(documentId, { signal, ...requestOptions })
+  const queryFn: QueryFunction<Awaited<ReturnType<typeof getDocument>>> = ({ signal }) =>
+    getDocument(documentId, { signal, ...requestOptions })
 
   return {
     queryKey,
@@ -390,27 +359,18 @@ export const getGetDocumentQueryOptions = <
     gcTime: 300000,
     retry: 1,
     ...queryOptions,
-  } as UseQueryOptions<
-    Awaited<ReturnType<typeof getDocument>>,
-    TError,
-    TData
-  > & { queryKey: DataTag<QueryKey, TData, TError> }
+  } as UseQueryOptions<Awaited<ReturnType<typeof getDocument>>, TError, TData> & {
+    queryKey: DataTag<QueryKey, TData, TError>
+  }
 }
 
-export type GetDocumentQueryResult = NonNullable<
-  Awaited<ReturnType<typeof getDocument>>
->
+export type GetDocumentQueryResult = NonNullable<Awaited<ReturnType<typeof getDocument>>>
 export type GetDocumentQueryError = ApiError
 
-export function useGetDocument<
-  TData = Awaited<ReturnType<typeof getDocument>>,
-  TError = ApiError,
->(
+export function useGetDocument<TData = Awaited<ReturnType<typeof getDocument>>, TError = ApiError>(
   documentId: string,
   options: {
-    query: Partial<
-      UseQueryOptions<Awaited<ReturnType<typeof getDocument>>, TError, TData>
-    > &
+    query: Partial<UseQueryOptions<Awaited<ReturnType<typeof getDocument>>, TError, TData>> &
       Pick<
         DefinedInitialDataOptions<
           Awaited<ReturnType<typeof getDocument>>,
@@ -425,15 +385,10 @@ export function useGetDocument<
 ): DefinedUseQueryResult<TData, TError> & {
   queryKey: DataTag<QueryKey, TData, TError>
 }
-export function useGetDocument<
-  TData = Awaited<ReturnType<typeof getDocument>>,
-  TError = ApiError,
->(
+export function useGetDocument<TData = Awaited<ReturnType<typeof getDocument>>, TError = ApiError>(
   documentId: string,
   options?: {
-    query?: Partial<
-      UseQueryOptions<Awaited<ReturnType<typeof getDocument>>, TError, TData>
-    > &
+    query?: Partial<UseQueryOptions<Awaited<ReturnType<typeof getDocument>>, TError, TData>> &
       Pick<
         UndefinedInitialDataOptions<
           Awaited<ReturnType<typeof getDocument>>,
@@ -448,15 +403,10 @@ export function useGetDocument<
 ): UseQueryResult<TData, TError> & {
   queryKey: DataTag<QueryKey, TData, TError>
 }
-export function useGetDocument<
-  TData = Awaited<ReturnType<typeof getDocument>>,
-  TError = ApiError,
->(
+export function useGetDocument<TData = Awaited<ReturnType<typeof getDocument>>, TError = ApiError>(
   documentId: string,
   options?: {
-    query?: Partial<
-      UseQueryOptions<Awaited<ReturnType<typeof getDocument>>, TError, TData>
-    >
+    query?: Partial<UseQueryOptions<Awaited<ReturnType<typeof getDocument>>, TError, TData>>
     request?: SecondParameter<typeof fetchApi>
   },
   queryClient?: QueryClient,
@@ -464,15 +414,10 @@ export function useGetDocument<
   queryKey: DataTag<QueryKey, TData, TError>
 }
 
-export function useGetDocument<
-  TData = Awaited<ReturnType<typeof getDocument>>,
-  TError = ApiError,
->(
+export function useGetDocument<TData = Awaited<ReturnType<typeof getDocument>>, TError = ApiError>(
   documentId: string,
   options?: {
-    query?: Partial<
-      UseQueryOptions<Awaited<ReturnType<typeof getDocument>>, TError, TData>
-    >
+    query?: Partial<UseQueryOptions<Awaited<ReturnType<typeof getDocument>>, TError, TData>>
     request?: SecondParameter<typeof fetchApi>
   },
   queryClient?: QueryClient,
@@ -481,10 +426,9 @@ export function useGetDocument<
 } {
   const queryOptions = getGetDocumentQueryOptions(documentId, options)
 
-  const query = useQuery(queryOptions, queryClient) as UseQueryResult<
-    TData,
-    TError
-  > & { queryKey: DataTag<QueryKey, TData, TError> }
+  const query = useQuery(queryOptions, queryClient) as UseQueryResult<TData, TError> & {
+    queryKey: DataTag<QueryKey, TData, TError>
+  }
 
   return { ...query, queryKey: queryOptions.queryKey }
 }
@@ -498,15 +442,12 @@ export const updateDocumentStyle = async (
   updateDocumentStyleRequest: UpdateDocumentStyleRequest,
   options?: RequestInit,
 ): Promise<UpdateDocumentStyleRequest> => {
-  return fetchApi<UpdateDocumentStyleRequest>(
-    getUpdateDocumentStyleUrl(documentId),
-    {
-      ...options,
-      method: 'PATCH',
-      headers: { 'Content-Type': 'application/json', ...options?.headers },
-      body: JSON.stringify(updateDocumentStyleRequest),
-    },
-  )
+  return fetchApi<UpdateDocumentStyleRequest>(getUpdateDocumentStyleUrl(documentId), {
+    ...options,
+    method: 'PATCH',
+    headers: { 'Content-Type': 'application/json', ...options?.headers },
+    body: JSON.stringify(updateDocumentStyleRequest),
+  })
 }
 
 export const getUpdateDocumentStyleMutationOptions = <
@@ -528,9 +469,7 @@ export const getUpdateDocumentStyleMutationOptions = <
 > => {
   const mutationKey = ['updateDocumentStyle']
   const { mutation: mutationOptions, request: requestOptions } = options
-    ? options.mutation &&
-      'mutationKey' in options.mutation &&
-      options.mutation.mutationKey
+    ? options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey
       ? options
       : { ...options, mutation: { ...options.mutation, mutationKey } }
     : { mutation: { mutationKey }, request: undefined }
@@ -570,10 +509,7 @@ export const useUpdateDocumentStyle = <TError = ApiError, TContext = unknown>(
   { documentId: string; data: UpdateDocumentStyleRequest },
   TContext
 > => {
-  return useMutation(
-    getUpdateDocumentStyleMutationOptions(options),
-    queryClient,
-  )
+  return useMutation(getUpdateDocumentStyleMutationOptions(options), queryClient)
 }
 export const getGetDocumentThumbnailUrl = (
   documentId: string,
@@ -609,10 +545,7 @@ export const getGetDocumentThumbnailQueryKey = (
   documentId: string,
   params?: GetDocumentThumbnailParams,
 ) => {
-  return [
-    `/api/v1/documents/${documentId}/thumbnail`,
-    ...(params ? [params] : []),
-  ] as const
+  return [`/api/v1/documents/${documentId}/thumbnail`, ...(params ? [params] : [])] as const
 }
 
 export const getGetDocumentThumbnailQueryOptions = <
@@ -623,24 +556,16 @@ export const getGetDocumentThumbnailQueryOptions = <
   params?: GetDocumentThumbnailParams,
   options?: {
     query?: Partial<
-      UseQueryOptions<
-        Awaited<ReturnType<typeof getDocumentThumbnail>>,
-        TError,
-        TData
-      >
+      UseQueryOptions<Awaited<ReturnType<typeof getDocumentThumbnail>>, TError, TData>
     >
     request?: SecondParameter<typeof fetchApi>
   },
 ) => {
   const { query: queryOptions, request: requestOptions } = options ?? {}
 
-  const queryKey =
-    queryOptions?.queryKey ??
-    getGetDocumentThumbnailQueryKey(documentId, params)
+  const queryKey = queryOptions?.queryKey ?? getGetDocumentThumbnailQueryKey(documentId, params)
 
-  const queryFn: QueryFunction<
-    Awaited<ReturnType<typeof getDocumentThumbnail>>
-  > = ({ signal }) =>
+  const queryFn: QueryFunction<Awaited<ReturnType<typeof getDocumentThumbnail>>> = ({ signal }) =>
     getDocumentThumbnail(documentId, params, { signal, ...requestOptions })
 
   return {
@@ -650,11 +575,9 @@ export const getGetDocumentThumbnailQueryOptions = <
     gcTime: 300000,
     retry: 1,
     ...queryOptions,
-  } as UseQueryOptions<
-    Awaited<ReturnType<typeof getDocumentThumbnail>>,
-    TError,
-    TData
-  > & { queryKey: DataTag<QueryKey, TData, TError> }
+  } as UseQueryOptions<Awaited<ReturnType<typeof getDocumentThumbnail>>, TError, TData> & {
+    queryKey: DataTag<QueryKey, TData, TError>
+  }
 }
 
 export type GetDocumentThumbnailQueryResult = NonNullable<
@@ -670,11 +593,7 @@ export function useGetDocumentThumbnail<
   params: undefined | GetDocumentThumbnailParams,
   options: {
     query: Partial<
-      UseQueryOptions<
-        Awaited<ReturnType<typeof getDocumentThumbnail>>,
-        TError,
-        TData
-      >
+      UseQueryOptions<Awaited<ReturnType<typeof getDocumentThumbnail>>, TError, TData>
     > &
       Pick<
         DefinedInitialDataOptions<
@@ -698,11 +617,7 @@ export function useGetDocumentThumbnail<
   params?: GetDocumentThumbnailParams,
   options?: {
     query?: Partial<
-      UseQueryOptions<
-        Awaited<ReturnType<typeof getDocumentThumbnail>>,
-        TError,
-        TData
-      >
+      UseQueryOptions<Awaited<ReturnType<typeof getDocumentThumbnail>>, TError, TData>
     > &
       Pick<
         UndefinedInitialDataOptions<
@@ -726,11 +641,7 @@ export function useGetDocumentThumbnail<
   params?: GetDocumentThumbnailParams,
   options?: {
     query?: Partial<
-      UseQueryOptions<
-        Awaited<ReturnType<typeof getDocumentThumbnail>>,
-        TError,
-        TData
-      >
+      UseQueryOptions<Awaited<ReturnType<typeof getDocumentThumbnail>>, TError, TData>
     >
     request?: SecondParameter<typeof fetchApi>
   },
@@ -747,11 +658,7 @@ export function useGetDocumentThumbnail<
   params?: GetDocumentThumbnailParams,
   options?: {
     query?: Partial<
-      UseQueryOptions<
-        Awaited<ReturnType<typeof getDocumentThumbnail>>,
-        TError,
-        TData
-      >
+      UseQueryOptions<Awaited<ReturnType<typeof getDocumentThumbnail>>, TError, TData>
     >
     request?: SecondParameter<typeof fetchApi>
   },
@@ -759,16 +666,11 @@ export function useGetDocumentThumbnail<
 ): UseQueryResult<TData, TError> & {
   queryKey: DataTag<QueryKey, TData, TError>
 } {
-  const queryOptions = getGetDocumentThumbnailQueryOptions(
-    documentId,
-    params,
-    options,
-  )
+  const queryOptions = getGetDocumentThumbnailQueryOptions(documentId, params, options)
 
-  const query = useQuery(queryOptions, queryClient) as UseQueryResult<
-    TData,
-    TError
-  > & { queryKey: DataTag<QueryKey, TData, TError> }
+  const query = useQuery(queryOptions, queryClient) as UseQueryResult<TData, TError> & {
+    queryKey: DataTag<QueryKey, TData, TError>
+  }
 
   return { ...query, queryKey: queryOptions.queryKey }
 }

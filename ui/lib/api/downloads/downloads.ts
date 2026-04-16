@@ -16,9 +16,8 @@ import type {
   UseQueryResult,
 } from '@tanstack/react-query'
 
-import type { DownloadState } from '../schemas'
-
 import { fetchApi } from '.././fetch'
+import type { DownloadState } from '../schemas'
 
 type SecondParameter<T extends (...args: never) => unknown> = Parameters<T>[1]
 
@@ -26,9 +25,7 @@ export const getListDownloadsUrl = () => {
   return `/api/v1/downloads`
 }
 
-export const listDownloads = async (
-  options?: RequestInit,
-): Promise<DownloadState[]> => {
+export const listDownloads = async (options?: RequestInit): Promise<DownloadState[]> => {
   return fetchApi<DownloadState[]>(getListDownloadsUrl(), {
     ...options,
     method: 'GET',
@@ -43,18 +40,15 @@ export const getListDownloadsQueryOptions = <
   TData = Awaited<ReturnType<typeof listDownloads>>,
   TError = unknown,
 >(options?: {
-  query?: Partial<
-    UseQueryOptions<Awaited<ReturnType<typeof listDownloads>>, TError, TData>
-  >
+  query?: Partial<UseQueryOptions<Awaited<ReturnType<typeof listDownloads>>, TError, TData>>
   request?: SecondParameter<typeof fetchApi>
 }) => {
   const { query: queryOptions, request: requestOptions } = options ?? {}
 
   const queryKey = queryOptions?.queryKey ?? getListDownloadsQueryKey()
 
-  const queryFn: QueryFunction<Awaited<ReturnType<typeof listDownloads>>> = ({
-    signal,
-  }) => listDownloads({ signal, ...requestOptions })
+  const queryFn: QueryFunction<Awaited<ReturnType<typeof listDownloads>>> = ({ signal }) =>
+    listDownloads({ signal, ...requestOptions })
 
   return {
     queryKey,
@@ -62,16 +56,12 @@ export const getListDownloadsQueryOptions = <
     gcTime: 300000,
     retry: 1,
     ...queryOptions,
-  } as UseQueryOptions<
-    Awaited<ReturnType<typeof listDownloads>>,
-    TError,
-    TData
-  > & { queryKey: DataTag<QueryKey, TData, TError> }
+  } as UseQueryOptions<Awaited<ReturnType<typeof listDownloads>>, TError, TData> & {
+    queryKey: DataTag<QueryKey, TData, TError>
+  }
 }
 
-export type ListDownloadsQueryResult = NonNullable<
-  Awaited<ReturnType<typeof listDownloads>>
->
+export type ListDownloadsQueryResult = NonNullable<Awaited<ReturnType<typeof listDownloads>>>
 export type ListDownloadsQueryError = unknown
 
 export function useListDownloads<
@@ -79,9 +69,7 @@ export function useListDownloads<
   TError = unknown,
 >(
   options: {
-    query: Partial<
-      UseQueryOptions<Awaited<ReturnType<typeof listDownloads>>, TError, TData>
-    > &
+    query: Partial<UseQueryOptions<Awaited<ReturnType<typeof listDownloads>>, TError, TData>> &
       Pick<
         DefinedInitialDataOptions<
           Awaited<ReturnType<typeof listDownloads>>,
@@ -101,9 +89,7 @@ export function useListDownloads<
   TError = unknown,
 >(
   options?: {
-    query?: Partial<
-      UseQueryOptions<Awaited<ReturnType<typeof listDownloads>>, TError, TData>
-    > &
+    query?: Partial<UseQueryOptions<Awaited<ReturnType<typeof listDownloads>>, TError, TData>> &
       Pick<
         UndefinedInitialDataOptions<
           Awaited<ReturnType<typeof listDownloads>>,
@@ -123,9 +109,7 @@ export function useListDownloads<
   TError = unknown,
 >(
   options?: {
-    query?: Partial<
-      UseQueryOptions<Awaited<ReturnType<typeof listDownloads>>, TError, TData>
-    >
+    query?: Partial<UseQueryOptions<Awaited<ReturnType<typeof listDownloads>>, TError, TData>>
     request?: SecondParameter<typeof fetchApi>
   },
   queryClient?: QueryClient,
@@ -138,9 +122,7 @@ export function useListDownloads<
   TError = unknown,
 >(
   options?: {
-    query?: Partial<
-      UseQueryOptions<Awaited<ReturnType<typeof listDownloads>>, TError, TData>
-    >
+    query?: Partial<UseQueryOptions<Awaited<ReturnType<typeof listDownloads>>, TError, TData>>
     request?: SecondParameter<typeof fetchApi>
   },
   queryClient?: QueryClient,
@@ -149,10 +131,9 @@ export function useListDownloads<
 } {
   const queryOptions = getListDownloadsQueryOptions(options)
 
-  const query = useQuery(queryOptions, queryClient) as UseQueryResult<
-    TData,
-    TError
-  > & { queryKey: DataTag<QueryKey, TData, TError> }
+  const query = useQuery(queryOptions, queryClient) as UseQueryResult<TData, TError> & {
+    queryKey: DataTag<QueryKey, TData, TError>
+  }
 
   return { ...query, queryKey: queryOptions.queryKey }
 }

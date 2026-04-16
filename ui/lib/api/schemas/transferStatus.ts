@@ -4,8 +4,7 @@
  * OpenAPI spec version: 0.0.1
  */
 
-export type TransferStatus =
-  (typeof TransferStatus)[keyof typeof TransferStatus]
+export type TransferStatus = (typeof TransferStatus)[keyof typeof TransferStatus]
 
 export const TransferStatus = {
   started: 'started',

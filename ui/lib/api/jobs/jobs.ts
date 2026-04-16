@@ -19,9 +19,8 @@ import type {
   UseQueryResult,
 } from '@tanstack/react-query'
 
-import type { ApiError, JobState, PipelineJobRequest } from '../schemas'
-
 import { fetchApi } from '.././fetch'
+import type { ApiError, JobState, PipelineJobRequest } from '../schemas'
 
 type SecondParameter<T extends (...args: never) => unknown> = Parameters<T>[1]
 
@@ -44,18 +43,15 @@ export const getListJobsQueryOptions = <
   TData = Awaited<ReturnType<typeof listJobs>>,
   TError = unknown,
 >(options?: {
-  query?: Partial<
-    UseQueryOptions<Awaited<ReturnType<typeof listJobs>>, TError, TData>
-  >
+  query?: Partial<UseQueryOptions<Awaited<ReturnType<typeof listJobs>>, TError, TData>>
   request?: SecondParameter<typeof fetchApi>
 }) => {
   const { query: queryOptions, request: requestOptions } = options ?? {}
 
   const queryKey = queryOptions?.queryKey ?? getListJobsQueryKey()
 
-  const queryFn: QueryFunction<Awaited<ReturnType<typeof listJobs>>> = ({
-    signal,
-  }) => listJobs({ signal, ...requestOptions })
+  const queryFn: QueryFunction<Awaited<ReturnType<typeof listJobs>>> = ({ signal }) =>
+    listJobs({ signal, ...requestOptions })
 
   return {
     queryKey,
@@ -68,19 +64,12 @@ export const getListJobsQueryOptions = <
   }
 }
 
-export type ListJobsQueryResult = NonNullable<
-  Awaited<ReturnType<typeof listJobs>>
->
+export type ListJobsQueryResult = NonNullable<Awaited<ReturnType<typeof listJobs>>>
 export type ListJobsQueryError = unknown
 
-export function useListJobs<
-  TData = Awaited<ReturnType<typeof listJobs>>,
-  TError = unknown,
->(
+export function useListJobs<TData = Awaited<ReturnType<typeof listJobs>>, TError = unknown>(
   options: {
-    query: Partial<
-      UseQueryOptions<Awaited<ReturnType<typeof listJobs>>, TError, TData>
-    > &
+    query: Partial<UseQueryOptions<Awaited<ReturnType<typeof listJobs>>, TError, TData>> &
       Pick<
         DefinedInitialDataOptions<
           Awaited<ReturnType<typeof listJobs>>,
@@ -95,14 +84,9 @@ export function useListJobs<
 ): DefinedUseQueryResult<TData, TError> & {
   queryKey: DataTag<QueryKey, TData, TError>
 }
-export function useListJobs<
-  TData = Awaited<ReturnType<typeof listJobs>>,
-  TError = unknown,
->(
+export function useListJobs<TData = Awaited<ReturnType<typeof listJobs>>, TError = unknown>(
   options?: {
-    query?: Partial<
-      UseQueryOptions<Awaited<ReturnType<typeof listJobs>>, TError, TData>
-    > &
+    query?: Partial<UseQueryOptions<Awaited<ReturnType<typeof listJobs>>, TError, TData>> &
       Pick<
         UndefinedInitialDataOptions<
           Awaited<ReturnType<typeof listJobs>>,
@@ -117,14 +101,9 @@ export function useListJobs<
 ): UseQueryResult<TData, TError> & {
   queryKey: DataTag<QueryKey, TData, TError>
 }
-export function useListJobs<
-  TData = Awaited<ReturnType<typeof listJobs>>,
-  TError = unknown,
->(
+export function useListJobs<TData = Awaited<ReturnType<typeof listJobs>>, TError = unknown>(
   options?: {
-    query?: Partial<
-      UseQueryOptions<Awaited<ReturnType<typeof listJobs>>, TError, TData>
-    >
+    query?: Partial<UseQueryOptions<Awaited<ReturnType<typeof listJobs>>, TError, TData>>
     request?: SecondParameter<typeof fetchApi>
   },
   queryClient?: QueryClient,
@@ -132,14 +111,9 @@ export function useListJobs<
   queryKey: DataTag<QueryKey, TData, TError>
 }
 
-export function useListJobs<
-  TData = Awaited<ReturnType<typeof listJobs>>,
-  TError = unknown,
->(
+export function useListJobs<TData = Awaited<ReturnType<typeof listJobs>>, TError = unknown>(
   options?: {
-    query?: Partial<
-      UseQueryOptions<Awaited<ReturnType<typeof listJobs>>, TError, TData>
-    >
+    query?: Partial<UseQueryOptions<Awaited<ReturnType<typeof listJobs>>, TError, TData>>
     request?: SecondParameter<typeof fetchApi>
   },
   queryClient?: QueryClient,
@@ -148,10 +122,9 @@ export function useListJobs<
 } {
   const queryOptions = getListJobsQueryOptions(options)
 
-  const query = useQuery(queryOptions, queryClient) as UseQueryResult<
-    TData,
-    TError
-  > & { queryKey: DataTag<QueryKey, TData, TError> }
+  const query = useQuery(queryOptions, queryClient) as UseQueryResult<TData, TError> & {
+    queryKey: DataTag<QueryKey, TData, TError>
+  }
 
   return { ...query, queryKey: queryOptions.queryKey }
 }
@@ -172,10 +145,7 @@ export const startPipeline = async (
   })
 }
 
-export const getStartPipelineMutationOptions = <
-  TError = ApiError,
-  TContext = unknown,
->(options?: {
+export const getStartPipelineMutationOptions = <TError = ApiError, TContext = unknown>(options?: {
   mutation?: UseMutationOptions<
     Awaited<ReturnType<typeof startPipeline>>,
     TError,
@@ -191,9 +161,7 @@ export const getStartPipelineMutationOptions = <
 > => {
   const mutationKey = ['startPipeline']
   const { mutation: mutationOptions, request: requestOptions } = options
-    ? options.mutation &&
-      'mutationKey' in options.mutation &&
-      options.mutation.mutationKey
+    ? options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey
       ? options
       : { ...options, mutation: { ...options.mutation, mutationKey } }
     : { mutation: { mutationKey }, request: undefined }
@@ -210,9 +178,7 @@ export const getStartPipelineMutationOptions = <
   return { mutationFn, ...mutationOptions }
 }
 
-export type StartPipelineMutationResult = NonNullable<
-  Awaited<ReturnType<typeof startPipeline>>
->
+export type StartPipelineMutationResult = NonNullable<Awaited<ReturnType<typeof startPipeline>>>
 export type StartPipelineMutationBody = PipelineJobRequest
 export type StartPipelineMutationError = ApiError
 
@@ -239,10 +205,7 @@ export const getGetJobUrl = (jobId: string) => {
   return `/api/v1/jobs/${jobId}`
 }
 
-export const getJob = async (
-  jobId: string,
-  options?: RequestInit,
-): Promise<JobState> => {
+export const getJob = async (jobId: string, options?: RequestInit): Promise<JobState> => {
   return fetchApi<JobState>(getGetJobUrl(jobId), {
     ...options,
     method: 'GET',
@@ -259,9 +222,7 @@ export const getGetJobQueryOptions = <
 >(
   jobId: string,
   options?: {
-    query?: Partial<
-      UseQueryOptions<Awaited<ReturnType<typeof getJob>>, TError, TData>
-    >
+    query?: Partial<UseQueryOptions<Awaited<ReturnType<typeof getJob>>, TError, TData>>
     request?: SecondParameter<typeof fetchApi>
   },
 ) => {
@@ -269,9 +230,8 @@ export const getGetJobQueryOptions = <
 
   const queryKey = queryOptions?.queryKey ?? getGetJobQueryKey(jobId)
 
-  const queryFn: QueryFunction<Awaited<ReturnType<typeof getJob>>> = ({
-    signal,
-  }) => getJob(jobId, { signal, ...requestOptions })
+  const queryFn: QueryFunction<Awaited<ReturnType<typeof getJob>>> = ({ signal }) =>
+    getJob(jobId, { signal, ...requestOptions })
 
   return {
     queryKey,
@@ -288,15 +248,10 @@ export const getGetJobQueryOptions = <
 export type GetJobQueryResult = NonNullable<Awaited<ReturnType<typeof getJob>>>
 export type GetJobQueryError = ApiError
 
-export function useGetJob<
-  TData = Awaited<ReturnType<typeof getJob>>,
-  TError = ApiError,
->(
+export function useGetJob<TData = Awaited<ReturnType<typeof getJob>>, TError = ApiError>(
   jobId: string,
   options: {
-    query: Partial<
-      UseQueryOptions<Awaited<ReturnType<typeof getJob>>, TError, TData>
-    > &
+    query: Partial<UseQueryOptions<Awaited<ReturnType<typeof getJob>>, TError, TData>> &
       Pick<
         DefinedInitialDataOptions<
           Awaited<ReturnType<typeof getJob>>,
@@ -311,15 +266,10 @@ export function useGetJob<
 ): DefinedUseQueryResult<TData, TError> & {
   queryKey: DataTag<QueryKey, TData, TError>
 }
-export function useGetJob<
-  TData = Awaited<ReturnType<typeof getJob>>,
-  TError = ApiError,
->(
+export function useGetJob<TData = Awaited<ReturnType<typeof getJob>>, TError = ApiError>(
   jobId: string,
   options?: {
-    query?: Partial<
-      UseQueryOptions<Awaited<ReturnType<typeof getJob>>, TError, TData>
-    > &
+    query?: Partial<UseQueryOptions<Awaited<ReturnType<typeof getJob>>, TError, TData>> &
       Pick<
         UndefinedInitialDataOptions<
           Awaited<ReturnType<typeof getJob>>,
@@ -334,15 +284,10 @@ export function useGetJob<
 ): UseQueryResult<TData, TError> & {
   queryKey: DataTag<QueryKey, TData, TError>
 }
-export function useGetJob<
-  TData = Awaited<ReturnType<typeof getJob>>,
-  TError = ApiError,
->(
+export function useGetJob<TData = Awaited<ReturnType<typeof getJob>>, TError = ApiError>(
   jobId: string,
   options?: {
-    query?: Partial<
-      UseQueryOptions<Awaited<ReturnType<typeof getJob>>, TError, TData>
-    >
+    query?: Partial<UseQueryOptions<Awaited<ReturnType<typeof getJob>>, TError, TData>>
     request?: SecondParameter<typeof fetchApi>
   },
   queryClient?: QueryClient,
@@ -350,15 +295,10 @@ export function useGetJob<
   queryKey: DataTag<QueryKey, TData, TError>
 }
 
-export function useGetJob<
-  TData = Awaited<ReturnType<typeof getJob>>,
-  TError = ApiError,
->(
+export function useGetJob<TData = Awaited<ReturnType<typeof getJob>>, TError = ApiError>(
   jobId: string,
   options?: {
-    query?: Partial<
-      UseQueryOptions<Awaited<ReturnType<typeof getJob>>, TError, TData>
-    >
+    query?: Partial<UseQueryOptions<Awaited<ReturnType<typeof getJob>>, TError, TData>>
     request?: SecondParameter<typeof fetchApi>
   },
   queryClient?: QueryClient,
@@ -367,10 +307,9 @@ export function useGetJob<
 } {
   const queryOptions = getGetJobQueryOptions(jobId, options)
 
-  const query = useQuery(queryOptions, queryClient) as UseQueryResult<
-    TData,
-    TError
-  > & { queryKey: DataTag<QueryKey, TData, TError> }
+  const query = useQuery(queryOptions, queryClient) as UseQueryResult<TData, TError> & {
+    queryKey: DataTag<QueryKey, TData, TError>
+  }
 
   return { ...query, queryKey: queryOptions.queryKey }
 }
@@ -379,20 +318,14 @@ export const getCancelJobUrl = (jobId: string) => {
   return `/api/v1/jobs/${jobId}`
 }
 
-export const cancelJob = async (
-  jobId: string,
-  options?: RequestInit,
-): Promise<void> => {
+export const cancelJob = async (jobId: string, options?: RequestInit): Promise<void> => {
   return fetchApi<void>(getCancelJobUrl(jobId), {
     ...options,
     method: 'DELETE',
   })
 }
 
-export const getCancelJobMutationOptions = <
-  TError = ApiError,
-  TContext = unknown,
->(options?: {
+export const getCancelJobMutationOptions = <TError = ApiError, TContext = unknown>(options?: {
   mutation?: UseMutationOptions<
     Awaited<ReturnType<typeof cancelJob>>,
     TError,
@@ -408,17 +341,14 @@ export const getCancelJobMutationOptions = <
 > => {
   const mutationKey = ['cancelJob']
   const { mutation: mutationOptions, request: requestOptions } = options
-    ? options.mutation &&
-      'mutationKey' in options.mutation &&
-      options.mutation.mutationKey
+    ? options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey
       ? options
       : { ...options, mutation: { ...options.mutation, mutationKey } }
     : { mutation: { mutationKey }, request: undefined }
 
-  const mutationFn: MutationFunction<
-    Awaited<ReturnType<typeof cancelJob>>,
-    { jobId: string }
-  > = (props) => {
+  const mutationFn: MutationFunction<Awaited<ReturnType<typeof cancelJob>>, { jobId: string }> = (
+    props,
+  ) => {
     const { jobId } = props ?? {}
 
     return cancelJob(jobId, requestOptions)
@@ -427,9 +357,7 @@ export const getCancelJobMutationOptions = <
   return { mutationFn, ...mutationOptions }
 }
 
-export type CancelJobMutationResult = NonNullable<
-  Awaited<ReturnType<typeof cancelJob>>
->
+export type CancelJobMutationResult = NonNullable<Awaited<ReturnType<typeof cancelJob>>>
 
 export type CancelJobMutationError = ApiError
 

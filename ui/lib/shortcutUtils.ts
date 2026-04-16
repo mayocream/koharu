@@ -8,11 +8,7 @@ export function getPlatform(): Platform {
   if (cachedPlatform) return cachedPlatform
   if (typeof navigator === 'undefined') return 'unknown'
   const nav = navigator as any
-  const platform = (
-    nav.userAgentData?.platform ||
-    nav.platform ||
-    ''
-  ).toLowerCase()
+  const platform = (nav.userAgentData?.platform || nav.platform || '').toLowerCase()
   if (platform.includes('mac')) cachedPlatform = 'mac'
   else if (platform.includes('win')) cachedPlatform = 'windows'
   else if (platform.includes('linux')) cachedPlatform = 'linux'
@@ -84,8 +80,7 @@ const BLOCKED_KEYS = new Set([
  * Checks if a key is in the blocked list (F-keys, system keys, etc.)
  */
 export function isKeyBlocked(key: string): boolean {
-  const isFunctionKey =
-    key.startsWith('F') && key.length > 1 && !isNaN(Number(key.slice(1)))
+  const isFunctionKey = key.startsWith('F') && key.length > 1 && !isNaN(Number(key.slice(1)))
 
   return isFunctionKey || BLOCKED_KEYS.has(key)
 }
@@ -93,10 +88,7 @@ export function isKeyBlocked(key: string): boolean {
 /**
  * Performs a highly efficient shallow comparison between two shortcut objects.
  */
-export function areShortcutsEqual(
-  a: Record<string, string>,
-  b: Record<string, string>,
-): boolean {
+export function areShortcutsEqual(a: Record<string, string>, b: Record<string, string>): boolean {
   const keysA = Object.keys(a)
   const keysB = Object.keys(b)
 

@@ -5,10 +5,7 @@ export const llmTargetKey = (target: LlmTarget) =>
     ? `local:${target.modelId}`
     : `provider:${target.providerId ?? ''}:${target.modelId}`
 
-export const sameLlmTarget = (
-  left?: LlmTarget | null,
-  right?: LlmTarget | null,
-) =>
+export const sameLlmTarget = (left?: LlmTarget | null, right?: LlmTarget | null) =>
   !!left &&
   !!right &&
   left.kind === right.kind &&

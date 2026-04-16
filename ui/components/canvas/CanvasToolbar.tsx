@@ -1,9 +1,5 @@
 'use client'
 
-import { useEffect, useMemo, useState } from 'react'
-import { useTranslation } from 'react-i18next'
-
-import { motion } from 'motion/react'
 import {
   ScanIcon,
   ScanTextIcon,
@@ -12,10 +8,13 @@ import {
   LoaderCircleIcon,
   LanguagesIcon,
 } from 'lucide-react'
-import { Separator } from '@/components/ui/separator'
+import { motion } from 'motion/react'
+import { useEffect, useMemo, useState } from 'react'
+import { useTranslation } from 'react-i18next'
+
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
-import { Textarea } from '@/components/ui/textarea'
+import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover'
 import {
   Select,
   SelectContent,
@@ -23,21 +22,14 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select'
-import {
-  Popover,
-  PopoverContent,
-  PopoverTrigger,
-} from '@/components/ui/popover'
+import { Separator } from '@/components/ui/separator'
+import { Textarea } from '@/components/ui/textarea'
+import { useGetLlm, useGetLlmCatalog } from '@/lib/api/llm/llm'
+import type { LlmCatalog, LlmCatalogModel, LlmProviderCatalog } from '@/lib/api/schemas'
+import { llmTargetKey, sameLlmTarget } from '@/lib/llmTargets'
+import { useProcessing } from '@/lib/machines'
 import { useEditorUiStore } from '@/lib/stores/editorUiStore'
 import { usePreferencesStore } from '@/lib/stores/preferencesStore'
-import { useGetLlm, useGetLlmCatalog } from '@/lib/api/llm/llm'
-import type {
-  LlmCatalog,
-  LlmCatalogModel,
-  LlmProviderCatalog,
-} from '@/lib/api/schemas'
-import { useProcessing } from '@/lib/machines'
-import { llmTargetKey, sameLlmTarget } from '@/lib/llmTargets'
 
 type SelectableLlmModel = {
   model: LlmCatalogModel
@@ -48,15 +40,10 @@ const flattenCatalogModels = (catalog?: LlmCatalog): SelectableLlmModel[] => [
   ...(catalog?.localModels ?? []).map((model) => ({ model })),
   ...(catalog?.providers ?? [])
     .filter((provider) => provider.status === 'ready')
-    .flatMap((provider) =>
-      provider.models.map((model) => ({ model, provider })),
-    ),
+    .flatMap((provider) => provider.models.map((model) => ({ model, provider }))),
 ]
 
-const filterCatalogModels = (
-  models: SelectableLlmModel[],
-  query: string,
-): SelectableLlmModel[] => {
+const filterCatalogModels = (models: SelectableLlmModel[], query: string): SelectableLlmModel[] => {
   const normalized = query.trim().toLowerCase()
   if (!normalized) return models
 
@@ -68,15 +55,13 @@ const filterCatalogModels = (
       provider?.name,
       provider?.id,
     ]
-    return candidates.some((candidate) =>
-      candidate?.toLowerCase().includes(normalized),
-    )
+    return candidates.some((candidate) => candidate?.toLowerCase().includes(normalized))
   })
 }
 
 export function CanvasToolbar() {
   return (
-    <div className='border-border/60 bg-card text-foreground flex items-center gap-2 border-b px-3 py-2 text-xs'>
+    <div className='flex items-center gap-2 border-b border-border/60 bg-card px-3 py-2 text-xs text-foreground'>
       <WorkflowButtons />
       <div className='flex-1' />
       <LlmStatusPopover />
@@ -88,9 +73,7 @@ function WorkflowButtons() {
   const { send, isProcessing, state } = useProcessing()
   const { data: llmState } = useGetLlm()
   const llmReady = llmState?.status === 'ready'
-  const hasDocument = useEditorUiStore(
-    (state) => state.currentDocumentId !== null,
-  )
+  const hasDocument = useEditorUiStore((state) => state.currentDocumentId !== null)
   const { t } = useTranslation()
 
   const isDetecting = state.matches('detecting')
@@ -110,9 +93,7 @@ function WorkflowButtons() {
       <Button
         variant='ghost'
         size='xs'
-        onClick={() =>
-          send({ type: 'START_DETECT', documentId: requireDocumentId() })
-        }
+        onClick={() => send({ type: 'START_DETECT', documentId: requireDocumentId() })}
         data-testid='toolbar-detect'
         disabled={!hasDocument || isDetecting || isProcessing}
       >
@@ -129,9 +110,7 @@ function WorkflowButtons() {
       <Button
         variant='ghost'
         size='xs'
-        onClick={() =>
-          send({ type: 'START_RECOGNIZE', documentId: requireDocumentId() })
-        }
+        onClick={() => send({ type: 'START_RECOGNIZE', documentId: requireDocumentId() })}
         data-testid='toolbar-ocr'
         disabled={!hasDocument || isOcr || isProcessing}
       >
@@ -177,9 +156,7 @@ function WorkflowButtons() {
       <Button
         variant='ghost'
         size='xs'
-        onClick={() =>
-          send({ type: 'START_INPAINT', documentId: requireDocumentId() })
-        }
+        onClick={() => send({ type: 'START_INPAINT', documentId: requireDocumentId() })}
         data-testid='toolbar-inpaint'
         disabled={!hasDocument || isInpainting || isProcessing}
       >
@@ -226,20 +203,11 @@ function LlmStatusPopover() {
   const { data: llmCatalog } = useGetLlmCatalog()
   const [popoverOpen, setPopoverOpen] = useState(false)
   const [modelSearchQuery, setModelSearchQuery] = useState('')
-  const llmModels = useMemo(
-    () => flattenCatalogModels(llmCatalog),
-    [llmCatalog],
-  )
+  const llmModels = useMemo(() => flattenCatalogModels(llmCatalog), [llmCatalog])
   const selectedTarget = useEditorUiStore((state) => state.selectedTarget)
-  const customSystemPrompt = usePreferencesStore(
-    (state) => state.customSystemPrompt,
-  )
-  const setCustomSystemPrompt = usePreferencesStore(
-    (state) => state.setCustomSystemPrompt,
-  )
-  const llmSelectedLanguage = useEditorUiStore(
-    (state) => state.selectedLanguage,
-  )
+  const customSystemPrompt = usePreferencesStore((state) => state.customSystemPrompt)
+  const setCustomSystemPrompt = usePreferencesStore((state) => state.setCustomSystemPrompt)
+  const llmSelectedLanguage = useEditorUiStore((state) => state.selectedLanguage)
   const { data: llmState } = useGetLlm()
   const llmReady = llmState?.status === 'ready'
   const { send, state } = useProcessing()
@@ -249,27 +217,19 @@ function LlmStatusPopover() {
   const { t } = useTranslation()
 
   const selectedModel = useMemo(
-    () =>
-      llmModels.find(({ model }) =>
-        sameLlmTarget(model.target, selectedTarget),
-      ),
+    () => llmModels.find(({ model }) => sameLlmTarget(model.target, selectedTarget)),
     [llmModels, selectedTarget],
   )
   const filteredLlmModels = useMemo(
     () => filterCatalogModels(llmModels, modelSearchQuery),
     [llmModels, modelSearchQuery],
   )
-  const selectedTargetKey = selectedTarget
-    ? llmTargetKey(selectedTarget)
-    : undefined
+  const selectedTargetKey = selectedTarget ? llmTargetKey(selectedTarget) : undefined
   const selectedModelLanguages = selectedModel?.model.languages ?? []
-  const selectedIsLoaded =
-    llmReady && sameLlmTarget(llmState?.target, selectedTarget)
+  const selectedIsLoaded = llmReady && sameLlmTarget(llmState?.target, selectedTarget)
 
   const handleSetSelectedModel = (key: string) => {
-    const nextSelection = llmModels.find(
-      ({ model }) => llmTargetKey(model.target) === key,
-    )
+    const nextSelection = llmModels.find(({ model }) => llmTargetKey(model.target) === key)
     if (!nextSelection) return
 
     const nextLanguages = nextSelection.model.languages
@@ -310,9 +270,7 @@ function LlmStatusPopover() {
   useEffect(() => {
     if (llmModels.length === 0) return
 
-    const hasCurrent = llmModels.some(({ model }) =>
-      sameLlmTarget(model.target, selectedTarget),
-    )
+    const hasCurrent = llmModels.some(({ model }) => sameLlmTarget(model.target, selectedTarget))
     const nextModel = hasCurrent ? selectedModel?.model : llmModels[0]?.model
     if (!nextModel) return
 
@@ -354,23 +312,15 @@ function LlmStatusPopover() {
               ? 'bg-rose-400 text-white ring-1 ring-rose-400/30'
               : busy
                 ? 'bg-amber-400 text-white ring-1 ring-amber-400/30'
-                : 'bg-muted text-muted-foreground ring-border/50 ring-1'
+                : 'bg-muted text-muted-foreground ring-1 ring-border/50'
           }`}
         >
           <motion.span
             className={`size-1.5 rounded-full ${
-              llmReady
-                ? 'bg-white'
-                : busy
-                  ? 'bg-white'
-                  : 'bg-muted-foreground/40'
+              llmReady ? 'bg-white' : busy ? 'bg-white' : 'bg-muted-foreground/40'
             }`}
             animate={
-              llmReady
-                ? { opacity: [1, 0.5, 1] }
-                : busy
-                  ? { opacity: [1, 0.4, 1] }
-                  : { opacity: 1 }
+              llmReady ? { opacity: [1, 0.5, 1] } : busy ? { opacity: [1, 0.4, 1] } : { opacity: 1 }
             }
             transition={
               llmReady || busy
@@ -385,14 +335,10 @@ function LlmStatusPopover() {
           LLM
         </button>
       </PopoverTrigger>
-      <PopoverContent
-        align='end'
-        className='w-[280px] p-0'
-        data-testid='llm-popover'
-      >
+      <PopoverContent align='end' className='w-[280px] p-0' data-testid='llm-popover'>
         {/* Model + load */}
         <div className='flex flex-col gap-1 px-3 pt-3 pb-2.5'>
-          <span className='text-muted-foreground text-[10px] font-medium uppercase'>
+          <span className='text-[10px] font-medium text-muted-foreground uppercase'>
             {t('llm.model', { defaultValue: 'Model' })}
           </span>
           <Input
@@ -405,14 +351,8 @@ function LlmStatusPopover() {
             className='h-7 text-xs'
           />
           <div className='flex items-center gap-1.5'>
-            <Select
-              value={selectedTargetKey}
-              onValueChange={handleSetSelectedModel}
-            >
-              <SelectTrigger
-                data-testid='llm-model-select'
-                className='min-w-0 flex-1'
-              >
+            <Select value={selectedTargetKey} onValueChange={handleSetSelectedModel}>
+              <SelectTrigger data-testid='llm-model-select' className='min-w-0 flex-1'>
                 <SelectValue placeholder={t('llm.selectPlaceholder')} />
               </SelectTrigger>
               <SelectContent position='popper'>
@@ -425,7 +365,7 @@ function LlmStatusPopover() {
                     >
                       <span className='flex items-center gap-1.5'>
                         {provider ? (
-                          <span className='bg-primary/10 text-primary rounded px-1 py-0.5 text-[9px] leading-none font-semibold uppercase'>
+                          <span className='rounded bg-primary/10 px-1 py-0.5 text-[9px] leading-none font-semibold text-primary uppercase'>
                             {provider.name}
                           </span>
                         ) : null}
@@ -436,7 +376,7 @@ function LlmStatusPopover() {
                 ) : (
                   <div
                     data-testid='llm-model-empty'
-                    className='text-muted-foreground px-2 py-2 text-xs'
+                    className='px-2 py-2 text-xs text-muted-foreground'
                   >
                     {t('llm.modelSearchNoResults', {
                       defaultValue: 'No models found',
@@ -455,12 +395,8 @@ function LlmStatusPopover() {
               disabled={!selectedTarget || busy}
               className='h-6 shrink-0 gap-1 px-2 text-[11px]'
             >
-              {busy ? (
-                <LoaderCircleIcon className='size-3 animate-spin' />
-              ) : null}
-              {selectedIsLoaded || llmUnloading
-                ? t('llm.unload')
-                : t('llm.load')}
+              {busy ? <LoaderCircleIcon className='size-3 animate-spin' /> : null}
+              {selectedIsLoaded || llmUnloading ? t('llm.unload') : t('llm.load')}
             </Button>
           </div>
         </div>
@@ -471,7 +407,7 @@ function LlmStatusPopover() {
 
         {/* Language + prompt */}
         <div className='flex flex-col gap-1 px-3 pt-2.5 pb-3'>
-          <span className='text-muted-foreground text-[10px] font-medium uppercase'>
+          <span className='text-[10px] font-medium text-muted-foreground uppercase'>
             {t('llm.translationSettings', {
               defaultValue: 'Translation',
             })}
@@ -483,10 +419,7 @@ function LlmStatusPopover() {
                 value={llmSelectedLanguage ?? selectedModelLanguages[0]}
                 onValueChange={handleSetSelectedLanguage}
               >
-                <SelectTrigger
-                  data-testid='llm-language-select'
-                  className='w-full'
-                >
+                <SelectTrigger data-testid='llm-language-select' className='w-full'>
                   <SelectValue placeholder={t('llm.languagePlaceholder')} />
                 </SelectTrigger>
                 <SelectContent position='popper'>
@@ -506,9 +439,7 @@ function LlmStatusPopover() {
             <Textarea
               data-testid='llm-system-prompt'
               value={customSystemPrompt ?? ''}
-              onChange={(e) =>
-                setCustomSystemPrompt(e.target.value || undefined)
-              }
+              onChange={(e) => setCustomSystemPrompt(e.target.value || undefined)}
               placeholder={t('llm.systemPromptPlaceholder', {
                 defaultValue: 'Custom system prompt (optional)',
               })}

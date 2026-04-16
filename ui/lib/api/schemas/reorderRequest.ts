@@ -5,5 +5,5 @@
  */
 
 export interface ReorderRequest {
-  ids: string[];
+  ids: string[]
 }

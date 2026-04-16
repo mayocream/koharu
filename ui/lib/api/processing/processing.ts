@@ -11,9 +11,8 @@ import type {
   UseMutationResult,
 } from '@tanstack/react-query'
 
-import type { ApiError, RenderRequest, TranslateRequest } from '../schemas'
-
 import { fetchApi } from '.././fetch'
+import type { ApiError, RenderRequest, TranslateRequest } from '../schemas'
 
 type SecondParameter<T extends (...args: never) => unknown> = Parameters<T>[1]
 
@@ -21,20 +20,14 @@ export const getDetectDocumentUrl = (documentId: string) => {
   return `/api/v1/documents/${documentId}/detect`
 }
 
-export const detectDocument = async (
-  documentId: string,
-  options?: RequestInit,
-): Promise<void> => {
+export const detectDocument = async (documentId: string, options?: RequestInit): Promise<void> => {
   return fetchApi<void>(getDetectDocumentUrl(documentId), {
     ...options,
     method: 'POST',
   })
 }
 
-export const getDetectDocumentMutationOptions = <
-  TError = ApiError,
-  TContext = unknown,
->(options?: {
+export const getDetectDocumentMutationOptions = <TError = ApiError, TContext = unknown>(options?: {
   mutation?: UseMutationOptions<
     Awaited<ReturnType<typeof detectDocument>>,
     TError,
@@ -50,9 +43,7 @@ export const getDetectDocumentMutationOptions = <
 > => {
   const mutationKey = ['detectDocument']
   const { mutation: mutationOptions, request: requestOptions } = options
-    ? options.mutation &&
-      'mutationKey' in options.mutation &&
-      options.mutation.mutationKey
+    ? options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey
       ? options
       : { ...options, mutation: { ...options.mutation, mutationKey } }
     : { mutation: { mutationKey }, request: undefined }
@@ -69,9 +60,7 @@ export const getDetectDocumentMutationOptions = <
   return { mutationFn, ...mutationOptions }
 }
 
-export type DetectDocumentMutationResult = NonNullable<
-  Awaited<ReturnType<typeof detectDocument>>
->
+export type DetectDocumentMutationResult = NonNullable<Awaited<ReturnType<typeof detectDocument>>>
 
 export type DetectDocumentMutationError = ApiError
 
@@ -98,20 +87,14 @@ export const getInpaintDocumentUrl = (documentId: string) => {
   return `/api/v1/documents/${documentId}/inpaint`
 }
 
-export const inpaintDocument = async (
-  documentId: string,
-  options?: RequestInit,
-): Promise<void> => {
+export const inpaintDocument = async (documentId: string, options?: RequestInit): Promise<void> => {
   return fetchApi<void>(getInpaintDocumentUrl(documentId), {
     ...options,
     method: 'POST',
   })
 }
 
-export const getInpaintDocumentMutationOptions = <
-  TError = ApiError,
-  TContext = unknown,
->(options?: {
+export const getInpaintDocumentMutationOptions = <TError = ApiError, TContext = unknown>(options?: {
   mutation?: UseMutationOptions<
     Awaited<ReturnType<typeof inpaintDocument>>,
     TError,
@@ -127,9 +110,7 @@ export const getInpaintDocumentMutationOptions = <
 > => {
   const mutationKey = ['inpaintDocument']
   const { mutation: mutationOptions, request: requestOptions } = options
-    ? options.mutation &&
-      'mutationKey' in options.mutation &&
-      options.mutation.mutationKey
+    ? options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey
       ? options
       : { ...options, mutation: { ...options.mutation, mutationKey } }
     : { mutation: { mutationKey }, request: undefined }
@@ -146,9 +127,7 @@ export const getInpaintDocumentMutationOptions = <
   return { mutationFn, ...mutationOptions }
 }
 
-export type InpaintDocumentMutationResult = NonNullable<
-  Awaited<ReturnType<typeof inpaintDocument>>
->
+export type InpaintDocumentMutationResult = NonNullable<Awaited<ReturnType<typeof inpaintDocument>>>
 
 export type InpaintDocumentMutationError = ApiError
 
@@ -204,9 +183,7 @@ export const getRecognizeDocumentMutationOptions = <
 > => {
   const mutationKey = ['recognizeDocument']
   const { mutation: mutationOptions, request: requestOptions } = options
-    ? options.mutation &&
-      'mutationKey' in options.mutation &&
-      options.mutation.mutationKey
+    ? options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey
       ? options
       : { ...options, mutation: { ...options.mutation, mutationKey } }
     : { mutation: { mutationKey }, request: undefined }
@@ -265,10 +242,7 @@ export const renderDocument = async (
   })
 }
 
-export const getRenderDocumentMutationOptions = <
-  TError = ApiError,
-  TContext = unknown,
->(options?: {
+export const getRenderDocumentMutationOptions = <TError = ApiError, TContext = unknown>(options?: {
   mutation?: UseMutationOptions<
     Awaited<ReturnType<typeof renderDocument>>,
     TError,
@@ -284,9 +258,7 @@ export const getRenderDocumentMutationOptions = <
 > => {
   const mutationKey = ['renderDocument']
   const { mutation: mutationOptions, request: requestOptions } = options
-    ? options.mutation &&
-      'mutationKey' in options.mutation &&
-      options.mutation.mutationKey
+    ? options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey
       ? options
       : { ...options, mutation: { ...options.mutation, mutationKey } }
     : { mutation: { mutationKey }, request: undefined }
@@ -303,9 +275,7 @@ export const getRenderDocumentMutationOptions = <
   return { mutationFn, ...mutationOptions }
 }
 
-export type RenderDocumentMutationResult = NonNullable<
-  Awaited<ReturnType<typeof renderDocument>>
->
+export type RenderDocumentMutationResult = NonNullable<Awaited<ReturnType<typeof renderDocument>>>
 export type RenderDocumentMutationBody = RenderRequest
 export type RenderDocumentMutationError = ApiError
 
@@ -364,9 +334,7 @@ export const getTranslateDocumentMutationOptions = <
 > => {
   const mutationKey = ['translateDocument']
   const { mutation: mutationOptions, request: requestOptions } = options
-    ? options.mutation &&
-      'mutationKey' in options.mutation &&
-      options.mutation.mutationKey
+    ? options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey
       ? options
       : { ...options, mutation: { ...options.mutation, mutationKey } }
     : { mutation: { mutationKey }, request: undefined }

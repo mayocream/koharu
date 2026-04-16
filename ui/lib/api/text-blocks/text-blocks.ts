@@ -11,6 +11,7 @@ import type {
   UseMutationResult,
 } from '@tanstack/react-query'
 
+import { fetchApi } from '.././fetch'
 import type {
   ApiError,
   CreateTextBlock,
@@ -18,8 +19,6 @@ import type {
   TextBlockInput,
   TextBlockPatch,
 } from '../schemas'
-
-import { fetchApi } from '.././fetch'
 
 type SecondParameter<T extends (...args: never) => unknown> = Parameters<T>[1]
 
@@ -40,10 +39,7 @@ export const putTextBlocks = async (
   })
 }
 
-export const getPutTextBlocksMutationOptions = <
-  TError = ApiError,
-  TContext = unknown,
->(options?: {
+export const getPutTextBlocksMutationOptions = <TError = ApiError, TContext = unknown>(options?: {
   mutation?: UseMutationOptions<
     Awaited<ReturnType<typeof putTextBlocks>>,
     TError,
@@ -59,9 +55,7 @@ export const getPutTextBlocksMutationOptions = <
 > => {
   const mutationKey = ['putTextBlocks']
   const { mutation: mutationOptions, request: requestOptions } = options
-    ? options.mutation &&
-      'mutationKey' in options.mutation &&
-      options.mutation.mutationKey
+    ? options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey
       ? options
       : { ...options, mutation: { ...options.mutation, mutationKey } }
     : { mutation: { mutationKey }, request: undefined }
@@ -78,9 +72,7 @@ export const getPutTextBlocksMutationOptions = <
   return { mutationFn, ...mutationOptions }
 }
 
-export type PutTextBlocksMutationResult = NonNullable<
-  Awaited<ReturnType<typeof putTextBlocks>>
->
+export type PutTextBlocksMutationResult = NonNullable<Awaited<ReturnType<typeof putTextBlocks>>>
 export type PutTextBlocksMutationBody = TextBlockInput[]
 export type PutTextBlocksMutationError = ApiError
 
@@ -120,10 +112,7 @@ export const createTextBlock = async (
   })
 }
 
-export const getCreateTextBlockMutationOptions = <
-  TError = ApiError,
-  TContext = unknown,
->(options?: {
+export const getCreateTextBlockMutationOptions = <TError = ApiError, TContext = unknown>(options?: {
   mutation?: UseMutationOptions<
     Awaited<ReturnType<typeof createTextBlock>>,
     TError,
@@ -139,9 +128,7 @@ export const getCreateTextBlockMutationOptions = <
 > => {
   const mutationKey = ['createTextBlock']
   const { mutation: mutationOptions, request: requestOptions } = options
-    ? options.mutation &&
-      'mutationKey' in options.mutation &&
-      options.mutation.mutationKey
+    ? options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey
       ? options
       : { ...options, mutation: { ...options.mutation, mutationKey } }
     : { mutation: { mutationKey }, request: undefined }
@@ -158,9 +145,7 @@ export const getCreateTextBlockMutationOptions = <
   return { mutationFn, ...mutationOptions }
 }
 
-export type CreateTextBlockMutationResult = NonNullable<
-  Awaited<ReturnType<typeof createTextBlock>>
->
+export type CreateTextBlockMutationResult = NonNullable<Awaited<ReturnType<typeof createTextBlock>>>
 export type CreateTextBlockMutationBody = CreateTextBlock
 export type CreateTextBlockMutationError = ApiError
 
@@ -183,10 +168,7 @@ export const useCreateTextBlock = <TError = ApiError, TContext = unknown>(
 > => {
   return useMutation(getCreateTextBlockMutationOptions(options), queryClient)
 }
-export const getDeleteTextBlockUrl = (
-  documentId: string,
-  textBlockId: string,
-) => {
+export const getDeleteTextBlockUrl = (documentId: string, textBlockId: string) => {
   return `/api/v1/documents/${documentId}/text-blocks/${textBlockId}`
 }
 
@@ -201,10 +183,7 @@ export const deleteTextBlock = async (
   })
 }
 
-export const getDeleteTextBlockMutationOptions = <
-  TError = ApiError,
-  TContext = unknown,
->(options?: {
+export const getDeleteTextBlockMutationOptions = <TError = ApiError, TContext = unknown>(options?: {
   mutation?: UseMutationOptions<
     Awaited<ReturnType<typeof deleteTextBlock>>,
     TError,
@@ -220,9 +199,7 @@ export const getDeleteTextBlockMutationOptions = <
 > => {
   const mutationKey = ['deleteTextBlock']
   const { mutation: mutationOptions, request: requestOptions } = options
-    ? options.mutation &&
-      'mutationKey' in options.mutation &&
-      options.mutation.mutationKey
+    ? options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey
       ? options
       : { ...options, mutation: { ...options.mutation, mutationKey } }
     : { mutation: { mutationKey }, request: undefined }
@@ -239,9 +216,7 @@ export const getDeleteTextBlockMutationOptions = <
   return { mutationFn, ...mutationOptions }
 }
 
-export type DeleteTextBlockMutationResult = NonNullable<
-  Awaited<ReturnType<typeof deleteTextBlock>>
->
+export type DeleteTextBlockMutationResult = NonNullable<Awaited<ReturnType<typeof deleteTextBlock>>>
 
 export type DeleteTextBlockMutationError = ApiError
 
@@ -264,10 +239,7 @@ export const useDeleteTextBlock = <TError = ApiError, TContext = unknown>(
 > => {
   return useMutation(getDeleteTextBlockMutationOptions(options), queryClient)
 }
-export const getPatchTextBlockUrl = (
-  documentId: string,
-  textBlockId: string,
-) => {
+export const getPatchTextBlockUrl = (documentId: string, textBlockId: string) => {
   return `/api/v1/documents/${documentId}/text-blocks/${textBlockId}`
 }
 
@@ -277,21 +249,15 @@ export const patchTextBlock = async (
   textBlockPatch: TextBlockPatch,
   options?: RequestInit,
 ): Promise<TextBlockDetail> => {
-  return fetchApi<TextBlockDetail>(
-    getPatchTextBlockUrl(documentId, textBlockId),
-    {
-      ...options,
-      method: 'PATCH',
-      headers: { 'Content-Type': 'application/json', ...options?.headers },
-      body: JSON.stringify(textBlockPatch),
-    },
-  )
+  return fetchApi<TextBlockDetail>(getPatchTextBlockUrl(documentId, textBlockId), {
+    ...options,
+    method: 'PATCH',
+    headers: { 'Content-Type': 'application/json', ...options?.headers },
+    body: JSON.stringify(textBlockPatch),
+  })
 }
 
-export const getPatchTextBlockMutationOptions = <
-  TError = ApiError,
-  TContext = unknown,
->(options?: {
+export const getPatchTextBlockMutationOptions = <TError = ApiError, TContext = unknown>(options?: {
   mutation?: UseMutationOptions<
     Awaited<ReturnType<typeof patchTextBlock>>,
     TError,
@@ -307,9 +273,7 @@ export const getPatchTextBlockMutationOptions = <
 > => {
   const mutationKey = ['patchTextBlock']
   const { mutation: mutationOptions, request: requestOptions } = options
-    ? options.mutation &&
-      'mutationKey' in options.mutation &&
-      options.mutation.mutationKey
+    ? options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey
       ? options
       : { ...options, mutation: { ...options.mutation, mutationKey } }
     : { mutation: { mutationKey }, request: undefined }
@@ -326,9 +290,7 @@ export const getPatchTextBlockMutationOptions = <
   return { mutationFn, ...mutationOptions }
 }
 
-export type PatchTextBlockMutationResult = NonNullable<
-  Awaited<ReturnType<typeof patchTextBlock>>
->
+export type PatchTextBlockMutationResult = NonNullable<Awaited<ReturnType<typeof patchTextBlock>>>
 export type PatchTextBlockMutationBody = TextBlockPatch
 export type PatchTextBlockMutationError = ApiError
 

@@ -2,6 +2,7 @@
 
 import * as React from 'react'
 import { useEffect, useRef, useState } from 'react'
+
 import { Textarea } from '@/components/ui/textarea'
 
 export type DraftTextareaProps = Omit<

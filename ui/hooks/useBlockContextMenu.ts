@@ -2,8 +2,9 @@
 
 import { useState } from 'react'
 import type React from 'react'
-import type { MappedDocument } from '@/hooks/useTextBlocks'
+
 import type { PointerToDocumentFn } from '@/hooks/usePointerToDocument'
+import type { MappedDocument } from '@/hooks/useTextBlocks'
 
 type BlockContextMenuOptions = {
   currentDocument: MappedDocument | null
@@ -18,9 +19,7 @@ export function useBlockContextMenu({
   selectBlock,
   removeBlock,
 }: BlockContextMenuOptions) {
-  const [contextMenuBlockIndex, setContextMenuBlockIndex] = useState<
-    number | undefined
-  >(undefined)
+  const [contextMenuBlockIndex, setContextMenuBlockIndex] = useState<number | undefined>(undefined)
 
   const handleContextMenu = (event: React.MouseEvent<HTMLElement>) => {
     if (!currentDocument) return

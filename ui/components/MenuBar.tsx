@@ -1,13 +1,13 @@
 'use client'
 
-import { useCallback, useEffect, useState } from 'react'
 import { MinusIcon, SquareIcon, XIcon, CopyIcon } from 'lucide-react'
-import { isTauri, openExternalUrl } from '@/lib/backend'
+import { useCallback, useEffect, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 
+import { isTauri, openExternalUrl } from '@/lib/backend'
+
 const isMacOS = () =>
-  typeof navigator !== 'undefined' &&
-  /Mac|iPhone|iPad|iPod/.test(navigator.userAgent)
+  typeof navigator !== 'undefined' && /Mac|iPhone|iPad|iPod/.test(navigator.userAgent)
 
 const windowControls = {
   async close() {
@@ -27,8 +27,10 @@ const windowControls = {
     return getCurrentWindow().isMaximized()
   },
 }
-import { fitCanvasToViewport, resetCanvasScale } from '@/components/Canvas'
 import Image from 'next/image'
+
+import { fitCanvasToViewport, resetCanvasScale } from '@/components/Canvas'
+import { SettingsDialog, type TabId } from '@/components/SettingsDialog'
 import {
   Menubar,
   MenubarContent,
@@ -37,11 +39,10 @@ import {
   MenubarSeparator,
   MenubarTrigger,
 } from '@/components/ui/menubar'
-import { SettingsDialog, type TabId } from '@/components/SettingsDialog'
+import type { PipelineJobRequest } from '@/lib/api/schemas'
 import { useProcessing } from '@/lib/machines'
 import { useEditorUiStore } from '@/lib/stores/editorUiStore'
 import { usePreferencesStore } from '@/lib/stores/preferencesStore'
-import type { PipelineJobRequest } from '@/lib/api/schemas'
 
 type MenuItem = {
   label: string
@@ -61,9 +62,7 @@ export function MenuBar() {
   const { send } = useProcessing()
   const [settingsOpen, setSettingsOpen] = useState(false)
   const [settingsTab, setSettingsTab] = useState<TabId>('appearance')
-  const hasDocument = useEditorUiStore(
-    (state) => state.currentDocumentId !== null,
-  )
+  const hasDocument = useEditorUiStore((state) => state.currentDocumentId !== null)
 
   const buildPipelineRequest = (documentId?: string): PipelineJobRequest => {
     const { selectedTarget, selectedLanguage, renderEffect, renderStroke } =
@@ -88,26 +87,22 @@ export function MenuBar() {
   const fileMenuItems: MenuItem[] = [
     {
       label: t('menu.openFile'),
-      onSelect: () =>
-        send({ type: 'START_IMPORT', mode: 'replace', source: 'files' }),
+      onSelect: () => send({ type: 'START_IMPORT', mode: 'replace', source: 'files' }),
       testId: 'menu-file-open',
     },
     {
       label: t('menu.addFile'),
-      onSelect: () =>
-        send({ type: 'START_IMPORT', mode: 'append', source: 'files' }),
+      onSelect: () => send({ type: 'START_IMPORT', mode: 'append', source: 'files' }),
       testId: 'menu-file-add',
     },
     {
       label: t('menu.openFolder'),
-      onSelect: () =>
-        send({ type: 'START_IMPORT', mode: 'replace', source: 'folder' }),
+      onSelect: () => send({ type: 'START_IMPORT', mode: 'replace', source: 'folder' }),
       testId: 'menu-file-open-folder',
     },
     {
       label: t('menu.addFolder'),
-      onSelect: () =>
-        send({ type: 'START_IMPORT', mode: 'append', source: 'folder' }),
+      onSelect: () => send({ type: 'START_IMPORT', mode: 'append', source: 'folder' }),
       testId: 'menu-file-add-folder',
     },
     {
@@ -180,8 +175,7 @@ export function MenuBar() {
         },
         {
           label: t('menu.processAll'),
-          onSelect: () =>
-            send({ type: 'START_PIPELINE', request: buildPipelineRequest() }),
+          onSelect: () => send({ type: 'START_PIPELINE', request: buildPipelineRequest() }),
           testId: 'menu-process-all',
         },
       ],
@@ -203,19 +197,13 @@ export function MenuBar() {
   const isWindowsTauri = isTauri() && !isMacOS()
 
   return (
-    <div className='border-border bg-background text-foreground flex h-8 items-center border-b text-[13px]'>
+    <div className='flex h-8 items-center border-b border-border bg-background text-[13px] text-foreground'>
       {/* macOS traffic lights */}
       {isNativeMacOS && <MacOSControls />}
 
       {/* Logo */}
       <div className='flex h-full items-center pl-2 select-none'>
-        <Image
-          src='/icon.png'
-          alt='Koharu'
-          width={18}
-          height={18}
-          draggable={false}
-        />
+        <Image src='/icon.png' alt='Koharu' width={18} height={18} draggable={false} />
       </div>
 
       {/* Menu items */}
@@ -223,16 +211,11 @@ export function MenuBar() {
         <MenubarMenu>
           <MenubarTrigger
             data-testid='menu-file-trigger'
-            className='hover:bg-accent data-[state=open]:bg-accent rounded px-3 py-1.5 font-medium'
+            className='rounded px-3 py-1.5 font-medium hover:bg-accent data-[state=open]:bg-accent'
           >
             {t('menu.file')}
           </MenubarTrigger>
-          <MenubarContent
-            className='min-w-36'
-            align='start'
-            sideOffset={5}
-            alignOffset={-3}
-          >
+          <MenubarContent className='min-w-36' align='start' sideOffset={5} alignOffset={-3}>
             {fileMenuItems.map((item) => (
               <MenubarItem
                 key={item.label}
@@ -266,16 +249,11 @@ export function MenuBar() {
           <MenubarMenu key={label}>
             <MenubarTrigger
               data-testid={triggerTestId}
-              className='hover:bg-accent data-[state=open]:bg-accent rounded px-3 py-1.5 font-medium'
+              className='rounded px-3 py-1.5 font-medium hover:bg-accent data-[state=open]:bg-accent'
             >
               {label}
             </MenubarTrigger>
-            <MenubarContent
-              className='min-w-36'
-              align='start'
-              sideOffset={5}
-              alignOffset={-3}
-            >
+            <MenubarContent className='min-w-36' align='start' sideOffset={5} alignOffset={-3}>
               {items.map((item) => (
                 <MenubarItem
                   key={item.label}
@@ -297,15 +275,10 @@ export function MenuBar() {
           </MenubarMenu>
         ))}
         <MenubarMenu>
-          <MenubarTrigger className='hover:bg-accent data-[state=open]:bg-accent rounded px-3 py-1.5 font-medium'>
+          <MenubarTrigger className='rounded px-3 py-1.5 font-medium hover:bg-accent data-[state=open]:bg-accent'>
             {t('menu.help')}
           </MenubarTrigger>
-          <MenubarContent
-            className='min-w-36'
-            align='start'
-            sideOffset={5}
-            alignOffset={-3}
-          >
+          <MenubarContent className='min-w-36' align='start' sideOffset={5} alignOffset={-3}>
             {helpMenuItems.map((item) => (
               <MenubarItem
                 key={item.label}
@@ -337,19 +310,12 @@ export function MenuBar() {
       </Menubar>
 
       {/* Draggable region */}
-      <div
-        data-tauri-drag-region
-        className='flex h-full flex-1 items-center justify-center'
-      />
+      <div data-tauri-drag-region className='flex h-full flex-1 items-center justify-center' />
 
       {/* Window controls for Windows */}
       {isWindowsTauri && <WindowControls />}
 
-      <SettingsDialog
-        open={settingsOpen}
-        onOpenChange={setSettingsOpen}
-        defaultTab={settingsTab}
-      />
+      <SettingsDialog open={settingsOpen} onOpenChange={setSettingsOpen} defaultTab={settingsTab} />
     </div>
   )
 }
@@ -407,7 +373,7 @@ function WindowControls() {
     <div className='flex h-full'>
       <button
         onClick={() => void windowControls.minimize()}
-        className='hover:bg-accent flex h-full w-11 items-center justify-center'
+        className='flex h-full w-11 items-center justify-center hover:bg-accent'
       >
         <MinusIcon className='size-4' />
       </button>
@@ -415,13 +381,9 @@ function WindowControls() {
         onClick={() => {
           void windowControls.toggleMaximize().then(updateMaximized)
         }}
-        className='hover:bg-accent flex h-full w-11 items-center justify-center'
+        className='flex h-full w-11 items-center justify-center hover:bg-accent'
       >
-        {maximized ? (
-          <CopyIcon className='size-3.5' />
-        ) : (
-          <SquareIcon className='size-3.5' />
-        )}
+        {maximized ? <CopyIcon className='size-3.5' /> : <SquareIcon className='size-3.5' />}
       </button>
       <button
         onClick={() => void windowControls.close()}

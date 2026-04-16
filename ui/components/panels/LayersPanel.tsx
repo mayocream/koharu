@@ -1,7 +1,5 @@
 'use client'
 
-import { useTranslation } from 'react-i18next'
-import { motion } from 'motion/react'
 import {
   EyeIcon,
   EyeOffIcon,
@@ -11,10 +9,13 @@ import {
   BandageIcon,
   PaintbrushIcon,
 } from 'lucide-react'
-import { cn } from '@/lib/utils'
+import { motion } from 'motion/react'
+import { useTranslation } from 'react-i18next'
+
 import { Button } from '@/components/ui/button'
-import { useEditorUiStore } from '@/lib/stores/editorUiStore'
 import { useCurrentDocument } from '@/hooks/useTextBlocks'
+import { useEditorUiStore } from '@/lib/stores/editorUiStore'
+import { cn } from '@/lib/utils'
 
 type Layer = {
   id: string
@@ -28,30 +29,16 @@ type Layer = {
 
 export function LayersPanel() {
   const currentDocument = useCurrentDocument()
-  const showInpaintedImage = useEditorUiStore(
-    (state) => state.showInpaintedImage,
-  )
-  const setShowInpaintedImage = useEditorUiStore(
-    (state) => state.setShowInpaintedImage,
-  )
-  const showSegmentationMask = useEditorUiStore(
-    (state) => state.showSegmentationMask,
-  )
-  const setShowSegmentationMask = useEditorUiStore(
-    (state) => state.setShowSegmentationMask,
-  )
+  const showInpaintedImage = useEditorUiStore((state) => state.showInpaintedImage)
+  const setShowInpaintedImage = useEditorUiStore((state) => state.setShowInpaintedImage)
+  const showSegmentationMask = useEditorUiStore((state) => state.showSegmentationMask)
+  const setShowSegmentationMask = useEditorUiStore((state) => state.setShowSegmentationMask)
   const showBrushLayer = useEditorUiStore((state) => state.showBrushLayer)
   const setShowBrushLayer = useEditorUiStore((state) => state.setShowBrushLayer)
-  const showTextBlocksOverlay = useEditorUiStore(
-    (state) => state.showTextBlocksOverlay,
-  )
-  const setShowTextBlocksOverlay = useEditorUiStore(
-    (state) => state.setShowTextBlocksOverlay,
-  )
+  const showTextBlocksOverlay = useEditorUiStore((state) => state.showTextBlocksOverlay)
+  const setShowTextBlocksOverlay = useEditorUiStore((state) => state.setShowTextBlocksOverlay)
   const showRenderedImage = useEditorUiStore((state) => state.showRenderedImage)
-  const setShowRenderedImage = useEditorUiStore(
-    (state) => state.setShowRenderedImage,
-  )
+  const setShowRenderedImage = useEditorUiStore((state) => state.setShowRenderedImage)
 
   const layers: Layer[] = [
     {
@@ -69,8 +56,7 @@ export function LayersPanel() {
       visible: showTextBlocksOverlay,
       setVisible: setShowTextBlocksOverlay,
       hasContent:
-        currentDocument?.textBlocks !== undefined &&
-        currentDocument.textBlocks.length > 0,
+        currentDocument?.textBlocks !== undefined && currentDocument.textBlocks.length > 0,
     },
     {
       id: 'brush',
@@ -145,20 +131,14 @@ function LayerItem({ layer }: { layer: Layer }) {
           }
         }}
         disabled={!canToggle}
-        className={cn(
-          'size-5',
-          canToggle ? 'cursor-pointer' : 'cursor-default',
-        )}
+        className={cn('size-5', canToggle ? 'cursor-pointer' : 'cursor-default')}
       >
         {layer.visible ? (
           <EyeIcon
-            className={cn(
-              'size-3.5',
-              isActive ? 'text-foreground' : 'text-muted-foreground',
-            )}
+            className={cn('size-3.5', isActive ? 'text-foreground' : 'text-muted-foreground')}
           />
         ) : (
-          <EyeOffIcon className='text-muted-foreground/40 size-3.5' />
+          <EyeOffIcon className='size-3.5 text-muted-foreground/40' />
         )}
       </Button>
 
@@ -166,9 +146,7 @@ function LayerItem({ layer }: { layer: Layer }) {
       <div
         className={cn(
           'flex size-5 shrink-0 items-center justify-center rounded',
-          !layer.hasContent && !isLocked
-            ? 'text-muted-foreground/40'
-            : 'text-muted-foreground',
+          !layer.hasContent && !isLocked ? 'text-muted-foreground/40' : 'text-muted-foreground',
         )}
       >
         {layer.icon === 'RAW' ? (

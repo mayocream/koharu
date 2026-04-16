@@ -4,8 +4,7 @@
  * OpenAPI spec version: 0.0.1
  */
 
-export type LlmStateStatus =
-  (typeof LlmStateStatus)[keyof typeof LlmStateStatus]
+export type LlmStateStatus = (typeof LlmStateStatus)[keyof typeof LlmStateStatus]
 
 export const LlmStateStatus = {
   empty: 'empty',

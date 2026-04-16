@@ -1,28 +1,25 @@
 'use client'
 
-import { useTranslation } from 'react-i18next'
-import { motion } from 'motion/react'
-import { TextBlock } from '@/types'
 import { Languages, LoaderCircleIcon, Trash2Icon } from 'lucide-react'
-import { useTextBlocks } from '@/hooks/useTextBlocks'
-import { useGetLlm } from '@/lib/api/llm/llm'
-import { useEditorUiStore } from '@/lib/stores/editorUiStore'
-import { usePreferencesStore } from '@/lib/stores/preferencesStore'
-import { useProcessing } from '@/lib/machines'
+import { motion } from 'motion/react'
+import { useTranslation } from 'react-i18next'
+
 import {
   Accordion,
   AccordionContent,
   AccordionItem,
   AccordionTrigger,
 } from '@/components/ui/accordion'
-import {
-  Tooltip,
-  TooltipContent,
-  TooltipTrigger,
-} from '@/components/ui/tooltip'
 import { Button } from '@/components/ui/button'
 import { DraftTextarea } from '@/components/ui/draft-textarea'
 import { ScrollArea } from '@/components/ui/scroll-area'
+import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip'
+import { useTextBlocks } from '@/hooks/useTextBlocks'
+import { useGetLlm } from '@/lib/api/llm/llm'
+import { useProcessing } from '@/lib/machines'
+import { useEditorUiStore } from '@/lib/stores/editorUiStore'
+import { usePreferencesStore } from '@/lib/stores/preferencesStore'
+import { TextBlock } from '@/types'
 
 export function TextBlocksPanel() {
   const {
@@ -41,14 +38,13 @@ export function TextBlocksPanel() {
 
   if (!document) {
     return (
-      <div className='text-muted-foreground flex flex-1 items-center justify-center text-xs'>
+      <div className='flex flex-1 items-center justify-center text-xs text-muted-foreground'>
         {t('textBlocks.emptyPrompt')}
       </div>
     )
   }
 
-  const accordionValue =
-    selectedBlockIndex !== undefined ? selectedBlockIndex.toString() : ''
+  const accordionValue = selectedBlockIndex !== undefined ? selectedBlockIndex.toString() : ''
 
   const handleGenerate = (blockIndex: number) => {
     const documentId = useEditorUiStore.getState().currentDocumentId
@@ -78,11 +74,8 @@ export function TextBlocksPanel() {
   }
 
   return (
-    <div
-      className='flex min-h-0 flex-1 flex-col'
-      data-testid='panels-textblocks'
-    >
-      <div className='border-border text-muted-foreground flex items-center justify-between border-b px-2 py-1.5 text-xs font-semibold tracking-wide uppercase'>
+    <div className='flex min-h-0 flex-1 flex-col' data-testid='panels-textblocks'>
+      <div className='flex items-center justify-between border-b border-border px-2 py-1.5 text-xs font-semibold tracking-wide text-muted-foreground uppercase'>
         <span data-testid='textblocks-count' data-count={textBlocks.length}>
           {t('textBlocks.title', { count: textBlocks.length })}
         </span>
@@ -94,7 +87,7 @@ export function TextBlocksPanel() {
       >
         <div className='p-2'>
           {textBlocks.length === 0 ? (
-            <p className='border-border text-muted-foreground rounded border border-dashed p-2 text-xs'>
+            <p className='rounded border border-dashed border-border p-2 text-xs text-muted-foreground'>
               {t('textBlocks.none')}
             </p>
           ) : (
@@ -172,9 +165,9 @@ function BlockCard({
       <AccordionItem
         value={index.toString()}
         data-selected={selected}
-        className='bg-card/90 ring-border data-[selected=true]:ring-primary overflow-hidden rounded text-xs ring-1'
+        className='overflow-hidden rounded bg-card/90 text-xs ring-1 ring-border data-[selected=true]:ring-primary'
       >
-        <AccordionTrigger className='data-[state=open]:bg-accent flex w-full cursor-pointer items-center gap-1.5 px-2 py-1.5 text-left transition outline-none hover:no-underline [&>svg]:hidden'>
+        <AccordionTrigger className='flex w-full cursor-pointer items-center gap-1.5 px-2 py-1.5 text-left transition outline-none hover:no-underline data-[state=open]:bg-accent [&>svg]:hidden'>
           <span
             className={`shrink-0 rounded px-1.5 py-0.5 text-center text-[10px] font-medium text-white tabular-nums ${
               selected ? 'bg-primary' : 'bg-muted-foreground/60'
@@ -186,33 +179,27 @@ function BlockCard({
           <div className='flex min-w-0 flex-1 items-center gap-1'>
             <span
               className={`shrink-0 rounded px-1 py-0.5 text-[9px] font-medium uppercase ${
-                hasOcr
-                  ? 'bg-rose-400/80 text-white'
-                  : 'bg-muted text-muted-foreground/50'
+                hasOcr ? 'bg-rose-400/80 text-white' : 'bg-muted text-muted-foreground/50'
               }`}
             >
               {t('textBlocks.ocrBadge')}
             </span>
             <span
               className={`shrink-0 rounded px-1 py-0.5 text-[9px] font-medium uppercase ${
-                hasTranslation
-                  ? 'bg-rose-400/80 text-white'
-                  : 'bg-muted text-muted-foreground/50'
+                hasTranslation ? 'bg-rose-400/80 text-white' : 'bg-muted text-muted-foreground/50'
               }`}
             >
               {t('textBlocks.translationBadge')}
             </span>
             {preview && (
-              <p className='text-muted-foreground line-clamp-1 min-w-0 flex-1 text-xs'>
-                {preview}
-              </p>
+              <p className='line-clamp-1 min-w-0 flex-1 text-xs text-muted-foreground'>{preview}</p>
             )}
           </div>
         </AccordionTrigger>
         <AccordionContent className='px-2 pt-1.5 pb-2 shadow-[inset_0_1px_0_0_var(--color-border)]'>
           <div className='space-y-1.5'>
             <div className='flex flex-col gap-0.5'>
-              <span className='text-muted-foreground text-[10px] uppercase'>
+              <span className='text-[10px] text-muted-foreground uppercase'>
                 {t('textBlocks.ocrLabel')}
               </span>
               <DraftTextarea
@@ -226,7 +213,7 @@ function BlockCard({
             </div>
             <div className='flex flex-col gap-0.5'>
               <div className='flex items-center justify-between'>
-                <span className='text-muted-foreground text-[10px] uppercase'>
+                <span className='text-[10px] text-muted-foreground uppercase'>
                   {t('textBlocks.translationLabel')}
                 </span>
                 <div className='flex items-center gap-0.5'>

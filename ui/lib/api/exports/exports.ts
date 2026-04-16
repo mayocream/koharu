@@ -19,14 +19,8 @@ import type {
   UseQueryResult,
 } from '@tanstack/react-query'
 
-import type {
-  ApiError,
-  ExportBatchRequest,
-  ExportDocumentParams,
-  ExportResult,
-} from '../schemas'
-
 import { fetchApi } from '.././fetch'
+import type { ApiError, ExportBatchRequest, ExportDocumentParams, ExportResult } from '../schemas'
 
 type SecondParameter<T extends (...args: never) => unknown> = Parameters<T>[1]
 
@@ -67,10 +61,7 @@ export const getExportDocumentQueryKey = (
   format: string,
   params?: ExportDocumentParams,
 ) => {
-  return [
-    `/api/v1/documents/${documentId}/export/${format}`,
-    ...(params ? [params] : []),
-  ] as const
+  return [`/api/v1/documents/${documentId}/export/${format}`, ...(params ? [params] : [])] as const
 }
 
 export const getExportDocumentQueryOptions = <
@@ -81,21 +72,15 @@ export const getExportDocumentQueryOptions = <
   format: string,
   params?: ExportDocumentParams,
   options?: {
-    query?: Partial<
-      UseQueryOptions<Awaited<ReturnType<typeof exportDocument>>, TError, TData>
-    >
+    query?: Partial<UseQueryOptions<Awaited<ReturnType<typeof exportDocument>>, TError, TData>>
     request?: SecondParameter<typeof fetchApi>
   },
 ) => {
   const { query: queryOptions, request: requestOptions } = options ?? {}
 
-  const queryKey =
-    queryOptions?.queryKey ??
-    getExportDocumentQueryKey(documentId, format, params)
+  const queryKey = queryOptions?.queryKey ?? getExportDocumentQueryKey(documentId, format, params)
 
-  const queryFn: QueryFunction<Awaited<ReturnType<typeof exportDocument>>> = ({
-    signal,
-  }) =>
+  const queryFn: QueryFunction<Awaited<ReturnType<typeof exportDocument>>> = ({ signal }) =>
     exportDocument(documentId, format, params, { signal, ...requestOptions })
 
   return {
@@ -105,16 +90,12 @@ export const getExportDocumentQueryOptions = <
     gcTime: 300000,
     retry: 1,
     ...queryOptions,
-  } as UseQueryOptions<
-    Awaited<ReturnType<typeof exportDocument>>,
-    TError,
-    TData
-  > & { queryKey: DataTag<QueryKey, TData, TError> }
+  } as UseQueryOptions<Awaited<ReturnType<typeof exportDocument>>, TError, TData> & {
+    queryKey: DataTag<QueryKey, TData, TError>
+  }
 }
 
-export type ExportDocumentQueryResult = NonNullable<
-  Awaited<ReturnType<typeof exportDocument>>
->
+export type ExportDocumentQueryResult = NonNullable<Awaited<ReturnType<typeof exportDocument>>>
 export type ExportDocumentQueryError = ApiError
 
 export function useExportDocument<
@@ -125,9 +106,7 @@ export function useExportDocument<
   format: string,
   params: undefined | ExportDocumentParams,
   options: {
-    query: Partial<
-      UseQueryOptions<Awaited<ReturnType<typeof exportDocument>>, TError, TData>
-    > &
+    query: Partial<UseQueryOptions<Awaited<ReturnType<typeof exportDocument>>, TError, TData>> &
       Pick<
         DefinedInitialDataOptions<
           Awaited<ReturnType<typeof exportDocument>>,
@@ -150,9 +129,7 @@ export function useExportDocument<
   format: string,
   params?: ExportDocumentParams,
   options?: {
-    query?: Partial<
-      UseQueryOptions<Awaited<ReturnType<typeof exportDocument>>, TError, TData>
-    > &
+    query?: Partial<UseQueryOptions<Awaited<ReturnType<typeof exportDocument>>, TError, TData>> &
       Pick<
         UndefinedInitialDataOptions<
           Awaited<ReturnType<typeof exportDocument>>,
@@ -175,9 +152,7 @@ export function useExportDocument<
   format: string,
   params?: ExportDocumentParams,
   options?: {
-    query?: Partial<
-      UseQueryOptions<Awaited<ReturnType<typeof exportDocument>>, TError, TData>
-    >
+    query?: Partial<UseQueryOptions<Awaited<ReturnType<typeof exportDocument>>, TError, TData>>
     request?: SecondParameter<typeof fetchApi>
   },
   queryClient?: QueryClient,
@@ -193,26 +168,18 @@ export function useExportDocument<
   format: string,
   params?: ExportDocumentParams,
   options?: {
-    query?: Partial<
-      UseQueryOptions<Awaited<ReturnType<typeof exportDocument>>, TError, TData>
-    >
+    query?: Partial<UseQueryOptions<Awaited<ReturnType<typeof exportDocument>>, TError, TData>>
     request?: SecondParameter<typeof fetchApi>
   },
   queryClient?: QueryClient,
 ): UseQueryResult<TData, TError> & {
   queryKey: DataTag<QueryKey, TData, TError>
 } {
-  const queryOptions = getExportDocumentQueryOptions(
-    documentId,
-    format,
-    params,
-    options,
-  )
+  const queryOptions = getExportDocumentQueryOptions(documentId, format, params, options)
 
-  const query = useQuery(queryOptions, queryClient) as UseQueryResult<
-    TData,
-    TError
-  > & { queryKey: DataTag<QueryKey, TData, TError> }
+  const query = useQuery(queryOptions, queryClient) as UseQueryResult<TData, TError> & {
+    queryKey: DataTag<QueryKey, TData, TError>
+  }
 
   return { ...query, queryKey: queryOptions.queryKey }
 }
@@ -233,10 +200,7 @@ export const batchExport = async (
   })
 }
 
-export const getBatchExportMutationOptions = <
-  TError = ApiError,
-  TContext = unknown,
->(options?: {
+export const getBatchExportMutationOptions = <TError = ApiError, TContext = unknown>(options?: {
   mutation?: UseMutationOptions<
     Awaited<ReturnType<typeof batchExport>>,
     TError,
@@ -252,9 +216,7 @@ export const getBatchExportMutationOptions = <
 > => {
   const mutationKey = ['batchExport']
   const { mutation: mutationOptions, request: requestOptions } = options
-    ? options.mutation &&
-      'mutationKey' in options.mutation &&
-      options.mutation.mutationKey
+    ? options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey
       ? options
       : { ...options, mutation: { ...options.mutation, mutationKey } }
     : { mutation: { mutationKey }, request: undefined }
@@ -271,9 +233,7 @@ export const getBatchExportMutationOptions = <
   return { mutationFn, ...mutationOptions }
 }
 
-export type BatchExportMutationResult = NonNullable<
-  Awaited<ReturnType<typeof batchExport>>
->
+export type BatchExportMutationResult = NonNullable<Awaited<ReturnType<typeof batchExport>>>
 export type BatchExportMutationBody = ExportBatchRequest
 export type BatchExportMutationError = ApiError
 
