@@ -9,7 +9,7 @@ use skrifa::{
 };
 
 use crate::font::{Font, font_key};
-use crate::shape::shape_segment_with_fallbacks;
+use crate::shape::shape_script_runs;
 use crate::text::script::shaping_direction_for_text;
 use koharu_core::TextAlign;
 
@@ -230,7 +230,7 @@ impl<'a> TextLayout<'a> {
         // Temporary storage for runs in the current line to be reordered
         struct LineRun<'a> {
             shaped: ShapedRun<'a>,
-            range: std::ops::Range<usize>,
+            level: unicode_bidi::Level,
         }
         let mut current_line_runs: Vec<LineRun<'a>> = Vec::new();
         let mut line_offset = 0usize;
@@ -239,22 +239,19 @@ impl<'a> TextLayout<'a> {
         let finalize_current_line =
             |runs: &mut Vec<LineRun<'a>>,
              offset: &mut usize,
-             end_offset: usize,
+             visible_end: usize,
+             next_offset: usize,
              lines: &mut Vec<LayoutLine<'a>>| {
                 if runs.is_empty() {
-                    *offset = end_offset;
+                    *offset = next_offset;
                     return;
                 }
 
-                let line_range = *offset..end_offset;
-                let (visual_levels, visual_ranges) = if let Some(p) = para {
-                    bidi_info.visual_runs(p, line_range)
-                } else {
-                    (vec![unicode_bidi::Level::ltr()], vec![line_range])
-                };
+                let levels: Vec<unicode_bidi::Level> = runs.iter().map(|r| r.level).collect();
+                let visual_indices = reorder_visual(&levels);
 
                 let mut line = LayoutLine {
-                    range: *offset..end_offset,
+                    range: *offset..visible_end,
                     direction: base_direction,
                     ..Default::default()
                 };
@@ -262,36 +259,18 @@ impl<'a> TextLayout<'a> {
                 let mut pen_x = 0.0f32;
                 let mut pen_y = 0.0f32;
 
-                for (level, visual_range) in visual_levels.into_iter().zip(visual_ranges) {
-                    // Find all line runs that overlap with this visual range.
-                    // Since runs is in logical order, we can filter by overlap.
-                    let mut overlapping: Vec<usize> = Vec::new();
-                    for (idx, run) in runs.iter().enumerate() {
-                        let overlap_start = run.range.start.max(visual_range.start);
-                        let overlap_end = run.range.end.min(visual_range.end);
-                        if overlap_start < overlap_end {
-                            overlapping.push(idx);
-                        }
+                for idx in visual_indices {
+                    let run = &mut runs[idx];
+                    for glyph in std::mem::take(&mut run.shaped.glyphs) {
+                        line.glyphs.push(glyph);
                     }
-
-                    // If the run is RTL, we must reverse the sequence of segments within it.
-                    if level.is_rtl() {
-                        overlapping.reverse();
-                    }
-
-                    for idx in overlapping {
-                        let run = &mut runs[idx];
-                        for mut glyph in std::mem::take(&mut run.shaped.glyphs) {
-                            glyph.cluster += run.range.start as u32;
-                            line.glyphs.push(glyph);
-                        }
-                        if self.writing_mode.is_vertical() {
-                            pen_y -= run.shaped.y_advance;
-                        } else {
-                            pen_x += run.shaped.x_advance;
-                        }
+                    if self.writing_mode.is_vertical() {
+                        pen_y -= run.shaped.y_advance;
+                    } else {
+                        pen_x += run.shaped.x_advance;
                     }
                 }
+
                 line.advance = if self.writing_mode.is_vertical() {
                     pen_y.abs()
                 } else {
@@ -300,56 +279,88 @@ impl<'a> TextLayout<'a> {
 
                 lines.push(line);
                 runs.clear();
-                *offset = end_offset;
+                *offset = next_offset;
             };
 
         for segment in segments {
             let start = segment.range.start;
             let segment_text = &text[segment.range.clone()];
 
-            let mut shaped = if segment_text.is_empty() {
-                ShapedRun {
-                    glyphs: Vec::new(),
-                    x_advance: 0.0,
-                    y_advance: 0.0,
+            let mut segment_runs = Vec::new();
+            let mut segment_advance = 0.0f32;
+
+            if !segment_text.is_empty() {
+                // Subdivide segment into constant BiDi level runs.
+                let mut run_start = segment.range.start;
+                while run_start < segment.range.end {
+                    let level = bidi_info.levels[run_start];
+                    let mut run_end = run_start + 1;
+                    while run_end < segment.range.end && bidi_info.levels[run_end] == level {
+                        run_end += 1;
+                    }
+
+                    let run_text = &text[run_start..run_end];
+                    let mut run_opts = opts.clone();
+                    run_opts.direction = if self.writing_mode.is_vertical() {
+                        harfrust::Direction::TopToBottom
+                    } else if level.is_rtl() {
+                        harfrust::Direction::RightToLeft
+                    } else {
+                        harfrust::Direction::LeftToRight
+                    };
+
+                    let script_runs = shape_script_runs(&shaper, run_text, &fonts, &run_opts)?;
+                    for mut shaped in script_runs {
+                        if self.writing_mode.is_vertical() && self.center_vertical_punctuation {
+                            self.center_vertical_fullwidth_punctuation(
+                                font_size,
+                                run_text,
+                                &mut shaped.glyphs,
+                            );
+                        }
+
+                        for glyph in &mut shaped.glyphs {
+                            glyph.cluster += run_start as u32;
+                        }
+
+                        segment_advance += if self.writing_mode.is_vertical() {
+                            shaped.y_advance
+                        } else {
+                            shaped.x_advance
+                        };
+
+                        segment_runs.push(LineRun { shaped, level });
+                    }
+
+                    run_start = run_end;
                 }
-            } else {
-                shape_segment_with_fallbacks(&shaper, segment_text, &fonts, &opts)?
-            };
-            if self.writing_mode.is_vertical() && self.center_vertical_punctuation {
-                self.center_vertical_fullwidth_punctuation(
-                    font_size,
-                    segment_text,
-                    &mut shaped.glyphs,
-                );
             }
-            let advance = if self.writing_mode.is_vertical() {
-                shaped.y_advance
-            } else {
-                shaped.x_advance
-            };
 
             let would_overflow = if self.writing_mode.is_vertical() {
-                current_advance.abs() + advance.abs() > max_extent
+                current_advance.abs() + segment_advance.abs() > max_extent
             } else {
-                current_advance + advance > max_extent
+                current_advance + segment_advance > max_extent
             };
 
             if would_overflow && !current_line_runs.is_empty() {
-                finalize_current_line(&mut current_line_runs, &mut line_offset, start, &mut lines);
+                finalize_current_line(
+                    &mut current_line_runs,
+                    &mut line_offset,
+                    start,
+                    start,
+                    &mut lines,
+                );
                 current_advance = 0.0;
             }
 
-            current_line_runs.push(LineRun {
-                shaped,
-                range: segment.range.clone(),
-            });
-            current_advance += advance;
+            current_line_runs.extend(segment_runs);
+            current_advance += segment_advance;
 
             if segment.is_mandatory {
                 finalize_current_line(
                     &mut current_line_runs,
                     &mut line_offset,
+                    segment.range.end,
                     segment.next_offset,
                     &mut lines,
                 );
@@ -361,6 +372,7 @@ impl<'a> TextLayout<'a> {
         finalize_current_line(
             &mut current_line_runs,
             &mut line_offset,
+            text.len(),
             text.len(),
             &mut lines,
         );
@@ -878,4 +890,40 @@ mod tests {
             "Hello⁉!"
         );
     }
+}
+
+fn reorder_visual(levels: &[unicode_bidi::Level]) -> Vec<usize> {
+    let mut indices: Vec<usize> = (0..levels.len()).collect();
+    if levels.is_empty() {
+        return indices;
+    }
+
+    let max_level = levels.iter().map(|l| l.number()).max().unwrap();
+    let min_odd_level = levels
+        .iter()
+        .map(|l| l.number())
+        .filter(|&n| n % 2 != 0)
+        .min()
+        .unwrap_or(u8::MAX);
+
+    if min_odd_level == u8::MAX {
+        return indices;
+    }
+
+    for level in (min_odd_level..=max_level).rev() {
+        let mut i = 0;
+        while i < levels.len() {
+            if levels[i].number() >= level {
+                let mut j = i;
+                while j < levels.len() && levels[j].number() >= level {
+                    j += 1;
+                }
+                indices[i..j].reverse();
+                i = j;
+            } else {
+                i += 1;
+            }
+        }
+    }
+    indices
 }

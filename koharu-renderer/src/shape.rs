@@ -1,7 +1,6 @@
 use anyhow::Result;
 use harfrust::{Direction, Feature, Script, ShaperData, UnicodeBuffer};
 use skrifa::raw::TableProvider;
-use unicode_bidi::BidiInfo;
 
 use crate::font::Font;
 
@@ -116,116 +115,67 @@ impl TextShaper {
 }
 
 #[tracing::instrument(level = "debug", skip_all)]
-pub(crate) fn shape_segment_with_fallbacks<'a>(
+pub(crate) fn shape_script_runs<'a>(
     shaper: &TextShaper,
-    segment: &str,
+    text: &str,
     fonts: &[&'a Font],
     options: &ShapingOptions,
-) -> Result<ShapedRun<'a>> {
-    if segment.is_empty() || fonts.is_empty() {
-        return Ok(ShapedRun {
-            glyphs: Vec::new(),
-            x_advance: 0.0,
-            y_advance: 0.0,
-        });
+) -> Result<Vec<ShapedRun<'a>>> {
+    if text.is_empty() || fonts.is_empty() {
+        return Ok(Vec::new());
     }
-
-    // Perform proper BiDi resolution and itemize by script runs.
-    let bidi_info = BidiInfo::new(segment, None);
-
-    if bidi_info.paragraphs.is_empty() {
-        return Ok(ShapedRun {
-            glyphs: Vec::new(),
-            x_advance: 0.0,
-            y_advance: 0.0,
-        });
-    }
-
-    // Perform proper BiDi resolution and itemize by script runs.
-    let bidi_info = BidiInfo::new(segment, None);
-
-    if bidi_info.paragraphs.is_empty() {
-        return Ok(ShapedRun {
-            glyphs: Vec::new(),
-            x_advance: 0.0,
-            y_advance: 0.0,
-        });
-    }
-
-    let para = &bidi_info.paragraphs[0];
-    let line = para.range.clone();
-    let (run_levels, visual_runs) = bidi_info.visual_runs(para, line);
 
     let script_map = icu::properties::CodePointMapData::<icu::properties::props::Script>::new();
-    let mut all_glyphs = Vec::new();
-    let (mut total_x_advance, mut total_y_advance) = (0.0, 0.0);
+    let mut runs = Vec::new();
 
-    for (i, run_range) in visual_runs.into_iter().enumerate() {
-        let run_text = &segment[run_range.clone()];
-        let run_level = run_levels[i];
+    let mut char_iter = text.char_indices().peekable();
+    while let Some((start, ch)) = char_iter.next() {
+        let mut script = script_map.get(ch);
+        let mut end = start + ch.len_utf8();
 
-        let run_direction = if run_level.is_rtl() {
-            Direction::RightToLeft
-        } else {
-            Direction::LeftToRight
-        };
-
-        // Sub-itemize the bidi run by script to handle font fallbacks correctly.
-        let mut char_iter = run_text.char_indices().peekable();
-        while let Some((start_in_run, ch)) = char_iter.next() {
-            let mut script = script_map.get(ch);
-            let mut end_in_run = start_in_run + ch.len_utf8();
-
-            while let Some(&(next_start, next_ch)) = char_iter.peek() {
-                let next_script = script_map.get(next_ch);
-                if next_script == script
-                    || next_script == icu::properties::props::Script::Common
-                    || next_script == icu::properties::props::Script::Inherited
-                {
-                    char_iter.next();
-                    end_in_run = next_start + next_ch.len_utf8();
-                } else if script == icu::properties::props::Script::Common
-                    || script == icu::properties::props::Script::Inherited
-                {
-                    script = next_script;
-                    char_iter.next();
-                    end_in_run = next_start + next_ch.len_utf8();
-                } else {
-                    break;
-                }
+        while let Some(&(next_start, next_ch)) = char_iter.peek() {
+            let next_script = script_map.get(next_ch);
+            if next_script == script
+                || next_script == icu::properties::props::Script::Common
+                || next_script == icu::properties::props::Script::Inherited
+            {
+                char_iter.next();
+                end = next_start + next_ch.len_utf8();
+            } else if script == icu::properties::props::Script::Common
+                || script == icu::properties::props::Script::Inherited
+            {
+                script = next_script;
+                char_iter.next();
+                end = next_start + next_ch.len_utf8();
+            } else {
+                break;
             }
-
-            let script_run_text = &run_text[start_in_run..end_in_run];
-            let absolute_start = run_range.start + start_in_run;
-
-            // Find the best font for this script run.
-            let mut chosen_font = fonts[0];
-            for font in fonts {
-                if script_run_text.chars().all(|c| font.has_glyph(c)) {
-                    chosen_font = font;
-                    break;
-                }
-            }
-
-            let mut run_opts = options.clone();
-            run_opts.direction = run_direction;
-
-            let mut shaped = shaper.shape(script_run_text, chosen_font, &run_opts)?;
-            for glyph in &mut shaped.glyphs {
-                glyph.cluster += absolute_start as u32;
-            }
-
-            total_x_advance += shaped.x_advance;
-            total_y_advance += shaped.y_advance;
-            all_glyphs.extend(shaped.glyphs);
         }
+
+        let script_run_text = &text[start..end];
+
+        // Find the best font for this script run.
+        let mut chosen_font = fonts[0];
+        for font in fonts {
+            if script_run_text.chars().all(|c| font.has_glyph(c)) {
+                chosen_font = font;
+                break;
+            }
+        }
+
+        let run_opts = options.clone();
+        // HarfBuzz will handle script-specific shaping if run_opts.script is None,
+        // using guess_segment_properties. Since we are in logical order, this is safe.
+
+        let mut shaped = shaper.shape(script_run_text, chosen_font, &run_opts)?;
+        for glyph in &mut shaped.glyphs {
+            glyph.cluster += start as u32;
+        }
+
+        runs.push(shaped);
     }
 
-    Ok(ShapedRun {
-        glyphs: all_glyphs,
-        x_advance: total_x_advance,
-        y_advance: total_y_advance,
-    })
+    Ok(runs)
 }
 
 #[cfg(test)]
@@ -314,11 +264,11 @@ mod tests {
             font_size: 16.0,
             features: &[],
         };
-        let shaped = shape_segment_with_fallbacks(&shaper, &text, &[&primary, &fallback], &opts)?;
+        let shaped = shape_script_runs(&shaper, &text, &[&primary, &fallback], &opts)?;
 
-        assert!(!shaped.glyphs.is_empty());
+        assert!(!shaped.is_empty());
         assert!(
-            shaped
+            shaped[0]
                 .glyphs
                 .iter()
                 .all(|g| std::ptr::eq(g.font, &fallback))
@@ -349,13 +299,13 @@ mod tests {
 
         // "مرحبا" (Marhaba)
         let text = "مرحبا";
-        let shaped = shape_segment_with_fallbacks(&shaper, text, &[&primary, &fallback], &opts)?;
+        let shaped = shape_script_runs(&shaper, text, &[&primary, &fallback], &opts)?;
 
-        assert!(!shaped.glyphs.is_empty());
+        assert!(!shaped.is_empty());
         // Verify it used a consistent font for the whole run to ensure joining.
-        let font_at_start = shaped.glyphs[0].font;
+        let font_at_start = shaped[0].glyphs[0].font;
         assert!(
-            shaped
+            shaped[0]
                 .glyphs
                 .iter()
                 .all(|g| std::ptr::eq(g.font, font_at_start))
@@ -382,13 +332,11 @@ mod tests {
 
         // Mixed script: Arabic + Hebrew (will be detected as separate script runs).
         let text = "مرحبا שלום";
-        let shaped = shape_segment_with_fallbacks(&shaper, text, &[&font], &opts)?;
+        let shaped = shape_script_runs(&shaper, text, &[&font], &opts)?;
 
-        let clusters: Vec<u32> = shaped.glyphs.iter().map(|g| g.cluster).collect();
-        // In RTL, visual order is reverse logical.
-        // The first visual glyph should be from the Hebrew part (latter part of string).
-        assert!(!clusters.is_empty());
-        assert!(clusters[0] > clusters[clusters.len() - 1]);
+        // Now returns separate script runs in logical order.
+        assert!(shaped.len() >= 2); // Arabic+space, Hebrew (or maybe space separate)
+        assert!(shaped[0].glyphs[0].cluster < shaped[shaped.len() - 1].glyphs[0].cluster);
 
         Ok(())
     }
