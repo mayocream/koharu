@@ -155,7 +155,7 @@ pub(crate) fn shape_segment_with_fallbacks<'a>(
     let para = &bidi_info.paragraphs[0];
     let line = para.range.clone();
     let (run_levels, visual_runs) = bidi_info.visual_runs(para, line);
-    
+
     let script_map = icu::properties::CodePointMapData::<icu::properties::props::Script>::new();
     let mut all_glyphs = Vec::new();
     let (mut total_x_advance, mut total_y_advance) = (0.0, 0.0);
@@ -214,7 +214,7 @@ pub(crate) fn shape_segment_with_fallbacks<'a>(
             for glyph in &mut shaped.glyphs {
                 glyph.cluster += absolute_start as u32;
             }
-            
+
             total_x_advance += shaped.x_advance;
             total_y_advance += shaped.y_advance;
             all_glyphs.extend(shaped.glyphs);
@@ -317,10 +317,12 @@ mod tests {
         let shaped = shape_segment_with_fallbacks(&shaper, &text, &[&primary, &fallback], &opts)?;
 
         assert!(!shaped.glyphs.is_empty());
-        assert!(shaped
-            .glyphs
-            .iter()
-            .all(|g| std::ptr::eq(g.font, &fallback)));
+        assert!(
+            shaped
+                .glyphs
+                .iter()
+                .all(|g| std::ptr::eq(g.font, &fallback))
+        );
 
         Ok(())
     }
@@ -352,10 +354,12 @@ mod tests {
         assert!(!shaped.glyphs.is_empty());
         // Verify it used a consistent font for the whole run to ensure joining.
         let font_at_start = shaped.glyphs[0].font;
-        assert!(shaped
-            .glyphs
-            .iter()
-            .all(|g| std::ptr::eq(g.font, font_at_start)));
+        assert!(
+            shaped
+                .glyphs
+                .iter()
+                .all(|g| std::ptr::eq(g.font, font_at_start))
+        );
 
         Ok(())
     }
@@ -381,7 +385,7 @@ mod tests {
         let shaped = shape_segment_with_fallbacks(&shaper, text, &[&font], &opts)?;
 
         let clusters: Vec<u32> = shaped.glyphs.iter().map(|g| g.cluster).collect();
-        // In RTL, visual order is reverse logical. 
+        // In RTL, visual order is reverse logical.
         // The first visual glyph should be from the Hebrew part (latter part of string).
         assert!(!clusters.is_empty());
         assert!(clusters[0] > clusters[clusters.len() - 1]);

@@ -60,7 +60,6 @@ pub(crate) fn font_key(font: &Font) -> usize {
     font as *const Font as usize
 }
 
-
 /// A collection of font sources for font discovery and loading.
 pub struct FontBook {
     database: Database,

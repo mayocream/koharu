@@ -258,20 +258,20 @@ fn render_with_fallback_fonts() -> Result<()> {
 
 #[test]
 fn test_arabic_layout_order() -> Result<()> {
-    let font = font("Segoe UI")?; 
+    let font = font("Segoe UI")?;
     let text = "مرحبا"; // Marhaba (Hello)
     // "م" (0), "ر" (1), "ح" (2), "ب" (3), "ا" (4)
     let layout = TextLayout::new(&font, Some(24.0)).run(text)?;
     let line = &layout.lines[0];
-    
+
     let clusters: Vec<u32> = line.glyphs.iter().map(|g| g.cluster).collect();
     println!("Clusters for {text}: {:?}", clusters);
-    
+
     // In current RTL shaping, HarfBuzz returns visual order [Rightmost...Leftmost].
     // If "Marhaba" is shaped RTL, the first visual glyph (rightmost) is 'م' (0).
     // Wait, let's see what it actually is.
     assert!(!clusters.is_empty());
-    
+
     Ok(())
 }
 
@@ -280,17 +280,27 @@ fn test_mixed_bidi_render() -> Result<()> {
     let font = font("Arial")?;
     let text = "Hello مرحبا Hello";
     let layout = TextLayout::new(&font, Some(24.0)).run(text)?;
-    
+
     let bidi_info = BidiInfo::new(text, None);
     println!("Paragraphs: {}", bidi_info.paragraphs.len());
     let para = &bidi_info.paragraphs[0];
     println!("Base Level: {:?}", para.level);
-    
+
     let levels = bidi_info.levels;
-    println!("Levels: {:?}", levels.iter().map(|l| l.number()).collect::<Vec<_>>());
-    
+    println!(
+        "Levels: {:?}",
+        levels.iter().map(|l| l.number()).collect::<Vec<_>>()
+    );
+
     println!("Direction: {:?}", layout.lines[0].direction);
-    println!("Clusters: {:?}", layout.lines[0].glyphs.iter().map(|g| g.cluster).collect::<Vec<_>>());
+    println!(
+        "Clusters: {:?}",
+        layout.lines[0]
+            .glyphs
+            .iter()
+            .map(|g| g.cluster)
+            .collect::<Vec<_>>()
+    );
 
     let img = tiny_skia_renderer()?.render(
         &layout,
@@ -302,7 +312,7 @@ fn test_mixed_bidi_render() -> Result<()> {
             ..Default::default()
         },
     )?;
-    
+
     img.save(output_dir().join("mixed_bidi.png"))?;
     Ok(())
 }
@@ -317,7 +327,12 @@ fn test_rtl_multiline() -> Result<()> {
 
     println!("Line count: {}", layout.lines.len());
     for (i, line) in layout.lines.iter().enumerate() {
-        println!("Line {}: {:?} ({} glyphs)", i, line.direction, line.glyphs.len());
+        println!(
+            "Line {}: {:?} ({} glyphs)",
+            i,
+            line.direction,
+            line.glyphs.len()
+        );
     }
 
     let img = tiny_skia_renderer()?.render(
@@ -330,7 +345,7 @@ fn test_rtl_multiline() -> Result<()> {
             ..Default::default()
         },
     )?;
-    
+
     img.save(output_dir().join("rtl_multiline.png"))?;
     Ok(())
 }
@@ -339,13 +354,13 @@ fn test_rtl_multiline() -> Result<()> {
 fn test_rtl_alignment() -> Result<()> {
     let font = font("Arial")?;
     let text = "مرحبا بالعالم"; // Hello World in Arabic
-    
+
     // Test Left Alignment
     let layout_left = TextLayout::new(&font, Some(24.0))
         .with_max_width(500.0)
         .with_alignment(koharu_core::TextAlign::Left)
         .run(text)?;
-        
+
     let img_left = tiny_skia_renderer()?.render(
         &layout_left,
         WritingMode::Horizontal,
@@ -363,7 +378,7 @@ fn test_rtl_alignment() -> Result<()> {
         .with_max_width(500.0)
         .with_alignment(koharu_core::TextAlign::Right)
         .run(text)?;
-        
+
     let img_right = tiny_skia_renderer()?.render(
         &layout_right,
         WritingMode::Horizontal,
@@ -375,7 +390,7 @@ fn test_rtl_alignment() -> Result<()> {
         },
     )?;
     img_right.save(output_dir().join("rtl_align_right.png"))?;
-    
+
     Ok(())
 }
 
@@ -385,10 +400,17 @@ fn test_rtl_punctuation_numbers() -> Result<()> {
     // Text with numbers and trailing punctuation.
     // In LTR, it's: "Arabic 123!"
     // In RTL, "123" stays LTR, but "!" might move to the left side of the word.
-    let text = "هذا اختبار 123!"; 
+    let text = "هذا اختبار 123!";
     let layout = TextLayout::new(&font, Some(24.0)).run(text)?;
-    
-    println!("Clusters: {:?}", layout.lines[0].glyphs.iter().map(|g| g.cluster).collect::<Vec<_>>());
+
+    println!(
+        "Clusters: {:?}",
+        layout.lines[0]
+            .glyphs
+            .iter()
+            .map(|g| g.cluster)
+            .collect::<Vec<_>>()
+    );
 
     let img = tiny_skia_renderer()?.render(
         &layout,
@@ -400,7 +422,7 @@ fn test_rtl_punctuation_numbers() -> Result<()> {
             ..Default::default()
         },
     )?;
-    
+
     img.save(output_dir().join("rtl_punctuation_numbers.png"))?;
     Ok(())
 }
@@ -422,7 +444,7 @@ fn test_rtl_mixed_complex() -> Result<()> {
             ..Default::default()
         },
     )?;
-    
+
     img.save(output_dir().join("rtl_mixed.png"))?;
     Ok(())
 }
@@ -446,7 +468,7 @@ fn test_rtl_user_reported_string() -> Result<()> {
             ..Default::default()
         },
     )?;
-    
+
     img.save(output_dir().join("rtl_user_reported.png"))?;
     Ok(())
 }
