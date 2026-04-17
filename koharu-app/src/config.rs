@@ -2,7 +2,9 @@ use std::fs;
 
 use anyhow::{Context, Result};
 use camino::Utf8PathBuf;
-use koharu_llm::providers::{get_saved_api_key, set_saved_api_key, all_provider_descriptors, is_keyring_disabled};
+use koharu_llm::providers::{
+    all_provider_descriptors, get_saved_api_key, is_keyring_disabled, set_saved_api_key,
+};
 use koharu_runtime::default_app_data_root;
 use serde::{Deserialize, Deserializer, Serialize, Serializer};
 use utoipa::ToSchema;
@@ -164,7 +166,8 @@ pub fn load() -> Result<AppConfig> {
             if let Ok(Some(key)) = get_saved_api_key(descriptor.id)
                 && !key.trim().is_empty()
             {
-                if let Some(existing) = config.providers.iter_mut().find(|p| p.id == descriptor.id) {
+                if let Some(existing) = config.providers.iter_mut().find(|p| p.id == descriptor.id)
+                {
                     existing.api_key = Some(RedactedSecret::new(key));
                 } else {
                     config.providers.push(ProviderConfig {
