@@ -136,6 +136,7 @@ utoipa-axum = "0.2"
 uuid = { version = "1.18", features = ["v4", "serde"] }
 base64 = "0.22"
 tower-http = { version = "0.6", features = ["cors"] }
+unicode-bidi = "0.3"
 criterion = { version = "0.8", features = ["html_reports"] }
 git-version = "0.3"
 keyring = "3.6"
