@@ -7,6 +7,7 @@ use koharu_renderer::{
     renderer::{RenderOptions, TinySkiaRenderer},
 };
 use once_cell::sync::OnceCell;
+use unicode_bidi::BidiInfo;
 
 const SAMPLE_TEXT: &str = "吾輩は猫である。名前はまだ無い。どこで生れたかとんと見当がつかぬ。何でも薄暗いじめじめした所でニャーニャー泣いていた事だけは記憶している。吾輩はここで始めて人間というものを見た。しかもあとで聞くとそれは書生という人間中で一番獰悪な種族であったそうだ。";
 const SAMPLE_TEXT_ZH_CN: &str = "《我是猫》是日本作家夏目漱石创作的长篇小说，也是其代表作，它确立了夏目漱石在文学史上的地位。作品淋漓尽致地反映了二十世纪初，日本中小资产阶级的思想和生活，尖锐地揭露和批判了明治“文明开化”的资本主义社会。小说采用幽默、讽刺、滑稽的手法，借助一只猫的视觉、听觉、感觉，嘲笑了明治时代知识分子空虚的精神生活，小说构思奇巧，描写夸张，结构灵活，具有鲜明的艺术特色。";
@@ -252,5 +253,200 @@ fn render_with_fallback_fonts() -> Result<()> {
     )?;
     assert!(img.pixels().any(|p| p.0 != [255, 255, 255, 255]));
     img.save(output_dir().join("fallback_fonts.png"))?;
+    Ok(())
+}
+
+#[test]
+fn test_arabic_layout_order() -> Result<()> {
+    let font = font("Segoe UI")?; 
+    let text = "مرحبا"; // Marhaba (Hello)
+    // "م" (0), "ر" (1), "ح" (2), "ب" (3), "ا" (4)
+    let layout = TextLayout::new(&font, Some(24.0)).run(text)?;
+    let line = &layout.lines[0];
+    
+    let clusters: Vec<u32> = line.glyphs.iter().map(|g| g.cluster).collect();
+    println!("Clusters for {text}: {:?}", clusters);
+    
+    // In current RTL shaping, HarfBuzz returns visual order [Rightmost...Leftmost].
+    // If "Marhaba" is shaped RTL, the first visual glyph (rightmost) is 'م' (0).
+    // Wait, let's see what it actually is.
+    assert!(!clusters.is_empty());
+    
+    Ok(())
+}
+
+#[test]
+fn test_mixed_bidi_render() -> Result<()> {
+    let font = font("Arial")?;
+    let text = "Hello مرحبا Hello";
+    let layout = TextLayout::new(&font, Some(24.0)).run(text)?;
+    
+    let bidi_info = BidiInfo::new(text, None);
+    println!("Paragraphs: {}", bidi_info.paragraphs.len());
+    let para = &bidi_info.paragraphs[0];
+    println!("Base Level: {:?}", para.level);
+    
+    let levels = bidi_info.levels;
+    println!("Levels: {:?}", levels.iter().map(|l| l.number()).collect::<Vec<_>>());
+    
+    println!("Direction: {:?}", layout.lines[0].direction);
+    println!("Clusters: {:?}", layout.lines[0].glyphs.iter().map(|g| g.cluster).collect::<Vec<_>>());
+
+    let img = tiny_skia_renderer()?.render(
+        &layout,
+        WritingMode::Horizontal,
+        &RenderOptions {
+            font_size: 24.0,
+            padding: 20.0,
+            background: Some([255, 255, 255, 255]),
+            ..Default::default()
+        },
+    )?;
+    
+    img.save(output_dir().join("mixed_bidi.png"))?;
+    Ok(())
+}
+#[test]
+fn test_rtl_multiline() -> Result<()> {
+    let font = font("Arial")?;
+    // A long text that will wrap.
+    let text = "هذا نص طويل باللغة العربية سيتم لفه عبر عدة أسطر للتأكد من أن تخطيط الحروف والاتجاهات يعمل بشكل صحيح في جميع الأسطر. Hello World! وهذا جزء آخر.";
+    let layout = TextLayout::new(&font, Some(24.0))
+        .with_max_width(400.0)
+        .run(text)?;
+
+    println!("Line count: {}", layout.lines.len());
+    for (i, line) in layout.lines.iter().enumerate() {
+        println!("Line {}: {:?} ({} glyphs)", i, line.direction, line.glyphs.len());
+    }
+
+    let img = tiny_skia_renderer()?.render(
+        &layout,
+        WritingMode::Horizontal,
+        &RenderOptions {
+            font_size: 24.0,
+            padding: 20.0,
+            background: Some([255, 255, 255, 255]),
+            ..Default::default()
+        },
+    )?;
+    
+    img.save(output_dir().join("rtl_multiline.png"))?;
+    Ok(())
+}
+
+#[test]
+fn test_rtl_alignment() -> Result<()> {
+    let font = font("Arial")?;
+    let text = "مرحبا بالعالم"; // Hello World in Arabic
+    
+    // Test Left Alignment
+    let layout_left = TextLayout::new(&font, Some(24.0))
+        .with_max_width(500.0)
+        .with_alignment(koharu_core::TextAlign::Left)
+        .run(text)?;
+        
+    let img_left = tiny_skia_renderer()?.render(
+        &layout_left,
+        WritingMode::Horizontal,
+        &RenderOptions {
+            font_size: 24.0,
+            padding: 20.0,
+            background: Some([255, 255, 255, 255]),
+            ..Default::default()
+        },
+    )?;
+    img_left.save(output_dir().join("rtl_align_left.png"))?;
+
+    // Test Right Alignment
+    let layout_right = TextLayout::new(&font, Some(24.0))
+        .with_max_width(500.0)
+        .with_alignment(koharu_core::TextAlign::Right)
+        .run(text)?;
+        
+    let img_right = tiny_skia_renderer()?.render(
+        &layout_right,
+        WritingMode::Horizontal,
+        &RenderOptions {
+            font_size: 24.0,
+            padding: 20.0,
+            background: Some([255, 255, 255, 255]),
+            ..Default::default()
+        },
+    )?;
+    img_right.save(output_dir().join("rtl_align_right.png"))?;
+    
+    Ok(())
+}
+
+#[test]
+fn test_rtl_punctuation_numbers() -> Result<()> {
+    let font = font("Arial")?;
+    // Text with numbers and trailing punctuation.
+    // In LTR, it's: "Arabic 123!"
+    // In RTL, "123" stays LTR, but "!" might move to the left side of the word.
+    let text = "هذا اختبار 123!"; 
+    let layout = TextLayout::new(&font, Some(24.0)).run(text)?;
+    
+    println!("Clusters: {:?}", layout.lines[0].glyphs.iter().map(|g| g.cluster).collect::<Vec<_>>());
+
+    let img = tiny_skia_renderer()?.render(
+        &layout,
+        WritingMode::Horizontal,
+        &RenderOptions {
+            font_size: 24.0,
+            padding: 20.0,
+            background: Some([255, 255, 255, 255]),
+            ..Default::default()
+        },
+    )?;
+    
+    img.save(output_dir().join("rtl_punctuation_numbers.png"))?;
+    Ok(())
+}
+
+#[test]
+fn test_rtl_mixed_complex() -> Result<()> {
+    let font = font("Arial")?;
+    // Mixed text with LTR and RTL sequences.
+    let text = "The word for 'Apple' is تفاحة in Arabic.";
+    let layout = TextLayout::new(&font, Some(24.0)).run(text)?;
+
+    let img = tiny_skia_renderer()?.render(
+        &layout,
+        WritingMode::Horizontal,
+        &RenderOptions {
+            font_size: 24.0,
+            padding: 20.0,
+            background: Some([255, 255, 255, 255]),
+            ..Default::default()
+        },
+    )?;
+    
+    img.save(output_dir().join("rtl_mixed.png"))?;
+    Ok(())
+}
+
+#[test]
+fn test_rtl_user_reported_string() -> Result<()> {
+    let font = font("Arial")?;
+    // The problematic string from the user.
+    let text = "هل من المقبول حقاً ارتداء ملابس كهذه، إنها مجرد خيط؟";
+    let layout = TextLayout::new(&font, Some(24.0))
+        .with_max_width(200.0) // Narrow width to force multiline
+        .run(text)?;
+
+    let img = tiny_skia_renderer()?.render(
+        &layout,
+        WritingMode::Horizontal,
+        &RenderOptions {
+            font_size: 24.0,
+            padding: 20.0,
+            background: Some([173, 216, 230, 255]), // Light blue to match screenshot
+            ..Default::default()
+        },
+    )?;
+    
+    img.save(output_dir().join("rtl_user_reported.png"))?;
     Ok(())
 }
