@@ -60,32 +60,6 @@ pub(crate) fn font_key(font: &Font) -> usize {
     font as *const Font as usize
 }
 
-pub(crate) fn select_font(cluster: &str, fonts: &[&Font]) -> usize {
-    let mut chars = cluster.chars();
-    let Some(ch) = chars.next() else {
-        return 0;
-    };
-
-    if cluster.len() == ch.len_utf8() {
-        for (index, font) in fonts.iter().enumerate() {
-            if font.has_glyph(ch) {
-                return index;
-            }
-        }
-        return 0;
-    }
-
-    'fonts: for (index, font) in fonts.iter().enumerate() {
-        for ch in cluster.chars() {
-            if !font.has_glyph(ch) {
-                continue 'fonts;
-            }
-        }
-        return index;
-    }
-
-    0
-}
 
 /// A collection of font sources for font discovery and loading.
 pub struct FontBook {
