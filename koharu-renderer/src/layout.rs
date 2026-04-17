@@ -1,4 +1,5 @@
 use std::{collections::HashMap, ops::Range};
+use unicode_bidi::BidiInfo;
 
 use anyhow::Result;
 use harfrust::{Feature, Tag};
@@ -43,6 +44,8 @@ pub struct LayoutLine<'a> {
     pub advance: f32,
     /// Baseline position for this line (x, y).
     pub baseline: (f32, f32),
+    /// Writing direction of this line.
+    pub direction: harfrust::Direction,
 }
 
 /// A collection of laid out lines.
@@ -182,6 +185,18 @@ impl<'a> TextLayout<'a> {
         let descent = -metrics.descent;
         let line_height = (ascent + descent + metrics.leading).max(font_size);
 
+        let bidi_info = BidiInfo::new(text, None);
+        let para = bidi_info.paragraphs.get(0);
+        let base_direction = if let Some(p) = para {
+            if p.level.is_rtl() {
+                harfrust::Direction::RightToLeft
+            } else {
+                harfrust::Direction::LeftToRight
+            }
+        } else {
+            harfrust::Direction::LeftToRight
+        };
+
         let (direction, script) = shaping_direction_for_text(text, self.writing_mode);
         let opts = ShapingOptions {
             direction,
@@ -211,8 +226,82 @@ impl<'a> TextLayout<'a> {
         fonts.push(self.font);
         fonts.extend(self.fallback_fonts.iter());
         let mut lines: Vec<LayoutLine<'a>> = Vec::new();
-        let mut current = LayoutLine::default();
+
+        // Temporary storage for runs in the current line to be reordered
+        struct LineRun<'a> {
+            shaped: ShapedRun<'a>,
+            level: unicode_bidi::Level,
+            range: std::ops::Range<usize>,
+        }
+        let mut current_line_runs: Vec<LineRun<'a>> = Vec::new();
         let mut line_offset = 0usize;
+        let mut current_advance = 0.0f32;
+
+        let mut finalize_current_line = |runs: &mut Vec<LineRun<'a>>,
+                                         offset: &mut usize,
+                                         end_offset: usize,
+                                         lines: &mut Vec<LayoutLine<'a>>| {
+            if runs.is_empty() {
+                *offset = end_offset;
+                return;
+            }
+
+            let line_range = *offset..end_offset;
+            let (visual_levels, visual_ranges) = if let Some(p) = para {
+                bidi_info.visual_runs(p, line_range)
+            } else {
+                (vec![unicode_bidi::Level::ltr()], vec![line_range])
+            };
+
+            let mut line = LayoutLine {
+                range: *offset..end_offset,
+                direction: base_direction,
+                ..Default::default()
+            };
+
+            let mut pen_x = 0.0f32;
+            let mut pen_y = 0.0f32;
+
+            for (level, visual_range) in visual_levels.into_iter().zip(visual_ranges) {
+                // Find all line runs that overlap with this visual range.
+                // Since runs is in logical order, we can filter by overlap.
+                let mut overlapping: Vec<usize> = Vec::new();
+                for (idx, run) in runs.iter().enumerate() {
+                    let overlap_start = run.range.start.max(visual_range.start);
+                    let overlap_end = run.range.end.min(visual_range.end);
+                    if overlap_start < overlap_end {
+                        overlapping.push(idx);
+                    }
+                }
+                
+                // If the run is RTL, we must reverse the sequence of segments within it.
+                if level.is_rtl() {
+                    overlapping.reverse();
+                }
+
+                for idx in overlapping {
+                    let run = &mut runs[idx];
+                    for mut glyph in std::mem::take(&mut run.shaped.glyphs) {
+                        glyph.cluster += run.range.start as u32;
+                        line.glyphs.push(glyph);
+                    }
+                    if self.writing_mode.is_vertical() {
+                        pen_y -= run.shaped.y_advance;
+                    } else {
+                        pen_x += run.shaped.x_advance;
+                    }
+                }
+            }
+            line.advance = if self.writing_mode.is_vertical() {
+                pen_y.abs()
+            } else {
+                pen_x
+            };
+
+            lines.push(line);
+            runs.clear();
+            *offset = end_offset;
+        };
 
         for segment in segments {
             let start = segment.range.start;
@@ -224,8 +313,6 @@ impl<'a> TextLayout<'a> {
                     x_advance: 0.0,
                     y_advance: 0.0,
                 }
-            } else if fonts.len() == 1 {
-                shaper.shape(segment_text, self.font, &opts)?
             } else {
                 shape_segment_with_fallbacks(&shaper, segment_text, &fonts, &opts)?
             };
@@ -243,43 +330,32 @@ impl<'a> TextLayout<'a> {
             };
 
             let would_overflow = if self.writing_mode.is_vertical() {
-                // For vertical text, advance is negative (downward), so we check absolute values
-                current.advance.abs() + advance.abs() > max_extent
+                current_advance.abs() + advance.abs() > max_extent
             } else {
-                current.advance + advance > max_extent
+                current_advance + advance > max_extent
             };
-            let has_content = !current.glyphs.is_empty();
 
-            if would_overflow && has_content {
-                // Finalize current line
-                current.range = line_offset..start;
-                lines.push(current);
-
-                // Start new line
-                current = LayoutLine::default();
-                line_offset = start;
+            if would_overflow && !current_line_runs.is_empty() {
+                finalize_current_line(&mut current_line_runs, &mut line_offset, start, &mut lines);
+                current_advance = 0.0;
             }
 
-            // Adjust cluster indices and add glyphs to current line
-            for mut glyph in shaped.glyphs {
-                glyph.cluster += start as u32;
-                current.glyphs.push(glyph);
-            }
-            current.advance += advance;
+            let level = bidi_info.levels.get(start).copied().unwrap_or(unicode_bidi::Level::ltr());
+            current_line_runs.push(LineRun {
+                shaped,
+                level,
+                range: segment.range.clone(),
+            });
+            current_advance += advance;
 
             if segment.is_mandatory {
-                current.range = line_offset..segment.range.end;
-                lines.push(current);
-                current = LayoutLine::default();
-                line_offset = segment.next_offset;
+                finalize_current_line(&mut current_line_runs, &mut line_offset, segment.next_offset, &mut lines);
+                current_advance = 0.0;
             }
         }
 
         // Finalize last line
-        if !current.glyphs.is_empty() {
-            current.range = line_offset..text.len();
-            lines.push(current);
-        }
+        finalize_current_line(&mut current_line_runs, &mut line_offset, text.len(), &mut lines);
 
         // Baselines depend only on line index and metrics. For vertical text we compute absolute X
         // positions within the layout bounds (0..width) so the renderer can draw from the left.

@@ -1,6 +1,7 @@
 use harfrust::{Direction, Script, Tag};
 use icu::properties::{CodePointMapData, props::Script as IcuScript};
 use koharu_core::TextBlock;
+use unicode_bidi::BidiInfo;
 
 use crate::layout::WritingMode;
 
@@ -85,8 +86,20 @@ pub fn shaping_direction_for_text(
         return (Direction::TopToBottom, None);
     }
 
+    if text.is_empty() {
+        return (Direction::LeftToRight, None);
+    }
+
+    // Use unicode-bidi to detect the paragraph's base direction.
+    let bidi_info = BidiInfo::new(text, None);
+    let direction = if !bidi_info.paragraphs.is_empty() && bidi_info.paragraphs[0].level.is_rtl() {
+        Direction::RightToLeft
+    } else {
+        Direction::LeftToRight
+    };
+
     let flags = detect_scripts(text);
-    if let Some(rtl) = flags.rtl_script {
+    let script = if let Some(rtl) = flags.rtl_script {
         let tag = match rtl {
             IcuScript::Hebrew => b"Hebr",
             IcuScript::Syriac => b"Syrc",
@@ -95,23 +108,16 @@ pub fn shaping_direction_for_text(
             IcuScript::Adlam => b"Adlm",
             _ => b"Arab",
         };
-        (
-            Direction::RightToLeft,
-            Script::from_iso15924_tag(Tag::new(tag)),
-        )
+        Script::from_iso15924_tag(Tag::new(tag))
     } else if flags.has_thai {
-        (
-            Direction::LeftToRight,
-            Script::from_iso15924_tag(Tag::new(b"Thai")),
-        )
+        Script::from_iso15924_tag(Tag::new(b"Thai"))
     } else if flags.has_cjk {
-        (
-            Direction::LeftToRight,
-            Script::from_iso15924_tag(Tag::new(b"Hani")),
-        )
+        Script::from_iso15924_tag(Tag::new(b"Hani"))
     } else {
-        (Direction::LeftToRight, None)
-    }
+        None
+    };
+
+    (direction, script)
 }
 
 pub fn font_families_for_text(text: &str) -> Vec<String> {

@@ -13,7 +13,7 @@ use tiny_skia::{
 };
 
 use crate::font::{Font, font_key};
-use crate::layout::{LayoutRun, PositionedGlyph, WritingMode};
+use crate::layout::{LayoutLine, LayoutRun, WritingMode};
 
 pub use koharu_core::TextShaderEffect;
 
@@ -155,7 +155,7 @@ fn render_pass(
                 opts.padding + line.baseline.1,
             ),
         };
-        render_line(surface, cache, &line.glyphs, origin, opts, pass)?;
+        render_line(surface, cache, line, origin, opts, pass)?;
     }
 
     Ok(())
@@ -164,7 +164,7 @@ fn render_pass(
 fn render_line(
     surface: &mut Pixmap,
     cache: &mut HashMap<FontGlyphId, GlyphRenderSource>,
-    glyphs: &[PositionedGlyph<'_>],
+    line: &LayoutLine<'_>,
     origin: (f32, f32),
     opts: &RenderOptions,
     pass: RenderPass,
@@ -173,7 +173,7 @@ fn render_line(
     let mut pen_x = 0.0f32;
     let mut pen_y = 0.0f32;
 
-    for glyph in glyphs {
+    for glyph in &line.glyphs {
         let Ok(gid) = u16::try_from(glyph.glyph_id) else {
             pen_x += glyph.x_advance;
             pen_y -= glyph.y_advance;
