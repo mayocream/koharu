@@ -2,7 +2,7 @@ use std::fs;
 
 use anyhow::{Context, Result};
 use camino::Utf8PathBuf;
-use koharu_llm::providers::{get_saved_api_key, set_saved_api_key};
+use koharu_llm::providers::{get_saved_api_key, set_saved_api_key, all_provider_descriptors, is_keyring_disabled};
 use koharu_runtime::default_app_data_root;
 use serde::{Deserialize, Deserializer, Serialize, Serializer};
 use utoipa::ToSchema;
@@ -116,7 +116,7 @@ pub struct ProviderConfig {
     /// Populated from the keyring on `load()`, never written to config.toml.
     /// Serializes as `"[REDACTED]"` in API responses.
     /// Populated from keyring on `load()`. Serializes as `"[REDACTED]"`.
-    #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[serde(default, skip_deserializing, skip_serializing_if = "Option::is_none")]
     #[schema(value_type = Option<String>)]
     pub api_key: Option<RedactedSecret>,
 }
@@ -159,12 +159,29 @@ pub fn load() -> Result<AppConfig> {
         config
     };
 
-    // Populate api_key from the keyring for every known provider.
-    for provider in &mut config.providers {
-        if let Ok(Some(key)) = get_saved_api_key(&provider.id)
-            && !key.trim().is_empty()
-        {
-            provider.api_key = Some(RedactedSecret::new(key));
+    if is_keyring_disabled() {
+        for descriptor in all_provider_descriptors() {
+            if let Ok(Some(key)) = get_saved_api_key(descriptor.id)
+                && !key.trim().is_empty()
+            {
+                if let Some(existing) = config.providers.iter_mut().find(|p| p.id == descriptor.id) {
+                    existing.api_key = Some(RedactedSecret::new(key));
+                } else {
+                    config.providers.push(ProviderConfig {
+                        id: descriptor.id.to_string(),
+                        base_url: None,
+                        api_key: Some(RedactedSecret::new(key)),
+                    });
+                }
+            }
+        }
+    } else {
+        for provider in &mut config.providers {
+            if let Ok(Some(key)) = get_saved_api_key(&provider.id)
+                && !key.trim().is_empty()
+            {
+                provider.api_key = Some(RedactedSecret::new(key));
+            }
         }
     }
 

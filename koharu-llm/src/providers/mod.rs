@@ -82,6 +82,10 @@ pub fn disable_keyring() {
     NO_KEYRING.store(true, Ordering::Relaxed);
 }
 
+pub fn is_keyring_disabled() -> bool {
+    NO_KEYRING.load(Ordering::Relaxed)
+}
+
 fn env_key_var(provider: &str) -> String {
     format!(
         "KOHARU_{}_API_KEY",
