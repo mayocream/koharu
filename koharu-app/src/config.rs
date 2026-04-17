@@ -116,7 +116,7 @@ pub struct ProviderConfig {
     /// Populated from the keyring on `load()`, never written to config.toml.
     /// Serializes as `"[REDACTED]"` in API responses.
     /// Populated from keyring on `load()`. Serializes as `"[REDACTED]"`.
-    #[serde(default, skip_deserializing, skip_serializing_if = "Option::is_none")]
+    #[serde(default, skip_serializing_if = "Option::is_none")]
     #[schema(value_type = Option<String>)]
     pub api_key: Option<RedactedSecret>,
 }
