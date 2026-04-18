@@ -163,9 +163,14 @@ pub(crate) fn shape_script_runs<'a>(
             }
         }
 
-        let run_opts = options.clone();
-        // HarfBuzz will handle script-specific shaping if run_opts.script is None,
-        // using guess_segment_properties. Since we are in logical order, this is safe.
+        let mut run_opts = options.clone();
+        // Apply the detected script to this specific run instead of inheriting a
+        // caller-provided script for all runs. For non-Arabic runs, clear the
+        // override so HarfBuzz can guess the correct segment properties.
+        run_opts.script = match script {
+            icu::properties::props::Script::Arabic => Some(Script::Arab),
+            _ => None,
+        };
 
         let mut shaped = shaper.shape(script_run_text, chosen_font, &run_opts)?;
         for glyph in &mut shaped.glyphs {
