@@ -260,17 +260,30 @@ fn render_with_fallback_fonts() -> Result<()> {
 fn test_arabic_layout_order() -> Result<()> {
     let font = font("Segoe UI")?;
     let text = "مرحبا"; // Marhaba (Hello)
-    // "م" (0), "ر" (1), "ح" (2), "ب" (3), "ا" (4)
     let layout = TextLayout::new(&font, Some(24.0)).run(text)?;
     let line = &layout.lines[0];
+
+    let bidi_info = BidiInfo::new(text, None);
+    let para = &bidi_info.paragraphs[0];
+    assert!(
+        para.level.is_rtl(),
+        "expected Arabic text to resolve to an RTL paragraph level, got {:?}",
+        para.level
+    );
 
     let clusters: Vec<u32> = line.glyphs.iter().map(|g| g.cluster).collect();
     println!("Clusters for {text}: {:?}", clusters);
 
-    // In current RTL shaping, HarfBuzz returns visual order [Rightmost...Leftmost].
-    // If "Marhaba" is shaped RTL, the first visual glyph (rightmost) is 'م' (0).
-    // Wait, let's see what it actually is.
-    assert!(!clusters.is_empty());
+    assert!(
+        clusters.len() > 1,
+        "expected multiple glyph clusters for Arabic shaping, got {:?}",
+        clusters
+    );
+    assert!(
+        clusters.windows(2).all(|w| w[0] >= w[1]),
+        "expected RTL visual order to produce non-increasing cluster indices, got {:?}",
+        clusters
+    );
 
     Ok(())
 }
