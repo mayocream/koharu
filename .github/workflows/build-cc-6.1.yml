@@ -1,0 +1,55 @@
+name: Build Koharu VGA 10xx
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+env:
+  CARGO_TERM_COLOR: always
+
+jobs:
+  build:
+    name: Build Windows Version
+    runs-on: windows-latest
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup Bun
+        uses: oven-sh/setup-bun@v2
+
+      - name: Install CUDA 12.4.0
+        uses: Jimver/cuda-toolkit@v0.2.19
+        with:
+          cuda: '12.4.0'
+          method: 'network'
+          sub-packages: '["nvcc", "cudart", "cublas", "cublas_dev", "cufft", "cufft_dev", "curand", "curand_dev", "nvrtc", "nvrtc_dev"]'
+
+      - name: MSVC Developer Command Prompt
+        uses: ilammy/msvc-dev-cmd@v1
+
+      - name: Rust Cache
+        uses: Swatinem/rust-cache@v2
+
+      - name: Bun Cache
+        uses: actions/cache@v4
+        with:
+          path: ~/.bun/install/cache
+          key: ${{ runner.os }}-bun-${{ hashFiles('**/bun.lock') }}
+
+      - name: Install Dependencies
+        run: bun install
+
+      - name: Build Tauri EXE
+        run: bun tauri build --no-bundle
+
+      - name: Upload Artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: Koharu-CC-6.1
+          path: |
+            target/release/koharu.exe
+          if-no-files-found: warn
+          retention-days: 7

@@ -9,11 +9,12 @@ use crate::install::InstallState;
 use crate::loader::{add_runtime_search_path, preload_library};
 
 const CUDA_SUCCESS: i32 = 0;
+const CUDA_12_4_DRIVER_VERSION: i32 = 12040;
 const CUDA_13_0_DRIVER_VERSION: i32 = 13000;
 const CUDA_13_1_DRIVER_VERSION: i32 = 13010;
 const CU_DEVICE_ATTRIBUTE_COMPUTE_CAPABILITY_MAJOR: i32 = 75;
 const CU_DEVICE_ATTRIBUTE_COMPUTE_CAPABILITY_MINOR: i32 = 76;
-const MIN_COMPUTE_CAPABILITY: (i32, i32) = (7, 5); // Turing (RTX 20xx) and above
+const MIN_COMPUTE_CAPABILITY: (i32, i32) = (6, 1);
 
 type CuInit = unsafe extern "C" fn(flags: u32) -> i32;
 type CuDriverGetVersion = unsafe extern "C" fn(driver_version: *mut i32) -> i32;
@@ -43,7 +44,30 @@ struct WheelSpec {
     linux_dylibs: &'static [&'static str],
 }
 
-const WHEELS: &[WheelSpec] = &[
+const WHEELS_12: &[WheelSpec] = &[
+    WheelSpec {
+        package: "nvidia-cuda-runtime-cu12/12.4.127",
+        windows_dylibs: &["cudart64_12.dll"],
+        linux_dylibs: &["libcudart.so.12"],
+    },
+    WheelSpec {
+        package: "nvidia-cublas-cu12/12.4.5.8",
+        windows_dylibs: &["cublasLt64_12.dll", "cublas64_12.dll"],
+        linux_dylibs: &["libcublasLt.so.12", "libcublas.so.12"],
+    },
+    WheelSpec {
+        package: "nvidia-cufft-cu12/11.2.1.3",
+        windows_dylibs: &["cufft64_11.dll"],
+        linux_dylibs: &["libcufft.so.11"],
+    },
+    WheelSpec {
+        package: "nvidia-curand-cu12/10.3.5.147",
+        windows_dylibs: &["curand64_10.dll"],
+        linux_dylibs: &["libcurand.so.10"],
+    },
+];
+
+const WHEELS_13: &[WheelSpec] = &[
     WheelSpec {
         package: "nvidia-cuda-runtime/13.0.96",
         windows_dylibs: &["cudart64_13.dll"],
@@ -66,6 +90,15 @@ const WHEELS: &[WheelSpec] = &[
     },
 ];
 
+fn get_wheels() -> &'static [WheelSpec] {
+    if let Ok(version) = driver_version() {
+        if version.raw() >= CUDA_13_0_DRIVER_VERSION {
+            return WHEELS_13;
+        }
+    }
+    WHEELS_12
+}
+
 impl CudaDriverVersion {
     pub const fn from_raw(raw: i32) -> Self {
         Self { raw }
@@ -81,6 +114,10 @@ impl CudaDriverVersion {
 
     pub const fn minor(self) -> i32 {
         (self.raw % 1000) / 10
+    }
+
+    pub const fn supports_cuda_12_4(self) -> bool {
+        self.raw >= CUDA_12_4_DRIVER_VERSION
     }
 
     pub const fn supports_cuda_13_0(self) -> bool {
@@ -199,20 +236,20 @@ pub fn check_cuda_driver_support() -> bool {
 
     // Check driver version
     match driver_version() {
-        Ok(version) if version.supports_cuda_13_0() => {
+        Ok(version) if version.supports_cuda_12_4() => {
             tracing::info!("NVIDIA driver reports CUDA {version} support");
         }
         Ok(version) => {
             tracing::warn!(
                 "NVIDIA driver only supports CUDA {version}; \
                  falling back to CPU. Update your NVIDIA driver to a version \
-                 that supports CUDA 13.0 or newer to enable GPU acceleration."
+                 that supports CUDA 12.4 or newer to enable GPU acceleration."
             );
             return false;
         }
         Err(err) => {
             tracing::warn!(
-                "Could not verify NVIDIA driver support for CUDA 13.0: {err:#}; \
+                "Could not verify NVIDIA driver support for CUDA 12.4: {err:#}; \
                  falling back to CPU."
             );
             return false;
@@ -228,7 +265,7 @@ pub fn check_cuda_driver_support() -> bool {
         Ok((major, minor)) => {
             tracing::warn!(
                 "GPU compute capability {major}.{minor} is below the minimum \
-                 required {}.{}; falling back to CPU. A Turing (RTX 20xx) or \
+                 required {}.{}; falling back to CPU. A Pascal (GTX 10xx) or \
                  newer GPU is required for GPU acceleration.",
                 MIN_COMPUTE_CAPABILITY.0,
                 MIN_COMPUTE_CAPABILITY.1,
@@ -246,7 +283,7 @@ pub(crate) fn package_enabled(runtime: &Runtime) -> bool {
     runtime.wants_gpu()
         && driver_library_available()
         && driver_version()
-            .map(|version| version.supports_cuda_13_0())
+            .map(|version| version.supports_cuda_12_4())
             .unwrap_or(false)
 }
 
@@ -267,7 +304,7 @@ pub(crate) fn package_present(runtime: &Runtime) -> Result<bool> {
         return Ok(false);
     }
 
-    Ok(WHEELS
+    Ok(get_wheels()
         .iter()
         .flat_map(|wheel| wheel.dylibs().iter())
         .all(|dylib| install_dir.join(dylib).exists()))
@@ -285,7 +322,7 @@ pub(crate) async fn ensure_ready(runtime: &Runtime) -> Result<()> {
     if !install.is_current() {
         install.reset()?;
 
-        for wheel in WHEELS {
+        for wheel in get_wheels() {
             let asset = select_wheel(runtime, wheel).await?;
             let archive = runtime
                 .downloads()
@@ -304,7 +341,7 @@ pub(crate) async fn ensure_ready(runtime: &Runtime) -> Result<()> {
     }
 
     add_runtime_search_path(&install_dir)?;
-    for wheel in WHEELS {
+    for wheel in get_wheels() {
         for dylib in wheel.dylibs() {
             let path = install_dir.join(dylib);
             if path.exists() {
@@ -377,7 +414,7 @@ impl WheelSpec {
 }
 
 fn source_id() -> Result<String> {
-    let packages = WHEELS.iter().map(|wheel| wheel.package).collect::<Vec<_>>();
+    let packages = get_wheels().iter().map(|wheel| wheel.package).collect::<Vec<_>>();
     Ok(format!(
         "cuda;platform={};wheels={}",
         platform_tags()?.join(","),
@@ -429,7 +466,7 @@ mod tests {
     #[test]
     #[cfg(any(target_os = "windows", target_os = "linux"))]
     fn wheels_have_dylibs_for_current_platform() {
-        for wheel in WHEELS {
+        for wheel in get_wheels() {
             assert!(
                 !wheel.dylibs().is_empty(),
                 "{} has no dylibs",
@@ -443,13 +480,13 @@ mod tests {
         let tempdir = tempfile::tempdir().unwrap();
         let root = tempdir.path();
 
-        for wheel in WHEELS {
+        for wheel in get_wheels() {
             for dylib in wheel.dylibs() {
                 std::fs::write(root.join(dylib), b"ok").unwrap();
             }
         }
 
-        let all_dylibs: Vec<&str> = WHEELS
+        let all_dylibs: Vec<&str> = get_wheels()
             .iter()
             .flat_map(|wheel| wheel.dylibs().iter().copied())
             .collect();
