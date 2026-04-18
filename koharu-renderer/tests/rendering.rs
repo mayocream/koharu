@@ -503,14 +503,26 @@ fn test_complex_reordering_and_glyph_count() -> Result<()> {
     }
 
     // Check for duplicates that might indicate the duplication bug.
-    // Some ligatures might have multiple glyphs for one cluster, but we shouldn't have
-    // the same sequence repeated.
+    // Some ligatures or combining sequences might legitimately have multiple glyphs for one
+    // cluster, but we shouldn't have more repeated glyph identities than that shaping requires.
     let mut unique_glyphs = std::collections::HashSet::new();
     for g in &line.glyphs {
         // Use a tuple of (cluster, glyph_id, x_advance) as a proxy for identity.
         let identity = (g.cluster, g.glyph_id, (g.x_advance * 100.0) as i32);
         unique_glyphs.insert(identity);
     }
-    // If duplication occurred, the set size would be significantly smaller than glyphs.len().
+
+    let unique_clusters = clusters.iter().copied().collect::<std::collections::HashSet<_>>();
+    let allowed_duplicates = line.glyphs.len().saturating_sub(unique_clusters.len());
+    let duplicate_glyphs = line.glyphs.len().saturating_sub(unique_glyphs.len());
+
+    assert!(
+        duplicate_glyphs <= allowed_duplicates,
+        "Unexpected duplicated glyph identities for '{}': {} duplicated glyphs across {} glyphs and {} clusters",
+        text,
+        duplicate_glyphs,
+        line.glyphs.len(),
+        unique_clusters.len()
+    );
     Ok(())
 }
