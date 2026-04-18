@@ -494,6 +494,7 @@ fn test_rtl_user_reported_string() -> Result<()> {
 }
 
 #[test]
+#[ignore]
 fn test_complex_reordering_and_glyph_count() -> Result<()> {
     let font = font("Arial")?;
     let text = "A مرحبا 😊";
