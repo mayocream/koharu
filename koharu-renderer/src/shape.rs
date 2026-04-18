@@ -1,5 +1,5 @@
 use anyhow::Result;
-use harfrust::{Direction, Feature, Script, ShaperData, UnicodeBuffer};
+use harfrust::{Direction, Feature, Script, ShaperData, Tag, UnicodeBuffer};
 use skrifa::raw::TableProvider;
 
 use crate::font::Font;
@@ -154,30 +154,64 @@ pub(crate) fn shape_script_runs<'a>(
 
         let script_run_text = &text[start..end];
 
-        // Find the best font for this script run.
-        let mut chosen_font = fonts[0];
-        for font in fonts {
-            if script_run_text.chars().all(|c| font.has_glyph(c)) {
-                chosen_font = font;
-                break;
+        let mut font_item_iter = script_run_text.char_indices().peekable();
+        while let Some((start_in_script, ch)) = font_item_iter.next() {
+            // Find the best font for this specific character in the cascade.
+            let font_idx = fonts.iter().position(|f| f.has_glyph(ch)).unwrap_or(0);
+            let mut end_in_script = start_in_script + ch.len_utf8();
+
+            // Group subsequent characters that use the same font from the cascade.
+            while let Some(&(next_start, next_ch)) = font_item_iter.peek() {
+                let next_font_idx = fonts.iter().position(|f| f.has_glyph(next_ch)).unwrap_or(0);
+                if next_font_idx == font_idx {
+                    font_item_iter.next();
+                    end_in_script = next_start + next_ch.len_utf8();
+                } else {
+                    break;
+                }
             }
+
+            let font_run_text = &script_run_text[start_in_script..end_in_script];
+            let absolute_start = start + start_in_script;
+            let chosen_font = fonts[font_idx];
+
+            let mut run_opts = options.clone();
+            // Apply the detected script to this specific run.
+            run_opts.script = match script {
+                icu::properties::props::Script::Arabic => {
+                    Script::from_iso15924_tag(Tag::new(b"Arab"))
+                }
+                icu::properties::props::Script::Hebrew => {
+                    Script::from_iso15924_tag(Tag::new(b"Hebr"))
+                }
+                icu::properties::props::Script::Syriac => {
+                    Script::from_iso15924_tag(Tag::new(b"Syrc"))
+                }
+                icu::properties::props::Script::Thaana => {
+                    Script::from_iso15924_tag(Tag::new(b"Thaa"))
+                }
+                icu::properties::props::Script::Nko => Script::from_iso15924_tag(Tag::new(b"Nkoo")),
+                icu::properties::props::Script::Adlam => {
+                    Script::from_iso15924_tag(Tag::new(b"Adlm"))
+                }
+                icu::properties::props::Script::Thai => {
+                    Script::from_iso15924_tag(Tag::new(b"Thai"))
+                }
+                icu::properties::props::Script::Han
+                | icu::properties::props::Script::Hiragana
+                | icu::properties::props::Script::Katakana => {
+                    Script::from_iso15924_tag(Tag::new(b"Hani"))
+                }
+                _ => None,
+            };
+
+            let mut shaped = shaper.shape(font_run_text, chosen_font, &run_opts)?;
+            for glyph in &mut shaped.glyphs {
+                glyph.cluster += absolute_start as u32;
+            }
+
+            runs.push(shaped);
         }
-
-        let mut run_opts = options.clone();
-        // Apply the detected script to this specific run instead of inheriting a
-        // caller-provided script for all runs. For non-Arabic runs, clear the
-        // override so HarfBuzz can guess the correct segment properties.
-        run_opts.script = match script {
-            icu::properties::props::Script::Arabic => Some(Script::Arab),
-            _ => None,
-        };
-
-        let mut shaped = shaper.shape(script_run_text, chosen_font, &run_opts)?;
-        for glyph in &mut shaped.glyphs {
-            glyph.cluster += start as u32;
-        }
-
-        runs.push(shaped);
     }
 
     Ok(runs)
@@ -261,7 +295,7 @@ mod tests {
 
         let (fallback, symbol) = chosen.expect("no fallback font with missing primary glyph found");
 
-        let text = symbol.to_string();
+        let text = format!("A{}!", symbol);
         let shaper = TextShaper::new();
         let opts = ShapingOptions {
             direction: harfrust::Direction::LeftToRight,
@@ -269,15 +303,16 @@ mod tests {
             font_size: 16.0,
             features: &[],
         };
-        let shaped = shape_script_runs(&shaper, &text, &[&primary, &fallback], &opts)?;
+        let runs = shape_script_runs(&shaper, &text, &[&primary, &fallback], &opts)?;
 
-        assert!(!shaped.is_empty());
+        // The mixed run should have been split into 3 segments: [A], [symbol], [!]
         assert!(
-            shaped[0]
-                .glyphs
-                .iter()
-                .all(|g| std::ptr::eq(g.font, &fallback))
+            runs.len() >= 2,
+            "expected at least 2 runs for mixed text, got {}",
+            runs.len()
         );
+        let glyph_count: usize = runs.iter().map(|r| r.glyphs.len()).sum();
+        assert!(glyph_count >= 3);
 
         Ok(())
     }

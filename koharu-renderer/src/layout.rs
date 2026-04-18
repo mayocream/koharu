@@ -291,12 +291,21 @@ impl<'a> TextLayout<'a> {
 
             if !segment_text.is_empty() {
                 // Subdivide segment into constant BiDi level runs.
-                let mut run_start = segment.range.start;
-                while run_start < segment.range.end {
+                let mut char_indices = segment_text
+                    .char_indices()
+                    .map(|(id, _)| segment.range.start + id)
+                    .peekable();
+
+                while let Some(run_start) = char_indices.next() {
                     let level = bidi_info.levels[run_start];
-                    let mut run_end = run_start + 1;
-                    while run_end < segment.range.end && bidi_info.levels[run_end] == level {
-                        run_end += 1;
+                    let mut run_end = segment.range.end;
+
+                    while let Some(&next_char_start) = char_indices.peek() {
+                        if bidi_info.levels[next_char_start] != level {
+                            run_end = next_char_start;
+                            break;
+                        }
+                        char_indices.next();
                     }
 
                     let run_text = &text[run_start..run_end];
@@ -331,8 +340,6 @@ impl<'a> TextLayout<'a> {
 
                         segment_runs.push(LineRun { shaped, level });
                     }
-
-                    run_start = run_end;
                 }
             }
 
