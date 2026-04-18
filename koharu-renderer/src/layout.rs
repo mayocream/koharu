@@ -186,16 +186,6 @@ impl<'a> TextLayout<'a> {
         let line_height = (ascent + descent + metrics.leading).max(font_size);
 
         let bidi_info = BidiInfo::new(text, None);
-        let para = bidi_info.paragraphs.first();
-        let base_direction = if let Some(p) = para {
-            if p.level.is_rtl() {
-                harfrust::Direction::RightToLeft
-            } else {
-                harfrust::Direction::LeftToRight
-            }
-        } else {
-            harfrust::Direction::LeftToRight
-        };
 
         let (direction, script) = shaping_direction_for_text(text, self.writing_mode);
         let opts = ShapingOptions {
@@ -236,54 +226,68 @@ impl<'a> TextLayout<'a> {
         let mut line_offset = 0usize;
         let mut current_advance = 0.0f32;
 
-        let finalize_current_line =
-            |runs: &mut Vec<LineRun<'a>>,
-             offset: &mut usize,
-             visible_end: usize,
-             next_offset: usize,
-             lines: &mut Vec<LayoutLine<'a>>| {
-                if runs.is_empty() {
-                    *offset = next_offset;
-                    return;
-                }
-
-                let levels: Vec<unicode_bidi::Level> = runs.iter().map(|r| r.level).collect();
-                let visual_indices = reorder_visual(&levels);
-
-                let mut line = LayoutLine {
-                    range: *offset..visible_end,
-                    direction: base_direction,
-                    ..Default::default()
-                };
-
-                let mut pen_x = 0.0f32;
-                let mut pen_y = 0.0f32;
-
-                for idx in visual_indices {
-                    let run = &mut runs[idx];
-                    for glyph in std::mem::take(&mut run.shaped.glyphs) {
-                        line.glyphs.push(glyph);
-                    }
-                    if self.writing_mode.is_vertical() {
-                        pen_y -= run.shaped.y_advance;
-                    } else {
-                        pen_x += run.shaped.x_advance;
-                    }
-                }
-
-                line.advance = if self.writing_mode.is_vertical() {
-                    pen_y.abs()
-                } else {
-                    pen_x
-                };
-
-                lines.push(line);
-                runs.clear();
+        let finalize_current_line = |runs: &mut Vec<LineRun<'a>>,
+                                     offset: &mut usize,
+                                     visible_end: usize,
+                                     next_offset: usize,
+                                     lines: &mut Vec<LayoutLine<'a>>,
+                                     force_push: bool| {
+            if runs.is_empty() && !force_push {
                 *offset = next_offset;
+                return;
+            }
+
+            let levels: Vec<unicode_bidi::Level> = runs.iter().map(|r| r.level).collect();
+            let visual_indices = reorder_visual(&levels);
+
+            let mut line = LayoutLine {
+                range: *offset..visible_end,
+                direction: if self.writing_mode.is_vertical() {
+                    harfrust::Direction::TopToBottom
+                } else {
+                    bidi_info
+                        .paragraphs
+                        .iter()
+                        .find(|p| *offset >= p.range.start && *offset <= p.range.end)
+                        .map(|p| {
+                            if p.level.is_rtl() {
+                                harfrust::Direction::RightToLeft
+                            } else {
+                                harfrust::Direction::LeftToRight
+                            }
+                        })
+                        .unwrap_or(harfrust::Direction::LeftToRight)
+                },
+                ..Default::default()
             };
 
+            let mut pen_x = 0.0f32;
+            let mut pen_y = 0.0f32;
+
+            for idx in visual_indices {
+                let run = &mut runs[idx];
+                for glyph in std::mem::take(&mut run.shaped.glyphs) {
+                    line.glyphs.push(glyph);
+                }
+                if self.writing_mode.is_vertical() {
+                    pen_y -= run.shaped.y_advance;
+                } else {
+                    pen_x += run.shaped.x_advance;
+                }
+            }
+
+            line.advance = if self.writing_mode.is_vertical() {
+                pen_y.abs()
+            } else {
+                pen_x
+            };
+
+            lines.push(line);
+            runs.clear();
+            *offset = next_offset;
+        };
+
         for segment in segments {
-            let start = segment.range.start;
             let segment_text = &text[segment.range.clone()];
 
             let mut segment_runs = Vec::new();
@@ -353,9 +357,10 @@ impl<'a> TextLayout<'a> {
                 finalize_current_line(
                     &mut current_line_runs,
                     &mut line_offset,
-                    start,
-                    start,
+                    segment.range.start,
+                    segment.range.start,
                     &mut lines,
+                    false,
                 );
                 current_advance = 0.0;
             }
@@ -364,12 +369,18 @@ impl<'a> TextLayout<'a> {
             current_advance += segment_advance;
 
             if segment.is_mandatory {
+                // Consecutive mandatory breaks (e.g. "A\n\nB") will drop the empty line:
+                // when segment.is_mandatory and current_line_runs is empty, finalize_current_line
+                // early-returns without pushing a LayoutLine. Consider special-casing mandatory
+                // breaks to push an empty LayoutLine (advance=0, glyphs empty, range=offset..visible_end)
+                // so blank lines are preserved.
                 finalize_current_line(
                     &mut current_line_runs,
                     &mut line_offset,
                     segment.range.end,
                     segment.next_offset,
                     &mut lines,
+                    true,
                 );
                 current_advance = 0.0;
             }
@@ -382,6 +393,7 @@ impl<'a> TextLayout<'a> {
             text.len(),
             text.len(),
             &mut lines,
+            false, // Don't force push a final empty line if the text didn't end with a break
         );
 
         // Baselines depend only on line index and metrics. For vertical text we compute absolute X

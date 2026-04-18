@@ -154,16 +154,30 @@ pub(crate) fn shape_script_runs<'a>(
 
         let script_run_text = &text[start..end];
 
-        let mut font_item_iter = script_run_text.char_indices().peekable();
-        while let Some((start_in_script, ch)) = font_item_iter.next() {
-            // Find the best font for this specific character in the cascade.
-            let font_idx = fonts.iter().position(|f| f.has_glyph(ch)).unwrap_or(0);
+        // Identify priority font for each character in the script run.
+        // We use a small optimization to check the primary font and recently used font first.
+        let mut char_fonts = Vec::with_capacity(script_run_text.len());
+        let mut last_idx = 0;
+        for (_, ch) in script_run_text.char_indices() {
+            let idx = if fonts[0].has_glyph(ch) {
+                0
+            } else if last_idx != 0 && fonts[last_idx].has_glyph(ch) {
+                last_idx
+            } else {
+                fonts.iter().position(|f| f.has_glyph(ch)).unwrap_or(0)
+            };
+            last_idx = idx;
+            char_fonts.push(idx);
+        }
+
+        // Group characters into runs using the pre-calculated font indices.
+        let mut font_item_iter = script_run_text.char_indices().enumerate().peekable();
+        while let Some((i, (start_in_script, ch))) = font_item_iter.next() {
+            let font_idx = char_fonts[i];
             let mut end_in_script = start_in_script + ch.len_utf8();
 
-            // Group subsequent characters that use the same font from the cascade.
-            while let Some(&(next_start, next_ch)) = font_item_iter.peek() {
-                let next_font_idx = fonts.iter().position(|f| f.has_glyph(next_ch)).unwrap_or(0);
-                if next_font_idx == font_idx {
+            while let Some(&(next_i, (next_start, next_ch))) = font_item_iter.peek() {
+                if char_fonts[next_i] == font_idx {
                     font_item_iter.next();
                     end_in_script = next_start + next_ch.len_utf8();
                 } else {
