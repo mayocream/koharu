@@ -13,7 +13,8 @@ import { motion } from 'motion/react'
 import { useTranslation } from 'react-i18next'
 
 import { Button } from '@/components/ui/button'
-import { useCurrentDocument } from '@/hooks/useTextBlocks'
+import { findImageBlob, findMaskBlob, useCurrentPage, useTextNodes } from '@/hooks/useCurrentPage'
+import { useScene } from '@/hooks/useScene'
 import { useEditorUiStore } from '@/lib/stores/editorUiStore'
 import { cn } from '@/lib/utils'
 
@@ -28,17 +29,27 @@ type Layer = {
 }
 
 export function LayersPanel() {
-  const currentDocument = useCurrentDocument()
-  const showInpaintedImage = useEditorUiStore((state) => state.showInpaintedImage)
-  const setShowInpaintedImage = useEditorUiStore((state) => state.setShowInpaintedImage)
-  const showSegmentationMask = useEditorUiStore((state) => state.showSegmentationMask)
-  const setShowSegmentationMask = useEditorUiStore((state) => state.setShowSegmentationMask)
-  const showBrushLayer = useEditorUiStore((state) => state.showBrushLayer)
-  const setShowBrushLayer = useEditorUiStore((state) => state.setShowBrushLayer)
-  const showTextBlocksOverlay = useEditorUiStore((state) => state.showTextBlocksOverlay)
-  const setShowTextBlocksOverlay = useEditorUiStore((state) => state.setShowTextBlocksOverlay)
-  const showRenderedImage = useEditorUiStore((state) => state.showRenderedImage)
-  const setShowRenderedImage = useEditorUiStore((state) => state.setShowRenderedImage)
+  const page = useCurrentPage()
+  const { epoch: sceneEpoch } = useScene()
+  const textNodes = useTextNodes()
+  const showInpaintedImage = useEditorUiStore((s) => s.showInpaintedImage)
+  const setShowInpaintedImage = useEditorUiStore((s) => s.setShowInpaintedImage)
+  const showSegmentationMask = useEditorUiStore((s) => s.showSegmentationMask)
+  const setShowSegmentationMask = useEditorUiStore((s) => s.setShowSegmentationMask)
+  const showBrushLayer = useEditorUiStore((s) => s.showBrushLayer)
+  const setShowBrushLayer = useEditorUiStore((s) => s.setShowBrushLayer)
+  const showTextBlocksOverlay = useEditorUiStore((s) => s.showTextBlocksOverlay)
+  const setShowTextBlocksOverlay = useEditorUiStore((s) => s.setShowTextBlocksOverlay)
+  const showRenderedImage = useEditorUiStore((s) => s.showRenderedImage)
+  const setShowRenderedImage = useEditorUiStore((s) => s.setShowRenderedImage)
+
+  const hasRendered = !!(page && findImageBlob(page, 'rendered'))
+  const hasInpainted = !!(page && findImageBlob(page, 'inpainted'))
+  const hasSource = !!(page && findImageBlob(page, 'source'))
+  const hasSegment = !!(page && findMaskBlob(page, 'segment'))
+  const hasBrush = !!(page && findMaskBlob(page, 'brushInpaint'))
+  // Silence warning about unused epoch dep — it's the invalidation trigger.
+  void sceneEpoch
 
   const layers: Layer[] = [
     {
@@ -47,7 +58,7 @@ export function LayersPanel() {
       icon: SparklesIcon,
       visible: showRenderedImage,
       setVisible: setShowRenderedImage,
-      hasContent: currentDocument?.rendered !== undefined,
+      hasContent: hasRendered,
     },
     {
       id: 'textBlocks',
@@ -55,8 +66,7 @@ export function LayersPanel() {
       icon: ALargeSmallIcon,
       visible: showTextBlocksOverlay,
       setVisible: setShowTextBlocksOverlay,
-      hasContent:
-        currentDocument?.textBlocks !== undefined && currentDocument.textBlocks.length > 0,
+      hasContent: textNodes.length > 0,
     },
     {
       id: 'brush',
@@ -64,7 +74,7 @@ export function LayersPanel() {
       icon: PaintbrushIcon,
       visible: showBrushLayer,
       setVisible: setShowBrushLayer,
-      hasContent: currentDocument?.brushLayer !== undefined,
+      hasContent: hasBrush,
     },
     {
       id: 'inpainted',
@@ -72,7 +82,7 @@ export function LayersPanel() {
       icon: BandageIcon,
       visible: showInpaintedImage,
       setVisible: setShowInpaintedImage,
-      hasContent: currentDocument?.inpainted !== undefined,
+      hasContent: hasInpainted,
     },
     {
       id: 'mask',
@@ -80,7 +90,7 @@ export function LayersPanel() {
       icon: ContrastIcon,
       visible: showSegmentationMask,
       setVisible: setShowSegmentationMask,
-      hasContent: currentDocument?.segment !== undefined,
+      hasContent: hasSegment,
     },
     {
       id: 'base',
@@ -88,7 +98,7 @@ export function LayersPanel() {
       icon: 'RAW',
       visible: true,
       setVisible: () => {},
-      hasContent: currentDocument?.image !== undefined,
+      hasContent: hasSource,
       alwaysEnabled: true,
     },
   ]

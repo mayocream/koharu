@@ -12,7 +12,6 @@ keywords.workspace = true
 publish.workspace = true
 
 [dependencies]
-koharu-core = { workspace = true }
 anyhow = { workspace = true }
 image = { workspace = true }
 imageproc = { workspace = true }

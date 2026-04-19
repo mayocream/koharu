@@ -17,19 +17,16 @@ import {
   useSortable,
 } from '@dnd-kit/sortable'
 import { CSS } from '@dnd-kit/utilities'
-import { useQueryClient } from '@tanstack/react-query'
 import { GripVerticalIcon, Loader2Icon } from 'lucide-react'
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 
 import { Button } from '@/components/ui/button'
 import { Dialog, DialogContent, DialogDescription, DialogTitle } from '@/components/ui/dialog'
-import {
-  getGetDocumentThumbnailUrl,
-  getListDocumentsQueryKey,
-  useListDocuments,
-  useReorderDocuments,
-} from '@/lib/api/documents/documents'
+import { useScene } from '@/hooks/useScene'
+import { getGetPageThumbnailUrl } from '@/lib/api/default/default'
+import { applyOp } from '@/lib/io/scene'
+import { ops } from '@/lib/ops'
 
 const THUMBNAIL_DPR =
   typeof window !== 'undefined' ? Math.min(Math.ceil(window.devicePixelRatio || 1), 3) : 2
@@ -40,31 +37,27 @@ type PageManagerDialogProps = {
 }
 
 export function PageManagerDialog({ open, onOpenChange }: PageManagerDialogProps) {
-  const { data: documents = [] } = useListDocuments()
-  const queryClient = useQueryClient()
   const { t } = useTranslation()
-  const reorderMutation = useReorderDocuments()
-
+  const { scene } = useScene()
+  const pagesMap = scene?.pages
+  const pages = useMemo(() => (pagesMap ? Object.values(pagesMap) : []), [pagesMap])
   const [orderedIds, setOrderedIds] = useState<string[]>([])
+  const [saving, setSaving] = useState(false)
 
-  const docsById = useMemo(() => Object.fromEntries(documents.map((d) => [d.id, d])), [documents])
+  const pagesById = useMemo(() => Object.fromEntries(pages.map((p) => [p.id, p])), [pages])
 
   useEffect(() => {
-    if (open) {
-      setOrderedIds(documents.map((d) => d.id))
-    }
-  }, [open, documents])
+    if (open) setOrderedIds(pages.map((p) => p.id))
+  }, [open, pages])
 
   const hasChanges = useMemo(() => {
-    if (orderedIds.length !== documents.length) return false
-    return orderedIds.some((id, i) => id !== documents[i]?.id)
-  }, [orderedIds, documents])
+    if (orderedIds.length !== pages.length) return false
+    return orderedIds.some((id, i) => id !== pages[i]?.id)
+  }, [orderedIds, pages])
 
   const sensors = useSensors(
     useSensor(PointerSensor, { activationConstraint: { distance: 5 } }),
-    useSensor(KeyboardSensor, {
-      coordinateGetter: sortableKeyboardCoordinates,
-    }),
+    useSensor(KeyboardSensor, { coordinateGetter: sortableKeyboardCoordinates }),
   )
 
   const handleDragEnd = useCallback((event: DragEndEvent) => {
@@ -77,23 +70,20 @@ export function PageManagerDialog({ open, onOpenChange }: PageManagerDialogProps
     })
   }, [])
 
-  const handleSave = useCallback(() => {
+  const handleSave = useCallback(async () => {
     if (!hasChanges) {
       onOpenChange(false)
       return
     }
-    reorderMutation.mutate(
-      { data: { ids: orderedIds } },
-      {
-        onSuccess: () => {
-          queryClient.invalidateQueries({
-            queryKey: getListDocumentsQueryKey(),
-          })
-          onOpenChange(false)
-        },
-      },
-    )
-  }, [hasChanges, orderedIds, reorderMutation, queryClient, onOpenChange])
+    setSaving(true)
+    try {
+      const prevOrder = pages.map((p) => p.id)
+      await applyOp(ops.reorderPages(orderedIds, prevOrder))
+      onOpenChange(false)
+    } finally {
+      setSaving(false)
+    }
+  }, [hasChanges, orderedIds, pages, onOpenChange])
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
@@ -120,7 +110,7 @@ export function PageManagerDialog({ open, onOpenChange }: PageManagerDialogProps
                 className='grid grid-cols-3 gap-3 sm:grid-cols-4'
               >
                 {orderedIds.map((id, index) => (
-                  <SortablePageCard key={id} id={id} index={index} name={docsById[id]?.name} />
+                  <SortablePageCard key={id} id={id} index={index} name={pagesById[id]?.name} />
                 ))}
               </div>
             </SortableContext>
@@ -128,19 +118,15 @@ export function PageManagerDialog({ open, onOpenChange }: PageManagerDialogProps
         </div>
 
         <div className='flex items-center justify-end gap-2 border-t border-border px-6 py-4'>
-          <Button
-            variant='outline'
-            onClick={() => onOpenChange(false)}
-            disabled={reorderMutation.isPending}
-          >
+          <Button variant='outline' onClick={() => onOpenChange(false)} disabled={saving}>
             {t('common.cancel')}
           </Button>
           <Button
             data-testid='page-manager-save'
-            onClick={handleSave}
-            disabled={!hasChanges || reorderMutation.isPending}
+            onClick={() => void handleSave()}
+            disabled={!hasChanges || saving}
           >
-            {reorderMutation.isPending && <Loader2Icon className='mr-2 h-4 w-4 animate-spin' />}
+            {saving && <Loader2Icon className='mr-2 h-4 w-4 animate-spin' />}
             {t('common.save')}
           </Button>
         </div>
@@ -149,23 +135,15 @@ export function PageManagerDialog({ open, onOpenChange }: PageManagerDialogProps
   )
 }
 
-type SortablePageCardProps = {
-  id: string
-  index: number
-  name?: string
-}
-
-function SortablePageCard({ id, index, name }: SortablePageCardProps) {
+function SortablePageCard({ id, index, name }: { id: string; index: number; name?: string }) {
   const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({
     id,
   })
-
   const style: React.CSSProperties = {
     transform: CSS.Transform.toString(transform),
     transition,
     zIndex: isDragging ? 10 : undefined,
   }
-
   return (
     <div ref={setNodeRef} style={style} {...attributes} {...listeners}>
       <PageCard id={id} index={index} name={name} dragging={isDragging} />
@@ -173,16 +151,18 @@ function SortablePageCard({ id, index, name }: SortablePageCardProps) {
   )
 }
 
-type PageCardProps = {
+function PageCard({
+  id,
+  index,
+  name,
+  dragging,
+}: {
   id: string
   index: number
   name?: string
   dragging?: boolean
-}
-
-function PageCard({ id, index, name, dragging }: PageCardProps) {
-  const src = getGetDocumentThumbnailUrl(id, { size: 200 * THUMBNAIL_DPR })
-
+}) {
+  const src = `${getGetPageThumbnailUrl(id)}?size=${200 * THUMBNAIL_DPR}`
   return (
     <div
       data-testid={`page-manager-card-${index}`}

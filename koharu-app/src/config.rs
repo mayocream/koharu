@@ -68,11 +68,9 @@ pub struct AppConfig {
 #[serde(default)]
 pub struct PipelineConfig {
     pub detector: String,
-    #[serde(default)]
-    pub bubble_detector: String,
-    #[serde(default)]
     pub font_detector: String,
     pub segmenter: String,
+    pub bubble_segmenter: String,
     pub ocr: String,
     pub translator: String,
     pub inpainter: String,
@@ -82,12 +80,12 @@ pub struct PipelineConfig {
 impl Default for PipelineConfig {
     fn default() -> Self {
         Self {
-            detector: "comic-text-bubble-detector".to_string(),
-            bubble_detector: "comic-text-bubble-detector".to_string(),
+            detector: "pp-doclayout-v3".to_string(),
             font_detector: "yuzumarker-font-detection".to_string(),
             segmenter: "comic-text-detector-seg".to_string(),
+            bubble_segmenter: "speech-bubble-segmentation".to_string(),
             ocr: "paddle-ocr-vl-1.5".to_string(),
-            translator: "llm".to_string(),
+            translator: "llm-translate".to_string(),
             inpainter: "aot-inpainting".to_string(),
             renderer: "koharu-renderer".to_string(),
         }
@@ -180,6 +178,77 @@ pub fn save(config: &AppConfig) -> Result<()> {
     // `api_key` is `#[serde(skip)]`, so it is never written to the TOML file.
     let content = toml::to_string_pretty(config).context("failed to serialize config")?;
     fs::write(&path, content).with_context(|| format!("failed to write config to `{path}`"))
+}
+
+// ---------------------------------------------------------------------------
+// Patch application
+// ---------------------------------------------------------------------------
+
+/// Apply a `ConfigPatch` in-place. Missing fields leave the existing value
+/// alone. Providers are replaced wholesale (the list, not field-by-field).
+pub fn apply_patch(config: &mut AppConfig, patch: koharu_core::ConfigPatch) {
+    if let Some(data) = patch.data
+        && let Some(path) = data.path
+    {
+        config.data.path = camino::Utf8PathBuf::from(path);
+    }
+    if let Some(http) = patch.http {
+        if let Some(v) = http.connect_timeout {
+            config.http.connect_timeout = v;
+        }
+        if let Some(v) = http.read_timeout {
+            config.http.read_timeout = v;
+        }
+        if let Some(v) = http.max_retries {
+            config.http.max_retries = v;
+        }
+    }
+    if let Some(p) = patch.pipeline {
+        if let Some(v) = p.detector {
+            config.pipeline.detector = v;
+        }
+        if let Some(v) = p.font_detector {
+            config.pipeline.font_detector = v;
+        }
+        if let Some(v) = p.segmenter {
+            config.pipeline.segmenter = v;
+        }
+        if let Some(v) = p.bubble_segmenter {
+            config.pipeline.bubble_segmenter = v;
+        }
+        if let Some(v) = p.ocr {
+            config.pipeline.ocr = v;
+        }
+        if let Some(v) = p.translator {
+            config.pipeline.translator = v;
+        }
+        if let Some(v) = p.inpainter {
+            config.pipeline.inpainter = v;
+        }
+        if let Some(v) = p.renderer {
+            config.pipeline.renderer = v;
+        }
+    }
+    if let Some(providers) = patch.providers {
+        let mut new_providers = Vec::with_capacity(providers.len());
+        for p in providers {
+            let existing = config.providers.iter().find(|e| e.id == p.id);
+            let api_key = match p.api_key.as_deref() {
+                Some(REDACTED) => existing.and_then(|e| e.api_key.clone()),
+                Some("") => None,
+                Some(s) => Some(RedactedSecret::new(s)),
+                None => existing.and_then(|e| e.api_key.clone()),
+            };
+            new_providers.push(ProviderConfig {
+                id: p.id,
+                base_url: p
+                    .base_url
+                    .or_else(|| existing.and_then(|e| e.base_url.clone())),
+                api_key,
+            });
+        }
+        config.providers = new_providers;
+    }
 }
 
 // ---------------------------------------------------------------------------

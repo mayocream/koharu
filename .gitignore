@@ -13,8 +13,6 @@ dist-ssr
 *.local
 
 # Editor directories and files
-.vscode/*
-!.vscode/extensions.json
 .idea
 .DS_Store
 *.suo
@@ -29,15 +27,13 @@ dist-ssr
 target/
 
 # Datasets
-data/
-!koharu-app/data/
-!koharu-app/data/google-fonts-catalog.json
+/data
 
 # model results
-runs/
+/runs
 
 # model checkpoints
-models/
+/models
 .env
 
 # Python
@@ -54,8 +50,9 @@ test-results/
 
 # Misc
 AGENTS.md
-claudedocs/
-/.claude
 
 # Zensical
 site/
+
+# integration-tests shared runtime cache
+.cache/

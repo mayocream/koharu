@@ -1,57 +1,60 @@
 'use client'
 
-import { useQueryClient } from '@tanstack/react-query'
 import type { RefObject } from 'react'
 
-import { useCanvasDrawing } from '@/hooks/useCanvasDrawing'
+import { useCanvasDrawing, type CanvasDims } from '@/hooks/useCanvasDrawing'
 import type { PointerToDocumentFn } from '@/hooks/usePointerToDocument'
-import type { MappedDocument } from '@/hooks/useTextBlocks'
-import { getGetDocumentQueryKey, getListDocumentsQueryKey } from '@/lib/api/documents/documents'
-import { updateBrushLayer } from '@/lib/api/regions/regions'
+import type { Page } from '@/lib/api/schemas'
 import { useEditorUiStore } from '@/lib/stores/editorUiStore'
 import { usePreferencesStore } from '@/lib/stores/preferencesStore'
-import type { ToolMode } from '@/types'
+import type { ToolMode } from '@/lib/types'
 
 type RenderBrushOptions = {
   mode: ToolMode
-  currentDocument: MappedDocument | null
+  page: Page | null
   pointerToDocument: PointerToDocumentFn
   enabled: boolean
   action: 'paint' | 'erase'
   targetCanvasRef?: RefObject<HTMLCanvasElement | null>
 }
 
+/**
+ * Color-brush over the `Mask { role: brushInpaint }` node. Stroke finalize
+ * PUTs the updated mask to `/api/v1/pages/{id}/masks/brushInpaint`.
+ */
 export function useRenderBrushDrawing({
-  currentDocument,
+  page,
   pointerToDocument,
   enabled,
   action,
   targetCanvasRef,
 }: RenderBrushOptions) {
-  const queryClient = useQueryClient()
   const isErasing = action === 'erase'
+  const dims: CanvasDims | null = page
+    ? { width: page.width, height: page.height, key: page.id }
+    : null
 
-  return useCanvasDrawing(currentDocument, pointerToDocument, {
+  return useCanvasDrawing(dims, pointerToDocument, {
     getColor: () => (isErasing ? '#000000' : usePreferencesStore.getState().brushConfig.color),
     blendMode: isErasing ? 'destination-out' : 'source-over',
     getBrushSize: () => usePreferencesStore.getState().brushConfig.size,
     enabled,
     targetCanvasRef,
     clearAfterStroke: true,
-    onFinalize: async (patch, region) => {
-      const documentId = useEditorUiStore.getState().currentDocumentId
-      if (!documentId) return
-      await updateBrushLayer(documentId, {
-        data: Array.from(patch),
-        region,
-      })
-      await queryClient.invalidateQueries({
-        queryKey: getGetDocumentQueryKey(documentId),
-      })
-      await queryClient.invalidateQueries({
-        queryKey: getListDocumentsQueryKey(),
-      })
-      useEditorUiStore.getState().setShowBrushLayer(true)
+    onFinalize: async () => {},
+    onFinalizeFullCanvas: async (fullPng) => {
+      if (!page) return
+      try {
+        const res = await fetch(`/api/v1/pages/${page.id}/masks/brushInpaint`, {
+          method: 'PUT',
+          headers: { 'Content-Type': 'image/png' },
+          body: fullPng as unknown as BodyInit,
+        })
+        if (!res.ok) throw new Error(`brush PUT failed: ${res.status}`)
+        useEditorUiStore.getState().setShowBrushLayer(true)
+      } catch (e) {
+        useEditorUiStore.getState().showError(String(e))
+      }
     },
   })
 }

@@ -31,14 +31,14 @@ koharu_runtime::declare_hf_model_package!(
     id: "model:aot-inpainting:config",
     repo: HF_REPO,
     file: CONFIG_FILENAME,
-    bootstrap: true,
+    bootstrap: false,
     order: 131,
 );
 koharu_runtime::declare_hf_model_package!(
     id: "model:aot-inpainting:weights",
     repo: HF_REPO,
     file: SAFETENSORS_FILENAME,
-    bootstrap: true,
+    bootstrap: false,
     order: 132,
 );
 

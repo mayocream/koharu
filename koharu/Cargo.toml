@@ -38,6 +38,8 @@ serde_json = { workspace = true }
 once_cell = { workspace = true }
 rfd = { workspace = true }
 tauri = { workspace = true }
+tauri-plugin-dialog = { workspace = true }
+tauri-plugin-fs = { workspace = true }
 tauri-plugin-opener = { workspace = true }
 tauri-plugin-process = { workspace = true }
 tauri-plugin-updater = { workspace = true }

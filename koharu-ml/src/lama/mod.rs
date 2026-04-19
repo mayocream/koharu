@@ -1,6 +1,7 @@
 mod fft;
 mod model;
 
+use crate::types::TextRegion;
 use anyhow::{Result, bail};
 use candle_core::{DType, Device, Tensor};
 use image::{
@@ -11,7 +12,6 @@ use imageproc::{
     contours::find_contours, distance_transform::Norm, drawing::draw_polygon_mut, edges::canny,
     filter::gaussian_blur_f32, morphology::dilate, point::Point,
 };
-use koharu_core::TextBlock;
 use koharu_runtime::RuntimeManager;
 use tracing::instrument;
 
@@ -90,7 +90,7 @@ impl Lama {
         &self,
         image: &DynamicImage,
         mask: &DynamicImage,
-        text_blocks: Option<&[TextBlock]>,
+        text_blocks: Option<&[TextRegion]>,
     ) -> Result<DynamicImage> {
         if image.dimensions() != mask.dimensions() {
             bail!(
@@ -132,7 +132,7 @@ impl Lama {
         &self,
         image: &RgbImage,
         mask: &GrayImage,
-        text_blocks: &[TextBlock],
+        text_blocks: &[TextRegion],
     ) -> Result<RgbImage> {
         let (im_w, im_h) = image.dimensions();
         let mut inpainted = image.clone();
@@ -235,7 +235,7 @@ impl Lama {
     }
 }
 
-fn block_xyxy(block: &TextBlock, width: u32, height: u32) -> Option<Xyxy> {
+fn block_xyxy(block: &TextRegion, width: u32, height: u32) -> Option<Xyxy> {
     let x1 = block.x.floor().max(0.0) as u32;
     let y1 = block.y.floor().max(0.0) as u32;
     let x2 = (block.x + block.width).ceil().max(block.x.floor()) as u32;
@@ -570,10 +570,10 @@ mod tests {
         enlarge_window, extract_balloon_mask, try_fill_balloon,
     };
     use crate::inpainting::restore_alpha_channel;
+    use crate::types::TextRegion;
     use image::{GrayImage, Luma, Rgb, RgbImage};
     use imageproc::drawing::draw_hollow_rect_mut;
     use imageproc::rect::Rect;
-    use koharu_core::TextBlock;
 
     const ALPHA_RING_RADIUS: u8 = 7;
 
@@ -688,7 +688,7 @@ mod tests {
 
     #[test]
     fn block_xyxy_rounds_and_clamps_document_coords() {
-        let block = TextBlock {
+        let block = TextRegion {
             x: 10.2,
             y: 20.7,
             width: 15.1,

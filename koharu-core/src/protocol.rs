@@ -1,8 +1,17 @@
+//! Non-scene protocol types: metadata, LLM lifecycle, engine catalog, config.
+//!
+//! Scene ops live in `op.rs`; push events in `events.rs`. Per-route request
+//! DTOs (multipart import, pipeline start) live in `koharu-rpc/src/routes/`.
+
 use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
 use utoipa::ToSchema;
 
-use crate::{FontPrediction, TextBlock, TextShaderEffect, TextStrokeStyle, TextStyle};
+use crate::google_fonts::FontSource;
+
+// ---------------------------------------------------------------------------
+// Meta / fonts
+// ---------------------------------------------------------------------------
 
 #[derive(
     Debug, Clone, Serialize, Deserialize, PartialEq, Eq, PartialOrd, Ord, JsonSchema, ToSchema,
@@ -11,7 +20,7 @@ use crate::{FontPrediction, TextBlock, TextShaderEffect, TextStrokeStyle, TextSt
 pub struct FontFaceInfo {
     pub family_name: String,
     pub post_script_name: String,
-    pub source: crate::google_fonts::FontSource,
+    pub source: FontSource,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub category: Option<String>,
     pub cached: bool,
@@ -24,176 +33,22 @@ pub struct MetaInfo {
     pub ml_device: String,
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize, JsonSchema, ToSchema)]
-#[serde(rename_all = "camelCase")]
-pub struct DocumentSummary {
-    pub id: String,
-    pub name: String,
-    pub width: u32,
-    pub height: u32,
-    pub order: u32,
-    pub has_segment: bool,
-    pub has_inpainted: bool,
-    pub has_brush_layer: bool,
-    pub has_rendered: bool,
-    pub text_block_count: usize,
-}
-
-#[derive(Debug, Clone, Serialize, Deserialize, JsonSchema, ToSchema)]
-#[serde(rename_all = "camelCase")]
-pub struct TextBlockDetail {
-    pub id: String,
-    pub x: f32,
-    pub y: f32,
-    pub width: f32,
-    pub height: f32,
-    pub confidence: f32,
-    pub line_polygons: Option<Vec<[[f32; 2]; 4]>>,
-    pub source_direction: Option<crate::TextDirection>,
-    pub rendered_direction: Option<crate::TextDirection>,
-    pub source_language: Option<String>,
-    pub rotation_deg: Option<f32>,
-    pub detected_font_size_px: Option<f32>,
-    pub detector: Option<String>,
-    pub text: Option<String>,
-    pub translation: Option<String>,
-    pub style: Option<TextStyle>,
-    pub font_prediction: Option<FontPrediction>,
-    /// Blob hash for the rendered text block sprite.
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub rendered: Option<String>,
-    /// Actual render area position/size (when bubble expansion is used).
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub render_x: Option<f32>,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub render_y: Option<f32>,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub render_width: Option<f32>,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub render_height: Option<f32>,
-}
-
-impl From<&TextBlock> for TextBlockDetail {
-    fn from(block: &TextBlock) -> Self {
-        Self {
-            id: block.id.clone(),
-            x: block.x,
-            y: block.y,
-            width: block.width,
-            height: block.height,
-            confidence: block.confidence,
-            line_polygons: block.line_polygons.clone(),
-            source_direction: block.source_direction,
-            rendered_direction: block.rendered_direction,
-            source_language: block.source_language.clone(),
-            rotation_deg: block.rotation_deg,
-            detected_font_size_px: block.detected_font_size_px,
-            detector: block.detector.clone(),
-            text: block.text.clone(),
-            translation: block.translation.clone(),
-            style: block.style.clone(),
-            font_prediction: block.font_prediction.clone(),
-            rendered: block.rendered.as_ref().map(|r| r.hash().to_string()),
-            render_x: block.render_x,
-            render_y: block.render_y,
-            render_width: block.render_width,
-            render_height: block.render_height,
-        }
-    }
-}
-
-#[derive(Debug, Clone, Serialize, Deserialize, ToSchema)]
-#[serde(rename_all = "camelCase")]
-pub struct DocumentDetail {
-    pub id: String,
-    pub name: String,
-    pub width: u32,
-    pub height: u32,
-    pub text_blocks: Vec<TextBlockDetail>,
-    /// Blob hash for the source image layer.
-    pub image: String,
-    /// Blob hash for the segmentation mask layer.
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub segment: Option<String>,
-    /// Blob hash for the inpainted layer.
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub inpainted: Option<String>,
-    /// Blob hash for the brush layer.
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub brush_layer: Option<String>,
-    /// Blob hash for the rendered composite layer.
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub rendered: Option<String>,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub style: Option<crate::DocumentStyle>,
-}
-
-#[derive(Debug, Clone, Serialize, Deserialize, JsonSchema, ToSchema)]
-#[serde(rename_all = "camelCase")]
-pub struct TextBlockInput {
-    pub id: Option<String>,
-    pub x: f32,
-    pub y: f32,
-    pub width: f32,
-    pub height: f32,
-    pub text: Option<String>,
-    pub translation: Option<String>,
-    pub style: Option<TextStyle>,
-}
-
-#[derive(Debug, Clone, Serialize, Deserialize, JsonSchema, ToSchema)]
-#[serde(rename_all = "camelCase")]
-pub struct TextBlockPatch {
-    pub text: Option<String>,
-    pub translation: Option<String>,
-    pub x: Option<f32>,
-    pub y: Option<f32>,
-    pub width: Option<f32>,
-    pub height: Option<f32>,
-    pub style: Option<TextStyle>,
-}
-
-#[derive(Debug, Clone, Serialize, Deserialize, JsonSchema, ToSchema)]
-#[serde(rename_all = "camelCase")]
-pub struct CreateTextBlock {
-    pub x: f32,
-    pub y: f32,
-    pub width: f32,
-    pub height: f32,
-}
-
-#[derive(Debug, Clone, Serialize, Deserialize, JsonSchema, ToSchema)]
-#[serde(rename_all = "camelCase")]
-pub struct ReorderRequest {
-    pub ids: Vec<String>,
-}
+// ---------------------------------------------------------------------------
+// Region (generic pixel rectangle)
+// ---------------------------------------------------------------------------
 
 #[derive(Debug, Clone, Copy, Serialize, Deserialize, JsonSchema, ToSchema)]
-#[serde(rename_all = "snake_case")]
-pub enum ImportMode {
-    Replace,
-    Append,
-}
-
-#[derive(Debug, Clone, Serialize, Deserialize, JsonSchema, ToSchema)]
 #[serde(rename_all = "camelCase")]
-pub struct ImportResult {
-    pub total_count: usize,
-    pub documents: Vec<DocumentSummary>,
+pub struct Region {
+    pub x: u32,
+    pub y: u32,
+    pub width: u32,
+    pub height: u32,
 }
 
-#[derive(Debug, Clone, Copy, Serialize, Deserialize, JsonSchema, ToSchema)]
-#[serde(rename_all = "snake_case")]
-pub enum ExportLayer {
-    Rendered,
-    Inpainted,
-}
-
-#[derive(Debug, Clone, Serialize, Deserialize, JsonSchema, ToSchema)]
-#[serde(rename_all = "camelCase")]
-pub struct ExportResult {
-    pub count: usize,
-}
+// ---------------------------------------------------------------------------
+// LLM lifecycle
+// ---------------------------------------------------------------------------
 
 #[derive(Debug, Clone, Copy, Serialize, Deserialize, JsonSchema, ToSchema)]
 #[serde(rename_all = "snake_case")]
@@ -280,88 +135,9 @@ pub struct LlmCatalog {
     pub providers: Vec<LlmProviderCatalog>,
 }
 
-#[derive(Debug, Clone, Copy, Serialize, Deserialize, JsonSchema, ToSchema)]
-#[serde(rename_all = "snake_case")]
-pub enum JobStatus {
-    Running,
-    Completed,
-    CompletedWithErrors,
-    Cancelled,
-    Failed,
-}
-
-#[derive(Debug, Clone, Serialize, Deserialize, JsonSchema, ToSchema)]
-#[serde(rename_all = "camelCase")]
-pub struct JobState {
-    pub id: String,
-    pub kind: String,
-    pub status: JobStatus,
-    pub step: Option<String>,
-    pub current_document: usize,
-    pub total_documents: usize,
-    pub current_step_index: usize,
-    pub total_steps: usize,
-    pub overall_percent: u8,
-    pub error: Option<String>,
-}
-
-#[derive(Debug, Clone, Copy, Serialize, Deserialize, JsonSchema, ToSchema)]
-#[serde(rename_all = "snake_case")]
-pub enum TransferStatus {
-    Started,
-    Downloading,
-    Completed,
-    Failed,
-}
-
-#[derive(Debug, Clone, Serialize, Deserialize, JsonSchema, ToSchema)]
-#[serde(rename_all = "camelCase")]
-pub struct DownloadState {
-    pub id: String,
-    pub filename: String,
-    pub downloaded: u64,
-    pub total: Option<u64>,
-    pub status: TransferStatus,
-    pub error: Option<String>,
-}
-
-#[derive(Debug, Clone, Serialize, Deserialize, JsonSchema, ToSchema)]
-#[serde(rename_all = "camelCase")]
-pub struct SnapshotEvent {
-    pub documents: Vec<DocumentSummary>,
-    pub llm: LlmState,
-    pub jobs: Vec<JobState>,
-    pub downloads: Vec<DownloadState>,
-}
-
-#[derive(Debug, Clone, Serialize, Deserialize, JsonSchema, ToSchema)]
-#[serde(rename_all = "camelCase")]
-pub struct DocumentsChangedEvent {
-    pub documents: Vec<DocumentSummary>,
-}
-
-#[derive(Debug, Clone, Serialize, Deserialize, JsonSchema, ToSchema)]
-#[serde(rename_all = "camelCase")]
-pub struct DocumentChangedEvent {
-    pub document_id: String,
-    pub changed: Vec<String>,
-}
-
-#[derive(Debug, Clone, Serialize, Deserialize, JsonSchema, ToSchema)]
-#[serde(rename_all = "camelCase")]
-pub struct RenderRequest {
-    pub text_block_id: Option<String>,
-    pub shader_effect: Option<TextShaderEffect>,
-    pub shader_stroke: Option<TextStrokeStyle>,
-}
-
-#[derive(Debug, Clone, Serialize, Deserialize, JsonSchema, ToSchema)]
-#[serde(rename_all = "camelCase")]
-pub struct TranslateRequest {
-    pub text_block_id: Option<String>,
-    pub language: Option<String>,
-    pub system_prompt: Option<String>,
-}
+// ---------------------------------------------------------------------------
+// Pipeline request shapes
+// ---------------------------------------------------------------------------
 
 #[derive(Debug, Clone, Serialize, Deserialize, JsonSchema, ToSchema)]
 #[serde(rename_all = "camelCase")]
@@ -371,57 +147,9 @@ pub struct PipelineLlmRequest {
     pub options: Option<LlmGenerationOptions>,
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize, JsonSchema, ToSchema)]
-#[serde(rename_all = "camelCase")]
-pub struct PipelineJobRequest {
-    pub document_id: Option<String>,
-    pub llm: Option<PipelineLlmRequest>,
-    pub language: Option<String>,
-    pub system_prompt: Option<String>,
-    pub shader_effect: Option<TextShaderEffect>,
-    pub shader_stroke: Option<TextStrokeStyle>,
-    pub default_font: Option<String>,
-}
-
-#[derive(Debug, Clone, Serialize, Deserialize, JsonSchema, ToSchema)]
-#[serde(rename_all = "camelCase")]
-pub struct Region {
-    pub x: u32,
-    pub y: u32,
-    pub width: u32,
-    pub height: u32,
-}
-
-#[cfg(test)]
-mod tests {
-    use super::JobStatus;
-
-    #[test]
-    fn job_status_serializes_completed_with_errors_in_snake_case() {
-        let encoded = serde_json::to_string(&JobStatus::CompletedWithErrors).expect("serialize");
-        assert_eq!(encoded, "\"completed_with_errors\"");
-    }
-}
-
-#[derive(Debug, Clone, Serialize, Deserialize, JsonSchema, ToSchema)]
-#[serde(rename_all = "camelCase")]
-pub struct MaskRegionRequest {
-    pub data: Vec<u8>,
-    pub region: Option<Region>,
-}
-
-#[derive(Debug, Clone, Serialize, Deserialize, JsonSchema, ToSchema)]
-#[serde(rename_all = "camelCase")]
-pub struct BrushRegionRequest {
-    pub data: Vec<u8>,
-    pub region: Region,
-}
-
-#[derive(Debug, Clone, Serialize, Deserialize, JsonSchema, ToSchema)]
-#[serde(rename_all = "camelCase")]
-pub struct InpaintRegionRequest {
-    pub region: Region,
-}
+// ---------------------------------------------------------------------------
+// Engine catalog
+// ---------------------------------------------------------------------------
 
 #[derive(Debug, Clone, Serialize, Deserialize, JsonSchema, ToSchema)]
 #[serde(rename_all = "camelCase")]
@@ -435,11 +163,69 @@ pub struct EngineCatalogEntry {
 #[serde(rename_all = "camelCase")]
 pub struct EngineCatalog {
     pub detectors: Vec<EngineCatalogEntry>,
-    pub bubble_detectors: Vec<EngineCatalogEntry>,
     pub font_detectors: Vec<EngineCatalogEntry>,
     pub segmenters: Vec<EngineCatalogEntry>,
+    pub bubble_segmenters: Vec<EngineCatalogEntry>,
     pub ocr: Vec<EngineCatalogEntry>,
     pub translators: Vec<EngineCatalogEntry>,
     pub inpainters: Vec<EngineCatalogEntry>,
     pub renderers: Vec<EngineCatalogEntry>,
+}
+
+// ---------------------------------------------------------------------------
+// Config
+// ---------------------------------------------------------------------------
+
+/// Sparse patch for `koharu_app::AppConfig`. Missing fields mean "leave
+/// as-is". The `providers` field, if present, replaces the whole provider
+/// list — we do not merge by id because ordering is meaningful.
+#[derive(Debug, Clone, Default, Serialize, Deserialize, JsonSchema, ToSchema)]
+#[serde(rename_all = "camelCase")]
+pub struct ConfigPatch {
+    #[serde(default)]
+    pub data: Option<DataConfigPatch>,
+    #[serde(default)]
+    pub http: Option<HttpConfigPatch>,
+    #[serde(default)]
+    pub pipeline: Option<PipelineConfigPatch>,
+    /// If present, replaces the entire list. Api_key values of `"[REDACTED]"`
+    /// are interpreted as "leave the existing secret alone".
+    #[serde(default)]
+    pub providers: Option<Vec<ProviderPatch>>,
+}
+
+#[derive(Debug, Clone, Default, Serialize, Deserialize, JsonSchema, ToSchema)]
+#[serde(rename_all = "camelCase")]
+pub struct DataConfigPatch {
+    pub path: Option<String>,
+}
+
+#[derive(Debug, Clone, Default, Serialize, Deserialize, JsonSchema, ToSchema)]
+#[serde(rename_all = "camelCase")]
+pub struct HttpConfigPatch {
+    pub connect_timeout: Option<u64>,
+    pub read_timeout: Option<u64>,
+    pub max_retries: Option<u32>,
+}
+
+#[derive(Debug, Clone, Default, Serialize, Deserialize, JsonSchema, ToSchema)]
+#[serde(rename_all = "camelCase")]
+pub struct PipelineConfigPatch {
+    pub detector: Option<String>,
+    pub font_detector: Option<String>,
+    pub segmenter: Option<String>,
+    pub bubble_segmenter: Option<String>,
+    pub ocr: Option<String>,
+    pub translator: Option<String>,
+    pub inpainter: Option<String>,
+    pub renderer: Option<String>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, JsonSchema, ToSchema)]
+#[serde(rename_all = "camelCase")]
+pub struct ProviderPatch {
+    pub id: String,
+    pub base_url: Option<String>,
+    /// `"[REDACTED]"` → keep existing keyring secret; empty → clear; otherwise save.
+    pub api_key: Option<String>,
 }

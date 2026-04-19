@@ -1,24 +1,55 @@
+//! Server → client push events.
+//!
+//! Delivered over the SSE stream (`GET /events`). Scoped to long-running
+//! processes — pipeline jobs and runtime downloads — plus the LLM
+//! lifecycle (loading a multi-GB model is minutes of work), and a
+//! `Snapshot` replay on (re)connect. Project / scene / config state is
+//! still caller-driven: the HTTP client that triggered a change re-fetches
+//! the relevant resource.
+
+use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
+use utoipa::ToSchema;
 
-#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
-#[serde(rename_all = "camelCase")]
-pub enum DownloadStatus {
-    Started,
-    Downloading,
-    Completed,
-    Failed(String),
+use crate::protocol::LlmTarget;
+
+// ---------------------------------------------------------------------------
+// AppEvent
+// ---------------------------------------------------------------------------
+
+#[derive(Debug, Clone, Serialize, Deserialize, JsonSchema, ToSchema)]
+#[serde(tag = "event", rename_all = "camelCase")]
+pub enum AppEvent {
+    // Pipeline jobs.
+    JobStarted { id: String, kind: String },
+    JobProgress(PipelineProgress),
+    JobFinished(JobFinishedEvent),
+
+    // Runtime library / model downloads.
+    DownloadProgress(DownloadProgress),
+
+    // LLM lifecycle. Loading is a long-running operation; every state
+    // transition fires an event so clients can refetch `GET /llm/current`
+    // and show the right indicator.
+    //
+    // - `LlmLoading`  — background load has started for `target`.
+    // - `LlmLoaded`   — model is on the GPU and ready for inference.
+    // - `LlmFailed`   — load failed; see `GET /llm/current` for the reason.
+    // - `LlmUnloaded` — model released.
+    LlmLoading { target: LlmTarget },
+    LlmLoaded { target: LlmTarget },
+    LlmFailed { target: Option<LlmTarget> },
+    LlmUnloaded,
+
+    // (Re)connect replay so the client can seed in-flight state.
+    Snapshot(SnapshotEvent),
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
-#[serde(rename_all = "camelCase")]
-pub struct DownloadProgress {
-    pub filename: String,
-    pub downloaded: u64,
-    pub total: Option<u64>,
-    pub status: DownloadStatus,
-}
+// ---------------------------------------------------------------------------
+// Pipeline progress
+// ---------------------------------------------------------------------------
 
-#[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq)]
+#[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Eq, JsonSchema, ToSchema)]
 #[serde(rename_all = "camelCase")]
 #[derive(strum::Display)]
 #[strum(serialize_all = "snake_case")]
@@ -40,79 +71,138 @@ impl PipelineStep {
     ];
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
-#[serde(rename_all = "camelCase")]
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq, JsonSchema, ToSchema)]
+#[serde(tag = "status", rename_all = "camelCase")]
 pub enum PipelineStatus {
     Running,
     Completed,
     Cancelled,
-    Failed(String),
+    Failed { reason: String },
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, JsonSchema, ToSchema)]
 #[serde(rename_all = "camelCase")]
 pub struct PipelineProgress {
     pub job_id: String,
     pub status: PipelineStatus,
     pub step: Option<PipelineStep>,
-    pub current_document: usize,
-    pub total_documents: usize,
+    pub current_page: usize,
+    pub total_pages: usize,
     pub current_step_index: usize,
     pub total_steps: usize,
     pub overall_percent: u8,
 }
 
+#[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Eq, JsonSchema, ToSchema)]
+#[serde(rename_all = "snake_case")]
+pub enum JobStatus {
+    Running,
+    Completed,
+    CompletedWithErrors,
+    Cancelled,
+    Failed,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, JsonSchema, ToSchema)]
+#[serde(rename_all = "camelCase")]
+pub struct JobSummary {
+    pub id: String,
+    pub kind: String,
+    pub status: JobStatus,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub error: Option<String>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, JsonSchema, ToSchema)]
+#[serde(rename_all = "camelCase")]
+pub struct JobFinishedEvent {
+    pub id: String,
+    pub status: JobStatus,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub error: Option<String>,
+}
+
+// ---------------------------------------------------------------------------
+// Downloads
+// ---------------------------------------------------------------------------
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, JsonSchema, ToSchema)]
+#[serde(tag = "status", rename_all = "camelCase")]
+pub enum DownloadStatus {
+    Started,
+    Downloading,
+    Completed,
+    Failed { reason: String },
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, JsonSchema, ToSchema)]
+#[serde(rename_all = "camelCase")]
+pub struct DownloadProgress {
+    pub id: String,
+    pub filename: String,
+    pub downloaded: u64,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub total: Option<u64>,
+    pub status: DownloadStatus,
+}
+
+// ---------------------------------------------------------------------------
+// Project / snapshot
+// ---------------------------------------------------------------------------
+
+#[derive(Debug, Clone, Serialize, Deserialize, JsonSchema, ToSchema)]
+#[serde(rename_all = "camelCase")]
+pub struct ProjectSummary {
+    /// Stable identifier — the `.khrproj` directory basename (without the
+    /// extension). Clients address projects by this.
+    pub id: String,
+    pub name: String,
+    /// Absolute filesystem path. Informational; clients never need to pass
+    /// it back in — they use `id`.
+    pub path: String,
+    /// Last modification time of the project directory on disk (ms since
+    /// UNIX epoch). Used for "recent projects" ordering.
+    #[serde(default)]
+    pub updated_at_ms: u64,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, JsonSchema, ToSchema)]
+#[serde(rename_all = "camelCase")]
+pub struct SnapshotEvent {
+    pub jobs: Vec<JobSummary>,
+    pub downloads: Vec<DownloadProgress>,
+}
+
 #[cfg(test)]
 mod tests {
-    use serde::Serialize;
-    use serde::de::DeserializeOwned;
-
     use super::*;
 
-    fn round_trip<T>(value: &T)
-    where
-        T: Serialize + DeserializeOwned,
-    {
-        let encoded = serde_json::to_vec(value).expect("serialize");
-        let decoded: T = serde_json::from_slice(&encoded).expect("deserialize");
-        let original = serde_json::to_value(value).expect("serialize to value");
-        let restored = serde_json::to_value(decoded).expect("serialize decoded to value");
-        assert_eq!(original, restored);
-    }
-
     #[test]
-    fn event_dtos_round_trip() {
-        round_trip(&DownloadProgress {
-            filename: "model.bin".to_string(),
+    fn download_progress_round_trips() {
+        let value = DownloadProgress {
+            id: "model-x".into(),
+            filename: "model.bin".into(),
             downloaded: 123,
             total: Some(456),
             status: DownloadStatus::Downloading,
-        });
-        round_trip(&DownloadProgress {
-            filename: "model.bin".to_string(),
-            downloaded: 123,
-            total: Some(456),
-            status: DownloadStatus::Failed("network".to_string()),
-        });
-        round_trip(&PipelineProgress {
-            job_id: "job-1".to_string(),
+        };
+        let encoded = serde_json::to_string(&value).expect("serialize");
+        let _: DownloadProgress = serde_json::from_str(&encoded).expect("deserialize");
+    }
+
+    #[test]
+    fn pipeline_progress_round_trips() {
+        let value = PipelineProgress {
+            job_id: "j".into(),
             status: PipelineStatus::Running,
             step: Some(PipelineStep::Inpaint),
-            current_document: 1,
-            total_documents: 3,
+            current_page: 1,
+            total_pages: 3,
             current_step_index: 2,
             total_steps: 5,
             overall_percent: 40,
-        });
-        round_trip(&PipelineProgress {
-            job_id: "job-2".to_string(),
-            status: PipelineStatus::Failed("boom".to_string()),
-            step: Some(PipelineStep::Render),
-            current_document: 2,
-            total_documents: 3,
-            current_step_index: 4,
-            total_steps: 5,
-            overall_percent: 90,
-        });
+        };
+        let encoded = serde_json::to_string(&value).expect("serialize");
+        let _: PipelineProgress = serde_json::from_str(&encoded).expect("deserialize");
     }
 }

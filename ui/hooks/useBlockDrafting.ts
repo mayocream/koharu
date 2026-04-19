@@ -3,82 +3,79 @@
 import { useDrag } from '@use-gesture/react'
 import { useRef, useState } from 'react'
 
-import type { PointerToDocumentFn, DocumentPointer } from '@/hooks/usePointerToDocument'
-import type { MappedDocument } from '@/hooks/useTextBlocks'
-import { TextBlock, ToolMode } from '@/types'
+import type { DocumentPointer, PointerToDocumentFn } from '@/hooks/usePointerToDocument'
+import type { Page } from '@/lib/api/schemas'
+import type { ToolMode } from '@/lib/types'
+
+/**
+ * Rectangle a user is drawing while `mode === 'block'`. Committed on stroke
+ * end via `onCreateBlock` (which dispatches `Op::AddNode` with a text node).
+ */
+export type BlockDraft = {
+  x: number
+  y: number
+  width: number
+  height: number
+}
 
 type BlockDraftingOptions = {
   mode: ToolMode
-  currentDocument: MappedDocument | null
+  page: Page | null
   pointerToDocument: PointerToDocumentFn
   clearSelection: () => void
-  onCreateBlock: (block: TextBlock) => void
+  onCreateBlock: (draft: BlockDraft) => void
 }
 
 export function useBlockDrafting({
   mode,
-  currentDocument,
+  page,
   pointerToDocument,
   clearSelection,
   onCreateBlock,
 }: BlockDraftingOptions) {
   const dragStartRef = useRef<DocumentPointer | null>(null)
-  const draftBlockRef = useRef<TextBlock | null>(null)
-  const [draftBlock, setDraftBlock] = useState<TextBlock | null>(null)
+  const draftRef = useRef<BlockDraft | null>(null)
+  const [draft, setDraft] = useState<BlockDraft | null>(null)
 
-  const resetDraft = () => {
+  const reset = () => {
     dragStartRef.current = null
-    draftBlockRef.current = null
-    setDraftBlock(null)
+    draftRef.current = null
+    setDraft(null)
   }
 
-  const finalizeDraft = () => {
+  const finalize = () => {
     if (mode !== 'block') {
-      resetDraft()
+      reset()
       return
     }
-    const block = draftBlockRef.current
-    dragStartRef.current = null
-    draftBlockRef.current = null
-    setDraftBlock(null)
-    if (!block || !currentDocument) return
-    const minSize = 4
-    if (block.width < minSize || block.height < minSize) return
-    const normalized: TextBlock = {
-      x: Math.round(block.x),
-      y: Math.round(block.y),
-      width: Math.round(block.width),
-      height: Math.round(block.height),
-      confidence: block.confidence ?? 1,
-      text: block.text,
-      translation: block.translation,
-    }
-    onCreateBlock(normalized)
+    const d = draftRef.current
+    reset()
+    if (!d || !page) return
+    const MIN = 4
+    if (d.width < MIN || d.height < MIN) return
+    onCreateBlock({
+      x: Math.round(d.x),
+      y: Math.round(d.y),
+      width: Math.round(d.width),
+      height: Math.round(d.height),
+    })
   }
 
   const bind = useDrag(
     ({ first, last, event, active }) => {
-      if (!currentDocument || mode !== 'block') return
+      if (!page || mode !== 'block') return
       const sourceEvent = event as MouseEvent
       const point = pointerToDocument(sourceEvent)
       if (!point) {
-        if ((last || !active) && draftBlockRef.current) {
-          finalizeDraft()
-        }
+        if ((last || !active) && draftRef.current) finalize()
         return
       }
 
       if (first) {
         dragStartRef.current = point
-        const nextDraft: TextBlock = {
-          x: point.x,
-          y: point.y,
-          width: 0,
-          height: 0,
-          confidence: 1,
-        }
-        draftBlockRef.current = nextDraft
-        setDraftBlock(nextDraft)
+        const next: BlockDraft = { x: point.x, y: point.y, width: 0, height: 0 }
+        draftRef.current = next
+        setDraft(next)
         clearSelection()
         return
       }
@@ -89,19 +86,11 @@ export function useBlockDrafting({
       const y = Math.min(start.y, point.y)
       const width = Math.abs(point.x - start.x)
       const height = Math.abs(point.y - start.y)
-      const nextDraft: TextBlock = {
-        x,
-        y,
-        width,
-        height,
-        confidence: 1,
-      }
-      draftBlockRef.current = nextDraft
-      setDraftBlock(nextDraft)
+      const next: BlockDraft = { x, y, width, height }
+      draftRef.current = next
+      setDraft(next)
 
-      if (last || !active) {
-        finalizeDraft()
-      }
+      if (last || !active) finalize()
     },
     {
       pointer: { buttons: 1, touch: true },
@@ -111,9 +100,5 @@ export function useBlockDrafting({
     },
   )
 
-  return {
-    draftBlock,
-    bind,
-    resetDraft,
-  }
+  return { draftBlock: draft, bind, resetDraft: reset }
 }

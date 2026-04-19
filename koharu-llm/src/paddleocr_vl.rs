@@ -34,14 +34,14 @@ koharu_runtime::declare_hf_model_package!(
     id: "model:paddleocr-vl:weights",
     repo: HF_REPO,
     file: MODEL_FILENAME,
-    bootstrap: true,
+    bootstrap: false,
     order: 120,
 );
 koharu_runtime::declare_hf_model_package!(
     id: "model:paddleocr-vl:mmproj",
     repo: HF_REPO,
     file: MMPROJ_FILENAME,
-    bootstrap: true,
+    bootstrap: false,
     order: 121,
 );
 

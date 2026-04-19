@@ -236,12 +236,15 @@ impl TransferReporter {
 
     fn fail(&self, error: &anyhow::Error) {
         self.bar.finish_and_clear();
-        self.emit(DownloadStatus::Failed(error.to_string()));
+        self.emit(DownloadStatus::Failed {
+            reason: error.to_string(),
+        });
     }
 
     fn emit(&self, status: DownloadStatus) {
         let total = self.total.load(Ordering::Relaxed);
         let _ = self.tx.send(DownloadProgress {
+            id: self.filename.to_string(),
             filename: self.filename.to_string(),
             downloaded: self.downloaded.load(Ordering::Relaxed),
             total: (total != UNKNOWN_TOTAL).then_some(total),

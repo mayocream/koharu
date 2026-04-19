@@ -1,9 +1,13 @@
+//! Extract Tauri's embedded assets and expose them as an `AssetResolver` for
+//! the axum server to fall back on (i.e. serve the bundled UI).
+
 use std::sync::Arc;
 
 use koharu_rpc::server::AssetResolver;
 
-/// Extract embedded assets from the Tauri context and return a resolver
-/// that maps URL paths to `(bytes, mime_type)`.
+/// Build an `AssetResolver` from the Tauri context. Replaces the context's
+/// embedded assets with an empty set so Tauri's own webview points at the
+/// axum-served URL instead.
 pub fn from_context<R: tauri::Runtime>(context: &mut tauri::Context<R>) -> AssetResolver {
     struct Empty;
     impl<R: tauri::Runtime> tauri::Assets<R> for Empty {

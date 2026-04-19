@@ -12,8 +12,6 @@ keywords.workspace = true
 publish.workspace = true
 
 [dependencies]
-koharu-core = { workspace = true }
-koharu-llm = { workspace = true }
 koharu-runtime = { workspace = true }
 anyhow = { workspace = true }
 clap = { workspace = true }
@@ -60,7 +58,6 @@ cuda = [
     "candle-transformers/cuda",
     "cudarc",
 ]
-cudnn = ["candle-core/cudnn", "candle-nn/cudnn", "candle-transformers/cudnn"]
 metal = [
     "candle-core/metal",
     "candle-nn/metal",

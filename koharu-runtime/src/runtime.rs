@@ -34,6 +34,13 @@ impl Default for RuntimeHttpConfig {
 
 // FIXME: move this function to a more appropriate place, e.g. a `config` module
 pub fn default_app_data_root() -> Utf8PathBuf {
+    // Env-override (tests, CI, portable installs).
+    if let Ok(v) = std::env::var("KOHARU_DATA_ROOT")
+        && !v.is_empty()
+    {
+        return Utf8PathBuf::from(v);
+    }
+
     if let Ok(exe) = std::env::current_exe()
         && let Some(root) = exe.parent()
         && root.join("config.toml").is_file()

@@ -1,55 +1,18 @@
+//! Binary entry point. Wires `koharu-app::App` to the axum router plus
+//! (optionally) Tauri.
+
 use std::sync::Arc;
 
 use anyhow::{Context, Result};
 use clap::Parser;
-use tokio::{net::TcpListener, sync::RwLock};
+use koharu_app::{App, AppConfig, config as app_config};
+use koharu_rpc::server;
+use koharu_runtime::{ComputePolicy, RuntimeHttpConfig, RuntimeManager};
+use tokio::net::TcpListener;
 use tracing_subscriber::layer::SubscriberExt;
 use tracing_subscriber::util::SubscriberInitExt;
 
 use crate::cli::Cli;
-use koharu_app::{AppResources, config as app_config, engine, llm, storage::Storage};
-use koharu_llm::safe::llama_backend::LlamaBackend;
-use koharu_ml::{Device, device};
-use koharu_rpc::{SharedState, server};
-use koharu_runtime::{ComputePolicy, RuntimeHttpConfig, RuntimeManager};
-
-async fn build_resources(
-    runtime: RuntimeManager,
-    data_root: camino::Utf8PathBuf,
-    cpu: bool,
-) -> Result<AppResources> {
-    runtime
-        .prepare()
-        .await
-        .context("Failed to prepare runtime")?;
-
-    let selected_device = device(cpu)?;
-    let cpu = matches!(&selected_device, Device::Cpu);
-
-    #[cfg(target_os = "windows")]
-    crate::windows::register_khr().ok();
-
-    // FIXME: llama.cpp might not need when a external LLM provider is used, but currently it's required to initialize the safe backend
-    koharu_llm::sys::initialize(&runtime).context("failed to init llama.cpp")?;
-    let backend = Arc::new(LlamaBackend::init().context("failed to init llama backend")?);
-    koharu_llm::suppress_native_logs();
-
-    let llm = Arc::new(llm::Model::new(runtime.clone(), cpu, backend));
-    let storage = Arc::new(Storage::open(data_root.as_std_path())?);
-    let registry = Arc::new(engine::Registry::new());
-    let config = app_config::load().unwrap_or_default();
-
-    Ok(AppResources {
-        runtime,
-        storage,
-        registry,
-        config: Arc::new(RwLock::new(config)),
-        llm,
-        device: selected_device,
-        pipeline: Arc::new(RwLock::new(None)),
-        version: crate::version::current(),
-    })
-}
 
 pub async fn run() -> Result<()> {
     let cli = Cli::parse();
@@ -79,8 +42,7 @@ pub async fn run() -> Result<()> {
     }
 
     // ── Config ───────────────────────────────────────────────────────
-    let config = app_config::load()?;
-    let data_root = config.data.path.clone();
+    let config: AppConfig = app_config::load()?;
     let http = RuntimeHttpConfig {
         connect_timeout_secs: config.http.connect_timeout.max(1),
         read_timeout_secs: config.http.read_timeout.max(1),
@@ -93,73 +55,90 @@ pub async fn run() -> Result<()> {
     };
 
     if cli.download {
-        return RuntimeManager::new_with_http(data_root.as_std_path(), compute, http.clone())?
+        return RuntimeManager::new_with_http(config.data.path.as_std_path(), compute, http)?
             .prepare()
             .await
-            .context("Failed to download runtime packages");
+            .context("failed to download runtime packages");
     }
 
+    // ── Runtime + App ────────────────────────────────────────────────
+    let runtime = RuntimeManager::new_with_http(config.data.path.as_std_path(), compute, http)?;
+    runtime
+        .prepare()
+        .await
+        .context("failed to prepare runtime")?;
+
+    #[cfg(target_os = "windows")]
+    crate::windows::register_khr().ok();
+
+    let app = Arc::new(App::new(
+        config,
+        Arc::new(runtime),
+        cli.cpu,
+        crate::version::current(),
+    )?);
+    koharu_llm::suppress_native_logs();
+    app.spawn_download_forwarder();
+    app.spawn_llm_forwarder();
+
     // ── Server ───────────────────────────────────────────────────────
-    let runtime = RuntimeManager::new_with_http(data_root.as_std_path(), compute, http)?;
     let default_port = if cfg!(debug_assertions) { 9999 } else { 0 };
     let bind_host = cli.host.as_deref().unwrap_or("127.0.0.1");
     let bind_port = cli.port.unwrap_or(default_port);
     let listener: TcpListener = TcpListener::bind((bind_host, bind_port)).await?;
     let port = listener.local_addr()?.port();
-    let resources: Arc<tokio::sync::OnceCell<AppResources>> = Default::default();
-    let shared = SharedState::new(Arc::clone(&resources), runtime.clone());
+    tracing::info!(port, "starting server");
+
+    // Extract the embedded UI assets up-front so both headless and GUI modes
+    // can serve them on the HTTP fallback. Headless deployments point a
+    // browser at the listener port and get the full app; the GUI build uses
+    // the same bundle inside Tauri's webview.
     let mut context = tauri::generate_context!();
     let assets = crate::assets::from_context(&mut context);
 
-    tracing::info!(root = %runtime.root().display(), port, "starting server");
-
     if cli.headless {
-        tauri::async_runtime::spawn(server::serve_with_listener(listener, shared, assets));
-        resources
-            .get_or_try_init(|| build_resources(runtime, data_root, cli.cpu))
-            .await?;
+        tauri::async_runtime::spawn(async move {
+            if let Err(e) = server::serve_with_listener_and_assets(listener, app, assets).await {
+                tracing::error!("server error: {e:#}");
+            }
+        });
+        tracing::info!(port, "headless: open http://127.0.0.1:{port}/ in a browser");
         tokio::signal::ctrl_c().await?;
         return Ok(());
     }
 
     // ── GUI ──────────────────────────────────────────────────────────
+    tauri::async_runtime::spawn(async move {
+        if let Err(e) = server::serve_with_listener_and_assets(listener, app, assets).await {
+            tracing::error!("server error: {e:#}");
+        }
+    });
+
     tauri::Builder::default()
+        .plugin(tauri_plugin_dialog::init())
+        .plugin(tauri_plugin_fs::init())
         .plugin(tauri_plugin_opener::init())
         .plugin(tauri_plugin_updater::Builder::new().build())
         .plugin(tauri_plugin_process::init())
-        .setup(move |app| {
-            tauri::async_runtime::spawn(server::serve_with_listener(listener, shared, assets));
-
-            tauri::async_runtime::spawn(async move {
-                if let Err(err) = resources
-                    .get_or_try_init(|| build_resources(runtime, data_root, cli.cpu))
-                    .await
-                {
-                    tracing::error!("Failed to build resources: {err:#}");
-                    std::process::exit(1);
-                }
-            });
-
+        .setup(move |handle| {
+            let cfg = handle.config();
             let url: tauri::Url = if cfg!(debug_assertions) {
-                // Dev: use Next.js dev server (rewrites proxy API to Axum)
-                app.config()
-                    .build
+                cfg.build
                     .dev_url
-                    .clone()
+                    .as_ref()
                     .expect("dev_url must be set in dev mode")
+                    .as_str()
+                    .parse()?
             } else {
-                // Production: load from Axum server (same-origin for API)
                 format!("http://127.0.0.1:{port}").parse()?
             };
-            let wc = app
-                .config()
+            let wc = cfg
                 .app
                 .windows
                 .iter()
                 .find(|w| w.label == "main")
-                .cloned()
                 .expect("main window config not found");
-            tauri::webview::WebviewWindowBuilder::from_config(app, &wc)?
+            tauri::webview::WebviewWindowBuilder::from_config(handle, wc)?
                 .build()?
                 .navigate(url)?;
 

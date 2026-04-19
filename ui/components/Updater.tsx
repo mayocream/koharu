@@ -2,7 +2,15 @@
 
 import type { Update } from '@tauri-apps/plugin-updater'
 import { Download, RefreshCw, AlertCircle } from 'lucide-react'
-import { createContext, useContext, useEffect, useState, type ReactNode } from 'react'
+import {
+  createContext,
+  useCallback,
+  useContext,
+  useEffect,
+  useMemo,
+  useState,
+  type ReactNode,
+} from 'react'
 import { Trans, useTranslation } from 'react-i18next'
 import ReactMarkdown from 'react-markdown'
 import remarkGfm from 'remark-gfm'
@@ -54,7 +62,7 @@ export function UpdaterProvider({ children }: { children: ReactNode }) {
     }
   }, [update])
 
-  const checkForUpdates = async (showDialog = false) => {
+  const checkForUpdates = useCallback(async (showPrompt = false) => {
     if (!isTauri()) {
       setStatus('idle')
       setUpdate(null)
@@ -68,79 +76,85 @@ export function UpdaterProvider({ children }: { children: ReactNode }) {
       if (!nextUpdate) {
         setUpdate(null)
         setStatus('latest')
-        if (showDialog) setPhase({ kind: 'hidden' })
+        if (showPrompt) setPhase({ kind: 'hidden' })
         return
       }
 
       setUpdate(nextUpdate)
       setStatus('outdated')
-      if (showDialog) setPhase({ kind: 'prompt' })
+      if (showPrompt) setPhase({ kind: 'prompt' })
     } catch (err) {
       console.warn('[updater] check failed', err)
       setStatus('error')
-      if (showDialog) {
+    }
+  }, [])
+
+  const installUpdate = useCallback(
+    async (target: Update | null = update) => {
+      if (!isTauri() || isInstalling || !target) return
+
+      setIsInstalling(true)
+      setPhase({ kind: 'downloading', downloaded: 0, total: null })
+      try {
+        await target.downloadAndInstall((event) => {
+          setPhase((prev) => {
+            if (prev.kind !== 'downloading') return prev
+            if (event.event === 'Started') {
+              return { ...prev, total: event.data.contentLength ?? null }
+            }
+            if (event.event === 'Progress') {
+              return {
+                ...prev,
+                downloaded: prev.downloaded + event.data.chunkLength,
+              }
+            }
+            return prev
+          })
+        })
+
+        setStatus('latest')
+        setPhase({ kind: 'hidden' })
+        const { relaunch } = await import('@tauri-apps/plugin-process')
+        await relaunch()
+      } catch (err) {
+        console.warn('[updater] install failed', err)
+        setStatus('error')
         setPhase({
           kind: 'error',
           message: String(err),
-          retry: async () => checkForUpdates(true),
+          retry: async () => installUpdate(target),
         })
+      } finally {
+        setIsInstalling(false)
       }
-    }
-  }
-
-  const installUpdate = async (target: Update | null = update) => {
-    if (!isTauri() || isInstalling || !target) return
-
-    setIsInstalling(true)
-    setPhase({ kind: 'downloading', downloaded: 0, total: null })
-    try {
-      await target.downloadAndInstall((event) => {
-        setPhase((prev) => {
-          if (prev.kind !== 'downloading') return prev
-          if (event.event === 'Started') {
-            return { ...prev, total: event.data.contentLength ?? null }
-          }
-          if (event.event === 'Progress') {
-            return {
-              ...prev,
-              downloaded: prev.downloaded + event.data.chunkLength,
-            }
-          }
-          return prev
-        })
-      })
-
-      setStatus('latest')
-      setPhase({ kind: 'hidden' })
-      const { relaunch } = await import('@tauri-apps/plugin-process')
-      await relaunch()
-    } catch (err) {
-      console.warn('[updater] install failed', err)
-      setStatus('error')
-      setPhase({
-        kind: 'error',
-        message: String(err),
-        retry: async () => installUpdate(target),
-      })
-    } finally {
-      setIsInstalling(false)
-    }
-  }
+    },
+    [update, isInstalling],
+  )
 
   useEffect(() => {
     void checkForUpdates(true)
-  }, [])
+  }, [checkForUpdates])
+
+  // Stable wrappers so `updater.checkForUpdates` / `updater.installUpdate`
+  // keep the same identity across provider re-renders. Without this,
+  // `setStatus` -> provider re-render -> new arrow wrappers -> consumer
+  // useEffects that depend on them re-fire in a loop.
+  const checkForUpdatesPublic = useCallback(() => checkForUpdates(false), [checkForUpdates])
+  const installUpdatePublic = useCallback(() => installUpdate(), [installUpdate])
+
+  const contextValue = useMemo<UpdaterContextValue>(
+    () => ({
+      status,
+      latestVersion: update?.version,
+      isInstalling,
+      checkForUpdates: checkForUpdatesPublic,
+      installUpdate: installUpdatePublic,
+    }),
+    [status, update?.version, isInstalling, checkForUpdatesPublic, installUpdatePublic],
+  )
 
   return (
-    <UpdaterContext.Provider
-      value={{
-        status,
-        latestVersion: update?.version,
-        isInstalling,
-        checkForUpdates: async () => checkForUpdates(false),
-        installUpdate: async () => installUpdate(),
-      }}
-    >
+    <UpdaterContext.Provider value={contextValue}>
       {children}
       <Dialog
         open={phase.kind !== 'hidden'}

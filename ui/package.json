@@ -7,12 +7,16 @@
     "build": "next build",
     "start": "next start",
     "generate:api": "orval",
-    "lint": "oxlint -c .oxlintrc.json"
+    "lint": "oxlint -c .oxlintrc.json",
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "test:ui": "vitest --ui"
   },
   "dependencies": {
     "@dnd-kit/core": "^6.3.1",
     "@dnd-kit/sortable": "^10.0.0",
     "@dnd-kit/utilities": "^3.2.2",
+    "@microsoft/fetch-event-source": "^2.0.1",
     "@msgpack/msgpack": "^3.1.3",
     "@radix-ui/react-accordion": "^1.2.12",
     "@radix-ui/react-alert-dialog": "^1.1.15",
@@ -32,8 +36,9 @@
     "@radix-ui/react-tooltip": "^1.2.8",
     "@sentry/nextjs": "10",
     "@tanstack/react-query": "^5.99.0",
-    "@tanstack/react-virtual": "^3.13.23",
+    "@tanstack/react-virtual": "^3.13.24",
     "@tauri-apps/api": "^2.10.1",
+    "@tauri-apps/plugin-dialog": "^2.7.0",
     "@tauri-apps/plugin-opener": "^2.4.0",
     "@tauri-apps/plugin-process": "^2.3.1",
     "@tauri-apps/plugin-updater": "^2.10.1",
@@ -42,6 +47,7 @@
     "browser-fs-access": "^0.38.0",
     "class-variance-authority": "^0.7.1",
     "clsx": "^2.1.1",
+    "fflate": "^0.8.2",
     "i18next": "^26.0.5",
     "i18next-browser-languagedetector": "^8.2.1",
     "i18next-localstorage-backend": "^4.3.1",
@@ -55,7 +61,7 @@
     "react-dom": "^19.2.5",
     "react-error-boundary": "^6.1.1",
     "react-hotkeys-hook": "^5.2.4",
-    "react-i18next": "^17.0.3",
+    "react-i18next": "^17.0.4",
     "react-markdown": "^9.1.0",
     "react-resizable-panels": "^4.10.0",
     "react-rnd": "^10.5.3",
@@ -66,15 +72,26 @@
     "zustand": "^5.0.12"
   },
   "devDependencies": {
+    "@faker-js/faker": "^10.4.0",
+    "@mswjs/data": "^0.16.2",
     "@tailwindcss/postcss": "^4.2.2",
+    "@tauri-apps/plugin-fs": "^2.5.0",
+    "@testing-library/jest-dom": "^6.9.1",
+    "@testing-library/react": "^16.3.2",
+    "@testing-library/user-event": "^14.6.1",
     "@types/node": "^25.6.0",
     "@types/react": "^19.2.14",
     "@types/react-dom": "^19.2.3",
+    "@vitejs/plugin-react": "^6.0.1",
+    "@vitest/ui": "^4.1.4",
     "babel-plugin-react-compiler": "^1.0.0",
+    "jsdom": "^29.0.2",
+    "msw": "^2.13.4",
     "orval": "^8.8.0",
     "oxlint": "^1.60.0",
     "tailwindcss": "^4.2.2",
     "tw-animate-css": "^1.4.0",
-    "typescript": "^6.0.2"
+    "typescript": "^6.0.3",
+    "vitest": "^4.1.4"
   }
 }

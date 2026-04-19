@@ -9,6 +9,8 @@ members = [
     "koharu-app",
     "koharu-rpc",
     "koharu-core",
+    "tests/integration-tests",
+    "tests/integration-tests/client",
 ]
 default-members = ["koharu"]
 resolver = "3"
@@ -59,6 +61,8 @@ postcard = { version = "1.0", features = ["use-std"] }
 thiserror = "2.0"
 tauri = { version = "2.9", features = ["devtools"] }
 tauri-build = "2.5"
+tauri-plugin-dialog = "2.4"
+tauri-plugin-fs = "2.5"
 tauri-plugin-opener = "2.5"
 tauri-plugin-updater = "2.10"
 blake3 = "1.8"
@@ -69,7 +73,7 @@ strum = { version = "0.28", features = ["derive"] }
 zip = { version = "8.5", default-features = false, features = ["deflate"] }
 dirs = "6.0"
 futures = "0.3"
-reqwest = { version = "0.13", features = ["stream", "json", "form", "blocking"] }
+reqwest = { version = "0.13", features = ["stream", "json", "form", "blocking", "multipart"] }
 secrecy = { version = "0.10", features = ["serde"] }
 reqwest-middleware = "0.5"
 reqwest-retry = "0.9"
@@ -78,7 +82,7 @@ inventory = "0.3"
 url = { version = "2.5", features = ["serde"] }
 arc-swap = "1.7"
 camino = { version = "1.1", features = ["serde1"] }
-indexmap = "2.13"
+indexmap = { version = "2.13", features = ["serde"] }
 flate2 = { version = "1.0", default-features = false, features = [
     "zlib-ng-compat",
 ] }
@@ -126,14 +130,23 @@ axum = { version = "0.8", features = ["multipart", "ws"] }
 async-stream = "0.3"
 rmp-serde = "1"
 rmpv = { version = "1", features = ["with-serde"] }
-rmcp = { version = "0.16", features = [
+rmcp = { version = "1.5", features = [
     "server",
     "transport-streamable-http-server",
 ] }
-schemars = "1.2"
-utoipa = { version = "5", features = ["axum_extras"] }
+schemars = { version = "1.2", features = ["chrono04", "indexmap2", "uuid1"] }
+utoipa = { version = "5", features = ["axum_extras", "chrono", "indexmap", "uuid"] }
 utoipa-axum = "0.2"
-uuid = { version = "1.18", features = ["v4", "serde"] }
+uuid = { version = "1.18", features = ["v4", "v7", "serde"] }
+chrono = { version = "0.4", default-features = false, features = ["serde", "clock"] }
+atomicwrites = "0.4"
+fs4 = "0.12"
+parking_lot = "0.12"
+dashmap = "6"
+tokio-stream = { version = "0.1", features = ["sync"] }
+walkdir = "2.5"
+proptest = "1.6"
+insta = "1.41"
 base64 = "0.22"
 tower-http = { version = "0.6", features = ["cors"] }
 unicode-bidi = "0.3"

@@ -1,7 +1,7 @@
 use std::path::Path;
 
 use image::GenericImageView;
-use koharu_core::TextBlock;
+use koharu_ml::TextRegion;
 use koharu_ml::aot_inpainting::AotInpainting;
 use koharu_ml::lama::Lama;
 
@@ -69,7 +69,7 @@ async fn lama_block_aware_inpainting_returns_same_size() -> anyhow::Result<()> {
 
     assert!(found, "mask fixture should contain a non-empty region");
 
-    let block = TextBlock {
+    let block = TextRegion {
         x: min_x as f32,
         y: min_y as f32,
         width: max_x.saturating_sub(min_x).saturating_add(1) as f32,

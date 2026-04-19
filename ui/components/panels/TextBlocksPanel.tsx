@@ -14,29 +14,30 @@ import { Button } from '@/components/ui/button'
 import { DraftTextarea } from '@/components/ui/draft-textarea'
 import { ScrollArea } from '@/components/ui/scroll-area'
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip'
-import { useTextBlocks } from '@/hooks/useTextBlocks'
-import { useGetLlm } from '@/lib/api/llm/llm'
-import { useProcessing } from '@/lib/machines'
+import { useCurrentPage, useTextNodes, type TextNodeEntry } from '@/hooks/useCurrentPage'
+import { getConfig, startPipeline, useGetCurrentLlm } from '@/lib/api/default/default'
+import type { TextDataPatch } from '@/lib/api/schemas'
+import { applyOp } from '@/lib/io/scene'
+import { ops } from '@/lib/ops'
 import { useEditorUiStore } from '@/lib/stores/editorUiStore'
+import { useJobsStore } from '@/lib/stores/jobsStore'
 import { usePreferencesStore } from '@/lib/stores/preferencesStore'
-import { TextBlock } from '@/types'
+import { useSelectionStore } from '@/lib/stores/selectionStore'
 
 export function TextBlocksPanel() {
-  const {
-    document,
-    textBlocks,
-    selectedBlockIndex,
-    setSelectedBlockIndex,
-    replaceBlock,
-    removeBlock,
-  } = useTextBlocks()
   const { t } = useTranslation()
-  const { data: llm } = useGetLlm()
+  const page = useCurrentPage()
+  const textNodes = useTextNodes()
+  const selectedIds = useSelectionStore((s) => s.nodeIds)
+  const select = useSelectionStore((s) => s.select)
+  const clearSelection = useSelectionStore((s) => s.clear)
+  const { data: llm } = useGetCurrentLlm()
   const llmReady = llm?.status === 'ready'
-  const { send, isProcessing, state } = useProcessing()
-  const isTranslatingBlock = state.matches('translatingBlock')
+  const isProcessing = useJobsStore((s) =>
+    Object.values(s.jobs).some((j) => j.status === 'running'),
+  )
 
-  if (!document) {
+  if (!page) {
     return (
       <div className='flex flex-1 items-center justify-center text-xs text-muted-foreground'>
         {t('textBlocks.emptyPrompt')}
@@ -44,40 +45,48 @@ export function TextBlocksPanel() {
     )
   }
 
-  const accordionValue = selectedBlockIndex !== undefined ? selectedBlockIndex.toString() : ''
+  const selectedIndex = textNodes.findIndex((n) => selectedIds.has(n.id))
+  const accordionValue = selectedIndex >= 0 ? selectedIndex.toString() : ''
 
-  const handleGenerate = (blockIndex: number) => {
-    const documentId = useEditorUiStore.getState().currentDocumentId
-    if (!documentId) return
-    const selectedLanguage = useEditorUiStore.getState().selectedLanguage
-    const textBlockId = document.textBlocks[blockIndex]?.id
-    const { renderEffect, renderStroke } = useEditorUiStore.getState()
-    const { customSystemPrompt } = usePreferencesStore.getState()
-    send({
-      type: 'START_TRANSLATE_BLOCK',
-      documentId,
-      options: {
-        textBlockId,
-        language: selectedLanguage,
-        systemPrompt: customSystemPrompt,
-      },
-      renderOptions: {
-        shaderEffect: renderEffect,
-        shaderStroke: renderStroke,
-      },
-    })
+  const patchText = async (nodeId: string, patch: TextDataPatch) => {
+    await applyOp(
+      ops.updateNode(page.id, nodeId, {
+        data: { text: patch } as never,
+      }),
+    )
   }
 
-  const handleDelete = async (blockIndex: number) => {
-    if (isProcessing) return
-    await removeBlock(blockIndex)
+  const removeNode = async (nodeId: string) => {
+    const node = page.nodes[nodeId]
+    if (!node) return
+    const idx = Object.keys(page.nodes).indexOf(nodeId)
+    await applyOp(ops.removeNode(page.id, nodeId, node, idx < 0 ? 0 : idx))
+    clearSelection()
+  }
+
+  const generate = async () => {
+    if (!page) return
+    const cfg = await getConfig()
+    const translator = cfg.pipeline?.translator || 'llm-translate'
+    const renderer = cfg.pipeline?.renderer || 'koharu-renderer'
+    const editor = useEditorUiStore.getState()
+    const prefs = usePreferencesStore.getState()
+    // Run translator then renderer for the whole page; the server emits ops
+    // for updated text nodes + rendered image.
+    await startPipeline({
+      steps: [translator, renderer],
+      pages: [page.id],
+      targetLanguage: editor.selectedLanguage,
+      systemPrompt: prefs.customSystemPrompt,
+      defaultFont: prefs.defaultFont,
+    })
   }
 
   return (
     <div className='flex min-h-0 flex-1 flex-col' data-testid='panels-textblocks'>
       <div className='flex items-center justify-between border-b border-border px-2 py-1.5 text-xs font-semibold tracking-wide text-muted-foreground uppercase'>
-        <span data-testid='textblocks-count' data-count={textBlocks.length}>
-          {t('textBlocks.title', { count: textBlocks.length })}
+        <span data-testid='textblocks-count' data-count={textNodes.length}>
+          {t('textBlocks.title', { count: textNodes.length })}
         </span>
       </div>
       <ScrollArea
@@ -86,8 +95,8 @@ export function TextBlocksPanel() {
         data-testid='textblocks-scroll'
       >
         <div className='p-2'>
-          {textBlocks.length === 0 ? (
-            <p className='rounded border border-dashed border-border p-2 text-xs text-muted-foreground'>
+          {textNodes.length === 0 ? (
+            <p className='rounded-md border border-dashed border-border p-2 text-xs text-muted-foreground'>
               {t('textBlocks.none')}
             </p>
           ) : (
@@ -98,24 +107,25 @@ export function TextBlocksPanel() {
               value={accordionValue}
               onValueChange={(value) => {
                 if (!value) {
-                  setSelectedBlockIndex(undefined)
+                  clearSelection()
                   return
                 }
-                setSelectedBlockIndex(Number(value))
+                const idx = Number(value)
+                const node = textNodes[idx]
+                if (node) select(node.id, false)
               }}
               className='flex flex-col gap-1'
             >
-              {textBlocks.map((block, index) => (
+              {textNodes.map((node, index) => (
                 <BlockCard
-                  key={`${document.id}-${index}`}
-                  block={block}
+                  key={node.id}
+                  node={node}
                   index={index}
-                  selected={index === selectedBlockIndex}
-                  onChange={(updates) => void replaceBlock(index, updates)}
-                  onDelete={() => void handleDelete(index)}
-                  onGenerate={() => handleGenerate(index)}
+                  selected={selectedIds.has(node.id)}
+                  onPatch={(patch) => void patchText(node.id, patch)}
+                  onDelete={() => void removeNode(node.id)}
+                  onGenerate={() => void generate()}
                   processing={isProcessing}
-                  translating={isTranslatingBlock}
                   llmReady={llmReady}
                 />
               ))}
@@ -128,32 +138,31 @@ export function TextBlocksPanel() {
 }
 
 type BlockCardProps = {
-  block: TextBlock
+  node: TextNodeEntry
   index: number
   selected: boolean
-  onChange: (updates: Partial<TextBlock>) => void
-  onDelete: () => void | Promise<void>
+  onPatch: (patch: TextDataPatch) => void
+  onDelete: () => void
   onGenerate: () => void
   processing: boolean
-  translating: boolean
   llmReady: boolean
 }
 
 function BlockCard({
-  block,
+  node,
   index,
   selected,
-  onChange,
+  onPatch,
   onDelete,
   onGenerate,
   processing,
-  translating,
   llmReady,
 }: BlockCardProps) {
   const { t } = useTranslation()
-  const hasOcr = !!block.text?.trim()
-  const hasTranslation = !!block.translation?.trim()
-  const preview = block.translation?.trim() || block.text?.trim()
+  const data = node.data
+  const hasOcr = !!data.text?.trim()
+  const hasTranslation = !!data.translation?.trim()
+  const preview = data.translation?.trim() || data.text?.trim()
 
   return (
     <motion.div
@@ -165,11 +174,11 @@ function BlockCard({
       <AccordionItem
         value={index.toString()}
         data-selected={selected}
-        className='overflow-hidden rounded bg-card/90 text-xs ring-1 ring-border data-[selected=true]:ring-primary'
+        className='overflow-hidden rounded-md bg-card/90 text-xs ring-1 ring-border data-[selected=true]:ring-primary'
       >
         <AccordionTrigger className='flex w-full cursor-pointer items-center gap-1.5 px-2 py-1.5 text-left transition outline-none hover:no-underline data-[state=open]:bg-accent [&>svg]:hidden'>
           <span
-            className={`shrink-0 rounded px-1.5 py-0.5 text-center text-[10px] font-medium text-white tabular-nums ${
+            className={`shrink-0 rounded-md px-1.5 py-0.5 text-center text-[10px] font-medium text-white tabular-nums ${
               selected ? 'bg-primary' : 'bg-muted-foreground/60'
             }`}
             style={{ minWidth: '1.5rem' }}
@@ -178,15 +187,15 @@ function BlockCard({
           </span>
           <div className='flex min-w-0 flex-1 items-center gap-1'>
             <span
-              className={`shrink-0 rounded px-1 py-0.5 text-[9px] font-medium uppercase ${
-                hasOcr ? 'bg-rose-400/80 text-white' : 'bg-muted text-muted-foreground/50'
+              className={`shrink-0 rounded-sm px-1 py-0.5 text-[9px] font-medium uppercase ${
+                hasOcr ? 'bg-rose-400/70 text-white' : 'bg-muted text-muted-foreground/50'
               }`}
             >
               {t('textBlocks.ocrBadge')}
             </span>
             <span
-              className={`shrink-0 rounded px-1 py-0.5 text-[9px] font-medium uppercase ${
-                hasTranslation ? 'bg-rose-400/80 text-white' : 'bg-muted text-muted-foreground/50'
+              className={`shrink-0 rounded-sm px-1 py-0.5 text-[9px] font-medium uppercase ${
+                hasTranslation ? 'bg-rose-400/70 text-white' : 'bg-muted text-muted-foreground/50'
               }`}
             >
               {t('textBlocks.translationBadge')}
@@ -204,10 +213,10 @@ function BlockCard({
               </span>
               <DraftTextarea
                 data-testid={`textblock-ocr-${index}`}
-                value={block.text ?? ''}
+                value={data.text ?? ''}
                 placeholder={t('textBlocks.addOcrPlaceholder')}
                 rows={2}
-                onValueChange={(value) => onChange({ text: value })}
+                onValueChange={(value) => onPatch({ text: value })}
                 className='min-h-0 resize-none px-1.5 py-1 text-xs'
               />
             </div>
@@ -245,7 +254,7 @@ function BlockCard({
                         onClick={onGenerate}
                         className='size-5'
                       >
-                        {translating ? (
+                        {processing ? (
                           <LoaderCircleIcon className='size-3 animate-spin' />
                         ) : (
                           <Languages className='size-3' />
@@ -260,10 +269,10 @@ function BlockCard({
               </div>
               <DraftTextarea
                 data-testid={`textblock-translation-${index}`}
-                value={block.translation ?? ''}
+                value={data.translation ?? ''}
                 placeholder={t('textBlocks.addTranslationPlaceholder')}
                 rows={2}
-                onValueChange={(value) => onChange({ translation: value })}
+                onValueChange={(value) => onPatch({ translation: value })}
                 className='min-h-0 resize-none px-1.5 py-1 text-xs'
               />
             </div>

@@ -1,13 +1,15 @@
+//! Small image-encoding helpers.
+
 use std::io::Cursor;
 
 use image::{DynamicImage, ImageFormat, RgbaImage};
-use koharu_core::{Region, SerializableDynamicImage};
+use koharu_core::Region;
 
-pub trait InpaintRegionExt {
+pub trait RegionExt {
     fn clamp(&self, width: u32, height: u32) -> Option<(u32, u32, u32, u32)>;
 }
 
-impl InpaintRegionExt for Region {
+impl RegionExt for Region {
     fn clamp(&self, width: u32, height: u32) -> Option<(u32, u32, u32, u32)> {
         if width == 0 || height == 0 {
             return None;
@@ -25,15 +27,7 @@ impl InpaintRegionExt for Region {
     }
 }
 
-pub fn encode_image(image: &SerializableDynamicImage, ext: &str) -> anyhow::Result<Vec<u8>> {
-    let mut buf = Vec::new();
-    let mut cursor = Cursor::new(&mut buf);
-    let format = ImageFormat::from_extension(ext).unwrap_or(ImageFormat::Jpeg);
-    image.0.write_to(&mut cursor, format)?;
-    Ok(buf)
-}
-
-pub fn encode_image_dynamic(image: &DynamicImage, ext: &str) -> anyhow::Result<Vec<u8>> {
+pub fn encode_image(image: &DynamicImage, ext: &str) -> anyhow::Result<Vec<u8>> {
     let mut buf = Vec::new();
     let mut cursor = Cursor::new(&mut buf);
     let format = ImageFormat::from_extension(ext).unwrap_or(ImageFormat::Jpeg);
@@ -50,7 +44,6 @@ pub fn mime_from_ext(ext: &str) -> &'static str {
     }
 }
 
-pub fn blank_rgba(width: u32, height: u32, color: image::Rgba<u8>) -> SerializableDynamicImage {
-    let blank = RgbaImage::from_pixel(width, height, color);
-    image::DynamicImage::ImageRgba8(blank).into()
+pub fn blank_rgba(width: u32, height: u32, color: image::Rgba<u8>) -> DynamicImage {
+    DynamicImage::ImageRgba8(RgbaImage::from_pixel(width, height, color))
 }

@@ -15,7 +15,7 @@ use tiny_skia::{
 use crate::font::{Font, font_key};
 use crate::layout::{LayoutLine, LayoutRun, WritingMode};
 
-pub use koharu_core::TextShaderEffect;
+pub use crate::types::TextShaderEffect;
 
 #[derive(Debug, Clone, Copy)]
 pub struct RenderStrokeOptions {

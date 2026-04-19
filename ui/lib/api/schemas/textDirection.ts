@@ -4,9 +4,12 @@
  * OpenAPI spec version: 0.0.1
  */
 
+/**
+ * Reading axis of a text block.
+ */
 export type TextDirection = (typeof TextDirection)[keyof typeof TextDirection]
 
 export const TextDirection = {
-  Horizontal: 'Horizontal',
-  Vertical: 'Vertical',
+  horizontal: 'horizontal',
+  vertical: 'vertical',
 } as const

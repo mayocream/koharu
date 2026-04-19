@@ -1,71 +1,70 @@
+//! Server bootstrap — attaches the router to an axum listener.
+//!
+//! Also exposes an `AssetResolver` hook so the Tauri binary can bolt its
+//! embedded frontend onto unmatched routes.
+
 use std::sync::Arc;
 
 use anyhow::Result;
-use axum::{
-    Router,
-    body::Body,
-    http::{HeaderValue, StatusCode, Uri, header},
-    response::{IntoResponse, Response},
-};
-use rmcp::transport::streamable_http_server::{
-    StreamableHttpService, session::local::LocalSessionManager, tower::StreamableHttpServerConfig,
-};
+use axum::Router;
+use axum::body::Body;
+use axum::extract::Request;
+use axum::http::{HeaderValue, StatusCode, header::CONTENT_TYPE};
+use axum::response::{IntoResponse, Response};
+use koharu_app::App;
 use tokio::net::TcpListener;
 use tower_http::cors::CorsLayer;
 
 use crate::api;
-use crate::mcp::KoharuMcp;
-use crate::shared::SharedState;
-use crate::tracker::Tracker;
 
-/// Resolves a URL path to `(bytes, mime_type)`. Used for serving static UI assets.
+/// Function that maps a URL path (e.g. `"/index.html"`) to `(bytes, mime)`.
+/// Returning `None` signals a 404 fall-through.
 pub type AssetResolver = Arc<dyn Fn(&str) -> Option<(Vec<u8>, String)> + Send + Sync>;
 
-pub async fn serve_with_listener(
-    listener: TcpListener,
-    shared: SharedState,
-    assets: AssetResolver,
-) -> Result<()> {
-    let tracker = Tracker::new(&shared);
+/// Wrap `router(app)` with CORS + mount MCP at `/mcp`.
+pub fn router_for(app: Arc<App>) -> Router {
+    let base = api::router(app.clone()).layer(CorsLayer::very_permissive());
+    crate::mcp::mount(base, app)
+}
 
-    let mcp = StreamableHttpService::new(
-        {
-            let shared = shared.clone();
-            move || Ok(KoharuMcp::new(shared.clone()))
-        },
-        LocalSessionManager::default().into(),
-        StreamableHttpServerConfig {
-            sse_retry: None,
-            ..Default::default()
-        },
-    );
+/// Same as `router_for` but installs `resolver` as a fallback, serving
+/// embedded frontend assets for unmatched GET requests.
+pub fn router_with_assets(app: Arc<App>, resolver: AssetResolver) -> Router {
+    router_for(app).fallback(move |req: Request<Body>| {
+        let resolver = resolver.clone();
+        async move { serve_asset(resolver, req).await }
+    })
+}
 
-    let router = Router::new()
-        .nest("/api/v1", api::router(shared.clone(), tracker))
-        .nest_service("/mcp", mcp)
-        .layer(CorsLayer::very_permissive())
-        .fallback(move |uri: Uri| {
-            let assets = assets.clone();
-            async move {
-                let path = uri.path().trim_start_matches('/');
-                let path = if path.is_empty() { "index.html" } else { path };
+async fn serve_asset(resolver: AssetResolver, req: Request<Body>) -> Response {
+    if req.method() != axum::http::Method::GET {
+        return (StatusCode::METHOD_NOT_ALLOWED, "method not allowed").into_response();
+    }
+    let path = req.uri().path().trim_start_matches('/');
+    let path = if path.is_empty() { "index.html" } else { path };
+    if let Some((bytes, mime)) = resolver(path)
+        && let Ok(header) = HeaderValue::from_str(&mime)
+    {
+        let mut resp = Response::new(Body::from(bytes));
+        resp.headers_mut().insert(CONTENT_TYPE, header);
+        return resp;
+    }
+    (StatusCode::NOT_FOUND, "not found").into_response()
+}
 
-                serve_file(&assets, path)
-                    .or_else(|| serve_file(&assets, "index.html"))
-                    .unwrap_or_else(|| (StatusCode::NOT_FOUND, "Not Found").into_response())
-            }
-        });
-
-    tracing::info!("HTTP server listening on http://{}", listener.local_addr()?);
-    axum::serve(listener, router.into_make_service()).await?;
+/// Serve HTTP on an already-bound listener. Tauri-friendly.
+pub async fn serve_with_listener(listener: TcpListener, app: Arc<App>) -> Result<()> {
+    axum::serve(listener, router_for(app)).await?;
     Ok(())
 }
 
-fn serve_file(assets: &AssetResolver, path: &str) -> Option<Response> {
-    let (bytes, mime) = assets(path)?;
-    let mut response = Response::new(Body::from(bytes));
-    if let Ok(ct) = HeaderValue::from_str(&mime) {
-        response.headers_mut().insert(header::CONTENT_TYPE, ct);
-    }
-    Some(response)
+/// Variant that installs embedded assets as the fallback. Used by the Tauri
+/// production build to serve the bundled UI.
+pub async fn serve_with_listener_and_assets(
+    listener: TcpListener,
+    app: Arc<App>,
+    resolver: AssetResolver,
+) -> Result<()> {
+    axum::serve(listener, router_with_assets(app, resolver)).await?;
+    Ok(())
 }

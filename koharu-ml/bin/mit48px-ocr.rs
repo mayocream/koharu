@@ -1,5 +1,5 @@
 use clap::Parser;
-use koharu_core::TextBlock;
+use koharu_ml::TextRegion;
 use koharu_ml::mit48px_ocr::{Mit48pxBlockPrediction, Mit48pxOcr, Mit48pxPrediction};
 use koharu_runtime::{ComputePolicy, RuntimeManager, default_app_data_root};
 
@@ -54,7 +54,7 @@ async fn main() -> anyhow::Result<()> {
     };
 
     let output = if let Some(blocks_path) = &cli.blocks_json {
-        let blocks: Vec<TextBlock> = serde_json::from_str(&std::fs::read_to_string(blocks_path)?)?;
+        let blocks: Vec<TextRegion> = serde_json::from_str(&std::fs::read_to_string(blocks_path)?)?;
         let predictions = model.inference_text_blocks(&image, &blocks)?;
         for prediction in &predictions {
             println!(

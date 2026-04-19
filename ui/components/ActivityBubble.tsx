@@ -5,9 +5,11 @@ import { type ReactNode } from 'react'
 import { useTranslation } from 'react-i18next'
 
 import { Button } from '@/components/ui/button'
-import { useListDownloads } from '@/lib/api/downloads/downloads'
-import { useProcessing } from '@/lib/machines'
+import { cancelOperation } from '@/lib/api/default/default'
+import type { DownloadProgress, JobSummary, PipelineProgress } from '@/lib/api/schemas'
+import { useDownloadsStore } from '@/lib/stores/downloadsStore'
 import { useEditorUiStore } from '@/lib/stores/editorUiStore'
+import { type JobEntry, useJobsStore } from '@/lib/stores/jobsStore'
 
 type TranslateFunc = ReturnType<typeof useTranslation>['t']
 
@@ -110,41 +112,9 @@ function ErrorCard({
   )
 }
 
-/** Map machine state name to an operation type label key */
-function getOperationTitle(
-  state: ReturnType<typeof useProcessing>['state'],
-  t: TranslateFunc,
-): string {
-  if (state.matches('importing')) return t('operations.loadKhr')
-  if (state.matches('loadingLlm')) return t('operations.loadModel')
-  if (state.matches('pipeline')) {
-    const docId = state.context.documentId
-    return docId ? t('operations.processCurrent') : t('operations.processAll')
-  }
-  return t('operations.processCurrent')
-}
-
-function OperationCard({
-  machineState,
-  onCancel,
-  canCancel,
-  t,
-}: {
-  machineState: ReturnType<typeof useProcessing>['state']
-  onCancel: () => void
-  canCancel: boolean
-  t: TranslateFunc
-}) {
-  const ctx = machineState.context
-  const hasProgressNumbers = ctx.total > 0
-  const progress = clampProgress(hasProgressNumbers ? (ctx.current / ctx.total) * 100 : undefined)
-  const displayCurrent = hasProgressNumbers
-    ? Math.min(ctx.total, Math.floor(ctx.current) + (ctx.current >= ctx.total ? 0 : 1))
-    : undefined
-  const total = hasProgressNumbers ? ctx.total : undefined
-
-  const isPipelineAll = machineState.matches('pipeline') && !ctx.documentId
-
+function JobCard({ job, onCancel, t }: { job: JobEntry; onCancel: () => void; t: TranslateFunc }) {
+  const progress: PipelineProgress | undefined = job.progress
+  const percent = clampProgress(progress?.overallPercent)
   const stepLabels: Record<string, string> = {
     detect: t('processing.detect'),
     ocr: t('processing.ocr'),
@@ -152,31 +122,17 @@ function OperationCard({
     llmGenerate: t('llm.generate'),
     render: t('processing.render'),
   }
-
-  const stepLabel = ctx.step ? (stepLabels[ctx.step] ?? ctx.step) : undefined
-  const stepText =
-    stepLabel && total && typeof displayCurrent === 'number'
-      ? t('operations.stepProgress', {
-          current: displayCurrent,
-          total,
-          step: stepLabel,
-        })
+  const stepLabel = progress?.step
+    ? (stepLabels[String(progress.step)] ?? String(progress.step))
+    : undefined
+  const currentPage = progress?.currentPage
+  const totalPages = progress?.totalPages
+  const pageText =
+    typeof currentPage === 'number' && totalPages && totalPages > 1
+      ? t('operations.imageProgress', { current: currentPage + 1, total: totalPages })
       : undefined
-
-  const imageText =
-    isPipelineAll && total && typeof displayCurrent === 'number'
-      ? t('operations.imageProgress', {
-          current: displayCurrent,
-          total,
-        })
-      : undefined
-
-  const subtitleParts = isPipelineAll
-    ? [stepLabel]
-    : [imageText, stepText ?? stepLabel].filter(Boolean)
-  const subtitle = subtitleParts.filter(Boolean).join(' \u00b7 ') || t('operations.inProgress')
-
-  const title = getOperationTitle(machineState, t)
+  const subtitle =
+    [pageText, stepLabel].filter(Boolean).join(' \u00b7 ') || t('operations.inProgress')
 
   return (
     <BubbleCard>
@@ -185,34 +141,24 @@ function OperationCard({
         <div className='flex-1'>
           <div className='flex items-start justify-between gap-2'>
             <div className='flex flex-col gap-1'>
-              <div className='text-sm font-semibold text-foreground'>{title}</div>
-              <div className='text-xs text-muted-foreground'>
-                {subtitle || t('operations.inProgress')}
+              <div className='text-sm font-semibold text-foreground'>
+                {t('operations.processCurrent')}
               </div>
+              <div className='text-xs text-muted-foreground'>{subtitle}</div>
             </div>
-            {isPipelineAll && total && typeof displayCurrent === 'number' ? (
-              <span className='rounded-full bg-muted px-2 py-0.5 text-[11px] font-medium text-muted-foreground'>
-                {t('operations.imageProgress', {
-                  current: displayCurrent,
-                  total,
-                })}
-              </span>
-            ) : null}
           </div>
-          <ProgressBar percent={progress} />
-          {canCancel && (
-            <div className='mt-3 flex justify-end'>
-              <Button
-                data-testid='operation-cancel'
-                variant='outline'
-                size='sm'
-                onClick={onCancel}
-                className='text-xs font-semibold'
-              >
-                {t('operations.cancel')}
-              </Button>
-            </div>
-          )}
+          <ProgressBar percent={percent} />
+          <div className='mt-3 flex justify-end'>
+            <Button
+              data-testid='operation-cancel'
+              variant='outline'
+              size='sm'
+              onClick={onCancel}
+              className='text-xs font-semibold'
+            >
+              {t('operations.cancel')}
+            </Button>
+          </div>
         </div>
       </div>
     </BubbleCard>
@@ -221,43 +167,33 @@ function OperationCard({
 
 export function ActivityBubble() {
   const { t } = useTranslation()
-  const { isProcessing, state: machineState, send, canCancel } = useProcessing()
-  const uiError = useEditorUiStore((state) => state.error)
-  const clearUiError = useEditorUiStore((state) => state.clearError)
+  const jobs = useJobsStore((s) => s.jobs)
+  const downloads = useDownloadsStore((s) => s.downloads)
+  const uiError = useEditorUiStore((s) => s.error)
+  const clearUiError = useEditorUiStore((s) => s.clearError)
 
-  const handleCancel = () => {
-    send({ type: 'CANCEL' })
-  }
-
-  const { data: allDownloads = [] } = useListDownloads({
-    query: { refetchInterval: 2000 },
+  const runningJobs = Object.values(jobs).filter(
+    (j: JobSummary) => j.status === 'running',
+  ) as JobEntry[]
+  const activeDownloads: DownloadProgress[] = Object.values(downloads).filter((d) => {
+    const s = d.status.status
+    return s === 'started' || s === 'downloading'
   })
 
-  const activeDownloads = allDownloads
-    .filter((d) => d.status === 'started' || d.status === 'downloading')
-    .map((d) => ({
-      ...d,
-      percent: d.total && d.total > 0 ? Math.round((d.downloaded / d.total) * 100) : undefined,
-    }))
-
   const errorMessage = uiError?.message
-
-  if (!errorMessage && !isProcessing && activeDownloads.length === 0) return null
+  if (!errorMessage && runningJobs.length === 0 && activeDownloads.length === 0) return null
 
   return (
     <div className='pointer-events-auto fixed right-6 bottom-6 z-100 flex w-80 max-w-[calc(100%-1.5rem)] flex-col gap-3'>
       {errorMessage && <ErrorCard message={errorMessage} onDismiss={clearUiError} t={t} />}
-      {isProcessing && (
-        <OperationCard
-          machineState={machineState}
-          onCancel={handleCancel}
-          canCancel={canCancel}
-          t={t}
-        />
-      )}
-      {activeDownloads.map((d) => (
-        <DownloadCard key={d.filename} filename={d.filename} percent={d.percent} t={t} />
+      {runningJobs.map((job) => (
+        <JobCard key={job.id} job={job} onCancel={() => void cancelOperation(job.id)} t={t} />
       ))}
+      {activeDownloads.map((d) => {
+        const percent =
+          d.total && d.total > 0 ? Math.round((d.downloaded / d.total) * 100) : undefined
+        return <DownloadCard key={d.id} filename={d.filename} percent={percent} t={t} />
+      })}
     </div>
   )
 }

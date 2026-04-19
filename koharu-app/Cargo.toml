@@ -11,36 +11,57 @@ repository.workspace = true
 keywords.workspace = true
 publish.workspace = true
 
+[[bin]]
+name = "pipeline"
+path = "bin/pipeline.rs"
+
 [dependencies]
+clap = { workspace = true }
+tracing-subscriber = { workspace = true }
 koharu-core = { workspace = true }
 koharu-ml = { workspace = true }
 koharu-renderer = { workspace = true }
 koharu-llm = { workspace = true }
 koharu-runtime = { workspace = true }
 anyhow = { workspace = true }
-inventory = { workspace = true }
+arc-swap = { workspace = true }
 async-trait = { workspace = true }
+atomicwrites = { workspace = true }
+blake3 = { workspace = true }
 camino = { workspace = true }
+chrono = { workspace = true }
+dashmap = { workspace = true }
 dirs = { workspace = true }
+fs4 = { workspace = true }
 image = { workspace = true }
 imageproc = { workspace = true }
+indexmap = { workspace = true }
+inventory = { workspace = true }
+lru = { workspace = true }
+natord = { workspace = true }
 open = { workspace = true }
+parking_lot = { workspace = true }
+petgraph = { workspace = true }
+petname = { workspace = true }
+postcard = { workspace = true }
 rayon = { workspace = true }
-rfd = { workspace = true }
 reqwest-middleware = { workspace = true }
+rfd = { workspace = true }
 secrecy = { workspace = true }
 serde = { workspace = true }
-utoipa = { workspace = true }
+serde_json = { workspace = true }
 strum = { workspace = true }
 tempfile = { workspace = true }
+thiserror = { workspace = true }
 tokio = { workspace = true }
 toml = { workspace = true }
 tracing = { workspace = true }
 url = { workspace = true }
+utoipa = { workspace = true }
 uuid = { workspace = true }
-blake3 = { workspace = true }
-lru = { workspace = true }
-petgraph = { workspace = true }
-petname = { workspace = true }
-natord = { workspace = true }
-serde_json = { workspace = true }
+walkdir = { workspace = true }
+zip = { workspace = true }
+
+[features]
+cuda = ["koharu-ml/cuda"]
+metal = ["koharu-ml/metal"]

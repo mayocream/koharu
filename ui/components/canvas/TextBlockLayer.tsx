@@ -1,42 +1,61 @@
 'use client'
 
 import { useDrag } from '@use-gesture/react'
-import { useRef } from 'react'
+import { useMemo, useRef } from 'react'
 import { useHotkeys } from 'react-hotkeys-hook'
 
 import { useBlobImage } from '@/hooks/useBlobData'
-import { useTextBlocks } from '@/hooks/useTextBlocks'
+import { useCurrentPage, useTextNodes, type TextNodeEntry } from '@/hooks/useCurrentPage'
+import type { Transform } from '@/lib/api/schemas'
+import { applyOp } from '@/lib/io/scene'
+import { ops } from '@/lib/ops'
 import { useEditorUiStore } from '@/lib/stores/editorUiStore'
-import { TextBlock } from '@/types'
+import { useSelectionStore } from '@/lib/stores/selectionStore'
 
 type TextBlockLayerProps = {
-  selectedIndex?: number
-  onSelect: (index?: number) => void
   showSprites?: boolean
   scale: number
   style?: React.CSSProperties
 }
 
-export function TextBlockLayer({
-  selectedIndex,
-  onSelect,
-  showSprites,
-  scale,
-  style,
-}: TextBlockLayerProps) {
-  const { textBlocks, replaceBlock, removeBlock } = useTextBlocks()
-  const mode = useEditorUiStore((state) => state.mode)
+/**
+ * Overlay for the active page's Text nodes. Each rectangle is draggable /
+ * resizable; commits dispatch `Op::UpdateNode { transform }` through
+ * `applyCommand`. Selection is driven by `selectionStore.nodeIds`.
+ */
+export function TextBlockLayer({ showSprites, scale, style }: TextBlockLayerProps) {
+  const nodes = useTextNodes()
+  const page = useCurrentPage()
+  const selectedIds = useSelectionStore((s) => s.nodeIds)
+  const select = useSelectionStore((s) => s.select)
+  const mode = useEditorUiStore((s) => s.mode)
   const interactive = mode === 'select' || mode === 'block'
+
+  const firstSelectedId = useMemo(() => {
+    for (const id of selectedIds) if (id) return id
+    return null
+  }, [selectedIds])
+
+  const removeNode = async (id: string) => {
+    if (!page) return
+    const node = page.nodes[id]
+    if (!node) return
+    const idx = Object.keys(page.nodes).indexOf(id)
+    await applyOp(ops.removeNode(page.id, id, node, idx < 0 ? 0 : idx))
+  }
+
+  const updateTransform = async (id: string, t: Transform) => {
+    if (!page) return
+    await applyOp(ops.updateNode(page.id, id, { transform: t }))
+  }
 
   useHotkeys(
     'delete',
     () => {
-      if (selectedIndex !== undefined && interactive) {
-        void removeBlock(selectedIndex)
-      }
+      if (firstSelectedId && interactive) void removeNode(firstSelectedId)
     },
-    { enabled: selectedIndex !== undefined && interactive },
-    [selectedIndex, interactive, removeBlock],
+    { enabled: !!firstSelectedId && interactive },
+    [firstSelectedId, interactive],
   )
 
   return (
@@ -52,19 +71,17 @@ export function TextBlockLayer({
       }}
     >
       {showSprites &&
-        textBlocks.map((block, index) => (
-          <BlockSprite key={`sprite-${block.id ?? index}`} block={block} scale={scale} />
-        ))}
-      {textBlocks.map((block, index) => (
+        nodes.map((n, i) => <BlockSprite key={`sprite-${n.id ?? i}`} node={n} scale={scale} />)}
+      {nodes.map((n, i) => (
         <TextBlockItem
-          key={block.id ?? `fallback-${index}`}
-          block={block}
-          index={index}
+          key={n.id}
+          node={n}
+          index={i}
           scale={scale}
-          selected={index === selectedIndex}
+          selected={selectedIds.has(n.id)}
           interactive={interactive}
-          onSelect={onSelect}
-          onUpdate={(updates) => void replaceBlock(index, updates)}
+          onSelect={(id) => select(id, false)}
+          onCommit={(t) => void updateTransform(n.id, t)}
         />
       ))}
     </div>
@@ -72,35 +89,29 @@ export function TextBlockLayer({
 }
 
 type TextBlockItemProps = {
-  block: TextBlock
+  node: TextNodeEntry
   index: number
   scale: number
   selected: boolean
   interactive: boolean
-  onSelect: (index: number) => void
-  onUpdate: (updates: Partial<TextBlock>) => void
+  onSelect: (id: string) => void
+  onCommit: (transform: Transform) => void
 }
 
 const RESIZE_HANDLE_SIZE = 8
 
-type ResizeEdge = {
-  top: boolean
-  bottom: boolean
-  left: boolean
-  right: boolean
-}
+type ResizeEdge = { top: boolean; bottom: boolean; left: boolean; right: boolean }
 
 function TextBlockItem({
-  block,
+  node,
   index,
   scale,
   selected,
   interactive,
   onSelect,
-  onUpdate,
+  onCommit,
 }: TextBlockItemProps) {
   const boxRef = useRef<HTMLDivElement>(null)
-  // Store block values at drag start so we're immune to mid-drag re-renders.
   const dragStart = useRef({ x: 0, y: 0, w: 0, h: 0 })
   const edgeRef = useRef<ResizeEdge | null>(null)
   const isResizeRef = useRef(false)
@@ -113,35 +124,32 @@ function TextBlockItem({
     el.style.height = `${h}px`
   }
 
+  const t = node.transform
+
   const bind = useDrag(
     ({ first, last, movement: [mx, my], event, tap }) => {
       if (!interactive) return
       event?.stopPropagation()
       if (tap) {
-        onSelect(index)
+        onSelect(node.id)
         return
       }
-
       if (first) {
-        // Snapshot block state at drag start.
         dragStart.current = {
-          x: block.x * scale,
-          y: block.y * scale,
-          w: block.width * scale,
-          h: block.height * scale,
+          x: t.x * scale,
+          y: t.y * scale,
+          w: t.width * scale,
+          h: t.height * scale,
         }
-        onSelect(index)
+        onSelect(node.id)
       }
-
       const { x: sx, y: sy, w: sw, h: sh } = dragStart.current
       const edge = edgeRef.current
-
       if (isResizeRef.current && edge) {
         let dx = 0
         let dy = 0
         let w = sw
         let h = sh
-
         if (edge.right) w += mx
         if (edge.left) {
           w -= mx
@@ -152,31 +160,31 @@ function TextBlockItem({
           h -= my
           dy = my
         }
-
         w = Math.max(4 * scale, w)
         h = Math.max(4 * scale, h)
         if (edge.left && w === 4 * scale) dx = sw - 4 * scale
         if (edge.top && h === 4 * scale) dy = sh - 4 * scale
-
         setBox(sx + dx, sy + dy, w, h)
-
         if (last) {
           isResizeRef.current = false
           edgeRef.current = null
-          onUpdate({
+          onCommit({
             x: Math.round((sx + dx) / scale),
             y: Math.round((sy + dy) / scale),
             width: Math.max(4, Math.round(w / scale)),
             height: Math.max(4, Math.round(h / scale)),
+            rotationDeg: t.rotationDeg ?? 0,
           })
         }
       } else {
         setBox(sx + mx, sy + my, sw, sh)
-
         if (last) {
-          onUpdate({
+          onCommit({
             x: Math.round((sx + mx) / scale),
             y: Math.round((sy + my) / scale),
+            width: t.width,
+            height: t.height,
+            rotationDeg: t.rotationDeg ?? 0,
           })
         }
       }
@@ -195,8 +203,8 @@ function TextBlockItem({
     edgeRef.current = edge
   }
 
-  const w = block.width * scale
-  const h = block.height * scale
+  const w = t.width * scale
+  const h = t.height * scale
 
   return (
     <div
@@ -206,7 +214,7 @@ function TextBlockItem({
         position: 'absolute',
         top: 0,
         left: 0,
-        transform: `translate(${block.x * scale}px, ${block.y * scale}px)`,
+        transform: `translate(${t.x * scale}px, ${t.y * scale}px)`,
         width: w,
         height: h,
         pointerEvents: interactive ? 'auto' : 'none',
@@ -215,16 +223,13 @@ function TextBlockItem({
         cursor: interactive ? 'move' : 'default',
       }}
     >
-      {/* Annotation border */}
       <div
-        className={`absolute inset-0 rounded ${
+        className={`absolute inset-0 rounded-md ${
           selected
             ? 'border-[3px] border-primary bg-primary/15'
             : 'border-2 border-rose-400/60 bg-rose-400/5'
         }`}
       />
-
-      {/* Index badge */}
       <div
         className={`pointer-events-none absolute -top-1.5 -left-1.5 flex h-4 w-4 items-center justify-center rounded-full text-[9px] font-semibold text-white shadow ${
           selected ? 'bg-primary' : 'bg-rose-400'
@@ -232,18 +237,18 @@ function TextBlockItem({
       >
         {index + 1}
       </div>
-
-      {/* Resize handles */}
       {selected && interactive && <ResizeHandles onEdgePointerDown={handleEdgePointerDown} />}
     </div>
   )
 }
 
-function BlockSprite({ block, scale }: { block: TextBlock; scale: number }) {
-  const { data: src } = useBlobImage(block.rendered)
+function BlockSprite({ node, scale }: { node: TextNodeEntry; scale: number }) {
+  const sprite = (node.data.sprite as string | null | undefined) ?? undefined
+  const { data: src } = useBlobImage(sprite)
   if (!src) return null
-  const x = (block.renderX ?? block.x) * scale
-  const y = (block.renderY ?? block.y) * scale
+  const spriteT = node.data.spriteTransform
+  const x = (spriteT?.x ?? node.transform.x) * scale
+  const y = (spriteT?.y ?? node.transform.y) * scale
   return (
     <img
       alt=''
@@ -264,12 +269,7 @@ function ResizeHandles({ onEdgePointerDown }: { onEdgePointerDown: (edge: Resize
   const s = RESIZE_HANDLE_SIZE
   const half = s / 2
 
-  const edges: {
-    edge: ResizeEdge
-    style: React.CSSProperties
-    cursor: string
-  }[] = [
-    // Corners
+  const edges: { edge: ResizeEdge; style: React.CSSProperties; cursor: string }[] = [
     {
       edge: { top: true, left: true, bottom: false, right: false },
       cursor: 'nwse-resize',
@@ -290,7 +290,6 @@ function ResizeHandles({ onEdgePointerDown }: { onEdgePointerDown: (edge: Resize
       cursor: 'nwse-resize',
       style: { bottom: -half, right: -half, width: s, height: s },
     },
-    // Edges
     {
       edge: { top: true, left: false, bottom: false, right: false },
       cursor: 'ns-resize',
@@ -319,12 +318,7 @@ function ResizeHandles({ onEdgePointerDown }: { onEdgePointerDown: (edge: Resize
         <div
           key={i}
           onPointerDown={() => onEdgePointerDown(e.edge)}
-          style={{
-            position: 'absolute',
-            ...e.style,
-            cursor: e.cursor,
-            zIndex: 30,
-          }}
+          style={{ position: 'absolute', ...e.style, cursor: e.cursor, zIndex: 30 }}
         />
       ))}
     </>

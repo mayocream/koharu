@@ -1,19 +1,6 @@
 use std::io::Write;
 
 use image::{DynamicImage, GrayImage, Rgba, RgbaImage, imageops::overlay};
-use koharu_core::{BlobRef, Document, FontPrediction, TextAlign, TextBlock, TextDirection};
-
-/// A document with all blob refs resolved to in-memory images.
-pub struct ResolvedDocument<'a> {
-    pub document: &'a Document,
-    pub source: &'a DynamicImage,
-    pub segment: Option<&'a DynamicImage>,
-    pub inpainted: Option<&'a DynamicImage>,
-    pub rendered: Option<&'a DynamicImage>,
-    pub brush_layer: Option<&'a DynamicImage>,
-    /// Map from BlobRef to resolved DynamicImage for text block rendered images.
-    pub block_images: &'a std::collections::HashMap<BlobRef, DynamicImage>,
-}
 
 use crate::{
     descriptor::{
@@ -21,6 +8,10 @@ use crate::{
     },
     engine_data::{TextEngineSpec, TextJustification, TextOrientation, encode_engine_data},
     error::PsdExportError,
+    input::{
+        PsdBlobRef, PsdDocument, PsdFontPrediction, PsdTextAlign, PsdTextBlock, PsdTextDirection,
+        ResolvedDocument,
+    },
     packbits::{ChannelId, encode_image_rle},
     writer::PsdWriter,
 };
@@ -114,7 +105,7 @@ pub fn write_document<W: Write>(
     Ok(())
 }
 
-fn document_dimensions(document: &Document) -> Result<(u32, u32), PsdExportError> {
+fn document_dimensions(document: &PsdDocument) -> Result<(u32, u32), PsdExportError> {
     let width = document.width;
     let height = document.height;
 
@@ -217,10 +208,10 @@ fn collect_layers(
 }
 
 fn text_layer(
-    block: &TextBlock,
+    block: &PsdTextBlock,
     index: i32,
     mode: TextLayerMode,
-    block_images: &std::collections::HashMap<BlobRef, DynamicImage>,
+    block_images: &std::collections::HashMap<PsdBlobRef, DynamicImage>,
 ) -> Result<Option<ExportLayer>, PsdExportError> {
     let text = block.translation.clone().unwrap_or_default();
     let trimmed = text.trim();
@@ -633,23 +624,23 @@ fn write_image_data(
     Ok(())
 }
 
-fn infer_orientation(block: &TextBlock) -> TextOrientation {
+fn infer_orientation(block: &PsdTextBlock) -> TextOrientation {
     match block.rendered_direction.or(block.source_direction) {
-        Some(TextDirection::Vertical) => TextOrientation::Vertical,
+        Some(PsdTextDirection::Vertical) => TextOrientation::Vertical,
         _ => TextOrientation::Horizontal,
     }
 }
 
 fn infer_justification(
-    block: &TextBlock,
+    block: &PsdTextBlock,
     text: &str,
     orientation: TextOrientation,
 ) -> TextJustification {
     if let Some(alignment) = block.style.as_ref().and_then(|style| style.text_align) {
         return match alignment {
-            TextAlign::Left => TextJustification::Left,
-            TextAlign::Center => TextJustification::Center,
-            TextAlign::Right => TextJustification::Right,
+            PsdTextAlign::Left => TextJustification::Left,
+            PsdTextAlign::Center => TextJustification::Center,
+            PsdTextAlign::Right => TextJustification::Right,
         };
     }
 
@@ -660,7 +651,7 @@ fn infer_justification(
     }
 }
 
-fn infer_font_name(block: &TextBlock) -> String {
+fn infer_font_name(block: &PsdTextBlock) -> String {
     if let Some(style_font) = block.style.as_ref().and_then(|style| {
         style
             .font_families
@@ -682,7 +673,7 @@ fn infer_font_name(block: &TextBlock) -> String {
     "ArialMT".to_string()
 }
 
-fn infer_font_size(block: &TextBlock) -> f64 {
+fn infer_font_size(block: &PsdTextBlock) -> f64 {
     if let Some(size) = block.style.as_ref().and_then(|style| style.font_size)
         && size.is_finite()
         && size > 0.0
@@ -707,12 +698,12 @@ fn infer_font_size(block: &TextBlock) -> f64 {
     f64::max(6.0, f64::from(block.width.min(block.height)) * 0.7)
 }
 
-fn infer_color(block: &TextBlock) -> [u8; 4] {
+fn infer_color(block: &PsdTextBlock) -> [u8; 4] {
     if let Some(style) = block.style.as_ref() {
         return style.color;
     }
 
-    if let Some(FontPrediction { text_color, .. }) = block.font_prediction.as_ref() {
+    if let Some(PsdFontPrediction { text_color, .. }) = block.font_prediction.as_ref() {
         return [text_color[0], text_color[1], text_color[2], 255];
     }
 
@@ -743,7 +734,7 @@ mod tests {
 
     use crate::writer::PsdWriter;
 
-    use koharu_core::{TextBlock, TextDirection};
+    use crate::input::{PsdTextBlock, PsdTextDirection, PsdTextStyle};
 
     use super::{
         TextOrientation, contains_cjk, infer_font_name, infer_orientation, is_probably_latin,
@@ -767,7 +758,7 @@ mod tests {
 
     #[test]
     fn orientation_uses_rendered_direction_not_geometry() {
-        let tall_english_block = TextBlock {
+        let tall_english_block = PsdTextBlock {
             width: 40.0,
             height: 120.0,
             translation: Some("HELLO".to_string()),
@@ -778,8 +769,8 @@ mod tests {
             TextOrientation::Horizontal
         );
 
-        let vertical_block = TextBlock {
-            rendered_direction: Some(TextDirection::Vertical),
+        let vertical_block = PsdTextBlock {
+            rendered_direction: Some(PsdTextDirection::Vertical),
             ..Default::default()
         };
         assert_eq!(
@@ -811,13 +802,12 @@ mod tests {
 
     #[test]
     fn style_font_name_is_used_for_editable_export() {
-        let block = TextBlock {
-            style: Some(koharu_core::TextStyle {
+        let block = PsdTextBlock {
+            style: Some(PsdTextStyle {
                 font_families: vec!["ArialMT".to_string()],
                 font_size: None,
                 color: [0, 0, 0, 255],
                 effect: None,
-                stroke: None,
                 text_align: None,
             }),
             ..Default::default()

@@ -1,10 +1,28 @@
 'use client'
 
-import { MinusIcon, SquareIcon, XIcon, CopyIcon } from 'lucide-react'
+import { CopyIcon, MinusIcon, SquareIcon, XIcon } from 'lucide-react'
+import Image from 'next/image'
 import { useCallback, useEffect, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 
+import { fitCanvasToViewport, resetCanvasScale } from '@/components/Canvas'
+import { SettingsDialog, type TabId } from '@/components/SettingsDialog'
+import {
+  Menubar,
+  MenubarContent,
+  MenubarItem,
+  MenubarMenu,
+  MenubarSeparator,
+  MenubarTrigger,
+} from '@/components/ui/menubar'
+import { useScene } from '@/hooks/useScene'
+import { getConfig, startPipeline } from '@/lib/api/default/default'
 import { isTauri, openExternalUrl } from '@/lib/backend'
+import { exportCurrentProjectAs, importPages } from '@/lib/io/pagesIo'
+import { closeProject } from '@/lib/io/scene'
+import { useEditorUiStore } from '@/lib/stores/editorUiStore'
+import { usePreferencesStore } from '@/lib/stores/preferencesStore'
+import { useSelectionStore } from '@/lib/stores/selectionStore'
 
 const isMacOS = () =>
   typeof navigator !== 'undefined' && /Mac|iPhone|iPad|iPod/.test(navigator.userAgent)
@@ -27,22 +45,6 @@ const windowControls = {
     return getCurrentWindow().isMaximized()
   },
 }
-import Image from 'next/image'
-
-import { fitCanvasToViewport, resetCanvasScale } from '@/components/Canvas'
-import { SettingsDialog, type TabId } from '@/components/SettingsDialog'
-import {
-  Menubar,
-  MenubarContent,
-  MenubarItem,
-  MenubarMenu,
-  MenubarSeparator,
-  MenubarTrigger,
-} from '@/components/ui/menubar'
-import type { PipelineJobRequest } from '@/lib/api/schemas'
-import { useProcessing } from '@/lib/machines'
-import { useEditorUiStore } from '@/lib/stores/editorUiStore'
-import { usePreferencesStore } from '@/lib/stores/preferencesStore'
 
 type MenuItem = {
   label: string
@@ -59,84 +61,71 @@ type MenuSection = {
 
 export function MenuBar() {
   const { t } = useTranslation()
-  const { send } = useProcessing()
   const [settingsOpen, setSettingsOpen] = useState(false)
   const [settingsTab, setSettingsTab] = useState<TabId>('appearance')
-  const hasDocument = useEditorUiStore((state) => state.currentDocumentId !== null)
+  const hasPage = useSelectionStore((s) => s.pageId !== null)
+  const hasScene = useScene().scene !== null
 
-  const buildPipelineRequest = (documentId?: string): PipelineJobRequest => {
-    const { selectedTarget, selectedLanguage, renderEffect, renderStroke } =
-      useEditorUiStore.getState()
-    const { customSystemPrompt, defaultFont } = usePreferencesStore.getState()
-    return {
-      documentId,
-      llm: selectedTarget ? { target: selectedTarget } : undefined,
-      language: selectedLanguage,
-      systemPrompt: customSystemPrompt,
-      shaderEffect: renderEffect,
-      shaderStroke: renderStroke,
-      defaultFont,
-    }
-  }
-
-  const requireDocumentId = () => {
-    const id = useEditorUiStore.getState().currentDocumentId
-    if (!id) throw new Error('No current document selected')
+  const requirePageId = () => {
+    const id = useSelectionStore.getState().pageId
+    if (!id) throw new Error('No current page selected')
     return id
   }
 
-  const fileMenuItems: MenuItem[] = [
-    {
-      label: t('menu.openFile'),
-      onSelect: () => send({ type: 'START_IMPORT', mode: 'replace', source: 'files' }),
-      testId: 'menu-file-open',
-    },
-    {
-      label: t('menu.addFile'),
-      onSelect: () => send({ type: 'START_IMPORT', mode: 'append', source: 'files' }),
-      testId: 'menu-file-add',
-    },
-    {
-      label: t('menu.openFolder'),
-      onSelect: () => send({ type: 'START_IMPORT', mode: 'replace', source: 'folder' }),
-      testId: 'menu-file-open-folder',
-    },
-    {
-      label: t('menu.addFolder'),
-      onSelect: () => send({ type: 'START_IMPORT', mode: 'append', source: 'folder' }),
-      testId: 'menu-file-add-folder',
-    },
+  const runPipeline = async (opts: { pageId?: string }) => {
+    const cfg = await getConfig()
+    if (!cfg.pipeline) return
+    const p = cfg.pipeline
+    const steps = [
+      p.detector,
+      p.segmenter,
+      p.bubble_segmenter,
+      p.font_detector,
+      p.ocr,
+      p.translator,
+      p.inpainter,
+      p.renderer,
+    ].filter((s): s is string => !!s)
+    const editor = useEditorUiStore.getState()
+    const prefs = usePreferencesStore.getState()
+    await startPipeline({
+      steps,
+      pages: opts.pageId ? [opts.pageId] : undefined,
+      targetLanguage: editor.selectedLanguage,
+      systemPrompt: prefs.customSystemPrompt,
+      defaultFont: prefs.defaultFont,
+    })
+  }
+
+  const runInpaint = async (pageId: string) => {
+    const cfg = await getConfig()
+    if (!cfg.pipeline?.inpainter) return
+    await startPipeline({ steps: [cfg.pipeline.inpainter], pages: [pageId] })
+  }
+
+  const exportItems: MenuItem[] = [
     {
       label: t('menu.export'),
-      onSelect: () =>
-        send({
-          type: 'START_EXPORT',
-          documentId: requireDocumentId(),
-          format: 'webp',
-          params: { layer: 'rendered' },
-        }),
-      disabled: !hasDocument,
+      onSelect: () => void exportCurrentProjectAs('rendered', [requirePageId()]),
+      disabled: !hasPage,
       testId: 'menu-file-export',
     },
     {
       label: t('menu.exportPsd'),
-      onSelect: () =>
-        send({
-          type: 'START_EXPORT',
-          documentId: requireDocumentId(),
-          format: 'psd',
-        }),
-      disabled: !hasDocument,
+      onSelect: () => void exportCurrentProjectAs('psd', [requirePageId()]),
+      disabled: !hasPage,
       testId: 'menu-file-export-psd',
     },
     {
       label: t('menu.exportAllInpainted'),
-      onSelect: () => send({ type: 'START_BATCH_EXPORT', layer: 'inpainted' }),
+      onSelect: () => void exportCurrentProjectAs('inpainted'),
+      disabled: !hasScene,
       testId: 'menu-file-export-all-inpainted',
     },
     {
       label: t('menu.exportAllRendered'),
-      onSelect: () => send({ type: 'START_BATCH_EXPORT', layer: 'rendered' }),
+      onSelect: () => void exportCurrentProjectAs('rendered'),
+      disabled: !hasScene,
       testId: 'menu-file-export-all-rendered',
     },
   ]
@@ -155,28 +144,20 @@ export function MenuBar() {
       items: [
         {
           label: t('menu.processCurrent'),
-          onSelect: () => {
-            const documentId = requireDocumentId()
-            send({
-              type: 'START_PIPELINE',
-              request: buildPipelineRequest(documentId),
-            })
-          },
-          disabled: !hasDocument,
+          onSelect: () => void runPipeline({ pageId: requirePageId() }),
+          disabled: !hasPage,
           testId: 'menu-process-current',
         },
         {
           label: t('menu.redoInpaintRender'),
-          onSelect: () => {
-            const documentId = requireDocumentId()
-            send({ type: 'START_INPAINT', documentId })
-          },
-          disabled: !hasDocument,
+          onSelect: () => void runInpaint(requirePageId()),
+          disabled: !hasPage,
           testId: 'menu-process-rerender',
         },
         {
           label: t('menu.processAll'),
-          onSelect: () => send({ type: 'START_PIPELINE', request: buildPipelineRequest() }),
+          onSelect: () => void runPipeline({}),
+          disabled: !hasScene,
           testId: 'menu-process-all',
         },
       ],
@@ -184,10 +165,7 @@ export function MenuBar() {
   ]
 
   const helpMenuItems: MenuItem[] = [
-    {
-      label: t('menu.discord'),
-      onSelect: () => openExternalUrl('https://discord.gg/mHvHkxGnUY'),
-    },
+    { label: t('menu.discord'), onSelect: () => openExternalUrl('https://discord.gg/mHvHkxGnUY') },
     {
       label: t('menu.github'),
       onSelect: () => openExternalUrl('https://github.com/mayocream/koharu'),
@@ -199,15 +177,10 @@ export function MenuBar() {
 
   return (
     <div className='flex h-8 items-center border-b border-border bg-background text-[13px] text-foreground'>
-      {/* macOS traffic lights */}
       {isNativeMacOS && <MacOSControls />}
-
-      {/* Logo */}
       <div className='flex h-full items-center pl-2 select-none'>
         <Image src='/icon.png' alt='Koharu' width={18} height={18} draggable={false} />
       </div>
-
-      {/* Menu items */}
       <Menubar className='h-auto gap-1 border-none bg-transparent p-0 px-1.5 shadow-none'>
         <MenubarMenu>
           <MenubarTrigger
@@ -216,24 +189,53 @@ export function MenuBar() {
           >
             {t('menu.file')}
           </MenubarTrigger>
-          <MenubarContent className='min-w-36' align='start' sideOffset={5} alignOffset={-3}>
-            {fileMenuItems.map((item) => (
+          <MenubarContent className='min-w-48' align='start' sideOffset={5} alignOffset={-3}>
+            <MenubarItem
+              data-testid='menu-file-open-files'
+              className='text-[13px]'
+              disabled={!hasScene}
+              onSelect={() => void importPages('replace', 'files')}
+            >
+              {t('menu.openFiles', { defaultValue: 'Open Files...' })}
+            </MenubarItem>
+            <MenubarItem
+              data-testid='menu-file-open-folder'
+              className='text-[13px]'
+              disabled={!hasScene}
+              onSelect={() => void importPages('replace', 'folder')}
+            >
+              {t('menu.openFolder', { defaultValue: 'Open Folder...' })}
+            </MenubarItem>
+            <MenubarSeparator />
+            <MenubarItem
+              data-testid='menu-file-save-as'
+              className='text-[13px]'
+              disabled={!hasScene}
+              onSelect={() => void exportCurrentProjectAs('khr')}
+            >
+              {t('menu.saveAs', { defaultValue: 'Save As...' })}
+            </MenubarItem>
+            <MenubarSeparator />
+            {exportItems.map((item) => (
               <MenubarItem
                 key={item.label}
                 data-testid={item.testId}
                 className='text-[13px]'
                 disabled={item.disabled}
-                onSelect={
-                  item.onSelect
-                    ? () => {
-                        void item.onSelect?.()
-                      }
-                    : undefined
-                }
+                onSelect={item.onSelect ? () => void item.onSelect?.() : undefined}
               >
                 {item.label}
               </MenubarItem>
             ))}
+            <MenubarSeparator />
+            <MenubarItem
+              data-testid='menu-file-close-project'
+              className='text-[13px]'
+              disabled={!hasScene}
+              onSelect={() => void closeProject()}
+            >
+              {t('menu.closeProject', { defaultValue: 'Close Project' })}
+            </MenubarItem>
             <MenubarSeparator />
             <MenubarItem
               className='text-[13px]'
@@ -261,13 +263,7 @@ export function MenuBar() {
                   data-testid={item.testId}
                   className='text-[13px]'
                   disabled={item.disabled}
-                  onSelect={
-                    item.onSelect
-                      ? () => {
-                          void item.onSelect?.()
-                        }
-                      : undefined
-                  }
+                  onSelect={item.onSelect ? () => void item.onSelect?.() : undefined}
                 >
                   {item.label}
                 </MenubarItem>
@@ -285,13 +281,7 @@ export function MenuBar() {
                 key={item.label}
                 className='text-[13px]'
                 disabled={item.disabled}
-                onSelect={
-                  item.onSelect
-                    ? () => {
-                        void item.onSelect?.()
-                      }
-                    : undefined
-                }
+                onSelect={item.onSelect ? () => void item.onSelect?.() : undefined}
               >
                 {item.label}
               </MenubarItem>
@@ -309,13 +299,8 @@ export function MenuBar() {
           </MenubarContent>
         </MenubarMenu>
       </Menubar>
-
-      {/* Draggable region */}
       <div data-tauri-drag-region className='flex h-full flex-1 items-center justify-center' />
-
-      {/* Window controls for Windows */}
       {isWindowsTauri && <WindowControls />}
-
       <SettingsDialog open={settingsOpen} onOpenChange={setSettingsOpen} defaultTab={settingsTab} />
     </div>
   )
@@ -364,7 +349,6 @@ function WindowControls() {
 
   useEffect(() => {
     void updateMaximized()
-    // Sync maximize state on window resize (snap, double-click titlebar, etc.)
     const onResize = () => void updateMaximized()
     window.addEventListener('resize', onResize)
     return () => window.removeEventListener('resize', onResize)

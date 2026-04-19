@@ -1,8 +1,8 @@
 use std::path::Path;
 
-use koharu_core::{TextBlock, TextDirection};
 use koharu_ml::comic_text_detector::extract_text_block_regions;
 use koharu_ml::paddleocr_vl::{PaddleOcrVl, PaddleOcrVlTask};
+use koharu_ml::{TextDirection, TextRegion};
 
 mod support;
 
@@ -11,7 +11,7 @@ mod support;
 async fn paddleocr_vl_reads_dialog_image_via_default_block_path() -> anyhow::Result<()> {
     let fixtures = Path::new(env!("CARGO_MANIFEST_DIR")).join("tests/fixtures");
     let image = image::open(fixtures.join("1.jpg"))?.crop_imm(66, 26, 270, 48);
-    let block = TextBlock {
+    let block = TextRegion {
         x: 0.0,
         y: 0.0,
         width: image.width() as f32,

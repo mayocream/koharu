@@ -49,24 +49,75 @@ import {
   SelectValue,
 } from '@/components/ui/select'
 import { useUpdater, type UpdaterStatus } from '@/components/Updater'
-import { getLlmCatalog, getGetLlmCatalogQueryKey } from '@/lib/api/llm/llm'
+import {
+  getCatalog as getLlmCatalog,
+  getConfig,
+  getEngineCatalog,
+  getGetCatalogQueryKey as getGetLlmCatalogQueryKey,
+  getMeta,
+  patchConfig,
+} from '@/lib/api/default/default'
 import type {
-  UpdateConfigBody,
-  ProviderConfig,
+  AppConfig,
+  ConfigPatch,
+  EngineCatalog as GetEngineCatalog200,
   LlmProviderCatalog,
-  GetEngineCatalog200,
+  ProviderConfig,
 } from '@/lib/api/schemas'
-import { getConfig, getEngineCatalog, getMeta, updateConfig } from '@/lib/api/system/system'
 import { isTauri, openExternalUrl } from '@/lib/backend'
 import { supportedLanguages } from '@/lib/i18n'
 import {
-  getPlatform,
-  formatShortcut,
-  isKeyBlocked,
   areShortcutsEqual,
+  formatShortcut,
+  getPlatform,
+  isKeyBlocked,
   isModifierKey,
 } from '@/lib/shortcutUtils'
 import { usePreferencesStore } from '@/lib/stores/preferencesStore'
+
+// Dialog state models `AppConfig` (what `GET /config` returns — snake_case).
+// But `PATCH /config` expects a `ConfigPatch` with camelCase fields because
+// the patch schema derives `rename_all = "camelCase"` serde attrs. Translate
+// at the boundary so the dialog internals stay unified.
+type UpdateConfigBody = AppConfig
+
+function appConfigToPatch(cfg: AppConfig): ConfigPatch {
+  const patch: ConfigPatch = {}
+  if (cfg.data?.path) {
+    patch.data = { path: cfg.data.path }
+  }
+  if (cfg.http) {
+    patch.http = {
+      connectTimeout: cfg.http.connect_timeout,
+      readTimeout: cfg.http.read_timeout,
+      maxRetries: cfg.http.max_retries,
+    }
+  }
+  if (cfg.pipeline) {
+    patch.pipeline = {
+      detector: cfg.pipeline.detector,
+      fontDetector: cfg.pipeline.font_detector,
+      segmenter: cfg.pipeline.segmenter,
+      bubbleSegmenter: cfg.pipeline.bubble_segmenter,
+      ocr: cfg.pipeline.ocr,
+      translator: cfg.pipeline.translator,
+      inpainter: cfg.pipeline.inpainter,
+      renderer: cfg.pipeline.renderer,
+    }
+  }
+  if (cfg.providers) {
+    patch.providers = cfg.providers.map((p) => ({
+      id: p.id,
+      baseUrl: p.base_url ?? null,
+      apiKey: p.api_key ?? null,
+    }))
+  }
+  return patch
+}
+
+async function updateConfig(next: UpdateConfigBody): Promise<AppConfig> {
+  return (await patchConfig(appConfigToPatch(next))) as AppConfig
+}
 
 const GITHUB_REPO = 'mayocream/koharu'
 
@@ -149,10 +200,11 @@ export function SettingsDialog({
     }
   }, [open])
 
+  const checkForUpdates = updater.checkForUpdates
   useEffect(() => {
     if (!open || !isTauri()) return
-    void updater.checkForUpdates()
-  }, [open])
+    void checkForUpdates()
+  }, [open, checkForUpdates])
 
   useEffect(() => {
     if (!appConfig?.data) return
@@ -446,11 +498,6 @@ function EnginesPane({
       engines: catalog.detectors,
     },
     {
-      label: t('settings.bubbleDetector'),
-      key: 'bubble_detector' as const,
-      engines: catalog.bubbleDetectors,
-    },
-    {
       label: t('settings.fontDetector'),
       key: 'font_detector' as const,
       engines: catalog.fontDetectors,
@@ -459,6 +506,11 @@ function EnginesPane({
       label: t('settings.segmenter'),
       key: 'segmenter' as const,
       engines: catalog.segmenters,
+    },
+    {
+      label: t('settings.bubbleSegmenter'),
+      key: 'bubble_segmenter' as const,
+      engines: catalog.bubbleSegmenters,
     },
     { label: t('settings.ocr'), key: 'ocr' as const, engines: catalog.ocr },
     {

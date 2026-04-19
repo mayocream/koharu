@@ -2,15 +2,15 @@
 
 import * as ScrollAreaPrimitive from '@radix-ui/react-scroll-area'
 import { useGesture } from '@use-gesture/react'
-import { useEffect, useRef, useMemo, useCallback } from 'react'
+import { useCallback, useEffect, useMemo, useRef } from 'react'
 import type React from 'react'
 import { useTranslation } from 'react-i18next'
 
 import { CanvasToolbar } from '@/components/canvas/CanvasToolbar'
 import {
-  setCanvasViewport,
-  setCanvasDocumentSize,
   fitCanvasToViewport,
+  setCanvasDocumentSize,
+  setCanvasViewport,
 } from '@/components/canvas/canvasViewport'
 import { TextBlockLayer } from '@/components/canvas/TextBlockLayer'
 import { ToolRail } from '@/components/canvas/ToolRail'
@@ -25,84 +25,138 @@ import {
   ContextMenuItem,
   ContextMenuTrigger,
 } from '@/components/ui/context-menu'
+import { useBlobData } from '@/hooks/useBlobData'
 import { useBlockContextMenu } from '@/hooks/useBlockContextMenu'
-import { useBlockDrafting } from '@/hooks/useBlockDrafting'
+import { useBlockDrafting, type BlockDraft } from '@/hooks/useBlockDrafting'
 import { useBrushCursor } from '@/hooks/useBrushCursor'
 import { useBrushLayerDisplay } from '@/hooks/useBrushLayerDisplay'
 import { useCanvasZoom } from '@/hooks/useCanvasZoom'
+import { findImageBlob, findMaskBlob, useCurrentPage } from '@/hooks/useCurrentPage'
 import { useKeyboardShortcuts } from '@/hooks/useKeyboardShortcuts'
 import { useMaskDrawing } from '@/hooks/useMaskDrawing'
 import { usePointerToDocument } from '@/hooks/usePointerToDocument'
 import { useRenderBrushDrawing } from '@/hooks/useRenderBrushDrawing'
-import { useTextBlocks, useDocumentLayer } from '@/hooks/useTextBlocks'
-import { listen } from '@/lib/backend'
+import { useScene } from '@/hooks/useScene'
+import type { Node, Transform } from '@/lib/api/schemas'
+import { applyOp } from '@/lib/io/scene'
+import { ops } from '@/lib/ops'
 import { useEditorUiStore } from '@/lib/stores/editorUiStore'
+import { useSelectionStore } from '@/lib/stores/selectionStore'
 
 const BRUSH_CURSOR = 'none'
 
+/**
+ * Primary canvas viewport.
+ *
+ * Reads the active page from the scene mirror; derives layer blob hashes from
+ * role-keyed nodes (`Image { source | inpainted | rendered | custom }`,
+ * `Mask { segment | brushInpaint }`). Mutations (text-block add/delete,
+ * mask edits, brush strokes) dispatch through `applyCommand` or the V2 mask
+ * PUT endpoint — no V1 shim layer.
+ */
 export function Workspace() {
   useKeyboardShortcuts()
-  const scale = useEditorUiStore((state) => state.scale)
-  const showSegmentationMask = useEditorUiStore((state) => state.showSegmentationMask)
-  const showInpaintedImage = useEditorUiStore((state) => state.showInpaintedImage)
-  const showBrushLayer = useEditorUiStore((state) => state.showBrushLayer)
-  const showRenderedImage = useEditorUiStore((state) => state.showRenderedImage)
-  const showTextBlocksOverlay = useEditorUiStore((state) => state.showTextBlocksOverlay)
-  const mode = useEditorUiStore((state) => state.mode)
-  const autoFitEnabled = useEditorUiStore((state) => state.autoFitEnabled)
-  const {
-    document: currentDocument,
-    selectedBlockIndex,
-    setSelectedBlockIndex,
-    clearSelection,
-    appendBlock,
-    removeBlock,
-  } = useTextBlocks()
 
-  const imageData = useDocumentLayer(currentDocument?.id, 'image', currentDocument?.image)
-  const segmentData = useDocumentLayer(currentDocument?.id, 'segment', currentDocument?.segment)
-  const inpaintedData = useDocumentLayer(
-    currentDocument?.id,
-    'inpainted',
-    currentDocument?.inpainted,
+  const scale = useEditorUiStore((s) => s.scale)
+  const showSegmentationMask = useEditorUiStore((s) => s.showSegmentationMask)
+  const showInpaintedImage = useEditorUiStore((s) => s.showInpaintedImage)
+  const showBrushLayer = useEditorUiStore((s) => s.showBrushLayer)
+  const showRenderedImage = useEditorUiStore((s) => s.showRenderedImage)
+  const showTextBlocksOverlay = useEditorUiStore((s) => s.showTextBlocksOverlay)
+  const mode = useEditorUiStore((s) => s.mode)
+  const autoFitEnabled = useEditorUiStore((s) => s.autoFitEnabled)
+
+  const page = useCurrentPage()
+  const { epoch: sceneEpoch } = useScene()
+  const clearSelection = useSelectionStore((s) => s.clear)
+
+  // Derive role-keyed blob hashes off the active page.
+  const imageHash = useMemo(() => (page ? findImageBlob(page, 'source') : null), [page, sceneEpoch])
+  const segmentHash = useMemo(
+    () => (page ? findMaskBlob(page, 'segment') : null),
+    [page, sceneEpoch],
   )
-  const brushLayerData = useDocumentLayer(
-    currentDocument?.id,
-    'brushLayer',
-    currentDocument?.brushLayer,
+  const inpaintedHash = useMemo(
+    () => (page ? findImageBlob(page, 'inpainted') : null),
+    [page, sceneEpoch],
   )
-  const renderedData = useDocumentLayer(currentDocument?.id, 'rendered', currentDocument?.rendered)
+  const brushLayerHash = useMemo(
+    () => (page ? findMaskBlob(page, 'brushInpaint') : null),
+    [page, sceneEpoch],
+  )
+  const renderedHash = useMemo(
+    () => (page ? findImageBlob(page, 'rendered') : null),
+    [page, sceneEpoch],
+  )
+
+  const imageData = useBlobData(imageHash ?? undefined)
+  const segmentData = useBlobData(segmentHash ?? undefined)
+  const inpaintedData = useBlobData(inpaintedHash ?? undefined)
+  const brushLayerData = useBlobData(brushLayerHash ?? undefined)
+  const renderedData = useBlobData(renderedHash ?? undefined)
 
   useEffect(() => {
-    if (currentDocument) {
-      setCanvasDocumentSize(currentDocument.width, currentDocument.height)
-    }
-  }, [currentDocument?.width, currentDocument?.height])
+    if (page) setCanvasDocumentSize(page.width, page.height)
+  }, [page?.width, page?.height])
 
   const viewportRef = useRef<HTMLDivElement | null>(null)
+  const canvasRef = useRef<HTMLDivElement | null>(null)
   const { setScale: applyScale } = useCanvasZoom()
   const scaleRatio = scale / 100
-  const canvasRef = useRef<HTMLDivElement | null>(null)
+
   const handleViewportRef = useCallback((el: HTMLDivElement | null) => {
     viewportRef.current = el
     setCanvasViewport(el)
   }, [])
+
   const pointerToDocument = usePointerToDocument(scaleRatio, canvasRef)
+
+  const createTextNode = useCallback(
+    async (draft: BlockDraft) => {
+      if (!page) return
+      const at = Object.keys(page.nodes).length
+      const nodeId = crypto.randomUUID()
+      const transform: Transform = {
+        x: draft.x,
+        y: draft.y,
+        width: draft.width,
+        height: draft.height,
+        rotationDeg: 0,
+      }
+      const node: Node = {
+        id: nodeId,
+        transform,
+        visible: true,
+        kind: { text: {} },
+      }
+      await applyOp(ops.addNode(page.id, at, node))
+      useSelectionStore.getState().selectMany([nodeId])
+    },
+    [page],
+  )
+
+  const removeTextNode = useCallback(
+    async (nodeId: string) => {
+      if (!page) return
+      const node = page.nodes[nodeId]
+      if (!node) return
+      const idx = Object.keys(page.nodes).indexOf(nodeId)
+      await applyOp(ops.removeNode(page.id, nodeId, node, idx < 0 ? 0 : idx))
+    },
+    [page],
+  )
+
   const { draftBlock, bind: bindBlockDraft } = useBlockDrafting({
     mode,
-    currentDocument,
+    page,
     pointerToDocument,
     clearSelection,
-    onCreateBlock: (block) => {
-      void appendBlock(block)
+    onCreateBlock: (draft) => {
+      void createTextNode(draft)
     },
   })
 
-  const { brushCursorRef, isBrushMode, brushSize } = useBrushCursor(
-    canvasRef,
-    mode,
-    currentDocument?.id,
-  )
+  const { brushCursorRef, isBrushMode, brushSize } = useBrushCursor(canvasRef, mode, page?.id)
 
   const maskPointerEnabled = useMemo(
     () =>
@@ -113,22 +167,23 @@ export function Workspace() {
     () => mode === 'brush' || (mode === 'eraser' && !showSegmentationMask && showBrushLayer),
     [mode, showSegmentationMask, showBrushLayer],
   )
+
   const maskDrawing = useMaskDrawing({
     mode,
-    currentDocument,
+    page,
     segmentData,
     pointerToDocument,
     showMask: showSegmentationMask,
     enabled: maskPointerEnabled,
   })
   const brushLayerDisplay = useBrushLayerDisplay({
-    currentDocument,
+    page,
     brushLayerData,
     visible: showBrushLayer,
   })
   const brushDrawing = useRenderBrushDrawing({
     mode,
-    currentDocument,
+    page,
     pointerToDocument,
     enabled: brushPointerEnabled,
     action: mode === 'eraser' ? 'erase' : 'paint',
@@ -139,80 +194,50 @@ export function Workspace() {
   const brushBindings = brushDrawing.bind()
 
   useEffect(() => {
-    if (currentDocument && autoFitEnabled) {
-      fitCanvasToViewport()
-    }
-  }, [currentDocument?.id, autoFitEnabled])
-  const { contextMenuBlockIndex, handleContextMenu, handleDeleteBlock, clearContextMenu } =
+    if (page && autoFitEnabled) fitCanvasToViewport()
+  }, [page?.id, autoFitEnabled])
+
+  const { contextMenuNodeId, handleContextMenu, handleDeleteBlock, clearContextMenu } =
     useBlockContextMenu({
-      currentDocument,
+      page,
       pointerToDocument,
-      selectBlock: setSelectedBlockIndex,
-      removeBlock: (index) => {
-        void removeBlock(index)
+      onSelect: (nodeId) => {
+        if (nodeId) useSelectionStore.getState().selectMany([nodeId])
+        else useSelectionStore.getState().clear()
+      },
+      onRemove: (nodeId) => {
+        void removeTextNode(nodeId)
       },
     })
   const { t } = useTranslation()
 
-  // Listen for Tauri resize events
-  useEffect(() => {
-    let unlisten: (() => void) | undefined
-
-    const setupListener = async () => {
-      unlisten = await listen('tauri://resize', () => {
-        if (currentDocument && autoFitEnabled) {
-          fitCanvasToViewport()
-        }
-      })
-    }
-
-    void setupListener()
-
-    return () => {
-      if (unlisten) {
-        unlisten()
-      }
-    }
-  }, [currentDocument])
-
   useGesture(
     {
       onDrag: ({ first, movement: [mx, my], memo, cancel, ctrlKey }) => {
-        if (!currentDocument) return memo
+        if (!page) return memo
         if (!ctrlKey) {
           if (first && cancel) cancel()
           return memo
         }
-
         const viewport = viewportRef.current
         if (!viewport) return memo
-
         if (first) {
-          return {
-            scrollLeft: viewport.scrollLeft,
-            scrollTop: viewport.scrollTop,
-          }
+          return { scrollLeft: viewport.scrollLeft, scrollTop: viewport.scrollTop }
         }
-
         if (!memo) return memo
         viewport.scrollLeft = memo.scrollLeft - mx
         viewport.scrollTop = memo.scrollTop - my
         return memo
       },
       onWheel: ({ ctrlKey, delta: [, dy], event }) => {
-        if (!currentDocument || !ctrlKey) return
-
-        if (event.cancelable) {
-          event.preventDefault()
-        }
-
+        if (!page || !ctrlKey) return
+        if (event.cancelable) event.preventDefault()
         const direction = Math.sign(dy)
         if (!direction) return
-        const currentScale = useEditorUiStore.getState().scale
-        applyScale(currentScale - direction)
+        applyScale(useEditorUiStore.getState().scale - direction)
       },
       onPinch: ({ canceled, movement: [movementScale], memo }) => {
-        if (!currentDocument || canceled) return memo
+        if (!page || canceled) return memo
         const memoScaleRatio = resolvePinchMemoScaleRatio(
           memo,
           useEditorUiStore.getState().scale / 100,
@@ -225,15 +250,8 @@ export function Workspace() {
     {
       target: viewportRef,
       eventOptions: { passive: false },
-      drag: {
-        filterTaps: true,
-        pointer: {
-          mouse: true,
-        },
-      },
-      wheel: {
-        preventDefault: false,
-      },
+      drag: { filterTaps: true, pointer: { mouse: true } },
+      wheel: { preventDefault: false },
       pinch: {
         threshold: 0.1,
         enabled: true,
@@ -250,7 +268,6 @@ export function Workspace() {
       clearSelection()
     }
   }
-
   const handleCanvasContextMenu = (event: React.MouseEvent<HTMLDivElement>) => {
     handleContextMenu(event)
   }
@@ -262,13 +279,10 @@ export function Workspace() {
 
   const canvasDimensions = useMemo(
     () =>
-      currentDocument
-        ? {
-            width: currentDocument.width * scaleRatio,
-            height: currentDocument.height * scaleRatio,
-          }
+      page
+        ? { width: page.width * scaleRatio, height: page.height * scaleRatio }
         : { width: 0, height: 0 },
-    [currentDocument?.width, currentDocument?.height, scaleRatio],
+    [page?.width, page?.height, scaleRatio],
   )
 
   return (
@@ -282,12 +296,10 @@ export function Workspace() {
             data-testid='workspace-viewport'
             className='grid size-full place-content-center-safe'
           >
-            {currentDocument ? (
+            {page ? (
               <ContextMenu
                 onOpenChange={(open) => {
-                  if (!open) {
-                    clearContextMenu()
-                  }
+                  if (!open) clearContextMenu()
                 }}
               >
                 <ContextMenuTrigger asChild>
@@ -295,7 +307,7 @@ export function Workspace() {
                     <div
                       ref={canvasRef}
                       data-testid='workspace-canvas'
-                      className='relative rounded border border-border bg-card shadow-sm'
+                      className='relative rounded-md border border-border bg-card shadow-sm'
                       style={{
                         ...canvasDimensions,
                         cursor: canvasCursor,
@@ -317,7 +329,7 @@ export function Workspace() {
                       <div className='absolute inset-0'>
                         <Image
                           data={imageData}
-                          dataKey={currentDocument.image}
+                          dataKey={imageHash ?? undefined}
                           transition={false}
                         />
                         <canvas
@@ -372,8 +384,6 @@ export function Workspace() {
                         />
                         {showTextBlocksOverlay && (
                           <TextBlockLayer
-                            selectedIndex={selectedBlockIndex}
-                            onSelect={setSelectedBlockIndex}
                             showSprites={!showRenderedImage}
                             scale={scaleRatio}
                             style={{ zIndex: 30 }}
@@ -390,7 +400,7 @@ export function Workspace() {
                       </div>
                       {draftBlock && (
                         <div
-                          className='pointer-events-none absolute rounded border-2 border-dashed border-primary bg-primary/10'
+                          className='pointer-events-none absolute rounded-md border-2 border-dashed border-primary bg-primary/10'
                           style={{
                             left: draftBlock.x * scaleRatio,
                             top: draftBlock.y * scaleRatio,
@@ -404,7 +414,7 @@ export function Workspace() {
                 </ContextMenuTrigger>
                 <ContextMenuContent className='min-w-32'>
                   <ContextMenuItem
-                    disabled={contextMenuBlockIndex === undefined}
+                    disabled={contextMenuNodeId === null}
                     onSelect={handleDeleteBlock}
                   >
                     {t('workspace.deleteBlock')}

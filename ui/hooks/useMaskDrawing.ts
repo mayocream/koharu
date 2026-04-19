@@ -1,72 +1,67 @@
 'use client'
 
-import { useQueryClient } from '@tanstack/react-query'
-import { useCallback, useRef } from 'react'
+import { useRef } from 'react'
 
-import { useCanvasDrawing } from '@/hooks/useCanvasDrawing'
+import { useCanvasDrawing, type CanvasDims } from '@/hooks/useCanvasDrawing'
 import type { PointerToDocumentFn } from '@/hooks/usePointerToDocument'
-import type { MappedDocument } from '@/hooks/useTextBlocks'
-import { getGetDocumentQueryKey, getListDocumentsQueryKey } from '@/lib/api/documents/documents'
-import {
-  updateMask as updateMaskApi,
-  inpaintRegion as inpaintRegionApi,
-} from '@/lib/api/regions/regions'
-import { normalizeErrorMessage } from '@/lib/errors'
+import { getConfig, startPipeline } from '@/lib/api/default/default'
+import type { Page } from '@/lib/api/schemas'
 import { useEditorUiStore } from '@/lib/stores/editorUiStore'
 import { usePreferencesStore } from '@/lib/stores/preferencesStore'
-import { convertToImageBitmap } from '@/lib/util'
-import type { ToolMode } from '@/types'
+import type { ToolMode } from '@/lib/types'
+
+async function convertBytesToBitmap(bytes: Uint8Array): Promise<ImageBitmap> {
+  const blob = new Blob([bytes as unknown as BlobPart])
+  return createImageBitmap(blob)
+}
 
 type MaskDrawingOptions = {
   mode: ToolMode
-  currentDocument: MappedDocument | null
+  page: Page | null
   segmentData?: Uint8Array
   pointerToDocument: PointerToDocumentFn
   showMask: boolean
   enabled: boolean
 }
 
+/**
+ * Repair-brush canvas that edits the `Mask { role: segment }` node. On stroke
+ * end:
+ *   1. PUT the updated mask to `/api/v1/pages/{id}/masks/segment` (raw PNG).
+ *   2. Kick a region-scoped inpainter via `POST /pipelines` so the inpainted
+ *      layer refreshes just over the touched area.
+ */
 export function useMaskDrawing({
   mode,
-  currentDocument,
+  page,
   segmentData,
   pointerToDocument,
   showMask,
   enabled,
 }: MaskDrawingOptions) {
-  const queryClient = useQueryClient()
   const inpaintQueueRef = useRef<Promise<void>>(Promise.resolve())
   const isEraseMode = mode === 'eraser'
   const isActive = enabled && (mode === 'repairBrush' || isEraseMode)
 
-  const invalidateDocument = useCallback(
-    async (documentId: string) => {
-      await queryClient.invalidateQueries({
-        queryKey: getGetDocumentQueryKey(documentId),
-      })
-      await queryClient.invalidateQueries({
-        queryKey: getListDocumentsQueryKey(),
-      })
-    },
-    [queryClient],
-  )
+  const dims: CanvasDims | null = page
+    ? { width: page.width, height: page.height, key: page.id }
+    : null
 
-  const { canvasRef, bind: rawBind } = useCanvasDrawing(currentDocument, pointerToDocument, {
+  const { canvasRef, bind: rawBind } = useCanvasDrawing(dims, pointerToDocument, {
     getColor: () => (isEraseMode ? '#000000' : '#ffffff'),
     blendMode: 'source-over',
     getBrushSize: () => usePreferencesStore.getState().brushConfig.size,
     enabled: showMask,
-    onCanvasInit: (ctx, doc) => {
-      // Fill black then draw existing segment mask on top
+    onCanvasInit: (ctx, d) => {
       ctx.fillStyle = '#000'
-      ctx.fillRect(0, 0, doc.width, doc.height)
+      ctx.fillRect(0, 0, d.width, d.height)
       if (segmentData) {
         void (async () => {
           try {
-            const bitmap = await convertToImageBitmap(segmentData)
+            const bitmap = await convertBytesToBitmap(segmentData)
             ctx.save()
-            ctx.clearRect(0, 0, doc.width, doc.height)
-            ctx.drawImage(bitmap, 0, 0, doc.width, doc.height)
+            ctx.clearRect(0, 0, d.width, d.height)
+            ctx.drawImage(bitmap, 0, 0, d.width, d.height)
             ctx.restore()
             bitmap.close()
           } catch (e) {
@@ -76,28 +71,27 @@ export function useMaskDrawing({
       }
     },
     onFinalizeFullCanvas: async (fullPng) => {
-      const documentId = useEditorUiStore.getState().currentDocumentId
-      if (!documentId) return
+      if (!page) return
       try {
-        await updateMaskApi(documentId, {
-          data: Array.from(fullPng),
+        const res = await fetch(`/api/v1/pages/${page.id}/masks/segment`, {
+          method: 'PUT',
+          headers: { 'Content-Type': 'image/png' },
+          body: fullPng as unknown as BodyInit,
         })
+        if (!res.ok) throw new Error(`mask PUT failed: ${res.status}`)
       } catch (e) {
-        useEditorUiStore.getState().showError(normalizeErrorMessage(e))
+        useEditorUiStore.getState().showError(String(e))
       }
     },
     onFinalize: async (_patch, region) => {
-      const documentId = useEditorUiStore.getState().currentDocumentId
-      if (!documentId) return
-      // Compute the inpaint region with margin
+      if (!page) return
       const brushSize = usePreferencesStore.getState().brushConfig.size
       const width = Math.max(brushSize, region.width)
       const margin = Math.min(width * 0.2, 32)
-      const doc = currentDocument!
       const x0 = Math.max(0, Math.floor(region.x - margin))
       const y0 = Math.max(0, Math.floor(region.y - margin))
-      const x1 = Math.min(doc.width, Math.ceil(region.x + region.width + margin))
-      const y1 = Math.min(doc.height, Math.ceil(region.y + region.height + margin))
+      const x1 = Math.min(page.width, Math.ceil(region.x + region.width + margin))
+      const y1 = Math.min(page.height, Math.ceil(region.y + region.height + margin))
       const inpaintRegion = {
         x: x0,
         y: y0,
@@ -108,18 +102,21 @@ export function useMaskDrawing({
         .catch(() => {})
         .then(async () => {
           try {
-            await inpaintRegionApi(documentId, { region: inpaintRegion })
-            await invalidateDocument(documentId)
+            const cfg = await getConfig()
+            const inpainter = cfg.pipeline?.inpainter || 'lama-manga'
+            await startPipeline({
+              steps: [inpainter],
+              pages: [page.id],
+              region: inpaintRegion,
+            })
             useEditorUiStore.getState().setShowInpaintedImage(true)
           } catch (e) {
-            useEditorUiStore.getState().showError(normalizeErrorMessage(e))
+            useEditorUiStore.getState().showError(String(e))
           }
         })
     },
   })
 
-  // Only allow drawing on the mask if the specific tools are active
   const bind = isActive ? rawBind : () => ({})
-
   return { canvasRef, visible: showMask, bind }
 }

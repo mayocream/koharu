@@ -11,7 +11,7 @@ import { Slider } from '@/components/ui/slider'
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip'
 import { useEditorUiStore } from '@/lib/stores/editorUiStore'
 import { usePreferencesStore } from '@/lib/stores/preferencesStore'
-import { ToolMode } from '@/types'
+import type { ToolMode } from '@/lib/types'
 
 type ModeDefinition = {
   value: ToolMode

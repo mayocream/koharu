@@ -8,7 +8,9 @@ import { AppInitializationSkeleton } from '@/components/AppInitializationSkeleto
 import { Workspace, StatusBar } from '@/components/Canvas'
 import { Navigator } from '@/components/Navigator'
 import { Panels } from '@/components/Panels'
-import { useGetMeta } from '@/lib/api/system/system'
+import { WelcomeScreen } from '@/components/WelcomeScreen'
+import { useScene } from '@/hooks/useScene'
+import { useGetMeta } from '@/lib/api/default/default'
 
 const LAYOUT_ID = 'koharu-main-layout-v2'
 
@@ -24,9 +26,14 @@ export default function Page() {
       staleTime: Infinity,
     },
   })
+  const hasProject = useScene().scene !== null
 
   if (!meta) {
     return <AppInitializationSkeleton />
+  }
+
+  if (!hasProject) {
+    return <WelcomeScreen />
   }
 
   return (

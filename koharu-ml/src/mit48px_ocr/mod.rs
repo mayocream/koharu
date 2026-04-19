@@ -6,14 +6,13 @@ use anyhow::{Context, Result};
 use candle_core::{DType, Device, Tensor};
 use candle_nn::VarBuilder;
 use image::{DynamicImage, RgbImage, imageops::FilterType};
-use koharu_core::TextBlock;
 use koharu_runtime::RuntimeManager;
 use serde::{Deserialize, Serialize};
 use tracing::instrument;
 
 use model::{Mit48pxModel, RawPrediction};
 
-use crate::{comic_text_detector::extract_text_block_regions, device, loading};
+use crate::{comic_text_detector::extract_text_block_regions, device, loading, types::TextRegion};
 
 const OCR_CHUNK_SIZE: usize = 16;
 const HF_REPO: &str = "mayocream/mit48px-ocr";
@@ -139,7 +138,7 @@ impl Mit48pxOcr {
     pub fn inference_text_blocks(
         &self,
         image: &DynamicImage,
-        blocks: &[TextBlock],
+        blocks: &[TextRegion],
     ) -> Result<Vec<Mit48pxBlockPrediction>> {
         let mut regions = Vec::new();
         let mut block_indices = Vec::new();

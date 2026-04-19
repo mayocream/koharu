@@ -1,0 +1,27 @@
+[package]
+name = "koharu-integration-tests"
+version = "0.0.0"
+edition = "2024"
+publish = false
+
+[dependencies]
+anyhow = { workspace = true }
+camino = { workspace = true }
+futures = { workspace = true }
+image = { workspace = true }
+koharu-app = { workspace = true }
+koharu-client = { path = "client" }
+koharu-core = { workspace = true }
+koharu-rpc = { workspace = true }
+koharu-runtime = { workspace = true }
+postcard = { workspace = true }
+reqwest = { workspace = true }
+serde = { workspace = true }
+serde_json = { workspace = true }
+tempfile = { workspace = true }
+tokio = { workspace = true }
+tracing = { workspace = true }
+uuid = { workspace = true }
+
+[dev-dependencies]
+tokio = { workspace = true }

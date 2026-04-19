@@ -2,20 +2,20 @@
 
 import { useEffect, useRef } from 'react'
 
-import type { MappedDocument } from '@/hooks/useTextBlocks'
-import { convertToImageBitmap } from '@/lib/util'
+import type { Page } from '@/lib/api/schemas'
+
+async function bytesToBitmap(bytes: Uint8Array): Promise<ImageBitmap> {
+  const blob = new Blob([bytes as unknown as BlobPart])
+  return createImageBitmap(blob)
+}
 
 type BrushLayerDisplayOptions = {
-  currentDocument: MappedDocument | null
+  page: Page | null
   brushLayerData?: Uint8Array
   visible: boolean
 }
 
-export function useBrushLayerDisplay({
-  currentDocument,
-  brushLayerData,
-  visible,
-}: BrushLayerDisplayOptions) {
+export function useBrushLayerDisplay({ page, brushLayerData, visible }: BrushLayerDisplayOptions) {
   const canvasRef = useRef<HTMLCanvasElement | null>(null)
   const ctxRef = useRef<CanvasRenderingContext2D | null>(null)
 
@@ -25,34 +25,31 @@ export function useBrushLayerDisplay({
     const ctx = canvas.getContext('2d')
     ctxRef.current = ctx
 
-    if (!currentDocument) {
+    if (!page) {
       canvas.width = 0
       canvas.height = 0
       ctx?.clearRect(0, 0, canvas.width, canvas.height)
       return
     }
 
-    const needsResize =
-      canvas.width !== currentDocument.width || canvas.height !== currentDocument.height
-
+    const needsResize = canvas.width !== page.width || canvas.height !== page.height
     if (needsResize) {
-      canvas.width = currentDocument.width
-      canvas.height = currentDocument.height
+      canvas.width = page.width
+      canvas.height = page.height
     }
 
     let cancelled = false
-
     if (visible && brushLayerData) {
       void (async () => {
         try {
-          const bitmap = await convertToImageBitmap(brushLayerData)
+          const bitmap = await bytesToBitmap(brushLayerData)
           if (cancelled) {
             bitmap.close()
             return
           }
           ctx?.save()
           ctx?.clearRect(0, 0, canvas.width, canvas.height)
-          ctx?.drawImage(bitmap, 0, 0, currentDocument.width, currentDocument.height)
+          ctx?.drawImage(bitmap, 0, 0, page.width, page.height)
           ctx?.restore()
           bitmap.close()
         } catch (error) {
@@ -66,16 +63,7 @@ export function useBrushLayerDisplay({
     return () => {
       cancelled = true
     }
-  }, [
-    currentDocument?.id,
-    currentDocument?.width,
-    currentDocument?.height,
-    brushLayerData,
-    visible,
-  ])
+  }, [page?.id, page?.width, page?.height, brushLayerData, visible])
 
-  return {
-    canvasRef,
-    visible,
-  }
+  return { canvasRef, visible }
 }

@@ -4,12 +4,11 @@ use std::{collections::BTreeMap, time::Instant};
 
 use anyhow::{Context, Result, bail};
 use image::{DynamicImage, GenericImageView, imageops::FilterType};
-use koharu_core::TextBlock;
 use koharu_runtime::RuntimeManager;
 use serde::{Deserialize, Serialize};
 use tracing::instrument;
 
-use crate::{Device, device, loading};
+use crate::{Device, device, loading, types::TextRegion};
 
 use self::model::{RTDetrV2ForObjectDetection, RTDetrV2Outputs};
 
@@ -21,21 +20,21 @@ koharu_runtime::declare_hf_model_package!(
     id: "model:comic-text-bubble-detector:config",
     repo: "ogkalu/comic-text-and-bubble-detector",
     file: "config.json",
-    bootstrap: true,
+    bootstrap: false,
     order: 113,
 );
 koharu_runtime::declare_hf_model_package!(
     id: "model:comic-text-bubble-detector:preprocessor-config",
     repo: "ogkalu/comic-text-and-bubble-detector",
     file: "preprocessor_config.json",
-    bootstrap: true,
+    bootstrap: false,
     order: 114,
 );
 koharu_runtime::declare_hf_model_package!(
     id: "model:comic-text-bubble-detector:weights",
     repo: "ogkalu/comic-text-and-bubble-detector",
     file: "model.safetensors",
-    bootstrap: true,
+    bootstrap: false,
     order: 115,
 );
 
@@ -134,7 +133,7 @@ pub struct ComicTextBubbleDetection {
     pub image_width: u32,
     pub image_height: u32,
     pub detections: Vec<ComicTextBubbleRegion>,
-    pub text_blocks: Vec<TextBlock>,
+    pub text_blocks: Vec<TextRegion>,
 }
 
 #[derive(Debug, Clone, Serialize)]
@@ -459,7 +458,7 @@ fn post_process_object_detection(
 fn detections_to_text_blocks(
     image_dimensions: (u32, u32),
     detections: &[ComicTextBubbleRegion],
-) -> Vec<TextBlock> {
+) -> Vec<TextRegion> {
     let text_boxes = merge_text_regions(
         detections
             .iter()
@@ -480,7 +479,7 @@ fn detections_to_text_blocks(
             continue;
         }
 
-        let block = TextBlock {
+        let block = TextRegion {
             x: bbox[0],
             y: bbox[1],
             width,

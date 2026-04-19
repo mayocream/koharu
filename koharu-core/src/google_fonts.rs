@@ -2,7 +2,7 @@ use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
 use utoipa::ToSchema;
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, JsonSchema, ToSchema)]
 #[serde(rename_all = "camelCase")]
 pub struct GoogleFontVariant {
     pub style: String,
@@ -10,7 +10,7 @@ pub struct GoogleFontVariant {
     pub filename: String,
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, JsonSchema, ToSchema)]
 #[serde(rename_all = "camelCase")]
 pub struct GoogleFontEntry {
     pub family: String,
@@ -19,7 +19,7 @@ pub struct GoogleFontEntry {
     pub variants: Vec<GoogleFontVariant>,
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, JsonSchema, ToSchema)]
 pub struct GoogleFontCatalog {
     pub fonts: Vec<GoogleFontEntry>,
 }

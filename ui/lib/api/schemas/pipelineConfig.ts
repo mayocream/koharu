@@ -10,7 +10,7 @@ Values are engine IDs (e.g. "pp-doclayout-v3", "comic-text-detector").
 Empty string means use default.
  */
 export interface PipelineConfig {
-  bubble_detector?: string
+  bubble_segmenter?: string
   detector?: string
   font_detector?: string
   inpainter?: string

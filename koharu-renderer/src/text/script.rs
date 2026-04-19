@@ -1,17 +1,15 @@
 use harfrust::{Direction, Script, Tag};
 use icu::properties::{CodePointMapData, props::Script as IcuScript};
-use koharu_core::TextBlock;
 use unicode_bidi::BidiInfo;
 
 use crate::layout::WritingMode;
+use crate::types::RenderBlock;
 
-pub fn writing_mode_for_block(text_block: &TextBlock) -> WritingMode {
-    let text = match &text_block.translation {
-        Some(t) => t,
-        None => return WritingMode::Horizontal,
-    };
-
-    if !is_cjk_text(text) || text_block.width >= text_block.height {
+pub fn writing_mode_for_block(block: &RenderBlock) -> WritingMode {
+    if block.text.is_empty() {
+        return WritingMode::Horizontal;
+    }
+    if !is_cjk_text(&block.text) || block.width >= block.height {
         WritingMode::Horizontal
     } else {
         WritingMode::VerticalRl
@@ -217,9 +215,8 @@ fn is_cjk_text(text: &str) -> bool {
 
 #[cfg(test)]
 mod tests {
-    use koharu_core::{TextBlock, TextDirection};
-
     use crate::layout::WritingMode;
+    use crate::types::RenderBlock;
 
     use super::{
         font_families_for_text, is_latin_only, normalize_translation_for_layout,
@@ -248,10 +245,10 @@ mod tests {
 
     #[test]
     fn writing_mode_uses_cjk_tall_box_heuristic() {
-        let block = TextBlock {
+        let block = RenderBlock {
             width: 40.0,
             height: 120.0,
-            translation: Some("縦書き".to_string()),
+            text: "縦書き".to_string(),
             ..Default::default()
         };
 
@@ -259,13 +256,11 @@ mod tests {
     }
 
     #[test]
-    fn writing_mode_ignores_stale_rendered_direction() {
-        let block = TextBlock {
+    fn writing_mode_uses_latin_text_even_in_tall_box() {
+        let block = RenderBlock {
             width: 40.0,
             height: 120.0,
-            translation: Some("HELLO".to_string()),
-            source_direction: Some(TextDirection::Horizontal),
-            rendered_direction: Some(TextDirection::Vertical),
+            text: "HELLO".to_string(),
             ..Default::default()
         };
 

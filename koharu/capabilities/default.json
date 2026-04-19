@@ -23,6 +23,21 @@
     "core:window:allow-internal-toggle-maximize",
     "opener:default",
     "process:default",
-    "updater:default"
+    "updater:default",
+    "dialog:default",
+    "dialog:allow-open",
+    "dialog:allow-save",
+    "fs:default",
+    "fs:allow-read-file",
+    "fs:allow-write-file",
+    "fs:allow-read-dir",
+    "fs:allow-mkdir",
+    "fs:allow-exists",
+    {
+      "identifier": "fs:scope",
+      "allow": [
+        { "path": "**" }
+      ]
+    }
   ]
 }

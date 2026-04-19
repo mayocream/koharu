@@ -14,24 +14,34 @@ publish.workspace = true
 [dependencies]
 koharu-app = { workspace = true }
 koharu-core = { workspace = true }
+koharu-llm = { workspace = true }
 koharu-psd = { workspace = true }
 koharu-runtime = { workspace = true }
 anyhow = { workspace = true }
+async-stream = { workspace = true }
 axum = { workspace = true }
-base64 = { workspace = true }
+camino = { workspace = true }
+dashmap = { workspace = true }
+futures = { workspace = true }
 image = { workspace = true }
-imageproc = { workspace = true }
+natord = { workspace = true }
+postcard = { workspace = true }
+rayon = { workspace = true }
 rmcp = { workspace = true }
-rmp-serde = { workspace = true }
-rmpv = { workspace = true }
+schemars = { workspace = true }
 serde = { workspace = true }
-serde_bytes = { workspace = true }
 serde_json = { workspace = true }
+thiserror = { workspace = true }
 tokio = { workspace = true }
+tokio-stream = { workspace = true }
 tower-http = { workspace = true }
+tracing = { workspace = true }
 utoipa = { workspace = true }
 utoipa-axum = { workspace = true }
-tracing = { workspace = true }
+uuid = { workspace = true }
+
+[dev-dependencies]
+insta = { workspace = true }
 
 [[bin]]
 name = "openapi"

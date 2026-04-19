@@ -11,7 +11,7 @@ use skrifa::{
 use crate::font::{Font, font_key};
 use crate::shape::shape_script_runs;
 use crate::text::script::shaping_direction_for_text;
-use koharu_core::TextAlign;
+use crate::types::TextAlign;
 
 pub use crate::segment::{LineBreakOpportunity, LineBreaker, LineSegment};
 pub use crate::shape::{PositionedGlyph, ShapedRun, ShapingOptions, TextShaper};
@@ -751,10 +751,11 @@ mod tests {
     }
 
     fn assert_approx_eq(actual: f32, expected: f32) {
-        if actual.is_infinite() && expected.is_infinite() {
-            if actual.is_sign_positive() == expected.is_sign_positive() {
-                return;
-            }
+        if actual.is_infinite()
+            && expected.is_infinite()
+            && actual.is_sign_positive() == expected.is_sign_positive()
+        {
+            return;
         }
         let eps = 1e-4;
         assert!(
@@ -845,7 +846,7 @@ mod tests {
         let layout = TextLayout::new(&font, Some(16.0))
             .with_writing_mode(WritingMode::VerticalRl)
             .with_max_width(max_width)
-            .with_alignment(koharu_core::TextAlign::Center)
+            .with_alignment(TextAlign::Center)
             .run("A")?;
 
         assert_eq!(layout.width, max_width);
@@ -863,13 +864,39 @@ mod tests {
         let layout = TextLayout::new(&font, Some(16.0))
             .with_writing_mode(WritingMode::VerticalRl)
             .with_max_width(max_width)
-            .with_alignment(koharu_core::TextAlign::Left)
+            .with_alignment(TextAlign::Left)
             .run("A")?;
 
         assert_eq!(layout.width, max_width);
         // The block should NOT be shifted horizontally.
         assert!(layout.lines[0].baseline.0 < 20.0);
 
+        Ok(())
+    }
+
+    #[test]
+    fn horizontal_center_alignment_centres_short_lines() -> anyhow::Result<()> {
+        // Two lines of clearly different widths — a wide "HELLOWORLD" and
+        // a narrow "HI". In a max_width wider than the long line, the
+        // narrow line should be offset so its centre matches the long
+        // line's centre (and the sprite centre).
+        let font = any_system_font();
+        let max_width = 400.0;
+        let layout = TextLayout::new(&font, Some(20.0))
+            .with_max_width(max_width)
+            .with_alignment(TextAlign::Center)
+            .run("HELLOWORLD\nHI")?;
+
+        assert_eq!(layout.lines.len(), 2);
+        let w0 = layout.lines[0].advance;
+        let w1 = layout.lines[1].advance;
+        let c0 = layout.lines[0].baseline.0 + w0 * 0.5;
+        let c1 = layout.lines[1].baseline.0 + w1 * 0.5;
+        // Line centres must coincide (within rounding / float slack).
+        assert!(
+            (c0 - c1).abs() < 1.0,
+            "expected line centres to match, got c0={c0} c1={c1}",
+        );
         Ok(())
     }
 

@@ -8,7 +8,7 @@ import { usePreferencesStore } from '@/lib/stores/preferencesStore'
 export function useBrushCursor(
   canvasRef: React.RefObject<HTMLDivElement | null>,
   mode: string,
-  currentDocumentId?: string,
+  pageKey?: string,
 ) {
   const brushCursorRef = useRef<HTMLDivElement>(null)
   const cachedRectRef = useRef<DOMRect | null>(null)
@@ -88,7 +88,8 @@ export function useBrushCursor(
       window.removeEventListener('scroll', refresh, true)
       window.removeEventListener('resize', refresh)
     }
-  }, [canvasRef, currentDocumentId])
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [canvasRef, pageKey])
 
   // Separate effect for visibility to avoid re-attaching listeners
   useEffect(() => {

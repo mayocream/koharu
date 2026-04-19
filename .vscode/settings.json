@@ -1,0 +1,3 @@
+{
+  "tailwindCSS.lint.suggestCanonicalClasses": "ignore"
+}

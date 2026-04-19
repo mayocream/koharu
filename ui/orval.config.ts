@@ -9,6 +9,10 @@ export default defineConfig({
       client: 'react-query',
       mode: 'tags-split',
       baseUrl: '/api/v1',
+      mock: {
+        type: 'msw',
+        delay: 0,
+      },
       override: {
         fetch: {
           includeHttpResponseReturnType: false,
@@ -18,7 +22,10 @@ export default defineConfig({
           name: 'fetchApi',
         },
         operations: {
-          importDocuments: {
+          createPages: {
+            formData: true,
+          },
+          addImageLayer: {
             formData: true,
           },
         },

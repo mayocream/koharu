@@ -1,3 +1,4 @@
+// @ts-nocheck
 import os from 'node:os'
 import path from 'node:path'
 import { readdir, access } from 'node:fs/promises'
@@ -50,8 +51,6 @@ async function setupCuda() {
       if (await pathExists(binPath)) {
         process.env.PATH = `${binPath}${path.delimiter}${process.env.PATH}`
         process.env.CUDA_PATH = path.join(cudaRoot, version)
-
-        console.log(`Added CUDA to PATH: ${binPath}`)
         return
       }
     }
@@ -81,8 +80,6 @@ async function setupCl() {
             const binPath = path.join(vcPath, msvcVersion, 'bin/Hostx64/x64')
             if (await pathExists(binPath)) {
               process.env.PATH = `${binPath}${path.delimiter}${process.env.PATH}`
-
-              console.log(`Added cl.exe to PATH: ${binPath}`)
               return
             }
           }

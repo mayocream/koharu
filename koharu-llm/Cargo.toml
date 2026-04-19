@@ -34,7 +34,6 @@ flate2 = { workspace = true }
 futures = { workspace = true }
 hf-hub = { workspace = true }
 image = { workspace = true }
-koharu-core = { workspace = true }
 koharu-runtime = { workspace = true }
 libloading = { workspace = true }
 minijinja = { workspace = true }

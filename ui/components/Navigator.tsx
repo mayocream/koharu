@@ -2,28 +2,30 @@
 
 import { useVirtualizer } from '@tanstack/react-virtual'
 import { LayoutGridIcon } from 'lucide-react'
-import { useRef, useState } from 'react'
+import { useMemo, useRef, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 
 import { PageManagerDialog } from '@/components/PageManagerDialog'
 import { Button } from '@/components/ui/button'
 import { ScrollArea } from '@/components/ui/scroll-area'
-import { useListDocuments, getGetDocumentThumbnailUrl } from '@/lib/api/documents/documents'
-import { useEditorUiStore } from '@/lib/stores/editorUiStore'
+import { useScene } from '@/hooks/useScene'
+import { getGetPageThumbnailUrl } from '@/lib/api/default/default'
+import { useSelectionStore } from '@/lib/stores/selectionStore'
 
 const THUMBNAIL_DPR =
   typeof window !== 'undefined' ? Math.min(Math.ceil(window.devicePixelRatio || 1), 3) : 2
 
-// Fixed row height: thumbnail (aspect 3:4 in ~150px width ≈ 200px) + page number + padding
 const ROW_HEIGHT = 230
 const OVERSCAN = 5
 
 export function Navigator() {
-  const { data: documents = [] } = useListDocuments()
-  const totalPages = documents.length
-  const currentDocumentId = useEditorUiStore((state) => state.currentDocumentId)
-  const setCurrentDocumentId = useEditorUiStore((state) => state.setCurrentDocumentId)
-  const currentDocumentIndex = documents.findIndex((d) => d.id === currentDocumentId)
+  const { scene } = useScene()
+  const pagesMap = scene?.pages
+  const pages = useMemo(() => (pagesMap ? Object.values(pagesMap) : []), [pagesMap])
+  const totalPages = pages.length
+  const pageId = useSelectionStore((s) => s.pageId)
+  const setPage = useSelectionStore((s) => s.setPage)
+  const currentIndex = pages.findIndex((p) => p.id === pageId)
   const viewportRef = useRef<HTMLDivElement | null>(null)
   const { t } = useTranslation()
   const [pageManagerOpen, setPageManagerOpen] = useState(false)
@@ -67,7 +69,7 @@ export function Navigator() {
       <div className='flex items-center gap-1.5 px-2 py-1.5 text-xs text-muted-foreground'>
         {totalPages > 0 ? (
           <span className='bg-secondary px-2 py-0.5 font-mono text-[10px] text-secondary-foreground'>
-            #{currentDocumentIndex + 1}
+            #{currentIndex + 1}
           </span>
         ) : (
           <span>{t('navigator.prompt')}</span>
@@ -77,10 +79,10 @@ export function Navigator() {
       <ScrollArea className='min-h-0 flex-1' viewportRef={viewportRef}>
         <div className='relative w-full' style={{ height: virtualizer.getTotalSize() }}>
           {virtualizer.getVirtualItems().map((virtualRow) => {
-            const doc = documents[virtualRow.index]
+            const page = pages[virtualRow.index]
             return (
               <div
-                key={doc?.id ?? virtualRow.index}
+                key={page?.id ?? virtualRow.index}
                 className='absolute left-0 w-full px-1.5 pb-1'
                 style={{
                   height: ROW_HEIGHT,
@@ -90,9 +92,9 @@ export function Navigator() {
               >
                 <PagePreview
                   index={virtualRow.index}
-                  documentId={doc?.id}
-                  selected={doc?.id === currentDocumentId}
-                  onSelect={() => doc && setCurrentDocumentId(doc.id)}
+                  pageId={page?.id}
+                  selected={page?.id === pageId}
+                  onSelect={() => page && setPage(page.id)}
                 />
               </div>
             )
@@ -107,15 +109,13 @@ export function Navigator() {
 
 type PagePreviewProps = {
   index: number
-  documentId?: string
+  pageId?: string
   selected: boolean
   onSelect: () => void
 }
 
-function PagePreview({ index, documentId, selected, onSelect }: PagePreviewProps) {
-  const src = documentId
-    ? getGetDocumentThumbnailUrl(documentId, { size: 200 * THUMBNAIL_DPR })
-    : undefined
+function PagePreview({ index, pageId, selected, onSelect }: PagePreviewProps) {
+  const src = pageId ? `${getGetPageThumbnailUrl(pageId)}?size=${200 * THUMBNAIL_DPR}` : undefined
 
   return (
     <Button

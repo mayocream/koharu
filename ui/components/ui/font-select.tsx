@@ -6,7 +6,7 @@ import { useRef, useState, useMemo, useCallback, useEffect } from 'react'
 
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover'
 import { ScrollArea, ScrollBar } from '@/components/ui/scroll-area'
-import { fetchGoogleFont } from '@/lib/api/system/system'
+import { fetchGoogleFont, getGetGoogleFontFileUrl } from '@/lib/api/default/default'
 import { cn } from '@/lib/utils'
 
 const ITEM_HEIGHT = 28
@@ -48,7 +48,7 @@ function useGoogleFontPreview(family: string, source: string, isVisible: boolean
     fetchGoogleFont(encodeURIComponent(family))
       .then(() => {
         if (cancelled) return
-        const url = `/api/v1/fonts/google/${encodeURIComponent(family)}/file`
+        const url = getGetGoogleFontFileUrl(encodeURIComponent(family), 'file')
         const face = new FontFace(family, `url(${url})`)
         return face.load()
       })

@@ -7,12 +7,14 @@
     "build": "bun run scripts/dev.ts tauri build --no-bundle",
     "cargo": "bun run scripts/dev.ts cargo",
     "lint:ui": "bun run --filter ui lint",
+    "test:ui": "bun run --filter ui test",
     "format": "oxfmt ui package.json .oxfmtrc.json .vscode",
     "format:check": "oxfmt --check ui package.json .oxfmtrc.json .vscode",
-    "test:e2e": "playwright test"
+    "generate:openapi": "cargo run -p koharu-rpc --bin openapi -- ui/openapi.json",
+    "generate:client": "openapi-generator-cli generate -i ui/openapi.json -g rust -o tests/integration-tests/client --package-name koharu-client --additional-properties=library=reqwest,supportAsync=true,preferUnsignedInt=true,packageVersion=0.0.0"
   },
   "devDependencies": {
-    "@playwright/test": "^1.59.1",
+    "@openapitools/openapi-generator-cli": "^2.31.1",
     "@tauri-apps/cli": "^2.10.1",
     "git-cliff": "^2.12.0",
     "oxfmt": "^0.45.0"

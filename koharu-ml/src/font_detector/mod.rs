@@ -20,18 +20,18 @@ koharu_runtime::declare_hf_model_package!(
     id: "model:font-detector:weights",
     repo: "fffonion/yuzumarker-font-detection",
     file: "yuzumarker-font-detection.safetensors",
-    bootstrap: true,
+    bootstrap: false,
     order: 140,
 );
 koharu_runtime::declare_hf_model_package!(
     id: "model:font-detector:labels",
     repo: "fffonion/yuzumarker-font-detection",
     file: "font-labels-ex.json",
-    bootstrap: true,
+    bootstrap: false,
     order: 141,
 );
 
-pub use koharu_core::{FontPrediction, NamedFontPrediction, TextDirection, TopFont};
+pub use crate::types::{FontPrediction, NamedFontPrediction, TextDirection, TopFont};
 
 pub struct FontDetector {
     model: models::Model,

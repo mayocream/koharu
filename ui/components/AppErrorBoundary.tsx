@@ -6,7 +6,7 @@ import { type ReactNode } from 'react'
 import { ErrorBoundary, type FallbackProps } from 'react-error-boundary'
 
 import { Button } from '@/components/ui/button'
-import { useEditorUiStore } from '@/lib/stores/editorUiStore'
+import { useSelectionStore } from '@/lib/stores/selectionStore'
 
 function ErrorFallback({ error, resetErrorBoundary }: FallbackProps) {
   const queryClient = useQueryClient()
@@ -24,11 +24,11 @@ function ErrorFallback({ error, resetErrorBoundary }: FallbackProps) {
           size='sm'
           variant='outline'
           onClick={() => {
-            useEditorUiStore.getState().resetUiState()
+            useSelectionStore.getState().clear()
             resetErrorBoundary()
           }}
         >
-          Reset UI State
+          Reset Selection
         </Button>
         <Button
           size='sm'

@@ -2,6 +2,7 @@
 
 import { useEffect, useMemo } from 'react'
 
+import { redoOp, undoOp } from '@/lib/io/scene'
 import { getPlatform, formatShortcut, isModifierKey } from '@/lib/shortcutUtils'
 import { useEditorUiStore } from '@/lib/stores/editorUiStore'
 import { usePreferencesStore } from '@/lib/stores/preferencesStore'
@@ -13,11 +14,28 @@ export function useKeyboardShortcuts() {
 
   useEffect(() => {
     const handleKeyDown = (event: KeyboardEvent) => {
-      // Skip if user is typing in an input
       const target = event.target as HTMLElement
-      if (target.tagName === 'INPUT' || target.tagName === 'TEXTAREA' || target.isContentEditable) {
+      const inTextField =
+        target.tagName === 'INPUT' || target.tagName === 'TEXTAREA' || target.isContentEditable
+
+      // Undo / Redo — work globally, including from within text fields (the
+      // browser's native `z` on an input would only undo keystrokes, not
+      // scene ops). Cmd on macOS, Ctrl elsewhere.
+      const mod = isMac ? event.metaKey : event.ctrlKey
+      if (mod && (event.key === 'z' || event.key === 'Z')) {
+        event.preventDefault()
+        if (event.shiftKey) void redoOp()
+        else void undoOp()
         return
       }
+      if (mod && (event.key === 'y' || event.key === 'Y')) {
+        event.preventDefault()
+        void redoOp()
+        return
+      }
+
+      // Every other shortcut is tool-level and should not fire while typing.
+      if (inTextField) return
 
       // Early exit for modifier-only events
       if (isModifierKey(event.key)) {
@@ -55,5 +73,6 @@ export function useKeyboardShortcuts() {
 
     window.addEventListener('keydown', handleKeyDown)
     return () => window.removeEventListener('keydown', handleKeyDown)
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [isMac, setMode])
 }

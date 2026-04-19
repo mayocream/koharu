@@ -7,12 +7,12 @@
   "paths": {
     "/blobs/{hash}": {
       "get": {
-        "tags": ["blobs"],
-        "operationId": "getBlob",
+        "operationId": "get_blob",
         "parameters": [
           {
             "name": "hash",
             "in": "path",
+            "description": "Blake3 hash of the blob",
             "required": true,
             "schema": {
               "type": "string"
@@ -23,36 +23,7 @@
           "200": {
             "description": "",
             "content": {
-              "application/octet-stream": {
-                "schema": {
-                  "type": "array",
-                  "items": {
-                    "type": "integer",
-                    "format": "int32",
-                    "minimum": 0
-                  }
-                }
-              }
-            }
-          },
-          "404": {
-            "description": "",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ApiError"
-                }
-              }
-            }
-          },
-          "503": {
-            "description": "",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ApiError"
-                }
-              }
+              "application/octet-stream": {}
             }
           }
         }
@@ -60,833 +31,27 @@
     },
     "/config": {
       "get": {
-        "tags": ["system"],
-        "operationId": "getConfig",
+        "operationId": "get_config",
         "responses": {
           "200": {
             "description": "",
             "content": {
               "application/json": {
                 "schema": {
-                  "type": "object",
-                  "properties": {
-                    "data": {
-                      "oneOf": [
-                        {
-                          "$ref": "#/components/schemas/DataConfig"
-                        }
-                      ],
-                      "default": {
-                        "path": "C:\\Users\\Mayo\\AppData\\Local\\Koharu"
-                      }
-                    },
-                    "http": {
-                      "oneOf": [
-                        {
-                          "$ref": "#/components/schemas/HttpConfig"
-                        }
-                      ],
-                      "default": {
-                        "connect_timeout": 20,
-                        "max_retries": 3,
-                        "read_timeout": 300
-                      }
-                    },
-                    "pipeline": {
-                      "oneOf": [
-                        {
-                          "$ref": "#/components/schemas/PipelineConfig"
-                        }
-                      ],
-                      "default": {
-                        "bubble_detector": "comic-text-bubble-detector",
-                        "detector": "comic-text-bubble-detector",
-                        "font_detector": "yuzumarker-font-detection",
-                        "inpainter": "aot-inpainting",
-                        "ocr": "paddle-ocr-vl-1.5",
-                        "renderer": "koharu-renderer",
-                        "segmenter": "comic-text-detector-seg",
-                        "translator": "llm"
-                      }
-                    },
-                    "providers": {
-                      "type": "array",
-                      "items": {
-                        "$ref": "#/components/schemas/ProviderConfig"
-                      },
-                      "default": []
-                    }
-                  }
-                }
-              }
-            }
-          },
-          "503": {
-            "description": "",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ApiError"
+                  "$ref": "#/components/schemas/AppConfig"
                 }
               }
             }
           }
         }
       },
-      "put": {
-        "tags": ["system"],
-        "operationId": "updateConfig",
-        "requestBody": {
-          "content": {
-            "application/json": {
-              "schema": {
-                "type": "object",
-                "properties": {
-                  "data": {
-                    "oneOf": [
-                      {
-                        "$ref": "#/components/schemas/DataConfig"
-                      }
-                    ],
-                    "default": {
-                      "path": "C:\\Users\\Mayo\\AppData\\Local\\Koharu"
-                    }
-                  },
-                  "http": {
-                    "oneOf": [
-                      {
-                        "$ref": "#/components/schemas/HttpConfig"
-                      }
-                    ],
-                    "default": {
-                      "connect_timeout": 20,
-                      "max_retries": 3,
-                      "read_timeout": 300
-                    }
-                  },
-                  "pipeline": {
-                    "oneOf": [
-                      {
-                        "$ref": "#/components/schemas/PipelineConfig"
-                      }
-                    ],
-                    "default": {
-                      "bubble_detector": "comic-text-bubble-detector",
-                      "detector": "comic-text-bubble-detector",
-                      "font_detector": "yuzumarker-font-detection",
-                      "inpainter": "aot-inpainting",
-                      "ocr": "paddle-ocr-vl-1.5",
-                      "renderer": "koharu-renderer",
-                      "segmenter": "comic-text-detector-seg",
-                      "translator": "llm"
-                    }
-                  },
-                  "providers": {
-                    "type": "array",
-                    "items": {
-                      "$ref": "#/components/schemas/ProviderConfig"
-                    },
-                    "default": []
-                  }
-                }
-              }
-            }
-          },
-          "required": true
-        },
-        "responses": {
-          "200": {
-            "description": "",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "type": "object",
-                  "properties": {
-                    "data": {
-                      "oneOf": [
-                        {
-                          "$ref": "#/components/schemas/DataConfig"
-                        }
-                      ],
-                      "default": {
-                        "path": "C:\\Users\\Mayo\\AppData\\Local\\Koharu"
-                      }
-                    },
-                    "http": {
-                      "oneOf": [
-                        {
-                          "$ref": "#/components/schemas/HttpConfig"
-                        }
-                      ],
-                      "default": {
-                        "connect_timeout": 20,
-                        "max_retries": 3,
-                        "read_timeout": 300
-                      }
-                    },
-                    "pipeline": {
-                      "oneOf": [
-                        {
-                          "$ref": "#/components/schemas/PipelineConfig"
-                        }
-                      ],
-                      "default": {
-                        "bubble_detector": "comic-text-bubble-detector",
-                        "detector": "comic-text-bubble-detector",
-                        "font_detector": "yuzumarker-font-detection",
-                        "inpainter": "aot-inpainting",
-                        "ocr": "paddle-ocr-vl-1.5",
-                        "renderer": "koharu-renderer",
-                        "segmenter": "comic-text-detector-seg",
-                        "translator": "llm"
-                      }
-                    },
-                    "providers": {
-                      "type": "array",
-                      "items": {
-                        "$ref": "#/components/schemas/ProviderConfig"
-                      },
-                      "default": []
-                    }
-                  }
-                }
-              }
-            }
-          },
-          "400": {
-            "description": "",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ApiError"
-                }
-              }
-            }
-          }
-        }
-      }
-    },
-    "/documents": {
-      "get": {
-        "tags": ["documents"],
-        "operationId": "listDocuments",
-        "responses": {
-          "200": {
-            "description": "",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "type": "array",
-                  "items": {
-                    "$ref": "#/components/schemas/DocumentSummary"
-                  }
-                }
-              }
-            }
-          },
-          "503": {
-            "description": "",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ApiError"
-                }
-              }
-            }
-          }
-        }
-      },
-      "post": {
-        "tags": ["documents"],
-        "operationId": "importDocuments",
-        "parameters": [
-          {
-            "name": "mode",
-            "in": "query",
-            "required": false,
-            "schema": {
-              "oneOf": [
-                {
-                  "type": "null"
-                },
-                {
-                  "$ref": "#/components/schemas/ImportMode"
-                }
-              ]
-            }
-          }
-        ],
-        "requestBody": {
-          "content": {
-            "multipart/form-data": {
-              "schema": {
-                "type": "object",
-                "required": ["files"],
-                "properties": {
-                  "files": {
-                    "type": "array",
-                    "items": {
-                      "type": "string",
-                      "format": "binary"
-                    }
-                  }
-                }
-              }
-            }
-          },
-          "required": true
-        },
-        "responses": {
-          "200": {
-            "description": "",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ImportResult"
-                }
-              }
-            }
-          },
-          "400": {
-            "description": "",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ApiError"
-                }
-              }
-            }
-          },
-          "503": {
-            "description": "",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ApiError"
-                }
-              }
-            }
-          }
-        }
-      }
-    },
-    "/documents/order": {
-      "put": {
-        "tags": ["documents"],
-        "operationId": "reorderDocuments",
-        "requestBody": {
-          "content": {
-            "application/json": {
-              "schema": {
-                "$ref": "#/components/schemas/ReorderRequest"
-              }
-            }
-          },
-          "required": true
-        },
-        "responses": {
-          "200": {
-            "description": "",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "type": "array",
-                  "items": {
-                    "$ref": "#/components/schemas/DocumentSummary"
-                  }
-                }
-              }
-            }
-          },
-          "400": {
-            "description": "",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ApiError"
-                }
-              }
-            }
-          },
-          "503": {
-            "description": "",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ApiError"
-                }
-              }
-            }
-          }
-        }
-      }
-    },
-    "/documents/{document_id}": {
-      "get": {
-        "tags": ["documents"],
-        "operationId": "getDocument",
-        "parameters": [
-          {
-            "name": "document_id",
-            "in": "path",
-            "required": true,
-            "schema": {
-              "type": "string"
-            }
-          }
-        ],
-        "responses": {
-          "200": {
-            "description": "",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/DocumentDetail"
-                }
-              }
-            }
-          },
-          "404": {
-            "description": "",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ApiError"
-                }
-              }
-            }
-          },
-          "503": {
-            "description": "",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ApiError"
-                }
-              }
-            }
-          }
-        }
-      }
-    },
-    "/documents/{document_id}/brush-layer": {
-      "put": {
-        "tags": ["regions"],
-        "operationId": "updateBrushLayer",
-        "parameters": [
-          {
-            "name": "document_id",
-            "in": "path",
-            "required": true,
-            "schema": {
-              "type": "string"
-            }
-          }
-        ],
-        "requestBody": {
-          "content": {
-            "application/json": {
-              "schema": {
-                "$ref": "#/components/schemas/BrushRegionRequest"
-              }
-            }
-          },
-          "required": true
-        },
-        "responses": {
-          "204": {
-            "description": ""
-          },
-          "404": {
-            "description": "",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ApiError"
-                }
-              }
-            }
-          },
-          "503": {
-            "description": "",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ApiError"
-                }
-              }
-            }
-          }
-        }
-      }
-    },
-    "/documents/{document_id}/detect": {
-      "post": {
-        "tags": ["processing"],
-        "operationId": "detectDocument",
-        "parameters": [
-          {
-            "name": "document_id",
-            "in": "path",
-            "required": true,
-            "schema": {
-              "type": "string"
-            }
-          }
-        ],
-        "responses": {
-          "204": {
-            "description": ""
-          },
-          "404": {
-            "description": "",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ApiError"
-                }
-              }
-            }
-          },
-          "503": {
-            "description": "",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ApiError"
-                }
-              }
-            }
-          }
-        }
-      }
-    },
-    "/documents/{document_id}/export/{format}": {
-      "get": {
-        "tags": ["exports"],
-        "operationId": "exportDocument",
-        "parameters": [
-          {
-            "name": "document_id",
-            "in": "path",
-            "required": true,
-            "schema": {
-              "type": "string"
-            }
-          },
-          {
-            "name": "format",
-            "in": "path",
-            "required": true,
-            "schema": {
-              "type": "string"
-            }
-          },
-          {
-            "name": "layer",
-            "in": "query",
-            "required": false,
-            "schema": {
-              "oneOf": [
-                {
-                  "type": "null"
-                },
-                {
-                  "$ref": "#/components/schemas/ExportLayer"
-                }
-              ]
-            }
-          }
-        ],
-        "responses": {
-          "200": {
-            "description": "",
-            "content": {
-              "application/octet-stream": {
-                "schema": {
-                  "type": "string"
-                }
-              }
-            }
-          },
-          "404": {
-            "description": "",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ApiError"
-                }
-              }
-            }
-          },
-          "503": {
-            "description": "",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ApiError"
-                }
-              }
-            }
-          }
-        }
-      }
-    },
-    "/documents/{document_id}/inpaint": {
-      "post": {
-        "tags": ["processing"],
-        "operationId": "inpaintDocument",
-        "parameters": [
-          {
-            "name": "document_id",
-            "in": "path",
-            "required": true,
-            "schema": {
-              "type": "string"
-            }
-          }
-        ],
-        "responses": {
-          "204": {
-            "description": ""
-          },
-          "404": {
-            "description": "",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ApiError"
-                }
-              }
-            }
-          },
-          "503": {
-            "description": "",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ApiError"
-                }
-              }
-            }
-          }
-        }
-      }
-    },
-    "/documents/{document_id}/inpaint-region": {
-      "post": {
-        "tags": ["regions"],
-        "operationId": "inpaintRegion",
-        "parameters": [
-          {
-            "name": "document_id",
-            "in": "path",
-            "required": true,
-            "schema": {
-              "type": "string"
-            }
-          }
-        ],
-        "requestBody": {
-          "content": {
-            "application/json": {
-              "schema": {
-                "$ref": "#/components/schemas/InpaintRegionRequest"
-              }
-            }
-          },
-          "required": true
-        },
-        "responses": {
-          "204": {
-            "description": ""
-          },
-          "404": {
-            "description": "",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ApiError"
-                }
-              }
-            }
-          },
-          "503": {
-            "description": "",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ApiError"
-                }
-              }
-            }
-          }
-        }
-      }
-    },
-    "/documents/{document_id}/mask": {
-      "put": {
-        "tags": ["regions"],
-        "operationId": "updateMask",
-        "parameters": [
-          {
-            "name": "document_id",
-            "in": "path",
-            "required": true,
-            "schema": {
-              "type": "string"
-            }
-          }
-        ],
-        "requestBody": {
-          "content": {
-            "application/json": {
-              "schema": {
-                "$ref": "#/components/schemas/MaskRegionRequest"
-              }
-            }
-          },
-          "required": true
-        },
-        "responses": {
-          "204": {
-            "description": ""
-          },
-          "404": {
-            "description": "",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ApiError"
-                }
-              }
-            }
-          },
-          "503": {
-            "description": "",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ApiError"
-                }
-              }
-            }
-          }
-        }
-      }
-    },
-    "/documents/{document_id}/recognize": {
-      "post": {
-        "tags": ["processing"],
-        "operationId": "recognizeDocument",
-        "parameters": [
-          {
-            "name": "document_id",
-            "in": "path",
-            "required": true,
-            "schema": {
-              "type": "string"
-            }
-          }
-        ],
-        "responses": {
-          "204": {
-            "description": ""
-          },
-          "404": {
-            "description": "",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ApiError"
-                }
-              }
-            }
-          },
-          "503": {
-            "description": "",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ApiError"
-                }
-              }
-            }
-          }
-        }
-      }
-    },
-    "/documents/{document_id}/render": {
-      "post": {
-        "tags": ["processing"],
-        "operationId": "renderDocument",
-        "parameters": [
-          {
-            "name": "document_id",
-            "in": "path",
-            "required": true,
-            "schema": {
-              "type": "string"
-            }
-          }
-        ],
-        "requestBody": {
-          "content": {
-            "application/json": {
-              "schema": {
-                "$ref": "#/components/schemas/RenderRequest"
-              }
-            }
-          },
-          "required": true
-        },
-        "responses": {
-          "204": {
-            "description": ""
-          },
-          "404": {
-            "description": "",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ApiError"
-                }
-              }
-            }
-          },
-          "503": {
-            "description": "",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ApiError"
-                }
-              }
-            }
-          }
-        }
-      }
-    },
-    "/documents/{document_id}/style": {
       "patch": {
-        "tags": ["documents"],
-        "operationId": "updateDocumentStyle",
-        "parameters": [
-          {
-            "name": "document_id",
-            "in": "path",
-            "description": "Document ID",
-            "required": true,
-            "schema": {
-              "type": "string"
-            }
-          }
-        ],
+        "operationId": "patch_config",
         "requestBody": {
           "content": {
             "application/json": {
               "schema": {
-                "$ref": "#/components/schemas/UpdateDocumentStyleRequest"
+                "$ref": "#/components/schemas/ConfigPatch"
               }
             }
           },
@@ -898,27 +63,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/UpdateDocumentStyleRequest"
-                }
-              }
-            }
-          },
-          "404": {
-            "description": "",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ApiError"
-                }
-              }
-            }
-          },
-          "503": {
-            "description": "",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ApiError"
+                  "$ref": "#/components/schemas/AppConfig"
                 }
               }
             }
@@ -926,14 +71,15 @@
         }
       }
     },
-    "/documents/{document_id}/text-blocks": {
+    "/config/providers/{id}/secret": {
       "put": {
-        "tags": ["text-blocks"],
-        "operationId": "putTextBlocks",
+        "summary": "Save (or overwrite) the keyring secret for a provider. Creates the\nprovider entry in `config.providers` if it didn't exist. `PUT` because\nsetting the secret is idempotent for the same body.",
+        "operationId": "set_provider_secret",
         "parameters": [
           {
-            "name": "document_id",
+            "name": "id",
             "in": "path",
+            "description": "Provider id",
             "required": true,
             "schema": {
               "type": "string"
@@ -944,10 +90,7 @@
           "content": {
             "application/json": {
               "schema": {
-                "type": "array",
-                "items": {
-                  "$ref": "#/components/schemas/TextBlockInput"
-                }
+                "$ref": "#/components/schemas/ProviderSecretRequest"
               }
             }
           },
@@ -956,102 +99,17 @@
         "responses": {
           "204": {
             "description": ""
-          },
-          "404": {
-            "description": "",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ApiError"
-                }
-              }
-            }
-          },
-          "503": {
-            "description": "",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ApiError"
-                }
-              }
-            }
           }
         }
       },
-      "post": {
-        "tags": ["text-blocks"],
-        "operationId": "createTextBlock",
-        "parameters": [
-          {
-            "name": "document_id",
-            "in": "path",
-            "required": true,
-            "schema": {
-              "type": "string"
-            }
-          }
-        ],
-        "requestBody": {
-          "content": {
-            "application/json": {
-              "schema": {
-                "$ref": "#/components/schemas/CreateTextBlock"
-              }
-            }
-          },
-          "required": true
-        },
-        "responses": {
-          "200": {
-            "description": "",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/TextBlockDetail"
-                }
-              }
-            }
-          },
-          "404": {
-            "description": "",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ApiError"
-                }
-              }
-            }
-          },
-          "503": {
-            "description": "",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ApiError"
-                }
-              }
-            }
-          }
-        }
-      }
-    },
-    "/documents/{document_id}/text-blocks/{text_block_id}": {
       "delete": {
-        "tags": ["text-blocks"],
-        "operationId": "deleteTextBlock",
+        "summary": "Clear a provider's keyring secret. The provider entry itself is kept.",
+        "operationId": "clear_provider_secret",
         "parameters": [
           {
-            "name": "document_id",
+            "name": "id",
             "in": "path",
-            "required": true,
-            "schema": {
-              "type": "string"
-            }
-          },
-          {
-            "name": "text_block_id",
-            "in": "path",
+            "description": "Provider id",
             "required": true,
             "schema": {
               "type": "string"
@@ -1061,217 +119,45 @@
         "responses": {
           "204": {
             "description": ""
-          },
-          "404": {
-            "description": "",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ApiError"
-                }
-              }
-            }
-          },
-          "503": {
-            "description": "",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ApiError"
-                }
-              }
-            }
-          }
-        }
-      },
-      "patch": {
-        "tags": ["text-blocks"],
-        "operationId": "patchTextBlock",
-        "parameters": [
-          {
-            "name": "document_id",
-            "in": "path",
-            "required": true,
-            "schema": {
-              "type": "string"
-            }
-          },
-          {
-            "name": "text_block_id",
-            "in": "path",
-            "required": true,
-            "schema": {
-              "type": "string"
-            }
-          }
-        ],
-        "requestBody": {
-          "content": {
-            "application/json": {
-              "schema": {
-                "$ref": "#/components/schemas/TextBlockPatch"
-              }
-            }
-          },
-          "required": true
-        },
-        "responses": {
-          "200": {
-            "description": "",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/TextBlockDetail"
-                }
-              }
-            }
-          },
-          "404": {
-            "description": "",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ApiError"
-                }
-              }
-            }
-          },
-          "503": {
-            "description": "",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ApiError"
-                }
-              }
-            }
-          }
-        }
-      }
-    },
-    "/documents/{document_id}/thumbnail": {
-      "get": {
-        "tags": ["documents"],
-        "operationId": "getDocumentThumbnail",
-        "parameters": [
-          {
-            "name": "document_id",
-            "in": "path",
-            "required": true,
-            "schema": {
-              "type": "string"
-            }
-          },
-          {
-            "name": "size",
-            "in": "query",
-            "required": false,
-            "schema": {
-              "type": ["integer", "null"],
-              "format": "int32",
-              "minimum": 0
-            }
-          }
-        ],
-        "responses": {
-          "200": {
-            "description": "",
-            "content": {
-              "image/webp": {
-                "schema": {
-                  "type": "string"
-                }
-              }
-            }
-          },
-          "404": {
-            "description": "",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ApiError"
-                }
-              }
-            }
-          },
-          "503": {
-            "description": "",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ApiError"
-                }
-              }
-            }
-          }
-        }
-      }
-    },
-    "/documents/{document_id}/translate": {
-      "post": {
-        "tags": ["processing"],
-        "operationId": "translateDocument",
-        "parameters": [
-          {
-            "name": "document_id",
-            "in": "path",
-            "required": true,
-            "schema": {
-              "type": "string"
-            }
-          }
-        ],
-        "requestBody": {
-          "content": {
-            "application/json": {
-              "schema": {
-                "$ref": "#/components/schemas/TranslateRequest"
-              }
-            }
-          },
-          "required": true
-        },
-        "responses": {
-          "204": {
-            "description": ""
-          },
-          "404": {
-            "description": "",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ApiError"
-                }
-              }
-            }
-          },
-          "503": {
-            "description": "",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ApiError"
-                }
-              }
-            }
           }
         }
       }
     },
     "/downloads": {
       "get": {
-        "tags": ["downloads"],
-        "operationId": "listDownloads",
+        "operationId": "list_downloads",
         "responses": {
           "200": {
             "description": "",
             "content": {
               "application/json": {
                 "schema": {
-                  "type": "array",
-                  "items": {
-                    "$ref": "#/components/schemas/DownloadState"
-                  }
+                  "$ref": "#/components/schemas/ListDownloadsResponse"
+                }
+              }
+            }
+          }
+        }
+      },
+      "post": {
+        "operationId": "start_download",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/StartDownloadRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "202": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/StartDownloadResponse"
                 }
               }
             }
@@ -1281,75 +167,14 @@
     },
     "/engines": {
       "get": {
-        "tags": ["system"],
-        "operationId": "getEngineCatalog",
+        "operationId": "get_engine_catalog",
         "responses": {
           "200": {
             "description": "",
             "content": {
               "application/json": {
                 "schema": {
-                  "type": "object",
-                  "required": [
-                    "detectors",
-                    "bubbleDetectors",
-                    "fontDetectors",
-                    "segmenters",
-                    "ocr",
-                    "translators",
-                    "inpainters",
-                    "renderers"
-                  ],
-                  "properties": {
-                    "bubbleDetectors": {
-                      "type": "array",
-                      "items": {
-                        "$ref": "#/components/schemas/EngineCatalogEntry"
-                      }
-                    },
-                    "detectors": {
-                      "type": "array",
-                      "items": {
-                        "$ref": "#/components/schemas/EngineCatalogEntry"
-                      }
-                    },
-                    "fontDetectors": {
-                      "type": "array",
-                      "items": {
-                        "$ref": "#/components/schemas/EngineCatalogEntry"
-                      }
-                    },
-                    "inpainters": {
-                      "type": "array",
-                      "items": {
-                        "$ref": "#/components/schemas/EngineCatalogEntry"
-                      }
-                    },
-                    "ocr": {
-                      "type": "array",
-                      "items": {
-                        "$ref": "#/components/schemas/EngineCatalogEntry"
-                      }
-                    },
-                    "renderers": {
-                      "type": "array",
-                      "items": {
-                        "$ref": "#/components/schemas/EngineCatalogEntry"
-                      }
-                    },
-                    "segmenters": {
-                      "type": "array",
-                      "items": {
-                        "$ref": "#/components/schemas/EngineCatalogEntry"
-                      }
-                    },
-                    "translators": {
-                      "type": "array",
-                      "items": {
-                        "$ref": "#/components/schemas/EngineCatalogEntry"
-                      }
-                    }
-                  }
+                  "$ref": "#/components/schemas/EngineCatalog"
                 }
               }
             }
@@ -1357,37 +182,16 @@
         }
       }
     },
-    "/exports": {
-      "post": {
-        "tags": ["exports"],
-        "operationId": "batchExport",
-        "requestBody": {
-          "content": {
-            "application/json": {
-              "schema": {
-                "$ref": "#/components/schemas/ExportBatchRequest"
-              }
-            }
-          },
-          "required": true
-        },
+    "/events": {
+      "get": {
+        "operationId": "events",
         "responses": {
           "200": {
             "description": "",
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/ExportResult"
-                }
-              }
-            }
-          },
-          "503": {
-            "description": "",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ApiError"
+                  "$ref": "#/components/schemas/AppEvent"
                 }
               }
             }
@@ -1397,8 +201,7 @@
     },
     "/fonts": {
       "get": {
-        "tags": ["system"],
-        "operationId": "listFonts",
+        "operationId": "list_fonts",
         "responses": {
           "200": {
             "description": "",
@@ -1412,41 +215,20 @@
                 }
               }
             }
-          },
-          "503": {
-            "description": "",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ApiError"
-                }
-              }
-            }
           }
         }
       }
     },
-    "/fonts/google/catalog": {
+    "/google-fonts": {
       "get": {
-        "tags": ["system"],
-        "operationId": "getGoogleFontsCatalog",
+        "operationId": "get_google_fonts_catalog",
         "responses": {
           "200": {
             "description": "",
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/GoogleFontCatalogResponse"
-                }
-              }
-            }
-          },
-          "503": {
-            "description": "",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ApiError"
+                  "$ref": "#/components/schemas/GoogleFontCatalog"
                 }
               }
             }
@@ -1454,15 +236,14 @@
         }
       }
     },
-    "/fonts/google/{family}/fetch": {
+    "/google-fonts/{family}/fetch": {
       "post": {
-        "tags": ["system"],
-        "operationId": "fetchGoogleFont",
+        "operationId": "fetch_google_font",
         "parameters": [
           {
             "name": "family",
             "in": "path",
-            "description": "Font family name",
+            "description": "Google Fonts family name",
             "required": true,
             "schema": {
               "type": "string"
@@ -1470,48 +251,29 @@
           }
         ],
         "responses": {
-          "200": {
-            "description": "",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/FontFaceInfo"
-                }
-              }
-            }
-          },
-          "404": {
-            "description": "",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ApiError"
-                }
-              }
-            }
-          },
-          "503": {
-            "description": "",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ApiError"
-                }
-              }
-            }
+          "204": {
+            "description": ""
           }
         }
       }
     },
-    "/fonts/google/{family}/file": {
+    "/google-fonts/{family}/{file}": {
       "get": {
-        "tags": ["system"],
-        "operationId": "getGoogleFontFile",
+        "operationId": "get_google_font_file",
         "parameters": [
           {
             "name": "family",
             "in": "path",
-            "description": "Font family name",
+            "description": "Google Fonts family name",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "file",
+            "in": "path",
+            "description": "Font filename",
             "required": true,
             "schema": {
               "type": "string"
@@ -1520,64 +282,22 @@
         ],
         "responses": {
           "200": {
-            "description": "Font file bytes",
+            "description": "",
             "content": {
               "font/ttf": {}
             }
-          },
-          "404": {
-            "description": "",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ApiError"
-                }
-              }
-            }
-          },
-          "503": {
-            "description": "",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ApiError"
-                }
-              }
-            }
           }
         }
       }
     },
-    "/jobs": {
-      "get": {
-        "tags": ["jobs"],
-        "operationId": "listJobs",
-        "responses": {
-          "200": {
-            "description": "",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "type": "array",
-                  "items": {
-                    "$ref": "#/components/schemas/JobState"
-                  }
-                }
-              }
-            }
-          }
-        }
-      }
-    },
-    "/jobs/pipeline": {
+    "/history/apply": {
       "post": {
-        "tags": ["jobs"],
-        "operationId": "startPipeline",
+        "operationId": "apply_command",
         "requestBody": {
           "content": {
             "application/json": {
               "schema": {
-                "$ref": "#/components/schemas/PipelineJobRequest"
+                "$ref": "#/components/schemas/Op"
               }
             }
           },
@@ -1589,17 +309,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/JobState"
-                }
-              }
-            }
-          },
-          "503": {
-            "description": "",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ApiError"
+                  "$ref": "#/components/schemas/HistoryResult"
                 }
               }
             }
@@ -1607,76 +317,16 @@
         }
       }
     },
-    "/jobs/{job_id}": {
-      "get": {
-        "tags": ["jobs"],
-        "operationId": "getJob",
-        "parameters": [
-          {
-            "name": "job_id",
-            "in": "path",
-            "required": true,
-            "schema": {
-              "type": "string"
-            }
-          }
-        ],
+    "/history/redo": {
+      "post": {
+        "operationId": "redo",
         "responses": {
           "200": {
             "description": "",
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/JobState"
-                }
-              }
-            }
-          },
-          "404": {
-            "description": "",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ApiError"
-                }
-              }
-            }
-          }
-        }
-      },
-      "delete": {
-        "tags": ["jobs"],
-        "operationId": "cancelJob",
-        "parameters": [
-          {
-            "name": "job_id",
-            "in": "path",
-            "required": true,
-            "schema": {
-              "type": "string"
-            }
-          }
-        ],
-        "responses": {
-          "204": {
-            "description": ""
-          },
-          "404": {
-            "description": "",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ApiError"
-                }
-              }
-            }
-          },
-          "503": {
-            "description": "",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ApiError"
+                  "$ref": "#/components/schemas/HistoryResult"
                 }
               }
             }
@@ -1684,10 +334,43 @@
         }
       }
     },
-    "/llm": {
+    "/history/undo": {
+      "post": {
+        "operationId": "undo",
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HistoryResult"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/llm/catalog": {
       "get": {
-        "tags": ["llm"],
-        "operationId": "getLlm",
+        "operationId": "get_catalog",
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/LlmCatalog"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/llm/current": {
+      "get": {
+        "operationId": "get_current_llm",
         "responses": {
           "200": {
             "description": "",
@@ -1698,22 +381,11 @@
                 }
               }
             }
-          },
-          "503": {
-            "description": "",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ApiError"
-                }
-              }
-            }
           }
         }
       },
       "put": {
-        "tags": ["llm"],
-        "operationId": "loadLlm",
+        "operationId": "put_current_llm",
         "requestBody": {
           "content": {
             "application/json": {
@@ -1725,97 +397,23 @@
           "required": true
         },
         "responses": {
-          "200": {
-            "description": "",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/LlmState"
-                }
-              }
-            }
-          },
-          "400": {
-            "description": "",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ApiError"
-                }
-              }
-            }
-          },
-          "503": {
-            "description": "",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ApiError"
-                }
-              }
-            }
+          "204": {
+            "description": ""
           }
         }
       },
       "delete": {
-        "tags": ["llm"],
-        "operationId": "unloadLlm",
+        "operationId": "delete_current_llm",
         "responses": {
-          "200": {
-            "description": "",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/LlmState"
-                }
-              }
-            }
-          },
-          "503": {
-            "description": "",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ApiError"
-                }
-              }
-            }
-          }
-        }
-      }
-    },
-    "/llm/catalog": {
-      "get": {
-        "tags": ["llm"],
-        "operationId": "getLlmCatalog",
-        "responses": {
-          "200": {
-            "description": "",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/LlmCatalog"
-                }
-              }
-            }
-          },
-          "503": {
-            "description": "",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ApiError"
-                }
-              }
-            }
+          "204": {
+            "description": ""
           }
         }
       }
     },
     "/meta": {
       "get": {
-        "tags": ["system"],
-        "operationId": "getMeta",
+        "operationId": "get_meta",
         "responses": {
           "200": {
             "description": "",
@@ -1826,13 +424,371 @@
                 }
               }
             }
-          },
-          "503": {
+          }
+        }
+      }
+    },
+    "/operations": {
+      "get": {
+        "operationId": "list_operations",
+        "responses": {
+          "200": {
             "description": "",
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/ApiError"
+                  "$ref": "#/components/schemas/ListOperationsResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/operations/{id}": {
+      "delete": {
+        "operationId": "cancel_operation",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "description": "Operation id",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": ""
+          }
+        }
+      }
+    },
+    "/pages": {
+      "post": {
+        "operationId": "create_pages",
+        "requestBody": {
+          "content": {
+            "multipart/form-data": {}
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CreatePagesResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/pages/from-paths": {
+      "post": {
+        "summary": "Create pages by reading image files from absolute paths on the server's\nfilesystem. This is the Tauri desktop import path — the webview picker\nreturns paths, and the backend reads + decodes + hashes them in parallel\nwithout a round-trip through JS memory or a multipart upload body.",
+        "description": "Web clients should keep using `POST /pages` with multipart.",
+        "operationId": "create_pages_from_paths",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CreatePagesFromPathsRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CreatePagesResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/pages/{id}/image-layers": {
+      "post": {
+        "operationId": "add_image_layer",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "description": "Page id",
+            "required": true,
+            "schema": {
+              "$ref": "#/components/schemas/PageId"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "multipart/form-data": {}
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AddImageLayerResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/pages/{id}/masks/{role}": {
+      "put": {
+        "summary": "Upsert the `Mask { role }` node on a page with the raw image bytes in\nthe body. Emits `Op::UpdateNode` if a mask of that role exists, else\n`Op::AddNode`. Used by the repair-brush / segment-edit flow; the\nfollow-up localized inpaint is a separate `POST /pipelines` call.",
+        "operationId": "put_mask",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "description": "Page id",
+            "required": true,
+            "schema": {
+              "$ref": "#/components/schemas/PageId"
+            }
+          },
+          {
+            "name": "role",
+            "in": "path",
+            "description": "Mask role (segment|brushInpaint)",
+            "required": true,
+            "schema": {
+              "$ref": "#/components/schemas/MaskRole"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "image/png": {}
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PutMaskResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/pages/{id}/thumbnail": {
+      "get": {
+        "operationId": "get_page_thumbnail",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "description": "Page id",
+            "required": true,
+            "schema": {
+              "$ref": "#/components/schemas/PageId"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "image/webp": {}
+            }
+          }
+        }
+      }
+    },
+    "/pipelines": {
+      "post": {
+        "operationId": "start_pipeline",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/StartPipelineRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/StartPipelineResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/projects": {
+      "get": {
+        "operationId": "list_projects",
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ListProjectsResponse"
+                }
+              }
+            }
+          }
+        }
+      },
+      "post": {
+        "operationId": "create_project",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CreateProjectRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProjectSummary"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/projects/current": {
+      "put": {
+        "operationId": "put_current_project",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/OpenProjectRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProjectSummary"
+                }
+              }
+            }
+          }
+        }
+      },
+      "delete": {
+        "operationId": "delete_current_project",
+        "responses": {
+          "204": {
+            "description": ""
+          }
+        }
+      }
+    },
+    "/projects/current/export": {
+      "post": {
+        "operationId": "export_current_project",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ExportProjectRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Export bytes. Content-Type is `application/zip` when the format produces multiple files.",
+            "content": {
+              "application/octet-stream": {}
+            }
+          }
+        }
+      }
+    },
+    "/projects/import": {
+      "post": {
+        "operationId": "import_project",
+        "requestBody": {
+          "content": {
+            "application/zip": {}
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProjectSummary"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/scene.bin": {
+      "get": {
+        "operationId": "get_scene_bin",
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/octet-stream": {}
+            }
+          }
+        }
+      }
+    },
+    "/scene.json": {
+      "get": {
+        "operationId": "get_scene_json",
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SceneSnapshot"
                 }
               }
             }
@@ -1843,56 +799,290 @@
   },
   "components": {
     "schemas": {
-      "ApiError": {
+      "AddImageLayerResponse": {
         "type": "object",
-        "required": ["status", "message"],
+        "required": ["node"],
         "properties": {
-          "message": {
-            "type": "string"
-          },
-          "status": {
-            "type": "integer",
-            "format": "int32",
-            "minimum": 0
+          "node": {
+            "$ref": "#/components/schemas/NodeId"
           }
         }
       },
-      "BrushRegionRequest": {
+      "AppConfig": {
         "type": "object",
-        "required": ["data", "region"],
         "properties": {
           "data": {
-            "type": "array",
-            "items": {
-              "type": "integer",
-              "format": "int32",
-              "minimum": 0
+            "oneOf": [
+              {
+                "$ref": "#/components/schemas/DataConfig"
+              }
+            ],
+            "default": {
+              "path": "C:\\Users\\Mayo\\AppData\\Local\\Koharu"
             }
           },
-          "region": {
-            "$ref": "#/components/schemas/Region"
+          "http": {
+            "oneOf": [
+              {
+                "$ref": "#/components/schemas/HttpConfig"
+              }
+            ],
+            "default": {
+              "connect_timeout": 20,
+              "max_retries": 3,
+              "read_timeout": 300
+            }
+          },
+          "pipeline": {
+            "oneOf": [
+              {
+                "$ref": "#/components/schemas/PipelineConfig"
+              }
+            ],
+            "default": {
+              "bubble_segmenter": "speech-bubble-segmentation",
+              "detector": "pp-doclayout-v3",
+              "font_detector": "yuzumarker-font-detection",
+              "inpainter": "aot-inpainting",
+              "ocr": "paddle-ocr-vl-1.5",
+              "renderer": "koharu-renderer",
+              "segmenter": "comic-text-detector-seg",
+              "translator": "llm-translate"
+            }
+          },
+          "providers": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/ProviderConfig"
+            },
+            "default": []
           }
         }
       },
-      "CreateTextBlock": {
+      "AppEvent": {
+        "oneOf": [
+          {
+            "type": "object",
+            "required": ["id", "kind", "event"],
+            "properties": {
+              "event": {
+                "type": "string",
+                "enum": ["jobStarted"]
+              },
+              "id": {
+                "type": "string"
+              },
+              "kind": {
+                "type": "string"
+              }
+            }
+          },
+          {
+            "allOf": [
+              {
+                "$ref": "#/components/schemas/PipelineProgress"
+              },
+              {
+                "type": "object",
+                "required": ["event"],
+                "properties": {
+                  "event": {
+                    "type": "string",
+                    "enum": ["jobProgress"]
+                  }
+                }
+              }
+            ]
+          },
+          {
+            "allOf": [
+              {
+                "$ref": "#/components/schemas/JobFinishedEvent"
+              },
+              {
+                "type": "object",
+                "required": ["event"],
+                "properties": {
+                  "event": {
+                    "type": "string",
+                    "enum": ["jobFinished"]
+                  }
+                }
+              }
+            ]
+          },
+          {
+            "allOf": [
+              {
+                "$ref": "#/components/schemas/DownloadProgress"
+              },
+              {
+                "type": "object",
+                "required": ["event"],
+                "properties": {
+                  "event": {
+                    "type": "string",
+                    "enum": ["downloadProgress"]
+                  }
+                }
+              }
+            ]
+          },
+          {
+            "type": "object",
+            "required": ["target", "event"],
+            "properties": {
+              "event": {
+                "type": "string",
+                "enum": ["llmLoading"]
+              },
+              "target": {
+                "$ref": "#/components/schemas/LlmTarget"
+              }
+            }
+          },
+          {
+            "type": "object",
+            "required": ["target", "event"],
+            "properties": {
+              "event": {
+                "type": "string",
+                "enum": ["llmLoaded"]
+              },
+              "target": {
+                "$ref": "#/components/schemas/LlmTarget"
+              }
+            }
+          },
+          {
+            "type": "object",
+            "required": ["event"],
+            "properties": {
+              "event": {
+                "type": "string",
+                "enum": ["llmFailed"]
+              },
+              "target": {
+                "oneOf": [
+                  {
+                    "type": "null"
+                  },
+                  {
+                    "$ref": "#/components/schemas/LlmTarget"
+                  }
+                ]
+              }
+            }
+          },
+          {
+            "type": "object",
+            "required": ["event"],
+            "properties": {
+              "event": {
+                "type": "string",
+                "enum": ["llmUnloaded"]
+              }
+            }
+          },
+          {
+            "allOf": [
+              {
+                "$ref": "#/components/schemas/SnapshotEvent"
+              },
+              {
+                "type": "object",
+                "required": ["event"],
+                "properties": {
+                  "event": {
+                    "type": "string",
+                    "enum": ["snapshot"]
+                  }
+                }
+              }
+            ]
+          }
+        ]
+      },
+      "BlobRef": {
+        "type": "string",
+        "description": "Hex-encoded blake3 hash of an immutable blob."
+      },
+      "ConfigPatch": {
         "type": "object",
-        "required": ["x", "y", "width", "height"],
+        "description": "Sparse patch for `koharu_app::AppConfig`. Missing fields mean \"leave\nas-is\". The `providers` field, if present, replaces the whole provider\nlist — we do not merge by id because ordering is meaningful.",
         "properties": {
-          "height": {
-            "type": "number",
-            "format": "float"
+          "data": {
+            "oneOf": [
+              {
+                "type": "null"
+              },
+              {
+                "$ref": "#/components/schemas/DataConfigPatch"
+              }
+            ]
           },
-          "width": {
-            "type": "number",
-            "format": "float"
+          "http": {
+            "oneOf": [
+              {
+                "type": "null"
+              },
+              {
+                "$ref": "#/components/schemas/HttpConfigPatch"
+              }
+            ]
           },
-          "x": {
-            "type": "number",
-            "format": "float"
+          "pipeline": {
+            "oneOf": [
+              {
+                "type": "null"
+              },
+              {
+                "$ref": "#/components/schemas/PipelineConfigPatch"
+              }
+            ]
           },
-          "y": {
-            "type": "number",
-            "format": "float"
+          "providers": {
+            "type": ["array", "null"],
+            "items": {
+              "$ref": "#/components/schemas/ProviderPatch"
+            },
+            "description": "If present, replaces the entire list. Api_key values of `\"[REDACTED]\"`\nare interpreted as \"leave the existing secret alone\"."
+          }
+        }
+      },
+      "CreatePagesFromPathsRequest": {
+        "type": "object",
+        "required": ["paths"],
+        "properties": {
+          "paths": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "replace": {
+            "type": "boolean"
+          }
+        }
+      },
+      "CreatePagesResponse": {
+        "type": "object",
+        "required": ["pages"],
+        "properties": {
+          "pages": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/PageId"
+            }
+          }
+        }
+      },
+      "CreateProjectRequest": {
+        "type": "object",
+        "required": ["name"],
+        "properties": {
+          "name": {
+            "type": "string"
           }
         }
       },
@@ -1905,127 +1095,15 @@
           }
         }
       },
-      "DocumentDetail": {
-        "type": "object",
-        "required": ["id", "name", "width", "height", "textBlocks", "image"],
-        "properties": {
-          "brushLayer": {
-            "type": ["string", "null"],
-            "description": "Blob hash for the brush layer."
-          },
-          "height": {
-            "type": "integer",
-            "format": "int32",
-            "minimum": 0
-          },
-          "id": {
-            "type": "string"
-          },
-          "image": {
-            "type": "string",
-            "description": "Blob hash for the source image layer."
-          },
-          "inpainted": {
-            "type": ["string", "null"],
-            "description": "Blob hash for the inpainted layer."
-          },
-          "name": {
-            "type": "string"
-          },
-          "rendered": {
-            "type": ["string", "null"],
-            "description": "Blob hash for the rendered composite layer."
-          },
-          "segment": {
-            "type": ["string", "null"],
-            "description": "Blob hash for the segmentation mask layer."
-          },
-          "style": {
-            "oneOf": [
-              {
-                "type": "null"
-              },
-              {
-                "$ref": "#/components/schemas/DocumentStyle"
-              }
-            ]
-          },
-          "textBlocks": {
-            "type": "array",
-            "items": {
-              "$ref": "#/components/schemas/TextBlockDetail"
-            }
-          },
-          "width": {
-            "type": "integer",
-            "format": "int32",
-            "minimum": 0
-          }
-        }
-      },
-      "DocumentStyle": {
+      "DataConfigPatch": {
         "type": "object",
         "properties": {
-          "defaultFont": {
+          "path": {
             "type": ["string", "null"]
           }
         }
       },
-      "DocumentSummary": {
-        "type": "object",
-        "required": [
-          "id",
-          "name",
-          "width",
-          "height",
-          "order",
-          "hasSegment",
-          "hasInpainted",
-          "hasBrushLayer",
-          "hasRendered",
-          "textBlockCount"
-        ],
-        "properties": {
-          "hasBrushLayer": {
-            "type": "boolean"
-          },
-          "hasInpainted": {
-            "type": "boolean"
-          },
-          "hasRendered": {
-            "type": "boolean"
-          },
-          "hasSegment": {
-            "type": "boolean"
-          },
-          "height": {
-            "type": "integer",
-            "format": "int32",
-            "minimum": 0
-          },
-          "id": {
-            "type": "string"
-          },
-          "name": {
-            "type": "string"
-          },
-          "order": {
-            "type": "integer",
-            "format": "int32",
-            "minimum": 0
-          },
-          "textBlockCount": {
-            "type": "integer",
-            "minimum": 0
-          },
-          "width": {
-            "type": "integer",
-            "format": "int32",
-            "minimum": 0
-          }
-        }
-      },
-      "DownloadState": {
+      "DownloadProgress": {
         "type": "object",
         "required": ["id", "filename", "downloaded", "status"],
         "properties": {
@@ -2034,9 +1112,6 @@
             "format": "int64",
             "minimum": 0
           },
-          "error": {
-            "type": ["string", "null"]
-          },
           "filename": {
             "type": "string"
           },
@@ -2044,12 +1119,122 @@
             "type": "string"
           },
           "status": {
-            "$ref": "#/components/schemas/TransferStatus"
+            "$ref": "#/components/schemas/DownloadStatus"
           },
           "total": {
             "type": ["integer", "null"],
             "format": "int64",
             "minimum": 0
+          }
+        }
+      },
+      "DownloadStatus": {
+        "oneOf": [
+          {
+            "type": "object",
+            "required": ["status"],
+            "properties": {
+              "status": {
+                "type": "string",
+                "enum": ["started"]
+              }
+            }
+          },
+          {
+            "type": "object",
+            "required": ["status"],
+            "properties": {
+              "status": {
+                "type": "string",
+                "enum": ["downloading"]
+              }
+            }
+          },
+          {
+            "type": "object",
+            "required": ["status"],
+            "properties": {
+              "status": {
+                "type": "string",
+                "enum": ["completed"]
+              }
+            }
+          },
+          {
+            "type": "object",
+            "required": ["reason", "status"],
+            "properties": {
+              "reason": {
+                "type": "string"
+              },
+              "status": {
+                "type": "string",
+                "enum": ["failed"]
+              }
+            }
+          }
+        ]
+      },
+      "EngineCatalog": {
+        "type": "object",
+        "required": [
+          "detectors",
+          "fontDetectors",
+          "segmenters",
+          "bubbleSegmenters",
+          "ocr",
+          "translators",
+          "inpainters",
+          "renderers"
+        ],
+        "properties": {
+          "bubbleSegmenters": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/EngineCatalogEntry"
+            }
+          },
+          "detectors": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/EngineCatalogEntry"
+            }
+          },
+          "fontDetectors": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/EngineCatalogEntry"
+            }
+          },
+          "inpainters": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/EngineCatalogEntry"
+            }
+          },
+          "ocr": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/EngineCatalogEntry"
+            }
+          },
+          "renderers": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/EngineCatalogEntry"
+            }
+          },
+          "segmenters": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/EngineCatalogEntry"
+            }
+          },
+          "translators": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/EngineCatalogEntry"
+            }
           }
         }
       },
@@ -2071,32 +1256,23 @@
           }
         }
       },
-      "ExportBatchRequest": {
-        "type": "object",
-        "properties": {
-          "layer": {
-            "oneOf": [
-              {
-                "type": "null"
-              },
-              {
-                "$ref": "#/components/schemas/ExportLayer"
-              }
-            ]
-          }
-        }
-      },
-      "ExportLayer": {
+      "ExportFormat": {
         "type": "string",
-        "enum": ["rendered", "inpainted"]
+        "enum": ["khr", "psd", "rendered", "inpainted"]
       },
-      "ExportResult": {
+      "ExportProjectRequest": {
         "type": "object",
-        "required": ["count"],
+        "required": ["format"],
         "properties": {
-          "count": {
-            "type": "integer",
-            "minimum": 0
+          "format": {
+            "$ref": "#/components/schemas/ExportFormat"
+          },
+          "pages": {
+            "type": ["array", "null"],
+            "items": {
+              "$ref": "#/components/schemas/PageId"
+            },
+            "description": "Optional subset of pages; defaults to every page."
           }
         }
       },
@@ -2124,39 +1300,39 @@
       "FontPrediction": {
         "type": "object",
         "required": [
-          "top_fonts",
-          "named_fonts",
+          "topFonts",
+          "namedFonts",
           "direction",
-          "text_color",
-          "stroke_color",
-          "font_size_px",
-          "stroke_width_px",
-          "line_height",
-          "angle_deg"
+          "textColor",
+          "strokeColor",
+          "fontSizePx",
+          "strokeWidthPx",
+          "lineHeight",
+          "angleDeg"
         ],
         "properties": {
-          "angle_deg": {
+          "angleDeg": {
             "type": "number",
             "format": "float"
           },
           "direction": {
             "$ref": "#/components/schemas/TextDirection"
           },
-          "font_size_px": {
+          "fontSizePx": {
             "type": "number",
             "format": "float"
           },
-          "line_height": {
+          "lineHeight": {
             "type": "number",
             "format": "float"
           },
-          "named_fonts": {
+          "namedFonts": {
             "type": "array",
             "items": {
               "$ref": "#/components/schemas/NamedFontPrediction"
             }
           },
-          "stroke_color": {
+          "strokeColor": {
             "type": "array",
             "items": {
               "type": "integer",
@@ -2164,11 +1340,11 @@
               "minimum": 0
             }
           },
-          "stroke_width_px": {
+          "strokeWidthPx": {
             "type": "number",
             "format": "float"
           },
-          "text_color": {
+          "textColor": {
             "type": "array",
             "items": {
               "type": "integer",
@@ -2176,7 +1352,7 @@
               "minimum": 0
             }
           },
-          "top_fonts": {
+          "topFonts": {
             "type": "array",
             "items": {
               "$ref": "#/components/schemas/TopFont"
@@ -2188,13 +1364,22 @@
         "type": "string",
         "enum": ["system", "google"]
       },
-      "GoogleFontCatalogEntry": {
+      "GoogleFontCatalog": {
         "type": "object",
-        "required": ["family", "category", "subsets", "cached"],
+        "required": ["fonts"],
         "properties": {
-          "cached": {
-            "type": "boolean"
-          },
+          "fonts": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/GoogleFontEntry"
+            }
+          }
+        }
+      },
+      "GoogleFontEntry": {
+        "type": "object",
+        "required": ["family", "category", "subsets", "variants"],
+        "properties": {
           "category": {
             "type": "string"
           },
@@ -2206,24 +1391,40 @@
             "items": {
               "type": "string"
             }
+          },
+          "variants": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/GoogleFontVariant"
+            }
           }
         }
       },
-      "GoogleFontCatalogResponse": {
+      "GoogleFontVariant": {
         "type": "object",
-        "required": ["fonts", "recommended"],
+        "required": ["style", "weight", "filename"],
         "properties": {
-          "fonts": {
-            "type": "array",
-            "items": {
-              "$ref": "#/components/schemas/GoogleFontCatalogEntry"
-            }
+          "filename": {
+            "type": "string"
           },
-          "recommended": {
-            "type": "array",
-            "items": {
-              "type": "string"
-            }
+          "style": {
+            "type": "string"
+          },
+          "weight": {
+            "type": "integer",
+            "format": "int32",
+            "minimum": 0
+          }
+        }
+      },
+      "HistoryResult": {
+        "type": "object",
+        "properties": {
+          "epoch": {
+            "type": ["integer", "null"],
+            "format": "int64",
+            "description": "New epoch. `None` only for a no-op undo/redo at the stack boundary.",
+            "minimum": 0
           }
         }
       },
@@ -2250,56 +1451,115 @@
           }
         }
       },
-      "ImportMode": {
+      "HttpConfigPatch": {
+        "type": "object",
+        "properties": {
+          "connectTimeout": {
+            "type": ["integer", "null"],
+            "format": "int64",
+            "minimum": 0
+          },
+          "maxRetries": {
+            "type": ["integer", "null"],
+            "format": "int32",
+            "minimum": 0
+          },
+          "readTimeout": {
+            "type": ["integer", "null"],
+            "format": "int64",
+            "minimum": 0
+          }
+        }
+      },
+      "ImageData": {
+        "type": "object",
+        "required": ["role", "blob", "naturalWidth", "naturalHeight"],
+        "properties": {
+          "blob": {
+            "$ref": "#/components/schemas/BlobRef"
+          },
+          "name": {
+            "type": ["string", "null"]
+          },
+          "naturalHeight": {
+            "type": "integer",
+            "format": "int32",
+            "minimum": 0
+          },
+          "naturalWidth": {
+            "type": "integer",
+            "format": "int32",
+            "minimum": 0
+          },
+          "opacity": {
+            "type": "number",
+            "format": "float"
+          },
+          "role": {
+            "$ref": "#/components/schemas/ImageRole",
+            "description": "Role tags differentiate source / inpainted / rendered / user-imported images.\nRole is immutable on an existing node — switching roles = delete + add."
+          }
+        }
+      },
+      "ImageDataPatch": {
+        "type": "object",
+        "properties": {
+          "blob": {
+            "oneOf": [
+              {
+                "type": "null"
+              },
+              {
+                "$ref": "#/components/schemas/BlobRef"
+              }
+            ]
+          },
+          "name": {
+            "type": ["string", "null"]
+          },
+          "naturalHeight": {
+            "type": ["integer", "null"],
+            "format": "int32",
+            "minimum": 0
+          },
+          "naturalWidth": {
+            "type": ["integer", "null"],
+            "format": "int32",
+            "minimum": 0
+          },
+          "opacity": {
+            "type": ["number", "null"],
+            "format": "float"
+          }
+        }
+      },
+      "ImageRole": {
         "type": "string",
-        "enum": ["replace", "append"]
+        "enum": ["source", "inpainted", "rendered", "custom"]
       },
-      "ImportResult": {
+      "JobFinishedEvent": {
         "type": "object",
-        "required": ["totalCount", "documents"],
+        "required": ["id", "status"],
         "properties": {
-          "documents": {
-            "type": "array",
-            "items": {
-              "$ref": "#/components/schemas/DocumentSummary"
-            }
+          "error": {
+            "type": ["string", "null"]
           },
-          "totalCount": {
-            "type": "integer",
-            "minimum": 0
+          "id": {
+            "type": "string"
+          },
+          "status": {
+            "$ref": "#/components/schemas/JobStatus"
           }
         }
       },
-      "InpaintRegionRequest": {
-        "type": "object",
-        "required": ["region"],
-        "properties": {
-          "region": {
-            "$ref": "#/components/schemas/Region"
-          }
-        }
+      "JobStatus": {
+        "type": "string",
+        "enum": ["running", "completed", "completed_with_errors", "cancelled", "failed"]
       },
-      "JobState": {
+      "JobSummary": {
         "type": "object",
-        "required": [
-          "id",
-          "kind",
-          "status",
-          "currentDocument",
-          "totalDocuments",
-          "currentStepIndex",
-          "totalSteps",
-          "overallPercent"
-        ],
+        "required": ["id", "kind", "status"],
         "properties": {
-          "currentDocument": {
-            "type": "integer",
-            "minimum": 0
-          },
-          "currentStepIndex": {
-            "type": "integer",
-            "minimum": 0
-          },
           "error": {
             "type": ["string", "null"]
           },
@@ -2309,30 +1569,46 @@
           "kind": {
             "type": "string"
           },
-          "overallPercent": {
-            "type": "integer",
-            "format": "int32",
-            "minimum": 0
-          },
           "status": {
             "$ref": "#/components/schemas/JobStatus"
-          },
-          "step": {
-            "type": ["string", "null"]
-          },
-          "totalDocuments": {
-            "type": "integer",
-            "minimum": 0
-          },
-          "totalSteps": {
-            "type": "integer",
-            "minimum": 0
           }
         }
       },
-      "JobStatus": {
-        "type": "string",
-        "enum": ["running", "completed", "completed_with_errors", "cancelled", "failed"]
+      "ListDownloadsResponse": {
+        "type": "object",
+        "required": ["downloads"],
+        "properties": {
+          "downloads": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/DownloadProgress"
+            }
+          }
+        }
+      },
+      "ListOperationsResponse": {
+        "type": "object",
+        "required": ["operations"],
+        "properties": {
+          "operations": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/JobSummary"
+            }
+          }
+        }
+      },
+      "ListProjectsResponse": {
+        "type": "object",
+        "required": ["projects"],
+        "properties": {
+          "projects": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/ProjectSummary"
+            }
+          }
+        }
       },
       "LlmCatalog": {
         "type": "object",
@@ -2499,29 +1775,36 @@
         "type": "string",
         "enum": ["local", "provider"]
       },
-      "MaskRegionRequest": {
+      "MaskData": {
         "type": "object",
-        "required": ["data"],
+        "required": ["role", "blob"],
         "properties": {
-          "data": {
-            "type": "array",
-            "items": {
-              "type": "integer",
-              "format": "int32",
-              "minimum": 0
-            }
+          "blob": {
+            "$ref": "#/components/schemas/BlobRef"
           },
-          "region": {
+          "role": {
+            "$ref": "#/components/schemas/MaskRole"
+          }
+        }
+      },
+      "MaskDataPatch": {
+        "type": "object",
+        "properties": {
+          "blob": {
             "oneOf": [
               {
                 "type": "null"
               },
               {
-                "$ref": "#/components/schemas/Region"
+                "$ref": "#/components/schemas/BlobRef"
               }
             ]
           }
         }
+      },
+      "MaskRole": {
+        "type": "string",
+        "enum": ["brushInpaint", "segment", "bubble"]
       },
       "MetaInfo": {
         "type": "object",
@@ -2558,17 +1841,421 @@
           }
         }
       },
+      "Node": {
+        "type": "object",
+        "required": ["id", "visible", "kind"],
+        "properties": {
+          "id": {
+            "$ref": "#/components/schemas/NodeId"
+          },
+          "kind": {
+            "$ref": "#/components/schemas/NodeKind"
+          },
+          "transform": {
+            "$ref": "#/components/schemas/Transform"
+          },
+          "visible": {
+            "type": "boolean"
+          }
+        }
+      },
+      "NodeDataPatch": {
+        "oneOf": [
+          {
+            "type": "object",
+            "required": ["text"],
+            "properties": {
+              "text": {
+                "$ref": "#/components/schemas/TextDataPatch"
+              }
+            }
+          },
+          {
+            "type": "object",
+            "required": ["image"],
+            "properties": {
+              "image": {
+                "$ref": "#/components/schemas/ImageDataPatch"
+              }
+            }
+          },
+          {
+            "type": "object",
+            "required": ["mask"],
+            "properties": {
+              "mask": {
+                "$ref": "#/components/schemas/MaskDataPatch"
+              }
+            }
+          }
+        ]
+      },
+      "NodeId": {
+        "type": "string",
+        "format": "uuid"
+      },
+      "NodeKind": {
+        "oneOf": [
+          {
+            "type": "object",
+            "required": ["image"],
+            "properties": {
+              "image": {
+                "$ref": "#/components/schemas/ImageData"
+              }
+            }
+          },
+          {
+            "type": "object",
+            "required": ["text"],
+            "properties": {
+              "text": {
+                "$ref": "#/components/schemas/TextData"
+              }
+            }
+          },
+          {
+            "type": "object",
+            "required": ["mask"],
+            "properties": {
+              "mask": {
+                "$ref": "#/components/schemas/MaskData"
+              }
+            }
+          }
+        ]
+      },
+      "NodePatch": {
+        "type": "object",
+        "properties": {
+          "data": {
+            "oneOf": [
+              {
+                "type": "null"
+              },
+              {
+                "$ref": "#/components/schemas/NodeDataPatch"
+              }
+            ]
+          },
+          "transform": {
+            "oneOf": [
+              {
+                "type": "null"
+              },
+              {
+                "$ref": "#/components/schemas/Transform"
+              }
+            ]
+          },
+          "visible": {
+            "type": ["boolean", "null"]
+          }
+        }
+      },
+      "Op": {
+        "oneOf": [
+          {
+            "type": "object",
+            "required": ["updateProjectMeta"],
+            "properties": {
+              "updateProjectMeta": {
+                "type": "object",
+                "required": ["patch"],
+                "properties": {
+                  "patch": {
+                    "$ref": "#/components/schemas/ProjectMetaPatch"
+                  },
+                  "prev": {
+                    "$ref": "#/components/schemas/ProjectMetaPatch"
+                  }
+                }
+              }
+            }
+          },
+          {
+            "type": "object",
+            "required": ["addPage"],
+            "properties": {
+              "addPage": {
+                "type": "object",
+                "required": ["page", "at"],
+                "properties": {
+                  "at": {
+                    "type": "integer",
+                    "minimum": 0
+                  },
+                  "page": {
+                    "$ref": "#/components/schemas/Page"
+                  }
+                }
+              }
+            }
+          },
+          {
+            "type": "object",
+            "required": ["removePage"],
+            "properties": {
+              "removePage": {
+                "type": "object",
+                "required": ["id", "prev_page", "prev_index"],
+                "properties": {
+                  "id": {
+                    "$ref": "#/components/schemas/PageId"
+                  },
+                  "prev_index": {
+                    "type": "integer",
+                    "minimum": 0
+                  },
+                  "prev_page": {
+                    "$ref": "#/components/schemas/Page"
+                  }
+                }
+              }
+            }
+          },
+          {
+            "type": "object",
+            "required": ["updatePage"],
+            "properties": {
+              "updatePage": {
+                "type": "object",
+                "required": ["id", "patch"],
+                "properties": {
+                  "id": {
+                    "$ref": "#/components/schemas/PageId"
+                  },
+                  "patch": {
+                    "$ref": "#/components/schemas/PagePatch"
+                  },
+                  "prev": {
+                    "$ref": "#/components/schemas/PagePatch"
+                  }
+                }
+              }
+            }
+          },
+          {
+            "type": "object",
+            "required": ["reorderPages"],
+            "properties": {
+              "reorderPages": {
+                "type": "object",
+                "required": ["order", "prev_order"],
+                "properties": {
+                  "order": {
+                    "type": "array",
+                    "items": {
+                      "$ref": "#/components/schemas/PageId"
+                    }
+                  },
+                  "prev_order": {
+                    "type": "array",
+                    "items": {
+                      "$ref": "#/components/schemas/PageId"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          {
+            "type": "object",
+            "required": ["addNode"],
+            "properties": {
+              "addNode": {
+                "type": "object",
+                "required": ["page", "node", "at"],
+                "properties": {
+                  "at": {
+                    "type": "integer",
+                    "minimum": 0
+                  },
+                  "node": {
+                    "$ref": "#/components/schemas/Node"
+                  },
+                  "page": {
+                    "$ref": "#/components/schemas/PageId"
+                  }
+                }
+              }
+            }
+          },
+          {
+            "type": "object",
+            "required": ["removeNode"],
+            "properties": {
+              "removeNode": {
+                "type": "object",
+                "required": ["page", "id", "prev_node", "prev_index"],
+                "properties": {
+                  "id": {
+                    "$ref": "#/components/schemas/NodeId"
+                  },
+                  "page": {
+                    "$ref": "#/components/schemas/PageId"
+                  },
+                  "prev_index": {
+                    "type": "integer",
+                    "minimum": 0
+                  },
+                  "prev_node": {
+                    "$ref": "#/components/schemas/Node"
+                  }
+                }
+              }
+            }
+          },
+          {
+            "type": "object",
+            "required": ["updateNode"],
+            "properties": {
+              "updateNode": {
+                "type": "object",
+                "required": ["page", "id", "patch"],
+                "properties": {
+                  "id": {
+                    "$ref": "#/components/schemas/NodeId"
+                  },
+                  "page": {
+                    "$ref": "#/components/schemas/PageId"
+                  },
+                  "patch": {
+                    "$ref": "#/components/schemas/NodePatch"
+                  },
+                  "prev": {
+                    "$ref": "#/components/schemas/NodePatch"
+                  }
+                }
+              }
+            }
+          },
+          {
+            "type": "object",
+            "required": ["reorderNodes"],
+            "properties": {
+              "reorderNodes": {
+                "type": "object",
+                "required": ["page", "order", "prev_order"],
+                "properties": {
+                  "order": {
+                    "type": "array",
+                    "items": {
+                      "$ref": "#/components/schemas/NodeId"
+                    }
+                  },
+                  "page": {
+                    "$ref": "#/components/schemas/PageId"
+                  },
+                  "prev_order": {
+                    "type": "array",
+                    "items": {
+                      "$ref": "#/components/schemas/NodeId"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          {
+            "type": "object",
+            "required": ["batch"],
+            "properties": {
+              "batch": {
+                "type": "object",
+                "required": ["ops", "label"],
+                "properties": {
+                  "label": {
+                    "type": "string"
+                  },
+                  "ops": {
+                    "type": "array",
+                    "items": {
+                      "$ref": "#/components/schemas/Op"
+                    }
+                  }
+                }
+              }
+            }
+          }
+        ]
+      },
+      "OpenProjectRequest": {
+        "type": "object",
+        "required": ["id"],
+        "properties": {
+          "id": {
+            "type": "string",
+            "description": "`.khrproj/` directory basename (no extension). Must exist under the\nmanaged projects directory."
+          }
+        }
+      },
+      "Page": {
+        "type": "object",
+        "required": ["id", "name", "width", "height", "nodes"],
+        "properties": {
+          "height": {
+            "type": "integer",
+            "format": "int32",
+            "minimum": 0
+          },
+          "id": {
+            "$ref": "#/components/schemas/PageId"
+          },
+          "name": {
+            "type": "string"
+          },
+          "nodes": {
+            "type": "object",
+            "description": "Stacking = insertion order. Bottom-first: `source` is typically first,\n`rendered` typically last.",
+            "additionalProperties": {
+              "$ref": "#/components/schemas/Node"
+            },
+            "propertyNames": {
+              "type": "string",
+              "format": "uuid"
+            }
+          },
+          "width": {
+            "type": "integer",
+            "format": "int32",
+            "minimum": 0
+          }
+        }
+      },
+      "PageId": {
+        "type": "string",
+        "format": "uuid"
+      },
+      "PagePatch": {
+        "type": "object",
+        "properties": {
+          "height": {
+            "type": ["integer", "null"],
+            "format": "int32",
+            "minimum": 0
+          },
+          "name": {
+            "type": ["string", "null"]
+          },
+          "width": {
+            "type": ["integer", "null"],
+            "format": "int32",
+            "minimum": 0
+          }
+        }
+      },
       "PipelineConfig": {
         "type": "object",
         "description": "Engine selection for each pipeline stage.\nValues are engine IDs (e.g. \"pp-doclayout-v3\", \"comic-text-detector\").\nEmpty string means use default.",
         "properties": {
-          "bubble_detector": {
+          "bubble_segmenter": {
             "type": "string",
-            "default": "comic-text-bubble-detector"
+            "default": "speech-bubble-segmentation"
           },
           "detector": {
             "type": "string",
-            "default": "comic-text-bubble-detector"
+            "default": "pp-doclayout-v3"
           },
           "font_detector": {
             "type": "string",
@@ -2592,73 +2279,211 @@
           },
           "translator": {
             "type": "string",
-            "default": "llm"
+            "default": "llm-translate"
           }
         }
       },
-      "PipelineJobRequest": {
+      "PipelineConfigPatch": {
+        "type": "object",
+        "properties": {
+          "bubbleSegmenter": {
+            "type": ["string", "null"]
+          },
+          "detector": {
+            "type": ["string", "null"]
+          },
+          "fontDetector": {
+            "type": ["string", "null"]
+          },
+          "inpainter": {
+            "type": ["string", "null"]
+          },
+          "ocr": {
+            "type": ["string", "null"]
+          },
+          "renderer": {
+            "type": ["string", "null"]
+          },
+          "segmenter": {
+            "type": ["string", "null"]
+          },
+          "translator": {
+            "type": ["string", "null"]
+          }
+        }
+      },
+      "PipelineProgress": {
+        "type": "object",
+        "required": [
+          "jobId",
+          "status",
+          "currentPage",
+          "totalPages",
+          "currentStepIndex",
+          "totalSteps",
+          "overallPercent"
+        ],
+        "properties": {
+          "currentPage": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "currentStepIndex": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "jobId": {
+            "type": "string"
+          },
+          "overallPercent": {
+            "type": "integer",
+            "format": "int32",
+            "minimum": 0
+          },
+          "status": {
+            "$ref": "#/components/schemas/PipelineStatus"
+          },
+          "step": {
+            "oneOf": [
+              {
+                "type": "null"
+              },
+              {
+                "$ref": "#/components/schemas/PipelineStep"
+              }
+            ]
+          },
+          "totalPages": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "totalSteps": {
+            "type": "integer",
+            "minimum": 0
+          }
+        }
+      },
+      "PipelineStatus": {
+        "oneOf": [
+          {
+            "type": "object",
+            "required": ["status"],
+            "properties": {
+              "status": {
+                "type": "string",
+                "enum": ["running"]
+              }
+            }
+          },
+          {
+            "type": "object",
+            "required": ["status"],
+            "properties": {
+              "status": {
+                "type": "string",
+                "enum": ["completed"]
+              }
+            }
+          },
+          {
+            "type": "object",
+            "required": ["status"],
+            "properties": {
+              "status": {
+                "type": "string",
+                "enum": ["cancelled"]
+              }
+            }
+          },
+          {
+            "type": "object",
+            "required": ["reason", "status"],
+            "properties": {
+              "reason": {
+                "type": "string"
+              },
+              "status": {
+                "type": "string",
+                "enum": ["failed"]
+              }
+            }
+          }
+        ]
+      },
+      "PipelineStep": {
+        "type": "string",
+        "enum": ["detect", "ocr", "inpaint", "llmGenerate", "render"]
+      },
+      "ProjectMeta": {
+        "type": "object",
+        "required": ["name", "createdAt", "updatedAt"],
+        "properties": {
+          "createdAt": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "name": {
+            "type": "string"
+          },
+          "style": {
+            "$ref": "#/components/schemas/ProjectStyle"
+          },
+          "updatedAt": {
+            "type": "string",
+            "format": "date-time"
+          }
+        }
+      },
+      "ProjectMetaPatch": {
+        "type": "object",
+        "properties": {
+          "name": {
+            "type": ["string", "null"]
+          },
+          "style": {
+            "oneOf": [
+              {
+                "type": "null"
+              },
+              {
+                "$ref": "#/components/schemas/ProjectStyle"
+              }
+            ]
+          },
+          "updatedAt": {
+            "type": ["string", "null"],
+            "format": "date-time"
+          }
+        }
+      },
+      "ProjectStyle": {
         "type": "object",
         "properties": {
           "defaultFont": {
             "type": ["string", "null"]
-          },
-          "documentId": {
-            "type": ["string", "null"]
-          },
-          "language": {
-            "type": ["string", "null"]
-          },
-          "llm": {
-            "oneOf": [
-              {
-                "type": "null"
-              },
-              {
-                "$ref": "#/components/schemas/PipelineLlmRequest"
-              }
-            ]
-          },
-          "shaderEffect": {
-            "oneOf": [
-              {
-                "type": "null"
-              },
-              {
-                "$ref": "#/components/schemas/TextShaderEffect"
-              }
-            ]
-          },
-          "shaderStroke": {
-            "oneOf": [
-              {
-                "type": "null"
-              },
-              {
-                "$ref": "#/components/schemas/TextStrokeStyle"
-              }
-            ]
-          },
-          "systemPrompt": {
-            "type": ["string", "null"]
           }
         }
       },
-      "PipelineLlmRequest": {
+      "ProjectSummary": {
         "type": "object",
-        "required": ["target"],
+        "required": ["id", "name", "path"],
         "properties": {
-          "options": {
-            "oneOf": [
-              {
-                "type": "null"
-              },
-              {
-                "$ref": "#/components/schemas/LlmGenerationOptions"
-              }
-            ]
+          "id": {
+            "type": "string",
+            "description": "Stable identifier — the `.khrproj` directory basename (without the\nextension). Clients address projects by this."
           },
-          "target": {
-            "$ref": "#/components/schemas/LlmTarget"
+          "name": {
+            "type": "string"
+          },
+          "path": {
+            "type": "string",
+            "description": "Absolute filesystem path. Informational; clients never need to pass\nit back in — they use `id`."
+          },
+          "updatedAtMs": {
+            "type": "integer",
+            "format": "int64",
+            "description": "Last modification time of the project directory on disk (ms since\nUNIX epoch). Used for \"recent projects\" ordering.",
+            "minimum": 0
           }
         }
       },
@@ -2675,6 +2500,43 @@
           },
           "id": {
             "type": "string"
+          }
+        }
+      },
+      "ProviderPatch": {
+        "type": "object",
+        "required": ["id"],
+        "properties": {
+          "apiKey": {
+            "type": ["string", "null"],
+            "description": "`\"[REDACTED]\"` → keep existing keyring secret; empty → clear; otherwise save."
+          },
+          "baseUrl": {
+            "type": ["string", "null"]
+          },
+          "id": {
+            "type": "string"
+          }
+        }
+      },
+      "ProviderSecretRequest": {
+        "type": "object",
+        "required": ["secret"],
+        "properties": {
+          "secret": {
+            "type": "string"
+          }
+        }
+      },
+      "PutMaskResponse": {
+        "type": "object",
+        "required": ["node", "blob"],
+        "properties": {
+          "blob": {
+            "$ref": "#/components/schemas/BlobRef"
+          },
+          "node": {
+            "$ref": "#/components/schemas/NodeId"
           }
         }
       },
@@ -2704,43 +2566,125 @@
           }
         }
       },
-      "RenderRequest": {
+      "Scene": {
         "type": "object",
+        "required": ["project", "pages"],
         "properties": {
-          "shaderEffect": {
+          "pages": {
+            "type": "object",
+            "description": "Pages in insertion order; `IndexMap` ordering *is* the page order.",
+            "additionalProperties": {
+              "$ref": "#/components/schemas/Page"
+            },
+            "propertyNames": {
+              "type": "string",
+              "format": "uuid"
+            }
+          },
+          "project": {
+            "$ref": "#/components/schemas/ProjectMeta"
+          }
+        }
+      },
+      "SceneSnapshot": {
+        "type": "object",
+        "description": "JSON-shaped scene snapshot for the UI (no postcard decoder in JS).",
+        "required": ["epoch", "scene"],
+        "properties": {
+          "epoch": {
+            "type": "integer",
+            "format": "int64",
+            "minimum": 0
+          },
+          "scene": {
+            "$ref": "#/components/schemas/Scene"
+          }
+        }
+      },
+      "SnapshotEvent": {
+        "type": "object",
+        "required": ["jobs", "downloads"],
+        "properties": {
+          "downloads": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/DownloadProgress"
+            }
+          },
+          "jobs": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/JobSummary"
+            }
+          }
+        }
+      },
+      "StartDownloadRequest": {
+        "type": "object",
+        "required": ["modelId"],
+        "properties": {
+          "modelId": {
+            "type": "string",
+            "description": "Package id, as declared via `declare_hf_model_package!`\n(e.g. `\"model:comic-text-detector:yolo-v5\"`)."
+          }
+        }
+      },
+      "StartDownloadResponse": {
+        "type": "object",
+        "required": ["operationId"],
+        "properties": {
+          "operationId": {
+            "type": "string",
+            "description": "Operation id. Reusing the package id keeps ids meaningful for clients\nwatching progress events."
+          }
+        }
+      },
+      "StartPipelineRequest": {
+        "type": "object",
+        "required": ["steps"],
+        "properties": {
+          "defaultFont": {
+            "type": ["string", "null"]
+          },
+          "pages": {
+            "type": ["array", "null"],
+            "items": {
+              "$ref": "#/components/schemas/PageId"
+            },
+            "description": "`None` → whole project, `Some(pages)` → just those pages."
+          },
+          "region": {
             "oneOf": [
               {
                 "type": "null"
               },
               {
-                "$ref": "#/components/schemas/TextShaderEffect"
+                "$ref": "#/components/schemas/Region",
+                "description": "Optional bounding-box hint for inpainter engines (repair-brush)."
               }
             ]
           },
-          "shaderStroke": {
-            "oneOf": [
-              {
-                "type": "null"
-              },
-              {
-                "$ref": "#/components/schemas/TextStrokeStyle"
-              }
-            ]
+          "steps": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
+            "description": "Engine ids (`inventory::submit!` ids) to run in order."
           },
-          "textBlockId": {
+          "systemPrompt": {
+            "type": ["string", "null"]
+          },
+          "targetLanguage": {
             "type": ["string", "null"]
           }
         }
       },
-      "ReorderRequest": {
+      "StartPipelineResponse": {
         "type": "object",
-        "required": ["ids"],
+        "required": ["operationId"],
         "properties": {
-          "ids": {
-            "type": "array",
-            "items": {
-              "type": "string"
-            }
+          "operationId": {
+            "type": "string"
           }
         }
       },
@@ -2748,9 +2692,8 @@
         "type": "string",
         "enum": ["left", "center", "right"]
       },
-      "TextBlockDetail": {
+      "TextData": {
         "type": "object",
-        "required": ["id", "x", "y", "width", "height", "confidence"],
         "properties": {
           "confidence": {
             "type": "number",
@@ -2773,13 +2716,6 @@
               }
             ]
           },
-          "height": {
-            "type": "number",
-            "format": "float"
-          },
-          "id": {
-            "type": "string"
-          },
           "linePolygons": {
             "type": ["array", "null"],
             "items": {
@@ -2793,26 +2729,8 @@
               }
             }
           },
-          "renderHeight": {
-            "type": ["number", "null"],
-            "format": "float"
-          },
-          "renderWidth": {
-            "type": ["number", "null"],
-            "format": "float"
-          },
-          "renderX": {
-            "type": ["number", "null"],
-            "format": "float",
-            "description": "Actual render area position/size (when bubble expansion is used)."
-          },
-          "renderY": {
-            "type": ["number", "null"],
-            "format": "float"
-          },
-          "rendered": {
-            "type": ["string", "null"],
-            "description": "Blob hash for the rendered text block sprite."
+          "lockLayoutBox": {
+            "type": "boolean"
           },
           "renderedDirection": {
             "oneOf": [
@@ -2838,8 +2756,30 @@
               }
             ]
           },
-          "sourceLanguage": {
+          "sourceLang": {
             "type": ["string", "null"]
+          },
+          "sprite": {
+            "oneOf": [
+              {
+                "type": "null"
+              },
+              {
+                "$ref": "#/components/schemas/BlobRef",
+                "description": "Renderer-produced sprite for this block."
+              }
+            ]
+          },
+          "spriteTransform": {
+            "oneOf": [
+              {
+                "type": "null"
+              },
+              {
+                "$ref": "#/components/schemas/Transform",
+                "description": "Sprite placement when the renderer expands past the bubble geometry."
+              }
+            ]
           },
           "style": {
             "oneOf": [
@@ -2856,31 +2796,96 @@
           },
           "translation": {
             "type": ["string", "null"]
-          },
-          "width": {
-            "type": "number",
-            "format": "float"
-          },
-          "x": {
-            "type": "number",
-            "format": "float"
-          },
-          "y": {
-            "type": "number",
-            "format": "float"
           }
         }
       },
-      "TextBlockInput": {
+      "TextDataPatch": {
         "type": "object",
-        "required": ["x", "y", "width", "height"],
+        "description": "For fields where \"set to None\" is meaningful (e.g. clearing a translation),\nthe outer `Option` is \"patch present\", the inner is \"value present\".",
         "properties": {
-          "height": {
-            "type": "number",
+          "confidence": {
+            "type": ["number", "null"],
             "format": "float"
           },
-          "id": {
+          "detectedFontSizePx": {
+            "type": ["number", "null"],
+            "format": "float"
+          },
+          "detector": {
             "type": ["string", "null"]
+          },
+          "fontPrediction": {
+            "oneOf": [
+              {
+                "type": "null"
+              },
+              {
+                "$ref": "#/components/schemas/FontPrediction"
+              }
+            ]
+          },
+          "linePolygons": {
+            "type": ["array", "null"],
+            "items": {
+              "type": "array",
+              "items": {
+                "type": "array",
+                "items": {
+                  "type": "number",
+                  "format": "float"
+                }
+              }
+            }
+          },
+          "lockLayoutBox": {
+            "type": ["boolean", "null"]
+          },
+          "renderedDirection": {
+            "oneOf": [
+              {
+                "type": "null"
+              },
+              {
+                "$ref": "#/components/schemas/TextDirection"
+              }
+            ]
+          },
+          "rotationDeg": {
+            "type": ["number", "null"],
+            "format": "float"
+          },
+          "sourceDirection": {
+            "oneOf": [
+              {
+                "type": "null"
+              },
+              {
+                "$ref": "#/components/schemas/TextDirection"
+              }
+            ]
+          },
+          "sourceLang": {
+            "type": ["string", "null"]
+          },
+          "sprite": {
+            "oneOf": [
+              {
+                "type": "null"
+              },
+              {
+                "$ref": "#/components/schemas/BlobRef"
+              }
+            ]
+          },
+          "spriteTransform": {
+            "oneOf": [
+              {
+                "type": "null"
+              },
+              {
+                "$ref": "#/components/schemas/Transform"
+              }
+            ]
           },
           "style": {
             "oneOf": [
@@ -2897,61 +2902,13 @@
           },
           "translation": {
             "type": ["string", "null"]
-          },
-          "width": {
-            "type": "number",
-            "format": "float"
-          },
-          "x": {
-            "type": "number",
-            "format": "float"
-          },
-          "y": {
-            "type": "number",
-            "format": "float"
-          }
-        }
-      },
-      "TextBlockPatch": {
-        "type": "object",
-        "properties": {
-          "height": {
-            "type": ["number", "null"],
-            "format": "float"
-          },
-          "style": {
-            "oneOf": [
-              {
-                "type": "null"
-              },
-              {
-                "$ref": "#/components/schemas/TextStyle"
-              }
-            ]
-          },
-          "text": {
-            "type": ["string", "null"]
-          },
-          "translation": {
-            "type": ["string", "null"]
-          },
-          "width": {
-            "type": ["number", "null"],
-            "format": "float"
-          },
-          "x": {
-            "type": ["number", "null"],
-            "format": "float"
-          },
-          "y": {
-            "type": ["number", "null"],
-            "format": "float"
           }
         }
       },
       "TextDirection": {
         "type": "string",
-        "enum": ["Horizontal", "Vertical"]
+        "description": "Reading axis of a text block.",
+        "enum": ["horizontal", "vertical"]
       },
       "TextShaderEffect": {
         "type": "object",
@@ -3052,29 +3009,29 @@
           }
         }
       },
-      "TransferStatus": {
-        "type": "string",
-        "enum": ["started", "downloading", "completed", "failed"]
-      },
-      "TranslateRequest": {
+      "Transform": {
         "type": "object",
+        "required": ["x", "y", "width", "height"],
         "properties": {
-          "language": {
-            "type": ["string", "null"]
+          "height": {
+            "type": "number",
+            "format": "float"
           },
-          "systemPrompt": {
-            "type": ["string", "null"]
+          "rotationDeg": {
+            "type": "number",
+            "format": "float"
           },
-          "textBlockId": {
-            "type": ["string", "null"]
-          }
-        }
-      },
-      "UpdateDocumentStyleRequest": {
-        "type": "object",
-        "properties": {
-          "defaultFont": {
-            "type": ["string", "null"]
+          "width": {
+            "type": "number",
+            "format": "float"
+          },
+          "x": {
+            "type": "number",
+            "format": "float"
+          },
+          "y": {
+            "type": "number",
+            "format": "float"
           }
         }
       }

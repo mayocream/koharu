@@ -3,7 +3,7 @@
 import type { CSSProperties } from 'react'
 import { useCallback, useEffect, useRef, useState } from 'react'
 
-import { cancelObjectUrlRevoke, convertToBlob, revokeObjectUrlLater } from '@/lib/util'
+import { cancelObjectUrlRevoke, convertToBlob, revokeObjectUrlLater } from '@/lib/io/blobConvert'
 
 type ImageProps = {
   data?: Uint8Array

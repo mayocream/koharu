@@ -1,3 +1,4 @@
+use crate::types::{TextDirection, TextRegion};
 use image::{
     DynamicImage, GrayImage, Luma, Rgb, RgbImage,
     imageops::{self},
@@ -7,7 +8,6 @@ use imageproc::{
     geometric_transformations::{Interpolation, Projection, warp_into},
     morphology::dilate,
 };
-use koharu_core::{TextBlock, TextDirection};
 
 const FINAL_MASK_DILATE_RADIUS: u8 = 2;
 
@@ -18,14 +18,14 @@ pub struct ComicTextDetection {
     pub shrink_map: GrayImage,
     pub threshold_map: GrayImage,
     pub line_polygons: Vec<Quad>,
-    pub text_blocks: Vec<TextBlock>,
+    pub text_blocks: Vec<TextRegion>,
     pub mask: GrayImage,
 }
 
 pub fn refine_segmentation_mask(
     _image: &DynamicImage,
     pred_mask: &GrayImage,
-    blocks: &[TextBlock],
+    blocks: &[TextRegion],
 ) -> GrayImage {
     let width = pred_mask.width();
     let height = pred_mask.height();
@@ -52,7 +52,7 @@ pub fn refine_segmentation_mask(
     }
 
     // Apply a threshold mask: Pixels are preserved exclusively if their probability
-    // exceeds the core threshold (`super::BINARY_THRESHOLD`) and they reside within a known TextBlock geometry.
+    // exceeds the core threshold (`super::BINARY_THRESHOLD`) and they reside within a known TextRegion geometry.
     let base = GrayImage::from_fn(width, height, |x, y| {
         if in_bounds_mask.get_pixel(x, y)[0] != 0
             && pred_mask.get_pixel(x, y)[0] > super::BINARY_THRESHOLD
@@ -76,12 +76,12 @@ pub fn refine_segmentation_mask(
     })
 }
 
-pub fn crop_text_block_bbox(image: &DynamicImage, block: &TextBlock) -> DynamicImage {
+pub fn crop_text_block_bbox(image: &DynamicImage, block: &TextRegion) -> DynamicImage {
     let [x1, y1, x2, y2] = expanded_text_block_crop_bounds(image.width(), image.height(), block);
     image.crop_imm(x1, y1, x2.saturating_sub(x1), y2.saturating_sub(y1))
 }
 
-pub fn extract_text_block_regions(image: &DynamicImage, block: &TextBlock) -> Vec<DynamicImage> {
+pub fn extract_text_block_regions(image: &DynamicImage, block: &TextRegion) -> Vec<DynamicImage> {
     let Some(line_polygons) = block.line_polygons.as_ref() else {
         return vec![crop_text_block_bbox(image, block)];
     };
@@ -107,7 +107,7 @@ pub fn extract_text_block_regions(image: &DynamicImage, block: &TextBlock) -> Ve
 fn expanded_text_block_crop_bounds(
     image_width: u32,
     image_height: u32,
-    block: &TextBlock,
+    block: &TextRegion,
 ) -> [u32; 4] {
     let should_expand = block.detector.as_deref() == Some("ctd")
         || block
@@ -167,7 +167,7 @@ fn expanded_text_block_crop_bounds(
     [x1, y1, x2, y2]
 }
 
-fn warp_line_region(image: &RgbImage, block: &TextBlock, line: &Quad) -> Option<RgbImage> {
+fn warp_line_region(image: &RgbImage, block: &TextRegion, line: &Quad) -> Option<RgbImage> {
     let expanded = maybe_expand_ctd_line(block, line);
     let clipped = clip_quad(&expanded, image.width() as f32, image.height() as f32);
     let bbox = quad_bbox(&clipped);
@@ -240,7 +240,7 @@ fn warp_line_region(image: &RgbImage, block: &TextBlock, line: &Quad) -> Option<
     }
 }
 
-fn maybe_expand_ctd_line(block: &TextBlock, line: &Quad) -> Quad {
+fn maybe_expand_ctd_line(block: &TextRegion, line: &Quad) -> Quad {
     let should_expand = block.detector.as_deref() == Some("ctd")
         && block.source_direction == Some(TextDirection::Horizontal);
     if !should_expand {
@@ -350,7 +350,7 @@ mod tests {
             }
         });
 
-        let block = TextBlock {
+        let block = TextRegion {
             x: 10.0,
             y: 11.0,
             width: 4.0, // Limits to roughly [10, 11] to [14, 15]
@@ -375,7 +375,7 @@ mod tests {
     #[test]
     fn extract_text_block_regions_falls_back_to_bbox_without_lines() {
         let image = DynamicImage::ImageRgb8(RgbImage::from_pixel(24, 24, Rgb([255, 255, 255])));
-        let block = TextBlock {
+        let block = TextRegion {
             x: 4.0,
             y: 5.0,
             width: 10.0,
@@ -392,7 +392,7 @@ mod tests {
     #[test]
     fn crop_text_block_bbox_expands_ctd_crop() {
         let image = DynamicImage::ImageRgb8(RgbImage::from_pixel(48, 48, Rgb([255, 255, 255])));
-        let block = TextBlock {
+        let block = TextRegion {
             x: 10.0,
             y: 12.0,
             width: 12.0,

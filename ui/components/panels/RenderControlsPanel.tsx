@@ -1,6 +1,5 @@
 'use client'
 
-import { useQueryClient } from '@tanstack/react-query'
 import {
   AlignCenterIcon,
   AlignLeftIcon,
@@ -19,16 +18,28 @@ import { ColorPicker } from '@/components/ui/color-picker'
 import { FontSelect } from '@/components/ui/font-select'
 import { Input } from '@/components/ui/input'
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip'
-import { useTextBlocks } from '@/hooks/useTextBlocks'
-import { getGetDocumentQueryKey, updateDocumentStyle } from '@/lib/api/documents/documents'
-import type { FontFaceInfo } from '@/lib/api/schemas'
-import { useListFonts, useGetGoogleFontsCatalog } from '@/lib/api/system/system'
+import { useCurrentPage, useSelectedTextNode, useTextNodes } from '@/hooks/useCurrentPage'
+import { useGetGoogleFontsCatalog, useListFonts } from '@/lib/api/default/default'
+import type {
+  FontFaceInfo,
+  TextAlign,
+  TextShaderEffect,
+  TextStrokeStyle,
+  TextStyle,
+} from '@/lib/api/schemas'
+import { applyOp } from '@/lib/io/scene'
+import { ops } from '@/lib/ops'
 import { useEditorUiStore } from '@/lib/stores/editorUiStore'
 import { usePreferencesStore } from '@/lib/stores/preferencesStore'
 import { cn } from '@/lib/utils'
-import { RenderEffect, RenderStroke, RgbaColor, TextAlign, TextStyle } from '@/types'
 
-const DEFAULT_COLOR: RgbaColor = [0, 0, 0, 255]
+const DEFAULT_COLOR: number[] = [0, 0, 0, 255]
+const DEFAULT_STROKE_COLOR: number[] = [255, 255, 255, 255]
+const DEFAULT_STROKE_WIDTH = 1.6
+const MIN_STROKE_WIDTH = 0.2
+const MAX_STROKE_WIDTH = 24
+const STROKE_WIDTH_STEP = 0.1
+
 const DEFAULT_FONT_FACES: FontFaceInfo[] = [
   {
     familyName: 'Arial',
@@ -37,53 +48,32 @@ const DEFAULT_FONT_FACES: FontFaceInfo[] = [
     cached: true,
   },
 ]
-const DEFAULT_EFFECT: RenderEffect = {
-  italic: false,
-  bold: false,
-}
-const DEFAULT_STROKE: RenderStroke = {
-  enabled: true,
-  color: [255, 255, 255, 255],
-  widthPx: undefined,
-}
-const DEFAULT_STROKE_WIDTH = 1.6
-const MIN_STROKE_WIDTH = 0.2
-const MAX_STROKE_WIDTH = 24
-const STROKE_WIDTH_STEP = 0.1
 
-const clampByte = (value: number) => Math.max(0, Math.min(255, Math.round(value)))
+const clampByte = (v: number) => Math.max(0, Math.min(255, Math.round(v)))
+const clampStrokeWidth = (v: number) =>
+  Number(Math.max(MIN_STROKE_WIDTH, Math.min(MAX_STROKE_WIDTH, v)).toFixed(1))
 
-const clampStrokeWidth = (value: number) =>
-  Number(Math.max(MIN_STROKE_WIDTH, Math.min(MAX_STROKE_WIDTH, value)).toFixed(1))
-
-const colorToHex = (color: RgbaColor) =>
+const colorToHex = (color: number[]) =>
   `#${color
     .slice(0, 3)
-    .map((value) => value.toString(16).padStart(2, '0'))
+    .map((v) => clampByte(v).toString(16).padStart(2, '0'))
     .join('')}`
 
-const hexToColor = (value: string, alpha: number): RgbaColor => {
+const hexToColor = (value: string, alpha: number): number[] => {
   const normalized = value.replace('#', '')
-  if (normalized.length !== 6) {
-    return [0, 0, 0, clampByte(alpha)]
-  }
-
+  if (normalized.length !== 6) return [0, 0, 0, clampByte(alpha)]
   const r = Number.parseInt(normalized.slice(0, 2), 16)
   const g = Number.parseInt(normalized.slice(2, 4), 16)
   const b = Number.parseInt(normalized.slice(4, 6), 16)
-
-  if ([r, g, b].some((channel) => Number.isNaN(channel))) {
-    return [0, 0, 0, clampByte(alpha)]
-  }
-
+  if ([r, g, b].some((c) => Number.isNaN(c))) return [0, 0, 0, clampByte(alpha)]
   return [r, g, b, clampByte(alpha)]
 }
 
 const uniqueFontFaces = (values: FontFaceInfo[]) => {
   const seen = new Set<string>()
-  return values.filter((value) => {
-    if (!value.postScriptName || seen.has(value.postScriptName)) return false
-    seen.add(value.postScriptName)
+  return values.filter((v) => {
+    if (!v.postScriptName || seen.has(v.postScriptName)) return false
+    seen.add(v.postScriptName)
     return true
   })
 }
@@ -91,15 +81,10 @@ const uniqueFontFaces = (values: FontFaceInfo[]) => {
 const findFontFace = (fonts: FontFaceInfo[], value?: string) => {
   if (!value) return undefined
   return fonts.find(
-    (font) =>
-      font.postScriptName === value ||
-      font.familyName === value ||
-      font.familyName.trim() === value.trim(),
+    (f) =>
+      f.postScriptName === value || f.familyName === value || f.familyName.trim() === value.trim(),
   )
 }
-
-const normalizeFontValue = (fonts: FontFaceInfo[], value?: string) =>
-  findFontFace(fonts, value)?.postScriptName ?? value
 
 const fallbackFontFace = (value?: string): FontFaceInfo | undefined => {
   const normalized = value?.trim()
@@ -112,219 +97,140 @@ const fallbackFontFace = (value?: string): FontFaceInfo | undefined => {
   }
 }
 
-const hasExplicitFontFamilies = (style?: TextStyle) => (style?.fontFamilies?.length ?? 0) > 0
-
-const normalizeEffect = (effect?: Partial<RenderEffect>): RenderEffect => ({
-  italic: effect?.italic ?? false,
-  bold: effect?.bold ?? false,
-})
-
-const normalizeStroke = (stroke?: Partial<RenderStroke>): RenderStroke => ({
+const normalizeStroke = (stroke?: TextStrokeStyle | null): TextStrokeStyle => ({
   enabled: stroke?.enabled ?? true,
-  color: stroke?.color ?? DEFAULT_STROKE.color,
-  widthPx: stroke?.widthPx,
+  color: stroke?.color ?? DEFAULT_STROKE_COLOR,
+  widthPx: stroke?.widthPx ?? null,
 })
 
-const resolveStyleColor = (
-  style: TextStyle | undefined,
-  block:
-    | {
-        fontPrediction?: {
-          text_color: [number, number, number]
-        }
-      }
-    | undefined,
-  fallbackColor: RgbaColor,
-): RgbaColor =>
-  style?.color ??
-  (block?.fontPrediction?.text_color
-    ? [
-        block.fontPrediction.text_color[0],
-        block.fontPrediction.text_color[1],
-        block.fontPrediction.text_color[2],
-        255,
-      ]
-    : fallbackColor)
-
-const resolveEffectiveTextAlign = (
-  block:
-    | {
-        style?: TextStyle
-        translation?: string
-      }
-    | undefined,
-): TextAlign => {
-  if (block?.style?.textAlign) {
-    return block.style.textAlign
-  }
-
-  if (block?.translation) {
-    // Default to Center for all translated scripts to match speech bubble aesthetics.
-    return 'center'
-  }
-
-  return 'left'
-}
+const normalizeEffect = (effect?: TextShaderEffect | null): TextShaderEffect => ({
+  bold: effect?.bold ?? false,
+  italic: effect?.italic ?? false,
+})
 
 export function RenderControlsPanel() {
-  const renderEffect = useEditorUiStore((state) => state.renderEffect)
-  const renderStroke = useEditorUiStore((state) => state.renderStroke)
-  const setRenderEffect = useEditorUiStore((state) => state.setRenderEffect)
-  const setRenderStroke = useEditorUiStore((state) => state.setRenderStroke)
-  const { data: availableFonts = [] } = useListFonts()
-  const { data: catalog } = useGetGoogleFontsCatalog()
-  const sortedFonts = useMemo(() => {
-    if (!availableFonts) return []
-    const recommended = new Set(catalog?.recommended ?? [])
-    return [...availableFonts].sort((a, b) => {
-      const aRec = recommended.has(a.familyName) ? 0 : 1
-      const bRec = recommended.has(b.familyName) ? 0 : 1
-      if (aRec !== bRec) return aRec - bRec
-      return a.familyName.localeCompare(b.familyName)
-    })
-  }, [availableFonts, catalog])
-  const {
-    document: currentDocument,
-    textBlocks,
-    selectedBlockIndex,
-    replaceBlock,
-    updateTextBlocks,
-  } = useTextBlocks()
-  const documentId = currentDocument?.id
-  const appDefaultFont = usePreferencesStore((state) => state.defaultFont)
-  const documentFont = currentDocument?.style?.defaultFont ?? appDefaultFont
-  const queryClient = useQueryClient()
   const { t } = useTranslation()
-  const selectedBlock =
-    selectedBlockIndex !== undefined ? textBlocks[selectedBlockIndex] : undefined
-  const selectedBlockHasExplicitFont = hasExplicitFontFamilies(selectedBlock?.style)
-  const firstBlock = textBlocks[0]
-  const hasBlocks = textBlocks.length > 0
+  const page = useCurrentPage()
+  const textNodes = useTextNodes()
+  const selectedNode = useSelectedTextNode()
+  const { data: availableFonts = [] } = useListFonts()
+  useGetGoogleFontsCatalog() // prefetch catalog so picker can decorate Google entries
+  const appDefaultFont = usePreferencesStore((s) => s.defaultFont)
+  const renderEffect = useEditorUiStore((s) => s.renderEffect)
+  const renderStroke = useEditorUiStore((s) => s.renderStroke)
+  const setRenderEffect = useEditorUiStore((s) => s.setRenderEffect)
+  const setRenderStroke = useEditorUiStore((s) => s.setRenderStroke)
+
+  const sortedFonts = useMemo(() => {
+    return [...(availableFonts ?? [])].sort((a, b) => a.familyName.localeCompare(b.familyName))
+  }, [availableFonts])
+
+  const firstNode = textNodes[0]
+  const hasNodes = textNodes.length > 0
+
   const fontCandidates = uniqueFontFaces(
     [
       ...sortedFonts,
-      ...(documentFont ? [fallbackFontFace(documentFont)] : []),
-      ...(selectedBlock?.style?.fontFamilies?.slice(0, 1)?.map(fallbackFontFace) ?? []),
-      ...(firstBlock?.style?.fontFamilies?.slice(0, 1)?.map(fallbackFontFace) ?? []),
+      ...(appDefaultFont ? [fallbackFontFace(appDefaultFont)] : []),
+      ...(selectedNode?.data.style?.fontFamilies?.slice(0, 1)?.map(fallbackFontFace) ?? []),
+      ...(firstNode?.data.style?.fontFamilies?.slice(0, 1)?.map(fallbackFontFace) ?? []),
       ...DEFAULT_FONT_FACES,
-    ].filter((value): value is FontFaceInfo => !!value),
+    ].filter((v): v is FontFaceInfo => !!v),
   )
-  const fallbackFontFaces = fontCandidates.length > 0 ? fontCandidates : DEFAULT_FONT_FACES
-  const fallbackColor = firstBlock
-    ? resolveStyleColor(firstBlock.style, firstBlock, DEFAULT_COLOR)
-    : DEFAULT_COLOR
-  const fontOptions = fontCandidates
+
   const currentFontCandidate =
-    selectedBlock?.style?.fontFamilies?.[0] ??
-    documentFont ??
-    firstBlock?.style?.fontFamilies?.[0] ??
-    (hasBlocks ? fallbackFontFaces[0]?.postScriptName : '')
+    selectedNode?.data.style?.fontFamilies?.[0] ??
+    appDefaultFont ??
+    firstNode?.data.style?.fontFamilies?.[0] ??
+    (hasNodes ? fontCandidates[0]?.postScriptName : '')
   const currentFontFace =
-    findFontFace(fontOptions, currentFontCandidate) ?? fallbackFontFace(currentFontCandidate)
+    findFontFace(fontCandidates, currentFontCandidate) ?? fallbackFontFace(currentFontCandidate)
   const currentFont = currentFontFace?.postScriptName ?? ''
   const currentFontFamilyName = currentFontFace?.familyName
-  const currentEffect = normalizeEffect(selectedBlock?.style?.effect ?? renderEffect)
-  const currentStroke = normalizeStroke(selectedBlock?.style?.stroke ?? renderStroke)
-  const currentColor = selectedBlock
-    ? resolveStyleColor(selectedBlock.style, selectedBlock, fallbackColor)
-    : fallbackColor
+
+  const selectedStyle = selectedNode?.data.style ?? firstNode?.data.style
+  const currentColor = selectedStyle?.color ?? DEFAULT_COLOR
   const currentColorHex = colorToHex(currentColor)
-  const currentStrokeColorHex = colorToHex(currentStroke.color)
+  const currentStroke = normalizeStroke(selectedStyle?.stroke)
+  const currentStrokeColorHex = colorToHex(currentStroke.color ?? DEFAULT_STROKE_COLOR)
   const currentStrokeWidth = currentStroke.widthPx ?? DEFAULT_STROKE_WIDTH
-  const fontLabel = t('render.fontLabel')
-  const fontSizeLabel = t('render.fontSizeLabel', { defaultValue: 'Size' })
-  const currentFontSize =
-    selectedBlock?.style?.fontSize ??
-    selectedBlock?.fontPrediction?.font_size_px ??
-    selectedBlock?.detectedFontSizePx
-  const effectLabel = t('render.effectLabel')
-  const strokeLabel = t('render.effectBorder')
-  const strokeColorLabel = t('render.strokeColorLabel')
-  const strokeWidthLabel = t('render.strokeWidthLabel')
-  const alignLabel = t('render.alignLabel')
-  const currentTextAlign = resolveEffectiveTextAlign(selectedBlock ?? firstBlock)
-  const scopeLabel =
-    selectedBlockIndex !== undefined
-      ? t('render.fontScopeBlockIndex', {
-          index: selectedBlockIndex + 1,
-        })
-      : t('render.fontScopeGlobal')
-  const scopeToneClass =
-    selectedBlockIndex !== undefined
-      ? 'border-primary/20 bg-primary/10 text-primary'
-      : 'border-border/60 bg-muted text-muted-foreground'
+  const currentEffect = normalizeEffect(selectedStyle?.effect ?? renderEffect)
+  const currentFontSize: number | undefined =
+    (selectedNode?.data.style?.fontSize ?? undefined) ||
+    selectedNode?.data.fontPrediction?.fontSizePx ||
+    (selectedNode?.data.detectedFontSizePx ?? undefined)
 
-  const buildStyle = (
-    block:
-      | {
-          style?: TextStyle
-          fontPrediction?: {
-            text_color: [number, number, number]
-          }
-        }
-      | undefined,
-    style: TextStyle | undefined,
-    updates: Partial<TextStyle>,
-  ): TextStyle => ({
-    fontFamilies: updates.fontFamilies ?? style?.fontFamilies ?? [],
-    fontSize: updates.fontSize ?? style?.fontSize,
-    color: updates.color ?? resolveStyleColor(style, block, fallbackColor),
-    effect: updates.effect ?? style?.effect,
-    stroke: updates.stroke ?? style?.stroke,
-    textAlign: updates.textAlign ?? style?.textAlign,
-  })
+  const effectiveAlign: TextAlign =
+    selectedNode?.data.style?.textAlign ??
+    firstNode?.data.style?.textAlign ??
+    (selectedNode?.data.translation ? 'center' : 'left')
 
-  const applyStyleToSelected = (updates: Partial<TextStyle>) => {
-    if (selectedBlockIndex === undefined) return false
-    const nextStyle = buildStyle(selectedBlock, selectedBlock?.style, updates)
-    void replaceBlock(selectedBlockIndex, { style: nextStyle })
-    return true
-  }
+  const selectedBlockHasExplicitFont = (selectedNode?.data.style?.fontFamilies?.length ?? 0) > 0
 
-  const applyStyleToAll = (updates: Partial<TextStyle>) => {
-    if (!hasBlocks) return
-    const nextBlocks = textBlocks.map((block) => ({
-      ...block,
-      style: buildStyle(block, block.style, updates),
-    }))
-    void updateTextBlocks(nextBlocks)
-  }
+  // ---------------------------------------------------------------------------
+  // Mutations
+  // ---------------------------------------------------------------------------
 
-  const mergeFontFamilies = (nextFont: string, current: string[] | undefined) => {
-    const base = (
-      current?.length ? current : fallbackFontFaces.map((font) => font.postScriptName)
-    ).map((family) => normalizeFontValue(fontOptions, family) ?? family)
-    return [nextFont, ...base.filter((family) => family !== nextFont)]
-  }
-
-  const updateDocumentDefaultFont = (value: string) => {
-    // Remember as app-level default for future documents
-    usePreferencesStore.getState().setDefaultFont(value)
-    if (!documentId) return
-    void updateDocumentStyle(documentId, {
-      defaultFont: value,
-    }).then(() =>
-      queryClient.invalidateQueries({
-        queryKey: getGetDocumentQueryKey(documentId),
+  const applyStyleToNode = async (nodeId: string, updates: Partial<TextStyle>) => {
+    if (!page) return
+    const existing = page.nodes[nodeId]
+    if (!existing || !('text' in existing.kind)) return
+    const current = existing.kind.text.style ?? undefined
+    const nextStyle: TextStyle = {
+      fontFamilies: updates.fontFamilies ?? current?.fontFamilies ?? [],
+      fontSize: updates.fontSize ?? current?.fontSize ?? null,
+      color: updates.color ?? current?.color ?? DEFAULT_COLOR,
+      effect: updates.effect ?? current?.effect ?? null,
+      stroke: updates.stroke ?? current?.stroke ?? null,
+      textAlign: updates.textAlign ?? current?.textAlign ?? null,
+    }
+    await applyOp(
+      ops.updateNode(page.id, nodeId, {
+        data: { text: { style: nextStyle } } as never,
       }),
     )
   }
 
-  const applyStrokeSetting = (nextStroke: RenderStroke) => {
-    const normalized = normalizeStroke(nextStroke)
-    if (applyStyleToSelected({ stroke: normalized })) return
-    setRenderStroke(normalized)
+  const applyStyleToSelected = (updates: Partial<TextStyle>): boolean => {
+    if (!selectedNode) return false
+    void applyStyleToNode(selectedNode.id, updates)
+    return true
   }
 
-  const updateStrokeWidth = (value: number) => {
-    applyStrokeSetting({
-      ...currentStroke,
-      widthPx: clampStrokeWidth(value),
+  const applyStyleToAll = (updates: Partial<TextStyle>) => {
+    if (!hasNodes || !page) return
+    const batch = textNodes.map((n) => {
+      const current = n.data.style
+      const nextStyle: TextStyle = {
+        fontFamilies: updates.fontFamilies ?? current?.fontFamilies ?? [],
+        fontSize: updates.fontSize ?? current?.fontSize ?? null,
+        color: updates.color ?? current?.color ?? DEFAULT_COLOR,
+        effect: updates.effect ?? current?.effect ?? null,
+        stroke: updates.stroke ?? current?.stroke ?? null,
+        textAlign: updates.textAlign ?? current?.textAlign ?? null,
+      }
+      return ops.updateNode(page.id, n.id, {
+        data: { text: { style: nextStyle } } as never,
+      })
+    })
+    void applyOp(ops.batch('Bulk style update', batch))
+  }
+
+  const applyStrokeSetting = (nextStroke: TextStrokeStyle) => {
+    if (applyStyleToSelected({ stroke: normalizeStroke(nextStroke) })) return
+    setRenderStroke({
+      enabled: nextStroke.enabled ?? true,
+      color: (nextStroke.color ?? DEFAULT_STROKE_COLOR) as [number, number, number, number],
+      widthPx: nextStroke.widthPx ?? undefined,
     })
   }
 
+  const updateStrokeWidth = (value: number) => {
+    applyStrokeSetting({ ...currentStroke, widthPx: clampStrokeWidth(value) })
+  }
+
   const effectItems: {
-    key: keyof RenderEffect
+    key: 'italic' | 'bold'
     label: string
     Icon: ComponentType<{ className?: string }>
   }[] = [
@@ -337,26 +243,23 @@ export function RenderControlsPanel() {
     label: string
     Icon: ComponentType<{ className?: string }>
   }[] = [
-    {
-      value: 'left',
-      label: t('render.alignLeft'),
-      Icon: AlignLeftIcon,
-    },
-    {
-      value: 'center',
-      label: t('render.alignCenter'),
-      Icon: AlignCenterIcon,
-    },
-    {
-      value: 'right',
-      label: t('render.alignRight'),
-      Icon: AlignRightIcon,
-    },
+    { value: 'left', label: t('render.alignLeft'), Icon: AlignLeftIcon },
+    { value: 'center', label: t('render.alignCenter'), Icon: AlignCenterIcon },
+    { value: 'right', label: t('render.alignRight'), Icon: AlignRightIcon },
   ]
+
+  const scopeLabel = selectedNode
+    ? t('render.fontScopeBlockIndex', {
+        index: textNodes.findIndex((n) => n.id === selectedNode.id) + 1,
+      })
+    : t('render.fontScopeGlobal')
+  const scopeToneClass = selectedNode
+    ? 'border-primary/20 bg-primary/10 text-primary'
+    : 'border-border/60 bg-muted text-muted-foreground'
 
   return (
     <div className='flex w-full min-w-0 flex-col gap-2'>
-      {/* Scope indicator */}
+      {/* Scope */}
       <div className='flex items-center justify-end'>
         <span
           data-testid='render-scope-indicator'
@@ -373,7 +276,7 @@ export function RenderControlsPanel() {
       <div className='flex flex-col gap-0.5'>
         <div className='flex items-baseline justify-between'>
           <span className='text-[10px] font-medium text-muted-foreground uppercase'>
-            {fontLabel}
+            {t('render.fontLabel')}
           </span>
           <span className='text-[10px] font-medium text-muted-foreground uppercase'>
             {t('render.fontColorLabel')}
@@ -384,36 +287,34 @@ export function RenderControlsPanel() {
             <FontSelect
               data-testid='render-font-select'
               value={currentFont}
-              options={fontOptions}
-              disabled={fontOptions.length === 0}
+              options={fontCandidates}
+              disabled={fontCandidates.length === 0}
               placeholder={t('render.fontPlaceholder')}
               triggerStyle={
                 currentFontFamilyName ? { fontFamily: currentFontFamilyName } : undefined
               }
               onChange={(value) => {
-                const nextFamilies = mergeFontFamilies(value, selectedBlock?.style?.fontFamilies)
-                // Only persist a block override when the block already has one.
-                // Otherwise keep the block inheriting the document default.
                 if (selectedBlockHasExplicitFont) {
+                  const nextFamilies = [value]
                   if (applyStyleToSelected({ fontFamilies: nextFamilies })) return
                 }
-                updateDocumentDefaultFont(value)
+                usePreferencesStore.getState().setDefaultFont(value)
               }}
             />
           </div>
-          {selectedBlockHasExplicitFont ? (
+          {selectedBlockHasExplicitFont && (
             <button
               type='button'
               className='text-[9px] text-muted-foreground hover:text-foreground'
               onClick={() => applyStyleToSelected({ fontFamilies: [] })}
-              title='Reset to document default'
+              title='Reset to default'
             >
               ✕
             </button>
-          ) : null}
+          )}
           <ColorPicker
             value={currentColorHex}
-            disabled={!hasBlocks}
+            disabled={!hasNodes}
             triggerTestId='render-color-trigger'
             pickerTestId='render-color-picker'
             swatchTestId='render-color-swatch'
@@ -430,15 +331,15 @@ export function RenderControlsPanel() {
       </div>
 
       {/* Size / Effect / Align */}
-      <div className='grid w-full grid-cols-[minmax(0,1fr)_auto_auto] items-end gap-x-2'>
+      <div className='grid w-full grid-cols-[minmax(0,1fr)_auto_auto] items-end gap-x-1.5'>
         <span className='text-[10px] font-medium text-muted-foreground uppercase'>
-          {fontSizeLabel}
+          {t('render.fontSizeLabel', { defaultValue: 'Size' })}
         </span>
         <span className='text-[10px] font-medium text-muted-foreground uppercase'>
-          {effectLabel}
+          {t('render.effectLabel')}
         </span>
         <span className='text-[10px] font-medium text-muted-foreground uppercase'>
-          {alignLabel}
+          {t('render.alignLabel')}
         </span>
 
         <div className='flex min-w-0 items-center rounded-md border border-input bg-background shadow-xs'>
@@ -446,9 +347,8 @@ export function RenderControlsPanel() {
             type='button'
             variant='ghost'
             size='icon-sm'
-            aria-label={`${fontSizeLabel} -`}
-            className='size-7 shrink-0 rounded-r-none border-r'
-            disabled={selectedBlockIndex === undefined}
+            className='size-6 shrink-0 rounded-r-none border-r'
+            disabled={!selectedNode}
             onClick={() => {
               const next = Math.max(6, Math.round((currentFontSize ?? 16) - 1))
               applyStyleToSelected({ fontSize: next })
@@ -462,9 +362,9 @@ export function RenderControlsPanel() {
             min='6'
             max='300'
             inputMode='numeric'
-            className='h-7 min-w-0 flex-1 [appearance:textfield] rounded-none border-0 px-1 text-center text-xs shadow-none focus-visible:ring-0 [&::-webkit-inner-spin-button]:appearance-none [&::-webkit-outer-spin-button]:appearance-none'
+            className='h-6 min-w-0 flex-1 [appearance:textfield] rounded-none border-0 px-0.5 text-center text-xs shadow-none focus-visible:ring-0 [&::-webkit-inner-spin-button]:appearance-none [&::-webkit-outer-spin-button]:appearance-none'
             data-testid='render-font-size'
-            disabled={selectedBlockIndex === undefined}
+            disabled={!selectedNode}
             value={currentFontSize !== undefined ? Math.round(currentFontSize) : ''}
             placeholder='auto'
             onChange={(event) => {
@@ -477,9 +377,8 @@ export function RenderControlsPanel() {
             type='button'
             variant='ghost'
             size='icon-sm'
-            aria-label={`${fontSizeLabel} +`}
-            className='size-7 shrink-0 rounded-l-none border-l'
-            disabled={selectedBlockIndex === undefined}
+            className='size-6 shrink-0 rounded-l-none border-l'
+            disabled={!selectedNode}
             onClick={() => {
               const next = Math.min(300, Math.round((currentFontSize ?? 16) + 1))
               applyStyleToSelected({ fontSize: next })
@@ -489,7 +388,7 @@ export function RenderControlsPanel() {
           </Button>
         </div>
 
-        <div className='flex items-center gap-1'>
+        <div className='flex items-center gap-0.5'>
           {effectItems.map((item) => {
             const active = currentEffect[item.key]
             const Icon = item.Icon
@@ -502,21 +401,23 @@ export function RenderControlsPanel() {
                     aria-label={item.label}
                     data-testid={`render-effect-toggle-${item.key}`}
                     className={cn(
-                      'size-7 shrink-0',
+                      'size-6 shrink-0',
                       active &&
                         'border-primary bg-primary text-primary-foreground hover:bg-primary/90',
                     )}
                     onClick={() => {
-                      const nextEffect = {
-                        ...DEFAULT_EFFECT,
+                      const nextEffect: TextShaderEffect = {
                         ...currentEffect,
                         [item.key]: !active,
                       }
                       if (applyStyleToSelected({ effect: nextEffect })) return
-                      setRenderEffect(nextEffect)
+                      setRenderEffect({
+                        bold: nextEffect.bold ?? false,
+                        italic: nextEffect.italic ?? false,
+                      })
                     }}
                   >
-                    <Icon className='size-3.5' />
+                    <Icon className='size-3' />
                   </Button>
                 </TooltipTrigger>
                 <TooltipContent side='bottom' sideOffset={4}>
@@ -527,9 +428,9 @@ export function RenderControlsPanel() {
           })}
         </div>
 
-        <div className='flex items-center gap-1'>
+        <div className='flex items-center gap-0.5'>
           {textAlignItems.map((item) => {
-            const active = currentTextAlign === item.value
+            const active = effectiveAlign === item.value
             const Icon = item.Icon
             return (
               <Tooltip key={item.value}>
@@ -539,9 +440,9 @@ export function RenderControlsPanel() {
                     size='icon-sm'
                     aria-label={item.label}
                     data-testid={`render-align-${item.value}`}
-                    disabled={!hasBlocks}
+                    disabled={!hasNodes}
                     className={cn(
-                      'size-7 shrink-0',
+                      'size-6 shrink-0',
                       active &&
                         'border-primary bg-primary text-primary-foreground hover:bg-primary/90',
                     )}
@@ -550,7 +451,7 @@ export function RenderControlsPanel() {
                       applyStyleToAll({ textAlign: item.value })
                     }}
                   >
-                    <Icon className='size-3.5' />
+                    <Icon className='size-3' />
                   </Button>
                 </TooltipTrigger>
                 <TooltipContent side='bottom' sideOffset={4}>
@@ -565,7 +466,7 @@ export function RenderControlsPanel() {
       {/* Border / Stroke */}
       <div className='flex flex-col gap-0.5'>
         <span className='text-[10px] font-medium text-muted-foreground uppercase'>
-          {strokeLabel}
+          {t('render.effectBorder')}
         </span>
         <div className='flex min-w-0 items-center gap-1'>
           <Tooltip>
@@ -573,7 +474,6 @@ export function RenderControlsPanel() {
               <Button
                 variant='outline'
                 size='icon-sm'
-                aria-label={strokeLabel}
                 data-testid='render-stroke-enable'
                 className={cn(
                   'size-7 shrink-0',
@@ -581,17 +481,14 @@ export function RenderControlsPanel() {
                     'border-primary bg-primary text-primary-foreground hover:bg-primary/90',
                 )}
                 onClick={() =>
-                  applyStrokeSetting({
-                    ...currentStroke,
-                    enabled: !currentStroke.enabled,
-                  })
+                  applyStrokeSetting({ ...currentStroke, enabled: !currentStroke.enabled })
                 }
               >
                 <SquareIcon className='size-3.5' />
               </Button>
             </TooltipTrigger>
             <TooltipContent side='bottom' sideOffset={4}>
-              {strokeLabel}
+              {t('render.effectBorder')}
             </TooltipContent>
           </Tooltip>
 
@@ -600,7 +497,7 @@ export function RenderControlsPanel() {
               <div>
                 <ColorPicker
                   value={currentStrokeColorHex}
-                  disabled={!hasBlocks}
+                  disabled={!hasNodes}
                   triggerTestId='render-stroke-color-trigger'
                   pickerTestId='render-stroke-color-picker'
                   swatchTestId='render-stroke-color-swatch'
@@ -609,7 +506,10 @@ export function RenderControlsPanel() {
                   onChange={(hex) => {
                     applyStrokeSetting({
                       ...currentStroke,
-                      color: hexToColor(hex, currentStroke.color[3] ?? 255),
+                      color: hexToColor(
+                        hex,
+                        (currentStroke.color ?? DEFAULT_STROKE_COLOR)[3] ?? 255,
+                      ),
                     })
                   }}
                   className='size-7'
@@ -617,7 +517,7 @@ export function RenderControlsPanel() {
               </div>
             </TooltipTrigger>
             <TooltipContent side='bottom' sideOffset={4}>
-              {strokeColorLabel}
+              {t('render.strokeColorLabel')}
             </TooltipContent>
           </Tooltip>
 
@@ -626,13 +526,11 @@ export function RenderControlsPanel() {
               type='button'
               variant='ghost'
               size='icon-sm'
-              aria-label={`${strokeWidthLabel} -`}
               className='size-7 shrink-0 rounded-r-none border-r'
               onClick={() => updateStrokeWidth(currentStrokeWidth - STROKE_WIDTH_STEP)}
             >
               <MinusIcon className='size-3' />
             </Button>
-
             <Input
               type='number'
               step={String(STROKE_WIDTH_STEP)}
@@ -650,12 +548,10 @@ export function RenderControlsPanel() {
                 updateStrokeWidth(parsed)
               }}
             />
-
             <Button
               type='button'
               variant='ghost'
               size='icon-sm'
-              aria-label={`${strokeWidthLabel} +`}
               className='size-7 shrink-0 rounded-l-none border-l'
               onClick={() => updateStrokeWidth(currentStrokeWidth + STROKE_WIDTH_STEP)}
             >

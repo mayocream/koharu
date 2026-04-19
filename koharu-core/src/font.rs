@@ -1,14 +1,30 @@
+//! Scene-facing font-prediction types.
+//!
+//! These mirror the raw predictions emitted by `koharu-ml`'s font detector but
+//! add the OpenAPI/JSON-Schema derives so they can live on `TextData.font_prediction`
+//! and appear in the typed HTTP surface.
+
 use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
 use utoipa::ToSchema;
 
+/// Reading axis of a text block.
 #[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Eq, ToSchema, JsonSchema)]
+#[serde(rename_all = "camelCase")]
 pub enum TextDirection {
     Horizontal,
     Vertical,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, ToSchema, JsonSchema)]
+#[serde(rename_all = "camelCase")]
+pub struct TopFont {
+    pub index: usize,
+    pub score: f32,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, ToSchema, JsonSchema)]
+#[serde(rename_all = "camelCase")]
 pub struct NamedFontPrediction {
     pub index: usize,
     pub name: String,
@@ -18,12 +34,7 @@ pub struct NamedFontPrediction {
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, ToSchema, JsonSchema)]
-pub struct TopFont {
-    pub index: usize,
-    pub score: f32,
-}
-
-#[derive(Debug, Clone, Serialize, Deserialize, ToSchema, JsonSchema)]
+#[serde(rename_all = "camelCase")]
 pub struct FontPrediction {
     pub top_fonts: Vec<TopFont>,
     pub named_fonts: Vec<NamedFontPrediction>,

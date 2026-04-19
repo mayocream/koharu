@@ -12,8 +12,8 @@ env:
   CARGO_TERM_COLOR: always
 
 jobs:
-  test:
-    name: Unit Tests
+  rust:
+    name: Rust
     runs-on: ubuntu-latest
     steps:
       # refer: https://v2.tauri.app/start/prerequisites/#linux
@@ -29,10 +29,41 @@ jobs:
             libssl-dev \
             libayatana-appindicator3-dev \
             librsvg2-dev \
-            fonts-noto-cjk
+            fonts-noto-cjk \
+            dbus-x11 \
+            gnome-keyring
       - uses: actions/checkout@v6
       - uses: Swatinem/rust-cache@v2
         with:
           cache-targets: false
-      - run: cargo test --no-run
-      - run: cargo test --workspace --tests
+      # The integration-tests crate prepares a shared llama.cpp runtime once
+      # per `cargo test` invocation under `tests/integration-tests/.cache`;
+      # caching that directory across runs avoids re-downloading the dylib
+      # on every PR.
+      - uses: actions/cache@v4
+        with:
+          path: tests/integration-tests/.cache
+          key: ${{ runner.os }}-integration-runtime-${{ hashFiles('koharu-runtime/**/*.rs', 'koharu-llm/**/*.rs') }}
+          restore-keys: ${{ runner.os }}-integration-runtime-
+      - name: Run workspace tests (unit + integration)
+        run: |
+          # Headless dbus + gnome-keyring so the provider-secret integration
+          # tests can talk to secret-service on Linux runners.
+          eval "$(dbus-launch --sh-syntax)"
+          echo -n "" | gnome-keyring-daemon --unlock --components=secrets &>/dev/null &
+          export $(echo -n "" | gnome-keyring-daemon --start --components=secrets 2>/dev/null)
+          cargo test --workspace --tests
+
+  ui:
+    name: UI
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+      - uses: oven-sh/setup-bun@v2
+      - uses: actions/cache@v4
+        with:
+          path: ~/.bun/install/cache
+          key: ${{ runner.os }}-bun-${{ hashFiles('**/bun.lock') }}
+      - run: bun install --frozen-lockfile
+      - name: Run Vitest
+        run: bun run --filter ui test
