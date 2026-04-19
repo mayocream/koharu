@@ -86,6 +86,7 @@ fn deepl_target_lang(language: Language) -> &'static str {
         Language::Mongolian => "EN-US",
         Language::Uyghur => "ZH",
         Language::Cantonese => "ZH",
+        Language::Belarusian => "BE",
     }
 }
 
