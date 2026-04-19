@@ -157,7 +157,9 @@ describe('export', () => {
     )
 
     const blob = await exportProject({ format: 'rendered' })
-    expect(blob).toBeInstanceOf(Blob)
+    expect(Object.prototype.toString.call(blob)).toBe('[object Blob]')
+    expect(blob.type).toBe('application/zip')
+    expect(blob.size).toBe(3)
     expect(isInvalidated(getGetSceneJsonQueryKey())).toBe(false)
   })
 })
