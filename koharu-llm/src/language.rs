@@ -285,6 +285,13 @@ pub enum Language {
         props(tag = "yue-HK")
     )]
     Cantonese,
+    #[strum(
+        to_string = "Belarusian",
+        serialize = "be-BY",
+        serialize = "be",
+        props(tag = "be-BY")
+    )]
+    Belarusian,
 }
 
 impl Language {
