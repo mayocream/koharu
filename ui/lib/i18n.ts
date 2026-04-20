@@ -27,7 +27,25 @@ export const resources = {
   'pt-BR': { translation: ptBR },
 } satisfies Resource
 
-export const supportedLanguages = Object.keys(resources)
+export type SupportedLanguage = keyof typeof resources
+
+export const supportedLanguages = Object.keys(resources) as SupportedLanguage[]
+
+export const languageDisplayNames = {
+  'en-US': 'English',
+  'zh-CN': '中文（简体）',
+  'zh-TW': '中文（繁體）',
+  'ja-JP': '日本語',
+  'ru-RU': 'Русский',
+  'es-ES': 'Español',
+  'tr-TR': 'Türkçe',
+  'ko-KR': '한국어',
+  'pt-BR': 'Português (Brasil)',
+} satisfies Record<SupportedLanguage, string>
+
+export function getLanguageDisplayName(language: string): string | undefined {
+  return (languageDisplayNames as Partial<Record<string, string>>)[language]
+}
 
 i18n
   .use(LocalStorageBackend)
