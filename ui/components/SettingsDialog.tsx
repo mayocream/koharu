@@ -732,6 +732,8 @@ function KeybindsPane() {
       return
     }
 
+    setError(null)
+    setLiveShortcut(null)
     const handleKeyDown = (e: KeyboardEvent) => {
       e.preventDefault()
       e.stopPropagation()
