@@ -62,16 +62,22 @@ export function useKeyboardShortcuts() {
       }
 
       // Tool Switching
-      const TOOL_MAP: Record<string, import('@/lib/types').ToolMode> = {
-        [shortcuts.select]: 'select',
-        [shortcuts.block]: 'block',
-        [shortcuts.brush]: 'brush',
-        [shortcuts.eraser]: 'eraser',
-        [shortcuts.repairBrush]: 'repairBrush',
-      }
+      const toolShortcutEntries: ReadonlyArray<
+        readonly [string, import('@/lib/types').ToolMode]
+      > = [
+        [shortcuts.select, 'select'],
+        [shortcuts.block, 'block'],
+        [shortcuts.brush, 'brush'],
+        [shortcuts.eraser, 'eraser'],
+        [shortcuts.repairBrush, 'repairBrush'],
+      ]
 
-      if (shortcut && TOOL_MAP[shortcut]) {
-        setMode(TOOL_MAP[shortcut])
+      const matchingTool = shortcut
+        ? toolShortcutEntries.find(([toolShortcut]) => toolShortcut === shortcut)?.[1]
+        : undefined
+
+      if (matchingTool) {
+        setMode(matchingTool)
         return
       }
 
