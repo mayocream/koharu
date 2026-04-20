@@ -19,7 +19,7 @@ import {
   AlertTriangleIcon,
 } from 'lucide-react'
 import { useTheme } from 'next-themes'
-import { useEffect, useMemo, useRef, useState, type ReactNode } from 'react'
+import { Fragment, useEffect, useMemo, useRef, useState, type ReactNode } from 'react'
 import { useTranslation } from 'react-i18next'
 
 import {
@@ -39,6 +39,7 @@ import {
 import { Button } from '@/components/ui/button'
 import { Dialog, DialogContent, DialogTitle, DialogDescription } from '@/components/ui/dialog'
 import { Input } from '@/components/ui/input'
+import { Kbd } from '@/components/ui/kbd'
 import { Label } from '@/components/ui/label'
 import { ScrollArea } from '@/components/ui/scroll-area'
 import {
@@ -69,6 +70,7 @@ import { supportedLanguages } from '@/lib/i18n'
 import {
   areShortcutsEqual,
   formatShortcut,
+  formatModifierCombination,
   getPlatform,
   isKeyBlocked,
   isModifierKey,
@@ -688,6 +690,8 @@ const SHORTCUT_ITEMS = [
     key: 'decreaseBrushSize',
     labelKey: 'settings.shortcutDecreaseBrushSize',
   },
+  { key: 'undo', labelKey: 'menu.undo' },
+  { key: 'redo', labelKey: 'menu.redo' },
 ] as const
 
 function KeybindsPane() {
@@ -699,6 +703,7 @@ function KeybindsPane() {
   const [recordingKey, setRecordingKey] = useState<string | null>(null)
   const [error, setError] = useState<string | null>(null)
   const [isSaved, setIsSaved] = useState(false)
+  const [liveShortcut, setLiveShortcut] = useState<string | null>(null)
   const isMac = useMemo(() => getPlatform() === 'mac', [])
 
   // Optimized conflict detection
@@ -723,6 +728,7 @@ function KeybindsPane() {
   useEffect(() => {
     if (!recordingKey) {
       setError(null)
+      setLiveShortcut(null)
       return
     }
 
@@ -730,14 +736,16 @@ function KeybindsPane() {
       e.preventDefault()
       e.stopPropagation()
 
-      // Early exit for modifier-only events
+      // Early exit for modifier-only events - but update preview!
       if (isModifierKey(e.key)) {
+        setLiveShortcut(formatModifierCombination(e, isMac))
         return
       }
 
       // Allow Escape to cancel recording
       if (e.key === 'Escape') {
         setRecordingKey(null)
+        setLiveShortcut(null)
         return
       }
 
@@ -750,29 +758,30 @@ function KeybindsPane() {
       const shortcut = formatShortcut(e, isMac)
       if (!shortcut) return
 
-      // Conflict detection (now non-blocking)
-      const existingAction = Object.entries(pendingShortcuts).find(
-        ([action, val]) => val === shortcut && action !== recordingKey,
-      )
-
-      if (existingAction) {
-        // Just a hint, we still allow it
-        setError(t('settings.shortcutConflict'))
-      }
-
       setPendingShortcuts((prev) => ({ ...prev, [recordingKey]: shortcut }))
       setRecordingKey(null)
       setIsSaved(false)
+      setLiveShortcut(null)
+    }
+
+    const handleKeyUp = (e: KeyboardEvent) => {
+      if (isModifierKey(e.key)) {
+        const combo = formatModifierCombination(e, isMac)
+        setLiveShortcut(combo || null)
+      }
     }
 
     const handleClickOutside = () => {
       setRecordingKey(null)
+      setLiveShortcut(null)
     }
 
     window.addEventListener('keydown', handleKeyDown, { capture: true })
+    window.addEventListener('keyup', handleKeyUp, { capture: true })
     window.addEventListener('click', handleClickOutside, { capture: true })
     return () => {
       window.removeEventListener('keydown', handleKeyDown, { capture: true })
+      window.removeEventListener('keyup', handleKeyUp, { capture: true })
       window.removeEventListener('click', handleClickOutside, {
         capture: true,
       })
@@ -813,6 +822,15 @@ function KeybindsPane() {
     setResetConfirmOpen(false)
   }
 
+  const renderShortcutKeys = (shortcutStr: string, kbdClass?: string) => {
+    return shortcutStr.split('+').map((part, i) => (
+      <Fragment key={i}>
+        <Kbd className={kbdClass}>{part}</Kbd>
+        {i < shortcutStr.split('+').length - 1 && <span className='text-muted-foreground'>+</span>}
+      </Fragment>
+    ))
+  }
+
   return (
     <div className='flex h-full flex-col gap-6'>
       <div className='grow space-y-6 overflow-y-auto pr-2'>
@@ -820,30 +838,53 @@ function KeybindsPane() {
           <div className='divide-y divide-border overflow-hidden rounded-xl border border-border bg-card'>
             {SHORTCUT_ITEMS.map((item) => {
               const currentVal = pendingShortcuts[item.key]
-              const hasConflict = (conflictCounts.get(currentVal) || 0) > 1
+              const hasConflict = currentVal && (conflictCounts.get(currentVal) || 0) > 1
+              const conflictingItem = hasConflict
+                ? SHORTCUT_ITEMS.find(
+                    (s) => s.key !== item.key && pendingShortcuts[s.key] === currentVal,
+                  )
+                : null
 
               return (
-                <div key={item.key} className='flex items-center justify-between px-4 py-3'>
+                <div key={item.key} className='flex items-center justify-between px-4 py-2'>
                   <div className='flex items-center gap-2'>
                     <span className='text-sm'>{t(item.labelKey)}</span>
                     {hasConflict && (
-                      <div title={t('settings.shortcutConflict')}>
+                      <div
+                        title={`${t('settings.shortcutConflict')}${
+                          conflictingItem ? `: ${t(conflictingItem.labelKey)}` : ''
+                        }`}
+                      >
                         <AlertTriangleIcon className='size-3.5 text-amber-500' />
                       </div>
                     )}
                   </div>
                   <Button
-                    variant={recordingKey === item.key ? 'default' : 'outline'}
+                    variant={recordingKey === item.key ? 'secondary' : 'ghost'}
                     size='sm'
                     onClick={(e) => {
                       e.stopPropagation()
                       setRecordingKey(item.key)
                     }}
-                    className='h-8 min-w-16 font-mono uppercase'
+                    className='group h-8 w-fit px-2 font-mono uppercase'
                   >
-                    {recordingKey === item.key
-                      ? error || t('settings.shortcutPressKey')
-                      : currentVal || 'NONE'}
+                    <div className='flex items-center gap-1'>
+                      {recordingKey === item.key ? (
+                        error ? (
+                          <span className='text-xs text-destructive'>{error}</span>
+                        ) : liveShortcut ? (
+                          renderShortcutKeys(liveShortcut)
+                        ) : (
+                          <span className='text-xs text-muted-foreground italic'>
+                            {t('settings.shortcutPressKey')}
+                          </span>
+                        )
+                      ) : currentVal ? (
+                        renderShortcutKeys(currentVal, 'bg-background')
+                      ) : (
+                        <span className='text-xs text-muted-foreground'>NONE</span>
+                      )}
+                    </div>
                   </Button>
                 </div>
               )

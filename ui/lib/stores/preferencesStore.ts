@@ -3,6 +3,8 @@
 import { create } from 'zustand'
 import { persist } from 'zustand/middleware'
 
+import { getPlatform } from '@/lib/shortcutUtils'
+
 type PreferencesState = {
   brushConfig: {
     size: number
@@ -21,6 +23,8 @@ type PreferencesState = {
     repairBrush: string
     increaseBrushSize: string
     decreaseBrushSize: string
+    undo: string
+    redo: string
   }
   setShortcuts: (shortcuts: Partial<PreferencesState['shortcuts']>) => void
   resetShortcuts: () => void
@@ -40,6 +44,8 @@ const initialPreferences = {
     repairBrush: 'R',
     increaseBrushSize: ']',
     decreaseBrushSize: '[',
+    undo: getPlatform() === 'mac' ? 'Cmd+Z' : 'Ctrl+Z',
+    redo: getPlatform() === 'mac' ? 'Cmd+Shift+Z' : 'Ctrl+Shift+Z',
   },
 }
 
@@ -73,7 +79,7 @@ export const usePreferencesStore = create<PreferencesState>()(
     }),
     {
       name: 'koharu-config',
-      version: 4,
+      version: 5,
       migrate: (persisted: any, version: number) => {
         if (version < 2 && persisted) {
           delete persisted.localLlm
@@ -90,6 +96,15 @@ export const usePreferencesStore = create<PreferencesState>()(
             if (typeof val === 'string' && val.length === 1) {
               persisted.shortcuts[key] = val.toUpperCase()
             }
+          }
+        }
+        if (version < 5 && persisted?.shortcuts) {
+          const isMac = getPlatform() === 'mac'
+          if (!persisted.shortcuts.undo) {
+            persisted.shortcuts.undo = isMac ? 'Cmd+Z' : 'Ctrl+Z'
+          }
+          if (!persisted.shortcuts.redo) {
+            persisted.shortcuts.redo = isMac ? 'Cmd+Shift+Z' : 'Ctrl+Shift+Z'
           }
         }
         return persisted

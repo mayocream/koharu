@@ -14,20 +14,31 @@ export function useKeyboardShortcuts() {
 
   useEffect(() => {
     const handleKeyDown = (event: KeyboardEvent) => {
-      const target = event.target as HTMLElement
+      const target = event.target
       const inTextField =
-        target.tagName === 'INPUT' || target.tagName === 'TEXTAREA' || target.isContentEditable
+        target instanceof HTMLElement &&
+        (target.tagName === 'INPUT' || target.tagName === 'TEXTAREA' || target.isContentEditable)
 
-      // Undo / Redo — work globally, including from within text fields (the
-      // browser's native `z` on an input would only undo keystrokes, not
-      // scene ops). Cmd on macOS, Ctrl elsewhere.
+      // Undo / Redo — these work globally, including from within text fields,
+      // as scene-level history should usually take precedence over native
+      // browser text-undo.
+      const shortcut = formatShortcut(event, isMac)
       const mod = isMac ? event.metaKey : event.ctrlKey
-      if (mod && (event.key === 'z' || event.key === 'Z')) {
+      const shortcuts = usePreferencesStore.getState().shortcuts
+
+      if (shortcut === shortcuts.undo) {
         event.preventDefault()
-        if (event.shiftKey) void redoOp()
-        else void undoOp()
+        void undoOp()
         return
       }
+
+      if (shortcut === shortcuts.redo) {
+        event.preventDefault()
+        void redoOp()
+        return
+      }
+
+      // Legacy fallback: Redo on Ctrl+Y / Cmd+Y
       if (mod && (event.key === 'y' || event.key === 'Y')) {
         event.preventDefault()
         void redoOp()
@@ -50,27 +61,22 @@ export function useKeyboardShortcuts() {
         return
       }
 
-      const shortcut = formatShortcut(event, isMac)
-      if (!shortcut) return
-
-      // Pull latest shortcuts from store to avoid re-binding this listener
-      const shortcuts = usePreferencesStore.getState().shortcuts
-
       // Tool Switching
-      if (shortcut === shortcuts.select) {
-        setMode('select')
-      } else if (shortcut === shortcuts.block) {
-        setMode('block')
-      } else if (shortcut === shortcuts.brush) {
-        setMode('brush')
-      } else if (shortcut === shortcuts.eraser) {
-        setMode('eraser')
-      } else if (shortcut === shortcuts.repairBrush) {
-        setMode('repairBrush')
+      const TOOL_MAP: Record<string, import('@/lib/types').ToolMode> = {
+        [shortcuts.select]: 'select',
+        [shortcuts.block]: 'block',
+        [shortcuts.brush]: 'brush',
+        [shortcuts.eraser]: 'eraser',
+        [shortcuts.repairBrush]: 'repairBrush',
+      }
+
+      if (shortcut && TOOL_MAP[shortcut]) {
+        setMode(TOOL_MAP[shortcut])
+        return
       }
 
       // Brush Size
-      else if (shortcut === shortcuts.increaseBrushSize) {
+      if (shortcut === shortcuts.increaseBrushSize) {
         const currentSize = usePreferencesStore.getState().brushConfig.size
         setBrushConfig({ size: Math.min(128, currentSize + 4) })
       } else if (shortcut === shortcuts.decreaseBrushSize) {

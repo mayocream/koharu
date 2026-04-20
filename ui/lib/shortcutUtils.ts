@@ -38,6 +38,18 @@ const MODIFIER_NAMES = new Set([
 ])
 
 /**
+ * Generates a string representing only the modifiers currently held.
+ */
+export function formatModifierCombination(event: ShortcutEvent, isMac: boolean): string {
+  const parts: string[] = []
+  if (event.ctrlKey) parts.push('Ctrl')
+  if (event.altKey) parts.push(isMac ? 'Opt' : 'Alt')
+  if (event.shiftKey) parts.push('Shift')
+  if (event.metaKey) parts.push(isMac ? 'Cmd' : 'Win')
+  return parts.join('+')
+}
+
+/**
  * Generates a standardized shortcut string from a keyboard event.
  * Format: [Ctrl+][Alt/Opt+][Shift+][Cmd/Win+]Key
  */
@@ -58,7 +70,8 @@ export function formatShortcut(event: ShortcutEvent, isMac: boolean): string {
   }
 
   // Standardize single characters to uppercase (V, B, [)
-  const displayKey = key.length === 1 ? key.toUpperCase() : key
+  let displayKey = key.length === 1 ? key.toUpperCase() : key
+  if (displayKey === ' ') displayKey = 'Space'
   parts.push(displayKey)
 
   return parts.join('+')
