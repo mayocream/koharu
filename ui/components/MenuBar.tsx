@@ -2,7 +2,7 @@
 
 import { CopyIcon, MinusIcon, SquareIcon, XIcon } from 'lucide-react'
 import Image from 'next/image'
-import { useCallback, useEffect, useState } from 'react'
+import { useCallback, useEffect, useMemo, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 
 import { fitCanvasToViewport, resetCanvasScale } from '@/components/Canvas'
@@ -21,12 +21,10 @@ import { getConfig, startPipeline } from '@/lib/api/default/default'
 import { isTauri, openExternalUrl } from '@/lib/backend'
 import { exportCurrentProjectAs, importPages } from '@/lib/io/pagesIo'
 import { closeProject, redoOp, selectAllTextNodesOnCurrentPage, undoOp } from '@/lib/io/scene'
+import { formatShortcutForDisplay, getPlatform } from '@/lib/shortcutUtils'
 import { useEditorUiStore } from '@/lib/stores/editorUiStore'
 import { usePreferencesStore } from '@/lib/stores/preferencesStore'
 import { useSelectionStore } from '@/lib/stores/selectionStore'
-
-const isMacOS = () =>
-  typeof navigator !== 'undefined' && /Mac|iPhone|iPad|iPod/.test(navigator.userAgent)
 
 const windowControls = {
   async close() {
@@ -66,6 +64,8 @@ export function MenuBar() {
   const [settingsTab, setSettingsTab] = useState<TabId>('appearance')
   const hasPage = useSelectionStore((s) => s.pageId !== null)
   const hasScene = useScene().scene !== null
+  const shortcuts = usePreferencesStore((state) => state.shortcuts)
+  const isMac = useMemo(() => getPlatform() === 'mac', [])
 
   const requirePageId = () => {
     const id = useSelectionStore.getState().pageId
@@ -173,8 +173,8 @@ export function MenuBar() {
     },
   ]
 
-  const isNativeMacOS = isTauri() && isMacOS()
-  const isWindowsTauri = isTauri() && !isMacOS()
+  const isNativeMacOS = isTauri() && isMac
+  const isWindowsTauri = isTauri() && !isMac
 
   return (
     <div className='flex h-8 items-center border-b border-border bg-background text-[13px] text-foreground'>
@@ -264,7 +264,7 @@ export function MenuBar() {
               onSelect={() => void undoOp()}
             >
               {t('menu.undo')}
-              <MenubarShortcut>{isMacOS() ? '⌘Z' : 'Ctrl+Z'}</MenubarShortcut>
+              <MenubarShortcut>{formatShortcutForDisplay(shortcuts.undo, isMac)}</MenubarShortcut>
             </MenubarItem>
             <MenubarItem
               data-testid='menu-edit-redo'
@@ -273,7 +273,7 @@ export function MenuBar() {
               onSelect={() => void redoOp()}
             >
               {t('menu.redo')}
-              <MenubarShortcut>{isMacOS() ? '⇧⌘Z' : 'Ctrl+Shift+Z'}</MenubarShortcut>
+              <MenubarShortcut>{formatShortcutForDisplay(shortcuts.redo, isMac)}</MenubarShortcut>
             </MenubarItem>
             <MenubarSeparator />
             <MenubarItem
@@ -283,7 +283,7 @@ export function MenuBar() {
               onSelect={() => selectAllTextNodesOnCurrentPage()}
             >
               {t('menu.selectAll')}
-              <MenubarShortcut>{isMacOS() ? '⌘A' : 'Ctrl+A'}</MenubarShortcut>
+              <MenubarShortcut>{isMac ? '⌘A' : 'Ctrl+A'}</MenubarShortcut>
             </MenubarItem>
           </MenubarContent>
         </MenubarMenu>

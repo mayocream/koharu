@@ -737,6 +737,7 @@ function KeybindsPane() {
     const handleKeyDown = (e: KeyboardEvent) => {
       e.preventDefault()
       e.stopPropagation()
+      setError(null)
 
       // Early exit for modifier-only events - but update preview!
       if (isModifierKey(e.key)) {

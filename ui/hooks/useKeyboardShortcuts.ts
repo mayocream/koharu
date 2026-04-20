@@ -10,7 +10,20 @@ import { usePreferencesStore } from '@/lib/stores/preferencesStore'
 export function useKeyboardShortcuts() {
   const setMode = useEditorUiStore((state) => state.setMode)
   const setBrushConfig = usePreferencesStore((state) => state.setBrushConfig)
+  const shortcuts = usePreferencesStore((state) => state.shortcuts)
   const isMac = useMemo(() => getPlatform() === 'mac', [])
+
+  // Optimized tool mapping - built once and updated only when shortcuts change
+  const TOOL_MAP = useMemo(
+    (): Record<string, import('@/lib/types').ToolMode> => ({
+      [shortcuts.select]: 'select',
+      [shortcuts.block]: 'block',
+      [shortcuts.brush]: 'brush',
+      [shortcuts.eraser]: 'eraser',
+      [shortcuts.repairBrush]: 'repairBrush',
+    }),
+    [shortcuts],
+  )
 
   useEffect(() => {
     const handleKeyDown = (event: KeyboardEvent) => {
@@ -24,7 +37,6 @@ export function useKeyboardShortcuts() {
       // browser text-undo.
       const shortcut = formatShortcut(event, isMac)
       const mod = isMac ? event.metaKey : event.ctrlKey
-      const shortcuts = usePreferencesStore.getState().shortcuts
 
       if (shortcut === shortcuts.undo) {
         event.preventDefault()
@@ -61,21 +73,8 @@ export function useKeyboardShortcuts() {
         return
       }
 
-      // Tool Switching
-      const toolShortcutEntries: ReadonlyArray<
-        readonly [string, import('@/lib/types').ToolMode]
-      > = [
-        [shortcuts.select, 'select'],
-        [shortcuts.block, 'block'],
-        [shortcuts.brush, 'brush'],
-        [shortcuts.eraser, 'eraser'],
-        [shortcuts.repairBrush, 'repairBrush'],
-      ]
-
-      const matchingTool = shortcut
-        ? toolShortcutEntries.find(([toolShortcut]) => toolShortcut === shortcut)?.[1]
-        : undefined
-
+      // Tool Switching - O(1) direct matching
+      const matchingTool = shortcut ? TOOL_MAP[shortcut] : undefined
       if (matchingTool) {
         setMode(matchingTool)
         return
@@ -94,5 +93,5 @@ export function useKeyboardShortcuts() {
     window.addEventListener('keydown', handleKeyDown)
     return () => window.removeEventListener('keydown', handleKeyDown)
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [isMac, setMode])
+  }, [isMac, setMode, TOOL_MAP, shortcuts])
 }

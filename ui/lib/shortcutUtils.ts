@@ -121,3 +121,36 @@ export function areShortcutsEqual(a: Record<string, string>, b: Record<string, s
 export function isModifierKey(key: string): boolean {
   return MODIFIER_NAMES.has(key)
 }
+
+/**
+ * Formats a standardized shortcut string (e.g., 'Cmd+Shift+Z') for UI display.
+ * On Mac, it uses standard symbols (⌘, ⇧, ⌥, ⌃).
+ * On other platforms, it returns the string as-is with '+' separators.
+ */
+export function formatShortcutForDisplay(shortcut: string, isMac: boolean): string {
+  if (!shortcut) return ''
+
+  const parts = shortcut.split('+')
+  if (!isMac) return parts.join('+')
+
+  // Mac symbol mapping
+  const symbols: Record<string, string> = {
+    Ctrl: '⌃',
+    Opt: '⌥',
+    Shift: '⇧',
+    Cmd: '⌘',
+  }
+
+  // Map parts to symbols if they exist, otherwise keep the key as is
+  const mappedParts = parts.map((part) => symbols[part] || part)
+
+  // Standard Mac menu order: Control, Option, Shift, Command
+  // We sort based on this order for consistency in the UI
+  const ORDER = ['⌃', '⌥', '⇧', '⌘']
+  const modifiers = mappedParts.filter((p) => ORDER.includes(p))
+  const key = mappedParts.find((p) => !ORDER.includes(p))
+
+  modifiers.sort((a, b) => ORDER.indexOf(a) - ORDER.indexOf(b))
+
+  return modifiers.join('') + (key || '')
+}
