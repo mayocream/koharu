@@ -825,10 +825,12 @@ function KeybindsPane() {
   }
 
   const renderShortcutKeys = (shortcutStr: string, kbdClass?: string) => {
-    return shortcutStr.split('+').map((part, i) => (
+    const parts = shortcutStr.split('+')
+
+    return parts.map((part, i) => (
       <Fragment key={i}>
         <Kbd className={kbdClass}>{part}</Kbd>
-        {i < shortcutStr.split('+').length - 1 && <span className='text-muted-foreground'>+</span>}
+        {i < parts.length - 1 && <span className='text-muted-foreground'>+</span>}
       </Fragment>
     ))
   }
