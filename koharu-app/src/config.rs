@@ -163,8 +163,7 @@ pub fn load() -> Result<AppConfig> {
         save(&config)?;
     }
 
-    // Populate api_key from the keyring (or .env fallback) for every known
-    // provider.
+    // Populate api_key from the keyring (or .env fallback) for every known provider.
     for provider in &mut config.providers {
         if let Ok(Some(key)) = get_saved_api_key(&provider.id)
             && !key.trim().is_empty()
