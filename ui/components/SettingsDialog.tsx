@@ -65,7 +65,7 @@ import type {
   ProviderConfig,
 } from '@/lib/api/schemas'
 import { isTauri, openExternalUrl } from '@/lib/backend'
-import { languageDisplayNames, supportedLanguages } from '@/lib/i18n'
+import { supportedLanguages } from '@/lib/i18n'
 import {
   areShortcutsEqual,
   formatShortcut,
@@ -468,7 +468,7 @@ function AppearancePane() {
           <SelectContent>
             {locales.map((code) => (
               <SelectItem key={code} value={code}>
-                {languageDisplayNames[code]}
+                {t(`menu.languages.${code}`, { defaultValue: code })}
               </SelectItem>
             ))}
           </SelectContent>

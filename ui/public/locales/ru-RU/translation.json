@@ -36,18 +36,7 @@
     "github": "GitHub",
     "version": "Версия: {{version}}",
     "versionUnknown": "Версия: Неизвестно",
-    "language": "Язык",
-    "languages": {
-      "en-US": "Английский",
-      "zh-CN": "Китайский (упр.)",
-      "zh-TW": "Китайский (трад.)",
-      "ja-JP": "Японский",
-      "ru-RU": "Русский",
-      "es-ES": "Испанский",
-      "tr-TR": "Турецкий",
-      "ko-KR": "Корейский",
-      "pt-BR": "Português (Brasil)"
-    }
+    "language": "Язык"
   },
   "welcome": {
     "title": "Koharu",

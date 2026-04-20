@@ -33,7 +33,6 @@ import {
   useGetCurrentLlm,
 } from '@/lib/api/default/default'
 import type { LlmCatalog, LlmCatalogModel, LlmProviderCatalog, LlmTarget } from '@/lib/api/schemas'
-import { getLanguageDisplayName } from '@/lib/i18n'
 import { useEditorUiStore } from '@/lib/stores/editorUiStore'
 import { useJobsStore } from '@/lib/stores/jobsStore'
 import { usePreferencesStore } from '@/lib/stores/preferencesStore'
@@ -401,7 +400,7 @@ function LlmStatusPopover() {
                       value={language}
                       data-testid={`llm-language-option-${index}`}
                     >
-                      {getLanguageDisplayName(language) ?? t(`llm.languages.${language}`)}
+                      {t(`llm.languages.${language}`, { defaultValue: language })}
                     </SelectItem>
                   ))}
                 </SelectContent>
