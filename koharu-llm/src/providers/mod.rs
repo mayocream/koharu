@@ -94,43 +94,152 @@ fn provider_key_entry(provider: &str) -> anyhow::Result<Entry> {
     Ok(Entry::new(API_KEY_SERVICE, &username)?)
 }
 
-pub fn get_saved_api_key(provider: &str) -> anyhow::Result<Option<String>> {
-    if NO_KEYRING.load(Ordering::Relaxed) {
-        let var = env_key_var(provider);
-        return Ok(std::env::var(&var)
-            .ok()
-            .map(|v| v.trim().to_string())
-            .filter(|v| !v.is_empty()));
+// ---------------------------------------------------------------------------
+// .env file-based fallback for API key storage
+// ---------------------------------------------------------------------------
+
+/// Path to the `.env` secrets file inside the app data directory.
+fn secrets_env_path() -> std::path::PathBuf {
+    koharu_runtime::default_app_data_root()
+        .as_std_path()
+        .join(".env")
+}
+
+/// Read a single provider key from the `.env` file.
+/// Lines are expected in `KOHARU_<PROVIDER>_API_KEY=<value>` format.
+fn get_file_api_key(provider: &str) -> Option<String> {
+    let var_name = env_key_var(provider);
+    let content = std::fs::read_to_string(secrets_env_path()).ok()?;
+    for line in content.lines() {
+        let line = line.trim();
+        if line.is_empty() || line.starts_with('#') {
+            continue;
+        }
+        if let Some(value) = line.strip_prefix(&var_name).and_then(|rest| rest.strip_prefix('='))
+        {
+            let value = value.trim().to_string();
+            if !value.is_empty() {
+                return Some(value);
+            }
+        }
+    }
+    None
+}
+
+/// Write (or update) a single provider key in the `.env` file.
+/// Creates the file if it doesn't exist. Sets file permissions to 600 on Unix.
+fn set_file_api_key(provider: &str, api_key: &str) -> anyhow::Result<()> {
+    let path = secrets_env_path();
+    if let Some(parent) = path.parent() {
+        std::fs::create_dir_all(parent)
+            .with_context(|| format!("failed to create directory for {}", path.display()))?;
     }
 
-    let entry = provider_key_entry(provider)?;
-    match entry.get_password() {
-        Ok(value) => Ok(Some(value)),
-        Err(keyring::Error::NoEntry) => Ok(None),
-        Err(err) => Err(err.into()),
+    let var_name = env_key_var(provider);
+    let existing = std::fs::read_to_string(&path).unwrap_or_default();
+
+    let mut lines: Vec<String> = Vec::new();
+    let mut found = false;
+    for line in existing.lines() {
+        if line.trim().starts_with(&var_name) && line.contains('=') {
+            found = true;
+            if !api_key.trim().is_empty() {
+                lines.push(format!("{var_name}={api_key}"));
+            }
+            // If api_key is empty, we skip this line (effectively deleting it)
+        } else {
+            lines.push(line.to_string());
+        }
+    }
+    if !found && !api_key.trim().is_empty() {
+        lines.push(format!("{var_name}={api_key}"));
+    }
+
+    let content = if lines.is_empty() {
+        String::new()
+    } else {
+        let mut s = lines.join("\n");
+        s.push('\n');
+        s
+    };
+    std::fs::write(&path, &content)
+        .with_context(|| format!("failed to write secrets to {}", path.display()))?;
+
+    // Restrict file permissions on Unix (owner read/write only).
+    #[cfg(unix)]
+    {
+        use std::os::unix::fs::PermissionsExt;
+        let perms = std::fs::Permissions::from_mode(0o600);
+        std::fs::set_permissions(&path, perms).ok();
+    }
+
+    Ok(())
+}
+
+// ---------------------------------------------------------------------------
+// Public API key accessors (keyring → .env fallback)
+// ---------------------------------------------------------------------------
+
+pub fn get_saved_api_key(provider: &str) -> anyhow::Result<Option<String>> {
+    if NO_KEYRING.load(Ordering::Relaxed) {
+        // --no-keyring: try process env var first, then .env file
+        let var = env_key_var(provider);
+        let from_env = std::env::var(&var)
+            .ok()
+            .map(|v| v.trim().to_string())
+            .filter(|v| !v.is_empty());
+        if from_env.is_some() {
+            return Ok(from_env);
+        }
+        return Ok(get_file_api_key(provider));
+    }
+
+    // Normal mode: try keyring first
+    match provider_key_entry(provider).and_then(|entry| {
+        match entry.get_password() {
+            Ok(value) => Ok(Some(value)),
+            Err(keyring::Error::NoEntry) => Ok(None),
+            Err(err) => Err(err.into()),
+        }
+    }) {
+        Ok(value) => Ok(value),
+        Err(err) => {
+            tracing::debug!(provider, "keyring read failed, trying .env fallback: {err}");
+            Ok(get_file_api_key(provider))
+        }
     }
 }
 
 pub fn set_saved_api_key(provider: &str, api_key: &str) -> anyhow::Result<()> {
     if NO_KEYRING.load(Ordering::Relaxed) {
-        tracing::warn!(
-            provider,
-            "keyring is disabled; API key changes are not saved"
-        );
-        return Err(anyhow::anyhow!(
-            "keyring is disabled; API key cannot be saved"
-        ));
+        // --no-keyring: write to .env file directly
+        let path = secrets_env_path();
+        tracing::info!(provider, path = %path.display(), "keyring disabled, saving API key to .env");
+        return set_file_api_key(provider, api_key);
     }
 
-    let entry = provider_key_entry(provider)?;
-    if api_key.trim().is_empty() {
-        match entry.delete_credential() {
-            Ok(()) | Err(keyring::Error::NoEntry) => Ok(()),
-            Err(err) => Err(err.into()),
+    // Normal mode: try keyring, fall back to .env on failure
+    let keyring_result = provider_key_entry(provider).and_then(|entry| {
+        if api_key.trim().is_empty() {
+            match entry.delete_credential() {
+                Ok(()) | Err(keyring::Error::NoEntry) => Ok(()),
+                Err(err) => Err(err.into()),
+            }
+        } else {
+            entry.set_password(api_key)?;
+            Ok(())
         }
-    } else {
-        entry.set_password(api_key)?;
-        Ok(())
+    });
+
+    match keyring_result {
+        Ok(()) => Ok(()),
+        Err(err) => {
+            tracing::warn!(
+                provider,
+                "keyring write failed, saving to .env fallback: {err}"
+            );
+            set_file_api_key(provider, api_key)
+        }
     }
 }
 

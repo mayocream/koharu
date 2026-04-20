@@ -113,10 +113,10 @@ pub struct ProviderConfig {
     pub id: String,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub base_url: Option<String>,
-    /// Populated from the keyring on `load()`, never written to config.toml.
-    /// Serializes as `"[REDACTED]"` in API responses.
-    /// Populated from keyring on `load()`. Serializes as `"[REDACTED]"`.
-    #[serde(default, skip_serializing_if = "Option::is_none")]
+    /// Populated from keyring (or .env fallback) on `load()`.
+    /// Serializes as `"[REDACTED]"` in API/JSON responses.
+    /// **Never written to config.toml** — `skip_serializing` ensures this.
+    #[serde(default, skip_serializing)]
     #[schema(value_type = Option<String>)]
     pub api_key: Option<RedactedSecret>,
 }
@@ -163,7 +163,8 @@ pub fn load() -> Result<AppConfig> {
         save(&config)?;
     }
 
-    // Populate api_key from the keyring for every known provider.
+    // Populate api_key from the keyring (or .env fallback) for every known
+    // provider.
     for provider in &mut config.providers {
         if let Ok(Some(key)) = get_saved_api_key(&provider.id)
             && !key.trim().is_empty()
@@ -351,18 +352,31 @@ fn validate_engine_name(
 // Secret (keyring) handling
 // ---------------------------------------------------------------------------
 
-/// Sync api_key fields to the keyring.
+/// Sync api_key fields to the keyring (or .env fallback).
 /// - `Some(RedactedSecret)` with value != "[REDACTED]" → save to keyring
 /// - `None` → clear from keyring
 /// - `Some(RedactedSecret)` with value == "[REDACTED]" → unchanged
+///
+/// Individual provider failures are logged but do not abort the sync,
+/// so that the config update can still proceed.
 pub fn sync_secrets(config: &AppConfig) -> Result<()> {
     for provider in &config.providers {
         match &provider.api_key {
             Some(secret) if secret.expose() != REDACTED => {
-                set_saved_api_key(&provider.id, secret.expose())?;
+                if let Err(e) = set_saved_api_key(&provider.id, secret.expose()) {
+                    tracing::error!(
+                        provider = provider.id,
+                        "failed to persist API key: {e:#}"
+                    );
+                }
             }
             None => {
-                set_saved_api_key(&provider.id, "")?;
+                if let Err(e) = set_saved_api_key(&provider.id, "") {
+                    tracing::warn!(
+                        provider = provider.id,
+                        "failed to clear API key: {e:#}"
+                    );
+                }
             }
             _ => {} // "[REDACTED]" means unchanged
         }
