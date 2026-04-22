@@ -158,8 +158,7 @@ export function RenderControlsPanel() {
     [
       ...sortedFonts,
       ...(appDefaultFont ? [fallbackFontFace(appDefaultFont)] : []),
-      ...(selectedNode?.data.style?.fontFamilies?.slice(0, 1)?.map(fallbackFontFace) ?? []),
-      ...(firstNode?.data.style?.fontFamilies?.slice(0, 1)?.map(fallbackFontFace) ?? []),
+      ...textNodes.flatMap((n) => n.data.style?.fontFamilies ?? []).map(fallbackFontFace),
       ...DEFAULT_FONT_FACES,
     ].filter((v): v is FontFaceInfo => !!v),
   )
@@ -321,10 +320,7 @@ export function RenderControlsPanel() {
                 currentFontFamilyName ? { fontFamily: currentFontFamilyName } : undefined
               }
               onChange={(value) => {
-                if (selectedNode) {
-                  applyStyleToSelected({ fontFamilies: [value] })
-                  return
-                }
+                if (applyStyleToSelected({ fontFamilies: [value] })) return
                 usePreferencesStore.getState().setDefaultFont(value)
               }}
             />
