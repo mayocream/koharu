@@ -81,3 +81,50 @@ Object.defineProperty(window, 'matchMedia', {
     dispatchEvent: vi.fn(),
   })),
 })
+
+// Mock localStorage for zustand persist
+const localStorageMock = (() => {
+  let store: Record<string, string> = {}
+  return {
+    getItem: vi.fn((key: string) => store[key] || null),
+    setItem: vi.fn((key: string, value: string) => {
+      store[key] = value.toString()
+    }),
+    removeItem: vi.fn((key: string) => {
+      delete store[key]
+    }),
+    clear: vi.fn(() => {
+      store = {}
+    }),
+    length: 0,
+    key: vi.fn((index: number) => Object.keys(store)[index] || null),
+  }
+})()
+
+Object.defineProperty(window, 'localStorage', {
+  value: localStorageMock,
+})
+
+// FontFace API stubs for jsdom
+class StubFontFace {
+  constructor(family: string, source: string | ArrayBuffer | ArrayBufferView, descriptors?: any) {}
+  load() {
+    return Promise.resolve(this)
+  }
+}
+Object.defineProperty(globalThis, 'FontFace', {
+  value: StubFontFace,
+  writable: true,
+})
+
+Object.defineProperty(document, 'fonts', {
+  value: {
+    add: vi.fn(),
+    delete: vi.fn(),
+    clear: vi.fn(),
+    check: vi.fn(() => true),
+    load: vi.fn(() => Promise.resolve([])),
+    ready: Promise.resolve([]),
+  },
+  writable: true,
+})
