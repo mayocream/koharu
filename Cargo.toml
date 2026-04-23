@@ -140,7 +140,7 @@ utoipa-axum = "0.2"
 uuid = { version = "1.18", features = ["v4", "v7", "serde"] }
 chrono = { version = "0.4", default-features = false, features = ["serde", "clock"] }
 atomicwrites = "0.4"
-fs4 = "0.12"
+fs4 = "1.0"
 parking_lot = "0.12"
 dashmap = "6"
 tokio-stream = { version = "0.1", features = ["sync"] }
