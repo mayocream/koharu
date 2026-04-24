@@ -532,7 +532,9 @@ async fn put_mask(
 
         // 1. Simulate the mask update in a cloned scene so the engine sees it.
         let mut scene = session.scene_snapshot();
-        mask_op.apply(&mut scene).map_err(|e| ApiError::internal(e.into()))?;
+        mask_op
+            .apply(&mut scene)
+            .map_err(|e| ApiError::internal(e.into()))?;
 
         // 2. Prepare EngineCtx
         let region = Region {
