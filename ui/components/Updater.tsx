@@ -50,10 +50,6 @@ function isExternalUrl(href: string): boolean {
   return /^https?:\/\//i.test(href)
 }
 
-async function openUpdateLink(href: string): Promise<void> {
-  await openExternalUrl(href)
-}
-
 export function useUpdater(): UpdaterContextValue {
   return useContext(UpdaterContext)
 }
@@ -240,7 +236,7 @@ function PromptView({
                       onClick={(event) => {
                         if (!href || !isExternalUrl(href)) return
                         event.preventDefault()
-                        void openUpdateLink(href)
+                        void openExternalUrl(href)
                       }}
                     >
                       {children}
