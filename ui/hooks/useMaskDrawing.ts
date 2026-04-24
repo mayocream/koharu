@@ -6,6 +6,7 @@ import { useCanvasDrawing, type CanvasDims } from '@/hooks/useCanvasDrawing'
 import type { PointerToDocumentFn } from '@/hooks/usePointerToDocument'
 import { getConfig, startPipeline } from '@/lib/api/default/default'
 import type { Page } from '@/lib/api/schemas'
+import { invalidateScene } from '@/lib/io/scene'
 import { useEditorUiStore } from '@/lib/stores/editorUiStore'
 import { usePreferencesStore } from '@/lib/stores/preferencesStore'
 import type { ToolMode } from '@/lib/types'
@@ -79,6 +80,7 @@ export function useMaskDrawing({
           body: fullPng as unknown as BodyInit,
         })
         if (!res.ok) throw new Error(`mask PUT failed: ${res.status}`)
+        await invalidateScene()
       } catch (e) {
         useEditorUiStore.getState().showError(String(e))
       }

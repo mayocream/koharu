@@ -43,7 +43,8 @@ import { useSelectionStore } from '@/lib/stores/selectionStore'
  * no optimistic mirroring, backend is the single source of truth.
  */
 
-const invalidateScene = () => queryClient.invalidateQueries({ queryKey: getGetSceneJsonQueryKey() })
+export const invalidateScene = () =>
+  queryClient.invalidateQueries({ queryKey: getGetSceneJsonQueryKey() })
 
 const invalidateConfig = () => queryClient.invalidateQueries({ queryKey: getGetConfigQueryKey() })
 
