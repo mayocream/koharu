@@ -2,12 +2,39 @@ use std::sync::Once;
 
 use keyring::Entry;
 
-const API_KEY_SERVICE: &str = "koharu";
-
 static INIT_CREDENTIAL_STORE: Once = Once::new();
 
-pub fn get_saved_api_key(provider: &str) -> anyhow::Result<Option<String>> {
-    let entry = provider_entry(provider)?;
+/// Service-scoped access to Koharu's platform-backed string secret storage.
+#[derive(Debug, Clone)]
+pub struct SecretStore {
+    service: String,
+}
+
+impl SecretStore {
+    pub fn new(service: impl Into<String>) -> Self {
+        Self {
+            service: service.into(),
+        }
+    }
+
+    /// Load a secret by key, returning `None` when no credential exists.
+    pub fn get(&self, key: &str) -> anyhow::Result<Option<String>> {
+        get_secret(&self.service, key)
+    }
+
+    /// Store a secret by key. Use `delete` to clear an existing credential.
+    pub fn set(&self, key: &str, secret: &str) -> anyhow::Result<()> {
+        set_secret(&self.service, key, secret)
+    }
+
+    /// Clear a secret by key. Missing credentials are treated as success.
+    pub fn delete(&self, key: &str) -> anyhow::Result<()> {
+        delete_secret(&self.service, key)
+    }
+}
+
+pub fn get_secret(service: &str, key: &str) -> anyhow::Result<Option<String>> {
+    let entry = secret_entry(service, key)?;
     match entry.get_password() {
         Ok(value) => Ok(Some(value)),
         Err(keyring::Error::NoEntry) => Ok(None),
@@ -15,29 +42,26 @@ pub fn get_saved_api_key(provider: &str) -> anyhow::Result<Option<String>> {
     }
 }
 
-pub fn set_saved_api_key(provider: &str, api_key: &str) -> anyhow::Result<()> {
-    let entry = provider_entry(provider)?;
-    if api_key.trim().is_empty() {
-        return match entry.delete_credential() {
-            Ok(()) | Err(keyring::Error::NoEntry) => Ok(()),
-            Err(err) => Err(err.into()),
-        };
-    }
-
-    entry.set_password(api_key)?;
+pub fn set_secret(service: &str, key: &str, secret: &str) -> anyhow::Result<()> {
+    secret_entry(service, key)?.set_password(secret)?;
     Ok(())
 }
 
-fn provider_entry(provider: &str) -> anyhow::Result<Entry> {
-    INIT_CREDENTIAL_STORE.call_once(configure_platform_store);
+pub fn delete_secret(service: &str, key: &str) -> anyhow::Result<()> {
+    match secret_entry(service, key)?.delete_credential() {
+        Ok(()) | Err(keyring::Error::NoEntry) => Ok(()),
+        Err(err) => Err(err.into()),
+    }
+}
 
-    let username = format!("llm_provider_api_key_{provider}");
-    Ok(Entry::new(API_KEY_SERVICE, &username)?)
+fn secret_entry(service: &str, key: &str) -> anyhow::Result<Entry> {
+    INIT_CREDENTIAL_STORE.call_once(configure_platform_store);
+    Ok(Entry::new(service, key)?)
 }
 
 #[cfg(target_os = "linux")]
 fn configure_platform_store() {
-    let root = koharu_runtime::default_app_data_root()
+    let root = crate::runtime::default_app_data_root()
         .as_std_path()
         .join("secrets")
         .join("keyring");
@@ -51,13 +75,13 @@ fn configure_platform_store() {}
 mod filesystem {
     use std::fmt::Write as _;
     use std::fs;
+    use std::io;
+    use std::io::Write as _;
     use std::path::{Path, PathBuf};
-    use std::sync::atomic::{AtomicU64, Ordering};
 
+    use atomicwrites::{AtomicFile, OverwriteBehavior};
     use keyring::credential::{Credential, CredentialApi, CredentialBuilderApi};
     use keyring::{Error, Result};
-
-    static TEMP_ID: AtomicU64 = AtomicU64::new(0);
 
     #[derive(Debug)]
     pub(super) struct Builder {
@@ -98,15 +122,6 @@ mod filesystem {
         fn path(&self) -> PathBuf {
             self.root.join(&self.name)
         }
-
-        fn temp_path(&self) -> PathBuf {
-            self.root.join(format!(
-                "{}.tmp-{}-{}",
-                self.name,
-                std::process::id(),
-                TEMP_ID.fetch_add(1, Ordering::Relaxed)
-            ))
-        }
     }
 
     impl CredentialApi for FileCredential {
@@ -115,14 +130,12 @@ mod filesystem {
             set_mode(&self.root, 0o700)?;
 
             let path = self.path();
-            let temp_path = self.temp_path();
-            fs::write(&temp_path, secret).map_err(storage_error)?;
-            set_mode(&temp_path, 0o600)?;
-
-            fs::rename(&temp_path, &path).map_err(|err| {
-                let _ = fs::remove_file(&temp_path);
-                storage_error(err)
-            })?;
+            AtomicFile::new(&path, OverwriteBehavior::AllowOverwrite)
+                .write(|file| -> io::Result<()> {
+                    set_file_mode(file, 0o600)?;
+                    file.write_all(secret)
+                })
+                .map_err(atomic_write_error)?;
             set_mode(&path, 0o600)
         }
 
@@ -155,6 +168,26 @@ mod filesystem {
     #[cfg(not(unix))]
     fn set_mode(_path: &Path, _mode: u32) -> Result<()> {
         Ok(())
+    }
+
+    #[cfg(unix)]
+    fn set_file_mode(file: &fs::File, mode: u32) -> io::Result<()> {
+        use std::os::unix::fs::PermissionsExt;
+
+        file.set_permissions(fs::Permissions::from_mode(mode))
+    }
+
+    #[cfg(not(unix))]
+    fn set_file_mode(_file: &fs::File, _mode: u32) -> io::Result<()> {
+        Ok(())
+    }
+
+    fn atomic_write_error(err: atomicwrites::Error<io::Error>) -> Error {
+        match err {
+            atomicwrites::Error::Internal(err) | atomicwrites::Error::User(err) => {
+                storage_error(err)
+            }
+        }
     }
 
     fn storage_error(err: std::io::Error) -> Error {

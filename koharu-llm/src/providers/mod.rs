@@ -19,15 +19,12 @@ pub(crate) fn resolve_system_prompt(custom: Option<&str>, target_language: Langu
 pub mod caiyun;
 mod chat_completions;
 pub mod claude;
-mod credentials;
 pub mod deepl;
 pub mod deepseek;
 pub mod gemini;
 pub mod google_translate;
 pub mod openai;
 pub mod openai_compatible;
-
-pub use credentials::{get_saved_api_key, set_saved_api_key};
 
 #[derive(Debug, Clone, Copy)]
 pub struct ProviderModelDescriptor {

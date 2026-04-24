@@ -2,8 +2,7 @@ use std::fs;
 
 use anyhow::{Context, Result};
 use camino::Utf8PathBuf;
-use koharu_llm::providers::{get_saved_api_key, set_saved_api_key};
-use koharu_runtime::default_app_data_root;
+use koharu_runtime::{SecretStore, default_app_data_root};
 use serde::{Deserialize, Deserializer, Serialize, Serializer};
 use utoipa::ToSchema;
 
@@ -11,6 +10,8 @@ use crate::pipeline::{Artifact, Registry};
 
 const CONFIG_FILE: &str = "config.toml";
 const REDACTED: &str = "[REDACTED]";
+const SECRET_SERVICE: &str = "koharu";
+const PROVIDER_API_KEY_SECRET_PREFIX: &str = "llm_provider_api_key_";
 
 // ---------------------------------------------------------------------------
 // RedactedSecret
@@ -163,8 +164,9 @@ pub fn load() -> Result<AppConfig> {
     }
 
     // Populate api_key from credential storage for every known provider.
+    let secrets = SecretStore::new(SECRET_SERVICE);
     for provider in &mut config.providers {
-        if let Ok(Some(key)) = get_saved_api_key(&provider.id)
+        if let Ok(Some(key)) = secrets.get(&provider_api_key_secret_key(&provider.id))
             && !key.trim().is_empty()
         {
             provider.api_key = Some(RedactedSecret::new(key));
@@ -355,18 +357,28 @@ fn validate_engine_name(
 /// - `None` → clear from credential storage
 /// - `Some(RedactedSecret)` with value == "[REDACTED]" → unchanged
 pub fn sync_secrets(config: &AppConfig) -> Result<()> {
+    let secrets = SecretStore::new(SECRET_SERVICE);
     for provider in &config.providers {
         match &provider.api_key {
             Some(secret) if secret.expose() != REDACTED => {
-                set_saved_api_key(&provider.id, secret.expose())?;
+                let key = provider_api_key_secret_key(&provider.id);
+                if secret.expose().trim().is_empty() {
+                    secrets.delete(&key)?;
+                } else {
+                    secrets.set(&key, secret.expose())?;
+                }
             }
             None => {
-                set_saved_api_key(&provider.id, "")?;
+                secrets.delete(&provider_api_key_secret_key(&provider.id))?;
             }
             _ => {} // "[REDACTED]" means unchanged
         }
     }
     Ok(())
+}
+
+fn provider_api_key_secret_key(provider_id: &str) -> String {
+    format!("{PROVIDER_API_KEY_SECRET_PREFIX}{provider_id}")
 }
 
 #[cfg(test)]
@@ -411,6 +423,14 @@ mod tests {
         let path = config_path().unwrap();
         assert_eq!(path.file_name(), Some("config.toml"));
         assert!(path.as_str().contains("Koharu"));
+    }
+
+    #[test]
+    fn provider_api_key_secret_key_preserves_legacy_keyring_user() {
+        assert_eq!(
+            provider_api_key_secret_key("openai"),
+            "llm_provider_api_key_openai"
+        );
     }
 
     #[test]

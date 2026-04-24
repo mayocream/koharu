@@ -13,6 +13,7 @@ publish.workspace = true
 
 [dependencies]
 anyhow = { workspace = true }
+atomicwrites = { workspace = true }
 camino = { workspace = true }
 koharu-core = { workspace = true }
 dirs = { workspace = true }
@@ -21,6 +22,7 @@ hf-hub = { workspace = true }
 indexmap = { workspace = true }
 indicatif = { workspace = true }
 inventory = { workspace = true }
+keyring = { workspace = true }
 reqwest = { workspace = true }
 reqwest-middleware = { workspace = true }
 reqwest-retry = { workspace = true }
@@ -37,6 +39,12 @@ tar = "0.4"
 
 [target.'cfg(target_os = "windows")'.dependencies]
 windows-sys = { workspace = true }
+
+[target.'cfg(windows)'.dependencies]
+keyring = { workspace = true, features = ["windows-native"] }
+
+[target.'cfg(target_os = "macos")'.dependencies]
+keyring = { workspace = true, features = ["apple-native"] }
 
 [dev-dependencies]
 tempfile = { workspace = true }
