@@ -8,13 +8,17 @@
 //! All three do the same server-side dance: read bytes → `blobs.put_bytes`
 //! → emit an `Op` on the session history.
 
+use std::sync::Arc;
+use std::sync::atomic::AtomicBool;
+
 use axum::Json;
 use axum::body::Bytes;
-use axum::extract::{Multipart, Path, State};
+use axum::extract::{Multipart, Path, Query, State};
 use image::GenericImageView;
+use koharu_app::pipeline::{self, EngineCtx, PipelineRunOptions};
 use koharu_core::{
     BlobRef, ImageData, ImageRole, MaskRole, Node, NodeDataPatch, NodeId, NodeKind, Op, Page,
-    PageId, Scene, Transform,
+    PageId, Region, Scene, Transform,
 };
 use rayon::prelude::*;
 use serde::{Deserialize, Serialize};
@@ -22,6 +26,18 @@ use utoipa_axum::{router::OpenApiRouter, routes};
 
 use crate::AppState;
 use crate::error::{ApiError, ApiResult};
+
+#[derive(Debug, Clone, Serialize, Deserialize, utoipa::IntoParams)]
+#[serde(rename_all = "camelCase")]
+pub struct PutMaskParams {
+    /// Optional pipeline engine to run after the mask is updated.
+    pub pipeline: Option<String>,
+    /// Bounding box for the pipeline run.
+    pub x: Option<f32>,
+    pub y: Option<f32>,
+    pub width: Option<f32>,
+    pub height: Option<f32>,
+}
 
 pub fn router() -> OpenApiRouter<AppState> {
     OpenApiRouter::default()
@@ -443,6 +459,7 @@ pub struct PutMaskResponse {
 async fn put_mask(
     State(app): State<AppState>,
     Path((page_id, role)): Path<(PageId, MaskRole)>,
+    Query(params): Query<PutMaskParams>,
     body: Bytes,
 ) -> ApiResult<Json<PutMaskResponse>> {
     let session = app
@@ -458,7 +475,7 @@ async fn put_mask(
     let blob = session.blobs.put_bytes(&body).map_err(ApiError::internal)?;
 
     // Find existing mask node of this role, or plan an AddNode.
-    let (op, node_id) = {
+    let (mut mask_op, node_id) = {
         let scene = session.scene.read();
         let existing = scene
             .page(page_id)
@@ -509,7 +526,61 @@ async fn put_mask(
         }
     };
 
-    app.apply(op).map_err(ApiError::internal)?;
+    if let Some(engine_id) = params.pipeline {
+        // Atomic Batch: Mask Update + Pipeline Run
+        let mut ops = vec![mask_op.clone()];
+
+        // 1. Simulate the mask update in a cloned scene so the engine sees it.
+        let mut scene = session.scene_snapshot();
+        mask_op.apply(&mut scene).map_err(|e| ApiError::internal(e.into()))?;
+
+        // 2. Prepare EngineCtx
+        let region = Region {
+            x: params.x.unwrap_or(0.0) as u32,
+            y: params.y.unwrap_or(0.0) as u32,
+            width: params.width.unwrap_or(0.0) as u32,
+            height: params.height.unwrap_or(0.0) as u32,
+        };
+        let cancel = Arc::new(AtomicBool::new(false));
+        let ctx = EngineCtx {
+            scene: &scene,
+            page: page_id,
+            blobs: &session.blobs,
+            runtime: &app.runtime,
+            cancel: &cancel,
+            options: &PipelineRunOptions {
+                region: Some(region),
+                ..Default::default()
+            },
+            llm: &app.llm,
+            renderer: &app.renderer,
+        };
+
+        // 3. Run Engine (Synchronously for this request)
+        let engine_info = pipeline::Registry::find(&engine_id)
+            .map_err(|e| ApiError::bad_request(format!("{e:#}")))?;
+        let engine = app
+            .registry
+            .get(engine_info.id, &app.runtime, app.cpu_only())
+            .await
+            .map_err(|e| ApiError::internal(anyhow::anyhow!("load engine: {e:#}")))?;
+
+        let engine_ops = engine
+            .run(ctx)
+            .await
+            .map_err(|e| ApiError::internal(anyhow::anyhow!("run engine: {e:#}")))?;
+
+        ops.extend(engine_ops);
+
+        let batch = Op::Batch {
+            ops,
+            label: format!("Repair Brush ({})", engine_id),
+        };
+        app.apply(batch).map_err(ApiError::internal)?;
+    } else {
+        app.apply(mask_op).map_err(ApiError::internal)?;
+    }
+
     Ok(Json(PutMaskResponse {
         node: node_id,
         blob,

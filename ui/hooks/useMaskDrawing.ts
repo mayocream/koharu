@@ -1,6 +1,6 @@
 'use client'
 
-import { useRef } from 'react'
+import { useEffect, useRef } from 'react'
 
 import { useCanvasDrawing, type CanvasDims } from '@/hooks/useCanvasDrawing'
 import type { PointerToDocumentFn } from '@/hooks/usePointerToDocument'
@@ -19,6 +19,7 @@ async function convertBytesToBitmap(bytes: Uint8Array): Promise<ImageBitmap> {
 type MaskDrawingOptions = {
   mode: ToolMode
   page: Page | null
+  maskHash?: string | null
   segmentData?: Uint8Array
   pointerToDocument: PointerToDocumentFn
   showMask: boolean
@@ -35,6 +36,7 @@ type MaskDrawingOptions = {
 export function useMaskDrawing({
   mode,
   page,
+  maskHash,
   segmentData,
   pointerToDocument,
   showMask,
@@ -45,7 +47,11 @@ export function useMaskDrawing({
   const isActive = enabled && (mode === 'repairBrush' || isEraseMode)
 
   const dims: CanvasDims | null = page
-    ? { width: page.width, height: page.height, key: page.id }
+    ? {
+        width: page.width,
+        height: page.height,
+        key: page.id,
+      }
     : null
 
   const { canvasRef, bind: rawBind } = useCanvasDrawing(dims, pointerToDocument, {
@@ -54,8 +60,6 @@ export function useMaskDrawing({
     getBrushSize: () => usePreferencesStore.getState().brushConfig.size,
     enabled: showMask,
     onCanvasInit: (ctx, d) => {
-      ctx.fillStyle = '#000'
-      ctx.fillRect(0, 0, d.width, d.height)
       if (segmentData) {
         void (async () => {
           try {
@@ -69,55 +73,74 @@ export function useMaskDrawing({
             console.error(e)
           }
         })()
+      } else {
+        ctx.fillStyle = '#000'
+        ctx.fillRect(0, 0, d.width, d.height)
       }
     },
-    onFinalizeFullCanvas: async (fullPng) => {
+    onFinalizeFullCanvas: async (fullPng, region) => {
       if (!page) return
-      try {
-        const res = await fetch(`/api/v1/pages/${page.id}/masks/segment`, {
-          method: 'PUT',
-          headers: { 'Content-Type': 'image/png' },
-          body: fullPng as unknown as BodyInit,
-        })
-        if (!res.ok) throw new Error(`mask PUT failed: ${res.status}`)
-        await invalidateScene()
-      } catch (e) {
-        useEditorUiStore.getState().showError(String(e))
-      }
+
+      // Chain the request to prevent concurrent ML runs and race conditions
+      inpaintQueueRef.current = inpaintQueueRef.current.then(async () => {
+        try {
+          const config = await getConfig()
+          const inpainter = config.pipeline?.inpainter || 'lama-manga'
+
+          const params = new URLSearchParams({
+            pipeline: inpainter,
+            x: region.x.toString(),
+            y: region.y.toString(),
+            width: region.width.toString(),
+            height: region.height.toString(),
+          })
+
+          const res = await fetch(`/api/v1/pages/${page.id}/masks/segment?${params}`, {
+            method: 'PUT',
+            headers: { 'Content-Type': 'image/png' },
+            body: fullPng as unknown as BodyInit,
+          })
+          if (!res.ok) throw new Error(`mask PUT failed: ${res.status}`)
+          await invalidateScene()
+          useEditorUiStore.getState().setShowInpaintedImage(true)
+        } catch (e) {
+          useEditorUiStore.getState().showError(String(e))
+        }
+      })
+
+      await inpaintQueueRef.current
     },
-    onFinalize: async (_patch, region) => {
-      if (!page) return
-      const brushSize = usePreferencesStore.getState().brushConfig.size
-      const width = Math.max(brushSize, region.width)
-      const margin = Math.min(width * 0.2, 32)
-      const x0 = Math.max(0, Math.floor(region.x - margin))
-      const y0 = Math.max(0, Math.floor(region.y - margin))
-      const x1 = Math.min(page.width, Math.ceil(region.x + region.width + margin))
-      const y1 = Math.min(page.height, Math.ceil(region.y + region.height + margin))
-      const inpaintRegion = {
-        x: x0,
-        y: y0,
-        width: Math.max(1, x1 - x0),
-        height: Math.max(1, y1 - y0),
-      }
-      inpaintQueueRef.current = inpaintQueueRef.current
-        .catch(() => {})
-        .then(async () => {
-          try {
-            const cfg = await getConfig()
-            const inpainter = cfg.pipeline?.inpainter || 'lama-manga'
-            await startPipeline({
-              steps: [inpainter],
-              pages: [page.id],
-              region: inpaintRegion,
-            })
-            useEditorUiStore.getState().setShowInpaintedImage(true)
-          } catch (e) {
-            useEditorUiStore.getState().showError(String(e))
-          }
-        })
-    },
+    onFinalize: async () => {},
   })
+  // Watch for mask data changes and repaint. This handles the case where
+  // segmentData updates after the canvas key change / onCanvasInit.
+  useEffect(() => {
+    const canvas = canvasRef.current
+    if (!canvas || !segmentData || !page) return
+    const ctx = canvas.getContext('2d')
+    if (!ctx) return
+
+    let cancelled = false
+    void (async () => {
+      try {
+        const bitmap = await convertBytesToBitmap(segmentData)
+        if (cancelled) {
+          bitmap.close()
+          return
+        }
+        ctx.save()
+        ctx.clearRect(0, 0, page.width, page.height)
+        ctx.drawImage(bitmap, 0, 0, page.width, page.height)
+        ctx.restore()
+        bitmap.close()
+      } catch (e) {
+        console.error('Failed to repaint mask:', e)
+      }
+    })()
+    return () => {
+      cancelled = true
+    }
+  }, [segmentData, page?.id, page?.width, page?.height, canvasRef, showMask])
 
   const bind = isActive ? rawBind : () => ({})
   return { canvasRef, visible: showMask, bind }
