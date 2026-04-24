@@ -32,6 +32,57 @@ pub fn expand_mask_for_inpainting(
     let mut covered = GrayImage::new(width, height);
 
     for block in text_blocks {
+        let support = expand_rect(
+            expanded_text_block_crop_bounds(width, height, block),
+            width,
+            height,
+            u32::from(block_dilate_radius(block)),
+        );
+        if count_nonzero_in_rect(&base, support) == 0 {
+            continue;
+        }
+
+        let bubble_id = dominant_bubble_id(&base, &bubbles, support);
+        fill_text_block_region(&mut expanded, &bubbles, support, bubble_id, &mut covered);
+    }
+
+    let residual = GrayImage::from_fn(width, height, |x, y| {
+        if base.get_pixel(x, y).0[0] > 0 && covered.get_pixel(x, y).0[0] == 0 {
+            Luma([255])
+        } else {
+            Luma([0])
+        }
+    });
+    if residual.pixels().any(|pixel| pixel.0[0] > 0) {
+        expand_residual_components(&mut expanded, &residual, &bubbles);
+    }
+
+    expanded
+}
+
+/// Expand only the detected text glyph mask before inpainting. Unlike
+/// [`expand_mask_for_inpainting`], this does not fill the whole text block, so
+/// color/texture inside speech bubbles stays outside the inpaint mask.
+pub fn expand_glyph_mask_for_inpainting(
+    mask: &DynamicImage,
+    bubble_mask: &DynamicImage,
+    text_blocks: &[TextRegion],
+) -> GrayImage {
+    let base = binarize_mask(mask);
+    if base.pixels().all(|pixel| pixel.0[0] == 0) {
+        return base;
+    }
+
+    let bubbles = bubble_mask.to_luma8();
+    if base.dimensions() != bubbles.dimensions() {
+        return base;
+    }
+
+    let (width, height) = base.dimensions();
+    let mut expanded = base.clone();
+    let mut covered = GrayImage::new(width, height);
+
+    for block in text_blocks {
         let support = expanded_text_block_crop_bounds(width, height, block);
         if count_nonzero_in_rect(&base, support) == 0 {
             continue;
@@ -91,6 +142,24 @@ fn expand_residual_components(out: &mut GrayImage, residual: &GrayImage, bubbles
         let dilated = dilate(&local_mask, Norm::LInf, radius);
         let bubble_id = dominant_bubble_id(residual, bubbles, support);
         merge_expanded_region(out, &dilated, bubbles, work, support, bubble_id, None);
+    }
+}
+
+fn fill_text_block_region(
+    out: &mut GrayImage,
+    bubbles: &GrayImage,
+    [x1, y1, x2, y2]: Xyxy,
+    bubble_id: u8,
+    covered: &mut GrayImage,
+) {
+    for y in y1..y2 {
+        for x in x1..x2 {
+            if bubble_id > 0 && bubbles.get_pixel(x, y).0[0] != bubble_id {
+                continue;
+            }
+            out.put_pixel(x, y, Luma([255]));
+            covered.put_pixel(x, y, Luma([255]));
+        }
     }
 }
 
@@ -220,6 +289,107 @@ mod tests {
         assert_eq!(expanded.get_pixel(24, 24).0[0], 255);
         assert_eq!(expanded.get_pixel(40, 31).0[0], 255);
         assert_eq!(expanded.get_pixel(6, 24).0[0], 0);
+    }
+
+    #[test]
+    fn text_block_expansion_fills_missed_pixels_inside_block() {
+        let mut mask = GrayImage::new(64, 64);
+        let mut bubbles = GrayImage::new(64, 64);
+        for y in 8..56 {
+            for x in 8..56 {
+                bubbles.put_pixel(x, y, Luma([7]));
+            }
+        }
+        for y in 26..28 {
+            for x in 24..28 {
+                mask.put_pixel(x, y, Luma([255]));
+            }
+        }
+
+        let expanded = expand_mask_for_inpainting(
+            &DynamicImage::ImageLuma8(mask),
+            &DynamicImage::ImageLuma8(bubbles),
+            &[TextRegion {
+                x: 22.0,
+                y: 24.0,
+                width: 20.0,
+                height: 10.0,
+                detected_font_size_px: Some(18.0),
+                ..TextRegion::default()
+            }],
+        );
+
+        assert_eq!(expanded.get_pixel(40, 31).0[0], 255);
+        assert_eq!(expanded.get_pixel(20, 24).0[0], 255);
+        assert_eq!(expanded.get_pixel(7, 24).0[0], 0);
+    }
+
+    #[test]
+    fn text_block_expansion_stays_inside_dominant_bubble() {
+        let mut mask = GrayImage::new(64, 64);
+        let mut bubbles = GrayImage::new(64, 64);
+        for y in 8..56 {
+            for x in 8..32 {
+                bubbles.put_pixel(x, y, Luma([3]));
+            }
+            for x in 32..56 {
+                bubbles.put_pixel(x, y, Luma([4]));
+            }
+        }
+        for y in 26..28 {
+            for x in 24..28 {
+                mask.put_pixel(x, y, Luma([255]));
+            }
+        }
+
+        let expanded = expand_mask_for_inpainting(
+            &DynamicImage::ImageLuma8(mask),
+            &DynamicImage::ImageLuma8(bubbles),
+            &[TextRegion {
+                x: 22.0,
+                y: 24.0,
+                width: 20.0,
+                height: 10.0,
+                detected_font_size_px: Some(18.0),
+                ..TextRegion::default()
+            }],
+        );
+
+        assert_eq!(expanded.get_pixel(30, 28).0[0], 255);
+        assert_eq!(expanded.get_pixel(36, 28).0[0], 0);
+    }
+
+    #[test]
+    fn glyph_expansion_does_not_fill_text_block_background() {
+        let mut mask = GrayImage::new(64, 64);
+        let mut bubbles = GrayImage::new(64, 64);
+        for y in 8..56 {
+            for x in 8..56 {
+                bubbles.put_pixel(x, y, Luma([7]));
+            }
+        }
+        for y in 26..28 {
+            for x in 24..28 {
+                mask.put_pixel(x, y, Luma([255]));
+            }
+        }
+
+        let expanded = expand_glyph_mask_for_inpainting(
+            &DynamicImage::ImageLuma8(mask),
+            &DynamicImage::ImageLuma8(bubbles),
+            &[TextRegion {
+                x: 22.0,
+                y: 24.0,
+                width: 20.0,
+                height: 10.0,
+                detected_font_size_px: Some(18.0),
+                ..TextRegion::default()
+            }],
+        );
+
+        assert_eq!(expanded.get_pixel(24, 26).0[0], 255);
+        assert_eq!(expanded.get_pixel(22, 24).0[0], 255);
+        assert_eq!(expanded.get_pixel(40, 31).0[0], 0);
     }
 
     #[test]

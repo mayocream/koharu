@@ -3,6 +3,7 @@ mod hf_hub;
 pub mod aot_inpainting;
 pub mod comic_text_bubble_detector;
 pub mod comic_text_detector;
+pub mod flux2_klein;
 pub mod font_detector;
 pub mod inpainting;
 pub mod lama;

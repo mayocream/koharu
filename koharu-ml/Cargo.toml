@@ -105,3 +105,11 @@ path = "bin/speech-bubble-segmentation.rs"
 [[bin]]
 name = "aot-inpainting"
 path = "bin/aot-inpainting.rs"
+
+[[bin]]
+name = "flux2-klein"
+path = "bin/flux2-klein.rs"
+
+[[bin]]
+name = "flux2-klein-prompt"
+path = "bin/flux2-klein-prompt.rs"

@@ -88,8 +88,8 @@ impl Default for PipelineConfig {
             segmenter: "comic-text-detector-seg".to_string(),
             bubble_segmenter: "speech-bubble-segmentation".to_string(),
             ocr: "paddle-ocr-vl-1.5".to_string(),
-            translator: "llm-translate".to_string(),
-            inpainter: "aot-inpainting".to_string(),
+            translator: "llm".to_string(),
+            inpainter: "lama-manga".to_string(),
             renderer: "koharu-renderer".to_string(),
         }
     }

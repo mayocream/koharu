@@ -12,6 +12,7 @@ import {
   setCanvasDocumentSize,
   setCanvasViewport,
 } from '@/components/canvas/canvasViewport'
+import { SubToolRail } from '@/components/canvas/SubToolRail'
 import { TextBlockLayer } from '@/components/canvas/TextBlockLayer'
 import { ToolRail } from '@/components/canvas/ToolRail'
 import {
@@ -287,8 +288,9 @@ export function Workspace() {
   )
 
   return (
-    <div className='flex min-h-0 min-w-0 flex-1 bg-muted'>
+    <div className='relative flex min-h-0 min-w-0 flex-1 bg-muted'>
       <ToolRail />
+      <SubToolRail />
       <div className='relative flex min-h-0 min-w-0 flex-1 flex-col'>
         <CanvasToolbar />
         <ScrollAreaPrimitive.Root className='flex min-h-0 min-w-0 flex-1'>

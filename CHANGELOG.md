@@ -1,3 +1,24 @@
+## [0.48.0](https://github.com/mayocream/koharu/compare/0.47.8..0.48.0) - 2026-04-24
+
+### ⛰️  Features
+
+- Refactor Brush Tool Settings to Sub-ToolRail panel ([#537](https://github.com/mayocream/koharu/issues/537)) - ([d30ca44](https://github.com/mayocream/koharu/commit/d30ca44d8fe91a4c7f98538e7174e22374b90046))
+- Flux.2 Klein inpainting - ([ac81ff7](https://github.com/mayocream/koharu/commit/ac81ff7850b2168572252048b8d000de0e07d6e2))
+- Koharu-ai crate - ([87acca5](https://github.com/mayocream/koharu/commit/87acca53a93b71e8237af37ad138821cc487f4b2))
+
+### 🚜 Refactor
+
+- Move keyring to koharu-runtime - ([9821bf7](https://github.com/mayocream/koharu/commit/9821bf7cec33a5915507490ab5b50b22d615e941))
+
+### ⚡ Performance
+
+- Use small-decoder for flux-2-klein-4b - ([dfe33a3](https://github.com/mayocream/koharu/commit/dfe33a367c0f9e277d00727425a68772de218b16))
+
+### ⚙️ Miscellaneous Tasks
+
+- *(dev)* Fix args parsing - ([e331a6e](https://github.com/mayocream/koharu/commit/e331a6e0b1883f0386ac81f767b7957678a4bc0b))
+
+
 ## [0.47.8](https://github.com/mayocream/koharu/compare/0.47.7..0.47.8) - 2026-04-23
 
 ### 🐛 Bug Fixes

@@ -113,9 +113,9 @@ async function dev() {
     throw new Error('No command provided')
   }
 
-  const proc = spawn(args.join(' '), {
+  const proc = spawn(args[0], args.slice(1), {
     stdio: 'inherit',
-    shell: true,
+    shell: false,
     env: process.env,
   })
 

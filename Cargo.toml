@@ -17,7 +17,7 @@ default-members = ["koharu"]
 resolver = "3"
 
 [workspace.package]
-version = "0.47.8"
+version = "0.48.0"
 edition = "2024"
 description = "Manga translation tools"
 license = "GPL-3.0-only"

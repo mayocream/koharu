@@ -62,8 +62,8 @@ impl Engine for Model {
 
 inventory::submit! {
     EngineInfo {
-        id: "llm-translate",
-        name: "LLM Translate",
+        id: "llm",
+        name: "LLM",
         needs: &[Artifact::OcrText],
         produces: &[Artifact::Translations],
         load: |_runtime, _cpu| Box::pin(async move {

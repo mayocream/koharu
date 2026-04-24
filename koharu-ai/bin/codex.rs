@@ -97,14 +97,16 @@ async fn main() -> anyhow::Result<()> {
         } => {
             image_cmd(
                 &client,
-                model,
-                instructions,
-                image_path,
-                quality,
-                size,
-                action,
-                detail,
-                prompt,
+                ImageCommand {
+                    model,
+                    instructions,
+                    image: image_path,
+                    quality,
+                    size,
+                    action,
+                    detail,
+                    prompt,
+                },
             )
             .await
         }
@@ -161,8 +163,7 @@ async fn run(
     Ok(())
 }
 
-async fn image_cmd(
-    client: &CodexClient,
+struct ImageCommand {
     model: String,
     instructions: String,
     image: Option<PathBuf>,
@@ -171,7 +172,20 @@ async fn image_cmd(
     action: Option<String>,
     detail: String,
     prompt: String,
-) -> anyhow::Result<()> {
+}
+
+async fn image_cmd(client: &CodexClient, command: ImageCommand) -> anyhow::Result<()> {
+    let ImageCommand {
+        model,
+        instructions,
+        image,
+        quality,
+        size,
+        action,
+        detail,
+        prompt,
+    } = command;
+
     let action = action.unwrap_or_else(|| {
         if image.is_some() {
             "edit".to_string()

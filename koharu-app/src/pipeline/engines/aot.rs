@@ -52,11 +52,11 @@ impl Engine for Model {
             .into_iter()
             .map(|(_, transform, text)| text_node_to_region(transform, text))
             .collect();
-        let mask = DynamicImage::ImageLuma8(expand_mask_for_inpainting(
-            &mask,
-            &bubble_mask,
-            &text_blocks,
-        ));
+        let expanded = expand_mask_for_inpainting(&mask, &bubble_mask, &text_blocks);
+        let mask = match ctx.options.region {
+            Some(r) => clip_mask_to_region(&DynamicImage::ImageLuma8(expanded), &r),
+            None => DynamicImage::ImageLuma8(expanded),
+        };
 
         let result = self.0.inference(&image, &mask, &bubble_mask)?;
         let (w, h) = image_dimensions(&result);
