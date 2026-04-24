@@ -17,6 +17,8 @@ type ColorPickerProps = {
   swatchTestId?: string
   inputTestId?: string
   pickButtonTestId?: string
+  'aria-label'?: string
+  'aria-labelledby'?: string
 }
 
 type EyeDropperWindow = Window & {
@@ -40,6 +42,8 @@ export function ColorPicker({
   swatchTestId,
   inputTestId,
   pickButtonTestId,
+  'aria-label': ariaLabel,
+  'aria-labelledby': ariaLabelledBy,
 }: ColorPickerProps) {
   const [localColor, setLocalColor] = useState(value)
   const dragging = useRef(false)
@@ -82,6 +86,8 @@ export function ColorPicker({
         <button
           data-testid={triggerTestId}
           disabled={disabled}
+          aria-label={ariaLabel}
+          aria-labelledby={ariaLabelledBy}
           className={cn(
             'flex h-7 w-7 cursor-pointer items-center justify-center rounded-md border border-input transition hover:border-border disabled:cursor-not-allowed disabled:opacity-50',
             className,

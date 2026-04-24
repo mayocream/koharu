@@ -27,7 +27,7 @@ describe('SubToolRail', () => {
       brushConfig: {
         size: 36,
         color: '#ffffff',
-      }
+      },
     })
   })
 

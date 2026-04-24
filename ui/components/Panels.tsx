@@ -1,7 +1,6 @@
 'use client'
 
 import { LayersIcon, SlidersHorizontalIcon } from 'lucide-react'
-import { AnimatePresence, motion } from 'motion/react'
 import { useTranslation } from 'react-i18next'
 
 import { LayersPanel } from '@/components/panels/LayersPanel'
@@ -9,7 +8,6 @@ import { RenderControlsPanel } from '@/components/panels/RenderControlsPanel'
 import { TextBlocksPanel } from '@/components/panels/TextBlocksPanel'
 import { ScrollArea } from '@/components/ui/scroll-area'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
-import { useEditorUiStore } from '@/lib/stores/editorUiStore'
 
 export function Panels() {
   const { t } = useTranslation()
