@@ -1,6 +1,7 @@
 'use client'
 
-import { Group, Panel, Separator, useDefaultLayout } from 'react-resizable-panels'
+import { useEffect, useRef } from 'react'
+import { Group, Panel, Separator, useDefaultLayout, type PanelImperativeHandle } from 'react-resizable-panels'
 
 import { ActivityBubble } from '@/components/ActivityBubble'
 import { AppErrorBoundary } from '@/components/AppErrorBoundary'
@@ -12,14 +13,33 @@ import { WelcomeScreen } from '@/components/WelcomeScreen'
 import { useScene } from '@/hooks/useScene'
 import { useGetMeta } from '@/lib/api/default/default'
 import { useEditorUiStore } from '@/lib/stores/editorUiStore'
+import { cn } from '@/lib/utils'
 
 const LAYOUT_ID = 'koharu-main-layout-v3'
 
 export default function Page() {
+  const hasProject = useScene().scene !== null
+  const showNavigator = useEditorUiStore((s) => s.showNavigator)
+  const setShowNavigator = useEditorUiStore((s) => s.setShowNavigator)
+  const leftPanelRef = useRef<PanelImperativeHandle>(null)
+
   const { defaultLayout, onLayoutChanged } = useDefaultLayout({
     id: LAYOUT_ID,
     panelIds: ['left', 'center', 'right'],
   })
+
+  // Sync store -> panel state
+  useEffect(() => {
+    const panel = leftPanelRef.current
+    if (!panel) return
+
+    if (showNavigator && panel.isCollapsed()) {
+      panel.expand()
+    } else if (!showNavigator && !panel.isCollapsed()) {
+      panel.collapse()
+    }
+  }, [showNavigator])
+
   const { data: meta } = useGetMeta({
     query: {
       retry: false,
@@ -27,8 +47,6 @@ export default function Page() {
       staleTime: Infinity,
     },
   })
-  const hasProject = useScene().scene !== null
-  const showNavigator = useEditorUiStore((s) => s.showNavigator)
 
   if (!meta) {
     return <AppInitializationSkeleton />
@@ -48,14 +66,30 @@ export default function Page() {
         onLayoutChanged={onLayoutChanged}
         className='flex min-h-0 flex-1'
       >
-        {showNavigator && (
-          <>
-            <Panel id='left' defaultSize={160} minSize={160} maxSize={250}>
-              <Navigator />
-            </Panel>
-            <Separator className='w-px bg-border transition-colors hover:bg-border' />
-          </>
-        )}
+        <Panel
+          panelRef={leftPanelRef}
+          id='left'
+          defaultSize={160}
+          minSize={160}
+          maxSize={250}
+          collapsible
+          collapsedSize={0}
+          onResize={(size) => {
+            if (size.asPercentage === 0 && showNavigator) {
+              setShowNavigator(false)
+            } else if (size.asPercentage > 0 && !showNavigator) {
+              setShowNavigator(true)
+            }
+          }}
+        >
+          <Navigator />
+        </Panel>
+        <Separator
+          className={cn(
+            'w-px bg-border transition-colors hover:bg-border',
+            !showNavigator && 'hidden',
+          )}
+        />
         <Panel id='center' minSize={480}>
           <AppErrorBoundary>
             <div className='flex h-full min-h-0 min-w-0 flex-1 flex-col overflow-hidden'>

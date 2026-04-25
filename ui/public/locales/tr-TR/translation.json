@@ -68,6 +68,8 @@
   },
   "navigator": {
     "title": "Gezgin",
+    "show": "Gezgini Göster",
+    "hide": "Gezgini Gizle",
     "pages_one": "{{count}} sayfa",
     "pages_other": "{{count}} sayfa",
     "empty": "Belge yok",

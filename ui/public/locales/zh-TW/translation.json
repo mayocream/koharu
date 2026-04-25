@@ -67,7 +67,9 @@
     "cancelling": "停止中..."
   },
   "navigator": {
-    "title": "導覽",
+    "title": "導航",
+    "show": "顯示導航器",
+    "hide": "隱藏導航器",
     "pages_one": "{{count}} 頁",
     "pages_other": "{{count}} 頁",
     "empty": "沒有文件",

@@ -69,6 +69,8 @@
   },
   "navigator": {
     "title": "Navegador",
+    "show": "Mostrar navegador",
+    "hide": "Ocultar navegador",
     "pages_one": "{{count}} página",
     "pages_other": "{{count}} páginas",
     "empty": "Nenhum documento",

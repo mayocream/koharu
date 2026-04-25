@@ -68,6 +68,8 @@
   },
   "navigator": {
     "title": "내비게이터",
+    "show": "내비게이터 표시",
+    "hide": "내비게이터 숨기기",
     "pages_one": "{{count}} 페이지",
     "pages_other": "{{count}} 페이지",
     "empty": "문서 없음",

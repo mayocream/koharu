@@ -71,13 +71,14 @@ export function ToolRail() {
               data-active={showNavigator}
               onClick={() => setShowNavigator(!showNavigator)}
               className='border border-transparent text-muted-foreground data-[active=true]:text-primary'
-              aria-label={t('navigator.title')}
+              aria-label={showNavigator ? t('navigator.hide') : t('navigator.show')}
+              aria-pressed={showNavigator}
             >
               <PanelLeft className='h-4 w-4' />
             </Button>
           </TooltipTrigger>
           <TooltipContent side='right' sideOffset={8}>
-            {t('navigator.title')}
+            {showNavigator ? t('navigator.hide') : t('navigator.show')}
           </TooltipContent>
         </Tooltip>
       </div>

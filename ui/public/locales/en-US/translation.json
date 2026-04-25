@@ -84,6 +84,8 @@
   },
   "navigator": {
     "title": "Navigator",
+    "show": "Show Navigator",
+    "hide": "Hide Navigator",
     "pages_one": "{{count}} page",
     "pages_other": "{{count}} pages",
     "empty": "No documents",

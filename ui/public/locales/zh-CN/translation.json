@@ -68,6 +68,8 @@
   },
   "navigator": {
     "title": "导航",
+    "show": "显示导航器",
+    "hide": "隐藏导航器",
     "pages_one": "{{count}} 页",
     "pages_other": "{{count}} 页",
     "empty": "没有文档",

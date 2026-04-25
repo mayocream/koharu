@@ -68,6 +68,8 @@
   },
   "navigator": {
     "title": "ナビゲーター",
+    "show": "ナビゲーターを表示",
+    "hide": "ナビゲーターを非表示",
     "pages_one": "{{count}} ページ",
     "pages_other": "{{count}} ページ",
     "empty": "ドキュメントがありません",
