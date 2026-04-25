@@ -202,8 +202,9 @@ These models recognize source text after detection.
 
 These models remove source lettering before translated text is rendered back onto the page.
 
-- [aot-inpainting](https://huggingface.co/mayocream/aot-inpainting) for inpainting
+- [FLUX.2 Klein 4B](https://huggingface.co/unsloth/FLUX.2-klein-4B-GGUF) for FLUX.2-based inpainting
 - [lama-manga](https://huggingface.co/mayocream/lama-manga) for inpainting
+- [aot-inpainting](https://huggingface.co/mayocream/aot-inpainting) for inpainting
 
 #### Font Analysis
 

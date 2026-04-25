@@ -45,7 +45,7 @@ Esse design é intencional. Uma ferramenta de tradução de mangá precisa tanto
 | Dicas de fonte | [YuzuMarker.FontDetection](https://huggingface.co/fffonion/yuzumarker-font-detection) | classificador / regressor de imagem | estimar família da fonte, cores e dicas de traço |
 | Tradução | modelo GGUF local via [llama.cpp](https://github.com/ggml-org/llama.cpp) ou API remota | LLM decoder-only na maioria das configurações locais | traduzir o texto do OCR para o idioma de destino |
 
-Alternativas internas opcionais ainda estão disponíveis. As principais são [PP-DocLayoutV3](https://huggingface.co/PaddlePaddle/PP-DocLayoutV3_safetensors) como detector alternativo e engine de análise de layout, [speech-bubble-segmentation](https://huggingface.co/mayocream/speech-bubble-segmentation) como detector dedicado de balões e [lama-manga](https://huggingface.co/mayocream/lama-manga) como inpainter alternativo.
+Alternativas internas opcionais ainda estão disponíveis. As principais são [PP-DocLayoutV3](https://huggingface.co/PaddlePaddle/PP-DocLayoutV3_safetensors) como detector alternativo e engine de análise de layout, [speech-bubble-segmentation](https://huggingface.co/mayocream/speech-bubble-segmentation) como detector dedicado de balões, [FLUX.2 Klein 4B](https://huggingface.co/unsloth/FLUX.2-klein-4B-GGUF) como inpainter baseado em FLUX.2 e [lama-manga](https://huggingface.co/mayocream/lama-manga) como inpainter alternativo.
 
 ## Por que a detecção de texto e balão importa em páginas de mangá
 
@@ -169,6 +169,8 @@ A versão em Candle do Koharu segue de perto a forma de inferência upstream:
 3. alimenta a imagem RGB mascarada mais uma máscara binária de texto na rede
 4. compõe os pixels previstos de volta no tamanho original da imagem
 
+`flux2-klein` também está disponível como inpainter opcional. Ele usa a máscara de segmentação do CTD e a máscara de balão para construir uma máscara mais ampla da região de texto, depois executa o transformer GGUF FLUX.2 Klein 4B com o FLUX.2 small decoder no crop resultante.
+
 `lama-manga` ainda está disponível como engine alternativo se você quiser o comportamento baseado em Fourier do LaMa, mas ele não é mais o padrão.
 
 ## LLMs locais e tipo de modelo
@@ -199,7 +201,7 @@ Alguns detalhes são fáceis de perder se você ler apenas a documentação de a
 - o OCR é executado em imagens de blocos de texto recortados, não na página inteira original
 - o wrapper de OCR usa o caminho multimodal do llama.cpp e o prompt de tarefa `OCR:`
 - o inpainting consome `doc.segment`, então máscaras ruins levam diretamente a limpezas ruins
-- o inpainter padrão é `aot-inpainting`, enquanto `lama-manga` permanece selecionável como alternativa
+- o inpainter padrão é `aot-inpainting`, enquanto `flux2-klein` e `lama-manga` permanecem selecionáveis como alternativas
 - a predição de fonte é normalizada antes da renderização para que cores próximas do preto e do branco sejam ajustadas para valores mais limpos
 
 ## Leitura recomendada
@@ -213,6 +215,7 @@ Alguns detalhes são fáceis de perder se você ler apenas a documentação de a
 - [Repositório do manga-image-translator](https://github.com/zyddnys/manga-image-translator)
 - [Model card do YuzuMarker.FontDetection](https://huggingface.co/fffonion/yuzumarker-font-detection)
 - [Model card do PP-DocLayoutV3](https://huggingface.co/PaddlePaddle/PP-DocLayoutV3)
+- [Model card do FLUX.2 Klein 4B GGUF](https://huggingface.co/unsloth/FLUX.2-klein-4B-GGUF)
 - [Repositório do LaMa](https://github.com/advimman/lama)
 - [llama.cpp](https://github.com/ggml-org/llama.cpp)
 
