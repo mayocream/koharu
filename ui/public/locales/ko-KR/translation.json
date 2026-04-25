@@ -2,6 +2,9 @@
   "common": {
     "initializing": "초기화 중...",
     "cancel": "취소",
+    "confirm": "확인",
+    "copy": "복사",
+    "copied": "복사됨",
     "save": "저장",
     "saved": "저장됨!"
   },
@@ -11,14 +14,16 @@
     "addFile": "파일 추가...",
     "openFolder": "폴더 열기...",
     "addFolder": "폴더 추가...",
-    "save": "저장...",
     "saveAs": "다른 이름으로 저장...",
+    "save": "저장...",
+    "open": "열기",
     "openFiles": "파일 열기...",
     "closeProject": "프로젝트 닫기",
     "edit": "편집",
     "undo": "실행 취소",
     "redo": "다시 실행",
     "selectAll": "모두 선택",
+    "exportGroup": "내보내기",
     "export": "내보내기...",
     "exportPsd": "PSD 내보내기...",
     "exportAllInpainted": "모든 인페인트 이미지 내보내기...",
@@ -32,14 +37,25 @@
     "processAll": "모든 이미지 처리",
     "help": "도움말",
     "settings": "설정",
-    "discord": "Discord",
-    "github": "GitHub",
+    "discord": "디스코드",
+    "github": "깃허브",
     "version": "버전: {{version}}",
     "versionUnknown": "버전: 알 수 없음",
-    "language": "언어"
+    "language": "언어",
+    "languages": {
+      "en-US": "English",
+      "zh-CN": "中文（简体）",
+      "zh-TW": "中文（繁體）",
+      "ja-JP": "日本語",
+      "ru-RU": "Русский",
+      "es-ES": "Español",
+      "tr-TR": "Turkish",
+      "ko-KR": "한국어",
+      "pt-BR": "포르투갈어 (브라질)"
+    }
   },
   "welcome": {
-    "title": "Koharu",
+    "title": "코하루",
     "subtitle": "만화 번역 작업 공간",
     "new": "새 프로젝트",
     "newDescription": "빈 상태로 시작하고 나중에 페이지 가져오기",
@@ -83,6 +99,7 @@
     "processing": "처리",
     "mask": "마스크",
     "llm": "LLM",
+    "ai": "AI",
     "render": "렌더"
   },
   "layers": {
@@ -180,6 +197,22 @@
       "be-BY": "벨라루스어 (벨라루스)"
     }
   },
+  "ai": {
+    "model": "모델",
+    "prompt": "프롬프트",
+    "generate": "이미지 생성",
+    "noPage": "먼저 페이지를 선택해야 합니다.",
+    "signIn": "로그인",
+    "signOut": "로그아웃",
+    "signedIn": "로그인됨",
+    "signedOut": "로그아웃됨",
+    "signInTitle": "Codex에 로그인",
+    "signInPending": "인증 대기 중...",
+    "signInComplete": "로그인됨",
+    "signInFailed": "로그인 실패",
+    "userCode": "Code",
+    "openBrowser": "탐색기 열기"
+  },
   "render": {
     "effectLabel": "텍스트 효과",
     "alignLabel": "정렬",
@@ -204,11 +237,11 @@
     "emptyPrompt": "텍스트 블록을 보려면 이미지를 열어주세요.",
     "title": "텍스트 블록 ({{count}})",
     "none": "텍스트 블록이 없습니다. 목록을 채우려면 감지를 실행하세요.",
-    "emptySummary": "<비어 있음>",
+    "emptySummary": "<empty>",
     "ocrLabel": "OCR 텍스트",
     "ocrBadge": "OCR",
     "translationLabel": "번역",
-    "translationBadge": "TL",
+    "translationBadge": "번역",
     "addOcrPlaceholder": "OCR 텍스트 추가",
     "addTranslationPlaceholder": "번역 추가"
   },
@@ -277,7 +310,7 @@
     "httpProxyDescription": "런타임 및 모델 다운로드에 사용됩니다. 변경 사항은 자동으로 저장됩니다.",
     "title": "설정",
     "appearance": "모양",
-    "appearanceDescription": "장치에서 Koharu의 모양을 사용자 지정합니다.",
+    "appearanceDescription": "장치에서 코하루의 모양을 사용자 지정합니다.",
     "theme": "테마",
     "themeDescription": "선호하는 색상 구성표를 선택합니다.",
     "themeLight": "밝게",
@@ -298,6 +331,10 @@
     "deviceMl": "ML 컴퓨팅",
     "apiKeys": "API 키",
     "apiKeysDescription": "다양한 제공자에 대한 API 키를 관리합니다. 키는 장치 키체인에 안전하게 저장되며 누구와도 공유되지 않습니다.",
+    "ai": "AI",
+    "codex": "Codex",
+    "codexDescription": "이미지 생성을 위해 ChatGPT Codex 계정으로 로그인하세요.",
+    "codexTwoFactorDescription": "로그인 전 ChatGPT 계정의 2단계 인증(2FA)을 활성화하세요. Codex 기기 코드 로그인을 완료하려면 2단계 인증이 필수입니다.",
     "freeTier": "무료 등급",
     "localLlm": "로컬 LLM",
     "localLlmTitle": "로컬 LLM",
@@ -339,7 +376,7 @@
     "apiKeySave": "저장",
     "apiKeySaved": "저장되었습니다!",
     "dataPath": "데이터 경로",
-    "dataPathDescription": "Koharu는 모델, 런타임 패키지, 페이지 매니페스트 및 이미지 데이터를 이 디렉토리에 저장합니다. 경로를 변경하면 앱을 다시 시작해야 합니다.",
+    "dataPathDescription": "코하루는 모델, 런타임 패키지, 페이지 매니페스트 및 이미지 데이터를 이 디렉토리에 저장합니다. 경로를 변경하면 앱을 다시 시작해야 합니다.",
     "dataPathApply": "적용 후 재시작",
     "dataPathApplying": "적용 중...",
     "dataPathDesktopOnly": "런타임 설정은 데스크톱 앱에서만 사용할 수 있습니다.",
@@ -356,7 +393,7 @@
     "engines": "엔진",
     "enginesDescription": "각 파이프라인 단계에서 사용할 ML 엔진을 선택합니다.",
     "detector": "검출기",
-    "fontDetector": "Font Detector",
+    "fontDetector": "글꼴 검출기",
     "segmenter": "세그멘터",
     "bubbleSegmenter": "말풍선 세그멘터",
     "ocr": "OCR",
@@ -376,14 +413,14 @@
   "updater": {
     "available": {
       "title": "업데이트 사용 가능",
-      "description": "Koharu <strong>{{version}}</strong>을(를) 설치할 수 있습니다"
+      "description": "코하루 <strong>{{version}}</strong>을(를) 설치할 수 있습니다"
     },
     "noNotes": "릴리스 노트가 제공되지 않았습니다.",
     "later": "나중에",
     "update": "업데이트",
     "downloading": {
       "title": "업데이트 다운로드 중…",
-      "subtitle": "Koharu {{version}}"
+      "subtitle": "코하루 {{version}}"
     },
     "error": {
       "title": "업데이트 실패",
