@@ -172,7 +172,6 @@ export function Workspace() {
   const maskDrawing = useMaskDrawing({
     mode,
     page,
-    maskHash: segmentHash,
     segmentData,
     pointerToDocument,
     showMask: showSegmentationMask,

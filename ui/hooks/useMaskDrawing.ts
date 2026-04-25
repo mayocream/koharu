@@ -4,7 +4,7 @@ import { useEffect, useRef } from 'react'
 
 import { useCanvasDrawing, type CanvasDims } from '@/hooks/useCanvasDrawing'
 import type { PointerToDocumentFn } from '@/hooks/usePointerToDocument'
-import { getConfig, startPipeline } from '@/lib/api/default/default'
+import { getConfig } from '@/lib/api/default/default'
 import type { Page } from '@/lib/api/schemas'
 import { invalidateScene } from '@/lib/io/scene'
 import { useEditorUiStore } from '@/lib/stores/editorUiStore'
@@ -28,15 +28,14 @@ type MaskDrawingOptions = {
 
 /**
  * Repair-brush canvas that edits the `Mask { role: segment }` node. On stroke
- * end:
+ * end, it performs an atomic update:
  *   1. PUT the updated mask to `/api/v1/pages/{id}/masks/segment` (raw PNG).
- *   2. Kick a region-scoped inpainter via `POST /pipelines` so the inpainted
- *      layer refreshes just over the touched area.
+ *   2. Includes inpainter pipeline and region parameters in the query string
+ *      to trigger the AI result in the same backend transaction.
  */
 export function useMaskDrawing({
   mode,
   page,
-  maskHash,
   segmentData,
   pointerToDocument,
   showMask,

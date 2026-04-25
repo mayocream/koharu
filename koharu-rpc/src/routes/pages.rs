@@ -452,6 +452,7 @@ pub struct PutMaskResponse {
     params(
         ("id"   = PageId,   Path, description = "Page id"),
         ("role" = MaskRole, Path, description = "Mask role (segment|brushInpaint)"),
+        PutMaskParams,
     ),
     request_body(content_type = "image/png"),
     responses((status = 200, body = PutMaskResponse))
@@ -526,7 +527,7 @@ async fn put_mask(
         }
     };
 
-    if let Some(engine_id) = params.pipeline {
+    if let Some(engine_id) = params.pipeline.as_ref() {
         // Atomic Batch: Mask Update + Pipeline Run
         let mut ops = vec![mask_op.clone()];
 
@@ -544,22 +545,23 @@ async fn put_mask(
             height: params.height.unwrap_or(0.0) as u32,
         };
         let cancel = Arc::new(AtomicBool::new(false));
+        let options = PipelineRunOptions {
+            region: Some(region),
+            ..Default::default()
+        };
         let ctx = EngineCtx {
             scene: &scene,
             page: page_id,
             blobs: &session.blobs,
             runtime: &app.runtime,
             cancel: &cancel,
-            options: &PipelineRunOptions {
-                region: Some(region),
-                ..Default::default()
-            },
+            options: &options,
             llm: &app.llm,
             renderer: &app.renderer,
         };
 
         // 3. Run Engine (Synchronously for this request)
-        let engine_info = pipeline::Registry::find(&engine_id)
+        let engine_info = pipeline::Registry::find(engine_id)
             .map_err(|e| ApiError::bad_request(format!("{e:#}")))?;
         let engine = app
             .registry
