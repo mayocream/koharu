@@ -10,7 +10,7 @@ Koharu supports multiple runtime backends so the same pipeline can run across a 
 
 CUDA is the primary GPU backend on systems with supported NVIDIA hardware.
 
-- Koharu supports NVIDIA GPUs with compute capability 7.5 or higher
+- Koharu supports NVIDIA GPUs with compute capability 8.0 or higher
 - Koharu bundles CUDA toolkit 13.0
 
 On first run, Koharu extracts the required dynamic libraries into the application data directory.

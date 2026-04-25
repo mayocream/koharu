@@ -1,8 +1,6 @@
 use std::path::Path;
 
-use candle_core::{D, DType, IndexOp, Module, Result, Tensor};
-use candle_nn::{LayerNorm, RmsNorm};
-use candle_transformers::quantized_nn::{Linear, linear_b};
+use candle_core::{D, DType, IndexOp, Module, Result, Tensor, quantized::QMatMul};
 use candle_transformers::quantized_var_builder::VarBuilder;
 
 #[derive(Debug, Clone)]
@@ -32,8 +30,97 @@ impl Default for Flux2TransformerConfig {
     }
 }
 
+#[derive(Debug, Clone)]
+struct Linear {
+    weight: QMatMul,
+}
+
+impl Module for Linear {
+    fn forward(&self, xs: &Tensor) -> Result<Tensor> {
+        let dtype = xs.dtype();
+        let xs = if should_promote_for_cuda(xs) {
+            xs.to_dtype(DType::F32)?
+        } else {
+            xs.clone()
+        };
+        let ys = xs.apply(&self.weight)?;
+        if ys.dtype() != dtype && matches!(dtype, DType::BF16 | DType::F16) {
+            ys.to_dtype(dtype)
+        } else {
+            Ok(ys)
+        }
+    }
+}
+
 fn qlinear_no_bias(in_dim: usize, out_dim: usize, vb: VarBuilder) -> Result<Linear> {
-    linear_b(in_dim, out_dim, false, vb)
+    let weight = vb.get((out_dim, in_dim), "weight")?;
+    Ok(Linear {
+        weight: QMatMul::from_arc(weight)?,
+    })
+}
+
+#[derive(Debug, Clone)]
+struct LayerNorm {
+    inner: candle_nn::LayerNorm,
+}
+
+impl LayerNorm {
+    fn new_no_bias(weight: Tensor, eps: f64) -> Self {
+        Self {
+            inner: candle_nn::LayerNorm::new_no_bias(weight, eps),
+        }
+    }
+}
+
+impl Module for LayerNorm {
+    fn forward(&self, xs: &Tensor) -> Result<Tensor> {
+        let dtype = xs.dtype();
+        let xs = if should_promote_for_cuda(xs) {
+            xs.to_dtype(DType::F32)?
+        } else {
+            xs.clone()
+        };
+        let ys = xs.apply(&self.inner)?;
+        if ys.dtype() != dtype && matches!(dtype, DType::BF16 | DType::F16) {
+            ys.to_dtype(dtype)
+        } else {
+            Ok(ys)
+        }
+    }
+}
+
+#[derive(Debug, Clone)]
+struct RmsNorm {
+    inner: candle_nn::RmsNorm,
+}
+
+impl RmsNorm {
+    fn new(weight: Tensor, eps: f64) -> Self {
+        Self {
+            inner: candle_nn::RmsNorm::new(weight, eps),
+        }
+    }
+}
+
+impl Module for RmsNorm {
+    fn forward(&self, xs: &Tensor) -> Result<Tensor> {
+        let dtype = xs.dtype();
+        let xs = if should_promote_for_cuda(xs) {
+            xs.to_dtype(DType::F32)?
+        } else {
+            xs.clone()
+        };
+        let ys = xs.apply(&self.inner)?;
+        if ys.dtype() != dtype && matches!(dtype, DType::BF16 | DType::F16) {
+            ys.to_dtype(dtype)
+        } else {
+            Ok(ys)
+        }
+    }
+}
+
+fn should_promote_for_cuda(xs: &Tensor) -> bool {
+    xs.device().is_cuda() && matches!(xs.dtype(), DType::BF16 | DType::F16)
 }
 
 fn layer_norm(dim: usize, vb: &VarBuilder) -> Result<LayerNorm> {
@@ -83,6 +170,18 @@ fn apply_rope(xs: &Tensor, freq_cis: &Tensor) -> Result<Tensor> {
 fn scaled_dot_product_attention(q: &Tensor, k: &Tensor, v: &Tensor) -> Result<Tensor> {
     let dim = q.dim(D::Minus1)?;
     let scale = 1.0 / (dim as f64).sqrt();
+    #[cfg(feature = "cuda")]
+    if q.device().is_cuda() {
+        let q = q.transpose(1, 2)?.contiguous()?;
+        let k = k.transpose(1, 2)?.contiguous()?;
+        let v = v.transpose(1, 2)?.contiguous()?;
+        let xs = candle_flash_attn::flash_attn(&q, &k, &v, scale as f32, false)?;
+        drop(q);
+        drop(k);
+        drop(v);
+        return xs.transpose(1, 2);
+    }
+
     if q.device().is_metal() {
         return candle_nn::ops::sdpa(q, k, v, None, false, scale as f32, 1.0);
     }
@@ -107,6 +206,8 @@ fn attention(q: &Tensor, k: &Tensor, v: &Tensor, pe: &Tensor) -> Result<Tensor> 
     let q = apply_rope(q, pe)?.contiguous()?;
     let k = apply_rope(k, pe)?.contiguous()?;
     let xs = scaled_dot_product_attention(&q, &k, v)?;
+    drop(q);
+    drop(k);
     xs.transpose(1, 2)?.flatten_from(2)
 }
 
@@ -265,6 +366,7 @@ impl SelfAttention {
         let v = qkv.i((.., .., 2))?.transpose(1, 2)?;
         let q = q.apply(&self.norm.query_norm)?;
         let k = k.apply(&self.norm.key_norm)?;
+        drop(qkv);
         Ok((q, k, v))
     }
 }
@@ -284,7 +386,9 @@ impl Mlp {
     }
 
     fn forward(&self, xs: &Tensor) -> Result<Tensor> {
-        swiglu(&xs.apply(&self.lin1)?)?.apply(&self.lin2)
+        let xs = xs.apply(&self.lin1)?;
+        let xs = swiglu(&xs)?;
+        xs.apply(&self.lin2)
     }
 }
 
@@ -336,8 +440,10 @@ impl DoubleStreamBlock {
 
         let img_modulated = img_mod1.scale_shift(&img.apply(&self.img_norm1)?)?;
         let (img_q, img_k, img_v) = self.img_attn.qkv(&img_modulated)?;
+        drop(img_modulated);
         let txt_modulated = txt_mod1.scale_shift(&txt.apply(&self.txt_norm1)?)?;
         let (txt_q, txt_k, txt_v) = self.txt_attn.qkv(&txt_modulated)?;
+        drop(txt_modulated);
 
         let attn = {
             let q = Tensor::cat(&[&txt_q, &img_q], 2)?;
@@ -361,41 +467,28 @@ impl DoubleStreamBlock {
         let img_attn = img_attn.apply(&self.img_attn.proj)?;
         let txt_attn = txt_attn.apply(&self.txt_attn.proj)?;
         drop(attn);
+
+        let img_attn = img_mod1.gate(&img_attn)?;
+        let img = (img + img_attn)?;
+        let img_normed = img.apply(&self.img_norm2)?;
+        let img_modulated = img_mod2.scale_shift(&img_normed)?;
+        drop(img_normed);
+        let img_mlp = self.img_mlp.forward(&img_modulated)?;
         drop(img_modulated);
+        let img_mlp = img_mod2.gate(&img_mlp)?;
+        let img = (img + img_mlp)?;
+
+        let txt_attn = txt_mod1.gate(&txt_attn)?;
+        let txt = (txt + txt_attn)?;
+        let txt_normed = txt.apply(&self.txt_norm2)?;
+        let txt_modulated = txt_mod2.scale_shift(&txt_normed)?;
+        drop(txt_normed);
+        let txt_mlp = self.txt_mlp.forward(&txt_modulated)?;
         drop(txt_modulated);
-
-        let img = (img + img_mod1.gate(&img_attn)?)?;
-        drop(img_attn);
-        let img_mlp = img_mod2
-            .scale_shift(&img.apply(&self.img_norm2)?)?
-            .apply_fn(|xs| self.img_mlp.forward(xs))?;
-        let img = (img + img_mod2.gate(&img_mlp)?)?;
-        drop(img_mlp);
-
-        let txt = (txt + txt_mod1.gate(&txt_attn)?)?;
-        drop(txt_attn);
-        let txt_mlp = txt_mod2
-            .scale_shift(&txt.apply(&self.txt_norm2)?)?
-            .apply_fn(|xs| self.txt_mlp.forward(xs))?;
-        let txt = (txt + txt_mod2.gate(&txt_mlp)?)?;
-        drop(txt_mlp);
+        let txt_mlp = txt_mod2.gate(&txt_mlp)?;
+        let txt = (txt + txt_mlp)?;
 
         Ok((img, txt))
-    }
-}
-
-trait ApplyFn {
-    fn apply_fn<F>(&self, f: F) -> Result<Tensor>
-    where
-        F: FnOnce(&Tensor) -> Result<Tensor>;
-}
-
-impl ApplyFn for Tensor {
-    fn apply_fn<F>(&self, f: F) -> Result<Tensor>
-    where
-        F: FnOnce(&Tensor) -> Result<Tensor>,
-    {
-        f(self)
     }
 }
 
@@ -432,8 +525,11 @@ impl SingleStreamBlock {
 
     fn forward(&self, xs: &Tensor, mods: &[ModulationOut], pe: &Tensor) -> Result<Tensor> {
         let mod_ = &mods[0];
-        let x_mod = mod_.scale_shift(&xs.apply(&self.pre_norm)?)?;
+        let x_normed = xs.apply(&self.pre_norm)?;
+        let x_mod = mod_.scale_shift(&x_normed)?;
+        drop(x_normed);
         let qkv_mlp = x_mod.apply(&self.linear1)?;
+        drop(x_mod);
         let qkv = qkv_mlp.narrow(D::Minus1, 0, 3 * self.hidden_size)?;
         let (b, len, _) = qkv.dims3()?;
         let qkv = qkv.reshape((b, len, 3, self.num_heads, ()))?;
@@ -441,6 +537,8 @@ impl SingleStreamBlock {
         let k = qkv.i((.., .., 1))?.transpose(1, 2)?;
         let v = qkv.i((.., .., 2))?.transpose(1, 2)?;
         let mlp = qkv_mlp.narrow(D::Minus1, 3 * self.hidden_size, self.mlp_size * 2)?;
+        drop(qkv_mlp);
+        drop(qkv);
         let q = q.apply(&self.norm.query_norm)?;
         let k = k.apply(&self.norm.key_norm)?;
         let attn = attention(&q, &k, &v, pe)?;
@@ -448,10 +546,13 @@ impl SingleStreamBlock {
         drop(k);
         drop(v);
         let mlp = swiglu(&mlp)?;
-        let output = Tensor::cat(&[&attn, &mlp], D::Minus1)?.apply(&self.linear2)?;
+        let output = Tensor::cat(&[&attn, &mlp], D::Minus1)?;
         drop(attn);
         drop(mlp);
-        xs + mod_.gate(&output)?
+        let output = output.apply(&self.linear2)?;
+        let gated = mod_.gate(&output)?;
+        drop(output);
+        xs + gated
     }
 }
 
@@ -585,6 +686,7 @@ impl Flux2Transformer {
         let dtype = img.dtype();
         let ids = Tensor::cat(&[txt_ids, img_ids], 1)?;
         let pe = self.pe_embedder.forward(&ids)?;
+        drop(ids);
         let mut img = img.apply(&self.img_in)?;
         let mut txt = txt.apply(&self.txt_in)?;
         let vec_ = timestep_embedding(timesteps, 256, dtype)?.apply(&self.time_in)?;
@@ -595,14 +697,22 @@ impl Flux2Transformer {
         for block in &self.double_blocks {
             (img, txt) = block.forward(&img, &txt, &ds_img_mods, &ds_txt_mods, &pe)?;
         }
+        drop(ds_img_mods);
+        drop(ds_txt_mods);
         let txt_len = txt.dim(1)?;
         let img_len = img.dim(1)?;
         let mut xs = Tensor::cat(&[&txt, &img], 1)?;
+        drop(txt);
+        drop(img);
         for block in &self.single_blocks {
             xs = block.forward(&xs, &ss_mods, &pe)?;
         }
+        drop(ss_mods);
+        drop(pe);
         let img = xs.narrow(1, txt_len, img_len)?;
-        self.final_layer.forward(&img, &vec_)
+        let xs = self.final_layer.forward(&img, &vec_)?;
+        drop(img);
+        Ok(xs)
     }
 
     pub fn in_channels(&self) -> usize {

@@ -828,9 +828,9 @@ dependencies = [
 
 [[package]]
 name = "blake3"
-version = "1.8.4"
+version = "1.8.5"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "4d2d5991425dfd0785aed03aedcf0b321d61975c9b5b3689c774a2610ae0b51e"
+checksum = "0aa83c34e62843d924f905e0f5c866eb1dd6545fc4d719e803d9ba6030371fce"
 dependencies = [
  "arrayref",
  "arrayvec",
@@ -1007,7 +1007,7 @@ dependencies = [
 [[package]]
 name = "candle-core"
 version = "0.9.2"
-source = "git+https://github.com/mayocream/candle?branch=cuda-dynamic-loading#38be780754e954d88b63bbe1ef7e4098bbaa4c02"
+source = "git+https://github.com/mayocream/candle?branch=flash-attn#e7e71e18414db8de91113963beaabb6b4046a0a5"
 dependencies = [
  "byteorder",
  "candle-kernels",
@@ -1034,9 +1034,28 @@ dependencies = [
 ]
 
 [[package]]
+name = "candle-flash-attn"
+version = "0.9.2"
+source = "git+https://github.com/mayocream/candle?branch=flash-attn#e7e71e18414db8de91113963beaabb6b4046a0a5"
+dependencies = [
+ "anyhow",
+ "candle-core",
+ "candle-flash-attn-build",
+ "half",
+]
+
+[[package]]
+name = "candle-flash-attn-build"
+version = "0.9.2"
+source = "git+https://github.com/mayocream/candle?branch=flash-attn#e7e71e18414db8de91113963beaabb6b4046a0a5"
+dependencies = [
+ "anyhow",
+]
+
+[[package]]
 name = "candle-kernels"
 version = "0.9.2"
-source = "git+https://github.com/mayocream/candle?branch=cuda-dynamic-loading#38be780754e954d88b63bbe1ef7e4098bbaa4c02"
+source = "git+https://github.com/mayocream/candle?branch=flash-attn#e7e71e18414db8de91113963beaabb6b4046a0a5"
 dependencies = [
  "bindgen_cuda",
 ]
@@ -1044,7 +1063,7 @@ dependencies = [
 [[package]]
 name = "candle-metal-kernels"
 version = "0.9.2"
-source = "git+https://github.com/mayocream/candle?branch=cuda-dynamic-loading#38be780754e954d88b63bbe1ef7e4098bbaa4c02"
+source = "git+https://github.com/mayocream/candle?branch=flash-attn#e7e71e18414db8de91113963beaabb6b4046a0a5"
 dependencies = [
  "half",
  "objc2",
@@ -1058,7 +1077,7 @@ dependencies = [
 [[package]]
 name = "candle-nn"
 version = "0.9.2"
-source = "git+https://github.com/mayocream/candle?branch=cuda-dynamic-loading#38be780754e954d88b63bbe1ef7e4098bbaa4c02"
+source = "git+https://github.com/mayocream/candle?branch=flash-attn#e7e71e18414db8de91113963beaabb6b4046a0a5"
 dependencies = [
  "candle-core",
  "candle-metal-kernels",
@@ -1075,7 +1094,7 @@ dependencies = [
 [[package]]
 name = "candle-transformers"
 version = "0.9.2"
-source = "git+https://github.com/mayocream/candle?branch=cuda-dynamic-loading#38be780754e954d88b63bbe1ef7e4098bbaa4c02"
+source = "git+https://github.com/mayocream/candle?branch=flash-attn#e7e71e18414db8de91113963beaabb6b4046a0a5"
 dependencies = [
  "byteorder",
  "candle-core",
@@ -1093,7 +1112,7 @@ dependencies = [
 [[package]]
 name = "candle-ug"
 version = "0.9.2"
-source = "git+https://github.com/mayocream/candle?branch=cuda-dynamic-loading#38be780754e954d88b63bbe1ef7e4098bbaa4c02"
+source = "git+https://github.com/mayocream/candle?branch=flash-attn#e7e71e18414db8de91113963beaabb6b4046a0a5"
 dependencies = [
  "ug",
  "ug-cuda",
@@ -1150,9 +1169,9 @@ dependencies = [
 
 [[package]]
 name = "cc"
-version = "1.2.60"
+version = "1.2.61"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "43c5703da9466b66a946814e1adf53ea2c90f10063b86290cc9eb67ce3478a20"
+checksum = "d16d90359e986641506914ba71350897565610e87ce0ad9e6f28569db3dd5c6d"
 dependencies = [
  "find-msvc-tools",
  "jobserver",
@@ -1790,9 +1809,9 @@ dependencies = [
 
 [[package]]
 name = "data-encoding"
-version = "2.10.0"
+version = "2.11.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "d7a1e2f27636f116493b8b860f5546edb47c8d8f8ea73e1d2a20be88e28d1fea"
+checksum = "a4ae5f15dda3c708c0ade84bfee31ccab44a3da4f88015ed22f63732abe300c8"
 
 [[package]]
 name = "debugid"
@@ -2078,14 +2097,14 @@ checksum = "48c757948c5ede0e46177b7add2e67155f70e33c07fea8284df6576da70b3719"
 
 [[package]]
 name = "embed-resource"
-version = "3.0.8"
+version = "3.0.9"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "63a1d0de4f2249aa0ff5884d7080814f446bb241a559af6c170a41e878ed2d45"
+checksum = "c31a88c8d26de40ed18fe748c547845aa39de1db3afd958f8cb91579f3644bcb"
 dependencies = [
  "cc",
  "memchr",
  "rustc_version",
- "toml 0.9.12+spec-1.1.0",
+ "toml 1.1.2+spec-1.1.0",
  "vswhom",
  "winreg 0.55.0",
 ]
@@ -4475,7 +4494,7 @@ dependencies = [
 
 [[package]]
 name = "koharu"
-version = "0.49.0"
+version = "0.50.0"
 dependencies = [
  "anyhow",
  "camino",
@@ -4511,7 +4530,7 @@ dependencies = [
 
 [[package]]
 name = "koharu-ai"
-version = "0.49.0"
+version = "0.50.0"
 dependencies = [
  "anyhow",
  "async-trait",
@@ -4530,7 +4549,7 @@ dependencies = [
 
 [[package]]
 name = "koharu-app"
-version = "0.49.0"
+version = "0.50.0"
 dependencies = [
  "anyhow",
  "arc-swap",
@@ -4596,7 +4615,7 @@ dependencies = [
 
 [[package]]
 name = "koharu-core"
-version = "0.49.0"
+version = "0.50.0"
 dependencies = [
  "anyhow",
  "chrono",
@@ -4637,7 +4656,7 @@ dependencies = [
 
 [[package]]
 name = "koharu-llm"
-version = "0.49.0"
+version = "0.50.0"
 dependencies = [
  "anyhow",
  "bindgen",
@@ -4673,10 +4692,11 @@ dependencies = [
 
 [[package]]
 name = "koharu-ml"
-version = "0.49.0"
+version = "0.50.0"
 dependencies = [
  "anyhow",
  "candle-core",
+ "candle-flash-attn",
  "candle-nn",
  "candle-transformers",
  "clap",
@@ -4708,7 +4728,7 @@ dependencies = [
 
 [[package]]
 name = "koharu-psd"
-version = "0.49.0"
+version = "0.50.0"
 dependencies = [
  "image",
  "thiserror 2.0.18",
@@ -4716,7 +4736,7 @@ dependencies = [
 
 [[package]]
 name = "koharu-renderer"
-version = "0.49.0"
+version = "0.50.0"
 dependencies = [
  "anyhow",
  "criterion",
@@ -4740,7 +4760,7 @@ dependencies = [
 
 [[package]]
 name = "koharu-rpc"
-version = "0.49.0"
+version = "0.50.0"
 dependencies = [
  "anyhow",
  "async-stream",
@@ -4774,7 +4794,7 @@ dependencies = [
 
 [[package]]
 name = "koharu-runtime"
-version = "0.49.0"
+version = "0.50.0"
 dependencies = [
  "anyhow",
  "atomicwrites",
@@ -4866,9 +4886,9 @@ dependencies = [
 
 [[package]]
 name = "libc"
-version = "0.2.185"
+version = "0.2.186"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "52ff2c0fe9bc6cb6b14a0592c2ff4fa9ceb83eea9db979b0487cd054946a2b8f"
+checksum = "68ab91017fe16c622486840e4c83c9a37afeff978bd239b5293d61ece587de66"
 
 [[package]]
 name = "libfuzzer-sys"
@@ -6080,9 +6100,9 @@ checksum = "35fb2e5f958ec131621fdd531e9fc186ed768cbe395337403ae56c17a74c68ec"
 
 [[package]]
 name = "pastey"
-version = "0.2.1"
+version = "0.2.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "b867cad97c0791bbd3aaa6472142568c6c9e8f71937e98379f584cfb0cf35bec"
+checksum = "c5a797f0e07bdf071d15742978fc3128ec6c22891c31a3a931513263904c982a"
 
 [[package]]
 name = "pathdiff"
@@ -7354,7 +7374,7 @@ dependencies = [
  "http 1.4.0",
  "http-body",
  "http-body-util",
- "pastey 0.2.1",
+ "pastey 0.2.2",
  "pin-project-lite",
  "rand 0.10.1",
  "rmcp-macros",
@@ -7462,9 +7482,9 @@ dependencies = [
 
 [[package]]
 name = "rustls"
-version = "0.23.38"
+version = "0.23.39"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "69f9466fb2c14ea04357e91413efb882e2a6d4a406e625449bc0a5d360d53a21"
+checksum = "7c2c118cb077cca2822033836dfb1b975355dfb784b5e8da48f7b6c5db74e60e"
 dependencies = [
  "aws-lc-rs",
  "log",
@@ -7490,9 +7510,9 @@ dependencies = [
 
 [[package]]
 name = "rustls-pki-types"
-version = "1.14.0"
+version = "1.14.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "be040f8b0a225e40375822a563fa9524378b9d63112f53e19ffff34df5d33fdd"
+checksum = "30a7197ae7eb376e574fe940d068c30fe0462554a3ddbe4eca7838e049c937a9"
 dependencies = [
  "web-time",
  "zeroize",

@@ -1,3 +1,34 @@
+## [0.50.0](https://github.com/mayocream/koharu/compare/0.49.0..0.50.0) - 2026-04-25
+
+### ⛰️  Features
+
+- Collapsible Navigator ([#571](https://github.com/mayocream/koharu/issues/571)) - ([8c925f0](https://github.com/mayocream/koharu/commit/8c925f0cd5c860e318d5615dfb07206e00a8718d))
+
+### 🐛 Bug Fixes
+
+- *(ui)* Open updater release-note links externally ([#565](https://github.com/mayocream/koharu/issues/565)) - ([5f309a7](https://github.com/mayocream/koharu/commit/5f309a79364b350762e082dbdbe694bfedb47fb3))
+- [**breaking**] Require CUDA compute cap 8.0 - ([4a71a64](https://github.com/mayocream/koharu/commit/4a71a64a401bdda55591c00acfcc4f3b034d1bcd))
+- Implement universal locale-aware uppercase conversion for all no… ([#572](https://github.com/mayocream/koharu/issues/572)) - ([973e2d4](https://github.com/mayocream/koharu/commit/973e2d465d90c900b3d4cfff35cab4553a8105b1))
+- Implement universal locale-aware uppercase conversion using ICU ([#567](https://github.com/mayocream/koharu/issues/567)) - ([ca4cf81](https://github.com/mayocream/koharu/commit/ca4cf81724d0ae61722fa9b5afbe7ad00c743848))
+
+### 📚 Documentation
+
+- Add codex - ([8b90145](https://github.com/mayocream/koharu/commit/8b90145260cb1a2ba16ace48db38e6f8ece45425))
+
+### ⚡ Performance
+
+- FLUX.2 improvements - ([a66436f](https://github.com/mayocream/koharu/commit/a66436f75668389742f25e89a3349e6841659789))
+
+### ⚙️ Miscellaneous Tasks
+
+- Add Winget Releaser workflow ([#570](https://github.com/mayocream/koharu/issues/570)) - ([e4529ed](https://github.com/mayocream/koharu/commit/e4529edba9aad4f2a16029eb23591edf33dad1a0))
+
+## New Contributors ❤️
+
+* @edsporfekt made their first contribution in [#572](https://github.com/mayocream/koharu/pull/572)
+* @sitiom made their first contribution in [#570](https://github.com/mayocream/koharu/pull/570)
+* @dragoon4890 made their first contribution in [#565](https://github.com/mayocream/koharu/pull/565)
+
 ## [0.49.0](https://github.com/mayocream/koharu/compare/0.48.0..0.49.0) - 2026-04-25
 
 ### ⛰️  Features

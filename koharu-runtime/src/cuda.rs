@@ -11,9 +11,10 @@ use crate::loader::{add_runtime_search_path, preload_library};
 const CUDA_SUCCESS: i32 = 0;
 const CUDA_13_0_DRIVER_VERSION: i32 = 13000;
 const CUDA_13_1_DRIVER_VERSION: i32 = 13010;
+const CUDA_EXTRACT_REVISION: u32 = 2;
 const CU_DEVICE_ATTRIBUTE_COMPUTE_CAPABILITY_MAJOR: i32 = 75;
 const CU_DEVICE_ATTRIBUTE_COMPUTE_CAPABILITY_MINOR: i32 = 76;
-const MIN_COMPUTE_CAPABILITY: (i32, i32) = (7, 5); // Turing (RTX 20xx) and above
+const MIN_COMPUTE_CAPABILITY: (i32, i32) = (8, 0); // Ampere (RTX 30xx) and above
 
 type CuInit = unsafe extern "C" fn(flags: u32) -> i32;
 type CuDriverGetVersion = unsafe extern "C" fn(driver_version: *mut i32) -> i32;
@@ -63,6 +64,31 @@ const WHEELS: &[WheelSpec] = &[
         package: "nvidia-curand/10.4.1.81",
         windows_dylibs: &["curand64_10.dll"],
         linux_dylibs: &["libcurand.so.10"],
+    },
+    WheelSpec {
+        package: "nvidia-cudnn-cu13/9.21.0.82",
+        windows_dylibs: &[
+            "cudnn64_9.dll",
+            "cudnn_adv64_9.dll",
+            "cudnn_cnn64_9.dll",
+            "cudnn_engines_precompiled64_9.dll",
+            "cudnn_engines_runtime_compiled64_9.dll",
+            "cudnn_engines_tensor_ir64_9.dll",
+            "cudnn_graph64_9.dll",
+            "cudnn_heuristic64_9.dll",
+            "cudnn_ops64_9.dll",
+        ],
+        linux_dylibs: &[
+            "libcudnn.so.9",
+            "libcudnn_adv.so.9",
+            "libcudnn_cnn.so.9",
+            "libcudnn_engines_precompiled.so.9",
+            "libcudnn_engines_runtime_compiled.so.9",
+            "libcudnn_engines_tensor_ir.so.9",
+            "libcudnn_graph.so.9",
+            "libcudnn_heuristic.so.9",
+            "libcudnn_ops.so.9",
+        ],
     },
 ];
 
@@ -132,7 +158,7 @@ pub fn driver_version() -> Result<CudaDriverVersion> {
 
 /// Query the compute capability of CUDA device 0.
 ///
-/// Returns `(major, minor)` e.g. `(7, 5)` for Turing, `(8, 6)` for Ampere.
+/// Returns `(major, minor)` e.g. `(8, 0)` for Ampere, `(8, 9)` for Ada.
 pub fn compute_capability() -> Result<(i32, i32)> {
     let library_name = if cfg!(target_os = "windows") {
         "nvcuda.dll"
@@ -219,7 +245,7 @@ pub fn check_cuda_driver_support() -> bool {
         }
     }
 
-    // Check GPU compute capability (need >= 7.5 / Turing)
+    // Check GPU compute capability (need >= 8.0 / Ampere)
     match compute_capability() {
         Ok((major, minor)) if (major, minor) >= MIN_COMPUTE_CAPABILITY => {
             tracing::info!("GPU compute capability: {major}.{minor}");
@@ -228,7 +254,7 @@ pub fn check_cuda_driver_support() -> bool {
         Ok((major, minor)) => {
             tracing::warn!(
                 "GPU compute capability {major}.{minor} is below the minimum \
-                 required {}.{}; falling back to CPU. A Turing (RTX 20xx) or \
+                 required {}.{}; falling back to CPU. An Ampere (RTX 30xx) or \
                  newer GPU is required for GPU acceleration.",
                 MIN_COMPUTE_CAPABILITY.0,
                 MIN_COMPUTE_CAPABILITY.1,
@@ -379,9 +405,10 @@ impl WheelSpec {
 fn source_id() -> Result<String> {
     let packages = WHEELS.iter().map(|wheel| wheel.package).collect::<Vec<_>>();
     Ok(format!(
-        "cuda;platform={};wheels={}",
+        "cuda;platform={};wheels={};extract={}",
         platform_tags()?.join(","),
-        packages.join(",")
+        packages.join(","),
+        CUDA_EXTRACT_REVISION
     ))
 }
 
@@ -456,6 +483,20 @@ mod tests {
         for dylib in &all_dylibs {
             assert!(root.join(dylib).exists());
         }
+    }
+
+    #[test]
+    fn cuda_runtime_includes_cudnn() {
+        let wheel = WHEELS
+            .iter()
+            .find(|wheel| wheel.package.starts_with("nvidia-cudnn-cu13/"))
+            .expect("missing cuDNN runtime wheel");
+
+        #[cfg(target_os = "windows")]
+        assert!(wheel.dylibs().contains(&"cudnn64_9.dll"));
+
+        #[cfg(target_os = "linux")]
+        assert!(wheel.dylibs().contains(&"libcudnn.so.9"));
     }
 
     #[test]

@@ -20,6 +20,7 @@ imageproc = { workspace = true }
 candle-core = { workspace = true }
 candle-transformers = { workspace = true }
 candle-nn = { workspace = true }
+candle-flash-attn = { workspace = true, optional = true }
 tokenizers = { workspace = true }
 serde = { workspace = true }
 serde_json = { workspace = true }
@@ -44,9 +45,14 @@ objc2-foundation = { workspace = true, optional = true }
 [features]
 cuda = [
     "candle-core/cuda",
+    "candle-core/cudnn",
     "candle-nn/cuda",
+    "candle-nn/cudnn",
     "candle-transformers/cuda",
+    "candle-transformers/cudnn",
     "cudarc",
+    "candle-flash-attn",
+    "candle-flash-attn/cudnn",
 ]
 metal = [
     "candle-core/metal",
