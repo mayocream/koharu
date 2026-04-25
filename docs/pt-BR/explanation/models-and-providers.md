@@ -46,6 +46,7 @@ Você pode trocar estágios individuais em **Configurações > Engines**. As alt
 - [PP-DocLayoutV3](https://huggingface.co/PaddlePaddle/PP-DocLayoutV3_safetensors) como detector alternativo e engine de análise de layout
 - [speech-bubble-segmentation](https://huggingface.co/mayocream/speech-bubble-segmentation) como detector dedicado de balões
 - [Manga OCR](https://huggingface.co/mayocream/manga-ocr) e [MIT 48px OCR](https://huggingface.co/mayocream/mit48px-ocr) como engines de OCR alternativos
+- [FLUX.2 Klein 4B](https://huggingface.co/unsloth/FLUX.2-klein-4B-GGUF) como inpainter opcional baseado em FLUX.2
 - [lama-manga](https://huggingface.co/mayocream/lama-manga) como inpainter alternativo
 
 ## LLMs locais

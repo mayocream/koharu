@@ -46,6 +46,7 @@ You can swap individual stages in **Settings > Engines**. Built-in alternatives 
 - [PP-DocLayoutV3](https://huggingface.co/PaddlePaddle/PP-DocLayoutV3_safetensors) as an alternative detector and layout-analysis engine
 - [speech-bubble-segmentation](https://huggingface.co/mayocream/speech-bubble-segmentation) as a dedicated bubble detector
 - [Manga OCR](https://huggingface.co/mayocream/manga-ocr) and [MIT 48px OCR](https://huggingface.co/mayocream/mit48px-ocr) as alternative OCR engines
+- [FLUX.2 Klein 4B](https://huggingface.co/unsloth/FLUX.2-klein-4B-GGUF) as an optional FLUX.2-based inpainter
 - [lama-manga](https://huggingface.co/mayocream/lama-manga) as an alternative inpainter
 
 ## Local LLMs

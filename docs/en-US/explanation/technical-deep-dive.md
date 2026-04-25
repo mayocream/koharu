@@ -45,7 +45,7 @@ That design is deliberate. A manga translation tool needs both page structure an
 | Font hints | [YuzuMarker.FontDetection](https://huggingface.co/fffonion/yuzumarker-font-detection) | image classifier / regressor | estimate font family, colors, and stroke hints |
 | Translation | local GGUF model via [llama.cpp](https://github.com/ggml-org/llama.cpp) or remote API | decoder-only LLM in most local setups | translate OCR text into the target language |
 
-Optional built-in alternatives are still available. The main ones are [PP-DocLayoutV3](https://huggingface.co/PaddlePaddle/PP-DocLayoutV3_safetensors) as an alternative detector and layout-analysis engine, [speech-bubble-segmentation](https://huggingface.co/mayocream/speech-bubble-segmentation) as a dedicated bubble detector, and [lama-manga](https://huggingface.co/mayocream/lama-manga) as an alternative inpainter.
+Optional built-in alternatives are still available. The main ones are [PP-DocLayoutV3](https://huggingface.co/PaddlePaddle/PP-DocLayoutV3_safetensors) as an alternative detector and layout-analysis engine, [speech-bubble-segmentation](https://huggingface.co/mayocream/speech-bubble-segmentation) as a dedicated bubble detector, [FLUX.2 Klein 4B](https://huggingface.co/unsloth/FLUX.2-klein-4B-GGUF) as a FLUX.2-based inpainter, and [lama-manga](https://huggingface.co/mayocream/lama-manga) as an alternative inpainter.
 
 ## Why text and bubble detection matters on manga pages
 
@@ -169,6 +169,8 @@ Koharu's Candle port follows the upstream inference shape closely:
 3. feed the masked RGB image plus a binary text mask into the network
 4. composite the predicted pixels back into the original image size
 
+`flux2-klein` is also available as an optional inpainter. It uses the CTD segment mask and bubble mask to build a broader text-region mask, then runs the FLUX.2 Klein 4B GGUF transformer with the FLUX.2 small decoder on the resulting crop.
+
 `lama-manga` is still available as an alternative engine if you want LaMa's Fourier-based behavior, but it is no longer the default.
 
 ## Local LLMs and model type
@@ -199,7 +201,7 @@ Some details are easy to miss if you only read the high-level docs:
 - OCR runs on cropped text-block images, not the original whole page
 - the OCR wrapper uses the multimodal llama.cpp path and the task prompt `OCR:`
 - inpainting consumes `doc.segment`, so bad masks lead directly to bad cleanup
-- the default inpainter is `aot-inpainting`, while `lama-manga` remains selectable as an alternative
+- the default inpainter is `aot-inpainting`, while `flux2-klein` and `lama-manga` remain selectable as alternatives
 - font prediction is normalized before rendering so near-black and near-white colors snap to cleaner values
 
 ## Recommended reading
@@ -213,6 +215,7 @@ Some details are easy to miss if you only read the high-level docs:
 - [manga-image-translator repository](https://github.com/zyddnys/manga-image-translator)
 - [YuzuMarker.FontDetection model card](https://huggingface.co/fffonion/yuzumarker-font-detection)
 - [PP-DocLayoutV3 model card](https://huggingface.co/PaddlePaddle/PP-DocLayoutV3)
+- [FLUX.2 Klein 4B GGUF model card](https://huggingface.co/unsloth/FLUX.2-klein-4B-GGUF)
 - [LaMa repository](https://github.com/advimman/lama)
 - [llama.cpp](https://github.com/ggml-org/llama.cpp)
 

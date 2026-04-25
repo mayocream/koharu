@@ -46,6 +46,7 @@ Koharu 会在首次使用时自动下载所需的视觉模型。
 - 作为替代检测 / 版面分析引擎的 [PP-DocLayoutV3](https://huggingface.co/PaddlePaddle/PP-DocLayoutV3_safetensors)
 - 作为专用气泡检测器的 [speech-bubble-segmentation](https://huggingface.co/mayocream/speech-bubble-segmentation)
 - 作为替代 OCR 的 [Manga OCR](https://huggingface.co/mayocream/manga-ocr) 和 [MIT 48px OCR](https://huggingface.co/mayocream/mit48px-ocr)
+- 作为可选 FLUX.2 修复器的 [FLUX.2 Klein 4B](https://huggingface.co/unsloth/FLUX.2-klein-4B-GGUF)
 - 作为替代修复器的 [lama-manga](https://huggingface.co/mayocream/lama-manga)
 
 ## 本地 LLM

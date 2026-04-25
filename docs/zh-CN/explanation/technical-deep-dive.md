@@ -45,7 +45,7 @@ flowchart TD
 | 字体提示 | [YuzuMarker.FontDetection](https://huggingface.co/fffonion/yuzumarker-font-detection) | 图像分类 / 回归模型 | 估计字体、颜色与描边提示 |
 | 翻译 | 通过 [llama.cpp](https://github.com/ggml-org/llama.cpp) 运行的本地 GGUF 模型，或远程 API | 大多数本地场景下是 decoder-only LLM | 将 OCR 文本翻译到目标语言 |
 
-内置替代引擎仍然可用。主要包括：作为替代检测 / 版面分析引擎的 [PP-DocLayoutV3](https://huggingface.co/PaddlePaddle/PP-DocLayoutV3_safetensors)、作为专用气泡检测器的 [speech-bubble-segmentation](https://huggingface.co/mayocream/speech-bubble-segmentation)，以及作为替代修复器的 [lama-manga](https://huggingface.co/mayocream/lama-manga)。
+内置替代引擎仍然可用。主要包括：作为替代检测 / 版面分析引擎的 [PP-DocLayoutV3](https://huggingface.co/PaddlePaddle/PP-DocLayoutV3_safetensors)、作为专用气泡检测器的 [speech-bubble-segmentation](https://huggingface.co/mayocream/speech-bubble-segmentation)、作为 FLUX.2 修复器的 [FLUX.2 Klein 4B](https://huggingface.co/unsloth/FLUX.2-klein-4B-GGUF)，以及作为替代修复器的 [lama-manga](https://huggingface.co/mayocream/lama-manga)。
 
 ## 为什么文本和气泡检测在漫画页上很重要
 
@@ -167,6 +167,8 @@ Koharu 的 Candle 端口基本遵循上游推理流程：
 3. 将 masked RGB 图像和二值文本掩码送入网络
 4. 再把预测像素合成回原尺寸图像
 
+`flux2-klein` 也可以作为可选修复器使用。它会用 CTD 分割掩码和气泡掩码构建更宽松的文本区域掩码，然后在对应 crop 上运行 FLUX.2 Klein 4B GGUF transformer 和 FLUX.2 small decoder。
+
 `lama-manga` 仍然可以作为替代引擎选择，但已经不是默认项。
 
 ## 本地 LLM 与模型类型
@@ -191,7 +193,7 @@ Koharu 的本地翻译路径通过 `llama.cpp` 使用 GGUF 模型。实际中，
 - OCR 运行在裁剪后的文本块图像上，而不是整页原图
 - OCR 封装使用的是 `llama.cpp` 的多模态路径，并采用 `OCR:` 提示
 - 修复阶段直接消费 `doc.segment`，所以糟糕的掩码会直接导致糟糕的清理结果
-- 默认修复器是 `aot-inpainting`，`lama-manga` 仍可作为替代方案
+- 默认修复器是 `aot-inpainting`，`flux2-klein` 和 `lama-manga` 仍可作为替代方案
 - 渲染前会对字体预测做归一化，让接近纯黑或纯白的颜色更稳定
 
 ## 推荐阅读
@@ -205,6 +207,7 @@ Koharu 的本地翻译路径通过 `llama.cpp` 使用 GGUF 模型。实际中，
 - [manga-image-translator 仓库](https://github.com/zyddnys/manga-image-translator)
 - [YuzuMarker.FontDetection model card](https://huggingface.co/fffonion/yuzumarker-font-detection)
 - [PP-DocLayoutV3 model card](https://huggingface.co/PaddlePaddle/PP-DocLayoutV3)
+- [FLUX.2 Klein 4B GGUF model card](https://huggingface.co/unsloth/FLUX.2-klein-4B-GGUF)
 - [LaMa 仓库](https://github.com/advimman/lama)
 - [llama.cpp](https://github.com/ggml-org/llama.cpp)
 
