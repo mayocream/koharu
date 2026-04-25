@@ -138,6 +138,17 @@ jobs:
           uploadUpdaterSignatures: true
           uploadPlainBinary: true
 
+  winget:
+    needs: release
+    runs-on: ubuntu-latest
+    steps:
+      - uses: vedantmgoyal9/winget-releaser@main
+        with:
+          identifier: mayocream.koharu
+          version: ${{ github.ref_name }}
+          installers-regex: '(-setup\.exe|\.msi)$'
+          token: ${{ secrets.WINGET_TOKEN }}
+
   container:
     needs: release
     runs-on: ubuntu-latest
