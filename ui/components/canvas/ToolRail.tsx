@@ -1,6 +1,6 @@
 'use client'
 
-import { MousePointer, VectorSquare, Brush, Bandage, Eraser } from 'lucide-react'
+import { MousePointer, VectorSquare, Brush, Bandage, Eraser, PanelLeft } from 'lucide-react'
 import type { ComponentType } from 'react'
 import { useTranslation } from 'react-i18next'
 
@@ -53,11 +53,37 @@ const MODES: ModeDefinition[] = [
 export function ToolRail() {
   const mode = useEditorUiStore((state) => state.mode)
   const setMode = useEditorUiStore((state) => state.setMode)
+  const showNavigator = useEditorUiStore((state) => state.showNavigator)
+  const setShowNavigator = useEditorUiStore((state) => state.setShowNavigator)
   const shortcuts = usePreferencesStore((state) => state.shortcuts)
   const { t } = useTranslation()
 
   return (
     <div className='flex w-11 flex-col border-r border-border bg-card'>
+      {/* Navigator Toggle Section - Height matches Navigator Header (py-1.5 + 2 lines of text-xs = 44px) */}
+      <div className='flex h-[44px] shrink-0 items-center justify-center'>
+        <Tooltip>
+          <TooltipTrigger asChild>
+            <Button
+              variant='ghost'
+              size='icon-sm'
+              data-testid='tool-navigator-toggle'
+              data-active={showNavigator}
+              onClick={() => setShowNavigator(!showNavigator)}
+              className='border border-transparent text-muted-foreground data-[active=true]:text-primary'
+              aria-label={t('navigator.title')}
+            >
+              <PanelLeft className='h-4 w-4' />
+            </Button>
+          </TooltipTrigger>
+          <TooltipContent side='right' sideOffset={8}>
+            {t('navigator.title')}
+          </TooltipContent>
+        </Tooltip>
+      </div>
+
+      <div className='h-px w-full bg-border' />
+
       <div className='flex flex-1 flex-col items-center gap-1 py-2'>
         {MODES.map((item) => {
           const label = t(item.labelKey)

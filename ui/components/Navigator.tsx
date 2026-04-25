@@ -41,7 +41,7 @@ export function Navigator() {
     <div
       data-testid='navigator-panel'
       data-total-pages={totalPages}
-      className='flex h-full min-h-0 w-full flex-col border-r bg-muted/50'
+      className='flex h-full min-h-0 w-full flex-col bg-muted/50'
     >
       <div className='flex items-center justify-between border-b border-border px-2 py-1.5'>
         <div>

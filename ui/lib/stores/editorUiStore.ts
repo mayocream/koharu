@@ -64,6 +64,10 @@ type EditorUiState = {
   error?: { id: number; message: string }
   showError: (message: string) => void
   clearError: () => void
+
+  // page navigator panel
+  showNavigator: boolean
+  setShowNavigator: (show: boolean) => void
 }
 
 const initialState = {
@@ -80,6 +84,7 @@ const initialState = {
   selectedTarget: undefined as LlmTarget | undefined,
   selectedLanguage: undefined as string | undefined,
   error: undefined as { id: number; message: string } | undefined,
+  showNavigator: true,
 }
 
 export const useEditorUiStore = create<EditorUiState>((set) => ({
@@ -133,4 +138,6 @@ export const useEditorUiStore = create<EditorUiState>((set) => ({
     clearDismissTimer()
     set({ error: undefined })
   },
+
+  setShowNavigator: (show) => set({ showNavigator: show }),
 }))

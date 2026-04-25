@@ -11,6 +11,7 @@ import { Panels } from '@/components/Panels'
 import { WelcomeScreen } from '@/components/WelcomeScreen'
 import { useScene } from '@/hooks/useScene'
 import { useGetMeta } from '@/lib/api/default/default'
+import { useEditorUiStore } from '@/lib/stores/editorUiStore'
 
 const LAYOUT_ID = 'koharu-main-layout-v3'
 
@@ -27,6 +28,7 @@ export default function Page() {
     },
   })
   const hasProject = useScene().scene !== null
+  const showNavigator = useEditorUiStore((s) => s.showNavigator)
 
   if (!meta) {
     return <AppInitializationSkeleton />
@@ -46,10 +48,14 @@ export default function Page() {
         onLayoutChanged={onLayoutChanged}
         className='flex min-h-0 flex-1'
       >
-        <Panel id='left' defaultSize={160} minSize={160} maxSize={250}>
-          <Navigator />
-        </Panel>
-        <Separator className='w-1 bg-border/40 transition-colors hover:bg-border' />
+        {showNavigator && (
+          <>
+            <Panel id='left' defaultSize={160} minSize={160} maxSize={250}>
+              <Navigator />
+            </Panel>
+            <Separator className='w-px bg-border transition-colors hover:bg-border' />
+          </>
+        )}
         <Panel id='center' minSize={480}>
           <AppErrorBoundary>
             <div className='flex h-full min-h-0 min-w-0 flex-1 flex-col overflow-hidden'>
@@ -58,7 +64,7 @@ export default function Page() {
             </div>
           </AppErrorBoundary>
         </Panel>
-        <Separator className='w-1 bg-border/40 transition-colors hover:bg-border' />
+        <Separator className='w-px bg-border transition-colors hover:bg-border' />
         <Panel id='right' defaultSize={280} minSize={280} maxSize={400}>
           <AppErrorBoundary>
             <Panels />
