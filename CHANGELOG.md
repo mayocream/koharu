@@ -1,3 +1,14 @@
+## [0.53.0](https://github.com/mayocream/koharu/compare/0.52.0..0.53.0) - 2026-04-26
+
+### ⛰️  Features
+
+- Qwen3.6 - ([3f0ec29](https://github.com/mayocream/koharu/commit/3f0ec29405678579f6e066d542a542cdc1e6ac8f))
+
+### 🐛 Bug Fixes
+
+- Filename overflow - ([c431e82](https://github.com/mayocream/koharu/commit/c431e823194e048ee5dee947644906f6b17f54b0))
+
+
 ## [0.52.0](https://github.com/mayocream/koharu/compare/0.51.0..0.52.0) - 2026-04-26
 
 ### 🐛 Bug Fixes
