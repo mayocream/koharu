@@ -376,3 +376,10 @@ Thanks to all the contributors who have helped make Koharu better!
 ## License
 
 Koharu is licensed under the [GNU General Public License v3.0](LICENSE).
+
+
+---
+
+## Auto-generated contribution
+
+Added by bounty bot.
