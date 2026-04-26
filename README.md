@@ -151,6 +151,8 @@ ZLUDA is a CUDA compatibility layer that lets some CUDA workloads run on AMD GPU
 
 To use it, install the [AMD HIP SDK](https://www.amd.com/en/developer/resources/rocm-hub/hip-sdk.html).
 
+On Windows with a Radeon RX 9070 XT, use `therock-dist-windows-gfx120X-all-7.12.0a20260311.tar.gz` or an older HIP runtime for ZLUDA compatibility.
+
 ### Metal (Apple Silicon on macOS)
 
 Koharu supports Metal on Apple Silicon Macs. No extra runtime setup is required beyond a normal app install.

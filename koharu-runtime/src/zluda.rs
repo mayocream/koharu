@@ -6,12 +6,14 @@ const RELEASE_TAG: &str = "v6-preview.65";
 const ZLUDA_ASSET_NAME: &str = "zluda-windows-5c75a54.zip";
 #[cfg(any(target_os = "windows", test))]
 // Bump this when extraction behavior changes but the upstream asset name stays the same.
-const ZLUDA_EXTRACT_REVISION: u32 = 4;
+const ZLUDA_EXTRACT_REVISION: u32 = 5;
 #[cfg(any(target_os = "windows", test))]
 const ZLUDA_DLLS: &[&str] = &[
     "nvcudart_hybrid64.dll",
     "nvcuda.dll",
+    "cublasLt64_12.dll",
     "cublasLt64_13.dll",
+    "cublas64_12.dll",
     "cublas64_13.dll",
     "cufft64_12.dll",
     "cudnn64_9.dll",
@@ -200,7 +202,9 @@ mod tests {
     #[test]
     fn required_runtime_dlls_cover_zluda_cuda_entrypoints() {
         assert!(ZLUDA_DLLS.contains(&"nvcuda.dll"));
+        assert!(ZLUDA_DLLS.contains(&"cublas64_12.dll"));
         assert!(ZLUDA_DLLS.contains(&"cublas64_13.dll"));
+        assert!(ZLUDA_DLLS.contains(&"cublasLt64_12.dll"));
         assert!(ZLUDA_DLLS.contains(&"cublasLt64_13.dll"));
         assert!(ZLUDA_DLLS.contains(&"cufft64_12.dll"));
         assert!(ZLUDA_DLLS.contains(&"cudnn64_9.dll"));
@@ -231,7 +235,7 @@ mod tests {
 
     #[test]
     fn runtime_extract_list_matches_preload_list() {
-        assert_eq!(ZLUDA_DLLS.len(), 6);
+        assert_eq!(ZLUDA_DLLS.len(), 8);
         assert!(ZLUDA_DLLS.iter().all(|dll| dll.ends_with(".dll")));
     }
 }

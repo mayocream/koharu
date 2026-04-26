@@ -29,6 +29,12 @@ On Windows and Linux, Vulkan is available as an alternative GPU path for OCR and
 
 AMD and Intel GPUs can benefit from Vulkan, but detection and inpainting still depend on CUDA or Metal.
 
+## ZLUDA on AMD GPUs
+
+On Windows, Koharu can use experimental ZLUDA acceleration on AMD GPUs when a compatible HIP runtime is installed.
+
+For Radeon RX 9070 XT systems on Windows, use `therock-dist-windows-gfx120X-all-7.12.0a20260311.tar.gz` or an older HIP runtime. Newer HIP builds may change runtime library behavior in ways that prevent the bundled ZLUDA runtime from loading correctly.
+
 ## CPU fallback
 
 Koharu can always run on CPU when GPU acceleration is unavailable or when you force CPU mode explicitly.
