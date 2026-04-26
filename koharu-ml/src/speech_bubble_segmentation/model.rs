@@ -1,8 +1,10 @@
 use candle_core::{D, IndexOp, Result, Tensor};
 use candle_nn::{
     BatchNorm, Conv2d, Conv2dConfig, ConvTranspose2d, ConvTranspose2dConfig, Module, VarBuilder,
-    batch_norm, conv_transpose2d, conv2d, conv2d_no_bias,
+    batch_norm, conv_transpose2d,
 };
+
+use crate::ops::{conv2d, conv2d_no_bias};
 
 #[derive(Clone, Copy, PartialEq, Debug)]
 pub struct Multiples {

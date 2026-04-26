@@ -3,6 +3,8 @@ use candle_core::{Module, ModuleT, Tensor};
 use candle_nn::{BatchNorm, Conv2d, Conv2dConfig, Linear, VarBuilder};
 use clap::ValueEnum;
 
+use crate::ops::conv2d_new;
+
 use super::{FONT_COUNT, REGRESSION_DIM};
 
 #[derive(Default, Debug, Clone, Copy, PartialEq, Eq, ValueEnum)]
@@ -92,7 +94,7 @@ struct BasicBlock {
 
 impl BasicBlock {
     fn load(vb: VarBuilder, in_channels: usize, planes: usize, stride: usize) -> Result<Self> {
-        let conv1 = Conv2d::new(
+        let conv1 = conv2d_new(
             vb.pp("conv1").get((planes, in_channels, 3, 3), "weight")?,
             None,
             Conv2dConfig {
@@ -100,9 +102,9 @@ impl BasicBlock {
                 padding: 1,
                 ..Default::default()
             },
-        );
+        )?;
         let bn1 = load_batch_norm(&vb.pp("bn1"), planes)?;
-        let conv2 = Conv2d::new(
+        let conv2 = conv2d_new(
             vb.pp("conv2").get((planes, planes, 3, 3), "weight")?,
             None,
             Conv2dConfig {
@@ -110,11 +112,11 @@ impl BasicBlock {
                 padding: 1,
                 ..Default::default()
             },
-        );
+        )?;
         let bn2 = load_batch_norm(&vb.pp("bn2"), planes)?;
 
         let downsample = if stride != 1 || in_channels != planes {
-            let conv = Conv2d::new(
+            let conv = conv2d_new(
                 vb.pp("downsample.0")
                     .get((planes, in_channels, 1, 1), "weight")?,
                 None,
@@ -122,7 +124,7 @@ impl BasicBlock {
                     stride,
                     ..Default::default()
                 },
-            );
+            )?;
             let bn = load_batch_norm(&vb.pp("downsample.1"), planes)?;
             Some((conv, bn))
         } else {
@@ -177,13 +179,13 @@ impl Bottleneck {
         stride: usize,
         expansion: usize,
     ) -> Result<Self> {
-        let conv1 = Conv2d::new(
+        let conv1 = conv2d_new(
             vb.pp("conv1").get((planes, in_channels, 1, 1), "weight")?,
             None,
             Conv2dConfig::default(),
-        );
+        )?;
         let bn1 = load_batch_norm(&vb.pp("bn1"), planes)?;
-        let conv2 = Conv2d::new(
+        let conv2 = conv2d_new(
             vb.pp("conv2").get((planes, planes, 3, 3), "weight")?,
             None,
             Conv2dConfig {
@@ -191,18 +193,18 @@ impl Bottleneck {
                 padding: 1,
                 ..Default::default()
             },
-        );
+        )?;
         let bn2 = load_batch_norm(&vb.pp("bn2"), planes)?;
-        let conv3 = Conv2d::new(
+        let conv3 = conv2d_new(
             vb.pp("conv3")
                 .get((planes * expansion, planes, 1, 1), "weight")?,
             None,
             Conv2dConfig::default(),
-        );
+        )?;
         let bn3 = load_batch_norm(&vb.pp("bn3"), planes * expansion)?;
 
         let downsample = if in_channels != planes * expansion || stride != 1 {
-            let conv = Conv2d::new(
+            let conv = conv2d_new(
                 vb.pp("downsample.0")
                     .get((planes * expansion, in_channels, 1, 1), "weight")?,
                 None,
@@ -210,7 +212,7 @@ impl Bottleneck {
                     stride,
                     ..Default::default()
                 },
-            );
+            )?;
             let bn = load_batch_norm(&vb.pp("downsample.1"), planes * expansion)?;
             Some((conv, bn))
         } else {
@@ -282,7 +284,7 @@ impl ResNet {
         block: BlockKind,
         expansion: usize,
     ) -> Result<Self> {
-        let conv1 = Conv2d::new(
+        let conv1 = conv2d_new(
             vb.pp("conv1").get((64, 3, 7, 7), "weight")?,
             None,
             Conv2dConfig {
@@ -290,7 +292,7 @@ impl ResNet {
                 padding: 3,
                 ..Default::default()
             },
-        );
+        )?;
         let bn1 = load_batch_norm(&vb.pp("bn1"), 64)?;
 
         let (layer1, c1) =
@@ -419,48 +421,48 @@ struct DeepFont {
 
 impl DeepFont {
     fn load(vb: VarBuilder) -> Result<Self> {
-        let conv1 = Conv2d::new(
+        let conv1 = conv2d_new(
             vb.pp("0").get((64, 3, 11, 11), "weight")?,
             Some(vb.pp("0").get(64, "bias")?),
             Conv2dConfig {
                 stride: 2,
                 ..Default::default()
             },
-        );
+        )?;
         let bn1 = load_batch_norm(&vb.pp("1"), 64)?;
-        let conv2 = Conv2d::new(
+        let conv2 = conv2d_new(
             vb.pp("4").get((128, 64, 3, 3), "weight")?,
             Some(vb.pp("4").get(128, "bias")?),
             Conv2dConfig {
                 padding: 1,
                 ..Default::default()
             },
-        );
+        )?;
         let bn2 = load_batch_norm(&vb.pp("5"), 128)?;
-        let conv3 = Conv2d::new(
+        let conv3 = conv2d_new(
             vb.pp("8").get((256, 128, 3, 3), "weight")?,
             Some(vb.pp("8").get(256, "bias")?),
             Conv2dConfig {
                 padding: 1,
                 ..Default::default()
             },
-        );
-        let conv4 = Conv2d::new(
+        )?;
+        let conv4 = conv2d_new(
             vb.pp("9").get((256, 256, 3, 3), "weight")?,
             Some(vb.pp("9").get(256, "bias")?),
             Conv2dConfig {
                 padding: 1,
                 ..Default::default()
             },
-        );
-        let conv5 = Conv2d::new(
+        )?;
+        let conv5 = conv2d_new(
             vb.pp("10").get((256, 256, 3, 3), "weight")?,
             Some(vb.pp("10").get(256, "bias")?),
             Conv2dConfig {
                 padding: 1,
                 ..Default::default()
             },
-        );
+        )?;
         let fc1 = Linear::new(
             vb.pp("14").get((4096, 256 * 12 * 12), "weight")?,
             Some(vb.pp("14").get(4096, "bias")?),

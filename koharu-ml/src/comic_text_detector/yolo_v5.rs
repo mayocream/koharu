@@ -1,8 +1,7 @@
 use candle_core::{Device, IndexOp, Result, Tensor};
-use candle_nn::{
-    BatchNorm, Conv2d, Conv2dConfig, Module, ModuleT, VarBuilder, batch_norm, conv2d,
-    conv2d_no_bias,
-};
+use candle_nn::{BatchNorm, Conv2d, Conv2dConfig, Module, ModuleT, VarBuilder, batch_norm};
+
+use crate::ops::{conv2d, conv2d_no_bias};
 
 // refer: https://github.com/huggingface/candle/blob/95ea4538c3527f7cf001559281f45fe3ddaab359/candle-examples/examples/yolo-v8/model.rs#L56-L73
 #[derive(Debug)]

@@ -106,7 +106,7 @@ impl PatchEmbedding {
             ..Default::default()
         };
         // Weight: embeddings.patch_embedding (with bias)
-        let patch_embedding = candle_nn::conv2d(
+        let patch_embedding = crate::ops::conv2d(
             cfg.num_channels,
             cfg.hidden_size,
             cfg.patch_size,

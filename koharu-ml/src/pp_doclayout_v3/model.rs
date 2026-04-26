@@ -1,12 +1,12 @@
 use anyhow::{Context, Result, bail};
 use candle_core::{D, DType, Device, Tensor};
 use candle_nn::{
-    BatchNorm, Conv2d, Conv2dConfig, LayerNorm, Linear, Module, ModuleT, VarBuilder, conv2d,
-    conv2d_no_bias, layer_norm,
+    BatchNorm, Conv2d, Conv2dConfig, LayerNorm, Linear, Module, ModuleT, VarBuilder, layer_norm,
     ops::{sigmoid, silu, softmax},
 };
 
 use super::{HGNetV2Config, PPDocLayoutV3Config};
+use crate::ops::{conv2d, conv2d_no_bias};
 
 #[derive(Debug)]
 pub(crate) struct PPDocLayoutV3Outputs {

@@ -1,7 +1,8 @@
 use candle_core::{D, Module, Result, Tensor, conv::CudnnFwdAlgo};
-use candle_nn::{Conv2d, Conv2dConfig, GroupNorm, VarBuilder, conv2d, group_norm};
+use candle_nn::{Conv2d, Conv2dConfig, GroupNorm, VarBuilder, group_norm};
 
 use super::latents::{patchify_latents, unpatchify_latents};
+use crate::ops::conv2d;
 
 #[derive(Debug, Clone)]
 pub struct Flux2VaeConfig {

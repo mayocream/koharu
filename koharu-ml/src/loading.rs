@@ -7,11 +7,7 @@ use candle_nn::VarBuilder;
 use serde::de::DeserializeOwned;
 
 pub fn model_dtype(device: &Device) -> DType {
-    if device.is_cuda() {
-        DType::BF16
-    } else {
-        DType::F32
-    }
+    crate::ops::model_dtype(device)
 }
 
 pub async fn resolve_manifest_path<F>(manifest: F) -> Result<PathBuf>

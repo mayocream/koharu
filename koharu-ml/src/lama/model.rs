@@ -4,6 +4,8 @@ use candle_nn::{
     BatchNorm, Conv2d, Conv2dConfig, ConvTranspose2d, ConvTranspose2dConfig, VarBuilder, ops,
 };
 
+use crate::ops::conv2d_new;
+
 use super::fft::{irfft2, rfft2};
 
 #[derive(Clone, Copy)]
@@ -35,7 +37,7 @@ impl Conv2dPad {
         } else {
             None
         };
-        let conv = Conv2d::new(
+        let conv = conv2d_new(
             weight,
             bias,
             Conv2dConfig {
@@ -45,7 +47,7 @@ impl Conv2dPad {
                 groups,
                 cudnn_fwd_algo: None,
             },
-        );
+        )?;
         Ok(Self { conv, pad })
     }
 
@@ -75,7 +77,7 @@ struct FourierUnit {
 
 impl FourierUnit {
     fn load(vb: &VarBuilder, in_channels: usize, out_channels: usize) -> Result<Self> {
-        let conv = Conv2d::new(
+        let conv = conv2d_new(
             vb.get((out_channels, in_channels * 2, 1, 1), "conv_layer.weight")?,
             None,
             Conv2dConfig {
@@ -85,7 +87,7 @@ impl FourierUnit {
                 groups: 1,
                 cudnn_fwd_algo: None,
             },
-        );
+        )?;
         let bn = load_batch_norm(&vb.pp("bn"), out_channels)?;
         Ok(Self {
             conv,
@@ -133,7 +135,7 @@ impl SpectralTransform {
         out_channels: usize,
     ) -> Result<Self> {
         let conv1_out = out_channels / 2;
-        let conv1 = Conv2d::new(
+        let conv1 = conv2d_new(
             vb.get((conv1_out, in_channels, 1, 1), "conv1.0.weight")?,
             None,
             Conv2dConfig {
@@ -143,10 +145,10 @@ impl SpectralTransform {
                 groups: 1,
                 cudnn_fwd_algo: None,
             },
-        );
+        )?;
         let bn1 = load_batch_norm(&vb.pp("conv1.1"), conv1_out)?;
         let fu = FourierUnit::load(&vb.pp("fu"), conv1_out, out_channels)?;
-        let conv2 = Conv2d::new(
+        let conv2 = conv2d_new(
             vb.get((out_channels, conv1_out, 1, 1), "conv2.weight")?,
             None,
             Conv2dConfig {
@@ -156,7 +158,7 @@ impl SpectralTransform {
                 groups: 1,
                 cudnn_fwd_algo: None,
             },
-        );
+        )?;
         Ok(Self {
             downsample: stride == 2,
             conv1,
@@ -513,7 +515,7 @@ impl Lama {
         );
         let up3_bn = load_batch_norm(&vb.pp("model.31"), up3.weight().dims4()?.1)?;
 
-        let final_conv = Conv2d::new(
+        let final_conv = conv2d_new(
             vb.pp("model.34").get((3, 64, 7, 7), "weight")?,
             Some(vb.pp("model.34").get(3, "bias")?),
             Conv2dConfig {
@@ -523,7 +525,7 @@ impl Lama {
                 groups: 1,
                 cudnn_fwd_algo: None,
             },
-        );
+        )?;
 
         Ok(Self {
             pad_input,

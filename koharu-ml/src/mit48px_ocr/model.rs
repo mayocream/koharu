@@ -2,8 +2,10 @@ use anyhow::Result;
 use candle_core::{D, DType, Device, Tensor};
 use candle_nn::{
     BatchNorm, Conv1d, Conv1dConfig, Conv2d, Conv2dConfig, Embedding, LayerNorm, Linear, Module,
-    ModuleT, VarBuilder, conv2d, embedding, layer_norm,
+    ModuleT, VarBuilder, embedding, layer_norm,
 };
+
+use crate::ops::{conv1d_new, conv2d};
 
 use super::Mit48pxConfig;
 
@@ -513,14 +515,14 @@ impl HeightConv {
             .get((out_channels, in_channels, kernel, 1), "weight")?
             .reshape((out_channels, in_channels, kernel))?;
         let bias = vb.get(out_channels, "bias")?;
-        let conv = Conv1d::new(
+        let conv = conv1d_new(
             weight,
             Some(bias),
             Conv1dConfig {
                 stride,
                 ..Default::default()
             },
-        );
+        )?;
         Ok(Self { conv, out_channels })
     }
 

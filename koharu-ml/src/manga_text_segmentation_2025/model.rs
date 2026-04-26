@@ -2,10 +2,12 @@ use std::collections::BTreeMap;
 
 use candle_core::{Result, Tensor};
 use candle_nn::{
-    BatchNorm, Conv2d, Conv2dConfig, GroupNorm, Module, ModuleT, VarBuilder, batch_norm, conv2d,
-    conv2d_no_bias, group_norm,
+    BatchNorm, Conv2d, Conv2dConfig, GroupNorm, Module, ModuleT, VarBuilder, batch_norm,
+    group_norm,
     ops::{sigmoid, silu},
 };
+
+use crate::ops::{conv2d, conv2d_no_bias};
 
 const ENCODER_CHANNELS: [usize; 6] = [3, 32, 56, 80, 192, 328];
 const DECODER_CHANNELS: [usize; 5] = [256, 128, 64, 32, 16];

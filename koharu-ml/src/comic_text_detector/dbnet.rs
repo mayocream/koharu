@@ -1,8 +1,10 @@
 use candle_core::{ModuleT, Result, Tensor};
 use candle_nn::{
     BatchNorm, Conv2d, Conv2dConfig, ConvTranspose2d, ConvTranspose2dConfig, Module, VarBuilder,
-    batch_norm, conv_transpose2d, conv_transpose2d_no_bias, conv2d, conv2d_no_bias, ops,
+    batch_norm, conv_transpose2d, conv_transpose2d_no_bias, ops,
 };
+
+use crate::ops::{conv2d, conv2d_no_bias};
 
 #[derive(Clone, Copy)]
 enum Act {

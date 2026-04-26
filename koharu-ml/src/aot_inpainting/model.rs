@@ -4,6 +4,8 @@ use candle_nn::{
     Conv2d, Conv2dConfig, ConvTranspose2d, ConvTranspose2dConfig, Module, VarBuilder, ops::sigmoid,
 };
 
+use crate::ops::conv2d_new;
+
 const RELU_NF_SCALE: f64 = 1.713_958_859_443_664_6;
 const WEIGHT_STANDARDIZATION_EPS: f32 = 1e-4;
 const LAYER_NORM_EPS: f64 = 1e-9;
@@ -285,7 +287,7 @@ fn load_plain_conv2d(
 ) -> Result<Conv2d> {
     let weight = vb.get(shape, "weight")?;
     let bias = Some(vb.get(shape.0, "bias")?);
-    Ok(Conv2d::new(
+    Ok(conv2d_new(
         weight,
         bias,
         Conv2dConfig {
@@ -295,7 +297,7 @@ fn load_plain_conv2d(
             groups: 1,
             cudnn_fwd_algo: None,
         },
-    ))
+    )?)
 }
 
 fn load_scaled_ws_conv2d(
@@ -309,7 +311,7 @@ fn load_scaled_ws_conv2d(
         vb.get((shape.0, 1, 1, 1), "gain")?,
     )?;
     let bias = Some(vb.get(shape.0, "bias")?);
-    Ok(Conv2d::new(
+    Ok(conv2d_new(
         weight,
         bias,
         Conv2dConfig {
@@ -319,7 +321,7 @@ fn load_scaled_ws_conv2d(
             groups: 1,
             cudnn_fwd_algo: None,
         },
-    ))
+    )?)
 }
 
 fn load_scaled_ws_transpose_conv2d(
