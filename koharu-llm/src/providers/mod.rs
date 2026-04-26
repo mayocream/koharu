@@ -123,10 +123,24 @@ const OPENAI_MODELS: &[ProviderModelDescriptor] = &[ProviderModelDescriptor {
     name: "GPT-5 mini",
 }];
 
-const GEMINI_MODELS: &[ProviderModelDescriptor] = &[ProviderModelDescriptor {
-    id: "gemini-3.1-flash-lite-preview",
-    name: "Gemini 3.1 Flash-Lite Preview",
-}];
+const GEMINI_MODELS: &[ProviderModelDescriptor] = &[
+    ProviderModelDescriptor {
+        id: "gemini-3.1-flash-lite-preview",
+        name: "Gemini 3.1 Flash-Lite Preview",
+    },
+    ProviderModelDescriptor {
+        id: "gemini-3.1-flash-preview",
+        name: "Gemini 3.1 Flash Preview",
+    },
+    ProviderModelDescriptor {
+        id: "gemma4-31b-it",
+        name: "Gemma 4 31B",
+    },
+    ProviderModelDescriptor {
+        id: "gemma4-26b-a4b-it",
+        name: "Gemma 4 26B",
+    },
+];
 
 const CLAUDE_MODELS: &[ProviderModelDescriptor] = &[ProviderModelDescriptor {
     id: "claude-haiku-4-5",
