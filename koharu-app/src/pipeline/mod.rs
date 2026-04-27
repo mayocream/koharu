@@ -1116,6 +1116,7 @@ fn translation_ops(targets: Vec<TranslationTarget>, translations: Vec<String>) -
         .zip(translations)
         .map(|(target, translation)| {
             let translation = restore_text(&translation, &target.replacements);
+            let translation = normalize_translation_line_breaks(&translation);
             Op::UpdateNode {
                 page: target.page_id,
                 id: target.node_id,
@@ -1131,6 +1132,13 @@ fn translation_ops(targets: Vec<TranslationTarget>, translations: Vec<String>) -
             }
         })
         .collect()
+}
+
+fn normalize_translation_line_breaks(text: &str) -> String {
+    text.replace("<br />", "\n")
+        .replace("<br/>", "\n")
+        .replace("<br>", "\n")
+        .replace("\\n", "\n")
 }
 
 #[allow(clippy::too_many_arguments)]
@@ -1286,6 +1294,24 @@ mod tests {
         let prompt = batch_translation_system_prompt(&options).expect("prompt should be present");
 
         assert!(prompt.contains("Strictly preserve all placeholders like {{1}}, {{2}}"));
+    }
+
+    #[test]
+    fn batch_translation_ops_normalize_line_break_markers() {
+        let target = target("source");
+
+        let ops = translation_ops(vec![target], vec![r"first<br>second\nthird".to_string()]);
+
+        let [Op::UpdateNode { patch, .. }] = ops.as_slice() else {
+            panic!("expected one update op");
+        };
+        let Some(NodeDataPatch::Text(text)) = patch.data.as_ref() else {
+            panic!("expected text patch");
+        };
+        assert_eq!(
+            text.translation.as_ref().and_then(|value| value.as_ref()),
+            Some(&"first\nsecond\nthird".to_string())
+        );
     }
 }
 
