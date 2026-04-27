@@ -307,6 +307,7 @@
     "terminologyDescription": "管理啟用中的術語庫。較高的優先級數字會先匹配；同優先級時會先匹配較長的來源詞。",
     "terminologyName": "術語庫名稱",
     "terminologyPriority": "優先級",
+    "terminologyPromptInjection": "System Prompt 注入模式",
     "terminologyTerms": "術語",
     "terminologySource": "原文",
     "terminologyTarget": "譯文",

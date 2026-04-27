@@ -265,6 +265,7 @@ pub fn apply_patch(config: &mut AppConfig, patch: koharu_core::ConfigPatch) {
                 id: library.id,
                 name: library.name,
                 enabled: library.enabled,
+                prompt_injection: library.prompt_injection,
                 priority: library.priority,
                 file: library.file,
             })

@@ -307,6 +307,7 @@
     "terminologyDescription": "管理启用中的术语库。较高的优先级数字会先匹配；同优先级时会先匹配较长的来源词。",
     "terminologyName": "术语库名称",
     "terminologyPriority": "优先级",
+    "terminologyPromptInjection": "System Prompt 注入模式",
     "terminologyTerms": "术语",
     "terminologySource": "原文",
     "terminologyTarget": "译文",

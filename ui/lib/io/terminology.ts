@@ -14,6 +14,7 @@ export type TerminologyLibrary = {
   id: string
   name: string
   enabled: boolean
+  promptInjection: boolean
   priority: number
   terms: TerminologyEntry[]
 }
@@ -25,6 +26,7 @@ type ListTerminologyResponse = {
 export type TerminologyLibraryPatch = {
   name?: string
   enabled?: boolean
+  promptInjection?: boolean
   priority?: number
   terms?: TerminologyEntry[]
 }

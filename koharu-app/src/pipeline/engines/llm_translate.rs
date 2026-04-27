@@ -9,7 +9,7 @@ use koharu_core::{NodeDataPatch, NodeId, NodePatch, Op, TextDataPatch};
 use crate::pipeline::artifacts::Artifact;
 use crate::pipeline::engine::{Engine, EngineCtx, EngineInfo};
 use crate::pipeline::engines::support::text_nodes;
-use crate::terminology::{protect_text, restore_text, system_prompt_with_placeholders};
+use crate::terminology::{protect_text, restore_text, system_prompt_with_terminology};
 
 pub struct Model;
 
@@ -36,10 +36,10 @@ impl Engine for Model {
             .map(|(_, source)| protect_text(source, &ctx.options.terminology))
             .collect::<Vec<_>>();
         let sources: Vec<String> = protected.iter().map(|item| item.text.clone()).collect();
-        let system_prompt = system_prompt_with_placeholders(
+        let system_prompt = system_prompt_with_terminology(
             ctx.options.system_prompt.as_deref(),
             ctx.options.target_language.as_deref(),
-            !ctx.options.terminology.is_empty(),
+            &ctx.options.terminology,
         );
         let translations = ctx
             .llm

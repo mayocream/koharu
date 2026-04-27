@@ -238,6 +238,8 @@ pub struct TerminologyLibraryPatch {
     pub id: String,
     pub name: String,
     pub enabled: bool,
+    #[serde(default)]
+    pub prompt_injection: bool,
     pub priority: i32,
     pub file: String,
 }

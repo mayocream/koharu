@@ -841,7 +841,7 @@ function TerminologyPane() {
             title={t('settings.terminology')}
             description={t('settings.terminologyDescription')}
           >
-            <div className='grid gap-3 md:grid-cols-[1fr_120px_auto]'>
+            <div className='grid gap-3 md:grid-cols-[1fr_120px_auto_auto]'>
               <div className='space-y-1.5'>
                 <Label className='text-xs'>{t('settings.terminologyName')}</Label>
                 <Input
@@ -871,6 +871,15 @@ function TerminologyPane() {
                 />
                 <span className='text-xs text-muted-foreground'>
                   {selected.enabled ? t('common.enabled') : t('common.disabled')}
+                </span>
+              </div>
+              <div className='flex items-end gap-2 pb-2'>
+                <Switch
+                  checked={selected.promptInjection}
+                  onCheckedChange={(promptInjection) => void patchSelected({ promptInjection })}
+                />
+                <span className='text-xs text-muted-foreground'>
+                  {t('settings.terminologyPromptInjection')}
                 </span>
               </div>
             </div>

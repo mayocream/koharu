@@ -16,6 +16,8 @@ pub struct TerminologyLibraryConfig {
     pub id: String,
     pub name: String,
     pub enabled: bool,
+    #[serde(default)]
+    pub prompt_injection: bool,
     pub priority: i32,
     pub file: String,
 }
@@ -33,6 +35,7 @@ pub struct TerminologyLibrary {
     pub id: String,
     pub name: String,
     pub enabled: bool,
+    pub prompt_injection: bool,
     pub priority: i32,
     pub terms: Vec<TerminologyEntry>,
 }
@@ -42,6 +45,7 @@ pub struct TerminologyLibrary {
 pub struct TerminologyLibraryPatch {
     pub name: Option<String>,
     pub enabled: Option<bool>,
+    pub prompt_injection: Option<bool>,
     pub priority: Option<i32>,
     pub terms: Option<Vec<TerminologyEntry>>,
 }
@@ -67,6 +71,7 @@ pub struct ListTerminologyLibrariesResponse {
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct ActiveGlossary {
     pub priority: i32,
+    pub prompt_injection: bool,
     pub terms: Vec<TerminologyEntry>,
 }
 
@@ -101,6 +106,7 @@ pub fn load_libraries(config: &AppConfig) -> Result<Vec<TerminologyLibrary>> {
                 id: meta.id.clone(),
                 name: meta.name.clone(),
                 enabled: meta.enabled,
+                prompt_injection: meta.prompt_injection,
                 priority: meta.priority,
                 terms,
             })
@@ -114,6 +120,7 @@ pub fn load_active_glossaries(config: &AppConfig) -> Result<Vec<ActiveGlossary>>
         .filter(|library| library.enabled && !library.terms.is_empty())
         .map(|library| ActiveGlossary {
             priority: library.priority,
+            prompt_injection: library.prompt_injection,
             terms: library.terms,
         })
         .collect())
@@ -133,6 +140,7 @@ pub fn create_library(config: &mut AppConfig, name: &str) -> Result<TerminologyL
         id: id.clone(),
         name: name.clone(),
         enabled: true,
+        prompt_injection: false,
         priority,
         file: file.clone(),
     };
@@ -143,6 +151,7 @@ pub fn create_library(config: &mut AppConfig, name: &str) -> Result<TerminologyL
         id,
         name,
         enabled: true,
+        prompt_injection: false,
         priority,
         terms: Vec::new(),
     })
@@ -171,6 +180,9 @@ pub fn update_library(
     if let Some(enabled) = patch.enabled {
         config.terminology_libraries[index].enabled = enabled;
     }
+    if let Some(prompt_injection) = patch.prompt_injection {
+        config.terminology_libraries[index].prompt_injection = prompt_injection;
+    }
     if let Some(priority) = patch.priority {
         config.terminology_libraries[index].priority = priority;
     }
@@ -185,6 +197,7 @@ pub fn update_library(
         id: meta.id.clone(),
         name: meta.name.clone(),
         enabled: meta.enabled,
+        prompt_injection: meta.prompt_injection,
         priority: meta.priority,
         terms,
     }))
@@ -218,6 +231,7 @@ pub fn import_csv(
         TerminologyLibraryPatch {
             name: None,
             enabled: None,
+            prompt_injection: None,
             priority: None,
             terms: Some(terms),
         },
@@ -237,7 +251,12 @@ pub fn export_csv(config: &AppConfig, id: &str) -> Result<Option<String>> {
 }
 
 pub fn protect_text(source: &str, glossaries: &[ActiveGlossary]) -> ProtectedText {
-    let candidates = sorted_terms(glossaries);
+    let placeholder_glossaries = glossaries
+        .iter()
+        .filter(|glossary| !glossary.prompt_injection)
+        .cloned()
+        .collect::<Vec<_>>();
+    let candidates = sorted_terms(&placeholder_glossaries);
     if candidates.is_empty() {
         return ProtectedText {
             text: source.to_string(),
@@ -296,7 +315,85 @@ pub fn system_prompt_with_placeholders(
             .map(ToOwned::to_owned);
     }
 
-    let base = match custom_system_prompt
+    let base = base_system_prompt(custom_system_prompt, target_language);
+    Some(format!("{base}\n{PLACEHOLDER_SYSTEM_PROMPT}"))
+}
+
+pub fn system_prompt_with_terminology(
+    custom_system_prompt: Option<&str>,
+    target_language: Option<&str>,
+    glossaries: &[ActiveGlossary],
+) -> Option<String> {
+    let has_placeholder_glossaries = glossaries
+        .iter()
+        .any(|glossary| !glossary.prompt_injection && !glossary.terms.is_empty());
+    let prompt_rules = prompt_injection_rules(glossaries);
+    if !has_placeholder_glossaries && prompt_rules.is_empty() {
+        return custom_system_prompt
+            .map(str::trim)
+            .filter(|prompt| !prompt.is_empty())
+            .map(ToOwned::to_owned);
+    }
+
+    let base = base_system_prompt(custom_system_prompt, target_language);
+    let mut lines = vec![base];
+    if has_placeholder_glossaries {
+        lines.push(PLACEHOLDER_SYSTEM_PROMPT.to_string());
+    }
+    lines.extend(prompt_rules);
+    Some(lines.join("\n"))
+}
+
+fn prompt_injection_rules(glossaries: &[ActiveGlossary]) -> Vec<String> {
+    let mut candidates = glossaries
+        .iter()
+        .filter(|glossary| glossary.prompt_injection)
+        .enumerate()
+        .flat_map(|(library_index, library)| {
+            library
+                .terms
+                .iter()
+                .enumerate()
+                .filter(|(_, term)| !term.source.is_empty() && !term.target.is_empty())
+                .map(move |(term_index, term)| {
+                    (
+                        library.priority,
+                        term.source.len(),
+                        library_index,
+                        term_index,
+                        term,
+                    )
+                })
+        })
+        .collect::<Vec<_>>();
+    candidates.sort_by(
+        |(left_priority, left_len, left_library, left_term, _),
+         (right_priority, right_len, right_library, right_term, _)| {
+            right_priority
+                .cmp(left_priority)
+                .then_with(|| right_len.cmp(left_len))
+                .then_with(|| left_library.cmp(right_library))
+                .then_with(|| left_term.cmp(right_term))
+        },
+    );
+    candidates
+        .into_iter()
+        .map(|(_, _, _, _, term)| {
+            format!(
+                "Translate `{}` to `{}`.",
+                escape_prompt_term(&term.source),
+                escape_prompt_term(&term.target)
+            )
+        })
+        .collect()
+}
+
+fn escape_prompt_term(term: &str) -> String {
+    term.replace('`', "\\`")
+}
+
+fn base_system_prompt(custom_system_prompt: Option<&str>, target_language: Option<&str>) -> String {
+    match custom_system_prompt
         .map(str::trim)
         .filter(|prompt| !prompt.is_empty())
     {
@@ -307,8 +404,7 @@ pub fn system_prompt_with_placeholders(
                 .unwrap_or(koharu_llm::Language::English);
             koharu_llm::prompt::base_system_prompt(language)
         }
-    };
-    Some(format!("{base}\n{PLACEHOLDER_SYSTEM_PROMPT}"))
+    }
 }
 
 fn ensure_dir(dir: &Utf8Path) -> Result<()> {
@@ -421,12 +517,48 @@ mod tests {
         }
     }
 
+    fn glossary(
+        priority: i32,
+        prompt_injection: bool,
+        terms: Vec<TerminologyEntry>,
+    ) -> ActiveGlossary {
+        ActiveGlossary {
+            priority,
+            prompt_injection,
+            terms,
+        }
+    }
+
+    #[test]
+    fn prompt_injection_glossaries_do_not_use_placeholders() {
+        let protected = protect_text(
+            "Alice meets Bob",
+            &[glossary(10, true, vec![entry("Alice", "Alice Target")])],
+        );
+
+        assert_eq!(protected.text, "Alice meets Bob");
+        assert!(protected.replacements.is_empty());
+    }
+
+    #[test]
+    fn system_prompt_injects_translate_rules_for_prompt_mode() {
+        let prompt = system_prompt_with_terminology(
+            Some("Base prompt"),
+            Some("English"),
+            &[glossary(10, true, vec![entry("Alice", "Alice Target")])],
+        )
+        .expect("prompt should be present");
+
+        assert_eq!(prompt, "Base prompt\nTranslate `Alice` to `Alice Target`.");
+    }
+
     #[test]
     fn same_priority_uses_longest_match_first() {
         let protected = protect_text(
             "Apple Watch and Apple",
             &[ActiveGlossary {
                 priority: 10,
+                prompt_injection: false,
                 terms: vec![entry("Apple", "蘋果"), entry("Apple Watch", "蘋果手錶")],
             }],
         );
@@ -454,10 +586,12 @@ mod tests {
             &[
                 ActiveGlossary {
                     priority: 100,
+                    prompt_injection: false,
                     terms: vec![entry("Apple", "高優先級蘋果")],
                 },
                 ActiveGlossary {
                     priority: 1,
+                    prompt_injection: false,
                     terms: vec![entry("Apple Watch", "低優先級手錶")],
                 },
             ],

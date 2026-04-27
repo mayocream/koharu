@@ -340,6 +340,7 @@
     "terminologyDescription": "Manage active term libraries. Higher priority numbers match before lower priority libraries; ties use the longest source term first.",
     "terminologyName": "Library name",
     "terminologyPriority": "Priority",
+    "terminologyPromptInjection": "System prompt injection",
     "terminologyTerms": "Terms",
     "terminologySource": "Source",
     "terminologyTarget": "Target",
