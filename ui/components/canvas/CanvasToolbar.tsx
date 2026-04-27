@@ -13,6 +13,7 @@ import { useEffect, useMemo, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 
 import { Button } from '@/components/ui/button'
+import { Input } from '@/components/ui/input'
 import { LlmModelSelect, type LlmModelOption } from '@/components/ui/llm-model-select'
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover'
 import {
@@ -244,6 +245,8 @@ function LlmStatusPopover() {
   const selectedTarget = useEditorUiStore((s) => s.selectedTarget)
   const customSystemPrompt = usePreferencesStore((s) => s.customSystemPrompt)
   const setCustomSystemPrompt = usePreferencesStore((s) => s.setCustomSystemPrompt)
+  const batchTranslationCharLimit = usePreferencesStore((s) => s.batchTranslationCharLimit)
+  const setBatchTranslationCharLimit = usePreferencesStore((s) => s.setBatchTranslationCharLimit)
   const llmSelectedLanguage = useEditorUiStore((s) => s.selectedLanguage)
 
   const selectedModel = useMemo(
@@ -406,6 +409,24 @@ function LlmStatusPopover() {
                 </SelectContent>
               </Select>
             ) : null}
+            <div className='flex flex-col gap-1'>
+              <span className='text-[10px] text-muted-foreground uppercase'>
+                {t('llm.batchTranslationCharLimit')}
+              </span>
+              <Input
+                data-testid='llm-batch-translation-char-limit'
+                type='number'
+                min={1}
+                step={1}
+                inputMode='numeric'
+                value={batchTranslationCharLimit}
+                onChange={(e) => {
+                  const next = Number.parseInt(e.target.value, 10)
+                  if (Number.isFinite(next)) setBatchTranslationCharLimit(next)
+                }}
+                className='h-7 px-2 text-xs md:text-xs'
+              />
+            </div>
             <Textarea
               data-testid='llm-system-prompt'
               value={customSystemPrompt ?? ''}

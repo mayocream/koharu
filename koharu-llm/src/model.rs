@@ -115,15 +115,35 @@ impl Llm {
         target_language: Language,
         system_prompt: Option<&str>,
     ) -> Result<String> {
+        self.generate_with_block_instructions(
+            prompt,
+            opts,
+            target_language,
+            system_prompt,
+            crate::prompt::BLOCK_TAG_INSTRUCTIONS,
+        )
+    }
+
+    pub fn generate_with_block_instructions(
+        &mut self,
+        prompt: &str,
+        opts: &GenerateOptions,
+        target_language: Language,
+        system_prompt: Option<&str>,
+        block_instructions: &str,
+    ) -> Result<String> {
         if opts.max_tokens == 0 {
             return Ok(String::new());
         }
 
-        let prompt = self.prompt_renderer.format_chat_prompt(
-            prompt.to_string(),
-            target_language,
-            system_prompt,
-        )?;
+        let prompt = self
+            .prompt_renderer
+            .format_chat_prompt_with_block_instructions(
+                prompt.to_string(),
+                target_language,
+                system_prompt,
+                block_instructions,
+            )?;
         tracing::debug!("Generating with prompt:\n{}", prompt);
 
         let prompt_tokens = self

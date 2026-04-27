@@ -19,7 +19,7 @@ use std::sync::Arc;
 use std::sync::atomic::{AtomicBool, Ordering};
 
 use anyhow::{Result, bail};
-use koharu_core::{Op, PageId, PipelineStep};
+use koharu_core::{NodeDataPatch, NodeId, NodePatch, Op, PageId, PipelineStep, TextDataPatch};
 use koharu_runtime::RuntimeManager;
 use tracing::Instrument;
 
@@ -134,6 +134,18 @@ pub async fn run(
         .map(|id| Registry::find(id))
         .collect::<Result<_>>()?;
     let order = build_order(&infos)?;
+
+    if let Some(limit) = spec.options.batch_translation_char_limit
+        && infos
+            .iter()
+            .any(|info| info.produces.contains(&Artifact::Translations))
+    {
+        return run_with_batch_translation(
+            session, registry, runtime, cpu, llm, renderer, spec, cancel, progress, warnings,
+            infos, order, limit,
+        )
+        .await;
+    }
 
     let pages = match &spec.scope {
         Scope::WholeProject => session
@@ -273,6 +285,427 @@ pub async fn run(
 }
 
 #[allow(clippy::too_many_arguments)]
+async fn run_with_batch_translation(
+    session: Arc<ProjectSession>,
+    registry: Arc<Registry>,
+    runtime: Arc<RuntimeManager>,
+    cpu: bool,
+    llm: Arc<llm::Model>,
+    renderer: Arc<renderer::Renderer>,
+    spec: PipelineSpec,
+    cancel: Arc<AtomicBool>,
+    progress: Option<ProgressSink>,
+    warnings: Option<WarningSink>,
+    infos: Vec<&'static EngineInfo>,
+    order: Vec<usize>,
+    batch_char_limit: usize,
+) -> Result<RunOutcome> {
+    let pages = match &spec.scope {
+        Scope::WholeProject => session
+            .scene
+            .read()
+            .pages
+            .keys()
+            .copied()
+            .collect::<Vec<_>>(),
+        Scope::Pages(ids) => ids.clone(),
+    };
+
+    let translation_steps = order
+        .iter()
+        .copied()
+        .filter(|&i| infos[i].produces.contains(&Artifact::Translations))
+        .collect::<Vec<_>>();
+    if translation_steps.len() != 1 {
+        bail!("batch translation requires exactly one translation engine");
+    }
+
+    let pre_steps = order
+        .iter()
+        .copied()
+        .filter(|&i| {
+            !infos[i].produces.contains(&Artifact::Translations)
+                && matches!(
+                    step_for(infos[i]),
+                    Some(PipelineStep::Detect | PipelineStep::Ocr)
+                )
+        })
+        .collect::<Vec<_>>();
+    let post_steps = order
+        .iter()
+        .copied()
+        .filter(|&i| !pre_steps.contains(&i) && !translation_steps.contains(&i))
+        .collect::<Vec<_>>();
+
+    let total_pages = pages.len().max(1);
+    let mut total_units = (total_pages * (pre_steps.len() + post_steps.len()) + 1).max(1);
+    let mut completed = 0usize;
+    let mut warning_count = 0usize;
+    let mut skipped_pages = Vec::new();
+    let mut last_percent = 0u8;
+
+    for (page_index, page_id) in pages.iter().enumerate() {
+        for (seq, &i) in pre_steps.iter().enumerate() {
+            if cancel.load(Ordering::Relaxed) {
+                bail!("cancelled");
+            }
+            let info = infos[i];
+            emit_progress(
+                progress.as_ref(),
+                info,
+                seq,
+                pre_steps.len() + post_steps.len() + 1,
+                page_index,
+                total_pages,
+                completed,
+                total_units,
+                &mut last_percent,
+            );
+
+            if !session.scene.read().pages.contains_key(page_id) {
+                skipped_pages.push(*page_id);
+                completed += pre_steps.len() - seq;
+                break;
+            }
+
+            let ok = run_one_step(
+                &session,
+                &registry,
+                &runtime,
+                cpu,
+                &llm,
+                &renderer,
+                &spec.options,
+                &cancel,
+                info,
+                *page_id,
+                seq,
+                page_index,
+                total_pages,
+                pre_steps.len() + post_steps.len() + 1,
+                &mut warning_count,
+                warnings.as_ref(),
+            )
+            .await?;
+            completed += 1;
+            if !ok {
+                skipped_pages.push(*page_id);
+                break;
+            }
+        }
+    }
+
+    let mut targets = Vec::new();
+    let scene_snap = session.scene_snapshot();
+    for page_id in &pages {
+        if skipped_pages.contains(page_id) {
+            continue;
+        }
+        targets.extend(collect_translation_targets(&scene_snap, *page_id));
+    }
+    let batches = build_translation_batches(targets, batch_char_limit);
+    total_units = (total_pages * (pre_steps.len() + post_steps.len()) + batches.len()).max(1);
+
+    for (batch_index, batch) in batches.into_iter().enumerate() {
+        if cancel.load(Ordering::Relaxed) {
+            bail!("cancelled");
+        }
+        let info = infos[translation_steps[0]];
+        emit_progress(
+            progress.as_ref(),
+            info,
+            pre_steps.len(),
+            pre_steps.len() + post_steps.len() + 1,
+            batch_index,
+            total_pages,
+            completed,
+            total_units,
+            &mut last_percent,
+        );
+        let sources = batch
+            .iter()
+            .map(|target| target.source.clone())
+            .collect::<Vec<_>>();
+        let translations = llm
+            .translate_xml_tagged_texts(
+                &sources,
+                spec.options.target_language.as_deref(),
+                spec.options.system_prompt.as_deref(),
+            )
+            .await?;
+        let ops = translation_ops(batch, translations);
+        if !ops.is_empty() {
+            session.apply(Op::Batch {
+                ops,
+                label: format!("{}: batch {}", info.id, batch_index + 1),
+            })?;
+        }
+        completed += 1;
+    }
+
+    for (page_index, page_id) in pages.iter().enumerate() {
+        if skipped_pages.contains(page_id) {
+            continue;
+        }
+        for (seq, &i) in post_steps.iter().enumerate() {
+            if cancel.load(Ordering::Relaxed) {
+                bail!("cancelled");
+            }
+            let info = infos[i];
+            emit_progress(
+                progress.as_ref(),
+                info,
+                pre_steps.len() + 1 + seq,
+                pre_steps.len() + post_steps.len() + 1,
+                page_index,
+                total_pages,
+                completed,
+                total_units,
+                &mut last_percent,
+            );
+            if !session.scene.read().pages.contains_key(page_id) {
+                completed += post_steps.len() - seq;
+                break;
+            }
+            let ok = run_one_step(
+                &session,
+                &registry,
+                &runtime,
+                cpu,
+                &llm,
+                &renderer,
+                &spec.options,
+                &cancel,
+                info,
+                *page_id,
+                pre_steps.len() + 1 + seq,
+                page_index,
+                total_pages,
+                pre_steps.len() + post_steps.len() + 1,
+                &mut warning_count,
+                warnings.as_ref(),
+            )
+            .await?;
+            completed += 1;
+            if !ok {
+                break;
+            }
+        }
+    }
+
+    if let Some(sink) = progress.as_ref() {
+        sink(ProgressTick {
+            step: None,
+            step_id: String::new(),
+            step_index: pre_steps.len() + post_steps.len(),
+            total_steps: pre_steps.len() + post_steps.len() + 1,
+            page_index: total_pages.saturating_sub(1),
+            total_pages,
+            overall_percent: 100,
+        });
+    }
+
+    Ok(RunOutcome { warning_count })
+}
+
+#[allow(clippy::too_many_arguments)]
+async fn run_one_step(
+    session: &Arc<ProjectSession>,
+    registry: &Arc<Registry>,
+    runtime: &Arc<RuntimeManager>,
+    cpu: bool,
+    llm: &Arc<llm::Model>,
+    renderer: &Arc<renderer::Renderer>,
+    options: &PipelineRunOptions,
+    cancel: &Arc<AtomicBool>,
+    info: &EngineInfo,
+    page_id: PageId,
+    step_index: usize,
+    page_index: usize,
+    total_pages: usize,
+    total_steps: usize,
+    warning_count: &mut usize,
+    warnings: Option<&WarningSink>,
+) -> Result<bool> {
+    let engine = match registry.get(info.id, runtime, cpu).await {
+        Ok(e) => e,
+        Err(err) => {
+            report_step_failure(
+                info.id,
+                &page_id,
+                step_index,
+                page_index,
+                total_pages,
+                total_steps,
+                &err,
+                warning_count,
+                warnings,
+            );
+            return Ok(false);
+        }
+    };
+    let scene_snap = session.scene_snapshot();
+    let ctx = EngineCtx {
+        scene: &scene_snap,
+        page: page_id,
+        blobs: &session.blobs,
+        runtime: runtime.as_ref(),
+        cancel: cancel.as_ref(),
+        options,
+        llm: llm.as_ref(),
+        renderer: renderer.as_ref(),
+    };
+    let step_result = async { engine.run(ctx).await }
+        .instrument(tracing::info_span!("step", engine = info.id, page = %page_id))
+        .await;
+    let ops = match step_result {
+        Ok(ops) => ops,
+        Err(err) => {
+            report_step_failure(
+                info.id,
+                &page_id,
+                step_index,
+                page_index,
+                total_pages,
+                total_steps,
+                &err,
+                warning_count,
+                warnings,
+            );
+            return Ok(false);
+        }
+    };
+    if ops.is_empty() {
+        return Ok(true);
+    }
+    let batch = Op::Batch {
+        ops,
+        label: format!("{}: page {}", info.id, page_id),
+    };
+    if let Err(err) = session.apply(batch) {
+        report_step_failure(
+            info.id,
+            &page_id,
+            step_index,
+            page_index,
+            total_pages,
+            total_steps,
+            &err,
+            warning_count,
+            warnings,
+        );
+        return Ok(false);
+    }
+    Ok(true)
+}
+
+#[allow(clippy::too_many_arguments)]
+fn emit_progress(
+    sink: Option<&ProgressSink>,
+    info: &EngineInfo,
+    step_index: usize,
+    total_steps: usize,
+    page_index: usize,
+    total_pages: usize,
+    completed: usize,
+    total_units: usize,
+    last_percent: &mut u8,
+) {
+    if let Some(sink) = sink {
+        let percent = (((completed as u64) * 100) / (total_units as u64)).min(100) as u8;
+        *last_percent = (*last_percent).max(percent);
+        sink(ProgressTick {
+            step: step_for(info),
+            step_id: info.id.to_string(),
+            step_index,
+            total_steps,
+            page_index,
+            total_pages,
+            overall_percent: *last_percent,
+        });
+    }
+}
+
+#[derive(Debug, Clone)]
+struct TranslationTarget {
+    page_id: PageId,
+    node_id: NodeId,
+    source: String,
+}
+
+fn collect_translation_targets(
+    scene: &koharu_core::Scene,
+    page_id: PageId,
+) -> Vec<TranslationTarget> {
+    let Some(page) = scene.pages.get(&page_id) else {
+        return Vec::new();
+    };
+    page.nodes
+        .iter()
+        .filter_map(|(node_id, node)| {
+            let koharu_core::NodeKind::Text(text_data) = &node.kind else {
+                return None;
+            };
+            let source = text_data.text.as_ref()?;
+            if source.trim().is_empty() {
+                return None;
+            }
+            Some(TranslationTarget {
+                page_id,
+                node_id: *node_id,
+                source: source.clone(),
+            })
+        })
+        .collect()
+}
+
+fn build_translation_batches(
+    targets: Vec<TranslationTarget>,
+    char_limit: usize,
+) -> Vec<Vec<TranslationTarget>> {
+    let char_limit = char_limit.max(1);
+    let mut batches = Vec::new();
+    let mut current = Vec::new();
+    let mut current_chars = 0usize;
+
+    for target in targets {
+        let target_chars = target.source.chars().count();
+        if !current.is_empty() && current_chars + target_chars > char_limit {
+            batches.push(current);
+            current = Vec::new();
+            current_chars = 0;
+        }
+        current_chars += target_chars;
+        current.push(target);
+    }
+
+    if !current.is_empty() {
+        batches.push(current);
+    }
+    batches
+}
+
+fn translation_ops(targets: Vec<TranslationTarget>, translations: Vec<String>) -> Vec<Op> {
+    targets
+        .into_iter()
+        .zip(translations)
+        .map(|(target, translation)| Op::UpdateNode {
+            page: target.page_id,
+            id: target.node_id,
+            patch: NodePatch {
+                data: Some(NodeDataPatch::Text(TextDataPatch {
+                    translation: Some(Some(translation)),
+                    ..Default::default()
+                })),
+                transform: None,
+                visible: None,
+            },
+            prev: NodePatch::default(),
+        })
+        .collect()
+}
+
+#[allow(clippy::too_many_arguments)]
 fn report_step_failure(
     engine_id: &str,
     page_id: &PageId,
@@ -299,6 +732,52 @@ fn report_step_failure(
             total_pages,
             message: format!("{err:#}"),
         });
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn target(source: &str) -> TranslationTarget {
+        TranslationTarget {
+            page_id: PageId::new(),
+            node_id: NodeId::new(),
+            source: source.to_string(),
+        }
+    }
+
+    #[test]
+    fn translation_batches_respect_limit_without_splitting_blocks() {
+        let targets = vec![target("abcd"), target("efg"), target("hijkl")];
+
+        let batches = build_translation_batches(targets, 8);
+
+        assert_eq!(batches.len(), 2);
+        assert_eq!(
+            batches[0]
+                .iter()
+                .map(|t| t.source.as_str())
+                .collect::<Vec<_>>(),
+            vec!["abcd", "efg"]
+        );
+        assert_eq!(
+            batches[1]
+                .iter()
+                .map(|t| t.source.as_str())
+                .collect::<Vec<_>>(),
+            vec!["hijkl"]
+        );
+    }
+
+    #[test]
+    fn oversized_translation_block_stays_whole() {
+        let targets = vec![target("abcdef")];
+
+        let batches = build_translation_batches(targets, 3);
+
+        assert_eq!(batches.len(), 1);
+        assert_eq!(batches[0][0].source, "abcdef");
     }
 }
 

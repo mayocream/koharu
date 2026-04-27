@@ -49,11 +49,37 @@ pub struct PromptRenderer {
 
 pub const BLOCK_TAG_INSTRUCTIONS: &str = "The input uses numbered tags like [1], [2], etc. to mark each text block. Translate only the text after each tag. Keep every tag exactly unchanged, including numbers and order. Output the same tags followed by the translated text. Do not merge, split, or reorder blocks.";
 
-pub fn system_prompt(target_language: Language) -> String {
+fn base_system_prompt(target_language: Language) -> String {
     format!(
-        "You are a professional manga translator. Translate manga dialogue into natural {} that fits inside speech bubbles. Preserve character voice, emotional tone, relationship nuance, emphasis, and sound effects naturally. Keep the wording concise. Do not add notes, explanations, or romanization. {BLOCK_TAG_INSTRUCTIONS}",
+        "You are a professional manga translator. Translate manga dialogue into natural {} that fits inside speech bubbles. Preserve character voice, emotional tone, relationship nuance, emphasis, and sound effects naturally. Keep the wording concise. Do not add notes, explanations, or romanization.",
         target_language
     )
+}
+
+pub fn system_prompt(target_language: Language) -> String {
+    system_prompt_with_block_instructions(target_language, BLOCK_TAG_INSTRUCTIONS)
+}
+
+pub fn system_prompt_with_block_instructions(
+    target_language: Language,
+    block_instructions: &str,
+) -> String {
+    format!(
+        "{}\n{}",
+        base_system_prompt(target_language),
+        block_instructions
+    )
+}
+
+pub fn resolve_system_prompt_content(
+    custom_prompt: Option<&str>,
+    target_language: Language,
+    block_instructions: &str,
+) -> String {
+    match custom_prompt {
+        Some(p) if !p.trim().is_empty() => format!("{}\n{}", p.trim(), block_instructions),
+        _ => system_prompt_with_block_instructions(target_language, block_instructions),
+    }
 }
 
 impl PromptRenderer {
@@ -67,19 +93,15 @@ impl PromptRenderer {
         }
     }
 
-    fn messages(
+    fn messages_with_block_instructions(
         &self,
         text: impl Into<String>,
         target_language: Language,
         custom_prompt: Option<&str>,
+        block_instructions: &str,
     ) -> Vec<ChatMessage> {
         let text = text.into();
-        let sys = match custom_prompt {
-            Some(p) if !p.trim().is_empty() => {
-                format!("{p} {BLOCK_TAG_INSTRUCTIONS}")
-            }
-            _ => system_prompt(target_language),
-        };
+        let sys = resolve_system_prompt_content(custom_prompt, target_language, block_instructions);
 
         match self.model_id {
             ModelId::VntlLlama3_8Bv2 => vec![
@@ -103,7 +125,27 @@ impl PromptRenderer {
         target_language: Language,
         custom_prompt: Option<&str>,
     ) -> anyhow::Result<String> {
-        let messages = self.messages(prompt, target_language, custom_prompt);
+        self.format_chat_prompt_with_block_instructions(
+            prompt,
+            target_language,
+            custom_prompt,
+            BLOCK_TAG_INSTRUCTIONS,
+        )
+    }
+
+    pub fn format_chat_prompt_with_block_instructions(
+        &self,
+        prompt: String,
+        target_language: Language,
+        custom_prompt: Option<&str>,
+        block_instructions: &str,
+    ) -> anyhow::Result<String> {
+        let messages = self.messages_with_block_instructions(
+            prompt,
+            target_language,
+            custom_prompt,
+            block_instructions,
+        );
         let tmpl = self.env.template_from_str(&self.template)?;
 
         let prompt = tmpl

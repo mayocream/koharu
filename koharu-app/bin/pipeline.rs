@@ -226,6 +226,7 @@ async fn run() -> Result<()> {
             target_language: Some(cli.target_lang.clone()),
             system_prompt: cli.system_prompt.clone(),
             default_font: cli.default_font.clone(),
+            batch_translation_char_limit: None,
             region: None,
         },
     };

@@ -7,7 +7,10 @@ use std::sync::Arc;
 use crate::Language;
 
 use super::chat_completions::{ChatCompletionsAuth, ChatCompletionsRequest, send_chat_completion};
-use super::{AnyProvider, ensure_provider_success, resolve_system_prompt};
+use super::{
+    AnyProvider, ensure_provider_success, resolve_system_prompt,
+    resolve_system_prompt_with_block_instructions,
+};
 
 #[derive(Debug, Clone)]
 pub struct OpenAiCompatibleProvider {
@@ -75,6 +78,42 @@ impl AnyProvider for OpenAiCompatibleProvider {
     ) -> Pin<Box<dyn Future<Output = anyhow::Result<String>> + Send + 'a>> {
         Box::pin(async move {
             let prompt = resolve_system_prompt(custom_system_prompt, target_language);
+            send_chat_completion(
+                Arc::clone(&self.http_client),
+                ChatCompletionsRequest {
+                    provider: "openai-compatible",
+                    endpoint: format!("{}/chat/completions", normalized_base_url(&self.base_url)?),
+                    auth: self
+                        .api_key
+                        .as_deref()
+                        .filter(|value| !value.trim().is_empty())
+                        .map(|key| ChatCompletionsAuth::Bearer(key.to_string()))
+                        .unwrap_or(ChatCompletionsAuth::None),
+                    model: model.to_string(),
+                    system_prompt: prompt,
+                    user_prompt: source.to_string(),
+                    temperature: self.temperature,
+                    max_tokens: self.max_tokens,
+                },
+            )
+            .await
+        })
+    }
+
+    fn translate_with_block_instructions<'a>(
+        &'a self,
+        source: &'a str,
+        target_language: Language,
+        model: &'a str,
+        custom_system_prompt: Option<&'a str>,
+        block_instructions: &'a str,
+    ) -> Pin<Box<dyn Future<Output = anyhow::Result<String>> + Send + 'a>> {
+        Box::pin(async move {
+            let prompt = resolve_system_prompt_with_block_instructions(
+                custom_system_prompt,
+                target_language,
+                block_instructions,
+            );
             send_chat_completion(
                 Arc::clone(&self.http_client),
                 ChatCompletionsRequest {

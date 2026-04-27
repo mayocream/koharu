@@ -10,6 +10,7 @@ use tokio::time::{Duration, Instant, sleep};
 
 fn empty_pipeline_request(steps: Vec<String>) -> models::StartPipelineRequest {
     models::StartPipelineRequest {
+        batch_translation_char_limit: None,
         steps,
         pages: None,
         region: None,
@@ -137,6 +138,7 @@ async fn renderer_pipeline_noops_on_pages_without_text_blocks() -> anyhow::Resul
     let resp = api::start_pipeline(
         &app.client_config,
         models::StartPipelineRequest {
+            batch_translation_char_limit: None,
             steps: vec!["koharu-renderer".into()],
             pages: Some(Some(pages)),
             region: None,
