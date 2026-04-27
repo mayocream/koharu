@@ -26,6 +26,8 @@
     "exportGroup": "Export",
     "export": "Export...",
     "exportPsd": "Export PSD...",
+    "importTranslationXml": "Import Translation XML...",
+    "exportTranslationXml": "Export Translation XML...",
     "exportAllInpainted": "Export All Inpainted...",
     "exportAllRendered": "Export All Rendered...",
     "view": "View",

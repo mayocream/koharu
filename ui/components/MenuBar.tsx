@@ -21,6 +21,7 @@ import { getConfig, startPipeline } from '@/lib/api/default/default'
 import { isTauri, openExternalUrl } from '@/lib/backend'
 import { exportCurrentProjectAs, importPages } from '@/lib/io/pagesIo'
 import { closeProject, redoOp, selectAllTextNodesOnCurrentPage, undoOp } from '@/lib/io/scene'
+import { exportTranslationXml, importTranslationXmlFromFile } from '@/lib/io/translationXml'
 import { formatShortcutForDisplay, getPlatform } from '@/lib/shortcutUtils'
 import { useEditorUiStore } from '@/lib/stores/editorUiStore'
 import { usePreferencesStore } from '@/lib/stores/preferencesStore'
@@ -129,6 +130,12 @@ export function MenuBar() {
       disabled: !hasScene,
       testId: 'menu-file-export-all-rendered',
     },
+    {
+      label: t('menu.exportTranslationXml'),
+      onSelect: () => void exportTranslationXml(),
+      disabled: !hasScene,
+      testId: 'menu-file-export-translation-xml',
+    },
   ]
 
   const menus: MenuSection[] = [
@@ -215,6 +222,15 @@ export function MenuBar() {
               onSelect={() => void exportCurrentProjectAs('khr')}
             >
               {t('menu.saveAs')}
+            </MenubarItem>
+            <MenubarSeparator />
+            <MenubarItem
+              data-testid='menu-file-import-translation-xml'
+              className='text-[13px]'
+              disabled={!hasScene}
+              onSelect={() => void importTranslationXmlFromFile()}
+            >
+              {t('menu.importTranslationXml')}
             </MenubarItem>
             <MenubarSeparator />
             {exportItems.map((item) => (

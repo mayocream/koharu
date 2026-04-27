@@ -21,6 +21,8 @@
     "selectAll": "全選",
     "export": "匯出...",
     "exportPsd": "匯出 PSD...",
+    "importTranslationXml": "匯入翻譯 XML...",
+    "exportTranslationXml": "匯出翻譯 XML...",
     "exportAllInpainted": "匯出所有修補後的影像...",
     "exportAllRendered": "匯出所有渲染後的影像...",
     "view": "檢視",
