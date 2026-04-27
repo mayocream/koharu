@@ -31,9 +31,9 @@ export function TextBlockLayer({ showSprites, scale, style }: TextBlockLayerProp
   const mode = useEditorUiStore((s) => s.mode)
   const interactive = mode === 'select' || mode === 'block'
 
-  const firstSelectedId = useMemo(() => {
-    for (const id of selectedIds) if (id) return id
-    return null
+  const hasSelection = useMemo(() => {
+    for (const id of selectedIds) if (id) return true
+    return false
   }, [selectedIds])
 
   const removeNode = async (id: string) => {
@@ -45,6 +45,16 @@ export function TextBlockLayer({ showSprites, scale, style }: TextBlockLayerProp
     if ('text' in node.kind) queueAutoRender(page.id)
   }
 
+  const removeSelected = async () => {
+    if (!page) return
+    // Snapshot selection now: each op invalidates the page state by removing a
+    // node, so we can't iterate against a stale closure mid-loop.
+    const ids = Array.from(selectedIds).filter((id): id is string => !!id)
+    for (const id of ids) {
+      await removeNode(id)
+    }
+  }
+
   const updateTransform = async (id: string, t: Transform) => {
     if (!page) return
     await applyOp(ops.updateNode(page.id, id, { transform: t }))
@@ -54,10 +64,10 @@ export function TextBlockLayer({ showSprites, scale, style }: TextBlockLayerProp
   useHotkeys(
     'delete',
     () => {
-      if (firstSelectedId && interactive) void removeNode(firstSelectedId)
+      if (hasSelection && interactive) void removeSelected()
     },
-    { enabled: !!firstSelectedId && interactive },
-    [firstSelectedId, interactive],
+    { enabled: hasSelection && interactive },
+    [selectedIds, interactive],
   )
 
   return (
