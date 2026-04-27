@@ -6,6 +6,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { MenuBar } from '@/components/MenuBar'
 import { getGetConfigQueryKey, getGetSceneJsonQueryKey } from '@/lib/api/default/default'
 import { queryClient } from '@/lib/queryClient'
+import { usePreferencesStore } from '@/lib/stores/preferencesStore'
 
 import { renderWithQuery } from '../helpers'
 import { server } from '../msw/server'
@@ -77,5 +78,47 @@ describe('MenuBar', () => {
     await userEvent.click(screen.getByTestId('menu-file-trigger'))
     const close = await screen.findByTestId('menu-file-close-project')
     expect(close).toHaveAttribute('data-disabled')
+  })
+
+  it('Process all batch translation posts the configured character limit', async () => {
+    let body: any = null
+    usePreferencesStore.getState().setBatchTranslationCharLimit(345)
+    server.use(
+      http.get('/api/v1/config', () =>
+        HttpResponse.json({
+          pipeline: {
+            detector: 'detector',
+            segmenter: 'segmenter',
+            bubble_segmenter: 'bubble',
+            font_detector: 'font',
+            ocr: 'ocr',
+            translator: 'llm',
+            inpainter: 'inpaint',
+            renderer: 'render',
+          },
+        }),
+      ),
+      http.post('/api/v1/pipelines', async ({ request }) => {
+        body = await request.json()
+        return HttpResponse.json({ operationId: 'op-1' })
+      }),
+    )
+
+    renderWithQuery(<MenuBar />)
+    await userEvent.click(screen.getByTestId('menu-process-trigger'))
+    await userEvent.click(await screen.findByTestId('menu-process-all-batch-translation'))
+
+    await waitFor(() => expect(body).not.toBeNull())
+    expect(body.batchTranslationCharLimit).toBe(345)
+    expect(body.steps).toEqual([
+      'detector',
+      'segmenter',
+      'bubble',
+      'font',
+      'ocr',
+      'llm',
+      'inpaint',
+      'render',
+    ])
   })
 })

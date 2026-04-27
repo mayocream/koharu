@@ -98,6 +98,31 @@ export function MenuBar() {
     })
   }
 
+  const runBatchTranslationPipeline = async () => {
+    const cfg = await getConfig()
+    if (!cfg.pipeline) return
+    const p = cfg.pipeline
+    const steps = [
+      p.detector,
+      p.segmenter,
+      p.bubble_segmenter,
+      p.font_detector,
+      p.ocr,
+      p.translator,
+      p.inpainter,
+      p.renderer,
+    ].filter((s): s is string => !!s)
+    const editor = useEditorUiStore.getState()
+    const prefs = usePreferencesStore.getState()
+    await startPipeline({
+      steps,
+      targetLanguage: editor.selectedLanguage,
+      systemPrompt: prefs.customSystemPrompt,
+      defaultFont: prefs.defaultFont,
+      batchTranslationCharLimit: prefs.batchTranslationCharLimit,
+    })
+  }
+
   const runInpaint = async (pageId: string) => {
     const cfg = await getConfig()
     if (!cfg.pipeline?.inpainter) return
@@ -160,6 +185,12 @@ export function MenuBar() {
           onSelect: () => void runPipeline({}),
           disabled: !hasScene,
           testId: 'menu-process-all',
+        },
+        {
+          label: t('menu.processAllBatchTranslation'),
+          onSelect: () => void runBatchTranslationPipeline(),
+          disabled: !hasScene,
+          testId: 'menu-process-all-batch-translation',
         },
       ],
     },

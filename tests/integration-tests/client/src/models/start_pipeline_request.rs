@@ -14,6 +14,13 @@ use serde::{Deserialize, Serialize};
 #[derive(Clone, Default, Debug, PartialEq, Serialize, Deserialize)]
 pub struct StartPipelineRequest {
     #[serde(
+        rename = "batchTranslationCharLimit",
+        default,
+        with = "::serde_with::rust::double_option",
+        skip_serializing_if = "Option::is_none"
+    )]
+    pub batch_translation_char_limit: Option<Option<u32>>,
+    #[serde(
         rename = "defaultFont",
         default,
         with = "::serde_with::rust::double_option",
@@ -58,6 +65,7 @@ pub struct StartPipelineRequest {
 impl StartPipelineRequest {
     pub fn new(steps: Vec<String>) -> StartPipelineRequest {
         StartPipelineRequest {
+            batch_translation_char_limit: None,
             default_font: None,
             pages: None,
             region: None,

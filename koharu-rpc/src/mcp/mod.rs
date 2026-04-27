@@ -187,6 +187,7 @@ impl KoharuServer {
                 target_language: input.target_language,
                 system_prompt: input.system_prompt,
                 default_font: input.default_font,
+                batch_translation_char_limit: None,
                 region: None,
             },
         };

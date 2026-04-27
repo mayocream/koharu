@@ -4,6 +4,7 @@
 
 Name | Type | Description | Notes
 ------------ | ------------- | ------------- | -------------
+**batch_translation_char_limit** | Option<**u32**> | When set, process detection/OCR across pages first, then translate OCR text in cross-page batches up to this character limit before rendering. | [optional]
 **default_font** | Option<**String**> |  | [optional]
 **pages** | Option<**Vec<uuid::Uuid>**> | `None` → whole project, `Some(pages)` → just those pages. | [optional]
 **region** | Option<[**models::Region**](Region.md)> | Optional bounding-box hint for inpainter engines (repair-brush). | [optional]

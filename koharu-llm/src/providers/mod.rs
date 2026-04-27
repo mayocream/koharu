@@ -5,15 +5,20 @@ use std::sync::Arc;
 use anyhow::Context;
 use reqwest_middleware::ClientWithMiddleware;
 
-use crate::prompt::{BLOCK_TAG_INSTRUCTIONS, system_prompt};
+use crate::prompt::{BLOCK_TAG_INSTRUCTIONS, resolve_system_prompt_content};
 use crate::{Language, language::tags as language_tags, supported_locales};
 
 /// Resolve the effective system prompt: custom (with block instructions appended) or default.
 pub(crate) fn resolve_system_prompt(custom: Option<&str>, target_language: Language) -> String {
-    match custom {
-        Some(p) if !p.trim().is_empty() => format!("{p} {BLOCK_TAG_INSTRUCTIONS}"),
-        _ => system_prompt(target_language),
-    }
+    resolve_system_prompt_content(custom, target_language, BLOCK_TAG_INSTRUCTIONS)
+}
+
+pub(crate) fn resolve_system_prompt_with_block_instructions(
+    custom: Option<&str>,
+    target_language: Language,
+    block_instructions: &str,
+) -> String {
+    resolve_system_prompt_content(custom, target_language, block_instructions)
 }
 
 pub mod caiyun;
@@ -107,6 +112,17 @@ pub trait AnyProvider: Send + Sync {
         model: &'a str,
         custom_system_prompt: Option<&'a str>,
     ) -> Pin<Box<dyn Future<Output = anyhow::Result<String>> + Send + 'a>>;
+
+    fn translate_with_block_instructions<'a>(
+        &'a self,
+        source: &'a str,
+        target_language: Language,
+        model: &'a str,
+        custom_system_prompt: Option<&'a str>,
+        _block_instructions: &'a str,
+    ) -> Pin<Box<dyn Future<Output = anyhow::Result<String>> + Send + 'a>> {
+        self.translate(source, target_language, model, custom_system_prompt)
+    }
 }
 
 #[derive(Clone)]

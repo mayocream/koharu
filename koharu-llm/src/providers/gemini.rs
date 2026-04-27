@@ -7,7 +7,10 @@ use serde::Serialize;
 
 use crate::Language;
 
-use super::{AnyProvider, ensure_provider_success, resolve_system_prompt};
+use super::{
+    AnyProvider, ensure_provider_success, resolve_system_prompt,
+    resolve_system_prompt_with_block_instructions,
+};
 
 pub struct GeminiProvider {
     pub http_client: Arc<ClientWithMiddleware>,
@@ -53,6 +56,59 @@ impl AnyProvider for GeminiProvider {
                 system_instruction: SystemInstruction {
                     parts: vec![Part {
                         text: resolve_system_prompt(custom_system_prompt, target_language),
+                    }],
+                },
+                contents: vec![Content {
+                    parts: vec![Part {
+                        text: source.to_string(),
+                    }],
+                }],
+            };
+
+            let response = self
+                .http_client
+                .post(&url)
+                .header("content-type", "application/json")
+                .body(serde_json::to_vec(&body)?)
+                .send()
+                .await?;
+
+            let resp: serde_json::Value = ensure_provider_success("gemini", response)
+                .await?
+                .json()
+                .await?;
+
+            let text = resp["candidates"][0]["content"]["parts"][0]["text"]
+                .as_str()
+                .ok_or_else(|| anyhow::anyhow!("Gemini returned no content"))?
+                .to_string();
+
+            Ok(text)
+        })
+    }
+
+    fn translate_with_block_instructions<'a>(
+        &'a self,
+        source: &'a str,
+        target_language: Language,
+        model: &'a str,
+        custom_system_prompt: Option<&'a str>,
+        block_instructions: &'a str,
+    ) -> Pin<Box<dyn Future<Output = anyhow::Result<String>> + Send + 'a>> {
+        Box::pin(async move {
+            let url = format!(
+                "https://generativelanguage.googleapis.com/v1beta/models/{}:generateContent?key={}",
+                model, self.api_key
+            );
+
+            let body = GenerateRequest {
+                system_instruction: SystemInstruction {
+                    parts: vec![Part {
+                        text: resolve_system_prompt_with_block_instructions(
+                            custom_system_prompt,
+                            target_language,
+                            block_instructions,
+                        ),
                     }],
                 },
                 contents: vec![Content {

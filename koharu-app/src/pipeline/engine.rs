@@ -55,6 +55,7 @@ pub struct PipelineRunOptions {
     pub target_language: Option<String>,
     pub system_prompt: Option<String>,
     pub default_font: Option<String>,
+    pub batch_translation_char_limit: Option<usize>,
     /// Optional bounding-box hint. Inpainter engines (lama/aot) honor it:
     /// composite onto the existing `Image { Inpainted }` (fallback Source)
     /// and process just that one block. Other engines ignore it.

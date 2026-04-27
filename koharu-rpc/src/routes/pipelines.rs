@@ -45,6 +45,10 @@ pub struct StartPipelineRequest {
     pub system_prompt: Option<String>,
     #[serde(default)]
     pub default_font: Option<String>,
+    /// When set, process detection/OCR across pages first, then translate OCR
+    /// text in cross-page batches up to this character limit before rendering.
+    #[serde(default)]
+    pub batch_translation_char_limit: Option<usize>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, utoipa::ToSchema)]
@@ -80,6 +84,7 @@ async fn start_pipeline(
             target_language: req.target_language,
             system_prompt: req.system_prompt,
             default_font: req.default_font,
+            batch_translation_char_limit: req.batch_translation_char_limit.filter(|v| *v > 0),
             region: req.region,
         },
     };

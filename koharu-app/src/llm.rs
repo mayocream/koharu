@@ -28,6 +28,14 @@ use koharu_runtime::RuntimeManager;
 use strum::IntoEnumIterator;
 use tokio::sync::{RwLock, broadcast};
 
+const BATCH_XML_TAG_TEMPLATE: &str = "Strictly preserve all <N>...</N> tags and their IDs; translate only the text inside the tags.There are {count} sets of tags in total. Ensure the output contains the exact same number of tags.";
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum TagFormat {
+    Bracket,
+    Xml,
+}
+
 // ---------------------------------------------------------------------------
 // State
 // ---------------------------------------------------------------------------
@@ -207,27 +215,69 @@ impl Model {
         target_language: Option<&str>,
         custom_system_prompt: Option<&str>,
     ) -> Result<Vec<String>> {
+        self.translate_texts_with_tag_format(
+            sources,
+            target_language,
+            custom_system_prompt,
+            TagFormat::Bracket,
+        )
+        .await
+    }
+
+    pub async fn translate_xml_tagged_texts(
+        &self,
+        sources: &[String],
+        target_language: Option<&str>,
+        custom_system_prompt: Option<&str>,
+    ) -> Result<Vec<String>> {
+        self.translate_texts_with_tag_format(
+            sources,
+            target_language,
+            custom_system_prompt,
+            TagFormat::Xml,
+        )
+        .await
+    }
+
+    async fn translate_texts_with_tag_format(
+        &self,
+        sources: &[String],
+        target_language: Option<&str>,
+        custom_system_prompt: Option<&str>,
+        tag_format: TagFormat,
+    ) -> Result<Vec<String>> {
         if sources.is_empty() {
             return Ok(Vec::new());
         }
         let target_language = target_language
             .and_then(Language::parse)
             .unwrap_or(Language::English);
-        let body = format_sources(sources);
+        let body = format_sources_with_tags(sources, tag_format);
+        let block_instructions = match tag_format {
+            TagFormat::Bracket => koharu_llm::prompt::BLOCK_TAG_INSTRUCTIONS.to_string(),
+            TagFormat::Xml => batch_xml_block_instructions(sources.len()),
+        };
 
         let mut guard = self.state.write().await;
         let translation = match &mut *guard {
             State::ReadyLocal(llm) => {
                 let opts = llm.id().default_generate_options();
-                llm.generate(&body, &opts, target_language, custom_system_prompt)
+                llm.generate_with_block_instructions(
+                    &body,
+                    &opts,
+                    target_language,
+                    custom_system_prompt,
+                    &block_instructions,
+                )
             }
             State::ReadyProvider { target, provider } => {
                 provider
-                    .translate(
+                    .translate_with_block_instructions(
                         &body,
                         target_language,
                         &target.model_id,
                         custom_system_prompt,
+                        &block_instructions,
                     )
                     .await
             }
@@ -237,7 +287,7 @@ impl Model {
         }?;
 
         let translation = strip_thinking_block(&translation);
-        let out = match parse_tagged_blocks(translation, sources.len())? {
+        let out = match parse_tagged_blocks_with_format(translation, sources.len(), tag_format)? {
             Some(blocks) => blocks,
             None => split_legacy_lines(translation, sources.len()),
         };
@@ -436,13 +486,41 @@ pub fn provider_config_from_settings(
 // Tag formatting + response parsing
 // ---------------------------------------------------------------------------
 
-fn format_sources(sources: &[String]) -> String {
+fn format_sources_with_tags(sources: &[String], tag_format: TagFormat) -> String {
+    match tag_format {
+        TagFormat::Bracket => format_bracket_sources(sources),
+        TagFormat::Xml => format_xml_sources(sources),
+    }
+}
+
+fn format_bracket_sources(sources: &[String]) -> String {
     sources
         .iter()
         .enumerate()
         .map(|(idx, text)| format!("[{}]{}", idx + 1, text))
         .collect::<Vec<_>>()
         .join("\n")
+}
+
+fn format_xml_sources(sources: &[String]) -> String {
+    sources
+        .iter()
+        .enumerate()
+        .map(|(idx, text)| format!("<{}>{}</{}>", idx + 1, text, idx + 1))
+        .collect::<String>()
+}
+
+fn batch_xml_block_instructions(tag_count: usize) -> String {
+    BATCH_XML_TAG_TEMPLATE.replace("{count}", &tag_count.to_string())
+}
+
+#[cfg(test)]
+fn batch_xml_system_prompt(custom_system_prompt: Option<&str>, tag_count: usize) -> String {
+    let instructions = batch_xml_block_instructions(tag_count);
+    match custom_system_prompt {
+        Some(prompt) if !prompt.trim().is_empty() => format!("{}\n{}", prompt.trim(), instructions),
+        _ => instructions,
+    }
 }
 
 fn parse_block_tag(text: &str) -> Option<(usize, usize)> {
@@ -480,7 +558,21 @@ fn find_next_tag(text: &str) -> Option<(usize, usize, usize)> {
     None
 }
 
-fn parse_tagged_blocks(translation: &str, expected_blocks: usize) -> Result<Option<Vec<String>>> {
+fn parse_tagged_blocks_with_format(
+    translation: &str,
+    expected_blocks: usize,
+    tag_format: TagFormat,
+) -> Result<Option<Vec<String>>> {
+    match tag_format {
+        TagFormat::Bracket => parse_bracket_tagged_blocks(translation, expected_blocks),
+        TagFormat::Xml => Ok(parse_xml_tagged_blocks(translation, expected_blocks)),
+    }
+}
+
+fn parse_bracket_tagged_blocks(
+    translation: &str,
+    expected_blocks: usize,
+) -> Result<Option<Vec<String>>> {
     if find_next_tag(translation).is_none() {
         return Ok(None);
     }
@@ -500,6 +592,47 @@ fn parse_tagged_blocks(translation: &str, expected_blocks: usize) -> Result<Opti
         cursor = &cursor[content_end..];
     }
     Ok(found_any.then_some(blocks))
+}
+
+fn parse_xml_tagged_blocks(translation: &str, expected_blocks: usize) -> Option<Vec<String>> {
+    let mut blocks = vec![String::new(); expected_blocks];
+    let mut found_any = false;
+    let mut cursor = 0;
+
+    while cursor < translation.len() {
+        let Some(open_rel) = translation[cursor..].find('<') else {
+            break;
+        };
+        let open = cursor + open_rel;
+        let Some(close_rel) = translation[open..].find('>') else {
+            break;
+        };
+        let tag_end = open + close_rel;
+        let id_text = &translation[open + 1..tag_end];
+        let Ok(id_1based) = id_text.parse::<usize>() else {
+            cursor = tag_end + 1;
+            continue;
+        };
+        if id_1based == 0 {
+            cursor = tag_end + 1;
+            continue;
+        }
+
+        let close_tag = format!("</{}>", id_1based);
+        let content_start = tag_end + 1;
+        let Some(content_end_rel) = translation[content_start..].find(&close_tag) else {
+            cursor = content_start;
+            continue;
+        };
+        let content_end = content_start + content_end_rel;
+        if id_1based <= expected_blocks {
+            blocks[id_1based - 1] = translation[content_start..content_end].trim().to_string();
+            found_any = true;
+        }
+        cursor = content_end + close_tag.len();
+    }
+
+    found_any.then_some(blocks)
 }
 
 fn split_legacy_lines(translation: &str, expected_blocks: usize) -> Vec<String> {
@@ -535,4 +668,39 @@ fn strip_wrapping_quotes(text: &str) -> String {
         }
     }
     trimmed.to_string()
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn xml_tagged_sources_are_compact_numbered_elements() {
+        let sources = vec!["AAA".to_string(), "BBB".to_string()];
+
+        assert_eq!(
+            format_sources_with_tags(&sources, TagFormat::Xml),
+            "<1>AAA</1><2>BBB</2>"
+        );
+    }
+
+    #[test]
+    fn xml_tagged_response_parses_back_to_original_order() -> anyhow::Result<()> {
+        let parsed =
+            parse_tagged_blocks_with_format("<2>second</2><1>first</1>", 2, TagFormat::Xml)?
+                .expect("xml tags should be parsed");
+
+        assert_eq!(parsed, vec!["first".to_string(), "second".to_string()]);
+        Ok(())
+    }
+
+    #[test]
+    fn batch_xml_prompt_instruction_is_appended_on_new_line() {
+        let prompt = batch_xml_system_prompt(Some("Translate carefully."), 3);
+
+        assert_eq!(
+            prompt,
+            "Translate carefully.\nStrictly preserve all <N>...</N> tags and their IDs; translate only the text inside the tags.There are 3 sets of tags in total. Ensure the output contains the exact same number of tags."
+        );
+    }
 }
