@@ -87,7 +87,7 @@ use crate::llm;
 use crate::renderer;
 use crate::session::ProjectSession;
 use crate::terminology::{
-    PlaceholderReplacement, protect_text, restore_text, system_prompt_with_placeholders,
+    PlaceholderReplacement, protect_text, restore_text, system_prompt_with_terminology,
 };
 
 // ---------------------------------------------------------------------------
@@ -1023,10 +1023,10 @@ fn collect_translation_targets(
 }
 
 fn batch_translation_system_prompt(options: &PipelineRunOptions) -> Option<String> {
-    system_prompt_with_placeholders(
+    system_prompt_with_terminology(
         options.system_prompt.as_deref(),
         options.target_language.as_deref(),
-        !options.terminology.is_empty(),
+        &options.terminology,
     )
 }
 
@@ -1283,6 +1283,7 @@ mod tests {
             target_language: Some("English".to_string()),
             terminology: vec![crate::terminology::ActiveGlossary {
                 priority: 10,
+                prompt_injection: false,
                 terms: vec![crate::terminology::TerminologyEntry {
                     source: "Alice".to_string(),
                     target: "艾莉絲".to_string(),
@@ -1312,6 +1313,27 @@ mod tests {
             text.translation.as_ref().and_then(|value| value.as_ref()),
             Some(&"first\nsecond\nthird".to_string())
         );
+    }
+
+    #[test]
+    fn batch_translation_prompt_includes_prompt_injection_rules() {
+        let options = PipelineRunOptions {
+            target_language: Some("English".to_string()),
+            terminology: vec![crate::terminology::ActiveGlossary {
+                priority: 10,
+                prompt_injection: true,
+                terms: vec![crate::terminology::TerminologyEntry {
+                    source: "Alice".to_string(),
+                    target: "Alice Target".to_string(),
+                }],
+            }],
+            ..Default::default()
+        };
+
+        let prompt = batch_translation_system_prompt(&options).expect("prompt should be present");
+
+        assert!(prompt.contains("Translate `Alice` to `Alice Target`."));
+        assert!(!prompt.contains("Strictly preserve all placeholders"));
     }
 }
 
