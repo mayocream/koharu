@@ -169,4 +169,32 @@ describe('RenderControlsPanel Font Assignment', () => {
     await waitFor(() => expect(input.value).toBe(''))
     expect(input).toHaveAttribute('placeholder', 'auto')
   })
+
+  it('toggles text direction for a selected text block', async () => {
+    renderWithQuery(<RenderControlsPanel />)
+    useSelectionStore.getState().select('t1', false)
+    const toggle = await screen.findByTestId('render-text-direction-toggle')
+    await userEvent.click(toggle)
+    await waitFor(() => expect(sceneActions.applyOp).toHaveBeenCalled())
+    const op = (sceneActions.applyOp as any).mock.calls[0][0]
+    expect(op).toHaveProperty('updateNode')
+    expect(op.updateNode.id).toBe('t1')
+    expect(op.updateNode.patch.data.text.sourceDirection).toBe('vertical')
+    expect(sceneActions.queueAutoRender).toHaveBeenCalled()
+  })
+
+  it('applies text direction globally when no text block is selected', async () => {
+    renderWithQuery(<RenderControlsPanel />)
+    useSelectionStore.getState().clear()
+    const toggle = await screen.findByTestId('render-text-direction-toggle')
+    await userEvent.click(toggle)
+    await waitFor(() => expect(sceneActions.applyOp).toHaveBeenCalled())
+    const op = (sceneActions.applyOp as any).mock.calls[0][0]
+    expect(op).toHaveProperty('batch')
+    expect(op.batch.ops).toHaveLength(2)
+    for (const inner of op.batch.ops) {
+      expect(inner.updateNode.patch.data.text.sourceDirection).toBe('vertical')
+    }
+    expect(sceneActions.queueAutoRender).toHaveBeenCalled()
+  })
 })

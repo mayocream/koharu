@@ -182,6 +182,8 @@
   },
   "render": {
     "effectLabel": "文字效果",
+    "textDirectionLabel": "方向",
+    "textDirectionToggle": "切换文字方向",
     "alignLabel": "对齐",
     "alignLeft": "左对齐",
     "alignCenter": "居中对齐",

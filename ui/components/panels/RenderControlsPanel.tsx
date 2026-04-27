@@ -4,6 +4,8 @@ import {
   AlignCenterIcon,
   AlignLeftIcon,
   AlignRightIcon,
+  ArrowDownIcon,
+  ArrowRightIcon,
   BoldIcon,
   ItalicIcon,
   MinusIcon,
@@ -31,6 +33,7 @@ import type {
   FontPrediction,
   Op,
   TextAlign,
+  TextDirection,
   TextShaderEffect,
   TextStrokeStyle,
   TextStyle,
@@ -191,6 +194,15 @@ export function RenderControlsPanel() {
     firstNode?.data.style?.textAlign ??
     (selectedNode?.data.translation ? 'center' : 'left')
 
+  const effectiveTextDirection: TextDirection =
+    selectedNode?.data.sourceDirection ??
+    selectedNode?.data.renderedDirection ??
+    firstNode?.data.sourceDirection ??
+    firstNode?.data.renderedDirection ?? 'horizontal'
+
+  const DirectionIcon =
+    effectiveTextDirection === 'vertical' ? ArrowDownIcon : ArrowRightIcon
+
   // ---------------------------------------------------------------------------
   // Mutations
   // ---------------------------------------------------------------------------
@@ -237,6 +249,47 @@ export function RenderControlsPanel() {
 
   const applyStyleToAll = (updates: Partial<TextStyle>) => {
     applyStyleToNodes(textNodes, updates, 'Bulk style update')
+  }
+
+  const buildTextDirectionOp = (n: TextNodeEntry, direction: TextDirection): Op => {
+    return ops.updateNode(page!.id, n.id, {
+      data: { text: { sourceDirection: direction } } as never,
+    })
+  }
+
+  const applyTextDirectionToNodes = (
+    nodes: TextNodeEntry[],
+    direction: TextDirection,
+    label: string,
+  ) => {
+    if (!page || nodes.length === 0) return
+    void (async () => {
+      const op =
+        nodes.length === 1
+          ? buildTextDirectionOp(nodes[0], direction)
+          : ops.batch(
+              label,
+              nodes.map((n) => buildTextDirectionOp(n, direction)),
+            )
+      await applyOp(op)
+      queueAutoRender(page.id)
+    })()
+  }
+
+  const applyTextDirectionToSelected = (direction: TextDirection): boolean => {
+    if (selectedNodes.length === 0) return false
+    applyTextDirectionToNodes(selectedNodes, direction, 'Multi-block text direction update')
+    return true
+  }
+
+  const applyTextDirectionToAll = (direction: TextDirection) => {
+    applyTextDirectionToNodes(textNodes, direction, 'Bulk text direction update')
+  }
+
+  const toggleTextDirection = () => {
+    const next: TextDirection = effectiveTextDirection === 'vertical' ? 'horizontal' : 'vertical'
+    if (applyTextDirectionToSelected(next)) return
+    applyTextDirectionToAll(next)
   }
 
   const applyStrokeSetting = (nextStroke: TextStrokeStyle) => {
@@ -347,12 +400,15 @@ export function RenderControlsPanel() {
       </div>
 
       {/* Size / Effect / Align */}
-      <div className='grid w-full grid-cols-[minmax(0,1fr)_auto_auto] items-end gap-x-1.5'>
+      <div className='grid w-full grid-cols-[minmax(0,1fr)_auto_auto_auto] items-end gap-x-1.5'>
         <span className='text-[10px] font-medium text-muted-foreground uppercase'>
           {t('render.fontSizeLabel')}
         </span>
         <span className='text-[10px] font-medium text-muted-foreground uppercase'>
           {t('render.effectLabel')}
+        </span>
+        <span className='text-[10px] font-medium text-muted-foreground uppercase'>
+          {t('render.textDirectionLabel')}
         </span>
         <span className='text-[10px] font-medium text-muted-foreground uppercase'>
           {t('render.alignLabel')}
@@ -442,6 +498,29 @@ export function RenderControlsPanel() {
               </Tooltip>
             )
           })}
+        </div>
+
+        <div className='flex items-center gap-0.5'>
+          <Tooltip>
+            <TooltipTrigger asChild>
+              <Button
+                type='button'
+                variant='outline'
+                size='icon-sm'
+                aria-label={t('render.textDirectionToggle')}
+                data-testid='render-text-direction-toggle'
+                aria-pressed={effectiveTextDirection === 'vertical'}
+                disabled={!hasNodes}
+                className='size-6 shrink-0'
+                onClick={toggleTextDirection}
+              >
+                <DirectionIcon className='size-3' />
+              </Button>
+            </TooltipTrigger>
+            <TooltipContent side='bottom' sideOffset={4}>
+              {t('render.textDirectionToggle')}
+            </TooltipContent>
+          </Tooltip>
         </div>
 
         <div className='flex items-center gap-0.5'>

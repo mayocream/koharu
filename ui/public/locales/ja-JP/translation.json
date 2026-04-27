@@ -183,6 +183,8 @@
   "render": {
     "effectLabel": "文字効果",
     "alignLabel": "配置",
+    "textDirectionLabel": "方向",
+    "textDirectionToggle": "文字方向を切り替え",
     "alignLeft": "左揃え",
     "alignCenter": "中央揃え",
     "alignRight": "右揃え",

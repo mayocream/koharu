@@ -183,6 +183,8 @@
   "render": {
     "effectLabel": "Metin efekti",
     "alignLabel": "Hizalama",
+    "textDirectionLabel": "Yön",
+    "textDirectionToggle": "Metin yönünü değiştir",
     "alignLeft": "Sola hizala",
     "alignCenter": "Ortala",
     "alignRight": "Sağa hizala",
