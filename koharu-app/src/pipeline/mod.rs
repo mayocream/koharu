@@ -86,6 +86,9 @@ fn step_for(info: &EngineInfo) -> Option<PipelineStep> {
 use crate::llm;
 use crate::renderer;
 use crate::session::ProjectSession;
+use crate::terminology::{
+    PlaceholderReplacement, protect_text, restore_text, system_prompt_with_placeholders,
+};
 
 // ---------------------------------------------------------------------------
 // Spec + scope
@@ -426,7 +429,7 @@ async fn run_with_batch_translation(
         }
 
         let scene_snap = session.scene_snapshot();
-        let targets = collect_translation_targets(&scene_snap, *page_id);
+        let targets = collect_translation_targets(&scene_snap, *page_id, &spec.options);
         states.mark_pre_done(*page_id, targets.len());
         pending_targets.extend(targets);
 
@@ -447,7 +450,7 @@ async fn run_with_batch_translation(
                 Arc::clone(&llm),
                 batch,
                 spec.options.target_language.clone(),
-                spec.options.system_prompt.clone(),
+                batch_translation_system_prompt(&spec.options),
                 next_batch_index,
             ));
             next_batch_index += 1;
@@ -459,7 +462,7 @@ async fn run_with_batch_translation(
             Arc::clone(&llm),
             take_next_translation_batch(&mut pending_targets, batch_char_limit),
             spec.options.target_language.clone(),
-            spec.options.system_prompt.clone(),
+            batch_translation_system_prompt(&spec.options),
             next_batch_index,
         ));
         next_batch_index += 1;
@@ -535,7 +538,7 @@ async fn run_with_batch_translation(
                             Arc::clone(&llm),
                             take_next_translation_batch(&mut pending_targets, batch_char_limit),
                             spec.options.target_language.clone(),
-                            spec.options.system_prompt.clone(),
+                            batch_translation_system_prompt(&spec.options),
                             next_batch_index,
                         ));
                         next_batch_index += 1;
@@ -609,7 +612,7 @@ async fn run_with_batch_translation(
                 Arc::clone(&llm),
                 take_next_translation_batch(&mut pending_targets, batch_char_limit),
                 spec.options.target_language.clone(),
-                spec.options.system_prompt.clone(),
+                batch_translation_system_prompt(&spec.options),
                 next_batch_index,
             ));
             next_batch_index += 1;
@@ -907,6 +910,7 @@ struct TranslationTarget {
     page_id: PageId,
     node_id: NodeId,
     source: String,
+    replacements: Vec<PlaceholderReplacement>,
 }
 
 #[derive(Debug, Clone, Default)]
@@ -992,6 +996,7 @@ impl BatchPageStates {
 fn collect_translation_targets(
     scene: &koharu_core::Scene,
     page_id: PageId,
+    options: &PipelineRunOptions,
 ) -> Vec<TranslationTarget> {
     let Some(page) = scene.pages.get(&page_id) else {
         return Vec::new();
@@ -1006,13 +1011,23 @@ fn collect_translation_targets(
             if source.trim().is_empty() {
                 return None;
             }
+            let protected = protect_text(source, &options.terminology);
             Some(TranslationTarget {
                 page_id,
                 node_id: *node_id,
-                source: source.clone(),
+                source: protected.text,
+                replacements: protected.replacements,
             })
         })
         .collect()
+}
+
+fn batch_translation_system_prompt(options: &PipelineRunOptions) -> Option<String> {
+    system_prompt_with_placeholders(
+        options.system_prompt.as_deref(),
+        options.target_language.as_deref(),
+        !options.terminology.is_empty(),
+    )
 }
 
 struct CompletedTranslationBatch {
@@ -1099,18 +1114,21 @@ fn translation_ops(targets: Vec<TranslationTarget>, translations: Vec<String>) -
     targets
         .into_iter()
         .zip(translations)
-        .map(|(target, translation)| Op::UpdateNode {
-            page: target.page_id,
-            id: target.node_id,
-            patch: NodePatch {
-                data: Some(NodeDataPatch::Text(TextDataPatch {
-                    translation: Some(Some(translation)),
-                    ..Default::default()
-                })),
-                transform: None,
-                visible: None,
-            },
-            prev: NodePatch::default(),
+        .map(|(target, translation)| {
+            let translation = restore_text(&translation, &target.replacements);
+            Op::UpdateNode {
+                page: target.page_id,
+                id: target.node_id,
+                patch: NodePatch {
+                    data: Some(NodeDataPatch::Text(TextDataPatch {
+                        translation: Some(Some(translation)),
+                        ..Default::default()
+                    })),
+                    transform: None,
+                    visible: None,
+                },
+                prev: NodePatch::default(),
+            }
         })
         .collect()
 }
@@ -1154,6 +1172,23 @@ mod tests {
             page_id: PageId::new(),
             node_id: NodeId::new(),
             source: source.to_string(),
+            replacements: Vec::new(),
+        }
+    }
+
+    fn target_with_replacement(
+        source: &str,
+        placeholder: &str,
+        replacement: &str,
+    ) -> TranslationTarget {
+        TranslationTarget {
+            page_id: PageId::new(),
+            node_id: NodeId::new(),
+            source: source.to_string(),
+            replacements: vec![PlaceholderReplacement {
+                placeholder: placeholder.to_string(),
+                target: replacement.to_string(),
+            }],
         }
     }
 
@@ -1214,6 +1249,43 @@ mod tests {
         assert!(!states.ready_for_render(page));
         states.mark_translated(page, 1);
         assert!(states.ready_for_render(page));
+    }
+
+    #[test]
+    fn batch_translation_ops_restore_terminology_placeholders() {
+        let target = target_with_replacement("{{1}} arrives", "{{1}}", "艾莉絲");
+
+        let ops = translation_ops(vec![target], vec!["{{1}} has arrived".to_string()]);
+
+        let [Op::UpdateNode { patch, .. }] = ops.as_slice() else {
+            panic!("expected one update op");
+        };
+        let Some(NodeDataPatch::Text(text)) = patch.data.as_ref() else {
+            panic!("expected text patch");
+        };
+        assert_eq!(
+            text.translation.as_ref().and_then(|value| value.as_ref()),
+            Some(&"艾莉絲 has arrived".to_string())
+        );
+    }
+
+    #[test]
+    fn batch_translation_prompt_includes_placeholder_rule_when_terminology_is_active() {
+        let options = PipelineRunOptions {
+            target_language: Some("English".to_string()),
+            terminology: vec![crate::terminology::ActiveGlossary {
+                priority: 10,
+                terms: vec![crate::terminology::TerminologyEntry {
+                    source: "Alice".to_string(),
+                    target: "艾莉絲".to_string(),
+                }],
+            }],
+            ..Default::default()
+        };
+
+        let prompt = batch_translation_system_prompt(&options).expect("prompt should be present");
+
+        assert!(prompt.contains("Strictly preserve all placeholders like {{1}}, {{2}}"));
     }
 }
 
