@@ -210,7 +210,7 @@ export function SettingsDialog({
         setAppConfig(config)
         setProviderCatalogs(catalog.providers)
         setEngineCatalog(engines)
-      } catch {}
+      } catch { }
     })()
   }, [open])
 
@@ -325,9 +325,9 @@ export function SettingsDialog({
   const storageSettingsUnchanged =
     dataPathDraft.trim() === appConfig?.data?.path &&
     httpConnectTimeoutDraft.trim() ===
-      String(appConfig?.http?.connect_timeout ?? DEFAULT_HTTP_CONNECT_TIMEOUT) &&
+    String(appConfig?.http?.connect_timeout ?? DEFAULT_HTTP_CONNECT_TIMEOUT) &&
     httpReadTimeoutDraft.trim() ===
-      String(appConfig?.http?.read_timeout ?? DEFAULT_HTTP_READ_TIMEOUT) &&
+    String(appConfig?.http?.read_timeout ?? DEFAULT_HTTP_READ_TIMEOUT) &&
     httpMaxRetriesDraft.trim() === String(appConfig?.http?.max_retries ?? DEFAULT_HTTP_MAX_RETRIES)
 
   return (
@@ -841,7 +841,7 @@ function TerminologyPane() {
             title={t('settings.terminology')}
             description={t('settings.terminologyDescription')}
           >
-            <div className='grid gap-3 md:grid-cols-[1fr_120px_auto_auto]'>
+            <div className='grid gap-4 grid-cols-1 md:grid-cols-2'>
               <div className='space-y-1.5'>
                 <Label className='text-xs'>{t('settings.terminologyName')}</Label>
                 <Input
@@ -850,6 +850,7 @@ function TerminologyPane() {
                   onBlur={() => void patchSelected({ name: selected.name })}
                 />
               </div>
+
               <div className='space-y-1.5'>
                 <Label className='text-xs'>{t('settings.terminologyPriority')}</Label>
                 <Input
@@ -864,7 +865,7 @@ function TerminologyPane() {
                   onBlur={() => void patchSelected({ priority: selected.priority })}
                 />
               </div>
-              <div className='flex items-end gap-2 pb-2'>
+              <div className='flex items-center gap-2 py-2'>
                 <Switch
                   checked={selected.enabled}
                   onCheckedChange={(enabled) => void patchSelected({ enabled })}
@@ -873,7 +874,7 @@ function TerminologyPane() {
                   {selected.enabled ? t('common.enabled') : t('common.disabled')}
                 </span>
               </div>
-              <div className='flex items-end gap-2 pb-2'>
+              <div className='flex items-center gap-2 py-2'>
                 <Switch
                   checked={selected.promptInjection}
                   onCheckedChange={(promptInjection) => void patchSelected({ promptInjection })}
@@ -882,37 +883,6 @@ function TerminologyPane() {
                   {t('settings.terminologyPromptInjection')}
                 </span>
               </div>
-            </div>
-            <div className='flex flex-wrap gap-2'>
-              <Button variant='outline' size='sm' className='gap-1.5' onClick={handleExport}>
-                <DownloadIcon className='size-3.5' />
-                {t('settings.terminologyExportCsv')}
-              </Button>
-              <Button
-                variant='outline'
-                size='sm'
-                className='gap-1.5'
-                onClick={() => fileInputRef.current?.click()}
-              >
-                <UploadIcon className='size-3.5' />
-                {t('settings.terminologyImportCsv')}
-              </Button>
-              <Button
-                variant='ghost'
-                size='sm'
-                className='gap-1.5'
-                onClick={() => void handleDelete()}
-              >
-                <Trash2Icon className='size-3.5' />
-                {t('common.delete')}
-              </Button>
-              <input
-                ref={fileInputRef}
-                type='file'
-                accept='.csv,text/csv'
-                className='hidden'
-                onChange={(e) => void handleImport(e.target.files?.[0])}
-              />
             </div>
           </Section>
 
@@ -1329,8 +1299,8 @@ function KeybindsPane() {
               const hasConflict = currentVal && (conflictCounts.get(currentVal) || 0) > 1
               const conflictingItem = hasConflict
                 ? SHORTCUT_ITEMS.find(
-                    (s) => s.key !== item.key && pendingShortcuts[s.key] === currentVal,
-                  )
+                  (s) => s.key !== item.key && pendingShortcuts[s.key] === currentVal,
+                )
                 : null
 
               return (
@@ -1339,9 +1309,8 @@ function KeybindsPane() {
                     <span className='text-sm'>{t(item.labelKey)}</span>
                     {hasConflict && (
                       <div
-                        title={`${t('settings.shortcutConflict')}${
-                          conflictingItem ? `: ${t(conflictingItem.labelKey)}` : ''
-                        }`}
+                        title={`${t('settings.shortcutConflict')}${conflictingItem ? `: ${t(conflictingItem.labelKey)}` : ''
+                          }`}
                       >
                         <AlertTriangleIcon className='size-3.5 text-amber-500' />
                       </div>
