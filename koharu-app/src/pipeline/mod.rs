@@ -15,12 +15,14 @@ pub use engine::{
     build_order,
 };
 
+use std::collections::HashMap;
 use std::sync::Arc;
 use std::sync::atomic::{AtomicBool, Ordering};
 
-use anyhow::{Result, bail};
+use anyhow::{Context, Result, bail};
 use koharu_core::{NodeDataPatch, NodeId, NodePatch, Op, PageId, PipelineStep, TextDataPatch};
 use koharu_runtime::RuntimeManager;
+use tokio::task::JoinHandle;
 use tracing::Instrument;
 
 /// Observer for pipeline progress. `step_id` is the engine id of the step
@@ -336,17 +338,35 @@ async fn run_with_batch_translation(
         .copied()
         .filter(|&i| !pre_steps.contains(&i) && !translation_steps.contains(&i))
         .collect::<Vec<_>>();
+    let render_steps = post_steps
+        .iter()
+        .copied()
+        .filter(|&i| infos[i].produces.contains(&Artifact::FinalRender))
+        .collect::<Vec<_>>();
+    let non_render_post_steps = post_steps
+        .iter()
+        .copied()
+        .filter(|i| !render_steps.contains(i))
+        .collect::<Vec<_>>();
 
     let total_pages = pages.len().max(1);
-    let mut total_units = (total_pages * (pre_steps.len() + post_steps.len()) + 1).max(1);
+    let total_steps = pre_steps.len() + non_render_post_steps.len() + render_steps.len() + 1;
+    let total_units = (total_pages * total_steps).max(1);
     let mut completed = 0usize;
     let mut warning_count = 0usize;
-    let mut skipped_pages = Vec::new();
     let mut last_percent = 0u8;
+    let mut states = BatchPageStates::new(&pages);
+    let mut pending_targets = Vec::new();
+    let mut translation_task: Option<TranslationHandle> = None;
+    let mut next_batch_index = 0usize;
+    let translation_info = infos[translation_steps[0]];
 
     for (page_index, page_id) in pages.iter().enumerate() {
         for (seq, &i) in pre_steps.iter().enumerate() {
             if cancel.load(Ordering::Relaxed) {
+                if let Some(task) = translation_task.take() {
+                    task.abort();
+                }
                 bail!("cancelled");
             }
             let info = infos[i];
@@ -354,7 +374,7 @@ async fn run_with_batch_translation(
                 progress.as_ref(),
                 info,
                 seq,
-                pre_steps.len() + post_steps.len() + 1,
+                total_steps,
                 page_index,
                 total_pages,
                 completed,
@@ -363,8 +383,7 @@ async fn run_with_batch_translation(
             );
 
             if !session.scene.read().pages.contains_key(page_id) {
-                skipped_pages.push(*page_id);
-                completed += pre_steps.len() - seq;
+                states.mark_skipped(*page_id);
                 break;
             }
 
@@ -382,73 +401,87 @@ async fn run_with_batch_translation(
                 seq,
                 page_index,
                 total_pages,
-                pre_steps.len() + post_steps.len() + 1,
+                total_steps,
                 &mut warning_count,
                 warnings.as_ref(),
             )
             .await?;
             completed += 1;
             if !ok {
-                skipped_pages.push(*page_id);
+                states.mark_skipped(*page_id);
                 break;
             }
-        }
-    }
 
-    let mut targets = Vec::new();
-    let scene_snap = session.scene_snapshot();
-    for page_id in &pages {
-        if skipped_pages.contains(page_id) {
+            if let Some(task) = translation_task.as_ref() {
+                if task.is_finished() {
+                    let task = translation_task.take().expect("translation task exists");
+                    finish_translation_batch(task, &session, &mut states, translation_info).await?;
+                    completed += 1;
+                }
+            }
+        }
+
+        if states.is_skipped(*page_id) {
             continue;
         }
-        targets.extend(collect_translation_targets(&scene_snap, *page_id));
-    }
-    let batches = build_translation_batches(targets, batch_char_limit);
-    total_units = (total_pages * (pre_steps.len() + post_steps.len()) + batches.len()).max(1);
 
-    for (batch_index, batch) in batches.into_iter().enumerate() {
-        if cancel.load(Ordering::Relaxed) {
-            bail!("cancelled");
+        let scene_snap = session.scene_snapshot();
+        let targets = collect_translation_targets(&scene_snap, *page_id);
+        states.mark_pre_done(*page_id, targets.len());
+        pending_targets.extend(targets);
+
+        if translation_task.is_none() && queued_char_count(&pending_targets) >= batch_char_limit {
+            let batch = take_next_translation_batch(&mut pending_targets, batch_char_limit);
+            emit_progress(
+                progress.as_ref(),
+                translation_info,
+                pre_steps.len(),
+                total_steps,
+                page_index,
+                total_pages,
+                completed,
+                total_units,
+                &mut last_percent,
+            );
+            translation_task = Some(spawn_translation_batch(
+                Arc::clone(&llm),
+                batch,
+                spec.options.target_language.clone(),
+                spec.options.system_prompt.clone(),
+                next_batch_index,
+            ));
+            next_batch_index += 1;
         }
-        let info = infos[translation_steps[0]];
-        emit_progress(
-            progress.as_ref(),
-            info,
-            pre_steps.len(),
-            pre_steps.len() + post_steps.len() + 1,
-            batch_index,
-            total_pages,
-            completed,
-            total_units,
-            &mut last_percent,
-        );
-        let sources = batch
-            .iter()
-            .map(|target| target.source.clone())
-            .collect::<Vec<_>>();
-        let translations = llm
-            .translate_xml_tagged_texts(
-                &sources,
-                spec.options.target_language.as_deref(),
-                spec.options.system_prompt.as_deref(),
-            )
-            .await?;
-        let ops = translation_ops(batch, translations);
-        if !ops.is_empty() {
-            session.apply(Op::Batch {
-                ops,
-                label: format!("{}: batch {}", info.id, batch_index + 1),
-            })?;
+    }
+
+    if translation_task.is_none() && !pending_targets.is_empty() {
+        translation_task = Some(spawn_translation_batch(
+            Arc::clone(&llm),
+            take_next_translation_batch(&mut pending_targets, batch_char_limit),
+            spec.options.target_language.clone(),
+            spec.options.system_prompt.clone(),
+            next_batch_index,
+        ));
+        next_batch_index += 1;
+    }
+
+    if non_render_post_steps.is_empty() {
+        for page_id in &pages {
+            if states.pre_done(*page_id) && !states.is_skipped(*page_id) {
+                states.mark_inpaint_done(*page_id);
+            }
         }
-        completed += 1;
     }
 
     for (page_index, page_id) in pages.iter().enumerate() {
-        if skipped_pages.contains(page_id) {
+        if !states.ready_for_inpaint(*page_id) {
             continue;
         }
-        for (seq, &i) in post_steps.iter().enumerate() {
+        for (seq, &i) in non_render_post_steps.iter().enumerate() {
             if cancel.load(Ordering::Relaxed) {
+                if let Some(task) = translation_task.take() {
+                    task.abort();
+                }
                 bail!("cancelled");
             }
             let info = infos[i];
@@ -456,7 +489,7 @@ async fn run_with_batch_translation(
                 progress.as_ref(),
                 info,
                 pre_steps.len() + 1 + seq,
-                pre_steps.len() + post_steps.len() + 1,
+                total_steps,
                 page_index,
                 total_pages,
                 completed,
@@ -464,7 +497,7 @@ async fn run_with_batch_translation(
                 &mut last_percent,
             );
             if !session.scene.read().pages.contains_key(page_id) {
-                completed += post_steps.len() - seq;
+                states.mark_skipped(*page_id);
                 break;
             }
             let ok = run_one_step(
@@ -481,24 +514,178 @@ async fn run_with_batch_translation(
                 pre_steps.len() + 1 + seq,
                 page_index,
                 total_pages,
-                pre_steps.len() + post_steps.len() + 1,
+                total_steps,
                 &mut warning_count,
                 warnings.as_ref(),
             )
             .await?;
             completed += 1;
             if !ok {
+                states.mark_skipped(*page_id);
                 break;
             }
+
+            if let Some(task) = translation_task.as_ref() {
+                if task.is_finished() {
+                    let task = translation_task.take().expect("translation task exists");
+                    finish_translation_batch(task, &session, &mut states, translation_info).await?;
+                    completed += 1;
+                    if translation_task.is_none() && !pending_targets.is_empty() {
+                        translation_task = Some(spawn_translation_batch(
+                            Arc::clone(&llm),
+                            take_next_translation_batch(&mut pending_targets, batch_char_limit),
+                            spec.options.target_language.clone(),
+                            spec.options.system_prompt.clone(),
+                            next_batch_index,
+                        ));
+                        next_batch_index += 1;
+                    }
+                }
+            }
+
+            run_ready_renders(
+                &pages,
+                &mut states,
+                &render_steps,
+                &session,
+                &registry,
+                &runtime,
+                cpu,
+                &llm,
+                &renderer,
+                &spec.options,
+                &cancel,
+                &progress,
+                &warnings,
+                infos.as_slice(),
+                pre_steps.len() + 1 + non_render_post_steps.len(),
+                total_steps,
+                total_pages,
+                total_units,
+                &mut completed,
+                &mut warning_count,
+                &mut last_percent,
+            )
+            .await?;
         }
+        if !states.is_skipped(*page_id) {
+            states.mark_inpaint_done(*page_id);
+        }
+        run_ready_renders(
+            &pages,
+            &mut states,
+            &render_steps,
+            &session,
+            &registry,
+            &runtime,
+            cpu,
+            &llm,
+            &renderer,
+            &spec.options,
+            &cancel,
+            &progress,
+            &warnings,
+            infos.as_slice(),
+            pre_steps.len() + 1 + non_render_post_steps.len(),
+            total_steps,
+            total_pages,
+            total_units,
+            &mut completed,
+            &mut warning_count,
+            &mut last_percent,
+        )
+        .await?;
     }
+
+    while translation_task.is_some() || !pending_targets.is_empty() {
+        if cancel.load(Ordering::Relaxed) {
+            if let Some(task) = translation_task.take() {
+                task.abort();
+            }
+            bail!("cancelled");
+        }
+        if translation_task.is_none() && !pending_targets.is_empty() {
+            translation_task = Some(spawn_translation_batch(
+                Arc::clone(&llm),
+                take_next_translation_batch(&mut pending_targets, batch_char_limit),
+                spec.options.target_language.clone(),
+                spec.options.system_prompt.clone(),
+                next_batch_index,
+            ));
+            next_batch_index += 1;
+        }
+        if let Some(task) = translation_task.take() {
+            emit_progress(
+                progress.as_ref(),
+                translation_info,
+                pre_steps.len(),
+                total_steps,
+                total_pages.saturating_sub(1),
+                total_pages,
+                completed,
+                total_units,
+                &mut last_percent,
+            );
+            finish_translation_batch(task, &session, &mut states, translation_info).await?;
+            completed += 1;
+        }
+        run_ready_renders(
+            &pages,
+            &mut states,
+            &render_steps,
+            &session,
+            &registry,
+            &runtime,
+            cpu,
+            &llm,
+            &renderer,
+            &spec.options,
+            &cancel,
+            &progress,
+            &warnings,
+            infos.as_slice(),
+            pre_steps.len() + 1 + non_render_post_steps.len(),
+            total_steps,
+            total_pages,
+            total_units,
+            &mut completed,
+            &mut warning_count,
+            &mut last_percent,
+        )
+        .await?;
+    }
+
+    run_ready_renders(
+        &pages,
+        &mut states,
+        &render_steps,
+        &session,
+        &registry,
+        &runtime,
+        cpu,
+        &llm,
+        &renderer,
+        &spec.options,
+        &cancel,
+        &progress,
+        &warnings,
+        infos.as_slice(),
+        pre_steps.len() + 1 + non_render_post_steps.len(),
+        total_steps,
+        total_pages,
+        total_units,
+        &mut completed,
+        &mut warning_count,
+        &mut last_percent,
+    )
+    .await?;
 
     if let Some(sink) = progress.as_ref() {
         sink(ProgressTick {
             step: None,
             step_id: String::new(),
-            step_index: pre_steps.len() + post_steps.len(),
-            total_steps: pre_steps.len() + post_steps.len() + 1,
+            step_index: total_steps.saturating_sub(1),
+            total_steps,
             page_index: total_pages.saturating_sub(1),
             total_pages,
             overall_percent: 100,
@@ -506,6 +693,95 @@ async fn run_with_batch_translation(
     }
 
     Ok(RunOutcome { warning_count })
+}
+
+#[allow(clippy::too_many_arguments)]
+async fn run_ready_renders(
+    pages: &[PageId],
+    states: &mut BatchPageStates,
+    render_steps: &[usize],
+    session: &Arc<ProjectSession>,
+    registry: &Arc<Registry>,
+    runtime: &Arc<RuntimeManager>,
+    cpu: bool,
+    llm: &Arc<llm::Model>,
+    renderer: &Arc<renderer::Renderer>,
+    options: &PipelineRunOptions,
+    cancel: &Arc<AtomicBool>,
+    progress: &Option<ProgressSink>,
+    warnings: &Option<WarningSink>,
+    infos: &[&'static EngineInfo],
+    step_index_base: usize,
+    total_steps: usize,
+    total_pages: usize,
+    total_units: usize,
+    completed: &mut usize,
+    warning_count: &mut usize,
+    last_percent: &mut u8,
+) -> Result<()> {
+    for (page_index, page_id) in pages.iter().enumerate() {
+        if !states.ready_for_render(*page_id) {
+            continue;
+        }
+        if render_steps.is_empty() {
+            states.mark_render_done(*page_id);
+            continue;
+        }
+
+        let mut page_ok = true;
+        for (seq, &i) in render_steps.iter().enumerate() {
+            if cancel.load(Ordering::Relaxed) {
+                bail!("cancelled");
+            }
+            let info = infos[i];
+            emit_progress(
+                progress.as_ref(),
+                info,
+                step_index_base + seq,
+                total_steps,
+                page_index,
+                total_pages,
+                *completed,
+                total_units,
+                last_percent,
+            );
+            if !session.scene.read().pages.contains_key(page_id) {
+                states.mark_skipped(*page_id);
+                page_ok = false;
+                break;
+            }
+            let ok = run_one_step(
+                session,
+                registry,
+                runtime,
+                cpu,
+                llm,
+                renderer,
+                options,
+                cancel,
+                info,
+                *page_id,
+                step_index_base + seq,
+                page_index,
+                total_pages,
+                total_steps,
+                warning_count,
+                warnings.as_ref(),
+            )
+            .await?;
+            *completed += 1;
+            if !ok {
+                states.mark_skipped(*page_id);
+                page_ok = false;
+                break;
+            }
+        }
+
+        if page_ok {
+            states.mark_render_done(*page_id);
+        }
+    }
+    Ok(())
 }
 
 #[allow(clippy::too_many_arguments)]
@@ -633,6 +909,86 @@ struct TranslationTarget {
     source: String,
 }
 
+#[derive(Debug, Clone, Default)]
+struct BatchPageState {
+    skipped: bool,
+    pre_done: bool,
+    pending_translations: usize,
+    translated: bool,
+    inpaint_done: bool,
+    render_done: bool,
+}
+
+#[derive(Debug, Clone)]
+struct BatchPageStates {
+    pages: HashMap<PageId, BatchPageState>,
+}
+
+impl BatchPageStates {
+    fn new(pages: &[PageId]) -> Self {
+        Self {
+            pages: pages
+                .iter()
+                .copied()
+                .map(|page_id| (page_id, BatchPageState::default()))
+                .collect(),
+        }
+    }
+
+    fn state_mut(&mut self, page_id: PageId) -> &mut BatchPageState {
+        self.pages.entry(page_id).or_default()
+    }
+
+    fn pre_done(&self, page_id: PageId) -> bool {
+        self.pages.get(&page_id).is_some_and(|state| state.pre_done)
+    }
+
+    fn is_skipped(&self, page_id: PageId) -> bool {
+        self.pages.get(&page_id).map_or(true, |state| state.skipped)
+    }
+
+    fn mark_skipped(&mut self, page_id: PageId) {
+        self.state_mut(page_id).skipped = true;
+    }
+
+    fn mark_pre_done(&mut self, page_id: PageId, translation_count: usize) {
+        let state = self.state_mut(page_id);
+        state.pre_done = true;
+        state.pending_translations = translation_count;
+        state.translated = translation_count == 0;
+    }
+
+    fn mark_translated(&mut self, page_id: PageId, count: usize) {
+        let state = self.state_mut(page_id);
+        state.pending_translations = state.pending_translations.saturating_sub(count);
+        state.translated = state.pending_translations == 0;
+    }
+
+    fn mark_inpaint_done(&mut self, page_id: PageId) {
+        self.state_mut(page_id).inpaint_done = true;
+    }
+
+    fn mark_render_done(&mut self, page_id: PageId) {
+        self.state_mut(page_id).render_done = true;
+    }
+
+    fn ready_for_inpaint(&self, page_id: PageId) -> bool {
+        self.pages
+            .get(&page_id)
+            .is_some_and(|state| state.pre_done && !state.inpaint_done && !state.skipped)
+    }
+
+    fn ready_for_render(&self, page_id: PageId) -> bool {
+        self.pages.get(&page_id).is_some_and(|state| {
+            state.pre_done
+                && state.translated
+                && state.inpaint_done
+                && !state.render_done
+                && !state.skipped
+        })
+    }
+}
+
 fn collect_translation_targets(
     scene: &koharu_core::Scene,
     page_id: PageId,
@@ -659,30 +1015,84 @@ fn collect_translation_targets(
         .collect()
 }
 
-fn build_translation_batches(
+struct CompletedTranslationBatch {
+    index: usize,
     targets: Vec<TranslationTarget>,
+    translations: Vec<String>,
+}
+
+type TranslationHandle = JoinHandle<Result<CompletedTranslationBatch>>;
+
+fn queued_char_count(targets: &[TranslationTarget]) -> usize {
+    targets
+        .iter()
+        .map(|target| target.source.chars().count())
+        .sum()
+}
+
+fn take_next_translation_batch(
+    pending_targets: &mut Vec<TranslationTarget>,
     char_limit: usize,
-) -> Vec<Vec<TranslationTarget>> {
+) -> Vec<TranslationTarget> {
     let char_limit = char_limit.max(1);
-    let mut batches = Vec::new();
-    let mut current = Vec::new();
-    let mut current_chars = 0usize;
-
-    for target in targets {
+    let mut take_count = 0usize;
+    let mut chars = 0usize;
+    for target in pending_targets.iter() {
         let target_chars = target.source.chars().count();
-        if !current.is_empty() && current_chars + target_chars > char_limit {
-            batches.push(current);
-            current = Vec::new();
-            current_chars = 0;
+        if take_count > 0 && chars + target_chars > char_limit {
+            break;
         }
-        current_chars += target_chars;
-        current.push(target);
+        chars += target_chars;
+        take_count += 1;
     }
+    pending_targets.drain(..take_count).collect()
+}
 
-    if !current.is_empty() {
-        batches.push(current);
+fn spawn_translation_batch(
+    llm: Arc<llm::Model>,
+    targets: Vec<TranslationTarget>,
+    target_language: Option<String>,
+    system_prompt: Option<String>,
+    index: usize,
+) -> TranslationHandle {
+    tokio::spawn(async move {
+        let sources = targets
+            .iter()
+            .map(|target| target.source.clone())
+            .collect::<Vec<_>>();
+        let translations = llm
+            .translate_xml_tagged_texts(
+                &sources,
+                target_language.as_deref(),
+                system_prompt.as_deref(),
+            )
+            .await?;
+        Ok(CompletedTranslationBatch {
+            index,
+            targets,
+            translations,
+        })
+    })
+}
+
+async fn finish_translation_batch(
+    handle: TranslationHandle,
+    session: &Arc<ProjectSession>,
+    states: &mut BatchPageStates,
+    info: &EngineInfo,
+) -> Result<()> {
+    let completed = handle.await.context("translation task panicked")??;
+    for target in &completed.targets {
+        states.mark_translated(target.page_id, 1);
     }
-    batches
+    let ops = translation_ops(completed.targets, completed.translations);
+    if !ops.is_empty() {
+        session.apply(Op::Batch {
+            ops,
+            label: format!("{}: batch {}", info.id, completed.index + 1),
+        })?;
+    }
+    Ok(())
 }
 
 fn translation_ops(targets: Vec<TranslationTarget>, translations: Vec<String>) -> Vec<Op> {
@@ -747,11 +1157,22 @@ mod tests {
         }
     }
 
+    fn drain_batches(
+        mut targets: Vec<TranslationTarget>,
+        char_limit: usize,
+    ) -> Vec<Vec<TranslationTarget>> {
+        let mut batches = Vec::new();
+        while !targets.is_empty() {
+            batches.push(take_next_translation_batch(&mut targets, char_limit));
+        }
+        batches
+    }
+
     #[test]
     fn translation_batches_respect_limit_without_splitting_blocks() {
         let targets = vec![target("abcd"), target("efg"), target("hijkl")];
 
-        let batches = build_translation_batches(targets, 8);
+        let batches = drain_batches(targets, 8);
 
         assert_eq!(batches.len(), 2);
         assert_eq!(
@@ -774,10 +1195,25 @@ mod tests {
     fn oversized_translation_block_stays_whole() {
         let targets = vec![target("abcdef")];
 
-        let batches = build_translation_batches(targets, 3);
+        let batches = drain_batches(targets, 3);
 
         assert_eq!(batches.len(), 1);
         assert_eq!(batches[0][0].source, "abcdef");
+    }
+
+    #[test]
+    fn batch_translation_state_waits_for_texts_before_render() {
+        let page = PageId::new();
+        let mut states = BatchPageStates::new(&[page]);
+        states.mark_pre_done(page, 2);
+
+        assert!(!states.ready_for_render(page));
+        states.mark_inpaint_done(page);
+        assert!(!states.ready_for_render(page));
+        states.mark_translated(page, 1);
+        assert!(!states.ready_for_render(page));
+        states.mark_translated(page, 1);
+        assert!(states.ready_for_render(page));
     }
 }
 
