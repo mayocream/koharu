@@ -160,7 +160,7 @@ unicode-bidi = "0.3"
 criterion = { version = "0.8", features = ["html_reports"] }
 git-version = "0.3"
 keyring = "3.6"
-lru = "0.17"
+lru = "0.18"
 petgraph = "0.8"
 petname = "3"
 tauri-plugin-process = "2.3"
