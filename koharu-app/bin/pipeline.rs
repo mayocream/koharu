@@ -227,6 +227,7 @@ async fn run() -> Result<()> {
             system_prompt: cli.system_prompt.clone(),
             default_font: cli.default_font.clone(),
             batch_translation_char_limit: None,
+            terminology: Vec::new(),
             region: None,
         },
     };

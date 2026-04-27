@@ -192,6 +192,8 @@ pub struct ConfigPatch {
     /// are interpreted as "leave the existing secret alone".
     #[serde(default)]
     pub providers: Option<Vec<ProviderPatch>>,
+    #[serde(default)]
+    pub terminology_libraries: Option<Vec<TerminologyLibraryPatch>>,
 }
 
 #[derive(Debug, Clone, Default, Serialize, Deserialize, JsonSchema, ToSchema)]
@@ -228,4 +230,14 @@ pub struct ProviderPatch {
     pub base_url: Option<String>,
     /// `"[REDACTED]"` → keep existing keyring secret; empty → clear; otherwise save.
     pub api_key: Option<String>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, JsonSchema, ToSchema)]
+#[serde(rename_all = "camelCase")]
+pub struct TerminologyLibraryPatch {
+    pub id: String,
+    pub name: String,
+    pub enabled: bool,
+    pub priority: i32,
+    pub file: String,
 }

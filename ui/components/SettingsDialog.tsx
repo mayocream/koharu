@@ -22,9 +22,14 @@ import {
   LogInIcon,
   LogOutIcon,
   SparklesIcon,
+  BookOpenIcon,
+  PlusIcon,
+  Trash2Icon,
+  UploadIcon,
+  DownloadIcon,
 } from 'lucide-react'
 import { useTheme } from 'next-themes'
-import { Fragment, useEffect, useMemo, useRef, useState, type ReactNode } from 'react'
+import { Fragment, useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from 'react'
 import { useTranslation } from 'react-i18next'
 
 import {
@@ -47,6 +52,7 @@ import { Input } from '@/components/ui/input'
 import { Kbd } from '@/components/ui/kbd'
 import { Label } from '@/components/ui/label'
 import { ScrollArea } from '@/components/ui/scroll-area'
+import { Switch } from '@/components/ui/switch'
 import {
   Select,
   SelectContent,
@@ -77,6 +83,17 @@ import type {
 } from '@/lib/api/schemas'
 import { isTauri, openExternalUrl } from '@/lib/backend'
 import { supportedLanguages } from '@/lib/i18n'
+import { saveBlob } from '@/lib/io/saveBlob'
+import {
+  createTerminologyLibrary,
+  deleteTerminologyLibrary,
+  exportTerminologyCsv,
+  importTerminologyCsv,
+  listTerminologyLibraries,
+  patchTerminologyLibrary,
+  type TerminologyEntry,
+  type TerminologyLibrary,
+} from '@/lib/io/terminology'
 import {
   areShortcutsEqual,
   formatShortcut,
@@ -137,6 +154,7 @@ const TABS = [
   { id: 'appearance', icon: PaletteIcon, labelKey: 'settings.appearance' },
   { id: 'engines', icon: CpuIcon, labelKey: 'settings.engines' },
   { id: 'providers', icon: KeyIcon, labelKey: 'settings.apiKeys' },
+  { id: 'terminology', icon: BookOpenIcon, labelKey: 'settings.terminology' },
   { id: 'ai', icon: SparklesIcon, labelKey: 'settings.ai' },
   { id: 'keybinds', icon: KeyboardIcon, labelKey: 'settings.keybinds' },
   { id: 'runtime', icon: HardDriveIcon, labelKey: 'settings.runtime' },
@@ -397,6 +415,7 @@ export function SettingsDialog({
                   }}
                 />
               )}
+              {tab === 'terminology' && <TerminologyPane />}
               {tab === 'ai' && <CodexSettingsPane />}
               {tab === 'runtime' && (
                 <StoragePane
@@ -687,6 +706,268 @@ function ProvidersPane({
 }
 
 // ── Keybinds ──────────────────────────────────────────────────────
+
+function TerminologyPane() {
+  const { t } = useTranslation()
+  const [libraries, setLibraries] = useState<TerminologyLibrary[]>([])
+  const [selectedId, setSelectedId] = useState<string | null>(null)
+  const [newName, setNewName] = useState('')
+  const [error, setError] = useState<string | null>(null)
+  const fileInputRef = useRef<HTMLInputElement | null>(null)
+
+  const selected = libraries.find((library) => library.id === selectedId) ?? libraries[0] ?? null
+
+  const replaceLibrary = (library: TerminologyLibrary) => {
+    setLibraries((current) => current.map((item) => (item.id === library.id ? library : item)))
+    setSelectedId(library.id)
+  }
+
+  const load = useCallback(async () => {
+    try {
+      const next = await listTerminologyLibraries()
+      setLibraries(next)
+      setSelectedId((current) =>
+        current && next.some((library) => library.id === current) ? current : (next[0]?.id ?? null),
+      )
+      setError(null)
+    } catch {
+      setError(t('settings.terminologyLoadFailed'))
+    }
+  }, [t])
+
+  useEffect(() => {
+    void load()
+  }, [load])
+
+  const createLibrary = async () => {
+    try {
+      const library = await createTerminologyLibrary(newName || t('settings.terminologyNewLibrary'))
+      setLibraries((current) => [...current, library])
+      setSelectedId(library.id)
+      setNewName('')
+      setError(null)
+    } catch {
+      setError(t('settings.terminologySaveFailed'))
+    }
+  }
+
+  const patchSelected = async (patch: Parameters<typeof patchTerminologyLibrary>[1]) => {
+    if (!selected) return
+    try {
+      const updated = await patchTerminologyLibrary(selected.id, patch)
+      replaceLibrary(updated)
+      setError(null)
+    } catch {
+      setError(t('settings.terminologySaveFailed'))
+    }
+  }
+
+  const updateLocalTerms = (terms: TerminologyEntry[]) => {
+    if (!selected) return
+    setLibraries((current) =>
+      current.map((library) => (library.id === selected.id ? { ...library, terms } : library)),
+    )
+  }
+
+  const handleImport = async (file: File | undefined) => {
+    if (!selected || !file) return
+    try {
+      const csv = await file.text()
+      const updated = await importTerminologyCsv(selected.id, csv)
+      replaceLibrary(updated)
+      setError(null)
+    } catch {
+      setError(t('settings.terminologyImportFailed'))
+    } finally {
+      if (fileInputRef.current) fileInputRef.current.value = ''
+    }
+  }
+
+  const handleExport = async () => {
+    if (!selected) return
+    try {
+      const { blob, filename } = await exportTerminologyCsv(selected.id)
+      await saveBlob(blob, filename ?? `${selected.name || 'terminology'}.csv`)
+      setError(null)
+    } catch {
+      setError(t('settings.terminologyExportFailed'))
+    }
+  }
+
+  const handleDelete = async () => {
+    if (!selected) return
+    try {
+      await deleteTerminologyLibrary(selected.id)
+      const next = libraries.filter((library) => library.id !== selected.id)
+      setLibraries(next)
+      setSelectedId(next[0]?.id ?? null)
+      setError(null)
+    } catch {
+      setError(t('settings.terminologySaveFailed'))
+    }
+  }
+
+  return (
+    <div className='grid min-h-[470px] gap-5 md:grid-cols-[220px_1fr]'>
+      <div className='space-y-3 border-r border-border pr-4'>
+        <div className='flex gap-2'>
+          <Input
+            value={newName}
+            placeholder={t('settings.terminologyName')}
+            onChange={(e) => setNewName(e.target.value)}
+          />
+          <Button size='icon-sm' aria-label={t('common.add')} onClick={() => void createLibrary()}>
+            <PlusIcon className='size-3.5' />
+          </Button>
+        </div>
+        <div className='space-y-1'>
+          {libraries.map((library) => (
+            <button
+              key={library.id}
+              data-active={selected?.id === library.id}
+              className='flex w-full items-center justify-between rounded-md px-2 py-2 text-left text-sm text-muted-foreground hover:bg-accent hover:text-foreground data-[active=true]:bg-accent data-[active=true]:text-foreground'
+              onClick={() => setSelectedId(library.id)}
+            >
+              <span className='truncate'>{library.name}</span>
+              <span className='font-mono text-[11px]'>{library.priority}</span>
+            </button>
+          ))}
+        </div>
+      </div>
+
+      {selected ? (
+        <div className='min-w-0 space-y-5'>
+          <Section
+            title={t('settings.terminology')}
+            description={t('settings.terminologyDescription')}
+          >
+            <div className='grid gap-3 md:grid-cols-[1fr_120px_auto]'>
+              <div className='space-y-1.5'>
+                <Label className='text-xs'>{t('settings.terminologyName')}</Label>
+                <Input
+                  value={selected.name}
+                  onChange={(e) => replaceLibrary({ ...selected, name: e.target.value })}
+                  onBlur={() => void patchSelected({ name: selected.name })}
+                />
+              </div>
+              <div className='space-y-1.5'>
+                <Label className='text-xs'>{t('settings.terminologyPriority')}</Label>
+                <Input
+                  type='number'
+                  value={selected.priority}
+                  onChange={(e) =>
+                    replaceLibrary({
+                      ...selected,
+                      priority: Number.parseInt(e.target.value || '0', 10),
+                    })
+                  }
+                  onBlur={() => void patchSelected({ priority: selected.priority })}
+                />
+              </div>
+              <div className='flex items-end gap-2 pb-2'>
+                <Switch
+                  checked={selected.enabled}
+                  onCheckedChange={(enabled) => void patchSelected({ enabled })}
+                />
+                <span className='text-xs text-muted-foreground'>
+                  {selected.enabled ? t('common.enabled') : t('common.disabled')}
+                </span>
+              </div>
+            </div>
+            <div className='flex flex-wrap gap-2'>
+              <Button variant='outline' size='sm' className='gap-1.5' onClick={handleExport}>
+                <DownloadIcon className='size-3.5' />
+                {t('settings.terminologyExportCsv')}
+              </Button>
+              <Button
+                variant='outline'
+                size='sm'
+                className='gap-1.5'
+                onClick={() => fileInputRef.current?.click()}
+              >
+                <UploadIcon className='size-3.5' />
+                {t('settings.terminologyImportCsv')}
+              </Button>
+              <Button
+                variant='ghost'
+                size='sm'
+                className='gap-1.5'
+                onClick={() => void handleDelete()}
+              >
+                <Trash2Icon className='size-3.5' />
+                {t('common.delete')}
+              </Button>
+              <input
+                ref={fileInputRef}
+                type='file'
+                accept='.csv,text/csv'
+                className='hidden'
+                onChange={(e) => void handleImport(e.target.files?.[0])}
+              />
+            </div>
+          </Section>
+
+          <Section title={t('settings.terminologyTerms')}>
+            <div className='space-y-2'>
+              <div className='grid grid-cols-[1fr_1fr_32px] gap-2 text-xs font-medium text-muted-foreground'>
+                <span>{t('settings.terminologySource')}</span>
+                <span>{t('settings.terminologyTarget')}</span>
+                <span />
+              </div>
+              {selected.terms.map((term, index) => (
+                <div key={index} className='grid grid-cols-[1fr_1fr_32px] gap-2'>
+                  <Input
+                    value={term.source}
+                    onChange={(e) => {
+                      const terms = [...selected.terms]
+                      terms[index] = { ...term, source: e.target.value }
+                      updateLocalTerms(terms)
+                    }}
+                  />
+                  <Input
+                    value={term.target}
+                    onChange={(e) => {
+                      const terms = [...selected.terms]
+                      terms[index] = { ...term, target: e.target.value }
+                      updateLocalTerms(terms)
+                    }}
+                  />
+                  <Button
+                    variant='ghost'
+                    size='icon-sm'
+                    aria-label={t('common.delete')}
+                    onClick={() => updateLocalTerms(selected.terms.filter((_, i) => i !== index))}
+                  >
+                    <Trash2Icon className='size-3.5' />
+                  </Button>
+                </div>
+              ))}
+              <div className='flex justify-between pt-1'>
+                <Button
+                  variant='outline'
+                  size='sm'
+                  className='gap-1.5'
+                  onClick={() => updateLocalTerms([...selected.terms, { source: '', target: '' }])}
+                >
+                  <PlusIcon className='size-3.5' />
+                  {t('settings.terminologyAddTerm')}
+                </Button>
+                <Button size='sm' onClick={() => void patchSelected({ terms: selected.terms })}>
+                  {t('common.save')}
+                </Button>
+              </div>
+            </div>
+          </Section>
+          {error && <p className='text-xs text-destructive'>{error}</p>}
+        </div>
+      ) : (
+        <div className='flex items-center justify-center text-sm text-muted-foreground'>
+          {t('settings.terminologyEmpty')}
+        </div>
+      )}
+    </div>
+  )
+}
 
 function CodexSettingsPane() {
   const { t } = useTranslation()

@@ -7,6 +7,7 @@ use serde::{Deserialize, Deserializer, Serialize, Serializer};
 use utoipa::ToSchema;
 
 use crate::pipeline::{Artifact, Registry};
+use crate::terminology::TerminologyLibraryConfig;
 
 const CONFIG_FILE: &str = "config.toml";
 const REDACTED: &str = "[REDACTED]";
@@ -62,6 +63,7 @@ pub struct AppConfig {
     pub http: HttpConfig,
     pub pipeline: PipelineConfig,
     pub providers: Vec<ProviderConfig>,
+    pub terminology_libraries: Vec<TerminologyLibraryConfig>,
 }
 
 /// Engine selection for each pipeline stage.
@@ -255,6 +257,18 @@ pub fn apply_patch(config: &mut AppConfig, patch: koharu_core::ConfigPatch) {
             });
         }
         config.providers = new_providers;
+    }
+    if let Some(libraries) = patch.terminology_libraries {
+        config.terminology_libraries = libraries
+            .into_iter()
+            .map(|library| TerminologyLibraryConfig {
+                id: library.id,
+                name: library.name,
+                enabled: library.enabled,
+                priority: library.priority,
+                file: library.file,
+            })
+            .collect();
     }
 
     validate_pipeline_config(config);

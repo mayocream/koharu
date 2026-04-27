@@ -9,6 +9,7 @@ use koharu_core::{NodeDataPatch, NodeId, NodePatch, Op, TextDataPatch};
 use crate::pipeline::artifacts::Artifact;
 use crate::pipeline::engine::{Engine, EngineCtx, EngineInfo};
 use crate::pipeline::engines::support::text_nodes;
+use crate::terminology::{protect_text, restore_text, system_prompt_with_placeholders};
 
 pub struct Model;
 
@@ -30,18 +31,30 @@ impl Engine for Model {
             return Ok(Vec::new());
         }
 
-        let sources: Vec<String> = targets.iter().map(|(_, s)| s.clone()).collect();
+        let protected = targets
+            .iter()
+            .map(|(_, source)| protect_text(source, &ctx.options.terminology))
+            .collect::<Vec<_>>();
+        let sources: Vec<String> = protected.iter().map(|item| item.text.clone()).collect();
+        let system_prompt = system_prompt_with_placeholders(
+            ctx.options.system_prompt.as_deref(),
+            ctx.options.target_language.as_deref(),
+            !ctx.options.terminology.is_empty(),
+        );
         let translations = ctx
             .llm
             .translate_texts(
                 &sources,
                 ctx.options.target_language.as_deref(),
-                ctx.options.system_prompt.as_deref(),
+                system_prompt.as_deref(),
             )
             .await?;
 
         let mut ops = Vec::with_capacity(targets.len());
-        for ((node_id, _), translation) in targets.into_iter().zip(translations) {
+        for (((node_id, _), protected), translation) in
+            targets.into_iter().zip(protected).zip(translations)
+        {
+            let translation = restore_text(&translation, &protected.replacements);
             ops.push(Op::UpdateNode {
                 page: ctx.page,
                 id: node_id,

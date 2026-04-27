@@ -17,6 +17,7 @@ pub mod pipeline;
 pub mod projects;
 pub mod renderer;
 pub mod session;
+pub mod terminology;
 pub mod utils;
 
 pub use ai::AiManager;

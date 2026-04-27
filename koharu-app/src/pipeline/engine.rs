@@ -32,6 +32,7 @@ use crate::blobs::BlobStore;
 use crate::llm;
 use crate::pipeline::artifacts::Artifact;
 use crate::renderer;
+use crate::terminology::ActiveGlossary;
 
 // ---------------------------------------------------------------------------
 // EngineCtx — everything an engine needs to produce ops
@@ -56,6 +57,7 @@ pub struct PipelineRunOptions {
     pub system_prompt: Option<String>,
     pub default_font: Option<String>,
     pub batch_translation_char_limit: Option<usize>,
+    pub terminology: Vec<ActiveGlossary>,
     /// Optional bounding-box hint. Inpainter engines (lama/aot) honor it:
     /// composite onto the existing `Image { Inpainted }` (fallback Source)
     /// and process just that one block. Other engines ignore it.
