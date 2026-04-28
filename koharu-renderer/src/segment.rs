@@ -66,20 +66,18 @@ impl LineBreaker {
                 )
             });
 
-            if !is_mandatory && break_pos < text.len() {
-                if let Some(next_char) = text[break_pos..].chars().next() {
-                    if is_kinsoku_not_at_start(next_char) {
-                        continue;
-                    }
-                }
+            if !is_mandatory
+                && break_pos < text.len()
+                && text[break_pos..].chars().next().is_some_and(is_kinsoku_not_at_start)
+            {
+                continue;
             }
 
-            if !is_mandatory && break_pos > 0 {
-                if let Some(prev_char) = text[..break_pos].chars().next_back() {
-                    if is_kinsoku_not_at_end(prev_char) {
-                        continue;
-                    }
-                }
+            if !is_mandatory
+                && break_pos > 0
+                && text[..break_pos].chars().next_back().is_some_and(is_kinsoku_not_at_end)
+            {
+                continue;
             }
 
             opportunities.push(LineBreakOpportunity {

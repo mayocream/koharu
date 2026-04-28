@@ -16,52 +16,62 @@ pub struct StyledSegment {
     pub kind: TextStyleKind,
 }
 
-static STYLE_RE: LazyLock<Regex> = LazyLock::new(|| Regex::new(r"(\*{1,3})(.*?)(\1)").unwrap());
+static BOLD_ITALIC_RE: LazyLock<Regex> =
+    LazyLock::new(|| Regex::new(r"\*\*\*([^*]+)\*\*\*").unwrap());
+static BOLD_RE: LazyLock<Regex> = LazyLock::new(|| Regex::new(r"\*\*([^*]+)\*\*").unwrap());
+static ITALIC_RE: LazyLock<Regex> = LazyLock::new(|| Regex::new(r"\*([^*]+)\*").unwrap());
 
 pub fn parse_styled_segments(text: &str) -> Vec<StyledSegment> {
-    let mut segments = Vec::new();
-    let mut last_end = 0;
+    let mut segments = vec![StyledSegment {
+        text: text.to_string(),
+        kind: TextStyleKind::Regular,
+    }];
 
-    for cap in STYLE_RE.captures_iter(text) {
-        let full_match = cap.get(0).unwrap();
-        let marker = cap.get(1).unwrap().as_str();
-        let content = cap.get(2).unwrap().as_str();
+    // Order matters: *** then ** then *
+    segments = process_regex(segments, &BOLD_ITALIC_RE, TextStyleKind::BoldItalic);
+    segments = process_regex(segments, &BOLD_RE, TextStyleKind::Bold);
+    segments = process_regex(segments, &ITALIC_RE, TextStyleKind::Italic);
 
-        if full_match.start() > last_end {
-            segments.push(StyledSegment {
-                text: text[last_end..full_match.start()].to_string(),
+    segments
+}
+
+fn process_regex(
+    segments: Vec<StyledSegment>,
+    re: &Regex,
+    new_kind: TextStyleKind,
+) -> Vec<StyledSegment> {
+    let mut result = Vec::new();
+    for seg in segments {
+        if seg.kind != TextStyleKind::Regular {
+            result.push(seg);
+            continue;
+        }
+
+        let mut last_end = 0;
+        for caps in re.captures_iter(&seg.text) {
+            let m = caps.get(0).unwrap();
+            let content = caps.get(1).unwrap();
+
+            if m.start() > last_end {
+                result.push(StyledSegment {
+                    text: seg.text[last_end..m.start()].to_string(),
+                    kind: TextStyleKind::Regular,
+                });
+            }
+
+            result.push(StyledSegment {
+                text: content.as_str().to_string(),
+                kind: new_kind,
+            });
+            last_end = m.end();
+        }
+
+        if last_end < seg.text.len() {
+            result.push(StyledSegment {
+                text: seg.text[last_end..].to_string(),
                 kind: TextStyleKind::Regular,
             });
         }
-
-        let kind = match marker.len() {
-            3 => TextStyleKind::BoldItalic,
-            2 => TextStyleKind::Bold,
-            1 => TextStyleKind::Italic,
-            _ => TextStyleKind::Regular,
-        };
-
-        segments.push(StyledSegment {
-            text: content.to_string(),
-            kind,
-        });
-
-        last_end = full_match.end();
     }
-
-    if last_end < text.len() {
-        segments.push(StyledSegment {
-            text: text[last_end..].to_string(),
-            kind: TextStyleKind::Regular,
-        });
-    }
-
-    if segments.is_empty() && !text.is_empty() {
-        segments.push(StyledSegment {
-            text: text.to_string(),
-            kind: TextStyleKind::Regular,
-        });
-    }
-
-    segments
+    result
 }
