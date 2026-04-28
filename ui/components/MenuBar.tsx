@@ -17,11 +17,13 @@ import {
   MenubarTrigger,
 } from '@/components/ui/menubar'
 import { useScene } from '@/hooks/useScene'
-import { getConfig, startPipeline } from '@/lib/api/default/default'
+import { getConfig, getGetSceneJsonQueryKey, startPipeline } from '@/lib/api/default/default'
+import type { SceneSnapshot } from '@/lib/api/schemas'
 import { isTauri, openExternalUrl } from '@/lib/backend'
 import { exportCurrentProjectAs, importPages } from '@/lib/io/pagesIo'
 import { closeProject, redoOp, selectAllTextNodesOnCurrentPage, undoOp } from '@/lib/io/scene'
 import { formatShortcutForDisplay, getPlatform } from '@/lib/shortcutUtils'
+import { queryClient } from '@/lib/queryClient'
 import { useEditorUiStore } from '@/lib/stores/editorUiStore'
 import { usePreferencesStore } from '@/lib/stores/preferencesStore'
 import { useSelectionStore } from '@/lib/stores/selectionStore'
@@ -91,7 +93,14 @@ export function MenuBar() {
     const prefs = usePreferencesStore.getState()
     await startPipeline({
       steps,
-      pages: opts.pageId ? [opts.pageId] : (scene ? Object.values(scene.pages).filter(p => !p.excluded).map(p => p.id) : undefined),
+      pages: opts.pageId
+        ? [opts.pageId]
+        : (() => {
+            const snap = queryClient.getQueryData<SceneSnapshot>(getGetSceneJsonQueryKey())
+            const pages = snap?.scene?.pages
+            if (!pages) return undefined
+            return Object.values(pages).filter(p => !p.excluded).map(p => p.id)
+          })(),
       targetLanguage: editor.selectedLanguage,
       systemPrompt: prefs.customSystemPrompt,
       defaultFont: prefs.defaultFont,
