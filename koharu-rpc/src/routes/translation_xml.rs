@@ -43,10 +43,10 @@ async fn export_translation_xml_route(State(app): State<AppState>) -> ApiResult<
     let scene = session.scene.read();
     let translations = scene
         .pages
-        .values()
-        .flat_map(|page| {
-            page.nodes.values().filter_map(|node| match &node.kind {
-                NodeKind::Text(text) => Some(text.translation.clone().unwrap_or_default()),
+        .iter()
+        .flat_map(|(page_id, page)| {
+            page.nodes.iter().filter_map(|(node_id, node)| match &node.kind {
+                NodeKind::Text(text) => Some((*page_id, *node_id, text.translation.clone().unwrap_or_default())),
                 _ => None,
             })
         })
@@ -74,19 +74,27 @@ async fn import_translation_xml_route(
         .ok_or_else(|| ApiError::bad_request("no project open"))?;
     let parsed =
         parse_translation_xml(&req.xml).map_err(|e| ApiError::bad_request(format!("{e:#}")))?;
-    let targets = translation_targets(&session);
+    
+    let scene = session.scene.read();
     let mut ops = Vec::with_capacity(parsed.len());
 
     for entry in parsed {
-        let Some((page, node)) = targets.get(entry.id - 1).copied() else {
+        let Some(page) = scene.page(entry.page) else {
             return Err(ApiError::bad_request(format!(
-                "translation id {} is out of range",
-                entry.id
+                "translation references missing page {}",
+                entry.page
             )));
         };
+        if !page.nodes.contains_key(&entry.node) {
+            return Err(ApiError::bad_request(format!(
+                "translation references missing node {}",
+                entry.node
+            )));
+        }
+        
         ops.push(Op::UpdateNode {
-            page,
-            id: node,
+            page: entry.page,
+            id: entry.node,
             patch: NodePatch {
                 data: Some(NodeDataPatch::Text(TextDataPatch {
                     translation: Some(Some(entry.text)),
@@ -99,6 +107,9 @@ async fn import_translation_xml_route(
         });
     }
 
+    // drop the lock before applying the batch
+    drop(scene);
+
     let updated = ops.len();
     if !ops.is_empty() {
         app.apply(Op::Batch {
@@ -109,19 +120,6 @@ async fn import_translation_xml_route(
     }
 
     Ok(Json(ImportTranslationXmlResponse { updated }))
-}
-
-fn translation_targets(session: &koharu_app::ProjectSession) -> Vec<(PageId, NodeId)> {
-    let scene = session.scene.read();
-    scene
-        .pages
-        .iter()
-        .flat_map(|(page_id, page)| {
-            page.nodes.iter().filter_map(|(node_id, node)| {
-                matches!(node.kind, NodeKind::Text(_)).then_some((*page_id, *node_id))
-            })
-        })
-        .collect()
 }
 
 fn xml_response(xml: String, filename: &str) -> Response {

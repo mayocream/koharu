@@ -1,27 +1,35 @@
 use anyhow::Result;
+use koharu_core::{NodeId, PageId};
+use std::str::FromStr;
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct TranslationXmlEntry {
-    pub id: usize,
+    pub page: PageId,
+    pub node: NodeId,
     pub text: String,
 }
 
-pub fn export_translation_xml(texts: &[String]) -> String {
-    let mut out = String::from("<translations>\n");
-    for (index, text) in texts.iter().enumerate() {
+pub fn export_translation_xml(texts: &[(PageId, NodeId, String)]) -> String {
+    let mut out = String::from("<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n");
+    out.push_str("<koharu-translations version=\"1.0\">\n");
+    for (page, node, text) in texts.iter() {
         out.push_str(&format!(
-            "  <p id=\"{}\">{}</p>\n",
-            index + 1,
+            "  <p page=\"{}\" node=\"{}\">{}</p>\n",
+            page,
+            node,
             escape_xml(text)
         ));
     }
-    out.push_str("</translations>\n");
+    out.push_str("</koharu-translations>\n");
     out
 }
 
 pub fn parse_translation_xml(xml: &str) -> Result<Vec<TranslationXmlEntry>> {
     let mut entries = Vec::new();
     let mut cursor = 0;
+
+    // If the file does not have the root tag, we could reject it or just skip.
+    // Given the request to break backwards compatibility if needed, we proceed by parsing `page` and `node`.
 
     while let Some(open_rel) = xml[cursor..].find("<p") {
         let open = cursor + open_rel;
@@ -30,15 +38,19 @@ pub fn parse_translation_xml(xml: &str) -> Result<Vec<TranslationXmlEntry>> {
             .map(|offset| open + offset)
             .ok_or_else(|| anyhow::anyhow!("unterminated <p> tag"))?;
         let tag = &xml[open..=tag_end];
-        let id = parse_id_attr(tag)?;
+        
+        let page = parse_uuid_attr(tag, "page")?;
+        let node = parse_uuid_attr(tag, "node")?;
+
         let content_start = tag_end + 1;
         let content_end = xml[content_start..]
             .find("</p>")
             .map(|offset| content_start + offset)
-            .ok_or_else(|| anyhow::anyhow!("missing </p> tag for id {id}"))?;
+            .ok_or_else(|| anyhow::anyhow!("missing </p> tag for node {node}"))?;
 
         entries.push(TranslationXmlEntry {
-            id,
+            page: PageId(page),
+            node: NodeId(node),
             text: unescape_xml(&xml[content_start..content_end])?,
         });
         cursor = content_end + "</p>".len();
@@ -47,22 +59,18 @@ pub fn parse_translation_xml(xml: &str) -> Result<Vec<TranslationXmlEntry>> {
     Ok(entries)
 }
 
-fn parse_id_attr(tag: &str) -> Result<usize> {
-    let id_start = tag
-        .find("id=\"")
-        .map(|offset| offset + "id=\"".len())
-        .ok_or_else(|| anyhow::anyhow!("translation paragraph missing id"))?;
-    let id_end = tag[id_start..]
+fn parse_uuid_attr(tag: &str, attr: &str) -> Result<uuid::Uuid> {
+    let prefix = format!("{attr}=\"");
+    let attr_start = tag
+        .find(&prefix)
+        .map(|offset| offset + prefix.len())
+        .ok_or_else(|| anyhow::anyhow!("translation paragraph missing {attr}"))?;
+    let attr_end = tag[attr_start..]
         .find('"')
-        .map(|offset| id_start + offset)
-        .ok_or_else(|| anyhow::anyhow!("unterminated id attribute"))?;
-    let id = tag[id_start..id_end]
-        .parse::<usize>()
-        .map_err(|_| anyhow::anyhow!("invalid translation id"))?;
-    if id == 0 {
-        anyhow::bail!("translation id must be >= 1");
-    }
-    Ok(id)
+        .map(|offset| attr_start + offset)
+        .ok_or_else(|| anyhow::anyhow!("unterminated {attr} attribute"))?;
+    let val = &tag[attr_start..attr_end];
+    uuid::Uuid::from_str(val).map_err(|_| anyhow::anyhow!("invalid uuid for {attr}: {val}"))
 }
 
 fn escape_xml(text: &str) -> String {
@@ -116,29 +124,42 @@ mod tests {
 
     #[test]
     fn export_escapes_translation_text() {
-        let xml = export_translation_xml(&["A&B".to_string(), "<hello>".to_string()]);
+        let page = PageId::from(uuid::Uuid::from_str("00000000-0000-0000-0000-000000000001").unwrap());
+        let node1 = NodeId::from(uuid::Uuid::from_str("00000000-0000-0000-0000-000000000002").unwrap());
+        let node2 = NodeId::from(uuid::Uuid::from_str("00000000-0000-0000-0000-000000000003").unwrap());
+        
+        let xml = export_translation_xml(&[
+            (page, node1, "A&B".to_string()), 
+            (page, node2, "<hello>".to_string())
+        ]);
 
         assert_eq!(
             xml,
-            "<translations>\n  <p id=\"1\">A&amp;B</p>\n  <p id=\"2\">&lt;hello&gt;</p>\n</translations>\n"
+            "<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n<koharu-translations version=\"1.0\">\n  <p page=\"00000000-0000-0000-0000-000000000001\" node=\"00000000-0000-0000-0000-000000000002\">A&amp;B</p>\n  <p page=\"00000000-0000-0000-0000-000000000001\" node=\"00000000-0000-0000-0000-000000000003\">&lt;hello&gt;</p>\n</koharu-translations>\n"
         );
     }
 
     #[test]
     fn import_parses_unescaped_text_by_id() -> Result<()> {
+        let page = PageId::from(uuid::Uuid::from_str("00000000-0000-0000-0000-000000000001").unwrap());
+        let node1 = NodeId::from(uuid::Uuid::from_str("00000000-0000-0000-0000-000000000002").unwrap());
+        let node2 = NodeId::from(uuid::Uuid::from_str("00000000-0000-0000-0000-000000000003").unwrap());
+
         let parsed = parse_translation_xml(
-            "<translations><p id=\"2\">&lt;world&gt;</p><p id=\"1\">A&amp;B</p></translations>",
+            "<koharu-translations version=\"1.0\">\n  <p page=\"00000000-0000-0000-0000-000000000001\" node=\"00000000-0000-0000-0000-000000000003\">&lt;world&gt;</p>\n  <p page=\"00000000-0000-0000-0000-000000000001\" node=\"00000000-0000-0000-0000-000000000002\">A&amp;B</p>\n</koharu-translations>",
         )?;
 
         assert_eq!(
             parsed,
             vec![
                 TranslationXmlEntry {
-                    id: 2,
+                    page,
+                    node: node2,
                     text: "<world>".to_string(),
                 },
                 TranslationXmlEntry {
-                    id: 1,
+                    page,
+                    node: node1,
                     text: "A&B".to_string(),
                 },
             ]
@@ -146,3 +167,4 @@ mod tests {
         Ok(())
     }
 }
+
