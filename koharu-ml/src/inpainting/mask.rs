@@ -21,6 +21,12 @@ const MODERN_MAX_COMPONENT_DILATE_RADIUS: u8 = 8;
 
 type Xyxy = [u32; 4];
 
+#[derive(Clone, Copy, PartialEq, Eq)]
+enum ExpansionMode {
+    LegacyGlyphOnly,
+    ModernRegionFill,
+}
+
 /// Expand the erase mask before inpainting using text-region geometry and the
 /// segmented bubble IDs as hard constraints where available.
 ///
@@ -84,7 +90,12 @@ pub fn expand_mask_for_inpainting(
         }
     });
     if residual.pixels().any(|pixel| pixel.0[0] > 0) {
-        expand_residual_components(&mut expanded, &residual, &bubbles, true);
+        expand_residual_components(
+            &mut expanded,
+            &residual,
+            &bubbles,
+            ExpansionMode::LegacyGlyphOnly,
+        );
     }
 
     expanded
@@ -134,7 +145,12 @@ pub fn expand_mask_to_bubble_region_for_inpainting(
         }
     });
     if residual.pixels().any(|pixel| pixel.0[0] > 0) {
-        expand_residual_components(&mut expanded, &residual, &bubbles, false);
+        expand_residual_components(
+            &mut expanded,
+            &residual,
+            &bubbles,
+            ExpansionMode::ModernRegionFill,
+        );
     }
 
     expanded
@@ -144,14 +160,13 @@ fn expand_residual_components(
     out: &mut GrayImage,
     residual: &GrayImage,
     bubbles: &GrayImage,
-    legacy: bool,
+    mode: ExpansionMode,
 ) {
     let (width, height) = residual.dimensions();
     for component in boxes_from_mask(residual) {
-        let radius = if legacy {
-            legacy_component_dilate_radius(component)
-        } else {
-            modern_component_dilate_radius(component)
+        let radius = match mode {
+            ExpansionMode::LegacyGlyphOnly => legacy_component_dilate_radius(component),
+            ExpansionMode::ModernRegionFill => modern_component_dilate_radius(component),
         };
         let support = expand_rect(component, width, height, u32::from(radius));
         let work = expand_rect(support, width, height, u32::from(radius));
@@ -166,11 +181,14 @@ fn expand_residual_components(
         let dilated = dilate(&local_mask, Norm::LInf, radius);
         let bubble_id = dominant_bubble_id(residual, bubbles, support);
 
-        if legacy {
-            merge_expanded_region(out, &dilated, bubbles, work, work, bubble_id, None);
-        } else {
-            let filled = fill_enclosed_holes(&dilated);
-            merge_expanded_region(out, &filled, bubbles, work, support, bubble_id, None);
+        match mode {
+            ExpansionMode::LegacyGlyphOnly => {
+                merge_expanded_region(out, &dilated, bubbles, work, work, bubble_id, None);
+            }
+            ExpansionMode::ModernRegionFill => {
+                let filled = fill_enclosed_holes(&dilated);
+                merge_expanded_region(out, &filled, bubbles, work, support, bubble_id, None);
+            }
         }
     }
 }
@@ -551,12 +569,12 @@ mod tests {
             }
         }
 
-        // Test modern path via bubble_region_for_inpainting
-        // Since it fills the whole block, this is a bit different, but it uses the same underlying
-        // expand_residual_components for any leftover holes if we used it that way.
-        // Actually, let's test expand_residual_components directly for modern path.
-        let mut expanded = mask.clone();
-        expand_residual_components(&mut expanded, &mask, &bubbles, false);
+        // Test modern path via public API with empty text_blocks to trigger residual components logic
+        let expanded = expand_mask_to_bubble_region_for_inpainting(
+            &DynamicImage::ImageLuma8(mask),
+            &DynamicImage::ImageLuma8(bubbles),
+            &[],
+        );
 
         assert_eq!(expanded.get_pixel(32, 32).0[0], 255);
     }
