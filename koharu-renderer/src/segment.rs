@@ -68,14 +68,20 @@ impl LineBreaker {
 
             if !is_mandatory
                 && break_pos < text.len()
-                && text[break_pos..].chars().next().is_some_and(is_kinsoku_not_at_start)
+                && text[break_pos..]
+                    .chars()
+                    .next()
+                    .is_some_and(is_kinsoku_not_at_start)
             {
                 continue;
             }
 
             if !is_mandatory
                 && break_pos > 0
-                && text[..break_pos].chars().next_back().is_some_and(is_kinsoku_not_at_end)
+                && text[..break_pos]
+                    .chars()
+                    .next_back()
+                    .is_some_and(is_kinsoku_not_at_end)
             {
                 continue;
             }
