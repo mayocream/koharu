@@ -39,13 +39,6 @@ const PROJECT_TOML: &str = "project.toml";
 const SNAPSHOT_MAGIC: &[u8; 4] = b"KHR!";
 const SNAPSHOT_VERSION: u32 = 1;
 
-/// Legacy snapshot without versioning (V0).
-#[derive(Serialize, Deserialize)]
-struct SnapshotV0 {
-    epoch: u64,
-    scene: Scene,
-}
-
 /// Versioned snapshot (V1+).
 #[derive(Serialize, Deserialize)]
 struct SnapshotV1 {
@@ -213,62 +206,56 @@ fn load_snapshot(dir: &Utf8Path, creating: bool) -> Result<(Scene, u64)> {
         }
 
         // 2. Fallback: Try decoding with legacy unversioned format (V0)
-        match postcard::from_bytes::<SnapshotV0>(&bytes) {
-            Ok(snap) => return Ok((snap.scene, snap.epoch)),
-            Err(e) => {
-                // If decoding fails, try legacy format (without 'excluded' field in Page)
-                // This is needed because postcard is a positional format and adding a field
-                // breaks backward compatibility.
-                use koharu_core::{Node, NodeId, Page, PageId, ProjectMeta};
-                use indexmap::IndexMap;
+        // V0 represents the format before 'excluded' field was added and before versioning.
+        use koharu_core::{Node, NodeId, Page, PageId, ProjectMeta};
+        use indexmap::IndexMap;
 
-                #[derive(Deserialize)]
-                struct LegacyPage {
-                    id: PageId,
-                    name: String,
-                    width: u32,
-                    height: u32,
-                    nodes: IndexMap<NodeId, Node>,
-                }
-
-                #[derive(Deserialize)]
-                struct LegacyScene {
-                    project: ProjectMeta,
-                    pages: IndexMap<PageId, LegacyPage>,
-                }
-
-                #[derive(Deserialize)]
-                struct LegacySnapshot {
-                    epoch: u64,
-                    scene: LegacyScene,
-                }
-
-                if let Ok(legacy) = postcard::from_bytes::<LegacySnapshot>(&bytes) {
-                    let mut pages = IndexMap::new();
-                    for (id, lp) in legacy.scene.pages {
-                        pages.insert(
-                            id,
-                            Page {
-                                id: lp.id,
-                                name: lp.name,
-                                width: lp.width,
-                                height: lp.height,
-                                nodes: lp.nodes,
-                                excluded: false,
-                            },
-                        );
-                    }
-                    return Ok((
-                        Scene {
-                            project: legacy.scene.project,
-                            pages,
-                        },
-                        legacy.epoch,
-                    ));
-                }
-                return Err(e).with_context(|| format!("decode {}", scene_path));
-            }
+        #[derive(Deserialize)]
+        struct PageV0 {
+            id: PageId,
+            name: String,
+            width: u32,
+            height: u32,
+            nodes: IndexMap<NodeId, Node>,
         }
+
+        #[derive(Deserialize)]
+        struct SceneV0 {
+            project: ProjectMeta,
+            pages: IndexMap<PageId, PageV0>,
+        }
+
+        #[derive(Deserialize)]
+        struct SnapshotV0 {
+            epoch: u64,
+            scene: SceneV0,
+        }
+
+        if let Ok(v0) = postcard::from_bytes::<SnapshotV0>(&bytes) {
+            let mut pages = IndexMap::new();
+            for (id, lp) in v0.scene.pages {
+                pages.insert(
+                    id,
+                    Page {
+                        id: lp.id,
+                        name: lp.name,
+                        width: lp.width,
+                        height: lp.height,
+                        nodes: lp.nodes,
+                        excluded: false,
+                    },
+                );
+            }
+            return Ok((
+                Scene {
+                    project: v0.scene.project,
+                    pages,
+                },
+                v0.epoch,
+            ));
+        }
+        return Err(anyhow::anyhow!("decode failed for both V1 and V0 formats"))
+            .with_context(|| format!("decode {}", scene_path));
     }
 
     // No snapshot — build one from `project.toml` (or defaults for creation).
