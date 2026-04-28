@@ -11,7 +11,6 @@ use skrifa::{
 use crate::font::{Font, font_key};
 use crate::shape::shape_script_runs;
 use crate::text::script::shaping_direction_for_text;
-use crate::text::style::parse_styled_segments;
 use crate::types::{MaskData, TextAlign};
 
 pub use crate::segment::{LineBreakOpportunity, LineBreaker, LineSegment};
@@ -72,7 +71,6 @@ struct ShapedSegment<'a> {
     runs: Vec<LineRun<'a>>,
     advance: f32,
     range: Range<usize>,
-    next_offset: usize,
     is_mandatory: bool,
     ends_with_hyphen: bool,
 }
@@ -191,7 +189,7 @@ impl<'a> TextLayout<'a> {
 
             let mut succeeded = false;
             let mut current_width_limit = max_width;
-            
+
             // Squeezing heuristic: try up to 3 times with reduced width if we have a mask.
             // This matches MangaTranslator's approach to finding a fit in tight bubbles.
             let max_squeezes = if self.mask.is_some() { 3 } else { 1 };
@@ -287,7 +285,6 @@ impl<'a> TextLayout<'a> {
         .unwrap_or(f32::INFINITY);
         let max_extent_finite = max_extent.is_finite() && max_extent > 0.0;
 
-        let segments = line_breaker.line_segments(text);
 
         let mut fonts: Vec<&Font> = Vec::with_capacity(1 + self.fallback_fonts.len());
         fonts.push(self.font);
@@ -295,73 +292,10 @@ impl<'a> TextLayout<'a> {
         let mut lines: Vec<LayoutLine<'a>> = Vec::new();
 
         let mut shaped_segments: Vec<ShapedSegment<'a>> = Vec::new();
-        let mut line_offset = 0usize;
-        let mut current_advance = 0.0f32;
-
-        let finalize_current_line = |runs: &mut Vec<LineRun<'a>>,
-                                     offset: &mut usize,
-                                     visible_end: usize,
-                                     next_offset: usize,
-                                     lines: &mut Vec<LayoutLine<'a>>,
-                                     force_push: bool| {
-            if runs.is_empty() && !force_push {
-                *offset = next_offset;
-                return;
-            }
-
-            let levels: Vec<unicode_bidi::Level> = runs.iter().map(|r| r.level).collect();
-            let visual_indices = reorder_visual(&levels);
-
-            let mut line = LayoutLine {
-                range: *offset..visible_end,
-                direction: if self.writing_mode.is_vertical() {
-                    harfrust::Direction::TopToBottom
-                } else {
-                    bidi_info
-                        .paragraphs
-                        .iter()
-                        .find(|p| *offset >= p.range.start && *offset <= p.range.end)
-                        .map(|p| {
-                            if p.level.is_rtl() {
-                                harfrust::Direction::RightToLeft
-                            } else {
-                                harfrust::Direction::LeftToRight
-                            }
-                        })
-                        .unwrap_or(harfrust::Direction::LeftToRight)
-                },
-                ..Default::default()
-            };
-
-            let mut pen_x = 0.0f32;
-            let mut pen_y = 0.0f32;
-
-            for idx in visual_indices {
-                let run = &mut runs[idx];
-                for glyph in std::mem::take(&mut run.shaped.glyphs) {
-                    line.glyphs.push(glyph);
-                }
-                if self.writing_mode.is_vertical() {
-                    pen_y -= run.shaped.y_advance;
-                } else {
-                    pen_x += run.shaped.x_advance;
-                }
-            }
-
-            line.advance = if self.writing_mode.is_vertical() {
-                pen_y.abs()
-            } else {
-                pen_x
-            };
-
-            lines.push(line);
-            runs.clear();
-            *offset = next_offset;
-        };
 
         for segment in line_breaker.line_segments(text) {
             let segment_text = &text[segment.range.clone()];
-            let (mut segment_runs, mut segment_advance) = self.shape_text_runs(
+            let (segment_runs, segment_advance) = self.shape_text_runs(
                 segment_text,
                 segment.range.start,
                 &shaper,
@@ -388,7 +322,6 @@ impl<'a> TextLayout<'a> {
                         runs: left_runs,
                         advance: left_advance,
                         range: segment.range.start..segment.range.start + left.len(),
-                        next_offset: segment.range.start + left.len(),
                         is_mandatory: false,
                         ends_with_hyphen: true,
                     });
@@ -405,7 +338,6 @@ impl<'a> TextLayout<'a> {
                         runs: right_runs,
                         advance: right_advance,
                         range: segment.range.start + left.len()..segment.range.end,
-                        next_offset: segment.next_offset,
                         is_mandatory: segment.is_mandatory,
                         ends_with_hyphen: false,
                     });
@@ -417,7 +349,6 @@ impl<'a> TextLayout<'a> {
                 runs: segment_runs,
                 advance: segment_advance,
                 range: segment.range,
-                next_offset: segment.next_offset,
                 is_mandatory: segment.is_mandatory,
                 ends_with_hyphen: false,
             });
@@ -514,17 +445,15 @@ impl<'a> TextLayout<'a> {
             };
 
             let mut current_line_runs: Vec<LineRun<'a>> = Vec::new();
-            let mut line_advance = 0.0f32;
-
             for segment_idx in range {
                 let segment = &mut shaped_segments[segment_idx];
-                line_advance += segment.advance;
-                for mut run in std::mem::take(&mut segment.runs) {
+                for run in std::mem::take(&mut segment.runs) {
                     current_line_runs.push(run);
                 }
             }
 
-            let levels: Vec<unicode_bidi::Level> = current_line_runs.iter().map(|r| r.level).collect();
+            let levels: Vec<unicode_bidi::Level> =
+                current_line_runs.iter().map(|r| r.level).collect();
             let visual_indices = reorder_visual(&levels);
 
             let mut pen_x = 0.0f32;
@@ -766,23 +695,27 @@ impl<'a> TextLayout<'a> {
 
         for line in lines {
             let (bx, by) = line.baseline;
-            let line_height = (bx.abs() + by.abs()).max(1.0); // Rough estimate if not available
 
             // Check corners of the line's advance box as a heuristic
             let x1 = box_top_left.0 + bx;
             let y1 = box_top_left.1 + by; // Baseline
-            
+
             // We should check the actual line box (from ascent to descent)
             // But for now let's use a simpler check: 4 corners of the line's advance
-            let x2 = x1 + if self.writing_mode.is_vertical() { 0.0 } else { line.advance };
-            let y2 = y1 + if self.writing_mode.is_vertical() { line.advance } else { 0.0 };
+            let x2 = x1
+                + if self.writing_mode.is_vertical() {
+                    0.0
+                } else {
+                    line.advance
+                };
+            let y2 = y1
+                + if self.writing_mode.is_vertical() {
+                    line.advance
+                } else {
+                    0.0
+                };
 
-            let points = [
-                (x1, y1),
-                (x2, y1),
-                (x1, y2),
-                (x2, y2),
-            ];
+            let points = [(x1, y1), (x2, y1), (x1, y2), (x2, y2)];
 
             for (px, py) in points {
                 if !mask.is_bubble(px.round() as u32, py.round() as u32) {
@@ -855,7 +788,13 @@ impl<'a> TextLayout<'a> {
             return 0.0;
         };
         runs.iter()
-            .map(|r| if self.writing_mode.is_vertical() { r.y_advance } else { r.x_advance })
+            .map(|r| {
+                if self.writing_mode.is_vertical() {
+                    r.y_advance
+                } else {
+                    r.x_advance
+                }
+            })
             .sum()
     }
 

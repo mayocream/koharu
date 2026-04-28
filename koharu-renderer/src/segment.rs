@@ -117,10 +117,51 @@ impl LineBreaker {
 fn is_kinsoku_not_at_start(c: char) -> bool {
     matches!(
         c,
-        '、' | '。' | '，' | '．' | '！' | '？' | '）' | '】' | '」' | '』' | '〕' | '〉' | '》'
-            | '］' | '｝' | ',' | '.' | '!' | '?' | ';' | ':' | '…' | '‥' | 'ー' | 'ぁ' | 'ぃ'
-            | 'ぅ' | 'ぇ' | 'ぉ' | 'っ' | 'ゃ' | 'ゅ' | 'ょ' | 'ゎ' | 'ァ' | 'ィ' | 'ゥ' | 'ェ'
-            | 'ォ' | 'ッ' | 'ャ' | 'ュ' | 'ョ' | 'ヮ' | 'ヵ' | 'ヶ'
+        '、' | '。'
+            | '，'
+            | '．'
+            | '！'
+            | '？'
+            | '）'
+            | '】'
+            | '」'
+            | '』'
+            | '〕'
+            | '〉'
+            | '》'
+            | '］'
+            | '｝'
+            | ','
+            | '.'
+            | '!'
+            | '?'
+            | ';'
+            | ':'
+            | '…'
+            | '‥'
+            | 'ー'
+            | 'ぁ'
+            | 'ぃ'
+            | 'ぅ'
+            | 'ぇ'
+            | 'ぉ'
+            | 'っ'
+            | 'ゃ'
+            | 'ゅ'
+            | 'ょ'
+            | 'ゎ'
+            | 'ァ'
+            | 'ィ'
+            | 'ゥ'
+            | 'ェ'
+            | 'ォ'
+            | 'ッ'
+            | 'ャ'
+            | 'ュ'
+            | 'ョ'
+            | 'ヮ'
+            | 'ヵ'
+            | 'ヶ'
     )
 }
 
@@ -242,9 +283,10 @@ mod tests {
 
     #[test]
     fn kinsoku_shori_start_prohibited() {
-        let text = "こんにち、は。"; 
+        let text = "こんにち、は。";
         let linebreaker = LineBreaker::new();
-        let segments: Vec<&str> = linebreaker.line_segments(text)
+        let segments: Vec<&str> = linebreaker
+            .line_segments(text)
             .iter()
             .map(|s| &text[s.range.clone()])
             .collect();
@@ -254,9 +296,10 @@ mod tests {
 
     #[test]
     fn kinsoku_shori_end_prohibited() {
-        let text = "（笑）"; 
+        let text = "（笑）";
         let linebreaker = LineBreaker::new();
-        let segments: Vec<&str> = linebreaker.line_segments(text)
+        let segments: Vec<&str> = linebreaker
+            .line_segments(text)
             .iter()
             .map(|s| &text[s.range.clone()])
             .collect();
