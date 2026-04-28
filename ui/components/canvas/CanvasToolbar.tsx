@@ -2,6 +2,7 @@
 
 import {
   LanguagesIcon,
+  LayersIcon,
   LoaderCircleIcon,
   ScanIcon,
   ScanTextIcon,
@@ -141,12 +142,14 @@ function WorkflowButtons() {
     p.bubble_segmenter!,
     p.font_detector!,
   ]
+  const segmentChain: PipelinePick = (p) => [p.segmenter!, p.bubble_segmenter!]
   const ocrChain: PipelinePick = (p) => [p.ocr!]
   const translateChain: PipelinePick = (p) => [p.translator!]
   const inpaintChain: PipelinePick = (p) => [p.inpainter!]
   const renderChain: PipelinePick = (p) => [p.renderer!]
 
   const isDetecting = currentStep === 'detect'
+  const isSegmenting = currentStep === 'segment'
   const isOcr = currentStep === 'ocr'
   const isInpainting = currentStep === 'inpaint'
   const isTranslating = currentStep === 'llmGenerate'
@@ -167,6 +170,21 @@ function WorkflowButtons() {
           <ScanIcon className='size-4' />
         )}
         {t('processing.detect')}
+      </Button>
+      <Separator orientation='vertical' className='mx-0.5 h-4' />
+      <Button
+        variant='ghost'
+        size='xs'
+        onClick={() => void runStep(segmentChain)}
+        data-testid='toolbar-segment'
+        disabled={!hasPage || isProcessing}
+      >
+        {isSegmenting ? (
+          <LoaderCircleIcon className='size-4 animate-spin' />
+        ) : (
+          <LayersIcon className='size-4' />
+        )}
+        {t('processing.segment')}
       </Button>
       <Separator orientation='vertical' className='mx-0.5 h-4' />
       <Button

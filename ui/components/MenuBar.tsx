@@ -106,6 +106,7 @@ export function MenuBar() {
     const p = cfg.pipeline
     const stageToEngines: Record<PipelineStageKey, (string | undefined)[]> = {
       detect: [p.detector, p.segmenter, p.bubble_segmenter, p.font_detector],
+      segment: [p.segmenter, p.bubble_segmenter],
       ocr: [p.ocr],
       translate: [p.translator],
       inpaint: [p.inpainter],

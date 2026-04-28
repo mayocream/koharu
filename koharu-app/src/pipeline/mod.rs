@@ -67,10 +67,8 @@ pub struct RunOutcome {
 /// matters, not the engine's string id.
 fn step_for(info: &EngineInfo) -> Option<PipelineStep> {
     info.produces.iter().find_map(|a| match a {
-        Artifact::TextBoxes
-        | Artifact::SegmentMask
-        | Artifact::FontPredictions
-        | Artifact::BubbleMask => Some(PipelineStep::Detect),
+        Artifact::TextBoxes | Artifact::FontPredictions => Some(PipelineStep::Detect),
+        Artifact::SegmentMask | Artifact::BubbleMask => Some(PipelineStep::Segment),
         Artifact::OcrText => Some(PipelineStep::Ocr),
         Artifact::Translations => Some(PipelineStep::LlmGenerate),
         Artifact::Inpainted => Some(PipelineStep::Inpaint),

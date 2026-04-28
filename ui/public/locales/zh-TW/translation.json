@@ -96,6 +96,7 @@
   },
   "processing": {
     "detect": "偵測",
+    "segment": "分割",
     "detectTooltip": "在目前頁面執行文字偵測",
     "ocr": "辨識",
     "ocrTooltip": "辨識已偵測區域中的文字",
@@ -378,6 +379,8 @@
     "description": "選擇要執行的處理步驟",
     "detect": "偵測",
     "detectDesc": "偵測文字區塊、分割遮罩和字體",
+    "segment": "分割",
+    "segmentDesc": "僅根據現有文字區塊產生分割遮罩（保護譯文）",
     "ocr": "辨識",
     "ocrDesc": "辨識已偵測區域中的文字",
     "translate": "翻譯",

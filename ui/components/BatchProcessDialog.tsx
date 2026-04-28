@@ -15,9 +15,9 @@ import {
 import { Switch } from '@/components/ui/switch'
 import { Label } from '@/components/ui/label'
 
-export type PipelineStageKey = 'detect' | 'ocr' | 'translate' | 'inpaint' | 'render'
+export type PipelineStageKey = 'detect' | 'segment' | 'ocr' | 'translate' | 'inpaint' | 'render'
 
-const STAGE_ORDER: PipelineStageKey[] = ['detect', 'ocr', 'translate', 'inpaint', 'render']
+const STAGE_ORDER: PipelineStageKey[] = ['detect', 'segment', 'ocr', 'translate', 'inpaint', 'render']
 
 type BatchProcessDialogProps = {
   open: boolean
@@ -29,6 +29,7 @@ export function BatchProcessDialog({ open, onOpenChange, onConfirm }: BatchProce
   const { t } = useTranslation()
   const [selected, setSelected] = useState<Record<PipelineStageKey, boolean>>({
     detect: true,
+    segment: false,
     ocr: true,
     translate: true,
     inpaint: true,
@@ -36,11 +37,20 @@ export function BatchProcessDialog({ open, onOpenChange, onConfirm }: BatchProce
   })
 
   const toggle = (key: PipelineStageKey) => {
-    setSelected((prev) => ({ ...prev, [key]: !prev[key] }))
+    setSelected((prev) => {
+      const next = { ...prev, [key]: !prev[key] }
+      if (key === 'detect' && next.detect) {
+        next.segment = false
+      } else if (key === 'segment' && next.segment) {
+        next.detect = false
+      }
+      return next
+    })
   }
 
   const stageLabels: Record<PipelineStageKey, string> = {
     detect: t('batchProcess.detect', '偵測'),
+    segment: t('processing.segment'),
     ocr: t('batchProcess.ocr', '辨識'),
     translate: t('batchProcess.translate', '翻譯'),
     inpaint: t('batchProcess.inpaint', '修補'),
@@ -49,6 +59,7 @@ export function BatchProcessDialog({ open, onOpenChange, onConfirm }: BatchProce
 
   const stageDescriptions: Record<PipelineStageKey, string> = {
     detect: t('batchProcess.detectDesc', '偵測文字區塊、分割遮罩和字體'),
+    segment: t('batchProcess.segmentDesc', '僅根據現有文字區塊產生分割遮罩（保護譯文）'),
     ocr: t('batchProcess.ocrDesc', '辨識已偵測區域中的文字'),
     translate: t('batchProcess.translateDesc', '使用 LLM 產生翻譯'),
     inpaint: t('batchProcess.inpaintDesc', '修補圖片以移除原文'),

@@ -113,9 +113,10 @@
   },
   "processing": {
     "detect": "Detect",
+    "segment": "Segment",
     "detectTooltip": "Run text detection on current page",
     "ocr": "OCR",
-    "ocrTooltip": "Recognize text for detected regions",
+    "ocrTooltip": "Run OCR on detected regions",
     "render": "Render"
   },
   "mask": {
@@ -414,8 +415,10 @@
     "title": "Process all images",
     "description": "Select the processing steps to run",
     "detect": "Detect",
-    "detectDesc": "Detect text blocks, segmentation masks, and fonts",
-    "ocr": "Recognize",
+    "detectDesc": "Detect text boxes, segment masks and fonts",
+    "segment": "Segment",
+    "segmentDesc": "Generate segment masks based on existing boxes (protects translations)",
+    "ocr": "OCR",
     "ocrDesc": "Recognize text in detected regions",
     "translate": "Translate",
     "translateDesc": "Generate translations using LLM",

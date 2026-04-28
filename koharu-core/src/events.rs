@@ -68,6 +68,7 @@ pub enum AppEvent {
 #[strum(serialize_all = "snake_case")]
 pub enum PipelineStep {
     Detect,
+    Segment,
     Ocr,
     Inpaint,
     LlmGenerate,
@@ -77,6 +78,7 @@ pub enum PipelineStep {
 impl PipelineStep {
     pub const ALL: &[PipelineStep] = &[
         PipelineStep::Detect,
+        PipelineStep::Segment,
         PipelineStep::Ocr,
         PipelineStep::Inpaint,
         PipelineStep::LlmGenerate,

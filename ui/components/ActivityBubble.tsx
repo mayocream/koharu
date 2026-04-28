@@ -157,6 +157,7 @@ function JobCard({ job, onCancel, t }: { job: JobEntry; onCancel: () => void; t:
   const percent = clampProgress(progress?.overallPercent)
   const stepLabels: Record<string, string> = {
     detect: t('processing.detect'),
+    segment: t('processing.segment'),
     ocr: t('processing.ocr'),
     inpaint: t('mask.inpaint'),
     llmGenerate: t('llm.generate'),
