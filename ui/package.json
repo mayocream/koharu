@@ -61,7 +61,7 @@
     "react-dom": "^19.2.5",
     "react-error-boundary": "^6.1.1",
     "react-hotkeys-hook": "^5.2.4",
-    "react-i18next": "^17.0.4",
+    "react-i18next": "^17.0.6",
     "react-markdown": "^9.1.0",
     "react-resizable-panels": "^4.10.0",
     "remark-gfm": "^4.0.1",
