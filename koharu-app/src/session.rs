@@ -36,12 +36,27 @@ const BLOBS_DIR: &str = "blobs";
 const CACHE_DIR: &str = "cache";
 const PROJECT_TOML: &str = "project.toml";
 
-/// Snapshot written to `scene.bin`.
+const SNAPSHOT_MAGIC: &[u8; 4] = b"KHR!";
+const SNAPSHOT_VERSION: u32 = 1;
+
+/// Legacy snapshot without versioning (V0).
 #[derive(Serialize, Deserialize)]
-struct Snapshot {
+struct SnapshotV0 {
     epoch: u64,
     scene: Scene,
 }
+
+/// Versioned snapshot (V1+).
+#[derive(Serialize, Deserialize)]
+struct SnapshotV1 {
+    magic: [u8; 4],
+    version: u32,
+    epoch: u64,
+    scene: Scene,
+}
+
+/// Current active snapshot type.
+type Snapshot = SnapshotV1;
 
 /// A loaded project.
 pub struct ProjectSession {
@@ -161,6 +176,8 @@ impl ProjectSession {
             let scene = self.scene.read();
             let epoch = self.history.lock().epoch();
             Snapshot {
+                magic: *SNAPSHOT_MAGIC,
+                version: SNAPSHOT_VERSION,
                 epoch,
                 scene: scene.clone(),
             }
@@ -188,8 +205,15 @@ fn load_snapshot(dir: &Utf8Path, creating: bool) -> Result<(Scene, u64)> {
         let bytes = std::fs::read(scene_path.as_std_path())
             .with_context(|| format!("read {}", scene_path))?;
 
-        // Try decoding with current format
-        match postcard::from_bytes::<Snapshot>(&bytes) {
+        // 1. Try decoding with current versioned format (V1)
+        if let Ok(snap) = postcard::from_bytes::<SnapshotV1>(&bytes) {
+            if &snap.magic == SNAPSHOT_MAGIC && snap.version == 1 {
+                return Ok((snap.scene, snap.epoch));
+            }
+        }
+
+        // 2. Fallback: Try decoding with legacy unversioned format (V0)
+        match postcard::from_bytes::<SnapshotV0>(&bytes) {
             Ok(snap) => return Ok((snap.scene, snap.epoch)),
             Err(e) => {
                 // If decoding fails, try legacy format (without 'excluded' field in Page)
