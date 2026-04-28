@@ -102,16 +102,8 @@ export function MenuBar() {
 
   const runInpaint = async (pageId: string) => {
     const cfg = await getConfig()
-    if (!cfg.pipeline) return
-    const p = cfg.pipeline
-    const steps = [p.inpainter, p.renderer].filter((s): s is string => !!s)
-    if (steps.length === 0) return
-    const prefs = usePreferencesStore.getState()
-    await startPipeline({ 
-      steps, 
-      pages: [pageId],
-      defaultFont: prefs.defaultFont
-    })
+    if (!cfg.pipeline?.inpainter) return
+    await startPipeline({ steps: [cfg.pipeline.inpainter], pages: [pageId] })
   }
 
   const exportItems: MenuItem[] = [

@@ -144,7 +144,7 @@ function WorkflowButtons() {
   ]
   const ocrChain: PipelinePick = (p) => [p.ocr!]
   const translateChain: PipelinePick = (p) => [p.translator!]
-  const inpaintChain: PipelinePick = (p) => [p.inpainter!, p.renderer!]
+  const inpaintChain: PipelinePick = (p) => [p.inpainter!]
   const renderChain: PipelinePick = (p) => [p.renderer!]
 
   const isDetecting = currentStep === 'detect'
