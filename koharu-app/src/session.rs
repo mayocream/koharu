@@ -22,7 +22,8 @@ use atomicwrites::{AtomicFile, OverwriteBehavior};
 use camino::{Utf8Path, Utf8PathBuf};
 use chrono::Utc;
 use fs4::fs_std::FileExt;
-use koharu_core::{Scene, op::Op};
+use indexmap::IndexMap;
+use koharu_core::{Node, NodeId, Page, PageId, ProjectMeta, Scene, op::Op};
 use parking_lot::{Mutex, RwLock};
 use serde::{Deserialize, Serialize};
 
@@ -46,6 +47,55 @@ struct SnapshotV1 {
     version: u32,
     epoch: u64,
     scene: Scene,
+}
+
+/// Legacy snapshot without versioning (V0).
+/// Represents the format before 'excluded' field was added and before versioning.
+#[derive(Deserialize)]
+struct SnapshotV0 {
+    epoch: u64,
+    scene: SceneV0,
+}
+
+#[derive(Deserialize)]
+struct SceneV0 {
+    project: ProjectMeta,
+    pages: IndexMap<PageId, PageV0>,
+}
+
+#[derive(Deserialize)]
+struct PageV0 {
+    id: PageId,
+    name: String,
+    width: u32,
+    height: u32,
+    nodes: IndexMap<NodeId, Node>,
+}
+
+impl SnapshotV0 {
+    fn migrate(self) -> (Scene, u64) {
+        let mut pages = IndexMap::new();
+        for (id, lp) in self.scene.pages {
+            pages.insert(
+                id,
+                Page {
+                    id: lp.id,
+                    name: lp.name,
+                    width: lp.width,
+                    height: lp.height,
+                    nodes: lp.nodes,
+                    excluded: false,
+                },
+            );
+        }
+        (
+            Scene {
+                project: self.scene.project,
+                pages,
+            },
+            self.epoch,
+        )
+    }
 }
 
 /// Current active snapshot type.
@@ -206,56 +256,11 @@ fn load_snapshot(dir: &Utf8Path, creating: bool) -> Result<(Scene, u64)> {
         }
 
         // 2. Fallback: Try decoding with legacy unversioned format (V0)
-        // V0 represents the format before 'excluded' field was added and before versioning.
-        use koharu_core::{Node, NodeId, Page, PageId, ProjectMeta};
-        use indexmap::IndexMap;
-
-        #[derive(Deserialize)]
-        struct PageV0 {
-            id: PageId,
-            name: String,
-            width: u32,
-            height: u32,
-            nodes: IndexMap<NodeId, Node>,
-        }
-
-        #[derive(Deserialize)]
-        struct SceneV0 {
-            project: ProjectMeta,
-            pages: IndexMap<PageId, PageV0>,
-        }
-
-        #[derive(Deserialize)]
-        struct SnapshotV0 {
-            epoch: u64,
-            scene: SceneV0,
-        }
-
         if let Ok(v0) = postcard::from_bytes::<SnapshotV0>(&bytes) {
-            let mut pages = IndexMap::new();
-            for (id, lp) in v0.scene.pages {
-                pages.insert(
-                    id,
-                    Page {
-                        id: lp.id,
-                        name: lp.name,
-                        width: lp.width,
-                        height: lp.height,
-                        nodes: lp.nodes,
-                        excluded: false,
-                    },
-                );
-            }
-            return Ok((
-                Scene {
-                    project: v0.scene.project,
-                    pages,
-                },
-                v0.epoch,
-            ));
+            return Ok(v0.migrate());
         }
-        return Err(anyhow::anyhow!("decode failed for both V1 and V0 formats"))
-            .with_context(|| format!("decode {}", scene_path));
+
+        anyhow::bail!("decode failed for both V1 and V0 formats (file: {})", scene_path);
     }
 
     // No snapshot — build one from `project.toml` (or defaults for creation).
