@@ -187,9 +187,64 @@ fn load_snapshot(dir: &Utf8Path, creating: bool) -> Result<(Scene, u64)> {
     if scene_path.exists() {
         let bytes = std::fs::read(scene_path.as_std_path())
             .with_context(|| format!("read {}", scene_path))?;
-        let snap: Snapshot =
-            postcard::from_bytes(&bytes).with_context(|| format!("decode {}", scene_path))?;
-        return Ok((snap.scene, snap.epoch));
+
+        // Try decoding with current format
+        match postcard::from_bytes::<Snapshot>(&bytes) {
+            Ok(snap) => return Ok((snap.scene, snap.epoch)),
+            Err(e) => {
+                // If decoding fails, try legacy format (without 'excluded' field in Page)
+                // This is needed because postcard is a positional format and adding a field
+                // breaks backward compatibility.
+                use koharu_core::{Node, NodeId, Page, PageId, ProjectMeta};
+                use indexmap::IndexMap;
+
+                #[derive(Deserialize)]
+                struct LegacyPage {
+                    id: PageId,
+                    name: String,
+                    width: u32,
+                    height: u32,
+                    nodes: IndexMap<NodeId, Node>,
+                }
+
+                #[derive(Deserialize)]
+                struct LegacyScene {
+                    project: ProjectMeta,
+                    pages: IndexMap<PageId, LegacyPage>,
+                }
+
+                #[derive(Deserialize)]
+                struct LegacySnapshot {
+                    epoch: u64,
+                    scene: LegacyScene,
+                }
+
+                if let Ok(legacy) = postcard::from_bytes::<LegacySnapshot>(&bytes) {
+                    let mut pages = IndexMap::new();
+                    for (id, lp) in legacy.scene.pages {
+                        pages.insert(
+                            id,
+                            Page {
+                                id: lp.id,
+                                name: lp.name,
+                                width: lp.width,
+                                height: lp.height,
+                                nodes: lp.nodes,
+                                excluded: false,
+                            },
+                        );
+                    }
+                    return Ok((
+                        Scene {
+                            project: legacy.scene.project,
+                            pages,
+                        },
+                        legacy.epoch,
+                    ));
+                }
+                return Err(e).with_context(|| format!("decode {}", scene_path));
+            }
+        }
     }
 
     // No snapshot — build one from `project.toml` (or defaults for creation).
