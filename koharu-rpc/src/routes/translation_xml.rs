@@ -5,10 +5,13 @@ use axum::body::Body;
 use axum::extract::State;
 use axum::http::{HeaderValue, header};
 use axum::response::{IntoResponse, Response};
-use koharu_app::translation_xml::{export_translation_xml, parse_translation_xml};
+use koharu_app::translation_xml::{
+    TranslationXmlExportItem, export_translation_xml, parse_translation_xml,
+};
 use koharu_core::{NodeDataPatch, NodeId, NodeKind, NodePatch, Op, PageId, TextDataPatch};
 use serde::{Deserialize, Serialize};
 use utoipa_axum::{router::OpenApiRouter, routes};
+use uuid::Uuid;
 
 use crate::AppState;
 use crate::error::{ApiError, ApiResult};
@@ -41,18 +44,23 @@ async fn export_translation_xml_route(State(app): State<AppState>) -> ApiResult<
         .current_session()
         .ok_or_else(|| ApiError::bad_request("no project open"))?;
     let scene = session.scene.read();
-    let translations = scene
+    let items = scene
         .pages
         .iter()
         .flat_map(|(page_id, page)| {
             page.nodes.iter().filter_map(|(node_id, node)| match &node.kind {
-                NodeKind::Text(text) => Some((*page_id, *node_id, text.translation.clone().unwrap_or_default())),
+                NodeKind::Text(text) => Some(TranslationXmlExportItem {
+                    page_id: page_id.to_string(),
+                    node_id: node_id.to_string(),
+                    text: text.translation.clone().unwrap_or_default(),
+                }),
                 _ => None,
             })
         })
         .collect::<Vec<_>>();
+
     let project_name = sanitize_filename(&scene.project.name);
-    let xml = export_translation_xml(&translations);
+    let xml = export_translation_xml(&items);
     Ok(xml_response(
         xml,
         &format!("{project_name}-translations.xml"),
@@ -74,27 +82,31 @@ async fn import_translation_xml_route(
         .ok_or_else(|| ApiError::bad_request("no project open"))?;
     let parsed =
         parse_translation_xml(&req.xml).map_err(|e| ApiError::bad_request(format!("{e:#}")))?;
-    
-    let scene = session.scene.read();
+    let targets = translation_targets(&session);
     let mut ops = Vec::with_capacity(parsed.len());
 
     for entry in parsed {
-        let Some(page) = scene.page(entry.page) else {
-            return Err(ApiError::bad_request(format!(
-                "translation references missing page {}",
-                entry.page
-            )));
+        let (page, node) = if let (Some(pid_str), Some(nid_str)) = (entry.page_id, entry.node_id) {
+            let pid = pid_str
+                .parse::<Uuid>()
+                .map(PageId)
+                .map_err(|_| ApiError::bad_request(format!("invalid page uuid: {pid_str}")))?;
+            let nid = nid_str
+                .parse::<Uuid>()
+                .map(NodeId)
+                .map_err(|_| ApiError::bad_request(format!("invalid node uuid: {nid_str}")))?;
+            (pid, nid)
+        } else if let Some(id) = entry.id {
+            *targets.get(id - 1).ok_or_else(|| {
+                ApiError::bad_request(format!("legacy translation id {} is out of range", id))
+            })?
+        } else {
+            continue;
         };
-        if !page.nodes.contains_key(&entry.node) {
-            return Err(ApiError::bad_request(format!(
-                "translation references missing node {}",
-                entry.node
-            )));
-        }
-        
+
         ops.push(Op::UpdateNode {
-            page: entry.page,
-            id: entry.node,
+            page,
+            id: node,
             patch: NodePatch {
                 data: Some(NodeDataPatch::Text(TextDataPatch {
                     translation: Some(Some(entry.text)),
@@ -107,9 +119,6 @@ async fn import_translation_xml_route(
         });
     }
 
-    // drop the lock before applying the batch
-    drop(scene);
-
     let updated = ops.len();
     if !ops.is_empty() {
         app.apply(Op::Batch {
@@ -120,6 +129,19 @@ async fn import_translation_xml_route(
     }
 
     Ok(Json(ImportTranslationXmlResponse { updated }))
+}
+
+fn translation_targets(session: &koharu_app::ProjectSession) -> Vec<(PageId, NodeId)> {
+    let scene = session.scene.read();
+    scene
+        .pages
+        .iter()
+        .flat_map(|(page_id, page)| {
+            page.nodes.iter().filter_map(|(node_id, node)| {
+                matches!(node.kind, NodeKind::Text(_)).then_some((*page_id, *node_id))
+            })
+        })
+        .collect()
 }
 
 fn xml_response(xml: String, filename: &str) -> Response {

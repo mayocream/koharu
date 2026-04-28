@@ -1,26 +1,30 @@
 use anyhow::Result;
-use koharu_core::{NodeId, PageId};
-use std::str::FromStr;
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct TranslationXmlEntry {
-    pub page: PageId,
-    pub node: NodeId,
+    pub page_id: Option<String>,
+    pub node_id: Option<String>,
+    pub id: Option<usize>, // Legacy index-based ID
     pub text: String,
 }
 
-pub fn export_translation_xml(texts: &[(PageId, NodeId, String)]) -> String {
-    let mut out = String::from("<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n");
-    out.push_str("<koharu-translations version=\"1.0\">\n");
-    for (page, node, text) in texts.iter() {
+pub struct TranslationXmlExportItem {
+    pub page_id: String,
+    pub node_id: String,
+    pub text: String,
+}
+
+pub fn export_translation_xml(items: &[TranslationXmlExportItem]) -> String {
+    let mut out = String::from("<translations version=\"1.0\">\n");
+    for item in items {
         out.push_str(&format!(
-            "  <p page=\"{}\" node=\"{}\">{}</p>\n",
-            page,
-            node,
-            escape_xml(text)
+            "  <entry page=\"{}\" node=\"{}\">{}</entry>\n",
+            item.page_id,
+            item.node_id,
+            escape_xml(&item.text)
         ));
     }
-    out.push_str("</koharu-translations>\n");
+    out.push_str("</translations>\n");
     out
 }
 
@@ -28,9 +32,39 @@ pub fn parse_translation_xml(xml: &str) -> Result<Vec<TranslationXmlEntry>> {
     let mut entries = Vec::new();
     let mut cursor = 0;
 
-    // If the file does not have the root tag, we could reject it or just skip.
-    // Given the request to break backwards compatibility if needed, we proceed by parsing `page` and `node`.
+    // Try V1 format first (<entry page="..." node="...">)
+    while let Some(open_rel) = xml[cursor..].find("<entry") {
+        let open = cursor + open_rel;
+        let tag_end = xml[open..]
+            .find('>')
+            .map(|offset| open + offset)
+            .ok_or_else(|| anyhow::anyhow!("unterminated <entry> tag"))?;
+        let tag = &xml[open..=tag_end];
+        
+        let page_id = parse_attr(tag, "page").ok();
+        let node_id = parse_attr(tag, "node").ok();
+        
+        let content_start = tag_end + 1;
+        let content_end = xml[content_start..]
+            .find("</entry>")
+            .map(|offset| content_start + offset)
+            .ok_or_else(|| anyhow::anyhow!("missing </entry> tag"))?;
 
+        entries.push(TranslationXmlEntry {
+            page_id,
+            node_id,
+            id: None,
+            text: unescape_xml(&xml[content_start..content_end])?,
+        });
+        cursor = content_end + "</entry>".len();
+    }
+
+    if !entries.is_empty() {
+        return Ok(entries);
+    }
+
+    // Fallback to V0 legacy format (<p id="...">)
+    cursor = 0;
     while let Some(open_rel) = xml[cursor..].find("<p") {
         let open = cursor + open_rel;
         let tag_end = xml[open..]
@@ -38,19 +72,17 @@ pub fn parse_translation_xml(xml: &str) -> Result<Vec<TranslationXmlEntry>> {
             .map(|offset| open + offset)
             .ok_or_else(|| anyhow::anyhow!("unterminated <p> tag"))?;
         let tag = &xml[open..=tag_end];
-        
-        let page = parse_uuid_attr(tag, "page")?;
-        let node = parse_uuid_attr(tag, "node")?;
-
+        let id = parse_attr(tag, "id")?.parse::<usize>().ok();
         let content_start = tag_end + 1;
         let content_end = xml[content_start..]
             .find("</p>")
             .map(|offset| content_start + offset)
-            .ok_or_else(|| anyhow::anyhow!("missing </p> tag for node {node}"))?;
+            .ok_or_else(|| anyhow::anyhow!("missing </p> tag"))?;
 
         entries.push(TranslationXmlEntry {
-            page: PageId(page),
-            node: NodeId(node),
+            page_id: None,
+            node_id: None,
+            id,
             text: unescape_xml(&xml[content_start..content_end])?,
         });
         cursor = content_end + "</p>".len();
@@ -59,19 +91,19 @@ pub fn parse_translation_xml(xml: &str) -> Result<Vec<TranslationXmlEntry>> {
     Ok(entries)
 }
 
-fn parse_uuid_attr(tag: &str, attr: &str) -> Result<uuid::Uuid> {
-    let prefix = format!("{attr}=\"");
-    let attr_start = tag
-        .find(&prefix)
-        .map(|offset| offset + prefix.len())
-        .ok_or_else(|| anyhow::anyhow!("translation paragraph missing {attr}"))?;
-    let attr_end = tag[attr_start..]
+fn parse_attr(tag: &str, name: &str) -> Result<String> {
+    let key = format!("{}=\"", name);
+    let start = tag
+        .find(&key)
+        .map(|offset| offset + key.len())
+        .ok_or_else(|| anyhow::anyhow!("attribute {} missing in tag", name))?;
+    let end = tag[start..]
         .find('"')
-        .map(|offset| attr_start + offset)
-        .ok_or_else(|| anyhow::anyhow!("unterminated {attr} attribute"))?;
-    let val = &tag[attr_start..attr_end];
-    uuid::Uuid::from_str(val).map_err(|_| anyhow::anyhow!("invalid uuid for {attr}: {val}"))
+        .map(|offset| start + offset)
+        .ok_or_else(|| anyhow::anyhow!("unterminated attribute {}", name))?;
+    Ok(tag[start..end].to_string())
 }
+
 
 fn escape_xml(text: &str) -> String {
     text.chars()
@@ -124,47 +156,65 @@ mod tests {
 
     #[test]
     fn export_escapes_translation_text() {
-        let page = PageId::from(uuid::Uuid::from_str("00000000-0000-0000-0000-000000000001").unwrap());
-        let node1 = NodeId::from(uuid::Uuid::from_str("00000000-0000-0000-0000-000000000002").unwrap());
-        let node2 = NodeId::from(uuid::Uuid::from_str("00000000-0000-0000-0000-000000000003").unwrap());
-        
         let xml = export_translation_xml(&[
-            (page, node1, "A&B".to_string()), 
-            (page, node2, "<hello>".to_string())
+            TranslationXmlExportItem {
+                page_id: "p1".into(),
+                node_id: "n1".into(),
+                text: "A&B".into(),
+            },
+            TranslationXmlExportItem {
+                page_id: "p1".into(),
+                node_id: "n2".into(),
+                text: "<hello>".into(),
+            },
         ]);
 
-        assert_eq!(
-            xml,
-            "<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n<koharu-translations version=\"1.0\">\n  <p page=\"00000000-0000-0000-0000-000000000001\" node=\"00000000-0000-0000-0000-000000000002\">A&amp;B</p>\n  <p page=\"00000000-0000-0000-0000-000000000001\" node=\"00000000-0000-0000-0000-000000000003\">&lt;hello&gt;</p>\n</koharu-translations>\n"
-        );
+        assert!(xml.contains("version=\"1.0\""));
+        assert!(xml.contains("<entry page=\"p1\" node=\"n1\">A&amp;B</entry>"));
+        assert!(xml.contains("<entry page=\"p1\" node=\"n2\">&lt;hello&gt;</entry>"));
     }
 
     #[test]
-    fn import_parses_unescaped_text_by_id() -> Result<()> {
-        let page = PageId::from(uuid::Uuid::from_str("00000000-0000-0000-0000-000000000001").unwrap());
-        let node1 = NodeId::from(uuid::Uuid::from_str("00000000-0000-0000-0000-000000000002").unwrap());
-        let node2 = NodeId::from(uuid::Uuid::from_str("00000000-0000-0000-0000-000000000003").unwrap());
-
+    fn import_parses_unescaped_text_by_uuids() -> Result<()> {
         let parsed = parse_translation_xml(
-            "<koharu-translations version=\"1.0\">\n  <p page=\"00000000-0000-0000-0000-000000000001\" node=\"00000000-0000-0000-0000-000000000003\">&lt;world&gt;</p>\n  <p page=\"00000000-0000-0000-0000-000000000001\" node=\"00000000-0000-0000-0000-000000000002\">A&amp;B</p>\n</koharu-translations>",
+            "<translations><entry page=\"p1\" node=\"n1\">&lt;world&gt;</entry></translations>",
+        )?;
+
+        assert_eq!(
+            parsed,
+            vec![TranslationXmlEntry {
+                page_id: Some("p1".into()),
+                node_id: Some("n1".into()),
+                id: None,
+                text: "<world>".into(),
+            },]
+        );
+        Ok(())
+    }
+
+    #[test]
+    fn import_parses_legacy_v0_format() -> Result<()> {
+        let parsed = parse_translation_xml(
+            "<translations><p id=\"2\">&lt;world&gt;</p><p id=\"1\">A&amp;B</p></translations>",
         )?;
 
         assert_eq!(
             parsed,
             vec![
                 TranslationXmlEntry {
-                    page,
-                    node: node2,
-                    text: "<world>".to_string(),
+                    page_id: None,
+                    node_id: None,
+                    id: Some(2),
+                    text: "<world>".into(),
                 },
                 TranslationXmlEntry {
-                    page,
-                    node: node1,
-                    text: "A&B".to_string(),
+                    page_id: None,
+                    node_id: None,
+                    id: Some(1),
+                    text: "A&B".into(),
                 },
             ]
         );
         Ok(())
     }
 }
-
