@@ -5,6 +5,8 @@
  */
 
 export interface PagePatch {
+  /** @nullable */
+  excluded?: boolean | null
   /**
    * @minimum 0
    * @nullable

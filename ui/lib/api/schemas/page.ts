@@ -7,6 +7,9 @@ import type { PageId } from './pageId'
 import type { PageNodes } from './pageNodes'
 
 export interface Page {
+  /** When true, this page is excluded from batch processing operations.
+   * @default false */
+  excluded?: boolean
   /** @minimum 0 */
   height: number
   id: PageId
