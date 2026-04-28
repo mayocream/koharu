@@ -304,44 +304,44 @@ impl<'a> TextLayout<'a> {
             );
 
             // Hyphenation: if a single word (segment) is too wide for max_extent, try to split it.
-            if let Some((left, right)) = (max_extent_finite && segment_advance > max_extent && !segment_text.is_empty())
-                .then(|| self.try_hyphenate(segment_text, max_extent, &shaper, &fonts, &opts))
-                .flatten()
+            if let Some((left, right)) =
+                (max_extent_finite && segment_advance > max_extent && !segment_text.is_empty())
+                    .then(|| self.try_hyphenate(segment_text, max_extent, &shaper, &fonts, &opts))
+                    .flatten()
             {
-                    // Replace one segment with two
-                    let (left_runs, left_advance) = self.shape_text_runs(
-                        &left,
-                        segment.range.start,
-                        &shaper,
-                        &fonts,
-                        &opts,
-                        &bidi_info,
-                    );
-                    shaped_segments.push(ShapedSegment {
-                        runs: left_runs,
-                        advance: left_advance,
-                        range: segment.range.start..segment.range.start + left.len(),
-                        is_mandatory: false,
-                        ends_with_hyphen: true,
-                    });
+                // Replace one segment with two
+                let (left_runs, left_advance) = self.shape_text_runs(
+                    &left,
+                    segment.range.start,
+                    &shaper,
+                    &fonts,
+                    &opts,
+                    &bidi_info,
+                );
+                shaped_segments.push(ShapedSegment {
+                    runs: left_runs,
+                    advance: left_advance,
+                    range: segment.range.start..segment.range.start + left.len(),
+                    is_mandatory: false,
+                    ends_with_hyphen: true,
+                });
 
-                    let (right_runs, right_advance) = self.shape_text_runs(
-                        &right,
-                        segment.range.start + left.len(),
-                        &shaper,
-                        &fonts,
-                        &opts,
-                        &bidi_info,
-                    );
-                    shaped_segments.push(ShapedSegment {
-                        runs: right_runs,
-                        advance: right_advance,
-                        range: segment.range.start + left.len()..segment.range.end,
-                        is_mandatory: segment.is_mandatory,
-                        ends_with_hyphen: false,
-                    });
-                    continue;
-                }
+                let (right_runs, right_advance) = self.shape_text_runs(
+                    &right,
+                    segment.range.start + left.len(),
+                    &shaper,
+                    &fonts,
+                    &opts,
+                    &bidi_info,
+                );
+                shaped_segments.push(ShapedSegment {
+                    runs: right_runs,
+                    advance: right_advance,
+                    range: segment.range.start + left.len()..segment.range.end,
+                    is_mandatory: segment.is_mandatory,
+                    ends_with_hyphen: false,
+                });
+                continue;
             }
 
             shaped_segments.push(ShapedSegment {
