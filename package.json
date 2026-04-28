@@ -14,7 +14,7 @@
     "generate:client": "openapi-generator-cli generate -i ui/openapi.json -g rust -o tests/integration-tests/client --package-name koharu-client --additional-properties=library=reqwest,supportAsync=true,preferUnsignedInt=true,packageVersion=0.0.0"
   },
   "devDependencies": {
-    "@openapitools/openapi-generator-cli": "^2.31.1",
+    "@openapitools/openapi-generator-cli": "^2.32.0",
     "@tauri-apps/cli": "^2.10.1",
     "git-cliff": "^2.12.0",
     "oxfmt": "^0.47.0"
