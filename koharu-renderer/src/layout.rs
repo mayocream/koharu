@@ -285,7 +285,6 @@ impl<'a> TextLayout<'a> {
         .unwrap_or(f32::INFINITY);
         let max_extent_finite = max_extent.is_finite() && max_extent > 0.0;
 
-
         let mut fonts: Vec<&Font> = Vec::with_capacity(1 + self.fallback_fonts.len());
         fonts.push(self.font);
         fonts.extend(self.fallback_fonts.iter());
