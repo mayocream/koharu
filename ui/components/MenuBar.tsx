@@ -91,7 +91,7 @@ export function MenuBar() {
     const prefs = usePreferencesStore.getState()
     await startPipeline({
       steps,
-      pages: opts.pageId ? [opts.pageId] : undefined,
+      pages: opts.pageId ? [opts.pageId] : (scene ? Object.values(scene.pages).filter(p => !p.excluded).map(p => p.id) : undefined),
       targetLanguage: editor.selectedLanguage,
       systemPrompt: prefs.customSystemPrompt,
       defaultFont: prefs.defaultFont,

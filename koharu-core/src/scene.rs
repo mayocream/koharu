@@ -153,6 +153,8 @@ pub struct Page {
     pub name: String,
     pub width: u32,
     pub height: u32,
+    #[serde(default)]
+    pub excluded: bool,
     /// Stacking = insertion order. Bottom-first: `source` is typically first,
     /// `rendered` typically last.
     pub nodes: IndexMap<NodeId, Node>,
@@ -165,6 +167,7 @@ impl Page {
             name: name.into(),
             width,
             height,
+            excluded: false,
             nodes: IndexMap::new(),
         }
     }

@@ -10,7 +10,14 @@ import { Button } from '@/components/ui/button'
 import { ScrollArea } from '@/components/ui/scroll-area'
 import { useScene } from '@/hooks/useScene'
 import { getGetPageThumbnailUrl } from '@/lib/api/default/default'
+import { applyOp } from '@/lib/io/scene'
 import { useSelectionStore } from '@/lib/stores/selectionStore'
+import {
+  ContextMenu,
+  ContextMenuContent,
+  ContextMenuItem,
+  ContextMenuTrigger,
+} from '@/components/ui/context-menu'
 
 const THUMBNAIL_DPR =
   typeof window !== 'undefined' ? Math.min(Math.ceil(window.devicePixelRatio || 1), 3) : 2
@@ -49,7 +56,13 @@ export function Navigator() {
             {t('navigator.title')}
           </p>
           <p className='text-xs font-semibold text-foreground'>
-            {totalPages ? t('navigator.pages', { count: totalPages }) : t('navigator.empty')}
+            {totalPages
+              ? (() => {
+                  const excluded = pages.filter((p) => p.excluded).length
+                  const countText = t('navigator.pages', { count: totalPages - excluded })
+                  return excluded > 0 ? `${countText} (${excluded} excluded)` : countText
+                })()
+              : t('navigator.empty')}
           </p>
         </div>
         {totalPages > 1 && (
@@ -94,7 +107,17 @@ export function Navigator() {
                   index={virtualRow.index}
                   pageId={page?.id}
                   selected={page?.id === pageId}
+                  excluded={page?.excluded ?? false}
                   onSelect={() => page && setPage(page.id)}
+                  onToggleExcluded={() =>
+                    page && applyOp({
+                      updatePage: {
+                        id: page.id,
+                        patch: { excluded: !(page.excluded ?? false) },
+                        prev: {}, // Handled by backend
+                      },
+                    })
+                  }
                 />
               </div>
             )
@@ -111,36 +134,50 @@ type PagePreviewProps = {
   index: number
   pageId?: string
   selected: boolean
+  excluded: boolean
   onSelect: () => void
+  onToggleExcluded: () => void
 }
 
-function PagePreview({ index, pageId, selected, onSelect }: PagePreviewProps) {
+function PagePreview({ index, pageId, selected, excluded, onSelect, onToggleExcluded }: PagePreviewProps) {
+  const { t } = useTranslation()
   const src = pageId ? `${getGetPageThumbnailUrl(pageId)}?size=${200 * THUMBNAIL_DPR}` : undefined
 
   return (
-    <Button
-      variant='ghost'
-      onClick={onSelect}
-      data-testid={`navigator-page-${index}`}
-      data-page-index={index}
-      data-selected={selected}
-      className='flex h-full w-full flex-col gap-0.5 rounded border border-transparent bg-card p-1.5 text-left shadow-sm data-[selected=true]:border-primary'
-    >
-      <div className='flex min-h-0 flex-1 items-center justify-center overflow-hidden rounded'>
-        {src ? (
-          <img
-            src={src}
-            alt={`Page ${index + 1}`}
-            loading='lazy'
-            className='max-h-full max-w-full rounded object-contain'
-          />
-        ) : (
-          <div className='h-full w-full rounded bg-muted' />
-        )}
-      </div>
-      <div className='flex shrink-0 items-center text-xs text-muted-foreground'>
-        <div className='mx-auto font-semibold text-foreground'>{index + 1}</div>
-      </div>
-    </Button>
+    <ContextMenu>
+      <ContextMenuTrigger asChild>
+        <Button
+          variant='ghost'
+          onClick={onSelect}
+          data-testid={`navigator-page-${index}`}
+          data-page-index={index}
+          data-selected={selected}
+          className='flex h-full w-full flex-col gap-0.5 rounded border border-transparent bg-card p-1.5 text-left shadow-sm data-[selected=true]:border-primary'
+        >
+          <div className='flex min-h-0 flex-1 items-center justify-center overflow-hidden rounded'>
+            {src ? (
+              <img
+                src={src}
+                alt={`Page ${index + 1}`}
+                loading='lazy'
+                className={`max-h-full max-w-full rounded object-contain ${excluded ? 'opacity-30' : ''}`}
+              />
+            ) : (
+              <div className={`h-full w-full rounded bg-muted ${excluded ? 'opacity-30' : ''}`} />
+            )}
+          </div>
+          <div className='flex shrink-0 items-center text-xs text-muted-foreground'>
+            <div className='mx-auto font-semibold text-foreground'>
+              {index + 1} {excluded && <span className="ml-1 text-[10px] text-destructive uppercase">(Excluded)</span>}
+            </div>
+          </div>
+        </Button>
+      </ContextMenuTrigger>
+      <ContextMenuContent>
+        <ContextMenuItem onSelect={onToggleExcluded}>
+          {excluded ? 'Include in Batch' : 'Exclude from Batch'}
+        </ContextMenuItem>
+      </ContextMenuContent>
+    </ContextMenu>
   )
 }
