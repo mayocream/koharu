@@ -117,7 +117,7 @@ pub fn expand_mask_to_bubble_region_for_inpainting(
         let block_support = expanded_text_block_crop_bounds(width, height, block);
         let radius = modern_block_dilate_radius(block);
         let support = expand_rect(block_support, width, height, u32::from(radius));
-        
+
         if count_nonzero_in_rect(&base, support) == 0 {
             continue;
         }
@@ -552,7 +552,7 @@ mod tests {
         }
 
         // Test modern path via bubble_region_for_inpainting
-        // Since it fills the whole block, this is a bit different, but it uses the same underlying 
+        // Since it fills the whole block, this is a bit different, but it uses the same underlying
         // expand_residual_components for any leftover holes if we used it that way.
         // Actually, let's test expand_residual_components directly for modern path.
         let mut expanded = mask.clone();
@@ -595,7 +595,6 @@ mod tests {
         assert_eq!(expanded.get_pixel(30, 28).0[0], 255);
         assert_eq!(expanded.get_pixel(36, 28).0[0], 0);
     }
-
 
     #[test]
     fn mask_expansion_does_not_fill_text_block_background_for_sparse_glyphs() {
