@@ -165,7 +165,7 @@ petgraph = "0.8"
 petname = "3"
 tauri-plugin-process = "2.3"
 natord = "1.0.9"
-sentry = { version = "0.47", features = ["tracing"] }
+sentry = { version = "0.48", features = ["tracing"] }
 
 [patch.crates-io]
 candle-transformers = { git = "https://github.com/mayocream/candle", branch = "flash-attn" }
