@@ -410,6 +410,21 @@
     "shortcutConflict": "Key combination already in use",
     "shortcutInvalid": "This key cannot be used as a shortcut"
   },
+  "batchProcess": {
+    "title": "Process all images",
+    "description": "Select the processing steps to run",
+    "detect": "Detect",
+    "detectDesc": "Detect text blocks, segmentation masks, and fonts",
+    "ocr": "Recognize",
+    "ocrDesc": "Recognize text in detected regions",
+    "translate": "Translate",
+    "translateDesc": "Generate translations using LLM",
+    "inpaint": "Inpaint",
+    "inpaintDesc": "Inpaint images to remove original text",
+    "render": "Render",
+    "renderDesc": "Render translated text onto images",
+    "start": "Start"
+  },
   "updater": {
     "available": {
       "title": "Update available",

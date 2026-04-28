@@ -5,6 +5,7 @@ import Image from 'next/image'
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 
+import { BatchProcessDialog, type PipelineStageKey } from '@/components/BatchProcessDialog'
 import { fitCanvasToViewport, resetCanvasScale } from '@/components/Canvas'
 import { SettingsDialog, type TabId } from '@/components/SettingsDialog'
 import {
@@ -62,6 +63,7 @@ export function MenuBar() {
   const { t } = useTranslation()
   const [settingsOpen, setSettingsOpen] = useState(false)
   const [settingsTab, setSettingsTab] = useState<TabId>('appearance')
+  const [batchDialogOpen, setBatchDialogOpen] = useState(false)
   const hasPage = useSelectionStore((s) => s.pageId !== null)
   const hasScene = useScene().scene !== null
   const shortcuts = usePreferencesStore((state) => state.shortcuts)
@@ -92,6 +94,31 @@ export function MenuBar() {
     await startPipeline({
       steps,
       pages: opts.pageId ? [opts.pageId] : undefined,
+      targetLanguage: editor.selectedLanguage,
+      systemPrompt: prefs.customSystemPrompt,
+      defaultFont: prefs.defaultFont,
+    })
+  }
+
+  const runSelectivePipeline = async (stages: PipelineStageKey[]) => {
+    const cfg = await getConfig()
+    if (!cfg.pipeline) return
+    const p = cfg.pipeline
+    const stageToEngines: Record<PipelineStageKey, (string | undefined)[]> = {
+      detect: [p.detector, p.segmenter, p.bubble_segmenter, p.font_detector],
+      ocr: [p.ocr],
+      translate: [p.translator],
+      inpaint: [p.inpainter],
+      render: [p.renderer],
+    }
+    const steps = stages
+      .flatMap((s) => stageToEngines[s])
+      .filter((s): s is string => !!s)
+    if (steps.length === 0) return
+    const editor = useEditorUiStore.getState()
+    const prefs = usePreferencesStore.getState()
+    await startPipeline({
+      steps,
       targetLanguage: editor.selectedLanguage,
       systemPrompt: prefs.customSystemPrompt,
       defaultFont: prefs.defaultFont,
@@ -157,7 +184,7 @@ export function MenuBar() {
         },
         {
           label: t('menu.processAll'),
-          onSelect: () => void runPipeline({}),
+          onSelect: () => setBatchDialogOpen(true),
           disabled: !hasScene,
           testId: 'menu-process-all',
         },
@@ -341,6 +368,11 @@ export function MenuBar() {
       <div data-tauri-drag-region className='flex h-full flex-1 items-center justify-center' />
       {isWindowsTauri && <WindowControls />}
       <SettingsDialog open={settingsOpen} onOpenChange={setSettingsOpen} defaultTab={settingsTab} />
+      <BatchProcessDialog
+        open={batchDialogOpen}
+        onOpenChange={setBatchDialogOpen}
+        onConfirm={(stages) => void runSelectivePipeline(stages)}
+      />
     </div>
   )
 }

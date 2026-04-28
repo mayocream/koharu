@@ -373,6 +373,21 @@
     "shortcutConflict": "按鍵組合已被使用",
     "shortcutInvalid": "此按鍵不能用作快捷鍵"
   },
+  "batchProcess": {
+    "title": "處理所有圖片",
+    "description": "選擇要執行的處理步驟",
+    "detect": "偵測",
+    "detectDesc": "偵測文字區塊、分割遮罩和字體",
+    "ocr": "辨識",
+    "ocrDesc": "辨識已偵測區域中的文字",
+    "translate": "翻譯",
+    "translateDesc": "使用 LLM 產生翻譯",
+    "inpaint": "修補",
+    "inpaintDesc": "修補圖片以移除原文",
+    "render": "渲染",
+    "renderDesc": "渲染翻譯文字到圖片",
+    "start": "開始處理"
+  },
   "updater": {
     "available": {
       "title": "有可用更新",
