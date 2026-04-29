@@ -1,10 +1,12 @@
 'use client'
 
-import { getGetSceneJsonQueryKey } from '@/lib/api/default/default'
-import type { SceneSnapshot } from '@/lib/api/schemas'
+import { getExportCurrentProjectUrl, getGetSceneJsonQueryKey } from '@/lib/api/default/default'
+import type { ExportProjectRequest, SceneSnapshot } from '@/lib/api/schemas'
+import { ApiError } from '@/lib/api/fetch'
 import { openImageFiles, openImageFolder, openKhrFile } from '@/lib/io/openFiles'
-import { saveBlob } from '@/lib/io/saveBlob'
+import { filenameFromContentDisposition, saveBlob, saveBlobViaStream } from '@/lib/io/saveBlob'
 import { exportProject, uploadKhrArchive, uploadPages, uploadPagesByPaths } from '@/lib/io/scene'
+import type { StreamingUnzipProgress } from '@/lib/io/streamingUnzip'
 import { queryClient } from '@/lib/queryClient'
 
 /**
@@ -39,7 +41,7 @@ export async function importKhrFile(): Promise<void> {
 }
 
 // ---------------------------------------------------------------------------
-// Export (server returns bytes; saveBlob dispatches Tauri-dialog / web-FS)
+// Export
 // ---------------------------------------------------------------------------
 
 const exportExtension: Record<'khr' | 'psd' | 'rendered' | 'inpainted', string> = {
@@ -64,16 +66,55 @@ function currentProjectName(): string | undefined {
   return snap?.scene.project?.name ?? undefined
 }
 
+/**
+ * Export the project (or a subset of pages).
+ *
+ * - **ZIP formats** (`rendered`, `inpainted`, `psd`) with multiple pages:
+ *   uses the streaming "先授權、後串流" path — folder picker fires first,
+ *   then the response is streamed and unzipped directly to disk. No blob
+ *   ever accumulates in memory.
+ *
+ * - **Single-file formats** (`khr`) or explicit single-page exports:
+ *   uses the classic blob path (small file, dialog fires after download).
+ *
+ * @param onProgress  Optional callback for download + unzip progress.
+ *                    Only invoked on the streaming ZIP path.
+ */
 export async function exportCurrentProjectAs(
   format: 'khr' | 'psd' | 'rendered' | 'inpainted',
   pages?: string[],
+  onProgress?: (p: StreamingUnzipProgress) => void,
 ): Promise<void> {
+  const isZipFormat = format !== 'khr'
+  const isMultiPage = !pages || pages.length !== 1
+
+  if (isZipFormat && isMultiPage) {
+    // "先授權、後串流" path: pick folder immediately, then stream
+    const req: ExportProjectRequest = { format, pages }
+    const base = sanitiseBaseName(currentProjectName())
+    const defaultName = `${base}.${exportExtension[format]}`
+    try {
+      await saveBlobViaStream(
+        getExportCurrentProjectUrl(),
+        {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(req),
+        },
+        defaultName,
+        onProgress,
+      )
+    } catch (err) {
+      console.error('Export failed:', err)
+      throw err
+    }
+    return
+  }
+
+  // Classic blob path (single file or KHR archive)
   try {
     const { blob, filename } = await exportProject({ format, pages })
     const base = sanitiseBaseName(currentProjectName())
-    // Prefer the server's Content-Disposition filename (matches the actual
-    // bytes — a raw PNG/PSD for single-file responses, a zip for multi).
-    // Fall back to our guess only if the header is missing/unparseable.
     const defaultName = filename ?? `${base}.${exportExtension[format]}`
     await saveBlob(blob, defaultName)
   } catch (err) {
