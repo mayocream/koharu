@@ -1,6 +1,6 @@
 'use client'
 
-import { Unzip, UnzipFile } from 'fflate'
+import { Unzip, UnzipFile, AsyncUnzipInflate } from 'fflate'
 
 import { createFileWritable, FolderHandle } from '@/lib/io/folderHandle'
 
@@ -16,6 +16,19 @@ export interface StreamingUnzipProgress {
 }
 
 export type ProgressCallback = (progress: StreamingUnzipProgress) => void
+
+function safeZipPath(name: string) {
+  if (
+    name.startsWith('/') ||
+    name.startsWith('\\') ||
+    name.includes('..') ||
+    name.includes('\\')
+  ) {
+    throw new Error(`Unsafe zip path: ${name}`)
+  }
+
+  return name
+}
 
 /**
  * Fetch `url` with `init`, stream-decompress the ZIP body, and write every
@@ -43,58 +56,76 @@ export async function streamingUnzipToFolder(
   let filesWritten = 0
   const writePromises: Promise<void>[] = []
 
-  // 1. Initialize fflate's Unzip instance
   const unzipper = new Unzip((file: UnzipFile) => {
-    // Ignore directory entries
     if (file.name.endsWith('/')) {
       file.start()
       return
     }
 
-    // Process each file in a concurrent promise
     const filePromise = (async () => {
-      try {
-        const writable = await createFileWritable(folder, file.name)
+      const writable = await createFileWritable(folder, safeZipPath(file.name))
 
-        return new Promise<void>((resolve, reject) => {
-          file.ondata = async (err, chunk, final) => {
-            if (err) {
-              await writable.abort()
-              reject(err)
-              return
-            }
+      let writeQueue = Promise.resolve()
+      let settled = false
 
-            try {
-              if (chunk.length > 0) {
-                await writable.write(chunk)
+      return new Promise<void>((resolve, reject) => {
+        const fail = (err: unknown) => {
+          if (settled) return
+          settled = true
+
+          writeQueue = writeQueue
+            .catch(() => { })
+            .then(() => writable.abort().catch(() => { }))
+            .finally(() => reject(err))
+        }
+
+        file.ondata = (err, chunk, final) => {
+          if (settled) return
+
+          if (err) {
+            fail(err)
+            return
+          }
+
+          // Defensive clone of the chunk in case the underlying buffer is reused or mutated.
+          const data = chunk.length > 0 ? new Uint8Array(chunk) : undefined
+
+          writeQueue = writeQueue
+            .then(async () => {
+              if (data && data.length > 0) {
+                await writable.write(data)
               }
+
               if (final) {
                 await writable.close()
+
                 filesWritten++
+
                 onProgress?.({
                   downloadedBytes,
                   totalBytes,
                   filesWritten,
                   currentFile: file.name,
                 })
+
+                settled = true
                 resolve()
               }
-            } catch (e) {
-              await writable.abort()
-              reject(e)
-            }
-          }
-          file.start()
-        })
-      } catch (e) {
-        console.error(`Failed to write file ${file.name}:`, e)
-      }
-    })()
+            })
+            .catch(fail)
+        }
 
-    writePromises.push(filePromise!)
-  });
+        file.start()
+      })
+    })().catch((e) => {
+      console.error(`Failed to write file ${file.name}:`, e)
+      throw e
+    })
 
-  // 2. Start reading the fetch stream and push to unzipper
+    writePromises.push(filePromise)
+  })
+  unzipper.register(AsyncUnzipInflate);
+
   const reader = res.body!.getReader()
   try {
     while (true) {
@@ -107,7 +138,6 @@ export async function streamingUnzipToFolder(
       downloadedBytes += value.length
       onProgress?.({ downloadedBytes, totalBytes, filesWritten })
 
-      // Push the downloaded chunk to the decompressor
       unzipper.push(value)
     }
   } catch (e) {
@@ -115,7 +145,6 @@ export async function streamingUnzipToFolder(
     throw e
   }
 
-  // 4. Wait for all file writes to finish
   await Promise.all(writePromises)
   return filesWritten
 }
