@@ -62,6 +62,6 @@ export async function writeFolderFile(
   }
   const fileHandle = await dir.getFileHandle(fileName, { create: true })
   const writable = await fileHandle.createWritable()
-  await writable.write(bytes)
+  await writable.write(new Uint8Array(bytes))
   await writable.close()
 }
