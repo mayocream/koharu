@@ -55,11 +55,11 @@ export async function createFileWritable(
     const { create, mkdir } = await import('@tauri-apps/plugin-fs')
     const fullDir = [folder.path, ...dirs].join('/')
     if (dirs.length > 0) {
-      await mkdir(fullDir, { recursive: true }).catch(() => {})
+      await mkdir(fullDir, { recursive: true }).catch(() => { })
     }
     const file = await create(`${fullDir}/${fileName}`)
     return {
-      write: (chunk) => file.write(chunk),
+      write: async (chunk) => { await file.write(chunk) },
       close: () => file.close(),
       abort: () => file.close(),
     }
