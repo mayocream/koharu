@@ -2,7 +2,7 @@
 
 import { Unzip, UnzipFile } from 'fflate'
 
-import { FolderHandle, writeFolderFile } from '@/lib/io/folderHandle'
+import { createFileWritable, FolderHandle } from '@/lib/io/folderHandle'
 
 export interface StreamingUnzipProgress {
   /** Bytes received so far from the HTTP response */
@@ -34,88 +34,88 @@ export async function streamingUnzipToFolder(
   onProgress?: ProgressCallback,
 ): Promise<number> {
   const res = await fetch(url, init)
-  if (!res.ok) {
-    const body = await res.json().catch(() => null)
-    const message =
-      (body && typeof body === 'object' && 'message' in body && typeof body.message === 'string'
-        ? body.message
-        : null) ??
-      res.statusText ??
-      `HTTP ${res.status}`
-    throw new Error(message)
-  }
+  if (!res.ok) throw new Error(`HTTP ${res.status}: ${res.statusText}`)
 
   const contentLength = res.headers.get('content-length')
   const totalBytes = contentLength ? parseInt(contentLength, 10) : undefined
+
   let downloadedBytes = 0
   let filesWritten = 0
-
-  // Collect all pending file-write promises so we can await them all at end
   const writePromises: Promise<void>[] = []
 
-  await new Promise<void>((resolve, reject) => {
-    const unzipper = new Unzip((file: UnzipFile) => {
-      // Skip directory entries (end with '/')
-      if (file.name.endsWith('/')) {
-        file.start()
-        return
-      }
-
-      onProgress?.({
-        downloadedBytes,
-        totalBytes,
-        currentFile: file.name,
-        filesWritten,
-      })
-
-      // Collect chunks for this file
-      const chunks: Uint8Array[] = []
-      file.ondata = (err, chunk, final) => {
-        if (err) {
-          reject(err)
-          return
-        }
-        chunks.push(chunk)
-        if (final) {
-          const totalLen = chunks.reduce((s, c) => s + c.length, 0)
-          const merged = new Uint8Array(totalLen)
-          let offset = 0
-          for (const c of chunks) {
-            merged.set(c, offset)
-            offset += c.length
-          }
-          filesWritten++
-          const writePromise = writeFolderFile(folder, file.name, merged).then(() => {
-            onProgress?.({ downloadedBytes, totalBytes, filesWritten })
-          })
-          writePromises.push(writePromise)
-        }
-      }
+  // 1. Initialize fflate's Unzip instance
+  const unzipper = new Unzip((file: UnzipFile) => {
+    // Ignore directory entries
+    if (file.name.endsWith('/')) {
       file.start()
-    })
-
-    const reader = res.body!.getReader()
-
-    const pump = (): void => {
-      reader
-        .read()
-        .then(({ done, value }) => {
-          if (done) {
-            unzipper.push(new Uint8Array(0), true)
-            resolve()
-            return
-          }
-          downloadedBytes += value.length
-          onProgress?.({ downloadedBytes, totalBytes, filesWritten })
-          unzipper.push(value)
-          pump()
-        })
-        .catch(reject)
+      return
     }
-    pump()
-  })
 
-  // Wait for all file writes to complete
+    // Process each file in a concurrent promise
+    const filePromise = (async () => {
+      try {
+        const writable = await createFileWritable(folder, file.name)
+
+        return new Promise<void>((resolve, reject) => {
+          file.ondata = async (err, chunk, final) => {
+            if (err) {
+              await writable.abort()
+              reject(err)
+              return
+            }
+
+            try {
+              if (chunk.length > 0) {
+                await writable.write(chunk)
+              }
+              if (final) {
+                await writable.close()
+                filesWritten++
+                onProgress?.({
+                  downloadedBytes,
+                  totalBytes,
+                  filesWritten,
+                  currentFile: file.name,
+                })
+                resolve()
+              }
+            } catch (e) {
+              await writable.abort()
+              reject(e)
+            }
+          }
+          file.start()
+        })
+      } catch (e) {
+        console.error(`Failed to write file ${file.name}:`, e)
+      }
+    })()
+
+    writePromises.push(filePromise!)
+  });
+
+  // 2. Start reading the fetch stream and push to unzipper
+  const reader = res.body!.getReader()
+  try {
+    while (true) {
+      const { done, value } = await reader.read()
+      if (done) {
+        unzipper.push(new Uint8Array(0), true) // Mark stream end
+        break
+      }
+
+      downloadedBytes += value.length
+      onProgress?.({ downloadedBytes, totalBytes, filesWritten })
+
+      // Push the downloaded chunk to the decompressor
+      unzipper.push(value)
+    }
+  } catch (e) {
+    reader.releaseLock()
+    throw e
+  }
+
+  // 4. Wait for all file writes to finish
   await Promise.all(writePromises)
   return filesWritten
 }
