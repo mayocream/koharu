@@ -17,7 +17,7 @@ default-members = ["koharu"]
 resolver = "3"
 
 [workspace.package]
-version = "0.54.0"
+version = "0.55.0"
 edition = "2024"
 description = "Manga translation tools"
 license = "GPL-3.0-only"
@@ -128,6 +128,7 @@ windows-sys = "0.61"
 winreg = "0.56"
 skrifa = "0.42"
 harfrust = "0.6"
+hypher = "0.1.7"
 icu_properties = "2.2"
 icu_segmenter = "2.2"
 fontdb = "0.23"

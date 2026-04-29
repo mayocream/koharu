@@ -1,5 +1,6 @@
 use std::ops::Range;
 
+use hypher::{Lang, hyphenate_bounded};
 use icu_properties::{CodePointMapData, props::LineBreak};
 use icu_segmenter::{LineSegmenter, LineSegmenterBorrowed, options::LineBreakOptions};
 
@@ -8,6 +9,20 @@ use icu_segmenter::{LineSegmenter, LineSegmenterBorrowed, options::LineBreakOpti
 pub struct LineBreakOpportunity {
     pub offset: usize,
     pub is_mandatory: bool,
+}
+
+/// Synthetic suffix to render only when a line actually breaks here.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum LineBreakSuffix {
+    Hyphen,
+}
+
+impl LineBreakSuffix {
+    pub fn as_str(self) -> &'static str {
+        match self {
+            Self::Hyphen => "-",
+        }
+    }
 }
 
 /// A trimmed line segment ready for shaping.
@@ -19,11 +34,20 @@ pub struct LineSegment {
     pub next_offset: usize,
     /// Whether this segment ends with a mandatory break in the original text.
     pub is_mandatory: bool,
+    /// Suffix to draw if this segment is the final segment on a wrapped line.
+    pub break_suffix: Option<LineBreakSuffix>,
+}
+
+#[derive(Clone, Copy, Debug)]
+struct HyphenationConfig {
+    lang: Lang,
+    min_word_len: usize,
 }
 
 /// Line breaker using ICU4X.
 pub struct LineBreaker {
     segmenter: LineSegmenterBorrowed<'static>,
+    hyphenation: Option<HyphenationConfig>,
 }
 
 fn trim_mandatory_break_suffix(text: &str, start: usize, end: usize) -> usize {
@@ -47,7 +71,26 @@ impl LineBreaker {
     pub fn new() -> Self {
         Self {
             segmenter: LineSegmenter::new_auto(LineBreakOptions::default()),
+            hyphenation: None,
         }
+    }
+
+    /// Enable discretionary word hyphenation for long Latin words.
+    ///
+    /// `min_word_len` follows MangaTranslator's default threshold: short words
+    /// keep ICU's normal break behavior, while long words gain extra break
+    /// opportunities inside the word.
+    pub fn with_hyphenation(mut self, lang: Lang, min_word_len: usize) -> Self {
+        self.hyphenation = Some(HyphenationConfig { lang, min_word_len });
+        self
+    }
+
+    /// Enable discretionary hyphenation from a BCP-47-ish language tag
+    /// supported by `hypher`.
+    pub fn with_hyphenation_tag(mut self, tag: &str, min_word_len: usize) -> Self {
+        self.hyphenation =
+            hyphenation_lang_from_tag(tag).map(|lang| HyphenationConfig { lang, min_word_len });
+        self
     }
 
     /// Returns a vector of line break opportunities in the given text.
@@ -74,7 +117,7 @@ impl LineBreaker {
     pub fn line_segments(&self, text: &str) -> Vec<LineSegment> {
         self.line_break_opportunities(text)
             .windows(2)
-            .map(|window| {
+            .flat_map(|window| {
                 let start = window[0].offset;
                 let end = window[1].offset;
                 let is_mandatory = window[1].is_mandatory;
@@ -83,13 +126,66 @@ impl LineBreaker {
                 } else {
                     end
                 };
-                LineSegment {
+                let segment = LineSegment {
                     range: start..segment_end,
                     next_offset: end,
                     is_mandatory,
-                }
+                    break_suffix: None,
+                };
+                self.hyphenated_segments(text, segment)
             })
             .collect()
+    }
+
+    fn hyphenated_segments(&self, text: &str, segment: LineSegment) -> Vec<LineSegment> {
+        let Some(config) = self.hyphenation else {
+            return vec![segment];
+        };
+        if segment.is_mandatory || segment.range.is_empty() {
+            return vec![segment];
+        }
+
+        let segment_text = &text[segment.range.clone()];
+        let Some((core_start, core_end)) = hyphenatable_word_bounds(segment_text) else {
+            return vec![segment];
+        };
+
+        let core = &segment_text[core_start..core_end];
+        if core.chars().count() < config.min_word_len {
+            return vec![segment];
+        }
+
+        let (left_min, right_min) = config.lang.bounds();
+        let syllables: Vec<&str> =
+            hyphenate_bounded(core, config.lang, left_min, right_min).collect();
+        if syllables.len() <= 1 {
+            return vec![segment];
+        }
+
+        let mut result = Vec::with_capacity(syllables.len());
+        let mut word_offset = 0usize;
+        for (idx, syllable) in syllables.iter().enumerate() {
+            let is_last = idx + 1 == syllables.len();
+            let start = if idx == 0 {
+                segment.range.start
+            } else {
+                segment.range.start + core_start + word_offset
+            };
+            word_offset += syllable.len();
+            let end = if is_last {
+                segment.range.end
+            } else {
+                segment.range.start + core_start + word_offset
+            };
+            result.push(LineSegment {
+                range: start..end,
+                next_offset: if is_last { segment.next_offset } else { end },
+                is_mandatory: false,
+                break_suffix: (!is_last).then_some(LineBreakSuffix::Hyphen),
+            });
+        }
+
+        result
     }
 }
 
@@ -97,6 +193,32 @@ impl Default for LineBreaker {
     fn default() -> Self {
         Self::new()
     }
+}
+
+pub fn hyphenation_lang_from_tag(value: &str) -> Option<Lang> {
+    let lower = value.trim().to_ascii_lowercase();
+    let primary = lower
+        .split(['-', '_'])
+        .next()
+        .filter(|part| part.len() == 2)?;
+    Lang::from_iso(primary.as_bytes().try_into().ok()?)
+}
+
+fn hyphenatable_word_bounds(text: &str) -> Option<(usize, usize)> {
+    let start = text.find(|ch: char| ch.is_alphabetic())?;
+    let end = text
+        .char_indices()
+        .rev()
+        .find(|&(_, ch)| ch.is_alphabetic())
+        .map(|(idx, ch)| idx + ch.len_utf8())?;
+    if start >= end {
+        return None;
+    }
+
+    let core = &text[start..end];
+    core.chars()
+        .all(|ch| ch.is_alphabetic())
+        .then_some((start, end))
 }
 
 #[cfg(test)]
@@ -150,9 +272,114 @@ mod tests {
         assert_eq!(&text[segments[0].range.clone()], "Hello, ");
         assert_eq!(segments[0].next_offset, 8);
         assert!(segments[0].is_mandatory);
+        assert_eq!(segments[0].break_suffix, None);
         assert_eq!(&text[segments[1].range.clone()], "World!");
         assert_eq!(segments[1].next_offset, text.len());
         assert!(!segments[1].is_mandatory);
+        assert_eq!(segments[1].break_suffix, None);
+    }
+
+    #[test]
+    fn hyphenation_adds_discretionary_segments_to_long_latin_words() {
+        let text = "antidisestablishmentarianism";
+        let linebreaker = LineBreaker::new().with_hyphenation(Lang::English, 8);
+        let segments = linebreaker.line_segments(text);
+
+        assert!(
+            segments.len() > 1,
+            "expected long word to be split into hyphenation segments, got {segments:?}"
+        );
+        for segment in segments.iter().take(segments.len() - 1) {
+            assert_eq!(segment.break_suffix, Some(LineBreakSuffix::Hyphen));
+            assert!(!segment.is_mandatory);
+        }
+        assert_eq!(segments.last().unwrap().break_suffix, None);
+
+        let rebuilt = segments
+            .iter()
+            .map(|segment| &text[segment.range.clone()])
+            .collect::<String>();
+        assert_eq!(rebuilt, text);
+    }
+
+    #[test]
+    fn hyphenation_language_tags_cover_hypher_languages() {
+        let cases = [
+            ("af", Lang::Afrikaans),
+            ("sq", Lang::Albanian),
+            ("as", Lang::Assamese),
+            ("be", Lang::Belarusian),
+            ("bn", Lang::Bengali),
+            ("bg", Lang::Bulgarian),
+            ("ca", Lang::Catalan),
+            ("hr", Lang::Croatian),
+            ("cs", Lang::Czech),
+            ("da", Lang::Danish),
+            ("nl", Lang::Dutch),
+            ("en-US", Lang::English),
+            ("et", Lang::Estonian),
+            ("fi", Lang::Finnish),
+            ("fr-FR", Lang::French),
+            ("gl", Lang::Galician),
+            ("ka", Lang::Georgian),
+            ("de-DE", Lang::German),
+            ("el", Lang::Greek),
+            ("gu", Lang::Gujarati),
+            ("hi", Lang::Hindi),
+            ("hu", Lang::Hungarian),
+            ("is", Lang::Icelandic),
+            ("it-IT", Lang::Italian),
+            ("kn", Lang::Kannada),
+            ("ku", Lang::Kurmanji),
+            ("la", Lang::Latin),
+            ("lt", Lang::Lithuanian),
+            ("ml", Lang::Malayalam),
+            ("mr", Lang::Marathi),
+            ("mn", Lang::Mongolian),
+            ("no", Lang::Norwegian),
+            ("nb", Lang::Norwegian),
+            ("nn", Lang::Norwegian),
+            ("or", Lang::Oriya),
+            ("pa", Lang::Panjabi),
+            ("pl", Lang::Polish),
+            ("pt-BR", Lang::Portuguese),
+            ("ru", Lang::Russian),
+            ("sa", Lang::Sanskrit),
+            ("sr", Lang::Serbian),
+            ("sk", Lang::Slovak),
+            ("sl", Lang::Slovenian),
+            ("es-ES", Lang::Spanish),
+            ("sv", Lang::Swedish),
+            ("ta", Lang::Tamil),
+            ("te", Lang::Telugu),
+            ("tr", Lang::Turkish),
+            ("tk", Lang::Turkmen),
+            ("uk", Lang::Ukrainian),
+        ];
+
+        for (tag, lang) in cases {
+            assert_eq!(hyphenation_lang_from_tag(tag), Some(lang), "tag={tag}");
+        }
+
+        assert_eq!(hyphenation_lang_from_tag("German"), None);
+        assert_eq!(hyphenation_lang_from_tag("ja-JP"), None);
+    }
+
+    #[test]
+    fn hyphenation_supports_unicode_words() {
+        let text = "электрификация";
+        let linebreaker = LineBreaker::new().with_hyphenation(Lang::Russian, 8);
+        let segments = linebreaker.line_segments(text);
+
+        assert!(
+            segments.len() > 1,
+            "expected unicode word to be split into hyphenation segments, got {segments:?}"
+        );
+        let rebuilt = segments
+            .iter()
+            .map(|segment| &text[segment.range.clone()])
+            .collect::<String>();
+        assert_eq!(rebuilt, text);
     }
 
     #[test]

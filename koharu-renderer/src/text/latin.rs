@@ -3,15 +3,15 @@
 //! Two pieces of public API:
 //! - [`LayoutBox`] + [`layout_box_from_block`]: the axis-aligned box a text
 //!   block lays out into. The layout engine treats this as a hard boundary.
-//! - [`bubble_bbox_for_seed`]: given the bubble-segmentation mask (where
+//! - [`BubbleIndex`]: given the bubble-segmentation mask (where
 //!   each detected bubble is painted with a unique non-zero grayscale ID)
 //!   and a text seed's bbox, pick the bubble that contains the seed and
-//!   return that bubble's bbox — this is exactly the region the model
-//!   detected, so it's the correct layout rect for the seed's text.
+//!   return a distance-transform safe area inside that bubble.
 
 use std::collections::HashMap;
 
-use image::GrayImage;
+use image::{GrayImage, Luma};
+use imageproc::distance_transform::{Norm, distance_transform};
 
 use crate::layout::WritingMode;
 use crate::types::RenderBlock;
@@ -45,24 +45,26 @@ pub fn layout_box_from_block(block: &RenderBlock) -> LayoutBox {
     }
 }
 
-/// Fraction of each axis trimmed off the bubble's bounding box to keep
-/// text comfortably inside the balloon. 12% per side for horizontal
-/// layout → ~76% of the detected bbox is usable layout space — leaves
-/// breathing room around the text instead of pushing lettering flush
-/// against the bubble outline, and absorbs slight bbox imprecision from
-/// the segmenter.
-const BUBBLE_INSET_FRAC_HORIZONTAL: f32 = 0.12;
-/// Vertical CJK text wants more breathing room: columns need horizontal
-/// margin so neighboring columns don't crowd the bubble outline, and a
-/// deeper top/bottom inset because vertical columns tend to fill the
-/// full bubble height more aggressively than wrapped horizontal lines.
-const BUBBLE_INSET_FRAC_VERTICAL: f32 = 0.20;
+/// Fraction of the bubble's short side reserved as distance-from-edge
+/// padding before choosing an interior safe area. This preserves the old
+/// bbox-inset proportions for rectangular bubbles while letting irregular
+/// masks steer text away from tails, notches, and thin connectors.
+const SAFE_PADDING_FRAC_HORIZONTAL: f32 = 0.12;
+/// Vertical CJK columns need more margin so neighboring columns do not crowd
+/// the balloon outline.
+const SAFE_PADDING_FRAC_VERTICAL: f32 = 0.20;
 
-fn bubble_inset_fraction(writing_mode: WritingMode) -> f32 {
+fn safe_padding_fraction(writing_mode: WritingMode) -> f32 {
     match writing_mode {
-        WritingMode::Horizontal => BUBBLE_INSET_FRAC_HORIZONTAL,
-        WritingMode::VerticalRl => BUBBLE_INSET_FRAC_VERTICAL,
+        WritingMode::Horizontal => SAFE_PADDING_FRAC_HORIZONTAL,
+        WritingMode::VerticalRl => SAFE_PADDING_FRAC_VERTICAL,
     }
+}
+
+#[derive(Clone, Copy, Debug)]
+struct BubbleGeometry {
+    horizontal_safe: LayoutBox,
+    vertical_safe: LayoutBox,
 }
 
 /// Pre-built index over a bubble-segmentation mask.
@@ -73,7 +75,7 @@ fn bubble_inset_fraction(writing_mode: WritingMode) -> f32 {
 /// only an O(seed_bbox_area) pixel-count to find the seed's majority ID.
 pub struct BubbleIndex {
     mask: GrayImage,
-    bboxes: HashMap<u8, LayoutBox>,
+    bubbles: HashMap<u8, BubbleGeometry>,
 }
 
 impl BubbleIndex {
@@ -107,21 +109,27 @@ impl BubbleIndex {
                 }
             }
         }
-        let bboxes = extents
+        let bubbles = extents
             .into_iter()
             .map(|(id, e)| {
+                let bbox = LayoutBox {
+                    x: e[0] as f32,
+                    y: e[1] as f32,
+                    width: (e[2] - e[0] + 1) as f32,
+                    height: (e[3] - e[1] + 1) as f32,
+                };
+                let horizontal_safe = safe_layout_box(&mask, id, bbox, WritingMode::Horizontal);
+                let vertical_safe = safe_layout_box(&mask, id, bbox, WritingMode::VerticalRl);
                 (
                     id,
-                    LayoutBox {
-                        x: e[0] as f32,
-                        y: e[1] as f32,
-                        width: (e[2] - e[0] + 1) as f32,
-                        height: (e[3] - e[1] + 1) as f32,
+                    BubbleGeometry {
+                        horizontal_safe,
+                        vertical_safe,
                     },
                 )
             })
             .collect();
-        Self { mask, bboxes }
+        Self { mask, bubbles }
     }
 
     /// Find the bubble this text seed belongs to and return its layout rect.
@@ -135,9 +143,9 @@ impl BubbleIndex {
     ///
     /// Returns `None` when the seed bbox has zero coverage over any bubble.
     ///
-    /// `writing_mode` controls how much the returned bubble bbox is inset —
-    /// vertical layouts reserve more margin so CJK columns aren't crowded
-    /// against the balloon outline.
+    /// `writing_mode` controls the edge-distance padding used for the safe
+    /// area. Vertical layouts reserve more margin so CJK columns are not
+    /// crowded against the balloon outline.
     pub fn lookup(&self, seed: LayoutBox, writing_mode: WritingMode) -> Option<LayoutBox> {
         self.lookup_match(seed, writing_mode)
             .map(|matched| matched.layout_box)
@@ -165,22 +173,274 @@ impl BubbleIndex {
             }
         }
         let (best_id, _) = counts.into_iter().max_by_key(|&(_, c)| c)?;
-        let bbox = self.bboxes.get(&best_id)?;
-
-        let frac = bubble_inset_fraction(writing_mode);
-        let inset_x = bbox.width * frac;
-        let inset_y = bbox.height * frac;
-        let width = (bbox.width - 2.0 * inset_x).max(1.0);
-        let height = (bbox.height - 2.0 * inset_y).max(1.0);
+        let bubble = self.bubbles.get(&best_id)?;
+        let layout_box = match writing_mode {
+            WritingMode::Horizontal => bubble.horizontal_safe,
+            WritingMode::VerticalRl => bubble.vertical_safe,
+        };
         Some(BubbleMatch {
             id: best_id,
-            layout_box: LayoutBox {
-                x: bbox.x + inset_x,
-                y: bbox.y + inset_y,
-                width,
-                height,
-            },
+            layout_box,
         })
+    }
+
+    pub fn mask(&self) -> &GrayImage {
+        &self.mask
+    }
+}
+
+fn safe_layout_box(
+    mask: &GrayImage,
+    bubble_id: u8,
+    bbox: LayoutBox,
+    writing_mode: WritingMode,
+) -> LayoutBox {
+    let desired_padding = (bbox.width.min(bbox.height) * safe_padding_fraction(writing_mode))
+        .round()
+        .max(1.0) as u8;
+    for padding in [
+        desired_padding,
+        desired_padding.saturating_mul(3) / 4,
+        desired_padding / 2,
+        desired_padding / 4,
+        1,
+        0,
+    ] {
+        if let Some(safe) = safe_layout_box_with_padding(mask, bubble_id, bbox, padding) {
+            return safe;
+        }
+    }
+    inset_layout_box(bbox, writing_mode)
+}
+
+fn safe_layout_box_with_padding(
+    mask: &GrayImage,
+    bubble_id: u8,
+    bbox: LayoutBox,
+    padding: u8,
+) -> Option<LayoutBox> {
+    let x0 = bbox.x.floor().max(0.0) as u32;
+    let y0 = bbox.y.floor().max(0.0) as u32;
+    let x1 = (bbox.x + bbox.width).ceil().min(mask.width() as f32) as u32;
+    let y1 = (bbox.y + bbox.height).ceil().min(mask.height() as f32) as u32;
+    let width = x1.checked_sub(x0)?;
+    let height = y1.checked_sub(y0)?;
+    if width == 0 || height == 0 {
+        return None;
+    }
+
+    // `distance_transform` measures distance to foreground pixels. Build an
+    // image where everything outside this bubble is foreground, then read the
+    // distance from each bubble pixel to the nearest edge/background pixel.
+    let mut background = GrayImage::from_pixel(width + 2, height + 2, Luma([255u8]));
+    for y in 0..height {
+        for x in 0..width {
+            if mask.get_pixel(x0 + x, y0 + y).0[0] == bubble_id {
+                background.put_pixel(x + 1, y + 1, Luma([0u8]));
+            }
+        }
+    }
+    let distance = distance_transform(&background, Norm::L2);
+
+    let safe_threshold = padding.max(1);
+    let mut count = 0f32;
+    let mut sum_x = 0f32;
+    let mut sum_y = 0f32;
+    let mut max_dist = 0u8;
+    let mut max_point = (0u32, 0u32);
+
+    for y in 0..height {
+        for x in 0..width {
+            let lx = x + 1;
+            let ly = y + 1;
+            if background.get_pixel(lx, ly).0[0] != 0 {
+                continue;
+            }
+            let dist = distance.get_pixel(lx, ly).0[0];
+            if dist > max_dist {
+                max_dist = dist;
+                max_point = (x, y);
+            }
+            if dist >= safe_threshold {
+                count += 1.0;
+                sum_x += x as f32;
+                sum_y += y as f32;
+            }
+        }
+    }
+
+    if count == 0.0 {
+        return None;
+    }
+
+    let mut cx = (sum_x / count)
+        .round()
+        .clamp(0.0, width.saturating_sub(1) as f32) as u32;
+    let mut cy = (sum_y / count)
+        .round()
+        .clamp(0.0, height.saturating_sub(1) as f32) as u32;
+    let centroid_dist = distance.get_pixel(cx + 1, cy + 1).0[0];
+    if max_dist > 0 && (centroid_dist as f32) < (max_dist as f32 * 0.70) {
+        (cx, cy) = max_point;
+    }
+    if !is_safe_pixel(&background, &distance, cx, cy, safe_threshold) {
+        (cx, cy) = nearest_safe_pixel(&background, &distance, cx, cy, safe_threshold)?;
+    }
+
+    let safe = build_safe_map(&background, &distance, width, height, safe_threshold);
+    let (left, top, right, bottom) = largest_safe_rectangle(&safe, width, height, (cx, cy))?;
+
+    Some(LayoutBox {
+        x: x0 as f32 + left as f32,
+        y: y0 as f32 + top as f32,
+        width: (right - left) as f32,
+        height: (bottom - top) as f32,
+    })
+}
+
+fn build_safe_map(
+    background: &GrayImage,
+    distance: &GrayImage,
+    width: u32,
+    height: u32,
+    threshold: u8,
+) -> Vec<bool> {
+    let mut safe = Vec::with_capacity(width as usize * height as usize);
+    for y in 0..height {
+        for x in 0..width {
+            safe.push(is_safe_pixel(background, distance, x, y, threshold));
+        }
+    }
+    safe
+}
+
+fn largest_safe_rectangle(
+    safe: &[bool],
+    width: u32,
+    height: u32,
+    anchor: (u32, u32),
+) -> Option<(u32, u32, u32, u32)> {
+    let width = width as usize;
+    if width == 0 || height == 0 || safe.len() != width * height as usize {
+        return None;
+    }
+
+    let mut heights = vec![0u32; width];
+    let mut best: Option<(u64, u64, u32, u32, u32, u32)> = None;
+    for y in 0..height {
+        let row_start = y as usize * width;
+        for x in 0..width {
+            if safe[row_start + x] {
+                heights[x] += 1;
+            } else {
+                heights[x] = 0;
+            }
+        }
+
+        let mut stack: Vec<usize> = Vec::with_capacity(width);
+        for x in 0..=width {
+            let current = if x == width { 0 } else { heights[x] };
+            while let Some(&last) = stack.last() {
+                if heights[last] <= current {
+                    break;
+                }
+                let bar = stack.pop().expect("stack is non-empty");
+                let rect_height = heights[bar];
+                if rect_height == 0 {
+                    continue;
+                }
+
+                let left = stack.last().map_or(0, |&prev| prev + 1);
+                let right = x;
+                let rect_width = right - left;
+                if rect_width == 0 {
+                    continue;
+                }
+
+                let bottom = y + 1;
+                let top = bottom - rect_height;
+                let left = left as u32;
+                let right = right as u32;
+                let area = rect_width as u64 * rect_height as u64;
+                let anchor_dist2 = rectangle_anchor_distance2(left, top, right, bottom, anchor);
+                if best.is_none_or(|(best_area, best_dist2, _, _, _, _)| {
+                    area > best_area || (area == best_area && anchor_dist2 < best_dist2)
+                }) {
+                    best = Some((area, anchor_dist2, left, top, right, bottom));
+                }
+            }
+            if x < width {
+                stack.push(x);
+            }
+        }
+    }
+
+    best.map(|(_, _, left, top, right, bottom)| (left, top, right, bottom))
+}
+
+fn rectangle_anchor_distance2(
+    left: u32,
+    top: u32,
+    right: u32,
+    bottom: u32,
+    anchor: (u32, u32),
+) -> u64 {
+    let rect_cx2 = left as i64 + right as i64;
+    let rect_cy2 = top as i64 + bottom as i64;
+    let anchor_cx2 = anchor.0 as i64 * 2 + 1;
+    let anchor_cy2 = anchor.1 as i64 * 2 + 1;
+    let dx = rect_cx2 - anchor_cx2;
+    let dy = rect_cy2 - anchor_cy2;
+    (dx * dx + dy * dy) as u64
+}
+
+fn is_safe_pixel(
+    background: &GrayImage,
+    distance: &GrayImage,
+    x: u32,
+    y: u32,
+    threshold: u8,
+) -> bool {
+    let lx = x + 1;
+    let ly = y + 1;
+    background.get_pixel(lx, ly).0[0] == 0 && distance.get_pixel(lx, ly).0[0] >= threshold
+}
+
+fn nearest_safe_pixel(
+    background: &GrayImage,
+    distance: &GrayImage,
+    cx: u32,
+    cy: u32,
+    threshold: u8,
+) -> Option<(u32, u32)> {
+    let width = background.width().checked_sub(2)?;
+    let height = background.height().checked_sub(2)?;
+    let mut best: Option<(u64, u32, u32)> = None;
+    for y in 0..height {
+        for x in 0..width {
+            if !is_safe_pixel(background, distance, x, y, threshold) {
+                continue;
+            }
+            let dx = x.abs_diff(cx) as u64;
+            let dy = y.abs_diff(cy) as u64;
+            let dist2 = dx * dx + dy * dy;
+            if best.is_none_or(|(best_dist2, _, _)| dist2 < best_dist2) {
+                best = Some((dist2, x, y));
+            }
+        }
+    }
+    best.map(|(_, x, y)| (x, y))
+}
+
+fn inset_layout_box(bbox: LayoutBox, writing_mode: WritingMode) -> LayoutBox {
+    let frac = safe_padding_fraction(writing_mode);
+    let inset_x = bbox.width * frac;
+    let inset_y = bbox.height * frac;
+    LayoutBox {
+        x: bbox.x + inset_x,
+        y: bbox.y + inset_y,
+        width: (bbox.width - 2.0 * inset_x).max(1.0),
+        height: (bbox.height - 2.0 * inset_y).max(1.0),
     }
 }
 
@@ -193,6 +453,22 @@ mod tests {
         for y in y0..y1 {
             for x in x0..x1 {
                 img.put_pixel(x, y, Luma([value]));
+            }
+        }
+    }
+
+    fn assert_rect_pixels_match(mask: &GrayImage, rect: LayoutBox, value: u8) {
+        let x0 = rect.x.floor().max(0.0) as u32;
+        let y0 = rect.y.floor().max(0.0) as u32;
+        let x1 = (rect.x + rect.width).ceil().min(mask.width() as f32) as u32;
+        let y1 = (rect.y + rect.height).ceil().min(mask.height() as f32) as u32;
+        for y in y0..y1 {
+            for x in x0..x1 {
+                assert_eq!(
+                    mask.get_pixel(x, y).0[0],
+                    value,
+                    "layout rect includes pixel ({x}, {y}) outside the safe bubble body"
+                );
             }
         }
     }
@@ -219,7 +495,7 @@ mod tests {
     }
 
     #[test]
-    fn lookup_returns_bubble_bbox_for_seed_inside() {
+    fn lookup_returns_safe_area_for_seed_inside() {
         // One bubble painted at x=20..80, y=30..100 with ID 1.
         let mut mask = GrayImage::from_pixel(200, 200, Luma([0u8]));
         paint_rect(&mut mask, 20, 30, 80, 100, 1);
@@ -234,17 +510,67 @@ mod tests {
         let rect = index
             .lookup(seed, WritingMode::Horizontal)
             .expect("should find bubble");
-        // The returned rect is the bubble bbox with a small inset.
+        // The returned rect stays inside the bubble with edge-distance padding.
         assert!(rect.x >= 20.0);
         assert!(rect.y >= 30.0);
         assert!(rect.x + rect.width <= 80.0);
         assert!(rect.y + rect.height <= 100.0);
-        // Padded inset reserves a comfortable margin on each side, so the
-        // usable area is a meaningful fraction of the bubble but not the
-        // whole thing.
+        // The safe area reserves a comfortable margin on each side, so the
+        // usable area is a meaningful fraction of the bubble but not the whole
+        // thing.
         let coverage = rect.area() / ((80.0 - 20.0) * (100.0 - 30.0));
         assert!(coverage > 0.5);
         assert!(coverage < 0.95);
+    }
+
+    #[test]
+    fn safe_area_ignores_thin_tail_in_bubble_mask() {
+        let mut mask = GrayImage::from_pixel(220, 140, Luma([0u8]));
+        paint_rect(&mut mask, 20, 20, 120, 100, 1);
+        paint_rect(&mut mask, 120, 55, 190, 65, 1);
+        let index = BubbleIndex::new(mask);
+
+        let seed = LayoutBox {
+            x: 60.0,
+            y: 50.0,
+            width: 20.0,
+            height: 20.0,
+        };
+        let rect = index
+            .lookup(seed, WritingMode::Horizontal)
+            .expect("should find bubble");
+
+        assert!(rect.x >= 20.0);
+        assert!(rect.y >= 20.0);
+        assert!(
+            rect.x + rect.width <= 122.0,
+            "safe area should stay in the main bubble body, got {rect:?}"
+        );
+        assert!(rect.y + rect.height <= 100.0);
+    }
+
+    #[test]
+    fn safe_area_stays_inside_concave_bubble_mask() {
+        let mut mask = GrayImage::from_pixel(180, 160, Luma([0u8]));
+        paint_rect(&mut mask, 20, 20, 140, 120, 1);
+        paint_rect(&mut mask, 80, 20, 140, 80, 0);
+        let index = BubbleIndex::new(mask.clone());
+
+        let seed = LayoutBox {
+            x: 45.0,
+            y: 85.0,
+            width: 20.0,
+            height: 20.0,
+        };
+        let rect = index
+            .lookup(seed, WritingMode::Horizontal)
+            .expect("should find bubble");
+
+        assert_rect_pixels_match(&mask, rect, 1);
+        assert!(
+            rect.x + rect.width <= 80.0 || rect.y >= 80.0,
+            "safe area should not bridge across the missing corner, got {rect:?}"
+        );
     }
 
     #[test]
@@ -303,9 +629,8 @@ mod tests {
             .lookup(seed, WritingMode::VerticalRl)
             .expect("vertical lookup");
 
-        // Vertical inset fraction is strictly greater, so the usable box
-        // should be smaller on both axes and the top-left corner pushed
-        // further inward.
+        // Vertical safe-area padding is strictly greater, so the usable box is
+        // smaller on both axes and the top-left corner pushed further inward.
         assert!(vertical.width < horizontal.width);
         assert!(vertical.height < horizontal.height);
         assert!(vertical.x > horizontal.x);

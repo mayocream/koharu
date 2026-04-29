@@ -12,6 +12,7 @@ use async_trait::async_trait;
 use koharu_core::{
     ImageRole, MaskRole, NodeDataPatch, NodePatch, Op, TextDataPatch, TextStyle, Transform,
 };
+use koharu_llm::Language;
 
 use crate::pipeline::artifacts::Artifact;
 use crate::pipeline::engine::{Engine, EngineCtx, EngineInfo};
@@ -76,6 +77,12 @@ impl Engine for Model {
             shader_effect: Default::default(),
             shader_stroke: None,
             document_font: ctx.options.default_font.clone(),
+            target_language: ctx
+                .options
+                .target_language
+                .as_deref()
+                .map(render_target_language_tag),
+            raster: Default::default(),
         };
 
         // `render_page` is synchronous and CPU-bound. It runs inline on the
@@ -167,9 +174,15 @@ fn preserve_existing_style(existing: Option<TextStyle>) -> Option<Option<TextSty
     existing.map(Some)
 }
 
+fn render_target_language_tag(value: &str) -> String {
+    Language::parse(value)
+        .map(|language| language.tag().to_string())
+        .unwrap_or_else(|| value.to_string())
+}
+
 #[cfg(test)]
 mod tests {
-    use super::preserve_existing_style;
+    use super::{preserve_existing_style, render_target_language_tag};
     use koharu_core::TextStyle;
 
     #[test]
@@ -197,5 +210,15 @@ mod tests {
         assert!(preserved.effect.is_none());
         assert!(preserved.stroke.is_none());
         assert!(preserved.text_align.is_none());
+    }
+
+    #[test]
+    fn render_target_language_normalizes_language_names() {
+        assert_eq!(render_target_language_tag("German"), "de-DE");
+        assert_eq!(render_target_language_tag("pt-BR"), "pt-BR");
+        assert_eq!(
+            render_target_language_tag("not-a-language"),
+            "not-a-language"
+        );
     }
 }

@@ -1,3 +1,10 @@
+## [0.55.0](https://github.com/mayocream/koharu/compare/0.54.0..0.55.0) - 2026-04-28
+
+### ⛰️  Features
+
+- Better text rendering - ([83d79db](https://github.com/mayocream/koharu/commit/83d79dbac1dc8c0ae8e34b659f516a97a1be3bbe))
+
+
 ## [0.54.0](https://github.com/mayocream/koharu/compare/0.53.0..0.54.0) - 2026-04-28
 
 ### ⛰️  Features

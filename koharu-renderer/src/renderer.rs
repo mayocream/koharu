@@ -1,7 +1,7 @@
 use std::collections::HashMap;
 
 use anyhow::{Context, Result, bail};
-use image::RgbaImage;
+use image::{RgbaImage, imageops};
 use skrifa::{
     GlyphId, MetadataProvider, OutlineGlyph,
     instance::{LocationRef, Size},
@@ -23,6 +23,56 @@ pub struct RenderStrokeOptions {
     pub width_px: f32,
 }
 
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
+pub enum DownsampleFilter {
+    Nearest,
+    Triangle,
+    CatmullRom,
+    Gaussian,
+    #[default]
+    Lanczos3,
+}
+
+impl From<DownsampleFilter> for imageops::FilterType {
+    fn from(value: DownsampleFilter) -> Self {
+        match value {
+            DownsampleFilter::Nearest => imageops::FilterType::Nearest,
+            DownsampleFilter::Triangle => imageops::FilterType::Triangle,
+            DownsampleFilter::CatmullRom => imageops::FilterType::CatmullRom,
+            DownsampleFilter::Gaussian => imageops::FilterType::Gaussian,
+            DownsampleFilter::Lanczos3 => imageops::FilterType::Lanczos3,
+        }
+    }
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct RasterOptions {
+    pub supersampling_factor: u32,
+    pub downsample_filter: DownsampleFilter,
+}
+
+impl RasterOptions {
+    pub fn supersampled(factor: u32) -> Self {
+        Self {
+            supersampling_factor: factor,
+            ..Default::default()
+        }
+    }
+
+    fn scale(self) -> u32 {
+        self.supersampling_factor.clamp(2, MAX_SUPERSAMPLING_FACTOR)
+    }
+}
+
+impl Default for RasterOptions {
+    fn default() -> Self {
+        Self {
+            supersampling_factor: 2,
+            downsample_filter: DownsampleFilter::Lanczos3,
+        }
+    }
+}
+
 /// Options for rendering text.
 #[derive(Debug, Clone)]
 pub struct RenderOptions {
@@ -33,6 +83,7 @@ pub struct RenderOptions {
     pub font_size: f32,
     pub effect: TextShaderEffect,
     pub stroke: Option<RenderStrokeOptions>,
+    pub raster: RasterOptions,
 }
 
 impl Default for RenderOptions {
@@ -45,9 +96,12 @@ impl Default for RenderOptions {
             font_size: 16.0,
             effect: TextShaderEffect::default(),
             stroke: None,
+            raster: RasterOptions::default(),
         }
     }
 }
+
+const MAX_SUPERSAMPLING_FACTOR: u32 = 4;
 
 pub struct TinySkiaRenderer;
 
@@ -67,9 +121,17 @@ impl TinySkiaRenderer {
         if width == 0 || height == 0 {
             bail!("invalid surface size {width}x{height}");
         }
+        let raster_scale = opts.raster.scale();
+        let raster_width = width
+            .checked_mul(raster_scale)
+            .context("supersampled render surface width overflow")?;
+        let raster_height = height
+            .checked_mul(raster_scale)
+            .context("supersampled render surface height overflow")?;
+        let raster_scale_f = raster_scale as f32;
 
-        let mut surface =
-            Pixmap::new(width, height).context("failed to allocate render surface")?;
+        let mut surface = Pixmap::new(raster_width, raster_height)
+            .context("failed to allocate render surface")?;
         if let Some(bg) = opts.background {
             surface.fill(color_from_rgba(bg));
         }
@@ -86,6 +148,7 @@ impl TinySkiaRenderer {
                 writing_mode,
                 opts,
                 RenderPass::Stroke,
+                raster_scale_f,
             )?;
         }
         render_pass(
@@ -95,13 +158,10 @@ impl TinySkiaRenderer {
             writing_mode,
             opts,
             RenderPass::Fill,
+            raster_scale_f,
         )?;
 
-        let mut pixels = surface.data().to_vec();
-        unpremultiply_rgba(&mut pixels);
-        let img =
-            RgbaImage::from_raw(width, height, pixels).context("failed to build RgbaImage")?;
-        Ok(img)
+        surface_to_image(surface, width, height, opts.raster.downsample_filter)
     }
 }
 
@@ -147,15 +207,16 @@ fn render_pass(
     writing_mode: WritingMode,
     opts: &RenderOptions,
     pass: RenderPass,
+    raster_scale: f32,
 ) -> Result<()> {
     for line in &layout.lines {
         let origin = match writing_mode {
             WritingMode::Horizontal | WritingMode::VerticalRl => (
-                opts.padding + line.baseline.0,
-                opts.padding + line.baseline.1,
+                (opts.padding + line.baseline.0) * raster_scale,
+                (opts.padding + line.baseline.1) * raster_scale,
             ),
         };
-        render_line(surface, cache, line, origin, opts, pass)?;
+        render_line(surface, cache, line, origin, opts, pass, raster_scale)?;
     }
 
     Ok(())
@@ -168,6 +229,7 @@ fn render_line(
     origin: (f32, f32),
     opts: &RenderOptions,
     pass: RenderPass,
+    raster_scale: f32,
 ) -> Result<()> {
     let (origin_x, origin_y) = origin;
     let mut pen_x = 0.0f32;
@@ -185,20 +247,41 @@ fn render_line(
             glyph: gid,
         };
         if let std::collections::hash_map::Entry::Vacant(e) = cache.entry(key) {
-            let source = load_glyph_source(glyph.font, gid, opts.font_size, opts.anti_alias)?;
+            let source = load_glyph_source(
+                glyph.font,
+                gid,
+                opts.font_size * raster_scale,
+                opts.anti_alias,
+            )?;
             e.insert(source);
         }
 
-        let baseline_x = origin_x + pen_x + glyph.x_offset;
-        let baseline_y = origin_y + pen_y - glyph.y_offset;
+        let baseline_x = origin_x + (pen_x + glyph.x_offset) * raster_scale;
+        let baseline_y = origin_y + (pen_y - glyph.y_offset) * raster_scale;
 
         if let Some(source) = cache.get(&key) {
             match source {
                 GlyphRenderSource::Outline(data) => {
-                    draw_outline_glyph(surface, data, baseline_x, baseline_y, opts, pass);
+                    draw_outline_glyph(
+                        surface,
+                        data,
+                        baseline_x,
+                        baseline_y,
+                        opts,
+                        pass,
+                        raster_scale,
+                    );
                 }
                 GlyphRenderSource::Bitmap(data) => {
-                    draw_bitmap_glyph(surface, data, baseline_x, baseline_y, opts, pass)?;
+                    draw_bitmap_glyph(
+                        surface,
+                        data,
+                        baseline_x,
+                        baseline_y,
+                        opts,
+                        pass,
+                        raster_scale,
+                    )?;
                 }
             }
         }
@@ -255,6 +338,7 @@ fn draw_outline_glyph(
     baseline_y: f32,
     opts: &RenderOptions,
     pass: RenderPass,
+    raster_scale: f32,
 ) {
     let transform = glyph_transform(glyph.bounds, baseline_x, baseline_y, opts.effect.italic);
 
@@ -266,7 +350,7 @@ fn draw_outline_glyph(
             {
                 let stroke_paint = paint_from_rgba(stroke.color, opts.anti_alias);
                 let stroke_style = Stroke {
-                    width: stroke.width_px.max(0.0) * 2.0,
+                    width: stroke.width_px.max(0.0) * raster_scale * 2.0,
                     line_join: LineJoin::Round,
                     line_cap: LineCap::Round,
                     ..Default::default()
@@ -278,7 +362,7 @@ fn draw_outline_glyph(
             if opts.effect.bold {
                 let bold_paint = paint_from_rgba(opts.color, opts.anti_alias);
                 let bold_style = Stroke {
-                    width: 2.0,
+                    width: 2.0 * raster_scale,
                     line_join: LineJoin::Round,
                     line_cap: LineCap::Round,
                     ..Default::default()
@@ -299,6 +383,7 @@ fn draw_bitmap_glyph(
     baseline_y: f32,
     opts: &RenderOptions,
     pass: RenderPass,
+    raster_scale: f32,
 ) -> Result<()> {
     if glyph.metrics.width == 0 || glyph.metrics.height == 0 || glyph.fill_alpha.is_empty() {
         return Ok(());
@@ -308,7 +393,12 @@ fn draw_bitmap_glyph(
     let height = glyph.metrics.height as usize;
     let mut fill_alpha = glyph.fill_alpha.clone();
     if opts.effect.bold {
-        fill_alpha = dilate_alpha(&fill_alpha, width, height, 1);
+        fill_alpha = dilate_alpha(
+            &fill_alpha,
+            width,
+            height,
+            scaled_pixel_radius(1.0, raster_scale),
+        );
     }
 
     let x = baseline_x + glyph.metrics.xmin as f32;
@@ -328,7 +418,7 @@ fn draw_bitmap_glyph(
                 .stroke
                 .filter(|stroke| stroke.width_px > 0.0 && stroke.color[3] > 0)
             {
-                let radius = stroke.width_px.ceil().max(1.0) as usize;
+                let radius = scaled_pixel_radius(stroke.width_px, raster_scale);
                 let outer = dilate_alpha(&fill_alpha, width, height, radius);
                 let stroke_alpha = outer
                     .into_iter()
@@ -405,6 +495,28 @@ fn pixmap_paint(italic: bool, anti_alias: bool) -> PixmapPaint {
         },
         ..Default::default()
     }
+}
+
+fn surface_to_image(
+    surface: Pixmap,
+    width: u32,
+    height: u32,
+    downsample_filter: DownsampleFilter,
+) -> Result<RgbaImage> {
+    let raster_width = surface.width();
+    let raster_height = surface.height();
+    let pixels = surface.data().to_vec();
+
+    let raster_img = RgbaImage::from_raw(raster_width, raster_height, pixels)
+        .context("failed to build supersampled RgbaImage")?;
+    let img = imageops::resize(&raster_img, width, height, downsample_filter.into());
+    let mut pixels = img.into_raw();
+    unpremultiply_rgba(&mut pixels);
+    RgbaImage::from_raw(width, height, pixels).context("failed to build downsampled RgbaImage")
+}
+
+fn scaled_pixel_radius(logical_radius: f32, raster_scale: f32) -> usize {
+    (logical_radius.max(0.0) * raster_scale).ceil().max(1.0) as usize
 }
 
 fn paint_from_rgba(color: [u8; 4], anti_alias: bool) -> Paint<'static> {
@@ -518,5 +630,104 @@ impl OutlinePen for TinySkiaPathPen {
 
     fn close(&mut self) {
         self.builder.close();
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::{
+        font::{Font, FontBook},
+        layout::TextLayout,
+    };
+
+    fn any_system_font() -> Font {
+        let mut book = FontBook::new();
+        let preferred = [
+            "Arial",
+            "Segoe UI",
+            "Yu Gothic",
+            "DejaVu Sans",
+            "Liberation Sans",
+        ];
+
+        for name in preferred {
+            if let Some(post_script_name) = book
+                .all_families()
+                .into_iter()
+                .find(|face| {
+                    face.post_script_name == name
+                        || face
+                            .families
+                            .iter()
+                            .any(|(family, _)| family.as_str() == name)
+                })
+                .map(|face| face.post_script_name)
+                .filter(|post_script_name| !post_script_name.is_empty())
+                && let Ok(font) = book.query(&post_script_name)
+            {
+                return font;
+            }
+        }
+
+        if let Some(face) = book
+            .all_families()
+            .into_iter()
+            .find(|face| !face.post_script_name.is_empty())
+        {
+            return book
+                .query(&face.post_script_name)
+                .expect("failed to load first system font");
+        }
+
+        panic!("no system font available for tests");
+    }
+
+    #[test]
+    fn default_raster_options_use_2x_lanczos_supersampling() {
+        let raster = RasterOptions::default();
+        assert_eq!(raster.supersampling_factor, 2);
+        assert_eq!(raster.downsample_filter, DownsampleFilter::Lanczos3);
+        assert_eq!(raster.scale(), 2);
+    }
+
+    #[test]
+    fn supersampling_factor_is_bounded() {
+        assert_eq!(RasterOptions::supersampled(0).scale(), 2);
+        assert_eq!(RasterOptions::supersampled(1).scale(), 2);
+        assert_eq!(
+            RasterOptions::supersampled(99).scale(),
+            MAX_SUPERSAMPLING_FACTOR
+        );
+    }
+
+    #[test]
+    fn supersampled_render_keeps_logical_surface_dimensions() -> Result<()> {
+        let font = any_system_font();
+        let font_size = 24.0;
+        let layout = TextLayout::new(&font, Some(font_size)).run("Hello")?;
+        let renderer = TinySkiaRenderer::new()?;
+
+        let default = renderer.render(
+            &layout,
+            WritingMode::Horizontal,
+            &RenderOptions {
+                font_size,
+                ..Default::default()
+            },
+        )?;
+        let higher_scale = renderer.render(
+            &layout,
+            WritingMode::Horizontal,
+            &RenderOptions {
+                font_size,
+                raster: RasterOptions::supersampled(4),
+                ..Default::default()
+            },
+        )?;
+
+        assert_eq!(higher_scale.dimensions(), default.dimensions());
+        assert!(default.pixels().any(|pixel| pixel.0[3] > 0));
+        Ok(())
     }
 }

@@ -19,6 +19,7 @@ once_cell = { workspace = true }
 serde = { workspace = true }
 skrifa = { workspace = true }
 harfrust = { workspace = true }
+hypher = { workspace = true }
 icu_properties = { workspace = true, features = ["compiled_data"] }
 icu_segmenter = { workspace = true, features = ["compiled_data"] }
 unicode-bidi = { workspace = true }

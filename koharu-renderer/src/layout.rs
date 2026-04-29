@@ -3,6 +3,7 @@ use unicode_bidi::BidiInfo;
 
 use anyhow::Result;
 use harfrust::{Feature, Tag};
+use hypher::Lang;
 use skrifa::{
     MetadataProvider,
     instance::{LocationRef, Size},
@@ -14,7 +15,10 @@ use crate::text::script::shaping_direction_for_text;
 use crate::types::TextAlign;
 
 pub use crate::segment::{LineBreakOpportunity, LineBreaker, LineSegment};
+pub use crate::segment::{LineBreakSuffix, hyphenation_lang_from_tag};
 pub use crate::shape::{PositionedGlyph, ShapedRun, ShapingOptions, TextShaper};
+
+const HYPHENATION_MIN_WORD_LEN: usize = 8;
 
 /// Writing mode for text layout.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
@@ -65,6 +69,7 @@ pub struct LayoutRun<'a> {
 pub struct TextLayout<'a> {
     writing_mode: WritingMode,
     center_vertical_punctuation: bool,
+    hyphenation_lang: Option<Lang>,
     font: &'a Font,
     fallback_fonts: &'a [Font],
     font_size: Option<f32>,
@@ -78,6 +83,7 @@ impl<'a> TextLayout<'a> {
         Self {
             writing_mode: WritingMode::Horizontal,
             center_vertical_punctuation: true,
+            hyphenation_lang: Some(Lang::English),
             font,
             fallback_fonts: &[],
             font_size,
@@ -99,6 +105,21 @@ impl<'a> TextLayout<'a> {
 
     pub fn with_center_vertical_punctuation(mut self, enabled: bool) -> Self {
         self.center_vertical_punctuation = enabled;
+        self
+    }
+
+    pub fn with_hyphenation_language(mut self, lang: Lang) -> Self {
+        self.hyphenation_lang = Some(lang);
+        self
+    }
+
+    pub fn with_hyphenation_language_tag(mut self, tag: &str) -> Self {
+        self.hyphenation_lang = hyphenation_lang_from_tag(tag);
+        self
+    }
+
+    pub fn without_hyphenation(mut self) -> Self {
+        self.hyphenation_lang = None;
         self
     }
 
@@ -169,7 +190,12 @@ impl<'a> TextLayout<'a> {
     fn run_with_size(&self, text: &str, font_size: f32) -> Result<LayoutRun<'a>> {
         let _s = tracing::debug_span!("layout_size", font_size = font_size as u32).entered();
         let shaper = TextShaper::new();
-        let line_breaker = LineBreaker::new();
+        let line_breaker = match (self.writing_mode.is_vertical(), self.hyphenation_lang) {
+            (false, Some(lang)) => {
+                LineBreaker::new().with_hyphenation(lang, HYPHENATION_MIN_WORD_LEN)
+            }
+            _ => LineBreaker::new(),
+        };
         let normalized_punctuation;
         let text = if self.writing_mode.is_vertical() {
             normalized_punctuation = normalize_vertical_emphasis_punctuation(text);
@@ -222,19 +248,29 @@ impl<'a> TextLayout<'a> {
             shaped: ShapedRun<'a>,
             level: unicode_bidi::Level,
         }
+        struct ShapedBreakSuffix<'a> {
+            runs: Vec<LineRun<'a>>,
+            advance: f32,
+        }
         let mut current_line_runs: Vec<LineRun<'a>> = Vec::new();
         let mut line_offset = 0usize;
         let mut current_advance = 0.0f32;
+        let mut current_break_suffix: Option<ShapedBreakSuffix<'a>> = None;
 
         let finalize_current_line = |runs: &mut Vec<LineRun<'a>>,
                                      offset: &mut usize,
                                      visible_end: usize,
                                      next_offset: usize,
                                      lines: &mut Vec<LayoutLine<'a>>,
+                                     break_suffix: Option<ShapedBreakSuffix<'a>>,
                                      force_push: bool| {
             if runs.is_empty() && !force_push {
                 *offset = next_offset;
                 return;
+            }
+
+            if let Some(mut suffix) = break_suffix {
+                runs.append(&mut suffix.runs);
             }
 
             let levels: Vec<unicode_bidi::Level> = runs.iter().map(|r| r.level).collect();
@@ -285,6 +321,30 @@ impl<'a> TextLayout<'a> {
             lines.push(line);
             runs.clear();
             *offset = next_offset;
+        };
+
+        let shape_break_suffix = |suffix: LineBreakSuffix,
+                                  level: unicode_bidi::Level,
+                                  cluster: usize|
+         -> Result<ShapedBreakSuffix<'a>> {
+            let mut suffix_opts = opts.clone();
+            suffix_opts.direction = if level.is_rtl() {
+                harfrust::Direction::RightToLeft
+            } else {
+                harfrust::Direction::LeftToRight
+            };
+
+            let mut runs = Vec::new();
+            let mut advance = 0.0f32;
+            for mut shaped in shape_script_runs(&shaper, suffix.as_str(), &fonts, &suffix_opts)? {
+                for glyph in &mut shaped.glyphs {
+                    glyph.cluster += cluster as u32;
+                }
+                advance += shaped.x_advance;
+                runs.push(LineRun { shaped, level });
+            }
+
+            Ok(ShapedBreakSuffix { runs, advance })
         };
 
         for segment in segments {
@@ -346,11 +406,21 @@ impl<'a> TextLayout<'a> {
                     }
                 }
             }
+            let segment_break_suffix = if let (Some(suffix), Some(level)) =
+                (segment.break_suffix, segment_runs.last().map(|r| r.level))
+            {
+                Some(shape_break_suffix(suffix, level, segment.range.end)?)
+            } else {
+                None
+            };
 
             let would_overflow = if self.writing_mode.is_vertical() {
                 current_advance.abs() + segment_advance.abs() > max_extent
             } else {
-                current_advance + segment_advance > max_extent
+                let break_suffix_advance = current_break_suffix
+                    .as_ref()
+                    .map_or(0.0, |suffix| suffix.advance);
+                current_advance + break_suffix_advance + segment_advance > max_extent
             };
 
             if would_overflow && !current_line_runs.is_empty() {
@@ -360,6 +430,7 @@ impl<'a> TextLayout<'a> {
                     segment.range.start,
                     segment.range.start,
                     &mut lines,
+                    current_break_suffix.take(),
                     false,
                 );
                 current_advance = 0.0;
@@ -367,6 +438,7 @@ impl<'a> TextLayout<'a> {
 
             current_line_runs.extend(segment_runs);
             current_advance += segment_advance;
+            current_break_suffix = segment_break_suffix;
 
             if segment.is_mandatory {
                 // Consecutive mandatory breaks (e.g. "A\n\nB") will drop the empty line:
@@ -380,9 +452,11 @@ impl<'a> TextLayout<'a> {
                     segment.range.end,
                     segment.next_offset,
                     &mut lines,
+                    None,
                     true,
                 );
                 current_advance = 0.0;
+                current_break_suffix = None;
             }
         }
 
@@ -393,6 +467,7 @@ impl<'a> TextLayout<'a> {
             text.len(),
             text.len(),
             &mut lines,
+            None,
             false, // Don't force push a final empty line if the text didn't end with a break
         );
 
@@ -933,6 +1008,44 @@ mod tests {
             (c0 - c1).abs() < 1.0,
             "expected line centres to match, got c0={c0} c1={c1}",
         );
+        Ok(())
+    }
+
+    #[test]
+    fn horizontal_layout_hyphenates_long_words() -> anyhow::Result<()> {
+        let font = any_system_font();
+        let text = "antidisestablishmentarianism";
+        let font_size = 24.0;
+        let unwrapped = TextLayout::new(&font, Some(font_size)).run(text)?;
+        let max_width = (unwrapped.lines[0].advance * 0.45).max(font_size * 4.0);
+
+        let layout = TextLayout::new(&font, Some(font_size))
+            .with_max_width(max_width)
+            .run(text)?;
+
+        assert!(
+            layout.lines.len() > 1,
+            "expected hyphenation to wrap long word, got {layout:?}"
+        );
+        for line in layout.lines.iter().take(layout.lines.len() - 1) {
+            assert!(
+                line.advance <= max_width + 1.0,
+                "hyphenated line should fit max width {max_width}, got {}",
+                line.advance
+            );
+        }
+        assert!(
+            layout
+                .lines
+                .iter()
+                .take(layout.lines.len() - 1)
+                .any(|line| line
+                    .glyphs
+                    .iter()
+                    .any(|glyph| glyph.cluster as usize == line.range.end)),
+            "expected a synthetic hyphen glyph at a discretionary break"
+        );
+
         Ok(())
     }
 
