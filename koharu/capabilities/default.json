@@ -30,13 +30,16 @@
     "fs:default",
     "fs:allow-read-file",
     "fs:allow-write-file",
+    "fs:allow-create",
     "fs:allow-read-dir",
     "fs:allow-mkdir",
     "fs:allow-exists",
     {
       "identifier": "fs:scope",
       "allow": [
-        { "path": "**" }
+        {
+          "path": "**"
+        }
       ]
     }
   ]
