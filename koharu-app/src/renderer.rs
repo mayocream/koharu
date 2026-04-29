@@ -252,7 +252,6 @@ impl Renderer {
             .text_align
             .map(core_align_to_renderer)
             .unwrap_or(RendererTextAlign::Center);
-        let seed_box = resolved_box.seed_box;
         let layout_box = resolved_box.layout_box;
 
         let mut layout_builder = TextLayout::new(&font, None)
@@ -285,7 +284,7 @@ impl Renderer {
                 },
             )?;
             let transform = centred_sprite_transform(
-                seed_box,
+                layout_box,
                 rendered.width(),
                 rendered.height(),
                 block.transform.rotation_deg,
@@ -335,16 +334,13 @@ impl Renderer {
         // left instead of being centred relative to the widest line.
         // Re-run the layout with `max_width = actual_content_width` so
         // every line is centred relative to the block's widest line.
-        let layout = if layout.width > layout_box.width + 0.5 {
-            layout_builder
-                .clone()
-                .with_font_size(layout.font_size)
-                .with_max_width(layout.width)
-                .with_max_height(layout_box.height)
-                .run(translation)?
-        } else {
-            layout
-        };
+        let layout = ensure_center_aligned(
+            &layout_builder,
+            layout,
+            translation,
+            layout_box.width,
+            layout_box.height,
+        )?;
 
         let candidate = render_candidate(&layout)?;
 
@@ -577,6 +573,14 @@ where
         if !layout_fits_collision_attempt(&layout, writing_mode, layout_box, main_extent) {
             continue;
         }
+        let layout = ensure_center_aligned(
+            layout_builder,
+            layout,
+            text,
+            layout_box.width,
+            layout_box.height,
+        )?;
+
         let candidate = render_candidate(&layout)?;
         if sprite_collides_with_bubble_mask(&candidate.image, &candidate.transform, mask, bubble_id)
         {
@@ -614,6 +618,13 @@ where
         font_size,
         primary_collision_extent(layout_box, writing_mode),
     )?;
+    let layout = ensure_center_aligned(
+        layout_builder,
+        layout,
+        text,
+        layout_box.width,
+        layout_box.height,
+    )?;
     render_candidate(&layout)
 }
 
@@ -635,6 +646,32 @@ fn run_collision_layout_at<'a>(
         .with_max_width(max_width.max(1.0))
         .with_max_height(max_height.max(1.0))
         .run(text)
+}
+
+fn ensure_center_aligned<'a>(
+    layout_builder: &TextLayout<'a>,
+    layout: LayoutRun<'a>,
+    text: &str,
+    container_width: f32,
+    container_height: f32,
+) -> Result<LayoutRun<'a>> {
+    // A narrow bubble can be narrower than individual words (manga tall-thin
+    // balloons frequently are). The layout engine's center-align step skips
+    // lines wider than `max_width`, leaving them at x=0 while shorter lines in
+    // the same block DO get centered at `max_width/2` — so shorter lines
+    // cluster on the left instead of being centred relative to the widest line.
+    // Re-run the layout with `max_width = actual_content_width` so every line
+    // is centred relative to the block's widest line.
+    if layout.width > container_width + FIT_EPSILON {
+        layout_builder
+            .clone()
+            .with_font_size(layout.font_size)
+            .with_max_width(layout.width)
+            .with_max_height(container_height)
+            .run(text)
+    } else {
+        Ok(layout)
+    }
 }
 
 fn layout_fits_collision_attempt(
@@ -951,21 +988,20 @@ fn rendered_direction_for_writing_mode(writing_mode: WritingMode) -> TextDirecti
 // ---------------------------------------------------------------------------
 
 fn centred_sprite_transform(
-    seed_box: LayoutBox,
+    anchor_box: LayoutBox,
     sprite_width: u32,
     sprite_height: u32,
     rotation_deg: f32,
 ) -> Transform {
-    // Place the sprite centred on the seed (detector's original text bbox).
-    // The seed is inside the bubble body, so this avoids tail-side drift when
-    // the matched bubble bbox extends into a balloon tail.
+    // Place the sprite centred on the provided anchor (usually the bubble's
+    // interior safe area).
     let sprite_w = sprite_width as f32;
     let sprite_h = sprite_height as f32;
-    let seed_cx = seed_box.x + seed_box.width * 0.5;
-    let seed_cy = seed_box.y + seed_box.height * 0.5;
+    let cx = anchor_box.x + anchor_box.width * 0.5;
+    let cy = anchor_box.y + anchor_box.height * 0.5;
     Transform {
-        x: (seed_cx - sprite_w * 0.5).round(),
-        y: (seed_cy - sprite_h * 0.5).round(),
+        x: (cx - sprite_w * 0.5).round(),
+        y: (cy - sprite_h * 0.5).round(),
         width: sprite_w,
         height: sprite_h,
         rotation_deg,
@@ -1206,5 +1242,24 @@ mod tests {
                 img.put_pixel(x, y, Luma([value]));
             }
         }
+    }
+
+    #[test]
+    fn centred_sprite_transform_anchors_to_provided_box_center() {
+        let anchor = LayoutBox {
+            x: 100.0,
+            y: 100.0,
+            width: 200.0,
+            height: 100.0,
+        };
+        let sprite_w = 100;
+        let sprite_h = 50;
+
+        let transform = centred_sprite_transform(anchor, sprite_w, sprite_h, 0.0);
+
+        // Center of anchor is (200, 150).
+        // Sprite (100x50) centered on (200, 150) starts at (150, 125).
+        assert_eq!(transform.x, 150.0);
+        assert_eq!(transform.y, 125.0);
     }
 }

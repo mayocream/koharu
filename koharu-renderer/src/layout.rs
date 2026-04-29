@@ -563,7 +563,7 @@ impl<'a> TextLayout<'a> {
                 && effective_alignment != TextAlign::Left
             {
                 for line in &mut lines {
-                    let remaining = (max_extent - line.advance).max(0.0);
+                    let remaining = (width - line.advance).max(0.0);
                     let offset = match effective_alignment {
                         TextAlign::Left => 0.0,
                         TextAlign::Center => remaining * 0.5,
@@ -1084,5 +1084,33 @@ mod tests {
             normalize_vertical_emphasis_punctuation("Hello!?!"),
             "Hello⁉!"
         );
+    }
+
+    #[test]
+    fn horizontal_center_alignment_with_overflow_is_aligned_relative_to_widest()
+    -> anyhow::Result<()> {
+        let font = any_system_font();
+        // A container only 50px wide.
+        let max_width = 50.0;
+        // "VILLAGE," is one word, it won't wrap and will overflow the 50px constraint.
+        // "HI" is short and fits.
+        let layout = TextLayout::new(&font, Some(20.0))
+            .with_max_width(max_width)
+            .with_alignment(TextAlign::Center)
+            .run("VILLAGE,\nHI")?;
+
+        let w0 = layout.lines[0].advance;
+        let w1 = layout.lines[1].advance;
+
+        let c0 = layout.lines[0].baseline.0 + w0 * 0.5;
+        let c1 = layout.lines[1].baseline.0 + w1 * 0.5;
+
+        // In a fixed system, the center of the short line should match the center
+        // of the overflowing line, NOT the center of the original 50px constraint.
+        assert!(
+            (c0 - c1).abs() < 1.0,
+            "expected line centres to match even with overflow, got c0={c0} c1={c1} (max_width={max_width})",
+        );
+        Ok(())
     }
 }
