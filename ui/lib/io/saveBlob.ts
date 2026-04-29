@@ -1,49 +1,37 @@
 'use client'
 
 /**
- * Cross-platform blob save.
+ * Cross-platform save helpers.
  *
- * - **Tauri**: native save dialog (for single files) or folder dialog + unzip
- *   (for multi-file `application/zip` blobs). The server always returns a zip
- *   when a format produces multiple files; on Tauri we extract into the
- *   chosen folder so users get individual files, not a zip they have to
- *   unpack.
+ * Two entry points:
  *
- * - **Web**: `browser-fs-access` handles File System Access API + the legacy
- *   `<a download>` fallback. Zips are saved as-is (user unzips if desired).
+ * ### `saveBlob(blob, defaultName)`
+ * For **single-file** exports (PNG, PSD, KHR). The caller has already
+ * downloaded the blob. Shows a save-file dialog and writes it.
  *
- * Returns `true` if the save completed, `false` if the user cancelled.
+ * ### `saveBlobViaStream(url, init, defaultName, onProgress)`
+ * For **multi-file ZIP** exports. Implements "先授權、後串流":
+ * 1. Pop the folder picker **immediately** (user gesture is still live).
+ * 2. Fetch the URL as a ReadableStream.
+ * 3. Pipe through fflate Unzip and write files directly to disk.
+ * This avoids holding a 400MB+ blob in memory and prevents SecurityError.
+ *
+ * Returns `true` if completed, `false` if user cancelled.
  */
 
 import { isTauri } from '@/lib/backend'
+import { pickFolder } from '@/lib/io/folderHandle'
+import type { StreamingUnzipProgress } from '@/lib/io/streamingUnzip'
+import { streamingUnzipToFolder } from '@/lib/io/streamingUnzip'
+
+// ---------------------------------------------------------------------------
+// Single-file save (for non-ZIP exports: KHR, single-page PNG/PSD)
+// ---------------------------------------------------------------------------
 
 export async function saveBlob(blob: Blob, defaultName: string): Promise<boolean> {
-  // Zip detection must come from the actual content type — a single-file
-  // export (PNG/PSD/khr) whose filename happens to end in `.zip` would
-  // otherwise be fed to `unzipSync` and throw.
-  const isZip = blob.type === 'application/zip'
-
   if (isTauri()) {
-    const { open, save } = await import('@tauri-apps/plugin-dialog')
-    const { writeFile, mkdir } = await import('@tauri-apps/plugin-fs')
-
-    if (isZip) {
-      const folder = await open({ directory: true, multiple: false })
-      if (!folder || typeof folder !== 'string') return false
-      const { unzipSync } = await import('fflate')
-      const entries = unzipSync(new Uint8Array(await blob.arrayBuffer()))
-      for (const [name, bytes] of Object.entries(entries)) {
-        const normalized = name.replace(/\\/g, '/')
-        const full = `${folder}/${normalized}`
-        const slash = full.lastIndexOf('/')
-        if (slash > folder.length) {
-          const dir = full.substring(0, slash)
-          await mkdir(dir, { recursive: true }).catch(() => {})
-        }
-        await writeFile(full, bytes)
-      }
-      return true
-    }
+    const { save } = await import('@tauri-apps/plugin-dialog')
+    const { writeFile } = await import('@tauri-apps/plugin-fs')
 
     const path = await save({ defaultPath: defaultName })
     if (!path || typeof path !== 'string') return false
@@ -55,6 +43,29 @@ export async function saveBlob(blob: Blob, defaultName: string): Promise<boolean
   await fileSave(blob, { fileName: defaultName })
   return true
 }
+
+// ---------------------------------------------------------------------------
+// Streaming ZIP save ("先授權、後串流")
+// ---------------------------------------------------------------------------
+
+export async function saveBlobViaStream(
+  url: string,
+  init: RequestInit,
+  _defaultName: string,
+  onProgress?: (progress: StreamingUnzipProgress) => void,
+): Promise<boolean> {
+  // Step 1: pick folder FIRST while user gesture is fresh
+  const folder = await pickFolder()
+  if (!folder) return false
+
+  // Step 2: stream fetch → decompress → write
+  await streamingUnzipToFolder(url, init, folder, onProgress)
+  return true
+}
+
+// ---------------------------------------------------------------------------
+// Content-Disposition header parser
+// ---------------------------------------------------------------------------
 
 /**
  * Parse a `Content-Disposition: attachment; filename="..."` header. Returns
