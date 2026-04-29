@@ -28,6 +28,7 @@
     "exportPsd": "Export PSD...",
     "exportAllInpainted": "Export All Inpainted...",
     "exportAllRendered": "Export All Rendered...",
+    "exportingProgress": "Exporting... {{downloaded}}/{{total}} MB ({{files}} files)",
     "view": "View",
     "fitWindow": "Fit Window",
     "originalSize": "Original Size",

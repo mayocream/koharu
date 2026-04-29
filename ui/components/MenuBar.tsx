@@ -20,6 +20,7 @@ import { useScene } from '@/hooks/useScene'
 import { getConfig, startPipeline } from '@/lib/api/default/default'
 import { isTauri, openExternalUrl } from '@/lib/backend'
 import { exportCurrentProjectAs, importPages } from '@/lib/io/pagesIo'
+import type { StreamingUnzipProgress } from '@/lib/io/streamingUnzip'
 import { closeProject, redoOp, selectAllTextNodesOnCurrentPage, undoOp } from '@/lib/io/scene'
 import { formatShortcutForDisplay, getPlatform } from '@/lib/shortcutUtils'
 import { useEditorUiStore } from '@/lib/stores/editorUiStore'
@@ -62,6 +63,7 @@ export function MenuBar() {
   const { t } = useTranslation()
   const [settingsOpen, setSettingsOpen] = useState(false)
   const [settingsTab, setSettingsTab] = useState<TabId>('appearance')
+  const [exportProgress, setExportProgress] = useState<StreamingUnzipProgress | null>(null)
   const hasPage = useSelectionStore((s) => s.pageId !== null)
   const hasScene = useScene().scene !== null
   const shortcuts = usePreferencesStore((state) => state.shortcuts)
@@ -118,15 +120,37 @@ export function MenuBar() {
       testId: 'menu-file-export-psd',
     },
     {
-      label: t('menu.exportAllInpainted'),
-      onSelect: () => void exportCurrentProjectAs('inpainted'),
-      disabled: !hasScene,
+      label: exportProgress
+        ? t('menu.exportingProgress', {
+            downloaded: Math.round(exportProgress.downloadedBytes / 1024 / 1024),
+            total: exportProgress.totalBytes
+              ? Math.round(exportProgress.totalBytes / 1024 / 1024)
+              : '?',
+            files: exportProgress.filesWritten,
+          })
+        : t('menu.exportAllInpainted'),
+      onSelect: () =>
+        void exportCurrentProjectAs('inpainted', undefined, (p) => setExportProgress(p)).finally(
+          () => setExportProgress(null),
+        ),
+      disabled: !hasScene || !!exportProgress,
       testId: 'menu-file-export-all-inpainted',
     },
     {
-      label: t('menu.exportAllRendered'),
-      onSelect: () => void exportCurrentProjectAs('rendered'),
-      disabled: !hasScene,
+      label: exportProgress
+        ? t('menu.exportingProgress', {
+            downloaded: Math.round(exportProgress.downloadedBytes / 1024 / 1024),
+            total: exportProgress.totalBytes
+              ? Math.round(exportProgress.totalBytes / 1024 / 1024)
+              : '?',
+            files: exportProgress.filesWritten,
+          })
+        : t('menu.exportAllRendered'),
+      onSelect: () =>
+        void exportCurrentProjectAs('rendered', undefined, (p) => setExportProgress(p)).finally(
+          () => setExportProgress(null),
+        ),
+      disabled: !hasScene || !!exportProgress,
       testId: 'menu-file-export-all-rendered',
     },
   ]
