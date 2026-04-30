@@ -252,6 +252,7 @@ impl Renderer {
             .text_align
             .map(core_align_to_renderer)
             .unwrap_or(RendererTextAlign::Center);
+        let seed_box = resolved_box.seed_box;
         let layout_box = resolved_box.layout_box;
 
         let mut layout_builder = TextLayout::new(&font, None)
@@ -284,7 +285,7 @@ impl Renderer {
                 },
             )?;
             let transform = centred_sprite_transform(
-                layout_box,
+                seed_box,
                 rendered.width(),
                 rendered.height(),
                 block.transform.rotation_deg,
@@ -350,10 +351,6 @@ impl Renderer {
         // the tail — so anchoring here keeps translations in the body
         // even when the bubble bbox extends into the tail area.
         //
-        // Deliberately no clamp to `expanded_box`: clamping to the
-        // segmentation bbox can pull the sprite toward the tail side
-        // when the bbox extends past the visible body. Trusting the
-        // seed position is both simpler and visually correct.
         Ok(Some(RenderedBlock {
             node_id: block.node_id,
             sprite: DynamicImage::ImageRgba8(candidate.image),
@@ -649,29 +646,14 @@ fn run_collision_layout_at<'a>(
 }
 
 fn ensure_center_aligned<'a>(
-    layout_builder: &TextLayout<'a>,
+    _layout_builder: &TextLayout<'a>,
     layout: LayoutRun<'a>,
-    text: &str,
-    container_width: f32,
-    container_height: f32,
+    _text: &str,
+    _container_width: f32,
+    _container_height: f32,
 ) -> Result<LayoutRun<'a>> {
-    // A narrow bubble can be narrower than individual words (manga tall-thin
-    // balloons frequently are). The layout engine's center-align step skips
-    // lines wider than `max_width`, leaving them at x=0 while shorter lines in
-    // the same block DO get centered at `max_width/2` — so shorter lines
-    // cluster on the left instead of being centred relative to the widest line.
-    // Re-run the layout with `max_width = actual_content_width` so every line
-    // is centred relative to the block's widest line.
-    if layout.width > container_width + FIT_EPSILON {
-        layout_builder
-            .clone()
-            .with_font_size(layout.font_size)
-            .with_max_width(layout.width)
-            .with_max_height(container_height)
-            .run(text)
-    } else {
-        Ok(layout)
-    }
+    // Pass-through now that tight-bounds centering is handled in the renderer.
+    Ok(layout)
 }
 
 fn layout_fits_collision_attempt(
@@ -993,8 +975,7 @@ fn centred_sprite_transform(
     sprite_height: u32,
     rotation_deg: f32,
 ) -> Transform {
-    // Place the sprite centred on the provided anchor (usually the bubble's
-    // interior safe area).
+    // Centering on seed_box maintains original positioning and avoids tail drift.
     let sprite_w = sprite_width as f32;
     let sprite_h = sprite_height as f32;
     let cx = anchor_box.x + anchor_box.width * 0.5;
