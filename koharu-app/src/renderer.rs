@@ -327,22 +327,6 @@ impl Renderer {
             max_font,
         )?;
 
-        // A narrow bubble can be narrower than individual words (manga
-        // tall-thin balloons frequently are). The layout engine's
-        // center-align step skips lines wider than `max_width`, leaving
-        // them at x=0 while shorter lines in the same block DO get
-        // centered at `max_width/2` — so shorter lines cluster on the
-        // left instead of being centred relative to the widest line.
-        // Re-run the layout with `max_width = actual_content_width` so
-        // every line is centred relative to the block's widest line.
-        let layout = ensure_center_aligned(
-            &layout_builder,
-            layout,
-            translation,
-            layout_box.width,
-            layout_box.height,
-        )?;
-
         let candidate = render_candidate(&layout)?;
 
         // Place the sprite centred on the *seed* (detector's original
@@ -570,13 +554,6 @@ where
         if !layout_fits_collision_attempt(&layout, writing_mode, layout_box, main_extent) {
             continue;
         }
-        let layout = ensure_center_aligned(
-            layout_builder,
-            layout,
-            text,
-            layout_box.width,
-            layout_box.height,
-        )?;
 
         let candidate = render_candidate(&layout)?;
         if sprite_collides_with_bubble_mask(&candidate.image, &candidate.transform, mask, bubble_id)
@@ -615,13 +592,6 @@ where
         font_size,
         primary_collision_extent(layout_box, writing_mode),
     )?;
-    let layout = ensure_center_aligned(
-        layout_builder,
-        layout,
-        text,
-        layout_box.width,
-        layout_box.height,
-    )?;
     render_candidate(&layout)
 }
 
@@ -643,17 +613,6 @@ fn run_collision_layout_at<'a>(
         .with_max_width(max_width.max(1.0))
         .with_max_height(max_height.max(1.0))
         .run(text)
-}
-
-fn ensure_center_aligned<'a>(
-    _layout_builder: &TextLayout<'a>,
-    layout: LayoutRun<'a>,
-    _text: &str,
-    _container_width: f32,
-    _container_height: f32,
-) -> Result<LayoutRun<'a>> {
-    // Pass-through now that tight-bounds centering is handled in the renderer.
-    Ok(layout)
 }
 
 fn layout_fits_collision_attempt(
@@ -975,7 +934,8 @@ fn centred_sprite_transform(
     sprite_height: u32,
     rotation_deg: f32,
 ) -> Transform {
-    // Centering on seed_box maintains original positioning and avoids tail drift.
+    // Centering on the anchor_box (usually the detector's seed_box)
+    // maintains original positioning and avoids tail drift.
     let sprite_w = sprite_width as f32;
     let sprite_h = sprite_height as f32;
     let cx = anchor_box.x + anchor_box.width * 0.5;
