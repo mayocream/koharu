@@ -205,6 +205,8 @@
   "render": {
     "effectLabel": "텍스트 효과",
     "alignLabel": "정렬",
+    "textDirectionLabel": "방향",
+    "textDirectionToggle": "텍스트 방향 전환",
     "alignLeft": "왼쪽 정렬",
     "alignCenter": "가운데 정렬",
     "alignRight": "오른쪽 정렬",

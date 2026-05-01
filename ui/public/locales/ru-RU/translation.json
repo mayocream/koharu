@@ -183,6 +183,8 @@
   "render": {
     "effectLabel": "Эффект текста",
     "alignLabel": "Выравнивание",
+    "textDirectionLabel": "Направление",
+    "textDirectionToggle": "Переключить направление текста",
     "alignLeft": "По левому краю",
     "alignCenter": "По центру",
     "alignRight": "По правому краю",

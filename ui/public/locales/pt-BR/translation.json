@@ -184,6 +184,8 @@
   "render": {
     "effectLabel": "Efeito de texto",
     "alignLabel": "Alinhamento",
+    "textDirectionLabel": "Direção",
+    "textDirectionToggle": "Alternar direção do texto",
     "alignLeft": "Alinhar à esquerda",
     "alignCenter": "Centralizar",
     "alignRight": "Alinhar à direita",

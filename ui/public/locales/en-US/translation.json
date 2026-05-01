@@ -216,6 +216,8 @@
   "render": {
     "effectLabel": "Text effect",
     "alignLabel": "Align",
+    "textDirectionLabel": "Direction",
+    "textDirectionToggle": "Toggle text direction",
     "alignLeft": "Align left",
     "alignCenter": "Align center",
     "alignRight": "Align right",
