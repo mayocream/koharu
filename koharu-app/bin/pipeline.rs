@@ -227,6 +227,7 @@ async fn run() -> Result<()> {
             system_prompt: cli.system_prompt.clone(),
             default_font: cli.default_font.clone(),
             text_node_ids: None,
+            reading_order: None,
             region: None,
         },
     };

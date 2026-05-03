@@ -14,7 +14,7 @@ use koharu_app::pipeline::{
 };
 use koharu_core::{
     AppEvent, JobFinishedEvent, JobStatus, JobSummary, JobWarningEvent, NodeId, PageId,
-    PipelineProgress, PipelineStatus, Region,
+    PipelineProgress, PipelineStatus, ReadingOrder, Region,
 };
 use serde::{Deserialize, Serialize};
 use utoipa_axum::{router::OpenApiRouter, routes};
@@ -48,6 +48,8 @@ pub struct StartPipelineRequest {
     pub system_prompt: Option<String>,
     #[serde(default)]
     pub default_font: Option<String>,
+    #[serde(default)]
+    pub reading_order: Option<ReadingOrder>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, utoipa::ToSchema)]
@@ -85,6 +87,7 @@ async fn start_pipeline(
             default_font: req.default_font,
             text_node_ids: req.text_node_ids,
             region: req.region,
+            reading_order: req.reading_order,
         },
     };
 

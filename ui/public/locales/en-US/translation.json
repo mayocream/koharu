@@ -243,7 +243,11 @@
     "translationLabel": "Translation",
     "translationBadge": "TL",
     "addOcrPlaceholder": "Add OCR text",
-    "addTranslationPlaceholder": "Add translation"
+    "addTranslationPlaceholder": "Add translation",
+    "readingOrder": "Reading Order",
+    "readingOrderRtl": "Right-to-Left (RTL)",
+    "readingOrderLtr": "Left-to-Right (LTR)",
+    "readingOrderCustom": "Custom"
   },
   "workspace": {
     "importPrompt": "Import a page to begin editing.",

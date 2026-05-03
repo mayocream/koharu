@@ -7,7 +7,7 @@
 
 pub mod artifacts;
 pub mod engine;
-mod engines;
+pub mod engines;
 
 pub use artifacts::Artifact;
 pub use engine::{

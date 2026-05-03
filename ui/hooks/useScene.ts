@@ -18,6 +18,7 @@ export function useScene(): { scene: Scene | null; epoch: number } {
       retry: false,
       staleTime: Infinity,
       gcTime: Infinity,
+      structuralSharing: false,
     },
   })
   // React Query preserves `data` across a failed refetch, so closing a

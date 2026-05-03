@@ -209,8 +209,12 @@
     "ocrBadge": "OCR",
     "translationLabel": "Traducción",
     "translationBadge": "TL",
-    "addOcrPlaceholder": "Agregar texto OCR",
-    "addTranslationPlaceholder": "Agregar traducción"
+    "addOcrPlaceholder": "Añadir texto OCR",
+    "addTranslationPlaceholder": "Añadir traducción",
+    "readingOrder": "Orden de lectura",
+    "readingOrderRtl": "Derecha a izquierda (RTL)",
+    "readingOrderLtr": "Izquierda a derecha (LTR)",
+    "readingOrderCustom": "Personalizado"
   },
   "workspace": {
     "importPrompt": "Importa una página para comenzar a editar.",

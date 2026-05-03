@@ -7,7 +7,7 @@ use anyhow::{Context, Result};
 use image::{DynamicImage, GenericImageView};
 use koharu_core::{
     BlobRef, ImageData, ImageRole, MaskData, MaskRole, Node, NodeDataPatch, NodeId, NodeKind, Op,
-    PageId, Scene, TextData, Transform,
+    PageId, ReadingOrder, Scene, TextData, Transform,
 };
 
 use crate::blobs::BlobStore;
@@ -307,12 +307,16 @@ pub fn clear_text_nodes_ops(scene: &Scene, page: PageId) -> Vec<Op> {
 // detector that emits text blocks (CTD, comic-text-bubble, PP-DocLayout).
 // ---------------------------------------------------------------------------
 
-/// Sort `(bbox, data)` pairs in manga reading order (right-to-left, top-to-bottom).
-pub fn sort_manga_reading_order<T>(blocks: &mut [([f32; 4], T)]) {
+/// Sort `(bbox, data)` pairs in a reading order (RTL, LTR, or Custom).
+pub fn sort_manga_reading_order<T>(blocks: &mut [([f32; 4], T)], order: ReadingOrder) {
     #[derive(Debug, PartialEq, Clone, Copy)]
     enum Axis {
         X,
         Y,
+    }
+
+    if order == ReadingOrder::Custom {
+        return;
     }
 
     if blocks.len() <= 1 {
@@ -329,7 +333,12 @@ pub fn sort_manga_reading_order<T>(blocks: &mut [([f32; 4], T)]) {
     let min_gap_x = (median_w * 0.15).max(10.0);
     let min_gap_y = (median_h * 0.10).max(8.0);
 
-    fn xy_cut_recursive<T>(blocks: &mut [([f32; 4], T)], min_gap_x: f32, min_gap_y: f32) {
+    fn xy_cut_recursive<T>(
+        blocks: &mut [([f32; 4], T)],
+        min_gap_x: f32,
+        min_gap_y: f32,
+        order: ReadingOrder,
+    ) {
         use std::cmp::Ordering;
         if blocks.len() <= 1 {
             return;
@@ -343,7 +352,11 @@ pub fn sort_manga_reading_order<T>(blocks: &mut [([f32; 4], T)]) {
                 row_a
                     .partial_cmp(&row_b)
                     .unwrap_or(Ordering::Equal)
-                    .then_with(|| b.0[0].partial_cmp(&a.0[0]).unwrap_or(Ordering::Equal))
+                    .then_with(|| match order {
+                        ReadingOrder::Rtl => b.0[0].partial_cmp(&a.0[0]).unwrap_or(Ordering::Equal),
+                        ReadingOrder::Ltr => a.0[0].partial_cmp(&b.0[0]).unwrap_or(Ordering::Equal),
+                        _ => Ordering::Equal,
+                    })
             });
             return;
         };
@@ -351,8 +364,12 @@ pub fn sort_manga_reading_order<T>(blocks: &mut [([f32; 4], T)]) {
         let cut_coord = (gap.0 + gap.1) / 2.0;
         blocks.sort_by_key(|(b, _)| {
             if axis == Axis::X {
-                // Right partition first (reading order): items whose center is LEFT of cut go second.
-                (b[0] + (b[2] - b[0]) * 0.5) < cut_coord
+                let center_x = b[0] + (b[2] - b[0]) * 0.5;
+                match order {
+                    ReadingOrder::Rtl => center_x < cut_coord, // Right first
+                    ReadingOrder::Ltr => center_x > cut_coord, // Left first
+                    _ => false,
+                }
             } else {
                 // Top partition first: items whose center is BELOW cut go second.
                 (b[1] + (b[3] - b[1]) * 0.5) > cut_coord
@@ -363,7 +380,12 @@ pub fn sort_manga_reading_order<T>(blocks: &mut [([f32; 4], T)]) {
             .iter()
             .filter(|(b, _)| {
                 if axis == Axis::X {
-                    (b[0] + (b[2] - b[0]) * 0.5) >= cut_coord
+                    let center_x = b[0] + (b[2] - b[0]) * 0.5;
+                    match order {
+                        ReadingOrder::Rtl => center_x >= cut_coord,
+                        ReadingOrder::Ltr => center_x <= cut_coord,
+                        _ => true,
+                    }
                 } else {
                     (b[1] + (b[3] - b[1]) * 0.5) <= cut_coord
                 }
@@ -371,13 +393,17 @@ pub fn sort_manga_reading_order<T>(blocks: &mut [([f32; 4], T)]) {
             .count();
 
         if group1_len == 0 || group1_len == blocks.len() {
-            blocks.sort_by(|a, b| b.0[0].partial_cmp(&a.0[0]).unwrap_or(Ordering::Equal));
+            blocks.sort_by(|a, b| match order {
+                ReadingOrder::Rtl => b.0[0].partial_cmp(&a.0[0]).unwrap_or(Ordering::Equal),
+                ReadingOrder::Ltr => a.0[0].partial_cmp(&b.0[0]).unwrap_or(Ordering::Equal),
+                _ => Ordering::Equal,
+            });
             return;
         }
 
         let (left, right) = blocks.split_at_mut(group1_len);
-        xy_cut_recursive(left, min_gap_x, min_gap_y);
-        xy_cut_recursive(right, min_gap_x, min_gap_y);
+        xy_cut_recursive(left, min_gap_x, min_gap_y, order);
+        xy_cut_recursive(right, min_gap_x, min_gap_y, order);
     }
 
     fn find_best_cut<T>(
@@ -430,5 +456,32 @@ pub fn sort_manga_reading_order<T>(blocks: &mut [([f32; 4], T)]) {
         largest
     }
 
-    xy_cut_recursive(blocks, min_gap_x, min_gap_y);
+    xy_cut_recursive(blocks, min_gap_x, min_gap_y, order);
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use koharu_core::ReadingOrder;
+
+    #[test]
+    fn test_reading_order_sort() {
+        // Two blocks side-by-side
+        // B1: [100, 100, 200, 200] (Left)
+        // B2: [300, 100, 400, 200] (Right)
+        let b1 = [100.0, 100.0, 200.0, 200.0];
+        let b2 = [300.0, 100.0, 400.0, 200.0];
+
+        let mut blocks = vec![(b1, "left"), (b2, "right")];
+
+        // RTL: Right should come first
+        sort_manga_reading_order(&mut blocks, ReadingOrder::Rtl);
+        assert_eq!(blocks[0].1, "right");
+        assert_eq!(blocks[1].1, "left");
+
+        // LTR: Left should come first
+        sort_manga_reading_order(&mut blocks, ReadingOrder::Ltr);
+        assert_eq!(blocks[0].1, "left");
+        assert_eq!(blocks[1].1, "right");
+    }
 }

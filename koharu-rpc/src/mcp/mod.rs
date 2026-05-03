@@ -19,7 +19,7 @@ use koharu_app::{
     App,
     pipeline::{PipelineRunOptions, PipelineSpec, Scope},
 };
-use koharu_core::{NodeId, Op, PageId};
+use koharu_core::{NodeId, Op, PageId, ReadingOrder};
 use rmcp::handler::server::wrapper::{Json as JsonOutput, Parameters};
 use rmcp::model::{ServerCapabilities, ServerInfo};
 use rmcp::transport::streamable_http_server::{
@@ -97,6 +97,7 @@ pub struct StartPipelineInput {
     pub target_language: Option<String>,
     pub system_prompt: Option<String>,
     pub default_font: Option<String>,
+    pub reading_order: Option<ReadingOrder>,
 }
 
 #[derive(Debug, Clone, Serialize, schemars::JsonSchema)]
@@ -189,6 +190,7 @@ impl KoharuServer {
                 system_prompt: input.system_prompt,
                 default_font: input.default_font,
                 text_node_ids: input.text_node_ids,
+                reading_order: input.reading_order,
                 region: None,
             },
         };

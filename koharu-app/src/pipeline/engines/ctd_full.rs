@@ -48,7 +48,7 @@ impl Engine for Model {
             .into_iter()
             .map(|r| text_region_to_pair(r, DETECTOR_NAME))
             .collect();
-        sort_manga_reading_order(&mut pairs);
+        sort_manga_reading_order(&mut pairs, ctx.options.reading_order.unwrap_or_default());
         for (bbox, text) in pairs {
             let node = new_text_node(bbox, text);
             ops.push(Op::AddNode {

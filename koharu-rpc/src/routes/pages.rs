@@ -18,7 +18,7 @@ use image::GenericImageView;
 use koharu_app::pipeline::{self, EngineCtx, PipelineRunOptions};
 use koharu_core::{
     BlobRef, ImageData, ImageRole, MaskRole, Node, NodeDataPatch, NodeId, NodeKind, Op, Page,
-    PageId, Region, Scene, Transform,
+    PageId, ReadingOrder, Region, Scene, Transform,
 };
 use rayon::prelude::*;
 use serde::{Deserialize, Serialize};
@@ -45,6 +45,7 @@ pub fn router() -> OpenApiRouter<AppState> {
         .routes(routes!(create_pages_from_paths))
         .routes(routes!(add_image_layer))
         .routes(routes!(put_mask))
+        .routes(routes!(reorder_text_nodes))
 }
 
 // ---------------------------------------------------------------------------
@@ -217,6 +218,7 @@ pub struct CreatePagesFromPathsRequest {
 #[utoipa::path(
     post,
     path = "/pages/from-paths",
+    params(),
     request_body = CreatePagesFromPathsRequest,
     responses((status = 200, body = CreatePagesResponse))
 )]
@@ -589,4 +591,89 @@ async fn put_mask(
         node: node_id,
         blob,
     }))
+}
+
+// ---------------------------------------------------------------------------
+// POST /pages/{page_id}/reorder-text-nodes  — re-sort existing text blocks
+// ---------------------------------------------------------------------------
+
+#[utoipa::path(
+    post,
+    path = "/pages/{page_id}/reorder-text-nodes",
+    params(("page_id" = PageId, Path, description = "Page id")),
+    request_body = ReadingOrder,
+    responses((status = 200))
+)]
+async fn reorder_text_nodes(
+    State(app): State<AppState>,
+    Path(page_id): Path<PageId>,
+    Json(order): Json<ReadingOrder>,
+) -> ApiResult<axum::http::StatusCode> {
+    tracing::debug!(
+        "Reordering text nodes for page {} with order {:?}",
+        page_id,
+        order
+    );
+    let new_order = {
+        let session = app
+            .current_session()
+            .ok_or_else(|| ApiError::not_found("no project open"))?;
+        let scene = session.scene_snapshot();
+        let page = scene
+            .page(page_id)
+            .ok_or_else(|| ApiError::not_found("page not found"))?;
+
+        // 1. Collect all text nodes and their bboxes
+        let mut text_nodes: Vec<([f32; 4], NodeId)> = page
+            .nodes
+            .iter()
+            .filter_map(|(id, node)| {
+                if let NodeKind::Text(_) = &node.kind {
+                    let b = &node.transform;
+                    Some(([b.x, b.y, b.x + b.width, b.y + b.height], *id))
+                } else {
+                    None
+                }
+            })
+            .collect();
+
+        tracing::debug!(
+            "Found {} text nodes. Current order: {:?}",
+            text_nodes.len(),
+            text_nodes.iter().map(|(_, id)| id).collect::<Vec<_>>()
+        );
+
+        if text_nodes.len() <= 1 {
+            return Ok(axum::http::StatusCode::OK);
+        }
+
+        // 2. Sort them
+        koharu_app::pipeline::engines::support::sort_manga_reading_order(&mut text_nodes, order);
+
+        // 3. Construct the full node order
+        let mut new_order = Vec::with_capacity(page.nodes.len());
+        let mut sorted_text_iter = text_nodes.into_iter().map(|(_, id)| id);
+
+        for id in page.nodes.keys() {
+            if let Some(node) = page.nodes.get(id) {
+                if let NodeKind::Text(_) = &node.kind {
+                    new_order.push(sorted_text_iter.next().unwrap());
+                } else {
+                    new_order.push(*id);
+                }
+            }
+        }
+        new_order
+    };
+
+    tracing::debug!("New order: {:?}", new_order);
+
+    let op = Op::ReorderNodes {
+        page: page_id,
+        order: new_order,
+        prev_order: Vec::new(),
+    };
+    app.apply(op).map_err(ApiError::internal)?;
+
+    Ok(axum::http::StatusCode::OK)
 }

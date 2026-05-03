@@ -21,7 +21,7 @@ use std::sync::atomic::AtomicBool;
 
 use anyhow::{Result, bail};
 use async_trait::async_trait;
-use koharu_core::{NodeId, Op, PageId, Region, Scene};
+use koharu_core::{NodeId, Op, PageId, ReadingOrder, Region, Scene};
 use koharu_runtime::RuntimeManager;
 use parking_lot::RwLock;
 use petgraph::algo::toposort;
@@ -62,6 +62,7 @@ pub struct PipelineRunOptions {
     /// composite onto the existing `Image { Inpainted }` (fallback Source)
     /// and process just that one block. Other engines ignore it.
     pub region: Option<Region>,
+    pub reading_order: Option<ReadingOrder>,
 }
 
 // ---------------------------------------------------------------------------

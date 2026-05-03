@@ -210,7 +210,11 @@
     "translationLabel": "Перевод",
     "translationBadge": "Пер.",
     "addOcrPlaceholder": "Добавить текст OCR",
-    "addTranslationPlaceholder": "Добавить перевод"
+    "addTranslationPlaceholder": "Добавить перевод",
+    "readingOrder": "Порядок чтения",
+    "readingOrderRtl": "Справа налево (RTL)",
+    "readingOrderLtr": "Слева направо (LTR)",
+    "readingOrderCustom": "Свой"
   },
   "workspace": {
     "importPrompt": "Импортируйте страницу, чтобы начать редактирование.",

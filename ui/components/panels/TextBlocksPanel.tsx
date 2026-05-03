@@ -2,6 +2,7 @@
 
 import { Languages, LoaderCircleIcon, Trash2Icon } from 'lucide-react'
 import { motion } from 'motion/react'
+import { useEffect } from 'react'
 import { useTranslation } from 'react-i18next'
 
 import {
@@ -13,11 +14,20 @@ import {
 import { Button } from '@/components/ui/button'
 import { DraftTextarea } from '@/components/ui/draft-textarea'
 import { ScrollArea } from '@/components/ui/scroll-area'
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from '@/components/ui/select'
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip'
 import { useCurrentPage, useTextNodes, type TextNodeEntry } from '@/hooks/useCurrentPage'
+import { useScene } from '@/hooks/useScene'
 import { getConfig, startPipeline, useGetCurrentLlm } from '@/lib/api/default/default'
+import { fetchApi } from '@/lib/api/fetch'
 import type { TextDataPatch } from '@/lib/api/schemas'
-import { applyOp, queueAutoRender } from '@/lib/io/scene'
+import { applyOp, invalidateScene, queueAutoRender } from '@/lib/io/scene'
 import { ops } from '@/lib/ops'
 import { useEditorUiStore } from '@/lib/stores/editorUiStore'
 import { useJobsStore } from '@/lib/stores/jobsStore'
@@ -27,7 +37,16 @@ import { useSelectionStore } from '@/lib/stores/selectionStore'
 export function TextBlocksPanel() {
   const { t } = useTranslation()
   const page = useCurrentPage()
+  const { epoch } = useScene()
   const textNodes = useTextNodes()
+  useEffect(() => {
+    if (process.env.NODE_ENV !== 'production') {
+      console.debug(
+        '[reorder] Text nodes order:',
+        textNodes.map((n) => n.id),
+      )
+    }
+  }, [textNodes])
   const selectedIds = useSelectionStore((s) => s.nodeIds)
   const select = useSelectionStore((s) => s.select)
   const clearSelection = useSelectionStore((s) => s.clear)
@@ -36,6 +55,8 @@ export function TextBlocksPanel() {
   const isProcessing = useJobsStore((s) =>
     Object.values(s.jobs).some((j) => j.status === 'running'),
   )
+  const readingOrder = useEditorUiStore((s) => s.readingOrder)
+  const setReadingOrder = useEditorUiStore((s) => s.setReadingOrder)
 
   if (!page) {
     return (
@@ -90,8 +111,49 @@ export function TextBlocksPanel() {
         <span data-testid='textblocks-count' data-count={textNodes.length}>
           {t('textBlocks.title', { count: textNodes.length })}
         </span>
+        <div className='flex items-center gap-1.5'>
+          <span className='font-normal uppercase opacity-50'>{t('textBlocks.readingOrder')}:</span>
+          <Select
+            value={readingOrder}
+            onValueChange={async (val: 'rtl' | 'ltr' | 'custom') => {
+              if (process.env.NODE_ENV !== 'production') {
+                console.debug('[reorder] Changing reading order to:', val)
+              }
+              setReadingOrder(val)
+              try {
+                await fetchApi(`/api/v1/pages/${page.id}/reorder-text-nodes`, {
+                  method: 'POST',
+                  headers: { 'Content-Type': 'application/json' },
+                  body: JSON.stringify(val),
+                })
+                await invalidateScene()
+              } catch (err) {
+                console.error('[reorder] Failed to reorder text nodes:', err)
+              }
+            }}
+          >
+            <SelectTrigger
+              className='h-5 w-32 gap-1 border-none bg-transparent px-1.5 text-[10px] font-semibold uppercase hover:bg-accent focus:ring-0'
+              aria-label={t('textBlocks.readingOrder')}
+            >
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value='rtl' className='text-[10px] font-semibold'>
+                {t('textBlocks.readingOrderRtl')}
+              </SelectItem>
+              <SelectItem value='ltr' className='text-[10px] font-semibold'>
+                {t('textBlocks.readingOrderLtr')}
+              </SelectItem>
+              <SelectItem value='custom' className='text-[10px] font-semibold'>
+                {t('textBlocks.readingOrderCustom')}
+              </SelectItem>
+            </SelectContent>
+          </Select>
+        </div>
       </div>
       <ScrollArea
+        key={epoch}
         className='min-h-0 flex-1'
         viewportClassName='pb-1'
         data-testid='textblocks-scroll'
@@ -262,6 +324,7 @@ function BlockCard({
                     <TooltipTrigger asChild>
                       <Button
                         data-testid={`textblock-generate-${index}`}
+                        aria-label={t('llm.generateTooltip')}
                         variant='ghost'
                         size='icon-xs'
                         disabled={!llmReady || processing}

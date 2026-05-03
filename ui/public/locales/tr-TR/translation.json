@@ -210,7 +210,11 @@
     "translationLabel": "Çeviri",
     "translationBadge": "TL",
     "addOcrPlaceholder": "OCR metni ekle",
-    "addTranslationPlaceholder": "Çeviri ekle"
+    "addTranslationPlaceholder": "Çeviri ekle",
+    "readingOrder": "Okuma Sırası",
+    "readingOrderRtl": "Sağdan Sola (RTL)",
+    "readingOrderLtr": "Soldan Sağa (LTR)",
+    "readingOrderCustom": "Özel"
   },
   "workspace": {
     "importPrompt": "Düzenlemeye başlamak için bir sayfa içe aktarın.",
