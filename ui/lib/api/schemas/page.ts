@@ -5,6 +5,7 @@
  */
 import type { PageId } from './pageId'
 import type { PageNodes } from './pageNodes'
+import type { ReadingOrder } from './readingOrder'
 
 export interface Page {
   /** @minimum 0 */
@@ -14,6 +15,7 @@ export interface Page {
   /** Stacking = insertion order. Bottom-first: `source` is typically first,
   `rendered` typically last. */
   nodes: PageNodes
+  readingOrder: ReadingOrder
   /** @minimum 0 */
   width: number
 }

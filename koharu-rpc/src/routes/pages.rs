@@ -609,71 +609,89 @@ async fn reorder_text_nodes(
     Path(page_id): Path<PageId>,
     Json(order): Json<ReadingOrder>,
 ) -> ApiResult<axum::http::StatusCode> {
-    tracing::debug!(
-        "Reordering text nodes for page {} with order {:?}",
-        page_id,
-        order
-    );
-    let new_order = {
-        let session = app
-            .current_session()
-            .ok_or_else(|| ApiError::not_found("no project open"))?;
-        let scene = session.scene_snapshot();
-        let page = scene
-            .page(page_id)
-            .ok_or_else(|| ApiError::not_found("page not found"))?;
+    if order == ReadingOrder::Custom {
+        return Ok(axum::http::StatusCode::OK);
+    }
 
-        // 1. Collect all text nodes and their bboxes
-        let mut text_nodes: Vec<([f32; 4], NodeId)> = page
-            .nodes
-            .iter()
-            .filter_map(|(id, node)| {
-                if let NodeKind::Text(_) = &node.kind {
-                    let b = &node.transform;
-                    Some(([b.x, b.y, b.x + b.width, b.y + b.height], *id))
-                } else {
-                    None
-                }
-            })
-            .collect();
+    let session = app
+        .current_session()
+        .ok_or_else(|| ApiError::not_found("no project open"))?;
+    let scene = session.scene_snapshot();
+    let page = scene
+        .page(page_id)
+        .ok_or_else(|| ApiError::not_found("page not found"))?;
 
-        tracing::debug!(
-            "Found {} text nodes. Current order: {:?}",
-            text_nodes.len(),
-            text_nodes.iter().map(|(_, id)| id).collect::<Vec<_>>()
-        );
+    let mut ops = Vec::new();
 
-        if text_nodes.len() <= 1 {
-            return Ok(axum::http::StatusCode::OK);
-        }
+    // 1. Update reading order metadata if it differs
+    if page.reading_order != order {
+        ops.push(Op::UpdatePage {
+            id: page_id,
+            patch: koharu_core::PagePatch {
+                reading_order: Some(order),
+                ..Default::default()
+            },
+            prev: Default::default(),
+        });
+    }
 
-        // 2. Sort them
+    // 2. Calculate new node sequence
+    let mut text_nodes: Vec<([f32; 4], NodeId)> = page
+        .nodes
+        .iter()
+        .filter_map(|(id, node)| {
+            if let NodeKind::Text(_) = &node.kind {
+                let b = &node.transform;
+                Some(([b.x, b.y, b.x + b.width, b.y + b.height], *id))
+            } else {
+                None
+            }
+        })
+        .collect();
+
+    if text_nodes.len() > 1 {
         koharu_app::pipeline::engines::support::sort_manga_reading_order(&mut text_nodes, order);
 
-        // 3. Construct the full node order
         let mut new_order = Vec::with_capacity(page.nodes.len());
         let mut sorted_text_iter = text_nodes.into_iter().map(|(_, id)| id);
 
-        for id in page.nodes.keys() {
-            if let Some(node) = page.nodes.get(id) {
-                if let NodeKind::Text(_) = &node.kind {
-                    new_order.push(sorted_text_iter.next().unwrap());
-                } else {
-                    new_order.push(*id);
-                }
+        for (id, node) in page.nodes.iter() {
+            if let NodeKind::Text(_) = &node.kind {
+                new_order.push(sorted_text_iter.next().unwrap());
+            } else {
+                new_order.push(*id);
             }
         }
-        new_order
-    };
 
-    tracing::debug!("New order: {:?}", new_order);
+        let sequence_changed = page
+            .nodes
+            .keys()
+            .zip(new_order.iter())
+            .any(|(old, new)| old != new);
 
-    let op = Op::ReorderNodes {
-        page: page_id,
-        order: new_order,
-        prev_order: Vec::new(),
-    };
-    app.apply(op).map_err(ApiError::internal)?;
+        if sequence_changed {
+            ops.push(Op::ReorderNodes {
+                page: page_id,
+                order: new_order,
+                prev_order: Vec::new(),
+            });
+        }
+    }
+
+    if ops.is_empty() {
+        tracing::debug!("No changes needed for page {}", page_id);
+        return Ok(axum::http::StatusCode::OK);
+    }
+
+    if ops.len() == 1 {
+        app.apply(ops.remove(0)).map_err(ApiError::internal)?;
+    } else {
+        app.apply(Op::Batch {
+            ops,
+            label: format!("Set Reading Order ({:?})", order),
+        })
+        .map_err(ApiError::internal)?;
+    }
 
     Ok(axum::http::StatusCode::OK)
 }

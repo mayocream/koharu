@@ -24,6 +24,7 @@ use utoipa::ToSchema;
 
 use crate::blob::BlobRef;
 use crate::font::{FontPrediction, TextDirection};
+use crate::protocol::ReadingOrder;
 use crate::scene::{
     ImageData, ImageRole, MaskData, MaskRole, Node, NodeId, NodeKind, NodeKindTag, Page, PageId,
     ProjectStyle, Scene, TextData, Transform,
@@ -153,6 +154,8 @@ pub struct PagePatch {
     pub width: Option<u32>,
     #[serde(default)]
     pub height: Option<u32>,
+    #[serde(default)]
+    pub reading_order: Option<ReadingOrder>,
 }
 
 #[derive(Clone, Debug, Default, Serialize, Deserialize, JsonSchema, ToSchema)]
@@ -311,6 +314,7 @@ impl Op {
                     name: patch.name.as_ref().map(|_| page.name.clone()),
                     width: patch.width.as_ref().map(|_| page.width),
                     height: patch.height.as_ref().map(|_| page.height),
+                    reading_order: patch.reading_order.as_ref().map(|_| page.reading_order),
                 };
                 if let Some(name) = &patch.name {
                     page.name = name.clone();
@@ -320,6 +324,9 @@ impl Op {
                 }
                 if let Some(h) = patch.height {
                     page.height = h;
+                }
+                if let Some(order) = patch.reading_order {
+                    page.reading_order = order;
                 }
             }
 

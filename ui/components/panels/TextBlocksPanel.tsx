@@ -58,6 +58,13 @@ export function TextBlocksPanel() {
   const readingOrder = useEditorUiStore((s) => s.readingOrder)
   const setReadingOrder = useEditorUiStore((s) => s.setReadingOrder)
 
+  // Sync reading order from page data (supports undo/redo)
+  useEffect(() => {
+    if (page?.readingOrder && page.readingOrder !== readingOrder) {
+      setReadingOrder(page.readingOrder)
+    }
+  }, [page?.id, page?.readingOrder, readingOrder, setReadingOrder])
+
   if (!page) {
     return (
       <div className='flex flex-1 items-center justify-center text-xs text-muted-foreground'>
@@ -120,6 +127,10 @@ export function TextBlocksPanel() {
                 console.debug('[reorder] Changing reading order to:', val)
               }
               setReadingOrder(val)
+
+              // Custom order doesn't require sorting existing blocks
+              if (val === 'custom') return
+
               try {
                 await fetchApi(`/api/v1/pages/${page.id}/reorder-text-nodes`, {
                   method: 'POST',
