@@ -16,7 +16,6 @@ use uuid::Uuid;
 
 use crate::blob::BlobRef;
 use crate::font::{FontPrediction, TextDirection};
-use crate::protocol::ReadingOrder;
 use crate::style::TextStyle;
 
 // ---------------------------------------------------------------------------
@@ -154,8 +153,6 @@ pub struct Page {
     pub name: String,
     pub width: u32,
     pub height: u32,
-    #[serde(default)]
-    pub reading_order: ReadingOrder,
     /// Stacking = insertion order. Bottom-first: `source` is typically first,
     /// `rendered` typically last.
     pub nodes: IndexMap<NodeId, Node>,
@@ -168,7 +165,6 @@ impl Page {
             name: name.into(),
             width,
             height,
-            reading_order: ReadingOrder::default(),
             nodes: IndexMap::new(),
         }
     }

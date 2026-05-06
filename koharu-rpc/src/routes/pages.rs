@@ -613,45 +613,48 @@ async fn reorder_text_nodes(
         return Ok(axum::http::StatusCode::OK);
     }
 
-    let session = app
-        .current_session()
-        .ok_or_else(|| ApiError::not_found("no project open"))?;
-    let scene = session.scene_snapshot();
-    let page = scene
-        .page(page_id)
-        .ok_or_else(|| ApiError::not_found("page not found"))?;
+    tracing::debug!(
+        "Reordering text nodes for page {} with order {:?}",
+        page_id,
+        order
+    );
+    let new_order_opt = {
+        let session = app
+            .current_session()
+            .ok_or_else(|| ApiError::not_found("no project open"))?;
+        let scene = session.scene_snapshot();
+        let page = scene
+            .page(page_id)
+            .ok_or_else(|| ApiError::not_found("page not found"))?;
 
-    let mut ops = Vec::new();
+        // 1. Collect all text nodes and their bboxes
+        let mut text_nodes: Vec<([f32; 4], NodeId)> = page
+            .nodes
+            .iter()
+            .filter_map(|(id, node)| {
+                if let NodeKind::Text(_) = &node.kind {
+                    let b = &node.transform;
+                    Some(([b.x, b.y, b.x + b.width, b.y + b.height], *id))
+                } else {
+                    None
+                }
+            })
+            .collect();
 
-    // 1. Update reading order metadata if it differs
-    if page.reading_order != order {
-        ops.push(Op::UpdatePage {
-            id: page_id,
-            patch: koharu_core::PagePatch {
-                reading_order: Some(order),
-                ..Default::default()
-            },
-            prev: Default::default(),
-        });
-    }
+        tracing::debug!(
+            "Found {} text nodes. Current order: {:?}",
+            text_nodes.len(),
+            text_nodes.iter().map(|(_, id)| id).collect::<Vec<_>>()
+        );
 
-    // 2. Calculate new node sequence
-    let mut text_nodes: Vec<([f32; 4], NodeId)> = page
-        .nodes
-        .iter()
-        .filter_map(|(id, node)| {
-            if let NodeKind::Text(_) = &node.kind {
-                let b = &node.transform;
-                Some(([b.x, b.y, b.x + b.width, b.y + b.height], *id))
-            } else {
-                None
-            }
-        })
-        .collect();
+        if text_nodes.len() <= 1 {
+            return Ok(axum::http::StatusCode::OK);
+        }
 
-    if text_nodes.len() > 1 {
+        // 2. Sort them
         koharu_app::pipeline::engines::support::sort_manga_reading_order(&mut text_nodes, order);
 
+        // 3. Construct the full node order
         let mut new_order = Vec::with_capacity(page.nodes.len());
         let mut sorted_text_iter = text_nodes.into_iter().map(|(_, id)| id);
 
@@ -663,34 +666,26 @@ async fn reorder_text_nodes(
             }
         }
 
-        let sequence_changed = page
+        // Only return new order if it actually changed
+        let changed = page
             .nodes
             .keys()
             .zip(new_order.iter())
             .any(|(old, new)| old != new);
 
-        if sequence_changed {
-            ops.push(Op::ReorderNodes {
-                page: page_id,
-                order: new_order,
-                prev_order: Vec::new(),
-            });
-        }
-    }
+        if changed { Some(new_order) } else { None }
+    };
 
-    if ops.is_empty() {
-        tracing::debug!("No changes needed for page {}", page_id);
-        return Ok(axum::http::StatusCode::OK);
-    }
-
-    if ops.len() == 1 {
-        app.apply(ops.remove(0)).map_err(ApiError::internal)?;
+    if let Some(new_order) = new_order_opt {
+        tracing::debug!("Applying new order: {:?}", new_order);
+        let op = Op::ReorderNodes {
+            page: page_id,
+            order: new_order,
+            prev_order: Vec::new(),
+        };
+        app.apply(op).map_err(ApiError::internal)?;
     } else {
-        app.apply(Op::Batch {
-            ops,
-            label: format!("Set Reading Order ({:?})", order),
-        })
-        .map_err(ApiError::internal)?;
+        tracing::debug!("Order unchanged, skipping Op::ReorderNodes");
     }
 
     Ok(axum::http::StatusCode::OK)

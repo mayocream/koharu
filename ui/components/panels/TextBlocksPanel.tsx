@@ -58,13 +58,6 @@ export function TextBlocksPanel() {
   const readingOrder = useEditorUiStore((s) => s.readingOrder)
   const setReadingOrder = useEditorUiStore((s) => s.setReadingOrder)
 
-  // Sync reading order from page data (supports undo/redo)
-  useEffect(() => {
-    if (page?.readingOrder && page.readingOrder !== readingOrder) {
-      setReadingOrder(page.readingOrder)
-    }
-  }, [page?.id, page?.readingOrder, readingOrder, setReadingOrder])
-
   if (!page) {
     return (
       <div className='flex flex-1 items-center justify-center text-xs text-muted-foreground'>
