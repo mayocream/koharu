@@ -54,7 +54,7 @@ pub enum ReadingOrder {
     #[default]
     Rtl,
     Ltr,
-    // Custom will be the order a future implementatioin wh
+    // TODO: Custom will be a future implementation for manual ordering
     Custom,
 }
 
