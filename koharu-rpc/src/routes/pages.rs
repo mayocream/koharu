@@ -620,7 +620,7 @@ async fn reorder_text_nodes(
     let new_order_opt = {
         let session = app
             .current_session()
-            .ok_or_else(|| ApiError::not_found("no project open"))?;
+            .ok_or_else(|| ApiError::bad_request("no project open"))?;
         let scene = session.scene_snapshot();
         let page = scene
             .page(page_id)

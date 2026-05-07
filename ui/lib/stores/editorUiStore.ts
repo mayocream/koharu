@@ -89,7 +89,7 @@ const initialState = {
   selectedLanguage: undefined as string | undefined,
   error: undefined as { id: number; message: string } | undefined,
   showNavigator: true,
-  readingOrder: 'custom' as const,
+  readingOrder: 'rtl' as const,
 }
 
 export const useEditorUiStore = create<EditorUiState>((set) => ({

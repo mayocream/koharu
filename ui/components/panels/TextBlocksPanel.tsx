@@ -27,7 +27,7 @@ import { useScene } from '@/hooks/useScene'
 import { getConfig, startPipeline, useGetCurrentLlm } from '@/lib/api/default/default'
 import { fetchApi } from '@/lib/api/fetch'
 import type { TextDataPatch } from '@/lib/api/schemas'
-import { applyOp, invalidateScene, queueAutoRender } from '@/lib/io/scene'
+import { applyOp, invalidateScene, queueAutoRender, reorderPageTextNodes } from '@/lib/io/scene'
 import { ops } from '@/lib/ops'
 import { useEditorUiStore } from '@/lib/stores/editorUiStore'
 import { useJobsStore } from '@/lib/stores/jobsStore'
@@ -120,20 +120,18 @@ export function TextBlocksPanel() {
               if (process.env.NODE_ENV !== 'production') {
                 console.debug('[reorder] Changing reading order to:', val)
               }
-              setReadingOrder(val)
 
-              // Custom order doesn't require sorting existing blocks
-              if (val === 'custom') return
+              if (val === 'custom') {
+                setReadingOrder(val)
+                return
+              }
 
               try {
-                await fetchApi(`/api/v1/pages/${page.id}/reorder-text-nodes`, {
-                  method: 'POST',
-                  headers: { 'Content-Type': 'application/json' },
-                  body: JSON.stringify(val),
-                })
-                await invalidateScene()
+                await reorderPageTextNodes(page.id, val)
+                setReadingOrder(val)
               } catch (err) {
                 console.error('[reorder] Failed to reorder text nodes:', err)
+                useEditorUiStore.getState().showError(String(err))
               }
             }}
           >
@@ -158,7 +156,7 @@ export function TextBlocksPanel() {
         </div>
       </div>
       <ScrollArea
-        key={epoch}
+        key={page.id}
         className='min-h-0 flex-1'
         viewportClassName='pb-1'
         data-testid='textblocks-scroll'
