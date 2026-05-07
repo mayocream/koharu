@@ -218,7 +218,6 @@ pub struct CreatePagesFromPathsRequest {
 #[utoipa::path(
     post,
     path = "/pages/from-paths",
-    params(),
     request_body = CreatePagesFromPathsRequest,
     responses((status = 200, body = CreatePagesResponse))
 )]
@@ -652,7 +651,7 @@ async fn reorder_text_nodes(
         }
 
         // 2. Sort them
-        koharu_app::pipeline::engines::support::sort_manga_reading_order(&mut text_nodes, order);
+        koharu_app::pipeline::support::sort_manga_reading_order(&mut text_nodes, order);
 
         // 3. Construct the full node order
         let mut new_order = Vec::with_capacity(page.nodes.len());
@@ -660,7 +659,10 @@ async fn reorder_text_nodes(
 
         for (id, node) in page.nodes.iter() {
             if let NodeKind::Text(_) = &node.kind {
-                new_order.push(sorted_text_iter.next().unwrap());
+                let sorted_id = sorted_text_iter.next().ok_or_else(|| {
+                    ApiError::internal(anyhow::anyhow!("text node count mismatch during reorder"))
+                })?;
+                new_order.push(sorted_id);
             } else {
                 new_order.push(*id);
             }
@@ -673,8 +675,8 @@ async fn reorder_text_nodes(
             .zip(new_order.iter())
             .any(|(old, new)| old != new);
 
-        if changed { Some(new_order) } else { None }
-    };
+        Ok::<_, ApiError>(if changed { Some(new_order) } else { None })
+    }?;
 
     if let Some(new_order) = new_order_opt {
         tracing::debug!("Applying new order: {:?}", new_order);

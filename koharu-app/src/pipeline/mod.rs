@@ -7,13 +7,14 @@
 
 pub mod artifacts;
 pub mod engine;
-pub mod engines;
+mod engines;
 
 pub use artifacts::Artifact;
 pub use engine::{
     BoxFuture, Engine, EngineCtx, EngineInfo, EngineLoadFn, PipelineRunOptions, Registry,
     build_order,
 };
+pub use engines::support;
 
 use std::sync::Arc;
 use std::sync::atomic::{AtomicBool, Ordering};
