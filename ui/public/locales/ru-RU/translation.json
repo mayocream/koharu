@@ -198,7 +198,22 @@
     "effectBold": "Жирный",
     "effectBorder": "Обводка",
     "strokeColorLabel": "Цвет обводки",
-    "strokeWidthLabel": "Толщина обводки"
+    "strokeWidthLabel": "Толщина обводки",
+    "fontWeights": {
+      "thin": "Тонкий",
+      "extraLight": "Сверхсветлый",
+      "light": "Светлый",
+      "regular": "Обычный",
+      "medium": "Средний",
+      "semiBold": "Полужирный",
+      "bold": "Жирный",
+      "extraBold": "Сверхжирный",
+      "black": "Черный"
+    },
+    "fontStyles": {
+      "italicWithName": "{{name}} Курсив",
+      "regularItalic": "Обычный Курсив"
+    }
   },
   "textBlocks": {
     "emptyPrompt": "Откройте изображение, чтобы увидеть текстовые блоки.",

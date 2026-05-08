@@ -10,14 +10,22 @@ import {
   PlusIcon,
   SquareIcon,
 } from 'lucide-react'
-import { type ComponentType, useMemo } from 'react'
+import { type ComponentType, useMemo, useRef, useEffect, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 
 import { Button } from '@/components/ui/button'
 import { ColorPicker } from '@/components/ui/color-picker'
-import { FontSelect } from '@/components/ui/font-select'
+import { FontSelect, useGoogleFontPreview } from '@/components/ui/font-select'
 import { Input } from '@/components/ui/input'
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from '@/components/ui/select'
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip'
+import { VariantItem } from '@/components/ui/variant-item'
 import {
   useCurrentPage,
   useSelectedTextNode,
@@ -25,7 +33,7 @@ import {
   useTextNodes,
   type TextNodeEntry,
 } from '@/hooks/useCurrentPage'
-import { useGetGoogleFontsCatalog, useListFonts } from '@/lib/api/default/default'
+import { fetchGoogleFont, useGetGoogleFontsCatalog, useListFonts } from '@/lib/api/default/default'
 import type {
   FontFaceInfo,
   FontPrediction,
@@ -35,7 +43,14 @@ import type {
   TextStrokeStyle,
   TextStyle,
 } from '@/lib/api/schemas'
-import { applyOp, queueAutoRender } from '@/lib/io/scene'
+import {
+  findFontFace,
+  getLocalizedFontLabel,
+  normalizeFamilyName,
+  STYLE_KEYWORDS,
+  uniqueFontFaces,
+} from '@/lib/font-utils'
+import { applyOp, invalidateScene, queueAutoRender } from '@/lib/io/scene'
 import { ops } from '@/lib/ops'
 import { useEditorUiStore } from '@/lib/stores/editorUiStore'
 import { usePreferencesStore } from '@/lib/stores/preferencesStore'
@@ -75,23 +90,6 @@ const hexToColor = (value: string, alpha: number): number[] => {
   const b = Number.parseInt(normalized.slice(4, 6), 16)
   if ([r, g, b].some((c) => Number.isNaN(c))) return [0, 0, 0, clampByte(alpha)]
   return [r, g, b, clampByte(alpha)]
-}
-
-const uniqueFontFaces = (values: FontFaceInfo[]) => {
-  const seen = new Set<string>()
-  return values.filter((v) => {
-    if (!v.postScriptName || seen.has(v.postScriptName)) return false
-    seen.add(v.postScriptName)
-    return true
-  })
-}
-
-const findFontFace = (fonts: FontFaceInfo[], value?: string) => {
-  if (!value) return undefined
-  return fonts.find(
-    (f) =>
-      f.postScriptName === value || f.familyName === value || f.familyName.trim() === value.trim(),
-  )
 }
 
 const fallbackFontFace = (value?: string): FontFaceInfo | undefined => {
@@ -137,6 +135,8 @@ export function RenderControlsPanel() {
   const { data: availableFonts = [] } = useListFonts()
   useGetGoogleFontsCatalog() // prefetch catalog so picker can decorate Google entries
   const appDefaultFont = usePreferencesStore((s) => s.defaultFont)
+  const favoriteFonts = usePreferencesStore((s) => s.favoriteFonts)
+  const toggleFavoriteFont = usePreferencesStore((s) => s.toggleFavoriteFont)
   const renderEffect = useEditorUiStore((s) => s.renderEffect)
   const setRenderEffect = useEditorUiStore((s) => s.setRenderEffect)
   const setRenderStroke = useEditorUiStore((s) => s.setRenderStroke)
@@ -145,25 +145,33 @@ export function RenderControlsPanel() {
     return [...(availableFonts ?? [])].sort((a, b) => a.familyName.localeCompare(b.familyName))
   }, [availableFonts])
 
-  if (!page) {
-    return (
-      <div className='flex items-center justify-center py-6 text-xs text-muted-foreground'>
-        {t('textBlocks.emptyPrompt')}
-      </div>
-    )
-  }
+  const sectionRef = useRef<HTMLDivElement>(null)
+  const [sectionWidth, setSectionWidth] = useState<number>(0)
+
+  useEffect(() => {
+    if (!sectionRef.current) return
+    const observer = new ResizeObserver((entries) => {
+      setSectionWidth(entries[0].contentRect.width)
+    })
+    observer.observe(sectionRef.current)
+    return () => observer.disconnect()
+  }, [])
 
   const firstNode = textNodes[0]
   const hasNodes = textNodes.length > 0
 
-  const fontCandidates = uniqueFontFaces(
-    [
-      ...sortedFonts,
-      ...(appDefaultFont ? [fallbackFontFace(appDefaultFont)] : []),
-      ...(selectedNode?.data.style?.fontFamilies?.slice(0, 1)?.map(fallbackFontFace) ?? []),
-      ...(firstNode?.data.style?.fontFamilies?.slice(0, 1)?.map(fallbackFontFace) ?? []),
-      ...DEFAULT_FONT_FACES,
-    ].filter((v): v is FontFaceInfo => !!v),
+  const fontCandidates = useMemo(
+    () =>
+      uniqueFontFaces(
+        [
+          ...sortedFonts,
+          ...(appDefaultFont ? [fallbackFontFace(appDefaultFont)] : []),
+          ...(selectedNode?.data.style?.fontFamilies?.slice(0, 1)?.map(fallbackFontFace) ?? []),
+          ...(firstNode?.data.style?.fontFamilies?.slice(0, 1)?.map(fallbackFontFace) ?? []),
+          ...DEFAULT_FONT_FACES,
+        ].filter((v): v is FontFaceInfo => !!v),
+      ),
+    [sortedFonts, appDefaultFont, selectedNode?.id, selectedNode?.data.style?.fontFamilies],
   )
 
   const currentFontCandidate =
@@ -171,10 +179,93 @@ export function RenderControlsPanel() {
     appDefaultFont ??
     firstNode?.data.style?.fontFamilies?.[0] ??
     (hasNodes ? fontCandidates[0]?.postScriptName : '')
-  const currentFontFace =
-    findFontFace(fontCandidates, currentFontCandidate) ?? fallbackFontFace(currentFontCandidate)
+  const currentFontFace = useMemo(() => {
+    return (
+      findFontFace(fontCandidates, currentFontCandidate) || fallbackFontFace(currentFontCandidate)
+    )
+  }, [fontCandidates, currentFontCandidate])
+
   const currentFont = currentFontFace?.postScriptName ?? ''
-  const currentFontFamilyName = currentFontFace?.familyName
+  const currentFontFamilyName = useMemo(() => {
+    if (!currentFontFace) return undefined
+    return normalizeFamilyName(currentFontFace.familyName)
+  }, [currentFontFace])
+
+  const groupedFonts = useMemo(() => {
+    const families = new Map<string, FontFaceInfo[]>()
+    fontCandidates.forEach((f) => {
+      const family = f.familyName.trim()
+      const existing = families.get(family) || []
+      existing.push(f)
+      families.set(family, existing)
+    })
+    return families
+  }, [fontCandidates])
+
+  const familyOptions = useMemo(() => {
+    const families = new Map<string, FontFaceInfo>()
+    for (const f of fontCandidates) {
+      const name = normalizeFamilyName(f.familyName)
+      if (!families.has(name) || f.postScriptName === name) {
+        families.set(name, { ...f, familyName: name }) // Use normalized name for the option
+      }
+    }
+    return Array.from(families.values()).sort((a, b) => a.familyName.localeCompare(b.familyName))
+  }, [fontCandidates])
+
+  const currentVariants = useMemo(() => {
+    const name = normalizeFamilyName(currentFontFamilyName ?? '').toLowerCase()
+    if (!name) return []
+    const nameNoSpace = name.replace(/\s+/g, '')
+    return fontCandidates.filter((f) => {
+      const fFamilyNorm = normalizeFamilyName(f.familyName).toLowerCase()
+      if (fFamilyNorm === name) return true
+
+      const fPsNorm = f.postScriptName.toLowerCase()
+      if (fPsNorm.includes(nameNoSpace)) {
+        // Ensure the family part of the PS name is an EXACT match
+        const familyPart = f.postScriptName
+          .split(/[:\-_]/)[0]
+          .replace(/[\s\-_]+/g, '')
+          .toLowerCase()
+        if (familyPart !== nameNoSpace) return false
+
+        const rest = fPsNorm.replace(nameNoSpace, '')
+        const isStyleSuffix =
+          !rest ||
+          /^[-_\s]/.test(rest) ||
+          STYLE_KEYWORDS.some((k) => rest.toLowerCase().includes(k.toLowerCase()))
+
+        if (isStyleSuffix) return true
+      }
+      return false
+    })
+  }, [fontCandidates, currentFontFamilyName])
+
+  const currentVariantsWithLabels = useMemo(() => {
+    if (!currentVariants) return []
+
+    // First pass: generate all labels
+    const mapped = currentVariants.map((v) => ({
+      variant: v,
+      label: getLocalizedFontLabel(v, t),
+    }))
+
+    // Second pass: identify duplicates
+    return mapped.map((item) => {
+      const isDuplicate =
+        mapped.filter(
+          (other) =>
+            other.variant.postScriptName !== item.variant.postScriptName &&
+            other.label === item.label,
+        ).length > 0
+
+      return {
+        ...item,
+        isDuplicate,
+      }
+    })
+  }, [currentVariants, t])
 
   const selectedStyle = selectedNode?.data.style ?? firstNode?.data.style
   const colorSource = selectedNode ?? firstNode
@@ -192,6 +283,12 @@ export function RenderControlsPanel() {
     selectedNode?.data.style?.textAlign ??
     firstNode?.data.style?.textAlign ??
     (selectedNode?.data.translation ? 'center' : 'left')
+
+  const currentFontPreviewState = useGoogleFontPreview(
+    currentFontFace?.source === 'google' ? currentFont : (currentFontFamilyName ?? ''),
+    currentFontFace?.source ?? 'system',
+    true,
+  )
 
   // ---------------------------------------------------------------------------
   // Mutations
@@ -291,6 +388,14 @@ export function RenderControlsPanel() {
     ? 'border-primary/20 bg-primary/10 text-primary'
     : 'border-border/60 bg-muted text-muted-foreground'
 
+  if (!page) {
+    return (
+      <div className='flex items-center justify-center py-6 text-xs text-muted-foreground'>
+        {t('textBlocks.emptyPrompt')}
+      </div>
+    )
+  }
+
   return (
     <div className='flex w-full min-w-0 flex-col gap-2'>
       {/* Scope */}
@@ -307,7 +412,7 @@ export function RenderControlsPanel() {
       </div>
 
       {/* Font + Color */}
-      <div className='flex flex-col gap-0.5'>
+      <div className='flex flex-col gap-0.5' ref={sectionRef}>
         <div className='flex items-baseline justify-between'>
           <span className='text-[10px] font-medium text-muted-foreground uppercase'>
             {t('render.fontLabel')}
@@ -317,25 +422,110 @@ export function RenderControlsPanel() {
           </span>
         </div>
         <div className='flex min-w-0 items-center gap-1.5'>
-          <div className='min-w-0 flex-1'>
+          <div className='min-w-0 flex-[1.5]'>
             <FontSelect
               data-testid='render-font-select'
-              value={currentFont}
-              options={fontCandidates}
-              disabled={fontCandidates.length === 0}
+              value={currentFontFamilyName ?? ''}
+              options={familyOptions}
+              favoriteFonts={favoriteFonts}
+              onToggleFavorite={toggleFavoriteFont}
+              disabled={familyOptions.length === 0}
               placeholder={t('render.fontPlaceholder')}
               triggerStyle={
                 currentFontFamilyName ? { fontFamily: currentFontFamilyName } : undefined
               }
-              onChange={(value) => {
+              contentStyle={
+                sectionWidth > 0 ? { width: sectionWidth, maxWidth: sectionWidth } : undefined
+              }
+              onChange={async (value) => {
+                const familyVariants = fontCandidates.filter((f) => f.familyName === value)
+                // Try to find Regular/400 first
+                const regularFace =
+                  familyVariants.find((f) => {
+                    const ps = f.postScriptName.toLowerCase()
+                    return ps.includes('regular') || ps.includes('400') || ps.includes(':400')
+                  }) || familyVariants[0]
+
+                const face = regularFace || findFontFace(fontCandidates, value)
+                if (!face) return
+
+                // Trigger fetch for Google Fonts if not cached
+                if (face.source === 'google' && !face.cached) {
+                  try {
+                    await fetchGoogleFont(face.postScriptName)
+                    invalidateScene()
+                  } catch (e) {
+                    console.error('Failed to fetch font:', e)
+                  }
+                }
+
                 if (selectedNode) {
-                  applyStyleToSelected({ fontFamilies: [value] })
+                  applyStyleToSelected({ fontFamilies: [face.postScriptName] })
                   return
                 }
-                usePreferencesStore.getState().setDefaultFont(value)
+                usePreferencesStore.getState().setDefaultFont(face.postScriptName)
               }}
             />
           </div>
+          {currentVariants && currentVariants.length > 1 && (
+            <div className='min-w-0 flex-1'>
+              <Select
+                key={`${currentFontFamilyName}-${currentVariants.length}`}
+                value={currentFont}
+                onValueChange={async (value) => {
+                  // Trigger fetch for Google Fonts if not cached
+                  const variant = currentVariants.find((v) => v.postScriptName === value)
+                  if (variant?.source === 'google' && !variant.cached) {
+                    try {
+                      await fetchGoogleFont(value)
+                      invalidateScene()
+                    } catch (e) {
+                      console.error('Failed to fetch font variant:', e)
+                    }
+                  }
+
+                  if (selectedNode) {
+                    applyStyleToSelected({ fontFamilies: [value] })
+                    return
+                  }
+                  usePreferencesStore.getState().setDefaultFont(value)
+                }}
+              >
+                <SelectTrigger
+                  className='h-7 w-full px-2 text-xs'
+                  style={{
+                    fontFamily:
+                      currentFontPreviewState === 'ready'
+                        ? `"${(currentFontFace?.source === 'google' ? currentFont : (currentFontFamilyName ?? '')).replace(':', '-')}"`
+                        : undefined,
+                  }}
+                >
+                  <SelectValue placeholder='Style' />
+                </SelectTrigger>
+                <SelectContent
+                  position='popper'
+                  style={
+                    sectionWidth > 0 ? { width: sectionWidth, maxWidth: sectionWidth } : undefined
+                  }
+                  className='overflow-hidden p-0'
+                  align='start'
+                  sideOffset={4}
+                >
+                  {currentVariantsWithLabels.map(({ variant, label, isDuplicate }) => (
+                    <VariantItem
+                      key={variant.postScriptName}
+                      variant={variant}
+                      label={
+                        isDuplicate
+                          ? `${label} (${variant.source === 'google' ? 'Google' : 'System'})`
+                          : label
+                      }
+                    />
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+          )}
           <ColorPicker
             value={currentColorHex}
             disabled={!hasNodes}

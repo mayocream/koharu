@@ -13,6 +13,8 @@ type PreferencesState = {
   setBrushConfig: (config: Partial<PreferencesState['brushConfig']>) => void
   defaultFont?: string
   setDefaultFont: (font?: string) => void
+  favoriteFonts: string[]
+  toggleFavoriteFont: (font: string) => void
   customSystemPrompt?: string
   setCustomSystemPrompt: (prompt?: string) => void
   codexImagePrompt?: string
@@ -40,6 +42,7 @@ const initialPreferences = {
     size: 36,
     color: '#ffffff',
   },
+  favoriteFonts: [],
   shortcuts: {
     select: 'V',
     block: 'M',
@@ -68,6 +71,12 @@ export const usePreferencesStore = create<PreferencesState>()(
           },
         })),
       setDefaultFont: (font) => set({ defaultFont: font }),
+      toggleFavoriteFont: (font) =>
+        set((state) => ({
+          favoriteFonts: state.favoriteFonts.includes(font)
+            ? state.favoriteFonts.filter((f) => f !== font)
+            : [...state.favoriteFonts, font],
+        })),
       setCustomSystemPrompt: (prompt) => set({ customSystemPrompt: prompt }),
       setCodexImagePrompt: (prompt) => set({ codexImagePrompt: prompt }),
       setCodexImageModel: (model) => set({ codexImageModel: model }),
@@ -125,6 +134,7 @@ export const usePreferencesStore = create<PreferencesState>()(
       partialize: (state) => ({
         brushConfig: state.brushConfig,
         defaultFont: state.defaultFont,
+        favoriteFonts: state.favoriteFonts,
         customSystemPrompt: state.customSystemPrompt,
         codexImagePrompt: state.codexImagePrompt,
         codexImageModel: state.codexImageModel,

@@ -198,7 +198,22 @@
     "effectBold": "太字",
     "effectBorder": "縁取り",
     "strokeColorLabel": "縁取りの色",
-    "strokeWidthLabel": "縁取りの太さ"
+    "strokeWidthLabel": "縁取りの太さ",
+    "fontWeights": {
+      "thin": "極細",
+      "extraLight": "特細",
+      "light": "細字",
+      "regular": "標準",
+      "medium": "中字",
+      "semiBold": "中太",
+      "bold": "太字",
+      "extraBold": "極太",
+      "black": "超極太"
+    },
+    "fontStyles": {
+      "italicWithName": "{{name}} イタリック",
+      "regularItalic": "標準 イタリック"
+    }
   },
   "textBlocks": {
     "emptyPrompt": "画像を開くとテキストブロックが表示されます。",

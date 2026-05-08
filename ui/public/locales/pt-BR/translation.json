@@ -199,7 +199,22 @@
     "fontScopeGlobal": "Global",
     "fontScopeBlock": "Por bloco",
     "fontScopeBlockIndex": "Bloco {{index}}",
-    "fontScopeBlocksCount": "{{count}} blocos"
+    "fontScopeBlocksCount": "{{count}} blocos",
+    "fontWeights": {
+      "thin": "Fino",
+      "extraLight": "Extra Leve",
+      "light": "Leve",
+      "regular": "Regular",
+      "medium": "Médio",
+      "semiBold": "Semi Negrito",
+      "bold": "Negrito",
+      "extraBold": "Extra Negrito",
+      "black": "Preto"
+    },
+    "fontStyles": {
+      "italicWithName": "{{name}} Itálico",
+      "regularItalic": "Regular Itálico"
+    }
   },
   "textBlocks": {
     "emptyPrompt": "Abra uma imagem para ver os blocos de texto.",

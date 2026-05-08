@@ -1,7 +1,7 @@
 'use client'
 
 import { useVirtualizer } from '@tanstack/react-virtual'
-import { CheckIcon, ChevronDownIcon } from 'lucide-react'
+import { CheckIcon, ChevronDownIcon, StarIcon } from 'lucide-react'
 import { useRef, useState, useMemo, useCallback, useEffect } from 'react'
 
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover'
@@ -25,16 +25,19 @@ type FontLoadState = 'idle' | 'loading' | 'ready' | 'error'
 type FontSelectProps = {
   value: string
   options: FontOption[]
+  favoriteFonts?: string[]
+  onToggleFavorite?: (font: string) => void
   disabled?: boolean
   placeholder?: string
   className?: string
   triggerClassName?: string
   triggerStyle?: React.CSSProperties
+  contentStyle?: React.CSSProperties
   onChange: (value: string) => void
   'data-testid'?: string
 }
 
-function useGoogleFontPreview(family: string, source: string, isVisible: boolean) {
+export function useGoogleFontPreview(family: string, source: string, isVisible: boolean) {
   const [state, setState] = useState<FontLoadState>(source === 'system' ? 'ready' : 'idle')
   const stateRef = useRef(state)
   stateRef.current = state
@@ -49,7 +52,9 @@ function useGoogleFontPreview(family: string, source: string, isVisible: boolean
       .then(() => {
         if (cancelled) return
         const url = getGetGoogleFontFileUrl(encodeURIComponent(family), 'file')
-        const face = new FontFace(family, `url(${url})`)
+        // Sanitize name for browser (replace : with -)
+        const safeName = family.replace(':', '-')
+        const face = new FontFace(safeName, `url(${url})`)
         return face.load()
       })
       .then((face) => {
@@ -73,41 +78,89 @@ function useGoogleFontPreview(family: string, source: string, isVisible: boolean
 function FontRow({
   font,
   selected,
+  isFavorite,
   style,
   isVisible,
   onClick,
+  onToggleFavorite,
 }: {
   font: FontOption
   selected: boolean
+  isFavorite: boolean
   style: React.CSSProperties
   isVisible: boolean
   onClick: () => void
+  onToggleFavorite?: (font: string) => void
 }) {
-  const loadState = useGoogleFontPreview(font.familyName, font.source, isVisible)
+  const loadState = useGoogleFontPreview(
+    font.source === 'google' ? font.postScriptName : font.familyName,
+    font.source,
+    isVisible,
+  )
+
+  const variantInfo = useMemo(() => {
+    const { postScriptName } = font
+    const parts = postScriptName.split(':')
+    if (parts.length < 2) return { weight: 'normal', style: 'normal' }
+    const variantStr = parts[1]
+    const weight = variantStr.replace(/\D/g, '') || '400'
+    const style = variantStr.includes('i') ? 'italic' : 'normal'
+    return { weight, style }
+  }, [font])
+
+  const variantLabel = useMemo(() => {
+    const { familyName, postScriptName } = font
+    if (postScriptName === familyName) return undefined
+    let s = font.postScriptName
+    if (s.startsWith(font.familyName)) {
+      s = s.slice(font.familyName.length).replace(/^[:\-_\s]+/, '')
+    }
+    s = s.replace(/MT$/, '').replace(/PS$/, '')
+    return s || undefined
+  }, [font])
+
+  const effectiveFontFamily = useMemo(() => {
+    if (loadState !== 'ready') return undefined
+    const name = font.source === 'google' ? font.postScriptName.replace(':', '-') : font.familyName
+    return `"${name}"`
+  }, [loadState, font])
 
   return (
-    <button
-      type='button'
+    <div
       className={cn(
         'absolute left-0 flex w-full cursor-default items-center gap-1.5 rounded-sm px-2 text-xs select-none hover:bg-accent hover:text-accent-foreground',
         selected && 'bg-accent',
       )}
       style={{
         ...style,
-        fontFamily: loadState === 'ready' ? font.familyName : undefined,
+        fontFamily: effectiveFontFamily,
+        fontWeight:
+          loadState === 'ready' && font.source === 'system' ? variantInfo.weight : undefined,
+        fontStyle:
+          loadState === 'ready' && font.source === 'system' ? variantInfo.style : undefined,
       }}
       onClick={onClick}
     >
       <span className='flex size-3 shrink-0 items-center justify-center'>
         {selected && <CheckIcon className='size-3' />}
       </span>
-      <span className='truncate'>{font.familyName}</span>
-      {font.source === 'google' && (
-        <span className='ml-auto shrink-0 text-[9px] text-muted-foreground'>
-          {loadState === 'loading' ? '...' : 'G'}
-        </span>
+      <span className='flex-1 truncate text-left'>{font.familyName}</span>
+      {onToggleFavorite && (
+        <button
+          type='button'
+          className={cn(
+            'flex size-5 shrink-0 items-center justify-center rounded-md hover:bg-muted-foreground/10',
+            isFavorite ? 'text-yellow-500' : 'text-muted-foreground/30 hover:text-muted-foreground',
+          )}
+          onClick={(e) => {
+            e.stopPropagation()
+            onToggleFavorite(font.postScriptName)
+          }}
+        >
+          <StarIcon className={cn('size-3', isFavorite && 'fill-current')} />
+        </button>
       )}
-    </button>
+    </div>
   )
 }
 
@@ -130,15 +183,21 @@ export function FontSelect({
 
   const filtered = useMemo(() => {
     let result = options
-    if (categoryFilter) {
+    if (categoryFilter === 'favs') {
+      result = result.filter((f) => props.favoriteFonts?.includes(f.postScriptName))
+    } else if (categoryFilter) {
       result = result.filter((f) => f.source === 'system' || f.category === categoryFilter)
     }
     if (search) {
       const lower = search.toLowerCase()
-      result = result.filter((f) => f.familyName.toLowerCase().includes(lower))
+      result = result.filter(
+        (f) =>
+          f.familyName.toLowerCase().includes(lower) ||
+          f.postScriptName.toLowerCase().includes(lower),
+      )
     }
     return result
-  }, [options, search, categoryFilter])
+  }, [options, search, categoryFilter, props.favoriteFonts])
 
   const virtualizer = useVirtualizer({
     count: filtered.length,
@@ -157,9 +216,11 @@ export function FontSelect({
     [open],
   )
 
-  const selectedLabel = options.find(
-    (f) => f.postScriptName === value || f.familyName === value,
-  )?.familyName
+  const selectedLabel = useMemo(() => {
+    const found =
+      options.find((f) => f.postScriptName === value) || options.find((f) => f.familyName === value)
+    return found?.familyName
+  }, [options, value])
 
   const listHeight = Math.min(filtered.length, MAX_VISIBLE) * ITEM_HEIGHT
 
@@ -184,7 +245,8 @@ export function FontSelect({
         <ChevronDownIcon className='size-3.5 shrink-0 opacity-50' />
       </PopoverTrigger>
       <PopoverContent
-        className={cn('w-(--radix-popover-trigger-width) p-0', className)}
+        className={cn('overflow-hidden p-0', className)}
+        style={props.contentStyle}
         align='start'
         onOpenAutoFocus={(e) => {
           e.preventDefault()
@@ -200,8 +262,16 @@ export function FontSelect({
         />
         <ScrollArea className='border-b'>
           <div className='flex gap-0.5 px-1.5 py-1'>
-            {['all', 'hand', 'display', 'sans', 'serif', 'mono'].map((cat, i) => {
-              const full = ['all', 'handwriting', 'display', 'sans-serif', 'serif', 'monospace'][i]
+            {['favs', 'all', 'hand', 'display', 'sans', 'serif', 'mono'].map((cat, i) => {
+              const full = [
+                'favs',
+                'all',
+                'handwriting',
+                'display',
+                'sans-serif',
+                'serif',
+                'monospace',
+              ][i]
               const active = cat === 'all' ? !categoryFilter : categoryFilter === full
               return (
                 <button
@@ -215,7 +285,11 @@ export function FontSelect({
                   )}
                   onClick={() => setCategoryFilter(cat === 'all' ? null : full)}
                 >
-                  {cat.charAt(0).toUpperCase() + cat.slice(1)}
+                  {cat === 'favs' ? (
+                    <StarIcon className='size-2.5 fill-current' />
+                  ) : (
+                    cat.charAt(0).toUpperCase() + cat.slice(1)
+                  )}
                 </button>
               )
             })}
@@ -232,11 +306,13 @@ export function FontSelect({
             {virtualizer.getVirtualItems().map((vi) => {
               const font = filtered[vi.index]
               const selected = font.postScriptName === value || font.familyName === value
+              const isFavorite = props.favoriteFonts?.includes(font.postScriptName) ?? false
               return (
                 <FontRow
                   key={vi.key}
                   font={font}
                   selected={selected}
+                  isFavorite={isFavorite}
                   style={{ height: ITEM_HEIGHT, top: vi.start }}
                   isVisible={true}
                   onClick={() => {
@@ -244,6 +320,7 @@ export function FontSelect({
                     setOpen(false)
                     setSearch('')
                   }}
+                  onToggleFavorite={props.onToggleFavorite}
                 />
               )
             })}

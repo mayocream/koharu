@@ -220,7 +220,22 @@
     "fontScopeGlobal": "전역",
     "fontScopeBlock": "블록별",
     "fontScopeBlockIndex": "블록 {{index}}",
-    "fontScopeBlocksCount": "블록 {{count}}개"
+    "fontScopeBlocksCount": "블록 {{count}}개",
+    "fontWeights": {
+      "thin": "가늘게",
+      "extraLight": "매우 얇게",
+      "light": "얇게",
+      "regular": "보통",
+      "medium": "중간",
+      "semiBold": "세미 볼드",
+      "bold": "굵게",
+      "extraBold": "매우 굵게",
+      "black": "가장 굵게"
+    },
+    "fontStyles": {
+      "italicWithName": "{{name}} 이탤릭",
+      "regularItalic": "레귤러 이탤릭"
+    }
   },
   "textBlocks": {
     "emptyPrompt": "텍스트 블록을 보려면 이미지를 열어주세요.",

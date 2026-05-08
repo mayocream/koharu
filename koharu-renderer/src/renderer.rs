@@ -4,7 +4,7 @@ use anyhow::{Context, Result, bail};
 use image::{RgbaImage, imageops};
 use skrifa::{
     GlyphId, MetadataProvider, OutlineGlyph,
-    instance::{LocationRef, Size},
+    instance::Size,
     outline::{DrawSettings, OutlinePen},
 };
 use tiny_skia::{
@@ -300,8 +300,17 @@ fn load_glyph_source(
     anti_alias: bool,
 ) -> Result<GlyphRenderSource> {
     let font_ref = font.skrifa()?;
+
+    // Support variable font weights by instancing the wght axis
+    let mut location = skrifa::instance::Location::default();
+    let axes = font_ref.axes();
+    if let Some(axis) = axes.iter().find(|a| a.tag() == skrifa::Tag::new(b"wght")) {
+        let target = (font.weight as f32).clamp(axis.min_value(), axis.max_value());
+        location = axes.location([(skrifa::Tag::new(b"wght"), target)]);
+    }
+
     if let Some(outline) = font_ref.outline_glyphs().get(GlyphId::new(glyph_id as u32))
-        && let Some(path) = outline_to_path(&outline, font_size)
+        && let Some(path) = outline_to_path(&outline, font_size, &location)
     {
         let bounds = path.bounds();
         if bounds.width() > 0.0 && bounds.height() > 0.0 {
@@ -532,9 +541,13 @@ fn color_from_rgba(color: [u8; 4]) -> Color {
     Color::from_rgba8(color[0], color[1], color[2], color[3])
 }
 
-fn outline_to_path(outline: &OutlineGlyph<'_>, font_size: f32) -> Option<Path> {
+fn outline_to_path(
+    outline: &OutlineGlyph<'_>,
+    font_size: f32,
+    location: &skrifa::instance::Location,
+) -> Option<Path> {
     let mut pen = TinySkiaPathPen::new();
-    let settings = DrawSettings::unhinted(Size::new(font_size), LocationRef::default());
+    let settings = DrawSettings::unhinted(Size::new(font_size), location);
     outline.draw(settings, &mut pen).ok()?;
     pen.finish()
 }

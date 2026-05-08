@@ -198,7 +198,22 @@
     "fontScopeGlobal": "Genel",
     "fontScopeBlock": "Blok bazında",
     "fontScopeBlockIndex": "Blok {{index}}",
-    "fontScopeBlocksCount": "{{count}} blok"
+    "fontScopeBlocksCount": "{{count}} blok",
+    "fontWeights": {
+      "thin": "İnce",
+      "extraLight": "Ekstra Hafif",
+      "light": "Hafif",
+      "regular": "Normal",
+      "medium": "Orta",
+      "semiBold": "Yarı Kalın",
+      "bold": "Kalın",
+      "extraBold": "Ekstra Kalın",
+      "black": "Siyah"
+    },
+    "fontStyles": {
+      "italicWithName": "{{name}} İtalik",
+      "regularItalic": "Normal İtalik"
+    }
   },
   "textBlocks": {
     "emptyPrompt": "Metin bloklarını görmek için bir görsel açın.",

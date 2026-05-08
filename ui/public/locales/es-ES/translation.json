@@ -198,7 +198,22 @@
     "effectBold": "Negrita",
     "effectBorder": "Borde",
     "strokeColorLabel": "Color del borde",
-    "strokeWidthLabel": "Grosor del borde"
+    "strokeWidthLabel": "Grosor del borde",
+    "fontWeights": {
+      "thin": "Fino",
+      "extraLight": "Extra ligero",
+      "light": "Ligero",
+      "regular": "Regular",
+      "medium": "Medio",
+      "semiBold": "Seminegrilla",
+      "bold": "Negrilla",
+      "extraBold": "Extranegrilla",
+      "black": "Negro"
+    },
+    "fontStyles": {
+      "italicWithName": "{{name}} cursiva",
+      "regularItalic": "Regular cursiva"
+    }
   },
   "textBlocks": {
     "emptyPrompt": "Abre una imagen para ver los bloques de texto.",

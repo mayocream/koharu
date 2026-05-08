@@ -11,6 +11,8 @@ pub struct Font {
     data: Arc<[u8]>,
     face: FaceInfo,
     fontdue: Arc<OnceCell<Arc<fontdue::Font>>>,
+    pub weight: u16,
+    pub style: String,
 }
 
 impl Font {
@@ -51,6 +53,14 @@ impl Font {
         &self.face.post_script_name
     }
 
+    pub fn weight(&self) -> u16 {
+        self.weight
+    }
+
+    pub fn style(&self) -> &str {
+        &self.style
+    }
+
     pub fn face_info(&self) -> &FaceInfo {
         &self.face
     }
@@ -64,6 +74,8 @@ pub(crate) fn font_key(font: &Font) -> usize {
 pub struct FontBook {
     database: Database,
     cache: HashMap<ID, Font>,
+    /// Maps data hash to font ID to avoid duplicate loading.
+    data_cache: HashMap<u64, ID>,
 }
 
 impl FontBook {
@@ -75,6 +87,7 @@ impl FontBook {
         Self {
             database,
             cache: HashMap::new(),
+            data_cache: HashMap::new(),
         }
     }
 
@@ -100,6 +113,17 @@ impl FontBook {
     /// Loads a font from raw bytes (e.g., downloaded from Google Fonts).
     /// Returns the loaded Font on success.
     pub fn load_from_bytes(&mut self, data: Vec<u8>) -> anyhow::Result<Font> {
+        use std::collections::hash_map::DefaultHasher;
+        use std::hash::{Hash, Hasher};
+
+        let mut hasher = DefaultHasher::new();
+        data.hash(&mut hasher);
+        let hash = hasher.finish();
+
+        if let Some(&id) = self.data_cache.get(&hash) {
+            return self.load_font(id);
+        }
+
         let data: Arc<dyn AsRef<[u8]> + Send + Sync> = Arc::new(data);
         let source = fontdb::Source::Binary(data);
         let ids = self.database.load_font_source(source);
@@ -107,10 +131,12 @@ impl FontBook {
             .into_iter()
             .next()
             .context("font data contained no valid faces")?;
+
+        self.data_cache.insert(hash, id);
         self.load_font(id)
     }
 
-    fn load_font(&mut self, id: ID) -> anyhow::Result<Font> {
+    pub fn load_font(&mut self, id: ID) -> anyhow::Result<Font> {
         if let Some(font) = self.cache.get(&id) {
             return Ok(font.clone());
         }
@@ -125,10 +151,20 @@ impl FontBook {
             .with_face_data(id, |data, _| Arc::<[u8]>::from(data.to_vec()))
             .with_context(|| format!("failed to load font data for {:?}", id))?;
 
+        // Determine weight and style from face info
+        let fontdb::Weight(weight) = face.weight;
+        let style = match face.style {
+            fontdb::Style::Normal => "normal".to_string(),
+            fontdb::Style::Italic => "italic".to_string(),
+            fontdb::Style::Oblique => "oblique".to_string(),
+        };
+
         let font = Font {
             data,
             face,
             fontdue: Arc::new(OnceCell::new()),
+            weight,
+            style,
         };
         self.cache.insert(id, font.clone());
         Ok(font)

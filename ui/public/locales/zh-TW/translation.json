@@ -198,7 +198,22 @@
     "effectBold": "粗體",
     "effectBorder": "描邊",
     "strokeColorLabel": "描邊顏色",
-    "strokeWidthLabel": "描邊寬度"
+    "strokeWidthLabel": "描邊寬度",
+    "fontWeights": {
+      "thin": "極細",
+      "extraLight": "特細",
+      "light": "細體",
+      "regular": "正規",
+      "medium": "中等",
+      "semiBold": "半粗",
+      "bold": "粗體",
+      "extraBold": "特粗",
+      "black": "極粗"
+    },
+    "fontStyles": {
+      "italicWithName": "{{name}} 斜體",
+      "regularItalic": "正規斜體"
+    }
   },
   "textBlocks": {
     "emptyPrompt": "開啟影像以查看文字區塊。",
