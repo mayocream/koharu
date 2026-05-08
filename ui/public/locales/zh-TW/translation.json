@@ -350,6 +350,8 @@
     "httpReadTimeoutDescription": "讀取 HTTP 回應前允許等待的最長時間。",
     "httpMaxRetries": "HTTP 最大重試次數",
     "httpMaxRetriesDescription": "發生暫時性 HTTP 錯誤時自動重試的次數。",
+    "huggingfaceEndpoint": "Hugging Face 鏡像",
+    "huggingfaceEndpointDescription": "用於 Hugging Face 模型下載的可選鏡像端點。留空則使用預設端點或 HF_ENDPOINT。",
     "restartApply": "套用並重新啟動",
     "restartApplying": "套用中...",
     "restartRequiredDescription": "這些設定會在啟動時載入。套用後會儲存設定並重新啟動應用程式。",

@@ -26,6 +26,7 @@ pub struct RuntimeHttpConfig {
     pub connect_timeout_secs: u64,
     pub read_timeout_secs: u64,
     pub max_retries: u32,
+    pub huggingface_endpoint: Option<String>,
 }
 
 impl Default for RuntimeHttpConfig {
@@ -34,6 +35,7 @@ impl Default for RuntimeHttpConfig {
             connect_timeout_secs: 20,
             read_timeout_secs: 300,
             max_retries: 3,
+            huggingface_endpoint: None,
         }
     }
 }

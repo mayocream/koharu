@@ -103,6 +103,7 @@ function appConfigToPatch(cfg: AppConfig): ConfigPatch {
       connectTimeout: cfg.http.connect_timeout,
       readTimeout: cfg.http.read_timeout,
       maxRetries: cfg.http.max_retries,
+      huggingfaceEndpoint: cfg.http.huggingface_endpoint ?? '',
     }
   }
   if (cfg.pipeline) {
@@ -155,6 +156,11 @@ const DEFAULT_HTTP_CONNECT_TIMEOUT = 20
 const DEFAULT_HTTP_READ_TIMEOUT = 300
 const DEFAULT_HTTP_MAX_RETRIES = 3
 
+function normalizeHuggingFaceEndpointDraft(value: string): string | null {
+  const endpoint = value.trim().replace(/\/+$/, '')
+  return endpoint ? endpoint : null
+}
+
 export function SettingsDialog({
   open,
   onOpenChange,
@@ -174,6 +180,7 @@ export function SettingsDialog({
   const [httpConnectTimeoutDraft, setHttpConnectTimeoutDraft] = useState('')
   const [httpReadTimeoutDraft, setHttpReadTimeoutDraft] = useState('')
   const [httpMaxRetriesDraft, setHttpMaxRetriesDraft] = useState('')
+  const [huggingfaceEndpointDraft, setHuggingfaceEndpointDraft] = useState('')
   const [storageSettingsError, setStorageSettingsError] = useState<string | null>(null)
   const [isSavingStorageSettings, setIsSavingStorageSettings] = useState(false)
   const [engineCatalog, setEngineCatalog] = useState<GetEngineCatalog200 | null>(null)
@@ -227,6 +234,7 @@ export function SettingsDialog({
     )
     setHttpReadTimeoutDraft(String(appConfig.http?.read_timeout ?? DEFAULT_HTTP_READ_TIMEOUT))
     setHttpMaxRetriesDraft(String(appConfig.http?.max_retries ?? DEFAULT_HTTP_MAX_RETRIES))
+    setHuggingfaceEndpointDraft(appConfig.http?.huggingface_endpoint ?? '')
     setStorageSettingsError(null)
   }, [appConfig])
 
@@ -275,6 +283,7 @@ export function SettingsDialog({
       setStorageSettingsError('Invalid HTTP max retries')
       return
     }
+    const huggingfaceEndpoint = normalizeHuggingFaceEndpointDraft(huggingfaceEndpointDraft)
 
     setIsSavingStorageSettings(true)
     setStorageSettingsError(null)
@@ -285,6 +294,7 @@ export function SettingsDialog({
         connect_timeout: connectTimeout,
         read_timeout: readTimeout,
         max_retries: maxRetries,
+        huggingface_endpoint: huggingfaceEndpoint,
       },
     })
     setIsSavingStorageSettings(false)
@@ -310,7 +320,9 @@ export function SettingsDialog({
       String(appConfig?.http?.connect_timeout ?? DEFAULT_HTTP_CONNECT_TIMEOUT) &&
     httpReadTimeoutDraft.trim() ===
       String(appConfig?.http?.read_timeout ?? DEFAULT_HTTP_READ_TIMEOUT) &&
-    httpMaxRetriesDraft.trim() === String(appConfig?.http?.max_retries ?? DEFAULT_HTTP_MAX_RETRIES)
+    httpMaxRetriesDraft.trim() === String(appConfig?.http?.max_retries ?? DEFAULT_HTTP_MAX_RETRIES) &&
+    (normalizeHuggingFaceEndpointDraft(huggingfaceEndpointDraft) ?? '') ===
+      (appConfig?.http?.huggingface_endpoint ?? '')
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
@@ -404,6 +416,7 @@ export function SettingsDialog({
                   httpConnectTimeout={httpConnectTimeoutDraft}
                   httpReadTimeout={httpReadTimeoutDraft}
                   httpMaxRetries={httpMaxRetriesDraft}
+                  huggingfaceEndpoint={huggingfaceEndpointDraft}
                   error={storageSettingsError}
                   saving={isSavingStorageSettings}
                   unchanged={storageSettingsUnchanged}
@@ -421,6 +434,10 @@ export function SettingsDialog({
                   }}
                   onHttpMaxRetriesChange={(v) => {
                     setHttpMaxRetriesDraft(v)
+                    setStorageSettingsError(null)
+                  }}
+                  onHuggingfaceEndpointChange={(v) => {
+                    setHuggingfaceEndpointDraft(v)
                     setStorageSettingsError(null)
                   }}
                   onApply={() => void handleApplyStorageSettings()}
@@ -1146,6 +1163,7 @@ function StoragePane({
   httpConnectTimeout,
   httpReadTimeout,
   httpMaxRetries,
+  huggingfaceEndpoint,
   error,
   saving,
   unchanged,
@@ -1153,12 +1171,14 @@ function StoragePane({
   onHttpConnectTimeoutChange,
   onHttpReadTimeoutChange,
   onHttpMaxRetriesChange,
+  onHuggingfaceEndpointChange,
   onApply,
 }: {
   dataPath: string
   httpConnectTimeout: string
   httpReadTimeout: string
   httpMaxRetries: string
+  huggingfaceEndpoint: string
   error: string | null
   saving: boolean
   unchanged: boolean
@@ -1166,6 +1186,7 @@ function StoragePane({
   onHttpConnectTimeoutChange: (v: string) => void
   onHttpReadTimeoutChange: (v: string) => void
   onHttpMaxRetriesChange: (v: string) => void
+  onHuggingfaceEndpointChange: (v: string) => void
   onApply: () => void
 }) {
   const { t } = useTranslation()
@@ -1226,6 +1247,19 @@ function StoragePane({
           />
           <p className='text-xs leading-relaxed text-muted-foreground'>
             {t('settings.httpMaxRetriesDescription')}
+          </p>
+        </div>
+
+        <div className='space-y-1.5'>
+          <Label className='text-xs'>{t('settings.huggingfaceEndpoint')}</Label>
+          <Input
+            type='url'
+            value={huggingfaceEndpoint}
+            placeholder='https://hf-mirror.com'
+            onChange={(e) => onHuggingfaceEndpointChange(e.target.value)}
+          />
+          <p className='text-xs leading-relaxed text-muted-foreground'>
+            {t('settings.huggingfaceEndpointDescription')}
           </p>
         </div>
 

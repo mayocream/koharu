@@ -10,6 +10,8 @@ export interface HttpConfigPatch {
    * @nullable
    */
   connectTimeout?: number | null
+  /** @nullable */
+  huggingfaceEndpoint?: string | null
   /**
    * @minimum 0
    * @nullable

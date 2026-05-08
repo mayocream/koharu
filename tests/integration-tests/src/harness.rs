@@ -44,6 +44,7 @@ async fn shared_runtime() -> Result<Arc<RuntimeManager>> {
                 connect_timeout_secs: 30,
                 read_timeout_secs: 600,
                 max_retries: 2,
+                huggingface_endpoint: None,
             };
             let runtime =
                 RuntimeManager::new_with_http(root.as_std_path(), ComputePolicy::CpuOnly, http)?;

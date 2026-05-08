@@ -7,6 +7,8 @@
 export interface HttpConfig {
   /** @minimum 0 */
   connect_timeout?: number
+  /** @nullable */
+  huggingface_endpoint?: string | null
   /** @minimum 0 */
   max_retries?: number
   /** @minimum 0 */

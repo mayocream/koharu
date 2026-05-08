@@ -376,6 +376,8 @@
     "httpReadTimeoutDescription": "HTTP 응답을 읽을 때까지 기다리는 최대 시간입니다.",
     "httpMaxRetries": "HTTP 최대 재시도 횟수",
     "httpMaxRetriesDescription": "일시적인 HTTP 실패에 대한 자동 재시도 횟수입니다.",
+    "huggingfaceEndpoint": "Hugging Face 미러",
+    "huggingfaceEndpointDescription": "Hugging Face 모델 다운로드에 사용할 선택적 미러 엔드포인트입니다. 비워 두면 기본 엔드포인트 또는 HF_ENDPOINT를 사용합니다.",
     "restartApply": "적용 후 재시작",
     "restartApplying": "적용 중...",
     "restartRequiredDescription": "이 설정은 시작 시 로드됩니다. 적용하면 구성을 저장하고 앱을 다시 시작합니다.",

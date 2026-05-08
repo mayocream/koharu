@@ -350,6 +350,8 @@
     "httpReadTimeoutDescription": "HTTP レスポンスの読み取りを待つ最大時間です。",
     "httpMaxRetries": "HTTP 最大リトライ回数",
     "httpMaxRetriesDescription": "一時的な HTTP 障害に対して自動再試行する回数です。",
+    "huggingfaceEndpoint": "Hugging Face ミラー",
+    "huggingfaceEndpointDescription": "Hugging Face モデルダウンロード用の任意のミラーエンドポイントです。空欄にすると既定のエンドポイントまたは HF_ENDPOINT を使います。",
     "restartApply": "適用して再起動",
     "restartApplying": "適用中...",
     "restartRequiredDescription": "これらの設定は起動時に読み込まれます。適用すると設定を保存してアプリを再起動します。",

@@ -144,6 +144,7 @@ async fn run() -> Result<()> {
         connect_timeout_secs: cfg.http.connect_timeout.max(1),
         read_timeout_secs: cfg.http.read_timeout.max(1),
         max_retries: cfg.http.max_retries,
+        huggingface_endpoint: cfg.http.huggingface_endpoint.clone(),
     };
     let compute = if cli.cpu {
         ComputePolicy::CpuOnly

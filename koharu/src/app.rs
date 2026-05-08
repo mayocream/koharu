@@ -67,6 +67,7 @@ pub async fn run() -> Result<()> {
         connect_timeout_secs: config.http.connect_timeout.max(1),
         read_timeout_secs: config.http.read_timeout.max(1),
         max_retries: config.http.max_retries,
+        huggingface_endpoint: config.http.huggingface_endpoint.clone(),
     };
     let compute = if cli.cpu {
         ComputePolicy::CpuOnly

@@ -107,6 +107,8 @@ pub struct HttpConfig {
     pub connect_timeout: u64,
     pub read_timeout: u64,
     pub max_retries: u32,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub huggingface_endpoint: Option<String>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, ToSchema)]
@@ -135,6 +137,7 @@ impl Default for HttpConfig {
             connect_timeout: 20,
             read_timeout: 300,
             max_retries: 3,
+            huggingface_endpoint: None,
         }
     }
 }
@@ -208,6 +211,9 @@ pub fn apply_patch(config: &mut AppConfig, patch: koharu_core::ConfigPatch) {
         }
         if let Some(v) = http.max_retries {
             config.http.max_retries = v;
+        }
+        if let Some(v) = http.huggingface_endpoint {
+            config.http.huggingface_endpoint = normalize_huggingface_endpoint(&v);
         }
     }
     if let Some(p) = patch.pipeline {
@@ -348,6 +354,16 @@ fn validate_engine_name(
     true
 }
 
+fn normalize_huggingface_endpoint(value: &str) -> Option<String> {
+    let endpoint = value.trim().trim_end_matches('/');
+
+    if endpoint.is_empty() {
+        None
+    } else {
+        Some(endpoint.to_string())
+    }
+}
+
 // ---------------------------------------------------------------------------
 // Secret handling
 // ---------------------------------------------------------------------------
@@ -384,7 +400,7 @@ fn provider_api_key_secret_key(provider_id: &str) -> String {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use koharu_core::{ConfigPatch, PipelineConfigPatch};
+    use koharu_core::{ConfigPatch, HttpConfigPatch, PipelineConfigPatch};
 
     #[test]
     fn old_config_without_providers_still_loads() {
@@ -400,6 +416,7 @@ mod tests {
         assert_eq!(config.http.connect_timeout, 20);
         assert_eq!(config.http.read_timeout, 300);
         assert_eq!(config.http.max_retries, 3);
+        assert_eq!(config.http.huggingface_endpoint, None);
         assert!(config.providers.is_empty());
     }
 
@@ -416,6 +433,7 @@ mod tests {
         assert_eq!(config.http.connect_timeout, 45);
         assert_eq!(config.http.read_timeout, 300);
         assert_eq!(config.http.max_retries, 3);
+        assert_eq!(config.http.huggingface_endpoint, None);
     }
 
     #[test]
@@ -463,5 +481,44 @@ mod tests {
         );
 
         assert_eq!(config.pipeline.renderer, PipelineConfig::default().renderer);
+    }
+
+    #[test]
+    fn apply_patch_normalizes_huggingface_endpoint() {
+        let mut config = AppConfig::default();
+        apply_patch(
+            &mut config,
+            ConfigPatch {
+                http: Some(HttpConfigPatch {
+                    huggingface_endpoint: Some(" https://hf-mirror.com/// ".to_string()),
+                    ..Default::default()
+                }),
+                ..Default::default()
+            },
+        );
+
+        assert_eq!(
+            config.http.huggingface_endpoint.as_deref(),
+            Some("https://hf-mirror.com")
+        );
+    }
+
+    #[test]
+    fn apply_patch_clears_huggingface_endpoint_with_empty_string() {
+        let mut config = AppConfig::default();
+        config.http.huggingface_endpoint = Some("https://hf-mirror.com".to_string());
+
+        apply_patch(
+            &mut config,
+            ConfigPatch {
+                http: Some(HttpConfigPatch {
+                    huggingface_endpoint: Some("   ".to_string()),
+                    ..Default::default()
+                }),
+                ..Default::default()
+            },
+        );
+
+        assert_eq!(config.http.huggingface_endpoint, None);
     }
 }

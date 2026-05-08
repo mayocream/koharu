@@ -350,6 +350,8 @@
     "httpReadTimeoutDescription": "Максимальное время ожидания чтения HTTP-ответа.",
     "httpMaxRetries": "Макс. число HTTP-повторов",
     "httpMaxRetriesDescription": "Количество автоматических повторных попыток при временных HTTP-сбоях.",
+    "huggingfaceEndpoint": "Зеркало Hugging Face",
+    "huggingfaceEndpointDescription": "Необязательный endpoint зеркала для загрузки моделей Hugging Face. Оставьте пустым, чтобы использовать endpoint по умолчанию или HF_ENDPOINT.",
     "restartApply": "Применить и перезапустить",
     "restartApplying": "Применение...",
     "restartRequiredDescription": "Эти настройки загружаются при запуске. Применение сохранит конфигурацию и перезапустит приложение.",

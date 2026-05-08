@@ -124,6 +124,10 @@ export const getGetConfigResponseHttpConfigMock = (
 ): HttpConfig => ({
   ...{
     connect_timeout: faker.number.int({ min: 0 }),
+    huggingface_endpoint: faker.helpers.arrayElement([
+      faker.helpers.arrayElement([faker.string.alpha({ length: { min: 10, max: 20 } }), null]),
+      null,
+    ]),
     max_retries: faker.number.int({ min: 0 }),
     read_timeout: faker.number.int({ min: 0 }),
   },
@@ -180,6 +184,10 @@ export const getPatchConfigResponseHttpConfigMock = (
 ): HttpConfig => ({
   ...{
     connect_timeout: faker.number.int({ min: 0 }),
+    huggingface_endpoint: faker.helpers.arrayElement([
+      faker.helpers.arrayElement([faker.string.alpha({ length: { min: 10, max: 20 } }), null]),
+      null,
+    ]),
     max_retries: faker.number.int({ min: 0 }),
     read_timeout: faker.number.int({ min: 0 }),
   },

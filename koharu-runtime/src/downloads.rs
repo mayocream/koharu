@@ -34,6 +34,7 @@ const HF_METADATA_TIMEOUT: Duration = Duration::from_secs(30);
 pub struct Downloads {
     downloads_root: PathBuf,
     huggingface_cache: Cache,
+    huggingface_endpoint: Option<String>,
     client: RuntimeHttpClient,
     tx: broadcast::Sender<DownloadProgress>,
     progress: Arc<MultiProgress>,
@@ -50,6 +51,10 @@ impl Downloads {
         Ok(Self {
             downloads_root,
             huggingface_cache: Cache::new(huggingface_root),
+            huggingface_endpoint: http
+                .huggingface_endpoint
+                .as_deref()
+                .and_then(normalize_hf_endpoint),
             client,
             tx: broadcast::channel(256).0,
             progress: Arc::new(MultiProgress::new()),
@@ -78,11 +83,15 @@ impl Downloads {
             return Ok(path);
         }
 
-        let api = ApiBuilder::from_cache(self.huggingface_cache.clone())
+        let mut api_builder = ApiBuilder::from_cache(self.huggingface_cache.clone())
             .with_progress(false)
-            .with_user_agent("koharu", env!("CARGO_PKG_VERSION"))
-            .build()
-            .context("failed to build HF Hub API")?;
+            .with_user_agent("koharu", env!("CARGO_PKG_VERSION"));
+
+        if let Some(endpoint) = effective_hf_endpoint(self.huggingface_endpoint.as_deref()) {
+            api_builder = api_builder.with_endpoint(endpoint);
+        }
+
+        let api = api_builder.build().context("failed to build HF Hub API")?;
         let repo_handle = api.model(repo.to_string());
         let url = repo_handle.url(filename);
 
@@ -368,15 +377,69 @@ fn part_path(destination: &Path) -> Result<PathBuf> {
     Ok(destination.with_file_name(format!("{}.part", file_name.to_string_lossy())))
 }
 
+fn normalize_hf_endpoint(value: &str) -> Option<String> {
+    let endpoint = value.trim().trim_end_matches('/');
+
+    if endpoint.is_empty() {
+        None
+    } else {
+        Some(endpoint.to_string())
+    }
+}
+
+fn effective_hf_endpoint(configured: Option<&str>) -> Option<String> {
+    hf_endpoint_from_sources(configured, std::env::var("HF_ENDPOINT").ok().as_deref())
+}
+
+fn hf_endpoint_from_sources(configured: Option<&str>, env: Option<&str>) -> Option<String> {
+    configured
+        .and_then(normalize_hf_endpoint)
+        .or_else(|| env.and_then(normalize_hf_endpoint))
+}
+
 #[cfg(test)]
 mod tests {
     use std::path::Path;
 
-    use super::part_path;
+    use super::{hf_endpoint_from_sources, normalize_hf_endpoint, part_path};
 
     #[test]
     fn partial_download_path_appends_suffix() {
         let part = part_path(Path::new("/tmp/models/config.json")).unwrap();
         assert_eq!(part, Path::new("/tmp/models/config.json.part"));
+    }
+
+    #[test]
+    fn normalizes_hf_endpoint() {
+        assert_eq!(
+            normalize_hf_endpoint(" https://hf-mirror.com/ "),
+            Some("https://hf-mirror.com".to_string())
+        );
+        assert_eq!(
+            normalize_hf_endpoint("https://hf-mirror.com///"),
+            Some("https://hf-mirror.com".to_string())
+        );
+        assert_eq!(normalize_hf_endpoint(""), None);
+        assert_eq!(normalize_hf_endpoint("   "), None);
+    }
+
+    #[test]
+    fn hf_endpoint_prefers_configured_value_over_env() {
+        assert_eq!(
+            hf_endpoint_from_sources(
+                Some(" https://configured.example/ "),
+                Some("https://env.example")
+            ),
+            Some("https://configured.example".to_string())
+        );
+    }
+
+    #[test]
+    fn hf_endpoint_falls_back_to_env() {
+        assert_eq!(
+            hf_endpoint_from_sources(None, Some(" https://env.example/ ")),
+            Some("https://env.example".to_string())
+        );
+        assert_eq!(hf_endpoint_from_sources(Some("   "), Some("   ")), None);
     }
 }

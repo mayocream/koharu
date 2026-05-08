@@ -350,6 +350,8 @@
     "httpReadTimeoutDescription": "Bir HTTP yanıtı okunurken beklenecek en uzun süre.",
     "httpMaxRetries": "HTTP Azami Yeniden Deneme",
     "httpMaxRetriesDescription": "Geçici HTTP hatalarında otomatik yeniden deneme sayısı.",
+    "huggingfaceEndpoint": "Hugging Face Aynası",
+    "huggingfaceEndpointDescription": "Hugging Face model indirmeleri için isteğe bağlı ayna uç noktası. Varsayılan uç noktayı veya HF_ENDPOINT değerini kullanmak için boş bırakın.",
     "restartApply": "Uygula ve Yeniden Başlat",
     "restartApplying": "Uygulanıyor...",
     "restartRequiredDescription": "Bu ayarlar başlangıçta yüklenir. Uygulamak yapılandırmayı kaydedip uygulamayı yeniden başlatır.",

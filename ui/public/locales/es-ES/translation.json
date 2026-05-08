@@ -350,6 +350,8 @@
     "httpReadTimeoutDescription": "Tiempo máximo de espera para leer una respuesta HTTP antes de fallar.",
     "httpMaxRetries": "Máximo de reintentos HTTP",
     "httpMaxRetriesDescription": "Número de reintentos automáticos para fallos HTTP transitorios.",
+    "huggingfaceEndpoint": "Mirror de Hugging Face",
+    "huggingfaceEndpointDescription": "Endpoint mirror opcional para descargar modelos de Hugging Face. Déjalo vacío para usar el endpoint predeterminado o HF_ENDPOINT.",
     "restartApply": "Aplicar y reiniciar",
     "restartApplying": "Aplicando...",
     "restartRequiredDescription": "Estos ajustes se cargan al iniciar. Aplicarlos guardará la configuración y reiniciará la aplicación.",

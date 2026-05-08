@@ -206,6 +206,7 @@ pub struct HttpConfigPatch {
     pub connect_timeout: Option<u64>,
     pub read_timeout: Option<u64>,
     pub max_retries: Option<u32>,
+    pub huggingface_endpoint: Option<String>,
 }
 
 #[derive(Debug, Clone, Default, Serialize, Deserialize, JsonSchema, ToSchema)]

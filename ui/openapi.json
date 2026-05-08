@@ -1629,6 +1629,10 @@
             "default": 20,
             "minimum": 0
           },
+          "huggingface_endpoint": {
+            "type": ["string", "null"],
+            "default": null
+          },
           "max_retries": {
             "type": "integer",
             "format": "int32",
@@ -1650,6 +1654,9 @@
             "type": ["integer", "null"],
             "format": "int64",
             "minimum": 0
+          },
+          "huggingfaceEndpoint": {
+            "type": ["string", "null"]
           },
           "maxRetries": {
             "type": ["integer", "null"],
