@@ -75,7 +75,7 @@ pub struct FontBook {
     database: Database,
     cache: HashMap<ID, Font>,
     /// Maps data hash to font ID to avoid duplicate loading.
-    data_cache: HashMap<u64, ID>,
+    data_cache: HashMap<[u8; 32], ID>,
 }
 
 impl FontBook {
@@ -111,14 +111,8 @@ impl FontBook {
     }
 
     /// Loads a font from raw bytes (e.g., downloaded from Google Fonts).
-    /// Returns the loaded Font on success.
     pub fn load_from_bytes(&mut self, data: Vec<u8>) -> anyhow::Result<Font> {
-        use std::collections::hash_map::DefaultHasher;
-        use std::hash::{Hash, Hasher};
-
-        let mut hasher = DefaultHasher::new();
-        data.hash(&mut hasher);
-        let hash = hasher.finish();
+        let hash: [u8; 32] = blake3::hash(&data).into();
 
         if let Some(&id) = self.data_cache.get(&hash) {
             return self.load_font(id);

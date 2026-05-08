@@ -228,6 +228,7 @@
     "fontPlaceholder": "Select font",
     "fontColorLabel": "Font color",
     "fontSizeLabel": "Size",
+    "fontStylePlaceholder": "Style",
     "fontScopeGlobal": "Global",
     "fontScopeBlock": "Per block",
     "fontScopeBlockIndex": "Block {{index}}",

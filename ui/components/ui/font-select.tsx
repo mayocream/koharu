@@ -108,17 +108,6 @@ function FontRow({
     return { weight, style }
   }, [font])
 
-  const variantLabel = useMemo(() => {
-    const { familyName, postScriptName } = font
-    if (postScriptName === familyName) return undefined
-    let s = font.postScriptName
-    if (s.startsWith(font.familyName)) {
-      s = s.slice(font.familyName.length).replace(/^[:\-_\s]+/, '')
-    }
-    s = s.replace(/MT$/, '').replace(/PS$/, '')
-    return s || undefined
-  }, [font])
-
   const effectiveFontFamily = useMemo(() => {
     if (loadState !== 'ready') return undefined
     const name = font.source === 'google' ? font.postScriptName.replace(':', '-') : font.familyName
@@ -127,8 +116,10 @@ function FontRow({
 
   return (
     <div
+      role='button'
+      tabIndex={0}
       className={cn(
-        'absolute left-0 flex w-full cursor-default items-center gap-1.5 rounded-sm px-2 text-xs select-none hover:bg-accent hover:text-accent-foreground',
+        'absolute left-0 flex w-full cursor-default items-center gap-1.5 rounded-sm px-2 text-xs outline-none select-none hover:bg-accent hover:text-accent-foreground focus-visible:bg-accent focus-visible:text-accent-foreground',
         selected && 'bg-accent',
       )}
       style={{
@@ -140,6 +131,12 @@ function FontRow({
           loadState === 'ready' && font.source === 'system' ? variantInfo.style : undefined,
       }}
       onClick={onClick}
+      onKeyDown={(e) => {
+        if (e.key === 'Enter' || e.key === ' ') {
+          e.preventDefault()
+          onClick()
+        }
+      }}
     >
       <span className='flex size-3 shrink-0 items-center justify-center'>
         {selected && <CheckIcon className='size-3' />}

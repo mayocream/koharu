@@ -64,6 +64,10 @@ export const findFontFace = (fonts: FontFaceInfo[], value?: string) => {
   )
 }
 
+export const escapeRegExp = (string: string) => {
+  return string.replace(/[.*+?^${}$()|[\]\\]/g, '\\$&')
+}
+
 /**
  * Generates a localized label for a font variant.
  * @param face The font face info
@@ -74,7 +78,7 @@ export const getLocalizedFontLabel = (
   t: (key: string, options?: any) => string,
 ) => {
   const familyNorm = face.familyName.replace(/[\s\-_]+/g, '').toLowerCase()
-  const familyRegex = new RegExp(`^${familyNorm}`, 'i')
+  const familyRegex = new RegExp(`^${escapeRegExp(familyNorm)}`, 'i')
   let psNorm = face.postScriptName.replace(/[\s\-_]+/g, '')
 
   // Try stripping by family name (space-agnostic)

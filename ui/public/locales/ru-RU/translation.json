@@ -190,6 +190,7 @@
     "fontPlaceholder": "Выберите шрифт",
     "fontColorLabel": "Цвет шрифта",
     "fontSizeLabel": "Размер",
+    "fontStylePlaceholder": "Стиль",
     "fontScopeGlobal": "Глобально",
     "fontScopeBlock": "Для блока",
     "fontScopeBlockIndex": "Блок {{index}}",

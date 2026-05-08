@@ -217,6 +217,7 @@
     "fontPlaceholder": "글꼴 선택",
     "fontColorLabel": "글꼴 색상",
     "fontSizeLabel": "크기",
+    "fontStylePlaceholder": "스타일",
     "fontScopeGlobal": "전역",
     "fontScopeBlock": "블록별",
     "fontScopeBlockIndex": "블록 {{index}}",

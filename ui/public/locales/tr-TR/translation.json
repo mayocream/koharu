@@ -195,6 +195,7 @@
     "fontPlaceholder": "Yazı tipi seç",
     "fontColorLabel": "Yazı rengi",
     "fontSizeLabel": "Boyut",
+    "fontStylePlaceholder": "Stil",
     "fontScopeGlobal": "Genel",
     "fontScopeBlock": "Blok bazında",
     "fontScopeBlockIndex": "Blok {{index}}",

@@ -1,12 +1,10 @@
 'use client'
 
 import React, { useMemo } from 'react'
-import { useTranslation } from 'react-i18next'
 
 import { useGoogleFontPreview } from '@/components/ui/font-select'
 import { SelectItem } from '@/components/ui/select'
 import { type FontFaceInfo } from '@/lib/api/schemas'
-import { getLocalizedFontLabel } from '@/lib/font-utils'
 
 interface VariantItemProps {
   variant: FontFaceInfo

@@ -109,7 +109,6 @@ impl Renderer {
             .fontbook
             .lock()
             .map_err(|_| anyhow::anyhow!("failed to lock fontbook"))?;
-        let mut seen = std::collections::HashSet::new();
         let mut fonts = fontbook
             .all_families()
             .into_iter()
@@ -120,7 +119,6 @@ impl Renderer {
                     .first()
                     .map(|(family, _)| family.clone())
                     .unwrap_or_else(|| face.post_script_name.clone());
-                seen.insert(family_name.clone());
                 FontFaceInfo {
                     family_name,
                     post_script_name: face.post_script_name,
@@ -359,9 +357,10 @@ impl Renderer {
 
             // 2. Check if it's a Google Font variant (Family:WeightStyle)
             let (family, weight, style_str) = crate::google_fonts::parse_variant_query(candidate);
-            if candidate.contains(':') && let Some(data) = self
-                .google_fonts
-                .read_cached_variant(family, weight, style_str)?
+            if candidate.contains(':')
+                && let Some(data) = self
+                    .google_fonts
+                    .read_cached_variant(family, weight, style_str)?
             {
                 let mut font = fontbook.load_from_bytes(data)?;
 

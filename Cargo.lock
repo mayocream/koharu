@@ -4548,6 +4548,7 @@ name = "koharu-renderer"
 version = "0.58.0"
 dependencies = [
  "anyhow",
+ "blake3",
  "criterion",
  "fontdb",
  "fontdue",

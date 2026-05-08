@@ -190,6 +190,7 @@
     "fontPlaceholder": "フォントを選択",
     "fontColorLabel": "フォントカラー",
     "fontSizeLabel": "サイズ",
+    "fontStylePlaceholder": "スタイル",
     "fontScopeGlobal": "全体",
     "fontScopeBlock": "ブロックごと",
     "fontScopeBlockIndex": "ブロック {{index}}",

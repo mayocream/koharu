@@ -191,17 +191,6 @@ export function RenderControlsPanel() {
     return normalizeFamilyName(currentFontFace.familyName)
   }, [currentFontFace])
 
-  const groupedFonts = useMemo(() => {
-    const families = new Map<string, FontFaceInfo[]>()
-    fontCandidates.forEach((f) => {
-      const family = f.familyName.trim()
-      const existing = families.get(family) || []
-      existing.push(f)
-      families.set(family, existing)
-    })
-    return families
-  }, [fontCandidates])
-
   const familyOptions = useMemo(() => {
     const families = new Map<string, FontFaceInfo>()
     for (const f of fontCandidates) {
@@ -438,7 +427,9 @@ export function RenderControlsPanel() {
                 sectionWidth > 0 ? { width: sectionWidth, maxWidth: sectionWidth } : undefined
               }
               onChange={async (value) => {
-                const familyVariants = fontCandidates.filter((f) => f.familyName === value)
+                const familyVariants = fontCandidates.filter(
+                  (f) => normalizeFamilyName(f.familyName) === value,
+                )
                 // Try to find Regular/400 first
                 const regularFace =
                   familyVariants.find((f) => {
@@ -452,7 +443,7 @@ export function RenderControlsPanel() {
                 // Trigger fetch for Google Fonts if not cached
                 if (face.source === 'google' && !face.cached) {
                   try {
-                    await fetchGoogleFont(face.postScriptName)
+                    await fetchGoogleFont(encodeURIComponent(face.postScriptName))
                     invalidateScene()
                   } catch (e) {
                     console.error('Failed to fetch font:', e)
@@ -477,7 +468,7 @@ export function RenderControlsPanel() {
                   const variant = currentVariants.find((v) => v.postScriptName === value)
                   if (variant?.source === 'google' && !variant.cached) {
                     try {
-                      await fetchGoogleFont(value)
+                      await fetchGoogleFont(encodeURIComponent(value))
                       invalidateScene()
                     } catch (e) {
                       console.error('Failed to fetch font variant:', e)
@@ -500,7 +491,7 @@ export function RenderControlsPanel() {
                         : undefined,
                   }}
                 >
-                  <SelectValue placeholder='Style' />
+                  <SelectValue placeholder={t('render.fontStylePlaceholder')} />
                 </SelectTrigger>
                 <SelectContent
                   position='popper'

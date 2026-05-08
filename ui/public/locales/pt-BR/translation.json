@@ -196,6 +196,7 @@
     "fontPlaceholder": "Selecionar fonte",
     "fontColorLabel": "Cor da fonte",
     "fontSizeLabel": "Tamanho",
+    "fontStylePlaceholder": "Estilo",
     "fontScopeGlobal": "Global",
     "fontScopeBlock": "Por bloco",
     "fontScopeBlockIndex": "Bloco {{index}}",

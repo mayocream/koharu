@@ -27,6 +27,7 @@ fontdb = { workspace = true }
 fontdue = { workspace = true }
 tiny-skia = { workspace = true }
 tracing = { workspace = true }
+blake3 = { workspace = true }
 
 [dev-dependencies]
 tokio = { workspace = true }
