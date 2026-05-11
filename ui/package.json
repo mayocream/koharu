@@ -60,7 +60,7 @@
     "react-colorful": "^5.6.1",
     "react-dom": "^19.2.5",
     "react-error-boundary": "^6.1.1",
-    "react-hotkeys-hook": "^5.3.0",
+    "react-hotkeys-hook": "^5.3.2",
     "react-i18next": "^17.0.7",
     "react-markdown": "^9.1.0",
     "react-resizable-panels": "^4.11.0",
