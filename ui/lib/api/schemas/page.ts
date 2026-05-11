@@ -7,6 +7,8 @@ import type { PageId } from './pageId'
 import type { PageNodes } from './pageNodes'
 
 export interface Page {
+  /** Whether this page is considered fully processed / ready for export. */
+  completed: boolean
   /** @minimum 0 */
   height: number
   id: PageId

@@ -882,6 +882,7 @@ export const getGetSceneJsonResponseMock = (
   scene: {
     pages: {
       [faker.string.alphanumeric(5)]: {
+        completed: faker.datatype.boolean(),
         height: faker.number.int({ min: 0 }),
         id: faker.string.uuid(),
         name: faker.string.alpha({ length: { min: 10, max: 20 } }),

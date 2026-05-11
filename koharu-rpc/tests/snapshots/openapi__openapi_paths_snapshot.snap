@@ -154,6 +154,12 @@ expression: paths
         ],
     ),
     (
+        "/pages/{id}",
+        [
+            "patch",
+        ],
+    ),
+    (
         "/pages/{id}/image-layers",
         [
             "post",

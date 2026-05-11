@@ -33,7 +33,7 @@ pub enum Artifact {
     FontPredictions,
     /// Every `Text` node has `translation` set (or has no OCR text).
     Translations,
-    /// Every `Text` node has a rendered sprite.
+    /// Every `Text` node with a non-empty translation has a rendered sprite.
     RenderedSprites,
     /// `Image { role: Rendered }` node present.
     FinalRender,
@@ -64,7 +64,11 @@ impl Artifact {
                 }
                 t.translation.as_ref().is_some_and(|s| !s.trim().is_empty())
             }),
-            Artifact::RenderedSprites => every_text(page, |t| t.sprite.is_some()),
+            Artifact::RenderedSprites => every_text(page, |t| {
+                // The renderer only emits sprites for non-empty translations.
+                let has_translation = t.translation.as_ref().is_some_and(|s| !s.trim().is_empty());
+                !has_translation || t.sprite.is_some()
+            }),
             Artifact::FinalRender => has_image_role(page, ImageRole::Rendered),
         }
     }
@@ -98,4 +102,67 @@ fn every_text(page: &Page, predicate: impl Fn(&koharu_core::TextData) -> bool) -
         return true;
     }
     texts.into_iter().all(predicate)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use koharu_core::{BlobRef, Node, NodeId, TextData, Transform};
+
+    #[test]
+    fn rendered_sprites_ignore_blank_translation_nodes() {
+        let mut page = Page::new("page", 100, 100);
+        page.nodes.insert(
+            node_id(1),
+            text_node(TextData {
+                text: Some(String::new()),
+                translation: Some("   ".to_string()),
+                ..Default::default()
+            }),
+        );
+
+        assert!(Artifact::RenderedSprites.ready(&page));
+    }
+
+    #[test]
+    fn rendered_sprites_require_sprite_for_nonblank_translation() {
+        let mut page = Page::new("page", 100, 100);
+        page.nodes.insert(
+            node_id(1),
+            text_node(TextData {
+                translation: Some("hello".to_string()),
+                ..Default::default()
+            }),
+        );
+
+        assert!(!Artifact::RenderedSprites.ready(&page));
+    }
+
+    #[test]
+    fn rendered_sprites_accept_nonblank_translation_with_sprite() {
+        let mut page = Page::new("page", 100, 100);
+        page.nodes.insert(
+            node_id(1),
+            text_node(TextData {
+                translation: Some("hello".to_string()),
+                sprite: Some(BlobRef::new("sprite")),
+                ..Default::default()
+            }),
+        );
+
+        assert!(Artifact::RenderedSprites.ready(&page));
+    }
+
+    fn node_id(_value: u128) -> NodeId {
+        NodeId::new()
+    }
+
+    fn text_node(data: TextData) -> Node {
+        Node {
+            id: NodeId::new(),
+            transform: Transform::default(),
+            visible: true,
+            kind: NodeKind::Text(data),
+        }
+    }
 }

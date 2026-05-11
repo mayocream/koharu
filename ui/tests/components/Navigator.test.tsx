@@ -27,9 +27,13 @@ import { server } from '../msw/server'
 
 beforeEach(() => useSelectionStore.getState().setPage(null))
 
-function sceneWithPages(ids: string[]) {
+function sceneWithPages(items: Array<string | { id: string; completed?: boolean }>) {
   const pages: Record<string, unknown> = {}
-  for (const id of ids) pages[id] = { id, name: id, width: 10, height: 10, nodes: {} }
+  for (const item of items) {
+    const id = typeof item === 'string' ? item : item.id
+    const completed = typeof item === 'string' ? false : (item.completed ?? false)
+    pages[id] = { id, completed, name: id, width: 10, height: 10, nodes: {} }
+  }
   return {
     epoch: 0,
     scene: { pages, project: { name: 'P' } as never },
@@ -80,5 +84,28 @@ describe('Navigator', () => {
     server.use(http.get('/api/v1/scene.json', () => HttpResponse.json(sceneWithPages(['a', 'b']))))
     renderWithQuery(<Navigator />)
     await waitFor(() => expect(screen.getByTestId('navigator-manage-pages')).toBeInTheDocument())
+  })
+
+  it('toggles page completion without selecting the page', async () => {
+    let completed = false
+    const patches: unknown[] = []
+    server.use(
+      http.get('/api/v1/scene.json', () =>
+        HttpResponse.json(sceneWithPages([{ id: 'a', completed }])),
+      ),
+      http.patch('/api/v1/pages/:id', async ({ request }) => {
+        const patch = await request.json()
+        patches.push(patch)
+        completed = Boolean((patch as { completed?: boolean }).completed)
+        return new HttpResponse(null, { status: 204 })
+      }),
+    )
+
+    renderWithQuery(<Navigator />)
+    await userEvent.click(await screen.findByTitle('navigator.markComplete'))
+
+    await waitFor(() => expect(patches).toEqual([{ completed: true }]))
+    await waitFor(() => expect(screen.getByTitle('navigator.markIncomplete')).toBeInTheDocument())
+    expect(useSelectionStore.getState().pageId).toBeNull()
   })
 })

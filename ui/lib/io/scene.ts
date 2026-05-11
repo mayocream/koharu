@@ -19,12 +19,14 @@ import {
   undo,
 } from '@/lib/api/default/default'
 import { ApiError } from '@/lib/api/fetch'
+import { fetchApi } from '@/lib/api/fetch'
 import type {
   ConfigPatch,
   CreateProjectRequest,
   ExportProjectRequest,
   Op,
   OpenProjectRequest,
+  PagePatch,
   ProjectSummary,
   SceneSnapshot,
 } from '@/lib/api/schemas'
@@ -63,6 +65,17 @@ const enqueueHistoryMutation = (run: () => Promise<void>): Promise<void> => {
 export async function applyOp(op: Op): Promise<void> {
   await enqueueHistoryMutation(async () => {
     await applyCommand(op)
+    await invalidateScene()
+  })
+}
+
+export async function updatePage(id: string, patch: PagePatch): Promise<void> {
+  await enqueueHistoryMutation(async () => {
+    await fetchApi<void>(`/api/v1/pages/${id}`, {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(patch),
+    })
     await invalidateScene()
   })
 }

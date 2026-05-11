@@ -1,8 +1,8 @@
 'use client'
 
 import { useVirtualizer } from '@tanstack/react-virtual'
-import { LayoutGridIcon } from 'lucide-react'
-import { useMemo, useRef, useState } from 'react'
+import { CheckCircleIcon, LayoutGridIcon } from 'lucide-react'
+import { useMemo, useRef, useState, type MouseEvent } from 'react'
 import { useTranslation } from 'react-i18next'
 
 import { PageManagerDialog } from '@/components/PageManagerDialog'
@@ -10,6 +10,8 @@ import { Button } from '@/components/ui/button'
 import { ScrollArea } from '@/components/ui/scroll-area'
 import { useScene } from '@/hooks/useScene'
 import { getGetPageThumbnailUrl } from '@/lib/api/default/default'
+import { updatePage } from '@/lib/io/scene'
+import { useEditorUiStore } from '@/lib/stores/editorUiStore'
 import { useSelectionStore } from '@/lib/stores/selectionStore'
 
 const THUMBNAIL_DPR =
@@ -93,6 +95,7 @@ export function Navigator() {
                 <PagePreview
                   index={virtualRow.index}
                   pageId={page?.id}
+                  completed={page?.completed ?? false}
                   selected={page?.id === pageId}
                   onSelect={() => page && setPage(page.id)}
                 />
@@ -110,37 +113,73 @@ export function Navigator() {
 type PagePreviewProps = {
   index: number
   pageId?: string
+  completed: boolean
   selected: boolean
   onSelect: () => void
 }
 
-function PagePreview({ index, pageId, selected, onSelect }: PagePreviewProps) {
+function PagePreview({ index, pageId, completed, selected, onSelect }: PagePreviewProps) {
+  const { t } = useTranslation()
   const src = pageId ? `${getGetPageThumbnailUrl(pageId)}?size=${200 * THUMBNAIL_DPR}` : undefined
+  const [completionPending, setCompletionPending] = useState(false)
+  const showError = useEditorUiStore((s) => s.showError)
+  const completionLabel = completed ? t('navigator.markIncomplete') : t('navigator.markComplete')
+
+  const handleToggleCompleted = async (e: MouseEvent) => {
+    e.stopPropagation()
+    if (!pageId || completionPending) return
+    setCompletionPending(true)
+    try {
+      await updatePage(pageId, { completed: !completed })
+    } catch (err) {
+      showError(err instanceof Error ? err.message : String(err))
+    } finally {
+      setCompletionPending(false)
+    }
+  }
 
   return (
-    <Button
-      variant='ghost'
-      onClick={onSelect}
-      data-testid={`navigator-page-${index}`}
-      data-page-index={index}
-      data-selected={selected}
-      className='flex h-full w-full flex-col gap-0.5 rounded border border-transparent bg-card p-1.5 text-left shadow-sm data-[selected=true]:border-primary'
-    >
-      <div className='flex min-h-0 flex-1 items-center justify-center overflow-hidden rounded'>
-        {src ? (
-          <img
-            src={src}
-            alt={`Page ${index + 1}`}
-            loading='lazy'
-            className='max-h-full max-w-full rounded object-contain'
-          />
-        ) : (
-          <div className='h-full w-full rounded bg-muted' />
-        )}
-      </div>
-      <div className='flex shrink-0 items-center text-xs text-muted-foreground'>
-        <div className='mx-auto font-semibold text-foreground'>{index + 1}</div>
-      </div>
-    </Button>
+    <div className='relative h-full w-full'>
+      <Button
+        variant='ghost'
+        onClick={onSelect}
+        data-testid={`navigator-page-${index}`}
+        data-page-index={index}
+        data-selected={selected}
+        className='flex h-full w-full flex-col gap-0.5 rounded border border-transparent bg-card p-1.5 text-left shadow-sm data-[selected=true]:border-primary'
+      >
+        <div className='flex min-h-0 flex-1 items-center justify-center overflow-hidden rounded'>
+          {src ? (
+            <img
+              src={src}
+              alt={`Page ${index + 1}`}
+              loading='lazy'
+              className='max-h-full max-w-full rounded object-contain'
+            />
+          ) : (
+            <div className='h-full w-full rounded bg-muted' />
+          )}
+        </div>
+        <div className='flex shrink-0 items-center text-xs text-muted-foreground'>
+          <div className='mx-auto font-semibold text-foreground'>{index + 1}</div>
+        </div>
+      </Button>
+      {pageId && (
+        <button
+          type='button'
+          onClick={handleToggleCompleted}
+          disabled={completionPending}
+          aria-label={completionLabel}
+          title={completionLabel}
+          className={`absolute right-2 bottom-7 flex size-5 items-center justify-center rounded-full transition-colors ${
+            completed
+              ? 'bg-emerald-500/20 text-emerald-600 hover:bg-emerald-500/30'
+              : 'bg-muted/80 text-muted-foreground/40 hover:bg-muted hover:text-muted-foreground/70'
+          }`}
+        >
+          <CheckCircleIcon className='size-4' />
+        </button>
+      )}
+    </div>
   )
 }

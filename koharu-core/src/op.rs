@@ -153,6 +153,8 @@ pub struct PagePatch {
     pub width: Option<u32>,
     #[serde(default)]
     pub height: Option<u32>,
+    #[serde(default)]
+    pub completed: Option<bool>,
 }
 
 #[derive(Clone, Debug, Default, Serialize, Deserialize, JsonSchema, ToSchema)]
@@ -311,6 +313,7 @@ impl Op {
                     name: patch.name.as_ref().map(|_| page.name.clone()),
                     width: patch.width.as_ref().map(|_| page.width),
                     height: patch.height.as_ref().map(|_| page.height),
+                    completed: patch.completed.as_ref().map(|_| page.completed),
                 };
                 if let Some(name) = &patch.name {
                     page.name = name.clone();
@@ -320,6 +323,9 @@ impl Op {
                 }
                 if let Some(h) = patch.height {
                     page.height = h;
+                }
+                if let Some(c) = patch.completed {
+                    page.completed = c;
                 }
             }
 

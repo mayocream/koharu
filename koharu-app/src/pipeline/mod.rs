@@ -153,6 +153,32 @@ pub async fn run(
     let mut warning_count: usize = 0;
 
     'pages: for (page_index, page_id) in pages.iter().enumerate() {
+        if cancel.load(Ordering::Relaxed) {
+            bail!("cancelled");
+        }
+
+        // Skip pages already marked completed. Without this, textless pages
+        // re-run detectors forever (TextBoxes never becomes "ready" with
+        // zero text nodes, so the per-step skip check below can't help).
+        // Users can untick the green checkmark in the navigator to force
+        // re-processing.
+        {
+            let scene_guard = session.scene.read();
+            let already_completed = scene_guard
+                .pages
+                .get(page_id)
+                .is_some_and(|page| page.completed);
+            if already_completed {
+                tracing::info!(
+                    page = %page_id,
+                    page_index,
+                    "skipped: page already marked completed"
+                );
+                completed += total_steps as u64;
+                continue 'pages;
+            }
+        }
+
         for (seq, &i) in order.iter().enumerate() {
             if cancel.load(Ordering::Relaxed) {
                 bail!("cancelled");
@@ -256,6 +282,32 @@ pub async fn run(
                 continue 'pages;
             }
         }
+
+        // Auto-mark the page as completed when all steps succeeded and the
+        // page is either textless (nothing to render) or fully rendered.
+        {
+            let scene_guard = session.scene.read();
+            let should_complete = scene_guard
+                .pages
+                .get(page_id)
+                .is_some_and(|page| !page.completed && page_completion_satisfied(page));
+            if should_complete {
+                drop(scene_guard);
+                if let Err(err) = session.apply(Op::UpdatePage {
+                    id: *page_id,
+                    patch: koharu_core::PagePatch {
+                        completed: Some(true),
+                        ..Default::default()
+                    },
+                    prev: koharu_core::PagePatch::default(),
+                }) {
+                    tracing::warn!(
+                        page = %page_id,
+                        "failed to mark page completed: {err:#}"
+                    );
+                }
+            }
+        }
     }
 
     if let Some(sink) = progress.as_ref() {
@@ -270,6 +322,30 @@ pub async fn run(
         });
     }
     Ok(RunOutcome { warning_count })
+}
+
+fn page_completion_satisfied(page: &koharu_core::Page) -> bool {
+    let has_processable_text = page.nodes.values().any(|node| match &node.kind {
+        koharu_core::NodeKind::Text(text) => text_has_content(text),
+        _ => false,
+    });
+    if !has_processable_text {
+        return true;
+    }
+
+    Artifact::Translations.ready(page)
+        && Artifact::FinalRender.ready(page)
+        && Artifact::RenderedSprites.ready(page)
+}
+
+fn text_has_content(text: &koharu_core::TextData) -> bool {
+    text.text.as_ref().is_some_and(|s| !s.trim().is_empty()) || text_has_translation(text)
+}
+
+fn text_has_translation(text: &koharu_core::TextData) -> bool {
+    text.translation
+        .as_ref()
+        .is_some_and(|s| !s.trim().is_empty())
 }
 
 #[allow(clippy::too_many_arguments)]
@@ -354,6 +430,9 @@ pub fn catalog() -> EngineCatalog {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use koharu_core::{
+        BlobRef, ImageData, ImageRole, Node, NodeId, NodeKind, Page, TextData, Transform,
+    };
 
     #[test]
     fn catalog_includes_anime_text_detector() {
@@ -364,5 +443,85 @@ mod tests {
                 && engine.name == "Anime Text YOLO (N)"
                 && engine.produces.iter().map(String::as_str).eq(["TextBoxes"])
         }));
+    }
+
+    #[test]
+    fn completion_treats_blank_text_nodes_as_textless() {
+        let mut page = Page::new("page", 100, 100);
+        page.nodes.insert(
+            node_id(1),
+            text_node(TextData {
+                text: Some("   ".to_string()),
+                translation: Some(String::new()),
+                ..Default::default()
+            }),
+        );
+
+        assert!(page_completion_satisfied(&page));
+    }
+
+    #[test]
+    fn completion_requires_translation_before_rendered_page_counts_done() {
+        let mut page = Page::new("page", 100, 100);
+        page.nodes.insert(
+            node_id(1),
+            text_node(TextData {
+                text: Some("source".to_string()),
+                translation: Some(String::new()),
+                ..Default::default()
+            }),
+        );
+        add_rendered_image(&mut page);
+
+        assert!(!page_completion_satisfied(&page));
+    }
+
+    #[test]
+    fn completion_requires_sprite_for_nonblank_translation() {
+        let mut page = Page::new("page", 100, 100);
+        page.nodes.insert(
+            node_id(1),
+            text_node(TextData {
+                text: Some("source".to_string()),
+                translation: Some("translation".to_string()),
+                ..Default::default()
+            }),
+        );
+        add_rendered_image(&mut page);
+
+        assert!(!page_completion_satisfied(&page));
+    }
+
+    fn node_id(_value: u128) -> NodeId {
+        NodeId::new()
+    }
+
+    fn text_node(data: TextData) -> Node {
+        Node {
+            id: NodeId::new(),
+            transform: Transform::default(),
+            visible: true,
+            kind: NodeKind::Text(data),
+        }
+    }
+
+    fn add_rendered_image(page: &mut Page) {
+        let id = node_id(99);
+        page.nodes.insert(
+            id,
+            Node {
+                id,
+                transform: Transform::default(),
+                visible: true,
+                kind: NodeKind::Image(ImageData {
+                    role: ImageRole::Rendered,
+                    blob: BlobRef::new("rendered"),
+                    opacity: 1.0,
+                    natural_width: 100,
+                    natural_height: 100,
+                    name: None,
+                }),
+            },
+        );
     }
 }

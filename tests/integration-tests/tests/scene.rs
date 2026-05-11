@@ -117,6 +117,7 @@ async fn update_page_then_undo_round_trips() -> anyhow::Result<()> {
             name: Some("renamed".into()),
             width: None,
             height: None,
+            completed: None,
         },
         prev: Default::default(),
     };

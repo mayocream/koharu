@@ -14,11 +14,12 @@ use std::sync::atomic::AtomicBool;
 use axum::Json;
 use axum::body::Bytes;
 use axum::extract::{Multipart, Path, Query, State};
+use axum::http::StatusCode;
 use image::GenericImageView;
 use koharu_app::pipeline::{self, EngineCtx, PipelineRunOptions};
 use koharu_core::{
     BlobRef, ImageData, ImageRole, MaskRole, Node, NodeDataPatch, NodeId, NodeKind, Op, Page,
-    PageId, Region, Scene, Transform,
+    PageId, PagePatch, Region, Scene, Transform,
 };
 use rayon::prelude::*;
 use serde::{Deserialize, Serialize};
@@ -43,6 +44,7 @@ pub fn router() -> OpenApiRouter<AppState> {
     OpenApiRouter::default()
         .routes(routes!(create_pages))
         .routes(routes!(create_pages_from_paths))
+        .routes(routes!(patch_page))
         .routes(routes!(add_image_layer))
         .routes(routes!(put_mask))
 }
@@ -326,6 +328,37 @@ async fn create_pages_from_paths(
     .map_err(ApiError::internal)?;
 
     Ok(Json(CreatePagesResponse { pages: created_ids }))
+}
+
+// ---------------------------------------------------------------------------
+// PATCH /pages/{id}  — update page metadata (e.g. completed flag)
+// ---------------------------------------------------------------------------
+
+#[utoipa::path(
+    patch,
+    path = "/pages/{id}",
+    params(("id" = PageId, Path, description = "Page id")),
+    request_body = PagePatch,
+    responses((status = 204))
+)]
+async fn patch_page(
+    State(app): State<AppState>,
+    Path(page_id): Path<PageId>,
+    Json(patch): Json<PagePatch>,
+) -> ApiResult<StatusCode> {
+    let session = app
+        .current_session()
+        .ok_or_else(|| ApiError::bad_request("no project open"))?;
+    if !session.scene.read().pages.contains_key(&page_id) {
+        return Err(ApiError::not_found(format!("page not found: {page_id}")));
+    }
+    app.apply(Op::UpdatePage {
+        id: page_id,
+        patch,
+        prev: PagePatch::default(),
+    })
+    .map_err(ApiError::internal)?;
+    Ok(StatusCode::NO_CONTENT)
 }
 
 // ---------------------------------------------------------------------------

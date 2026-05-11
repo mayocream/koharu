@@ -90,6 +90,8 @@
     "pages_other": "{{count}} pages",
     "empty": "No documents",
     "prompt": "Select or import a page to begin",
+    "markComplete": "Mark as complete",
+    "markIncomplete": "Mark as incomplete",
     "pageManager": {
       "title": "Page Manager",
       "description": "Drag and drop pages to reorder them."

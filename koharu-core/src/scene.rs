@@ -153,6 +153,11 @@ pub struct Page {
     pub name: String,
     pub width: u32,
     pub height: u32,
+    /// Whether this page is considered fully processed / ready for export.
+    /// Auto-set by the pipeline when a page finishes all steps (or has no
+    /// text to process). Can also be toggled manually by the user.
+    #[serde(default)]
+    pub completed: bool,
     /// Stacking = insertion order. Bottom-first: `source` is typically first,
     /// `rendered` typically last.
     pub nodes: IndexMap<NodeId, Node>,
@@ -165,6 +170,7 @@ impl Page {
             name: name.into(),
             width,
             height,
+            completed: false,
             nodes: IndexMap::new(),
         }
     }
