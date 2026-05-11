@@ -172,6 +172,12 @@ expression: paths
         ],
     ),
     (
+        "/pages/{page_id}/reorder-text-nodes",
+        [
+            "post",
+        ],
+    ),
+    (
         "/pipelines",
         [
             "post",

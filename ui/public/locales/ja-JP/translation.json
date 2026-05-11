@@ -209,8 +209,12 @@
     "ocrBadge": "OCR",
     "translationLabel": "翻訳",
     "translationBadge": "TL",
-    "addOcrPlaceholder": "OCR テキストを追加",
-    "addTranslationPlaceholder": "翻訳を追加"
+    "addOcrPlaceholder": "OCRテキストを追加",
+    "addTranslationPlaceholder": "翻訳を追加",
+    "readingOrder": "読み順",
+    "readingOrderRtl": "右から左 (RTL)",
+    "readingOrderLtr": "左から右 (LTR)",
+    "readingOrderCustom": "カスタム"
   },
   "workspace": {
     "importPrompt": "ページを読み込んで編集を開始してください。",

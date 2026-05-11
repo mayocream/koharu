@@ -232,7 +232,11 @@
     "translationLabel": "번역",
     "translationBadge": "번역",
     "addOcrPlaceholder": "OCR 텍스트 추가",
-    "addTranslationPlaceholder": "번역 추가"
+    "addTranslationPlaceholder": "번역 추가",
+    "readingOrder": "읽기 순서",
+    "readingOrderRtl": "우에서 좌 (RTL)",
+    "readingOrderLtr": "좌에서 우 (LTR)",
+    "readingOrderCustom": "사용자 정의"
   },
   "workspace": {
     "importPrompt": "편집을 시작하려면 페이지를 가져오세요.",

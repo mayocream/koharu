@@ -210,7 +210,11 @@
     "translationLabel": "翻译",
     "translationBadge": "TL",
     "addOcrPlaceholder": "添加 OCR 文本",
-    "addTranslationPlaceholder": "添加翻译"
+    "addTranslationPlaceholder": "添加翻译",
+    "readingOrder": "阅读顺序",
+    "readingOrderRtl": "从右至左 (RTL)",
+    "readingOrderLtr": "从左至右 (LTR)",
+    "readingOrderCustom": "自定义"
   },
   "workspace": {
     "importPrompt": "导入页面以开始编辑。",

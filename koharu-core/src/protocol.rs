@@ -46,6 +46,18 @@ pub struct Region {
     pub height: u32,
 }
 
+#[derive(
+    Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Eq, ToSchema, JsonSchema, Default,
+)]
+#[serde(rename_all = "snake_case")]
+pub enum ReadingOrder {
+    #[default]
+    Rtl,
+    Ltr,
+    // TODO: Custom will be a future implementation for manual ordering
+    Custom,
+}
+
 // ---------------------------------------------------------------------------
 // LLM lifecycle
 // ---------------------------------------------------------------------------

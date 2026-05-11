@@ -5,6 +5,7 @@
  */
 import type { NodeId } from './nodeId'
 import type { PageId } from './pageId'
+import type { ReadingOrder } from './readingOrder'
 import type { Region } from './region'
 
 export interface StartPipelineRequest {
@@ -15,6 +16,7 @@ export interface StartPipelineRequest {
    * @nullable
    */
   pages?: PageId[] | null
+  readingOrder?: ReadingOrder
   region?: null | Region
   /** Engine ids (`inventory::submit!` ids) to run in order. */
   steps: string[]

@@ -51,6 +51,7 @@ import type {
   ProjectSummary,
   ProviderSecretRequest,
   PutMaskResponse,
+  ReadingOrder,
   SceneSnapshot,
   StartDownloadRequest,
   StartDownloadResponse,
@@ -2719,6 +2720,82 @@ export function useGetPageThumbnail<
   }
 
   return { ...query, queryKey: queryOptions.queryKey }
+}
+
+export const getReorderTextNodesUrl = (id: PageId) => {
+  return `/api/v1/pages/${id}/reorder-text-nodes`
+}
+
+export const reorderTextNodes = async (
+  id: PageId,
+  readingOrder: ReadingOrder,
+  options?: RequestInit,
+): Promise<void> => {
+  return fetchApi<void>(getReorderTextNodesUrl(id), {
+    ...options,
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', ...options?.headers },
+    body: JSON.stringify(readingOrder),
+  })
+}
+
+export const getReorderTextNodesMutationOptions = <TError = unknown, TContext = unknown>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof reorderTextNodes>>,
+    TError,
+    { id: PageId; data: ReadingOrder },
+    TContext
+  >
+  request?: SecondParameter<typeof fetchApi>
+}): UseMutationOptions<
+  Awaited<ReturnType<typeof reorderTextNodes>>,
+  TError,
+  { id: PageId; data: ReadingOrder },
+  TContext
+> => {
+  const mutationKey = ['reorderTextNodes']
+  const { mutation: mutationOptions, request: requestOptions } = options
+    ? options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey
+      ? options
+      : { ...options, mutation: { ...options.mutation, mutationKey } }
+    : { mutation: { mutationKey }, request: undefined }
+
+  const mutationFn: MutationFunction<
+    Awaited<ReturnType<typeof reorderTextNodes>>,
+    { id: PageId; data: ReadingOrder }
+  > = (props) => {
+    const { id, data } = props ?? {}
+
+    return reorderTextNodes(id, data, requestOptions)
+  }
+
+  return { mutationFn, ...mutationOptions }
+}
+
+export type ReorderTextNodesMutationResult = NonNullable<
+  Awaited<ReturnType<typeof reorderTextNodes>>
+>
+export type ReorderTextNodesMutationBody = ReadingOrder
+export type ReorderTextNodesMutationError = unknown
+
+export const useReorderTextNodes = <TError = unknown, TContext = unknown>(
+  options?: {
+    mutation?: UseMutationOptions<
+      Awaited<ReturnType<typeof reorderTextNodes>>,
+      TError,
+      { id: PageId; data: ReadingOrder },
+      TContext
+    >
+    request?: SecondParameter<typeof fetchApi>
+  },
+  queryClient?: QueryClient,
+): UseMutationResult<
+  Awaited<ReturnType<typeof reorderTextNodes>>,
+  TError,
+  { id: PageId; data: ReadingOrder },
+  TContext
+> => {
+  return useMutation(getReorderTextNodesMutationOptions(options), queryClient)
 }
 
 export const getStartPipelineUrl = () => {

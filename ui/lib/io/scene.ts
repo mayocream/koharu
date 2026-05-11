@@ -15,6 +15,7 @@ import {
   patchConfig,
   putCurrentProject,
   redo,
+  reorderTextNodes,
   startPipeline,
   undo,
 } from '@/lib/api/default/default'
@@ -26,6 +27,7 @@ import type {
   Op,
   OpenProjectRequest,
   ProjectSummary,
+  ReadingOrder,
   SceneSnapshot,
 } from '@/lib/api/schemas'
 import { filenameFromContentDisposition } from '@/lib/io/saveBlob'
@@ -79,6 +81,11 @@ export async function redoOp(): Promise<void> {
     await redo()
     await invalidateScene()
   })
+}
+
+export async function reorderPageTextNodes(pageId: string, order: ReadingOrder): Promise<void> {
+  await reorderTextNodes(pageId, order)
+  await invalidateScene()
 }
 
 // Auto-render ---------------------------------------------------------------

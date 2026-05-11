@@ -30,7 +30,7 @@ impl Engine for Model {
             .into_iter()
             .map(|r| text_region_to_pair(r, DETECTOR_NAME))
             .collect();
-        sort_manga_reading_order(&mut pairs);
+        sort_manga_reading_order(&mut pairs, ctx.options.reading_order.unwrap_or_default());
 
         let mut ops = clear_text_nodes_ops(ctx.scene, ctx.page);
         let removed = ops.len();

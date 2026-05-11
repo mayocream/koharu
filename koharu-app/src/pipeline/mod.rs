@@ -14,6 +14,7 @@ pub use engine::{
     BoxFuture, Engine, EngineCtx, EngineInfo, EngineLoadFn, PipelineRunOptions, Registry,
     build_order,
 };
+pub use engines::support;
 
 use std::sync::Arc;
 use std::sync::atomic::{AtomicBool, Ordering};
