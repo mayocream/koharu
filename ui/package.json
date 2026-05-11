@@ -57,7 +57,7 @@
     "next": "^16.2.4",
     "next-themes": "^0.4.6",
     "react": "^19.2.5",
-    "react-colorful": "^5.6.1",
+    "react-colorful": "^5.7.0",
     "react-dom": "^19.2.5",
     "react-error-boundary": "^6.1.1",
     "react-hotkeys-hook": "^5.3.2",
