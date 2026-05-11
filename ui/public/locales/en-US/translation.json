@@ -228,10 +228,26 @@
     "fontPlaceholder": "Select font",
     "fontColorLabel": "Font color",
     "fontSizeLabel": "Size",
+    "fontStylePlaceholder": "Style",
     "fontScopeGlobal": "Global",
     "fontScopeBlock": "Per block",
     "fontScopeBlockIndex": "Block {{index}}",
-    "fontScopeBlocksCount": "{{count}} blocks"
+    "fontScopeBlocksCount": "{{count}} blocks",
+    "fontWeights": {
+      "thin": "Thin",
+      "extraLight": "Extra Light",
+      "light": "Light",
+      "regular": "Regular",
+      "medium": "Medium",
+      "semiBold": "Semi Bold",
+      "bold": "Bold",
+      "extraBold": "Extra Bold",
+      "black": "Black"
+    },
+    "fontStyles": {
+      "italicWithName": "{{name}} Italic",
+      "regularItalic": "Regular Italic"
+    }
   },
   "textBlocks": {
     "emptyPrompt": "Open an image to see text blocks.",

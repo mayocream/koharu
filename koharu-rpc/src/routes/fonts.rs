@@ -8,7 +8,7 @@
 use axum::body::Body;
 use axum::extract::{Path, State};
 use axum::http::{HeaderValue, StatusCode, header::CONTENT_TYPE};
-use axum::response::{IntoResponse, Json, Response};
+use axum::response::{Json, Response};
 use koharu_core::{FontFaceInfo, GoogleFontCatalog};
 use utoipa_axum::{router::OpenApiRouter, routes};
 
@@ -48,14 +48,17 @@ async fn get_google_fonts_catalog(
 )]
 async fn fetch_google_font(
     State(app): State<AppState>,
-    Path(family): Path<String>,
+    Path(family_query): Path<String>,
 ) -> ApiResult<StatusCode> {
     let http = app.runtime.http_client();
+    let (family, weight, style) = koharu_app::google_fonts::parse_variant_query(&family_query);
+
     app.renderer
         .google_fonts
-        .fetch_family(&family, &http)
+        .fetch_variant(family, weight, style, &http)
         .await
         .map_err(ApiError::internal)?;
+
     Ok(StatusCode::NO_CONTENT)
 }
 
@@ -70,16 +73,19 @@ async fn fetch_google_font(
 )]
 async fn get_google_font_file(
     State(app): State<AppState>,
-    Path((family, _file)): Path<(String, String)>,
+    Path((family_query, _file)): Path<(String, String)>,
 ) -> ApiResult<Response> {
+    let (family, weight, style) = koharu_app::google_fonts::parse_variant_query(&family_query);
     let bytes = app
         .renderer
         .google_fonts
-        .read_cached_file(&family)
-        .map_err(ApiError::internal)?
-        .ok_or_else(|| ApiError::not_found(format!("font {family} not cached")))?;
+        .read_cached_variant(family, weight, style)
+        .map_err(ApiError::internal)?;
+
+    let bytes =
+        bytes.ok_or_else(|| ApiError::not_found(format!("font {family_query} not cached")))?;
     let mut resp = Response::new(Body::from(bytes));
     resp.headers_mut()
         .insert(CONTENT_TYPE, HeaderValue::from_static("font/ttf"));
-    Ok(resp.into_response())
+    Ok(resp)
 }

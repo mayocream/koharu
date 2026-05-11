@@ -190,6 +190,7 @@
     "fontPlaceholder": "选择字体",
     "fontColorLabel": "字体颜色",
     "fontSizeLabel": "大小",
+    "fontStylePlaceholder": "样式",
     "fontScopeGlobal": "全局",
     "fontScopeBlock": "按文本块",
     "fontScopeBlockIndex": "文本块 {{index}}",
@@ -198,7 +199,22 @@
     "effectBold": "粗体",
     "effectBorder": "描边",
     "strokeColorLabel": "描边颜色",
-    "strokeWidthLabel": "描边宽度"
+    "strokeWidthLabel": "描边宽度",
+    "fontWeights": {
+      "thin": "极细",
+      "extraLight": "特细",
+      "light": "细体",
+      "regular": "常规",
+      "medium": "中等",
+      "semiBold": "半粗",
+      "bold": "粗体",
+      "extraBold": "特粗",
+      "black": "极粗"
+    },
+    "fontStyles": {
+      "italicWithName": "{{name}} 斜体",
+      "regularItalic": "常规斜体"
+    }
   },
   "textBlocks": {
     "emptyPrompt": "打开图像以查看文本块。",

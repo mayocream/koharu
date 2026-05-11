@@ -2,7 +2,7 @@ use std::collections::HashMap;
 
 use anyhow::{Context, Result};
 use camino::{Utf8Path, Utf8PathBuf};
-use koharu_core::{GoogleFontCatalog, GoogleFontEntry};
+use koharu_core::{GoogleFontCatalog, GoogleFontEntry, GoogleFontVariant};
 use tokio::sync::Mutex;
 use tracing::debug;
 
@@ -71,6 +71,12 @@ impl GoogleFontService {
         self.cached_families.lock().await.contains_key(family)
     }
 
+    /// Checks if a specific variant has been cached to disk.
+    pub fn is_variant_cached(&self, family: &str, variant: &GoogleFontVariant) -> bool {
+        let family_dir = self.cache_dir.join(normalize_family_dir(family));
+        family_dir.join(&variant.filename).exists()
+    }
+
     /// Downloads a font family's regular variant to disk cache.
     /// Returns the path to the cached .ttf file.
     /// No-op if already cached.
@@ -79,14 +85,17 @@ impl GoogleFontService {
         family: &str,
         http: &reqwest_middleware::ClientWithMiddleware,
     ) -> Result<Utf8PathBuf> {
-        // Check cache first
-        {
-            let cached = self.cached_families.lock().await;
-            if let Some(first) = cached.get(family).and_then(|p| p.first()) {
-                return Ok(first.clone());
-            }
-        }
+        self.fetch_variant(family, 400, "normal", http).await
+    }
 
+    /// Downloads a specific variant to disk cache.
+    pub async fn fetch_variant(
+        &self,
+        family: &str,
+        weight: u16,
+        style: &str,
+        http: &reqwest_middleware::ClientWithMiddleware,
+    ) -> Result<Utf8PathBuf> {
         let entry = self
             .catalog
             .fonts
@@ -94,51 +103,91 @@ impl GoogleFontService {
             .find(|e| e.family == family)
             .with_context(|| format!("font family not found in catalog: {family}"))?;
 
-        // Prefer regular weight, fallback to first variant
         let variant = entry
             .variants
             .iter()
-            .find(|v| v.weight == 400 && v.style == "normal")
+            .find(|v| v.weight == weight && v.style == style)
+            .or_else(|| {
+                // Fallback to regular if requested variant not found
+                entry
+                    .variants
+                    .iter()
+                    .find(|v| v.weight == 400 && v.style == "normal")
+            })
             .or_else(|| entry.variants.first())
             .context("font has no variants")?;
 
         let family_dir_name = normalize_family_dir(&entry.family);
-        let url = format!(
-            "https://raw.githubusercontent.com/google/fonts/main/ofl/{}/{}",
-            family_dir_name, variant.filename
-        );
+        let file_path = self
+            .cache_dir
+            .join(&family_dir_name)
+            .join(&variant.filename);
 
-        debug!(%family, %url, "downloading Google Font");
-        let response = http
-            .get(&url)
-            .send()
-            .await
-            .context("failed to fetch Google Font")?
-            .error_for_status()
-            .context("Google Fonts CDN returned an error")?;
-        let bytes = response
-            .bytes()
-            .await
-            .context("failed to read font bytes")?;
+        // Check cache first
+        if file_path.exists() {
+            return Ok(file_path);
+        }
 
-        // Write to disk cache
-        let family_dir = self.cache_dir.join(&family_dir_name);
-        std::fs::create_dir_all(family_dir.as_std_path())?;
-        let file_path = family_dir.join(&variant.filename);
-        std::fs::write(file_path.as_std_path(), &bytes)
-            .with_context(|| format!("failed to write cached font to {file_path}"))?;
+        // Try different license categories on Google Fonts GitHub
+        let categories = ["ofl", "apache", "ufl"];
+        let mut last_error = None;
 
-        // Update in-memory cache tracking
-        self.cached_families
-            .lock()
-            .await
-            .insert(family.to_string(), vec![file_path.clone()]);
+        for category in categories {
+            let url = format!(
+                "https://raw.githubusercontent.com/google/fonts/main/{}/{}/{}",
+                category, family_dir_name, variant.filename
+            );
 
-        Ok(file_path)
+            debug!(%family, %url, "trying to download Google Font");
+            match http.get(&url).send().await {
+                Ok(resp) if resp.status().is_success() => {
+                    let bytes = resp.bytes().await.context("failed to read font bytes")?;
+                    std::fs::create_dir_all(file_path.parent().unwrap())?;
+                    std::fs::write(&file_path, &bytes)?;
+
+                    // Update in-memory cache tracking
+                    let mut cached = self.cached_families.lock().await;
+                    let entries = cached.entry(family.to_string()).or_default();
+                    if !entries.contains(&file_path) {
+                        entries.push(file_path.clone());
+                    }
+
+                    return Ok(file_path);
+                }
+                Ok(resp) if resp.status() == 404 => {
+                    // If exact filename failed, it might be a naming mismatch on the CDN
+                    // This is rare for the main repo but happens with some older fonts
+                    last_error = Some(anyhow::anyhow!(
+                        "Font file {} not found in {}",
+                        variant.filename,
+                        category
+                    ));
+                    continue;
+                }
+                Ok(resp) => {
+                    last_error = Some(anyhow::anyhow!("CDN returned {}", resp.status()));
+                }
+                Err(e) => {
+                    last_error = Some(e.into());
+                }
+            }
+        }
+
+        Err(last_error.unwrap_or_else(|| anyhow::anyhow!("Font not found in any known category")))
     }
 
     /// Reads the cached font file bytes. Returns None if not cached.
     pub fn read_cached_file(&self, family: &str) -> Result<Option<Vec<u8>>> {
+        self.read_cached_variant(family, 400, "normal")
+    }
+
+    /// Reads a specific cached variant.
+    pub fn read_cached_variant(
+        &self,
+        family: &str,
+        weight: u16,
+        style: &str,
+    ) -> Result<Option<Vec<u8>>> {
         let entry = self.catalog.fonts.iter().find(|e| e.family == family);
         let Some(entry) = entry else {
             return Ok(None);
@@ -146,9 +195,10 @@ impl GoogleFontService {
         let variant = entry
             .variants
             .iter()
-            .find(|v| v.weight == 400 && v.style == "normal")
-            .or_else(|| entry.variants.first());
+            .find(|v| v.weight == weight && v.style == style);
+
         let Some(variant) = variant else {
+            // If the specific variant isn't in the catalog, we can't load it
             return Ok(None);
         };
         let file_path = self
@@ -172,4 +222,24 @@ impl GoogleFontService {
 /// e.g. "Comic Neue" -> "comicneue"
 fn normalize_family_dir(family: &str) -> String {
     family.to_lowercase().replace(' ', "")
+}
+
+/// Parses a variant query string like "Family:700i" into (family, weight, style).
+pub fn parse_variant_query(query: &str) -> (&str, u16, &str) {
+    if let Some((family, variant_str)) = query.split_once(':') {
+        let weight = variant_str
+            .chars()
+            .filter(|c| c.is_ascii_digit())
+            .collect::<String>()
+            .parse::<u16>()
+            .unwrap_or(400);
+        let style = if variant_str.contains('i') {
+            "italic"
+        } else {
+            "normal"
+        };
+        (family, weight, style)
+    } else {
+        (query, 400, "normal")
+    }
 }

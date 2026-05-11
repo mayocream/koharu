@@ -109,35 +109,42 @@ impl Renderer {
             .fontbook
             .lock()
             .map_err(|_| anyhow::anyhow!("failed to lock fontbook"))?;
-        let mut seen = std::collections::HashSet::new();
         let mut fonts = fontbook
             .all_families()
             .into_iter()
             .filter(|face| !face.post_script_name.is_empty())
-            .filter_map(|face| {
+            .map(|face| {
                 let family_name = face
                     .families
                     .first()
                     .map(|(family, _)| family.clone())
                     .unwrap_or_else(|| face.post_script_name.clone());
-                seen.insert(family_name.clone()).then_some(FontFaceInfo {
+                FontFaceInfo {
                     family_name,
                     post_script_name: face.post_script_name,
                     source: FontSource::System,
                     category: None,
                     cached: true,
-                })
+                }
             })
             .collect::<Vec<_>>();
         let catalog = self.google_fonts.catalog();
         for entry in &catalog.fonts {
-            if seen.insert(entry.family.clone()) {
+            for variant in &entry.variants {
+                // Unique PS name for Google Fonts to identify the specific weight/style
+                let post_script_name = format!(
+                    "{}:{}{}",
+                    entry.family,
+                    variant.weight,
+                    if variant.style == "italic" { "i" } else { "" }
+                );
+
                 fonts.push(FontFaceInfo {
                     family_name: entry.family.clone(),
-                    post_script_name: entry.family.clone(),
+                    post_script_name,
                     source: FontSource::Google,
                     category: Some(entry.category.clone()),
-                    cached: false,
+                    cached: self.google_fonts.is_variant_cached(&entry.family, variant),
                 });
             }
         }
@@ -342,12 +349,36 @@ impl Renderer {
             .map_err(|_| anyhow::anyhow!("failed to lock fontbook"))?;
         for candidate in &style.font_families {
             let faces = fontbook.all_families();
+
+            // 1. Try exact PostScript name match first (most reliable for variants)
+            if let Some(face) = faces.iter().find(|f| f.post_script_name == *candidate) {
+                return fontbook.load_font(face.id);
+            }
+
+            // 2. Check if it's a Google Font variant (Family:WeightStyle)
+            let (family, weight, style_str) = crate::google_fonts::parse_variant_query(candidate);
+            if candidate.contains(':')
+                && let Some(data) = self
+                    .google_fonts
+                    .read_cached_variant(family, weight, style_str)?
+            {
+                let mut font = fontbook.load_from_bytes(data)?;
+
+                // Explicitly set the weight and style for variable font instancing
+                font.weight = weight;
+                font.style = style_str.to_string();
+
+                return Ok(font);
+            }
+
+            // 3. Try fuzzy family name match
             if let Some(psn) = face_post_script_name(&faces, candidate) {
                 return fontbook.query(&psn);
             }
+
+            // 4. Try base Google Font file
             if let Some(data) = self.google_fonts.read_cached_file(candidate)? {
-                let font = fontbook.load_from_bytes(data)?;
-                return Ok(font);
+                return fontbook.load_from_bytes(data);
             }
         }
         Err(anyhow::anyhow!(
@@ -724,14 +755,15 @@ fn load_symbol_fallbacks(fontbook: &mut FontBook) -> Vec<Font> {
 }
 
 fn face_post_script_name(faces: &[FaceInfo], candidate: &str) -> Option<String> {
+    let candidate_lower = candidate.trim().to_lowercase();
     faces
         .iter()
         .find(|face| {
-            face.post_script_name == candidate
+            face.post_script_name.to_lowercase() == candidate_lower
                 || face
                     .families
                     .iter()
-                    .any(|(family, _)| family.as_str() == candidate)
+                    .any(|(family, _)| family.to_lowercase() == candidate_lower)
         })
         .map(|face| face.post_script_name.clone())
         .filter(|post_script_name| !post_script_name.is_empty())
