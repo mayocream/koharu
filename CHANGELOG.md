@@ -1,3 +1,11 @@
+## [0.59.0](https://github.com/mayocream/koharu/compare/0.58.0..0.59.0) - 2026-05-11
+
+### ⛰️  Features
+
+- Font favorite + weights/styles implementation ([#670](https://github.com/mayocream/koharu/issues/670)) - ([5ca5677](https://github.com/mayocream/koharu/commit/5ca5677a195955a89ccf8cc93e4c336f19a22705))
+- Reading Order Dropdown + LTR Reading Order ([#660](https://github.com/mayocream/koharu/issues/660)) - ([88625e2](https://github.com/mayocream/koharu/commit/88625e28ac0dd7a8be9173f5a44b8ad084453e02))
+
+
 ## [0.58.0](https://github.com/mayocream/koharu/compare/0.57.0..0.58.0) - 2026-05-01
 
 ### 🐛 Bug Fixes
