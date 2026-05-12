@@ -255,7 +255,8 @@ fn model_params(cpu: bool, backend: &LlamaBackend) -> LlamaModelParams {
     if !cpu && backend.supports_gpu_offload() {
         LlamaModelParams::default().with_n_gpu_layers(DEFAULT_GPU_LAYERS)
     } else {
-        LlamaModelParams::default()
+        // Issue #309: default n_gpu_layers is -1 (auto), which may still offload to GPU.
+        LlamaModelParams::default().with_n_gpu_layers(0)
     }
 }
 
