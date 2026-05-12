@@ -1,3 +1,10 @@
+## [0.59.1](https://github.com/mayocream/koharu/compare/0.59.0..0.59.1) - 2026-05-12
+
+### 🐛 Bug Fixes
+
+- *(llm)* Honor --cpu by zeroing n_gpu_layers ([#309](https://github.com/mayocream/koharu/issues/309)) ([#692](https://github.com/mayocream/koharu/issues/692)) - ([2a12c2c](https://github.com/mayocream/koharu/commit/2a12c2ca1580d330b4848939489dfcdcee42f372))
+
+
 ## [0.59.0](https://github.com/mayocream/koharu/compare/0.58.0..0.59.0) - 2026-05-11
 
 ### ⛰️  Features
