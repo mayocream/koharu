@@ -28,6 +28,7 @@
     "exportPsd": "PSD 내보내기...",
     "exportAllInpainted": "모든 인페인트 이미지 내보내기...",
     "exportAllRendered": "모든 렌더링된 이미지 내보내기...",
+    "exportText": "텍스트 내보내기...",
     "view": "보기",
     "fitWindow": "창에 맞추기",
     "originalSize": "원본 크기",
@@ -252,7 +253,14 @@
     "readingOrder": "읽기 순서",
     "readingOrderRtl": "우에서 좌 (RTL)",
     "readingOrderLtr": "좌에서 우 (LTR)",
-    "readingOrderCustom": "사용자 정의"
+    "readingOrderCustom": "사용자 정의",
+    "speakerLabel": "화자",
+    "speakerList": "화자 목록",
+    "speakerAddPlaceholder": "화자 이름 추가",
+    "speakerEmpty": "등록된 화자가 없습니다.",
+    "speakerSelectPlaceholder": "화자 선택",
+    "speakerNone": "없음",
+    "speakerInputPlaceholder": "직접 입력"
   },
   "workspace": {
     "importPrompt": "편집을 시작하려면 페이지를 가져오세요.",
@@ -274,6 +282,20 @@
     "brush": "브러시",
     "repairBrush": "복구 브러시",
     "eraser": "지우개"
+  },
+  "export": {
+    "dialogTitle": "내보내기",
+    "scope": "범위",
+    "scopeCurrent": "현재 페이지",
+    "scopeSelected": "페이지 선택",
+    "scopeAll": "모든 페이지",
+    "format": "형식",
+    "filename": "파일명",
+    "save": "저장",
+    "noText": "(텍스트 없음)",
+    "speaker": "화자",
+    "original": "원문",
+    "translation": "번역"
   },
   "download": {
     "title": "다운로드 중"
@@ -417,7 +439,21 @@
     "shortcutReset": "단축키 초기화",
     "shortcutResetDescription": "모든 단축키를 기본값으로 복원합니다. 저장된 변경 사항은 삭제됩니다.",
     "shortcutConflict": "이미 사용 중인 키 조합입니다",
-    "shortcutInvalid": "이 키는 단축키로 사용할 수 없습니다"
+    "shortcutInvalid": "이 키는 단축키로 사용할 수 없습니다",
+    "shortcutPrevPage": "이전 페이지",
+    "shortcutNextPage": "다음 페이지",
+    "shortcutResetView": "뷰 초기화",
+    "shortcutZoomIn": "확대",
+    "shortcutZoomOut": "축소",
+    "shortcutNextBlock": "다음 텍스트 블록",
+    "shortcutPrevBlock": "이전 텍스트 블록",
+    "canvasControls": "캔버스 컨트롤",
+    "wheelZoomOnly": "휠 줌에 Ctrl / Cmd 필요",
+    "wheelZoomSpeed": "줌 속도",
+    "panningButton": "패닝 버튼",
+    "panningRight": "우클릭",
+    "zoomStep": "키보드 줌 배율",
+    "blockNavWrapAround": "블록 이동 순환"
   },
   "updater": {
     "available": {

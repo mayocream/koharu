@@ -23,6 +23,7 @@
     "exportPsd": "PSD を書き出し...",
     "exportAllInpainted": "インペイント画像をすべてエクスポート...",
     "exportAllRendered": "レンダリング画像をすべてエクスポート...",
+    "exportText": "テキストを書き出す...",
     "view": "表示",
     "fitWindow": "ウィンドウに合わせる",
     "originalSize": "原寸",
@@ -230,7 +231,14 @@
     "readingOrder": "読み順",
     "readingOrderRtl": "右から左 (RTL)",
     "readingOrderLtr": "左から右 (LTR)",
-    "readingOrderCustom": "カスタム"
+    "readingOrderCustom": "カスタム",
+    "speakerLabel": "話者",
+    "speakerList": "話者リスト",
+    "speakerAddPlaceholder": "話者名を追加",
+    "speakerEmpty": "話者が登録されていません。",
+    "speakerSelectPlaceholder": "話者を選択",
+    "speakerNone": "なし",
+    "speakerInputPlaceholder": "直接入力"
   },
   "workspace": {
     "importPrompt": "ページを読み込んで編集を開始してください。",
@@ -252,6 +260,20 @@
     "brush": "ブラシ",
     "repairBrush": "リペアブラシ",
     "eraser": "消しゴム"
+  },
+  "export": {
+    "dialogTitle": "エクスポート",
+    "scope": "範囲",
+    "scopeCurrent": "現在のページ",
+    "scopeSelected": "ページを選択",
+    "scopeAll": "すべてのページ",
+    "format": "フォーマット",
+    "filename": "ファイル名",
+    "save": "保存",
+    "noText": "(テキストなし)",
+    "speaker": "話者",
+    "original": "原文",
+    "translation": "翻訳"
   },
   "download": {
     "title": "ダウンロード中"
@@ -391,7 +413,21 @@
     "shortcutReset": "ショートカットのリセット",
     "shortcutResetDescription": "すべてのショートカットをデフォルト値に戻します。保存された変更は失われます。",
     "shortcutConflict": "そのキーの組み合わせは既に使用されています",
-    "shortcutInvalid": "このキーはショートカットとして使用できません"
+    "shortcutInvalid": "このキーはショートカットとして使用できません",
+    "shortcutPrevPage": "前のページ",
+    "shortcutNextPage": "次のページ",
+    "shortcutResetView": "表示をリセット",
+    "settings.shortcutZoomIn": "拡大",
+    "settings.shortcutZoomOut": "縮小",
+    "settings.shortcutNextBlock": "次のテキストブロック",
+    "settings.shortcutPrevBlock": "前のテキストブロック",
+    "canvasControls": "キャンバスコントロール",
+    "wheelZoomOnly": "ホイールズームにCtrl/Cmdを必要とする",
+    "wheelZoomSpeed": "ズーム速度",
+    "panningButton": "パンニングボタン",
+    "panningRight": "右クリック",
+    "settings.zoomStep": "キーボードズームステップ",
+    "settings.blockNavWrapAround": "ブロックナビゲーションの折り返し"
   },
   "updater": {
     "available": {

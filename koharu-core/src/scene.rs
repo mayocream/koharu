@@ -309,6 +309,8 @@ pub struct TextData {
     pub sprite_transform: Option<Transform>,
     #[serde(default)]
     pub lock_layout_box: bool,
+    #[serde(default)]
+    pub speaker: Option<String>,
 }
 
 // ---------------------------------------------------------------------------

@@ -23,6 +23,7 @@
     "exportPsd": "匯出 PSD...",
     "exportAllInpainted": "匯出所有修補後的影像...",
     "exportAllRendered": "匯出所有渲染後的影像...",
+    "exportText": "匯出文字...",
     "view": "檢視",
     "fitWindow": "符合視窗",
     "originalSize": "原始大小",
@@ -230,7 +231,14 @@
     "readingOrder": "閱讀順序",
     "readingOrderRtl": "從右至左 (RTL)",
     "readingOrderLtr": "從左至右 (LTR)",
-    "readingOrderCustom": "自定義"
+    "readingOrderCustom": "自定義",
+    "speakerLabel": "說話者",
+    "speakerList": "說話者列表",
+    "speakerAddPlaceholder": "新增說話者名稱",
+    "speakerEmpty": "尚無已登錄的說話者。",
+    "speakerSelectPlaceholder": "選擇說話者",
+    "speakerNone": "無",
+    "speakerInputPlaceholder": "直接輸入"
   },
   "workspace": {
     "importPrompt": "匯入頁面以開始編輯。",
@@ -252,6 +260,20 @@
     "brush": "筆刷",
     "repairBrush": "修復筆",
     "eraser": "橡皮擦"
+  },
+  "export": {
+    "dialogTitle": "匯出",
+    "scope": "範圍",
+    "scopeCurrent": "目前頁面",
+    "scopeSelected": "選擇頁面",
+    "scopeAll": "所有頁面",
+    "format": "格式",
+    "filename": "檔案名稱",
+    "save": "儲存",
+    "noText": "(無文字)",
+    "speaker": "說話者",
+    "original": "原文",
+    "translation": "翻譯"
   },
   "download": {
     "title": "下載中"
@@ -391,7 +413,21 @@
     "shortcutReset": "重置快捷鍵",
     "shortcutResetDescription": "這將恢復所有快捷鍵到默認值。您保存的更改將丟失。",
     "shortcutConflict": "按鍵組合已被使用",
-    "shortcutInvalid": "此按鍵不能用作快捷鍵"
+    "shortcutInvalid": "此按鍵不能用作快捷鍵",
+    "shortcutPrevPage": "上一頁",
+    "shortcutNextPage": "下一頁",
+    "shortcutResetView": "重置檢視",
+    "settings.shortcutZoomIn": "放大",
+    "settings.shortcutZoomOut": "縮小",
+    "settings.shortcutNextBlock": "下一個文字區塊",
+    "settings.shortcutPrevBlock": "上一個文字區塊",
+    "canvasControls": "畫布控制",
+    "wheelZoomOnly": "滾輪縮放需按住 Ctrl / Cmd",
+    "wheelZoomSpeed": "縮放速度",
+    "panningButton": "平移按鈕",
+    "panningRight": "右鍵",
+    "settings.zoomStep": "鍵盤縮放步進",
+    "settings.blockNavWrapAround": "文字區塊循環導覽"
   },
   "updater": {
     "available": {

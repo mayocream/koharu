@@ -8,6 +8,8 @@ import type { Node, Page, SceneSnapshot } from '@/lib/api/schemas'
 import { queryClient } from '@/lib/queryClient'
 import { useSelectionStore } from '@/lib/stores/selectionStore'
 
+import { QueryClientProvider } from '@tanstack/react-query'
+
 function textNode(id: string): Node {
   return {
     id,
@@ -40,7 +42,13 @@ describe('useKeyboardShortcuts — Ctrl+A', () => {
   it('Ctrl+A selects every text node on the active page', () => {
     queryClient.setQueryData(getGetSceneJsonQueryKey(), seedScene())
     useSelectionStore.getState().setPage('p-1')
-    renderHook(() => useKeyboardShortcuts())
+    renderHook(() => useKeyboardShortcuts(), {
+      wrapper: ({ children }) => (
+        <QueryClientProvider client={queryClient}>
+          {children}
+        </QueryClientProvider>
+      ),
+    })
 
     fireEvent.keyDown(window, { key: 'a', ctrlKey: true })
 
@@ -50,7 +58,13 @@ describe('useKeyboardShortcuts — Ctrl+A', () => {
   it('Ctrl+A is a no-op while typing inside a textarea', () => {
     queryClient.setQueryData(getGetSceneJsonQueryKey(), seedScene())
     useSelectionStore.getState().setPage('p-1')
-    renderHook(() => useKeyboardShortcuts())
+    renderHook(() => useKeyboardShortcuts(), {
+      wrapper: ({ children }) => (
+        <QueryClientProvider client={queryClient}>
+         {children}
+        </QueryClientProvider>
+      ),
+    })
 
     const textarea = document.createElement('textarea')
     document.body.appendChild(textarea)

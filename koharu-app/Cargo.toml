@@ -53,6 +53,7 @@ utoipa = { workspace = true }
 uuid = { workspace = true }
 walkdir = { workspace = true }
 zip = { workspace = true }
+indexmap = { workspace = true }
 
 [features]
 cuda = ["koharu-ml/cuda"]

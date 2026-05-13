@@ -219,6 +219,8 @@ pub struct TextDataPatch {
     pub sprite_transform: Option<Option<Transform>>,
     #[serde(default)]
     pub lock_layout_box: Option<bool>,
+    #[serde(default)]
+    pub speaker: Option<Option<String>>,
 }
 
 #[derive(Clone, Debug, Default, Serialize, Deserialize, JsonSchema, ToSchema)]
@@ -696,6 +698,7 @@ fn capture_prev_text(kind: &NodeKind, p: &TextDataPatch) -> TextDataPatch {
         sprite: p.sprite.as_ref().map(|_| data.sprite.clone()),
         sprite_transform: p.sprite_transform.as_ref().map(|_| data.sprite_transform),
         lock_layout_box: p.lock_layout_box.as_ref().map(|_| data.lock_layout_box),
+        speaker: p.speaker.as_ref().map(|_| data.speaker.clone()),
     }
 }
 
@@ -785,6 +788,9 @@ fn apply_text_patch(t: &mut TextData, p: &TextDataPatch) {
     }
     if let Some(v) = p.lock_layout_box {
         t.lock_layout_box = v;
+    }
+    if let Some(v) = &p.speaker {
+        t.speaker = v.clone();
     }
 }
 

@@ -23,6 +23,7 @@
     "exportPsd": "Exportar PSD...",
     "exportAllInpainted": "Exportar todo lo rellenado...",
     "exportAllRendered": "Exportar todo lo renderizado...",
+    "exportText": "Exportar texto...",
     "view": "Ver",
     "fitWindow": "Ajustar a la ventana",
     "originalSize": "Tamaño original",
@@ -230,7 +231,14 @@
     "readingOrder": "Orden de lectura",
     "readingOrderRtl": "Derecha a izquierda (RTL)",
     "readingOrderLtr": "Izquierda a derecha (LTR)",
-    "readingOrderCustom": "Personalizado"
+    "readingOrderCustom": "Personalizado",
+    "speakerLabel": "Hablante",
+    "speakerList": "Lista de hablantes",
+    "speakerAddPlaceholder": "Añadir nombre de hablante",
+    "speakerEmpty": "No hay hablantes registrados.",
+    "speakerSelectPlaceholder": "Seleccionar hablante",
+    "speakerNone": "Ninguno",
+    "speakerInputPlaceholder": "Entrada directa"
   },
   "workspace": {
     "importPrompt": "Importa una página para comenzar a editar.",
@@ -252,6 +260,20 @@
     "brush": "Pincel",
     "repairBrush": "Pincel de reparación",
     "eraser": "Borrador"
+  },
+  "export": {
+    "dialogTitle": "Exportar",
+    "scope": "Ámbito",
+    "scopeCurrent": "Página actual",
+    "scopeSelected": "Seleccionar páginas",
+    "scopeAll": "Todas las páginas",
+    "format": "Formato",
+    "filename": "Nombre de archivo",
+    "save": "Guardar",
+    "noText": "(Sin texto)",
+    "speaker": "Hablante",
+    "original": "Original",
+    "translation": "Traducción"
   },
   "download": {
     "title": "Descargando"
@@ -391,7 +413,21 @@
     "shortcutReset": "Restablecer atajos",
     "shortcutResetDescription": "Esto restaurará todos los atajos a sus valores predeterminados. Los cambios guardados se perderán.",
     "shortcutConflict": "Combinación de teclas en uso",
-    "shortcutInvalid": "Esta tecla no se puede usar como atajo"
+    "shortcutInvalid": "Esta tecla no se puede usar como atajo",
+    "shortcutPrevPage": "Página anterior",
+    "shortcutNextPage": "Página siguiente",
+    "shortcutResetView": "Restablecer vista",
+    "settings.shortcutZoomIn": "Acercar",
+    "settings.shortcutZoomOut": "Alejar",
+    "settings.shortcutNextBlock": "Siguiente bloque de texto",
+    "settings.shortcutPrevBlock": "Bloque de texto anterior",
+    "canvasControls": "Controles del lienzo",
+    "wheelZoomOnly": "Requerir Ctrl / Cmd para zoom con rueda",
+    "wheelZoomSpeed": "Velocidad de zoom",
+    "panningButton": "Botón de desplazamiento",
+    "panningRight": "Clic derecho",
+    "settings.zoomStep": "Paso de zoom con teclado",
+    "settings.blockNavWrapAround": "Navegación circular entre bloques"
   },
   "updater": {
     "available": {

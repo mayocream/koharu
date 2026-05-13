@@ -35,6 +35,8 @@ export interface TextDataPatch {
   spriteTransform?: null | Transform
   style?: null | TextStyle
   /** @nullable */
+  speaker?: string | null
+  /** @nullable */
   text?: string | null
   /** @nullable */
   translation?: string | null

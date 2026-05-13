@@ -23,6 +23,7 @@
     "exportPsd": "Экспортировать PSD...",
     "exportAllInpainted": "Экспортировать все изображения после инпейнтинга...",
     "exportAllRendered": "Экспортировать все отрендеренные изображения...",
+    "exportText": "Экспорт текста...",
     "view": "Вид",
     "fitWindow": "По размеру окна",
     "originalSize": "Исходный размер",
@@ -230,7 +231,14 @@
     "readingOrder": "Порядок чтения",
     "readingOrderRtl": "Справа налево (RTL)",
     "readingOrderLtr": "Слева направо (LTR)",
-    "readingOrderCustom": "Свой"
+    "readingOrderCustom": "Свой",
+    "speakerLabel": "Говорящий",
+    "speakerList": "Список говорящих",
+    "speakerAddPlaceholder": "Добавить имя говорящего",
+    "speakerEmpty": "Говорящие не зарегистрированы.",
+    "speakerSelectPlaceholder": "Выбрать говорящего",
+    "speakerNone": "Нет",
+    "speakerInputPlaceholder": "Прямой ввод"
   },
   "workspace": {
     "importPrompt": "Импортируйте страницу, чтобы начать редактирование.",
@@ -252,6 +260,20 @@
     "brush": "Кисть",
     "repairBrush": "Кисть восстановления",
     "eraser": "Ластик"
+  },
+  "export": {
+    "dialogTitle": "Экспорт",
+    "scope": "Область",
+    "scopeCurrent": "Текущая страница",
+    "scopeSelected": "Выбрать страницы",
+    "scopeAll": "Все страницы",
+    "format": "Формат",
+    "filename": "Имя файла",
+    "save": "Сохранить",
+    "noText": "(Нет текста)",
+    "speaker": "Говорящий",
+    "original": "Оригинал",
+    "translation": "Перевод"
   },
   "download": {
     "title": "Загрузка"
@@ -391,7 +413,21 @@
     "shortcutReset": "Сбросить сочетания",
     "shortcutResetDescription": "Это восстановит все сочетания клавиш до их значений по умолчанию. Сохраненные изменения будут потеряны.",
     "shortcutConflict": "Сочетание клавиш уже используется",
-    "shortcutInvalid": "Эту клавишу нельзя использовать как горячую"
+    "shortcutInvalid": "Эту клавишу нельзя использовать как горячую",
+    "shortcutPrevPage": "Предыдущая страница",
+    "shortcutNextPage": "Следующая страница",
+    "shortcutResetView": "Сбросить вид",
+    "settings.shortcutZoomIn": "Увеличить",
+    "settings.shortcutZoomOut": "Уменьшить",
+    "settings.shortcutNextBlock": "Следующий текстовый блок",
+    "settings.shortcutPrevBlock": "Предыдущий текстовый блок",
+    "canvasControls": "Управление холстом",
+    "wheelZoomOnly": "Требовать Ctrl / Cmd для масштабирования колёсиком",
+    "wheelZoomSpeed": "Скорость масштабирования",
+    "panningButton": "Кнопка панорамирования",
+    "panningRight": "Правая кнопка мыши",
+    "settings.zoomStep": "Шаг масштабирования клавиатурой",
+    "settings.blockNavWrapAround": "Циклическая навигация по блокам"
   },
   "updater": {
     "available": {

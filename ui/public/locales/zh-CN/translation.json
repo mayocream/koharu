@@ -23,6 +23,7 @@
     "exportPsd": "导出 PSD...",
     "exportAllInpainted": "导出所有修复后的图像...",
     "exportAllRendered": "导出所有渲染后的图像...",
+    "exportText": "导出文本...",
     "view": "视图",
     "fitWindow": "适应窗口",
     "originalSize": "原始大小",
@@ -230,7 +231,14 @@
     "readingOrder": "阅读顺序",
     "readingOrderRtl": "从右至左 (RTL)",
     "readingOrderLtr": "从左至右 (LTR)",
-    "readingOrderCustom": "自定义"
+    "readingOrderCustom": "自定义",
+    "speakerLabel": "说话人",
+    "speakerList": "说话人列表",
+    "speakerAddPlaceholder": "添加说话人名称",
+    "speakerEmpty": "暂无已注册的说话人。",
+    "speakerSelectPlaceholder": "选择说话人",
+    "speakerNone": "无",
+    "speakerInputPlaceholder": "直接输入"
   },
   "workspace": {
     "importPrompt": "导入页面以开始编辑。",
@@ -252,6 +260,20 @@
     "brush": "画笔",
     "repairBrush": "修复笔",
     "eraser": "橡皮擦"
+  },
+  "export": {
+    "dialogTitle": "导出",
+    "scope": "范围",
+    "scopeCurrent": "当前页面",
+    "scopeSelected": "选择页面",
+    "scopeAll": "所有页面",
+    "format": "格式",
+    "filename": "文件名",
+    "save": "保存",
+    "noText": "(无文本)",
+    "speaker": "说话人",
+    "original": "原文",
+    "translation": "翻译"
   },
   "download": {
     "title": "下载中"
@@ -391,7 +413,21 @@
     "shortcutReset": "重置快捷键",
     "shortcutResetDescription": "这将恢复所有快捷键到默认值。您保存的更改将丢失。",
     "shortcutConflict": "此按键组合已在使用中",
-    "shortcutInvalid": "此按键不能用作快捷键"
+    "shortcutInvalid": "此按键不能用作快捷键",
+    "shortcutPrevPage": "上一页",
+    "shortcutNextPage": "下一页",
+    "shortcutResetView": "重置视图",
+    "settings.shortcutZoomIn": "放大",
+    "settings.shortcutZoomOut": "缩小",
+    "settings.shortcutNextBlock": "下一个文本块",
+    "settings.shortcutPrevBlock": "上一个文本块",
+    "canvasControls": "画布控制",
+    "wheelZoomOnly": "滚轮缩放需按住 Ctrl / Cmd",
+    "wheelZoomSpeed": "缩放速度",
+    "panningButton": "平移按键",
+    "panningRight": "右键",
+    "settings.zoomStep": "键盘缩放步长",
+    "settings.blockNavWrapAround": "文本块循环导航"
   },
   "updater": {
     "available": {

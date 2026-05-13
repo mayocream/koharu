@@ -107,6 +107,13 @@ pub struct TextDataPatch {
     )]
     pub style: Option<Option<Box<models::TextStyle>>>,
     #[serde(
+        rename = "speaker",
+        default,
+        with = "::serde_with::rust::double_option",
+        skip_serializing_if = "Option::is_none"
+    )]
+    pub speaker: Option<Option<String>>,
+    #[serde(
         rename = "text",
         default,
         with = "::serde_with::rust::double_option",
@@ -139,6 +146,7 @@ impl TextDataPatch {
             sprite: None,
             sprite_transform: None,
             style: None,
+            speaker: None,
             text: None,
             translation: None,
         }

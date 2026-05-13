@@ -28,6 +28,7 @@
     "exportPsd": "Export PSD...",
     "exportAllInpainted": "Export All Inpainted...",
     "exportAllRendered": "Export All Rendered...",
+    "exportText": "Export Text...",
     "view": "View",
     "fitWindow": "Fit Window",
     "originalSize": "Original Size",
@@ -263,7 +264,14 @@
     "readingOrder": "Reading Order",
     "readingOrderRtl": "Right-to-Left (RTL)",
     "readingOrderLtr": "Left-to-Right (LTR)",
-    "readingOrderCustom": "Custom"
+    "readingOrderCustom": "Custom",
+    "speakerLabel": "Speaker",
+    "speakerList": "Speaker List",
+    "speakerAddPlaceholder": "Add speaker name",
+    "speakerEmpty": "No speakers registered.",
+    "speakerSelectPlaceholder": "Select speaker",
+    "speakerNone": "None",
+    "speakerInputPlaceholder": "Direct input"
   },
   "workspace": {
     "importPrompt": "Import a page to begin editing.",
@@ -285,6 +293,20 @@
     "brush": "Brush",
     "repairBrush": "Repair brush",
     "eraser": "Eraser"
+  },
+  "export": {
+    "dialogTitle": "Export",
+    "scope": "Scope",
+    "scopeCurrent": "Current page",
+    "scopeSelected": "Select pages",
+    "scopeAll": "All pages",
+    "format": "Format",
+    "filename": "Filename",
+    "save": "Save",
+    "noText": "(No text)",
+    "speaker": "Speaker",
+    "original": "Original",
+    "translation": "Translation"
   },
   "download": {
     "title": "Downloading"
@@ -428,7 +450,21 @@
     "shortcutReset": "Reset Keybinds",
     "shortcutResetDescription": "This will restore all shortcuts to their default values. Your saved changes will be lost.",
     "shortcutConflict": "Key combination already in use",
-    "shortcutInvalid": "This key cannot be used as a shortcut"
+    "shortcutInvalid": "This key cannot be used as a shortcut",
+    "shortcutPrevPage": "Previous Page",
+    "shortcutNextPage": "Next Page",
+    "shortcutResetView": "Reset View",
+    "settings.shortcutZoomIn": "Zoom In",
+    "settings.shortcutZoomOut": "Zoom Out",
+    "settings.shortcutNextBlock": "Next Text Block",
+    "settings.shortcutPrevBlock": "Previous Text Block",
+    "canvasControls": "Canvas Controls",
+    "wheelZoomOnly": "Require Ctrl / Cmd for Wheel Zoom",
+    "wheelZoomSpeed": "Zoom Speed",
+    "panningButton": "Panning Button",
+    "panningRight": "Right Click",
+    "settings.zoomStep": "Keyboard Zoom Step",
+    "settings.blockNavWrapAround": "Wrap Around Block Navigation"
   },
   "updater": {
     "available": {

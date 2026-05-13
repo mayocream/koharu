@@ -86,6 +86,8 @@ import {
   isModifierKey,
 } from '@/lib/shortcutUtils'
 import { usePreferencesStore } from '@/lib/stores/preferencesStore'
+import { Slider } from '@/components/ui/slider'
+import { Switch } from '@/components/ui/switch'
 
 // Dialog state models `AppConfig` (what `GET /config` returns — snake_case).
 // But `PATCH /config` expects a `ConfigPatch` with camelCase fields because
@@ -885,6 +887,13 @@ const SHORTCUT_ITEMS = [
   },
   { key: 'undo', labelKey: 'menu.undo' },
   { key: 'redo', labelKey: 'menu.redo' },
+  { key: 'prevPage', labelKey: 'settings.shortcutPrevPage' },
+  { key: 'nextPage', labelKey: 'settings.shortcutNextPage' },
+  { key: 'resetView', labelKey: 'settings.shortcutResetView' },
+  { key: 'zoomIn',    labelKey: 'settings.shortcutZoomIn' },
+  { key: 'zoomOut',   labelKey: 'settings.shortcutZoomOut' },
+  { key: 'nextBlock', labelKey: 'settings.shortcutNextBlock' },
+  { key: 'prevBlock', labelKey: 'settings.shortcutPrevBlock' },
 ] as const
 
 function KeybindsPane() {
@@ -898,6 +907,17 @@ function KeybindsPane() {
   const [isSaved, setIsSaved] = useState(false)
   const [liveShortcut, setLiveShortcut] = useState<string | null>(null)
   const isMac = useMemo(() => getPlatform() === 'mac', [])
+
+  const wheelZoomOnly = usePreferencesStore((s) => s.wheelZoomOnly)
+  const setWheelZoomOnly = usePreferencesStore((s) => s.setWheelZoomOnly)
+  const wheelZoomSpeed = usePreferencesStore((s) => s.wheelZoomSpeed)
+  const setWheelZoomSpeed = usePreferencesStore((s) => s.setWheelZoomSpeed)
+  const zoomStep = usePreferencesStore((s) => s.zoomStep)
+  const setZoomStep = usePreferencesStore((s) => s.setZoomStep)
+  const blockNavWrapAround = usePreferencesStore((s) => s.blockNavWrapAround)
+  const setBlockNavWrapAround = usePreferencesStore((s) => s.setBlockNavWrapAround)
+  const panningButton = usePreferencesStore((s) => s.panningButton)
+  const setPanningButton = usePreferencesStore((s) => s.setPanningButton)
 
   // Optimized conflict detection
   const conflictCounts = useMemo(() => {
@@ -1087,6 +1107,66 @@ function KeybindsPane() {
                 </div>
               )
             })}
+          </div>
+        </Section>
+      <Section title={t('settings.canvasControls')}>
+          <div className='flex items-center justify-between'>
+            <Label className='text-sm'>{t('settings.wheelZoomOnly')}</Label>
+            <Switch
+              checked={wheelZoomOnly}
+              onCheckedChange={(v) => setWheelZoomOnly(v)}
+            />
+          </div>
+
+          <div className='space-y-2'>
+            <div className='flex items-center justify-between'>
+              <Label className='text-sm'>{t('settings.wheelZoomSpeed')}</Label>
+              <span className='text-xs text-muted-foreground'>{wheelZoomSpeed}</span>
+            </div>
+            <Slider
+              min={1}
+              max={10}
+              step={1}
+              value={[wheelZoomSpeed]}
+              onValueChange={([v]) => setWheelZoomSpeed(v)}
+            />
+          </div>
+
+          <div className='space-y-2'>
+            <div className='flex items-center justify-between'>
+              <Label className='text-sm'>{t('settings.zoomStep')}</Label>
+              <span className='text-xs text-muted-foreground'>{zoomStep}%</span>
+            </div>
+            <Slider
+              min={1}
+              max={50}
+              step={1}
+              value={[zoomStep]}
+              onValueChange={([v]) => setZoomStep(v)}
+            />
+          </div>
+
+          <div className='flex items-center justify-between'>
+            <Label className='text-sm'>{t('settings.blockNavWrapAround')}</Label>
+            <Switch
+              checked={blockNavWrapAround}
+              onCheckedChange={(v) => setBlockNavWrapAround(v)}
+            />
+          </div>
+
+          <div className='space-y-1.5'>
+            <Label className='text-xs'>{t('settings.panningButton')}</Label>
+            <Select
+              value={panningButton}
+              onValueChange={(v) => setPanningButton(v as 'right')}
+            >
+              <SelectTrigger className='w-full'>
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value='right'>{t('settings.panningRight')}</SelectItem>
+              </SelectContent>
+            </Select>
           </div>
         </Section>
       </div>

@@ -72,6 +72,10 @@ type EditorUiState = {
   // reading order
   readingOrder: 'rtl' | 'ltr' | 'custom'
   setReadingOrder: (order: 'rtl' | 'ltr' | 'custom') => void
+
+  // block Focus signal
+  blockFocusTarget: string | null
+  setBlockFocusTarget: (id: string | null) => void
 }
 
 const initialState = {
@@ -90,13 +94,14 @@ const initialState = {
   error: undefined as { id: number; message: string } | undefined,
   showNavigator: true,
   readingOrder: 'rtl' as const,
+  blockFocusTarget: null as string | null,
 }
 
 export const useEditorUiStore = create<EditorUiState>((set) => ({
   ...initialState,
 
   setScale: (scale) => {
-    const clamped = Math.max(10, Math.min(100, Math.round(scale)))
+    const clamped = Math.max(10, Math.min(400, Math.round(scale)))
     set({ scale: clamped })
   },
   setAutoFitEnabled: (enabled) => set({ autoFitEnabled: enabled }),
@@ -147,4 +152,6 @@ export const useEditorUiStore = create<EditorUiState>((set) => ({
   setShowNavigator: (show) => set({ showNavigator: show }),
 
   setReadingOrder: (readingOrder) => set({ readingOrder }),
+
+  setBlockFocusTarget: (id) => set({ blockFocusTarget: id }),
 }))

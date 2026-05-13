@@ -3,17 +3,17 @@
 import * as React from 'react'
 import { useEffect, useRef, useState } from 'react'
 
-import { Textarea } from '@/components/ui/textarea'
+import { Input } from '@/components/ui/input'
 
-export type DraftTextareaProps = Omit<
-  React.ComponentProps<typeof Textarea>,
+export type DraftInputProps = Omit<
+  React.ComponentProps<typeof Input>,
   'value' | 'onChange'
 > & {
   value: string
   onValueChange: (value: string) => void
 }
 
-export function DraftTextarea({
+export function DraftInput({
   value,
   onValueChange,
   onFocus,
@@ -22,13 +22,12 @@ export function DraftTextarea({
   onCompositionEnd,
   onKeyDown,
   ...props
-}: DraftTextareaProps) {
+}: DraftInputProps) {
   const [draftValue, setDraftValue] = useState(value)
   const draftValueRef = useRef(value)
   const isFocusedRef = useRef(false)
   const isComposingRef = useRef(false)
   const pendingCommitRef = useRef<string | null>(null)
-  const lastExternalValueRef = useRef(value)
 
   const commitValue = (nextValue: string) => {
     pendingCommitRef.current = null
@@ -40,19 +39,12 @@ export function DraftTextarea({
   }, [draftValue])
 
   useEffect(() => {
-    lastExternalValueRef.current = value
-
-    // While the user is focused or composing, preserve their draft.
-    // Stale server refetches must not override what the user is actively typing.
-    if (isFocusedRef.current || isComposingRef.current) {
-      return
-    }
-
+    if (isFocusedRef.current || isComposingRef.current) return
     setDraftValue(value)
   }, [value])
 
   return (
-    <Textarea
+    <Input
       {...props}
       value={draftValue}
       onKeyDown={(event) => {

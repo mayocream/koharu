@@ -181,14 +181,172 @@ impl ProjectSession {
 // Snapshot loading / TOML metadata
 // ---------------------------------------------------------------------------
 
+mod v1 {
+    //! Legacy schema mirror before `speaker` field was added to TextData.
+    //! Field order must exactly match the original scene.rs declaration.
+    use indexmap::IndexMap;
+    use koharu_core::font::{FontPrediction, TextDirection};
+    use koharu_core::style::TextStyle;
+    use koharu_core::{BlobRef, ImageData, MaskData, NodeId, PageId, ProjectMeta, Transform};
+    use serde::Deserialize;
+
+    #[derive(Deserialize)]
+    #[serde(rename_all = "camelCase")]
+    pub struct TextData {
+        #[serde(default)]
+        pub confidence: f32,
+        #[serde(default)]
+        pub source_lang: Option<String>,
+        #[serde(default)]
+        pub source_direction: Option<TextDirection>,
+        #[serde(default)]
+        pub rendered_direction: Option<TextDirection>,
+        #[serde(default)]
+        pub line_polygons: Option<Vec<[[f32; 2]; 4]>>,
+        #[serde(default)]
+        pub rotation_deg: Option<f32>,
+        #[serde(default)]
+        pub detected_font_size_px: Option<f32>,
+        #[serde(default)]
+        pub detector: Option<String>,
+        #[serde(default)]
+        pub text: Option<String>,
+        #[serde(default)]
+        pub translation: Option<String>,
+        #[serde(default)]
+        pub style: Option<TextStyle>,
+        #[serde(default)]
+        pub font_prediction: Option<FontPrediction>,
+        #[serde(default)]
+        pub sprite: Option<BlobRef>,
+        #[serde(default)]
+        pub sprite_transform: Option<Transform>,
+        #[serde(default)]
+        pub lock_layout_box: bool,
+        // speaker field absent — this is the whole point
+    }
+
+    #[derive(Deserialize)]
+    #[serde(rename_all = "camelCase")]
+    pub enum NodeKind {
+        Image(ImageData),
+        Text(Box<TextData>),
+        Mask(MaskData),
+    }
+
+    #[derive(Deserialize)]
+    #[serde(rename_all = "camelCase")]
+    pub struct Node {
+        pub id: NodeId,
+        #[serde(default)]
+        pub transform: Transform,
+        pub visible: bool,
+        pub kind: NodeKind,
+    }
+
+    #[derive(Deserialize)]
+    #[serde(rename_all = "camelCase")]
+    pub struct Page {
+        pub id: PageId,
+        pub name: String,
+        pub width: u32,
+        pub height: u32,
+        pub nodes: IndexMap<NodeId, Node>,
+    }
+
+    #[derive(Deserialize)]
+    #[serde(rename_all = "camelCase")]
+    pub struct Scene {
+        pub project: ProjectMeta,
+        pub pages: IndexMap<PageId, Page>,
+    }
+
+    #[derive(Deserialize)]
+    pub struct Snapshot {
+        pub epoch: u64,
+        pub scene: Scene,
+    }
+}
+
+fn migrate_v1(v1: v1::Scene) -> Scene {
+    use koharu_core::{Node, NodeKind, Page, TextData};
+
+    let pages = v1
+        .pages
+        .into_iter()
+        .map(|(pid, p)| {
+            let nodes = p
+                .nodes
+                .into_iter()
+                .map(|(nid, n)| {
+                    let kind = match n.kind {
+                        v1::NodeKind::Image(d) => NodeKind::Image(d),
+                        v1::NodeKind::Mask(d) => NodeKind::Mask(d),
+                        v1::NodeKind::Text(d) => NodeKind::Text(TextData {
+                            confidence: d.confidence,
+                            source_lang: d.source_lang,
+                            source_direction: d.source_direction,
+                            rendered_direction: d.rendered_direction,
+                            line_polygons: d.line_polygons,
+                            rotation_deg: d.rotation_deg,
+                            detected_font_size_px: d.detected_font_size_px,
+                            detector: d.detector,
+                            text: d.text,
+                            translation: d.translation,
+                            style: d.style,
+                            font_prediction: d.font_prediction,
+                            sprite: d.sprite,
+                            sprite_transform: d.sprite_transform,
+                            lock_layout_box: d.lock_layout_box,
+                            speaker: None,
+                        }),
+                    };
+                    (
+                        nid,
+                        Node {
+                            id: n.id,
+                            transform: n.transform,
+                            visible: n.visible,
+                            kind,
+                        },
+                    )
+                })
+                .collect();
+            (
+                pid,
+                Page {
+                    id: p.id,
+                    name: p.name,
+                    width: p.width,
+                    height: p.height,
+                    nodes,
+                },
+            )
+        })
+        .collect();
+
+    Scene {
+        project: v1.project,
+        pages,
+    }
+}
+
 fn load_snapshot(dir: &Utf8Path, creating: bool) -> Result<(Scene, u64)> {
     let scene_path = dir.join(SCENE_FILE);
     if scene_path.exists() {
         let bytes = std::fs::read(scene_path.as_std_path())
             .with_context(|| format!("read {}", scene_path))?;
-        let snap: Snapshot =
+
+        // Try current schema first.
+        if let Ok(snap) = postcard::from_bytes::<Snapshot>(&bytes) {
+            return Ok((snap.scene, snap.epoch));
+        }
+
+        // Fall back to v1 schema (pre-speaker).
+        tracing::info!(path = %scene_path, "falling back to v1 schema migration");
+        let snap: v1::Snapshot =
             postcard::from_bytes(&bytes).with_context(|| format!("decode {}", scene_path))?;
-        return Ok((snap.scene, snap.epoch));
+        return Ok((migrate_v1(snap.scene), snap.epoch));
     }
 
     // No snapshot — build one from `project.toml` (or defaults for creation).

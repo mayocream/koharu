@@ -23,6 +23,7 @@
     "exportPsd": "PSD Olarak Dışa Aktar...",
     "exportAllInpainted": "Tüm İnpaint Görsellerini Dışa Aktar...",
     "exportAllRendered": "Tüm Render Görsellerini Dışa Aktar...",
+    "exportText": "Metni dışa aktar...",
     "view": "Görünüm",
     "fitWindow": "Pencereye Sığdır",
     "originalSize": "Özgün Boyut",
@@ -230,7 +231,14 @@
     "readingOrder": "Okuma Sırası",
     "readingOrderRtl": "Sağdan Sola (RTL)",
     "readingOrderLtr": "Soldan Sağa (LTR)",
-    "readingOrderCustom": "Özel"
+    "readingOrderCustom": "Özel",
+    "speakerLabel": "Konuşmacı",
+    "speakerList": "Konuşmacı Listesi",
+    "speakerAddPlaceholder": "Konuşmacı adı ekle",
+    "speakerEmpty": "Kayıtlı konuşmacı yok.",
+    "speakerSelectPlaceholder": "Konuşmacı seç",
+    "speakerNone": "Yok",
+    "speakerInputPlaceholder": "Doğrudan giriş"
   },
   "workspace": {
     "importPrompt": "Düzenlemeye başlamak için bir sayfa içe aktarın.",
@@ -252,6 +260,20 @@
     "brush": "Fırça",
     "repairBrush": "Onarım fırçası",
     "eraser": "Silgi"
+  },
+  "export": {
+    "dialogTitle": "Dışa aktar",
+    "scope": "Kapsam",
+    "scopeCurrent": "Mevcut sayfa",
+    "scopeSelected": "Sayfa seç",
+    "scopeAll": "Tüm sayfalar",
+    "format": "Biçim",
+    "filename": "Dosya adı",
+    "save": "Kaydet",
+    "noText": "(Metin yok)",
+    "speaker": "Konuşmacı",
+    "original": "Orijinal",
+    "translation": "Çeviri"
   },
   "download": {
     "title": "İndiriliyor"
@@ -391,7 +413,21 @@
     "shortcutReset": "Kısayolları Sıfırla",
     "shortcutResetDescription": "Bu, tüm klavye kısayollarını varsayılan değerlerine döndürecektir. Kaydedilen değişiklikleriniz kaybolacaktır.",
     "shortcutConflict": "Tuş kombinasyonu zaten kullanılıyor",
-    "shortcutInvalid": "Bu tuş kısayol olarak kullanılamaz"
+    "shortcutInvalid": "Bu tuş kısayol olarak kullanılamaz",
+    "shortcutPrevPage": "Önceki Sayfa",
+    "shortcutNextPage": "Sonraki Sayfa",
+    "shortcutResetView": "Görünümü Sıfırla",
+    "settings.shortcutZoomIn": "Yakınlaştır",
+    "settings.shortcutZoomOut": "Uzaklaştır",
+    "settings.shortcutNextBlock": "Sonraki Metin Bloğu",
+    "settings.shortcutPrevBlock": "Önceki Metin Bloğu",
+    "canvasControls": "Tuval Kontrolleri",
+    "wheelZoomOnly": "Tekerlek Yakınlaştırma için Ctrl / Cmd Gerekli",
+    "wheelZoomSpeed": "Yakınlaştırma Hızı",
+    "panningButton": "Kaydırma Düğmesi",
+    "panningRight": "Sağ Tıklama",
+    "settings.zoomStep": "Klavye Yakınlaştırma Adımı",
+    "settings.blockNavWrapAround": "Döngüsel Blok Gezintisi"
   },
   "updater": {
     "available": {

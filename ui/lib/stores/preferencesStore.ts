@@ -31,10 +31,27 @@ type PreferencesState = {
     decreaseBrushSize: string
     undo: string
     redo: string
+    prevPage: string
+    nextPage: string
+    resetView: string
+    zoomIn: string
+    zoomOut: string
+    nextBlock: string
+    prevBlock: string
   }
+  zoomStep: number
+  setZoomStep: (value: number) => void
+  blockNavWrapAround: boolean
+  setBlockNavWrapAround: (value: boolean) => void
+  wheelZoomOnly: boolean
+  setWheelZoomOnly: (value: boolean) => void
   setShortcuts: (shortcuts: Partial<PreferencesState['shortcuts']>) => void
   resetShortcuts: () => void
   resetPreferences: () => void
+  wheelZoomSpeed: number
+  setWheelZoomSpeed: (value: number) => void
+  panningButton: 'right'
+  setPanningButton: (value: 'right') => void
 }
 
 const initialPreferences = {
@@ -53,10 +70,22 @@ const initialPreferences = {
     decreaseBrushSize: '[',
     undo: getPlatform() === 'mac' ? 'Cmd+Z' : 'Ctrl+Z',
     redo: getPlatform() === 'mac' ? 'Cmd+Shift+Z' : 'Ctrl+Shift+Z',
+    prevPage: 'O',
+    nextPage: 'P',
+    resetView: 'Home',
+    zoomIn: '=',
+    zoomOut: '-',
+    nextBlock: getPlatform() === 'mac' ? 'Cmd+Enter' : 'Ctrl+Enter',
+    prevBlock: getPlatform() === 'mac' ? 'Cmd+Shift+Enter' : 'Ctrl+Shift+Enter',
   },
   codexImagePrompt:
     'Translate all visible text to natural English, remove the original lettering, and redraw the page as a clean manga image while preserving the artwork, panel layout, speech bubbles, tone, and composition.',
   codexImageModel: 'gpt-5.5',
+  wheelZoomOnly: true,
+  wheelZoomSpeed: 3,
+  zoomStep: 10,
+  blockNavWrapAround: true,
+  panningButton: 'right' as const,
 }
 
 export const usePreferencesStore = create<PreferencesState>()(
@@ -93,11 +122,16 @@ export const usePreferencesStore = create<PreferencesState>()(
             ...initialPreferences.shortcuts,
           },
         })),
+      setWheelZoomOnly: (value) => set({ wheelZoomOnly: value }),
+      setWheelZoomSpeed: (value) => set({ wheelZoomSpeed: value }),
+      setZoomStep: (value) => set({ zoomStep: value }),
+      setBlockNavWrapAround: (value) => set({ blockNavWrapAround: value }),
+      setPanningButton: (value) => set({ panningButton: value }),
       resetPreferences: () => set({ ...initialPreferences }),
     }),
     {
       name: 'koharu-config',
-      version: 6,
+      version: 7,
       migrate: (persisted: any, version: number) => {
         if (version < 2 && persisted) {
           delete persisted.localLlm
@@ -129,6 +163,23 @@ export const usePreferencesStore = create<PreferencesState>()(
           persisted.codexImagePrompt ??= initialPreferences.codexImagePrompt
           persisted.codexImageModel ??= initialPreferences.codexImageModel
         }
+        if (version < 7 && persisted) {
+          const isMac = getPlatform() === 'mac'
+          persisted.wheelZoomOnly ??= true
+          persisted.wheelZoomSpeed ??= 3
+          persisted.panningButton ??= 'right'
+          persisted.zoomStep ??= 10
+          persisted.blockNavWrapAround ??= true
+          if (persisted.shortcuts) {
+            persisted.shortcuts.prevPage ??= 'O'
+            persisted.shortcuts.nextPage ??= 'P'
+            persisted.shortcuts.resetView ??= 'Home'
+            persisted.shortcuts.zoomIn    ??= '='
+            persisted.shortcuts.zoomOut   ??= '-'
+            persisted.shortcuts.nextBlock = isMac ? 'Cmd+Enter' : 'Ctrl+Enter'
+            persisted.shortcuts.prevBlock = isMac ? 'Cmd+Shift+Enter' : 'Ctrl+Shift+Enter'
+          }
+        }
         return persisted
       },
       partialize: (state) => ({
@@ -139,6 +190,11 @@ export const usePreferencesStore = create<PreferencesState>()(
         codexImagePrompt: state.codexImagePrompt,
         codexImageModel: state.codexImageModel,
         shortcuts: state.shortcuts,
+        wheelZoomOnly: state.wheelZoomOnly,
+        wheelZoomSpeed: state.wheelZoomSpeed,
+        zoomStep: state.zoomStep,
+        blockNavWrapAround: state.blockNavWrapAround,
+        panningButton: state.panningButton,
       }),
     },
   ),

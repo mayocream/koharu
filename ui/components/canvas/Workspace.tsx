@@ -43,6 +43,7 @@ import { applyOp } from '@/lib/io/scene'
 import { ops } from '@/lib/ops'
 import { useEditorUiStore } from '@/lib/stores/editorUiStore'
 import { useSelectionStore } from '@/lib/stores/selectionStore'
+import { usePreferencesStore } from '@/lib/stores/preferencesStore'
 
 const BRUSH_CURSOR = 'none'
 
@@ -99,6 +100,10 @@ export function Workspace() {
   useEffect(() => {
     if (page) setCanvasDocumentSize(page.width, page.height)
   }, [page?.width, page?.height])
+
+  useEffect(() => {
+    if (page) fitCanvasToViewport()
+  }, [page?.id])
 
   const viewportRef = useRef<HTMLDivElement | null>(null)
   const canvasRef = useRef<HTMLDivElement | null>(null)
@@ -214,9 +219,11 @@ export function Workspace() {
 
   useGesture(
     {
-      onDrag: ({ first, movement: [mx, my], memo, cancel, ctrlKey }) => {
+      onDrag: ({ first, movement: [mx, my], memo, cancel, event }) => {
         if (!page) return memo
-        if (!ctrlKey) {
+        const mouseEvent = event as MouseEvent
+        const pressed = mouseEvent?.buttons ?? 0
+        if ((pressed & 2) === 0) {
           if (first && cancel) cancel()
           return memo
         }
@@ -230,12 +237,69 @@ export function Workspace() {
         viewport.scrollTop = memo.scrollTop - my
         return memo
       },
-      onWheel: ({ ctrlKey, delta: [, dy], event }) => {
-        if (!page || !ctrlKey) return
+      onWheel: ({ ctrlKey, metaKey, delta: [dx, dy], event }) => {
+        if (!page) return
+        const { wheelZoomOnly, wheelZoomSpeed } = usePreferencesStore.getState()
+        const modKey = ctrlKey || metaKey
+
+        if (event.shiftKey && !modKey) {
+          if (event.cancelable) event.preventDefault()
+          const viewport = viewportRef.current
+          if (viewport) viewport.scrollLeft += dx || dy
+          return
+        }
+        
+        const wantsZoom = wheelZoomOnly ? modKey : !modKey
+        if (!wantsZoom) {
+          if (event.cancelable) event.preventDefault()
+            const viewport = viewportRef.current
+          if (viewport) {
+            viewport.scrollTop += dy
+          }
+          return
+        }
         if (event.cancelable) event.preventDefault()
         const direction = Math.sign(dy)
         if (!direction) return
-        applyScale(useEditorUiStore.getState().scale - direction)
+
+        const viewport = viewportRef.current
+        const currentScale = useEditorUiStore.getState().scale
+        const newScale = Math.max(10, Math.min(400, Math.round(currentScale - direction * wheelZoomSpeed)))
+        if (newScale === currentScale || !viewport) return
+
+        const wheelEvent = event as WheelEvent
+        const viewportRect = viewport.getBoundingClientRect()
+        const mouseX = wheelEvent.clientX - viewportRect.left
+        const mouseY = wheelEvent.clientY - viewportRect.top
+
+        const wrapperW = viewport.scrollWidth
+        const wrapperH = viewport.scrollHeight
+
+        const oldCanvasW = page.width * currentScale / 100
+        const oldCanvasH = page.height * currentScale / 100
+        const canvasLeftInWrapper = (wrapperW - oldCanvasW) / 2
+        const canvasTopInWrapper = (wrapperH - oldCanvasH) / 2
+
+        const cursorInWrapperX = viewport.scrollLeft + mouseX
+        const cursorInWrapperY = viewport.scrollTop + mouseY
+
+        const cursorInCanvasX = cursorInWrapperX - canvasLeftInWrapper
+        const cursorInCanvasY = cursorInWrapperY - canvasTopInWrapper
+
+        const ratio = newScale / currentScale
+        const newCanvasW = page.width * newScale / 100
+        const newCanvasH = page.height * newScale / 100
+        const newCanvasLeftInWrapper = (wrapperW - newCanvasW) / 2
+        const newCanvasTopInWrapper = (wrapperH - newCanvasH) / 2
+
+        const newScrollLeft = newCanvasLeftInWrapper + cursorInCanvasX * ratio - mouseX
+        const newScrollTop = newCanvasTopInWrapper + cursorInCanvasY * ratio - mouseY
+
+        applyScale(newScale)
+        requestAnimationFrame(() => {
+          viewport.scrollLeft = newScrollLeft
+          viewport.scrollTop = newScrollTop
+        })
       },
       onPinch: ({ canceled, movement: [movementScale], memo }) => {
         if (!page || canceled) return memo
@@ -251,7 +315,7 @@ export function Workspace() {
     {
       target: viewportRef,
       eventOptions: { passive: false },
-      drag: { filterTaps: true, pointer: { mouse: true } },
+      drag: { filterTaps: true, pointer: { mouse: true, buttons: [2] } },
       wheel: { preventDefault: false },
       pinch: {
         threshold: 0.1,
@@ -296,8 +360,9 @@ export function Workspace() {
           <ScrollAreaPrimitive.Viewport
             ref={handleViewportRef}
             data-testid='workspace-viewport'
-            className='grid size-full place-content-center-safe'
+            className='size-full overflow-auto'
           >
+            <div className='flex min-h-[200vh] min-w-[200vw] items-center justify-center'>
             {page ? (
               <ContextMenu
                 onOpenChange={(open) => {
@@ -428,6 +493,7 @@ export function Workspace() {
                 {t('workspace.importPrompt')}
               </div>
             )}
+            </div>
           </ScrollAreaPrimitive.Viewport>
           <ScrollAreaPrimitive.Scrollbar
             orientation='vertical'

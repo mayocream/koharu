@@ -121,7 +121,7 @@ const isAdditiveEvent = (event: unknown): boolean => {
   return !!(e.shiftKey || e.metaKey || e.ctrlKey)
 }
 
-const RESIZE_HANDLE_SIZE = 8
+const RESIZE_HANDLE_SIZE = 6
 
 type ResizeEdge = { top: boolean; bottom: boolean; left: boolean; right: boolean }
 
@@ -250,14 +250,14 @@ function TextBlockItem({
       }}
     >
       <div
-        className={`absolute inset-0 rounded-md ${
+        className={`absolute inset-0 rounded-sm ${
           selected
-            ? 'border-[3px] border-primary bg-primary/15'
-            : 'border-2 border-rose-400/60 bg-rose-400/5'
+            ? 'border-[2px] border-dashed border-primary'
+            : 'border border-dashed border-rose-400/60'
         }`}
       />
       <div
-        className={`pointer-events-none absolute -top-1.5 -left-1.5 flex h-4 w-4 items-center justify-center rounded-full text-[9px] font-semibold text-white shadow ${
+        className={`pointer-events-none absolute -top-5 left-1/2 -translate-x-1/2 flex h-4 w-4 items-center justify-center rounded-full text-[9px] font-semibold text-white shadow ${
           selected ? 'bg-primary' : 'bg-rose-400'
         }`}
       >
@@ -295,46 +295,54 @@ function ResizeHandles({ onEdgePointerDown }: { onEdgePointerDown: (edge: Resize
   const s = RESIZE_HANDLE_SIZE
   const half = s / 2
 
-  const edges: { edge: ResizeEdge; style: React.CSSProperties; cursor: string }[] = [
+  const edges: { edge: ResizeEdge; style: React.CSSProperties; cursor: string; corner: boolean }[] = [
     {
       edge: { top: true, left: true, bottom: false, right: false },
       cursor: 'nwse-resize',
       style: { top: -half, left: -half, width: s, height: s },
+      corner: true,
     },
     {
       edge: { top: true, left: false, bottom: false, right: true },
       cursor: 'nesw-resize',
       style: { top: -half, right: -half, width: s, height: s },
+      corner: true,
     },
     {
       edge: { top: false, left: true, bottom: true, right: false },
       cursor: 'nesw-resize',
       style: { bottom: -half, left: -half, width: s, height: s },
+      corner: true,
     },
     {
       edge: { top: false, left: false, bottom: true, right: true },
       cursor: 'nwse-resize',
       style: { bottom: -half, right: -half, width: s, height: s },
+      corner: true,
     },
     {
       edge: { top: true, left: false, bottom: false, right: false },
       cursor: 'ns-resize',
-      style: { top: -half, left: s, right: s, height: s },
+      style: { top: -half, left: '50%', transform: 'translateX(-50%)', width: s, height: s },
+      corner: false,
     },
     {
       edge: { top: false, left: false, bottom: true, right: false },
       cursor: 'ns-resize',
-      style: { bottom: -half, left: s, right: s, height: s },
+      style: { bottom: -half, left: '50%', transform: 'translateX(-50%)', width: s, height: s },
+      corner: false,
     },
     {
       edge: { top: false, left: true, bottom: false, right: false },
       cursor: 'ew-resize',
-      style: { left: -half, top: s, bottom: s, width: s },
+      style: { left: -half, top: '50%', transform: 'translateY(-50%)', width: s, height: s },
+      corner: false,
     },
     {
       edge: { top: false, left: false, bottom: false, right: true },
       cursor: 'ew-resize',
-      style: { right: -half, top: s, bottom: s, width: s },
+      style: { right: -half, top: '50%', transform: 'translateY(-50%)', width: s, height: s },
+      corner: false,
     },
   ]
 
@@ -344,7 +352,17 @@ function ResizeHandles({ onEdgePointerDown }: { onEdgePointerDown: (edge: Resize
         <div
           key={i}
           onPointerDown={() => onEdgePointerDown(e.edge)}
-          style={{ position: 'absolute', ...e.style, cursor: e.cursor, zIndex: 30 }}
+          className="bg-primary border border-primary"
+          style={{
+            position: 'absolute',
+            ...e.style,
+            cursor: e.cursor,
+            zIndex: 30,
+            borderRadius: '50%',
+            boxShadow: '0 1px 3px rgba(0,0,0,0.35)',
+            boxSizing: 'border-box',
+            opacity: 0.7,
+          }}
         />
       ))}
     </>

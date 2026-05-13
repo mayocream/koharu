@@ -7,6 +7,7 @@ import { useTranslation } from 'react-i18next'
 
 import { fitCanvasToViewport, resetCanvasScale } from '@/components/Canvas'
 import { SettingsDialog, type TabId } from '@/components/SettingsDialog'
+import { TextExportDialog } from '@/components/TextExportDialog'
 import {
   Menubar,
   MenubarContent,
@@ -62,6 +63,7 @@ export function MenuBar() {
   const { t } = useTranslation()
   const [settingsOpen, setSettingsOpen] = useState(false)
   const [settingsTab, setSettingsTab] = useState<TabId>('appearance')
+  const [textExportOpen, setTextExportOpen] = useState(false)
   const hasPage = useSelectionStore((s) => s.pageId !== null)
   const hasScene = useScene().scene !== null
   const shortcuts = usePreferencesStore((state) => state.shortcuts)
@@ -231,6 +233,15 @@ export function MenuBar() {
             ))}
             <MenubarSeparator />
             <MenubarItem
+              data-testid='menu-file-export-text'
+              className='text-[13px]'
+              disabled={!hasScene}
+              onSelect={() => setTextExportOpen(true)}
+            >
+              {t('menu.exportText')}
+            </MenubarItem>
+            <MenubarSeparator />
+            <MenubarItem
               data-testid='menu-file-close-project'
               className='text-[13px]'
               disabled={!hasScene}
@@ -342,6 +353,7 @@ export function MenuBar() {
       <div data-tauri-drag-region className='flex h-full flex-1 items-center justify-center' />
       {isWindowsTauri && <WindowControls />}
       <SettingsDialog open={settingsOpen} onOpenChange={setSettingsOpen} defaultTab={settingsTab} />
+      <TextExportDialog open={textExportOpen} onOpenChange={setTextExportOpen} />
     </div>
   )
 }
