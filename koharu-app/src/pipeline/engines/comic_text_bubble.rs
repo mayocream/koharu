@@ -6,7 +6,7 @@
 use anyhow::Result;
 use async_trait::async_trait;
 use koharu_core::{Op, TextData};
-use koharu_ml::comic_text_bubble_detector::{ComicTextBubbleDetector, ComicTextBubbleDetection};
+use koharu_ml::comic_text_bubble_detector::{ComicTextBubbleDetection, ComicTextBubbleDetector};
 
 use crate::pipeline::artifacts::Artifact;
 use crate::pipeline::engine::{Engine, EngineCtx, EngineInfo};
@@ -16,8 +16,8 @@ use crate::pipeline::engines::support::{
 };
 
 use std::thread;
-use tokio::sync::{mpsc, oneshot};
 use tokio::runtime::Builder;
+use tokio::sync::{mpsc, oneshot};
 
 const DETECTOR_NAME: &str = "comic-text-bubble-detector";
 
@@ -41,12 +41,18 @@ impl Engine for Model {
         let (resp_tx, resp_rx) = oneshot::channel();
 
         // Send the image to the dedicated CUDA thread
-        self.sender.send(DetectMessage { image, respond_to: resp_tx })
+        self.sender
+            .send(DetectMessage {
+                image,
+                respond_to: resp_tx,
+            })
             .await
             .map_err(|_| anyhow::anyhow!("[SYS] CUDA Detector thread disconnected"))?;
 
         // Wait asynchronously without blocking Tokio workers
-        let det = resp_rx.await.map_err(|_| anyhow::anyhow!("[SYS] CUDA Detector thread crashed"))??;
+        let det = resp_rx
+            .await
+            .map_err(|_| anyhow::anyhow!("[SYS] CUDA Detector thread crashed"))??;
 
         let mut pairs: Vec<([f32; 4], TextData)> = det
             .text_blocks
