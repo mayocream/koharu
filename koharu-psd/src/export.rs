@@ -45,6 +45,7 @@ impl Default for PsdExportOptions {
 
 #[derive(Debug, Clone)]
 struct ExportLayer {
+    id: i32,
     name: String,
     left: i32,
     top: i32,
@@ -61,7 +62,8 @@ struct TextLayerMetadata {
     transform: [f64; 6],
     orientation: TextOrientation,
     justification: TextJustification,
-    font_name: String,
+    font_index: usize,
+    font_set: Vec<String>,
     font_size: f64,
     color: [u8; 4],
     faux_bold: bool,
@@ -88,14 +90,14 @@ pub fn write_document<W: Write>(
     let (width, height) = document_dimensions(document)?;
     let layers_bottom_to_top = collect_layers(resolved, options)?;
     let composite = merged_composite(resolved, &layers_bottom_to_top, width, height);
-    let layers_top_to_bottom: Vec<&ExportLayer> = layers_bottom_to_top.iter().rev().collect();
+    let layers: Vec<&ExportLayer> = layers_bottom_to_top.iter().collect();
 
     let mut psd = PsdWriter::new();
     write_header(&mut psd, width, height);
     psd.write_u32(0);
     psd.write_u32(0);
 
-    let layer_mask_info = build_layer_and_mask_info(&layers_top_to_bottom)?;
+    let layer_mask_info = build_layer_and_mask_info(&layers)?;
     psd.write_u32(layer_mask_info.len() as u32);
     psd.write_bytes(&layer_mask_info);
 
@@ -143,6 +145,7 @@ fn collect_layers(
         let pixels = dynamic_to_rgba(resolved.source);
         validate_layer_pixels("Original Image", &pixels)?;
         layers.push(ExportLayer {
+            id: 1,
             name: "Original Image".to_string(),
             left: 0,
             top: 0,
@@ -156,6 +159,7 @@ fn collect_layers(
         let pixels = dynamic_to_rgba(image);
         validate_layer_pixels("Inpainted", &pixels)?;
         layers.push(ExportLayer {
+            id: 2,
             name: "Inpainted".to_string(),
             left: 0,
             top: 0,
@@ -169,6 +173,7 @@ fn collect_layers(
         let pixels = grayscale_mask_rgba(mask);
         validate_layer_pixels("Segmentation Mask", &pixels)?;
         layers.push(ExportLayer {
+            id: (layers.len() + 1) as i32,
             name: "Segmentation Mask".to_string(),
             left: 0,
             top: 0,
@@ -182,6 +187,7 @@ fn collect_layers(
         let pixels = dynamic_to_rgba(brush);
         validate_layer_pixels("Brush Layer", &pixels)?;
         layers.push(ExportLayer {
+            id: (layers.len() + 1) as i32,
             name: "Brush Layer".to_string(),
             left: 0,
             top: 0,
@@ -192,16 +198,24 @@ fn collect_layers(
     }
 
     let mut text_index = 1i32;
+    let mut text_layers = Vec::new();
     for block in &document.text_blocks {
         if let Some(layer) = text_layer(
             block,
             text_index,
             options.text_layer_mode,
             resolved.block_images,
+            &document.fonts,
         )? {
-            layers.push(layer);
+            text_layers.push(layer);
             text_index += 1;
         }
+    }
+
+    // Reverse text layers so the first block in the list appears at the top of the PSD stack
+    for mut layer in text_layers.into_iter().rev() {
+        layer.id = (layers.len() + 1) as i32;
+        layers.push(layer);
     }
 
     Ok(layers)
@@ -212,6 +226,7 @@ fn text_layer(
     index: i32,
     mode: TextLayerMode,
     block_images: &std::collections::HashMap<PsdBlobRef, DynamicImage>,
+    font_set: &[String],
 ) -> Result<Option<ExportLayer>, PsdExportError> {
     let text = block.translation.clone().unwrap_or_default();
     let trimmed = text.trim();
@@ -237,7 +252,7 @@ fn text_layer(
         TextLayerMode::Editable => {
             let orientation = infer_orientation(block);
             let justification = infer_justification(block, trimmed, orientation);
-            let font_name = infer_font_name(block);
+            let font_index = block.font_index.unwrap_or(0);
             let font_size = infer_font_size(block);
             let color = infer_color(block);
             let faux_bold = block
@@ -284,7 +299,8 @@ fn text_layer(
                 transform,
                 orientation,
                 justification,
-                font_name,
+                font_index,
+                font_set: font_set.to_vec(),
                 font_size,
                 color,
                 faux_bold,
@@ -296,6 +312,7 @@ fn text_layer(
     };
 
     Ok(Some(ExportLayer {
+        id: 0,
         name: format!("TL {index:03} {}", block.id),
         left,
         top,
@@ -466,12 +483,18 @@ fn build_extra_data(layer: &ExportLayer) -> Result<Vec<u8>, PsdExportError> {
     extra.write_u32(0);
     extra.write_pascal_string(&layer.name, 4);
 
+    write_additional_info_block(&mut extra, "lyid", &layer.id.to_be_bytes(), 4);
+
     if let Some(text) = layer.text.as_ref() {
         write_additional_info_block(&mut extra, "luni", &luni_body(&layer.name), 4);
         write_additional_info_block(&mut extra, "TySh", &tysh_body(text)?, 2);
     }
 
-    Ok(extra.into_inner())
+    let mut body = extra.into_inner();
+    while !body.len().is_multiple_of(4) {
+        body.push(0);
+    }
+    Ok(body)
 }
 
 fn luni_body(name: &str) -> Vec<u8> {
@@ -483,7 +506,8 @@ fn luni_body(name: &str) -> Vec<u8> {
 fn tysh_body(text: &TextLayerMetadata) -> Result<Vec<u8>, PsdExportError> {
     let engine_data = encode_engine_data(&TextEngineSpec {
         text: text.text.clone(),
-        font_name: text.font_name.clone(),
+        font_index: text.font_index,
+        font_set: text.font_set.clone(),
         font_size: text.font_size,
         color: text.color,
         faux_bold: text.faux_bold,
@@ -581,10 +605,16 @@ fn tysh_body(text: &TextLayerMetadata) -> Result<Vec<u8>, PsdExportError> {
     write_versioned_descriptor(&mut body, &text_descriptor)?;
     body.write_i16(1);
     write_versioned_descriptor(&mut body, &warp_descriptor)?;
-    for value in text.bounds {
-        body.write_f32(value as f32);
+    // Bounds: Top, Left, Bottom, Right
+    body.write_f32(text.bounds[1] as f32); // Top
+    body.write_f32(text.bounds[0] as f32); // Left
+    body.write_f32(text.bounds[3] as f32); // Bottom
+    body.write_f32(text.bounds[2] as f32); // Right
+    let mut out = body.into_inner();
+    while !out.len().is_multiple_of(4) {
+        out.push(0);
     }
-    Ok(body.into_inner())
+    Ok(out)
 }
 
 fn write_additional_info_block(writer: &mut PsdWriter, key: &str, body: &[u8], alignment: usize) {
@@ -651,28 +681,6 @@ fn infer_justification(
     }
 }
 
-fn infer_font_name(block: &PsdTextBlock) -> String {
-    if let Some(style_font) = block.style.as_ref().and_then(|style| {
-        style
-            .font_families
-            .iter()
-            .find(|font| !font.trim().is_empty())
-    }) {
-        return style_font.trim().to_string();
-    }
-
-    if let Some(predicted_font) = block.font_prediction.as_ref().and_then(|prediction| {
-        prediction
-            .named_fonts
-            .iter()
-            .find(|font| !font.name.trim().is_empty())
-    }) {
-        return predicted_font.name.trim().to_string();
-    }
-
-    "ArialMT".to_string()
-}
-
 fn infer_font_size(block: &PsdTextBlock) -> f64 {
     if let Some(size) = block.style.as_ref().and_then(|style| style.font_size)
         && size.is_finite()
@@ -737,13 +745,11 @@ mod tests {
 
     use crate::writer::PsdWriter;
 
-    use crate::input::{
-        PsdDocument, PsdTextBlock, PsdTextDirection, PsdTextStyle, ResolvedDocument,
-    };
+    use crate::input::{PsdDocument, PsdTextBlock, PsdTextDirection, ResolvedDocument};
 
     use super::{
         PsdExportOptions, TextLayerMode, TextOrientation, contains_cjk, export_document,
-        infer_font_name, infer_orientation, is_probably_latin, place_on_canvas, write_image_data,
+        infer_orientation, is_probably_latin, place_on_canvas, write_image_data,
     };
 
     #[test]
@@ -806,19 +812,13 @@ mod tests {
     }
 
     #[test]
-    fn style_font_name_is_used_for_editable_export() {
+    fn block_font_index_is_preserved() {
         let block = PsdTextBlock {
-            style: Some(PsdTextStyle {
-                font_families: vec!["ArialMT".to_string()],
-                font_size: None,
-                color: [0, 0, 0, 255],
-                effect: None,
-                text_align: None,
-            }),
+            font_index: Some(42),
             ..Default::default()
         };
 
-        assert_eq!(infer_font_name(&block), "ArialMT");
+        assert_eq!(block.font_index.unwrap_or(0), 42);
     }
 
     #[test]
@@ -834,8 +834,10 @@ mod tests {
                 width: 10.0,
                 height: 8.0,
                 translation: Some("Hello".to_string()),
+                font_index: Some(1),
                 ..Default::default()
             }],
+            fonts: vec!["AdobeInvisFont".to_string(), "ArialMT".to_string()],
         };
         let block_images = HashMap::new();
         let resolved = ResolvedDocument {
@@ -859,5 +861,90 @@ mod tests {
             bytes.windows(4).any(|window| window == b"TySh"),
             "editable PSD export should include text layer metadata",
         );
+    }
+
+    #[test]
+    fn additional_info_block_length_includes_padding() {
+        let mut writer = crate::writer::PsdWriter::new();
+        // Body length 10, alignment 4 -> padding 2.
+        // Total bytes written should be 12 (8 header + 10 data + 2 padding),
+        // and length field should be 12.
+        super::write_additional_info_block(&mut writer, "test", &[0; 10], 4);
+        let bytes = writer.into_inner();
+        assert_eq!(bytes.len(), 12 + 10 + 2); // 4 sig + 4 key + 4 len + 10 data + 2 pad
+        assert_eq!(u32::from_be_bytes(bytes[8..12].try_into().unwrap()), 12);
+    }
+
+    #[test]
+    fn layer_order_is_bottom_to_top_in_binary() {
+        let source =
+            DynamicImage::ImageRgba8(RgbaImage::from_pixel(16, 16, Rgba([255, 255, 255, 255])));
+        let document = PsdDocument {
+            width: 16,
+            height: 16,
+            text_blocks: vec![PsdTextBlock {
+                id: "TEXT_LAYER".to_string(),
+                translation: Some("Text".to_string()),
+                font_index: Some(0),
+                ..Default::default()
+            }],
+            fonts: vec!["ArialMT".to_string()],
+        };
+        let block_images = HashMap::new();
+        let resolved = ResolvedDocument {
+            document: &document,
+            source: &source,
+            segment: None,
+            inpainted: None,
+            rendered: None,
+            brush_layer: None,
+            block_images: &block_images,
+        };
+
+        let options = PsdExportOptions::default();
+        let bytes = export_document(&resolved, &options).expect("export");
+
+        // "Original Image" should appear before "TEXT_LAYER" in the layer records.
+        let original_pos = bytes
+            .windows(14)
+            .position(|w| w == b"Original Image")
+            .expect("Original Image not found in binary");
+        let text_pos = bytes
+            .windows(10)
+            .position(|w| w == b"TEXT_LAYER")
+            .expect("TEXT_LAYER not found in binary");
+        assert!(
+            original_pos < text_pos,
+            "Bottom layer (Original Image) should be written before top layer (TEXT_LAYER)"
+        );
+    }
+
+    #[test]
+    fn layer_count_is_negative() {
+        let source =
+            DynamicImage::ImageRgba8(RgbaImage::from_pixel(16, 16, Rgba([255, 255, 255, 255])));
+        let document = PsdDocument {
+            width: 16,
+            height: 16,
+            text_blocks: vec![],
+            fonts: vec![],
+        };
+        let block_images = HashMap::new();
+        let resolved = ResolvedDocument {
+            document: &document,
+            source: &source,
+            segment: None,
+            inpainted: None,
+            rendered: None,
+            brush_layer: None,
+            block_images: &block_images,
+        };
+
+        let bytes = export_document(&resolved, &PsdExportOptions::default()).expect("export");
+        // Layer count is at the start of the Layer Info section.
+        // We look for 8BPS signature, then skip to layer info.
+        // The count is written as i16.
+        // "Original Image" exists. Count should be -1.
+        assert!(bytes.windows(2).any(|w| w == (-1i16).to_be_bytes()));
     }
 }

@@ -75,6 +75,8 @@ pub struct PsdTextBlock {
     pub source_direction: Option<PsdTextDirection>,
     pub rendered_direction: Option<PsdTextDirection>,
     pub detected_font_size_px: Option<f32>,
+    /// Index into `PsdDocument.fonts`.
+    pub font_index: Option<usize>,
 }
 
 #[derive(Debug, Clone, Default)]
@@ -82,6 +84,8 @@ pub struct PsdDocument {
     pub width: u32,
     pub height: u32,
     pub text_blocks: Vec<PsdTextBlock>,
+    /// Global list of PostScript font names used in this document.
+    pub fonts: Vec<String>,
 }
 
 /// A document with all blob refs resolved to in-memory images.

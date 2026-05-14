@@ -182,6 +182,9 @@ pub struct ExportProjectRequest {
     /// Optional subset of pages; defaults to every page.
     #[serde(default)]
     pub pages: Option<Vec<PageId>>,
+    /// Optional global font override (from UI preferences).
+    #[serde(default)]
+    pub default_font: Option<String>,
 }
 
 #[derive(Debug, Clone, Copy, Serialize, Deserialize, utoipa::ToSchema)]
@@ -245,10 +248,17 @@ async fn export_current_project(
             }
             let session_c = session.clone();
             let page_ids_c = page_ids.clone();
+            let renderer_c = app.renderer.clone();
+            let default_font_c = req.default_font.clone();
             let files = tokio::task::spawn_blocking(move || -> anyhow::Result<_> {
                 let mut out = Vec::with_capacity(page_ids_c.len());
                 for (i, id) in page_ids_c.iter().enumerate() {
-                    let bytes = crate::psd_export::psd_bytes_for_page(&session_c, *id)?;
+                    let bytes = crate::psd_export::psd_bytes_for_page(
+                        &session_c,
+                        &renderer_c,
+                        default_font_c.clone(),
+                        *id,
+                    )?;
                     out.push((format!("page-{:03}-{id}.psd", i + 1), bytes));
                 }
                 Ok(out)

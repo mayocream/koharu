@@ -31,7 +31,12 @@ struct ResolvedPage {
 }
 
 /// Encode a single page as PSD bytes.
-pub fn psd_bytes_for_page(session: &Arc<ProjectSession>, page_id: PageId) -> Result<Vec<u8>> {
+pub fn psd_bytes_for_page(
+    session: &Arc<ProjectSession>,
+    renderer: &koharu_app::renderer::Renderer,
+    default_font_override: Option<String>,
+    page_id: PageId,
+) -> Result<Vec<u8>> {
     let scene: Scene = session.scene_snapshot();
     let page = scene
         .pages
@@ -45,7 +50,8 @@ pub fn psd_bytes_for_page(session: &Arc<ProjectSession>, page_id: PageId) -> Res
         rendered,
         brush,
         block_images,
-    } = resolve_page_blobs(session, page).with_context(|| format!("page {page_id}"))?;
+    } = resolve_page_blobs(session, renderer, default_font_override, page)
+        .with_context(|| format!("page {page_id}"))?;
     let resolved = ResolvedDocument {
         document: &doc,
         source: &source,
@@ -61,7 +67,13 @@ pub fn psd_bytes_for_page(session: &Arc<ProjectSession>, page_id: PageId) -> Res
     Ok(buf)
 }
 
-fn resolve_page_blobs(session: &ProjectSession, page: &koharu_core::Page) -> Result<ResolvedPage> {
+fn resolve_page_blobs(
+    session: &ProjectSession,
+    renderer: &koharu_app::renderer::Renderer,
+    default_font_override: Option<String>,
+    page: &koharu_core::Page,
+) -> Result<ResolvedPage> {
+    let scene = session.scene.read();
     let mut source: Option<DynamicImage> = None;
     let mut segment: Option<DynamicImage> = None;
     let mut inpainted: Option<DynamicImage> = None;
@@ -69,6 +81,9 @@ fn resolve_page_blobs(session: &ProjectSession, page: &koharu_core::Page) -> Res
     let mut brush: Option<DynamicImage> = None;
     let mut block_images: HashMap<PsdBlobRef, DynamicImage> = HashMap::new();
     let mut text_blocks: Vec<PsdTextBlock> = Vec::new();
+    let mut fonts = vec!["AdobeInvisFont".to_string()];
+    let mut font_map: HashMap<String, usize> = HashMap::new();
+    font_map.insert("AdobeInvisFont".to_string(), 0);
 
     for (node_id, node) in &page.nodes {
         match &node.kind {
@@ -101,7 +116,35 @@ fn resolve_page_blobs(session: &ProjectSession, page: &koharu_core::Page) -> Res
                     let decoded = session.blobs.load_image(sprite)?;
                     block_images.insert(blob_ref_to_psd(sprite), decoded);
                 }
-                text_blocks.push(text_to_psd(node_id, &node.transform, text));
+
+                let style = resolve_export_font_style(
+                    text,
+                    &scene.project.style.default_font,
+                    default_font_override.as_deref(),
+                );
+
+                tracing::debug!(
+                    "Resolving font for text node {}: families={:?}, default={:?}, override={:?}",
+                    node_id,
+                    text.style.as_ref().map(|s| &s.font_families),
+                    scene.project.style.default_font,
+                    default_font_override
+                );
+                let ps_name = renderer
+                    .resolve_post_script_name(&style, text.translation.as_deref())
+                    .unwrap_or_else(|_| "ArialMT".to_string());
+                let font_index = *font_map.entry(ps_name.clone()).or_insert_with(|| {
+                    let idx = fonts.len();
+                    fonts.push(ps_name);
+                    idx
+                });
+
+                text_blocks.push(text_to_psd(
+                    node_id,
+                    &node.transform,
+                    text,
+                    Some(font_index),
+                ));
             }
         }
     }
@@ -111,6 +154,7 @@ fn resolve_page_blobs(session: &ProjectSession, page: &koharu_core::Page) -> Res
         width: page.width,
         height: page.height,
         text_blocks,
+        fonts,
     };
     Ok(ResolvedPage {
         doc,
@@ -152,10 +196,39 @@ pub fn png_bytes_for_page(
     Ok(Some(buf))
 }
 
+fn resolve_export_font_style(
+    text: &TextData,
+    project_default: &Option<String>,
+    ui_override: Option<&str>,
+) -> TextStyle {
+    let mut style = text.style.clone().unwrap_or_default();
+    let default_font = ui_override
+        .map(|s| s.to_string())
+        .or_else(|| project_default.clone());
+
+    // If we have a global default, and the current style is either empty
+    // or looks like a raw AI path prediction, prioritize the global default.
+    let is_ai_path = style
+        .font_families
+        .first()
+        .map(|f| f.contains('/') || f.contains(".otf"))
+        .unwrap_or(false);
+
+    if (style.font_families.is_empty() || is_ai_path)
+        && let Some(df) = default_font
+    {
+        // Move the user's preference to the front
+        style.font_families.insert(0, df);
+    }
+
+    style
+}
+
 fn text_to_psd(
     node_id: &koharu_core::NodeId,
     transform: &koharu_core::Transform,
     text: &TextData,
+    font_index: Option<usize>,
 ) -> PsdTextBlock {
     let layer_transform = match (&text.sprite, &text.sprite_transform) {
         (Some(_), Some(sprite_transform)) => sprite_transform,
@@ -176,6 +249,7 @@ fn text_to_psd(
         source_direction: text.source_direction.map(convert_dir),
         rendered_direction: text.rendered_direction.map(convert_dir),
         detected_font_size_px: text.detected_font_size_px,
+        font_index,
     }
 }
 
@@ -255,7 +329,7 @@ mod tests {
             ..Default::default()
         };
 
-        let block = text_to_psd(&NodeId::new(), &node_transform, &text);
+        let block = text_to_psd(&NodeId::new(), &node_transform, &text, Some(0));
 
         assert_eq!(block.x, sprite_transform.x);
         assert_eq!(block.y, sprite_transform.y);
@@ -284,7 +358,7 @@ mod tests {
             ..Default::default()
         };
 
-        let block = text_to_psd(&NodeId::new(), &node_transform, &text);
+        let block = text_to_psd(&NodeId::new(), &node_transform, &text, Some(0));
 
         assert_eq!(block.x, node_transform.x);
         assert_eq!(block.y, node_transform.y);

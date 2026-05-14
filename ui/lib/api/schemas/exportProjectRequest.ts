@@ -7,6 +7,11 @@ import type { ExportFormat } from './exportFormat'
 import type { PageId } from './pageId'
 
 export interface ExportProjectRequest {
+  /**
+   * Optional global font override (from UI preferences).
+   * @nullable
+   */
+  defaultFont?: string | null
   format: ExportFormat
   /**
    * Optional subset of pages; defaults to every page.

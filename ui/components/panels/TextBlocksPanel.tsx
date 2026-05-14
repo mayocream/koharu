@@ -23,11 +23,9 @@ import {
 } from '@/components/ui/select'
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip'
 import { useCurrentPage, useTextNodes, type TextNodeEntry } from '@/hooks/useCurrentPage'
-import { useScene } from '@/hooks/useScene'
 import { getConfig, startPipeline, useGetCurrentLlm } from '@/lib/api/default/default'
-import { fetchApi } from '@/lib/api/fetch'
 import type { TextDataPatch } from '@/lib/api/schemas'
-import { applyOp, invalidateScene, queueAutoRender, reorderPageTextNodes } from '@/lib/io/scene'
+import { applyOp, queueAutoRender, reorderPageTextNodes } from '@/lib/io/scene'
 import { ops } from '@/lib/ops'
 import { useEditorUiStore } from '@/lib/stores/editorUiStore'
 import { useJobsStore } from '@/lib/stores/jobsStore'
@@ -37,7 +35,6 @@ import { useSelectionStore } from '@/lib/stores/selectionStore'
 export function TextBlocksPanel() {
   const { t } = useTranslation()
   const page = useCurrentPage()
-  const { epoch } = useScene()
   const textNodes = useTextNodes()
   useEffect(() => {
     if (process.env.NODE_ENV !== 'production') {

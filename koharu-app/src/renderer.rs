@@ -342,6 +342,75 @@ impl Renderer {
         }))
     }
 
+    /// Resolve a set of font family candidates into a single PostScript name.
+    pub fn resolve_post_script_name(
+        &self,
+        style: &TextStyle,
+        text: Option<&str>,
+    ) -> Result<String> {
+        let fontbook = self
+            .fontbook
+            .lock()
+            .map_err(|_| anyhow::anyhow!("failed to lock fontbook"))?;
+        let faces = fontbook.all_families();
+
+        let mut families = style.font_families.clone();
+        if families.is_empty()
+            && let Some(text) = text
+        {
+            tracing::debug!(
+                "Families empty, applying script-based default font families for text: {}",
+                text
+            );
+            apply_default_font_families(&mut families, text);
+        }
+        if families.is_empty() {
+            families.push("ArialMT".to_string());
+        }
+
+        for candidate in &families {
+            tracing::debug!("Attempting to resolve font candidate: {}", candidate);
+            // 1. Exact PS name
+            if let Some(face) = faces.iter().find(|f| f.post_script_name == *candidate) {
+                tracing::debug!("Resolved via exact PS name: {}", face.post_script_name);
+                return Ok(face.post_script_name.clone());
+            }
+
+            // 2. Google Font variant
+            let (family, weight, style_str) = crate::google_fonts::parse_variant_query(candidate);
+            if candidate.contains(':')
+                && self
+                    .google_fonts
+                    .read_cached_variant(family, weight, style_str)
+                    .map(|opt| opt.is_some())
+                    .unwrap_or(false)
+            {
+                tracing::debug!("Resolved via Google Font variant: {}", candidate);
+                return Ok(candidate.clone());
+            }
+
+            // 3. Fuzzy family name
+            if let Some(psn) = face_post_script_name(&faces, candidate) {
+                tracing::debug!("Resolved via fuzzy family name: {}", psn);
+                return Ok(psn);
+            }
+
+            // 4. Base Google Font
+            if self
+                .google_fonts
+                .read_cached_file(candidate)
+                .map(|opt| opt.is_some())
+                .unwrap_or(false)
+            {
+                tracing::debug!("Resolved via base Google Font: {}", candidate);
+                return Ok(candidate.clone());
+            }
+        }
+
+        tracing::warn!(?families, "font resolution failed, falling back to ArialMT");
+        Ok("ArialMT".to_string())
+    }
+
     fn select_font(&self, style: &TextStyle) -> Result<Font> {
         let mut fontbook = self
             .fontbook
