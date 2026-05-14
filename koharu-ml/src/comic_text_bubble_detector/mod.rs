@@ -129,14 +129,17 @@ impl ComicTextBubbleDetector {
         threshold: f32,
     ) -> Result<Vec<ComicTextBubbleRegion>> {
         let pixel_values = preprocess_image(image, &self.preprocessor, &self.device, self.dtype)?;
-        let outputs = self.model.forward(&pixel_values)?;
-        let results =
-            post_process_object_detection(&self.config, &outputs, image.dimensions(), threshold);
+
+        // Wrap the forward pass and post-processing in a closure so we can capture
+        // any errors without returning from the outer function immediately.
+        let inference_result = (|| -> Result<Vec<ComicTextBubbleRegion>> {
+            let outputs = self.model.forward(&pixel_values)?;
+            post_process_object_detection(&self.config, &outputs, image.dimensions(), threshold)
+        })();
 
         // EXPLICIT VRAM CLEANUP
-        // Drop the tensors manually before synchronizing
+        // This is now guaranteed to run even if the forward pass fails and returns an Err
         drop(pixel_values);
-        drop(outputs);
 
         // Force the CUDA device to flush its command queue and release memory
         // back to the OS so Vulkan (llama.cpp) can safely use it.
@@ -144,7 +147,7 @@ impl ComicTextBubbleDetector {
             let _ = self.device.synchronize();
         }
 
-        results
+        inference_result
     }
 }
 

@@ -41,18 +41,19 @@ impl Engine for Model {
         let (resp_tx, resp_rx) = oneshot::channel();
 
         // Send the image to the dedicated CUDA thread
+        // Send the image to the dedicated thread
         self.sender
             .send(DetectMessage {
                 image,
                 respond_to: resp_tx,
             })
             .await
-            .map_err(|_| anyhow::anyhow!("[SYS] CUDA Detector thread disconnected"))?;
+            .map_err(|_| anyhow::anyhow!("[SYS] Detector thread disconnected"))?;
 
         // Wait asynchronously without blocking Tokio workers
         let det = resp_rx
             .await
-            .map_err(|_| anyhow::anyhow!("[SYS] CUDA Detector thread crashed"))??;
+            .map_err(|_| anyhow::anyhow!("[SYS] Detector thread crashed"))??;
 
         let mut pairs: Vec<([f32; 4], TextData)> = det
             .text_blocks
