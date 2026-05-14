@@ -3,6 +3,18 @@
 //! the scene layer — bubble geometry is derived from the detected text
 //! regions and the segmentation mask.
 
+use anyhow::Result;
+use async_trait::async_trait;
+use koharu_core::{Op, TextData};
+use koharu_ml::comic_text_bubble_detector::{ComicTextBubbleDetector, ComicTextBubbleDetection};
+
+use crate::pipeline::artifacts::Artifact;
+use crate::pipeline::engine::{Engine, EngineCtx, EngineInfo};
+use crate::pipeline::engines::support::{
+    clear_text_nodes_ops, load_source_image, new_text_node, page_node_count,
+    sort_manga_reading_order, text_region_to_pair,
+};
+
 use std::thread;
 use tokio::sync::{mpsc, oneshot};
 use tokio::runtime::Builder;
@@ -11,8 +23,8 @@ const DETECTOR_NAME: &str = "comic-text-bubble-detector";
 
 // 1. Define the communication protocol
 struct DetectMessage {
-    image: koharu_core::image::DynamicImage,
-    respond_to: oneshot::Sender<Result<koharu_ml::comic_text_bubble_detector::ComicTextBubbleDetection>>,
+    image: image::DynamicImage,
+    respond_to: oneshot::Sender<Result<ComicTextBubbleDetection>>,
 }
 
 // 2. The Engine now acts as an Async Client to the dedicated thread
@@ -24,10 +36,10 @@ pub struct Model {
 impl Engine for Model {
     async fn run(&self, ctx: EngineCtx<'_>) -> Result<Vec<Op>> {
         let image = load_source_image(ctx.scene, ctx.page, ctx.blobs)?;
-        
+
         // Create a one-time return channel
         let (resp_tx, resp_rx) = oneshot::channel();
-        
+
         // Send the image to the dedicated CUDA thread
         self.sender.send(DetectMessage { image, respond_to: resp_tx })
             .await
@@ -69,12 +81,12 @@ inventory::submit! {
         load: |runtime, cpu| Box::pin(async move {
             let (tx, mut rx) = mpsc::channel::<DetectMessage>(8);
             let runtime_clone = runtime.clone(); // Clone Arc for the thread
-            
+
             thread::spawn(move || {
                 // Initialize an isolated single-threaded runtime strictly for this OS thread
                 let rt = Builder::new_current_thread().enable_all().build().unwrap();
                 rt.block_on(async move {
-                    
+
                     // The CUDA context is now permanently tied to this specific thread
                     let detector = match ComicTextBubbleDetector::load(&runtime_clone, cpu).await {
                         Ok(d) => d,
