@@ -1018,7 +1018,7 @@ dependencies = [
  "candle-kernels",
  "candle-metal-kernels",
  "candle-ug",
- "cudarc 0.19.6",
+ "cudarc 0.19.7",
  "float8",
  "gemm 0.19.0",
  "half",
@@ -1703,9 +1703,9 @@ dependencies = [
 
 [[package]]
 name = "cudarc"
-version = "0.19.6"
+version = "0.19.7"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "83be2fd94791d2580692ced87ea19e9728102ce75582543b82765dbe3e884557"
+checksum = "1cea5f10a99e025c1b44ae2354c2d8326b25ddbd0baf76bde8e55cfd4018a2cc"
 dependencies = [
  "float8",
  "half",
@@ -4435,7 +4435,7 @@ dependencies = [
  "candle-nn",
  "candle-transformers",
  "clap",
- "cudarc 0.19.6",
+ "cudarc 0.19.7",
  "dirs",
  "image",
  "imageproc",
