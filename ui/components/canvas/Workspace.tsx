@@ -37,6 +37,7 @@ import { useKeyboardShortcuts } from '@/hooks/useKeyboardShortcuts'
 import { useMaskDrawing } from '@/hooks/useMaskDrawing'
 import { usePointerToDocument } from '@/hooks/usePointerToDocument'
 import { useRenderBrushDrawing } from '@/hooks/useRenderBrushDrawing'
+import { useScene } from '@/hooks/useScene'
 import type { Node, Transform } from '@/lib/api/schemas'
 import { applyOp } from '@/lib/io/scene'
 import { ops } from '@/lib/ops'
@@ -67,14 +68,27 @@ export function Workspace() {
   const autoFitEnabled = useEditorUiStore((s) => s.autoFitEnabled)
 
   const page = useCurrentPage()
+  const { epoch: sceneEpoch } = useScene()
   const clearSelection = useSelectionStore((s) => s.clear)
 
   // Derive role-keyed blob hashes off the active page.
-  const imageHash = useMemo(() => (page ? findImageBlob(page, 'source') : null), [page])
-  const segmentHash = useMemo(() => (page ? findMaskBlob(page, 'segment') : null), [page])
-  const inpaintedHash = useMemo(() => (page ? findImageBlob(page, 'inpainted') : null), [page])
-  const brushLayerHash = useMemo(() => (page ? findMaskBlob(page, 'brushInpaint') : null), [page])
-  const renderedHash = useMemo(() => (page ? findImageBlob(page, 'rendered') : null), [page])
+  const imageHash = useMemo(() => (page ? findImageBlob(page, 'source') : null), [page, sceneEpoch])
+  const segmentHash = useMemo(
+    () => (page ? findMaskBlob(page, 'segment') : null),
+    [page, sceneEpoch],
+  )
+  const inpaintedHash = useMemo(
+    () => (page ? findImageBlob(page, 'inpainted') : null),
+    [page, sceneEpoch],
+  )
+  const brushLayerHash = useMemo(
+    () => (page ? findMaskBlob(page, 'brushInpaint') : null),
+    [page, sceneEpoch],
+  )
+  const renderedHash = useMemo(
+    () => (page ? findImageBlob(page, 'rendered') : null),
+    [page, sceneEpoch],
+  )
 
   const imageData = useBlobData(imageHash ?? undefined)
   const segmentData = useBlobData(segmentHash ?? undefined)
@@ -84,7 +98,7 @@ export function Workspace() {
 
   useEffect(() => {
     if (page) setCanvasDocumentSize(page.width, page.height)
-  }, [page])
+  }, [page?.width, page?.height])
 
   const viewportRef = useRef<HTMLDivElement | null>(null)
   const canvasRef = useRef<HTMLDivElement | null>(null)
@@ -182,7 +196,7 @@ export function Workspace() {
 
   useEffect(() => {
     if (page && autoFitEnabled) fitCanvasToViewport()
-  }, [page, autoFitEnabled])
+  }, [page?.id, autoFitEnabled])
 
   const { contextMenuNodeId, handleContextMenu, handleDeleteBlock, clearContextMenu } =
     useBlockContextMenu({
@@ -269,7 +283,7 @@ export function Workspace() {
       page
         ? { width: page.width * scaleRatio, height: page.height * scaleRatio }
         : { width: 0, height: 0 },
-    [page, scaleRatio],
+    [page?.width, page?.height, scaleRatio],
   )
 
   return (

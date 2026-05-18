@@ -42,6 +42,7 @@ pub fn psd_bytes_for_page(
         .pages
         .get(&page_id)
         .ok_or_else(|| anyhow::anyhow!("page {page_id} not found"))?;
+    let project_default_font = scene.project.style.default_font.clone();
     let ResolvedPage {
         doc,
         source,
@@ -50,8 +51,14 @@ pub fn psd_bytes_for_page(
         rendered,
         brush,
         block_images,
-    } = resolve_page_blobs(session, renderer, default_font_override, page)
-        .with_context(|| format!("page {page_id}"))?;
+    } = resolve_page_blobs(
+        session,
+        renderer,
+        default_font_override,
+        project_default_font,
+        page,
+    )
+    .with_context(|| format!("page {page_id}"))?;
     let resolved = ResolvedDocument {
         document: &doc,
         source: &source,
@@ -71,9 +78,9 @@ fn resolve_page_blobs(
     session: &ProjectSession,
     renderer: &koharu_app::renderer::Renderer,
     default_font_override: Option<String>,
+    project_default_font: Option<String>,
     page: &koharu_core::Page,
 ) -> Result<ResolvedPage> {
-    let scene = session.scene.read();
     let mut source: Option<DynamicImage> = None;
     let mut segment: Option<DynamicImage> = None;
     let mut inpainted: Option<DynamicImage> = None;
@@ -119,7 +126,7 @@ fn resolve_page_blobs(
 
                 let style = resolve_export_font_style(
                     text,
-                    &scene.project.style.default_font,
+                    &project_default_font,
                     default_font_override.as_deref(),
                 );
 
@@ -127,7 +134,7 @@ fn resolve_page_blobs(
                     "Resolving font for text node {}: families={:?}, default={:?}, override={:?}",
                     node_id,
                     text.style.as_ref().map(|s| &s.font_families),
-                    scene.project.style.default_font,
+                    project_default_font,
                     default_font_override
                 );
                 let ps_name = renderer
@@ -211,7 +218,14 @@ fn resolve_export_font_style(
     let is_ai_path = style
         .font_families
         .first()
-        .map(|f| f.contains('/') || f.contains(".otf"))
+        .map(|f| {
+            let lower = f.to_ascii_lowercase();
+            lower.ends_with(".otf")
+                || lower.ends_with(".ttf")
+                || lower.ends_with(".ttc")
+                || lower.ends_with(".woff")
+                || lower.ends_with(".woff2")
+        })
         .unwrap_or(false);
 
     if (style.font_families.is_empty() || is_ai_path)

@@ -98,7 +98,8 @@ export function useCurrentPage(): Page | null {
 /** Text nodes on the active page, in stacking order. */
 export function useTextNodes(): TextNodeEntry[] {
   const page = useCurrentPage()
-  return useMemo(() => (page ? textNodesOf(page) : []), [page])
+  const { epoch } = useScene()
+  return useMemo(() => (page ? textNodesOf(page) : []), [page, epoch])
 }
 
 /**
@@ -108,6 +109,7 @@ export function useTextNodes(): TextNodeEntry[] {
 export function useSelectedTextNode(): TextNodeEntry | null {
   const page = useCurrentPage()
   const nodeIds = useSelectionStore((s) => s.nodeIds)
+  const { epoch } = useScene()
   return useMemo(() => {
     if (!page) return null
     for (const id of nodeIds) {
@@ -121,13 +123,14 @@ export function useSelectedTextNode(): TextNodeEntry | null {
       }
     }
     return null
-  }, [page, nodeIds])
+  }, [page, nodeIds, epoch])
 }
 
 /** All selected text nodes in stacking order (for batch edits). */
 export function useSelectedTextNodes(): TextNodeEntry[] {
   const page = useCurrentPage()
   const nodeIds = useSelectionStore((s) => s.nodeIds)
+  const { epoch } = useScene()
   return useMemo(() => {
     if (!page) return []
     const out: TextNodeEntry[] = []
@@ -140,5 +143,5 @@ export function useSelectedTextNodes(): TextNodeEntry[] {
       })
     }
     return out
-  }, [page, nodeIds])
+  }, [page, nodeIds, epoch])
 }

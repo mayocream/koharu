@@ -45,7 +45,7 @@ export async function importKhrFile(): Promise<void> {
 
 const exportExtension: Record<'khr' | 'psd' | 'rendered' | 'inpainted', string> = {
   khr: 'khr',
-  psd: 'psd',
+  psd: 'zip',
   rendered: 'zip',
   inpainted: 'zip',
 }

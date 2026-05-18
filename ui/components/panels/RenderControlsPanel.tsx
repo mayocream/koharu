@@ -17,7 +17,13 @@ import { Button } from '@/components/ui/button'
 import { ColorPicker } from '@/components/ui/color-picker'
 import { FontSelect, useGoogleFontPreview } from '@/components/ui/font-select'
 import { Input } from '@/components/ui/input'
-import { Select, SelectContent, SelectTrigger, SelectValue } from '@/components/ui/select'
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from '@/components/ui/select'
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip'
 import { VariantItem } from '@/components/ui/variant-item'
 import {
@@ -165,12 +171,7 @@ export function RenderControlsPanel() {
           ...DEFAULT_FONT_FACES,
         ].filter((v): v is FontFaceInfo => !!v),
       ),
-    [
-      sortedFonts,
-      appDefaultFont,
-      selectedNode?.data.style?.fontFamilies,
-      firstNode?.data.style?.fontFamilies,
-    ],
+    [sortedFonts, appDefaultFont, selectedNode?.id, selectedNode?.data.style?.fontFamilies],
   )
 
   const currentFontCandidate =
