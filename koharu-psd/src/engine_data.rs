@@ -14,7 +14,8 @@ pub enum TextJustification {
 #[derive(Debug, Clone)]
 pub struct TextEngineSpec {
     pub text: String,
-    pub font_name: String,
+    pub font_index: usize,
+    pub font_set: Vec<String>,
     pub font_size: f64,
     pub color: [u8; 4],
     pub faux_bold: bool,
@@ -40,12 +41,7 @@ pub fn encode_engine_data(spec: &TextEngineSpec) -> Vec<u8> {
     let paragraph_lengths = paragraph_run_lengths(&text);
     let total_length = utf16_len(&text) as i32;
 
-    let font_name = if spec.font_name.trim().is_empty() {
-        "ArialMT"
-    } else {
-        spec.font_name.trim()
-    };
-    let font_index = if font_name == "AdobeInvisFont" { 0 } else { 1 };
+    let font_index = spec.font_index as i32;
     let writing_direction = match spec.orientation {
         TextOrientation::Horizontal => 0,
         TextOrientation::Vertical => 2,
@@ -58,7 +54,11 @@ pub fn encode_engine_data(spec: &TextEngineSpec) -> Vec<u8> {
     let paragraph_properties = paragraph_properties(spec.justification);
     let base_style_sheet = base_style_sheet(font_index);
     let style_run_sheet = style_run_sheet(spec, font_index);
-    let font_set = font_set(font_name);
+    let font_set = spec
+        .font_set
+        .iter()
+        .map(|name| font_descriptor(name))
+        .collect::<Vec<_>>();
 
     let root = EngineValue::Dict(vec![
         (
@@ -323,8 +323,8 @@ pub fn encode_engine_data(spec: &TextEngineSpec) -> Vec<u8> {
     ]);
 
     let mut out = Vec::new();
-    out.extend_from_slice(b"\n\n");
     write_value(&mut out, &root, 0, false, None);
+    out.push(b'\n');
     out
 }
 
@@ -582,14 +582,6 @@ fn resource_dict(
     ]
 }
 
-fn font_set(font_name: &str) -> Vec<EngineValue> {
-    let mut fonts = vec![font_descriptor("AdobeInvisFont")];
-    if font_name != "AdobeInvisFont" {
-        fonts.push(font_descriptor(font_name));
-    }
-    fonts
-}
-
 fn font_descriptor(name: &str) -> EngineValue {
     EngineValue::Dict(vec![
         ("Name".to_string(), EngineValue::String(name.to_string())),
@@ -767,22 +759,6 @@ fn serialize_float(value: f64, key: Option<&str>) -> String {
             formatted.pop();
         }
     }
-    if formatted.starts_with("0.")
-        && formatted
-            .as_bytes()
-            .get(2)
-            .is_some_and(|digit| *digit != b'0')
-    {
-        formatted.remove(0);
-    } else if formatted.starts_with("-0.0")
-        && formatted
-            .as_bytes()
-            .get(4)
-            .is_some_and(|digit| digit.is_ascii_digit() && *digit != b'0')
-    {
-        formatted.remove(1);
-    }
-
     formatted
 }
 
@@ -794,7 +770,8 @@ mod tests {
     fn engine_data_contains_expected_sections_and_utf16_text() {
         let bytes = encode_engine_data(&TextEngineSpec {
             text: "Hello".to_string(),
-            font_name: "ArialMT".to_string(),
+            font_index: 1,
+            font_set: vec!["AdobeInvisFont".to_string(), "ArialMT".to_string()],
             font_size: 14.0,
             color: [1, 2, 3, 255],
             faux_bold: true,
@@ -827,7 +804,8 @@ mod tests {
     fn engine_data_keeps_float_tokens_for_font_size_and_transforms() {
         let bytes = encode_engine_data(&TextEngineSpec {
             text: "Hello".to_string(),
-            font_name: "ArialMT".to_string(),
+            font_index: 1,
+            font_set: vec!["AdobeInvisFont".to_string(), "ArialMT".to_string()],
             font_size: 14.0,
             color: [1, 2, 3, 255],
             faux_bold: true,

@@ -6,6 +6,7 @@ import { openImageFiles, openImageFolder, openKhrFile } from '@/lib/io/openFiles
 import { saveBlob } from '@/lib/io/saveBlob'
 import { exportProject, uploadKhrArchive, uploadPages, uploadPagesByPaths } from '@/lib/io/scene'
 import { queryClient } from '@/lib/queryClient'
+import { usePreferencesStore } from '@/lib/stores/preferencesStore'
 
 /**
  * Platform-neutral image import. `openImageFiles` / `openImageFolder` return
@@ -69,7 +70,8 @@ export async function exportCurrentProjectAs(
   pages?: string[],
 ): Promise<void> {
   try {
-    const { blob, filename } = await exportProject({ format, pages })
+    const defaultFont = usePreferencesStore.getState().defaultFont
+    const { blob, filename } = await exportProject({ format, pages, defaultFont })
     const base = sanitiseBaseName(currentProjectName())
     // Prefer the server's Content-Disposition filename (matches the actual
     // bytes — a raw PNG/PSD for single-file responses, a zip for multi).
