@@ -9,10 +9,7 @@ export default defineConfig({
       client: 'react-query',
       mode: 'tags-split',
       baseUrl: '/api/v1',
-      mock: {
-        type: 'msw',
-        delay: 0,
-      },
+      mock: true,
       override: {
         fetch: {
           includeHttpResponseReturnType: false,
