@@ -92,7 +92,7 @@ export function ToolRail() {
   }
 
   return (
-    <div className='flex w-14 flex-col border-r border-border bg-card/95 shadow-sm'>
+    <div className='flex w-12 flex-col border-r border-border bg-card/95 shadow-sm'>
       <div className='flex h-[44px] shrink-0 items-center justify-center'>
         <Tooltip>
           <TooltipTrigger asChild>
@@ -102,7 +102,7 @@ export function ToolRail() {
               data-testid='tool-navigator-toggle'
               data-active={showNavigator}
               onClick={() => setShowNavigator(!showNavigator)}
-              className='h-9 w-9 rounded-xl border border-transparent text-muted-foreground transition hover:border-border hover:bg-muted/70 hover:text-foreground data-[active=true]:text-primary'
+              className='h-8 w-8 rounded-lg border border-transparent text-muted-foreground transition hover:border-border/70 hover:bg-muted/60 hover:text-foreground data-[active=true]:bg-muted/50 data-[active=true]:text-primary'
               aria-label={showNavigator ? t('navigator.hide') : t('navigator.show')}
               aria-pressed={showNavigator}
             >
@@ -116,9 +116,9 @@ export function ToolRail() {
         </Tooltip>
       </div>
 
-      <div className='mx-2 h-px bg-border' />
+      <div className='mx-2 h-px bg-border/80' />
 
-      <div className='flex flex-1 flex-col items-center gap-1.5 py-2'>
+      <div className='flex flex-1 flex-col items-center gap-1 py-2'>
         {MODES.map((item) => {
           const label = t(item.labelKey)
           const active = item.value === mode
@@ -134,24 +134,19 @@ export function ToolRail() {
                   data-active={active}
                   data-options-open={optionsActive}
                   onClick={() => handleToolClick(item.value)}
-                  className='group relative h-9 w-9 rounded-xl border border-transparent text-muted-foreground transition hover:border-border hover:bg-muted/70 hover:text-foreground data-[active=true]:border-primary/50 data-[active=true]:bg-primary/10 data-[active=true]:text-primary'
+                  className='group relative h-8 w-8 rounded-lg border border-transparent text-muted-foreground transition hover:border-border/70 hover:bg-muted/60 hover:text-foreground data-[active=true]:border-primary/35 data-[active=true]:bg-primary/10 data-[active=true]:text-primary'
                   aria-label={label}
                   aria-pressed={active}
                 >
                   <item.icon className='h-4 w-4' />
 
-                  {active && (
-                    <span
-                      className='absolute -right-1 top-1/2 h-5 w-1 -translate-y-1/2 rounded-full bg-primary'
-                      aria-hidden='true'
-                    />
-                  )}
-
                   {optionsActive && (
-                    <SlidersHorizontal
-                      className='absolute -bottom-1 -right-1 h-4 w-4 rounded-full border border-border bg-card p-0.5 text-primary shadow-sm'
+                    <span
+                      className='absolute -bottom-0.5 -right-0.5 flex h-3.5 w-3.5 items-center justify-center rounded-full border border-border bg-card text-primary shadow-sm'
                       aria-hidden='true'
-                    />
+                    >
+                      <SlidersHorizontal className='h-2.5 w-2.5' />
+                    </span>
                   )}
                 </Button>
               </TooltipTrigger>
