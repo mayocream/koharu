@@ -1,13 +1,23 @@
-'use client'
+﻿'use client'
 
-import { MousePointer, VectorSquare, Brush, Bandage, Eraser, PanelLeft } from 'lucide-react'
+import {
+  Bandage,
+  Brush,
+  Eraser,
+  MousePointer,
+  PanelLeft,
+  SlidersHorizontal,
+  VectorSquare,
+} from 'lucide-react'
 import type { ComponentType } from 'react'
 import { useTranslation } from 'react-i18next'
 
 import { Button } from '@/components/ui/button'
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip'
+
 import { useEditorUiStore } from '@/lib/stores/editorUiStore'
 import { usePreferencesStore } from '@/lib/stores/preferencesStore'
+
 import type { ToolMode } from '@/lib/types'
 
 type ModeDefinition = {
@@ -50,17 +60,39 @@ const MODES: ModeDefinition[] = [
   },
 ]
 
+const isBrushLikeTool = (value: ToolMode) =>
+  value === 'brush' || value === 'eraser' || value === 'repairBrush'
+
 export function ToolRail() {
   const mode = useEditorUiStore((state) => state.mode)
   const setMode = useEditorUiStore((state) => state.setMode)
+  const toolOptionsOpen = useEditorUiStore((state) => state.toolOptionsOpen)
+  const setToolOptionsOpen = useEditorUiStore((state) => state.setToolOptionsOpen)
+  const toggleToolOptionsOpen = useEditorUiStore((state) => state.toggleToolOptionsOpen)
   const showNavigator = useEditorUiStore((state) => state.showNavigator)
   const setShowNavigator = useEditorUiStore((state) => state.setShowNavigator)
   const shortcuts = usePreferencesStore((state) => state.shortcuts)
+
   const { t } = useTranslation()
 
+  const handleToolClick = (value: ToolMode) => {
+    if (isBrushLikeTool(value)) {
+      if (value === mode) {
+        toggleToolOptionsOpen()
+        return
+      }
+
+      setMode(value)
+      setToolOptionsOpen(true)
+      return
+    }
+
+    setMode(value)
+    setToolOptionsOpen(false)
+  }
+
   return (
-    <div className='flex w-11 flex-col border-r border-border bg-card'>
-      {/* Navigator Toggle Section - Height matches Navigator Header (py-1.5 + 2 lines of text-xs = 44px) */}
+    <div className='flex w-14 flex-col border-r border-border bg-card/95 shadow-sm'>
       <div className='flex h-[44px] shrink-0 items-center justify-center'>
         <Tooltip>
           <TooltipTrigger asChild>
@@ -70,24 +102,27 @@ export function ToolRail() {
               data-testid='tool-navigator-toggle'
               data-active={showNavigator}
               onClick={() => setShowNavigator(!showNavigator)}
-              className='border border-transparent text-muted-foreground data-[active=true]:text-primary'
+              className='h-9 w-9 rounded-xl border border-transparent text-muted-foreground transition hover:border-border hover:bg-muted/70 hover:text-foreground data-[active=true]:text-primary'
               aria-label={showNavigator ? t('navigator.hide') : t('navigator.show')}
               aria-pressed={showNavigator}
             >
               <PanelLeft className='h-4 w-4' />
             </Button>
           </TooltipTrigger>
+
           <TooltipContent side='right' sideOffset={8}>
             {showNavigator ? t('navigator.hide') : t('navigator.show')}
           </TooltipContent>
         </Tooltip>
       </div>
 
-      <div className='h-px w-full bg-border' />
+      <div className='mx-2 h-px bg-border' />
 
-      <div className='flex flex-1 flex-col items-center gap-1 py-2'>
+      <div className='flex flex-1 flex-col items-center gap-1.5 py-2'>
         {MODES.map((item) => {
           const label = t(item.labelKey)
+          const active = item.value === mode
+          const optionsActive = active && isBrushLikeTool(item.value) && toolOptionsOpen
 
           return (
             <Tooltip key={item.value}>
@@ -96,14 +131,31 @@ export function ToolRail() {
                   variant='ghost'
                   size='icon-sm'
                   data-testid={item.testId}
-                  data-active={item.value === mode}
-                  onClick={() => setMode(item.value)}
-                  className='border border-transparent text-muted-foreground data-[active=true]:border-primary data-[active=true]:bg-accent data-[active=true]:text-primary'
+                  data-active={active}
+                  data-options-open={optionsActive}
+                  onClick={() => handleToolClick(item.value)}
+                  className='group relative h-9 w-9 rounded-xl border border-transparent text-muted-foreground transition hover:border-border hover:bg-muted/70 hover:text-foreground data-[active=true]:border-primary/50 data-[active=true]:bg-primary/10 data-[active=true]:text-primary'
                   aria-label={label}
+                  aria-pressed={active}
                 >
                   <item.icon className='h-4 w-4' />
+
+                  {active && (
+                    <span
+                      className='absolute -right-1 top-1/2 h-5 w-1 -translate-y-1/2 rounded-full bg-primary'
+                      aria-hidden='true'
+                    />
+                  )}
+
+                  {optionsActive && (
+                    <SlidersHorizontal
+                      className='absolute -bottom-1 -right-1 h-4 w-4 rounded-full border border-border bg-card p-0.5 text-primary shadow-sm'
+                      aria-hidden='true'
+                    />
+                  )}
                 </Button>
               </TooltipTrigger>
+
               <TooltipContent side='right' sideOffset={8}>
                 {shortcuts[item.value as keyof typeof shortcuts]
                   ? `${label} (${shortcuts[item.value as keyof typeof shortcuts].toUpperCase()})`

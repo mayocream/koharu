@@ -1,4 +1,4 @@
-import { screen } from '@testing-library/react'
+﻿import { screen } from '@testing-library/react'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 
 import { SubToolRail } from '@/components/canvas/SubToolRail'
@@ -37,45 +37,46 @@ describe('SubToolRail', () => {
   })
 
   it('renders when brush tool is active', () => {
-    useEditorUiStore.setState({ mode: 'brush' })
+    useEditorUiStore.setState({ mode: 'brush', toolOptionsOpen: true })
     renderWithQuery(<SubToolRail />)
     expect(screen.getByTestId('sub-tool-rail')).toBeInTheDocument()
     expect(screen.getByText('toolbar.brushSize')).toBeInTheDocument()
   })
 
   it('renders when eraser tool is active', () => {
-    useEditorUiStore.setState({ mode: 'eraser' })
+    useEditorUiStore.setState({ mode: 'eraser', toolOptionsOpen: true })
     renderWithQuery(<SubToolRail />)
     expect(screen.getByTestId('sub-tool-rail')).toBeInTheDocument()
   })
 
   it('renders when repairBrush tool is active', () => {
-    useEditorUiStore.setState({ mode: 'repairBrush' })
+    useEditorUiStore.setState({ mode: 'repairBrush', toolOptionsOpen: true })
     renderWithQuery(<SubToolRail />)
     expect(screen.getByTestId('sub-tool-rail')).toBeInTheDocument()
   })
 
   it('shows color picker only for brush tool', () => {
     // Check Brush tool
-    useEditorUiStore.setState({ mode: 'brush' })
+    useEditorUiStore.setState({ mode: 'brush', toolOptionsOpen: true })
     const { rerender } = renderWithQuery(<SubToolRail />)
     expect(screen.getByText('toolbar.brushColor')).toBeInTheDocument()
 
     // Switch to Eraser
-    useEditorUiStore.setState({ mode: 'eraser' })
+    useEditorUiStore.setState({ mode: 'eraser', toolOptionsOpen: true })
     rerender(<SubToolRail />)
     expect(screen.queryByText('toolbar.brushColor')).not.toBeInTheDocument()
 
     // Switch to Repair Brush
-    useEditorUiStore.setState({ mode: 'repairBrush' })
+    useEditorUiStore.setState({ mode: 'repairBrush', toolOptionsOpen: true })
     rerender(<SubToolRail />)
     expect(screen.queryByText('toolbar.brushColor')).not.toBeInTheDocument()
   })
 
   it('displays the correct brush size', () => {
-    useEditorUiStore.setState({ mode: 'brush' })
+    useEditorUiStore.setState({ mode: 'brush', toolOptionsOpen: true })
     usePreferencesStore.setState({ brushConfig: { size: 64, color: '#ff0000' } })
     renderWithQuery(<SubToolRail />)
     expect(screen.getByDisplayValue('64')).toBeInTheDocument()
   })
 })
+
