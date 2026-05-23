@@ -1,3 +1,20 @@
+## [0.59.2](https://github.com/mayocream/koharu/compare/0.59.1..0.59.2) - 2026-05-23
+
+### 🐛 Bug Fixes
+
+- Orval mock type - ([7f0e58c](https://github.com/mayocream/koharu/commit/7f0e58c2a6c6fa995c02285e8971c73368d48e8e))
+- Remove Aggressive sceneEpoch Triggering ([#715](https://github.com/mayocream/koharu/issues/715)) - ([9a6b98e](https://github.com/mayocream/koharu/commit/9a6b98e2bf3e61d3137e9df957c388bba05fbe66))
+- Text Layers Rasterizing on PSD Exports ([#710](https://github.com/mayocream/koharu/issues/710)) - ([6fb2411](https://github.com/mayocream/koharu/commit/6fb2411b714f5316307513ec38c866135dfc6b02))
+- Cuda vulkan thread isolation ([#702](https://github.com/mayocream/koharu/issues/702)) - ([4b528af](https://github.com/mayocream/koharu/commit/4b528af44e013b46db872456cadff79ec8a6d2af))
+
+### ⚙️ Miscellaneous Tasks
+
+- Update README with icon image ([#703](https://github.com/mayocream/koharu/issues/703)) - ([19a9b8f](https://github.com/mayocream/koharu/commit/19a9b8fdd369cc49b1434243f04b15171e840f50))
+
+## New Contributors ❤️
+
+* @wahidalawy made their first contribution in [#702](https://github.com/mayocream/koharu/pull/702)
+
 ## [0.59.1](https://github.com/mayocream/koharu/compare/0.59.0..0.59.1) - 2026-05-12
 
 ### 🐛 Bug Fixes
