@@ -229,6 +229,19 @@ pub struct TextStyle {
     pub text_align: Option<TextAlign>,
 }
 
+impl Default for TextStyle {
+    fn default() -> Self {
+        Self {
+            font_families: Vec::new(),
+            font_size: None,
+            color: [0, 0, 0, 255],
+            effect: None,
+            stroke: None,
+            text_align: None,
+        }
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::{TextShaderEffect, TextStyle};

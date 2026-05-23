@@ -643,6 +643,52 @@
             "schema": {
               "$ref": "#/components/schemas/MaskRole"
             }
+          },
+          {
+            "name": "pipeline",
+            "in": "query",
+            "description": "Optional pipeline engine to run after the mask is updated.",
+            "required": false,
+            "schema": {
+              "type": ["string", "null"]
+            }
+          },
+          {
+            "name": "x",
+            "in": "query",
+            "description": "Bounding box for the pipeline run.",
+            "required": false,
+            "schema": {
+              "type": ["number", "null"],
+              "format": "float"
+            }
+          },
+          {
+            "name": "y",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": ["number", "null"],
+              "format": "float"
+            }
+          },
+          {
+            "name": "width",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": ["number", "null"],
+              "format": "float"
+            }
+          },
+          {
+            "name": "height",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": ["number", "null"],
+              "format": "float"
+            }
           }
         ],
         "requestBody": {
@@ -684,6 +730,37 @@
             "content": {
               "image/webp": {}
             }
+          }
+        }
+      }
+    },
+    "/pages/{page_id}/reorder-text-nodes": {
+      "post": {
+        "operationId": "reorder_text_nodes",
+        "parameters": [
+          {
+            "name": "page_id",
+            "in": "path",
+            "description": "Page id",
+            "required": true,
+            "schema": {
+              "$ref": "#/components/schemas/PageId"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ReadingOrder"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": ""
           }
         }
       }
@@ -1456,6 +1533,10 @@
         "type": "object",
         "required": ["format"],
         "properties": {
+          "defaultFont": {
+            "type": ["string", "null"],
+            "description": "Optional global font override (from UI preferences)."
+          },
           "format": {
             "$ref": "#/components/schemas/ExportFormat"
           },
@@ -2758,6 +2839,10 @@
           }
         }
       },
+      "ReadingOrder": {
+        "type": "string",
+        "enum": ["rtl", "ltr", "custom"]
+      },
       "Region": {
         "type": "object",
         "required": ["x", "y", "width", "height"],
@@ -2870,6 +2955,16 @@
               "$ref": "#/components/schemas/PageId"
             },
             "description": "`None` → whole project, `Some(pages)` → just those pages."
+          },
+          "readingOrder": {
+            "oneOf": [
+              {
+                "type": "null"
+              },
+              {
+                "$ref": "#/components/schemas/ReadingOrder"
+              }
+            ]
           },
           "region": {
             "oneOf": [

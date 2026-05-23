@@ -16,7 +16,7 @@ export interface StartPipelineRequest {
    * @nullable
    */
   pages?: PageId[] | null
-  readingOrder?: ReadingOrder
+  readingOrder?: null | ReadingOrder
   region?: null | Region
   /** Engine ids (`inventory::submit!` ids) to run in order. */
   steps: string[]

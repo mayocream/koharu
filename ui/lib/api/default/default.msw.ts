@@ -1837,6 +1837,26 @@ export const getGetPageThumbnailMockHandler = (
   )
 }
 
+export const getReorderTextNodesMockHandler = (
+  overrideResponse?:
+    | void
+    | ((info: Parameters<Parameters<typeof http.post>[1]>[0]) => Promise<void> | void),
+  options?: RequestHandlerOptions,
+) => {
+  return http.post(
+    '*/pages/:pageId/reorder-text-nodes',
+    async (info: Parameters<Parameters<typeof http.post>[1]>[0]) => {
+      await delay(0)
+      if (typeof overrideResponse === 'function') {
+        await overrideResponse(info)
+      }
+
+      return new HttpResponse(null, { status: 200 })
+    },
+    options,
+  )
+}
+
 export const getStartPipelineMockHandler = (
   overrideResponse?:
     | StartPipelineResponse
@@ -2099,6 +2119,7 @@ export const getDefaultMock = () => [
   getAddImageLayerMockHandler(),
   getPutMaskMockHandler(),
   getGetPageThumbnailMockHandler(),
+  getReorderTextNodesMockHandler(),
   getStartPipelineMockHandler(),
   getListProjectsMockHandler(),
   getCreateProjectMockHandler(),

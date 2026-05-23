@@ -50,6 +50,7 @@ import type {
   PageId,
   ProjectSummary,
   ProviderSecretRequest,
+  PutMaskParams,
   PutMaskResponse,
   ReadingOrder,
   SceneSnapshot,
@@ -291,6 +292,7 @@ export function useGetCodexAuthStatus<
 
   return { ...query, queryKey: queryOptions.queryKey }
 }
+
 export const getStartCodexImageGenerationUrl = () => {
   return `/api/v1/ai/codex/images`
 }
@@ -2525,17 +2527,30 @@ the body. Emits `Op::UpdateNode` if a mask of that role exists, else
 `Op::AddNode`. Used by the repair-brush / segment-edit flow; the
 follow-up localized inpaint is a separate `POST /pipelines` call.
  */
-export const getPutMaskUrl = (id: PageId, role: MaskRole) => {
-  return `/api/v1/pages/${id}/masks/${role}`
+export const getPutMaskUrl = (id: PageId, role: MaskRole, params?: PutMaskParams) => {
+  const normalizedParams = new URLSearchParams()
+
+  Object.entries(params || {}).forEach(([key, value]) => {
+    if (value !== undefined && value !== null) {
+      normalizedParams.append(key, value.toString())
+    }
+  })
+
+  const stringifiedParams = normalizedParams.toString()
+
+  return stringifiedParams.length > 0
+    ? `/api/v1/pages/${id}/masks/${role}?${stringifiedParams}`
+    : `/api/v1/pages/${id}/masks/${role}`
 }
 
 export const putMask = async (
   id: PageId,
   role: MaskRole,
   putMaskBody: Blob,
+  params?: PutMaskParams,
   options?: RequestInit,
 ): Promise<PutMaskResponse> => {
-  return fetchApi<PutMaskResponse>(getPutMaskUrl(id, role), {
+  return fetchApi<PutMaskResponse>(getPutMaskUrl(id, role, params), {
     ...options,
     method: 'PUT',
     headers: { 'Content-Type': 'image/png', ...options?.headers },
@@ -2547,14 +2562,14 @@ export const getPutMaskMutationOptions = <TError = unknown, TContext = unknown>(
   mutation?: UseMutationOptions<
     Awaited<ReturnType<typeof putMask>>,
     TError,
-    { id: PageId; role: MaskRole; data: Blob },
+    { id: PageId; role: MaskRole; data: Blob; params?: PutMaskParams },
     TContext
   >
   request?: SecondParameter<typeof fetchApi>
 }): UseMutationOptions<
   Awaited<ReturnType<typeof putMask>>,
   TError,
-  { id: PageId; role: MaskRole; data: Blob },
+  { id: PageId; role: MaskRole; data: Blob; params?: PutMaskParams },
   TContext
 > => {
   const mutationKey = ['putMask']
@@ -2566,11 +2581,11 @@ export const getPutMaskMutationOptions = <TError = unknown, TContext = unknown>(
 
   const mutationFn: MutationFunction<
     Awaited<ReturnType<typeof putMask>>,
-    { id: PageId; role: MaskRole; data: Blob }
+    { id: PageId; role: MaskRole; data: Blob; params?: PutMaskParams }
   > = (props) => {
-    const { id, role, data } = props ?? {}
+    const { id, role, data, params } = props ?? {}
 
-    return putMask(id, role, data, requestOptions)
+    return putMask(id, role, data, params, requestOptions)
   }
 
   return { mutationFn, ...mutationOptions }
@@ -2591,7 +2606,7 @@ export const usePutMask = <TError = unknown, TContext = unknown>(
     mutation?: UseMutationOptions<
       Awaited<ReturnType<typeof putMask>>,
       TError,
-      { id: PageId; role: MaskRole; data: Blob },
+      { id: PageId; role: MaskRole; data: Blob; params?: PutMaskParams },
       TContext
     >
     request?: SecondParameter<typeof fetchApi>
@@ -2600,7 +2615,7 @@ export const usePutMask = <TError = unknown, TContext = unknown>(
 ): UseMutationResult<
   Awaited<ReturnType<typeof putMask>>,
   TError,
-  { id: PageId; role: MaskRole; data: Blob },
+  { id: PageId; role: MaskRole; data: Blob; params?: PutMaskParams },
   TContext
 > => {
   return useMutation(getPutMaskMutationOptions(options), queryClient)
@@ -2722,16 +2737,16 @@ export function useGetPageThumbnail<
   return { ...query, queryKey: queryOptions.queryKey }
 }
 
-export const getReorderTextNodesUrl = (id: PageId) => {
-  return `/api/v1/pages/${id}/reorder-text-nodes`
+export const getReorderTextNodesUrl = (pageId: PageId) => {
+  return `/api/v1/pages/${pageId}/reorder-text-nodes`
 }
 
 export const reorderTextNodes = async (
-  id: PageId,
+  pageId: PageId,
   readingOrder: ReadingOrder,
   options?: RequestInit,
 ): Promise<void> => {
-  return fetchApi<void>(getReorderTextNodesUrl(id), {
+  return fetchApi<void>(getReorderTextNodesUrl(pageId), {
     ...options,
     method: 'POST',
     headers: { 'Content-Type': 'application/json', ...options?.headers },
@@ -2743,14 +2758,14 @@ export const getReorderTextNodesMutationOptions = <TError = unknown, TContext = 
   mutation?: UseMutationOptions<
     Awaited<ReturnType<typeof reorderTextNodes>>,
     TError,
-    { id: PageId; data: ReadingOrder },
+    { pageId: PageId; data: ReadingOrder },
     TContext
   >
   request?: SecondParameter<typeof fetchApi>
 }): UseMutationOptions<
   Awaited<ReturnType<typeof reorderTextNodes>>,
   TError,
-  { id: PageId; data: ReadingOrder },
+  { pageId: PageId; data: ReadingOrder },
   TContext
 > => {
   const mutationKey = ['reorderTextNodes']
@@ -2762,11 +2777,11 @@ export const getReorderTextNodesMutationOptions = <TError = unknown, TContext = 
 
   const mutationFn: MutationFunction<
     Awaited<ReturnType<typeof reorderTextNodes>>,
-    { id: PageId; data: ReadingOrder }
+    { pageId: PageId; data: ReadingOrder }
   > = (props) => {
-    const { id, data } = props ?? {}
+    const { pageId, data } = props ?? {}
 
-    return reorderTextNodes(id, data, requestOptions)
+    return reorderTextNodes(pageId, data, requestOptions)
   }
 
   return { mutationFn, ...mutationOptions }
@@ -2783,7 +2798,7 @@ export const useReorderTextNodes = <TError = unknown, TContext = unknown>(
     mutation?: UseMutationOptions<
       Awaited<ReturnType<typeof reorderTextNodes>>,
       TError,
-      { id: PageId; data: ReadingOrder },
+      { pageId: PageId; data: ReadingOrder },
       TContext
     >
     request?: SecondParameter<typeof fetchApi>
@@ -2792,12 +2807,11 @@ export const useReorderTextNodes = <TError = unknown, TContext = unknown>(
 ): UseMutationResult<
   Awaited<ReturnType<typeof reorderTextNodes>>,
   TError,
-  { id: PageId; data: ReadingOrder },
+  { pageId: PageId; data: ReadingOrder },
   TContext
 > => {
   return useMutation(getReorderTextNodesMutationOptions(options), queryClient)
 }
-
 export const getStartPipelineUrl = () => {
   return `/api/v1/pipelines`
 }
