@@ -37,7 +37,6 @@ import { useKeyboardShortcuts } from '@/hooks/useKeyboardShortcuts'
 import { useMaskDrawing } from '@/hooks/useMaskDrawing'
 import { usePointerToDocument } from '@/hooks/usePointerToDocument'
 import { useRenderBrushDrawing } from '@/hooks/useRenderBrushDrawing'
-import { useScene } from '@/hooks/useScene'
 import type { Node, Transform } from '@/lib/api/schemas'
 import { applyOp } from '@/lib/io/scene'
 import { ops } from '@/lib/ops'
@@ -68,27 +67,14 @@ export function Workspace() {
   const autoFitEnabled = useEditorUiStore((s) => s.autoFitEnabled)
 
   const page = useCurrentPage()
-  const { epoch: sceneEpoch } = useScene()
   const clearSelection = useSelectionStore((s) => s.clear)
 
   // Derive role-keyed blob hashes off the active page.
-  const imageHash = useMemo(() => (page ? findImageBlob(page, 'source') : null), [page, sceneEpoch])
-  const segmentHash = useMemo(
-    () => (page ? findMaskBlob(page, 'segment') : null),
-    [page, sceneEpoch],
-  )
-  const inpaintedHash = useMemo(
-    () => (page ? findImageBlob(page, 'inpainted') : null),
-    [page, sceneEpoch],
-  )
-  const brushLayerHash = useMemo(
-    () => (page ? findMaskBlob(page, 'brushInpaint') : null),
-    [page, sceneEpoch],
-  )
-  const renderedHash = useMemo(
-    () => (page ? findImageBlob(page, 'rendered') : null),
-    [page, sceneEpoch],
-  )
+  const imageHash = useMemo(() => (page ? findImageBlob(page, 'source') : null), [page])
+  const segmentHash = useMemo(() => (page ? findMaskBlob(page, 'segment') : null), [page])
+  const inpaintedHash = useMemo(() => (page ? findImageBlob(page, 'inpainted') : null), [page])
+  const brushLayerHash = useMemo(() => (page ? findMaskBlob(page, 'brushInpaint') : null), [page])
+  const renderedHash = useMemo(() => (page ? findImageBlob(page, 'rendered') : null), [page])
 
   const imageData = useBlobData(imageHash ?? undefined)
   const segmentData = useBlobData(segmentHash ?? undefined)
