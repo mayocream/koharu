@@ -6,7 +6,8 @@
     "copy": "복사",
     "copied": "복사됨",
     "save": "저장",
-    "saved": "저장됨!"
+    "saved": "저장됨!",
+    "delete": "삭제"
   },
   "menu": {
     "file": "파일",

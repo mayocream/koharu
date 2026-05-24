@@ -61,4 +61,49 @@ describe('selectionStore', () => {
     expect(s.isSelected('a')).toBe(true)
     expect(s.isSelected('b')).toBe(false)
   })
+
+  describe('page multi-selection', () => {
+    it('initializes with empty selectedPageIds', () => {
+      expect(useSelectionStore.getState().selectedPageIds.size).toBe(0)
+    })
+
+    it('setPage adds the active page to selectedPageIds and clears others if not already selected', () => {
+      const s = useSelectionStore.getState()
+      s.setSelectedPageIds(new Set(['p-1', 'p-2']))
+      s.setPage('p-3')
+      expect(useSelectionStore.getState().pageId).toBe('p-3')
+      expect(useSelectionStore.getState().selectedPageIds).toEqual(new Set(['p-3']))
+    })
+
+    it('setPage keeps existing selection intact if set page is already selected', () => {
+      const s = useSelectionStore.getState()
+      s.setSelectedPageIds(new Set(['p-1', 'p-2']))
+      // p-2 is already in selectedPageIds, so the selection should NOT be cleared/reset
+      s.setPage('p-2')
+      expect(useSelectionStore.getState().pageId).toBe('p-2')
+      expect(useSelectionStore.getState().selectedPageIds).toEqual(new Set(['p-1', 'p-2']))
+    })
+
+    it('setSelectedPageIds updates page selections correctly', () => {
+      const s = useSelectionStore.getState()
+      s.setSelectedPageIds(new Set(['p-1', 'p-2']))
+      expect(useSelectionStore.getState().selectedPageIds).toEqual(new Set(['p-1', 'p-2']))
+
+      // Test functional updater
+      s.setSelectedPageIds((prev) => {
+        const next = new Set(prev)
+        next.add('p-3')
+        return next
+      })
+      expect(useSelectionStore.getState().selectedPageIds).toEqual(new Set(['p-1', 'p-2', 'p-3']))
+    })
+
+    it('setPage(null) clears selectedPageIds', () => {
+      const s = useSelectionStore.getState()
+      s.setSelectedPageIds(new Set(['p-1']))
+      s.setPage(null)
+      expect(useSelectionStore.getState().pageId).toBeNull()
+      expect(useSelectionStore.getState().selectedPageIds.size).toBe(0)
+    })
+  })
 })
