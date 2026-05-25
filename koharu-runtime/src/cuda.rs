@@ -11,7 +11,8 @@ use crate::loader::{add_runtime_search_path, preload_library};
 const CUDA_SUCCESS: i32 = 0;
 const CUDA_13_0_DRIVER_VERSION: i32 = 13000;
 const CUDA_13_1_DRIVER_VERSION: i32 = 13010;
-const CUDA_EXTRACT_REVISION: u32 = 2;
+const CUDA_13_2_DRIVER_VERSION: i32 = 13020;
+const CUDA_EXTRACT_REVISION: u32 = 3;
 const CU_DEVICE_ATTRIBUTE_COMPUTE_CAPABILITY_MAJOR: i32 = 75;
 const CU_DEVICE_ATTRIBUTE_COMPUTE_CAPABILITY_MINOR: i32 = 76;
 const MIN_COMPUTE_CAPABILITY: (i32, i32) = (8, 0); // Ampere (RTX 30xx) and above
@@ -44,7 +45,12 @@ struct WheelSpec {
     linux_dylibs: &'static [&'static str],
 }
 
-const WHEELS: &[WheelSpec] = &[
+struct WheelSet {
+    name: &'static str,
+    wheels: &'static [WheelSpec],
+}
+
+const CUDA_13_0_WHEELS: &[WheelSpec] = &[
     WheelSpec {
         package: "nvidia-cuda-runtime/13.0.96",
         windows_dylibs: &["cudart64_13.dll"],
@@ -92,6 +98,64 @@ const WHEELS: &[WheelSpec] = &[
     },
 ];
 
+const CUDA_13_2_UPDATE_1_WHEELS: &[WheelSpec] = &[
+    WheelSpec {
+        package: "nvidia-cuda-runtime/13.2.75",
+        windows_dylibs: &["cudart64_13.dll"],
+        linux_dylibs: &["libcudart.so.13"],
+    },
+    WheelSpec {
+        package: "nvidia-cublas/13.4.0.1",
+        windows_dylibs: &["cublasLt64_13.dll", "cublas64_13.dll"],
+        linux_dylibs: &["libcublasLt.so.13", "libcublas.so.13"],
+    },
+    WheelSpec {
+        package: "nvidia-cufft/12.2.0.46",
+        windows_dylibs: &["cufft64_12.dll"],
+        linux_dylibs: &["libcufft.so.12"],
+    },
+    WheelSpec {
+        package: "nvidia-curand/10.4.2.55",
+        windows_dylibs: &["curand64_10.dll"],
+        linux_dylibs: &["libcurand.so.10"],
+    },
+    WheelSpec {
+        package: "nvidia-cudnn-cu13/9.21.0.82",
+        windows_dylibs: &[
+            "cudnn64_9.dll",
+            "cudnn_adv64_9.dll",
+            "cudnn_cnn64_9.dll",
+            "cudnn_engines_precompiled64_9.dll",
+            "cudnn_engines_runtime_compiled64_9.dll",
+            "cudnn_engines_tensor_ir64_9.dll",
+            "cudnn_graph64_9.dll",
+            "cudnn_heuristic64_9.dll",
+            "cudnn_ops64_9.dll",
+        ],
+        linux_dylibs: &[
+            "libcudnn.so.9",
+            "libcudnn_adv.so.9",
+            "libcudnn_cnn.so.9",
+            "libcudnn_engines_precompiled.so.9",
+            "libcudnn_engines_runtime_compiled.so.9",
+            "libcudnn_engines_tensor_ir.so.9",
+            "libcudnn_graph.so.9",
+            "libcudnn_heuristic.so.9",
+            "libcudnn_ops.so.9",
+        ],
+    },
+];
+
+const CUDA_13_0_WHEEL_SET: WheelSet = WheelSet {
+    name: "cuda-13.0",
+    wheels: CUDA_13_0_WHEELS,
+};
+
+const CUDA_13_2_UPDATE_1_WHEEL_SET: WheelSet = WheelSet {
+    name: "cuda-13.2-update1",
+    wheels: CUDA_13_2_UPDATE_1_WHEELS,
+};
+
 impl CudaDriverVersion {
     pub const fn from_raw(raw: i32) -> Self {
         Self { raw }
@@ -115,6 +179,10 @@ impl CudaDriverVersion {
 
     pub const fn supports_cuda_13_1(self) -> bool {
         self.raw >= CUDA_13_1_DRIVER_VERSION
+    }
+
+    pub const fn supports_cuda_13_2(self) -> bool {
+        self.raw >= CUDA_13_2_DRIVER_VERSION
     }
 }
 
@@ -287,13 +355,15 @@ pub(crate) fn llama_cuda_enabled(runtime: &Runtime) -> bool {
 
 pub(crate) fn package_present(runtime: &Runtime) -> Result<bool> {
     let install_dir = install_dir(runtime);
-    let source_id = source_id()?;
+    let wheel_set = selected_wheel_set()?;
+    let source_id = source_id_for_wheel_set(wheel_set)?;
     let install = InstallState::new(&install_dir, &source_id);
     if !install.is_current() {
         return Ok(false);
     }
 
-    Ok(WHEELS
+    Ok(wheel_set
+        .wheels
         .iter()
         .flat_map(|wheel| wheel.dylibs().iter())
         .all(|dylib| install_dir.join(dylib).exists()))
@@ -305,13 +375,14 @@ pub(crate) async fn package_prepare(runtime: &Runtime) -> Result<()> {
 
 pub(crate) async fn ensure_ready(runtime: &Runtime) -> Result<()> {
     let install_dir = install_dir(runtime);
-    let source_id = source_id()?;
+    let wheel_set = selected_wheel_set()?;
+    let source_id = source_id_for_wheel_set(wheel_set)?;
     let install = InstallState::new(&install_dir, &source_id);
 
     if !install.is_current() {
         install.reset()?;
 
-        for wheel in WHEELS {
+        for wheel in wheel_set.wheels {
             let asset = select_wheel(runtime, wheel).await?;
             let archive = runtime
                 .downloads()
@@ -330,7 +401,7 @@ pub(crate) async fn ensure_ready(runtime: &Runtime) -> Result<()> {
     }
 
     add_runtime_search_path(&install_dir)?;
-    for wheel in WHEELS {
+    for wheel in wheel_set.wheels {
         for dylib in wheel.dylibs() {
             let path = install_dir.join(dylib);
             if path.exists() {
@@ -402,11 +473,40 @@ impl WheelSpec {
     }
 }
 
-fn source_id() -> Result<String> {
-    let packages = WHEELS.iter().map(|wheel| wheel.package).collect::<Vec<_>>();
+impl WheelSet {
+    fn packages(&self) -> Vec<&'static str> {
+        self.wheels.iter().map(|wheel| wheel.package).collect()
+    }
+}
+
+fn wheel_set_for_driver(version: CudaDriverVersion) -> &'static WheelSet {
+    if version.supports_cuda_13_2() {
+        &CUDA_13_2_UPDATE_1_WHEEL_SET
+    } else {
+        &CUDA_13_0_WHEEL_SET
+    }
+}
+
+fn selected_wheel_set() -> Result<&'static WheelSet> {
+    let version = driver_version()?;
+    let wheel_set = wheel_set_for_driver(version);
+    let packages = wheel_set.packages();
+    tracing::info!(
+        cuda_driver_version = %version,
+        cuda_driver_version_raw = version.raw(),
+        cuda_wheel_set = wheel_set.name,
+        cuda_packages = ?packages,
+        "Selected bundled CUDA runtime wheel set"
+    );
+    Ok(wheel_set)
+}
+
+fn source_id_for_wheel_set(wheel_set: &WheelSet) -> Result<String> {
+    let packages = wheel_set.packages();
     Ok(format!(
-        "cuda;platform={};wheels={};extract={}",
+        "cuda;platform={};wheel-set={};wheels={};extract={}",
         platform_tags()?.join(","),
+        wheel_set.name,
         packages.join(","),
         CUDA_EXTRACT_REVISION
     ))
@@ -447,21 +547,30 @@ mod tests {
     use super::*;
 
     #[test]
-    fn source_id_includes_platform() {
-        let id = source_id().unwrap();
-        assert!(id.contains("cuda"));
-        assert!(id.contains("platform="));
+    fn source_id_includes_selected_set_and_platform() {
+        for wheel_set in [&CUDA_13_0_WHEEL_SET, &CUDA_13_2_UPDATE_1_WHEEL_SET] {
+            let id = source_id_for_wheel_set(wheel_set).unwrap();
+            assert!(id.contains("cuda"));
+            assert!(id.contains("platform="));
+            assert!(id.contains(&format!("wheel-set={}", wheel_set.name)));
+            for package in wheel_set.packages() {
+                assert!(id.contains(package), "missing {package} in {id}");
+            }
+        }
     }
 
     #[test]
     #[cfg(any(target_os = "windows", target_os = "linux"))]
-    fn wheels_have_dylibs_for_current_platform() {
-        for wheel in WHEELS {
-            assert!(
-                !wheel.dylibs().is_empty(),
-                "{} has no dylibs",
-                wheel.package
-            );
+    fn wheel_sets_have_dylibs_for_current_platform() {
+        for wheel_set in [&CUDA_13_0_WHEEL_SET, &CUDA_13_2_UPDATE_1_WHEEL_SET] {
+            for wheel in wheel_set.wheels {
+                assert!(
+                    !wheel.dylibs().is_empty(),
+                    "{} in {} has no dylibs",
+                    wheel.package,
+                    wheel_set.name
+                );
+            }
         }
     }
 
@@ -470,13 +579,14 @@ mod tests {
         let tempdir = tempfile::tempdir().unwrap();
         let root = tempdir.path();
 
-        for wheel in WHEELS {
+        for wheel in CUDA_13_2_UPDATE_1_WHEEL_SET.wheels {
             for dylib in wheel.dylibs() {
                 std::fs::write(root.join(dylib), b"ok").unwrap();
             }
         }
 
-        let all_dylibs: Vec<&str> = WHEELS
+        let all_dylibs: Vec<&str> = CUDA_13_2_UPDATE_1_WHEEL_SET
+            .wheels
             .iter()
             .flat_map(|wheel| wheel.dylibs().iter().copied())
             .collect();
@@ -486,17 +596,20 @@ mod tests {
     }
 
     #[test]
-    fn cuda_runtime_includes_cudnn() {
-        let wheel = WHEELS
-            .iter()
-            .find(|wheel| wheel.package.starts_with("nvidia-cudnn-cu13/"))
-            .expect("missing cuDNN runtime wheel");
+    fn cuda_runtime_includes_cudnn_in_all_wheel_sets() {
+        for wheel_set in [&CUDA_13_0_WHEEL_SET, &CUDA_13_2_UPDATE_1_WHEEL_SET] {
+            let wheel = wheel_set
+                .wheels
+                .iter()
+                .find(|wheel| wheel.package.starts_with("nvidia-cudnn-cu13/"))
+                .unwrap_or_else(|| panic!("missing cuDNN runtime wheel in {}", wheel_set.name));
 
-        #[cfg(target_os = "windows")]
-        assert!(wheel.dylibs().contains(&"cudnn64_9.dll"));
+            #[cfg(target_os = "windows")]
+            assert!(wheel.dylibs().contains(&"cudnn64_9.dll"));
 
-        #[cfg(target_os = "linux")]
-        assert!(wheel.dylibs().contains(&"libcudnn.so.9"));
+            #[cfg(target_os = "linux")]
+            assert!(wheel.dylibs().contains(&"libcudnn.so.9"));
+        }
     }
 
     #[test]
@@ -521,5 +634,29 @@ mod tests {
         assert!(CudaDriverVersion::from_raw(13020).supports_cuda_13_1());
         assert!(!CudaDriverVersion::from_raw(13000).supports_cuda_13_1());
         assert!(!CudaDriverVersion::from_raw(12080).supports_cuda_13_1());
+    }
+
+    #[test]
+    fn checks_cuda_13_2_threshold() {
+        assert!(CudaDriverVersion::from_raw(13020).supports_cuda_13_2());
+        assert!(CudaDriverVersion::from_raw(13030).supports_cuda_13_2());
+        assert!(!CudaDriverVersion::from_raw(13010).supports_cuda_13_2());
+        assert!(!CudaDriverVersion::from_raw(12080).supports_cuda_13_2());
+    }
+
+    #[test]
+    fn cuda_13_2_driver_selects_cuda_13_2_wheel_set() {
+        let wheel_set = wheel_set_for_driver(CudaDriverVersion::from_raw(13020));
+        assert_eq!(wheel_set.name, "cuda-13.2-update1");
+        assert!(wheel_set.packages().contains(&"nvidia-cublas/13.4.0.1"));
+    }
+
+    #[test]
+    fn cuda_13_0_and_13_1_drivers_keep_cuda_13_0_wheel_set() {
+        for raw in [13000, 13010] {
+            let wheel_set = wheel_set_for_driver(CudaDriverVersion::from_raw(raw));
+            assert_eq!(wheel_set.name, "cuda-13.0");
+            assert!(wheel_set.packages().contains(&"nvidia-cublas/13.0.2.14"));
+        }
     }
 }
