@@ -1,6 +1,6 @@
 'use client'
 
-import { useRef, useState, useCallback, useEffect } from 'react'
+import { useRef, useState, useEffect } from 'react'
 import { HexColorInput, HexColorPicker } from 'react-colorful'
 
 import { Button } from '@/components/ui/button'
@@ -55,13 +55,6 @@ export function ColorPicker({
     if (!dragging.current) setLocalColor(value)
   }, [value])
 
-  const handlePointerUp = useCallback(() => {
-    if (dragging.current) {
-      dragging.current = false
-      onChange(localColor)
-    }
-  }, [localColor, onChange])
-
   const canUseEyeDropper =
     typeof window !== 'undefined' && typeof (window as EyeDropperWindow).EyeDropper === 'function'
 
@@ -105,13 +98,17 @@ export function ColorPicker({
       <PopoverContent className='w-64 p-3' sideOffset={8}>
         <div className='space-y-3'>
           {/* eslint-disable-next-line jsx-a11y/no-static-element-interactions */}
-          <div data-testid={pickerTestId} onPointerUp={handlePointerUp}>
+          <div data-testid={pickerTestId}>
             <HexColorPicker
               color={localColor}
               onChange={(color) => {
                 const normalized = normalizeHex(color)
                 dragging.current = true
                 setLocalColor(normalized)
+              }}
+              onChangeEnd={(color) => {
+                dragging.current = false
+                onChange(normalizeHex(color))
               }}
             />
           </div>
