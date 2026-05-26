@@ -2,7 +2,8 @@
 
 import { useVirtualizer } from '@tanstack/react-virtual'
 import { LayoutGridIcon, Trash2Icon } from 'lucide-react'
-import { memo, useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import { memo, useCallback, useMemo, useRef, useState } from 'react'
+import type React from 'react'
 import { useTranslation } from 'react-i18next'
 
 import { PageManagerDialog } from '@/components/PageManagerDialog'
@@ -78,24 +79,29 @@ export function Navigator() {
 
   const handleDeletePages = useCallback(
     async (idsToDelete: Set<string>) => {
-      if (totalPages - idsToDelete.size < 1) return
+      // Intersect with existing pages to filter out any stale selection IDs
+      const existingPageIds = new Set(pages.map((p) => p.id))
+      const validIdsToDelete = new Set(
+        Array.from(idsToDelete).filter((id) => existingPageIds.has(id)),
+      )
+      if (validIdsToDelete.size === 0) return
+      if (totalPages - validIdsToDelete.size < 1) return
 
-      const remainingPages = pages.filter((p) => !idsToDelete.has(p.id))
+      const remainingPages = pages.filter((p) => !validIdsToDelete.has(p.id))
       if (remainingPages.length === 0) return
 
       // Transition selection if active page is being deleted
       let nextPageId = pageId
-      if (pageId && idsToDelete.has(pageId)) {
-        const firstDeletedIndex = pages.findIndex((p) => idsToDelete.has(p.id))
+      if (pageId && validIdsToDelete.has(pageId)) {
+        const firstDeletedIndex = pages.findIndex((p) => validIdsToDelete.has(p.id))
         const nextIndex = Math.min(firstDeletedIndex, remainingPages.length - 1)
         nextPageId = remainingPages[nextIndex]?.id ?? null
         setPage(nextPageId)
       }
 
       // Sort indices in descending order before generating ops to maintain correctness in sequence
-      const sortedIdsToDelete = Array.from(idsToDelete)
+      const sortedIdsToDelete = Array.from(validIdsToDelete)
         .map((id) => ({ id, index: pages.findIndex((p) => p.id === id) }))
-        .filter((item) => item.index !== -1)
         .sort((a, b) => b.index - a.index)
 
       const removeOps = sortedIdsToDelete.map(({ id, index }) => {

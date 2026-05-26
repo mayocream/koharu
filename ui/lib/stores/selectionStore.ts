@@ -70,7 +70,8 @@ export const useSelectionStore = create<SelectionState>((set, get) => ({
   isSelected: (id) => get().nodeIds.has(id),
 
   setSelectedPageIds: (ids) =>
-    set((state) => ({
-      selectedPageIds: typeof ids === 'function' ? ids(state.selectedPageIds) : ids,
-    })),
+    set((state) => {
+      const next = typeof ids === 'function' ? ids(state.selectedPageIds) : ids
+      return { selectedPageIds: new Set(next) }
+    }),
 }))
