@@ -17,6 +17,6 @@
     "@openapitools/openapi-generator-cli": "^2.34.0",
     "@tauri-apps/cli": "^2.11.2",
     "git-cliff": "^2.13.1",
-    "oxfmt": "^0.49.0"
+    "oxfmt": "^0.51.0"
   }
 }
