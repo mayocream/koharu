@@ -35,7 +35,7 @@
     "@radix-ui/react-tooltip": "^1.2.8",
     "@sentry/nextjs": "^10.53.1",
     "@tanstack/react-query": "^5.100.14",
-    "@tanstack/react-virtual": "^3.13.25",
+    "@tanstack/react-virtual": "^3.13.26",
     "@tauri-apps/api": "^2.11.0",
     "@tauri-apps/plugin-dialog": "^2.7.1",
     "@tauri-apps/plugin-fs": "^2.5.1",
