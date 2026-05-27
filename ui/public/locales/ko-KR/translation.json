@@ -252,7 +252,8 @@
     "readingOrder": "읽기 순서",
     "readingOrderRtl": "우에서 좌 (RTL)",
     "readingOrderLtr": "좌에서 우 (LTR)",
-    "readingOrderCustom": "사용자 정의"
+    "readingOrderCustom": "사용자 정의",
+    "ocrTooltip": "이 블록에 OCR 실행"
   },
   "workspace": {
     "importPrompt": "편집을 시작하려면 페이지를 가져오세요.",

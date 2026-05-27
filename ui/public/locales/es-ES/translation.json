@@ -230,7 +230,8 @@
     "readingOrder": "Orden de lectura",
     "readingOrderRtl": "Derecha a izquierda (RTL)",
     "readingOrderLtr": "Izquierda a derecha (LTR)",
-    "readingOrderCustom": "Personalizado"
+    "readingOrderCustom": "Personalizado",
+    "ocrTooltip": "Ejecutar OCR para este bloque"
   },
   "workspace": {
     "importPrompt": "Importa una página para comenzar a editar.",

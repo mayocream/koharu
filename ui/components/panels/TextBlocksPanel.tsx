@@ -1,6 +1,6 @@
 'use client'
 
-import { Languages, LoaderCircleIcon, Trash2Icon } from 'lucide-react'
+import { Languages, LoaderCircleIcon, ScanTextIcon, Trash2Icon } from 'lucide-react'
 import { motion } from 'motion/react'
 import { useEffect } from 'react'
 import { useTranslation } from 'react-i18next'
@@ -104,6 +104,17 @@ export function TextBlocksPanel() {
     })
   }
 
+  const runOcr = async (nodeId: string) => {
+    if (!page) return
+    const cfg = await getConfig()
+    const ocr = cfg.pipeline?.ocr || 'paddle-ocr-vl-1.5'
+    await startPipeline({
+      steps: [ocr],
+      pages: [page.id],
+      textNodeIds: [nodeId],
+    })
+  }
+
   return (
     <div className='flex min-h-0 flex-1 flex-col' data-testid='panels-textblocks'>
       <div className='flex items-center justify-between border-b border-border px-2 py-1.5 text-xs font-semibold tracking-wide text-muted-foreground uppercase'>
@@ -190,6 +201,7 @@ export function TextBlocksPanel() {
                   onToggleSelect={() => select(node.id, true)}
                   onPatch={(patch) => void patchText(node.id, patch)}
                   onDelete={() => void removeNode(node.id)}
+                  onOcr={() => void runOcr(node.id)}
                   onGenerate={() => void generate(node.id)}
                   processing={isProcessing}
                   llmReady={llmReady}
@@ -210,6 +222,7 @@ type BlockCardProps = {
   onToggleSelect: () => void
   onPatch: (patch: TextDataPatch) => void
   onDelete: () => void
+  onOcr: () => void
   onGenerate: () => void
   processing: boolean
   llmReady: boolean
@@ -222,6 +235,7 @@ function BlockCard({
   onToggleSelect,
   onPatch,
   onDelete,
+  onOcr,
   onGenerate,
   processing,
   llmReady,
@@ -303,6 +317,28 @@ function BlockCard({
                   {t('textBlocks.translationLabel')}
                 </span>
                 <div className='flex items-center gap-0.5'>
+                  <Tooltip>
+                    <TooltipTrigger asChild>
+                      <Button
+                        data-testid={`textblock-ocr-run-${index}`}
+                        aria-label={t('textBlocks.ocrTooltip')}
+                        variant='ghost'
+                        size='icon-xs'
+                        disabled={processing}
+                        onClick={onOcr}
+                        className='size-5'
+                      >
+                        {processing ? (
+                          <LoaderCircleIcon className='size-3 animate-spin' />
+                        ) : (
+                          <ScanTextIcon className='size-3' />
+                        )}
+                      </Button>
+                    </TooltipTrigger>
+                    <TooltipContent side='left' sideOffset={4}>
+                      {t('textBlocks.ocrTooltip')}
+                    </TooltipContent>
+                  </Tooltip>
                   <Tooltip>
                     <TooltipTrigger asChild>
                       <Button
