@@ -244,7 +244,8 @@
     "brush": "画笔",
     "eraser": "橡皮擦",
     "brushSize": "笔刷大小",
-    "brushColor": "笔刷颜色"
+    "brushColor": "笔刷颜色",
+    "brushSizeHelp": "左右拖动以调整画笔大小。按住 Shift 键进行微调。"
   },
   "toolRail": {
     "select": "选择",

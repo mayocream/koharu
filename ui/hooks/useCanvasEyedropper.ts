@@ -128,8 +128,11 @@ const drawMagnifier = (
   ctx.fillText(color, padding + 24, padding + size + 11)
 }
 
-const isAltBrushEvent = (mode: ToolMode, event: CanvasPointerEvent | CanvasMouseEvent) =>
-  mode === 'brush' && event.altKey && !isTextInputTarget(event.target)
+const isAltBrushEvent = (
+  mode: ToolMode,
+  event: CanvasPointerEvent | CanvasMouseEvent,
+  forceAlt = false,
+) => mode === 'brush' && (forceAlt || event.altKey) && !isTextInputTarget(event.target)
 
 export function useCanvasEyedropper({
   mode,
@@ -147,6 +150,7 @@ export function useCanvasEyedropper({
   const sampleCanvasRef = React.useRef<SampleCanvas | null>(null)
   const overlayRef = React.useRef<HTMLCanvasElement | null>(null)
   const cursorRef = React.useRef<HTMLDivElement | null>(null)
+  const latestPointerEventRef = React.useRef<CanvasPointerEvent | null>(null)
   const sizeHudRef = React.useRef<HTMLDivElement | null>(null)
   const latestSampleRef = React.useRef<LatestSample | null>(null)
   const suppressContextMenuRef = React.useRef(false)
@@ -316,11 +320,11 @@ export function useCanvasEyedropper({
   )
 
   const updatePreview = React.useCallback(
-    async (event: CanvasPointerEvent) => {
+    async (event: CanvasPointerEvent, forceAlt = false) => {
       const overlay = overlayRef.current
       const cursor = cursorRef.current
 
-      if (!overlay || !cursor || !isAltBrushEvent(mode, event)) {
+      if (!overlay || !cursor || !isAltBrushEvent(mode, event, forceAlt)) {
         hidePreview()
         return
       }
@@ -420,6 +424,7 @@ export function useCanvasEyedropper({
 
   const handlePointerDownCapture = React.useCallback(
     (event: CanvasPointerEvent) => {
+      latestPointerEventRef.current = event
       if (!isAltBrushEvent(mode, event)) return false
 
       // Right button always means brush-size scrub. Never let it fall into eyedropper.
@@ -443,6 +448,7 @@ export function useCanvasEyedropper({
 
   const handlePointerMoveCapture = React.useCallback(
     (event: CanvasPointerEvent) => {
+      latestPointerEventRef.current = event
       // If right button is held, force size scrub even if pointerdown was missed.
       if (mode === 'brush' && event.altKey && (event.buttons & SECONDARY_BUTTONS_MASK) !== 0) {
         event.preventDefault()
@@ -520,6 +526,41 @@ export function useCanvasEyedropper({
       finishSizeScrub()
     }
   }, [finishSizeScrub, hidePreview, mode])
+
+  React.useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (mode === 'brush' && e.key === 'Alt') {
+        e.preventDefault()
+        setCursorHidden(true)
+        if (latestPointerEventRef.current) {
+          void updatePreview(latestPointerEventRef.current, true)
+        }
+      }
+    }
+
+    const handleKeyUp = (e: KeyboardEvent) => {
+      if (mode === 'brush' && e.key === 'Alt') {
+        e.preventDefault()
+        setCursorHidden(false)
+        hidePreview()
+      }
+    }
+
+    const handleBlur = () => {
+      setCursorHidden(false)
+      hidePreview()
+    }
+
+    window.addEventListener('keydown', handleKeyDown)
+    window.addEventListener('keyup', handleKeyUp)
+    window.addEventListener('blur', handleBlur)
+
+    return () => {
+      window.removeEventListener('keydown', handleKeyDown)
+      window.removeEventListener('keyup', handleKeyUp)
+      window.removeEventListener('blur', handleBlur)
+    }
+  }, [hidePreview, mode, setCursorHidden, updatePreview])
 
   return {
     handlePointerDownCapture,

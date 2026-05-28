@@ -11,6 +11,7 @@ import {
   Pipette,
   VectorSquare,
 } from 'lucide-react'
+import { AnimatePresence, motion } from 'motion/react'
 import type { ComponentType } from 'react'
 import * as React from 'react'
 import { useTranslation } from 'react-i18next'
@@ -114,6 +115,8 @@ const isDarkColor = (color: string) => {
 
 export function ToolRail() {
   const mode = useEditorUiStore((state) => state.mode)
+  const isBrushMode = mode === 'brush' || mode === 'eraser' || mode === 'repairBrush'
+  const isColorBrush = mode === 'brush'
   const setMode = useEditorUiStore((state) => state.setMode)
   const setToolOptionsOpen = useEditorUiStore((state) => state.setToolOptionsOpen)
   const showNavigator = useEditorUiStore((state) => state.showNavigator)
@@ -316,106 +319,140 @@ export function ToolRail() {
           )
         })}
 
-        <div className='my-1 h-px w-6 bg-border/70' />
+        <AnimatePresence initial={false}>
+          {isBrushMode && (
+            <motion.div
+              initial={{ height: 0, opacity: 0, margin: 0 }}
+              animate={{ height: '1px', opacity: 1, margin: '4px 0' }}
+              exit={{ height: 0, opacity: 0, margin: 0 }}
+              transition={{ duration: 0.18, ease: 'easeInOut' }}
+              className='w-6 bg-border/70'
+            />
+          )}
+        </AnimatePresence>
 
-        {canUseEyeDropper && (
-          <Tooltip>
-            <TooltipTrigger asChild>
-              <Button
-                type='button'
-                variant='ghost'
-                size='icon-sm'
-                onClick={() => {
-                  void pickFromScreen()
-                }}
-                className='h-7 w-8 rounded-lg border border-border/60 bg-background/35 text-muted-foreground hover:bg-muted/60 hover:text-foreground'
-                aria-label='Pick brush color from screen'
-              >
-                <Pipette className='h-3.5 w-3.5' />
-              </Button>
-            </TooltipTrigger>
-
-            <TooltipContent side='right' sideOffset={8}>
-              Pick brush color from screen
-            </TooltipContent>
-          </Tooltip>
-        )}
-
-        <Tooltip>
-          <TooltipTrigger asChild>
-            <div
-              className='relative flex h-9 w-8 items-center justify-center overflow-hidden rounded-lg border shadow-sm transition hover:scale-[1.03] hover:shadow'
-              style={{
-                backgroundColor: brushConfig.color,
-                borderColor: colorTileOuterBorder,
-                boxShadow: `inset 0 0 0 1px ${colorTileRing}`,
-                color: colorTileForeground,
-              }}
-              aria-label={t('toolbar.brushColor')}
+        <AnimatePresence initial={false}>
+          {isColorBrush && (
+            <motion.div
+              initial={{ height: 0, opacity: 0, scale: 0.82 }}
+              animate={{ height: 'auto', opacity: 1, scale: 1 }}
+              exit={{ height: 0, opacity: 0, scale: 0.82 }}
+              transition={{ duration: 0.2, ease: 'easeOut' }}
+              className='flex flex-col items-center gap-1 overflow-hidden'
             >
-              <Palette className='h-4 w-4 drop-shadow-sm' aria-hidden='true' />
+              {canUseEyeDropper && (
+                <Tooltip>
+                  <TooltipTrigger asChild>
+                    <Button
+                      type='button'
+                      variant='ghost'
+                      size='icon-sm'
+                      onClick={() => {
+                        void pickFromScreen()
+                      }}
+                      className='h-8 w-8 rounded-lg border border-transparent text-muted-foreground transition hover:border-border/70 hover:bg-muted/60 hover:text-foreground'
+                      aria-label='Pick brush color from screen'
+                    >
+                      <Pipette className='h-4 w-4' />
+                    </Button>
+                  </TooltipTrigger>
 
-              <ColorPicker
-                value={brushConfig.color}
-                onChange={(color) => setBrushConfig({ color })}
-                className='absolute inset-0 h-full w-full rounded-lg border-0 opacity-0'
-                aria-label={t('toolbar.brushColor')}
-              />
-            </div>
-          </TooltipTrigger>
+                  <TooltipContent side='right' sideOffset={8}>
+                    Pick brush color from screen
+                  </TooltipContent>
+                </Tooltip>
+              )}
 
-          <TooltipContent side='right' sideOffset={8}>
-            {t('toolbar.brushColor')} · {brushConfig.color}
-          </TooltipContent>
-        </Tooltip>
+              <Tooltip>
+                <TooltipTrigger asChild>
+                  <div
+                    className='relative flex h-8 w-8 items-center justify-center overflow-hidden rounded-lg border shadow-sm transition hover:scale-[1.03] hover:shadow'
+                    style={{
+                      backgroundColor: brushConfig.color,
+                      borderColor: colorTileOuterBorder,
+                      boxShadow: `inset 0 0 0 1px ${colorTileRing}`,
+                      color: colorTileForeground,
+                    }}
+                    aria-label={t('toolbar.brushColor')}
+                  >
+                    <Palette className='h-4 w-4 drop-shadow-sm' aria-hidden='true' />
 
-        <Tooltip>
-          <TooltipTrigger asChild>
-            <div
-              role='slider'
-              tabIndex={0}
-              aria-label={t('toolbar.brushSize')}
-              aria-valuemin={MIN_BRUSH_SIZE}
-              aria-valuemax={MAX_BRUSH_SIZE}
-              aria-valuenow={clampedValuenow}
-              onPointerDown={handleSizeScrubStart}
-              onPointerMove={handleSizeScrubMove}
-              onPointerUp={endSizeScrub}
-              onPointerCancel={endSizeScrub}
-              onKeyDown={handleKeyDown}
-              className='relative flex h-10 w-8 cursor-ew-resize flex-col items-center justify-center rounded-lg border border-border/70 bg-background/45 text-muted-foreground shadow-sm transition select-none hover:border-border hover:bg-muted/60 hover:text-foreground'
-              title='Drag left/right to adjust brush size. Hold Shift for fine adjustment.'
+                    <ColorPicker
+                      value={brushConfig.color}
+                      onChange={(color) => setBrushConfig({ color })}
+                      className='absolute inset-0 h-full w-full rounded-lg border-0 opacity-0'
+                      aria-label={t('toolbar.brushColor')}
+                    />
+                  </div>
+                </TooltipTrigger>
+
+                <TooltipContent side='right' sideOffset={8}>
+                  {t('toolbar.brushColor')} · {brushConfig.color}
+                </TooltipContent>
+              </Tooltip>
+            </motion.div>
+          )}
+        </AnimatePresence>
+
+        <AnimatePresence initial={false}>
+          {isBrushMode && (
+            <motion.div
+              initial={{ height: 0, opacity: 0, scale: 0.82 }}
+              animate={{ height: 'auto', opacity: 1, scale: 1 }}
+              exit={{ height: 0, opacity: 0, scale: 0.82 }}
+              transition={{ duration: 0.2, ease: 'easeOut' }}
+              className='flex flex-col items-center overflow-hidden'
             >
-              <CircleDot
-                className='text-primary'
-                style={{ width: `${sizePreview}px`, height: `${sizePreview}px` }}
-                aria-hidden='true'
-              />
+              <Tooltip>
+                <TooltipTrigger asChild>
+                  <div
+                    role='slider'
+                    tabIndex={0}
+                    aria-label={t('toolbar.brushSize')}
+                    aria-valuemin={MIN_BRUSH_SIZE}
+                    aria-valuemax={MAX_BRUSH_SIZE}
+                    aria-valuenow={clampedValuenow}
+                    onPointerDown={handleSizeScrubStart}
+                    onPointerMove={handleSizeScrubMove}
+                    onPointerUp={endSizeScrub}
+                    onPointerCancel={endSizeScrub}
+                    onKeyDown={handleKeyDown}
+                    className='relative flex h-10 w-8 cursor-ew-resize flex-col items-center justify-center rounded-lg border border-border/70 bg-background/45 text-muted-foreground shadow-sm transition select-none hover:border-border hover:bg-muted/60 hover:text-foreground'
+                    title={t('toolbar.brushSizeHelp')}
+                  >
+                    <CircleDot
+                      className='text-primary'
+                      style={{ width: `${sizePreview}px`, height: `${sizePreview}px` }}
+                      aria-hidden='true'
+                    />
 
-              <div className='mt-0.5 flex h-3.5 items-center justify-center'>
-                <Input
-                  value={localSize}
-                  onPointerDown={(event) => event.stopPropagation()}
-                  onChange={(event) => {
-                    const next = Number(event.target.value)
-                    if (Number.isFinite(next)) setLocalSize(next)
-                  }}
-                  onBlur={() => commitSize(localSize)}
-                  onKeyDown={(event) => {
-                    event.stopPropagation()
-                    if (event.key === 'Enter') commitSize(localSize)
-                  }}
-                  aria-label='Brush size value'
-                  className='h-3.5 w-6 border-0 bg-transparent p-0 text-center font-mono text-[10px] font-semibold text-foreground shadow-none focus-visible:ring-0'
-                />
-              </div>
-            </div>
-          </TooltipTrigger>
+                    <div className='mt-0.5 flex h-3.5 items-center justify-center'>
+                      <Input
+                        value={localSize}
+                        onPointerDown={(event) => event.stopPropagation()}
+                        onChange={(event) => {
+                          const next = Number(event.target.value)
+                          if (Number.isFinite(next)) setLocalSize(next)
+                        }}
+                        onBlur={() => commitSize(localSize)}
+                        onKeyDown={(event) => {
+                          event.stopPropagation()
+                          if (event.key === 'Enter') commitSize(localSize)
+                        }}
+                        aria-label='Brush size value'
+                        className='h-3.5 w-6 border-0 bg-transparent p-0 text-center font-mono text-[10px] font-semibold text-foreground shadow-none focus-visible:ring-0'
+                      />
+                    </div>
+                  </div>
+                </TooltipTrigger>
 
-          <TooltipContent side='right' sideOffset={8}>
-            {t('toolbar.brushSize')} · {localSize}px ([ / ], Alt + right drag)
-          </TooltipContent>
-        </Tooltip>
+                <TooltipContent side='right' sideOffset={8}>
+                  {t('toolbar.brushSize')} · {localSize}px ([ / ], Alt + right drag)
+                </TooltipContent>
+              </Tooltip>
+            </motion.div>
+          )}
+        </AnimatePresence>
       </div>
     </div>
   )

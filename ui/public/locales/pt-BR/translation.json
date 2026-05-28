@@ -245,7 +245,8 @@
     "brush": "Pincel",
     "eraser": "Borracha",
     "brushSize": "Tamanho do pincel",
-    "brushColor": "Cor do pincel"
+    "brushColor": "Cor do pincel",
+    "brushSizeHelp": "Arraste para a esquerda/direita para ajustar o tamanho do pincel. Segure Shift para ajuste fino."
   },
   "toolRail": {
     "select": "Selecionar",

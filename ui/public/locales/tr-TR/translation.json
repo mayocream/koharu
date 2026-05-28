@@ -244,7 +244,8 @@
     "brush": "Fırça",
     "eraser": "Silgi",
     "brushSize": "Fırça boyutu",
-    "brushColor": "Fırça rengi"
+    "brushColor": "Fırça rengi",
+    "brushSizeHelp": "Fırça boyutunu ayarlamak için sola/sağa sürükleyin. Hassas ayar için Shift tuşunu basılı tutun."
   },
   "toolRail": {
     "select": "Seç",

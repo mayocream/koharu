@@ -14,6 +14,8 @@ export function useBrushCursor(
   const cachedRectRef = useRef<DOMRect | null>(null)
   const mousePosRef = useRef<{ x: number; y: number } | null>(null)
   const isInsideRef = useRef(false)
+  const altPressedRef = useRef(false)
+  const updateCursorPositionRef = useRef<((clientX: number, clientY: number) => void) | null>(null)
   const brushSize = usePreferencesStore((state) => state.brushConfig.size)
 
   const isBrushMode = useMemo(
@@ -24,6 +26,52 @@ export function useBrushCursor(
   const isBrushModeRef = useRef(isBrushMode)
   useEffect(() => {
     isBrushModeRef.current = isBrushMode
+    syncVisibility()
+  }, [isBrushMode])
+
+  const syncVisibility = () => {
+    const cursor = brushCursorRef.current
+    if (!cursor) return
+
+    if (isBrushMode && isInsideRef.current && !altPressedRef.current) {
+      cursor.style.opacity = '1'
+      if (mousePosRef.current && updateCursorPositionRef.current) {
+        updateCursorPositionRef.current(mousePosRef.current.x, mousePosRef.current.y)
+      }
+    } else {
+      cursor.style.opacity = '0'
+    }
+  }
+
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.key === 'Alt') {
+        altPressedRef.current = true
+        syncVisibility()
+      }
+    }
+
+    const handleKeyUp = (e: KeyboardEvent) => {
+      if (e.key === 'Alt') {
+        altPressedRef.current = false
+        syncVisibility()
+      }
+    }
+
+    const handleBlur = () => {
+      altPressedRef.current = false
+      syncVisibility()
+    }
+
+    window.addEventListener('keydown', handleKeyDown)
+    window.addEventListener('keyup', handleKeyUp)
+    window.addEventListener('blur', handleBlur)
+
+    return () => {
+      window.removeEventListener('keydown', handleKeyDown)
+      window.removeEventListener('keyup', handleKeyUp)
+      window.removeEventListener('blur', handleBlur)
+    }
   }, [isBrushMode])
 
   useEffect(() => {
@@ -45,31 +93,30 @@ export function useBrushCursor(
       const y = clientY - rect.top
       brushCursorRef.current.style.transform = `translate(${x}px, ${y}px) translate(-50%, -50%)`
     }
+    updateCursorPositionRef.current = updateCursorPosition
 
     const handleMove = (e: PointerEvent) => {
       mousePosRef.current = { x: e.clientX, y: e.clientY }
-      updateCursorPosition(e.clientX, e.clientY)
+      if (isInsideRef.current) {
+        updateCursorPosition(e.clientX, e.clientY)
+      }
     }
 
     const handleEnter = () => {
       isInsideRef.current = true
       refresh()
-      if (isBrushModeRef.current && brushCursorRef.current) {
-        brushCursorRef.current.style.opacity = '1'
-      }
+      syncVisibility()
     }
 
     const handleLeave = () => {
       isInsideRef.current = false
-      if (brushCursorRef.current) {
-        brushCursorRef.current.style.opacity = '0'
-      }
+      syncVisibility()
     }
 
     const resizeObserver = new ResizeObserver(() => refresh())
     resizeObserver.observe(canvas)
 
-    canvas.addEventListener('pointermove', handleMove)
+    window.addEventListener('pointermove', handleMove, { capture: true })
     canvas.addEventListener('pointerenter', handleEnter)
     canvas.addEventListener('pointerleave', handleLeave)
     window.addEventListener('scroll', refresh, true)
@@ -82,26 +129,15 @@ export function useBrushCursor(
 
     return () => {
       resizeObserver.disconnect()
-      canvas.removeEventListener('pointermove', handleMove)
+      window.removeEventListener('pointermove', handleMove, { capture: true })
       canvas.removeEventListener('pointerenter', handleEnter)
       canvas.removeEventListener('pointerleave', handleLeave)
       window.removeEventListener('scroll', refresh, true)
       window.removeEventListener('resize', refresh)
+      updateCursorPositionRef.current = null
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [canvasRef, pageKey])
-
-  // Separate effect for visibility to avoid re-attaching listeners
-  useEffect(() => {
-    const cursor = brushCursorRef.current
-    if (!cursor) return
-
-    if (isBrushMode && isInsideRef.current) {
-      cursor.style.opacity = '1'
-    } else {
-      cursor.style.opacity = '0'
-    }
-  }, [isBrushMode])
 
   return { brushCursorRef, isBrushMode, brushSize }
 }
