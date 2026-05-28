@@ -1,4 +1,4 @@
-﻿'use client'
+'use client'
 
 import { create } from 'zustand'
 
@@ -7,7 +7,7 @@ import type { RenderEffect, RenderStroke, ToolMode } from '@/lib/types'
 
 /**
  * Editor UI state (canvas scale, tool mode, layer-visibility toggles, local
- * UI errors). Does **not** hold scene data â€” that lives in `sceneStore`, and
+ * UI errors). Does **not** hold scene data — that lives in `sceneStore`, and
  * the active page id lives in `selectionStore`.
  */
 
@@ -86,8 +86,8 @@ const initialState = {
   showRenderedImage: false,
   showTextBlocksOverlay: false,
   mode: 'select' as ToolMode,
-    toolOptionsOpen: false,
-renderEffect: { italic: false, bold: false } as RenderEffect,
+  toolOptionsOpen: false,
+  renderEffect: { italic: false, bold: false } as RenderEffect,
   renderStroke: undefined as RenderStroke | undefined,
   selectedTarget: undefined as LlmTarget | undefined,
   selectedLanguage: undefined as string | undefined,
@@ -111,10 +111,9 @@ export const useEditorUiStore = create<EditorUiState>((set) => ({
   setShowRenderedImage: (show) => set({ showRenderedImage: show }),
   setShowTextBlocksOverlay: (show) => set({ showTextBlocksOverlay: show }),
 
-  
   setToolOptionsOpen: (toolOptionsOpen) => set({ toolOptionsOpen }),
-  toggleToolOptionsOpen: () =>
-    set((state) => ({ toolOptionsOpen: !state.toolOptionsOpen })),setMode: (mode) => {
+  toggleToolOptionsOpen: () => set((state) => ({ toolOptionsOpen: !state.toolOptionsOpen })),
+  setMode: (mode) => {
     const isBrushTool = mode === 'repairBrush' || mode === 'brush' || mode === 'eraser'
 
     set({ mode, toolOptionsOpen: isBrushTool })
@@ -158,4 +157,3 @@ export const useEditorUiStore = create<EditorUiState>((set) => ({
 
   setReadingOrder: (readingOrder) => set({ readingOrder }),
 }))
-

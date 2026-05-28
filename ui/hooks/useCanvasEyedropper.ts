@@ -36,7 +36,9 @@ type UseCanvasEyedropperOptions = {
 
 type LatestSample = {
   color: string
-  previewUrl: string | null
+  x: number
+  y: number
+  sampleCanvas: HTMLCanvasElement
 }
 
 const MIN_BRUSH_SIZE = 8
@@ -76,29 +78,27 @@ const createImageBitmapFromBytes = async (data: Uint8Array) => {
   return await createImageBitmap(blob)
 }
 
-const makeMagnifierDataUrl = (
+const drawMagnifier = (
+  overlayCanvas: HTMLCanvasElement,
   source: HTMLCanvasElement,
   x: number,
   y: number,
   color: string,
 ) => {
+  const ctx = overlayCanvas.getContext('2d')
+  if (!ctx) return
+
   const sourceSize = 13
   const zoom = 7
   const padding = 8
   const labelHeight = 22
   const size = sourceSize * zoom
-  const canvas = document.createElement('canvas')
-  canvas.width = size + padding * 2
-  canvas.height = size + padding * 2 + labelHeight
 
-  const ctx = canvas.getContext('2d')
-  if (!ctx) return null
+  ctx.fillStyle = 'rgba(2, 6, 23, 0.96)'
+  ctx.fillRect(0, 0, overlayCanvas.width, overlayCanvas.height)
 
   const sx = Math.max(0, Math.min(source.width - sourceSize, x - Math.floor(sourceSize / 2)))
   const sy = Math.max(0, Math.min(source.height - sourceSize, y - Math.floor(sourceSize / 2)))
-
-  ctx.fillStyle = 'rgba(2, 6, 23, 0.96)'
-  ctx.fillRect(0, 0, canvas.width, canvas.height)
 
   ctx.imageSmoothingEnabled = false
   ctx.drawImage(source, sx, sy, sourceSize, sourceSize, padding, padding, size, size)
@@ -126,8 +126,6 @@ const makeMagnifierDataUrl = (
   ctx.font = '11px ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace'
   ctx.textBaseline = 'middle'
   ctx.fillText(color, padding + 24, padding + size + 11)
-
-  return canvas.toDataURL('image/png')
 }
 
 const isAltBrushEvent = (mode: ToolMode, event: CanvasPointerEvent | CanvasMouseEvent) =>
@@ -147,7 +145,7 @@ export function useCanvasEyedropper({
   const brushSize = usePreferencesStore((state) => state.brushConfig.size)
 
   const sampleCanvasRef = React.useRef<SampleCanvas | null>(null)
-  const overlayRef = React.useRef<HTMLDivElement | null>(null)
+  const overlayRef = React.useRef<HTMLCanvasElement | null>(null)
   const cursorRef = React.useRef<HTMLDivElement | null>(null)
   const sizeHudRef = React.useRef<HTMLDivElement | null>(null)
   const latestSampleRef = React.useRef<LatestSample | null>(null)
@@ -181,7 +179,9 @@ export function useCanvasEyedropper({
   }, [])
 
   React.useEffect(() => {
-    const overlay = document.createElement('div')
+    const overlay = document.createElement('canvas')
+    overlay.width = 107
+    overlay.height = 129
     overlay.style.position = 'fixed'
     overlay.style.zIndex = '2147483647'
     overlay.style.pointerEvents = 'none'
@@ -205,8 +205,7 @@ export function useCanvasEyedropper({
     cursor.style.height = '18px'
     cursor.style.borderRadius = '9999px'
     cursor.style.border = '1px solid rgba(255, 255, 255, 0.96)'
-    cursor.style.boxShadow =
-      '0 0 0 1px rgba(15, 23, 42, 0.95), 0 0 12px rgba(0, 0, 0, 0.55)'
+    cursor.style.boxShadow = '0 0 0 1px rgba(15, 23, 42, 0.95), 0 0 12px rgba(0, 0, 0, 0.55)'
     cursor.style.transform = 'translate(-50%, -50%)'
     cursor.innerHTML =
       '<div style="position:absolute;left:50%;top:-5px;width:1px;height:28px;background:rgba(255,255,255,.86);box-shadow:0 0 0 1px rgba(15,23,42,.72);transform:translateX(-50%)"></div><div style="position:absolute;left:-5px;top:50%;width:28px;height:1px;background:rgba(255,255,255,.86);box-shadow:0 0 0 1px rgba(15,23,42,.72);transform:translateY(-50%)"></div><div style="position:absolute;left:50%;top:50%;width:4px;height:4px;border-radius:9999px;background:rgba(255,255,255,.96);box-shadow:0 0 0 1px rgba(15,23,42,.95);transform:translate(-50%,-50%)"></div>'
@@ -224,8 +223,7 @@ export function useCanvasEyedropper({
     sizeHud.style.boxShadow = '0 12px 30px rgba(0, 0, 0, 0.34)'
     sizeHud.style.background = 'rgba(2, 6, 23, 0.92)'
     sizeHud.style.color = '#f8fafc'
-    sizeHud.style.font =
-      '11px ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace'
+    sizeHud.style.font = '11px ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace'
     sizeHud.style.textAlign = 'center'
     document.body.appendChild(sizeHud)
 
@@ -309,9 +307,8 @@ export function useCanvasEyedropper({
       const y = Math.max(0, Math.min(sampleCanvas.canvas.height - 1, Math.floor(point.y)))
       const pixel = sampleCanvas.ctx.getImageData(x, y, 1, 1).data
       const color = toHex(pixel[0] ?? 0, pixel[1] ?? 0, pixel[2] ?? 0)
-      const previewUrl = makeMagnifierDataUrl(sampleCanvas.canvas, x, y, color)
 
-      const sample = { color, previewUrl }
+      const sample = { color, x, y, sampleCanvas: sampleCanvas.canvas }
       latestSampleRef.current = sample
       return sample
     },
@@ -335,13 +332,16 @@ export function useCanvasEyedropper({
       cursor.style.display = 'block'
 
       const sample = await sampleAtEvent(event)
-      if (!sample?.previewUrl) return
+      if (!sample) {
+        hidePreview()
+        return
+      }
 
       overlay.style.left = `${event.clientX + 18}px`
       overlay.style.top = `${event.clientY + 18}px`
-      overlay.style.backgroundImage = `url(${sample.previewUrl})`
-      overlay.style.backgroundSize = '107px 129px'
       overlay.style.display = 'block'
+
+      drawMagnifier(overlay, sample.sampleCanvas, sample.x, sample.y, sample.color)
     },
     [hidePreview, mode, sampleAtEvent, setCursorHidden],
   )
@@ -433,20 +433,12 @@ export function useCanvasEyedropper({
       if (event.button === LEFT_BUTTON) {
         event.preventDefault()
         event.stopPropagation()
-
-        void sampleAtEvent(event).then((sample) => {
-          if (sample?.color) {
-            setBrushConfig({ color: sample.color })
-          }
-          hidePreview()
-        })
-
         return true
       }
 
       return false
     },
-    [hidePreview, mode, sampleAtEvent, setBrushConfig, startSizeScrub],
+    [mode, startSizeScrub],
   )
 
   const handlePointerMoveCapture = React.useCallback(

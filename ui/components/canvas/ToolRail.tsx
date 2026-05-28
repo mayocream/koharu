@@ -19,10 +19,8 @@ import { Button } from '@/components/ui/button'
 import { ColorPicker } from '@/components/ui/color-picker'
 import { Input } from '@/components/ui/input'
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip'
-
 import { useEditorUiStore } from '@/lib/stores/editorUiStore'
 import { usePreferencesStore } from '@/lib/stores/preferencesStore'
-
 import type { ToolMode } from '@/lib/types'
 
 type ModeDefinition = {
@@ -126,7 +124,7 @@ export function ToolRail() {
 
   const { t } = useTranslation()
 
-  const [localSize, setLocalSize] = React.useState(brushConfig.size || DEFAULT_BRUSH_SIZE)
+  const [localSize, setLocalSize] = React.useState(brushConfig.size ?? DEFAULT_BRUSH_SIZE)
   const [isScrubbing, setIsScrubbing] = React.useState(false)
   const [canUseEyeDropper, setCanUseEyeDropper] = React.useState(false)
 
@@ -145,13 +143,13 @@ export function ToolRail() {
 
   React.useEffect(() => {
     if (!isScrubbing) {
-      setLocalSize(brushConfig.size || DEFAULT_BRUSH_SIZE)
+      setLocalSize(brushConfig.size ?? DEFAULT_BRUSH_SIZE)
     }
   }, [brushConfig.size, isScrubbing])
 
   const commitSize = React.useCallback(
     (size: number) => {
-      const clamped = clampBrushSize(size || DEFAULT_BRUSH_SIZE)
+      const clamped = clampBrushSize(size ?? DEFAULT_BRUSH_SIZE)
       setLocalSize(clamped)
       setBrushConfig({ size: clamped })
     },
@@ -214,15 +212,46 @@ export function ToolRail() {
     setIsScrubbing(false)
   }
 
+  const handleKeyDown = (event: React.KeyboardEvent<HTMLDivElement>) => {
+    const step = event.shiftKey ? 1 : 4
+    let nextSize = localSize
+
+    switch (event.key) {
+      case 'ArrowUp':
+      case 'ArrowRight':
+        event.preventDefault()
+        nextSize = clampBrushSize(localSize + step)
+        commitSize(nextSize)
+        break
+      case 'ArrowDown':
+      case 'ArrowLeft':
+        event.preventDefault()
+        nextSize = clampBrushSize(localSize - step)
+        commitSize(nextSize)
+        break
+      case 'Home':
+        event.preventDefault()
+        nextSize = MIN_BRUSH_SIZE
+        commitSize(nextSize)
+        break
+      case 'End':
+        event.preventDefault()
+        nextSize = MAX_BRUSH_SIZE
+        commitSize(nextSize)
+        break
+      default:
+        break
+    }
+  }
+
   const brushColorIsDark = isDarkColor(brushConfig.color)
   const colorTileForeground = brushColorIsDark ? '#f8fafc' : '#020617'
-  const colorTileRing = brushColorIsDark
-    ? 'rgba(248, 250, 252, 0.72)'
-    : 'rgba(2, 6, 23, 0.55)'
+  const colorTileRing = brushColorIsDark ? 'rgba(248, 250, 252, 0.72)' : 'rgba(2, 6, 23, 0.55)'
   const colorTileOuterBorder = brushColorIsDark
     ? 'rgba(248, 250, 252, 0.22)'
     : 'rgba(2, 6, 23, 0.24)'
   const sizePreview = Math.max(9, Math.min(18, localSize / 7))
+  const clampedValuenow = Math.max(MIN_BRUSH_SIZE, Math.min(MAX_BRUSH_SIZE, localSize))
 
   const handleToolClick = (value: ToolMode) => {
     setMode(value)
@@ -345,15 +374,16 @@ export function ToolRail() {
             <div
               role='slider'
               tabIndex={0}
-              aria-label='Drag horizontally to adjust brush size'
+              aria-label={t('toolbar.brushSize')}
               aria-valuemin={MIN_BRUSH_SIZE}
               aria-valuemax={MAX_BRUSH_SIZE}
-              aria-valuenow={localSize}
+              aria-valuenow={clampedValuenow}
               onPointerDown={handleSizeScrubStart}
               onPointerMove={handleSizeScrubMove}
               onPointerUp={endSizeScrub}
               onPointerCancel={endSizeScrub}
-              className='relative flex h-10 w-8 cursor-ew-resize select-none flex-col items-center justify-center rounded-lg border border-border/70 bg-background/45 text-muted-foreground shadow-sm transition hover:border-border hover:bg-muted/60 hover:text-foreground'
+              onKeyDown={handleKeyDown}
+              className='relative flex h-10 w-8 cursor-ew-resize flex-col items-center justify-center rounded-lg border border-border/70 bg-background/45 text-muted-foreground shadow-sm transition select-none hover:border-border hover:bg-muted/60 hover:text-foreground'
               title='Drag left/right to adjust brush size. Hold Shift for fine adjustment.'
             >
               <CircleDot
@@ -372,6 +402,7 @@ export function ToolRail() {
                   }}
                   onBlur={() => commitSize(localSize)}
                   onKeyDown={(event) => {
+                    event.stopPropagation()
                     if (event.key === 'Enter') commitSize(localSize)
                   }}
                   aria-label='Brush size value'
