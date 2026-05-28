@@ -1,6 +1,6 @@
 'use client'
 
-import { useEffect, useRef, useMemo } from 'react'
+import { useCallback, useEffect, useRef, useMemo } from 'react'
 import type React from 'react'
 
 import { usePreferencesStore } from '@/lib/stores/preferencesStore'
@@ -23,13 +23,7 @@ export function useBrushCursor(
     [mode],
   )
 
-  const isBrushModeRef = useRef(isBrushMode)
-  useEffect(() => {
-    isBrushModeRef.current = isBrushMode
-    syncVisibility()
-  }, [isBrushMode])
-
-  const syncVisibility = () => {
+  const syncVisibility = useCallback(() => {
     const cursor = brushCursorRef.current
     if (!cursor) return
 
@@ -41,7 +35,13 @@ export function useBrushCursor(
     } else {
       cursor.style.opacity = '0'
     }
-  }
+  }, [isBrushMode])
+
+  const isBrushModeRef = useRef(isBrushMode)
+  useEffect(() => {
+    isBrushModeRef.current = isBrushMode
+    syncVisibility()
+  }, [isBrushMode, syncVisibility])
 
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
@@ -72,7 +72,7 @@ export function useBrushCursor(
       window.removeEventListener('keyup', handleKeyUp)
       window.removeEventListener('blur', handleBlur)
     }
-  }, [isBrushMode])
+  }, [isBrushMode, syncVisibility])
 
   useEffect(() => {
     const canvas = canvasRef.current
@@ -137,7 +137,7 @@ export function useBrushCursor(
       updateCursorPositionRef.current = null
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [canvasRef, pageKey])
+  }, [canvasRef, pageKey, syncVisibility])
 
   return { brushCursorRef, isBrushMode, brushSize }
 }

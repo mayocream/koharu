@@ -46,10 +46,7 @@ type EditorUiState = {
 
   // tools
   mode: ToolMode
-  toolOptionsOpen: boolean
   setMode: (mode: ToolMode) => void
-  setToolOptionsOpen: (open: boolean) => void
-  toggleToolOptionsOpen: () => void
 
   // render style defaults (per-session)
   renderEffect: RenderEffect
@@ -86,7 +83,6 @@ const initialState = {
   showRenderedImage: false,
   showTextBlocksOverlay: false,
   mode: 'select' as ToolMode,
-  toolOptionsOpen: false,
   renderEffect: { italic: false, bold: false } as RenderEffect,
   renderStroke: undefined as RenderStroke | undefined,
   selectedTarget: undefined as LlmTarget | undefined,
@@ -111,12 +107,10 @@ export const useEditorUiStore = create<EditorUiState>((set) => ({
   setShowRenderedImage: (show) => set({ showRenderedImage: show }),
   setShowTextBlocksOverlay: (show) => set({ showTextBlocksOverlay: show }),
 
-  setToolOptionsOpen: (toolOptionsOpen) => set({ toolOptionsOpen }),
-  toggleToolOptionsOpen: () => set((state) => ({ toolOptionsOpen: !state.toolOptionsOpen })),
   setMode: (mode) => {
     const isBrushTool = mode === 'repairBrush' || mode === 'brush' || mode === 'eraser'
 
-    set({ mode, toolOptionsOpen: isBrushTool })
+    set({ mode })
 
     if (isBrushTool) {
       set({ showRenderedImage: false, showInpaintedImage: true })

@@ -1,8 +1,10 @@
 'use client'
 
 import * as React from 'react'
+import { useTranslation } from 'react-i18next'
 
 import type { Page } from '@/lib/api/schemas'
+import { MIN_BRUSH_SIZE, MAX_BRUSH_SIZE, clampBrushSize, DEFAULT_BRUSH_SIZE } from '@/lib/brush'
 import { usePreferencesStore } from '@/lib/stores/preferencesStore'
 import type { ToolMode } from '@/lib/types'
 
@@ -41,10 +43,6 @@ type LatestSample = {
   sampleCanvas: HTMLCanvasElement
 }
 
-const MIN_BRUSH_SIZE = 8
-const MAX_BRUSH_SIZE = 128
-const DEFAULT_BRUSH_SIZE = 32
-
 // Fast anchored scrub. The OS cursor is hidden and the HUD stays at the start point.
 const SCRUB_SENSITIVITY = 0.85
 const FINE_SCRUB_SENSITIVITY = 0.22
@@ -53,9 +51,6 @@ const LEFT_BUTTON = 0
 const RIGHT_BUTTON = 2
 const PRIMARY_BUTTONS_MASK = 1
 const SECONDARY_BUTTONS_MASK = 2
-
-const clampBrushSize = (size: number) =>
-  Math.max(MIN_BRUSH_SIZE, Math.min(MAX_BRUSH_SIZE, Math.round(size)))
 
 const componentToHex = (value: number) => value.toString(16).padStart(2, '0').toUpperCase()
 
@@ -144,6 +139,7 @@ export function useCanvasEyedropper({
   showRenderedImage,
   pointerToDocument,
 }: UseCanvasEyedropperOptions) {
+  const { t } = useTranslation()
   const setBrushConfig = usePreferencesStore((state) => state.setBrushConfig)
   const brushSize = usePreferencesStore((state) => state.brushConfig.size)
 
@@ -151,6 +147,7 @@ export function useCanvasEyedropper({
   const overlayRef = React.useRef<HTMLCanvasElement | null>(null)
   const cursorRef = React.useRef<HTMLDivElement | null>(null)
   const latestPointerEventRef = React.useRef<CanvasPointerEvent | null>(null)
+  const isOverCanvasRef = React.useRef(false)
   const sizeHudRef = React.useRef<HTMLDivElement | null>(null)
   const latestSampleRef = React.useRef<LatestSample | null>(null)
   const suppressContextMenuRef = React.useRef(false)
@@ -364,12 +361,12 @@ export function useCanvasEyedropper({
 
       setCursorHidden(true)
 
-      sizeHud.innerHTML = `<span style="opacity:.68">Brush</span> <strong>${size}px</strong>`
+      sizeHud.innerHTML = `<span style="opacity:.68">${t('toolbar.brush')}</span> <strong>${size}px</strong>`
       sizeHud.style.left = `${scrub.hudX}px`
       sizeHud.style.top = `${scrub.hudY}px`
       sizeHud.style.display = 'block'
     },
-    [setCursorHidden],
+    [setCursorHidden, t],
   )
 
   const startSizeScrub = React.useCallback(
@@ -424,6 +421,7 @@ export function useCanvasEyedropper({
 
   const handlePointerDownCapture = React.useCallback(
     (event: CanvasPointerEvent) => {
+      isOverCanvasRef.current = true
       latestPointerEventRef.current = event
       if (!isAltBrushEvent(mode, event)) return false
 
@@ -448,6 +446,7 @@ export function useCanvasEyedropper({
 
   const handlePointerMoveCapture = React.useCallback(
     (event: CanvasPointerEvent) => {
+      isOverCanvasRef.current = true
       latestPointerEventRef.current = event
       // If right button is held, force size scrub even if pointerdown was missed.
       if (mode === 'brush' && event.altKey && (event.buttons & SECONDARY_BUTTONS_MASK) !== 0) {
@@ -499,6 +498,8 @@ export function useCanvasEyedropper({
   )
 
   const handlePointerLeave = React.useCallback(() => {
+    isOverCanvasRef.current = false
+    latestPointerEventRef.current = null
     hidePreview()
     finishSizeScrub()
   }, [finishSizeScrub, hidePreview])
@@ -530,7 +531,9 @@ export function useCanvasEyedropper({
   React.useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
       if (mode === 'brush' && e.key === 'Alt') {
-        e.preventDefault()
+        if (isOverCanvasRef.current) {
+          e.preventDefault()
+        }
         setCursorHidden(true)
         if (latestPointerEventRef.current) {
           void updatePreview(latestPointerEventRef.current, true)
@@ -540,7 +543,9 @@ export function useCanvasEyedropper({
 
     const handleKeyUp = (e: KeyboardEvent) => {
       if (mode === 'brush' && e.key === 'Alt') {
-        e.preventDefault()
+        if (isOverCanvasRef.current) {
+          e.preventDefault()
+        }
         setCursorHidden(false)
         hidePreview()
       }

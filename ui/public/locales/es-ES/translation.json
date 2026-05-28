@@ -245,7 +245,9 @@
     "eraser": "Borrador",
     "brushSize": "Tamaño del pincel",
     "brushColor": "Color del pincel",
-    "brushSizeHelp": "Arrastre a la izquierda/derecha para ajustar el tamaño del pincel. Mantenga presionado Shift para un ajuste preciso."
+    "brushSizeHelp": "Arrastre a la izquierda/derecha para ajustar el tamaño del pincel. Mantenga presionado Shift para un ajuste preciso.",
+    "pickColor": "Elegir el color del pincel de la pantalla",
+    "brushSizeValue": "Valor del tamaño del pincel"
   },
   "toolRail": {
     "select": "Seleccionar",

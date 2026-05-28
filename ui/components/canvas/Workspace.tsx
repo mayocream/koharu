@@ -288,7 +288,7 @@ export function Workspace() {
   return (
     <div className='relative flex min-h-0 min-w-0 flex-1 bg-muted'>
       <ToolRail />
-      <SubToolRail />
+      {/* <SubToolRail /> */}
       <div className='relative flex min-h-0 min-w-0 flex-1 flex-col'>
         <CanvasToolbar />
         <ScrollAreaPrimitive.Root className='flex min-h-0 min-w-0 flex-1'>

@@ -245,7 +245,9 @@
     "eraser": "消しゴム",
     "brushSize": "ブラシサイズ",
     "brushColor": "ブラシカラー",
-    "brushSizeHelp": "左右にドラッグしてブラシサイズを調整します。Shiftキーを押しながらで微調整が可能です。"
+    "brushSizeHelp": "左右にドラッグしてブラシサイズを調整します。Shiftキーを押しながらで微調整が可能です。",
+    "pickColor": "画面からブラシカラーを抽出",
+    "brushSizeValue": "ブラシサイズの数値"
   },
   "toolRail": {
     "select": "選択",

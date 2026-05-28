@@ -245,7 +245,9 @@
     "eraser": "Silgi",
     "brushSize": "Fırça boyutu",
     "brushColor": "Fırça rengi",
-    "brushSizeHelp": "Fırça boyutunu ayarlamak için sola/sağa sürükleyin. Hassas ayar için Shift tuşunu basılı tutun."
+    "brushSizeHelp": "Fırça boyutunu ayarlamak için sola/sağa sürükleyin. Hassas ayar için Shift tuşunu basılı tutun.",
+    "pickColor": "Ekrandan fırça rengi seç",
+    "brushSizeValue": "Fırça boyutu değeri"
   },
   "toolRail": {
     "select": "Seç",

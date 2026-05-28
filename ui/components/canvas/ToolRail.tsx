@@ -20,6 +20,7 @@ import { Button } from '@/components/ui/button'
 import { ColorPicker } from '@/components/ui/color-picker'
 import { Input } from '@/components/ui/input'
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip'
+import { MIN_BRUSH_SIZE, MAX_BRUSH_SIZE, clampBrushSize } from '@/lib/brush'
 import { useEditorUiStore } from '@/lib/stores/editorUiStore'
 import { usePreferencesStore } from '@/lib/stores/preferencesStore'
 import type { ToolMode } from '@/lib/types'
@@ -68,14 +69,8 @@ const MODES: ModeDefinition[] = [
   },
 ]
 
-const MIN_BRUSH_SIZE = 8
-const MAX_BRUSH_SIZE = 128
-const DEFAULT_BRUSH_SIZE = 32
 const SCRUB_SENSITIVITY = 0.35
 const FINE_SCRUB_SENSITIVITY = 0.12
-
-const clampBrushSize = (size: number) =>
-  Math.max(MIN_BRUSH_SIZE, Math.min(MAX_BRUSH_SIZE, Math.round(size)))
 
 const normalizeHex = (value: string) => {
   const prefixed = value.startsWith('#') ? value : `#${value}`
@@ -118,7 +113,6 @@ export function ToolRail() {
   const isBrushMode = mode === 'brush' || mode === 'eraser' || mode === 'repairBrush'
   const isColorBrush = mode === 'brush'
   const setMode = useEditorUiStore((state) => state.setMode)
-  const setToolOptionsOpen = useEditorUiStore((state) => state.setToolOptionsOpen)
   const showNavigator = useEditorUiStore((state) => state.showNavigator)
   const setShowNavigator = useEditorUiStore((state) => state.setShowNavigator)
   const shortcuts = usePreferencesStore((state) => state.shortcuts)
@@ -258,7 +252,6 @@ export function ToolRail() {
 
   const handleToolClick = (value: ToolMode) => {
     setMode(value)
-    setToolOptionsOpen(false)
   }
 
   return (
@@ -351,14 +344,14 @@ export function ToolRail() {
                         void pickFromScreen()
                       }}
                       className='h-8 w-8 rounded-lg border border-transparent text-muted-foreground transition hover:border-border/70 hover:bg-muted/60 hover:text-foreground'
-                      aria-label='Pick brush color from screen'
+                      aria-label={t('toolbar.pickColor')}
                     >
                       <Pipette className='h-4 w-4' />
                     </Button>
                   </TooltipTrigger>
 
                   <TooltipContent side='right' sideOffset={8}>
-                    Pick brush color from screen
+                    {t('toolbar.pickColor')}
                   </TooltipContent>
                 </Tooltip>
               )}
@@ -439,7 +432,7 @@ export function ToolRail() {
                           event.stopPropagation()
                           if (event.key === 'Enter') commitSize(localSize)
                         }}
-                        aria-label='Brush size value'
+                        aria-label={t('toolbar.brushSizeValue')}
                         className='h-3.5 w-6 border-0 bg-transparent p-0 text-center font-mono text-[10px] font-semibold text-foreground shadow-none focus-visible:ring-0'
                       />
                     </div>
