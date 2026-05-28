@@ -6,10 +6,11 @@
 //! - `GET /google-fonts/{family}/{file}` — serve the cached TTF/WOFF file.
 
 use axum::body::Body;
-use axum::extract::{Path, State};
+use axum::extract::{Multipart, Path, State};
 use axum::http::{HeaderValue, StatusCode, header::CONTENT_TYPE};
 use axum::response::{Json, Response};
 use koharu_core::{FontFaceInfo, GoogleFontCatalog};
+use serde::{Deserialize, Serialize};
 use utoipa_axum::{router::OpenApiRouter, routes};
 
 use crate::AppState;
@@ -18,6 +19,7 @@ use crate::error::{ApiError, ApiResult};
 pub fn router() -> OpenApiRouter<AppState> {
     OpenApiRouter::default()
         .routes(routes!(list_fonts))
+        .routes(routes!(import_fonts))
         .routes(routes!(get_google_fonts_catalog))
         .routes(routes!(fetch_google_font))
         .routes(routes!(get_google_font_file))
@@ -27,6 +29,52 @@ pub fn router() -> OpenApiRouter<AppState> {
 async fn list_fonts(State(app): State<AppState>) -> ApiResult<Json<Vec<FontFaceInfo>>> {
     let fonts = app.renderer.available_fonts().map_err(ApiError::internal)?;
     Ok(Json(fonts))
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, utoipa::ToSchema)]
+#[serde(rename_all = "camelCase")]
+pub struct ImportFontsResponse {
+    pub fonts: Vec<FontFaceInfo>,
+}
+
+#[utoipa::path(
+    post,
+    path = "/fonts/import",
+    request_body(content_type = "multipart/form-data"),
+    responses((status = 200, body = ImportFontsResponse))
+)]
+async fn import_fonts(
+    State(app): State<AppState>,
+    mut multipart: Multipart,
+) -> ApiResult<Json<ImportFontsResponse>> {
+    let mut fonts = Vec::new();
+    while let Some(field) = multipart
+        .next_field()
+        .await
+        .map_err(|e| ApiError::bad_request(format!("multipart: {e}")))?
+    {
+        let filename = field
+            .file_name()
+            .map(|s| s.to_string())
+            .unwrap_or_else(|| "font.ttf".to_string());
+        let bytes = field
+            .bytes()
+            .await
+            .map_err(|e| ApiError::bad_request(format!("read file: {e}")))?
+            .to_vec();
+
+        let imported = app
+            .renderer
+            .import_font_bytes(&filename, bytes)
+            .map_err(ApiError::internal)?;
+        fonts.extend(imported);
+    }
+
+    if fonts.is_empty() {
+        return Err(ApiError::bad_request("no font files uploaded"));
+    }
+
+    Ok(Json(ImportFontsResponse { fonts }))
 }
 
 #[utoipa::path(

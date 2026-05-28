@@ -11,6 +11,7 @@ import {
   getGetConfigQueryKey,
   getGetCurrentLlmQueryKey,
   getGetSceneJsonQueryKey,
+  getListFontsQueryKey,
   importProject,
   patchConfig,
   putCurrentProject,
@@ -19,7 +20,7 @@ import {
   startPipeline,
   undo,
 } from '@/lib/api/default/default'
-import { ApiError } from '@/lib/api/fetch'
+import { ApiError, fetchApi } from '@/lib/api/fetch'
 import type {
   ConfigPatch,
   CreateProjectRequest,
@@ -51,6 +52,8 @@ export const invalidateScene = () =>
 const invalidateConfig = () => queryClient.invalidateQueries({ queryKey: getGetConfigQueryKey() })
 
 const invalidateLlm = () => queryClient.invalidateQueries({ queryKey: getGetCurrentLlmQueryKey() })
+
+const invalidateFonts = () => queryClient.invalidateQueries({ queryKey: getListFontsQueryKey() })
 
 // Ops ------------------------------------------------------------------------
 
@@ -190,6 +193,17 @@ export async function uploadKhrArchive(file: File): Promise<ProjectSummary> {
   })
   await invalidateScene()
   return summary
+}
+
+export async function importFontFiles(files: File[]): Promise<void> {
+  if (files.length === 0) return
+  const form = new FormData()
+  for (const file of files) form.append('file', file, file.name)
+  await fetchApi('/api/v1/fonts/import', {
+    method: 'POST',
+    body: form,
+  })
+  await invalidateFonts()
 }
 
 // Export ---------------------------------------------------------------------

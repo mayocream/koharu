@@ -19,6 +19,7 @@ use koharu_core::{
     TextStrokeStyle, TextStyle, Transform,
 };
 
+use camino::{Utf8Path, Utf8PathBuf};
 use koharu_renderer::{
     TextAlign as RendererTextAlign, TextShaderEffect as RendererEffect,
     font::{FaceInfo, Font, FontBook},
@@ -84,13 +85,16 @@ pub struct Renderer {
     renderer: TinySkiaRenderer,
     symbol_fallbacks: Vec<Font>,
     pub google_fonts: Arc<GoogleFontService>,
+    custom_fonts_dir: Utf8PathBuf,
 }
 
 impl Renderer {
     pub fn new() -> Result<Self> {
         let mut fontbook = FontBook::new();
-        let symbol_fallbacks = load_symbol_fallbacks(&mut fontbook);
         let app_data_root = koharu_runtime::default_app_data_root();
+        let custom_fonts_dir = app_data_root.join("fonts").join("custom");
+        load_custom_fonts(&mut fontbook, &custom_fonts_dir)?;
+        let symbol_fallbacks = load_symbol_fallbacks(&mut fontbook);
         let google_fonts = Arc::new(
             GoogleFontService::new(&app_data_root)
                 .context("failed to initialize Google Fonts service")?,
@@ -100,6 +104,7 @@ impl Renderer {
             renderer: TinySkiaRenderer::new()?,
             symbol_fallbacks,
             google_fonts,
+            custom_fonts_dir,
         })
     }
 
@@ -150,6 +155,42 @@ impl Renderer {
         }
         fonts.sort();
         Ok(fonts)
+    }
+
+    /// Persist a user font into the app data directory and load it into the renderer.
+    pub fn import_font_bytes(&self, filename: &str, bytes: Vec<u8>) -> Result<Vec<FontFaceInfo>> {
+        validate_font_filename(filename)?;
+        std::fs::create_dir_all(self.custom_fonts_dir.as_std_path())
+            .context("failed to create custom fonts dir")?;
+        let path = self.custom_fonts_dir.join(sanitize_font_filename(filename));
+        std::fs::write(path.as_std_path(), &bytes).context("failed to write imported font")?;
+
+        let faces = {
+            let mut fontbook = self
+                .fontbook
+                .lock()
+                .map_err(|_| anyhow::anyhow!("failed to lock fontbook"))?;
+            fontbook.load_faces_from_bytes(bytes)?
+        };
+
+        Ok(faces
+            .into_iter()
+            .filter(|face| !face.post_script_name.is_empty())
+            .map(|face| {
+                let family_name = face
+                    .families
+                    .first()
+                    .map(|(family, _)| family.clone())
+                    .unwrap_or_else(|| face.post_script_name.clone());
+                FontFaceInfo {
+                    family_name,
+                    post_script_name: face.post_script_name,
+                    source: FontSource::System,
+                    category: None,
+                    cached: true,
+                }
+            })
+            .collect())
     }
 
     /// Render every block's translation, composite onto `inpainted`, return
@@ -801,6 +842,55 @@ fn apply_default_font_families(font_families: &mut Vec<String>, text: &str) {
     if font_families.is_empty() {
         *font_families = font_families_for_text(text);
     }
+}
+
+fn load_custom_fonts(fontbook: &mut FontBook, custom_fonts_dir: &Utf8Path) -> Result<()> {
+    if !custom_fonts_dir.exists() {
+        return Ok(());
+    }
+
+    for entry in std::fs::read_dir(custom_fonts_dir.as_std_path())
+        .with_context(|| format!("failed to read custom fonts dir `{custom_fonts_dir}`"))?
+    {
+        let entry = entry?;
+        if !entry.file_type()?.is_file() {
+            continue;
+        }
+        let path = entry.path();
+        let Some(filename) = path.file_name().and_then(|s| s.to_str()) else {
+            continue;
+        };
+        if validate_font_filename(filename).is_err() {
+            continue;
+        }
+        let bytes = std::fs::read(&path)
+            .with_context(|| format!("failed to read custom font `{}`", path.display()))?;
+        if let Err(err) = fontbook.load_faces_from_bytes(bytes) {
+            tracing::warn!(path = %path.display(), "failed to load custom font: {err:#}");
+        }
+    }
+    Ok(())
+}
+
+fn validate_font_filename(filename: &str) -> Result<()> {
+    let lower = filename.to_ascii_lowercase();
+    if [".ttf", ".otf", ".ttc", ".otc"]
+        .iter()
+        .any(|ext| lower.ends_with(ext))
+    {
+        return Ok(());
+    }
+    anyhow::bail!("unsupported font file type: {filename}")
+}
+
+fn sanitize_font_filename(filename: &str) -> String {
+    filename
+        .chars()
+        .map(|c| match c {
+            'A'..='Z' | 'a'..='z' | '0'..='9' | '.' | '-' | '_' => c,
+            _ => '_',
+        })
+        .collect()
 }
 
 fn load_symbol_fallbacks(fontbook: &mut FontBook) -> Vec<Font> {

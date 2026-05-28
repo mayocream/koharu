@@ -9,6 +9,7 @@ import {
   MinusIcon,
   PlusIcon,
   SquareIcon,
+  UploadIcon,
 } from 'lucide-react'
 import { type ComponentType, useMemo, useRef, useEffect, useState } from 'react'
 import { useTranslation } from 'react-i18next'
@@ -50,7 +51,8 @@ import {
   STYLE_KEYWORDS,
   uniqueFontFaces,
 } from '@/lib/font-utils'
-import { applyOp, invalidateScene, queueAutoRender } from '@/lib/io/scene'
+import { openFontFiles } from '@/lib/io/openFiles'
+import { applyOp, importFontFiles, invalidateScene, queueAutoRender } from '@/lib/io/scene'
 import { ops } from '@/lib/ops'
 import { useEditorUiStore } from '@/lib/stores/editorUiStore'
 import { usePreferencesStore } from '@/lib/stores/preferencesStore'
@@ -342,6 +344,12 @@ export function RenderControlsPanel() {
     })
   }
 
+  const importFonts = async () => {
+    const picked = await openFontFiles()
+    if (picked.kind !== 'files' || picked.files.length === 0) return
+    await importFontFiles(picked.files)
+  }
+
   const updateStrokeWidth = (value: number) => {
     applyStrokeSetting({ ...currentStroke, widthPx: clampStrokeWidth(value) })
   }
@@ -402,10 +410,29 @@ export function RenderControlsPanel() {
 
       {/* Font + Color */}
       <div className='flex flex-col gap-0.5' ref={sectionRef}>
-        <div className='flex items-baseline justify-between'>
-          <span className='text-[10px] font-medium text-muted-foreground uppercase'>
-            {t('render.fontLabel')}
-          </span>
+        <div className='flex items-center justify-between'>
+          <div className='flex items-center gap-1'>
+            <span className='text-[10px] font-medium text-muted-foreground uppercase'>
+              {t('render.fontLabel')}
+            </span>
+            <Tooltip>
+              <TooltipTrigger asChild>
+                <Button
+                  type='button'
+                  variant='ghost'
+                  size='icon-xs'
+                  aria-label={t('render.importFont')}
+                  className='size-5 text-muted-foreground'
+                  onClick={() => void importFonts()}
+                >
+                  <UploadIcon className='size-3' />
+                </Button>
+              </TooltipTrigger>
+              <TooltipContent side='bottom' sideOffset={4}>
+                {t('render.importFont')}
+              </TooltipContent>
+            </Tooltip>
+          </div>
           <span className='text-[10px] font-medium text-muted-foreground uppercase'>
             {t('render.fontColorLabel')}
           </span>

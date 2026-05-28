@@ -16,6 +16,8 @@ import { isTauri } from '@/lib/backend'
 const IMAGE_EXTENSIONS = ['png', 'jpg', 'jpeg', 'webp'] as const
 const IMAGE_MIME = ['image/png', 'image/jpeg', 'image/webp']
 const IMAGE_RE = /\.(png|jpe?g|webp)$/i
+const FONT_EXTENSIONS = ['ttf', 'otf', 'ttc', 'otc'] as const
+const FONT_MIME = ['font/ttf', 'font/otf', 'application/font-sfnt', 'application/octet-stream']
 
 /**
  * Platform-tagged picker result. On Tauri we hand paths straight to the
@@ -47,6 +49,35 @@ export async function openImageFiles(): Promise<ImagePickerResult> {
       mimeTypes: IMAGE_MIME,
       extensions: IMAGE_EXTENSIONS.map((e) => `.${e}`),
       description: 'Images',
+    })
+    return { kind: 'files', files: Array.isArray(result) ? result : [result] }
+  } catch (e) {
+    if (isAbort(e)) return { kind: 'files', files: [] }
+    throw e
+  }
+}
+
+/** Pick one or more local font files. Empty result = user cancelled. */
+export async function openFontFiles(): Promise<ImagePickerResult> {
+  if (isTauri()) {
+    const { open } = await import('@tauri-apps/plugin-dialog')
+    const picked = await open({
+      multiple: true,
+      filters: [{ name: 'Fonts', extensions: [...FONT_EXTENSIONS] }],
+    })
+    if (!picked) return { kind: 'paths', paths: [] }
+    const paths = Array.isArray(picked) ? picked : [picked]
+    const files = await readTauriFiles(paths)
+    return { kind: 'files', files }
+  }
+
+  const { fileOpen } = await import('browser-fs-access')
+  try {
+    const result = await fileOpen({
+      multiple: true,
+      mimeTypes: FONT_MIME,
+      extensions: FONT_EXTENSIONS.map((e) => `.${e}`),
+      description: 'Fonts',
     })
     return { kind: 'files', files: Array.isArray(result) ? result : [result] }
   } catch (e) {
@@ -133,6 +164,8 @@ function mimeFromName(name: string): string {
   if (lower.endsWith('.jpg') || lower.endsWith('.jpeg')) return 'image/jpeg'
   if (lower.endsWith('.webp')) return 'image/webp'
   if (lower.endsWith('.khr')) return 'application/zip'
+  if (lower.endsWith('.ttf') || lower.endsWith('.ttc')) return 'font/ttf'
+  if (lower.endsWith('.otf') || lower.endsWith('.otc')) return 'font/otf'
   return 'application/octet-stream'
 }
 

@@ -75,7 +75,7 @@ pub struct FontBook {
     database: Database,
     cache: HashMap<ID, Font>,
     /// Maps data hash to font ID to avoid duplicate loading.
-    data_cache: HashMap<[u8; 32], ID>,
+    data_cache: HashMap<[u8; 32], Vec<ID>>,
 }
 
 impl FontBook {
@@ -114,7 +114,12 @@ impl FontBook {
     pub fn load_from_bytes(&mut self, data: Vec<u8>) -> anyhow::Result<Font> {
         let hash: [u8; 32] = blake3::hash(&data).into();
 
-        if let Some(&id) = self.data_cache.get(&hash) {
+        if let Some(id) = self
+            .data_cache
+            .get(&hash)
+            .and_then(|ids| ids.first())
+            .copied()
+        {
             return self.load_font(id);
         }
 
@@ -126,8 +131,41 @@ impl FontBook {
             .next()
             .context("font data contained no valid faces")?;
 
-        self.data_cache.insert(hash, id);
+        self.data_cache.insert(hash, vec![id]);
         self.load_font(id)
+    }
+
+    /// Loads a font source and returns all contained faces.
+    pub fn load_faces_from_bytes(&mut self, data: Vec<u8>) -> anyhow::Result<Vec<FaceInfo>> {
+        let hash: [u8; 32] = blake3::hash(&data).into();
+
+        if let Some(ids) = self.data_cache.get(&hash) {
+            return ids
+                .iter()
+                .map(|id| {
+                    self.database
+                        .face(*id)
+                        .cloned()
+                        .with_context(|| format!("missing font face for id {:?}", id))
+                })
+                .collect();
+        }
+
+        let data: Arc<dyn AsRef<[u8]> + Send + Sync> = Arc::new(data);
+        let source = fontdb::Source::Binary(data);
+        let ids = self.database.load_font_source(source);
+        if ids.is_empty() {
+            anyhow::bail!("font data contained no valid faces");
+        }
+
+        self.data_cache.insert(hash, ids.to_vec());
+        let mut faces = Vec::with_capacity(ids.len());
+        for id in ids {
+            if let Some(face) = self.database.face(id).cloned() {
+                faces.push(face);
+            }
+        }
+        Ok(faces)
     }
 
     pub fn load_font(&mut self, id: ID) -> anyhow::Result<Font> {

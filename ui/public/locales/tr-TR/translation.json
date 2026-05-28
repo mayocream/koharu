@@ -196,6 +196,7 @@
     "fontColorLabel": "Yazı rengi",
     "fontSizeLabel": "Boyut",
     "fontStylePlaceholder": "Stil",
+    "importFont": "Yazı tipi içe aktar",
     "fontScopeGlobal": "Genel",
     "fontScopeBlock": "Blok bazında",
     "fontScopeBlockIndex": "Blok {{index}}",

@@ -191,6 +191,7 @@
     "fontColorLabel": "フォントカラー",
     "fontSizeLabel": "サイズ",
     "fontStylePlaceholder": "スタイル",
+    "importFont": "フォントをインポート",
     "fontScopeGlobal": "全体",
     "fontScopeBlock": "ブロックごと",
     "fontScopeBlockIndex": "ブロック {{index}}",

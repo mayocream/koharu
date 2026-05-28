@@ -191,6 +191,7 @@
     "fontColorLabel": "字體顏色",
     "fontSizeLabel": "大小",
     "fontStylePlaceholder": "樣式",
+    "importFont": "匯入字體",
     "fontScopeGlobal": "全域",
     "fontScopeBlock": "依文字區塊",
     "fontScopeBlockIndex": "文字區塊 {{index}}",

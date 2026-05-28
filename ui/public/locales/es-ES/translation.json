@@ -191,6 +191,7 @@
     "fontColorLabel": "Color de fuente",
     "fontSizeLabel": "Tamaño",
     "fontStylePlaceholder": "Estilo",
+    "importFont": "Importar fuente",
     "fontScopeGlobal": "Global",
     "fontScopeBlock": "Por bloque",
     "fontScopeBlockIndex": "Bloque {{index}}",

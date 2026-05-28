@@ -229,6 +229,7 @@
     "fontColorLabel": "Font color",
     "fontSizeLabel": "Size",
     "fontStylePlaceholder": "Style",
+    "importFont": "Import font",
     "fontScopeGlobal": "Global",
     "fontScopeBlock": "Per block",
     "fontScopeBlockIndex": "Block {{index}}",

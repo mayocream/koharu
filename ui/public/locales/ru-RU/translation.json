@@ -191,6 +191,7 @@
     "fontColorLabel": "Цвет шрифта",
     "fontSizeLabel": "Размер",
     "fontStylePlaceholder": "Стиль",
+    "importFont": "Импортировать шрифт",
     "fontScopeGlobal": "Глобально",
     "fontScopeBlock": "Для блока",
     "fontScopeBlockIndex": "Блок {{index}}",
