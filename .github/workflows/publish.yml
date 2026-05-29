@@ -1,9 +1,9 @@
 name: Publish
 
+# crates.io publishing is disabled on this fork (workspace is `publish = false`
+# and no CARGO_REGISTRY_TOKEN is configured). Run manually only if needed.
 on:
-  push:
-    tags:
-      - '*'
+  workflow_dispatch:
 
 permissions:
   contents: read
