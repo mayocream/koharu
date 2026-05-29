@@ -146,7 +146,7 @@ rmcp = { version = "1.6", features = [
 schemars = { version = "1.2", features = ["chrono04", "indexmap2", "uuid1"] }
 utoipa = { version = "5", features = ["axum_extras", "chrono", "indexmap", "uuid"] }
 utoipa-axum = "0.2"
-uuid = { version = "1.18", features = ["v4", "v7", "serde"] }
+uuid = { version = "1.23", features = ["v4", "v7", "serde"] }
 chrono = { version = "0.4", default-features = false, features = ["serde", "clock"] }
 atomicwrites = "0.4"
 fs4 = "1"
