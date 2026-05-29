@@ -13,8 +13,8 @@ use koharu_app::pipeline::{
     self, PipelineRunOptions, PipelineSpec, ProgressTick, Scope, WarningTick,
 };
 use koharu_core::{
-    AppEvent, JobFinishedEvent, JobStatus, JobSummary, JobWarningEvent, NodeId, PageId,
-    PipelineProgress, PipelineStatus, ReadingOrder, Region,
+    AppEvent, GlossaryEntry, JobFinishedEvent, JobStatus, JobSummary, JobWarningEvent, NodeId,
+    PageId, PipelineProgress, PipelineStatus, ReadingOrder, Region,
 };
 use serde::{Deserialize, Serialize};
 use utoipa_axum::{router::OpenApiRouter, routes};
@@ -46,6 +46,10 @@ pub struct StartPipelineRequest {
     pub target_language: Option<String>,
     #[serde(default)]
     pub system_prompt: Option<String>,
+    /// Glossary entries applied during LLM translation. Terms whose source text
+    /// appears on a page are injected into that page's translation prompt.
+    #[serde(default)]
+    pub glossary: Vec<GlossaryEntry>,
     #[serde(default)]
     pub default_font: Option<String>,
     #[serde(default)]
@@ -84,6 +88,7 @@ async fn start_pipeline(
         options: PipelineRunOptions {
             target_language: req.target_language,
             system_prompt: req.system_prompt,
+            glossary: req.glossary,
             default_font: req.default_font,
             text_node_ids: req.text_node_ids,
             region: req.region,

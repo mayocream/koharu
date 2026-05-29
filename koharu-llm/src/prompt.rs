@@ -49,10 +49,20 @@ pub struct PromptRenderer {
 
 pub const BLOCK_TAG_INSTRUCTIONS: &str = "The input uses numbered tags like [1], [2], etc. to mark each text block. Translate only the text after each tag. Keep every tag exactly unchanged, including numbers and order. Output the same tags followed by the translated text. Do not merge, split, or reorder blocks.";
 
+/// The default manga-translation system prompt *without* the trailing block-tag
+/// instructions. Useful when composing additional guidance (e.g. a glossary)
+/// that must sit before the block rules so those rules stay last.
+pub fn system_prompt_base(target_language: Language) -> String {
+    format!(
+        "You are a professional manga translator. Translate manga dialogue into natural {} that fits inside speech bubbles. Preserve character voice, emotional tone, relationship nuance, emphasis, and sound effects naturally. Keep the wording concise. Do not add notes, explanations, or romanization.",
+        target_language
+    )
+}
+
 pub fn system_prompt(target_language: Language) -> String {
     format!(
-        "You are a professional manga translator. Translate manga dialogue into natural {} that fits inside speech bubbles. Preserve character voice, emotional tone, relationship nuance, emphasis, and sound effects naturally. Keep the wording concise. Do not add notes, explanations, or romanization. {BLOCK_TAG_INSTRUCTIONS}",
-        target_language
+        "{} {BLOCK_TAG_INSTRUCTIONS}",
+        system_prompt_base(target_language)
     )
 }
 

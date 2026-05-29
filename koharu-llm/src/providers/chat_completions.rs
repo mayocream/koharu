@@ -19,6 +19,9 @@ pub struct ChatCompletionsRequest {
     pub user_prompt: String,
     pub temperature: Option<f64>,
     pub max_tokens: Option<u32>,
+    /// Extra request headers (name, value). Used by providers such as
+    /// OpenRouter that recommend attribution headers (`HTTP-Referer`, `X-Title`).
+    pub extra_headers: Vec<(&'static str, String)>,
 }
 
 #[derive(Serialize)]
@@ -60,6 +63,9 @@ pub async fn send_chat_completion(
     let mut http_request = http_client.post(&request.endpoint);
     if let ChatCompletionsAuth::Bearer(api_key) = request.auth {
         http_request = http_request.bearer_auth(api_key);
+    }
+    for (name, value) in &request.extra_headers {
+        http_request = http_request.header(*name, value);
     }
 
     let response = http_request

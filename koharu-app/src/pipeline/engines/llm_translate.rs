@@ -4,7 +4,11 @@
 
 use anyhow::Result;
 use async_trait::async_trait;
-use koharu_core::{NodeDataPatch, NodeId, NodePatch, Op, PageId, Scene, TextData, TextDataPatch};
+use koharu_core::{
+    GlossaryEntry, NodeDataPatch, NodeId, NodePatch, Op, PageId, Scene, TextData, TextDataPatch,
+    render_glossary_section,
+};
+use koharu_llm::{Language, prompt::system_prompt_base};
 
 use crate::pipeline::artifacts::Artifact;
 use crate::pipeline::engine::{Engine, EngineCtx, EngineInfo};
@@ -21,12 +25,18 @@ impl Engine for Model {
         }
 
         let sources: Vec<String> = targets.iter().map(|(_, s)| s.clone()).collect();
+        let system_prompt = build_system_prompt(
+            ctx.options.system_prompt.as_deref(),
+            &ctx.options.glossary,
+            ctx.options.target_language.as_deref(),
+            &sources,
+        );
         let translations = ctx
             .llm
             .translate_texts(
                 &sources,
                 ctx.options.target_language.as_deref(),
-                ctx.options.system_prompt.as_deref(),
+                system_prompt.as_deref(),
             )
             .await?;
 
@@ -76,6 +86,41 @@ fn should_translate(id: NodeId, text_data: &TextData, allowed_ids: Option<&[Node
         .text
         .as_ref()
         .is_some_and(|source| !source.trim().is_empty())
+}
+
+/// Compose the effective system prompt: the base prompt (custom or default)
+/// followed by the glossary terms relevant to this page.
+///
+/// Returns `None` when there is no custom prompt and no applicable glossary, so
+/// the LLM layer falls back to its built-in default exactly as before. When a
+/// glossary applies, the base prompt is materialized here and the glossary is
+/// inserted before the block-tag rules that the LLM layer appends last.
+fn build_system_prompt(
+    custom: Option<&str>,
+    glossary: &[GlossaryEntry],
+    target_language: Option<&str>,
+    sources: &[String],
+) -> Option<String> {
+    let custom = custom.filter(|prompt| !prompt.trim().is_empty());
+
+    let glossary_section = if glossary.is_empty() {
+        None
+    } else {
+        render_glossary_section(glossary, &sources.join("\n"))
+    };
+
+    match glossary_section {
+        None => custom.map(str::to_string),
+        Some(section) => {
+            let target = target_language
+                .and_then(Language::parse)
+                .unwrap_or(Language::English);
+            let base = custom
+                .map(str::to_string)
+                .unwrap_or_else(|| system_prompt_base(target));
+            Some(format!("{base}\n\n{section}"))
+        }
+    }
 }
 
 inventory::submit! {
@@ -162,5 +207,52 @@ mod tests {
             collect_translation_targets_from(&scene, page_id(), options.text_node_ids.as_deref());
 
         assert!(targets.is_empty());
+    }
+
+    fn glossary_entry(source: &str, target: &str) -> GlossaryEntry {
+        GlossaryEntry {
+            source: source.to_string(),
+            target: target.to_string(),
+            note: None,
+            enabled: None,
+        }
+    }
+
+    #[test]
+    fn no_custom_prompt_and_no_glossary_keeps_default_fallback() {
+        let prompt = build_system_prompt(None, &[], Some("en-US"), &["hello".to_string()]);
+        assert!(prompt.is_none());
+    }
+
+    #[test]
+    fn custom_prompt_without_glossary_is_passed_through() {
+        let prompt =
+            build_system_prompt(Some("be terse"), &[], Some("en-US"), &["hello".to_string()]);
+        assert_eq!(prompt.as_deref(), Some("be terse"));
+    }
+
+    #[test]
+    fn glossary_is_appended_to_default_base_prompt() {
+        let glossary = vec![glossary_entry("春日", "Kasuga")];
+        let prompt =
+            build_system_prompt(None, &glossary, Some("en-US"), &["春日先輩".to_string()]).unwrap();
+        assert!(prompt.contains("professional manga translator"));
+        assert!(prompt.contains("春日 => Kasuga"));
+    }
+
+    #[test]
+    fn glossary_is_appended_to_custom_prompt() {
+        let glossary = vec![glossary_entry("春日", "Kasuga")];
+        let prompt =
+            build_system_prompt(Some("be terse"), &glossary, None, &["春日".to_string()]).unwrap();
+        assert!(prompt.starts_with("be terse"));
+        assert!(prompt.contains("春日 => Kasuga"));
+    }
+
+    #[test]
+    fn irrelevant_glossary_terms_are_not_injected() {
+        let glossary = vec![glossary_entry("海", "sea")];
+        let prompt = build_system_prompt(None, &glossary, Some("en-US"), &["春日".to_string()]);
+        assert!(prompt.is_none());
     }
 }

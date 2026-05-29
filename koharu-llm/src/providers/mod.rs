@@ -25,6 +25,7 @@ pub mod gemini;
 pub mod google_translate;
 pub mod openai;
 pub mod openai_compatible;
+pub mod openrouter;
 
 #[derive(Debug, Clone, Copy)]
 pub struct ProviderModelDescriptor {
@@ -414,6 +415,15 @@ const PROVIDERS: &[ProviderDescriptor] = &[
         models: ProviderCatalogModels::Dynamic(discover_openai_compatible_models),
         build: build_openai_compatible_provider,
     },
+    ProviderDescriptor {
+        id: "openrouter",
+        name: "OpenRouter",
+        requires_api_key: true,
+        requires_base_url: false,
+        supported_languages: ProviderSupportedLanguages::All,
+        models: ProviderCatalogModels::Dynamic(discover_openrouter_models),
+        build: build_openrouter_provider,
+    },
 ];
 
 pub fn all_provider_descriptors() -> &'static [ProviderDescriptor] {
@@ -535,6 +545,13 @@ fn build_openai_compatible_provider(
     }))
 }
 
+fn build_openrouter_provider(config: ProviderConfig) -> anyhow::Result<Box<dyn AnyProvider>> {
+    Ok(Box::new(openrouter::OpenRouterProvider {
+        http_client: Arc::clone(&config.http_client),
+        api_key: required_api_key(&config, "openrouter")?,
+    }))
+}
+
 fn build_deepl_mt_provider(config: ProviderConfig) -> anyhow::Result<Box<dyn AnyProvider>> {
     Ok(Box::new(deepl::DeeplMtProvider {
         http_client: Arc::clone(&config.http_client),
@@ -575,6 +592,13 @@ fn discover_openai_compatible_models(config: ProviderConfig) -> ProviderDiscover
                 id,
             })
             .collect())
+    })
+}
+
+fn discover_openrouter_models(config: ProviderConfig) -> ProviderDiscoveryFuture {
+    Box::pin(async move {
+        let api_key = required_api_key(&config, "openrouter")?;
+        openrouter::list_models(config.http_client, &api_key).await
     })
 }
 

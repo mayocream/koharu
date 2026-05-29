@@ -188,6 +188,7 @@ impl KoharuServer {
             options: PipelineRunOptions {
                 target_language: input.target_language,
                 system_prompt: input.system_prompt,
+                glossary: Vec::new(),
                 default_font: input.default_font,
                 text_node_ids: input.text_node_ids,
                 reading_order: input.reading_order,

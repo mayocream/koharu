@@ -225,6 +225,7 @@ async fn run() -> Result<()> {
         options: koharu_app::PipelineRunOptions {
             target_language: Some(cli.target_lang.clone()),
             system_prompt: cli.system_prompt.clone(),
+            glossary: Vec::new(),
             default_font: cli.default_font.clone(),
             text_node_ids: None,
             reading_order: None,

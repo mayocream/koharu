@@ -10,6 +10,7 @@
 pub mod blob;
 pub mod events;
 pub mod font;
+pub mod glossary;
 pub mod google_fonts;
 pub mod op;
 pub mod protocol;
@@ -22,6 +23,7 @@ pub use events::{
     JobWarningEvent, PipelineProgress, PipelineStatus, PipelineStep, ProjectSummary, SnapshotEvent,
 };
 pub use font::{FontPrediction, NamedFontPrediction, TextDirection, TopFont};
+pub use glossary::{GlossaryEntry, render_glossary_section};
 pub use google_fonts::{FontSource, GoogleFontCatalog, GoogleFontEntry, GoogleFontVariant};
 pub use op::{
     ImageDataPatch, MaskDataPatch, NodeDataPatch, NodePatch, Op, OpError, OpResult, PagePatch,

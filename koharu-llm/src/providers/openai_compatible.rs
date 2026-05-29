@@ -91,6 +91,7 @@ impl AnyProvider for OpenAiCompatibleProvider {
                     user_prompt: source.to_string(),
                     temperature: self.temperature,
                     max_tokens: self.max_tokens,
+                    extra_headers: Vec::new(),
                 },
             )
             .await

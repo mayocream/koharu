@@ -35,6 +35,7 @@ impl AnyProvider for DeepSeekProvider {
                     user_prompt: source.to_string(),
                     temperature: Some(1.3),
                     max_tokens: None,
+                    extra_headers: Vec::new(),
                 },
             )
             .await

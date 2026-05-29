@@ -35,6 +35,7 @@ impl AnyProvider for OpenAiProvider {
                     user_prompt: source.to_string(),
                     temperature: None,
                     max_tokens: None,
+                    extra_headers: Vec::new(),
                 },
             )
             .await

@@ -21,7 +21,7 @@ use std::sync::atomic::AtomicBool;
 
 use anyhow::{Result, bail};
 use async_trait::async_trait;
-use koharu_core::{NodeId, Op, PageId, ReadingOrder, Region, Scene};
+use koharu_core::{GlossaryEntry, NodeId, Op, PageId, ReadingOrder, Region, Scene};
 use koharu_runtime::RuntimeManager;
 use parking_lot::RwLock;
 use petgraph::algo::toposort;
@@ -54,6 +54,10 @@ pub struct EngineCtx<'a> {
 pub struct PipelineRunOptions {
     pub target_language: Option<String>,
     pub system_prompt: Option<String>,
+    /// Glossary entries applied during LLM translation. The `llm` engine injects
+    /// the entries relevant to each page into the system prompt. Empty = no
+    /// glossary. Engines other than `llm` ignore it.
+    pub glossary: Vec<GlossaryEntry>,
     pub default_font: Option<String>,
     /// Optional text-node scope for engines that can operate on individual
     /// text blocks. Engines that render full-page artifacts ignore it.
