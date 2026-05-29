@@ -37,10 +37,17 @@ jobs:
       - uses: actions/checkout@v6
       - uses: oven-sh/setup-bun@v2
       - uses: Swatinem/rust-cache@v2
+      - name: Free disk space
+        if: matrix.os == 'ubuntu-latest'
+        run: |
+          sudo rm -rf /usr/share/dotnet /usr/local/lib/android /opt/ghc
+          sudo apt-get clean
+          df -h
       - uses: Jimver/cuda-toolkit@master
         if: matrix.os == 'ubuntu-latest'
         with:
           cuda: '13.0.0'
+          linux-local-args: '["--toolkit"]'
           log-file-suffix: '${{ matrix.os }}.txt'
       - uses: Jimver/cuda-toolkit@master
         if: matrix.os == 'windows-latest'
