@@ -1,0 +1,40 @@
+name: Windows EXE
+
+# Builds the Windows executable (koharu.exe) and uploads it as a downloadable
+# artifact. Runs automatically on pushes to the glossary/openrouter branch and
+# can be triggered manually from the Actions tab ("Run workflow").
+on:
+  workflow_dispatch:
+  push:
+    branches: ['claude/glossary-openrouter-systems-vdHJ8']
+
+permissions:
+  contents: read
+
+env:
+  CARGO_TERM_COLOR: always
+
+jobs:
+  windows-exe:
+    name: Build koharu.exe
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v6
+      - uses: oven-sh/setup-bun@v2
+      - uses: Swatinem/rust-cache@v2
+      - uses: Jimver/cuda-toolkit@master
+        with:
+          cuda: '13.0.0'
+          method: 'network'
+          sub-packages: '["nvcc", "cudart", "crt", "thrust", "nvvm", "cublas", "cublas_dev", "cufft", "cufft_dev", "curand", "curand_dev", "nvrtc", "nvrtc_dev"]'
+      - uses: ilammy/msvc-dev-cmd@v1
+      - run: bun install
+      # Builds the UI (via tauri's beforeBuildCommand) and the Rust binary,
+      # without producing an installer bundle — yields target/release/koharu.exe.
+      - run: bun tauri build --no-bundle
+      - name: Upload koharu.exe
+        uses: actions/upload-artifact@v4
+        with:
+          name: koharu-windows-exe
+          path: target/release/koharu*.exe
+          retention-days: 7
