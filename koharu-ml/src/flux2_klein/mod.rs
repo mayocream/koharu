@@ -363,7 +363,7 @@ impl Flux2Klein {
                 continue;
             }
 
-            let image_crop = image.crop_imm(0, slice.y, image.width(), slice.height);
+            let image_crop = output.crop_imm(0, slice.y, image.width(), slice.height);
             let reference_crop = reference_image
                 .filter(|reference| reference.dimensions() == image.dimensions())
                 .map(|reference| reference.crop_imm(0, slice.y, image.width(), slice.height));

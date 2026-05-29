@@ -35,8 +35,8 @@ pub fn from_context<R: tauri::Runtime>(context: &mut tauri::Context<R>) -> Asset
             }
             // Tauri stores bundled asset keys with a leading slash while the
             // axum fallback can request relative paths.
-            let path = format!("/{path}");
-            let key = tauri::utils::assets::AssetKey::from(path.as_str());
+            let prefixed = format!("/{path}");
+            let key = tauri::utils::assets::AssetKey::from(prefixed.as_str());
             assets.get(&key)
         })?;
         let bytes = asset.into_owned();

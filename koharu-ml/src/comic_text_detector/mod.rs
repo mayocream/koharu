@@ -201,15 +201,15 @@ impl ComicTextDetector {
             }
             line_polygons.extend(detection.line_polygons);
             text_blocks.extend(detection.text_blocks);
-            stitch_gray_max(&mut shrink_map, &detection.shrink_map, slice.y);
-            stitch_gray_max(&mut threshold_map, &detection.threshold_map, slice.y);
-            stitch_gray_max(&mut mask, &detection.mask, slice.y);
+            stitch_gray_max(&mut shrink_map, &detection.shrink_map, slice.y)?;
+            stitch_gray_max(&mut threshold_map, &detection.threshold_map, slice.y)?;
+            stitch_gray_max(&mut mask, &detection.mask, slice.y)?;
         }
 
         Ok(Some(ComicTextDetection {
             shrink_map,
             threshold_map,
-            line_polygons,
+            line_polygons: dedupe_quads(line_polygons),
             text_blocks: dedupe_text_blocks(text_blocks),
             mask,
         }))
@@ -234,7 +234,7 @@ impl ComicTextDetector {
         for slice in slices {
             let cropped = image.crop_imm(0, slice.y, image.width(), slice.height);
             let mask = self.inference_segmentation_single(&cropped)?;
-            stitch_gray_max(&mut output, &mask, slice.y);
+            stitch_gray_max(&mut output, &mask, slice.y)?;
         }
         Ok(Some(output))
     }
@@ -272,8 +272,23 @@ impl ComicTextDetector {
     }
 }
 
-fn stitch_gray_max(dst: &mut GrayImage, src: &GrayImage, dst_y: u32) {
-    let width = dst.width().min(src.width());
+fn stitch_gray_max(dst: &mut GrayImage, src: &GrayImage, dst_y: u32) -> anyhow::Result<()> {
+    if dst.width() != src.width() {
+        bail!(
+            "cannot stitch gray maps with different widths: {} vs {}",
+            dst.width(),
+            src.width()
+        );
+    }
+    if dst_y >= dst.height() {
+        bail!(
+            "cannot stitch gray map at y={} into height {}",
+            dst_y,
+            dst.height()
+        );
+    }
+
+    let width = dst.width();
     let height = src.height().min(dst.height().saturating_sub(dst_y));
     let dst_width = dst.width() as usize;
     let src_width = src.width() as usize;
@@ -291,6 +306,7 @@ fn stitch_gray_max(dst: &mut GrayImage, src: &GrayImage, dst_y: u32) {
             }
         }
     }
+    Ok(())
 }
 
 fn offset_text_region(region: &mut TextRegion, offset_y: f32) {
@@ -324,6 +340,33 @@ fn dedupe_text_blocks(mut blocks: Vec<TextRegion>) -> Vec<TextRegion> {
         }
     }
     out
+}
+
+fn dedupe_quads(quads: Vec<Quad>) -> Vec<Quad> {
+    let mut out: Vec<Quad> = Vec::with_capacity(quads.len());
+    for quad in quads {
+        if out
+            .iter()
+            .all(|existing| !bbox_is_duplicate(quad_bbox(existing), quad_bbox(&quad)))
+        {
+            out.push(quad);
+        }
+    }
+    out
+}
+
+fn quad_bbox(quad: &Quad) -> [f32; 4] {
+    let mut min_x = f32::INFINITY;
+    let mut min_y = f32::INFINITY;
+    let mut max_x = f32::NEG_INFINITY;
+    let mut max_y = f32::NEG_INFINITY;
+    for [x, y] in quad {
+        min_x = min_x.min(*x);
+        min_y = min_y.min(*y);
+        max_x = max_x.max(*x);
+        max_y = max_y.max(*y);
+    }
+    [min_x, min_y, max_x, max_y]
 }
 
 fn text_regions_duplicate(a: &TextRegion, b: &TextRegion) -> bool {

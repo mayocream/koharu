@@ -31,7 +31,8 @@ impl VerticalSlicer {
     }
 
     /// Returns vertical slices only when the image is tall enough and splitting
-    /// would produce more than one useful slice after short-tail trimming.
+    /// would produce more than one useful slice after short-tail trimming. Very
+    /// narrow images use `MIN_SLICE_HEIGHT` instead of the configured ratio.
     pub(crate) fn slices(self, width: u32, height: u32) -> Option<Vec<VerticalSlice>> {
         if !self.is_tall(width, height) {
             return None;

@@ -50,6 +50,13 @@ impl ProbabilityMap {
                 src.width
             );
         }
+        if dst_y >= self.height {
+            bail!(
+                "cannot stitch probability map at y={} into height {}",
+                dst_y,
+                self.height
+            );
+        }
 
         let height = src.height.min(self.height.saturating_sub(dst_y));
         let width = self.width as usize;
