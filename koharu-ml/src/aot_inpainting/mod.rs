@@ -15,10 +15,11 @@ use tracing::instrument;
 use crate::{
     device,
     inpainting::{
-        HdStrategyConfig, InpaintForward, apply_bubble_fill, binarize_mask, extract_alpha,
-        restore_alpha_channel, run_inpaint,
+        HdStrategy, HdStrategyConfig, InpaintForward, apply_bubble_fill, binarize_mask,
+        extract_alpha, restore_alpha_channel, run_inpaint,
     },
     loading,
+    slicing::VerticalSlicer,
 };
 
 use self::model::{AotGenerator, AotModelSpec};
@@ -149,7 +150,11 @@ impl AotInpainting {
         mask: &DynamicImage,
         bubble_mask: &DynamicImage,
     ) -> Result<DynamicImage> {
-        self.inference_with_config(image, mask, bubble_mask, &self.default_config())
+        let mut cfg = self.default_config();
+        if is_tall_page(image) {
+            cfg.strategy = HdStrategy::Crop;
+        }
+        self.inference_with_config(image, mask, bubble_mask, &cfg)
     }
 
     #[instrument(level = "debug", skip_all)]
@@ -244,6 +249,11 @@ impl AotInpainting {
         RgbImage::from_raw(width as u32, height as u32, raw)
             .ok_or_else(|| anyhow::anyhow!("failed to create image buffer from model output"))
     }
+}
+
+fn is_tall_page(image: &DynamicImage) -> bool {
+    let (width, height) = image.dimensions();
+    VerticalSlicer::default().is_tall(width, height)
 }
 
 struct AotForward<'a> {

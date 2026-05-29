@@ -12,7 +12,7 @@ use imageproc::contours::{BorderType, find_contours};
 use koharu_runtime::RuntimeManager;
 use serde::{Deserialize, Serialize};
 
-use crate::{device, loading};
+use crate::{bbox::bbox_is_duplicate, device, loading, slicing::VerticalSlicer};
 
 use self::model::{PPDocLayoutV3ForObjectDetection, PPDocLayoutV3Outputs};
 
@@ -163,10 +163,7 @@ impl PPDocLayoutV3 {
         image: &DynamicImage,
         threshold: f32,
     ) -> Result<LayoutDetectionResult> {
-        let mut results = self.inference(std::slice::from_ref(image), threshold)?;
-        results
-            .pop()
-            .ok_or_else(|| anyhow::anyhow!("missing layout result"))
+        self.inference_one_impl(image, threshold, true)
     }
 
     pub fn inference_one_fast(
@@ -174,10 +171,70 @@ impl PPDocLayoutV3 {
         image: &DynamicImage,
         threshold: f32,
     ) -> Result<LayoutDetectionResult> {
-        let mut results = self.inference_fast(std::slice::from_ref(image), threshold)?;
+        self.inference_one_impl(image, threshold, false)
+    }
+
+    fn inference_one_impl(
+        &self,
+        image: &DynamicImage,
+        threshold: f32,
+        include_polygons: bool,
+    ) -> Result<LayoutDetectionResult> {
+        if let Some(result) = self.inference_one_sliced(image, threshold, include_polygons)? {
+            return Ok(result);
+        }
+
+        let mut results =
+            self.inference_impl(std::slice::from_ref(image), threshold, include_polygons)?;
         results
             .pop()
             .ok_or_else(|| anyhow::anyhow!("missing layout result"))
+    }
+
+    fn inference_one_sliced(
+        &self,
+        image: &DynamicImage,
+        threshold: f32,
+        include_polygons: bool,
+    ) -> Result<Option<LayoutDetectionResult>> {
+        let Some(slices) = VerticalSlicer::default().slices(image.width(), image.height()) else {
+            return Ok(None);
+        };
+
+        tracing::info!(
+            width = image.width(),
+            height = image.height(),
+            slices = slices.len(),
+            include_polygons,
+            "pp-doclayout-v3 slicing tall image"
+        );
+
+        let mut regions = Vec::new();
+        for slice in slices {
+            let cropped = image.crop_imm(0, slice.y, image.width(), slice.height);
+            let mut result = self
+                .inference_impl(std::slice::from_ref(&cropped), threshold, include_polygons)?
+                .pop()
+                .ok_or_else(|| anyhow::anyhow!("missing layout slice result"))?;
+            offset_layout_regions(&mut result.regions, slice.y as f32);
+            regions.extend(result.regions);
+        }
+
+        let mut regions = dedupe_layout_regions(regions);
+        regions.sort_by(|a, b| {
+            a.bbox[1]
+                .total_cmp(&b.bbox[1])
+                .then_with(|| a.bbox[0].total_cmp(&b.bbox[0]))
+        });
+        for (order, region) in regions.iter_mut().enumerate() {
+            region.order = order;
+        }
+
+        Ok(Some(LayoutDetectionResult {
+            image_width: image.width(),
+            image_height: image.height(),
+            regions,
+        }))
     }
 }
 
@@ -198,6 +255,37 @@ pub struct LayoutRegion {
     pub score: f32,
     pub bbox: [f32; 4],
     pub polygon_points: Vec<[f32; 2]>,
+}
+
+fn offset_layout_regions(regions: &mut [LayoutRegion], offset_y: f32) {
+    for region in regions {
+        region.bbox[1] += offset_y;
+        region.bbox[3] += offset_y;
+        for point in &mut region.polygon_points {
+            point[1] += offset_y;
+        }
+    }
+}
+
+fn dedupe_layout_regions(mut regions: Vec<LayoutRegion>) -> Vec<LayoutRegion> {
+    regions.sort_by(|a, b| b.score.total_cmp(&a.score));
+    let mut out: Vec<LayoutRegion> = Vec::with_capacity(regions.len());
+    for region in regions {
+        if out
+            .iter()
+            .all(|existing| !layout_regions_duplicate(existing, &region))
+        {
+            out.push(region);
+        }
+    }
+    out
+}
+
+fn layout_regions_duplicate(a: &LayoutRegion, b: &LayoutRegion) -> bool {
+    if a.label_id != b.label_id {
+        return false;
+    }
+    bbox_is_duplicate(a.bbox, b.bbox)
 }
 
 #[derive(Debug, Clone, Deserialize)]

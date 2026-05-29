@@ -12,7 +12,7 @@ use image::{DynamicImage, GenericImageView, GrayImage};
 use koharu_runtime::RuntimeManager;
 use tracing::instrument;
 
-use crate::{device, loading, types::TextRegion};
+use crate::{bbox::bbox_is_duplicate, device, loading, slicing::VerticalSlicer, types::TextRegion};
 
 pub use postprocess::{
     ComicTextDetection, Quad, crop_text_block_bbox, expanded_text_block_crop_bounds,
@@ -121,6 +121,13 @@ impl ComicTextDetector {
 
     #[instrument(level = "debug", skip_all)]
     pub fn inference(&self, image: &DynamicImage) -> anyhow::Result<ComicTextDetection> {
+        if let Some(result) = self.inference_sliced(image)? {
+            return Ok(result);
+        }
+        self.inference_single(image)
+    }
+
+    fn inference_single(&self, image: &DynamicImage) -> anyhow::Result<ComicTextDetection> {
         let original_dimensions = image.dimensions();
         let (image_tensor, resized_dimensions) = preprocess(image, &self.device, self.dtype)?;
         let (predictions, mask, shrink_threshold) = self.forward(&image_tensor)?;
@@ -154,10 +161,82 @@ impl ComicTextDetector {
 
     #[instrument(level = "debug", skip_all)]
     pub fn inference_segmentation(&self, image: &DynamicImage) -> anyhow::Result<GrayImage> {
+        if let Some(mask) = self.inference_segmentation_sliced(image)? {
+            return Ok(mask);
+        }
+        self.inference_segmentation_single(image)
+    }
+
+    fn inference_segmentation_single(&self, image: &DynamicImage) -> anyhow::Result<GrayImage> {
         let original_dimensions = image.dimensions();
         let (image_tensor, resized_dimensions) = preprocess(image, &self.device, self.dtype)?;
         let mask = self.forward_mask(&image_tensor)?;
         postprocess_unet_mask(&mask, original_dimensions, resized_dimensions)
+    }
+
+    fn inference_sliced(&self, image: &DynamicImage) -> anyhow::Result<Option<ComicTextDetection>> {
+        let Some(slices) = VerticalSlicer::default().slices(image.width(), image.height()) else {
+            return Ok(None);
+        };
+
+        tracing::info!(
+            width = image.width(),
+            height = image.height(),
+            slices = slices.len(),
+            "comic text detector slicing tall image"
+        );
+
+        let mut shrink_map = GrayImage::new(image.width(), image.height());
+        let mut threshold_map = GrayImage::new(image.width(), image.height());
+        let mut mask = GrayImage::new(image.width(), image.height());
+        let mut line_polygons = Vec::new();
+        let mut text_blocks = Vec::new();
+
+        for slice in slices {
+            let cropped = image.crop_imm(0, slice.y, image.width(), slice.height);
+            let mut detection = self.inference_single(&cropped)?;
+            offset_quads(&mut detection.line_polygons, slice.y as f32);
+            for block in &mut detection.text_blocks {
+                offset_text_region(block, slice.y as f32);
+            }
+            line_polygons.extend(detection.line_polygons);
+            text_blocks.extend(detection.text_blocks);
+            stitch_gray_max(&mut shrink_map, &detection.shrink_map, slice.y);
+            stitch_gray_max(&mut threshold_map, &detection.threshold_map, slice.y);
+            stitch_gray_max(&mut mask, &detection.mask, slice.y);
+        }
+
+        Ok(Some(ComicTextDetection {
+            shrink_map,
+            threshold_map,
+            line_polygons,
+            text_blocks: dedupe_text_blocks(text_blocks),
+            mask,
+        }))
+    }
+
+    fn inference_segmentation_sliced(
+        &self,
+        image: &DynamicImage,
+    ) -> anyhow::Result<Option<GrayImage>> {
+        let Some(slices) = VerticalSlicer::default().slices(image.width(), image.height()) else {
+            return Ok(None);
+        };
+
+        tracing::info!(
+            width = image.width(),
+            height = image.height(),
+            slices = slices.len(),
+            "comic text detector segmenting tall image in slices"
+        );
+
+        let mut output = GrayImage::new(image.width(), image.height());
+        for slice in slices {
+            let cropped = image.crop_imm(0, slice.y, image.width(), slice.height);
+            let mask = self.inference_segmentation_single(&cropped)?;
+            stitch_gray_max(&mut output, &mask, slice.y);
+        }
+        Ok(Some(output))
     }
 
     #[instrument(level = "debug", skip_all)]
@@ -191,6 +270,66 @@ impl ComicTextDetector {
         )?;
         Ok(mask)
     }
+}
+
+fn stitch_gray_max(dst: &mut GrayImage, src: &GrayImage, dst_y: u32) {
+    let width = dst.width().min(src.width());
+    let height = src.height().min(dst.height().saturating_sub(dst_y));
+    let dst_width = dst.width() as usize;
+    let src_width = src.width() as usize;
+    let width = width as usize;
+    let dst = dst.as_mut();
+    let src = src.as_raw();
+    for y in 0..height as usize {
+        let dst_row = (dst_y as usize + y) * dst_width;
+        let src_row = y * src_width;
+        for x in 0..width {
+            let value = src[src_row + x];
+            let target = &mut dst[dst_row + x];
+            if value > *target {
+                *target = value;
+            }
+        }
+    }
+}
+
+fn offset_text_region(region: &mut TextRegion, offset_y: f32) {
+    region.y += offset_y;
+    if let Some(lines) = region.line_polygons.as_mut() {
+        for line in lines {
+            for point in line {
+                point[1] += offset_y;
+            }
+        }
+    }
+}
+
+fn offset_quads(quads: &mut [Quad], offset_y: f32) {
+    for quad in quads {
+        for point in quad {
+            point[1] += offset_y;
+        }
+    }
+}
+
+fn dedupe_text_blocks(mut blocks: Vec<TextRegion>) -> Vec<TextRegion> {
+    blocks.sort_by(|a, b| b.confidence.total_cmp(&a.confidence));
+    let mut out: Vec<TextRegion> = Vec::with_capacity(blocks.len());
+    for block in blocks {
+        if out
+            .iter()
+            .all(|existing| !text_regions_duplicate(existing, &block))
+        {
+            out.push(block);
+        }
+    }
+    out
+}
+
+fn text_regions_duplicate(a: &TextRegion, b: &TextRegion) -> bool {
+    let a_bbox = [a.x, a.y, a.x + a.width, a.y + a.height];
+    let b_bbox = [b.x, b.y, b.x + b.width, b.y + b.height];
+    bbox_is_duplicate(a_bbox, b_bbox)
 }
 
 #[instrument(level = "debug", skip_all)]

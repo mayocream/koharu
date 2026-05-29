@@ -12,13 +12,14 @@ use std::num::NonZeroUsize;
 use std::path::{Path, PathBuf};
 
 use anyhow::{Context, Result};
-use image::{DynamicImage, RgbaImage};
+use image::{DynamicImage, ImageFormat, RgbaImage};
 use koharu_core::BlobRef;
 use lru::LruCache;
 use parking_lot::Mutex;
 
 const IMAGE_CACHE_CAPACITY: usize = 64;
 const RAW_MAGIC: &[u8; 4] = b"RGBA";
+const WEBP_MAX_DIMENSION: u32 = 16_383;
 
 /// Content-addressed blob store + decoded-image LRU.
 pub struct BlobStore {
@@ -84,11 +85,12 @@ impl BlobStore {
         Ok(img)
     }
 
-    /// Encode an image as WebP, store, cache, return ref.
-    pub fn put_webp(&self, img: &DynamicImage) -> Result<BlobRef> {
-        let mut buf = Cursor::new(Vec::new());
-        img.write_to(&mut buf, image::ImageFormat::WebP)?;
-        let r = self.put_bytes(&buf.into_inner())?;
+    /// Encode an image, preferring WebP and falling back to PNG for oversized
+    /// dimensions, then store/cache/return the ref. The stored format is an
+    /// implementation detail; readers should go through `load_image`.
+    pub fn put_image(&self, img: &DynamicImage) -> Result<BlobRef> {
+        let bytes = encode_preferred_image(img)?;
+        let r = self.put_bytes(&bytes)?;
         self.cache.lock().put(r.clone(), img.clone());
         Ok(r)
     }
@@ -135,9 +137,31 @@ fn decode_blob(bytes: &[u8]) -> Result<DynamicImage> {
     Ok(image::load_from_memory(bytes)?)
 }
 
+fn encode_preferred_image(img: &DynamicImage) -> Result<Vec<u8>> {
+    if img.width() <= WEBP_MAX_DIMENSION && img.height() <= WEBP_MAX_DIMENSION {
+        let mut buf = Cursor::new(Vec::new());
+        match img.write_to(&mut buf, ImageFormat::WebP) {
+            Ok(()) => return Ok(buf.into_inner()),
+            Err(err) => {
+                tracing::warn!(
+                    width = img.width(),
+                    height = img.height(),
+                    error = %err,
+                    "WebP encode failed, falling back to PNG"
+                );
+            }
+        }
+    }
+
+    let mut buf = Cursor::new(Vec::new());
+    img.write_to(&mut buf, ImageFormat::Png)?;
+    Ok(buf.into_inner())
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
+    use image::{Rgba, RgbaImage};
     use tempfile::tempdir;
 
     #[test]
@@ -158,5 +182,18 @@ mod tests {
         let a = store.put_bytes(b"x").unwrap();
         let b = store.put_bytes(b"x").unwrap();
         assert_eq!(a, b);
+    }
+
+    #[test]
+    fn oversized_webp_falls_back_to_png() {
+        let img = DynamicImage::ImageRgba8(RgbaImage::from_pixel(
+            1,
+            WEBP_MAX_DIMENSION + 1,
+            Rgba([0, 0, 0, 255]),
+        ));
+
+        let bytes = encode_preferred_image(&img).unwrap();
+
+        assert!(bytes.starts_with(b"\x89PNG\r\n\x1a\n"));
     }
 }

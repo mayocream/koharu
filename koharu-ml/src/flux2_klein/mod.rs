@@ -13,7 +13,10 @@ use image::{DynamicImage, GenericImageView, RgbImage};
 use koharu_runtime::RuntimeManager;
 use tracing::instrument;
 
-use crate::{device, inpainting, loading};
+use crate::{
+    device, inpainting, loading,
+    slicing::{VerticalSlice, VerticalSlicer},
+};
 
 use self::{
     latents::{
@@ -315,6 +318,12 @@ impl Flux2Klein {
             return Ok(image.clone());
         }
 
+        if let Some(output) =
+            self.inpaint_tall_page_sliced(image, mask, reference_image, options)?
+        {
+            return Ok(output);
+        }
+
         if let Some(bounds) = inpaint_crop_bounds(image, mask, options.mask_padding) {
             let image_crop = image.crop_imm(bounds.x, bounds.y, bounds.width, bounds.height);
             let mask_crop = mask.crop_imm(bounds.x, bounds.y, bounds.width, bounds.height);
@@ -324,6 +333,65 @@ impl Flux2Klein {
         }
 
         self.inpaint_full_frame(image, mask, reference_image, options)
+    }
+
+    fn inpaint_tall_page_sliced(
+        &self,
+        image: &DynamicImage,
+        mask: &DynamicImage,
+        reference_image: Option<&DynamicImage>,
+        options: &Flux2InpaintOptions,
+    ) -> Result<Option<DynamicImage>> {
+        let Some(slices) = VerticalSlicer::default().slices(image.width(), image.height()) else {
+            return Ok(None);
+        };
+
+        tracing::info!(
+            width = image.width(),
+            height = image.height(),
+            slices = slices.len(),
+            "flux2 inpainting slicing tall image"
+        );
+
+        let mut output = image.clone();
+        let mut processed_slices = 0usize;
+        let mut previous_end_y = 0u32;
+        for slice in slices {
+            let mask_crop = non_overlapping_slice_mask(mask, image.width(), slice, previous_end_y);
+            previous_end_y = previous_end_y.max(slice.y.saturating_add(slice.height));
+            if !mask_has_nonzero(&mask_crop) {
+                continue;
+            }
+
+            let image_crop = image.crop_imm(0, slice.y, image.width(), slice.height);
+            let reference_crop = reference_image
+                .filter(|reference| reference.dimensions() == image.dimensions())
+                .map(|reference| reference.crop_imm(0, slice.y, image.width(), slice.height));
+            let generated = self.inpaint_with_reference(
+                &image_crop,
+                &mask_crop,
+                reference_crop.as_ref(),
+                options,
+            )?;
+            output = composite_inpaint_crop(
+                &output,
+                &generated,
+                &mask_crop,
+                CropBounds {
+                    x: 0,
+                    y: slice.y,
+                    width: image.width(),
+                    height: slice.height,
+                },
+            )?;
+            processed_slices += 1;
+        }
+
+        if processed_slices == 0 {
+            return Ok(None);
+        }
+
+        Ok(Some(output))
     }
 
     fn inpaint_full_frame(
@@ -591,6 +659,26 @@ fn inpaint_crop_bounds(
     })
 }
 
+fn mask_has_nonzero(mask: &DynamicImage) -> bool {
+    mask.to_luma8().pixels().any(|pixel| pixel.0[0] > 0)
+}
+
+fn non_overlapping_slice_mask(
+    mask: &DynamicImage,
+    width: u32,
+    slice: VerticalSlice,
+    previous_end_y: u32,
+) -> DynamicImage {
+    let mut mask_crop = mask.crop_imm(0, slice.y, width, slice.height).to_luma8();
+    let overlap_height = previous_end_y.saturating_sub(slice.y).min(slice.height);
+    for y in 0..overlap_height {
+        for x in 0..mask_crop.width() {
+            mask_crop.get_pixel_mut(x, y).0[0] = 0;
+        }
+    }
+    DynamicImage::ImageLuma8(mask_crop)
+}
+
 fn composite_inpaint_crop(
     original: &DynamicImage,
     generated_crop: &DynamicImage,
@@ -655,4 +743,37 @@ fn restore_original_alpha(output: DynamicImage, original: &DynamicImage) -> Dyna
         pixel.0[3] = alpha.get_pixel(x, y).0[0];
     }
     DynamicImage::ImageRgba8(rgba)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::{mask_has_nonzero, non_overlapping_slice_mask};
+    use crate::slicing::VerticalSlice;
+    use image::{DynamicImage, GrayImage, Luma};
+
+    #[test]
+    fn mask_has_nonzero_detects_any_painted_pixel() {
+        let mut mask = GrayImage::new(2, 2);
+        assert!(!mask_has_nonzero(&DynamicImage::ImageLuma8(mask.clone())));
+
+        mask.put_pixel(1, 1, Luma([255]));
+
+        assert!(mask_has_nonzero(&DynamicImage::ImageLuma8(mask)));
+    }
+
+    #[test]
+    fn non_overlapping_slice_mask_clears_previous_overlap() {
+        let mask = GrayImage::from_pixel(2, 4, Luma([255]));
+        let mask = non_overlapping_slice_mask(
+            &DynamicImage::ImageLuma8(mask),
+            2,
+            VerticalSlice { y: 1, height: 3 },
+            3,
+        )
+        .to_luma8();
+
+        assert_eq!(mask.get_pixel(0, 0).0[0], 0);
+        assert_eq!(mask.get_pixel(0, 1).0[0], 0);
+        assert_eq!(mask.get_pixel(0, 2).0[0], 255);
+    }
 }

@@ -9,13 +9,14 @@ use koharu_runtime::RuntimeManager;
 use serde::{Deserialize, Serialize};
 use tracing::instrument;
 
-use crate::{Device, device, loading, types::TextRegion};
+use crate::{Device, device, loading, slicing::VerticalSlicer, types::TextRegion};
 
 use self::model::{RTDetrV2ForObjectDetection, RTDetrV2Outputs};
 
 const HF_REPO: &str = "ogkalu/comic-text-and-bubble-detector";
 const DEFAULT_CONFIDENCE_THRESHOLD: f32 = 0.3;
 const DETECTOR_NAME: &str = "comic-text-bubble-detector";
+const BUBBLE_DETECTOR_TARGET_SLICE_RATIO: f32 = 3.0;
 
 koharu_runtime::declare_hf_model_package!(
     id: "model:comic-text-bubble-detector:config",
@@ -46,7 +47,6 @@ pub struct ComicTextBubbleDetector {
     preprocessor: RTDetrImageProcessorConfig,
     device: Device,
     dtype: DType,
-    slicer: ImageSlicer,
 }
 
 impl ComicTextBubbleDetector {
@@ -80,7 +80,6 @@ impl ComicTextBubbleDetector {
             preprocessor,
             device,
             dtype,
-            slicer: ImageSlicer::default(),
         })
     }
 
@@ -96,9 +95,7 @@ impl ComicTextBubbleDetector {
         threshold: f32,
     ) -> Result<ComicTextBubbleDetection> {
         let started = Instant::now();
-        let detections = self.slicer.process_slices_for_detection(image, |slice| {
-            self.detect_single_image(slice, threshold)
-        })?;
+        let detections = self.detect_sliced_or_single(image, threshold)?;
         let detections = merge_slice_regions(
             filter_and_fix_regions(detections, image.dimensions()),
             image.height(),
@@ -120,6 +117,41 @@ impl ComicTextBubbleDetector {
             detections,
             text_blocks,
         })
+    }
+
+    #[instrument(level = "debug", skip_all)]
+    fn detect_sliced_or_single(
+        &self,
+        image: &DynamicImage,
+        threshold: f32,
+    ) -> Result<Vec<ComicTextBubbleRegion>> {
+        let slicer = VerticalSlicer {
+            target_slice_ratio: BUBBLE_DETECTOR_TARGET_SLICE_RATIO,
+            ..VerticalSlicer::default()
+        };
+        let Some(slices) = slicer.slices(image.width(), image.height()) else {
+            return self.detect_single_image(image, threshold);
+        };
+
+        tracing::info!(
+            width = image.width(),
+            height = image.height(),
+            slices = slices.len(),
+            "comic text bubble detector slicing tall image"
+        );
+
+        let mut detections = Vec::new();
+        for slice in slices {
+            let cropped = image.crop_imm(0, slice.y, image.width(), slice.height);
+            let mut slice_detections = self.detect_single_image(&cropped, threshold)?;
+            for detection in &mut slice_detections {
+                detection.bbox[1] += slice.y as f32;
+                detection.bbox[3] += slice.y as f32;
+            }
+            detections.extend(slice_detections);
+        }
+
+        Ok(detections)
     }
 
     #[instrument(level = "debug", skip_all)]
@@ -727,83 +759,6 @@ fn merge_boxes(box1: [f32; 4], box2: [f32; 4]) -> [f32; 4] {
         box1[2].max(box2[2]),
         box1[3].max(box2[3]),
     ]
-}
-
-#[derive(Debug, Clone)]
-struct ImageSlicer {
-    height_to_width_ratio_threshold: f32,
-    target_slice_ratio: f32,
-    overlap_height_ratio: f32,
-    min_slice_height_ratio: f32,
-}
-
-impl Default for ImageSlicer {
-    fn default() -> Self {
-        Self {
-            height_to_width_ratio_threshold: 3.5,
-            target_slice_ratio: 3.0,
-            overlap_height_ratio: 0.2,
-            min_slice_height_ratio: 0.7,
-        }
-    }
-}
-
-impl ImageSlicer {
-    fn should_slice(&self, image: &DynamicImage) -> bool {
-        let (width, height) = image.dimensions();
-        height as f32 / width.max(1) as f32 > self.height_to_width_ratio_threshold
-    }
-
-    fn calculate_slice_params(&self, image: &DynamicImage) -> (u32, u32, usize) {
-        let (width, height) = image.dimensions();
-        let slice_height = (width as f32 * self.target_slice_ratio).round().max(1.0) as u32;
-        let effective_slice_height = (slice_height as f32 * (1.0 - self.overlap_height_ratio))
-            .round()
-            .max(1.0) as u32;
-        let mut num_slices = height.div_ceil(effective_slice_height) as usize;
-        if num_slices > 1 {
-            let last_slice_start = (num_slices as u32 - 1) * effective_slice_height;
-            let last_slice_height = height.saturating_sub(last_slice_start);
-            if last_slice_height as f32 / slice_height as f32 <= self.min_slice_height_ratio {
-                num_slices -= 1;
-            }
-        }
-        (slice_height, effective_slice_height, num_slices.max(1))
-    }
-
-    fn process_slices_for_detection<F>(
-        &self,
-        image: &DynamicImage,
-        detect_fn: F,
-    ) -> Result<Vec<ComicTextBubbleRegion>>
-    where
-        F: Fn(&DynamicImage) -> Result<Vec<ComicTextBubbleRegion>>,
-    {
-        if !self.should_slice(image) {
-            return detect_fn(image);
-        }
-
-        let (slice_height, effective_slice_height, num_slices) = self.calculate_slice_params(image);
-        let (width, height) = image.dimensions();
-        let mut detections = Vec::new();
-        for slice_number in 0..num_slices {
-            let start_y = slice_number as u32 * effective_slice_height;
-            let end_y = if slice_number + 1 == num_slices {
-                height
-            } else {
-                (start_y + slice_height).min(height)
-            };
-            let crop_height = end_y.saturating_sub(start_y).max(1);
-            let cropped = image.crop_imm(0, start_y, width, crop_height);
-            let mut slice_detections = detect_fn(&cropped)?;
-            for detection in &mut slice_detections {
-                detection.bbox[1] += start_y as f32;
-                detection.bbox[3] += start_y as f32;
-            }
-            detections.extend(slice_detections);
-        }
-        Ok(detections)
-    }
 }
 
 const fn default_true() -> bool {

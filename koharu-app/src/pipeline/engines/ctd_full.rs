@@ -26,7 +26,7 @@ impl Engine for Model {
         let det = self.0.inference(&image)?;
 
         // Segmentation mask blob.
-        let mask_blob = ctx.blobs.put_webp(&DynamicImage::ImageLuma8(det.mask))?;
+        let mask_blob = ctx.blobs.put_image(&DynamicImage::ImageLuma8(det.mask))?;
 
         let mut ops = clear_text_nodes_ops(ctx.scene, ctx.page);
         let removed = ops.len();

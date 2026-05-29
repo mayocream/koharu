@@ -57,7 +57,7 @@ impl Engine for Model {
             self.0
                 .inpaint_with_reference(&image, &mask, None, &Flux2InpaintOptions::default())?;
         let (w, h) = image_dimensions(&result);
-        let blob = ctx.blobs.put_webp(&result)?;
+        let blob = ctx.blobs.put_image(&result)?;
         Ok(vec![upsert_image_blob(
             ctx.scene,
             ctx.page,

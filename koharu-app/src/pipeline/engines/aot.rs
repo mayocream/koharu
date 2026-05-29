@@ -60,7 +60,7 @@ impl Engine for Model {
 
         let result = self.0.inference(&image, &mask, &bubble_mask)?;
         let (w, h) = image_dimensions(&result);
-        let blob = ctx.blobs.put_webp(&result)?;
+        let blob = ctx.blobs.put_image(&result)?;
         Ok(vec![upsert_image_blob(
             ctx.scene,
             ctx.page,

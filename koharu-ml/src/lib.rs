@@ -1,4 +1,6 @@
+mod bbox;
 mod hf_hub;
+mod slicing;
 
 pub mod anime_text;
 pub mod aot_inpainting;

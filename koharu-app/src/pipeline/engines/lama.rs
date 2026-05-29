@@ -70,7 +70,7 @@ impl Engine for Model {
                 .inference_with_blocks(&image, &mask, &bubble_mask, &text_blocks)?
         };
         let (w, h) = image_dimensions(&result);
-        let blob = ctx.blobs.put_webp(&result)?;
+        let blob = ctx.blobs.put_image(&result)?;
         Ok(vec![upsert_image_blob(
             ctx.scene,
             ctx.page,

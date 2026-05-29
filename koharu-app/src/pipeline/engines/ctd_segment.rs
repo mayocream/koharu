@@ -28,7 +28,7 @@ impl Engine for Model {
             .collect();
 
         let mask = refine_segmentation_mask(&image, &prob_mask, &regions);
-        let mask_blob = ctx.blobs.put_webp(&DynamicImage::ImageLuma8(mask))?;
+        let mask_blob = ctx.blobs.put_image(&DynamicImage::ImageLuma8(mask))?;
 
         Ok(vec![upsert_mask_blob(
             ctx.scene,

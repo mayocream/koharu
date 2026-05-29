@@ -25,7 +25,7 @@ impl Engine for Model {
         regions.sort_by_key(|region| std::cmp::Reverse(region.area));
         let mask = paint_bubble_id_mask(result.image_width, result.image_height, &regions);
 
-        let blob = ctx.blobs.put_webp(&DynamicImage::ImageLuma8(mask))?;
+        let blob = ctx.blobs.put_image(&DynamicImage::ImageLuma8(mask))?;
         Ok(vec![upsert_mask_blob(
             ctx.scene,
             ctx.page,

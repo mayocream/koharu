@@ -257,7 +257,7 @@ impl AiManager {
                     let generated = image::load_from_memory(&generated_bytes)
                         .with_context(|| "failed to decode Codex image result")?;
                     let (width, height) = image_dimensions(&generated);
-                    let blob = session.blobs.put_webp(&generated)?;
+                    let blob = session.blobs.put_image(&generated)?;
                     Ok::<_, anyhow::Error>((width, height, blob))
                 })?;
             tracing::info!(width, height, "decoded and stored Codex generated image");

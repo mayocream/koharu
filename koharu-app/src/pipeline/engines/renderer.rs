@@ -127,7 +127,7 @@ impl Engine for Model {
         }
 
         // Final composite → Image { Rendered } upsert.
-        let final_blob = ctx.blobs.put_webp(&output.final_render)?;
+        let final_blob = ctx.blobs.put_image(&output.final_render)?;
         ops.push(upsert_image_blob(
             ctx.scene,
             ctx.page,

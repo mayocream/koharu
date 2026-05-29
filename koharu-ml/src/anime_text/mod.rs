@@ -13,7 +13,7 @@ use koharu_runtime::RuntimeManager;
 use serde::{Deserialize, Serialize};
 use tracing::instrument;
 
-use crate::{device, loading, types::TextRegion};
+use crate::{bbox::bbox_is_duplicate, device, loading, slicing::VerticalSlicer, types::TextRegion};
 
 use self::model::{Yolo12, Yolo12Scale};
 
@@ -207,6 +207,20 @@ impl AnimeTextDetector {
         confidence_threshold: f32,
         nms_threshold: f32,
     ) -> Result<AnimeTextDetection> {
+        if let Some(result) =
+            self.inference_sliced_with_thresholds(image, confidence_threshold, nms_threshold)?
+        {
+            return Ok(result);
+        }
+        self.inference_single_with_thresholds(image, confidence_threshold, nms_threshold)
+    }
+
+    fn inference_single_with_thresholds(
+        &self,
+        image: &DynamicImage,
+        confidence_threshold: f32,
+        nms_threshold: f32,
+    ) -> Result<AnimeTextDetection> {
         let started = Instant::now();
         let prepared = self.preprocess(image)?;
         let outputs = self.model.forward(&prepared.pixel_values)?;
@@ -229,6 +243,47 @@ impl AnimeTextDetector {
             regions,
             text_blocks,
         })
+    }
+
+    fn inference_sliced_with_thresholds(
+        &self,
+        image: &DynamicImage,
+        confidence_threshold: f32,
+        nms_threshold: f32,
+    ) -> Result<Option<AnimeTextDetection>> {
+        let Some(slices) = VerticalSlicer::default().slices(image.width(), image.height()) else {
+            return Ok(None);
+        };
+
+        tracing::info!(
+            width = image.width(),
+            height = image.height(),
+            slices = slices.len(),
+            variant = %self.variant,
+            "anime text YOLO slicing tall image"
+        );
+
+        let mut regions = Vec::new();
+        for slice in slices {
+            let cropped = image.crop_imm(0, slice.y, image.width(), slice.height);
+            let mut detection = self.inference_single_with_thresholds(
+                &cropped,
+                confidence_threshold,
+                nms_threshold,
+            )?;
+            offset_anime_regions(&mut detection.regions, slice.y as f32);
+            regions.extend(detection.regions);
+        }
+
+        let regions = dedupe_anime_regions(regions);
+        let text_blocks = regions_to_text_blocks(&regions);
+        Ok(Some(AnimeTextDetection {
+            image_width: image.width(),
+            image_height: image.height(),
+            variant: self.variant,
+            regions,
+            text_blocks,
+        }))
     }
 
     fn preprocess(&self, image: &DynamicImage) -> Result<PreparedInput> {
@@ -276,6 +331,31 @@ impl AnimeTextDetector {
             scale,
         })
     }
+}
+
+fn offset_anime_regions(regions: &mut [AnimeTextRegion], offset_y: f32) {
+    for region in regions {
+        region.bbox[1] += offset_y;
+        region.bbox[3] += offset_y;
+    }
+}
+
+fn dedupe_anime_regions(mut regions: Vec<AnimeTextRegion>) -> Vec<AnimeTextRegion> {
+    regions.sort_by(|a, b| b.score.total_cmp(&a.score));
+    let mut out: Vec<AnimeTextRegion> = Vec::with_capacity(regions.len());
+    for region in regions {
+        if out
+            .iter()
+            .all(|existing| !anime_regions_duplicate(existing, &region))
+        {
+            out.push(region);
+        }
+    }
+    out
+}
+
+fn anime_regions_duplicate(a: &AnimeTextRegion, b: &AnimeTextRegion) -> bool {
+    bbox_is_duplicate(a.bbox, b.bbox)
 }
 
 pub async fn prefetch(runtime: &RuntimeManager) -> Result<()> {

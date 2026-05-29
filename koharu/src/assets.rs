@@ -29,7 +29,17 @@ pub fn from_context<R: tauri::Runtime>(context: &mut tauri::Context<R>) -> Asset
 
     Arc::new(move |path: &str| {
         let key = tauri::utils::assets::AssetKey::from(path);
-        let bytes = assets.get(&key)?.into_owned();
+        let asset = assets.get(&key).or_else(|| {
+            if path.starts_with('/') {
+                return None;
+            }
+            // Tauri stores bundled asset keys with a leading slash while the
+            // axum fallback can request relative paths.
+            let path = format!("/{path}");
+            let key = tauri::utils::assets::AssetKey::from(path.as_str());
+            assets.get(&key)
+        })?;
+        let bytes = asset.into_owned();
         let mime = tauri::utils::mime_type::MimeType::parse(&bytes, path);
         Some((bytes, mime))
     })

@@ -17,7 +17,10 @@ use koharu_runtime::RuntimeManager;
 use serde::{Deserialize, Serialize};
 use tracing::instrument;
 
-use crate::{device, loading, probability_map::ProbabilityMap};
+use crate::{
+    bbox::bbox_is_duplicate, device, loading, probability_map::ProbabilityMap,
+    slicing::VerticalSlicer,
+};
 
 use self::model::{Multiples, YoloV8Seg, YoloV8SegOutputs};
 
@@ -221,6 +224,20 @@ impl SpeechBubbleSegmentation {
         confidence_threshold: f32,
         nms_threshold: f32,
     ) -> Result<SpeechBubbleSegmentationResult> {
+        if let Some(result) =
+            self.inference_sliced_with_thresholds(image, confidence_threshold, nms_threshold)?
+        {
+            return Ok(result);
+        }
+        self.inference_single_with_thresholds(image, confidence_threshold, nms_threshold)
+    }
+
+    fn inference_single_with_thresholds(
+        &self,
+        image: &DynamicImage,
+        confidence_threshold: f32,
+        nms_threshold: f32,
+    ) -> Result<SpeechBubbleSegmentationResult> {
         let started = Instant::now();
         let preprocess_started = Instant::now();
         let prepared = self.preprocess(image)?;
@@ -254,6 +271,46 @@ impl SpeechBubbleSegmentation {
         );
 
         Ok(result)
+    }
+
+    fn inference_sliced_with_thresholds(
+        &self,
+        image: &DynamicImage,
+        confidence_threshold: f32,
+        nms_threshold: f32,
+    ) -> Result<Option<SpeechBubbleSegmentationResult>> {
+        let Some(slices) = VerticalSlicer::default().slices(image.width(), image.height()) else {
+            return Ok(None);
+        };
+
+        tracing::info!(
+            width = image.width(),
+            height = image.height(),
+            slices = slices.len(),
+            "speech bubble segmentation slicing tall image"
+        );
+
+        let mut probability_map = ProbabilityMap::zeros(image.width(), image.height());
+        let mut regions = Vec::new();
+
+        for slice in slices {
+            let cropped = image.crop_imm(0, slice.y, image.width(), slice.height);
+            let mut result = self.inference_single_with_thresholds(
+                &cropped,
+                confidence_threshold,
+                nms_threshold,
+            )?;
+            probability_map.stitch_max(&result.probability_map, slice.y)?;
+            offset_speech_bubble_result(&mut result, slice.y);
+            regions.extend(result.regions);
+        }
+
+        Ok(Some(SpeechBubbleSegmentationResult {
+            image_width: image.width(),
+            image_height: image.height(),
+            regions: dedupe_speech_bubble_regions(regions),
+            probability_map,
+        }))
     }
 
     fn preprocess(&self, image: &DynamicImage) -> Result<PreparedInput> {
@@ -307,6 +364,36 @@ impl SpeechBubbleSegmentation {
             scale,
         })
     }
+}
+
+fn offset_speech_bubble_result(result: &mut SpeechBubbleSegmentationResult, offset_y: u32) {
+    for region in &mut result.regions {
+        region.bbox[1] += offset_y as f32;
+        region.bbox[3] += offset_y as f32;
+        region.mask.y = region.mask.y.saturating_add(offset_y);
+    }
+}
+
+fn dedupe_speech_bubble_regions(mut regions: Vec<SpeechBubbleRegion>) -> Vec<SpeechBubbleRegion> {
+    regions.sort_by(|a, b| {
+        b.area
+            .cmp(&a.area)
+            .then_with(|| b.score.total_cmp(&a.score))
+    });
+    let mut out: Vec<SpeechBubbleRegion> = Vec::with_capacity(regions.len());
+    for region in regions {
+        if out
+            .iter()
+            .all(|existing| !speech_bubble_regions_duplicate(existing, &region))
+        {
+            out.push(region);
+        }
+    }
+    out
+}
+
+fn speech_bubble_regions_duplicate(a: &SpeechBubbleRegion, b: &SpeechBubbleRegion) -> bool {
+    bbox_is_duplicate(a.bbox, b.bbox)
 }
 
 pub async fn prefetch(runtime: &RuntimeManager) -> Result<()> {

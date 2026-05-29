@@ -11,7 +11,7 @@ use candle_nn::ops::sigmoid;
 use image::{DynamicImage, imageops::FilterType};
 use koharu_runtime::RuntimeManager;
 
-use crate::{device, loading, probability_map::ProbabilityMap};
+use crate::{device, loading, probability_map::ProbabilityMap, slicing::VerticalSlicer};
 
 const REPO: &str = "mayocream/manga-text-segmentation-2025";
 const SAFETENSORS_FILENAME: &str = "model.safetensors";
@@ -64,6 +64,13 @@ impl MangaTextSegmentation {
     }
 
     pub fn inference(&self, image: &DynamicImage) -> Result<ProbabilityMap> {
+        if let Some(result) = self.inference_sliced(image)? {
+            return Ok(result);
+        }
+        self.inference_single(image)
+    }
+
+    fn inference_single(&self, image: &DynamicImage) -> Result<ProbabilityMap> {
         let started = Instant::now();
         let preprocess_started = Instant::now();
         let prepared = self.preprocess(image)?;
@@ -114,6 +121,28 @@ impl MangaTextSegmentation {
             height: prepared.original_height,
             values,
         })
+    }
+
+    fn inference_sliced(&self, image: &DynamicImage) -> Result<Option<ProbabilityMap>> {
+        let Some(slices) = VerticalSlicer::default().slices(image.width(), image.height()) else {
+            return Ok(None);
+        };
+
+        tracing::info!(
+            width = image.width(),
+            height = image.height(),
+            slices = slices.len(),
+            "manga text segmentation slicing tall image"
+        );
+
+        let mut output = ProbabilityMap::zeros(image.width(), image.height());
+        for slice in slices {
+            let cropped = image.crop_imm(0, slice.y, image.width(), slice.height);
+            let probability_map = self.inference_single(&cropped)?;
+            output.stitch_max(&probability_map, slice.y)?;
+        }
+
+        Ok(Some(output))
     }
 
     fn preprocess(&self, image: &DynamicImage) -> Result<PreparedInput> {
