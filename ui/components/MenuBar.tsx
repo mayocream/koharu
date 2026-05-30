@@ -71,6 +71,10 @@ export function MenuBar() {
   const shortcuts = usePreferencesStore((state) => state.shortcuts)
   const customPipeline = usePreferencesStore((state) => state.customPipeline)
   const setCustomPipeline = usePreferencesStore((state) => state.setCustomPipeline)
+  const hasSelectedSteps = useMemo(
+    () => Object.values(customPipeline).some(Boolean),
+    [customPipeline],
+  )
   const isMac = useMemo(() => getPlatform() === 'mac', [])
 
   const requirePageId = () => {
@@ -334,14 +338,14 @@ export function MenuBar() {
             <MenubarSeparator />
             <MenubarItem
               className='text-[13px]'
-              disabled={!hasPage}
+              disabled={!hasPage || !hasSelectedSteps}
               onSelect={() => void runCustomPipeline({ pageId: requirePageId() })}
             >
               {t('menu.runCustomCurrent')}
             </MenubarItem>
             <MenubarItem
               className='text-[13px]'
-              disabled={!hasScene}
+              disabled={!hasScene || !hasSelectedSteps}
               onSelect={() => void runCustomPipeline({})}
             >
               {t('menu.runCustomAll')}
