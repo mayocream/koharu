@@ -41,7 +41,10 @@
     "github": "깃허브",
     "version": "버전: {{version}}",
     "versionUnknown": "버전: 알 수 없음",
-    "language": "언어"
+    "language": "언어",
+    "customPipeline": "사용자 정의 파이프라인",
+    "runCustomCurrent": "사용자 정의 실행 (현재 페이지)",
+    "runCustomAll": "사용자 정의 실행 (모든 페이지)"
   },
   "welcome": {
     "title": "코하루",
