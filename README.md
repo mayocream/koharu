@@ -1,6 +1,3 @@
-<p align="center">
-<img src="https://github.com/mayocream/koharu/blob/main/ui/public/icon-large.png?raw=true">
-</p>
 <h1 align="center">Koharu</h1>
 
 <p align="center">ML-powered manga translator, written in <b>Rust</b>.</p>
