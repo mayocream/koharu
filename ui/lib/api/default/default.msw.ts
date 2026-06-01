@@ -2035,6 +2035,26 @@ export const getImportProjectMockHandler = (
   )
 }
 
+export const getDeleteProjectMockHandler = (
+  overrideResponse?:
+    | void
+    | ((info: Parameters<Parameters<typeof http.delete>[1]>[0]) => Promise<void> | void),
+  options?: RequestHandlerOptions,
+) => {
+  return http.delete(
+    '*/projects/:id',
+    async (info: Parameters<Parameters<typeof http.delete>[1]>[0]) => {
+      await delay(0)
+      if (typeof overrideResponse === 'function') {
+        await overrideResponse(info)
+      }
+
+      return new HttpResponse(null, { status: 204 })
+    },
+    options,
+  )
+}
+
 export const getGetSceneBinMockHandler = (
   overrideResponse?:
     | ArrayBuffer
@@ -2127,6 +2147,7 @@ export const getDefaultMock = () => [
   getDeleteCurrentProjectMockHandler(),
   getExportCurrentProjectMockHandler(),
   getImportProjectMockHandler(),
+  getDeleteProjectMockHandler(),
   getGetSceneBinMockHandler(),
   getGetSceneJsonMockHandler(),
 ]

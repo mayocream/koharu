@@ -11,7 +11,7 @@
 
 use axum::Json;
 use axum::body::{Body, Bytes};
-use axum::extract::State;
+use axum::extract::{Path, State};
 use axum::http::{HeaderValue, header};
 use axum::response::{IntoResponse, Response};
 use koharu_app::projects as project_dirs;
@@ -29,6 +29,7 @@ pub fn router() -> OpenApiRouter<AppState> {
         .routes(routes!(import_project))
         .routes(routes!(put_current_project))
         .routes(routes!(delete_current_project))
+        .routes(routes!(delete_project))
         .routes(routes!(export_current_project))
 }
 
@@ -129,6 +130,50 @@ async fn put_current_project(
 #[utoipa::path(delete, path = "/projects/current", responses((status = 204)))]
 async fn delete_current_project(State(app): State<AppState>) -> ApiResult<axum::http::StatusCode> {
     app.close_project().await.map_err(ApiError::internal)?;
+    Ok(axum::http::StatusCode::NO_CONTENT)
+}
+
+// ---------------------------------------------------------------------------
+// DELETE /projects/{id} — delete a managed project recursively
+// ---------------------------------------------------------------------------
+
+#[utoipa::path(
+    delete,
+    path = "/projects/{id}",
+    params(
+        ("id" = String, Path, description = "Project ID to delete")
+    ),
+    responses(
+        (status = 204, description = "Project successfully deleted"),
+        (status = 404, description = "Project not found"),
+        (status = 500, description = "Internal filesystem error")
+    )
+)]
+async fn delete_project(
+    State(app): State<AppState>,
+    Path(id): Path<String>,
+) -> ApiResult<axum::http::StatusCode> {
+    let config = (**app.config.load()).clone();
+    let path = project_dirs::project_path(&config, &id)
+        .map_err(|e| ApiError::bad_request(format!("{e:#}")))?;
+
+    if !path.exists() {
+        return Err(ApiError::not_found(format!("project {}", id)));
+    }
+
+    // If the active session is the project we are deleting, close it first to release lock files
+    if let Some(session) = app.current_session() {
+        if session.dir == path {
+            app.close_project().await.map_err(ApiError::internal)?;
+        }
+    }
+
+    // Recursively delete the project directory from disk
+    tokio::task::spawn_blocking(move || std::fs::remove_dir_all(path.as_std_path()))
+        .await
+        .map_err(|e| ApiError::internal(anyhow::Error::new(e)))?
+        .map_err(|e| ApiError::internal(anyhow::Error::new(e)))?;
+
     Ok(axum::http::StatusCode::NO_CONTENT)
 }
 

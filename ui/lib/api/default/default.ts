@@ -2531,8 +2531,8 @@ export const getPutMaskUrl = (id: PageId, role: MaskRole, params?: PutMaskParams
   const normalizedParams = new URLSearchParams()
 
   Object.entries(params || {}).forEach(([key, value]) => {
-    if (value !== undefined && value !== null) {
-      normalizedParams.append(key, value.toString())
+    if (value !== undefined) {
+      normalizedParams.append(key, value === null ? 'null' : value.toString())
     }
   })
 
@@ -3309,6 +3309,72 @@ export const useImportProject = <TError = unknown, TContext = unknown>(
   queryClient?: QueryClient,
 ): UseMutationResult<Awaited<ReturnType<typeof importProject>>, TError, void, TContext> => {
   return useMutation(getImportProjectMutationOptions(options), queryClient)
+}
+export const getDeleteProjectUrl = (id: string) => {
+  return `/api/v1/projects/${id}`
+}
+
+export const deleteProject = async (id: string, options?: RequestInit): Promise<void> => {
+  return fetchApi<void>(getDeleteProjectUrl(id), {
+    ...options,
+    method: 'DELETE',
+  })
+}
+
+export const getDeleteProjectMutationOptions = <TError = void, TContext = unknown>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof deleteProject>>,
+    TError,
+    { id: string },
+    TContext
+  >
+  request?: SecondParameter<typeof fetchApi>
+}): UseMutationOptions<
+  Awaited<ReturnType<typeof deleteProject>>,
+  TError,
+  { id: string },
+  TContext
+> => {
+  const mutationKey = ['deleteProject']
+  const { mutation: mutationOptions, request: requestOptions } = options
+    ? options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey
+      ? options
+      : { ...options, mutation: { ...options.mutation, mutationKey } }
+    : { mutation: { mutationKey }, request: undefined }
+
+  const mutationFn: MutationFunction<Awaited<ReturnType<typeof deleteProject>>, { id: string }> = (
+    props,
+  ) => {
+    const { id } = props ?? {}
+
+    return deleteProject(id, requestOptions)
+  }
+
+  return { mutationFn, ...mutationOptions }
+}
+
+export type DeleteProjectMutationResult = NonNullable<Awaited<ReturnType<typeof deleteProject>>>
+
+export type DeleteProjectMutationError = void
+
+export const useDeleteProject = <TError = void, TContext = unknown>(
+  options?: {
+    mutation?: UseMutationOptions<
+      Awaited<ReturnType<typeof deleteProject>>,
+      TError,
+      { id: string },
+      TContext
+    >
+    request?: SecondParameter<typeof fetchApi>
+  },
+  queryClient?: QueryClient,
+): UseMutationResult<
+  Awaited<ReturnType<typeof deleteProject>>,
+  TError,
+  { id: string },
+  TContext
+> => {
+  return useMutation(getDeleteProjectMutationOptions(options), queryClient)
 }
 export const getGetSceneBinUrl = () => {
   return `/api/v1/scene.bin`
