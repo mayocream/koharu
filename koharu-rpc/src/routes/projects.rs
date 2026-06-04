@@ -171,10 +171,14 @@ async fn delete_project(
     }
 
     // Recursively delete the project directory from disk
-    tokio::task::spawn_blocking(move || std::fs::remove_dir_all(path.as_std_path()))
-        .await
-        .map_err(|e| ApiError::internal(anyhow::Error::new(e)))?
-        .map_err(|e| ApiError::internal(anyhow::Error::new(e)))?;
+    tokio::task::spawn_blocking(move || match std::fs::remove_dir_all(path.as_std_path()) {
+        Ok(()) => Ok(()),
+        Err(e) if e.kind() == std::io::ErrorKind::NotFound => Ok(()),
+        Err(e) => Err(e),
+    })
+    .await
+    .map_err(|e| ApiError::internal(anyhow::Error::new(e)))?
+    .map_err(|e| ApiError::internal(anyhow::Error::new(e)))?;
 
     Ok(axum::http::StatusCode::NO_CONTENT)
 }
