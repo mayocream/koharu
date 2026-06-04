@@ -2531,8 +2531,8 @@ export const getPutMaskUrl = (id: PageId, role: MaskRole, params?: PutMaskParams
   const normalizedParams = new URLSearchParams()
 
   Object.entries(params || {}).forEach(([key, value]) => {
-    if (value !== undefined) {
-      normalizedParams.append(key, value === null ? 'null' : value.toString())
+    if (value !== undefined && value !== null) {
+      normalizedParams.append(key, value.toString())
     }
   })
 
@@ -3321,7 +3321,7 @@ export const deleteProject = async (id: string, options?: RequestInit): Promise<
   })
 }
 
-export const getDeleteProjectMutationOptions = <TError = void, TContext = unknown>(options?: {
+export const getDeleteProjectMutationOptions = <TError = unknown, TContext = unknown>(options?: {
   mutation?: UseMutationOptions<
     Awaited<ReturnType<typeof deleteProject>>,
     TError,
@@ -3355,9 +3355,9 @@ export const getDeleteProjectMutationOptions = <TError = void, TContext = unknow
 
 export type DeleteProjectMutationResult = NonNullable<Awaited<ReturnType<typeof deleteProject>>>
 
-export type DeleteProjectMutationError = void
+export type DeleteProjectMutationError = unknown
 
-export const useDeleteProject = <TError = void, TContext = unknown>(
+export const useDeleteProject = <TError = unknown, TContext = unknown>(
   options?: {
     mutation?: UseMutationOptions<
       Awaited<ReturnType<typeof deleteProject>>,

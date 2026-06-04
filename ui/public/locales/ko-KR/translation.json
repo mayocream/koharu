@@ -52,6 +52,8 @@
     "projects": "최근",
     "emptyHint": "최근 프로젝트가 여기에 표시됩니다",
     "delete": "삭제",
+    "deleting": "삭제 중...",
+    "projectOptions": "프로젝트 옵션",
     "deleteConfirmTitle": "프로젝트 삭제",
     "deleteConfirmDescription": "\"{{name}}\"을(를) 영구적으로 삭제하시겠습니까? 이 작업은 모든 페이지, 이미지 및 번역을 삭제하며 되돌릴 수 없습니다.",
     "newDialogTitle": "새 프로젝트",

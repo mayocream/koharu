@@ -145,6 +145,7 @@ async fn delete_current_project(State(app): State<AppState>) -> ApiResult<axum::
     ),
     responses(
         (status = 204, description = "Project successfully deleted"),
+        (status = 400, description = "Invalid project ID"),
         (status = 404, description = "Project not found"),
         (status = 500, description = "Internal filesystem error")
     )
@@ -162,10 +163,8 @@ async fn delete_project(
     }
 
     // If the active session is the project we are deleting, close it first to release lock files
-    if let Some(session) = app.current_session() {
-        if session.dir == path {
-            app.close_project().await.map_err(ApiError::internal)?;
-        }
+    if app.current_session().is_some_and(|session| session.dir == path) {
+        app.close_project().await.map_err(ApiError::internal)?;
     }
 
     // Recursively delete the project directory from disk

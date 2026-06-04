@@ -47,6 +47,8 @@
     "projects": "Son Kullanılanlar",
     "emptyHint": "Son projeleriniz burada görünecek",
     "delete": "Sil",
+    "deleting": "Siliniyor...",
+    "projectOptions": "Proje seçenekleri",
     "deleteConfirmTitle": "Projeyi Sil",
     "deleteConfirmDescription": "\"{{name}}\" projesini kalıcı olarak silmek istediğinizden emin misiniz? Bu işlem tüm sayfaları, görselleri ve çevirileri silecektir. Bu işlem geri alınamaz.",
     "newDialogTitle": "Yeni proje",

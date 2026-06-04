@@ -47,6 +47,8 @@
     "projects": "Recientes",
     "emptyHint": "Tus proyectos recientes aparecerán aquí",
     "delete": "Eliminar",
+    "deleting": "Eliminando...",
+    "projectOptions": "Opciones del proyecto",
     "deleteConfirmTitle": "Eliminar proyecto",
     "deleteConfirmDescription": "¿Está seguro de que desea eliminar permanentemente \"{{name}}\"? Esto eliminará todas sus páginas, imágenes y traducciones. Esta acción no se puede deshacer.",
     "newDialogTitle": "Nuevo proyecto",

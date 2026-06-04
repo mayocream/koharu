@@ -48,6 +48,8 @@
     "projects": "Recentes",
     "emptyHint": "Seus projetos recentes aparecerão aqui",
     "delete": "Excluir",
+    "deleting": "Excluindo...",
+    "projectOptions": "Opções do projeto",
     "deleteConfirmTitle": "Excluir projeto",
     "deleteConfirmDescription": "Tem certeza de que deseja excluir permanentemente \"{{name}}\"? Isso excluirá todas as suas páginas, imagens e traduções. Esta ação não pode ser desfeita.",
     "newDialogTitle": "Novo projeto",

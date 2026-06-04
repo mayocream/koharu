@@ -1,6 +1,5 @@
 ---
 source: koharu-rpc/tests/openapi.rs
-assertion_line: 34
 expression: paths
 ---
 [
@@ -207,6 +206,12 @@ expression: paths
         "/projects/import",
         [
             "post",
+        ],
+    ),
+    (
+        "/projects/{id}",
+        [
+            "delete",
         ],
     ),
     (

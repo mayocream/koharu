@@ -63,6 +63,8 @@
     "projects": "Recent",
     "emptyHint": "Your recent projects will appear here",
     "delete": "Delete",
+    "deleting": "Deleting...",
+    "projectOptions": "Project options",
     "deleteConfirmTitle": "Delete Project",
     "deleteConfirmDescription": "Are you sure you want to permanently delete \"{{name}}\"? This will delete all of its pages, images, and translations. This action cannot be undone.",
     "newDialogTitle": "New project",

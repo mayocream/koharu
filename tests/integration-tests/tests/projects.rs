@@ -229,4 +229,3 @@ async fn delete_project_by_id() -> anyhow::Result<()> {
 
     Ok(())
 }
-

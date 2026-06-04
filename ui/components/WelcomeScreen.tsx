@@ -225,7 +225,7 @@ export function WelcomeScreen() {
               disabled={busy === 'delete'}
               className='text-destructive-foreground bg-destructive hover:bg-destructive/90'
             >
-              {busy === 'delete' ? 'Deleting...' : t('welcome.delete')}
+              {busy === 'delete' ? t('welcome.deleting') : t('welcome.delete')}
             </AlertDialogAction>
           </div>
         </AlertDialogContent>
@@ -348,6 +348,7 @@ function ProjectRow({
   onDeleteRequest: (project: ProjectSummary) => void
   disabled?: boolean
 }) {
+  const { t } = useTranslation()
   const when = project.updatedAtMs && project.updatedAtMs > 0 ? new Date(project.updatedAtMs) : null
   return (
     <li className='group relative flex items-center justify-between transition-colors hover:bg-accent/20'>
@@ -377,7 +378,7 @@ function ProjectRow({
               size='icon-xs'
               className='h-7 w-7 text-muted-foreground hover:bg-accent hover:text-foreground'
               disabled={disabled}
-              aria-label='Project options'
+              aria-label={t('welcome.projectOptions')}
             >
               <MoreVerticalIcon className='h-3.5 w-3.5' />
             </Button>
@@ -392,7 +393,7 @@ function ProjectRow({
               className='flex w-full cursor-pointer items-center gap-2 rounded px-2 py-1.5 text-xs text-destructive transition-colors outline-none hover:bg-destructive/10 hover:text-destructive focus-visible:bg-destructive/10'
             >
               <TrashIcon className='h-3.5 w-3.5' />
-              <span>Delete</span>
+              <span>{t('welcome.delete')}</span>
             </button>
           </PopoverContent>
         </Popover>
