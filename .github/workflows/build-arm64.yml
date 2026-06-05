@@ -18,11 +18,17 @@ jobs:
             libwebkit2gtk-4.1-dev libayatana-appindicator3-dev librsvg2-dev libxdo-dev \
             libgomp1 pkg-config llvm
 
-      - name: Install CUDA Toolkit
+      - name: Install CUDA 12.8 Toolkit
         run: |
-          sudo add-apt-repository -y multiverse
+          wget https://developer.download.nvidia.com/compute/cuda/repos/ubuntu2404/sbsa/cuda-keyring_1.1-1_all.deb
+          sudo dpkg -i cuda-keyring_1.1-1_all.deb
           sudo apt-get update
-          sudo apt-get install -y nvidia-cuda-toolkit
+          sudo apt-get -y install cuda-toolkit-12-8
+
+      - name: Add CUDA to PATH
+        run: |
+          echo "/usr/local/cuda-12.8/bin" >> $GITHUB_PATH
+          echo "CUDA_PATH=/usr/local/cuda-12.8" >> $GITHUB_ENV
 
       - name: Verify CUDA Compiler (nvcc)
         run: |
