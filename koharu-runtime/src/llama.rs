@@ -16,6 +16,7 @@ enum LlamaDistribution {
     WindowsCuda13X64,
     WindowsVulkanX64,
     LinuxVulkanX64,
+    LinuxVulkanArm64,
     MacosArm64,
 }
 
@@ -28,12 +29,16 @@ impl LlamaDistribution {
         #[cfg(all(target_os = "linux", target_arch = "x86_64"))]
         return Ok(Self::LinuxVulkanX64);
 
+        #[cfg(all(target_os = "linux", target_arch = "aarch64"))]
+        return Ok(Self::LinuxVulkanArm64);
+
         #[cfg(all(target_os = "macos", target_arch = "aarch64"))]
         return Ok(Self::MacosArm64);
 
         #[cfg(not(any(
             all(target_os = "windows", target_arch = "x86_64"),
             all(target_os = "linux", target_arch = "x86_64"),
+            all(target_os = "linux", target_arch = "aarch64"),
             all(target_os = "macos", target_arch = "aarch64")
         )))]
         bail!(
@@ -59,6 +64,7 @@ impl LlamaDistribution {
             Self::WindowsCuda13X64 => "windows-cuda13-x64",
             Self::WindowsVulkanX64 => "windows-vulkan-x64",
             Self::LinuxVulkanX64 => "linux-vulkan-x64",
+            Self::LinuxVulkanArm64 => "linux-vulkan-arm64",
             Self::MacosArm64 => "macos-arm64",
         }
     }
@@ -72,6 +78,7 @@ impl LlamaDistribution {
             ],
             Self::WindowsVulkanX64 => vec![format!("llama-{tag}-bin-win-vulkan-x64.zip")],
             Self::LinuxVulkanX64 => vec![format!("llama-{tag}-bin-ubuntu-vulkan-x64.tar.gz")],
+            Self::LinuxVulkanArm64 => vec![format!("llama-{tag}-bin-ubuntu-vulkan-arm64.tar.gz")],
             Self::MacosArm64 => vec![format!("llama-{tag}-bin-macos-arm64.tar.gz")],
         }
     }
@@ -144,6 +151,22 @@ impl LlamaDistribution {
                 "libggml-cpu-sse42.so",
                 "libggml-cpu-x64.so",
                 "libggml-cpu-zen4.so",
+                "libggml-rpc.so",
+                "libggml-vulkan.so",
+                "libllama.so",
+                "libmtmd.so",
+            ],
+            Self::LinuxVulkanArm64 => &[
+                "libggml-base.so",
+                "libggml.so",
+                "libggml-cpu-armv8.0_1.so",
+                "libggml-cpu-armv8.2_1.so",
+                "libggml-cpu-armv8.2_2.so",
+                "libggml-cpu-armv8.2_3.so",
+                "libggml-cpu-armv8.6_1.so",
+                "libggml-cpu-armv8.6_2.so",
+                "libggml-cpu-armv9.2_1.so",
+                "libggml-cpu-armv9.2_2.so",
                 "libggml-rpc.so",
                 "libggml-vulkan.so",
                 "libllama.so",
