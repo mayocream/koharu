@@ -2,9 +2,11 @@
 
 import {
   LanguagesIcon,
+  ListChecksIcon,
   LoaderCircleIcon,
   ScanIcon,
   ScanTextIcon,
+  Settings2Icon,
   TypeIcon,
   Wand2Icon,
 } from 'lucide-react'
@@ -24,6 +26,7 @@ import {
 } from '@/components/ui/select'
 import { Separator } from '@/components/ui/separator'
 import { Textarea } from '@/components/ui/textarea'
+import { WorkflowPresetsDialog } from '@/components/WorkflowPresetsDialog'
 import {
   deleteCurrentLlm,
   getConfig,
@@ -32,10 +35,16 @@ import {
   useGetCatalog,
   useGetCurrentLlm,
 } from '@/lib/api/default/default'
-import type { LlmCatalog, LlmCatalogModel, LlmProviderCatalog, LlmTarget } from '@/lib/api/schemas'
+import type {
+  LlmCatalog,
+  LlmCatalogModel,
+  LlmProviderCatalog,
+  LlmTarget,
+  PipelineConfig,
+} from '@/lib/api/schemas'
 import { useEditorUiStore } from '@/lib/stores/editorUiStore'
 import { useJobsStore } from '@/lib/stores/jobsStore'
-import { usePreferencesStore } from '@/lib/stores/preferencesStore'
+import { type PipelineStepKey, usePreferencesStore } from '@/lib/stores/preferencesStore'
 import { useSelectionStore } from '@/lib/stores/selectionStore'
 
 // ---------------------------------------------------------------------------
@@ -63,6 +72,32 @@ const flattenCatalogModels = (catalog?: LlmCatalog): SelectableLlmModel[] => [
     .filter((p) => p.status === 'ready')
     .flatMap((p) => p.models.map((model) => ({ model, provider: p }))),
 ]
+
+type PipelinePick = (p: PipelineConfig) => Array<string | undefined>
+
+const workflowStepPickers: Record<PipelineStepKey, PipelinePick> = {
+  detect: (p) => [p.detector, p.segmenter, p.bubble_segmenter, p.font_detector],
+  ocr: (p) => [p.ocr],
+  translate: (p) => [p.translator],
+  inpaint: (p) => [p.inpainter],
+  render: (p) => [p.renderer],
+}
+
+export function composeWorkflowPresetSteps(
+  steps: PipelineStepKey[],
+  pipeline: PipelineConfig,
+): string[] {
+  const seen = new Set<string>()
+  const result: string[] = []
+  for (const key of steps) {
+    for (const step of workflowStepPickers[key](pipeline)) {
+      if (!step || seen.has(step)) continue
+      seen.add(step)
+      result.push(step)
+    }
+  }
+  return result
+}
 
 // ---------------------------------------------------------------------------
 // Component
@@ -100,6 +135,9 @@ function WorkflowButtons() {
   const hasPage = pageId !== null
   const isProcessing = useIsProcessing()
   const currentStep = useCurrentStep()
+  const workflowPresets = usePreferencesStore((s) => s.workflowPresets)
+  const [presetSelectKey, setPresetSelectKey] = useState(0)
+  const [presetsDialogOpen, setPresetsDialogOpen] = useState(false)
 
   /**
    * Run a pipeline step (or a small chain). `GET /config` is the single
@@ -113,9 +151,7 @@ function WorkflowButtons() {
    * backend driver skips any step whose artifact is already satisfied,
    * so re-running is idempotent.
    */
-  const runStep = async (
-    pick: (p: NonNullable<Awaited<ReturnType<typeof getConfig>>['pipeline']>) => string[],
-  ) => {
+  const runStep = async (pick: PipelinePick) => {
     if (!pageId) return
     const cfg = await getConfig()
     if (!cfg.pipeline) return
@@ -133,19 +169,18 @@ function WorkflowButtons() {
     })
   }
 
-  type PipelinePick = (
-    p: NonNullable<Awaited<ReturnType<typeof getConfig>>['pipeline']>,
-  ) => string[]
-  const detectChain: PipelinePick = (p) => [
-    p.detector!,
-    p.segmenter!,
-    p.bubble_segmenter!,
-    p.font_detector!,
-  ]
-  const ocrChain: PipelinePick = (p) => [p.ocr!]
-  const translateChain: PipelinePick = (p) => [p.translator!]
-  const inpaintChain: PipelinePick = (p) => [p.inpainter!]
-  const renderChain: PipelinePick = (p) => [p.renderer!]
+  const detectChain = workflowStepPickers.detect
+  const ocrChain = workflowStepPickers.ocr
+  const translateChain = workflowStepPickers.translate
+  const inpaintChain = workflowStepPickers.inpaint
+  const renderChain = workflowStepPickers.render
+
+  const handleRunWorkflowPreset = (id: string) => {
+    const preset = workflowPresets.find((candidate) => candidate.id === id)
+    setPresetSelectKey((key) => key + 1)
+    if (!preset) return
+    void runStep((pipeline) => composeWorkflowPresetSteps(preset.steps, pipeline))
+  }
 
   const isDetecting = currentStep === 'detect'
   const isOcr = currentStep === 'ocr'
@@ -229,6 +264,43 @@ function WorkflowButtons() {
         )}
         {t('llm.render')}
       </Button>
+      <Separator orientation='vertical' className='mx-0.5 h-4' />
+      <Select
+        key={presetSelectKey}
+        onValueChange={handleRunWorkflowPreset}
+        disabled={!hasPage || isProcessing || workflowPresets.length === 0}
+      >
+        <SelectTrigger
+          size='sm'
+          data-testid='toolbar-workflow-presets'
+          className='h-6 w-[130px] border-transparent bg-transparent shadow-none hover:bg-accent'
+        >
+          <ListChecksIcon className='size-4' />
+          <SelectValue placeholder='Presets' />
+        </SelectTrigger>
+        <SelectContent position='popper' align='start' className='min-w-44'>
+          {workflowPresets.map((preset) => (
+            <SelectItem
+              key={preset.id}
+              value={preset.id}
+              disabled={preset.steps.includes('translate') && !llmReady}
+              data-testid={`toolbar-workflow-preset-${preset.id}`}
+            >
+              {preset.name}
+            </SelectItem>
+          ))}
+        </SelectContent>
+      </Select>
+      <Button
+        variant='ghost'
+        size='icon-xs'
+        onClick={() => setPresetsDialogOpen(true)}
+        data-testid='toolbar-workflow-presets-manage'
+        aria-label='Manage workflow presets'
+      >
+        <Settings2Icon className='size-4' />
+      </Button>
+      <WorkflowPresetsDialog open={presetsDialogOpen} onOpenChange={setPresetsDialogOpen} />
     </div>
   )
 }
