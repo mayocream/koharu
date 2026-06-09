@@ -5,6 +5,16 @@ import { persist } from 'zustand/middleware'
 
 import { getPlatform } from '@/lib/shortcutUtils'
 
+export const WORKFLOW_STEP_KEYS = ['detect', 'ocr', 'translate', 'inpaint', 'render'] as const
+
+export type PipelineStepKey = (typeof WORKFLOW_STEP_KEYS)[number]
+
+export type WorkflowPreset = {
+  id: string
+  name: string
+  steps: PipelineStepKey[]
+}
+
 type PreferencesState = {
   brushConfig: {
     size: number
@@ -15,6 +25,10 @@ type PreferencesState = {
   setDefaultFont: (font?: string) => void
   favoriteFonts: string[]
   toggleFavoriteFont: (font: string) => void
+  workflowPresets: WorkflowPreset[]
+  addWorkflowPreset: (preset: Omit<WorkflowPreset, 'id'>) => void
+  removeWorkflowPreset: (id: string) => void
+  renameWorkflowPreset: (id: string, name: string) => void
   customSystemPrompt?: string
   setCustomSystemPrompt: (prompt?: string) => void
   codexImagePrompt?: string
@@ -37,12 +51,56 @@ type PreferencesState = {
   resetPreferences: () => void
 }
 
+const defaultWorkflowPresets: WorkflowPreset[] = [
+  {
+    id: 'default-detect-ocr-inpaint',
+    name: 'Detect + OCR + Inpaint',
+    steps: ['detect', 'ocr', 'inpaint'],
+  },
+  {
+    id: 'default-translate-render',
+    name: 'Translate + Render',
+    steps: ['translate', 'render'],
+  },
+]
+
+function getDefaultWorkflowPresets(): WorkflowPreset[] {
+  return defaultWorkflowPresets.map((preset) => ({
+    ...preset,
+    steps: [...preset.steps],
+  }))
+}
+
+function createWorkflowPresetId(): string {
+  if (typeof crypto !== 'undefined' && 'randomUUID' in crypto) {
+    return crypto.randomUUID()
+  }
+  return `workflow-preset-${Date.now()}-${Math.random().toString(36).slice(2)}`
+}
+
+function isPipelineStepKey(step: unknown): step is PipelineStepKey {
+  return typeof step === 'string' && WORKFLOW_STEP_KEYS.includes(step as PipelineStepKey)
+}
+
+function normalizeWorkflowPreset(preset: unknown): WorkflowPreset | null {
+  if (!preset || typeof preset !== 'object') return null
+  const candidate = preset as Partial<WorkflowPreset>
+  const id = typeof candidate.id === 'string' && candidate.id.trim() ? candidate.id : null
+  const name = typeof candidate.name === 'string' ? candidate.name.trim() : ''
+  const steps = Array.isArray(candidate.steps)
+    ? Array.from(new Set(candidate.steps.filter(isPipelineStepKey)))
+    : []
+  if (!id || !name || steps.length === 0) return null
+  return { id, name, steps }
+}
+
 const initialPreferences = {
   brushConfig: {
     size: 36,
     color: '#ffffff',
   },
   favoriteFonts: [],
+  workflowPresets: getDefaultWorkflowPresets(),
   shortcuts: {
     select: 'V',
     block: 'M',
@@ -77,6 +135,36 @@ export const usePreferencesStore = create<PreferencesState>()(
             ? state.favoriteFonts.filter((f) => f !== font)
             : [...state.favoriteFonts, font],
         })),
+      addWorkflowPreset: (preset) =>
+        set((state) => {
+          const name = preset.name.trim()
+          const steps = Array.from(new Set(preset.steps))
+          if (!name || steps.length === 0) return {}
+          return {
+            workflowPresets: [
+              ...state.workflowPresets,
+              {
+                id: createWorkflowPresetId(),
+                name,
+                steps,
+              },
+            ],
+          }
+        }),
+      removeWorkflowPreset: (id) =>
+        set((state) => ({
+          workflowPresets: state.workflowPresets.filter((preset) => preset.id !== id),
+        })),
+      renameWorkflowPreset: (id, name) =>
+        set((state) => {
+          const nextName = name.trim()
+          if (!nextName) return {}
+          return {
+            workflowPresets: state.workflowPresets.map((preset) =>
+              preset.id === id ? { ...preset, name: nextName } : preset,
+            ),
+          }
+        }),
       setCustomSystemPrompt: (prompt) => set({ customSystemPrompt: prompt }),
       setCodexImagePrompt: (prompt) => set({ codexImagePrompt: prompt }),
       setCodexImageModel: (model) => set({ codexImageModel: model }),
@@ -97,7 +185,7 @@ export const usePreferencesStore = create<PreferencesState>()(
     }),
     {
       name: 'koharu-config',
-      version: 6,
+      version: 7,
       migrate: (persisted: any, version: number) => {
         if (version < 2 && persisted) {
           delete persisted.localLlm
@@ -129,12 +217,22 @@ export const usePreferencesStore = create<PreferencesState>()(
           persisted.codexImagePrompt ??= initialPreferences.codexImagePrompt
           persisted.codexImageModel ??= initialPreferences.codexImageModel
         }
+        if (version < 7 && persisted) {
+          const presets = Array.isArray(persisted.workflowPresets)
+            ? persisted.workflowPresets
+                .map(normalizeWorkflowPreset)
+                .filter((preset): preset is WorkflowPreset => preset !== null)
+            : []
+          persisted.workflowPresets =
+            presets.length > 0 ? presets : getDefaultWorkflowPresets()
+        }
         return persisted
       },
       partialize: (state) => ({
         brushConfig: state.brushConfig,
         defaultFont: state.defaultFont,
         favoriteFonts: state.favoriteFonts,
+        workflowPresets: state.workflowPresets,
         customSystemPrompt: state.customSystemPrompt,
         codexImagePrompt: state.codexImagePrompt,
         codexImageModel: state.codexImageModel,
