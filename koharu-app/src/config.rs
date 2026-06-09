@@ -87,7 +87,7 @@ impl Default for PipelineConfig {
             font_detector: "yuzumarker-font-detection".to_string(),
             segmenter: "comic-text-detector-seg".to_string(),
             bubble_segmenter: "speech-bubble-segmentation".to_string(),
-            ocr: "paddle-ocr-vl-1.5".to_string(),
+            ocr: "paddle-ocr-vl-1.6".to_string(),
             translator: "llm".to_string(),
             inpainter: "lama-manga".to_string(),
             renderer: "koharu-renderer".to_string(),

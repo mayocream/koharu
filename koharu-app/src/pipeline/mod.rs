@@ -39,7 +39,7 @@ pub struct ProgressTick {
     /// produced artifact. `None` for the final 100% tick where no engine
     /// is running.
     pub step: Option<PipelineStep>,
-    /// Engine id (e.g. `"paddle-ocr-vl-1.5"`) for diagnostics + logs.
+    /// Engine id (e.g. `"paddle-ocr-vl-1.6"`) for diagnostics + logs.
     pub step_id: String,
     pub step_index: usize,
     pub total_steps: usize,
