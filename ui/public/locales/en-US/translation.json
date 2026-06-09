@@ -42,6 +42,9 @@
     "version": "Version: {{version}}",
     "versionUnknown": "Version: Unknown",
     "language": "Language",
+    "customPipeline": "Custom Pipeline",
+    "runCustomCurrent": "Run Custom (Current)",
+    "runCustomAll": "Run Custom (All)",
     "languages": {
       "en-US": "English",
       "zh-CN": "简体中文",

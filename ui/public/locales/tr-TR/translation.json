@@ -36,7 +36,10 @@
     "github": "GitHub",
     "version": "Sürüm: {{version}}",
     "versionUnknown": "Sürüm: Bilinmiyor",
-    "language": "Dil"
+    "language": "Dil",
+    "customPipeline": "Özel İşlem Hattı",
+    "runCustomCurrent": "Özeli Çalıştır (Geçerli Sayfa)",
+    "runCustomAll": "Özeli Çalıştır (Tüm Sayfalar)"
   },
   "welcome": {
     "title": "Koharu",
