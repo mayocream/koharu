@@ -44,6 +44,14 @@ type PreferencesState = {
   }
   setShortcuts: (shortcuts: Partial<PreferencesState['shortcuts']>) => void
   resetShortcuts: () => void
+  customPipeline: {
+    detect: boolean
+    ocr: boolean
+    translator: boolean
+    inpainter: boolean
+    renderer: boolean
+  }
+  setCustomPipeline: (pipeline: Partial<PreferencesState['customPipeline']>) => void
   resetPreferences: () => void
 }
 
@@ -74,6 +82,13 @@ const initialPreferences = {
   codexImagePrompt:
     'Translate all visible text to natural English, remove the original lettering, and redraw the page as a clean manga image while preserving the artwork, panel layout, speech bubbles, tone, and composition.',
   codexImageModel: 'gpt-5.5',
+  customPipeline: {
+    detect: true,
+    ocr: true,
+    translator: true,
+    inpainter: true,
+    renderer: true,
+  },
 }
 
 export const usePreferencesStore = create<PreferencesState>()(
@@ -117,6 +132,13 @@ export const usePreferencesStore = create<PreferencesState>()(
             ...initialPreferences.shortcuts,
           },
         })),
+      setCustomPipeline: (pipeline) =>
+        set((state) => ({
+          customPipeline: {
+            ...state.customPipeline,
+            ...pipeline,
+          },
+        })),
       resetPreferences: () => set({ ...initialPreferences }),
     }),
     {
@@ -155,6 +177,8 @@ export const usePreferencesStore = create<PreferencesState>()(
         }
         if (version < 7 && persisted) {
           persisted.translationContext ??= initialPreferences.translationContext
+        if (persisted && (version < 7 || persisted.customPipeline?.detect === undefined)) {
+          persisted.customPipeline = initialPreferences.customPipeline
         }
         return persisted
       },
@@ -167,6 +191,7 @@ export const usePreferencesStore = create<PreferencesState>()(
         codexImagePrompt: state.codexImagePrompt,
         codexImageModel: state.codexImageModel,
         shortcuts: state.shortcuts,
+        customPipeline: state.customPipeline,
       }),
     },
   ),

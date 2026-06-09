@@ -3,7 +3,8 @@
     "initializing": "初始化中...",
     "cancel": "取消",
     "save": "儲存",
-    "saved": "已儲存！"
+    "saved": "已儲存！",
+    "delete": "刪除"
   },
   "menu": {
     "file": "檔案",
@@ -36,7 +37,10 @@
     "github": "GitHub",
     "version": "版本：{{version}}",
     "versionUnknown": "版本：未知",
-    "language": "語言"
+    "language": "語言",
+    "customPipeline": "自訂流水線",
+    "runCustomCurrent": "執行自訂 (目前頁面)",
+    "runCustomAll": "執行自訂 (所有頁面)"
   },
   "welcome": {
     "title": "Koharu",
@@ -46,6 +50,11 @@
     "importKhr": "匯入 .khr 壓縮檔",
     "projects": "最近使用",
     "emptyHint": "您的最近專案將顯示在這裡",
+    "delete": "刪除",
+    "deleting": "刪除中...",
+    "projectOptions": "專案選項",
+    "deleteConfirmTitle": "刪除專案",
+    "deleteConfirmDescription": "您確定要永久刪除「{{name}}」嗎？這將刪除其所有頁面、圖片和翻譯。此動作無法復原。",
     "newDialogTitle": "新建專案",
     "newDialogDescription": "為專案命名。將儲存在管理的專案目錄下。",
     "newDialogPlaceholder": "專案名稱",
@@ -182,7 +191,8 @@
       "ug-CN": "維吾爾文",
       "yue-HK": "粵語",
       "pt-BR": "巴西葡萄牙文",
-      "be-BY": "白俄羅斯文"
+      "be-BY": "白俄羅斯文",
+      "hu-HU": "匈牙利文"
     }
   },
   "render": {

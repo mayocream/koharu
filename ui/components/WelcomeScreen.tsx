@@ -5,13 +5,23 @@ import {
   ArrowRightIcon,
   ClockIcon,
   FileArchiveIcon,
+  MoreVerticalIcon,
   PlusIcon,
+  TrashIcon,
   XIcon,
 } from 'lucide-react'
 import Image from 'next/image'
 import { useCallback, useMemo, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogTitle,
+} from '@/components/ui/alert-dialog'
 import { Button } from '@/components/ui/button'
 import { Card } from '@/components/ui/card'
 import {
@@ -23,8 +33,9 @@ import {
   DialogTitle,
 } from '@/components/ui/dialog'
 import { Input } from '@/components/ui/input'
+import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover'
 import { ScrollArea } from '@/components/ui/scroll-area'
-import { useListProjects } from '@/lib/api/default/default'
+import { useDeleteProject, useListProjects } from '@/lib/api/default/default'
 import type { ProjectSummary } from '@/lib/api/schemas'
 import { importKhrFile } from '@/lib/io/pagesIo'
 import { createAndOpenProject, switchProject } from '@/lib/io/scene'
@@ -45,9 +56,12 @@ export function WelcomeScreen() {
     return [...all].sort((a, b) => (b.updatedAtMs ?? 0) - (a.updatedAtMs ?? 0))
   }, [projectsData])
 
-  const [busy, setBusy] = useState<Busy>(false)
+  const [busy, setBusy] = useState<Busy | 'delete'>(false)
   const [error, setError] = useState<string | null>(null)
   const [newDialogOpen, setNewDialogOpen] = useState(false)
+  const [projectToDelete, setProjectToDelete] = useState<ProjectSummary | null>(null)
+
+  const deleteProjectMutation = useDeleteProject()
 
   const openById = useCallback(async (id: string) => {
     setError(null)
@@ -60,6 +74,21 @@ export function WelcomeScreen() {
       setBusy(false)
     }
   }, [])
+
+  const onDeleteConfirm = useCallback(async () => {
+    if (!projectToDelete) return
+    setError(null)
+    setBusy('delete')
+    try {
+      await deleteProjectMutation.mutateAsync({ id: projectToDelete.id })
+      await refetchProjects()
+      setProjectToDelete(null)
+    } catch (e) {
+      setError(`Delete failed: ${e instanceof Error ? e.message : String(e)}`)
+    } finally {
+      setBusy(false)
+    }
+  }, [projectToDelete, deleteProjectMutation, refetchProjects])
 
   const onCreate = useCallback(async (name: string) => {
     setError(null)
@@ -152,7 +181,13 @@ export function WelcomeScreen() {
             <ScrollArea className='h-48 rounded-lg border border-border/60 bg-card/30'>
               <ul className='flex flex-col divide-y divide-border/40'>
                 {projects.map((p) => (
-                  <ProjectRow key={p.id} project={p} onOpen={openById} disabled={busy === 'open'} />
+                  <ProjectRow
+                    key={p.id}
+                    project={p}
+                    onOpen={openById}
+                    onDeleteRequest={setProjectToDelete}
+                    disabled={!!busy}
+                  />
                 ))}
               </ul>
             </ScrollArea>
@@ -168,6 +203,33 @@ export function WelcomeScreen() {
         onSubmit={onCreate}
         busy={busy === 'new'}
       />
+
+      <AlertDialog
+        open={!!projectToDelete}
+        onOpenChange={(open) => !open && setProjectToDelete(null)}
+      >
+        <AlertDialogContent>
+          <div className='flex flex-col gap-1.5 text-center sm:text-left'>
+            <AlertDialogTitle>{t('welcome.deleteConfirmTitle')}</AlertDialogTitle>
+            <AlertDialogDescription>
+              {t('welcome.deleteConfirmDescription', { name: projectToDelete?.name })}
+            </AlertDialogDescription>
+          </div>
+          <div className='flex flex-col-reverse gap-2 sm:flex-row sm:justify-end'>
+            <AlertDialogCancel disabled={busy === 'delete'}>{t('common.cancel')}</AlertDialogCancel>
+            <AlertDialogAction
+              onClick={(e) => {
+                e.preventDefault()
+                void onDeleteConfirm()
+              }}
+              disabled={busy === 'delete'}
+              className='text-destructive-foreground bg-destructive hover:bg-destructive/90'
+            >
+              {busy === 'delete' ? t('welcome.deleting') : t('welcome.delete')}
+            </AlertDialogAction>
+          </div>
+        </AlertDialogContent>
+      </AlertDialog>
     </div>
   )
 }
@@ -278,32 +340,64 @@ function RecentSkeleton() {
 function ProjectRow({
   project,
   onOpen,
+  onDeleteRequest,
   disabled,
 }: {
   project: ProjectSummary
   onOpen: (id: string) => void
+  onDeleteRequest: (project: ProjectSummary) => void
   disabled?: boolean
 }) {
+  const { t } = useTranslation()
   const when = project.updatedAtMs && project.updatedAtMs > 0 ? new Date(project.updatedAtMs) : null
   return (
-    <li>
+    <li className='group relative flex items-center justify-between transition-colors hover:bg-accent/20'>
       <button
         type='button'
         onClick={() => onOpen(project.id)}
         disabled={disabled}
-        className='flex w-full cursor-pointer items-center gap-3 px-3 py-2 text-left outline-none focus-visible:bg-accent/60 disabled:cursor-not-allowed disabled:opacity-60'
+        className='flex min-w-0 flex-1 cursor-pointer items-center gap-3 px-3 py-2 text-left outline-none focus-visible:bg-accent/60 disabled:cursor-not-allowed disabled:opacity-60'
       >
         <div className='flex min-w-0 flex-1 flex-col'>
           <div className='truncate text-sm font-medium text-foreground'>{project.name}</div>
           <div className='truncate text-[11px] text-muted-foreground'>{project.id}</div>
         </div>
         {when && (
-          <div className='flex shrink-0 items-center gap-1 text-[11px] text-muted-foreground'>
+          <div className='mr-8 flex shrink-0 items-center gap-1 text-[11px] text-muted-foreground transition-opacity group-hover:opacity-0'>
             <ClockIcon className='h-3 w-3' />
             {formatRelative(when)}
           </div>
         )}
       </button>
+
+      <div className='absolute top-1/2 right-2 -translate-y-1/2 opacity-0 transition-opacity group-hover:opacity-100 focus-within:opacity-100'>
+        <Popover>
+          <PopoverTrigger asChild>
+            <Button
+              variant='ghost'
+              size='icon-xs'
+              className='h-7 w-7 text-muted-foreground hover:bg-accent hover:text-foreground'
+              disabled={disabled}
+              aria-label={t('welcome.projectOptions')}
+            >
+              <MoreVerticalIcon className='h-3.5 w-3.5' />
+            </Button>
+          </PopoverTrigger>
+          <PopoverContent
+            align='end'
+            className='w-32 rounded-md border border-border bg-popover p-1 shadow-lg'
+          >
+            <button
+              type='button'
+              onClick={() => onDeleteRequest(project)}
+              className='flex w-full cursor-pointer items-center gap-2 rounded px-2 py-1.5 text-xs text-destructive transition-colors outline-none hover:bg-destructive/10 hover:text-destructive focus-visible:bg-destructive/10'
+            >
+              <TrashIcon className='h-3.5 w-3.5' />
+              <span>{t('welcome.delete')}</span>
+            </button>
+          </PopoverContent>
+        </Popover>
+      </div>
     </li>
   )
 }

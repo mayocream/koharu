@@ -6,7 +6,8 @@
     "copy": "복사",
     "copied": "복사됨",
     "save": "저장",
-    "saved": "저장됨!"
+    "saved": "저장됨!",
+    "delete": "삭제"
   },
   "menu": {
     "file": "파일",
@@ -41,7 +42,10 @@
     "github": "깃허브",
     "version": "버전: {{version}}",
     "versionUnknown": "버전: 알 수 없음",
-    "language": "언어"
+    "language": "언어",
+    "customPipeline": "사용자 정의 파이프라인",
+    "runCustomCurrent": "사용자 정의 실행 (현재 페이지)",
+    "runCustomAll": "사용자 정의 실행 (모든 페이지)"
   },
   "welcome": {
     "title": "코하루",
@@ -51,6 +55,11 @@
     "importKhr": ".khr 아카이브 가져오기",
     "projects": "최근",
     "emptyHint": "최근 프로젝트가 여기에 표시됩니다",
+    "delete": "삭제",
+    "deleting": "삭제 중...",
+    "projectOptions": "프로젝트 옵션",
+    "deleteConfirmTitle": "프로젝트 삭제",
+    "deleteConfirmDescription": "\"{{name}}\"을(를) 영구적으로 삭제하시겠습니까? 이 작업은 모든 페이지, 이미지 및 번역을 삭제하며 되돌릴 수 없습니다.",
     "newDialogTitle": "새 프로젝트",
     "newDialogDescription": "프로젝트 이름을 입력하세요. 관리 프로젝트 디렉터리에 저장됩니다.",
     "newDialogPlaceholder": "프로젝트 이름",
@@ -188,7 +197,8 @@
       "ug-CN": "위구르어",
       "yue-HK": "광둥어",
       "pt-BR": "브라질 포르투갈어",
-      "be-BY": "벨라루스어"
+      "be-BY": "벨라루스어",
+      "hu-HU": "헝가리어"
     }
   },
   "ai": {

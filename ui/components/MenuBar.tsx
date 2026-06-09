@@ -15,6 +15,10 @@ import {
   MenubarSeparator,
   MenubarShortcut,
   MenubarTrigger,
+  MenubarCheckboxItem,
+  MenubarSub,
+  MenubarSubContent,
+  MenubarSubTrigger,
 } from '@/components/ui/menubar'
 import { useScene } from '@/hooks/useScene'
 import { getConfig, startPipeline } from '@/lib/api/default/default'
@@ -66,6 +70,12 @@ export function MenuBar() {
   const hasPage = useSelectionStore((s) => s.pageId !== null)
   const hasScene = useScene().scene !== null
   const shortcuts = usePreferencesStore((state) => state.shortcuts)
+  const customPipeline = usePreferencesStore((state) => state.customPipeline)
+  const setCustomPipeline = usePreferencesStore((state) => state.setCustomPipeline)
+  const hasSelectedSteps = useMemo(
+    () => Object.values(customPipeline).some(Boolean),
+    [customPipeline],
+  )
   const isMac = useMemo(() => getPlatform() === 'mac', [])
 
   const requirePageId = () => {
@@ -109,6 +119,31 @@ export function MenuBar() {
     await startPipeline({ steps: [cfg.pipeline.inpainter], pages: [pageId] })
   }
 
+  const runCustomPipeline = async (opts: { pageId?: string }) => {
+    const cfg = await getConfig()
+    if (!cfg.pipeline) return
+    const p = cfg.pipeline
+    const prefs = usePreferencesStore.getState()
+    const steps = [
+      ...(prefs.customPipeline.detect
+        ? [p.detector, p.segmenter, p.bubble_segmenter, p.font_detector]
+        : []),
+      prefs.customPipeline.ocr ? p.ocr : null,
+      prefs.customPipeline.translator ? p.translator : null,
+      prefs.customPipeline.inpainter ? p.inpainter : null,
+      prefs.customPipeline.renderer ? p.renderer : null,
+    ].filter((s): s is string => !!s)
+    const editor = useEditorUiStore.getState()
+    await startPipeline({
+      steps,
+      pages: opts.pageId ? [opts.pageId] : undefined,
+      targetLanguage: editor.selectedLanguage,
+      systemPrompt: prefs.customSystemPrompt,
+      defaultFont: prefs.defaultFont,
+      readingOrder: editor.readingOrder === 'custom' ? undefined : editor.readingOrder,
+    })
+  }
+
   const exportItems: MenuItem[] = [
     {
       label: t('menu.export'),
@@ -133,40 +168,6 @@ export function MenuBar() {
       onSelect: () => void exportCurrentProjectAs('rendered'),
       disabled: !hasScene,
       testId: 'menu-file-export-all-rendered',
-    },
-  ]
-
-  const menus: MenuSection[] = [
-    {
-      label: t('menu.view'),
-      items: [
-        { label: t('menu.fitWindow'), onSelect: fitCanvasToViewport },
-        { label: t('menu.originalSize'), onSelect: resetCanvasScale },
-      ],
-    },
-    {
-      label: t('menu.process'),
-      triggerTestId: 'menu-process-trigger',
-      items: [
-        {
-          label: t('menu.processCurrent'),
-          onSelect: () => void runPipeline({ pageId: requirePageId() }),
-          disabled: !hasPage,
-          testId: 'menu-process-current',
-        },
-        {
-          label: t('menu.redoInpaintRender'),
-          onSelect: () => void runInpaint(requirePageId()),
-          disabled: !hasPage,
-          testId: 'menu-process-rerender',
-        },
-        {
-          label: t('menu.processAll'),
-          onSelect: () => void runPipeline({}),
-          disabled: !hasScene,
-          testId: 'menu-process-all',
-        },
-      ],
     },
   ]
 
@@ -292,29 +293,116 @@ export function MenuBar() {
             </MenubarItem>
           </MenubarContent>
         </MenubarMenu>
-        {menus.map(({ label, items, triggerTestId }) => (
-          <MenubarMenu key={label}>
-            <MenubarTrigger
-              data-testid={triggerTestId}
-              className='rounded px-3 py-1.5 font-medium hover:bg-accent data-[state=open]:bg-accent'
+        <MenubarMenu>
+          <MenubarTrigger className='rounded px-3 py-1.5 font-medium hover:bg-accent data-[state=open]:bg-accent'>
+            {t('menu.view')}
+          </MenubarTrigger>
+          <MenubarContent className='min-w-36' align='start' sideOffset={5} alignOffset={-3}>
+            <MenubarItem className='text-[13px]' onSelect={fitCanvasToViewport}>
+              {t('menu.fitWindow')}
+            </MenubarItem>
+            <MenubarItem className='text-[13px]' onSelect={resetCanvasScale}>
+              {t('menu.originalSize')}
+            </MenubarItem>
+          </MenubarContent>
+        </MenubarMenu>
+
+        <MenubarMenu>
+          <MenubarTrigger
+            data-testid='menu-process-trigger'
+            className='rounded px-3 py-1.5 font-medium hover:bg-accent data-[state=open]:bg-accent'
+          >
+            {t('menu.process')}
+          </MenubarTrigger>
+          <MenubarContent className='min-w-48' align='start' sideOffset={5} alignOffset={-3}>
+            <MenubarItem
+              data-testid='menu-process-current'
+              className='text-[13px]'
+              disabled={!hasPage}
+              onSelect={() => void runPipeline({ pageId: requirePageId() })}
             >
-              {label}
-            </MenubarTrigger>
-            <MenubarContent className='min-w-36' align='start' sideOffset={5} alignOffset={-3}>
-              {items.map((item) => (
-                <MenubarItem
-                  key={item.label}
-                  data-testid={item.testId}
+              {t('menu.processCurrent')}
+            </MenubarItem>
+            <MenubarItem
+              data-testid='menu-process-rerender'
+              className='text-[13px]'
+              disabled={!hasPage}
+              onSelect={() => void runInpaint(requirePageId())}
+            >
+              {t('menu.redoInpaintRender')}
+            </MenubarItem>
+            <MenubarItem
+              data-testid='menu-process-all'
+              className='text-[13px]'
+              disabled={!hasScene}
+              onSelect={() => void runPipeline({})}
+            >
+              {t('menu.processAll')}
+            </MenubarItem>
+            <MenubarSeparator />
+            <MenubarItem
+              className='text-[13px]'
+              disabled={!hasPage || !hasSelectedSteps}
+              onSelect={() => void runCustomPipeline({ pageId: requirePageId() })}
+            >
+              {t('menu.runCustomCurrent')}
+            </MenubarItem>
+            <MenubarItem
+              className='text-[13px]'
+              disabled={!hasScene || !hasSelectedSteps}
+              onSelect={() => void runCustomPipeline({})}
+            >
+              {t('menu.runCustomAll')}
+            </MenubarItem>
+            <MenubarSub>
+              <MenubarSubTrigger className='text-[13px]'>
+                {t('menu.customPipeline')}
+              </MenubarSubTrigger>
+              <MenubarSubContent className='min-w-48'>
+                <MenubarCheckboxItem
                   className='text-[13px]'
-                  disabled={item.disabled}
-                  onSelect={item.onSelect ? () => void item.onSelect?.() : undefined}
+                  checked={customPipeline.detect}
+                  onCheckedChange={(checked) => setCustomPipeline({ detect: checked })}
+                  onSelect={(e) => e.preventDefault()}
                 >
-                  {item.label}
-                </MenubarItem>
-              ))}
-            </MenubarContent>
-          </MenubarMenu>
-        ))}
+                  {t('processing.detect')}
+                </MenubarCheckboxItem>
+                <MenubarCheckboxItem
+                  className='text-[13px]'
+                  checked={customPipeline.ocr}
+                  onCheckedChange={(checked) => setCustomPipeline({ ocr: checked })}
+                  onSelect={(e) => e.preventDefault()}
+                >
+                  {t('processing.ocr')}
+                </MenubarCheckboxItem>
+                <MenubarCheckboxItem
+                  className='text-[13px]'
+                  checked={customPipeline.translator}
+                  onCheckedChange={(checked) => setCustomPipeline({ translator: checked })}
+                  onSelect={(e) => e.preventDefault()}
+                >
+                  {t('llm.generate')}
+                </MenubarCheckboxItem>
+                <MenubarCheckboxItem
+                  className='text-[13px]'
+                  checked={customPipeline.inpainter}
+                  onCheckedChange={(checked) => setCustomPipeline({ inpainter: checked })}
+                  onSelect={(e) => e.preventDefault()}
+                >
+                  {t('mask.inpaint')}
+                </MenubarCheckboxItem>
+                <MenubarCheckboxItem
+                  className='text-[13px]'
+                  checked={customPipeline.renderer}
+                  onCheckedChange={(checked) => setCustomPipeline({ renderer: checked })}
+                  onSelect={(e) => e.preventDefault()}
+                >
+                  {t('llm.render')}
+                </MenubarCheckboxItem>
+              </MenubarSubContent>
+            </MenubarSub>
+          </MenubarContent>
+        </MenubarMenu>
         <MenubarMenu>
           <MenubarTrigger className='rounded px-3 py-1.5 font-medium hover:bg-accent data-[state=open]:bg-accent'>
             {t('menu.help')}

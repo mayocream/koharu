@@ -914,6 +914,36 @@
         }
       }
     },
+    "/projects/{id}": {
+      "delete": {
+        "operationId": "delete_project",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "description": "Project ID to delete",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": "Project successfully deleted"
+          },
+          "400": {
+            "description": "Invalid project ID"
+          },
+          "404": {
+            "description": "Project not found"
+          },
+          "500": {
+            "description": "Internal filesystem error"
+          }
+        }
+      }
+    },
     "/scene.bin": {
       "get": {
         "operationId": "get_scene_bin",

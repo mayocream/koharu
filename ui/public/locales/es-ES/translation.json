@@ -3,7 +3,8 @@
     "initializing": "Inicializando...",
     "cancel": "Cancelar",
     "save": "Guardar",
-    "saved": "¡Guardado!"
+    "saved": "¡Guardado!",
+    "delete": "Eliminar"
   },
   "menu": {
     "file": "Archivo",
@@ -36,7 +37,10 @@
     "github": "GitHub",
     "version": "Versión: {{version}}",
     "versionUnknown": "Versión: Desconocida",
-    "language": "Idioma"
+    "language": "Idioma",
+    "customPipeline": "Pipeline personalizado",
+    "runCustomCurrent": "Ejecutar personalizado (Página actual)",
+    "runCustomAll": "Ejecutar personalizado (Todas las páginas)"
   },
   "welcome": {
     "title": "Koharu",
@@ -46,6 +50,11 @@
     "importKhr": "Importar archivo .khr",
     "projects": "Recientes",
     "emptyHint": "Tus proyectos recientes aparecerán aquí",
+    "delete": "Eliminar",
+    "deleting": "Eliminando...",
+    "projectOptions": "Opciones del proyecto",
+    "deleteConfirmTitle": "Eliminar proyecto",
+    "deleteConfirmDescription": "¿Está seguro de que desea eliminar permanentemente \"{{name}}\"? Esto eliminará todas sus páginas, imágenes y traducciones. Esta acción no se puede deshacer.",
     "newDialogTitle": "Nuevo proyecto",
     "newDialogDescription": "Dale un nombre a tu proyecto. Se guardará en el directorio de proyectos administrados.",
     "newDialogPlaceholder": "Nombre del proyecto",
@@ -182,7 +191,8 @@
       "ug-CN": "Uigur",
       "yue-HK": "Cantonés",
       "pt-BR": "Portugués brasileño",
-      "be-BY": "Bielorruso"
+      "be-BY": "Bielorruso",
+      "hu-HU": "Húngaro"
     }
   },
   "render": {
