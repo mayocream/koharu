@@ -29,6 +29,7 @@
     "originalSize": "Исходный размер",
     "process": "Обработка",
     "processCurrent": "Обработать текущее изображение",
+    "processSelected": "Обработать выбранные изображения ({{count}})",
     "redoInpaintRender": "Повторить инпейнтинг и рендер",
     "processAll": "Обработать все изображения",
     "help": "Справка",
@@ -40,6 +41,7 @@
     "language": "Язык",
     "customPipeline": "Пользовательский конвейер",
     "runCustomCurrent": "Запуск настраиваемого (Текущая)",
+    "runCustomSelected": "Запуск настраиваемого (Выбранные: {{count}})",
     "runCustomAll": "Запуск настраиваемого (Все страницы)"
   },
   "welcome": {

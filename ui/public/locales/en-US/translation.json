@@ -34,6 +34,7 @@
     "originalSize": "Original Size",
     "process": "Process",
     "processCurrent": "Process current image",
+    "processSelected": "Process selected images ({{count}})",
     "redoInpaintRender": "Redo inpaint and render",
     "processAll": "Process all images",
     "help": "Help",
@@ -45,6 +46,7 @@
     "language": "Language",
     "customPipeline": "Custom Pipeline",
     "runCustomCurrent": "Run Custom (Current)",
+    "runCustomSelected": "Run Custom (Selected: {{count}})",
     "runCustomAll": "Run Custom (All)",
     "languages": {
       "en-US": "English",

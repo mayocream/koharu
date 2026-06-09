@@ -6,6 +6,8 @@ import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { MenuBar } from '@/components/MenuBar'
 import { getGetConfigQueryKey, getGetSceneJsonQueryKey } from '@/lib/api/default/default'
 import { queryClient } from '@/lib/queryClient'
+import { usePreferencesStore } from '@/lib/stores/preferencesStore'
+import { useSelectionStore } from '@/lib/stores/selectionStore'
 
 import { renderWithQuery } from '../helpers'
 import { server } from '../msw/server'
@@ -77,5 +79,93 @@ describe('MenuBar', () => {
     await userEvent.click(screen.getByTestId('menu-file-trigger'))
     const close = await screen.findByTestId('menu-file-close-project')
     expect(close).toHaveAttribute('data-disabled')
+  })
+
+  it('Process Selected calls POST /pipelines with selected pages', async () => {
+    const pipelineRequests: unknown[] = []
+    server.use(
+      http.post('/api/v1/pipelines', async ({ request }) => {
+        pipelineRequests.push(await request.json())
+        return HttpResponse.json({ operationId: 'op-selected' })
+      }),
+      http.get('/api/v1/config', () =>
+        HttpResponse.json({
+          pipeline: {
+            detector: 'det',
+            segmenter: 'seg',
+            bubble_segmenter: 'bub',
+            font_detector: 'font',
+            ocr: 'ocr',
+            translator: 'tl',
+            inpainter: 'inp',
+            renderer: 'render',
+          },
+        }),
+      ),
+    )
+
+    useSelectionStore.setState({
+      selectedPageIds: new Set(['p1', 'p2']),
+      pageId: 'p1',
+    })
+
+    renderWithQuery(<MenuBar />)
+    await userEvent.click(screen.getByTestId('menu-process-trigger'))
+    const processSelected = await screen.findByTestId('menu-process-selected')
+    await userEvent.click(processSelected)
+
+    await waitFor(() => expect(pipelineRequests).toHaveLength(1))
+    expect(pipelineRequests[0]).toMatchObject({
+      pages: ['p1', 'p2'],
+    })
+  })
+
+  it('Run Custom (Selected) calls POST /pipelines with selected pages and custom steps', async () => {
+    const pipelineRequests: unknown[] = []
+    server.use(
+      http.post('/api/v1/pipelines', async ({ request }) => {
+        pipelineRequests.push(await request.json())
+        return HttpResponse.json({ operationId: 'op-custom-selected' })
+      }),
+      http.get('/api/v1/config', () =>
+        HttpResponse.json({
+          pipeline: {
+            detector: 'det',
+            segmenter: 'seg',
+            bubble_segmenter: 'bub',
+            font_detector: 'font',
+            ocr: 'ocr',
+            translator: 'tl',
+            inpainter: 'inp',
+            renderer: 'render',
+          },
+        }),
+      ),
+    )
+
+    useSelectionStore.setState({
+      selectedPageIds: new Set(['p1', 'p2']),
+      pageId: 'p1',
+    })
+    usePreferencesStore.setState({
+      customPipeline: {
+        detect: true,
+        ocr: true,
+        translator: false,
+        inpainter: false,
+        renderer: false,
+      },
+    })
+
+    renderWithQuery(<MenuBar />)
+    await userEvent.click(screen.getByTestId('menu-process-trigger'))
+    const runCustomSelected = await screen.findByTestId('menu-run-custom-selected')
+    await userEvent.click(runCustomSelected)
+
+    await waitFor(() => expect(pipelineRequests).toHaveLength(1))
+    expect(pipelineRequests[0]).toMatchObject({
+      pages: ['p1', 'p2'],
+      steps: ['det', 'seg', 'bub', 'font', 'ocr'],
+    })
   })
 })

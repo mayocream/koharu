@@ -29,6 +29,7 @@
     "originalSize": "Özgün Boyut",
     "process": "İşlem",
     "processCurrent": "Geçerli görseli işle",
+    "processSelected": "Seçilen görselleri işle ({{count}})",
     "redoInpaintRender": "İnpaint ve render işlemini yeniden yap",
     "processAll": "Tüm görselleri işle",
     "help": "Yardım",
@@ -40,6 +41,7 @@
     "language": "Dil",
     "customPipeline": "Özel İşlem Hattı",
     "runCustomCurrent": "Özeli Çalıştır (Geçerli Sayfa)",
+    "runCustomSelected": "Özeli Çalıştır (Seçilen: {{count}})",
     "runCustomAll": "Özeli Çalıştır (Tüm Sayfalar)"
   },
   "welcome": {

@@ -29,6 +29,7 @@
     "originalSize": "原寸",
     "process": "処理",
     "processCurrent": "現在の画像を処理",
+    "processSelected": "選択した画像を処理 ({{count}})",
     "redoInpaintRender": "再インペイントしてレンダー",
     "processAll": "すべての画像を処理",
     "help": "ヘルプ",
@@ -40,6 +41,7 @@
     "language": "言語",
     "customPipeline": "カスタムパイプライン",
     "runCustomCurrent": "カスタム実行 (現在のページ)",
+    "runCustomSelected": "カスタム実行 (選択: {{count}})",
     "runCustomAll": "カスタム実行 (すべてのページ)"
   },
   "welcome": {

@@ -29,6 +29,7 @@
     "originalSize": "Tamaño original",
     "process": "Procesar",
     "processCurrent": "Procesar imagen actual",
+    "processSelected": "Procesar imágenes seleccionadas ({{count}})",
     "redoInpaintRender": "Rehacer relleno y renderizado",
     "processAll": "Procesar todas las imágenes",
     "help": "Ayuda",
@@ -40,6 +41,7 @@
     "language": "Idioma",
     "customPipeline": "Pipeline personalizado",
     "runCustomCurrent": "Ejecutar personalizado (Página actual)",
+    "runCustomSelected": "Ejecutar personalizado (Seleccionado: {{count}})",
     "runCustomAll": "Ejecutar personalizado (Todas las páginas)"
   },
   "welcome": {

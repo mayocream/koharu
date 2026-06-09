@@ -34,6 +34,7 @@
     "originalSize": "원본 크기",
     "process": "처리",
     "processCurrent": "현재 이미지 처리",
+    "processSelected": "선택한 이미지 처리 ({{count}})",
     "redoInpaintRender": "인페인트 및 렌더링 다시 실행",
     "processAll": "모든 이미지 처리",
     "help": "도움말",
@@ -45,6 +46,7 @@
     "language": "언어",
     "customPipeline": "사용자 정의 파이프라인",
     "runCustomCurrent": "사용자 정의 실행 (현재 페이지)",
+    "runCustomSelected": "사용자 정의 실행 (선택: {{count}})",
     "runCustomAll": "사용자 정의 실행 (모든 페이지)"
   },
   "welcome": {

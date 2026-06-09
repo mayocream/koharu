@@ -29,6 +29,7 @@
     "originalSize": "原始大小",
     "process": "处理",
     "processCurrent": "处理当前图片",
+    "processSelected": "处理所选图片 ({{count}})",
     "redoInpaintRender": "重新修补并渲染",
     "processAll": "处理所有图片",
     "help": "帮助",
@@ -40,6 +41,7 @@
     "language": "语言",
     "customPipeline": "自定义流水线",
     "runCustomCurrent": "运行自定义 (当前页面)",
+    "runCustomSelected": "运行自定义 (所选: {{count}})",
     "runCustomAll": "运行自定义 (所有页面)"
   },
   "welcome": {

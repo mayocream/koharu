@@ -67,6 +67,7 @@ export function MenuBar() {
   const [settingsOpen, setSettingsOpen] = useState(false)
   const [settingsTab, setSettingsTab] = useState<TabId>('appearance')
   const hasPage = useSelectionStore((s) => s.pageId !== null)
+  const selectedPageIds = useSelectionStore((s) => s.selectedPageIds)
   const hasScene = useScene().scene !== null
   const shortcuts = usePreferencesStore((state) => state.shortcuts)
   const customPipeline = usePreferencesStore((state) => state.customPipeline)
@@ -83,7 +84,7 @@ export function MenuBar() {
     return id
   }
 
-  const runPipeline = async (opts: { pageId?: string }) => {
+  const runPipeline = async (opts: { pageIds?: string[] }) => {
     const cfg = await getConfig()
     if (!cfg.pipeline) return
     const p = cfg.pipeline
@@ -101,7 +102,7 @@ export function MenuBar() {
     const prefs = usePreferencesStore.getState()
     await startPipeline({
       steps,
-      pages: opts.pageId ? [opts.pageId] : undefined,
+      pages: opts.pageIds ? opts.pageIds : undefined,
       targetLanguage: editor.selectedLanguage,
       systemPrompt: prefs.customSystemPrompt,
       defaultFont: prefs.defaultFont,
@@ -115,7 +116,7 @@ export function MenuBar() {
     await startPipeline({ steps: [cfg.pipeline.inpainter], pages: [pageId] })
   }
 
-  const runCustomPipeline = async (opts: { pageId?: string }) => {
+  const runCustomPipeline = async (opts: { pageIds?: string[] }) => {
     const cfg = await getConfig()
     if (!cfg.pipeline) return
     const p = cfg.pipeline
@@ -132,7 +133,7 @@ export function MenuBar() {
     const editor = useEditorUiStore.getState()
     await startPipeline({
       steps,
-      pages: opts.pageId ? [opts.pageId] : undefined,
+      pages: opts.pageIds ? opts.pageIds : undefined,
       targetLanguage: editor.selectedLanguage,
       systemPrompt: prefs.customSystemPrompt,
       defaultFont: prefs.defaultFont,
@@ -315,9 +316,17 @@ export function MenuBar() {
               data-testid='menu-process-current'
               className='text-[13px]'
               disabled={!hasPage}
-              onSelect={() => void runPipeline({ pageId: requirePageId() })}
+              onSelect={() => void runPipeline({ pageIds: [requirePageId()] })}
             >
               {t('menu.processCurrent')}
+            </MenubarItem>
+            <MenubarItem
+              data-testid='menu-process-selected'
+              className='text-[13px]'
+              disabled={selectedPageIds.size === 0}
+              onSelect={() => void runPipeline({ pageIds: Array.from(selectedPageIds) })}
+            >
+              {t('menu.processSelected', { count: selectedPageIds.size })}
             </MenubarItem>
             <MenubarItem
               data-testid='menu-process-rerender'
@@ -337,13 +346,23 @@ export function MenuBar() {
             </MenubarItem>
             <MenubarSeparator />
             <MenubarItem
+              data-testid='menu-run-custom-current'
               className='text-[13px]'
               disabled={!hasPage || !hasSelectedSteps}
-              onSelect={() => void runCustomPipeline({ pageId: requirePageId() })}
+              onSelect={() => void runCustomPipeline({ pageIds: [requirePageId()] })}
             >
               {t('menu.runCustomCurrent')}
             </MenubarItem>
             <MenubarItem
+              data-testid='menu-run-custom-selected'
+              className='text-[13px]'
+              disabled={selectedPageIds.size === 0 || !hasSelectedSteps}
+              onSelect={() => void runCustomPipeline({ pageIds: Array.from(selectedPageIds) })}
+            >
+              {t('menu.runCustomSelected', { count: selectedPageIds.size })}
+            </MenubarItem>
+            <MenubarItem
+              data-testid='menu-run-custom-all'
               className='text-[13px]'
               disabled={!hasScene || !hasSelectedSteps}
               onSelect={() => void runCustomPipeline({})}
