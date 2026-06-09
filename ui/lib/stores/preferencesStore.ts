@@ -177,6 +177,7 @@ export const usePreferencesStore = create<PreferencesState>()(
         }
         if (version < 7 && persisted) {
           persisted.translationContext ??= initialPreferences.translationContext
+        }
         if (persisted && (version < 7 || persisted.customPipeline?.detect === undefined)) {
           persisted.customPipeline = initialPreferences.customPipeline
         }
