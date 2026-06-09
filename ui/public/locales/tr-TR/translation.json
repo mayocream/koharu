@@ -3,7 +3,8 @@
     "initializing": "Başlatılıyor...",
     "cancel": "İptal",
     "save": "Kaydet",
-    "saved": "Kaydedildi!"
+    "saved": "Kaydedildi!",
+    "delete": "Sil"
   },
   "menu": {
     "file": "Dosya",

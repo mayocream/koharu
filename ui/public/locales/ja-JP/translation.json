@@ -3,7 +3,8 @@
     "initializing": "初期化中...",
     "cancel": "キャンセル",
     "save": "保存",
-    "saved": "保存しました！"
+    "saved": "保存しました！",
+    "delete": "削除"
   },
   "menu": {
     "file": "ファイル",

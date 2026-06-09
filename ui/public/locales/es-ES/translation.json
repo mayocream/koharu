@@ -3,7 +3,8 @@
     "initializing": "Inicializando...",
     "cancel": "Cancelar",
     "save": "Guardar",
-    "saved": "¡Guardado!"
+    "saved": "¡Guardado!",
+    "delete": "Eliminar"
   },
   "menu": {
     "file": "Archivo",

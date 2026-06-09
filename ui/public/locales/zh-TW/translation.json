@@ -3,7 +3,8 @@
     "initializing": "初始化中...",
     "cancel": "取消",
     "save": "儲存",
-    "saved": "已儲存！"
+    "saved": "已儲存！",
+    "delete": "刪除"
   },
   "menu": {
     "file": "檔案",

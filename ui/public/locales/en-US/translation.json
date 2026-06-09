@@ -6,7 +6,8 @@
     "copy": "Copy",
     "copied": "Copied",
     "save": "Save",
-    "saved": "Saved!"
+    "saved": "Saved!",
+    "delete": "Delete"
   },
   "menu": {
     "file": "File",
