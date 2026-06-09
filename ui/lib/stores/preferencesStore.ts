@@ -5,12 +5,22 @@ import { persist } from 'zustand/middleware'
 
 import { getPlatform } from '@/lib/shortcutUtils'
 
+export type TranslationContextPreference = {
+  enabled: boolean
+  previousBlocks: number
+  previousPages: number
+  includePreviousTranslations: boolean
+  maxContextChars: number
+}
+
 type PreferencesState = {
   brushConfig: {
     size: number
     color: string
   }
   setBrushConfig: (config: Partial<PreferencesState['brushConfig']>) => void
+  translationContext: TranslationContextPreference
+  setTranslationContext: (config: Partial<TranslationContextPreference>) => void
   defaultFont?: string
   setDefaultFont: (font?: string) => void
   favoriteFonts: string[]
@@ -42,6 +52,13 @@ const initialPreferences = {
     size: 36,
     color: '#ffffff',
   },
+  translationContext: {
+    enabled: true,
+    previousBlocks: 6,
+    previousPages: 1,
+    includePreviousTranslations: true,
+    maxContextChars: 4000,
+  },
   favoriteFonts: [],
   shortcuts: {
     select: 'V',
@@ -67,6 +84,13 @@ export const usePreferencesStore = create<PreferencesState>()(
         set((state) => ({
           brushConfig: {
             ...state.brushConfig,
+            ...config,
+          },
+        })),
+      setTranslationContext: (config) =>
+        set((state) => ({
+          translationContext: {
+            ...state.translationContext,
             ...config,
           },
         })),
@@ -97,7 +121,7 @@ export const usePreferencesStore = create<PreferencesState>()(
     }),
     {
       name: 'koharu-config',
-      version: 6,
+      version: 7,
       migrate: (persisted: any, version: number) => {
         if (version < 2 && persisted) {
           delete persisted.localLlm
@@ -129,10 +153,14 @@ export const usePreferencesStore = create<PreferencesState>()(
           persisted.codexImagePrompt ??= initialPreferences.codexImagePrompt
           persisted.codexImageModel ??= initialPreferences.codexImageModel
         }
+        if (version < 7 && persisted) {
+          persisted.translationContext ??= initialPreferences.translationContext
+        }
         return persisted
       },
       partialize: (state) => ({
         brushConfig: state.brushConfig,
+        translationContext: state.translationContext,
         defaultFont: state.defaultFont,
         favoriteFonts: state.favoriteFonts,
         customSystemPrompt: state.customSystemPrompt,

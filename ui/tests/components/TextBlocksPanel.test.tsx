@@ -52,6 +52,13 @@ describe('TextBlocksPanel', () => {
     usePreferencesStore.setState({
       customSystemPrompt: 'translate naturally',
       defaultFont: 'Arial',
+      translationContext: {
+        enabled: true,
+        previousBlocks: 6,
+        previousPages: 1,
+        includePreviousTranslations: true,
+        maxContextChars: 4000,
+      },
     })
   })
 
@@ -85,6 +92,13 @@ describe('TextBlocksPanel', () => {
       targetLanguage: 'en',
       systemPrompt: 'translate naturally',
       defaultFont: 'Arial',
+      translationContext: {
+        enabled: true,
+        previousBlocks: 6,
+        previousPages: 1,
+        includePreviousTranslations: true,
+        maxContextChars: 4000,
+      },
     })
   })
 })

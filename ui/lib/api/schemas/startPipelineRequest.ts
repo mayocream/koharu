@@ -8,6 +8,14 @@ import type { PageId } from './pageId'
 import type { ReadingOrder } from './readingOrder'
 import type { Region } from './region'
 
+export interface TranslationContextConfig {
+  enabled?: boolean
+  previousBlocks?: number
+  previousPages?: number
+  includePreviousTranslations?: boolean
+  maxContextChars?: number
+}
+
 export interface StartPipelineRequest {
   /** @nullable */
   defaultFont?: string | null
@@ -24,6 +32,8 @@ export interface StartPipelineRequest {
   systemPrompt?: string | null
   /** @nullable */
   targetLanguage?: string | null
+  /** @nullable */
+  translationContext?: null | TranslationContextConfig
   /**
    * Optional text-node ids for engines that can operate on individual blocks.
    * @nullable
