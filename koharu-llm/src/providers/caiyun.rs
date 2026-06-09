@@ -95,6 +95,10 @@ pub struct CaiyunMtProvider {
 }
 
 impl AnyProvider for CaiyunMtProvider {
+    fn supports_translation_context(&self) -> bool {
+        false
+    }
+
     fn translate<'a>(
         &'a self,
         source: &'a str,

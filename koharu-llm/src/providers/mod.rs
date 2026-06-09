@@ -100,6 +100,10 @@ pub async fn ensure_provider_success(
 }
 
 pub trait AnyProvider: Send + Sync {
+    fn supports_translation_context(&self) -> bool {
+        false
+    }
+
     fn translate<'a>(
         &'a self,
         source: &'a str,
@@ -581,9 +585,73 @@ fn discover_openai_compatible_models(config: ProviderConfig) -> ProviderDiscover
 #[cfg(test)]
 mod tests {
     use super::*;
+    use std::future::Future;
+    use std::pin::Pin;
+    use std::sync::Arc;
+
+    use reqwest_middleware::ClientBuilder;
 
     fn ids(models: &[ProviderModelDescriptor]) -> Vec<&'static str> {
         models.iter().map(|model| model.id).collect()
+    }
+
+    struct DummyProvider;
+
+    impl AnyProvider for DummyProvider {
+        fn translate<'a>(
+            &'a self,
+            _source: &'a str,
+            _target_language: Language,
+            _model: &'a str,
+            _custom_system_prompt: Option<&'a str>,
+        ) -> Pin<Box<dyn Future<Output = anyhow::Result<String>> + Send + 'a>> {
+            Box::pin(async { Ok(String::new()) })
+        }
+    }
+
+    #[test]
+    fn unknown_provider_defaults_to_no_translation_context() {
+        assert!(!DummyProvider.supports_translation_context());
+    }
+
+    fn test_provider_config() -> ProviderConfig {
+        ProviderConfig {
+            http_client: Arc::new(ClientBuilder::new(reqwest::Client::new()).build()),
+            api_key: Some("test-key".to_string()),
+            base_url: Some("http://127.0.0.1:1234/v1".to_string()),
+            temperature: None,
+            max_tokens: None,
+        }
+    }
+
+    #[test]
+    fn machine_translation_providers_do_not_support_translation_context() {
+        for provider_id in ["deepl", "google-translate", "caiyun"] {
+            let provider = build_provider(provider_id, test_provider_config()).unwrap();
+
+            assert!(
+                !provider.supports_translation_context(),
+                "{provider_id} should not receive contextual prompts"
+            );
+        }
+    }
+
+    #[test]
+    fn llm_providers_support_translation_context() {
+        for provider_id in [
+            "openai",
+            "gemini",
+            "claude",
+            "deepseek",
+            "openai-compatible",
+        ] {
+            let provider = build_provider(provider_id, test_provider_config()).unwrap();
+
+            assert!(
+                provider.supports_translation_context(),
+                "{provider_id} should accept contextual prompts"
+            );
+        }
     }
 
     fn assert_contains_all(provider: &str, models: &[ProviderModelDescriptor], expected: &[&str]) {

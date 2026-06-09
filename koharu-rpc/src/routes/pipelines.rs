@@ -10,7 +10,8 @@ use std::sync::atomic::AtomicBool;
 use axum::Json;
 use axum::extract::State;
 use koharu_app::pipeline::{
-    self, PipelineRunOptions, PipelineSpec, ProgressTick, Scope, WarningTick,
+    self, PipelineRunOptions, PipelineSpec, ProgressTick, Scope, TranslationContextConfig,
+    WarningTick,
 };
 use koharu_core::{
     AppEvent, JobFinishedEvent, JobStatus, JobSummary, JobWarningEvent, NodeId, PageId,
@@ -50,6 +51,8 @@ pub struct StartPipelineRequest {
     pub default_font: Option<String>,
     #[serde(default)]
     pub reading_order: Option<ReadingOrder>,
+    #[serde(default)]
+    pub translation_context: Option<TranslationContextConfig>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, utoipa::ToSchema)]
@@ -88,6 +91,7 @@ async fn start_pipeline(
             text_node_ids: req.text_node_ids,
             region: req.region,
             reading_order: req.reading_order,
+            translation_context: req.translation_context.unwrap_or_default(),
         },
     };
 

@@ -16,6 +16,10 @@ pub struct OpenAiProvider {
 }
 
 impl AnyProvider for OpenAiProvider {
+    fn supports_translation_context(&self) -> bool {
+        true
+    }
+
     fn translate<'a>(
         &'a self,
         source: &'a str,

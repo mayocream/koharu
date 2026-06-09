@@ -1,0 +1,11 @@
+{
+  "steps": ["llm"],
+  "targetLanguage": "zh-CN",
+  "translationContext": {
+    "enabled": true,
+    "previousBlocks": 6,
+    "previousPages": 1,
+    "includePreviousTranslations": true,
+    "maxContextChars": 4000
+  }
+}

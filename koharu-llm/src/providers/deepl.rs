@@ -98,6 +98,10 @@ pub struct DeeplMtProvider {
 }
 
 impl AnyProvider for DeeplMtProvider {
+    fn supports_translation_context(&self) -> bool {
+        false
+    }
+
     fn translate<'a>(
         &'a self,
         source: &'a str,

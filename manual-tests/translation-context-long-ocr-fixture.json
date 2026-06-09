@@ -1,0 +1,304 @@
+{
+  "batch": {
+    "label": "long translation context OCR fixture",
+    "ops": [
+      {
+        "addPage": {
+          "page": {
+            "id": "019b2222-0000-7000-8000-000000000001",
+            "name": "context-long-page-1",
+            "width": 900,
+            "height": 1200,
+            "nodes": {}
+          },
+          "at": 0
+        }
+      },
+      {
+        "addNode": {
+          "page": "019b2222-0000-7000-8000-000000000001",
+          "node": {
+            "id": "019b2222-0000-7000-8000-000000000101",
+            "transform": { "x": 520.0, "y": 80.0, "width": 310.0, "height": 95.0, "rotationDeg": 0.0 },
+            "visible": true,
+            "kind": {
+              "text": {
+                "confidence": 0.99,
+                "text": "Before dawn, Haru and I hid under the old harbor crane.",
+                "translation": "Haru and I hid under the old harbor crane machine."
+              }
+            }
+          },
+          "at": 0
+        }
+      },
+      {
+        "addNode": {
+          "page": "019b2222-0000-7000-8000-000000000001",
+          "node": {
+            "id": "019b2222-0000-7000-8000-000000000102",
+            "transform": { "x": 180.0, "y": 190.0, "width": 330.0, "height": 100.0, "rotationDeg": 0.0 },
+            "visible": true,
+            "kind": {
+              "text": {
+                "confidence": 0.99,
+                "text": "The river was low, so the smugglers left the case on the muddy bank.",
+                "translation": "The smugglers left the case on the muddy river bank."
+              }
+            }
+          },
+          "at": 1
+        }
+      },
+      {
+        "addNode": {
+          "page": "019b2222-0000-7000-8000-000000000001",
+          "node": {
+            "id": "019b2222-0000-7000-8000-000000000103",
+            "transform": { "x": 540.0, "y": 320.0, "width": 310.0, "height": 100.0, "rotationDeg": 0.0 },
+            "visible": true,
+            "kind": {
+              "text": {
+                "confidence": 0.99,
+                "text": "I told him not to touch the seal, but Haru said the mayor would blame us anyway.",
+                "translation": "I told Haru not to touch the seal, but he said the mayor would blame us anyway."
+              }
+            }
+          },
+          "at": 2
+        }
+      },
+      {
+        "addNode": {
+          "page": "019b2222-0000-7000-8000-000000000001",
+          "node": {
+            "id": "019b2222-0000-7000-8000-000000000104",
+            "transform": { "x": 170.0, "y": 465.0, "width": 320.0, "height": 110.0, "rotationDeg": 0.0 },
+            "visible": true,
+            "kind": {
+              "text": {
+                "confidence": 0.99,
+                "text": "Then a crane swung above us and dropped its hook into the water."
+              }
+            }
+          },
+          "at": 3
+        }
+      },
+      {
+        "addNode": {
+          "page": "019b2222-0000-7000-8000-000000000001",
+          "node": {
+            "id": "019b2222-0000-7000-8000-000000000105",
+            "transform": { "x": 535.0, "y": 615.0, "width": 310.0, "height": 115.0, "rotationDeg": 0.0 },
+            "visible": true,
+            "kind": {
+              "text": {
+                "confidence": 0.99,
+                "text": "The bank was the only place without cameras, so I pushed the case farther into the reeds."
+              }
+            }
+          },
+          "at": 4
+        }
+      },
+      {
+        "addPage": {
+          "page": {
+            "id": "019b2222-0000-7000-8000-000000000002",
+            "name": "context-long-page-2",
+            "width": 900,
+            "height": 1200,
+            "nodes": {}
+          },
+          "at": 1
+        }
+      },
+      {
+        "addNode": {
+          "page": "019b2222-0000-7000-8000-000000000002",
+          "node": {
+            "id": "019b2222-0000-7000-8000-000000000201",
+            "transform": { "x": 530.0, "y": 85.0, "width": 315.0, "height": 105.0, "rotationDeg": 0.0 },
+            "visible": true,
+            "kind": {
+              "text": {
+                "confidence": 0.99,
+                "text": "If he opens it, everyone will know the letter was never meant for him."
+              }
+            }
+          },
+          "at": 0
+        }
+      },
+      {
+        "addNode": {
+          "page": "019b2222-0000-7000-8000-000000000002",
+          "node": {
+            "id": "019b2222-0000-7000-8000-000000000202",
+            "transform": { "x": 170.0, "y": 225.0, "width": 340.0, "height": 115.0, "rotationDeg": 0.0 },
+            "visible": true,
+            "kind": {
+              "text": {
+                "confidence": 0.99,
+                "text": "Haru lowered his voice. \"Keep your pitch steady when you call the station,\" he said.",
+                "translation": "Haru said to keep the voice pitch steady when calling the station."
+              }
+            }
+          },
+          "at": 1
+        }
+      },
+      {
+        "addNode": {
+          "page": "019b2222-0000-7000-8000-000000000002",
+          "node": {
+            "id": "019b2222-0000-7000-8000-000000000203",
+            "transform": { "x": 530.0, "y": 380.0, "width": 310.0, "height": 105.0, "rotationDeg": 0.0 },
+            "visible": true,
+            "kind": {
+              "text": {
+                "confidence": 0.99,
+                "text": "But my pitch cracked, and the guard recognized me at once."
+              }
+            }
+          },
+          "at": 2
+        }
+      },
+      {
+        "addNode": {
+          "page": "019b2222-0000-7000-8000-000000000002",
+          "node": {
+            "id": "019b2222-0000-7000-8000-000000000204",
+            "transform": { "x": 165.0, "y": 535.0, "width": 330.0, "height": 110.0, "rotationDeg": 0.0 },
+            "visible": true,
+            "kind": {
+              "text": {
+                "confidence": 0.99,
+                "text": "He whispered, \"Do not say spring. Say coil, or they will think you mean the season.\"",
+                "translation": "He warned that spring means a coil here, not the season."
+              }
+            }
+          },
+          "at": 3
+        }
+      },
+      {
+        "addNode": {
+          "page": "019b2222-0000-7000-8000-000000000002",
+          "node": {
+            "id": "019b2222-0000-7000-8000-000000000205",
+            "transform": { "x": 535.0, "y": 690.0, "width": 315.0, "height": 115.0, "rotationDeg": 0.0 },
+            "visible": true,
+            "kind": {
+              "text": {
+                "confidence": 0.99,
+                "text": "The spring inside the lock snapped before I could answer."
+              }
+            }
+          },
+          "at": 4
+        }
+      },
+      {
+        "addPage": {
+          "page": {
+            "id": "019b2222-0000-7000-8000-000000000003",
+            "name": "context-long-page-3",
+            "width": 900,
+            "height": 1200,
+            "nodes": {}
+          },
+          "at": 2
+        }
+      },
+      {
+        "addNode": {
+          "page": "019b2222-0000-7000-8000-000000000003",
+          "node": {
+            "id": "019b2222-0000-7000-8000-000000000301",
+            "transform": { "x": 520.0, "y": 90.0, "width": 325.0, "height": 115.0, "rotationDeg": 0.0 },
+            "visible": true,
+            "kind": {
+              "text": {
+                "confidence": 0.99,
+                "text": "So that was the spring he warned me about."
+              }
+            }
+          },
+          "at": 0
+        }
+      },
+      {
+        "addNode": {
+          "page": "019b2222-0000-7000-8000-000000000003",
+          "node": {
+            "id": "019b2222-0000-7000-8000-000000000302",
+            "transform": { "x": 160.0, "y": 245.0, "width": 345.0, "height": 115.0, "rotationDeg": 0.0 },
+            "visible": true,
+            "kind": {
+              "text": {
+                "confidence": 0.99,
+                "text": "Mina arrived wearing the guard's coat. \"Give it to her,\" Haru said, pointing at Mina.",
+                "translation": "Mina arrived in the guard coat, and Haru told me to give the case to Mina."
+              }
+            }
+          },
+          "at": 1
+        }
+      },
+      {
+        "addNode": {
+          "page": "019b2222-0000-7000-8000-000000000003",
+          "node": {
+            "id": "019b2222-0000-7000-8000-000000000303",
+            "transform": { "x": 525.0, "y": 405.0, "width": 320.0, "height": 115.0, "rotationDeg": 0.0 },
+            "visible": true,
+            "kind": {
+              "text": {
+                "confidence": 0.99,
+                "text": "I gave her the case, not the coat."
+              }
+            }
+          },
+          "at": 2
+        }
+      },
+      {
+        "addNode": {
+          "page": "019b2222-0000-7000-8000-000000000003",
+          "node": {
+            "id": "019b2222-0000-7000-8000-000000000304",
+            "transform": { "x": 170.0, "y": 560.0, "width": 335.0, "height": 120.0, "rotationDeg": 0.0 },
+            "visible": true,
+            "kind": {
+              "text": {
+                "confidence": 0.99,
+                "text": "When the mayor shouted, \"You betrayed him,\" she smiled because he meant Haru, not the guard."
+              }
+            }
+          },
+          "at": 3
+        }
+      },
+      {
+        "addNode": {
+          "page": "019b2222-0000-7000-8000-000000000003",
+          "node": {
+            "id": "019b2222-0000-7000-8000-000000000305",
+            "transform": { "x": 525.0, "y": 725.0, "width": 320.0, "height": 120.0, "rotationDeg": 0.0 },
+            "visible": true,
+            "kind": {
+              "text": {
+                "confidence": 0.99,
+                "text": "Only then did I understand: the letter was addressed to the crane operator, not the bird watcher."
+              }
+            }
+          },
+          "at": 4
+        }
+      }
+    ]
+  }
+}

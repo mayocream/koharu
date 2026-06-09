@@ -28,6 +28,16 @@ use koharu_runtime::RuntimeManager;
 use strum::IntoEnumIterator;
 use tokio::sync::{RwLock, broadcast};
 
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct TranslationContextEntry {
+    /// Zero-based page position in `Scene.pages` insertion order.
+    pub page_index: usize,
+    /// Zero-based text block position in that page's text-node order.
+    pub block_index: usize,
+    pub source_text: String,
+    pub translated_text: Option<String>,
+}
+
 // ---------------------------------------------------------------------------
 // State
 // ---------------------------------------------------------------------------
@@ -185,6 +195,14 @@ impl Model {
         state_target(&*self.state.read().await)
     }
 
+    pub async fn translation_context_supported(&self) -> bool {
+        match &*self.state.read().await {
+            State::ReadyLocal(_) => true,
+            State::ReadyProvider { provider, .. } => provider.supports_translation_context(),
+            _ => false,
+        }
+    }
+
     pub fn subscribe(&self) -> broadcast::Receiver<LlmState> {
         self.state_tx.subscribe()
     }
@@ -245,6 +263,79 @@ impl Model {
             .into_iter()
             .map(|s| strip_wrapping_quotes(s.trim()))
             .collect())
+    }
+
+    /// Translate source strings with per-block previous dialogue context.
+    ///
+    /// Pure machine-translation providers do not accept auxiliary prompt
+    /// instructions, so they fall back to the existing batch behavior.
+    pub async fn translate_texts_with_contexts(
+        &self,
+        sources: &[String],
+        contexts: &[Vec<TranslationContextEntry>],
+        target_language: Option<&str>,
+        custom_system_prompt: Option<&str>,
+    ) -> Result<Vec<String>> {
+        if sources.is_empty() {
+            return Ok(Vec::new());
+        }
+        if contexts.len() != sources.len() {
+            anyhow::bail!(
+                "translation context count ({}) does not match source count ({})",
+                contexts.len(),
+                sources.len()
+            );
+        }
+        if !self.translation_context_supported().await {
+            return self
+                .translate_texts(sources, target_language, custom_system_prompt)
+                .await;
+        }
+
+        let target_language = target_language
+            .and_then(Language::parse)
+            .unwrap_or(Language::English);
+        let prompts: Vec<String> = sources
+            .iter()
+            .zip(contexts)
+            .map(|(source, context)| format_contextual_source(source, context, target_language))
+            .collect();
+
+        let mut guard = self.state.write().await;
+        let mut out = Vec::with_capacity(prompts.len());
+        for prompt in prompts {
+            let translation = match &mut *guard {
+                State::ReadyLocal(llm) => {
+                    let opts = llm.id().default_generate_options();
+                    llm.generate(&prompt, &opts, target_language, custom_system_prompt)
+                }
+                State::ReadyProvider { target, provider } => {
+                    provider
+                        .translate(
+                            &prompt,
+                            target_language,
+                            &target.model_id,
+                            custom_system_prompt,
+                        )
+                        .await
+                }
+                State::Loading { .. } => Err(anyhow::anyhow!("LLM is still loading")),
+                State::Failed { error, .. } => Err(anyhow::anyhow!("LLM failed to load: {error}")),
+                State::Empty => Err(anyhow::anyhow!("no LLM loaded")),
+            }?;
+
+            let translation = strip_thinking_block(&translation);
+            let block = match parse_tagged_blocks(translation, 1)? {
+                Some(mut blocks) => blocks.pop().unwrap_or_default(),
+                None => split_legacy_lines(translation, 1)
+                    .into_iter()
+                    .next()
+                    .unwrap_or_default(),
+            };
+            out.push(strip_wrapping_quotes(block.trim()));
+        }
+
+        Ok(out)
     }
 }
 
@@ -445,6 +536,48 @@ fn format_sources(sources: &[String]) -> String {
         .join("\n")
 }
 
+fn format_contextual_source(
+    source: &str,
+    context: &[TranslationContextEntry],
+    target_language: Language,
+) -> String {
+    let mut body = String::new();
+    body.push_str(
+        "You are translating manga dialogue. Use the previous context for continuity, \
+         but translate only the current text block.\n\n",
+    );
+    body.push_str(&format!("Target language: {target_language}\n\n"));
+
+    if !context.is_empty() {
+        body.push_str("Previous context (do not translate or output this section):\n");
+        for entry in context {
+            body.push_str(&format!(
+                "[Page {}, Block {}]\n",
+                entry.page_index + 1,
+                entry.block_index + 1
+            ));
+            body.push_str(&format!("Source: {}\n", entry.source_text));
+            if let Some(translated) = entry
+                .translated_text
+                .as_deref()
+                .filter(|text| !text.trim().is_empty())
+            {
+                body.push_str(&format!("Translation: {translated}\n"));
+            }
+            body.push('\n');
+        }
+    }
+
+    body.push_str("Current text block to translate:\n");
+    body.push_str("[1]");
+    body.push_str(source);
+    body.push_str(
+        "\n\nOutput only [1] followed by the translated current text. Do not output context, \
+         explanations, notes, or extra text.",
+    );
+    body
+}
+
 fn parse_block_tag(text: &str) -> Option<(usize, usize)> {
     let bytes = text.as_bytes();
     if bytes.first()? != &b'[' {
@@ -535,4 +668,62 @@ fn strip_wrapping_quotes(text: &str) -> String {
         }
     }
     trimmed.to_string()
+}
+
+#[cfg(test)]
+mod tests {
+    use koharu_llm::Language;
+
+    use super::*;
+
+    #[test]
+    fn format_sources_preserves_legacy_tagged_prompt_body() {
+        let sources = vec!["hello".to_string(), "world".to_string()];
+
+        assert_eq!(format_sources(&sources), "[1]hello\n[2]world");
+    }
+
+    #[test]
+    fn contextual_prompt_separates_context_from_current_text() {
+        let prompt = format_contextual_source(
+            "But I do not want to go home.",
+            &[TranslationContextEntry {
+                page_index: 2,
+                block_index: 4,
+                source_text: "Why are you here?".to_string(),
+                translated_text: Some("Why are you here?".to_string()),
+            }],
+            Language::English,
+        );
+
+        assert!(prompt.contains("Previous context"));
+        assert!(prompt.contains("[Page 3, Block 5]"));
+        assert!(prompt.contains("Source: Why are you here?"));
+        assert!(prompt.contains("Translation: Why are you here?"));
+        assert!(
+            prompt.contains("Current text block to translate:\n[1]But I do not want to go home.")
+        );
+        assert_eq!(find_next_tag(&prompt).map(|(_, _, id)| id), Some(0));
+    }
+
+    #[test]
+    fn contextual_prompt_works_without_history() {
+        let prompt = format_contextual_source("hello", &[], Language::English);
+
+        assert!(!prompt.contains("Previous context ("));
+        assert!(prompt.contains("Current text block to translate:\n[1]hello"));
+        assert_eq!(find_next_tag(&prompt).map(|(_, _, id)| id), Some(0));
+    }
+
+    #[test]
+    fn parse_tagged_blocks_ignores_page_context_labels() -> anyhow::Result<()> {
+        let output = "[Page 3, Block 5]\ncontext\n[1]translated current";
+
+        assert_eq!(
+            parse_tagged_blocks(output, 1)?,
+            Some(vec!["translated current".to_string()])
+        );
+
+        Ok(())
+    }
 }
