@@ -22,10 +22,10 @@ use crate::safe::mtmd::{
 use crate::safe::sampling::LlamaSampler;
 use crate::safe::token::LlamaToken;
 
-const HF_REPO: &str = "PaddlePaddle/PaddleOCR-VL-1.5-GGUF";
-const MODEL_FILENAME: &str = "PaddleOCR-VL-1.5.gguf";
-const MMPROJ_FILENAME: &str = "PaddleOCR-VL-1.5-mmproj.gguf";
-const DEFAULT_MEDIA_MARKER: &str = "<__media__>";
+const HF_REPO: &str = "PaddlePaddle/PaddleOCR-VL-1.6-GGUF";
+const MODEL_FILENAME: &str = "PaddleOCR-VL-1.6-GGUF.gguf";
+const MMPROJ_FILENAME: &str = "PaddleOCR-VL-1.6-GGUF-mmproj.gguf";
+const PADDLEOCR_IMAGE_MARKER: &str = "<|IMAGE_START|><|IMAGE_PLACEHOLDER|><|IMAGE_END|>";
 const DEFAULT_GPU_LAYERS: u32 = 1000;
 const DEFAULT_MAX_NEW_TOKENS: usize = 256;
 pub const DEFAULT_REPETITION_PENALTY: f32 = 1.2;
@@ -36,14 +36,14 @@ const OCR_REPEAT_MIN_REPETITIONS: usize = 4;
 const OCR_REPEAT_MIN_TOTAL_CHARS: usize = 12;
 
 koharu_runtime::declare_hf_model_package!(
-    id: "model:paddleocr-vl:weights",
+    id: "model:paddleocr-vl-1.6:weights",
     repo: HF_REPO,
     file: MODEL_FILENAME,
     bootstrap: false,
     order: 120,
 );
 koharu_runtime::declare_hf_model_package!(
-    id: "model:paddleocr-vl:mmproj",
+    id: "model:paddleocr-vl-1.6:mmproj",
     repo: HF_REPO,
     file: MMPROJ_FILENAME,
     bootstrap: false,
@@ -117,7 +117,14 @@ struct RenderedPrompt {
 #[derive(Debug, Clone, Serialize)]
 struct PromptMessage {
     role: &'static str,
-    content: String,
+    content: Vec<PromptContent>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
+#[serde(tag = "type", rename_all = "snake_case")]
+enum PromptContent {
+    Image,
+    Text { text: String },
 }
 
 pub struct PaddleOcrVl {
@@ -183,8 +190,8 @@ impl PaddleOcrVl {
                 use_gpu: !cpu && backend.as_ref().supports_gpu_offload(),
                 print_timings: false,
                 n_threads: num_cpus::get().try_into().unwrap_or(i32::MAX),
-                media_marker: CString::new(DEFAULT_MEDIA_MARKER)
-                    .expect("default media marker contains no null bytes"),
+                media_marker: CString::new(PADDLEOCR_IMAGE_MARKER)
+                    .expect("PaddleOCR image marker contains no null bytes"),
             },
         )
         .context("unable to initialize multimodal projector")?;
@@ -587,8 +594,13 @@ fn bitmap_from_image(image: &DynamicImage) -> Result<MtmdBitmap> {
         .context("failed to create MTMD bitmap from image")
 }
 
-fn build_user_message_content(task: PaddleOcrVlTask) -> String {
-    format!("{DEFAULT_MEDIA_MARKER}{}", task.prompt())
+fn build_user_message_content(task: PaddleOcrVlTask) -> Vec<PromptContent> {
+    vec![
+        PromptContent::Image,
+        PromptContent::Text {
+            text: task.prompt().to_string(),
+        },
+    ]
 }
 
 fn render_chat_prompt(
@@ -692,16 +704,21 @@ fn repeated_ocr_suffix_start(text: &str) -> Option<usize> {
 #[cfg(test)]
 mod tests {
     use super::{
-        DEFAULT_MAX_NEW_TOKENS, DEFAULT_MEDIA_MARKER, DEFAULT_REPETITION_PENALTY,
-        PaddleOcrVlGenerateOptions, PaddleOcrVlTask, build_user_message_content,
+        DEFAULT_MAX_NEW_TOKENS, DEFAULT_REPETITION_PENALTY, PADDLEOCR_IMAGE_MARKER,
+        PaddleOcrVlGenerateOptions, PaddleOcrVlTask, PromptContent, build_user_message_content,
         render_chat_prompt, repeated_ocr_suffix_start, validate_generate_options,
     };
 
     #[test]
-    fn user_message_places_media_marker_before_task() {
+    fn user_message_places_image_before_task() {
         assert_eq!(
             build_user_message_content(PaddleOcrVlTask::Ocr),
-            format!("{DEFAULT_MEDIA_MARKER}OCR:")
+            vec![
+                PromptContent::Image,
+                PromptContent::Text {
+                    text: "OCR:".to_string(),
+                },
+            ]
         );
     }
 
@@ -709,37 +726,64 @@ mod tests {
     fn user_message_contents_match_paddleocr_tasks() {
         assert_eq!(
             build_user_message_content(PaddleOcrVlTask::Table),
-            "<__media__>Table Recognition:"
+            vec![
+                PromptContent::Image,
+                PromptContent::Text {
+                    text: "Table Recognition:".to_string(),
+                },
+            ]
         );
         assert_eq!(
             build_user_message_content(PaddleOcrVlTask::Formula),
-            "<__media__>Formula Recognition:"
+            vec![
+                PromptContent::Image,
+                PromptContent::Text {
+                    text: "Formula Recognition:".to_string(),
+                },
+            ]
         );
         assert_eq!(
             build_user_message_content(PaddleOcrVlTask::Chart),
-            "<__media__>Chart Recognition:"
+            vec![
+                PromptContent::Image,
+                PromptContent::Text {
+                    text: "Chart Recognition:".to_string(),
+                },
+            ]
         );
         assert_eq!(
             build_user_message_content(PaddleOcrVlTask::Spotting),
-            "<__media__>Spotting:"
+            vec![
+                PromptContent::Image,
+                PromptContent::Text {
+                    text: "Spotting:".to_string(),
+                },
+            ]
         );
         assert_eq!(
             build_user_message_content(PaddleOcrVlTask::Seal),
-            "<__media__>Seal Recognition:"
+            vec![
+                PromptContent::Image,
+                PromptContent::Text {
+                    text: "Seal Recognition:".to_string(),
+                },
+            ]
         );
     }
 
     #[test]
     fn embedded_template_render_keeps_media_marker_in_user_turn() -> anyhow::Result<()> {
         let rendered = render_chat_prompt(
-            "{{ bos_token }}{% for message in messages %}User: {{ message['content'] }}\n{% endfor %}{% if add_generation_prompt %}Assistant:\n{% endif %}",
+            "{{ bos_token }}{% for message in messages %}User: {% for content in message['content'] %}{% if content['type'] == 'image' %}<|IMAGE_START|><|IMAGE_PLACEHOLDER|><|IMAGE_END|>{% endif %}{% endfor %}{% for content in message['content'] %}{% if content['type'] == 'text' %}{{ content['text'] }}{% endif %}{% endfor %}\n{% endfor %}{% if add_generation_prompt %}Assistant:\n{% endif %}",
             "<|begin_of_sentence|>",
             "</s>",
             PaddleOcrVlTask::Formula,
         )?;
         assert_eq!(
             rendered,
-            "<|begin_of_sentence|>User: <__media__>Formula Recognition:\nAssistant:\n"
+            format!(
+                "<|begin_of_sentence|>User: {PADDLEOCR_IMAGE_MARKER}Formula Recognition:\nAssistant:\n"
+            )
         );
         Ok(())
     }
