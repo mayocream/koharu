@@ -1,5 +1,5 @@
 use anyhow::Result;
-use harfrust::{Direction, Feature, Script, ShaperData, Tag, UnicodeBuffer};
+use harfrust::{Direction, Feature, Script, ShapeOptions, ShaperData, Tag, UnicodeBuffer};
 use icu_properties::{CodePointMapData, props::Script as IcuScript};
 use skrifa::raw::TableProvider;
 
@@ -75,11 +75,13 @@ impl TextShaper {
         }
 
         let shaper_data = ShaperData::new(&font_ref);
-        let shaper = shaper_data
-            .shaper(&font_ref)
-            .point_size(Some(options.font_size))
-            .build();
-        let output = shaper.shape(buffer, options.features);
+        let shaper = shaper_data.shaper(&font_ref).build();
+        let output = shaper.shape(
+            buffer,
+            ShapeOptions::new()
+                .features(options.features)
+                .point_size(Some(options.font_size)),
+        );
 
         let glyph_positions = output.glyph_positions();
         let glyph_infos = output.glyph_infos();
