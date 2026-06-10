@@ -17,7 +17,7 @@ default-members = ["koharu"]
 resolver = "3"
 
 [workspace.package]
-version = "0.59.2"
+version = "0.60.0"
 edition = "2024"
 description = "Manga translation tools"
 license = "GPL-3.0-only"
@@ -49,7 +49,7 @@ hf-hub = "0.5"
 image = "0.25"
 anyhow = "1.0"
 async-trait = "0.1"
-imageproc = "0.26"
+imageproc = "0.27"
 clap = { version = "4.5", features = ["derive"] }
 serde = { version = "1", features = ["derive"] }
 serde_bytes = "0.11"
@@ -127,11 +127,11 @@ windows = { version = "0.62", features = [
 windows-sys = "0.61"
 winreg = "0.56"
 skrifa = "0.42"
-harfrust = "0.6"
+harfrust = "0.8"
 hypher = "0.1.7"
 icu_properties = "2.2"
 icu_segmenter = "2.2"
-jieba-rs = "0.9.0"
+jieba-rs = "0.10"
 fontdb = "0.23"
 fontdue = "0.9"
 tiny-skia = "0.12"

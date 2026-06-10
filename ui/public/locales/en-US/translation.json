@@ -6,7 +6,8 @@
     "copy": "Copy",
     "copied": "Copied",
     "save": "Save",
-    "saved": "Saved!"
+    "saved": "Saved!",
+    "delete": "Delete"
   },
   "menu": {
     "file": "File",
@@ -42,6 +43,9 @@
     "version": "Version: {{version}}",
     "versionUnknown": "Version: Unknown",
     "language": "Language",
+    "customPipeline": "Custom Pipeline",
+    "runCustomCurrent": "Run Custom (Current)",
+    "runCustomAll": "Run Custom (All)",
     "languages": {
       "en-US": "English",
       "zh-CN": "简体中文",
@@ -62,6 +66,11 @@
     "importKhr": "Import .khr archive",
     "projects": "Recent",
     "emptyHint": "Your recent projects will appear here",
+    "delete": "Delete",
+    "deleting": "Deleting...",
+    "projectOptions": "Project options",
+    "deleteConfirmTitle": "Delete Project",
+    "deleteConfirmDescription": "Are you sure you want to permanently delete \"{{name}}\"? This will delete all of its pages, images, and translations. This action cannot be undone.",
     "newDialogTitle": "New project",
     "newDialogDescription": "Give your project a name. It will be stored under the managed projects directory.",
     "newDialogPlaceholder": "Project name",
@@ -194,7 +203,8 @@
       "ug-CN": "Uyghur",
       "yue-HK": "Cantonese",
       "pt-BR": "Brazilian Portuguese",
-      "be-BY": "Belarusian"
+      "be-BY": "Belarusian",
+      "hu-HU": "Hungarian"
     }
   },
   "ai": {

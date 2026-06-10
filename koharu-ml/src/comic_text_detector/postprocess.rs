@@ -227,9 +227,9 @@ fn warp_line_region(image: &RgbImage, block: &TextRegion, line: &Quad) -> Option
     let mut region = RgbImage::from_pixel(width, height, Rgb([0, 0, 0]));
     warp_into(
         &cropped,
-        &projection,
+        projection,
         Interpolation::Bilinear,
-        Rgb([0, 0, 0]),
+        imageproc::geometric_transformations::Border::Constant(Rgb([0, 0, 0])),
         &mut region,
     );
 

@@ -254,7 +254,8 @@ fn chinese_word_ranges(text: &str) -> Vec<Range<usize>> {
     JIEBA
         .cut(text, true)
         .into_iter()
-        .filter_map(|word| {
+        .filter_map(|token| {
+            let word = token.word;
             let start = offset;
             let end = start + word.len();
             offset = end;

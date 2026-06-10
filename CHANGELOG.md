@@ -1,3 +1,20 @@
+## [0.60.0](https://github.com/mayocream/koharu/compare/0.59.2..0.60.0) - 2026-06-09
+
+### ⛰️  Features
+
+- Add gemma4-12b-it - ([d65d730](https://github.com/mayocream/koharu/commit/d65d73045bd6ea5f0652cbf8c5fadf4e6d938737))
+- PaddleOCR-VL-1.6 - ([e583a2d](https://github.com/mayocream/koharu/commit/e583a2d4199050043e12aebbd15cf196becb694e))
+- Add Hungarian language ([#759](https://github.com/mayocream/koharu/issues/759)) - ([e86080d](https://github.com/mayocream/koharu/commit/e86080daa142c9f48cbe438e29da5d7e721dbdf0))
+
+### ⚙️ Miscellaneous Tasks
+
+- *(dev)* Remove unused script - ([ccecce6](https://github.com/mayocream/koharu/commit/ccecce6054314e55e9ec2058b7761084899b3255))
+- *(tests)* Remove unused warning - ([4ec5a15](https://github.com/mayocream/koharu/commit/4ec5a15b2030a7767340a4a60535537452cbc1eb))
+
+## New Contributors ❤️
+
+* @bloksma made their first contribution in [#759](https://github.com/mayocream/koharu/pull/759)
+
 ## [0.59.2](https://github.com/mayocream/koharu/compare/0.59.1..0.59.2) - 2026-05-23
 
 ### 🐛 Bug Fixes
