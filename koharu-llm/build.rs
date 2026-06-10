@@ -112,9 +112,12 @@ fn validate_target() -> Result<()> {
     let target = env::var("TARGET").context("missing TARGET")?;
 
     match target.as_str() {
-        "x86_64-pc-windows-msvc" | "x86_64-unknown-linux-gnu" | "aarch64-apple-darwin" => {}
+        "x86_64-pc-windows-msvc"
+        | "x86_64-unknown-linux-gnu"
+        | "aarch64-unknown-linux-gnu"
+        | "aarch64-apple-darwin" => {}
         _ => bail!(
-            "unsupported target `{target}`; only Windows x86_64 MSVC, Linux x86_64, and macOS arm64 are supported"
+            "unsupported target `{target}`; only Windows x86_64 MSVC, Linux x86_64, Linux arm64, and macOS arm64 are supported"
         ),
     }
 
