@@ -49,7 +49,7 @@ hf-hub = "0.5"
 image = "0.25"
 anyhow = "1.0"
 async-trait = "0.1"
-imageproc = "0.26"
+imageproc = "0.27"
 clap = { version = "4.5", features = ["derive"] }
 serde = { version = "1", features = ["derive"] }
 serde_bytes = "0.11"
