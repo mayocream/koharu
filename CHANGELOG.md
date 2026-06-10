@@ -1,3 +1,25 @@
+## [0.61.0](https://github.com/mayocream/koharu/compare/0.60.0..0.61.0) - 2026-06-10
+
+### ⛰️  Features
+
+- Page Deletion ([#727](https://github.com/mayocream/koharu/issues/727)) - ([639fda7](https://github.com/mayocream/koharu/commit/639fda7513562096fe763eee74635013575ce0f4))
+- Custom Processing Pipeline ([#744](https://github.com/mayocream/koharu/issues/744)) - ([19e1400](https://github.com/mayocream/koharu/commit/19e1400331ee5c310427cceb4a6a4c7f9a94a4de))
+- Project Deletion ([#753](https://github.com/mayocream/koharu/issues/753)) - ([ab82b6f](https://github.com/mayocream/koharu/commit/ab82b6f185b5a646efd1ed84803c6f756792707c))
+
+### 📚 Documentation
+
+- Add paddleocr-vl-1.6 and gemma4-12b-it - ([3995dce](https://github.com/mayocream/koharu/commit/3995dcea33bf4dff721542730dc28d6424f9cd92))
+
+### ⚙️ Miscellaneous Tasks
+
+- *(dev)* Do not check scripts - ([b29480c](https://github.com/mayocream/koharu/commit/b29480cb0fd0267857a66c9a5293b64421eddb1e))
+- Add ARM64 build support ([#757](https://github.com/mayocream/koharu/issues/757)) - ([2822d18](https://github.com/mayocream/koharu/commit/2822d18bc547a298692cc8ad67c7e446394ae5e7))
+- Hu-HU label translation ([#762](https://github.com/mayocream/koharu/issues/762)) - ([e83ff7b](https://github.com/mayocream/koharu/commit/e83ff7b4f53432357afaa90c18dd8204ebc83539))
+
+## New Contributors ❤️
+
+* @Cathgao made their first contribution in [#757](https://github.com/mayocream/koharu/pull/757)
+
 ## [0.60.0](https://github.com/mayocream/koharu/compare/0.59.2..0.60.0) - 2026-06-09
 
 ### ⛰️  Features
