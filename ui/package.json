@@ -62,7 +62,7 @@
     "react-error-boundary": "^6.1.2",
     "react-hotkeys-hook": "^5.3.2",
     "react-i18next": "^17.0.8",
-    "react-markdown": "^9.1.0",
+    "react-markdown": "^10.1.0",
     "react-resizable-panels": "^4.11.2",
     "remark-gfm": "^4.0.1",
     "tailwind-merge": "^3.6.0",
