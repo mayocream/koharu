@@ -71,6 +71,18 @@ pub fn text_nodes(scene: &Scene, page: PageId) -> Vec<(NodeId, &Transform, &Text
         .collect()
 }
 
+/// Collect text nodes, optionally restricted to a requested set of node ids.
+pub fn scoped_text_nodes<'a>(
+    scene: &'a Scene,
+    page: PageId,
+    allowed_ids: Option<&[NodeId]>,
+) -> Vec<(NodeId, &'a Transform, &'a TextData)> {
+    text_nodes(scene, page)
+        .into_iter()
+        .filter(|(id, _, _)| allowed_ids.is_none_or(|ids| ids.contains(id)))
+        .collect()
+}
+
 /// Convert a scene `(Transform, TextData)` pair into a `koharu-ml` `TextRegion`
 /// for passing back through detector helpers that need geometry + language
 /// hints (e.g. CTD's `refine_segmentation_mask`, OCR's `extract_text_block_regions`).
@@ -463,6 +475,34 @@ pub fn sort_manga_reading_order<T>(blocks: &mut [([f32; 4], T)], order: ReadingO
 mod tests {
     use super::*;
     use koharu_core::ReadingOrder;
+
+    #[test]
+    fn scoped_text_nodes_filters_requested_ids() {
+        let mut page = koharu_core::Page::new("page", 100, 100);
+        let first = NodeId::new();
+        let second = NodeId::new();
+        for id in [first, second] {
+            page.nodes.insert(
+                id,
+                Node {
+                    id,
+                    transform: Transform::default(),
+                    visible: true,
+                    kind: NodeKind::Text(TextData::default()),
+                },
+            );
+        }
+        let page_id = page.id;
+        let mut scene = Scene::default();
+        scene.pages.insert(page_id, page);
+
+        let nodes = scoped_text_nodes(&scene, page_id, Some(&[second]));
+
+        assert_eq!(
+            nodes.iter().map(|(id, _, _)| *id).collect::<Vec<_>>(),
+            vec![second]
+        );
+    }
 
     #[test]
     fn test_reading_order_sort() {

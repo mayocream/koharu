@@ -240,7 +240,8 @@
     "readingOrder": "読み順",
     "readingOrderRtl": "右から左 (RTL)",
     "readingOrderLtr": "左から右 (LTR)",
-    "readingOrderCustom": "カスタム"
+    "readingOrderCustom": "カスタム",
+    "ocrTooltip": "このブロックでOCRを実行"
   },
   "workspace": {
     "importPrompt": "ページを読み込んで編集を開始してください。",

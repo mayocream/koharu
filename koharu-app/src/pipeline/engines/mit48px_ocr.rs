@@ -9,14 +9,16 @@ use koharu_ml::types::TextRegion;
 
 use crate::pipeline::artifacts::Artifact;
 use crate::pipeline::engine::{Engine, EngineCtx, EngineInfo};
-use crate::pipeline::engines::support::{load_source_image, text_node_to_region, text_nodes};
+use crate::pipeline::engines::support::{
+    load_source_image, scoped_text_nodes, text_node_to_region,
+};
 
 pub struct Model(Mit48pxOcr);
 
 #[async_trait]
 impl Engine for Model {
     async fn run(&self, ctx: EngineCtx<'_>) -> Result<Vec<Op>> {
-        let texts = text_nodes(ctx.scene, ctx.page);
+        let texts = scoped_text_nodes(ctx.scene, ctx.page, ctx.options.text_node_ids.as_deref());
         if texts.is_empty() {
             return Ok(Vec::new());
         }

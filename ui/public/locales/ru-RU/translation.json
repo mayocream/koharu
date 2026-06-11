@@ -240,7 +240,8 @@
     "readingOrder": "Порядок чтения",
     "readingOrderRtl": "Справа налево (RTL)",
     "readingOrderLtr": "Слева направо (LTR)",
-    "readingOrderCustom": "Свой"
+    "readingOrderCustom": "Свой",
+    "ocrTooltip": "Запустить OCR для этого блока"
   },
   "workspace": {
     "importPrompt": "Импортируйте страницу, чтобы начать редактирование.",
