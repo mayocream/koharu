@@ -24,7 +24,7 @@ jobs:
             args: '--target aarch64-apple-darwin'
           - platform: 'ubuntu-latest'
             args: ''
-          - platform: 'windows-latest'
+          - platform: 'windows-2022'
             args: ''
 
     runs-on: ${{ matrix.platform }}
@@ -37,21 +37,21 @@ jobs:
       - uses: oven-sh/setup-bun@v2
 
       - name: install dependencies (ubuntu only)
-        if: matrix.platform == 'ubuntu-latest'
+        if: startsWith(matrix.platform, 'ubuntu')
         run: |
           sudo apt-get update
           sudo apt-get install -y libwebkit2gtk-4.1-dev libappindicator3-dev librsvg2-dev patchelf
 
       - name: Install CUDA Toolkit (ubuntu only)
         uses: Jimver/cuda-toolkit@master
-        if: matrix.platform == 'ubuntu-latest'
+        if: startsWith(matrix.platform, 'ubuntu')
         with:
           cuda: '13.0.0'
           log-file-suffix: '${{ matrix.platform }}.txt'
 
       - name: Install CUDA Toolkit (windows only)
         uses: Jimver/cuda-toolkit@master
-        if: matrix.platform == 'windows-latest'
+        if: startsWith(matrix.platform, 'windows')
         with:
           cuda: '13.0.0'
           method: 'network'
@@ -60,7 +60,7 @@ jobs:
 
       - name: Install MSVC Build Tools
         uses: ilammy/msvc-dev-cmd@v1
-        if: matrix.platform == 'windows-latest'
+        if: startsWith(matrix.platform, 'windows')
 
       - name: Install dependencies
         run: bun install
@@ -78,7 +78,7 @@ jobs:
           } >> "$GITHUB_OUTPUT"
 
       - name: Install trusted-signing-cli (windows only)
-        if: matrix.platform == 'windows-latest'
+        if: startsWith(matrix.platform, 'windows')
         shell: bash
         run: |
           curl -fsSL "https://github.com/Levminer/trusted-signing-cli/releases/download/0.8.0/trusted-signing-cli.exe" -o "$RUNNER_TEMP/trusted-signing-cli.exe"
@@ -86,7 +86,7 @@ jobs:
           "$RUNNER_TEMP/trusted-signing-cli.exe" --version
 
       - name: Import Apple Developer Certificate
-        if: matrix.platform == 'macos-latest'
+        if: startsWith(matrix.platform, 'macos')
         env:
           APPLE_CERTIFICATE: ${{ secrets.BUILD_CERTIFICATE_BASE64 }}
           APPLE_CERTIFICATE_PASSWORD: ""
@@ -102,7 +102,7 @@ jobs:
           security find-identity -v -p codesigning build.keychain
 
       - name: Verify Certificate
-        if: matrix.platform == 'macos-latest'
+        if: startsWith(matrix.platform, 'macos')
         run: |
           CERT_INFO=$(security find-identity -v -p codesigning build.keychain | grep "Developer ID Application")
           CERT_ID=$(echo "$CERT_INFO" | awk -F'"' '{print $2}')
