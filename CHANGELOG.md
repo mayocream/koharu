@@ -1,3 +1,10 @@
+## [0.61.1](https://github.com/mayocream/koharu/compare/0.61.0..0.61.1) - 2026-06-11
+
+### 🐛 Bug Fixes
+
+- Pin windows-2022 ([#772](https://github.com/mayocream/koharu/issues/772)) - ([8d00453](https://github.com/mayocream/koharu/commit/8d004530b4467fa11a3dddc3a58662d5179ebb26))
+
+
 ## [0.61.0](https://github.com/mayocream/koharu/compare/0.60.0..0.61.0) - 2026-06-10
 
 ### ⛰️  Features
