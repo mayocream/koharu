@@ -13,6 +13,8 @@ import { useEffect, useMemo, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 
 import { Button } from '@/components/ui/button'
+import { Input } from '@/components/ui/input'
+import { Label } from '@/components/ui/label'
 import { LlmModelSelect, type LlmModelOption } from '@/components/ui/llm-model-select'
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover'
 import {
@@ -23,6 +25,7 @@ import {
   SelectValue,
 } from '@/components/ui/select'
 import { Separator } from '@/components/ui/separator'
+import { Switch } from '@/components/ui/switch'
 import { Textarea } from '@/components/ui/textarea'
 import {
   deleteCurrentLlm,
@@ -37,6 +40,7 @@ import { useEditorUiStore } from '@/lib/stores/editorUiStore'
 import { useJobsStore } from '@/lib/stores/jobsStore'
 import { usePreferencesStore } from '@/lib/stores/preferencesStore'
 import { useSelectionStore } from '@/lib/stores/selectionStore'
+import { buildTranslationContext } from '@/lib/translationContext'
 
 // ---------------------------------------------------------------------------
 // Helpers (inlined from former llmTargets util)
@@ -130,6 +134,9 @@ function WorkflowButtons() {
       systemPrompt: prefs.customSystemPrompt,
       defaultFont: prefs.defaultFont,
       readingOrder: editor.readingOrder === 'custom' ? undefined : editor.readingOrder,
+      translationContext: steps.includes(cfg.pipeline.translator ?? '')
+        ? buildTranslationContext(prefs.translationContext)
+        : undefined,
     })
   }
 
@@ -245,6 +252,8 @@ function LlmStatusPopover() {
   const selectedTarget = useEditorUiStore((s) => s.selectedTarget)
   const customSystemPrompt = usePreferencesStore((s) => s.customSystemPrompt)
   const setCustomSystemPrompt = usePreferencesStore((s) => s.setCustomSystemPrompt)
+  const translationContext = usePreferencesStore((s) => s.translationContext)
+  const setTranslationContext = usePreferencesStore((s) => s.setTranslationContext)
   const llmSelectedLanguage = useEditorUiStore((s) => s.selectedLanguage)
 
   const selectedModel = useMemo(
@@ -415,9 +424,90 @@ function LlmStatusPopover() {
               rows={5}
               className='min-h-0 resize-y px-2 py-1.5 text-xs leading-snug md:text-xs'
             />
+            <div className='rounded-md border border-border/70 px-2 py-2'>
+              <div className='flex items-center justify-between gap-2'>
+                <Label htmlFor='llm-translation-context' className='text-[11px]'>
+                  {t('llm.translationContext')}
+                </Label>
+                <Switch
+                  id='llm-translation-context'
+                  size='sm'
+                  checked={translationContext.enabled}
+                  onCheckedChange={(enabled) => setTranslationContext({ enabled })}
+                  data-testid='llm-translation-context'
+                />
+              </div>
+              <div className='mt-2 grid grid-cols-3 gap-1.5'>
+                <ContextNumberInput
+                  label={t('llm.previousBlocks')}
+                  value={translationContext.previousBlocks}
+                  disabled={!translationContext.enabled}
+                  min={0}
+                  onChange={(previousBlocks) => setTranslationContext({ previousBlocks })}
+                />
+                <ContextNumberInput
+                  label={t('llm.previousPages')}
+                  value={translationContext.previousPages}
+                  disabled={!translationContext.enabled}
+                  min={0}
+                  onChange={(previousPages) => setTranslationContext({ previousPages })}
+                />
+                <ContextNumberInput
+                  label={t('llm.maxContextChars')}
+                  value={translationContext.maxContextChars}
+                  disabled={!translationContext.enabled}
+                  min={0}
+                  step={500}
+                  onChange={(maxContextChars) => setTranslationContext({ maxContextChars })}
+                />
+              </div>
+              <label className='mt-2 flex items-center justify-between gap-2 text-[11px] font-medium'>
+                <span>{t('llm.includePreviousTranslations')}</span>
+                <Switch
+                  size='sm'
+                  checked={translationContext.includePreviousTranslations}
+                  disabled={!translationContext.enabled}
+                  onCheckedChange={(includePreviousTranslations) =>
+                    setTranslationContext({ includePreviousTranslations })
+                  }
+                  data-testid='llm-include-previous-translations'
+                />
+              </label>
+            </div>
           </div>
         </div>
       </PopoverContent>
     </Popover>
+  )
+}
+
+function ContextNumberInput({
+  label,
+  value,
+  disabled,
+  min,
+  step,
+  onChange,
+}: {
+  label: string
+  value: number
+  disabled: boolean
+  min: number
+  step?: number
+  onChange: (value: number) => void
+}) {
+  return (
+    <label className='flex min-w-0 flex-col gap-1 text-[10px] font-medium text-muted-foreground'>
+      <span className='truncate'>{label}</span>
+      <Input
+        type='number'
+        value={value}
+        min={min}
+        step={step}
+        disabled={disabled}
+        onChange={(event) => onChange(Number(event.currentTarget.value))}
+        className='h-7 px-1.5 text-xs md:text-xs'
+      />
+    </label>
   )
 }

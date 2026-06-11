@@ -26,7 +26,9 @@ use koharu_runtime::RuntimeManager;
 use parking_lot::RwLock;
 use petgraph::algo::toposort;
 use petgraph::graph::DiGraph;
+use serde::{Deserialize, Serialize};
 use tracing::Instrument;
+use utoipa::ToSchema;
 
 use crate::blobs::BlobStore;
 use crate::llm;
@@ -63,6 +65,30 @@ pub struct PipelineRunOptions {
     /// and process just that one block. Other engines ignore it.
     pub region: Option<Region>,
     pub reading_order: Option<ReadingOrder>,
+    pub translation_context: TranslationContextConfig,
+}
+
+/// Optional previous-text context for LLM-backed translation.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, ToSchema)]
+#[serde(default, rename_all = "camelCase")]
+pub struct TranslationContextConfig {
+    pub enabled: bool,
+    pub previous_blocks: usize,
+    pub previous_pages: usize,
+    pub include_previous_translations: bool,
+    pub max_context_chars: usize,
+}
+
+impl Default for TranslationContextConfig {
+    fn default() -> Self {
+        Self {
+            enabled: false,
+            previous_blocks: 6,
+            previous_pages: 1,
+            include_previous_translations: true,
+            max_context_chars: 4000,
+        }
+    }
 }
 
 // ---------------------------------------------------------------------------
@@ -196,4 +222,20 @@ pub fn build_order(infos: &[&EngineInfo]) -> Result<Vec<usize>> {
     let order = toposort(&g, None)
         .map_err(|c| anyhow::anyhow!("cycle at '{}'", infos[g[c.node_id()]].id))?;
     Ok(order.into_iter().map(|n| g[n]).collect())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::TranslationContextConfig;
+
+    #[test]
+    fn translation_context_defaults_to_disabled() {
+        let config = TranslationContextConfig::default();
+
+        assert!(!config.enabled);
+        assert_eq!(config.previous_blocks, 6);
+        assert_eq!(config.previous_pages, 1);
+        assert!(config.include_previous_translations);
+        assert_eq!(config.max_context_chars, 4000);
+    }
 }

@@ -46,6 +46,10 @@ pub struct GoogleTranslateMtProvider {
 }
 
 impl AnyProvider for GoogleTranslateMtProvider {
+    fn supports_translation_context(&self) -> bool {
+        false
+    }
+
     fn translate<'a>(
         &'a self,
         source: &'a str,

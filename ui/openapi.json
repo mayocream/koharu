@@ -3020,12 +3020,48 @@
           "targetLanguage": {
             "type": ["string", "null"]
           },
+          "translationContext": {
+            "oneOf": [
+              {
+                "type": "null"
+              },
+              {
+                "$ref": "#/components/schemas/TranslationContextConfig"
+              }
+            ]
+          },
           "textNodeIds": {
             "type": ["array", "null"],
             "items": {
               "$ref": "#/components/schemas/NodeId"
             },
             "description": "Optional text-node ids for engines that can operate on individual blocks."
+          }
+        }
+      },
+      "TranslationContextConfig": {
+        "type": "object",
+        "properties": {
+          "enabled": {
+            "type": "boolean"
+          },
+          "includePreviousTranslations": {
+            "type": "boolean"
+          },
+          "maxContextChars": {
+            "type": "integer",
+            "format": "uint64",
+            "minimum": 0
+          },
+          "previousBlocks": {
+            "type": "integer",
+            "format": "uint32",
+            "minimum": 0
+          },
+          "previousPages": {
+            "type": "integer",
+            "format": "uint32",
+            "minimum": 0
           }
         }
       },

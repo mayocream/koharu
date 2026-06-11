@@ -36,6 +36,10 @@ struct GenerateRequest {
 }
 
 impl AnyProvider for GeminiProvider {
+    fn supports_translation_context(&self) -> bool {
+        true
+    }
+
     fn translate<'a>(
         &'a self,
         source: &'a str,

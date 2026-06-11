@@ -32,6 +32,7 @@ import { useEditorUiStore } from '@/lib/stores/editorUiStore'
 import { useJobsStore } from '@/lib/stores/jobsStore'
 import { usePreferencesStore } from '@/lib/stores/preferencesStore'
 import { useSelectionStore } from '@/lib/stores/selectionStore'
+import { buildTranslationContext } from '@/lib/translationContext'
 
 export function TextBlocksPanel() {
   const { t } = useTranslation()
@@ -101,6 +102,7 @@ export function TextBlocksPanel() {
       systemPrompt: prefs.customSystemPrompt,
       defaultFont: prefs.defaultFont,
       readingOrder: editor.readingOrder === 'custom' ? undefined : editor.readingOrder,
+      translationContext: buildTranslationContext(prefs.translationContext),
     })
   }
 

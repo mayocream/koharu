@@ -25,5 +25,6 @@ pub use blobs::BlobStore;
 pub use config::AppConfig;
 pub use pipeline::{
     Artifact, Engine, EngineCtx, EngineInfo, PipelineRunOptions, PipelineSpec, Registry, Scope,
+    TranslationContextConfig,
 };
 pub use session::ProjectSession;

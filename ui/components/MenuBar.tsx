@@ -29,6 +29,7 @@ import { formatShortcutForDisplay, getPlatform } from '@/lib/shortcutUtils'
 import { useEditorUiStore } from '@/lib/stores/editorUiStore'
 import { usePreferencesStore } from '@/lib/stores/preferencesStore'
 import { useSelectionStore } from '@/lib/stores/selectionStore'
+import { buildTranslationContext } from '@/lib/translationContext'
 
 const windowControls = {
   async close() {
@@ -106,6 +107,9 @@ export function MenuBar() {
       systemPrompt: prefs.customSystemPrompt,
       defaultFont: prefs.defaultFont,
       readingOrder: editor.readingOrder === 'custom' ? undefined : editor.readingOrder,
+      translationContext: steps.includes(p.translator ?? '')
+        ? buildTranslationContext(prefs.translationContext)
+        : undefined,
     })
   }
 

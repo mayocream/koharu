@@ -1,0 +1,155 @@
+{
+  "batch": {
+    "label": "translation context OCR fixture",
+    "ops": [
+      {
+        "addPage": {
+          "page": {
+            "id": "019b1111-0000-7000-8000-000000000001",
+            "name": "context-page-1",
+            "width": 900,
+            "height": 1200,
+            "nodes": {}
+          },
+          "at": 0
+        }
+      },
+      {
+        "addNode": {
+          "page": "019b1111-0000-7000-8000-000000000001",
+          "node": {
+            "id": "019b1111-0000-7000-8000-000000000101",
+            "transform": { "x": 540.0, "y": 100.0, "width": 260.0, "height": 90.0, "rotationDeg": 0.0 },
+            "visible": true,
+            "kind": {
+              "text": {
+                "confidence": 0.99,
+                "text": "I met Yuta-senpai yesterday.",
+                "translation": "I met Yuta-senpai yesterday."
+              }
+            }
+          },
+          "at": 0
+        }
+      },
+      {
+        "addNode": {
+          "page": "019b1111-0000-7000-8000-000000000001",
+          "node": {
+            "id": "019b1111-0000-7000-8000-000000000102",
+            "transform": { "x": 220.0, "y": 210.0, "width": 260.0, "height": 90.0, "rotationDeg": 0.0 },
+            "visible": true,
+            "kind": {
+              "text": {
+                "confidence": 0.99,
+                "text": "Do you still like him?",
+                "translation": "Do you still like him?"
+              }
+            }
+          },
+          "at": 1
+        }
+      },
+      {
+        "addNode": {
+          "page": "019b1111-0000-7000-8000-000000000001",
+          "node": {
+            "id": "019b1111-0000-7000-8000-000000000103",
+            "transform": { "x": 520.0, "y": 330.0, "width": 280.0, "height": 110.0, "rotationDeg": 0.0 },
+            "visible": true,
+            "kind": {
+              "text": {
+                "confidence": 0.99,
+                "text": "I do not know. But my chest hurts.",
+                "translation": "I do not know. But my chest hurts."
+              }
+            }
+          },
+          "at": 2
+        }
+      },
+      {
+        "addNode": {
+          "page": "019b1111-0000-7000-8000-000000000001",
+          "node": {
+            "id": "019b1111-0000-7000-8000-000000000104",
+            "transform": { "x": 190.0, "y": 470.0, "width": 300.0, "height": 110.0, "rotationDeg": 0.0 },
+            "visible": true,
+            "kind": {
+              "text": {
+                "confidence": 0.99,
+                "text": "Keep it a secret from Yuta-senpai.",
+                "translation": "Keep it a secret from Yuta-senpai."
+              }
+            }
+          },
+          "at": 3
+        }
+      },
+      {
+        "addPage": {
+          "page": {
+            "id": "019b1111-0000-7000-8000-000000000002",
+            "name": "context-page-2",
+            "width": 900,
+            "height": 1200,
+            "nodes": {}
+          },
+          "at": 1
+        }
+      },
+      {
+        "addNode": {
+          "page": "019b1111-0000-7000-8000-000000000002",
+          "node": {
+            "id": "019b1111-0000-7000-8000-000000000201",
+            "transform": { "x": 520.0, "y": 120.0, "width": 300.0, "height": 100.0, "rotationDeg": 0.0 },
+            "visible": true,
+            "kind": {
+              "text": {
+                "confidence": 0.99,
+                "text": "Do not tell anyone what I just said.",
+                "translation": "Do not tell anyone what I just said."
+              }
+            }
+          },
+          "at": 0
+        }
+      },
+      {
+        "addNode": {
+          "page": "019b1111-0000-7000-8000-000000000002",
+          "node": {
+            "id": "019b1111-0000-7000-8000-000000000202",
+            "transform": { "x": 200.0, "y": 250.0, "width": 320.0, "height": 100.0, "rotationDeg": 0.0 },
+            "visible": true,
+            "kind": {
+              "text": {
+                "confidence": 0.99,
+                "text": "If he finds out, I cannot see him anymore."
+              }
+            }
+          },
+          "at": 1
+        }
+      },
+      {
+        "addNode": {
+          "page": "019b1111-0000-7000-8000-000000000002",
+          "node": {
+            "id": "019b1111-0000-7000-8000-000000000203",
+            "transform": { "x": 520.0, "y": 390.0, "width": 300.0, "height": 100.0, "rotationDeg": 0.0 },
+            "visible": true,
+            "kind": {
+              "text": {
+                "confidence": 0.99,
+                "text": "So I really do still like him."
+              }
+            }
+          },
+          "at": 2
+        }
+      }
+    ]
+  }
+}
