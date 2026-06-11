@@ -181,6 +181,17 @@ pub async fn run(
                 continue 'pages;
             }
 
+            // Skip this step if its produced artifacts are already satisfied.
+            {
+                let scene_guard = session.scene.read();
+                if let Some(page) = scene_guard.pages.get(page_id) {
+                    if info.produces.iter().all(|a| a.ready(page)) {
+                        completed += 1;
+                        continue;
+                    }
+                }
+            }
+
             let engine = match registry.get(info.id, &runtime, cpu).await {
                 Ok(e) => e,
                 Err(err) => {
