@@ -31,6 +31,7 @@ import { useBlockContextMenu } from '@/hooks/useBlockContextMenu'
 import { useBlockDrafting, type BlockDraft } from '@/hooks/useBlockDrafting'
 import { useBrushCursor } from '@/hooks/useBrushCursor'
 import { useBrushLayerDisplay } from '@/hooks/useBrushLayerDisplay'
+import { useCanvasEyedropper } from '@/hooks/useCanvasEyedropper'
 import { useCanvasZoom } from '@/hooks/useCanvasZoom'
 import { findImageBlob, findMaskBlob, useCurrentPage } from '@/hooks/useCurrentPage'
 import { useKeyboardShortcuts } from '@/hooks/useKeyboardShortcuts'
@@ -97,6 +98,16 @@ export function Workspace() {
   }, [])
 
   const pointerToDocument = usePointerToDocument(scaleRatio, canvasRef)
+  const canvasEyedropper = useCanvasEyedropper({
+    mode,
+    page,
+    imageData,
+    inpaintedData,
+    renderedData,
+    showInpaintedImage,
+    showRenderedImage,
+    pointerToDocument,
+  })
 
   const createTextNode = useCallback(
     async (draft: BlockDraft) => {
@@ -251,11 +262,13 @@ export function Workspace() {
   )
 
   const handleCanvasPointerDownCapture = (event: React.PointerEvent<HTMLDivElement>) => {
+    if (canvasEyedropper.handlePointerDownCapture(event)) return
     if (mode !== 'block' && event.target === event.currentTarget) {
       clearSelection()
     }
   }
   const handleCanvasContextMenu = (event: React.MouseEvent<HTMLDivElement>) => {
+    if (canvasEyedropper.handleContextMenuCapture(event)) return
     handleContextMenu(event)
   }
 
@@ -275,7 +288,7 @@ export function Workspace() {
   return (
     <div className='relative flex min-h-0 min-w-0 flex-1 bg-muted'>
       <ToolRail />
-      <SubToolRail />
+      {/* <SubToolRail /> */}
       <div className='relative flex min-h-0 min-w-0 flex-1 flex-col'>
         <CanvasToolbar />
         <ScrollAreaPrimitive.Root className='flex min-h-0 min-w-0 flex-1'>
@@ -302,6 +315,9 @@ export function Workspace() {
                         touchAction: 'none',
                       }}
                       onPointerDownCapture={handleCanvasPointerDownCapture}
+                      onPointerMoveCapture={canvasEyedropper.handlePointerMoveCapture}
+                      onPointerUpCapture={canvasEyedropper.handlePointerUpCapture}
+                      onPointerLeave={canvasEyedropper.handlePointerLeave}
                       onContextMenuCapture={handleCanvasContextMenu}
                       {...blockDraftBindings}
                     >

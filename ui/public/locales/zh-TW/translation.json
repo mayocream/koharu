@@ -254,7 +254,10 @@
     "brush": "筆刷",
     "eraser": "橡皮擦",
     "brushSize": "筆刷大小",
-    "brushColor": "筆刷顏色"
+    "brushColor": "筆刷顏色",
+    "brushSizeHelp": "左右拖動以調整畫筆大小。按住 Shift 鍵進行微調。",
+    "pickColor": "從螢幕取色",
+    "brushSizeValue": "筆刷大小數值"
   },
   "toolRail": {
     "select": "選擇",

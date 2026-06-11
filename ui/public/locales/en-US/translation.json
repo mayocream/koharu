@@ -287,7 +287,10 @@
     "brush": "Brush",
     "eraser": "Eraser",
     "brushSize": "Brush size",
-    "brushColor": "Brush color"
+    "brushColor": "Brush color",
+    "brushSizeHelp": "Drag left/right to adjust brush size. Hold Shift for fine adjustment.",
+    "pickColor": "Pick brush color from screen",
+    "brushSizeValue": "Brush size value"
   },
   "toolRail": {
     "select": "Select",

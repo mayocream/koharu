@@ -276,7 +276,10 @@
     "brush": "브러시",
     "eraser": "지우개",
     "brushSize": "브러시 크기",
-    "brushColor": "브러시 색상"
+    "brushColor": "브러시 색상",
+    "brushSizeHelp": "좌우로 드래그하여 브러시 크기를 조절합니다. Shift를 누르면 미세 조절이 가능합니다.",
+    "pickColor": "화면에서 브러시 색상 선택",
+    "brushSizeValue": "브러시 크기 값"
   },
   "toolRail": {
     "select": "선택",
