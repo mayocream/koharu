@@ -16,7 +16,7 @@ jobs:
     name: ${{ matrix.os }}
     strategy:
       matrix:
-        os: [macos-latest, windows-latest, ubuntu-latest, ubuntu-24.04-arm]
+        os: [macos-latest, windows-2022, ubuntu-latest, ubuntu-24.04-arm]
       fail-fast: false
     runs-on: ${{ matrix.os }}
     steps:
