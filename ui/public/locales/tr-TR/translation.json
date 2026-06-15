@@ -3,7 +3,8 @@
     "initializing": "Başlatılıyor...",
     "cancel": "İptal",
     "save": "Kaydet",
-    "saved": "Kaydedildi!"
+    "saved": "Kaydedildi!",
+    "delete": "Sil"
   },
   "menu": {
     "file": "Dosya",
@@ -36,7 +37,10 @@
     "github": "GitHub",
     "version": "Sürüm: {{version}}",
     "versionUnknown": "Sürüm: Bilinmiyor",
-    "language": "Dil"
+    "language": "Dil",
+    "customPipeline": "Özel İşlem Hattı",
+    "runCustomCurrent": "Özeli Çalıştır (Geçerli Sayfa)",
+    "runCustomAll": "Özeli Çalıştır (Tüm Sayfalar)"
   },
   "welcome": {
     "title": "Koharu",
@@ -46,6 +50,11 @@
     "importKhr": ".khr arşivini içe aktar",
     "projects": "Son Kullanılanlar",
     "emptyHint": "Son projeleriniz burada görünecek",
+    "delete": "Sil",
+    "deleting": "Siliniyor...",
+    "projectOptions": "Proje seçenekleri",
+    "deleteConfirmTitle": "Projeyi Sil",
+    "deleteConfirmDescription": "\"{{name}}\" projesini kalıcı olarak silmek istediğinizden emin misiniz? Bu işlem tüm sayfaları, görselleri ve çevirileri silecektir. Bu işlem geri alınamaz.",
     "newDialogTitle": "Yeni proje",
     "newDialogDescription": "Projenize bir ad verin. Yönetilen proje dizini altında saklanacaktır.",
     "newDialogPlaceholder": "Proje adı",
@@ -177,7 +186,8 @@
       "ug-CN": "Uygurca",
       "yue-HK": "Kantonca",
       "pt-BR": "Brezilya Portekizcesi",
-      "be-BY": "Belarusça"
+      "be-BY": "Belarusça",
+      "hu-HU": "Macarca"
     }
   },
   "render": {

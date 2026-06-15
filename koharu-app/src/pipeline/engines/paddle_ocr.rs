@@ -67,7 +67,7 @@ impl Engine for Model {
 
 inventory::submit! {
     EngineInfo {
-        id: "paddle-ocr-vl-1.5",
+        id: "paddle-ocr-vl-1.6",
         name: "PaddleOCR-VL",
         needs: &[Artifact::TextBoxes],
         produces: &[Artifact::OcrText],

@@ -129,6 +129,15 @@ pub enum ModelId {
     )]
     Gemma4E4bIt,
     #[strum(
+        serialize = "gemma4-12b-it",
+        props(
+            repo = "unsloth/gemma-4-12b-it-GGUF",
+            filename = "gemma-4-12b-it-Q4_K_M.gguf",
+            languages = "*"
+        )
+    )]
+    Gemma4_12bIt,
+    #[strum(
         serialize = "gemma4-26b-a4b-it",
         props(
             repo = "unsloth/gemma-4-26B-A4B-it-GGUF",

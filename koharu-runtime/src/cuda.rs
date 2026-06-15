@@ -487,16 +487,16 @@ mod tests {
 
     #[test]
     fn cuda_runtime_includes_cudnn() {
-        let wheel = WHEELS
+        let _wheel = WHEELS
             .iter()
             .find(|wheel| wheel.package.starts_with("nvidia-cudnn-cu13/"))
             .expect("missing cuDNN runtime wheel");
 
         #[cfg(target_os = "windows")]
-        assert!(wheel.dylibs().contains(&"cudnn64_9.dll"));
+        assert!(_wheel.dylibs().contains(&"cudnn64_9.dll"));
 
         #[cfg(target_os = "linux")]
-        assert!(wheel.dylibs().contains(&"libcudnn.so.9"));
+        assert!(_wheel.dylibs().contains(&"libcudnn.so.9"));
     }
 
     #[test]

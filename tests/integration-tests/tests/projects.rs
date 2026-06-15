@@ -192,3 +192,40 @@ async fn import_khr_round_trips() -> anyhow::Result<()> {
     );
     Ok(())
 }
+
+#[tokio::test]
+async fn delete_project_by_id() -> anyhow::Result<()> {
+    let app = TestApp::spawn().await?;
+
+    let summary = api::create_project(
+        &app.client_config,
+        models::CreateProjectRequest {
+            name: "Delete Me".into(),
+        },
+    )
+    .await?;
+    assert_eq!(summary.id, "delete-me");
+    assert!(std::path::Path::new(&summary.path).exists());
+    assert!(app.app.current_session().is_some());
+
+    // Call DELETE /projects/delete-me
+    let client = reqwest::Client::new();
+    let res = client
+        .delete(format!("{}/projects/delete-me", app.base_url))
+        .send()
+        .await?;
+    assert!(res.status().is_success(), "status: {}", res.status());
+
+    // Verify it is no longer on disk
+    assert!(!std::path::Path::new(&summary.path).exists());
+
+    // Verify the open session is closed (since we deleted the open project)
+    assert!(app.app.current_session().is_none());
+
+    // Verify it's gone from the project list
+    let listing = api::list_projects(&app.client_config).await?;
+    let ids: Vec<_> = listing.projects.iter().map(|p| p.id.clone()).collect();
+    assert!(!ids.contains(&"delete-me".to_string()));
+
+    Ok(())
+}
