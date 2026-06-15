@@ -9,7 +9,7 @@ import {
   Wand2Icon,
 } from 'lucide-react'
 import { motion } from 'motion/react'
-import { useEffect, useMemo, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 
 import { Button } from '@/components/ui/button'
@@ -288,6 +288,13 @@ function LlmStatusPopover() {
     }
   }
 
+  const isInitialLoad = useRef(false)
+  useEffect(() => {
+    if (isInitialLoad.current) return
+    isInitialLoad.current = true
+    handleToggleLoadUnload()
+  }, [selectedIsLoaded])
+
   useEffect(() => {
     if (llmModels.length === 0) return
     const hasCurrent = llmModels.some(({ model }) => sameLlmTarget(model.target, selectedTarget))
@@ -320,18 +327,16 @@ function LlmStatusPopover() {
           data-testid='llm-trigger'
           data-llm-ready={llmReady ? 'true' : 'false'}
           data-llm-loading={indicatorBusy ? 'true' : 'false'}
-          className={`flex h-6 cursor-pointer items-center gap-1.5 rounded-full px-2.5 text-[11px] font-medium shadow-sm transition hover:opacity-80 ${
-            llmReady
-              ? 'bg-rose-400 text-white ring-1 ring-rose-400/30'
-              : indicatorBusy
-                ? 'bg-amber-400 text-white ring-1 ring-amber-400/30'
-                : 'bg-muted text-muted-foreground ring-1 ring-border/50'
-          }`}
+          className={`flex h-6 cursor-pointer items-center gap-1.5 rounded-full px-2.5 text-[11px] font-medium shadow-sm transition hover:opacity-80 ${llmReady
+            ? 'bg-rose-400 text-white ring-1 ring-rose-400/30'
+            : indicatorBusy
+              ? 'bg-amber-400 text-white ring-1 ring-amber-400/30'
+              : 'bg-muted text-muted-foreground ring-1 ring-border/50'
+            }`}
         >
           <motion.span
-            className={`size-1.5 rounded-full ${
-              llmReady ? 'bg-white' : indicatorBusy ? 'bg-white' : 'bg-muted-foreground/40'
-            }`}
+            className={`size-1.5 rounded-full ${llmReady ? 'bg-white' : indicatorBusy ? 'bg-white' : 'bg-muted-foreground/40'
+              }`}
             animate={
               llmReady
                 ? { opacity: [1, 0.5, 1] }

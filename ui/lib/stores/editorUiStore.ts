@@ -85,8 +85,12 @@ const initialState = {
   mode: 'select' as ToolMode,
   renderEffect: { italic: false, bold: false } as RenderEffect,
   renderStroke: undefined as RenderStroke | undefined,
-  selectedTarget: undefined as LlmTarget | undefined,
-  selectedLanguage: undefined as string | undefined,
+  selectedTarget: {
+    "kind": "provider",
+    "modelId": "gemini-3.1-flash-lite",
+    "providerId": "gemini"
+  } satisfies LlmTarget | undefined,
+  selectedLanguage: 'zh-TW' as string | undefined,
   error: undefined as { id: number; message: string } | undefined,
   showNavigator: true,
   readingOrder: 'rtl' as const,
