@@ -227,8 +227,8 @@ const GEMINI_MODELS: &[ProviderModelDescriptor] = &[
         name: "Gemini 3.1 Pro Preview Custom Tools",
     },
     ProviderModelDescriptor {
-        id: "gemini-3.1-flash-lite-preview",
-        name: "Gemini 3.1 Flash-Lite Preview",
+        id: "gemini-3.1-flash-lite",
+        name: "Gemini 3.1 Flash-Lite",
     },
     ProviderModelDescriptor {
         id: "gemini-3-flash-preview",
@@ -615,7 +615,7 @@ mod tests {
             GEMINI_MODELS,
             &[
                 "gemini-3.1-pro-preview",
-                "gemini-3.1-flash-lite-preview",
+                "gemini-3.1-flash-lite",
                 "gemini-2.5-flash",
                 "gemma-4-26b-a4b-it",
             ],
