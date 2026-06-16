@@ -1,12 +1,12 @@
 #[cfg(target_os = "windows")]
 const RELEASE_BASE_URL: &str = "https://github.com/vosen/ZLUDA/releases/download";
 #[cfg(any(target_os = "windows", test))]
-const RELEASE_TAG: &str = "v6-preview.65";
+const RELEASE_TAG: &str = "v6-preview.77";
 #[cfg(any(target_os = "windows", test))]
-const ZLUDA_ASSET_NAME: &str = "zluda-windows-5c75a54.zip";
+const ZLUDA_ASSET_NAME: &str = "zluda-windows-6e2bd0a.zip";
 #[cfg(any(target_os = "windows", test))]
 // Bump this when extraction behavior changes but the upstream asset name stays the same.
-const ZLUDA_EXTRACT_REVISION: u32 = 4;
+const ZLUDA_EXTRACT_REVISION: u32 = 5;
 #[cfg(any(target_os = "windows", test))]
 const ZLUDA_DLLS: &[&str] = &[
     "nvcudart_hybrid64.dll",
