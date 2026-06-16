@@ -1,3 +1,18 @@
+## [0.61.2](https://github.com/mayocream/koharu/compare/0.61.1..0.61.2) - 2026-06-16
+
+### 🐛 Bug Fixes
+
+- Upgrade ZLUDA to v6-preview.77 - ([2c34daa](https://github.com/mayocream/koharu/commit/2c34daa5117e5b6f530170d365865a01c9b4839b))
+
+### 📚 Documentation
+
+- RUST_LOG=debug - ([90d061c](https://github.com/mayocream/koharu/commit/90d061cabc4e63b907cca6fa2fed5a6b9d266119))
+
+### ⚙️ Miscellaneous Tasks
+
+- Update gemini models ([#790](https://github.com/mayocream/koharu/issues/790)) - ([2f3d648](https://github.com/mayocream/koharu/commit/2f3d64834fd016968640582b7af53c42900c1ae3))
+
+
 ## [0.61.1](https://github.com/mayocream/koharu/compare/0.61.0..0.61.1) - 2026-06-11
 
 ### 🐛 Bug Fixes
