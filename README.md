@@ -322,6 +322,15 @@ koharu --debug
 koharu.exe --debug
 ```
 
+You can also set the `RUST_LOG` environment variable to `debug` or `trace` to see more verbose logs:
+
+```bash
+# macOS / Linux
+RUST_LOG=debug koharu
+# Windows (PowerShell)
+$env:RUST_LOG="debug"; koharu.exe
+```
+
 ## Development
 
 To build Koharu from source, follow the steps below.
