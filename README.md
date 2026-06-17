@@ -297,6 +297,14 @@ On Windows, you can install Koharu with [winget](https://learn.microsoft.com/en-
 winget install koharu
 ```
 
+### Homebrew
+
+On macOS, you can install Koharu with [Homebrew](https://brew.sh/):
+
+```bash
+brew install --cask koharu
+```
+
 ### Docker
 
 Koharu also publishes official Docker images for headless use. You can pull the latest image from GitHub Container Registry:
