@@ -157,7 +157,7 @@ walkdir = "2.5"
 proptest = "1.6"
 insta = "1.41"
 base64 = "0.22"
-tower-http = { version = "0.6", features = ["cors"] }
+tower-http = { version = "0.7", features = ["cors"] }
 unicode-bidi = "0.3"
 criterion = { version = "0.8", features = ["html_reports"] }
 git-version = "0.3"
