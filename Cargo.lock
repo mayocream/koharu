@@ -2428,6 +2428,15 @@ dependencies = [
 ]
 
 [[package]]
+name = "font-types"
+version = "0.12.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "81bf886368962a7d8456f136073ed33ed1b0770c690d2063731bb6a776e99f33"
+dependencies = [
+ "bytemuck",
+]
+
+[[package]]
 name = "fontconfig-parser"
 version = "0.5.8"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -3262,13 +3271,13 @@ dependencies = [
 
 [[package]]
 name = "harfrust"
-version = "0.8.4"
+version = "0.9.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "d12c7c642d4ce8c2e784b4751a6634bd89583912265add4a679a8882d123fbcd"
+checksum = "2428703078f884a910b19e632719e4f2b3778aa0fd071e3bb18eb9786474a051"
 dependencies = [
  "bitflags 2.13.0",
  "bytemuck",
- "read-fonts",
+ "read-fonts 0.40.1",
  "smallvec",
 ]
 
@@ -6431,7 +6440,17 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "c4ed38b89c2c77ff968c524145ad65fb010f38af5c7a224b53b81d47ac2daa81"
 dependencies = [
  "bytemuck",
- "font-types",
+ "font-types 0.11.3",
+]
+
+[[package]]
+name = "read-fonts"
+version = "0.40.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "e47cf772000d7aea67a6ea51de8a21b77674aaa538f3b523d89ae6514bf45bb4"
+dependencies = [
+ "bytemuck",
+ "font-types 0.12.0",
 ]
 
 [[package]]
@@ -7585,7 +7604,7 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "0c34617370ae968efb7161bb2beb517d9084659aae19e24b89e3db25b46e4564"
 dependencies = [
  "bytemuck",
- "read-fonts",
+ "read-fonts 0.39.2",
 ]
 
 [[package]]
