@@ -37,15 +37,6 @@ export function TextBlockLayer({ showSprites, scale, style }: TextBlockLayerProp
     return false
   }, [selectedIds])
 
-  const removeNode = async (id: string) => {
-    if (!page) return
-    const node = page.nodes[id]
-    if (!node) return
-    const idx = Object.keys(page.nodes).indexOf(id)
-    await applyOp(ops.removeNode(page.id, id, node, idx < 0 ? 0 : idx))
-    if ('text' in node.kind) queueAutoRender(page.id)
-  }
-
   const removeSelected = async () => {
     if (!page) return
     const ids = Array.from(selectedIds).filter((id): id is string => !!id)
@@ -62,13 +53,13 @@ export function TextBlockLayer({ showSprites, scale, style }: TextBlockLayerProp
 
     if (removeOps.length === 0) return
 
-    clearSelection()
-
     if (removeOps.length === 1) {
       await applyOp(removeOps[0])
     } else {
       await applyOp(ops.batch('Delete blocks', removeOps))
     }
+
+    clearSelection()
 
     const hasTextKind = ids.some((id) => {
       const node = page.nodes[id]

@@ -157,9 +157,9 @@ impl History {
     fn push_undo(&mut self, op: Op) {
         // Try to merge if the incoming op is a pipeline render operation
         if let Op::Batch {
-            label: ref incoming_label,
-            ops: ref incoming_ops,
-        } = op
+            label: incoming_label,
+            ops: incoming_ops,
+        } = &op
             && (incoming_label.contains("renderer: page ")
                 || incoming_label.contains("koharu-renderer: page "))
             && let Some(prev) = self.undo_stack.back_mut()
