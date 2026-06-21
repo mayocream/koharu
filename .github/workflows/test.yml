@@ -32,7 +32,7 @@ jobs:
             fonts-noto-cjk \
             dbus-x11 \
             gnome-keyring
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@v7
       - uses: Swatinem/rust-cache@v2
         with:
           cache-targets: false
@@ -58,7 +58,7 @@ jobs:
     name: UI
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@v7
       - uses: oven-sh/setup-bun@v2
       - uses: actions/cache@v4
         with:

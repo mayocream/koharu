@@ -34,7 +34,7 @@ jobs:
             libssl-dev \
             libayatana-appindicator3-dev \
             librsvg2-dev
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@v7
       - uses: oven-sh/setup-bun@v2
       - uses: Swatinem/rust-cache@v2
       - uses: Jimver/cuda-toolkit@master
