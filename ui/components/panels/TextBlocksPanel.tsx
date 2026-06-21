@@ -32,6 +32,7 @@ import { useEditorUiStore } from '@/lib/stores/editorUiStore'
 import { useJobsStore } from '@/lib/stores/jobsStore'
 import { usePreferencesStore } from '@/lib/stores/preferencesStore'
 import { useSelectionStore } from '@/lib/stores/selectionStore'
+import { cn } from '@/lib/utils'
 
 export function TextBlocksPanel() {
   const { t } = useTranslation()
@@ -81,6 +82,18 @@ export function TextBlocksPanel() {
     if (!node) return
     const idx = Object.keys(page.nodes).indexOf(nodeId)
     await applyOp(ops.removeNode(page.id, nodeId, node, idx < 0 ? 0 : idx))
+    clearSelection()
+    queueAutoRender(page.id)
+  }
+
+  const removeNodes = async (nodeIds: string[]) => {
+    const batch = nodeIds.flatMap((nodeId) => {
+      const node = page.nodes[nodeId]
+      if (!node) return []
+      const idx = Object.keys(page.nodes).indexOf(nodeId)
+      return [ops.removeNode(page.id, nodeId, node, idx < 0 ? 0 : idx)]
+    })
+    await applyOp(ops.batch("removeNodes", batch))
     clearSelection()
     queueAutoRender(page.id)
   }
@@ -199,6 +212,26 @@ export function TextBlocksPanel() {
           )}
         </div>
       </ScrollArea>
+      <div className={cn('flex items-center justify-between border-t border-border px-2 py-1.5 text-xs font-semibold tracking-wide text-muted-foreground uppercase',
+        selectedIds.size <= 1 && 'hidden'
+      )}>
+        <Tooltip>
+          <TooltipTrigger asChild>
+            <Button
+              aria-label={t('workspace.deleteSelected')}
+              variant='ghost'
+              size='icon-xs'
+              className='size-5 text-rose-600 hover:text-rose-600'
+              onClick={() => removeNodes([...selectedIds])}
+            >
+              <Trash2Icon className='size-4' />
+            </Button>
+          </TooltipTrigger>
+          <TooltipContent side='left' sideOffset={4}>
+            {t('workspace.deleteSelected')}
+          </TooltipContent>
+        </Tooltip>
+      </div>
     </div>
   )
 }
@@ -255,25 +288,22 @@ function BlockCard({
           className='flex w-full cursor-pointer items-center gap-1.5 px-2 py-1.5 text-left transition outline-none hover:no-underline data-[state=open]:bg-accent [&>svg]:hidden'
         >
           <span
-            className={`shrink-0 rounded-md px-1.5 py-0.5 text-center text-[10px] font-medium text-white tabular-nums ${
-              selected ? 'bg-primary' : 'bg-muted-foreground/60'
-            }`}
+            className={`shrink-0 rounded-md px-1.5 py-0.5 text-center text-[10px] font-medium text-white tabular-nums ${selected ? 'bg-primary' : 'bg-muted-foreground/60'
+              }`}
             style={{ minWidth: '1.5rem' }}
           >
             {index + 1}
           </span>
           <div className='flex min-w-0 flex-1 items-center gap-1'>
             <span
-              className={`shrink-0 rounded-sm px-1 py-0.5 text-[9px] font-medium uppercase ${
-                hasOcr ? 'bg-rose-400/70 text-white' : 'bg-muted text-muted-foreground/50'
-              }`}
+              className={`shrink-0 rounded-sm px-1 py-0.5 text-[9px] font-medium uppercase ${hasOcr ? 'bg-rose-400/70 text-white' : 'bg-muted text-muted-foreground/50'
+                }`}
             >
               {t('textBlocks.ocrBadge')}
             </span>
             <span
-              className={`shrink-0 rounded-sm px-1 py-0.5 text-[9px] font-medium uppercase ${
-                hasTranslation ? 'bg-rose-400/70 text-white' : 'bg-muted text-muted-foreground/50'
-              }`}
+              className={`shrink-0 rounded-sm px-1 py-0.5 text-[9px] font-medium uppercase ${hasTranslation ? 'bg-rose-400/70 text-white' : 'bg-muted text-muted-foreground/50'
+                }`}
             >
               {t('textBlocks.translationBadge')}
             </span>

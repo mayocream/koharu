@@ -142,6 +142,11 @@ export function selectAllTextNodesOnCurrentPage(): void {
   useSelectionStore.getState().selectMany(ids)
 }
 
+/** Deselect everything on the current page. No-op if nothing is selected. */
+export function clearSelectionOnCurrentPage(): void {
+  useSelectionStore.getState().selectMany([])
+}
+
 // Project lifecycle ----------------------------------------------------------
 
 export async function createAndOpenProject(req: CreateProjectRequest): Promise<ProjectSummary> {
