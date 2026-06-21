@@ -64,7 +64,7 @@ jobs:
             ${{ runner.os }}-nextjs-${{ hashFiles('**/bun.lock') }}-
       - run: bun tauri build --no-bundle
       - name: Upload Artifact
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: koharu-${{ matrix.os }}
           path: |
