@@ -84,6 +84,8 @@
     "pages_other": "{{count}} páginas",
     "empty": "Nenhum documento",
     "prompt": "Selecione ou importe uma página para começar",
+    "deleteConfirmTitle": "Excluir página",
+    "deleteConfirmDescription": "Tem certeza de que deseja excluir a página {{index}}? Esta ação não pode ser desfeita.",
     "pageManager": {
       "title": "Gerenciador de páginas",
       "description": "Arraste e solte as páginas para reordená-las."

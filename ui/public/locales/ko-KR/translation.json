@@ -88,6 +88,8 @@
     "pages_other": "{{count}} 페이지",
     "empty": "문서 없음",
     "prompt": "시작하려면 페이지를 선택하거나 가져오세요",
+    "deleteConfirmTitle": "페이지 삭제",
+    "deleteConfirmDescription": "페이지 {{index}}을(를) 삭제하시겠습니까? 이 작업은 되돌릴 수 없습니다.",
     "pageManager": {
       "title": "페이지 관리",
       "description": "드래그 앤 드롭으로 페이지 순서를 변경하세요."

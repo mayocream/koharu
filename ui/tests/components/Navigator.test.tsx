@@ -109,13 +109,19 @@ describe('Navigator', () => {
     const deleteBtn = await screen.findByTestId('navigator-page-delete-0')
     await userEvent.click(deleteBtn)
 
-    expect(lastOp).toEqual({
-      removePage: {
-        id: 'a',
-        prev_page: { id: 'a', name: 'a', width: 10, height: 10, nodes: {} },
-        prev_index: 0,
-      },
-    })
+    // Click confirm in the AlertDialog
+    const confirmBtn = await screen.findByRole('button', { name: 'common.delete' })
+    await userEvent.click(confirmBtn)
+
+    await waitFor(() =>
+      expect(lastOp).toEqual({
+        removePage: {
+          id: 'a',
+          prev_page: { id: 'a', name: 'a', width: 10, height: 10, nodes: {} },
+          prev_index: 0,
+        },
+      }),
+    )
   })
 
   it('Shift-click selects a contiguous range of page elements', async () => {
@@ -222,13 +228,19 @@ describe('Navigator', () => {
     const deleteBtn = await screen.findByTestId('navigator-page-delete-2')
     await userEvent.click(deleteBtn)
 
-    expect(lastOp).toEqual({
-      removePage: {
-        id: 'c',
-        prev_page: { id: 'c', name: 'c', width: 10, height: 10, nodes: {} },
-        prev_index: 2,
-      },
-    })
+    // Click confirm in the AlertDialog
+    const confirmBtn = await screen.findByRole('button', { name: 'common.delete' })
+    await userEvent.click(confirmBtn)
+
+    await waitFor(() =>
+      expect(lastOp).toEqual({
+        removePage: {
+          id: 'c',
+          prev_page: { id: 'c', name: 'c', width: 10, height: 10, nodes: {} },
+          prev_index: 2,
+        },
+      }),
+    )
   })
 
   it('enforces the 1-page minimum invariant and prevents deleting all pages', async () => {
