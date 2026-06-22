@@ -124,6 +124,26 @@ describe('Navigator', () => {
     )
   })
 
+  it('cancelling the delete dialog does not trigger page deletion', async () => {
+    let applied = false
+    server.use(
+      http.get('/api/v1/scene.json', () => HttpResponse.json(sceneWithPages(['a', 'b']))),
+      http.post('/api/v1/history/apply', async () => {
+        applied = true
+        return HttpResponse.json({ epoch: 1 })
+      }),
+    )
+    renderWithQuery(<Navigator />)
+    const deleteBtn = await screen.findByTestId('navigator-page-delete-0')
+    await userEvent.click(deleteBtn)
+
+    const cancelBtn = await screen.findByRole('button', { name: 'common.cancel' })
+    await userEvent.click(cancelBtn)
+
+    await waitFor(() => expect(cancelBtn).not.toBeInTheDocument())
+    expect(applied).toBe(false)
+  })
+
   it('Shift-click selects a contiguous range of page elements', async () => {
     server.use(
       http.get('/api/v1/scene.json', () => HttpResponse.json(sceneWithPages(['a', 'b', 'c', 'd']))),
