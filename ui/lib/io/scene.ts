@@ -34,6 +34,7 @@ import { filenameFromContentDisposition } from '@/lib/io/saveBlob'
 import { queryClient } from '@/lib/queryClient'
 import { usePreferencesStore } from '@/lib/stores/preferencesStore'
 import { useSelectionStore } from '@/lib/stores/selectionStore'
+import { ops } from '../ops'
 
 /**
  * Imperative action helpers. Every mutation below is a thin wrapper that
@@ -145,6 +146,22 @@ export function selectAllTextNodesOnCurrentPage(): void {
 /** Deselect everything on the current page. No-op if nothing is selected. */
 export function clearSelectionOnCurrentPage(): void {
   useSelectionStore.getState().selectMany([])
+}
+
+export async function deleteSelectedTextNodesOnCurrentPage(): Promise<void> {
+  const pageId = useSelectionStore.getState().pageId
+  if (!pageId) return
+  const snap = queryClient.getQueryData<SceneSnapshot>(getGetSceneJsonQueryKey())
+  const page = snap?.scene?.pages?.[pageId]
+  if (!page) return
+  const nodeIds = useSelectionStore.getState().nodeIds
+  const batch = [...nodeIds.keys().flatMap((nodeId) => {
+    const node = page.nodes[nodeId]
+    if (!node) return []
+    const idx = Object.keys(page.nodes).indexOf(nodeId)
+    return [ops.removeNode(page.id, nodeId, node, idx < 0 ? 0 : idx)]
+  })]
+  await applyOp(ops.batch("removeNodes", batch))
 }
 
 // Project lifecycle ----------------------------------------------------------

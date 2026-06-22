@@ -2,7 +2,7 @@
 
 import { useEffect, useMemo } from 'react'
 
-import { redoOp, selectAllTextNodesOnCurrentPage, undoOp } from '@/lib/io/scene'
+import { deleteSelectedTextNodesOnCurrentPage, redoOp, selectAllTextNodesOnCurrentPage, undoOp } from '@/lib/io/scene'
 import { getPlatform, formatShortcut, isModifierKey } from '@/lib/shortcutUtils'
 import { useEditorUiStore } from '@/lib/stores/editorUiStore'
 import { usePreferencesStore } from '@/lib/stores/preferencesStore'
@@ -62,6 +62,12 @@ export function useKeyboardShortcuts() {
       if (mod && (event.key === 'a' || event.key === 'A') && !inTextField) {
         event.preventDefault()
         selectAllTextNodesOnCurrentPage()
+        return
+      }
+
+      if (event.key === 'Delete' && !inTextField) {
+        event.preventDefault()
+        deleteSelectedTextNodesOnCurrentPage()
         return
       }
 
