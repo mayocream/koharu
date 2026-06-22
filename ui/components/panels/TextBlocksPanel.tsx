@@ -24,9 +24,8 @@ import {
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip'
 import { useCurrentPage, useTextNodes, type TextNodeEntry } from '@/hooks/useCurrentPage'
 import { getConfig, startPipeline, useGetCurrentLlm } from '@/lib/api/default/default'
-import { fetchApi } from '@/lib/api/fetch'
 import type { TextDataPatch } from '@/lib/api/schemas'
-import { applyOp, invalidateScene, queueAutoRender, reorderPageTextNodes } from '@/lib/io/scene'
+import { applyOp, queueAutoRender, reorderPageTextNodes } from '@/lib/io/scene'
 import { ops } from '@/lib/ops'
 import { useEditorUiStore } from '@/lib/stores/editorUiStore'
 import { useJobsStore } from '@/lib/stores/jobsStore'
@@ -218,6 +217,7 @@ export function TextBlocksPanel() {
         <Tooltip>
           <TooltipTrigger asChild>
             <Button
+              data-testid="textblocks-delete-selected"
               aria-label={t('workspace.deleteSelected')}
               variant='ghost'
               size='icon-xs'
@@ -278,6 +278,7 @@ function BlockCard({
         className='overflow-hidden rounded-md bg-card/90 text-xs ring-1 ring-border data-[selected=true]:ring-primary'
       >
         <AccordionTrigger
+          data-testid={`textblock-trigger-${index}`}
           onClick={(e) => {
             if (e.shiftKey || e.ctrlKey || e.metaKey) {
               e.preventDefault()
