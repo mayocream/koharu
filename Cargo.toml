@@ -127,7 +127,7 @@ windows = { version = "0.62", features = [
 windows-sys = "0.61"
 winreg = "0.56"
 skrifa = "0.43"
-harfrust = "0.9"
+harfrust = "0.10"
 hypher = "0.1.7"
 icu_properties = "2.2"
 icu_segmenter = "2.2"
