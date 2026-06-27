@@ -21,6 +21,10 @@ candle-core = { workspace = true }
 candle-transformers = { workspace = true }
 candle-nn = { workspace = true }
 candle-flash-attn = { workspace = true, optional = true }
+burn = { workspace = true }
+safetensors = { workspace = true }
+half = { workspace = true }
+memmap2 = { workspace = true }
 tokenizers = { workspace = true }
 serde = { workspace = true }
 serde_json = { workspace = true }
@@ -38,6 +42,7 @@ objc2-foundation = { workspace = true, optional = true }
 
 [features]
 cuda = [
+    "burn/cuda",
     "candle-core/cuda",
     "candle-core/cudnn",
     "candle-nn/cuda",
