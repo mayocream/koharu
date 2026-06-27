@@ -188,7 +188,7 @@ async fn async_main() -> Result<()> {
     let bytes = std::fs::read(&cli.input)?;
     let format = image::guess_format(&bytes)?;
     let image = image::load_from_memory_with_format(&bytes, format)?;
-    let result = model.inference_one(&image, cli.threshold)?;
+    let result = model.inference(&image, cli.threshold)?;
 
     if let Some(path) = &cli.annotated_output {
         let mut annotated = image.to_rgba8();

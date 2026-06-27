@@ -4,7 +4,7 @@
 use anyhow::Result;
 use async_trait::async_trait;
 use koharu_core::{Op, TextData, TextDirection};
-use koharu_ml::pp_doclayout_v3::{LayoutRegion, PPDocLayoutV3};
+use koharu_ml::pp_doclayout_v3::{PPDocLayoutV3, PPDocLayoutV3Region};
 
 use crate::pipeline::artifacts::Artifact;
 use crate::pipeline::engine::{Engine, EngineCtx, EngineInfo};
@@ -21,7 +21,7 @@ pub struct Model(PPDocLayoutV3);
 impl Engine for Model {
     async fn run(&self, ctx: EngineCtx<'_>) -> Result<Vec<Op>> {
         let image = load_source_image(ctx.scene, ctx.page, ctx.blobs)?;
-        let layout = self.0.inference_one_fast(&image, CONFIDENCE_THRESHOLD)?;
+        let layout = self.0.inference(&image, CONFIDENCE_THRESHOLD)?;
         let blocks = build_text_blocks(&layout.regions);
 
         let mut ops = clear_text_nodes_ops(ctx.scene, ctx.page);
@@ -58,7 +58,7 @@ inventory::submit! {
 // Region → (bbox, TextData) mapping
 // ---------------------------------------------------------------------------
 
-fn build_text_blocks(regions: &[LayoutRegion]) -> Vec<([f32; 4], TextData)> {
+fn build_text_blocks(regions: &[PPDocLayoutV3Region]) -> Vec<([f32; 4], TextData)> {
     let mut blocks: Vec<([f32; 4], TextData)> = regions
         .iter()
         .filter(|r| {
@@ -119,10 +119,10 @@ fn overlap(a: [f32; 4], b: [f32; 4]) -> f32 {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use koharu_ml::pp_doclayout_v3::LayoutRegion;
+    use koharu_ml::pp_doclayout_v3::PPDocLayoutV3Region;
 
-    fn region(label: &str, bbox: [f32; 4]) -> LayoutRegion {
-        LayoutRegion {
+    fn region(label: &str, bbox: [f32; 4]) -> PPDocLayoutV3Region {
+        PPDocLayoutV3Region {
             order: 0,
             label_id: 0,
             label: label.to_string(),

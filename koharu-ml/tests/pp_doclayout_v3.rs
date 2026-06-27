@@ -15,7 +15,7 @@ async fn pp_doclayout_v3_detects_textlike_regions_on_manga_fixture() -> anyhow::
     let runtime = support::cpu_runtime();
     let model = PPDocLayoutV3::load(&runtime, false).await?;
     let image = image::open(Path::new(env!("CARGO_MANIFEST_DIR")).join("tests/fixtures/1.jpg"))?;
-    let result = model.inference_one(&image, 0.25)?;
+    let result = model.inference(&image, 0.25)?;
 
     assert!(
         result
