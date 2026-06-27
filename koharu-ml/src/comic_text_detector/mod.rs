@@ -3,7 +3,7 @@ mod postprocess;
 mod unet;
 mod yolo_v5;
 
-use std::cmp;
+use std::{cmp, path::Path};
 
 use anyhow::{Context, bail};
 use burn::{
@@ -92,116 +92,18 @@ impl ComicTextDetector {
         let yolo_path = downloads
             .huggingface_model(HF_REPO, "yolo-v5.safetensors")
             .await?;
-        let mut yolo = yolo_v5::YoloV5::new(&device);
-        let mut yolo_store = SafetensorsStore::from_file(yolo_path)
-            .with_from_adapter(PyTorchToBurnAdapter)
-            .with_key_remapping(r"^model\.0\.", "backbone.l0.")
-            .with_key_remapping(r"^model\.1\.", "backbone.l1.")
-            .with_key_remapping(r"^model\.2\.", "backbone.l2.")
-            .with_key_remapping(r"^model\.3\.", "backbone.l3.")
-            .with_key_remapping(r"^model\.4\.", "backbone.l4.")
-            .with_key_remapping(r"^model\.5\.", "backbone.l5.")
-            .with_key_remapping(r"^model\.6\.", "backbone.l6.")
-            .with_key_remapping(r"^model\.7\.", "backbone.l7.")
-            .with_key_remapping(r"^model\.8\.", "backbone.l8.")
-            .with_key_remapping(r"^model\.9\.", "backbone.l9.")
-            .with_key_remapping(r"^model\.10\.", "neck.l10.")
-            .with_key_remapping(r"^model\.13\.", "neck.l13.")
-            .with_key_remapping(r"^model\.14\.", "neck.l14.")
-            .with_key_remapping(r"^model\.17\.", "neck.l17.")
-            .with_key_remapping(r"^model\.18\.", "neck.l18.")
-            .with_key_remapping(r"^model\.20\.", "neck.l20.")
-            .with_key_remapping(r"^model\.21\.", "neck.l21.")
-            .with_key_remapping(r"^model\.23\.", "neck.l23.")
-            .with_key_remapping(r"^model\.24\.", "head.")
-            .skip_enum_variants(true)
-            .allow_partial(false);
-        let result = yolo.load_from(&mut yolo_store).context(
-            "failed to mmap/load comic text detector YOLO safetensors through Burn store",
-        )?;
-        if !result.errors.is_empty() {
-            bail!(
-                "failed to load comic text detector YOLO tensors: {}",
-                result
-            );
-        }
-        if !result.missing.is_empty() {
-            bail!(
-                "comic text detector YOLO checkpoint is missing tensors: {}",
-                result
-            );
-        }
-        yolo = cast_module_float(yolo, module_dtype);
+        let yolo = load_yolo_model(&yolo_path, &device, module_dtype)?;
 
         let unet_path = downloads
             .huggingface_model(HF_REPO, "unet.safetensors")
             .await?;
-        let mut unet = unet::UNet::new(&device);
-        let mut unet_store = SafetensorsStore::from_file(unet_path)
-            .with_from_adapter(PyTorchToBurnAdapter)
-            .with_key_remapping(r"^(.+)\.conv\.0\.", "$1.conv.c3.")
-            .with_key_remapping(r"^(.+)\.conv\.1\.", "$1.conv.deconv.")
-            .with_key_remapping(r"^(.+)\.conv\.2\.", "$1.conv.bn.")
-            .with_key_remapping(r"^upconv6\.0\.", "upconv6.conv.")
-            .skip_enum_variants(true)
-            .allow_partial(false);
-        let result = unet.load_from(&mut unet_store).context(
-            "failed to mmap/load comic text detector UNet safetensors through Burn store",
-        )?;
-        if !result.errors.is_empty() {
-            bail!(
-                "failed to load comic text detector UNet tensors: {}",
-                result
-            );
-        }
-        if !result.missing.is_empty() {
-            bail!(
-                "comic text detector UNet checkpoint is missing tensors: {}",
-                result
-            );
-        }
-        unet = cast_module_float(unet, module_dtype);
+        let unet = load_unet_model(&unet_path, &device, module_dtype)?;
 
         let dbnet = if load_dbnet {
             let dbnet_path = downloads
                 .huggingface_model(HF_REPO, "dbnet.safetensors")
                 .await?;
-            let mut dbnet = dbnet::DbNet::new(&device);
-            let mut dbnet_store = SafetensorsStore::from_file(dbnet_path)
-                .with_from_adapter(PyTorchToBurnAdapter)
-                .with_key_remapping(r"^(.+)\.conv\.0\.", "$1.conv.c3.")
-                .with_key_remapping(r"^(.+)\.conv\.1\.", "$1.conv.deconv.")
-                .with_key_remapping(r"^(.+)\.conv\.2\.", "$1.conv.bn.")
-                .with_key_remapping(r"^conv\.0\.", "conv.conv.")
-                .with_key_remapping(r"^conv\.1\.", "conv.bn.")
-                .with_key_remapping(r"^binarize\.0\.", "binarize.conv1.conv.")
-                .with_key_remapping(r"^binarize\.1\.", "binarize.conv1.bn.")
-                .with_key_remapping(r"^binarize\.3\.", "binarize.deconv1.")
-                .with_key_remapping(r"^binarize\.4\.", "binarize.bn1.")
-                .with_key_remapping(r"^binarize\.6\.", "binarize.deconv2.")
-                .with_key_remapping(r"^thresh\.0\.", "thresh.conv1.conv.")
-                .with_key_remapping(r"^thresh\.1\.", "thresh.conv1.bn.")
-                .with_key_remapping(r"^thresh\.3\.", "thresh.deconv1.")
-                .with_key_remapping(r"^thresh\.4\.", "thresh.bn1.")
-                .with_key_remapping(r"^thresh\.6\.", "thresh.deconv2.")
-                .skip_enum_variants(true)
-                .allow_partial(false);
-            let result = dbnet.load_from(&mut dbnet_store).context(
-                "failed to mmap/load comic text detector DBNet safetensors through Burn store",
-            )?;
-            if !result.errors.is_empty() {
-                bail!(
-                    "failed to load comic text detector DBNet tensors: {}",
-                    result
-                );
-            }
-            if !result.missing.is_empty() {
-                bail!(
-                    "comic text detector DBNet checkpoint is missing tensors: {}",
-                    result
-                );
-            }
-            Some(cast_module_float(dbnet, module_dtype))
+            Some(load_dbnet_model(&dbnet_path, &device, module_dtype)?)
         } else {
             None
         };
@@ -300,6 +202,128 @@ impl ComicTextDetector {
         );
         mask
     }
+}
+
+fn load_yolo_model(
+    path: &Path,
+    device: &Device,
+    module_dtype: FloatDType,
+) -> anyhow::Result<yolo_v5::YoloV5> {
+    let mut yolo = yolo_v5::YoloV5::new(device);
+    let mut store = SafetensorsStore::from_file(path)
+        .with_from_adapter(PyTorchToBurnAdapter)
+        .with_key_remapping(r"^model\.0\.", "backbone.l0.")
+        .with_key_remapping(r"^model\.1\.", "backbone.l1.")
+        .with_key_remapping(r"^model\.2\.", "backbone.l2.")
+        .with_key_remapping(r"^model\.3\.", "backbone.l3.")
+        .with_key_remapping(r"^model\.4\.", "backbone.l4.")
+        .with_key_remapping(r"^model\.5\.", "backbone.l5.")
+        .with_key_remapping(r"^model\.6\.", "backbone.l6.")
+        .with_key_remapping(r"^model\.7\.", "backbone.l7.")
+        .with_key_remapping(r"^model\.8\.", "backbone.l8.")
+        .with_key_remapping(r"^model\.9\.", "backbone.l9.")
+        .with_key_remapping(r"^model\.10\.", "neck.l10.")
+        .with_key_remapping(r"^model\.13\.", "neck.l13.")
+        .with_key_remapping(r"^model\.14\.", "neck.l14.")
+        .with_key_remapping(r"^model\.17\.", "neck.l17.")
+        .with_key_remapping(r"^model\.18\.", "neck.l18.")
+        .with_key_remapping(r"^model\.20\.", "neck.l20.")
+        .with_key_remapping(r"^model\.21\.", "neck.l21.")
+        .with_key_remapping(r"^model\.23\.", "neck.l23.")
+        .with_key_remapping(r"^model\.24\.", "head.")
+        .skip_enum_variants(true)
+        .allow_partial(false);
+    let result = yolo
+        .load_from(&mut store)
+        .context("failed to mmap/load comic text detector YOLO safetensors through Burn store")?;
+    if !result.errors.is_empty() {
+        bail!(
+            "failed to load comic text detector YOLO tensors: {}",
+            result
+        );
+    }
+    if !result.missing.is_empty() {
+        bail!(
+            "comic text detector YOLO checkpoint is missing tensors: {}",
+            result
+        );
+    }
+    Ok(cast_module_float(yolo, module_dtype))
+}
+
+fn load_unet_model(
+    path: &Path,
+    device: &Device,
+    module_dtype: FloatDType,
+) -> anyhow::Result<unet::UNet> {
+    let mut unet = unet::UNet::new(device);
+    let mut store = SafetensorsStore::from_file(path)
+        .with_from_adapter(PyTorchToBurnAdapter)
+        .with_key_remapping(r"^(.+)\.conv\.0\.", "$1.conv.c3.")
+        .with_key_remapping(r"^(.+)\.conv\.1\.", "$1.conv.deconv.")
+        .with_key_remapping(r"^(.+)\.conv\.2\.", "$1.conv.bn.")
+        .with_key_remapping(r"^upconv6\.0\.", "upconv6.conv.")
+        .skip_enum_variants(true)
+        .allow_partial(false);
+    let result = unet
+        .load_from(&mut store)
+        .context("failed to mmap/load comic text detector UNet safetensors through Burn store")?;
+    if !result.errors.is_empty() {
+        bail!(
+            "failed to load comic text detector UNet tensors: {}",
+            result
+        );
+    }
+    if !result.missing.is_empty() {
+        bail!(
+            "comic text detector UNet checkpoint is missing tensors: {}",
+            result
+        );
+    }
+    Ok(cast_module_float(unet, module_dtype))
+}
+
+fn load_dbnet_model(
+    path: &Path,
+    device: &Device,
+    module_dtype: FloatDType,
+) -> anyhow::Result<dbnet::DbNet> {
+    let mut dbnet = dbnet::DbNet::new(device);
+    let mut store = SafetensorsStore::from_file(path)
+        .with_from_adapter(PyTorchToBurnAdapter)
+        .with_key_remapping(r"^(.+)\.conv\.0\.", "$1.conv.c3.")
+        .with_key_remapping(r"^(.+)\.conv\.1\.", "$1.conv.deconv.")
+        .with_key_remapping(r"^(.+)\.conv\.2\.", "$1.conv.bn.")
+        .with_key_remapping(r"^conv\.0\.", "conv.conv.")
+        .with_key_remapping(r"^conv\.1\.", "conv.bn.")
+        .with_key_remapping(r"^binarize\.0\.", "binarize.conv1.conv.")
+        .with_key_remapping(r"^binarize\.1\.", "binarize.conv1.bn.")
+        .with_key_remapping(r"^binarize\.3\.", "binarize.deconv1.")
+        .with_key_remapping(r"^binarize\.4\.", "binarize.bn1.")
+        .with_key_remapping(r"^binarize\.6\.", "binarize.deconv2.")
+        .with_key_remapping(r"^thresh\.0\.", "thresh.conv1.conv.")
+        .with_key_remapping(r"^thresh\.1\.", "thresh.conv1.bn.")
+        .with_key_remapping(r"^thresh\.3\.", "thresh.deconv1.")
+        .with_key_remapping(r"^thresh\.4\.", "thresh.bn1.")
+        .with_key_remapping(r"^thresh\.6\.", "thresh.deconv2.")
+        .skip_enum_variants(true)
+        .allow_partial(false);
+    let result = dbnet
+        .load_from(&mut store)
+        .context("failed to mmap/load comic text detector DBNet safetensors through Burn store")?;
+    if !result.errors.is_empty() {
+        bail!(
+            "failed to load comic text detector DBNet tensors: {}",
+            result
+        );
+    }
+    if !result.missing.is_empty() {
+        bail!(
+            "comic text detector DBNet checkpoint is missing tensors: {}",
+            result
+        );
+    }
+    Ok(cast_module_float(dbnet, module_dtype))
 }
 
 fn make_device(cpu: bool) -> (Device, DType, FloatDType, u32) {

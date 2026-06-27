@@ -84,10 +84,6 @@ name = "manga-ocr"
 path = "bin/manga-ocr.rs"
 
 [[bin]]
-name = "paddleocr-vl"
-path = "bin/paddleocr-vl.rs"
-
-[[bin]]
 name = "font-detect"
 path = "bin/font-detect.rs"
 

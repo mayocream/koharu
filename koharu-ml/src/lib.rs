@@ -10,7 +10,6 @@ pub mod lama;
 pub mod loading;
 pub mod manga_ocr;
 mod ops;
-pub mod paddleocr_vl;
 pub mod pp_doclayout_v3;
 pub mod probability_map;
 pub mod speech_bubble_segmentation;
