@@ -1,8 +1,15 @@
-use std::{fs, path::PathBuf, time::Instant};
+use std::{
+    fs,
+    path::{Path, PathBuf},
+    time::Instant,
+};
 
-use crate::{device, loading};
-use anyhow::{Context, Result};
-use candle_core::{DType, Device, Tensor};
+use anyhow::{Context, Result, bail};
+use burn::{
+    module::{Module, ModuleMapper, Param},
+    store::{ModuleSnapshot, PyTorchToBurnAdapter, SafetensorsStore},
+    tensor::{DType, Device, DeviceKind, FloatDType, Tensor, TensorData},
+};
 use image::{DynamicImage, GenericImageView, imageops::FilterType};
 use koharu_runtime::RuntimeManager;
 use rayon::prelude::*;
@@ -50,18 +57,12 @@ impl FontDetector {
         cpu: bool,
         kind: ModelKind,
     ) -> Result<Self> {
-        let device = device(cpu)?;
-        let dtype = loading::model_dtype(&device);
+        let (device, dtype, module_dtype) = make_device(cpu);
         let downloads = runtime.downloads();
         let weights_path = downloads
             .huggingface_model(HF_REPO, "yuzumarker-font-detection.safetensors")
             .await?;
-        let model = loading::load_mmaped_safetensors_path_with_dtype(
-            &weights_path,
-            &device,
-            dtype,
-            move |vb| models::Model::load(vb.pp("model._orig_mod.model"), kind),
-        )?;
+        let model = load_model(&weights_path, &device, kind, module_dtype)?;
         let labels = FontLabels::load(runtime).await?;
 
         Ok(Self {
@@ -90,24 +91,33 @@ impl FontDetector {
             .collect::<Vec<_>>()
             .into_iter()
             .collect::<Result<Vec<_>>>()?;
-        let batch = Tensor::stack(&processed, 0)?
-            .to_device(&self.device)?
-            .to_dtype(self.dtype)?;
+        let plane = 3 * input_size * input_size;
+        let mut data = Vec::with_capacity(processed.len() * plane);
+        for image_data in processed {
+            data.extend(image_data);
+        }
+        let mut tensor_data = TensorData::new(data, [images.len(), 3, input_size, input_size]);
+        self.device.staging(std::iter::once(&mut tensor_data));
+        let batch = Tensor::from_data(tensor_data, (&self.device, self.dtype));
         let preprocess_elapsed = preprocess_started.elapsed();
 
         let forward_started = Instant::now();
-        let logits = self
-            .model
-            .forward(&batch, false)?
-            .to_dtype(DType::F32)?
-            .to_device(&Device::Cpu)?;
+        let logits = self.model.forward(batch)?;
         let forward_elapsed = forward_started.elapsed();
 
         let postprocess_started = Instant::now();
-        let rows = logits.to_vec2::<f32>()?;
+        let logits = tensor_to_f32_vec(logits)?;
+        let num_outputs = FONT_COUNT + REGRESSION_DIM + 2;
+        if logits.len() != images.len() * num_outputs {
+            bail!(
+                "invalid font detector output length: got {}, expected {}",
+                logits.len(),
+                images.len() * num_outputs
+            );
+        }
 
         let mut predictions = Vec::with_capacity(images.len());
-        for (row, width) in rows.into_iter().zip(original_sizes) {
+        for (row, width) in logits.chunks_exact(num_outputs).zip(original_sizes) {
             let ranked: Vec<TopFont> = top_k_softmax(&row[..FONT_COUNT], top_k.min(FONT_COUNT))
                 .into_iter()
                 .map(|(index, score)| TopFont { index, score })
@@ -186,6 +196,63 @@ impl FontDetector {
     }
 }
 
+fn load_model(
+    path: &Path,
+    device: &Device,
+    kind: ModelKind,
+    module_dtype: FloatDType,
+) -> Result<models::Model> {
+    let mut model = models::Model::new(device, kind)?;
+    let mut store = SafetensorsStore::from_file(path)
+        .with_from_adapter(PyTorchToBurnAdapter)
+        .with_key_remapping(r"^model\._orig_mod\.model\.", "inner.")
+        .with_key_remapping(r"^inner\.0\.", "inner.conv1.")
+        .with_key_remapping(r"^inner\.1\.", "inner.bn1.")
+        .with_key_remapping(r"^inner\.4\.", "inner.conv2.")
+        .with_key_remapping(r"^inner\.5\.", "inner.bn2.")
+        .with_key_remapping(r"^inner\.8\.", "inner.conv3.")
+        .with_key_remapping(r"^inner\.9\.", "inner.conv4.")
+        .with_key_remapping(r"^inner\.10\.", "inner.conv5.")
+        .with_key_remapping(r"^inner\.14\.", "inner.fc1.")
+        .with_key_remapping(r"^inner\.16\.", "inner.fc2.")
+        .with_key_remapping(r"^inner\.18\.", "inner.fc3.")
+        .skip_enum_variants(true)
+        .allow_partial(false);
+    let result = model
+        .load_from(&mut store)
+        .context("failed to mmap/load font detector safetensors through Burn store")?;
+    if !result.errors.is_empty() {
+        bail!("failed to load font detector tensors: {}", result);
+    }
+    if !result.missing.is_empty() {
+        bail!("font detector checkpoint is missing tensors: {}", result);
+    }
+    Ok(cast_module_float(model, module_dtype))
+}
+
+fn make_device(cpu: bool) -> (Device, DType, FloatDType) {
+    #[cfg(feature = "cuda")]
+    {
+        if !cpu {
+            let mut device = Device::cuda(0);
+            if let Err(error) = device.configure(FloatDType::BF16) {
+                tracing::warn!(%error, "failed to configure Burn CUDA default dtype to BF16");
+            }
+            return (device, DType::BF16, FloatDType::BF16);
+        }
+    }
+
+    let mut device = Device::wgpu(if cpu {
+        DeviceKind::Cpu
+    } else {
+        DeviceKind::DefaultDevice
+    });
+    if let Err(error) = device.configure(FloatDType::F32) {
+        tracing::warn!(%error, "failed to configure Burn WGPU default dtype to F32");
+    }
+    (device, DType::F32, FloatDType::F32)
+}
+
 #[derive(Debug, Clone)]
 pub struct FontLabel {
     pub name: String,
@@ -243,18 +310,18 @@ struct FontLabelEntry {
     serif: bool,
 }
 
-fn preprocess_image(image: &DynamicImage, target: usize) -> Result<Tensor> {
+fn preprocess_image(image: &DynamicImage, target: usize) -> Result<Vec<f32>> {
     let resized = image.resize_exact(target as u32, target as u32, FilterType::CatmullRom);
-    let data = resized.to_rgb8().into_raw();
-    let tensor = Tensor::from_vec(
-        data,
-        (target, target, 3),
-        &Device::Cpu,
-    )?
-    .to_dtype(DType::F32)?
-    .permute((2, 0, 1))? // (3, H, W)
-    * (1.0 / 255.0);
-    tensor.map_err(Into::into)
+    let rgb = resized.to_rgb8();
+    let plane = target * target;
+    let mut data = vec![0.0_f32; 3 * plane];
+    for (x, y, pixel) in rgb.enumerate_pixels() {
+        let index = y as usize * target + x as usize;
+        data[index] = pixel[0] as f32 / 255.0;
+        data[plane + index] = pixel[1] as f32 / 255.0;
+        data[2 * plane + index] = pixel[2] as f32 / 255.0;
+    }
+    Ok(data)
 }
 
 fn top_k_softmax(logits: &[f32], top_k: usize) -> Vec<(usize, f32)> {
@@ -297,4 +364,27 @@ fn insert_ranked(best: &mut Vec<(usize, f32)>, candidate: (usize, f32), limit: u
 
 fn sigmoid_scalar(value: f32) -> f32 {
     1.0 / (1.0 + (-value).exp())
+}
+
+fn cast_module_float<M: Module>(module: M, dtype: FloatDType) -> M {
+    struct CastMapper {
+        dtype: FloatDType,
+    }
+
+    impl ModuleMapper for CastMapper {
+        fn map_float<const D: usize>(&mut self, param: Param<Tensor<D>>) -> Param<Tensor<D>> {
+            let (id, tensor, mapper) = param.consume();
+            Param::from_mapped_value(id, tensor.cast(self.dtype), mapper)
+        }
+    }
+
+    module.map(&mut CastMapper { dtype })
+}
+
+fn tensor_to_f32_vec<const D: usize>(tensor: Tensor<D>) -> Result<Vec<f32>> {
+    tensor
+        .cast(FloatDType::F32)
+        .into_data()
+        .into_vec::<f32>()
+        .context("failed to extract burn tensor data as f32")
 }

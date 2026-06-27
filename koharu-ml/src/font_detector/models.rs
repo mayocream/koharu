@@ -1,15 +1,22 @@
-use anyhow::Result;
-use candle_core::{Module, ModuleT, Tensor};
-use candle_nn::{BatchNorm, Conv2d, Conv2dConfig, Linear, VarBuilder};
+use anyhow::{Result, bail};
+use burn::{
+    module::Module,
+    nn::{
+        BatchNorm, BatchNormConfig, Linear, LinearConfig, PaddingConfig2d,
+        conv::{Conv2d, Conv2dConfig},
+    },
+    tensor::{
+        DType, Device, FloatDType, Tensor,
+        activation::relu,
+        module::{adaptive_avg_pool2d, max_pool2d},
+    },
+};
 use clap::ValueEnum;
-
-use crate::ops::conv2d_new;
 
 use super::{FONT_COUNT, REGRESSION_DIM};
 
 #[derive(Default, Debug, Clone, Copy, PartialEq, Eq, ValueEnum)]
 #[value(rename_all = "kebab-case")]
-#[allow(clippy::large_enum_variant)]
 pub enum ModelKind {
     Resnet18,
     Resnet34,
@@ -19,34 +26,34 @@ pub enum ModelKind {
     Deepfont,
 }
 
+#[derive(Module, Debug)]
 pub struct Model {
-    kind: ModelKind,
     inner: ModelImpl,
+    #[module(skip)]
+    kind: ModelKind,
 }
 
+#[derive(Module, Debug)]
+#[allow(clippy::large_enum_variant)]
 enum ModelImpl {
-    ResNet(Box<ResNet>),
-    DeepFont(Box<DeepFont>),
+    ResNet(ResNet),
+    DeepFont(DeepFont),
 }
 
 impl Model {
-    pub fn load(vb: VarBuilder, kind: ModelKind) -> Result<Self> {
-        let model = match kind {
-            ModelKind::Resnet18 => {
-                ModelImpl::ResNet(Box::new(ResNet::load_basic(vb, [2, 2, 2, 2], 1)?))
-            }
-            ModelKind::Resnet34 => {
-                ModelImpl::ResNet(Box::new(ResNet::load_basic(vb, [3, 4, 6, 3], 1)?))
-            }
+    pub fn new(device: &Device, kind: ModelKind) -> Result<Self> {
+        let inner = match kind {
+            ModelKind::Resnet18 => ModelImpl::ResNet(ResNet::new_basic(device, [2, 2, 2, 2], 1)?),
+            ModelKind::Resnet34 => ModelImpl::ResNet(ResNet::new_basic(device, [3, 4, 6, 3], 1)?),
             ModelKind::Resnet50 => {
-                ModelImpl::ResNet(Box::new(ResNet::load_bottleneck(vb, [3, 4, 6, 3], 4)?))
+                ModelImpl::ResNet(ResNet::new_bottleneck(device, [3, 4, 6, 3], 4)?)
             }
             ModelKind::Resnet101 => {
-                ModelImpl::ResNet(Box::new(ResNet::load_bottleneck(vb, [3, 4, 23, 3], 4)?))
+                ModelImpl::ResNet(ResNet::new_bottleneck(device, [3, 4, 23, 3], 4)?)
             }
-            ModelKind::Deepfont => ModelImpl::DeepFont(Box::new(DeepFont::load(vb)?)),
+            ModelKind::Deepfont => ModelImpl::DeepFont(DeepFont::new(device)?),
         };
-        Ok(Self { kind, inner: model })
+        Ok(Self { inner, kind })
     }
 
     pub fn input_size(&self) -> usize {
@@ -56,34 +63,72 @@ impl Model {
         }
     }
 
-    pub fn forward(&self, xs: &Tensor, train: bool) -> candle_core::Result<Tensor> {
+    pub fn forward(&self, input: Tensor<4>) -> Result<Tensor<2>> {
         let logits = match &self.inner {
-            ModelImpl::ResNet(m) => m.forward(xs, train)?,
-            ModelImpl::DeepFont(m) => m.forward(xs, train)?,
+            ModelImpl::ResNet(model) => model.forward(input),
+            ModelImpl::DeepFont(model) => model.forward(input),
         };
 
-        let (_, dim) = logits.dims2()?;
+        let [batch_size, dim] = logits.dims();
         if dim == FONT_COUNT + REGRESSION_DIM + 2 {
             return Ok(logits);
         }
 
-        // For models that only output font logits (e.g., DeepFont), pad zeros for direction/regression.
         if dim == FONT_COUNT {
-            let device = logits.device();
+            let dtype = dtype_to_float(logits.dtype());
             let zeros =
-                Tensor::zeros((logits.dim(0)?, REGRESSION_DIM + 2), logits.dtype(), device)?;
-            return Tensor::cat(&[logits, zeros], 1);
+                Tensor::<2>::zeros([batch_size, REGRESSION_DIM + 2], &logits.device()).cast(dtype);
+            return Ok(Tensor::cat(vec![logits, zeros], 1));
         }
 
-        Err(candle_core::Error::Msg(format!(
-            "Unexpected output dimension from backbone: got {}, expected {}",
+        bail!(
+            "unexpected output dimension from font detector: got {}, expected {}",
             dim,
             FONT_COUNT + REGRESSION_DIM + 2
-        )))
+        )
     }
 }
 
-#[derive(Clone)]
+fn conv2d(
+    device: &Device,
+    in_channels: usize,
+    out_channels: usize,
+    kernel_size: usize,
+    stride: usize,
+    padding: usize,
+    bias: bool,
+) -> Conv2d {
+    Conv2dConfig::new([in_channels, out_channels], [kernel_size, kernel_size])
+        .with_stride([stride, stride])
+        .with_padding(PaddingConfig2d::Explicit(
+            padding, padding, padding, padding,
+        ))
+        .with_bias(bias)
+        .init(device)
+}
+
+fn batch_norm(device: &Device, channels: usize) -> BatchNorm {
+    BatchNormConfig::new(channels)
+        .with_epsilon(1e-5)
+        .init(device)
+}
+
+fn linear(device: &Device, input: usize, output: usize) -> Linear {
+    LinearConfig::new(input, output)
+        .with_bias(true)
+        .init(device)
+}
+
+fn dtype_to_float(dtype: DType) -> FloatDType {
+    match dtype {
+        DType::F16 => FloatDType::F16,
+        DType::BF16 => FloatDType::BF16,
+        DType::F64 => FloatDType::F64,
+        _ => FloatDType::F32,
+    }
+}
+
+#[derive(Module, Debug)]
 struct BasicBlock {
     conv1: Conv2d,
     bn1: BatchNorm,
@@ -93,74 +138,41 @@ struct BasicBlock {
 }
 
 impl BasicBlock {
-    fn load(vb: VarBuilder, in_channels: usize, planes: usize, stride: usize) -> Result<Self> {
-        let conv1 = conv2d_new(
-            vb.pp("conv1").get((planes, in_channels, 3, 3), "weight")?,
-            None,
-            Conv2dConfig {
-                stride,
-                padding: 1,
-                ..Default::default()
-            },
-        )?;
-        let bn1 = load_batch_norm(&vb.pp("bn1"), planes)?;
-        let conv2 = conv2d_new(
-            vb.pp("conv2").get((planes, planes, 3, 3), "weight")?,
-            None,
-            Conv2dConfig {
-                stride: 1,
-                padding: 1,
-                ..Default::default()
-            },
-        )?;
-        let bn2 = load_batch_norm(&vb.pp("bn2"), planes)?;
-
+    fn new(device: &Device, in_channels: usize, planes: usize, stride: usize) -> Self {
         let downsample = if stride != 1 || in_channels != planes {
-            let conv = conv2d_new(
-                vb.pp("downsample.0")
-                    .get((planes, in_channels, 1, 1), "weight")?,
-                None,
-                Conv2dConfig {
-                    stride,
-                    ..Default::default()
-                },
-            )?;
-            let bn = load_batch_norm(&vb.pp("downsample.1"), planes)?;
-            Some((conv, bn))
+            Some((
+                conv2d(device, in_channels, planes, 1, stride, 0, false),
+                batch_norm(device, planes),
+            ))
         } else {
             None
         };
 
-        Ok(Self {
-            conv1,
-            bn1,
-            conv2,
-            bn2,
+        Self {
+            conv1: conv2d(device, in_channels, planes, 3, stride, 1, false),
+            bn1: batch_norm(device, planes),
+            conv2: conv2d(device, planes, planes, 3, 1, 1, false),
+            bn2: batch_norm(device, planes),
             downsample,
-        })
+        }
     }
 
-    fn forward(&self, xs: &Tensor, train: bool) -> candle_core::Result<Tensor> {
-        let mut out = self.conv1.forward(xs)?;
-        out = self.bn1.forward_t(&out, train)?;
-        out = out.relu()?;
+    fn forward(&self, input: Tensor<4>) -> Tensor<4> {
+        let mut output = self.conv1.forward(input.clone());
+        output = relu(self.bn1.forward(output));
+        output = self.conv2.forward(output);
+        output = self.bn2.forward(output);
 
-        out = self.conv2.forward(&out)?;
-        out = self.bn2.forward_t(&out, train)?;
-
-        let residual = if let Some((conv, bn)) = &self.downsample {
-            let mut y = conv.forward(xs)?;
-            y = bn.forward_t(&y, train)?;
-            y
-        } else {
-            xs.clone()
+        let residual = match &self.downsample {
+            Some((conv, bn)) => bn.forward(conv.forward(input)),
+            None => input,
         };
 
-        (out + residual)?.relu()
+        relu(output + residual)
     }
 }
 
-#[derive(Clone)]
+#[derive(Module, Debug)]
 struct Bottleneck {
     conv1: Conv2d,
     bn1: BatchNorm,
@@ -172,88 +184,52 @@ struct Bottleneck {
 }
 
 impl Bottleneck {
-    fn load(
-        vb: VarBuilder,
+    fn new(
+        device: &Device,
         in_channels: usize,
         planes: usize,
         stride: usize,
         expansion: usize,
-    ) -> Result<Self> {
-        let conv1 = conv2d_new(
-            vb.pp("conv1").get((planes, in_channels, 1, 1), "weight")?,
-            None,
-            Conv2dConfig::default(),
-        )?;
-        let bn1 = load_batch_norm(&vb.pp("bn1"), planes)?;
-        let conv2 = conv2d_new(
-            vb.pp("conv2").get((planes, planes, 3, 3), "weight")?,
-            None,
-            Conv2dConfig {
-                stride,
-                padding: 1,
-                ..Default::default()
-            },
-        )?;
-        let bn2 = load_batch_norm(&vb.pp("bn2"), planes)?;
-        let conv3 = conv2d_new(
-            vb.pp("conv3")
-                .get((planes * expansion, planes, 1, 1), "weight")?,
-            None,
-            Conv2dConfig::default(),
-        )?;
-        let bn3 = load_batch_norm(&vb.pp("bn3"), planes * expansion)?;
-
-        let downsample = if in_channels != planes * expansion || stride != 1 {
-            let conv = conv2d_new(
-                vb.pp("downsample.0")
-                    .get((planes * expansion, in_channels, 1, 1), "weight")?,
-                None,
-                Conv2dConfig {
-                    stride,
-                    ..Default::default()
-                },
-            )?;
-            let bn = load_batch_norm(&vb.pp("downsample.1"), planes * expansion)?;
-            Some((conv, bn))
+    ) -> Self {
+        let out_channels = planes * expansion;
+        let downsample = if in_channels != out_channels || stride != 1 {
+            Some((
+                conv2d(device, in_channels, out_channels, 1, stride, 0, false),
+                batch_norm(device, out_channels),
+            ))
         } else {
             None
         };
 
-        Ok(Self {
-            conv1,
-            bn1,
-            conv2,
-            bn2,
-            conv3,
-            bn3,
+        Self {
+            conv1: conv2d(device, in_channels, planes, 1, 1, 0, false),
+            bn1: batch_norm(device, planes),
+            conv2: conv2d(device, planes, planes, 3, stride, 1, false),
+            bn2: batch_norm(device, planes),
+            conv3: conv2d(device, planes, out_channels, 1, 1, 0, false),
+            bn3: batch_norm(device, out_channels),
             downsample,
-        })
+        }
     }
 
-    fn forward(&self, xs: &Tensor, train: bool) -> candle_core::Result<Tensor> {
-        let mut out = self.conv1.forward(xs)?;
-        out = self.bn1.forward_t(&out, train)?;
-        out = out.relu()?;
+    fn forward(&self, input: Tensor<4>) -> Tensor<4> {
+        let mut output = self.conv1.forward(input.clone());
+        output = relu(self.bn1.forward(output));
+        output = self.conv2.forward(output);
+        output = relu(self.bn2.forward(output));
+        output = self.conv3.forward(output);
+        output = self.bn3.forward(output);
 
-        out = self.conv2.forward(&out)?;
-        out = self.bn2.forward_t(&out, train)?;
-        out = out.relu()?;
-
-        out = self.conv3.forward(&out)?;
-        out = self.bn3.forward_t(&out, train)?;
-
-        let residual = if let Some((conv, bn)) = &self.downsample {
-            let mut y = conv.forward(xs)?;
-            y = bn.forward_t(&y, train)?;
-            y
-        } else {
-            xs.clone()
+        let residual = match &self.downsample {
+            Some((conv, bn)) => bn.forward(conv.forward(input)),
+            None => input,
         };
 
-        (out + residual)?.relu()
+        relu(output + residual)
     }
 }
 
+#[derive(Module, Debug)]
 struct ResNet {
     conv1: Conv2d,
     bn1: BatchNorm,
@@ -264,138 +240,115 @@ struct ResNet {
     fc: Linear,
 }
 
+#[derive(Module, Debug)]
 enum ResBlock {
     Basic(BasicBlock),
     Bottleneck(Bottleneck),
 }
 
 impl ResNet {
-    fn load_basic(vb: VarBuilder, layers: [usize; 4], expansion: usize) -> Result<Self> {
-        Self::load_impl(vb, layers, BlockKind::Basic, expansion)
+    fn new_basic(device: &Device, layers: [usize; 4], expansion: usize) -> Result<Self> {
+        Self::new_impl(device, layers, BlockKind::Basic, expansion)
     }
 
-    fn load_bottleneck(vb: VarBuilder, layers: [usize; 4], expansion: usize) -> Result<Self> {
-        Self::load_impl(vb, layers, BlockKind::Bottleneck, expansion)
+    fn new_bottleneck(device: &Device, layers: [usize; 4], expansion: usize) -> Result<Self> {
+        Self::new_impl(device, layers, BlockKind::Bottleneck, expansion)
     }
 
-    fn load_impl(
-        vb: VarBuilder,
+    fn new_impl(
+        device: &Device,
         layers: [usize; 4],
         block: BlockKind,
         expansion: usize,
     ) -> Result<Self> {
-        let conv1 = conv2d_new(
-            vb.pp("conv1").get((64, 3, 7, 7), "weight")?,
-            None,
-            Conv2dConfig {
-                stride: 2,
-                padding: 3,
-                ..Default::default()
-            },
-        )?;
-        let bn1 = load_batch_norm(&vb.pp("bn1"), 64)?;
-
-        let (layer1, c1) =
-            Self::make_layer(vb.pp("layer1"), 64, 64, layers[0], 1, block, expansion)?;
-        let (layer2, c2) =
-            Self::make_layer(vb.pp("layer2"), c1, 128, layers[1], 2, block, expansion)?;
-        let (layer3, c3) =
-            Self::make_layer(vb.pp("layer3"), c2, 256, layers[2], 2, block, expansion)?;
-        let (layer4, c4) =
-            Self::make_layer(vb.pp("layer4"), c3, 512, layers[3], 2, block, expansion)?;
-
-        let fc = Linear::new(
-            vb.pp("fc")
-                .get((FONT_COUNT + REGRESSION_DIM + 2, c4), "weight")?,
-            Some(vb.pp("fc").get(FONT_COUNT + REGRESSION_DIM + 2, "bias")?),
-        );
+        let (layer1, c1) = Self::make_layer(device, 64, 64, layers[0], 1, block, expansion);
+        let (layer2, c2) = Self::make_layer(device, c1, 128, layers[1], 2, block, expansion);
+        let (layer3, c3) = Self::make_layer(device, c2, 256, layers[2], 2, block, expansion);
+        let (layer4, c4) = Self::make_layer(device, c3, 512, layers[3], 2, block, expansion);
 
         Ok(Self {
-            conv1,
-            bn1,
+            conv1: conv2d(device, 3, 64, 7, 2, 3, false),
+            bn1: batch_norm(device, 64),
             layer1,
             layer2,
             layer3,
             layer4,
-            fc,
+            fc: linear(device, c4, FONT_COUNT + REGRESSION_DIM + 2),
         })
     }
 
     fn make_layer(
-        vb: VarBuilder,
+        device: &Device,
         in_channels: usize,
         planes: usize,
         blocks: usize,
         stride: usize,
         block_kind: BlockKind,
         expansion: usize,
-    ) -> Result<(Vec<ResBlock>, usize)> {
+    ) -> (Vec<ResBlock>, usize) {
         let mut layers = Vec::with_capacity(blocks);
         let first = match block_kind {
             BlockKind::Basic => {
-                ResBlock::Basic(BasicBlock::load(vb.pp("0"), in_channels, planes, stride)?)
+                ResBlock::Basic(BasicBlock::new(device, in_channels, planes, stride))
             }
-            BlockKind::Bottleneck => ResBlock::Bottleneck(Bottleneck::load(
-                vb.pp("0"),
+            BlockKind::Bottleneck => ResBlock::Bottleneck(Bottleneck::new(
+                device,
                 in_channels,
                 planes,
                 stride,
                 expansion,
-            )?),
+            )),
         };
         layers.push(first);
         let current_channels = planes * expansion;
-        for idx in 1..blocks {
-            let block_vb = vb.pp(idx.to_string());
+        for _ in 1..blocks {
             let block = match block_kind {
                 BlockKind::Basic => {
-                    ResBlock::Basic(BasicBlock::load(block_vb, current_channels, planes, 1)?)
+                    ResBlock::Basic(BasicBlock::new(device, current_channels, planes, 1))
                 }
-                BlockKind::Bottleneck => ResBlock::Bottleneck(Bottleneck::load(
-                    block_vb,
+                BlockKind::Bottleneck => ResBlock::Bottleneck(Bottleneck::new(
+                    device,
                     current_channels,
                     planes,
                     1,
                     expansion,
-                )?),
+                )),
             };
             layers.push(block);
         }
-        Ok((layers, current_channels))
+        (layers, current_channels)
     }
 
-    fn forward(&self, xs: &Tensor, train: bool) -> candle_core::Result<Tensor> {
-        let mut x = self.conv1.forward(xs)?;
-        x = self.bn1.forward_t(&x, train)?;
-        x = x.relu()?;
-        x = x.max_pool2d_with_stride(3, 2)?;
+    fn forward(&self, input: Tensor<4>) -> Tensor<2> {
+        let batch_size = input.dims()[0];
+        let mut x = self.conv1.forward(input);
+        x = relu(self.bn1.forward(x));
+        x = max_pool2d(x, [3, 3], [2, 2], [0, 0], [1, 1], false);
 
-        for b in &self.layer1 {
-            x = b.forward(&x, train)?;
+        for block in &self.layer1 {
+            x = block.forward(x);
         }
-        for b in &self.layer2 {
-            x = b.forward(&x, train)?;
+        for block in &self.layer2 {
+            x = block.forward(x);
         }
-        for b in &self.layer3 {
-            x = b.forward(&x, train)?;
+        for block in &self.layer3 {
+            x = block.forward(x);
         }
-        for b in &self.layer4 {
-            x = b.forward(&x, train)?;
+        for block in &self.layer4 {
+            x = block.forward(x);
         }
 
-        let (_, c, h, w) = x.dims4()?;
-        let mut x = x.sum_keepdim(2)?;
-        x = x.sum_keepdim(3)?;
-        x = (x / ((h * w) as f64))?.reshape((xs.dim(0)?, c))?;
-        self.fc.forward(&x)
+        let channels = x.dims()[1];
+        let x = adaptive_avg_pool2d(x, [1, 1]).reshape([batch_size, channels]);
+        self.fc.forward(x)
     }
 }
 
 impl ResBlock {
-    fn forward(&self, xs: &Tensor, train: bool) -> candle_core::Result<Tensor> {
+    fn forward(&self, input: Tensor<4>) -> Tensor<4> {
         match self {
-            ResBlock::Basic(b) => b.forward(xs, train),
-            ResBlock::Bottleneck(b) => b.forward(xs, train),
+            Self::Basic(block) => block.forward(input),
+            Self::Bottleneck(block) => block.forward(input),
         }
     }
 }
@@ -406,6 +359,7 @@ enum BlockKind {
     Bottleneck,
 }
 
+#[derive(Module, Debug)]
 struct DeepFont {
     conv1: Conv2d,
     bn1: BatchNorm,
@@ -420,110 +374,37 @@ struct DeepFont {
 }
 
 impl DeepFont {
-    fn load(vb: VarBuilder) -> Result<Self> {
-        let conv1 = conv2d_new(
-            vb.pp("0").get((64, 3, 11, 11), "weight")?,
-            Some(vb.pp("0").get(64, "bias")?),
-            Conv2dConfig {
-                stride: 2,
-                ..Default::default()
-            },
-        )?;
-        let bn1 = load_batch_norm(&vb.pp("1"), 64)?;
-        let conv2 = conv2d_new(
-            vb.pp("4").get((128, 64, 3, 3), "weight")?,
-            Some(vb.pp("4").get(128, "bias")?),
-            Conv2dConfig {
-                padding: 1,
-                ..Default::default()
-            },
-        )?;
-        let bn2 = load_batch_norm(&vb.pp("5"), 128)?;
-        let conv3 = conv2d_new(
-            vb.pp("8").get((256, 128, 3, 3), "weight")?,
-            Some(vb.pp("8").get(256, "bias")?),
-            Conv2dConfig {
-                padding: 1,
-                ..Default::default()
-            },
-        )?;
-        let conv4 = conv2d_new(
-            vb.pp("9").get((256, 256, 3, 3), "weight")?,
-            Some(vb.pp("9").get(256, "bias")?),
-            Conv2dConfig {
-                padding: 1,
-                ..Default::default()
-            },
-        )?;
-        let conv5 = conv2d_new(
-            vb.pp("10").get((256, 256, 3, 3), "weight")?,
-            Some(vb.pp("10").get(256, "bias")?),
-            Conv2dConfig {
-                padding: 1,
-                ..Default::default()
-            },
-        )?;
-        let fc1 = Linear::new(
-            vb.pp("14").get((4096, 256 * 12 * 12), "weight")?,
-            Some(vb.pp("14").get(4096, "bias")?),
-        );
-        let fc2 = Linear::new(
-            vb.pp("16").get((4096, 4096), "weight")?,
-            Some(vb.pp("16").get(4096, "bias")?),
-        );
-        let fc3 = Linear::new(
-            vb.pp("18").get((FONT_COUNT, 4096), "weight")?,
-            Some(vb.pp("18").get(FONT_COUNT, "bias")?),
-        );
-
+    fn new(device: &Device) -> Result<Self> {
         Ok(Self {
-            conv1,
-            bn1,
-            conv2,
-            bn2,
-            conv3,
-            conv4,
-            conv5,
-            fc1,
-            fc2,
-            fc3,
+            conv1: conv2d(device, 3, 64, 11, 2, 0, true),
+            bn1: batch_norm(device, 64),
+            conv2: conv2d(device, 64, 128, 3, 1, 1, true),
+            bn2: batch_norm(device, 128),
+            conv3: conv2d(device, 128, 256, 3, 1, 1, true),
+            conv4: conv2d(device, 256, 256, 3, 1, 1, true),
+            conv5: conv2d(device, 256, 256, 3, 1, 1, true),
+            fc1: linear(device, 256 * 12 * 12, 4096),
+            fc2: linear(device, 4096, 4096),
+            fc3: linear(device, 4096, FONT_COUNT),
         })
     }
 
-    fn forward(&self, xs: &Tensor, train: bool) -> candle_core::Result<Tensor> {
-        let mut x = self.conv1.forward(xs)?;
-        x = self.bn1.forward_t(&x, train)?;
-        x = x.relu()?;
-        x = x.max_pool2d_with_stride(2, 2)?;
+    fn forward(&self, input: Tensor<4>) -> Tensor<2> {
+        let mut x = self.conv1.forward(input);
+        x = relu(self.bn1.forward(x));
+        x = max_pool2d(x, [2, 2], [2, 2], [0, 0], [1, 1], false);
 
-        x = self.conv2.forward(&x)?;
-        x = self.bn2.forward_t(&x, train)?;
-        x = x.relu()?;
-        x = x.max_pool2d_with_stride(2, 2)?;
+        x = self.conv2.forward(x);
+        x = relu(self.bn2.forward(x));
+        x = max_pool2d(x, [2, 2], [2, 2], [0, 0], [1, 1], false);
 
-        x = self.conv3.forward(&x)?;
-        x = x.relu()?;
-        x = self.conv4.forward(&x)?;
-        x = x.relu()?;
-        x = self.conv5.forward(&x)?;
-        x = x.relu()?;
+        x = relu(self.conv3.forward(x));
+        x = relu(self.conv4.forward(x));
+        x = relu(self.conv5.forward(x));
 
-        x = x.flatten(1, x.rank() - 1)?;
-        x = self.fc1.forward(&x)?;
-        x = x.relu()?;
-        x = self.fc2.forward(&x)?;
-        x = x.relu()?;
-        self.fc3.forward(&x)
+        let x = x.flatten::<2>(1, 3);
+        let x = relu(self.fc1.forward(x));
+        let x = relu(self.fc2.forward(x));
+        self.fc3.forward(x)
     }
-}
-
-fn load_batch_norm(vb: &VarBuilder, channels: usize) -> Result<BatchNorm> {
-    Ok(BatchNorm::new(
-        channels,
-        vb.get(channels, "running_mean")?,
-        vb.get(channels, "running_var")?,
-        vb.get(channels, "weight")?,
-        vb.get(channels, "bias")?,
-        1e-5,
-    )?)
 }
