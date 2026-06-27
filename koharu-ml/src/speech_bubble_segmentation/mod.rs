@@ -1,37 +1,38 @@
 mod model;
 
-use std::{
-    path::{Path, PathBuf},
-    time::Instant,
-};
+use std::{path::Path, time::Instant};
 
 use anyhow::{Context, Result, bail};
-use candle_core::{DType, Device, IndexOp, Tensor};
-use candle_nn::ops::sigmoid;
-use candle_transformers::object_detection::{Bbox, non_maximum_suppression};
+use burn::{
+    module::{Module, ModuleMapper, Param},
+    store::{ModuleSnapshot, PyTorchToBurnAdapter, SafetensorsStore},
+    tensor::{
+        DType, Device, DeviceKind, FloatDType, Tensor, TensorData,
+        activation::sigmoid,
+        module::interpolate,
+        ops::{InterpolateMode, InterpolateOptions},
+    },
+};
 use image::{
     DynamicImage, Rgb, RgbImage,
     imageops::{self, FilterType},
 };
 use koharu_runtime::RuntimeManager;
-use serde::{Deserialize, Serialize};
+use serde::Serialize;
 use tracing::instrument;
 
-use crate::{device, loading, probability_map::ProbabilityMap};
+use crate::probability_map::ProbabilityMap;
 
-use self::model::{Multiples, YoloV8Seg, YoloV8SegOutputs};
+use self::model::{INPUT_SIZE, NUM_CLASSES, NUM_MASKS, YoloV8Seg, YoloV8SegOutputs};
 
 const HF_REPO: &str = "mayocream/speech-bubble-segmentation";
-const CONFIG_FILENAME: &str = "config.json";
 const SAFETENSORS_FILENAME: &str = "model.safetensors";
+const DEFAULT_CONFIDENCE_THRESHOLD: f32 = 0.25;
+const DEFAULT_NMS_THRESHOLD: f32 = 0.45;
+const MASK_THRESHOLD: f32 = 0.5;
+const LETTERBOX_COLOR: u8 = 114;
+const CLASS_NAMES: [&str; NUM_CLASSES] = ["speech bubble"];
 
-koharu_runtime::declare_hf_model_package!(
-    id: "model:speech-bubble-segmentation:config",
-    repo: HF_REPO,
-    file: CONFIG_FILENAME,
-    bootstrap: false,
-    order: 116,
-);
 koharu_runtime::declare_hf_model_package!(
     id: "model:speech-bubble-segmentation:weights",
     repo: HF_REPO,
@@ -43,14 +44,12 @@ koharu_runtime::declare_hf_model_package!(
 #[derive(Debug)]
 pub struct SpeechBubbleSegmentation {
     model: YoloV8Seg,
-    config: SpeechBubbleSegmentationConfig,
     device: Device,
     dtype: DType,
 }
 
 #[derive(Debug, Clone)]
 struct PreparedInput {
-    pixel_values: Tensor,
     original_width: u32,
     original_height: u32,
     resized_width: u32,
@@ -114,92 +113,26 @@ struct RawSpeechBubbleRegion {
     mask_coefficients: Vec<f32>,
 }
 
-#[derive(Debug, Clone, Deserialize)]
-struct SpeechBubbleSegmentationConfig {
-    model_type: String,
-    variant: String,
-    input_size: u32,
-    num_classes: usize,
-    num_masks: usize,
-    num_prototypes: usize,
-    reg_max: usize,
-    class_names: Vec<String>,
-    default_confidence_threshold: f32,
-    default_nms_threshold: f32,
-    mask_threshold: f32,
-    letterbox_color: u8,
-}
-
-impl SpeechBubbleSegmentationConfig {
-    fn validate(&self) -> Result<()> {
-        if self.model_type != "yolov8-seg" {
-            bail!("unsupported speech bubble model type {}", self.model_type);
-        }
-        if self.variant != "m" {
-            bail!("unsupported YOLOv8 segmentation variant {}", self.variant);
-        }
-        if self.input_size == 0 || !self.input_size.is_multiple_of(32) {
-            bail!("invalid input_size {}", self.input_size);
-        }
-        if self.num_classes == 0 {
-            bail!("num_classes must be positive");
-        }
-        if self.class_names.len() != self.num_classes {
-            bail!(
-                "expected {} class names, found {}",
-                self.num_classes,
-                self.class_names.len()
-            );
-        }
-        if self.num_masks == 0 {
-            bail!("num_masks must be positive");
-        }
-        if self.num_prototypes == 0 {
-            bail!("num_prototypes must be positive");
-        }
-        if self.reg_max == 0 {
-            bail!("reg_max must be positive");
-        }
-        Ok(())
-    }
-}
-
 impl SpeechBubbleSegmentation {
     pub async fn load(runtime: &RuntimeManager, cpu: bool) -> Result<Self> {
-        let (config_path, weights_path) = resolve_model_paths(runtime).await?;
-        Self::load_from_paths(&config_path, &weights_path, cpu)
+        let weights_path = resolve_model_path(runtime).await?;
+        Self::load_from_weights_path(&weights_path, cpu)
     }
 
     pub fn load_from_paths(
-        config_path: impl AsRef<Path>,
+        _config_path: impl AsRef<Path>,
         weights_path: impl AsRef<Path>,
         cpu: bool,
     ) -> Result<Self> {
-        let device = device(cpu)?;
-        let dtype = loading::model_dtype(&device);
-        let config = loading::read_json::<SpeechBubbleSegmentationConfig>(config_path.as_ref())
-            .with_context(|| format!("failed to parse {}", config_path.as_ref().display()))?;
-        config.validate()?;
-        let multiples = variant_multiples(&config)?;
-        let model = loading::load_mmaped_safetensors_path_with_dtype(
-            weights_path.as_ref(),
-            &device,
-            dtype,
-            |vb| {
-                YoloV8Seg::load(
-                    vb,
-                    multiples,
-                    config.num_classes,
-                    config.num_masks,
-                    config.num_prototypes,
-                    config.reg_max,
-                )
-            },
-        )?;
+        Self::load_from_weights_path(weights_path, cpu)
+    }
+
+    pub fn load_from_weights_path(weights_path: impl AsRef<Path>, cpu: bool) -> Result<Self> {
+        let (device, dtype, module_dtype) = make_device(cpu);
+        let model = load_model(weights_path.as_ref(), &device, module_dtype)?;
 
         Ok(Self {
             model,
-            config,
             device,
             dtype,
         })
@@ -207,11 +140,7 @@ impl SpeechBubbleSegmentation {
 
     #[instrument(level = "debug", skip_all)]
     pub fn inference(&self, image: &DynamicImage) -> Result<SpeechBubbleSegmentationResult> {
-        self.inference_with_thresholds(
-            image,
-            self.config.default_confidence_threshold,
-            self.config.default_nms_threshold,
-        )
+        self.inference_with_thresholds(image, DEFAULT_CONFIDENCE_THRESHOLD, DEFAULT_NMS_THRESHOLD)
     }
 
     #[instrument(level = "debug", skip_all)]
@@ -223,21 +152,15 @@ impl SpeechBubbleSegmentation {
     ) -> Result<SpeechBubbleSegmentationResult> {
         let started = Instant::now();
         let preprocess_started = Instant::now();
-        let prepared = self.preprocess(image)?;
+        let (pixel_values, prepared) = self.preprocess(image)?;
         let preprocess_elapsed = preprocess_started.elapsed();
 
         let forward_started = Instant::now();
-        let outputs = self.model.forward(&prepared.pixel_values)?;
+        let outputs = self.model.forward(pixel_values);
         let forward_elapsed = forward_started.elapsed();
 
         let postprocess_started = Instant::now();
-        let result = postprocess(
-            &outputs,
-            &prepared,
-            &self.config,
-            confidence_threshold,
-            nms_threshold,
-        )?;
+        let result = postprocess(outputs, &prepared, confidence_threshold, nms_threshold)?;
         let postprocess_elapsed = postprocess_started.elapsed();
 
         tracing::info!(
@@ -256,10 +179,10 @@ impl SpeechBubbleSegmentation {
         Ok(result)
     }
 
-    fn preprocess(&self, image: &DynamicImage) -> Result<PreparedInput> {
+    fn preprocess(&self, image: &DynamicImage) -> Result<(Tensor<4>, PreparedInput)> {
         let rgb = image.to_rgb8();
         let (original_width, original_height) = rgb.dimensions();
-        let input_size = self.config.input_size;
+        let input_size = INPUT_SIZE;
         let scale = f32::min(
             input_size as f32 / original_width.max(1) as f32,
             input_size as f32 / original_height.max(1) as f32,
@@ -275,11 +198,8 @@ impl SpeechBubbleSegmentation {
             imageops::resize(&rgb, resized_width, resized_height, FilterType::Triangle)
         };
 
-        let mut letterboxed = RgbImage::from_pixel(
-            input_size,
-            input_size,
-            Rgb([self.config.letterbox_color; 3]),
-        );
+        let mut letterboxed =
+            RgbImage::from_pixel(input_size, input_size, Rgb([LETTERBOX_COLOR; 3]));
         imageops::overlay(
             &mut letterboxed,
             &resized,
@@ -287,84 +207,130 @@ impl SpeechBubbleSegmentation {
             i64::from(pad_y),
         );
 
-        let pixel_values = Tensor::from_vec(
-            letterboxed.into_raw(),
-            (1, input_size as usize, input_size as usize, 3),
-            &self.device,
-        )?
-        .permute((0, 3, 1, 2))?
-        .to_dtype(self.dtype)?;
-        let pixel_values = (pixel_values * (1.0 / 255.0))?;
+        let input_size = input_size as usize;
+        let plane = input_size * input_size;
+        let rgb = letterboxed.into_raw();
+        let mut data = vec![0.0_f32; 3 * plane];
+        for (index, pixel) in rgb.chunks_exact(3).enumerate() {
+            data[index] = pixel[0] as f32 / 255.0;
+            data[plane + index] = pixel[1] as f32 / 255.0;
+            data[2 * plane + index] = pixel[2] as f32 / 255.0;
+        }
+        let mut tensor_data = TensorData::new(data, [1, 3, input_size, input_size]);
+        self.device.staging(std::iter::once(&mut tensor_data));
+        let pixel_values = Tensor::from_data(tensor_data, (&self.device, self.dtype));
 
-        Ok(PreparedInput {
+        Ok((
             pixel_values,
-            original_width,
-            original_height,
-            resized_width,
-            resized_height,
-            pad_x,
-            pad_y,
-            scale,
-        })
+            PreparedInput {
+                original_width,
+                original_height,
+                resized_width,
+                resized_height,
+                pad_x,
+                pad_y,
+                scale,
+            },
+        ))
     }
 }
 
 pub async fn prefetch(runtime: &RuntimeManager) -> Result<()> {
-    let _ = resolve_model_paths(runtime).await?;
+    let _ = resolve_model_path(runtime).await?;
     Ok(())
 }
 
-async fn resolve_model_paths(runtime: &RuntimeManager) -> Result<(PathBuf, PathBuf)> {
+async fn resolve_model_path(runtime: &RuntimeManager) -> Result<std::path::PathBuf> {
     let downloads = runtime.downloads();
-    let config = downloads
-        .huggingface_model(HF_REPO, CONFIG_FILENAME)
-        .await
-        .with_context(|| format!("failed to download {CONFIG_FILENAME} from {HF_REPO}"))?;
-    let weights = downloads
+    downloads
         .huggingface_model(HF_REPO, SAFETENSORS_FILENAME)
         .await
-        .with_context(|| format!("failed to download {SAFETENSORS_FILENAME} from {HF_REPO}"))?;
-    Ok((config, weights))
+        .with_context(|| format!("failed to download {SAFETENSORS_FILENAME} from {HF_REPO}"))
 }
 
-fn variant_multiples(config: &SpeechBubbleSegmentationConfig) -> Result<Multiples> {
-    match config.variant.as_str() {
-        "m" => Ok(Multiples::m()),
-        other => bail!("unsupported YOLOv8 segmentation variant {other}"),
+fn load_model(path: &Path, device: &Device, module_dtype: FloatDType) -> Result<YoloV8Seg> {
+    let mut model = YoloV8Seg::new(device);
+    let mut store = SafetensorsStore::from_file(path)
+        .with_from_adapter(PyTorchToBurnAdapter)
+        .with_key_remapping(r"^model\.0\.", "backbone.b1_0.")
+        .with_key_remapping(r"^model\.1\.", "backbone.b1_1.")
+        .with_key_remapping(r"^model\.2\.", "backbone.b2_0.")
+        .with_key_remapping(r"^model\.3\.", "backbone.b2_1.")
+        .with_key_remapping(r"^model\.4\.", "backbone.b2_2.")
+        .with_key_remapping(r"^model\.5\.", "backbone.b3_0.")
+        .with_key_remapping(r"^model\.6\.", "backbone.b3_1.")
+        .with_key_remapping(r"^model\.7\.", "backbone.b4_0.")
+        .with_key_remapping(r"^model\.8\.", "backbone.b4_1.")
+        .with_key_remapping(r"^model\.9\.", "backbone.b5.")
+        .with_key_remapping(r"^model\.12\.", "neck.n1.")
+        .with_key_remapping(r"^model\.15\.", "neck.n2.")
+        .with_key_remapping(r"^model\.16\.", "neck.n3.")
+        .with_key_remapping(r"^model\.18\.", "neck.n4.")
+        .with_key_remapping(r"^model\.19\.", "neck.n5.")
+        .with_key_remapping(r"^model\.21\.", "neck.n6.")
+        .with_key_remapping(r"^model\.22\.", "head.")
+        .with_key_remapping(r"\.m\.", ".bottlenecks.")
+        .with_key_remapping(r"^head\.cv([234])\.(\d+)\.0\.", "head.cv$1.$2.b0.")
+        .with_key_remapping(r"^head\.cv([234])\.(\d+)\.1\.", "head.cv$1.$2.b1.")
+        .with_key_remapping(r"^head\.cv([234])\.(\d+)\.2\.", "head.cv$1.$2.conv.")
+        .skip_enum_variants(true)
+        .allow_partial(false);
+    let result = model
+        .load_from(&mut store)
+        .context("failed to mmap/load speech bubble segmentation safetensors through Burn store")?;
+    if !result.errors.is_empty() {
+        bail!(
+            "failed to load speech bubble segmentation tensors: {}",
+            result
+        );
     }
+    if !result.missing.is_empty() {
+        bail!(
+            "speech bubble segmentation checkpoint is missing tensors: {}",
+            result
+        );
+    }
+    Ok(cast_module_float(model, module_dtype))
+}
+
+fn make_device(cpu: bool) -> (Device, DType, FloatDType) {
+    #[cfg(feature = "cuda")]
+    {
+        if !cpu {
+            let mut device = Device::cuda(0);
+            if let Err(error) = device.configure(FloatDType::BF16) {
+                tracing::warn!(%error, "failed to configure Burn CUDA default dtype to BF16");
+            }
+            return (device, DType::BF16, FloatDType::BF16);
+        }
+    }
+
+    let mut device = Device::wgpu(if cpu {
+        DeviceKind::Cpu
+    } else {
+        DeviceKind::DefaultDevice
+    });
+    if let Err(error) = device.configure(FloatDType::F32) {
+        tracing::warn!(%error, "failed to configure Burn WGPU default dtype to F32");
+    }
+    (device, DType::F32, FloatDType::F32)
 }
 
 fn postprocess(
-    outputs: &YoloV8SegOutputs,
+    outputs: YoloV8SegOutputs,
     prepared: &PreparedInput,
-    config: &SpeechBubbleSegmentationConfig,
     confidence_threshold: f32,
     nms_threshold: f32,
 ) -> Result<SpeechBubbleSegmentationResult> {
-    let pred = outputs
-        .pred
-        .to_dtype(DType::F32)?
-        .to_device(&Device::Cpu)?
-        .i(0)?;
-    let proto = outputs
-        .proto
-        .to_dtype(DType::F32)?
-        .to_device(&Device::Cpu)?
-        .i(0)?;
-    let raw_regions =
-        extract_regions(&pred, prepared, config, confidence_threshold, nms_threshold)?;
+    let raw_regions = extract_regions(outputs.pred, prepared, confidence_threshold, nms_threshold)?;
     let mut probability_map =
         ProbabilityMap::zeros(prepared.original_width, prepared.original_height);
-    let mask_probabilities = build_mask_probabilities(&proto, prepared, config, &raw_regions)?;
+    let mask_probabilities = build_mask_probabilities(outputs.proto, prepared, &raw_regions)?;
 
     let mut regions = Vec::with_capacity(raw_regions.len());
     for (region, mask) in raw_regions.iter().zip(mask_probabilities.iter()) {
-        let (area, region_mask) = extract_region_contour_mask(
-            &mut probability_map,
-            mask,
-            region.bbox,
-            config.mask_threshold,
-        )?;
+        let (area, region_mask) =
+            extract_region_contour_mask(&mut probability_map, mask, region.bbox, MASK_THRESHOLD)?;
         if area == 0 {
             continue;
         }
@@ -386,42 +352,59 @@ fn postprocess(
     })
 }
 
+#[derive(Debug, Clone)]
+struct DetectionBBox {
+    xmin: f32,
+    ymin: f32,
+    xmax: f32,
+    ymax: f32,
+    confidence: f32,
+    data: Vec<f32>,
+}
+
 fn extract_regions(
-    pred: &Tensor,
+    pred: Tensor<3>,
     prepared: &PreparedInput,
-    config: &SpeechBubbleSegmentationConfig,
     confidence_threshold: f32,
     nms_threshold: f32,
 ) -> Result<Vec<RawSpeechBubbleRegion>> {
-    let (channels, anchors) = pred.dims2()?;
-    let expected_channels = 4 + config.num_classes + config.num_masks;
+    let [batch, channels, anchors] = pred.dims();
+    if batch != 1 {
+        bail!("only single-image speech bubble inference is supported, got batch_size={batch}");
+    }
+    let expected_channels = 4 + NUM_CLASSES + NUM_MASKS;
     if channels != expected_channels {
         bail!(
-            "unexpected prediction shape ({channels}, {anchors}), expected channel count {expected_channels}"
+            "unexpected prediction shape (1, {channels}, {anchors}), expected channel count {expected_channels}"
         );
     }
 
-    let mut grouped: Vec<Vec<Bbox<Vec<f32>>>> = vec![Vec::new(); config.num_classes];
+    let pred = tensor_to_f32_vec(pred)?;
+    let mut grouped: Vec<Vec<DetectionBBox>> = vec![Vec::new(); NUM_CLASSES];
     for anchor_idx in 0..anchors {
-        let values = pred.i((.., anchor_idx))?.to_vec1::<f32>()?;
-        let class_scores = &values[4..4 + config.num_classes];
-        let Some((label_id, &score)) = class_scores
-            .iter()
-            .enumerate()
-            .max_by(|(_, a), (_, b)| a.total_cmp(b))
-        else {
-            continue;
-        };
+        let mut label_id = 0usize;
+        let mut score = f32::NEG_INFINITY;
+        for class_id in 0..NUM_CLASSES {
+            let value = pred[(4 + class_id) * anchors + anchor_idx];
+            if value > score {
+                label_id = class_id;
+                score = value;
+            }
+        }
         if score < confidence_threshold {
             continue;
         }
 
+        let center_x = pred[anchor_idx];
+        let center_y = pred[anchors + anchor_idx];
+        let width = pred[2 * anchors + anchor_idx];
+        let height = pred[3 * anchors + anchor_idx];
         let bbox = map_bbox_to_original(
             [
-                values[0] - values[2] * 0.5,
-                values[1] - values[3] * 0.5,
-                values[0] + values[2] * 0.5,
-                values[1] + values[3] * 0.5,
+                center_x - width * 0.5,
+                center_y - height * 0.5,
+                center_x + width * 0.5,
+                center_y + height * 0.5,
             ],
             prepared,
         );
@@ -429,13 +412,16 @@ fn extract_regions(
             continue;
         }
 
-        grouped[label_id].push(Bbox {
+        let mask_coefficients = (0..NUM_MASKS)
+            .map(|index| pred[(4 + NUM_CLASSES + index) * anchors + anchor_idx])
+            .collect::<Vec<_>>();
+        grouped[label_id].push(DetectionBBox {
             xmin: bbox[0],
             ymin: bbox[1],
             xmax: bbox[2],
             ymax: bbox[3],
             confidence: score,
-            data: values[4 + config.num_classes..].to_vec(),
+            data: mask_coefficients,
         });
     }
 
@@ -443,11 +429,11 @@ fn extract_regions(
 
     let mut regions = Vec::new();
     for (label_id, bboxes) in grouped.into_iter().enumerate() {
-        let label = config
-            .class_names
+        let label = CLASS_NAMES
             .get(label_id)
-            .cloned()
-            .unwrap_or_else(|| format!("class-{label_id}"));
+            .copied()
+            .unwrap_or("speech bubble")
+            .to_string();
         for bbox in bboxes {
             regions.push(RawSpeechBubbleRegion {
                 label_id,
@@ -476,36 +462,34 @@ fn map_bbox_to_original(bbox: [f32; 4], prepared: &PreparedInput) -> [f32; 4] {
 }
 
 fn build_mask_probabilities(
-    proto: &Tensor,
+    proto: Tensor<4>,
     prepared: &PreparedInput,
-    config: &SpeechBubbleSegmentationConfig,
     regions: &[RawSpeechBubbleRegion],
 ) -> Result<Vec<Vec<f32>>> {
     if regions.is_empty() {
         return Ok(Vec::new());
     }
 
-    let (num_masks, proto_h, proto_w) = proto.dims3()?;
-    if num_masks != config.num_masks {
-        bail!(
-            "unexpected proto channel count {num_masks}, expected {}",
-            config.num_masks
-        );
+    let [batch, num_masks, proto_h, proto_w] = proto.dims();
+    if batch != 1 || num_masks != NUM_MASKS {
+        bail!("unexpected proto shape [{batch}, {num_masks}, {proto_h}, {proto_w}]");
     }
 
     let coefficients = regions
         .iter()
         .flat_map(|region| region.mask_coefficients.iter().copied())
         .collect::<Vec<_>>();
-    let coeffs = Tensor::from_vec(
-        coefficients,
-        (regions.len(), config.num_masks),
-        &Device::Cpu,
-    )?;
-    let proto_flat = proto.reshape((config.num_masks, proto_h * proto_w))?;
+    let device = proto.device();
+    let dtype = proto.dtype();
+    let coeffs = Tensor::from_data(
+        TensorData::new(coefficients, [regions.len(), NUM_MASKS]),
+        (&device, dtype),
+    );
+    let proto = proto.squeeze_dims::<3>(&[0]);
+    let proto_flat = proto.reshape([NUM_MASKS, proto_h * proto_w]);
     let mut masks = coeffs
-        .matmul(&proto_flat)?
-        .reshape((regions.len(), 1, proto_h, proto_w))?;
+        .matmul(proto_flat)
+        .reshape([regions.len(), 1, proto_h, proto_w]);
 
     let (top, left, bottom, right) = mask_crop_window(
         prepared.original_width,
@@ -513,18 +497,74 @@ fn build_mask_probabilities(
         proto_w as u32,
         proto_h as u32,
     );
-    masks = masks.i((.., .., top..bottom, left..right))?;
-    masks = masks.interpolate2d(
-        prepared.original_height as usize,
-        prepared.original_width as usize,
-    )?;
-    let masks = sigmoid(&masks.squeeze(1)?)?;
+    masks = masks
+        .narrow(2, top, bottom - top)
+        .narrow(3, left, right - left);
+    masks = interpolate(
+        masks,
+        [
+            prepared.original_height as usize,
+            prepared.original_width as usize,
+        ],
+        InterpolateOptions::new(InterpolateMode::Bilinear).with_align_corners(false),
+    );
+    let masks = sigmoid(masks.squeeze_dims::<3>(&[1]));
 
-    let mut outputs = Vec::with_capacity(regions.len());
-    for index in 0..regions.len() {
-        outputs.push(masks.i(index)?.flatten_all()?.to_vec1::<f32>()?);
+    let values = tensor_to_f32_vec(masks)?;
+    let mask_len = prepared.original_width as usize * prepared.original_height as usize;
+    Ok(values
+        .chunks_exact(mask_len)
+        .map(|chunk| chunk.to_vec())
+        .collect())
+}
+
+fn non_maximum_suppression(bboxes: &mut [Vec<DetectionBBox>], threshold: f32) {
+    for boxes in bboxes {
+        boxes.sort_unstable_by(|a, b| b.confidence.total_cmp(&a.confidence));
+        let mut keep = Vec::with_capacity(boxes.len());
+        for bbox in boxes.drain(..) {
+            if keep.iter().all(|kept| bbox_iou(&bbox, kept) <= threshold) {
+                keep.push(bbox);
+            }
+        }
+        *boxes = keep;
     }
-    Ok(outputs)
+}
+
+fn bbox_iou(a: &DetectionBBox, b: &DetectionBBox) -> f32 {
+    let inter_w = (a.xmax.min(b.xmax) - a.xmin.max(b.xmin)).max(0.0);
+    let inter_h = (a.ymax.min(b.ymax) - a.ymin.max(b.ymin)).max(0.0);
+    let inter = inter_w * inter_h;
+    if inter <= 0.0 {
+        return 0.0;
+    }
+
+    let area_a = (a.xmax - a.xmin).max(0.0) * (a.ymax - a.ymin).max(0.0);
+    let area_b = (b.xmax - b.xmin).max(0.0) * (b.ymax - b.ymin).max(0.0);
+    inter / (area_a + area_b - inter).max(f32::EPSILON)
+}
+
+fn cast_module_float<M: Module>(module: M, dtype: FloatDType) -> M {
+    struct CastMapper {
+        dtype: FloatDType,
+    }
+
+    impl ModuleMapper for CastMapper {
+        fn map_float<const D: usize>(&mut self, param: Param<Tensor<D>>) -> Param<Tensor<D>> {
+            let (id, tensor, mapper) = param.consume();
+            Param::from_mapped_value(id, tensor.cast(self.dtype), mapper)
+        }
+    }
+
+    module.map(&mut CastMapper { dtype })
+}
+
+fn tensor_to_f32_vec<const D: usize>(tensor: Tensor<D>) -> Result<Vec<f32>> {
+    tensor
+        .cast(FloatDType::F32)
+        .into_data()
+        .into_vec::<f32>()
+        .context("failed to extract burn tensor data as f32")
 }
 
 fn mask_crop_window(
@@ -610,14 +650,12 @@ mod tests {
     use super::{
         PreparedInput, extract_region_contour_mask, map_bbox_to_original, mask_crop_window,
     };
+
     use crate::probability_map::ProbabilityMap;
-    use candle_core::{DType, Device, Tensor};
 
     #[test]
     fn map_bbox_to_original_removes_letterbox_padding() {
         let prepared = PreparedInput {
-            pixel_values: Tensor::zeros((1, 3, 640, 640), DType::F32, &Device::Cpu)
-                .expect("tensor"),
             original_width: 1000,
             original_height: 500,
             resized_width: 640,

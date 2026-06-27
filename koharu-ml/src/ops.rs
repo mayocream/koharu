@@ -34,22 +34,6 @@ pub(crate) fn conv2d(
     )?)
 }
 
-pub(crate) fn conv2d_no_bias(
-    in_channels: usize,
-    out_channels: usize,
-    kernel_size: usize,
-    cfg: Conv2dConfig,
-    vb: VarBuilder,
-) -> Result<Conv2d> {
-    maybe_zluda_no_cudnn_conv2d(candle_nn::conv2d_no_bias(
-        in_channels,
-        out_channels,
-        kernel_size,
-        cfg,
-        vb,
-    )?)
-}
-
 fn maybe_zluda_no_cudnn_conv2d(conv: Conv2d) -> Result<Conv2d> {
     if !koharu_runtime::zluda_active() {
         return Ok(conv);
