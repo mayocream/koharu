@@ -1,17 +1,59 @@
 use anyhow::{Context, Result, bail};
-use candle_core::{D, DType, Device, Tensor};
-use candle_nn::{
-    BatchNorm, Conv2d, Conv2dConfig, LayerNorm, Linear, Module, ModuleT, VarBuilder, layer_norm,
-    ops::{silu, softmax},
+use burn::{
+    module::{Module, ModuleMapper, Param},
+    nn::{
+        BatchNorm, BatchNormConfig, LayerNorm, LayerNormConfig, Linear, LinearConfig,
+        PaddingConfig2d,
+        conv::{Conv2d, Conv2dConfig},
+    },
+    tensor::{
+        DType, Device, FloatDType, Tensor, TensorData,
+        activation::{gelu, relu, sigmoid, silu, softmax},
+        module::{avg_pool2d, interpolate, max_pool2d},
+        ops::{GridSampleOptions, InterpolateMode, InterpolateOptions},
+    },
 };
 
-use super::{RTDetrResNetConfig, RTDetrV2Config};
-use crate::ops::{conv2d, conv2d_no_bias};
+pub(crate) const IMAGE_SIZE: usize = 640;
+pub(crate) const NUM_LABELS: usize = 3;
+
+const NUM_QUERIES: usize = 300;
+const BATCH_NORM_EPS: f64 = 1e-5;
+const LAYER_NORM_EPS: f64 = 1e-5;
+const D_MODEL: usize = 256;
+const ENCODER_HIDDEN_DIM: usize = 256;
+const ENCODER_ATTENTION_HEADS: usize = 8;
+const ENCODER_FFN_DIM: usize = 1024;
+const ENCODER_LAYERS: usize = 1;
+const DECODER_ATTENTION_HEADS: usize = 8;
+const DECODER_FFN_DIM: usize = 1024;
+const DECODER_LAYERS: usize = 6;
+const DECODER_N_LEVELS: usize = 3;
+const DECODER_N_POINTS: usize = 4;
+const DECODER_OFFSET_SCALE: f64 = 0.5;
+const NUM_FEATURE_LEVELS: usize = 3;
+const HIDDEN_EXPANSION: f64 = 1.0;
+const POSITIONAL_ENCODING_TEMPERATURE: usize = 10_000;
+
+const BACKBONE_NUM_CHANNELS: usize = 3;
+const BACKBONE_EMBEDDING_SIZE: usize = 64;
+const BACKBONE_HIDDEN_SIZES: [usize; 4] = [256, 512, 1024, 2048];
+const BACKBONE_DEPTHS: [usize; 4] = [3, 4, 6, 3];
+const BACKBONE_OUT_STAGE_INDICES: [usize; 3] = [1, 2, 3];
+const BACKBONE_OUT_CHANNELS: [usize; 3] = [512, 1024, 2048];
+const ENCODER_IN_CHANNELS: [usize; 3] = [512, 1024, 2048];
+const DECODER_IN_CHANNELS: [usize; 3] = [256, 256, 256];
+const ENCODE_PROJ_LAYERS: [usize; 1] = [2];
+
+const BACKBONE_HIDDEN_ACT: &str = "relu";
+const MODEL_ACTIVATION: &str = "silu";
+const ENCODER_ACTIVATION: &str = "gelu";
+const DECODER_ACTIVATION: &str = "relu";
 
 #[derive(Debug)]
 pub(crate) struct RTDetrV2Outputs {
-    pub logits: Tensor,
-    pub pred_boxes: Tensor,
+    pub logits: Tensor<3>,
+    pub pred_boxes: Tensor<3>,
 }
 
 #[derive(Debug, Clone, Copy)]
@@ -33,130 +75,124 @@ impl ActivationKind {
         }
     }
 
-    fn forward(&self, xs: &Tensor) -> candle_core::Result<Tensor> {
+    fn apply<const D: usize>(self, tensor: Tensor<D>) -> Tensor<D> {
         match self {
-            Self::Identity => Ok(xs.clone()),
-            Self::Relu => xs.relu(),
-            Self::Gelu => xs.gelu(),
-            Self::Silu => silu(xs),
+            Self::Identity => tensor,
+            Self::Relu => relu(tensor),
+            Self::Gelu => gelu(tensor),
+            Self::Silu => silu(tensor),
         }
     }
 }
 
-fn load_linear(vb: VarBuilder, in_dim: usize, out_dim: usize) -> Result<Linear> {
-    Ok(Linear::new(
-        vb.get((out_dim, in_dim), "weight")?,
-        Some(vb.get(out_dim, "bias")?),
-    ))
-}
-
-fn load_batch_norm(vb: VarBuilder, channels: usize, eps: f64) -> Result<BatchNorm> {
-    Ok(BatchNorm::new(
-        channels,
-        vb.get(channels, "running_mean")?,
-        vb.get(channels, "running_var")?,
-        vb.get(channels, "weight")?,
-        vb.get(channels, "bias")?,
-        eps,
-    )?)
-}
-
-#[allow(clippy::too_many_arguments)]
-fn load_conv2d_module(
-    vb: VarBuilder,
+fn conv2d(
+    device: &Device,
     in_channels: usize,
     out_channels: usize,
     kernel_size: usize,
     stride: usize,
     padding: usize,
     bias: bool,
-) -> Result<Conv2d> {
-    let cfg = Conv2dConfig {
-        stride,
-        padding,
-        groups: 1,
-        dilation: 1,
-        cudnn_fwd_algo: None,
-    };
-    if bias {
-        Ok(conv2d(in_channels, out_channels, kernel_size, cfg, vb)?)
-    } else {
-        Ok(conv2d_no_bias(
-            in_channels,
-            out_channels,
-            kernel_size,
-            cfg,
-            vb,
-        )?)
+) -> Conv2d {
+    Conv2dConfig::new([in_channels, out_channels], [kernel_size, kernel_size])
+        .with_stride([stride, stride])
+        .with_padding(PaddingConfig2d::Explicit(
+            padding, padding, padding, padding,
+        ))
+        .with_bias(bias)
+        .init(device)
+}
+
+fn batch_norm(device: &Device, channels: usize, eps: f64) -> BatchNorm {
+    BatchNormConfig::new(channels)
+        .with_epsilon(eps)
+        .init(device)
+}
+
+fn layer_norm(device: &Device, hidden_size: usize, eps: f64) -> LayerNorm {
+    LayerNormConfig::new(hidden_size)
+        .with_epsilon(eps)
+        .init(device)
+}
+
+fn linear(device: &Device, in_dim: usize, out_dim: usize) -> Linear {
+    LinearConfig::new(in_dim, out_dim)
+        .with_bias(true)
+        .init(device)
+}
+
+fn upsample_nearest(input: Tensor<4>, size: [usize; 2]) -> Tensor<4> {
+    interpolate(
+        input,
+        size,
+        InterpolateOptions::new(InterpolateMode::Nearest).with_align_corners(false),
+    )
+}
+
+fn dtype_to_float(dtype: DType) -> FloatDType {
+    match dtype {
+        DType::F16 => FloatDType::F16,
+        DType::BF16 => FloatDType::BF16,
+        DType::F64 => FloatDType::F64,
+        _ => FloatDType::F32,
     }
 }
 
-fn load_layer_norm(vb: VarBuilder, hidden_size: usize, eps: f64) -> Result<LayerNorm> {
-    Ok(layer_norm(hidden_size, eps, vb)?)
-}
-
-fn softmax_f32(xs: &Tensor, dim: D) -> Result<Tensor> {
-    let dtype = xs.dtype();
+fn softmax_f32<const D: usize>(input: Tensor<D>, dim: usize) -> Tensor<D> {
+    let dtype = input.dtype();
     if dtype == DType::F32 {
-        Ok(softmax(xs, dim)?)
+        softmax(input, dim)
     } else {
-        Ok(softmax(&xs.to_dtype(DType::F32)?, dim)?.to_dtype(dtype)?)
+        softmax(input.cast(FloatDType::F32), dim).cast(dtype_to_float(dtype))
     }
 }
 
-fn pad_all_sides_one(xs: &Tensor) -> candle_core::Result<Tensor> {
-    xs.pad_with_zeros(2, 1, 1)?.pad_with_zeros(3, 1, 1)
-}
-
-#[derive(Debug)]
-struct ProjectionBlock {
+#[derive(Module, Debug)]
+struct ConvBn {
     conv: Conv2d,
     norm: BatchNorm,
 }
 
-impl ProjectionBlock {
-    #[allow(clippy::too_many_arguments)]
-    fn load(
-        vb: VarBuilder,
+impl ConvBn {
+    fn new(
+        device: &Device,
         in_channels: usize,
         out_channels: usize,
         kernel_size: usize,
         stride: usize,
         padding: usize,
         eps: f64,
-    ) -> Result<Self> {
-        Ok(Self {
-            conv: load_conv2d_module(
-                vb.pp("0"),
+    ) -> Self {
+        Self {
+            conv: conv2d(
+                device,
                 in_channels,
                 out_channels,
                 kernel_size,
                 stride,
                 padding,
                 false,
-            )?,
-            norm: load_batch_norm(vb.pp("1"), out_channels, eps)?,
-        })
+            ),
+            norm: batch_norm(device, out_channels, eps),
+        }
+    }
+
+    fn forward(&self, input: Tensor<4>) -> Tensor<4> {
+        self.norm.forward(self.conv.forward(input))
     }
 }
 
-impl Module for ProjectionBlock {
-    fn forward(&self, xs: &Tensor) -> candle_core::Result<Tensor> {
-        let ys = self.conv.forward(xs)?;
-        self.norm.forward_t(&ys, false)
-    }
-}
-
-#[derive(Debug)]
+#[derive(Module, Debug)]
 struct RTDetrResNetConvLayer {
     convolution: Conv2d,
     normalization: BatchNorm,
+    #[module(skip)]
     activation: ActivationKind,
 }
 
 impl RTDetrResNetConvLayer {
-    fn load(
-        vb: VarBuilder,
+    fn new(
+        device: &Device,
         in_channels: usize,
         out_channels: usize,
         kernel_size: usize,
@@ -165,75 +201,64 @@ impl RTDetrResNetConvLayer {
         eps: f64,
     ) -> Result<Self> {
         Ok(Self {
-            convolution: load_conv2d_module(
-                vb.pp("convolution"),
+            convolution: conv2d(
+                device,
                 in_channels,
                 out_channels,
                 kernel_size,
                 stride,
                 kernel_size / 2,
                 false,
-            )?,
-            normalization: load_batch_norm(vb.pp("normalization"), out_channels, eps)?,
+            ),
+            normalization: batch_norm(device, out_channels, eps),
             activation: ActivationKind::from_name(activation)?,
         })
     }
 
-    fn forward(&self, xs: &Tensor) -> Result<Tensor> {
-        let hidden = self.convolution.forward(xs)?;
-        let hidden = self.normalization.forward_t(&hidden, false)?;
-        Ok(self.activation.forward(&hidden)?)
+    fn forward(&self, input: Tensor<4>) -> Tensor<4> {
+        self.activation
+            .apply(self.normalization.forward(self.convolution.forward(input)))
     }
 }
 
-#[derive(Debug)]
+#[derive(Module, Debug)]
 struct RTDetrResNetShortcut {
     convolution: Conv2d,
     normalization: BatchNorm,
 }
 
 impl RTDetrResNetShortcut {
-    fn load(
-        vb: VarBuilder,
+    fn new(
+        device: &Device,
         in_channels: usize,
         out_channels: usize,
         stride: usize,
         eps: f64,
-    ) -> Result<Self> {
-        Ok(Self {
-            convolution: load_conv2d_module(
-                vb.pp("convolution"),
-                in_channels,
-                out_channels,
-                1,
-                stride,
-                0,
-                false,
-            )?,
-            normalization: load_batch_norm(vb.pp("normalization"), out_channels, eps)?,
-        })
+    ) -> Self {
+        Self {
+            convolution: conv2d(device, in_channels, out_channels, 1, stride, 0, false),
+            normalization: batch_norm(device, out_channels, eps),
+        }
     }
 
-    fn forward(&self, xs: &Tensor) -> Result<Tensor> {
-        let hidden = self.convolution.forward(xs)?;
-        Ok(self.normalization.forward_t(&hidden, false)?)
+    fn forward(&self, input: Tensor<4>) -> Tensor<4> {
+        self.normalization.forward(self.convolution.forward(input))
     }
 }
 
-#[derive(Debug)]
+#[derive(Module, Debug)]
 struct RTDetrResNetBottleNeckLayer {
+    #[module(skip)]
     shortcut_avg_pool: bool,
     shortcut: Option<RTDetrResNetShortcut>,
-    conv1: RTDetrResNetConvLayer,
-    conv2: RTDetrResNetConvLayer,
-    conv3: RTDetrResNetConvLayer,
+    layer: Vec<RTDetrResNetConvLayer>,
+    #[module(skip)]
     activation: ActivationKind,
 }
 
 impl RTDetrResNetBottleNeckLayer {
-    fn load(
-        vb: VarBuilder,
-        config: &RTDetrResNetConfig,
+    fn new(
+        device: &Device,
         in_channels: usize,
         out_channels: usize,
         stride: usize,
@@ -241,94 +266,90 @@ impl RTDetrResNetBottleNeckLayer {
     ) -> Result<Self> {
         let reduced_channels = out_channels / 4;
         let shortcut = if stride == 2 {
-            Some(RTDetrResNetShortcut::load(
-                vb.pp("shortcut.1"),
+            Some(RTDetrResNetShortcut::new(
+                device,
                 in_channels,
                 out_channels,
                 1,
                 eps,
-            )?)
+            ))
         } else if in_channels != out_channels || stride != 1 {
-            Some(RTDetrResNetShortcut::load(
-                vb.pp("shortcut"),
+            Some(RTDetrResNetShortcut::new(
+                device,
                 in_channels,
                 out_channels,
                 stride,
                 eps,
-            )?)
+            ))
         } else {
             None
         };
-        let first_stride = if config.downsample_in_bottleneck {
-            stride
-        } else {
-            1
-        };
-        let second_stride = if config.downsample_in_bottleneck {
-            1
-        } else {
-            stride
-        };
+        let first_stride = 1;
+        let second_stride = stride;
         Ok(Self {
             shortcut_avg_pool: stride == 2,
             shortcut,
-            conv1: RTDetrResNetConvLayer::load(
-                vb.pp("layer.0"),
-                in_channels,
-                reduced_channels,
-                1,
-                first_stride,
-                Some(config.hidden_act.as_str()),
-                eps,
-            )?,
-            conv2: RTDetrResNetConvLayer::load(
-                vb.pp("layer.1"),
-                reduced_channels,
-                reduced_channels,
-                3,
-                second_stride,
-                Some(config.hidden_act.as_str()),
-                eps,
-            )?,
-            conv3: RTDetrResNetConvLayer::load(
-                vb.pp("layer.2"),
-                reduced_channels,
-                out_channels,
-                1,
-                1,
-                None,
-                eps,
-            )?,
-            activation: ActivationKind::from_name(Some(config.hidden_act.as_str()))?,
+            layer: vec![
+                RTDetrResNetConvLayer::new(
+                    device,
+                    in_channels,
+                    reduced_channels,
+                    1,
+                    first_stride,
+                    Some(BACKBONE_HIDDEN_ACT),
+                    eps,
+                )?,
+                RTDetrResNetConvLayer::new(
+                    device,
+                    reduced_channels,
+                    reduced_channels,
+                    3,
+                    second_stride,
+                    Some(BACKBONE_HIDDEN_ACT),
+                    eps,
+                )?,
+                RTDetrResNetConvLayer::new(
+                    device,
+                    reduced_channels,
+                    out_channels,
+                    1,
+                    1,
+                    None,
+                    eps,
+                )?,
+            ],
+            activation: ActivationKind::from_name(Some(BACKBONE_HIDDEN_ACT))?,
         })
     }
 
-    fn forward(&self, xs: &Tensor) -> Result<Tensor> {
+    fn forward(&self, input: Tensor<4>) -> Tensor<4> {
         let residual = match &self.shortcut {
-            Some(shortcut) if self.shortcut_avg_pool => {
-                let pooled = xs.avg_pool2d_with_stride((2, 2), (2, 2))?;
-                shortcut.forward(&pooled)?
-            }
-            Some(shortcut) => shortcut.forward(xs)?,
-            None => xs.clone(),
+            Some(shortcut) if self.shortcut_avg_pool => shortcut.forward(avg_pool2d(
+                input.clone(),
+                [2, 2],
+                [2, 2],
+                [0, 0],
+                true,
+                false,
+            )),
+            Some(shortcut) => shortcut.forward(input.clone()),
+            None => input.clone(),
         };
-        let hidden = self.conv1.forward(xs)?;
-        let hidden = self.conv2.forward(&hidden)?;
-        let hidden = self.conv3.forward(&hidden)?;
-        let hidden = hidden.broadcast_add(&residual)?;
-        Ok(self.activation.forward(&hidden)?)
+        let hidden = self.layer[0].forward(input);
+        let hidden = self.layer[1].forward(hidden);
+        let hidden = self.layer[2].forward(hidden);
+        self.activation.apply(hidden + residual)
     }
 }
 
-#[derive(Debug)]
+#[derive(Module, Debug)]
 struct RTDetrResNetStage {
     layers: Vec<RTDetrResNetBottleNeckLayer>,
 }
 
 impl RTDetrResNetStage {
-    fn load(
-        vb: VarBuilder,
-        config: &RTDetrResNetConfig,
+    fn new(
+        device: &Device,
         in_channels: usize,
         out_channels: usize,
         stride: usize,
@@ -336,18 +357,16 @@ impl RTDetrResNetStage {
         eps: f64,
     ) -> Result<Self> {
         let mut layers = Vec::with_capacity(depth);
-        layers.push(RTDetrResNetBottleNeckLayer::load(
-            vb.pp("layers.0"),
-            config,
+        layers.push(RTDetrResNetBottleNeckLayer::new(
+            device,
             in_channels,
             out_channels,
             stride,
             eps,
         )?);
-        for index in 1..depth {
-            layers.push(RTDetrResNetBottleNeckLayer::load(
-                vb.pp(format!("layers.{index}")),
-                config,
+        for _ in 1..depth {
+            layers.push(RTDetrResNetBottleNeckLayer::new(
+                device,
                 out_channels,
                 out_channels,
                 1,
@@ -357,59 +376,59 @@ impl RTDetrResNetStage {
         Ok(Self { layers })
     }
 
-    fn forward(&self, xs: &Tensor) -> Result<Tensor> {
-        let mut hidden = xs.clone();
+    fn forward(&self, mut hidden: Tensor<4>) -> Tensor<4> {
         for layer in &self.layers {
-            hidden = layer.forward(&hidden)?;
+            hidden = layer.forward(hidden);
         }
-        Ok(hidden)
+        hidden
     }
 }
 
-#[derive(Debug)]
+#[derive(Module, Debug)]
 struct RTDetrResNetEmbeddings {
-    conv1: RTDetrResNetConvLayer,
-    conv2: RTDetrResNetConvLayer,
-    conv3: RTDetrResNetConvLayer,
+    embedder: Vec<RTDetrResNetConvLayer>,
+    #[module(skip)]
     num_channels: usize,
 }
 
 impl RTDetrResNetEmbeddings {
-    fn load(vb: VarBuilder, config: &RTDetrResNetConfig, eps: f64) -> Result<Self> {
+    fn new(device: &Device, eps: f64) -> Result<Self> {
         Ok(Self {
-            conv1: RTDetrResNetConvLayer::load(
-                vb.pp("embedder.0"),
-                config.num_channels,
-                config.embedding_size / 2,
-                3,
-                2,
-                Some(config.hidden_act.as_str()),
-                eps,
-            )?,
-            conv2: RTDetrResNetConvLayer::load(
-                vb.pp("embedder.1"),
-                config.embedding_size / 2,
-                config.embedding_size / 2,
-                3,
-                1,
-                Some(config.hidden_act.as_str()),
-                eps,
-            )?,
-            conv3: RTDetrResNetConvLayer::load(
-                vb.pp("embedder.2"),
-                config.embedding_size / 2,
-                config.embedding_size,
-                3,
-                1,
-                Some(config.hidden_act.as_str()),
-                eps,
-            )?,
-            num_channels: config.num_channels,
+            embedder: vec![
+                RTDetrResNetConvLayer::new(
+                    device,
+                    BACKBONE_NUM_CHANNELS,
+                    BACKBONE_EMBEDDING_SIZE / 2,
+                    3,
+                    2,
+                    Some(BACKBONE_HIDDEN_ACT),
+                    eps,
+                )?,
+                RTDetrResNetConvLayer::new(
+                    device,
+                    BACKBONE_EMBEDDING_SIZE / 2,
+                    BACKBONE_EMBEDDING_SIZE / 2,
+                    3,
+                    1,
+                    Some(BACKBONE_HIDDEN_ACT),
+                    eps,
+                )?,
+                RTDetrResNetConvLayer::new(
+                    device,
+                    BACKBONE_EMBEDDING_SIZE / 2,
+                    BACKBONE_EMBEDDING_SIZE,
+                    3,
+                    1,
+                    Some(BACKBONE_HIDDEN_ACT),
+                    eps,
+                )?,
+            ],
+            num_channels: BACKBONE_NUM_CHANNELS,
         })
     }
 
-    fn forward(&self, xs: &Tensor) -> Result<Tensor> {
-        let (_, channels, _, _) = xs.dims4()?;
+    fn forward(&self, input: Tensor<4>) -> Result<Tensor<4>> {
+        let [_, channels, _, _] = input.dims();
         if channels != self.num_channels {
             bail!(
                 "input channel mismatch for RT-DETR backbone: expected {}, got {}",
@@ -417,39 +436,31 @@ impl RTDetrResNetEmbeddings {
                 channels
             );
         }
-        let hidden = self.conv1.forward(xs)?;
-        let hidden = self.conv2.forward(&hidden)?;
-        let hidden = self.conv3.forward(&hidden)?;
-        Ok(pad_all_sides_one(&hidden)?.max_pool2d_with_stride(3, 2)?)
+        let hidden = self.embedder[0].forward(input);
+        let hidden = self.embedder[1].forward(hidden);
+        let hidden = self.embedder[2].forward(hidden);
+        let hidden = hidden.pad((1, 1, 1, 1), 0.0);
+        Ok(max_pool2d(hidden, [3, 3], [2, 2], [0, 0], [1, 1], false))
     }
 }
 
-#[derive(Debug)]
-struct RTDetrResNetBackbone {
-    embedder: RTDetrResNetEmbeddings,
+#[derive(Module, Debug)]
+struct RTDetrResNetEncoder {
     stages: Vec<RTDetrResNetStage>,
-    out_features: Vec<String>,
-    channels: Vec<usize>,
 }
 
-impl RTDetrResNetBackbone {
-    fn load(vb: VarBuilder, config: &RTDetrResNetConfig, eps: f64) -> Result<Self> {
-        let mut stages = Vec::with_capacity(config.depths.len());
-        let mut in_channels = config.embedding_size;
-        for (index, (&out_channels, &depth)) in config
-            .hidden_sizes
+impl RTDetrResNetEncoder {
+    fn new(device: &Device, eps: f64) -> Result<Self> {
+        let mut stages = Vec::with_capacity(BACKBONE_DEPTHS.len());
+        let mut in_channels = BACKBONE_EMBEDDING_SIZE;
+        for (index, (&out_channels, &depth)) in BACKBONE_HIDDEN_SIZES
             .iter()
-            .zip(config.depths.iter())
+            .zip(BACKBONE_DEPTHS.iter())
             .enumerate()
         {
-            let stride = if index == 0 && !config.downsample_in_first_stage {
-                1
-            } else {
-                2
-            };
-            stages.push(RTDetrResNetStage::load(
-                vb.pp(format!("encoder.stages.{index}")),
-                config,
+            let stride = if index == 0 { 1 } else { 2 };
+            stages.push(RTDetrResNetStage::new(
+                device,
                 in_channels,
                 out_channels,
                 stride,
@@ -458,72 +469,87 @@ impl RTDetrResNetBackbone {
             )?);
             in_channels = out_channels;
         }
+        Ok(Self { stages })
+    }
+
+    fn forward(&self, mut hidden: Tensor<4>) -> Vec<Tensor<4>> {
+        let mut outputs = Vec::with_capacity(self.stages.len());
+        for stage in &self.stages {
+            hidden = stage.forward(hidden);
+            outputs.push(hidden.clone());
+        }
+        outputs
+    }
+}
+
+#[derive(Module, Debug)]
+struct RTDetrResNetBackbone {
+    embedder: RTDetrResNetEmbeddings,
+    encoder: RTDetrResNetEncoder,
+}
+
+impl RTDetrResNetBackbone {
+    fn new(device: &Device, eps: f64) -> Result<Self> {
         Ok(Self {
-            embedder: RTDetrResNetEmbeddings::load(vb.pp("embedder"), config, eps)?,
-            stages,
-            out_features: config.out_features.clone(),
-            channels: config.channels()?,
+            embedder: RTDetrResNetEmbeddings::new(device, eps)?,
+            encoder: RTDetrResNetEncoder::new(device, eps)?,
         })
     }
 
-    fn forward(&self, pixel_values: &Tensor) -> Result<Vec<Tensor>> {
-        let mut hidden = self.embedder.forward(pixel_values)?;
-        let mut all_features = vec![("stem".to_string(), hidden.clone())];
-        for (index, stage) in self.stages.iter().enumerate() {
-            hidden = stage.forward(&hidden)?;
-            all_features.push((format!("stage{}", index + 1), hidden.clone()));
+    fn forward(&self, pixel_values: Tensor<4>) -> Result<Vec<Tensor<4>>> {
+        let stem = self.embedder.forward(pixel_values)?;
+        let stage_outputs = self.encoder.forward(stem.clone());
+        let mut selected = Vec::with_capacity(BACKBONE_OUT_STAGE_INDICES.len());
+
+        for &stage_index in &BACKBONE_OUT_STAGE_INDICES {
+            selected.push(
+                stage_outputs.get(stage_index).cloned().with_context(|| {
+                    format!("missing RT-DETR backbone stage {}", stage_index + 1)
+                })?,
+            );
         }
 
-        let mut selected = Vec::with_capacity(self.out_features.len());
-        for out_feature in &self.out_features {
-            let feature = all_features
-                .iter()
-                .find(|(name, _)| name == out_feature)
-                .map(|(_, feature)| feature.clone())
-                .with_context(|| format!("missing RT-DETR backbone feature {}", out_feature))?;
-            selected.push(feature);
-        }
         Ok(selected)
     }
 }
 
-#[derive(Debug)]
+#[derive(Module, Debug)]
 struct RTDetrV2ConvEncoder {
     model: RTDetrResNetBackbone,
+    #[module(skip)]
     intermediate_channel_sizes: Vec<usize>,
 }
 
 impl RTDetrV2ConvEncoder {
-    fn load(vb: VarBuilder, config: &RTDetrV2Config) -> Result<Self> {
-        let model = RTDetrResNetBackbone::load(
-            vb.pp("model"),
-            &config.backbone_config,
-            config.batch_norm_eps,
-        )?;
+    fn new(device: &Device) -> Result<Self> {
+        let model = RTDetrResNetBackbone::new(device, BATCH_NORM_EPS)?;
         Ok(Self {
-            intermediate_channel_sizes: model.channels.clone(),
+            intermediate_channel_sizes: BACKBONE_OUT_CHANNELS.to_vec(),
             model,
         })
     }
 
-    fn forward(&self, pixel_values: &Tensor) -> Result<Vec<Tensor>> {
+    fn forward(&self, pixel_values: Tensor<4>) -> Result<Vec<Tensor<4>>> {
         self.model.forward(pixel_values)
     }
 }
 
-#[derive(Debug)]
+#[derive(Module, Debug)]
 struct RTDetrV2MultiheadAttention {
-    num_attention_heads: usize,
-    head_dim: usize,
-    scaling: f64,
     q_proj: Linear,
     k_proj: Linear,
     v_proj: Linear,
     out_proj: Linear,
+    #[module(skip)]
+    num_attention_heads: usize,
+    #[module(skip)]
+    head_dim: usize,
+    #[module(skip)]
+    scaling: f64,
 }
 
 impl RTDetrV2MultiheadAttention {
-    fn load(vb: VarBuilder, hidden_size: usize, num_attention_heads: usize) -> Result<Self> {
+    fn new(device: &Device, hidden_size: usize, num_attention_heads: usize) -> Result<Self> {
         if !hidden_size.is_multiple_of(num_attention_heads) {
             bail!(
                 "hidden size {hidden_size} is not divisible by num_attention_heads {num_attention_heads}"
@@ -531,198 +557,180 @@ impl RTDetrV2MultiheadAttention {
         }
         let head_dim = hidden_size / num_attention_heads;
         Ok(Self {
+            q_proj: linear(device, hidden_size, hidden_size),
+            k_proj: linear(device, hidden_size, hidden_size),
+            v_proj: linear(device, hidden_size, hidden_size),
+            out_proj: linear(device, hidden_size, hidden_size),
             num_attention_heads,
             head_dim,
             scaling: (head_dim as f64).powf(-0.5),
-            q_proj: load_linear(vb.pp("q_proj"), hidden_size, hidden_size)?,
-            k_proj: load_linear(vb.pp("k_proj"), hidden_size, hidden_size)?,
-            v_proj: load_linear(vb.pp("v_proj"), hidden_size, hidden_size)?,
-            out_proj: load_linear(vb.pp("out_proj"), hidden_size, hidden_size)?,
         })
     }
 
     fn forward(
         &self,
-        hidden_states: &Tensor,
-        position_embeddings: Option<&Tensor>,
-    ) -> Result<Tensor> {
-        let (batch_size, sequence_length, hidden_size) = hidden_states.dims3()?;
+        hidden_states: Tensor<3>,
+        position_embeddings: Option<Tensor<3>>,
+    ) -> Tensor<3> {
+        let [batch_size, sequence_length, hidden_size] = hidden_states.dims();
         let query_key_input = match position_embeddings {
-            Some(position_embeddings) => hidden_states
-                .broadcast_add(&position_embeddings.to_dtype(hidden_states.dtype())?)?,
+            Some(position_embeddings) => hidden_states.clone() + position_embeddings,
             None => hidden_states.clone(),
         };
-        let shape = (
+        let shape = [
             batch_size,
             sequence_length,
             self.num_attention_heads,
             self.head_dim,
-        );
+        ];
         let query_states = self
             .q_proj
-            .forward(&query_key_input)?
-            .reshape(shape)?
-            .transpose(1, 2)?
-            .contiguous()?;
+            .forward(query_key_input.clone())
+            .reshape(shape)
+            .swap_dims(1, 2);
         let key_states = self
             .k_proj
-            .forward(&query_key_input)?
-            .reshape(shape)?
-            .transpose(1, 2)?
-            .contiguous()?;
+            .forward(query_key_input)
+            .reshape(shape)
+            .swap_dims(1, 2);
         let value_states = self
             .v_proj
-            .forward(hidden_states)?
-            .reshape(shape)?
-            .transpose(1, 2)?
-            .contiguous()?;
+            .forward(hidden_states)
+            .reshape(shape)
+            .swap_dims(1, 2);
 
-        let mut attention_scores =
-            query_states.matmul(&key_states.transpose(2, 3)?.contiguous()?)?;
-        attention_scores = (attention_scores * self.scaling)?;
-        let attention_probs = softmax_f32(&attention_scores, D::Minus1)?;
-        let context = attention_probs.matmul(&value_states)?;
-        let context = context.transpose(1, 2)?.contiguous()?.reshape((
-            batch_size,
-            sequence_length,
-            hidden_size,
-        ))?;
-        Ok(self.out_proj.forward(&context)?)
+        let attention_scores = query_states.matmul(key_states.swap_dims(2, 3)) * self.scaling;
+        let attention_probs = softmax_f32(attention_scores, 3);
+        let context = attention_probs
+            .matmul(value_states)
+            .swap_dims(1, 2)
+            .reshape([batch_size, sequence_length, hidden_size]);
+        self.out_proj.forward(context)
     }
 }
 
-#[derive(Debug)]
+#[derive(Module, Debug)]
 struct RTDetrV2FeedForward {
     fc1: Linear,
     fc2: Linear,
+    #[module(skip)]
     activation: ActivationKind,
 }
 
 impl RTDetrV2FeedForward {
-    fn load(
-        vb: VarBuilder,
+    fn new(
+        device: &Device,
         hidden_size: usize,
         intermediate_size: usize,
         activation: &str,
     ) -> Result<Self> {
         Ok(Self {
-            fc1: load_linear(vb.clone().pp("fc1"), hidden_size, intermediate_size)?,
-            fc2: load_linear(vb.pp("fc2"), intermediate_size, hidden_size)?,
+            fc1: linear(device, hidden_size, intermediate_size),
+            fc2: linear(device, intermediate_size, hidden_size),
             activation: ActivationKind::from_name(Some(activation))?,
         })
     }
 
-    fn forward(&self, xs: &Tensor) -> Result<Tensor> {
-        let hidden = self.fc1.forward(xs)?;
-        let hidden = self.activation.forward(&hidden)?;
-        Ok(self.fc2.forward(&hidden)?)
+    fn forward(&self, input: Tensor<3>) -> Tensor<3> {
+        self.fc2
+            .forward(self.activation.apply(self.fc1.forward(input)))
     }
 }
 
-#[derive(Debug)]
+#[derive(Module, Debug)]
 struct RTDetrV2EncoderLayer {
-    normalize_before: bool,
     self_attn: RTDetrV2MultiheadAttention,
     self_attn_layer_norm: LayerNorm,
     feed_forward: RTDetrV2FeedForward,
     final_layer_norm: LayerNorm,
+    #[module(skip)]
+    normalize_before: bool,
 }
 
 impl RTDetrV2EncoderLayer {
-    fn load(vb: VarBuilder, config: &RTDetrV2Config) -> Result<Self> {
+    fn new(device: &Device) -> Result<Self> {
         Ok(Self {
-            normalize_before: config.normalize_before,
-            self_attn: RTDetrV2MultiheadAttention::load(
-                vb.pp("self_attn"),
-                config.encoder_hidden_dim,
-                config.encoder_attention_heads,
+            self_attn: RTDetrV2MultiheadAttention::new(
+                device,
+                ENCODER_HIDDEN_DIM,
+                ENCODER_ATTENTION_HEADS,
             )?,
-            self_attn_layer_norm: load_layer_norm(
-                vb.pp("self_attn_layer_norm"),
-                config.encoder_hidden_dim,
-                config.layer_norm_eps,
+            self_attn_layer_norm: layer_norm(device, ENCODER_HIDDEN_DIM, LAYER_NORM_EPS),
+            feed_forward: RTDetrV2FeedForward::new(
+                device,
+                ENCODER_HIDDEN_DIM,
+                ENCODER_FFN_DIM,
+                ENCODER_ACTIVATION,
             )?,
-            feed_forward: RTDetrV2FeedForward::load(
-                vb.clone(),
-                config.encoder_hidden_dim,
-                config.encoder_ffn_dim,
-                config.encoder_activation_function.as_str(),
-            )?,
-            final_layer_norm: load_layer_norm(
-                vb.pp("final_layer_norm"),
-                config.encoder_hidden_dim,
-                config.layer_norm_eps,
-            )?,
+            final_layer_norm: layer_norm(device, ENCODER_HIDDEN_DIM, LAYER_NORM_EPS),
+            normalize_before: false,
         })
     }
 
-    fn forward(&self, hidden_states: &Tensor, position_embeddings: &Tensor) -> Result<Tensor> {
+    fn forward(&self, hidden_states: Tensor<3>, position_embeddings: Tensor<3>) -> Tensor<3> {
         let residual = hidden_states.clone();
         let hidden = if self.normalize_before {
-            self.self_attn_layer_norm.forward(hidden_states)?
+            self.self_attn_layer_norm.forward(hidden_states)
         } else {
-            hidden_states.clone()
+            hidden_states
         };
-        let hidden = self.self_attn.forward(&hidden, Some(position_embeddings))?;
-        let hidden = residual.broadcast_add(&hidden)?;
+        let hidden = self.self_attn.forward(hidden, Some(position_embeddings));
+        let hidden = residual + hidden;
         let hidden = if self.normalize_before {
             hidden
         } else {
-            self.self_attn_layer_norm.forward(&hidden)?
+            self.self_attn_layer_norm.forward(hidden)
         };
 
         let residual = if self.normalize_before {
-            self.final_layer_norm.forward(&hidden)?
+            self.final_layer_norm.forward(hidden.clone())
         } else {
             hidden.clone()
         };
-        let hidden = self.feed_forward.forward(&hidden)?;
-        let hidden = residual.broadcast_add(&hidden)?;
+        let hidden = self.feed_forward.forward(hidden);
+        let hidden = residual + hidden;
         if self.normalize_before {
-            Ok(hidden)
+            hidden
         } else {
-            Ok(self.final_layer_norm.forward(&hidden)?)
+            self.final_layer_norm.forward(hidden)
         }
     }
 }
 
-#[derive(Debug)]
+#[derive(Module, Debug)]
 struct RTDetrV2Encoder {
     layers: Vec<RTDetrV2EncoderLayer>,
 }
 
 impl RTDetrV2Encoder {
-    fn load(vb: VarBuilder, config: &RTDetrV2Config) -> Result<Self> {
-        let mut layers = Vec::with_capacity(config.encoder_layers);
-        for index in 0..config.encoder_layers {
-            layers.push(RTDetrV2EncoderLayer::load(
-                vb.pp(format!("layers.{index}")),
-                config,
-            )?);
+    fn new(device: &Device) -> Result<Self> {
+        let mut layers = Vec::with_capacity(ENCODER_LAYERS);
+        for _ in 0..ENCODER_LAYERS {
+            layers.push(RTDetrV2EncoderLayer::new(device)?);
         }
         Ok(Self { layers })
     }
 
-    fn forward(&self, src: &Tensor, pos_embed: &Tensor) -> Result<Tensor> {
-        let mut hidden = src.clone();
+    fn forward(&self, mut hidden: Tensor<3>, pos_embed: Tensor<3>) -> Tensor<3> {
         for layer in &self.layers {
-            hidden = layer.forward(&hidden, pos_embed)?;
+            hidden = layer.forward(hidden, pos_embed.clone());
         }
-        Ok(hidden)
+        hidden
     }
 }
 
-#[derive(Debug)]
+#[derive(Module, Debug)]
 struct RTDetrV2ConvNormLayer {
     conv: Conv2d,
     norm: BatchNorm,
+    #[module(skip)]
     activation: ActivationKind,
 }
 
 impl RTDetrV2ConvNormLayer {
     #[allow(clippy::too_many_arguments)]
-    fn load(
-        vb: VarBuilder,
+    fn new(
+        device: &Device,
         in_channels: usize,
         out_channels: usize,
         kernel_size: usize,
@@ -732,72 +740,69 @@ impl RTDetrV2ConvNormLayer {
         eps: f64,
     ) -> Result<Self> {
         Ok(Self {
-            conv: load_conv2d_module(
-                vb.pp("conv"),
+            conv: conv2d(
+                device,
                 in_channels,
                 out_channels,
                 kernel_size,
                 stride,
                 padding.unwrap_or((kernel_size - 1) / 2),
                 false,
-            )?,
-            norm: load_batch_norm(vb.pp("norm"), out_channels, eps)?,
+            ),
+            norm: batch_norm(device, out_channels, eps),
             activation: ActivationKind::from_name(activation)?,
         })
     }
 
-    fn forward(&self, xs: &Tensor) -> Result<Tensor> {
-        let hidden = self.conv.forward(xs)?;
-        let hidden = self.norm.forward_t(&hidden, false)?;
-        Ok(self.activation.forward(&hidden)?)
+    fn forward(&self, input: Tensor<4>) -> Tensor<4> {
+        self.activation
+            .apply(self.norm.forward(self.conv.forward(input)))
     }
 }
 
-#[derive(Debug)]
+#[derive(Module, Debug)]
 struct RTDetrV2RepVggBlock {
     conv1: RTDetrV2ConvNormLayer,
     conv2: RTDetrV2ConvNormLayer,
+    #[module(skip)]
     activation: ActivationKind,
 }
 
 impl RTDetrV2RepVggBlock {
-    fn load(vb: VarBuilder, config: &RTDetrV2Config) -> Result<Self> {
-        let hidden_channels = (config.encoder_hidden_dim as f64 * config.hidden_expansion) as usize;
+    fn new(device: &Device) -> Result<Self> {
+        let hidden_channels = (ENCODER_HIDDEN_DIM as f64 * HIDDEN_EXPANSION) as usize;
         Ok(Self {
-            conv1: RTDetrV2ConvNormLayer::load(
-                vb.pp("conv1"),
+            conv1: RTDetrV2ConvNormLayer::new(
+                device,
                 hidden_channels,
                 hidden_channels,
                 3,
                 1,
                 Some(1),
                 None,
-                config.batch_norm_eps,
+                BATCH_NORM_EPS,
             )?,
-            conv2: RTDetrV2ConvNormLayer::load(
-                vb.pp("conv2"),
+            conv2: RTDetrV2ConvNormLayer::new(
+                device,
                 hidden_channels,
                 hidden_channels,
                 1,
                 1,
                 Some(0),
                 None,
-                config.batch_norm_eps,
+                BATCH_NORM_EPS,
             )?,
-            activation: ActivationKind::from_name(Some(config.activation_function.as_str()))?,
+            activation: ActivationKind::from_name(Some(MODEL_ACTIVATION))?,
         })
     }
 
-    fn forward(&self, xs: &Tensor) -> Result<Tensor> {
-        let hidden = self
-            .conv1
-            .forward(xs)?
-            .broadcast_add(&self.conv2.forward(xs)?)?;
-        Ok(self.activation.forward(&hidden)?)
+    fn forward(&self, input: Tensor<4>) -> Tensor<4> {
+        let hidden = self.conv1.forward(input.clone()) + self.conv2.forward(input);
+        self.activation.apply(hidden)
     }
 }
 
-#[derive(Debug)]
+#[derive(Module, Debug)]
 struct RTDetrV2CSPRepLayer {
     conv1: RTDetrV2ConvNormLayer,
     conv2: RTDetrV2ConvNormLayer,
@@ -806,75 +811,68 @@ struct RTDetrV2CSPRepLayer {
 }
 
 impl RTDetrV2CSPRepLayer {
-    fn load(vb: VarBuilder, config: &RTDetrV2Config) -> Result<Self> {
-        let in_channels = config.encoder_hidden_dim * 2;
-        let out_channels = config.encoder_hidden_dim;
-        let hidden_channels = (out_channels as f64 * config.hidden_expansion) as usize;
-        let activation = Some(config.activation_function.as_str());
-        let conv1 = RTDetrV2ConvNormLayer::load(
-            vb.pp("conv1"),
-            in_channels,
-            hidden_channels,
-            1,
-            1,
-            Some(0),
-            activation,
-            config.batch_norm_eps,
-        )?;
-        let conv2 = RTDetrV2ConvNormLayer::load(
-            vb.pp("conv2"),
-            in_channels,
-            hidden_channels,
-            1,
-            1,
-            Some(0),
-            activation,
-            config.batch_norm_eps,
-        )?;
+    fn new(device: &Device) -> Result<Self> {
+        let in_channels = ENCODER_HIDDEN_DIM * 2;
+        let out_channels = ENCODER_HIDDEN_DIM;
+        let hidden_channels = (out_channels as f64 * HIDDEN_EXPANSION) as usize;
+        let activation = Some(MODEL_ACTIVATION);
         let mut bottlenecks = Vec::with_capacity(3);
-        for index in 0..3 {
-            bottlenecks.push(RTDetrV2RepVggBlock::load(
-                vb.pp(format!("bottlenecks.{index}")),
-                config,
-            )?);
+        for _ in 0..3 {
+            bottlenecks.push(RTDetrV2RepVggBlock::new(device)?);
         }
-        let conv3 = if hidden_channels != out_channels {
-            Some(RTDetrV2ConvNormLayer::load(
-                vb.pp("conv3"),
+        Ok(Self {
+            conv1: RTDetrV2ConvNormLayer::new(
+                device,
+                in_channels,
                 hidden_channels,
-                out_channels,
                 1,
                 1,
                 Some(0),
                 activation,
-                config.batch_norm_eps,
-            )?)
-        } else {
-            None
-        };
-        Ok(Self {
-            conv1,
-            conv2,
+                BATCH_NORM_EPS,
+            )?,
+            conv2: RTDetrV2ConvNormLayer::new(
+                device,
+                in_channels,
+                hidden_channels,
+                1,
+                1,
+                Some(0),
+                activation,
+                BATCH_NORM_EPS,
+            )?,
             bottlenecks,
-            conv3,
+            conv3: if hidden_channels != out_channels {
+                Some(RTDetrV2ConvNormLayer::new(
+                    device,
+                    hidden_channels,
+                    out_channels,
+                    1,
+                    1,
+                    Some(0),
+                    activation,
+                    BATCH_NORM_EPS,
+                )?)
+            } else {
+                None
+            },
         })
     }
 
-    fn forward(&self, xs: &Tensor) -> Result<Tensor> {
-        let mut hidden_state_1 = self.conv1.forward(xs)?;
+    fn forward(&self, input: Tensor<4>) -> Tensor<4> {
+        let mut hidden_1 = self.conv1.forward(input.clone());
         for bottleneck in &self.bottlenecks {
-            hidden_state_1 = bottleneck.forward(&hidden_state_1)?;
+            hidden_1 = bottleneck.forward(hidden_1);
         }
-        let hidden_state_2 = self.conv2.forward(xs)?;
-        let hidden = hidden_state_1.broadcast_add(&hidden_state_2)?;
+        let hidden = hidden_1 + self.conv2.forward(input);
         match &self.conv3 {
-            Some(conv3) => conv3.forward(&hidden),
-            None => Ok(hidden),
+            Some(conv3) => conv3.forward(hidden),
+            None => hidden,
         }
     }
 }
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 struct RTDetrV2SinePositionEmbedding {
     embed_dim: usize,
     temperature: usize,
@@ -888,124 +886,133 @@ impl RTDetrV2SinePositionEmbedding {
         }
     }
 
-    fn forward(&self, width: usize, height: usize, device: &Device) -> Result<Tensor> {
+    fn forward(
+        &self,
+        width: usize,
+        height: usize,
+        device: &Device,
+        dtype: DType,
+    ) -> Result<Tensor<3>> {
         if !self.embed_dim.is_multiple_of(4) {
             bail!("embed_dim must be divisible by 4, got {}", self.embed_dim);
         }
         let pos_dim = self.embed_dim / 4;
-        let omega = Tensor::arange(0f32, pos_dim as f32, device)?
-            .affine(1.0 / pos_dim as f64, 0.0)?
-            .affine(-(self.temperature as f64).ln(), 0.0)?
-            .exp()?
-            .reshape((1, pos_dim))?;
-        let grid_w = Tensor::arange(0f32, width as f32, device)?;
-        let grid_h = Tensor::arange(0f32, height as f32, device)?;
-        let grids = Tensor::meshgrid(&[&grid_w, &grid_h], true)?;
-        let grid_w = grids[0].flatten_all()?.reshape((width * height, 1))?;
-        let grid_h = grids[1].flatten_all()?.reshape((width * height, 1))?;
-        let out_w = grid_w.matmul(&omega.contiguous()?)?;
-        let out_h = grid_h.matmul(&omega.contiguous()?)?;
-        Ok(Tensor::cat(
-            &[&out_w.sin()?, &out_w.cos()?, &out_h.sin()?, &out_h.cos()?],
-            1,
-        )?
-        .reshape((1, width * height, self.embed_dim))?)
+        let mut data = Vec::with_capacity(width * height * self.embed_dim);
+        for x in 0..width {
+            for y in 0..height {
+                for dim in 0..pos_dim {
+                    let omega = 1.0 / (self.temperature as f32).powf(dim as f32 / pos_dim as f32);
+                    data.push((x as f32 * omega).sin());
+                }
+                for dim in 0..pos_dim {
+                    let omega = 1.0 / (self.temperature as f32).powf(dim as f32 / pos_dim as f32);
+                    data.push((x as f32 * omega).cos());
+                }
+                for dim in 0..pos_dim {
+                    let omega = 1.0 / (self.temperature as f32).powf(dim as f32 / pos_dim as f32);
+                    data.push((y as f32 * omega).sin());
+                }
+                for dim in 0..pos_dim {
+                    let omega = 1.0 / (self.temperature as f32).powf(dim as f32 / pos_dim as f32);
+                    data.push((y as f32 * omega).cos());
+                }
+            }
+        }
+        Ok(Tensor::from_data(
+            TensorData::new(data, [1, width * height, self.embed_dim]),
+            (device, dtype),
+        ))
     }
 }
 
-#[derive(Debug)]
+#[derive(Module, Debug)]
 struct RTDetrV2HybridEncoder {
-    encode_proj_layers: Vec<usize>,
     encoder: Vec<RTDetrV2Encoder>,
     lateral_convs: Vec<RTDetrV2ConvNormLayer>,
     fpn_blocks: Vec<RTDetrV2CSPRepLayer>,
     downsample_convs: Vec<RTDetrV2ConvNormLayer>,
     pan_blocks: Vec<RTDetrV2CSPRepLayer>,
+    #[module(skip)]
     position_embedding: RTDetrV2SinePositionEmbedding,
+    #[module(skip)]
     num_fpn_stages: usize,
+    #[module(skip)]
     encoder_hidden_dim: usize,
 }
 
 impl RTDetrV2HybridEncoder {
-    fn load(vb: VarBuilder, config: &RTDetrV2Config) -> Result<Self> {
-        let mut encoder = Vec::with_capacity(config.encode_proj_layers.len());
-        for index in 0..config.encode_proj_layers.len() {
-            encoder.push(RTDetrV2Encoder::load(
-                vb.pp(format!("encoder.{index}")),
-                config,
-            )?);
+    fn new(device: &Device) -> Result<Self> {
+        let mut encoder = Vec::with_capacity(ENCODE_PROJ_LAYERS.len());
+        for _ in 0..ENCODE_PROJ_LAYERS.len() {
+            encoder.push(RTDetrV2Encoder::new(device)?);
         }
 
-        let num_stages = config.encoder_in_channels.len() - 1;
+        let num_stages = ENCODER_IN_CHANNELS.len() - 1;
         let mut lateral_convs = Vec::with_capacity(num_stages);
         let mut fpn_blocks = Vec::with_capacity(num_stages);
         let mut downsample_convs = Vec::with_capacity(num_stages);
         let mut pan_blocks = Vec::with_capacity(num_stages);
-        for index in 0..num_stages {
-            lateral_convs.push(RTDetrV2ConvNormLayer::load(
-                vb.pp(format!("lateral_convs.{index}")),
-                config.encoder_hidden_dim,
-                config.encoder_hidden_dim,
+        for _ in 0..num_stages {
+            lateral_convs.push(RTDetrV2ConvNormLayer::new(
+                device,
+                ENCODER_HIDDEN_DIM,
+                ENCODER_HIDDEN_DIM,
                 1,
                 1,
                 Some(0),
-                Some(config.activation_function.as_str()),
-                config.batch_norm_eps,
+                Some(MODEL_ACTIVATION),
+                BATCH_NORM_EPS,
             )?);
-            fpn_blocks.push(RTDetrV2CSPRepLayer::load(
-                vb.pp(format!("fpn_blocks.{index}")),
-                config,
-            )?);
-            downsample_convs.push(RTDetrV2ConvNormLayer::load(
-                vb.pp(format!("downsample_convs.{index}")),
-                config.encoder_hidden_dim,
-                config.encoder_hidden_dim,
+            fpn_blocks.push(RTDetrV2CSPRepLayer::new(device)?);
+            downsample_convs.push(RTDetrV2ConvNormLayer::new(
+                device,
+                ENCODER_HIDDEN_DIM,
+                ENCODER_HIDDEN_DIM,
                 3,
                 2,
                 Some(1),
-                Some(config.activation_function.as_str()),
-                config.batch_norm_eps,
+                Some(MODEL_ACTIVATION),
+                BATCH_NORM_EPS,
             )?);
-            pan_blocks.push(RTDetrV2CSPRepLayer::load(
-                vb.pp(format!("pan_blocks.{index}")),
-                config,
-            )?);
+            pan_blocks.push(RTDetrV2CSPRepLayer::new(device)?);
         }
 
         Ok(Self {
-            encode_proj_layers: config.encode_proj_layers.clone(),
             encoder,
             lateral_convs,
             fpn_blocks,
             downsample_convs,
             pan_blocks,
             position_embedding: RTDetrV2SinePositionEmbedding::new(
-                config.encoder_hidden_dim,
-                config.positional_encoding_temperature,
+                ENCODER_HIDDEN_DIM,
+                POSITIONAL_ENCODING_TEMPERATURE,
             ),
             num_fpn_stages: num_stages,
-            encoder_hidden_dim: config.encoder_hidden_dim,
+            encoder_hidden_dim: ENCODER_HIDDEN_DIM,
         })
     }
 
-    fn forward(&self, feature_maps: &[Tensor]) -> Result<Vec<Tensor>> {
-        let mut feature_maps = feature_maps.to_vec();
-        for (index, encoder_index) in self.encode_proj_layers.iter().enumerate() {
-            let (batch_size, _, height, width) = feature_maps[*encoder_index].dims4()?;
-            let src_flatten = feature_maps[*encoder_index]
-                .flatten_from(2)?
-                .transpose(1, 2)?;
-            let pos_embed = self
-                .position_embedding
-                .forward(width, height, feature_maps[*encoder_index].device())?
-                .to_dtype(src_flatten.dtype())?;
-            let encoded = self.encoder[index].forward(&src_flatten, &pos_embed)?;
-            feature_maps[*encoder_index] = encoded.transpose(1, 2)?.reshape((
+    fn forward(&self, feature_maps: Vec<Tensor<4>>) -> Result<Vec<Tensor<4>>> {
+        let mut feature_maps = feature_maps;
+        for (index, encoder_index) in ENCODE_PROJ_LAYERS.iter().copied().enumerate() {
+            let [batch_size, _, height, width] = feature_maps[encoder_index].dims();
+            let src_flatten = feature_maps[encoder_index]
+                .clone()
+                .flatten::<3>(2, 3)
+                .swap_dims(1, 2);
+            let pos_embed = self.position_embedding.forward(
+                width,
+                height,
+                &feature_maps[encoder_index].device(),
+                src_flatten.dtype(),
+            )?;
+            let encoded = self.encoder[index].forward(src_flatten, pos_embed);
+            feature_maps[encoder_index] = encoded.swap_dims(1, 2).reshape([
                 batch_size,
                 self.encoder_hidden_dim,
                 height,
                 width,
-            ))?;
+            ]);
         }
 
         let mut fpn_feature_maps = vec![
@@ -1016,94 +1023,90 @@ impl RTDetrV2HybridEncoder {
         ];
         for index in 0..self.num_fpn_stages {
             let backbone_feature_map = feature_maps[self.num_fpn_stages - index - 1].clone();
-            let top_fpn_feature_map = self.lateral_convs[index]
-                .forward(fpn_feature_maps.last().context("missing FPN feature map")?)?;
-            *fpn_feature_maps
-                .last_mut()
-                .context("missing mutable FPN feature map")? = top_fpn_feature_map.clone();
-            let (_, _, height, width) = top_fpn_feature_map.dims4()?;
-            let upsampled = top_fpn_feature_map.upsample_nearest2d(height * 2, width * 2)?;
-            let fused = Tensor::cat(&[&upsampled, &backbone_feature_map], 1)?;
-            fpn_feature_maps.push(self.fpn_blocks[index].forward(&fused)?);
+            let mut top = self.lateral_convs[index]
+                .forward(fpn_feature_maps.pop().context("missing FPN feature map")?);
+            fpn_feature_maps.push(top.clone());
+            let dims = backbone_feature_map.dims();
+            top = upsample_nearest(top, [dims[2], dims[3]]);
+            let fused = Tensor::cat(vec![top, backbone_feature_map], 1);
+            fpn_feature_maps.push(self.fpn_blocks[index].forward(fused));
         }
         fpn_feature_maps.reverse();
 
         let mut pan_feature_maps = vec![fpn_feature_maps[0].clone()];
         for index in 0..self.num_fpn_stages {
-            let downsampled = self.downsample_convs[index]
-                .forward(pan_feature_maps.last().context("missing PAN feature map")?)?;
-            let fused = Tensor::cat(&[&downsampled, &fpn_feature_maps[index + 1]], 1)?;
-            pan_feature_maps.push(self.pan_blocks[index].forward(&fused)?);
+            let downsampled =
+                self.downsample_convs[index].forward(pan_feature_maps.last().unwrap().clone());
+            let fused = Tensor::cat(vec![downsampled, fpn_feature_maps[index + 1].clone()], 1);
+            pan_feature_maps.push(self.pan_blocks[index].forward(fused));
         }
         Ok(pan_feature_maps)
     }
 }
 
-#[derive(Debug)]
+#[derive(Module, Debug)]
 struct RTDetrV2MultiscaleDeformableAttention {
-    d_model: usize,
-    n_levels: usize,
-    n_heads: usize,
-    n_points: usize,
-    offset_scale: f64,
     sampling_offsets: Linear,
     attention_weights: Linear,
     value_proj: Linear,
     output_proj: Linear,
+    #[module(skip)]
+    d_model: usize,
+    #[module(skip)]
+    n_levels: usize,
+    #[module(skip)]
+    n_heads: usize,
+    #[module(skip)]
+    n_points: usize,
+    #[module(skip)]
+    offset_scale: f64,
 }
 
 impl RTDetrV2MultiscaleDeformableAttention {
-    fn load(vb: VarBuilder, config: &RTDetrV2Config) -> Result<Self> {
-        if !config
-            .d_model
-            .is_multiple_of(config.decoder_attention_heads)
-        {
+    fn new(device: &Device) -> Result<Self> {
+        if !D_MODEL.is_multiple_of(DECODER_ATTENTION_HEADS) {
             bail!(
                 "embed_dim {} must be divisible by num_heads {}",
-                config.d_model,
-                config.decoder_attention_heads
+                D_MODEL,
+                DECODER_ATTENTION_HEADS
             );
         }
         Ok(Self {
-            d_model: config.d_model,
-            n_levels: config.decoder_n_levels,
-            n_heads: config.decoder_attention_heads,
-            n_points: config.decoder_n_points,
-            offset_scale: config.decoder_offset_scale,
-            sampling_offsets: load_linear(
-                vb.pp("sampling_offsets"),
-                config.d_model,
-                config.decoder_attention_heads
-                    * config.decoder_n_levels
-                    * config.decoder_n_points
-                    * 2,
-            )?,
-            attention_weights: load_linear(
-                vb.pp("attention_weights"),
-                config.d_model,
-                config.decoder_attention_heads * config.decoder_n_levels * config.decoder_n_points,
-            )?,
-            value_proj: load_linear(vb.pp("value_proj"), config.d_model, config.d_model)?,
-            output_proj: load_linear(vb.pp("output_proj"), config.d_model, config.d_model)?,
+            sampling_offsets: linear(
+                device,
+                D_MODEL,
+                DECODER_ATTENTION_HEADS * DECODER_N_LEVELS * DECODER_N_POINTS * 2,
+            ),
+            attention_weights: linear(
+                device,
+                D_MODEL,
+                DECODER_ATTENTION_HEADS * DECODER_N_LEVELS * DECODER_N_POINTS,
+            ),
+            value_proj: linear(device, D_MODEL, D_MODEL),
+            output_proj: linear(device, D_MODEL, D_MODEL),
+            d_model: D_MODEL,
+            n_levels: DECODER_N_LEVELS,
+            n_heads: DECODER_ATTENTION_HEADS,
+            n_points: DECODER_N_POINTS,
+            offset_scale: DECODER_OFFSET_SCALE,
         })
     }
 
     fn forward(
         &self,
-        hidden_states: &Tensor,
-        encoder_hidden_states: &Tensor,
-        position_embeddings: Option<&Tensor>,
-        reference_points: &Tensor,
-        spatial_shapes_list: &[(usize, usize)],
-    ) -> Result<Tensor> {
+        hidden_states: Tensor<3>,
+        encoder_hidden_states: Tensor<3>,
+        position_embeddings: Option<Tensor<3>>,
+        reference_points: Tensor<4>,
+        spatial_shapes: &[(usize, usize)],
+    ) -> Result<Tensor<3>> {
         let hidden_states = match position_embeddings {
-            Some(position_embeddings) => hidden_states
-                .broadcast_add(&position_embeddings.to_dtype(hidden_states.dtype())?)?,
-            None => hidden_states.clone(),
+            Some(position_embeddings) => hidden_states + position_embeddings,
+            None => hidden_states,
         };
-        let (batch_size, num_queries, _) = hidden_states.dims3()?;
-        let (_, sequence_length, _) = encoder_hidden_states.dims3()?;
-        let total_elements = spatial_shapes_list
+        let [batch_size, num_queries, _] = hidden_states.dims();
+        let sequence_length = encoder_hidden_states.dims()[1];
+        let total_elements = spatial_shapes
             .iter()
             .map(|(height, width)| height * width)
             .sum::<usize>();
@@ -1115,50 +1118,65 @@ impl RTDetrV2MultiscaleDeformableAttention {
             );
         }
 
-        let value = self.value_proj.forward(encoder_hidden_states)?.reshape((
+        let value = self.value_proj.forward(encoder_hidden_states).reshape([
             batch_size,
             sequence_length,
             self.n_heads,
             self.d_model / self.n_heads,
-        ))?;
-        let sampling_offsets = self.sampling_offsets.forward(&hidden_states)?.reshape((
-            batch_size,
-            num_queries,
-            self.n_heads,
-            self.n_levels,
-            self.n_points,
-            2,
-        ))?;
+        ]);
+        let sampling_offsets = self
+            .sampling_offsets
+            .forward(hidden_states.clone())
+            .reshape([
+                batch_size,
+                num_queries,
+                self.n_heads,
+                self.n_levels,
+                self.n_points,
+                2,
+            ]);
         let attention_weights = softmax_f32(
-            &self.attention_weights.forward(&hidden_states)?.reshape((
+            self.attention_weights.forward(hidden_states).reshape([
                 batch_size,
                 num_queries,
                 self.n_heads,
                 self.n_levels * self.n_points,
-            ))?,
-            D::Minus1,
-        )?
-        .reshape((
+            ]),
+            3,
+        )
+        .reshape([
             batch_size,
             num_queries,
             self.n_heads,
             self.n_levels,
             self.n_points,
-        ))?;
-        let output = multi_scale_deformable_attention(
-            &value,
-            reference_points,
-            &sampling_offsets,
-            &attention_weights,
-            spatial_shapes_list,
+        ]);
+
+        let reference_xy = reference_points
+            .clone()
+            .narrow(3, 0, 2)
+            .unsqueeze_dim::<5>(3)
+            .unsqueeze_dim::<6>(4);
+        let reference_wh = reference_points
+            .narrow(3, 2, 2)
+            .unsqueeze_dim::<5>(3)
+            .unsqueeze_dim::<6>(4);
+        let sampling_locations = reference_xy
+            + sampling_offsets * (self.offset_scale / self.n_points as f64) * reference_wh;
+
+        let output = multiscale_deformable_attention(
+            value,
+            spatial_shapes,
+            sampling_locations,
+            attention_weights,
+            self.n_heads,
             self.n_points,
-            self.offset_scale,
         )?;
-        Ok(self.output_proj.forward(&output)?)
+        Ok(self.output_proj.forward(output))
     }
 }
 
-#[derive(Debug)]
+#[derive(Module, Debug)]
 struct RTDetrV2DecoderLayer {
     self_attn: RTDetrV2MultiheadAttention,
     self_attn_layer_norm: LayerNorm,
@@ -1169,125 +1187,91 @@ struct RTDetrV2DecoderLayer {
 }
 
 impl RTDetrV2DecoderLayer {
-    fn load(vb: VarBuilder, config: &RTDetrV2Config) -> Result<Self> {
+    fn new(device: &Device) -> Result<Self> {
         Ok(Self {
-            self_attn: RTDetrV2MultiheadAttention::load(
-                vb.pp("self_attn"),
-                config.d_model,
-                config.decoder_attention_heads,
+            self_attn: RTDetrV2MultiheadAttention::new(device, D_MODEL, DECODER_ATTENTION_HEADS)?,
+            self_attn_layer_norm: layer_norm(device, D_MODEL, LAYER_NORM_EPS),
+            encoder_attn: RTDetrV2MultiscaleDeformableAttention::new(device)?,
+            encoder_attn_layer_norm: layer_norm(device, D_MODEL, LAYER_NORM_EPS),
+            feed_forward: RTDetrV2FeedForward::new(
+                device,
+                D_MODEL,
+                DECODER_FFN_DIM,
+                DECODER_ACTIVATION,
             )?,
-            self_attn_layer_norm: load_layer_norm(
-                vb.pp("self_attn_layer_norm"),
-                config.d_model,
-                config.layer_norm_eps,
-            )?,
-            encoder_attn: RTDetrV2MultiscaleDeformableAttention::load(
-                vb.pp("encoder_attn"),
-                config,
-            )?,
-            encoder_attn_layer_norm: load_layer_norm(
-                vb.pp("encoder_attn_layer_norm"),
-                config.d_model,
-                config.layer_norm_eps,
-            )?,
-            feed_forward: RTDetrV2FeedForward::load(
-                vb.clone(),
-                config.d_model,
-                config.decoder_ffn_dim,
-                config.decoder_activation_function.as_str(),
-            )?,
-            final_layer_norm: load_layer_norm(
-                vb.pp("final_layer_norm"),
-                config.d_model,
-                config.layer_norm_eps,
-            )?,
+            final_layer_norm: layer_norm(device, D_MODEL, LAYER_NORM_EPS),
         })
     }
 
     fn forward(
         &self,
-        hidden_states: &Tensor,
-        position_embeddings: &Tensor,
-        reference_points: &Tensor,
-        spatial_shapes_list: &[(usize, usize)],
-        encoder_hidden_states: &Tensor,
-    ) -> Result<Tensor> {
+        hidden_states: Tensor<3>,
+        position_embeddings: Tensor<3>,
+        reference_points: Tensor<4>,
+        spatial_shapes: &[(usize, usize)],
+        encoder_hidden_states: Tensor<3>,
+    ) -> Result<Tensor<3>> {
         let residual = hidden_states.clone();
         let hidden = self
             .self_attn
-            .forward(hidden_states, Some(position_embeddings))?;
-        let hidden = self
-            .self_attn_layer_norm
-            .forward(&residual.broadcast_add(&hidden)?)?;
+            .forward(hidden_states, Some(position_embeddings.clone()));
+        let hidden = self.self_attn_layer_norm.forward(residual + hidden);
 
         let residual = hidden.clone();
         let hidden = self.encoder_attn.forward(
-            &hidden,
+            hidden,
             encoder_hidden_states,
             Some(position_embeddings),
             reference_points,
-            spatial_shapes_list,
+            spatial_shapes,
         )?;
-        let hidden = self
-            .encoder_attn_layer_norm
-            .forward(&residual.broadcast_add(&hidden)?)?;
+        let hidden = self.encoder_attn_layer_norm.forward(residual + hidden);
 
         let residual = hidden.clone();
-        let hidden = self.feed_forward.forward(&hidden)?;
-        Ok(self
-            .final_layer_norm
-            .forward(&residual.broadcast_add(&hidden)?)?)
+        let hidden = self.feed_forward.forward(hidden);
+        Ok(self.final_layer_norm.forward(residual + hidden))
     }
 }
 
-#[derive(Debug)]
+#[derive(Module, Debug)]
 struct RTDetrV2MlpPredictionHead {
     layers: Vec<Linear>,
-    hidden_activation: ActivationKind,
+    #[module(skip)]
+    last_index: usize,
 }
 
 impl RTDetrV2MlpPredictionHead {
-    fn load(
-        vb: VarBuilder,
+    fn new(
+        device: &Device,
         input_dim: usize,
         hidden_dim: usize,
         output_dim: usize,
         num_layers: usize,
-    ) -> Result<Self> {
-        let mut layers = Vec::with_capacity(num_layers);
-        let mut in_dim = input_dim;
-        for index in 0..num_layers {
-            let out_dim = if index + 1 == num_layers {
-                output_dim
-            } else {
-                hidden_dim
-            };
-            layers.push(load_linear(
-                vb.pp(format!("layers.{index}")),
-                in_dim,
-                out_dim,
-            )?);
-            in_dim = hidden_dim;
+    ) -> Self {
+        let mut dims = vec![input_dim];
+        dims.extend(std::iter::repeat_n(hidden_dim, num_layers - 1));
+        dims.push(output_dim);
+        Self {
+            layers: dims
+                .windows(2)
+                .map(|dims| linear(device, dims[0], dims[1]))
+                .collect(),
+            last_index: num_layers - 1,
         }
-        Ok(Self {
-            layers,
-            hidden_activation: ActivationKind::Relu,
-        })
     }
 
-    fn forward(&self, xs: &Tensor) -> Result<Tensor> {
-        let mut hidden = xs.clone();
+    fn forward(&self, mut input: Tensor<3>) -> Tensor<3> {
         for (index, layer) in self.layers.iter().enumerate() {
-            hidden = layer.forward(&hidden)?;
-            if index + 1 != self.layers.len() {
-                hidden = self.hidden_activation.forward(&hidden)?;
+            input = layer.forward(input);
+            if index != self.last_index {
+                input = relu(input);
             }
         }
-        Ok(hidden)
+        input
     }
 }
 
-#[derive(Debug)]
+#[derive(Module, Debug)]
 struct RTDetrV2Decoder {
     layers: Vec<RTDetrV2DecoderLayer>,
     query_pos_head: RTDetrV2MlpPredictionHead,
@@ -1296,37 +1280,20 @@ struct RTDetrV2Decoder {
 }
 
 impl RTDetrV2Decoder {
-    fn load(vb: VarBuilder, config: &RTDetrV2Config) -> Result<Self> {
-        let mut layers = Vec::with_capacity(config.decoder_layers);
-        let mut class_embed = Vec::with_capacity(config.decoder_layers);
-        let mut bbox_embed = Vec::with_capacity(config.decoder_layers);
-        for index in 0..config.decoder_layers {
-            layers.push(RTDetrV2DecoderLayer::load(
-                vb.pp(format!("layers.{index}")),
-                config,
-            )?);
-            class_embed.push(load_linear(
-                vb.pp(format!("class_embed.{index}")),
-                config.d_model,
-                config.num_labels(),
-            )?);
-            bbox_embed.push(RTDetrV2MlpPredictionHead::load(
-                vb.pp(format!("bbox_embed.{index}")),
-                config.d_model,
-                config.d_model,
-                4,
-                3,
-            )?);
+    fn new(device: &Device) -> Result<Self> {
+        let mut layers = Vec::with_capacity(DECODER_LAYERS);
+        let mut class_embed = Vec::with_capacity(DECODER_LAYERS);
+        let mut bbox_embed = Vec::with_capacity(DECODER_LAYERS);
+        for _ in 0..DECODER_LAYERS {
+            layers.push(RTDetrV2DecoderLayer::new(device)?);
+            class_embed.push(linear(device, D_MODEL, NUM_LABELS));
+            bbox_embed.push(RTDetrV2MlpPredictionHead::new(
+                device, D_MODEL, D_MODEL, 4, 3,
+            ));
         }
         Ok(Self {
             layers,
-            query_pos_head: RTDetrV2MlpPredictionHead::load(
-                vb.pp("query_pos_head"),
-                4,
-                2 * config.d_model,
-                config.d_model,
-                2,
-            )?,
+            query_pos_head: RTDetrV2MlpPredictionHead::new(device, 4, 2 * D_MODEL, D_MODEL, 2),
             class_embed,
             bbox_embed,
         })
@@ -1334,33 +1301,32 @@ impl RTDetrV2Decoder {
 
     fn forward(
         &self,
-        inputs_embeds: &Tensor,
-        encoder_hidden_states: &Tensor,
-        init_reference_points_unact: &Tensor,
-        spatial_shapes_list: &[(usize, usize)],
+        inputs_embeds: Tensor<3>,
+        encoder_hidden_states: Tensor<3>,
+        init_reference_points_unact: Tensor<3>,
+        spatial_shapes: &[(usize, usize)],
     ) -> Result<RTDetrV2Outputs> {
-        let mut hidden_states = inputs_embeds.clone();
-        let mut reference_points = inverse_sigmoid_to_sigmoid(init_reference_points_unact)?;
+        let mut hidden_states = inputs_embeds;
+        let mut reference_points = sigmoid(init_reference_points_unact);
         let mut logits = None;
         let mut pred_boxes = None;
 
         for (index, layer) in self.layers.iter().enumerate() {
-            let reference_points_input = reference_points.unsqueeze(2)?;
-            let position_embeddings = self.query_pos_head.forward(&reference_points)?;
+            let reference_points_input = reference_points.clone().unsqueeze_dim::<4>(2);
+            let position_embeddings = self.query_pos_head.forward(reference_points.clone());
             hidden_states = layer.forward(
-                &hidden_states,
-                &position_embeddings,
-                &reference_points_input,
-                spatial_shapes_list,
-                encoder_hidden_states,
+                hidden_states,
+                position_embeddings,
+                reference_points_input,
+                spatial_shapes,
+                encoder_hidden_states.clone(),
             )?;
 
-            let delta = self.bbox_embed[index].forward(&hidden_states)?;
+            let delta = self.bbox_embed[index].forward(hidden_states.clone());
             let reference_points_unact =
-                inverse_sigmoid_tensor(&reference_points)?.to_dtype(delta.dtype())?;
-            reference_points =
-                inverse_sigmoid_to_sigmoid(&delta.broadcast_add(&reference_points_unact)?)?;
-            logits = Some(self.class_embed[index].forward(&hidden_states)?);
+                inverse_sigmoid(reference_points).cast(dtype_to_float(delta.dtype()));
+            reference_points = sigmoid(delta + reference_points_unact);
+            logits = Some(self.class_embed[index].forward(hidden_states.clone()));
             pred_boxes = Some(reference_points.clone());
         }
 
@@ -1371,527 +1337,296 @@ impl RTDetrV2Decoder {
     }
 }
 
-#[derive(Debug)]
+#[derive(Module, Debug)]
+struct EncOutput {
+    linear: Linear,
+    norm: LayerNorm,
+}
+
+impl EncOutput {
+    fn new(device: &Device) -> Self {
+        Self {
+            linear: linear(device, D_MODEL, D_MODEL),
+            norm: layer_norm(device, D_MODEL, LAYER_NORM_EPS),
+        }
+    }
+
+    fn forward(&self, input: Tensor<3>) -> Tensor<3> {
+        self.norm.forward(self.linear.forward(input))
+    }
+}
+
+#[derive(Module, Debug)]
 struct RTDetrV2Model {
-    config: RTDetrV2Config,
     backbone: RTDetrV2ConvEncoder,
-    encoder_input_proj: Vec<ProjectionBlock>,
+    encoder_input_proj: Vec<ConvBn>,
     encoder: RTDetrV2HybridEncoder,
-    enc_output_linear: Linear,
-    enc_output_norm: LayerNorm,
+    enc_output: EncOutput,
     enc_score_head: Linear,
     enc_bbox_head: RTDetrV2MlpPredictionHead,
-    decoder_input_proj: Vec<ProjectionBlock>,
+    decoder_input_proj: Vec<ConvBn>,
     decoder: RTDetrV2Decoder,
 }
 
 impl RTDetrV2Model {
-    fn load(vb: VarBuilder, config: &RTDetrV2Config) -> Result<Self> {
-        let backbone = RTDetrV2ConvEncoder::load(vb.pp("backbone"), config)?;
+    fn new(device: &Device) -> Result<Self> {
+        let backbone = RTDetrV2ConvEncoder::new(device)?;
         let mut encoder_input_proj = Vec::with_capacity(backbone.intermediate_channel_sizes.len());
-        for (index, &in_channels) in backbone.intermediate_channel_sizes.iter().enumerate() {
-            encoder_input_proj.push(ProjectionBlock::load(
-                vb.pp(format!("encoder_input_proj.{index}")),
+        for &in_channels in &backbone.intermediate_channel_sizes {
+            encoder_input_proj.push(ConvBn::new(
+                device,
                 in_channels,
-                config.encoder_hidden_dim,
+                ENCODER_HIDDEN_DIM,
                 1,
                 1,
                 0,
-                config.batch_norm_eps,
-            )?);
+                BATCH_NORM_EPS,
+            ));
         }
 
-        let mut decoder_input_proj = Vec::with_capacity(config.num_feature_levels);
-        let mut in_channels = *config
-            .decoder_in_channels
+        let mut decoder_input_proj = Vec::with_capacity(NUM_FEATURE_LEVELS);
+        let mut in_channels = *DECODER_IN_CHANNELS
             .last()
             .context("missing RT-DETR decoder input channels")?;
-        for (index, &channels) in config.decoder_in_channels.iter().enumerate() {
-            decoder_input_proj.push(ProjectionBlock::load(
-                vb.pp(format!("decoder_input_proj.{index}")),
+        for &channels in &DECODER_IN_CHANNELS {
+            decoder_input_proj.push(ConvBn::new(
+                device,
                 channels,
-                config.d_model,
+                D_MODEL,
                 1,
                 1,
                 0,
-                config.batch_norm_eps,
-            )?);
+                BATCH_NORM_EPS,
+            ));
             in_channels = channels;
         }
-        for index in config.decoder_in_channels.len()..config.num_feature_levels {
-            decoder_input_proj.push(ProjectionBlock::load(
-                vb.pp(format!("decoder_input_proj.{index}")),
+        for _ in DECODER_IN_CHANNELS.len()..NUM_FEATURE_LEVELS {
+            decoder_input_proj.push(ConvBn::new(
+                device,
                 in_channels,
-                config.d_model,
+                D_MODEL,
                 3,
                 2,
                 1,
-                config.batch_norm_eps,
-            )?);
-            in_channels = config.d_model;
+                BATCH_NORM_EPS,
+            ));
+            in_channels = D_MODEL;
         }
 
         Ok(Self {
-            config: config.clone(),
             backbone,
             encoder_input_proj,
-            encoder: RTDetrV2HybridEncoder::load(vb.pp("encoder"), config)?,
-            enc_output_linear: load_linear(vb.pp("enc_output.0"), config.d_model, config.d_model)?,
-            enc_output_norm: load_layer_norm(
-                vb.pp("enc_output.1"),
-                config.d_model,
-                config.layer_norm_eps,
-            )?,
-            enc_score_head: load_linear(
-                vb.pp("enc_score_head"),
-                config.d_model,
-                config.num_labels(),
-            )?,
-            enc_bbox_head: RTDetrV2MlpPredictionHead::load(
-                vb.pp("enc_bbox_head"),
-                config.d_model,
-                config.d_model,
-                4,
-                3,
-            )?,
+            encoder: RTDetrV2HybridEncoder::new(device)?,
+            enc_output: EncOutput::new(device),
+            enc_score_head: linear(device, D_MODEL, NUM_LABELS),
+            enc_bbox_head: RTDetrV2MlpPredictionHead::new(device, D_MODEL, D_MODEL, 4, 3),
             decoder_input_proj,
-            decoder: RTDetrV2Decoder::load(vb.pp("decoder"), config)?,
+            decoder: RTDetrV2Decoder::new(device)?,
         })
     }
 
-    fn forward(&self, pixel_values: &Tensor) -> Result<RTDetrV2Outputs> {
+    fn forward(&self, pixel_values: Tensor<4>) -> Result<RTDetrV2Outputs> {
         let features = self.backbone.forward(pixel_values)?;
-        let mut proj_feats = Vec::with_capacity(features.len());
-        for (level, source) in features.iter().enumerate() {
-            proj_feats.push(self.encoder_input_proj[level].forward(source)?);
-        }
-        let encoder_outputs = self.encoder.forward(&proj_feats)?;
+        let proj_feats = features
+            .into_iter()
+            .zip(self.encoder_input_proj.iter())
+            .map(|(source, proj)| proj.forward(source))
+            .collect::<Vec<_>>();
+        let encoder_outputs = self.encoder.forward(proj_feats)?;
 
-        let mut sources = Vec::with_capacity(self.config.num_feature_levels);
+        let mut sources = Vec::with_capacity(NUM_FEATURE_LEVELS);
         for (level, source) in encoder_outputs.iter().enumerate() {
-            sources.push(self.decoder_input_proj[level].forward(source)?);
+            sources.push(self.decoder_input_proj[level].forward(source.clone()));
         }
-        if self.config.num_feature_levels > sources.len() {
+        if NUM_FEATURE_LEVELS > sources.len() {
             let mut source = encoder_outputs
                 .last()
                 .cloned()
                 .context("missing RT-DETR encoder outputs")?;
-            for level in sources.len()..self.config.num_feature_levels {
-                source = self.decoder_input_proj[level].forward(&source)?;
+            for level in sources.len()..NUM_FEATURE_LEVELS {
+                source = self.decoder_input_proj[level].forward(source);
                 sources.push(source.clone());
             }
         }
 
-        let mut source_flatten = Vec::with_capacity(sources.len());
-        let mut spatial_shapes_list = Vec::with_capacity(sources.len());
-        for source in &sources {
-            let (_, _, height, width) = source.dims4()?;
-            spatial_shapes_list.push((height, width));
-            source_flatten.push(source.flatten_from(2)?.transpose(1, 2)?);
-        }
-        let source_refs = source_flatten.iter().collect::<Vec<_>>();
-        let source_flatten = Tensor::cat(&source_refs, 1)?;
+        let spatial_shapes = sources
+            .iter()
+            .map(|source| {
+                let dims = source.dims();
+                (dims[2], dims[3])
+            })
+            .collect::<Vec<_>>();
+
+        let source_flatten = Tensor::cat(
+            sources
+                .into_iter()
+                .map(|source| source.flatten::<3>(2, 3).swap_dims(1, 2))
+                .collect(),
+            1,
+        );
 
         let (anchors, valid_mask) = generate_anchors(
-            &spatial_shapes_list,
-            source_flatten.device(),
+            &spatial_shapes,
+            &source_flatten.device(),
             source_flatten.dtype(),
-        )?;
-        let memory = source_flatten.broadcast_mul(&valid_mask)?;
-        let output_memory = self
-            .enc_output_norm
-            .forward(&self.enc_output_linear.forward(&memory)?)?;
-        let enc_outputs_class = self.enc_score_head.forward(&output_memory)?;
-        let enc_outputs_coord_logits = self
-            .enc_bbox_head
-            .forward(&output_memory)?
-            .broadcast_add(&anchors)?;
-        let topk_indices =
-            topk_query_indices(&enc_outputs_class.max(D::Minus1)?, self.config.num_queries)?;
-        let reference_points_unact = batch_gather_rows(&enc_outputs_coord_logits, &topk_indices)?;
-        let target = batch_gather_rows(&output_memory, &topk_indices)?;
+        );
+        let memory = source_flatten.clone() * valid_mask;
+        let output_memory = self.enc_output.forward(memory);
+        let enc_outputs_class = self.enc_score_head.forward(output_memory.clone());
+        let enc_outputs_coord_logits = self.enc_bbox_head.forward(output_memory.clone()) + anchors;
+        let (_, topk_ind) = enc_outputs_class
+            .clone()
+            .max_dim(2)
+            .topk_with_indices(NUM_QUERIES, 1);
+
+        let bbox_index = topk_ind.clone().repeat_dim(2, 4);
+        let reference_points_unact = enc_outputs_coord_logits.gather(1, bbox_index);
+
+        let query_index = topk_ind.repeat_dim(2, D_MODEL);
+        let target = output_memory.gather(1, query_index).detach();
 
         self.decoder.forward(
-            &target,
-            &source_flatten,
-            &reference_points_unact,
-            &spatial_shapes_list,
+            target,
+            source_flatten,
+            reference_points_unact,
+            &spatial_shapes,
         )
     }
 }
 
-#[derive(Debug)]
+#[derive(Module, Debug)]
 pub(crate) struct RTDetrV2ForObjectDetection {
     model: RTDetrV2Model,
 }
 
 impl RTDetrV2ForObjectDetection {
-    pub(crate) fn load(vb: VarBuilder, config: &RTDetrV2Config) -> Result<Self> {
+    pub(crate) fn new(device: &Device) -> Result<Self> {
         Ok(Self {
-            model: RTDetrV2Model::load(vb.pp("model"), config)?,
+            model: RTDetrV2Model::new(device)?,
         })
     }
 
-    pub(crate) fn forward(&self, pixel_values: &Tensor) -> Result<RTDetrV2Outputs> {
+    pub(crate) fn forward(&self, pixel_values: Tensor<4>) -> Result<RTDetrV2Outputs> {
         self.model.forward(pixel_values)
     }
 }
 
 fn generate_anchors(
-    spatial_shapes_list: &[(usize, usize)],
+    spatial_shapes: &[(usize, usize)],
     device: &Device,
     dtype: DType,
-) -> Result<(Tensor, Tensor)> {
-    let eps = 1e-2f32;
-    let mut anchors_by_level = Vec::with_capacity(spatial_shapes_list.len());
-    let mut masks_by_level = Vec::with_capacity(spatial_shapes_list.len());
+) -> (Tensor<3>, Tensor<3>) {
+    let eps = 1e-2_f32;
+    let total = spatial_shapes.iter().map(|(h, w)| h * w).sum::<usize>();
+    let mut anchors = Vec::with_capacity(total * 4);
+    let mut valid = Vec::with_capacity(total);
 
-    for (level, (height, width)) in spatial_shapes_list.iter().copied().enumerate() {
-        let scale = 0.05f32 * 2f32.powi(level as i32);
-        let x = Tensor::arange(0f32, width as f32, device)?
-            .affine(1.0 / width as f64, 0.5 / width as f64)?;
-        let y = Tensor::arange(0f32, height as f32, device)?
-            .affine(1.0 / height as f64, 0.5 / height as f64)?;
-        let grids = Tensor::meshgrid(&[&x, &y], true)?;
-        let center_x = grids[0].clone();
-        let center_y = grids[1].clone();
-        let box_w = Tensor::full(scale, (height, width), device)?;
-        let box_h = Tensor::full(scale, (height, width), device)?;
-        let valid_mask = center_x
-            .gt(eps)?
-            .to_dtype(DType::F32)?
-            .broadcast_mul(&center_x.lt(1.0 - eps)?.to_dtype(DType::F32)?)?
-            .broadcast_mul(&center_y.gt(eps)?.to_dtype(DType::F32)?)?
-            .broadcast_mul(&center_y.lt(1.0 - eps)?.to_dtype(DType::F32)?)?
-            .broadcast_mul(&box_w.gt(eps)?.to_dtype(DType::F32)?)?
-            .broadcast_mul(&box_w.lt(1.0 - eps)?.to_dtype(DType::F32)?)?
-            .broadcast_mul(&box_h.gt(eps)?.to_dtype(DType::F32)?)?
-            .broadcast_mul(&box_h.lt(1.0 - eps)?.to_dtype(DType::F32)?)?;
-        let anchor = Tensor::stack(&[&center_x, &center_y, &box_w, &box_h], 2)?;
-        let clipped = anchor.clamp(eps, 1.0 - eps)?;
-        let anchor = clipped.broadcast_div(&clipped.affine(-1.0, 1.0)?)?.log()?;
-        let valid_mask_bool = valid_mask
-            .gt(0.5)?
-            .unsqueeze(2)?
-            .broadcast_as((height, width, 4))?;
-        let invalid_fill = Tensor::full(1e4f32, (height, width, 4), device)?;
-        anchors_by_level.push(
-            valid_mask_bool
-                .where_cond(&anchor, &invalid_fill)?
-                .reshape((height * width, 4))?,
-        );
-        masks_by_level.push(valid_mask.reshape((height * width, 1))?);
+    for (level, &(height, width)) in spatial_shapes.iter().enumerate() {
+        let wh = 0.05_f32 * 2.0_f32.powi(level as i32);
+        for y in 0..height {
+            for x in 0..width {
+                let cx = (x as f32 + 0.5) / width as f32;
+                let cy = (y as f32 + 0.5) / height as f32;
+                let is_valid = cx > eps
+                    && cy > eps
+                    && wh > eps
+                    && cx < 1.0 - eps
+                    && cy < 1.0 - eps
+                    && wh < 1.0 - eps;
+                valid.push(if is_valid { 1.0 } else { 0.0 });
+                if is_valid {
+                    for value in [cx, cy, wh, wh] {
+                        anchors.push((value / (1.0 - value)).ln());
+                    }
+                } else {
+                    anchors.extend_from_slice(&[1.0e4; 4]);
+                }
+            }
+        }
     }
 
-    let anchors = Tensor::cat(&anchors_by_level, 0)?
-        .unsqueeze(0)?
-        .to_dtype(dtype)?;
-    let valid_mask = Tensor::cat(&masks_by_level, 0)?
-        .unsqueeze(0)?
-        .to_dtype(dtype)?;
-    Ok((anchors, valid_mask))
+    (
+        Tensor::from_data(TensorData::new(anchors, [1, total, 4]), (device, dtype)),
+        Tensor::from_data(TensorData::new(valid, [1, total, 1]), (device, dtype)),
+    )
 }
 
-fn topk_query_indices(scores: &Tensor, topk: usize) -> Result<Tensor> {
-    let (batch_size, sequence_length) = scores.dims2()?;
-    let topk = topk.min(sequence_length);
-    let positions = Tensor::arange(0u32, sequence_length as u32, scores.device())?
-        .reshape((1, sequence_length))?
-        .broadcast_as((batch_size, sequence_length))?;
-    let neg_inf = scores.zeros_like()?.affine(0.0, -1e9)?;
-    let mut working = scores.contiguous()?;
-    let mut selected = Vec::with_capacity(topk);
-
-    for _ in 0..topk {
-        let indices = working.argmax_keepdim(1)?;
-        let mask = positions.broadcast_eq(&indices.broadcast_as((batch_size, sequence_length))?)?;
-        working = mask.where_cond(&neg_inf, &working)?.contiguous()?;
-        selected.push(indices);
-    }
-
-    Ok(Tensor::cat(&selected, 1)?.contiguous()?)
+fn inverse_sigmoid(input: Tensor<3>) -> Tensor<3> {
+    let input = input.clamp(1e-5, 1.0 - 1e-5);
+    let one_minus = input.ones_like() - input.clone();
+    (input / one_minus).log()
 }
 
-fn batch_gather_rows(tensor: &Tensor, indices: &Tensor) -> Result<Tensor> {
-    let (batch_size, _, hidden_dim) = tensor.dims3()?;
-    let (index_batch, gather_len) = indices.dims2()?;
-    if batch_size != index_batch {
-        bail!(
-            "batch gather mismatch: tensor batch {}, indices batch {}",
-            batch_size,
-            index_batch
-        );
+fn multiscale_deformable_attention(
+    value: Tensor<4>,
+    spatial_shapes: &[(usize, usize)],
+    sampling_locations: Tensor<6>,
+    attention_weights: Tensor<5>,
+    num_heads: usize,
+    num_points: usize,
+) -> Result<Tensor<3>> {
+    let [batch, _, _, head_dim] = value.dims();
+    let mut start = 0;
+    let mut sampling_values = Vec::with_capacity(spatial_shapes.len());
+    let sampling_grids = sampling_locations * 2.0 - 1.0;
+    let num_queries = sampling_grids.dims()[1];
+
+    for (level, &(height, width)) in spatial_shapes.iter().enumerate() {
+        let length = height * width;
+        let value_l = value
+            .clone()
+            .narrow(1, start, length)
+            .flatten::<3>(2, 3)
+            .swap_dims(1, 2)
+            .reshape([batch * num_heads, head_dim, height, width]);
+        start += length;
+
+        let grid = sampling_grids
+            .clone()
+            .narrow(3, level, 1)
+            .reshape([batch, num_queries, num_heads, num_points, 2])
+            .swap_dims(1, 2)
+            .flatten::<4>(0, 1);
+
+        sampling_values.push(value_l.grid_sample_2d(grid, GridSampleOptions::default()));
     }
-    let expanded_indices = indices
-        .unsqueeze(2)?
-        .broadcast_as((batch_size, gather_len, hidden_dim))?
-        .contiguous()?;
-    Ok(tensor.contiguous()?.gather(&expanded_indices, 1)?)
+
+    if sampling_values.is_empty() {
+        bail!("multi-scale deformable attention requires at least one feature level");
+    }
+
+    let sampled = Tensor::stack::<5>(sampling_values, 3).flatten::<4>(3, 4);
+    let weights = attention_weights.swap_dims(1, 2).reshape([
+        batch * num_heads,
+        1,
+        num_queries,
+        spatial_shapes.len() * num_points,
+    ]);
+    Ok((sampled * weights)
+        .sum_dim(3)
+        .reshape([batch, num_heads * head_dim, num_queries])
+        .swap_dims(1, 2))
 }
 
-fn inverse_sigmoid_tensor(tensor: &Tensor) -> Result<Tensor> {
-    let dtype = tensor.dtype();
-    let tensor = tensor.to_dtype(DType::F32)?.clamp(1e-5, 1.0 - 1e-5)?;
-    Ok(tensor
-        .broadcast_div(&tensor.affine(-1.0, 1.0)?)?
-        .log()?
-        .to_dtype(dtype)?)
+pub(crate) fn cast_module_float<M: Module>(module: M, dtype: FloatDType) -> M {
+    struct CastMapper {
+        dtype: FloatDType,
+    }
+
+    impl ModuleMapper for CastMapper {
+        fn map_float<const D: usize>(&mut self, param: Param<Tensor<D>>) -> Param<Tensor<D>> {
+            let (id, tensor, mapper) = param.consume();
+            Param::from_mapped_value(id, tensor.cast(self.dtype), mapper)
+        }
+    }
+
+    module.map(&mut CastMapper { dtype })
 }
 
-fn inverse_sigmoid_to_sigmoid(tensor: &Tensor) -> Result<Tensor> {
-    Ok(candle_nn::ops::sigmoid(tensor)?)
-}
-
-fn multi_scale_deformable_attention(
-    value: &Tensor,
-    reference_points: &Tensor,
-    sampling_offsets: &Tensor,
-    attention_weights: &Tensor,
-    spatial_shapes_list: &[(usize, usize)],
-    n_points: usize,
-    offset_scale: f64,
-) -> Result<Tensor> {
-    let (batch_size, sequence_length, num_heads, head_dim) = value.dims4()?;
-    let reference_points = reference_points.to_dtype(DType::F32)?;
-    let sampling_offsets = sampling_offsets.to_dtype(DType::F32)?;
-    let attention_weights = attention_weights.to_dtype(DType::F32)?;
-    let [_, num_queries, _, num_levels, num_points, _] =
-        <[usize; 6]>::try_from(sampling_offsets.dims().to_vec()).map_err(|_| {
-            anyhow::anyhow!(
-                "unexpected sampling_offsets shape: {:?}",
-                sampling_offsets.dims()
-            )
-        })?;
-    let ref_dims = reference_points.dims().to_vec();
-    let (ref_levels, num_coordinates) = match ref_dims.as_slice() {
-        [_, _, levels, coordinates] => (*levels, *coordinates),
-        [_, _, coordinates] => (1, *coordinates),
-        other => bail!("unexpected reference_points shape: {other:?}"),
-    };
-    if num_levels != spatial_shapes_list.len() {
-        bail!(
-            "sampling levels {} do not match spatial shapes {}",
-            num_levels,
-            spatial_shapes_list.len()
-        );
-    }
-    if num_points != n_points {
-        bail!(
-            "sampling point mismatch: tensor has {}, config has {}",
-            num_points,
-            n_points
-        );
-    }
-    let total_elements = spatial_shapes_list
-        .iter()
-        .map(|(height, width)| height * width)
-        .sum::<usize>();
-    if total_elements != sequence_length {
-        bail!(
-            "spatial shapes total {} does not match sequence length {}",
-            total_elements,
-            sequence_length
-        );
-    }
-
-    let mut output: Option<Tensor> = None;
-    let mut level_offset = 0usize;
-    for (level, (height, width)) in spatial_shapes_list.iter().copied().enumerate() {
-        let level_value = value
-            .narrow(1, level_offset, height * width)?
-            .transpose(1, 2)?
-            .transpose(2, 3)?
-            .contiguous()?
-            .reshape((batch_size, num_heads, head_dim, height, width))?
-            .reshape((batch_size * num_heads, head_dim, height, width))?;
-        level_offset += height * width;
-
-        let reference_level = match ref_dims.as_slice() {
-            [_, _, _, _] if ref_levels == 1 => reference_points.squeeze(2)?,
-            [_, _, _, _] => reference_points.narrow(2, level, 1)?.squeeze(2)?,
-            [_, _, _] => reference_points.clone(),
-            other => bail!("unexpected reference_points shape in decoder: {other:?}"),
-        };
-        let ref_x = reference_level.narrow(2, 0, 1)?.squeeze(2)?;
-        let ref_y = reference_level.narrow(2, 1, 1)?.squeeze(2)?;
-        let offsets = sampling_offsets.narrow(3, level, 1)?.squeeze(3)?;
-        let offset_x = offsets.narrow(4, 0, 1)?.squeeze(4)?;
-        let offset_y = offsets.narrow(4, 1, 1)?.squeeze(4)?;
-        let ref_x = ref_x.unsqueeze(2)?.unsqueeze(3)?.broadcast_as((
-            batch_size,
-            num_queries,
-            num_heads,
-            num_points,
-        ))?;
-        let ref_y = ref_y.unsqueeze(2)?.unsqueeze(3)?.broadcast_as((
-            batch_size,
-            num_queries,
-            num_heads,
-            num_points,
-        ))?;
-        let (sample_x, sample_y) = if num_coordinates == 2 {
-            (
-                ref_x.broadcast_add(&offset_x.affine(1.0 / width as f64, 0.0)?)?,
-                ref_y.broadcast_add(&offset_y.affine(1.0 / height as f64, 0.0)?)?,
-            )
-        } else {
-            let ref_w = reference_level.narrow(2, 2, 1)?.squeeze(2)?;
-            let ref_h = reference_level.narrow(2, 3, 1)?.squeeze(2)?;
-            let ref_w = ref_w.unsqueeze(2)?.unsqueeze(3)?.broadcast_as((
-                batch_size,
-                num_queries,
-                num_heads,
-                num_points,
-            ))?;
-            let ref_h = ref_h.unsqueeze(2)?.unsqueeze(3)?.broadcast_as((
-                batch_size,
-                num_queries,
-                num_heads,
-                num_points,
-            ))?;
-            (
-                ref_x.broadcast_add(
-                    &offset_x
-                        .broadcast_mul(&ref_w)?
-                        .affine(offset_scale / n_points as f64, 0.0)?,
-                )?,
-                ref_y.broadcast_add(
-                    &offset_y
-                        .broadcast_mul(&ref_h)?
-                        .affine(offset_scale / n_points as f64, 0.0)?,
-                )?,
-            )
-        };
-        let sample_x = sample_x
-            .affine(width as f64, -0.5)?
-            .transpose(1, 2)?
-            .contiguous()?
-            .reshape((batch_size * num_heads, num_queries, num_points))?;
-        let sample_y = sample_y
-            .affine(height as f64, -0.5)?
-            .transpose(1, 2)?
-            .contiguous()?
-            .reshape((batch_size * num_heads, num_queries, num_points))?;
-        let sampled = bilinear_sample_nchw(&level_value, &sample_y, &sample_x)?.reshape((
-            batch_size,
-            num_heads,
-            head_dim,
-            num_queries,
-            num_points,
-        ))?;
-        let level_weights = attention_weights
-            .narrow(3, level, 1)?
-            .squeeze(3)?
-            .transpose(1, 2)?
-            .unsqueeze(2)?
-            .to_dtype(sampled.dtype())?;
-        let level_output = sampled
-            .broadcast_mul(&level_weights)?
-            .sum_keepdim(4)?
-            .squeeze(4)?;
-        output = Some(match output {
-            Some(accumulated) => accumulated.broadcast_add(&level_output)?,
-            None => level_output,
-        });
-    }
-
-    Ok(output
-        .context("multi-scale deformable attention requires at least one feature level")?
-        .transpose(1, 3)?
-        .transpose(2, 3)?
-        .contiguous()?
-        .reshape((batch_size, num_queries, num_heads * head_dim))?)
-}
-
-fn bilinear_sample_nchw(xs: &Tensor, sample_y: &Tensor, sample_x: &Tensor) -> Result<Tensor> {
-    let (batch_size, channels, height, width) = xs.dims4()?;
-    let (coord_batch, out_h, out_w) = sample_y.dims3()?;
-    if sample_x.dims3()? != (coord_batch, out_h, out_w) {
-        bail!(
-            "bilinear sample requires matching x/y coordinate shapes, got {:?} and {:?}",
-            sample_y.dims(),
-            sample_x.dims()
-        );
-    }
-    if batch_size != coord_batch {
-        bail!(
-            "bilinear sample batch mismatch: tensor batch {}, coordinate batch {}",
-            batch_size,
-            coord_batch
-        );
-    }
-
-    let xs_flat = xs.reshape((batch_size, channels, height * width))?;
-    let y0 = sample_y.floor()?;
-    let x0 = sample_x.floor()?;
-    let y1 = y0.affine(1.0, 1.0)?;
-    let x1 = x0.affine(1.0, 1.0)?;
-    let ly = sample_y.broadcast_sub(&y0)?;
-    let lx = sample_x.broadcast_sub(&x0)?;
-    let wy0 = ly.affine(-1.0, 1.0)?;
-    let wx0 = lx.affine(-1.0, 1.0)?;
-
-    let sample00 = gather_nchw_at(&xs_flat, &y0, &x0, height, width)?;
-    let sample01 = gather_nchw_at(&xs_flat, &y0, &x1, height, width)?;
-    let sample10 = gather_nchw_at(&xs_flat, &y1, &x0, height, width)?;
-    let sample11 = gather_nchw_at(&xs_flat, &y1, &x1, height, width)?;
-    let weight00 = wy0
-        .broadcast_mul(&wx0)?
-        .to_dtype(xs.dtype())?
-        .unsqueeze(1)?;
-    let weight01 = wy0.broadcast_mul(&lx)?.to_dtype(xs.dtype())?.unsqueeze(1)?;
-    let weight10 = ly.broadcast_mul(&wx0)?.to_dtype(xs.dtype())?.unsqueeze(1)?;
-    let weight11 = ly.broadcast_mul(&lx)?.to_dtype(xs.dtype())?.unsqueeze(1)?;
-
-    Ok(sample00
-        .broadcast_mul(&weight00)?
-        .broadcast_add(&sample01.broadcast_mul(&weight01)?)?
-        .broadcast_add(&sample10.broadcast_mul(&weight10)?)?
-        .broadcast_add(&sample11.broadcast_mul(&weight11)?)?)
-}
-
-fn gather_nchw_at(
-    xs_flat: &Tensor,
-    grid_y: &Tensor,
-    grid_x: &Tensor,
-    height: usize,
-    width: usize,
-) -> Result<Tensor> {
-    let (batch_size, channels, _) = xs_flat.dims3()?;
-    let (coord_batch, out_h, out_w) = grid_y.dims3()?;
-    if grid_x.dims3()? != (coord_batch, out_h, out_w) {
-        bail!(
-            "gather_nchw_at requires matching coordinate shapes, got {:?} and {:?}",
-            grid_y.dims(),
-            grid_x.dims()
-        );
-    }
-    if batch_size != coord_batch {
-        bail!(
-            "gather_nchw_at batch mismatch: tensor batch {}, coordinate batch {}",
-            batch_size,
-            coord_batch
-        );
-    }
-
-    let valid = grid_y
-        .ge(0.0)?
-        .to_dtype(DType::F32)?
-        .broadcast_mul(&grid_y.lt(height as f64)?.to_dtype(DType::F32)?)?
-        .broadcast_mul(&grid_x.ge(0.0)?.to_dtype(DType::F32)?)?
-        .broadcast_mul(&grid_x.lt(width as f64)?.to_dtype(DType::F32)?)?;
-    let indices = grid_y
-        .clamp(0.0, height.saturating_sub(1) as f64)?
-        .affine(width as f64, 0.0)?
-        .broadcast_add(&grid_x.clamp(0.0, width.saturating_sub(1) as f64)?)?
-        .to_dtype(DType::U32)?
-        .flatten_from(1)?
-        .unsqueeze(1)?
-        .broadcast_as((batch_size, channels, out_h * out_w))?
-        .contiguous()?;
-    let gathered = xs_flat
-        .contiguous()?
-        .gather(&indices, 2)?
-        .reshape((batch_size, channels, out_h, out_w))?;
-    Ok(gathered.broadcast_mul(&valid.to_dtype(xs_flat.dtype())?.unsqueeze(1)?)?)
+pub(crate) fn tensor_to_f32_vec<const D: usize>(tensor: Tensor<D>) -> Result<Vec<f32>> {
+    tensor
+        .cast(FloatDType::F32)
+        .into_data()
+        .into_vec::<f32>()
+        .context("failed to extract burn tensor data as f32")
 }
