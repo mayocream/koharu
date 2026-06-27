@@ -48,6 +48,7 @@ candle-flash-attn = "=0.9.2"
 burn = { git = "https://github.com/tracel-ai/burn", branch = "main", default-features = false, features = [
     "std",
     "wgpu",
+    "safetensors",
 ] }
 hf-hub = "0.5"
 image = "0.25"
