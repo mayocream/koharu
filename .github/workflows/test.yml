@@ -40,7 +40,7 @@ jobs:
       # per `cargo test` invocation under `tests/integration-tests/.cache`;
       # caching that directory across runs avoids re-downloading the dylib
       # on every PR.
-      - uses: actions/cache@v5
+      - uses: actions/cache@v6
         with:
           path: tests/integration-tests/.cache
           key: ${{ runner.os }}-integration-runtime-${{ hashFiles('koharu-runtime/**/*.rs', 'koharu-llm/**/*.rs') }}
@@ -60,7 +60,7 @@ jobs:
     steps:
       - uses: actions/checkout@v7
       - uses: oven-sh/setup-bun@v2
-      - uses: actions/cache@v5
+      - uses: actions/cache@v6
         with:
           path: ~/.bun/install/cache
           key: ${{ runner.os }}-bun-${{ hashFiles('**/bun.lock') }}
