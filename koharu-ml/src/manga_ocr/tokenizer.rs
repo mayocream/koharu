@@ -3,13 +3,9 @@ use std::path::Path;
 use anyhow::{Result, anyhow};
 use tokenizers::{AddedToken, Tokenizer, models::wordpiece::WordPiece};
 
-use crate::loading::read_json;
+const SPECIAL_TOKENS: [&str; 5] = ["[UNK]", "[SEP]", "[PAD]", "[CLS]", "[MASK]"];
 
-pub fn load_tokenizer(
-    tokenizer_json: Option<&Path>,
-    vocab_path: &Path,
-    special_tokens_path: &Path,
-) -> Result<Tokenizer> {
+pub fn load_tokenizer(tokenizer_json: Option<&Path>, vocab_path: &Path) -> Result<Tokenizer> {
     if let Some(path) = tokenizer_json
         && path.exists()
     {
@@ -22,20 +18,14 @@ pub fn load_tokenizer(
         .map_err(|e| anyhow!(e))?;
     let mut tokenizer = Tokenizer::new(model);
 
-    let specials: serde_json::Value = read_json(special_tokens_path)?;
-    let mut added = Vec::new();
-    if let Some(obj) = specials.as_object() {
-        for value in obj.values() {
-            if let Some(token) = value.as_str() {
-                added.push(AddedToken::from(token.to_string(), true));
-            }
-        }
-    }
-    if !added.is_empty() {
-        tokenizer
-            .add_special_tokens(added)
-            .map_err(|e| anyhow!(e))?;
-    }
+    tokenizer
+        .add_special_tokens(
+            SPECIAL_TOKENS
+                .iter()
+                .map(|token| AddedToken::from((*token).to_string(), true))
+                .collect::<Vec<_>>(),
+        )
+        .map_err(|e| anyhow!(e))?;
 
     Ok(tokenizer)
 }
