@@ -88,10 +88,6 @@ name = "paddleocr-vl"
 path = "bin/paddleocr-vl.rs"
 
 [[bin]]
-name = "mit48px-ocr"
-path = "bin/mit48px-ocr.rs"
-
-[[bin]]
 name = "font-detect"
 path = "bin/font-detect.rs"
 
@@ -100,16 +96,8 @@ name = "pp-doclayout-v3"
 path = "bin/pp-doclayout-v3.rs"
 
 [[bin]]
-name = "manga-text-segmentation-2025"
-path = "bin/manga-text-segmentation-2025.rs"
-
-[[bin]]
 name = "speech-bubble-segmentation"
 path = "bin/speech-bubble-segmentation.rs"
-
-[[bin]]
-name = "anime-text"
-path = "bin/anime-text.rs"
 
 [[bin]]
 name = "aot-inpainting"
