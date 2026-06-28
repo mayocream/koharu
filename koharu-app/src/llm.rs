@@ -20,13 +20,19 @@ use koharu_core::{
 };
 use koharu_llm::providers::{
     AnyProvider, ProviderCatalogModels, ProviderConfig, ProviderDescriptor,
-    all_provider_descriptors, build_provider, discover_models,
+    TranslationFinishReason, all_provider_descriptors, build_provider, discover_models,
 };
 use koharu_llm::safe::llama_backend::LlamaBackend;
-use koharu_llm::{Language, Llm, ModelId, language::tags as language_tags};
+use koharu_llm::{GenerateFinishReason, Language, Llm, ModelId, language::tags as language_tags};
+use koharu_llm::prompt::{resolve_chapter_system_prompt, verbatim_system_prompt};
 use koharu_runtime::RuntimeManager;
 use strum::IntoEnumIterator;
 use tokio::sync::{RwLock, broadcast};
+
+use crate::pipeline::chapter_translate::{
+    ChapterTranslationBlock, format_chapter_blocks, parse_stable_id_blocks,
+    validate_chapter_translations,
+};
 
 // ---------------------------------------------------------------------------
 // State
@@ -246,6 +252,25 @@ impl Model {
             .map(|s| strip_wrapping_quotes(s.trim()))
             .collect())
     }
+
+    /// Translate chapter blocks tagged with stable ids such as `[P001-B001]`.
+    ///
+    /// Uses the same local/provider dispatch path as [`translate_texts`], but
+    /// formats input with chapter ids and strictly validates the response.
+    /// Retries malformed or length-truncated chunks once with a stricter prompt,
+    /// then falls back to single-block translation before failing.
+    pub async fn translate_chapter_blocks(
+        &self,
+        blocks: &[ChapterTranslationBlock],
+        target_language: Option<&str>,
+        custom_system_prompt: Option<&str>,
+    ) -> Result<Vec<String>> {
+        if blocks.is_empty() {
+            return Ok(Vec::new());
+        }
+        translate_chapter_chunk_with_fallback(self, blocks, target_language, custom_system_prompt)
+            .await
+    }
 }
 
 // ---------------------------------------------------------------------------
@@ -433,6 +458,192 @@ pub fn provider_config_from_settings(
 }
 
 // ---------------------------------------------------------------------------
+// Chapter translation helpers
+// ---------------------------------------------------------------------------
+
+#[derive(Debug, Clone)]
+struct ChapterGenerationOutcome {
+    text: String,
+    finish_reason: TranslationFinishReason,
+}
+
+async fn translate_chapter_chunk_with_fallback(
+    llm: &Model,
+    blocks: &[ChapterTranslationBlock],
+    target_language: Option<&str>,
+    custom_system_prompt: Option<&str>,
+) -> Result<Vec<String>> {
+    match try_translate_chapter_chunk(llm, blocks, target_language, custom_system_prompt, false)
+        .await
+    {
+        Ok(translations) => Ok(translations),
+        Err(first_err) => {
+            tracing::warn!(
+                block_count = blocks.len(),
+                error = %first_err,
+                "chapter translation chunk failed, retrying with stricter prompt"
+            );
+            match try_translate_chapter_chunk(
+                llm,
+                blocks,
+                target_language,
+                custom_system_prompt,
+                true,
+            )
+            .await
+            {
+                Ok(translations) => {
+                    tracing::info!(
+                        block_count = blocks.len(),
+                        "chapter translation chunk recovered on strict retry"
+                    );
+                    Ok(translations)
+                }
+                Err(retry_err) => {
+                    if blocks.len() <= 1 {
+                        return Err(retry_err);
+                    }
+                    tracing::warn!(
+                        block_count = blocks.len(),
+                        error = %retry_err,
+                        "chapter translation retry failed, falling back to single-block translation"
+                    );
+                    translate_chapter_chunk_single_block_fallback(
+                        llm,
+                        blocks,
+                        target_language,
+                        custom_system_prompt,
+                    )
+                    .await
+                }
+            }
+        }
+    }
+}
+
+async fn translate_chapter_chunk_single_block_fallback(
+    llm: &Model,
+    blocks: &[ChapterTranslationBlock],
+    target_language: Option<&str>,
+    custom_system_prompt: Option<&str>,
+) -> Result<Vec<String>> {
+    tracing::info!(
+        block_count = blocks.len(),
+        "chapter translation using single-block fallback"
+    );
+    let mut translations = Vec::with_capacity(blocks.len());
+    for block in blocks {
+        let block_translations = try_single_block_with_retry(
+            llm,
+            block,
+            target_language,
+            custom_system_prompt,
+        )
+        .await?;
+        translations.extend(block_translations);
+    }
+    Ok(translations)
+}
+
+async fn try_single_block_with_retry(
+    llm: &Model,
+    block: &ChapterTranslationBlock,
+    target_language: Option<&str>,
+    custom_system_prompt: Option<&str>,
+) -> Result<Vec<String>> {
+    let chunk = std::slice::from_ref(block);
+    match try_translate_chapter_chunk(llm, chunk, target_language, custom_system_prompt, false)
+        .await
+    {
+        Ok(translations) => Ok(translations),
+        Err(first_err) => {
+            tracing::warn!(
+                stable_id = %block.stable_id,
+                error = %first_err,
+                "single-block chapter translation failed, retrying with stricter prompt"
+            );
+            try_translate_chapter_chunk(llm, chunk, target_language, custom_system_prompt, true)
+                .await
+        }
+    }
+}
+
+async fn try_translate_chapter_chunk(
+    llm: &Model,
+    blocks: &[ChapterTranslationBlock],
+    target_language: Option<&str>,
+    custom_system_prompt: Option<&str>,
+    strict: bool,
+) -> Result<Vec<String>> {
+    let target_language = target_language
+        .and_then(Language::parse)
+        .unwrap_or(Language::English);
+    let body = format_chapter_blocks(blocks);
+    let system = resolve_chapter_system_prompt(custom_system_prompt, target_language, strict);
+
+    let mut guard = llm.state.write().await;
+    let outcome =
+        generate_chapter_translation(&mut guard, &body, target_language, &system).await?;
+
+    if outcome.finish_reason == TranslationFinishReason::Length {
+        anyhow::bail!("chapter translation: generation truncated (length)");
+    }
+
+    parse_chapter_translation_response(&outcome.text, blocks)
+}
+
+async fn generate_chapter_translation(
+    state: &mut State,
+    body: &str,
+    target_language: Language,
+    system_prompt: &str,
+) -> Result<ChapterGenerationOutcome> {
+    match state {
+        State::ReadyLocal(llm) => {
+            let opts = llm.id().default_generate_options();
+            let outcome = llm.generate_with_system_outcome(body, &opts, target_language, system_prompt)?;
+            Ok(ChapterGenerationOutcome {
+                text: outcome.text,
+                finish_reason: match outcome.finish_reason {
+                    GenerateFinishReason::Length => TranslationFinishReason::Length,
+                    GenerateFinishReason::Stop => TranslationFinishReason::Stop,
+                },
+            })
+        }
+        State::ReadyProvider { target, provider } => {
+            let outcome = provider
+                .translate_with_outcome(
+                    body,
+                    target_language,
+                    &target.model_id,
+                    Some(&verbatim_system_prompt(system_prompt)),
+                )
+                .await?;
+            Ok(ChapterGenerationOutcome {
+                text: outcome.text,
+                finish_reason: outcome.finish_reason,
+            })
+        }
+        State::Loading { .. } => Err(anyhow::anyhow!("LLM is still loading")),
+        State::Failed { error, .. } => Err(anyhow::anyhow!("LLM failed to load: {error}")),
+        State::Empty => Err(anyhow::anyhow!("no LLM loaded")),
+    }
+}
+
+fn parse_chapter_translation_response(
+    response: &str,
+    blocks: &[ChapterTranslationBlock],
+) -> Result<Vec<String>> {
+    let response = strip_thinking_block(response);
+    let parsed = parse_stable_id_blocks(response)?;
+    let translations = validate_chapter_translations(blocks, &parsed)?;
+    Ok(translations
+        .into_iter()
+        .map(|s| strip_wrapping_quotes(s.trim()))
+        .collect())
+}
+
+// ---------------------------------------------------------------------------
 // Tag formatting + response parsing
 // ---------------------------------------------------------------------------
 
@@ -535,4 +746,93 @@ fn strip_wrapping_quotes(text: &str) -> String {
         }
     }
     trimmed.to_string()
+}
+
+#[cfg(test)]
+mod chapter_translation_tests {
+    use koharu_core::{NodeId, PageId};
+    use uuid::Uuid;
+
+    use super::*;
+
+    #[test]
+    fn parse_chapter_translation_response_accepts_valid_output() {
+        let blocks = vec![ChapterTranslationBlock {
+            page_id: PageId(Uuid::from_u128(1)),
+            node_id: NodeId(Uuid::from_u128(11)),
+            page_number: 1,
+            block_number: 1,
+            stable_id: crate::pipeline::chapter_translate::stable_id(1, 1),
+            source_text: "hello".to_string(),
+        }, ChapterTranslationBlock {
+            page_id: PageId(Uuid::from_u128(2)),
+            node_id: NodeId(Uuid::from_u128(21)),
+            page_number: 2,
+            block_number: 1,
+            stable_id: crate::pipeline::chapter_translate::stable_id(2, 1),
+            source_text: "world".to_string(),
+        }];
+        let response = "[P001-B001] hello\n[P002-B001] world\n";
+        let out = parse_chapter_translation_response(response, &blocks).unwrap();
+        assert_eq!(out, vec!["hello", "world"]);
+    }
+
+    #[test]
+    fn parse_chapter_translation_response_rejects_invalid_output() {
+        let blocks = vec![
+            ChapterTranslationBlock {
+                page_id: PageId(Uuid::from_u128(1)),
+                node_id: NodeId(Uuid::from_u128(11)),
+                page_number: 1,
+                block_number: 1,
+                stable_id: crate::pipeline::chapter_translate::stable_id(1, 1),
+                source_text: "one".to_string(),
+            },
+            ChapterTranslationBlock {
+                page_id: PageId(Uuid::from_u128(1)),
+                node_id: NodeId(Uuid::from_u128(12)),
+                page_number: 1,
+                block_number: 2,
+                stable_id: crate::pipeline::chapter_translate::stable_id(1, 2),
+                source_text: "two".to_string(),
+            },
+        ];
+        let response = "[P001-B001] only one block\n";
+        assert!(parse_chapter_translation_response(response, &blocks).is_err());
+    }
+
+    #[test]
+    fn format_chapter_blocks_groups_by_page() {
+        let blocks = vec![
+            ChapterTranslationBlock {
+                page_id: PageId(Uuid::from_u128(1)),
+                node_id: NodeId(Uuid::from_u128(11)),
+                page_number: 1,
+                block_number: 1,
+                stable_id: crate::pipeline::chapter_translate::stable_id(1, 1),
+                source_text: "first".to_string(),
+            },
+            ChapterTranslationBlock {
+                page_id: PageId(Uuid::from_u128(1)),
+                node_id: NodeId(Uuid::from_u128(12)),
+                page_number: 1,
+                block_number: 2,
+                stable_id: crate::pipeline::chapter_translate::stable_id(1, 2),
+                source_text: "second".to_string(),
+            },
+            ChapterTranslationBlock {
+                page_id: PageId(Uuid::from_u128(2)),
+                node_id: NodeId(Uuid::from_u128(21)),
+                page_number: 2,
+                block_number: 1,
+                stable_id: crate::pipeline::chapter_translate::stable_id(2, 1),
+                source_text: "third".to_string(),
+            },
+        ];
+        let body = format_chapter_blocks(&blocks);
+        assert!(body.contains("Page 1:"));
+        assert!(body.contains("[P001-B001]first"));
+        assert!(body.contains("Page 2:"));
+        assert!(body.contains("[P002-B001]third"));
+    }
 }

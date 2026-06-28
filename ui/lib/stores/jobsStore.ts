@@ -14,12 +14,17 @@ import type { JobSummary, JobWarningEvent, PipelineProgress } from '@/lib/api/sc
 export type JobEntry = JobSummary & {
   progress?: PipelineProgress
   warnings?: JobWarningEvent[]
+  chapterContextTranslation?: boolean
+}
+
+type JobStartedOptions = {
+  chapterContextTranslation?: boolean
 }
 
 type JobsState = {
   jobs: Record<string, JobEntry>
   setSnapshot: (jobs: JobSummary[]) => void
-  started: (id: string, kind: string) => void
+  started: (id: string, kind: string, opts?: JobStartedOptions) => void
   progress: (p: PipelineProgress) => void
   warning: (w: JobWarningEvent) => void
   finished: (id: string, status: JobSummary['status'], error: string | null | undefined) => void
@@ -35,9 +40,14 @@ export const useJobsStore = create<JobsState>()(
         s.jobs = {}
         for (const j of jobs) s.jobs[j.id] = j
       }),
-    started: (id, kind) =>
+    started: (id, kind, opts) =>
       set((s) => {
-        s.jobs[id] = { id, kind, status: 'running' }
+        s.jobs[id] = {
+          id,
+          kind,
+          status: 'running',
+          chapterContextTranslation: opts?.chapterContextTranslation,
+        }
       }),
     progress: (p) =>
       set((s) => {

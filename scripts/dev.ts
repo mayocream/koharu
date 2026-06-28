@@ -93,6 +93,13 @@ async function setupCl() {
   )
 }
 
+async function setupWindowsCudaBuildFlags() {
+  const append = '-Xcompiler=/Zc:preprocessor'
+  const existing = process.env.NVCC_APPEND_FLAGS?.trim()
+  if (existing?.includes('/Zc:preprocessor')) return
+  process.env.NVCC_APPEND_FLAGS = existing ? `${existing} ${append}` : append
+}
+
 async function dev() {
   if (os.type() === 'Windows_NT') {
     // First, try to check if nvcc is available
@@ -106,6 +113,9 @@ async function dev() {
 
     // Setup cl.exe path
     await setupCl()
+    // CUDA 13.2+ CCCL headers require MSVC's conforming preprocessor when nvcc
+    // invokes cl.exe (candle-kernels / bindgen_cuda). nvcc reads these env vars.
+    await setupWindowsCudaBuildFlags()
   }
 
   const args = process.argv.slice(2)

@@ -6,8 +6,13 @@ use std::sync::Arc;
 
 use crate::Language;
 
-use super::chat_completions::{ChatCompletionsAuth, ChatCompletionsRequest, send_chat_completion};
-use super::{AnyProvider, ensure_provider_success, resolve_system_prompt};
+use super::chat_completions::{
+    ChatCompletionsAuth, ChatCompletionsRequest, send_chat_completion_outcome,
+};
+use super::{
+    AnyProvider, TranslationOutcome, chat_finish_reason, ensure_provider_success,
+    resolve_system_prompt,
+};
 
 #[derive(Debug, Clone)]
 pub struct OpenAiCompatibleProvider {
@@ -74,8 +79,23 @@ impl AnyProvider for OpenAiCompatibleProvider {
         custom_system_prompt: Option<&'a str>,
     ) -> Pin<Box<dyn Future<Output = anyhow::Result<String>> + Send + 'a>> {
         Box::pin(async move {
+            Ok(self
+                .translate_with_outcome(source, target_language, model, custom_system_prompt)
+                .await?
+                .text)
+        })
+    }
+
+    fn translate_with_outcome<'a>(
+        &'a self,
+        source: &'a str,
+        target_language: Language,
+        model: &'a str,
+        custom_system_prompt: Option<&'a str>,
+    ) -> Pin<Box<dyn Future<Output = anyhow::Result<TranslationOutcome>> + Send + 'a>> {
+        Box::pin(async move {
             let prompt = resolve_system_prompt(custom_system_prompt, target_language);
-            send_chat_completion(
+            let outcome = send_chat_completion_outcome(
                 Arc::clone(&self.http_client),
                 ChatCompletionsRequest {
                     provider: "openai-compatible",
@@ -93,7 +113,11 @@ impl AnyProvider for OpenAiCompatibleProvider {
                     max_tokens: self.max_tokens,
                 },
             )
-            .await
+            .await?;
+            Ok(TranslationOutcome {
+                text: outcome.text,
+                finish_reason: chat_finish_reason(outcome.finish_reason),
+            })
         })
     }
 }

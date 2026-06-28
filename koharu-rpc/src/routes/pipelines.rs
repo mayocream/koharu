@@ -50,6 +50,16 @@ pub struct StartPipelineRequest {
     pub default_font: Option<String>,
     #[serde(default)]
     pub reading_order: Option<ReadingOrder>,
+    /// When true, translate with chapter-level context across all pages in
+    /// scope instead of page-by-page translation.
+    #[serde(default)]
+    pub chapter_context_translation: bool,
+    /// Token budget per chapter translation chunk (256–8192, default 4096).
+    #[serde(default)]
+    pub chapter_translation_token_budget: Option<u32>,
+    /// Maximum blocks per chapter translation chunk (1–200, default 100).
+    #[serde(default)]
+    pub chapter_translation_max_blocks: Option<u32>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, utoipa::ToSchema)]
@@ -88,6 +98,9 @@ async fn start_pipeline(
             text_node_ids: req.text_node_ids,
             region: req.region,
             reading_order: req.reading_order,
+            chapter_context_translation: req.chapter_context_translation,
+            chapter_translation_token_budget: req.chapter_translation_token_budget,
+            chapter_translation_max_blocks: req.chapter_translation_max_blocks,
         },
     };
 

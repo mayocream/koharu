@@ -21,6 +21,27 @@ pub struct ChatCompletionsRequest {
     pub max_tokens: Option<u32>,
 }
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum ChatCompletionFinishReason {
+    Stop,
+    Length,
+    Unknown,
+}
+
+#[derive(Debug, Clone)]
+pub struct ChatCompletionOutcome {
+    pub text: String,
+    pub finish_reason: ChatCompletionFinishReason,
+}
+
+pub fn parse_openai_finish_reason(resp: &serde_json::Value) -> ChatCompletionFinishReason {
+    match resp["choices"][0]["finish_reason"].as_str() {
+        Some("length") => ChatCompletionFinishReason::Length,
+        Some("stop") => ChatCompletionFinishReason::Stop,
+        _ => ChatCompletionFinishReason::Unknown,
+    }
+}
+
 #[derive(Serialize)]
 struct ChatMessage {
     role: &'static str,
@@ -41,6 +62,15 @@ pub async fn send_chat_completion(
     http_client: Arc<ClientWithMiddleware>,
     request: ChatCompletionsRequest,
 ) -> anyhow::Result<String> {
+    Ok(send_chat_completion_outcome(http_client, request)
+        .await?
+        .text)
+}
+
+pub async fn send_chat_completion_outcome(
+    http_client: Arc<ClientWithMiddleware>,
+    request: ChatCompletionsRequest,
+) -> anyhow::Result<ChatCompletionOutcome> {
     let body = ChatRequest {
         model: &request.model,
         messages: vec![
@@ -73,8 +103,13 @@ pub async fn send_chat_completion(
         .json()
         .await?;
 
-    resp["choices"][0]["message"]["content"]
+    let text = resp["choices"][0]["message"]["content"]
         .as_str()
         .map(ToOwned::to_owned)
-        .ok_or_else(|| anyhow::anyhow!("{} returned no content", request.provider))
+        .ok_or_else(|| anyhow::anyhow!("{} returned no content", request.provider))?;
+
+    Ok(ChatCompletionOutcome {
+        finish_reason: parse_openai_finish_reason(&resp),
+        text,
+    })
 }

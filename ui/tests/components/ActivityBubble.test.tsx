@@ -6,6 +6,7 @@ import { beforeEach, describe, expect, it } from 'vitest'
 import { ActivityBubble } from '@/components/ActivityBubble'
 import { useDownloadsStore } from '@/lib/stores/downloadsStore'
 import { useEditorUiStore } from '@/lib/stores/editorUiStore'
+import { clearChapterContextPipelineHints } from '@/lib/pipeline/chapterContextHint'
 import { useJobsStore } from '@/lib/stores/jobsStore'
 
 import { renderWithQuery } from '../helpers'
@@ -13,6 +14,7 @@ import { server } from '../msw/server'
 
 beforeEach(() => {
   useJobsStore.getState().clear()
+  clearChapterContextPipelineHints()
   useDownloadsStore.getState().clear()
   useEditorUiStore.getState().clearError()
 })
@@ -39,6 +41,23 @@ describe('ActivityBubble', () => {
     renderWithQuery(<ActivityBubble />)
     expect(screen.getByTestId('operation-card')).toBeInTheDocument()
     expect(screen.getByText(/25%/)).toBeInTheDocument()
+  })
+
+  it('shows chapter context hint when enabled on the job', () => {
+    useJobsStore.getState().started('job-1', 'pipeline', { chapterContextTranslation: true })
+    useJobsStore.getState().progress({
+      jobId: 'job-1',
+      status: { status: 'running' },
+      step: 'detect',
+      currentPage: 0,
+      totalPages: 3,
+      currentStepIndex: 0,
+      totalSteps: 5,
+      overallPercent: 25,
+    })
+
+    renderWithQuery(<ActivityBubble />)
+    expect(screen.getByTestId('operation-chapter-context-hint')).toBeInTheDocument()
   })
 
   it('cancelling a job calls DELETE /operations/{id}', async () => {

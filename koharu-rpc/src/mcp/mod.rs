@@ -192,6 +192,8 @@ impl KoharuServer {
                 text_node_ids: input.text_node_ids,
                 reading_order: input.reading_order,
                 region: None,
+                chapter_context_translation: false,
+                ..Default::default()
             },
         };
         let job_id = Uuid::new_v4().to_string();

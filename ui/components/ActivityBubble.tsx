@@ -186,6 +186,14 @@ function JobCard({ job, onCancel, t }: { job: JobEntry; onCancel: () => void; t:
                 {t('operations.processCurrent')}
               </div>
               <div className='text-xs text-muted-foreground'>{subtitle}</div>
+              {job.chapterContextTranslation && (
+                <div
+                  data-testid='operation-chapter-context-hint'
+                  className='text-[11px] text-primary/90'
+                >
+                  {t('operations.chapterContextTranslationEnabled')}
+                </div>
+              )}
             </div>
           </div>
           <ProgressBar percent={percent} />

@@ -7,7 +7,10 @@ use serde::Serialize;
 
 use crate::Language;
 
-use super::{AnyProvider, ensure_provider_success, resolve_system_prompt};
+use super::{
+    AnyProvider, TranslationOutcome, ensure_provider_success, parse_claude_stop_reason,
+    resolve_system_prompt,
+};
 
 pub struct ClaudeProvider {
     pub http_client: Arc<ClientWithMiddleware>,
@@ -36,6 +39,21 @@ impl AnyProvider for ClaudeProvider {
         model: &'a str,
         custom_system_prompt: Option<&'a str>,
     ) -> Pin<Box<dyn Future<Output = anyhow::Result<String>> + Send + 'a>> {
+        Box::pin(async move {
+            Ok(self
+                .translate_with_outcome(source, target_language, model, custom_system_prompt)
+                .await?
+                .text)
+        })
+    }
+
+    fn translate_with_outcome<'a>(
+        &'a self,
+        source: &'a str,
+        target_language: Language,
+        model: &'a str,
+        custom_system_prompt: Option<&'a str>,
+    ) -> Pin<Box<dyn Future<Output = anyhow::Result<TranslationOutcome>> + Send + 'a>> {
         Box::pin(async move {
             let body = MessagesRequest {
                 model,
@@ -67,7 +85,10 @@ impl AnyProvider for ClaudeProvider {
                 .ok_or_else(|| anyhow::anyhow!("Claude returned no content"))?
                 .to_string();
 
-            Ok(text)
+            Ok(TranslationOutcome {
+                finish_reason: parse_claude_stop_reason(&resp),
+                text,
+            })
         })
     }
 }

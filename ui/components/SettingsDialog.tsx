@@ -54,6 +54,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select'
+import { Switch } from '@/components/ui/switch'
 import { useUpdater, type UpdaterStatus } from '@/components/Updater'
 import {
   getCatalog as getLlmCatalog,
@@ -547,6 +548,7 @@ function EnginesPane({
   return (
     <div className='space-y-4'>
       <p className='text-xs text-muted-foreground'>{t('settings.enginesDescription')}</p>
+      <ChapterContextTranslationToggle />
       {sections.map(({ label, key, engines }) => (
         <div key={key} className='space-y-1.5'>
           <Label className='text-xs'>{label}</Label>
@@ -567,6 +569,83 @@ function EnginesPane({
           </Select>
         </div>
       ))}
+    </div>
+  )
+}
+
+function ChapterContextTranslationToggle() {
+  const { t } = useTranslation()
+  const chapterContextTranslation = usePreferencesStore((s) => s.chapterContextTranslation)
+  const setChapterContextTranslation = usePreferencesStore((s) => s.setChapterContextTranslation)
+  const chapterTranslationTokenBudget = usePreferencesStore((s) => s.chapterTranslationTokenBudget)
+  const setChapterTranslationTokenBudget = usePreferencesStore(
+    (s) => s.setChapterTranslationTokenBudget,
+  )
+  const chapterTranslationMaxBlocks = usePreferencesStore((s) => s.chapterTranslationMaxBlocks)
+  const setChapterTranslationMaxBlocks = usePreferencesStore(
+    (s) => s.setChapterTranslationMaxBlocks,
+  )
+
+  return (
+    <div className='space-y-2 rounded-lg border border-border/60 px-3 py-2.5'>
+      <div className='flex items-center justify-between gap-4'>
+        <div className='space-y-0.5'>
+          <Label className='text-xs'>{t('settings.chapterContextTranslation')}</Label>
+          <p className='text-xs text-muted-foreground'>
+            {t('settings.chapterContextTranslationDescription')}
+          </p>
+        </div>
+        <Switch
+          data-testid='settings-chapter-context-translation'
+          checked={chapterContextTranslation}
+          onCheckedChange={setChapterContextTranslation}
+        />
+      </div>
+      <Accordion type='single' collapsible className='-mx-1'>
+        <AccordionItem value='chapter-advanced' className='border-border/60'>
+          <AccordionTrigger className='px-1 py-2 text-xs hover:no-underline'>
+            {t('settings.chapterContextTranslationAdvanced')}
+          </AccordionTrigger>
+          <AccordionContent className='space-y-3 px-1 pb-1'>
+            <div className='space-y-1.5'>
+              <Label htmlFor='chapter-token-budget' className='text-xs'>
+                {t('settings.chapterTranslationTokenBudget')}
+              </Label>
+              <Input
+                id='chapter-token-budget'
+                data-testid='settings-chapter-token-budget'
+                type='number'
+                min={256}
+                max={8192}
+                step={256}
+                value={chapterTranslationTokenBudget}
+                onChange={(e) => setChapterTranslationTokenBudget(Number(e.target.value))}
+              />
+              <p className='text-[11px] text-muted-foreground'>
+                {t('settings.chapterTranslationTokenBudgetDescription')}
+              </p>
+            </div>
+            <div className='space-y-1.5'>
+              <Label htmlFor='chapter-max-blocks' className='text-xs'>
+                {t('settings.chapterTranslationMaxBlocks')}
+              </Label>
+              <Input
+                id='chapter-max-blocks'
+                data-testid='settings-chapter-max-blocks'
+                type='number'
+                min={1}
+                max={200}
+                step={1}
+                value={chapterTranslationMaxBlocks}
+                onChange={(e) => setChapterTranslationMaxBlocks(Number(e.target.value))}
+              />
+              <p className='text-[11px] text-muted-foreground'>
+                {t('settings.chapterTranslationMaxBlocksDescription')}
+              </p>
+            </div>
+          </AccordionContent>
+        </AccordionItem>
+      </Accordion>
     </div>
   )
 }

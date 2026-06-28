@@ -49,11 +49,57 @@ pub struct PromptRenderer {
 
 pub const BLOCK_TAG_INSTRUCTIONS: &str = "The input uses numbered tags like [1], [2], etc. to mark each text block. Translate only the text after each tag. Keep every tag exactly unchanged, including numbers and order. Output the same tags followed by the translated text. Do not merge, split, or reorder blocks.";
 
+pub const CHAPTER_BLOCK_TAG_INSTRUCTIONS: &str = "The input uses stable block IDs like [P001-B001], [P001-B002]. Translate only the text after each tag. Return EXACTLY the same IDs in the same order. Do not merge, split, reorder, add, or omit any block ID.";
+
+pub const CHAPTER_BLOCK_TAG_STRICT_INSTRUCTIONS: &str = "CRITICAL: Output ONLY tagged translations, one line per block. Every input ID must appear exactly once in the same order. No commentary, markdown, notes, or repetition. Keep each translation concise and roughly the same length as the source.";
+
+/// Prefix for a fully-resolved system prompt passed through provider/local
+/// dispatch without appending page-level `[1]` tag instructions.
+pub(crate) const VERBATIM_SYSTEM_PREFIX: &str = "\x01KOHARU_VERBATIM_SYSTEM:\n";
+
+pub fn verbatim_system_prompt(full: impl Into<String>) -> String {
+    format!("{VERBATIM_SYSTEM_PREFIX}{}", full.into())
+}
+
 pub fn system_prompt(target_language: Language) -> String {
     format!(
         "You are a professional manga translator. Translate manga dialogue into natural {} that fits inside speech bubbles. Preserve character voice, emotional tone, relationship nuance, emphasis, and sound effects naturally. Keep the wording concise. Do not add notes, explanations, or romanization. {BLOCK_TAG_INSTRUCTIONS}",
         target_language
     )
+}
+
+pub fn chapter_system_prompt(target_language: Language) -> String {
+    format!(
+        "You are a professional manga translator. Translate manga dialogue into natural {} that fits inside speech bubbles. Preserve character voice, emotional tone, relationship nuance, emphasis, and sound effects naturally. Keep the wording concise. Do not add notes, explanations, or romanization. {CHAPTER_BLOCK_TAG_INSTRUCTIONS}",
+        target_language
+    )
+}
+
+pub fn resolve_chapter_system_prompt(
+    custom: Option<&str>,
+    target_language: Language,
+    strict: bool,
+) -> String {
+    let base = match custom {
+        Some(p) if !p.trim().is_empty() => format!("{p} {CHAPTER_BLOCK_TAG_INSTRUCTIONS}"),
+        _ => chapter_system_prompt(target_language),
+    };
+    if strict {
+        format!("{base} {CHAPTER_BLOCK_TAG_STRICT_INSTRUCTIONS}")
+    } else {
+        base
+    }
+}
+
+fn resolve_custom_system_prompt(custom_prompt: Option<&str>, target_language: Language) -> String {
+    match custom_prompt {
+        Some(p) => match p.strip_prefix(VERBATIM_SYSTEM_PREFIX) {
+            Some(verbatim) => verbatim.to_string(),
+            None if !p.trim().is_empty() => format!("{p} {BLOCK_TAG_INSTRUCTIONS}"),
+            None => system_prompt(target_language),
+        },
+        None => system_prompt(target_language),
+    }
 }
 
 impl PromptRenderer {
@@ -67,43 +113,42 @@ impl PromptRenderer {
         }
     }
 
-    fn messages(
-        &self,
-        text: impl Into<String>,
-        target_language: Language,
-        custom_prompt: Option<&str>,
-    ) -> Vec<ChatMessage> {
-        let text = text.into();
-        let sys = match custom_prompt {
-            Some(p) if !p.trim().is_empty() => {
-                format!("{p} {BLOCK_TAG_INSTRUCTIONS}")
-            }
-            _ => system_prompt(target_language),
-        };
-
-        match self.model_id {
-            ModelId::VntlLlama3_8Bv2 => vec![
-                ChatMessage::new(ChatRole::System, sys),
-                ChatMessage::new(ChatRole::Name(Language::Japanese.to_string()), text),
-                ChatMessage::new(ChatRole::Name(target_language.to_string()), String::new()),
-            ],
-            ModelId::HunyuanMT7B => {
-                vec![ChatMessage::new(ChatRole::User, format!("{sys}\n\n{text}"))]
-            }
-            _ => vec![
-                ChatMessage::new(ChatRole::System, sys),
-                ChatMessage::new(ChatRole::User, text),
-            ],
-        }
-    }
-
     pub fn format_chat_prompt(
         &self,
         prompt: String,
         target_language: Language,
         custom_prompt: Option<&str>,
     ) -> anyhow::Result<String> {
-        let messages = self.messages(prompt, target_language, custom_prompt);
+        self.format_chat_prompt_with_system(
+            prompt,
+            target_language,
+            resolve_custom_system_prompt(custom_prompt, target_language),
+        )
+    }
+
+    pub fn format_chat_prompt_with_system(
+        &self,
+        prompt: String,
+        target_language: Language,
+        system: String,
+    ) -> anyhow::Result<String> {
+        let messages = match self.model_id {
+            ModelId::VntlLlama3_8Bv2 => vec![
+                ChatMessage::new(ChatRole::System, system.clone()),
+                ChatMessage::new(ChatRole::Name(Language::Japanese.to_string()), prompt.clone()),
+                ChatMessage::new(ChatRole::Name(target_language.to_string()), String::new()),
+            ],
+            ModelId::HunyuanMT7B => {
+                vec![ChatMessage::new(
+                    ChatRole::User,
+                    format!("{system}\n\n{prompt}"),
+                )]
+            }
+            _ => vec![
+                ChatMessage::new(ChatRole::System, system),
+                ChatMessage::new(ChatRole::User, prompt),
+            ],
+        };
         let tmpl = self.env.template_from_str(&self.template)?;
 
         let prompt = tmpl

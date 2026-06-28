@@ -3,6 +3,17 @@
 import { create } from 'zustand'
 import { persist } from 'zustand/middleware'
 
+import {
+  DEFAULT_OCR_OVERLAY_BACKGROUND,
+  normalizeOverlayBackground,
+  type OverlayBubbleBackground,
+} from '@/lib/ocrOverlayBackground'
+import {
+  CHAPTER_MAX_BLOCKS_DEFAULT,
+  CHAPTER_TOKEN_BUDGET_DEFAULT,
+  clampChapterTranslationMaxBlocks,
+  clampChapterTranslationTokenBudget,
+} from '@/lib/pipeline/chapterContextSettings'
 import { getPlatform } from '@/lib/shortcutUtils'
 
 type PreferencesState = {
@@ -42,6 +53,15 @@ type PreferencesState = {
     renderer: boolean
   }
   setCustomPipeline: (pipeline: Partial<PreferencesState['customPipeline']>) => void
+  chapterContextTranslation: boolean
+  setChapterContextTranslation: (enabled: boolean) => void
+  chapterTranslationTokenBudget: number
+  setChapterTranslationTokenBudget: (budget: number) => void
+  chapterTranslationMaxBlocks: number
+  setChapterTranslationMaxBlocks: (maxBlocks: number) => void
+  ocrOverlayBackground: OverlayBubbleBackground
+  setOcrOverlayBackground: (background: Partial<OverlayBubbleBackground>) => void
+  resetOcrOverlayBackground: () => void
   resetPreferences: () => void
 }
 
@@ -72,6 +92,10 @@ const initialPreferences = {
     inpainter: true,
     renderer: true,
   },
+  chapterContextTranslation: false,
+  chapterTranslationTokenBudget: CHAPTER_TOKEN_BUDGET_DEFAULT,
+  chapterTranslationMaxBlocks: CHAPTER_MAX_BLOCKS_DEFAULT,
+  ocrOverlayBackground: DEFAULT_OCR_OVERLAY_BACKGROUND,
 }
 
 export const usePreferencesStore = create<PreferencesState>()(
@@ -115,11 +139,26 @@ export const usePreferencesStore = create<PreferencesState>()(
             ...pipeline,
           },
         })),
+      setChapterContextTranslation: (enabled) =>
+        set({ chapterContextTranslation: enabled }),
+      setChapterTranslationTokenBudget: (budget) =>
+        set({ chapterTranslationTokenBudget: clampChapterTranslationTokenBudget(budget) }),
+      setChapterTranslationMaxBlocks: (maxBlocks) =>
+        set({ chapterTranslationMaxBlocks: clampChapterTranslationMaxBlocks(maxBlocks) }),
+      setOcrOverlayBackground: (background) =>
+        set((state) => ({
+          ocrOverlayBackground: normalizeOverlayBackground({
+            ...state.ocrOverlayBackground,
+            ...background,
+          }),
+        })),
+      resetOcrOverlayBackground: () =>
+        set({ ocrOverlayBackground: { ...DEFAULT_OCR_OVERLAY_BACKGROUND } }),
       resetPreferences: () => set({ ...initialPreferences }),
     }),
     {
       name: 'koharu-config',
-      version: 7,
+      version: 10,
       migrate: (persisted: any, version: number) => {
         if (version < 2 && persisted) {
           delete persisted.localLlm
@@ -154,6 +193,22 @@ export const usePreferencesStore = create<PreferencesState>()(
         if (persisted && (version < 7 || persisted.customPipeline?.detect === undefined)) {
           persisted.customPipeline = initialPreferences.customPipeline
         }
+        if (version < 8 && persisted) {
+          persisted.chapterContextTranslation ??= initialPreferences.chapterContextTranslation
+        }
+        if (version < 9 && persisted) {
+          persisted.chapterTranslationTokenBudget = clampChapterTranslationTokenBudget(
+            persisted.chapterTranslationTokenBudget ?? CHAPTER_TOKEN_BUDGET_DEFAULT,
+          )
+          persisted.chapterTranslationMaxBlocks = clampChapterTranslationMaxBlocks(
+            persisted.chapterTranslationMaxBlocks ?? CHAPTER_MAX_BLOCKS_DEFAULT,
+          )
+        }
+        if (version < 10 && persisted) {
+          persisted.ocrOverlayBackground = normalizeOverlayBackground(
+            persisted.ocrOverlayBackground ?? DEFAULT_OCR_OVERLAY_BACKGROUND,
+          )
+        }
         return persisted
       },
       partialize: (state) => ({
@@ -165,6 +220,10 @@ export const usePreferencesStore = create<PreferencesState>()(
         codexImageModel: state.codexImageModel,
         shortcuts: state.shortcuts,
         customPipeline: state.customPipeline,
+        chapterContextTranslation: state.chapterContextTranslation,
+        chapterTranslationTokenBudget: state.chapterTranslationTokenBudget,
+        chapterTranslationMaxBlocks: state.chapterTranslationMaxBlocks,
+        ocrOverlayBackground: state.ocrOverlayBackground,
       }),
     },
   ),
