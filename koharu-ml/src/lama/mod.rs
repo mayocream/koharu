@@ -1,53 +1,56 @@
-mod fft;
 mod model;
 
-use anyhow::{Result, bail};
-use candle_core::{DType, Device, Tensor};
+use std::{
+    path::{Path, PathBuf},
+    time::Instant,
+};
+
+use anyhow::{Context, Result, bail};
+use burn::{
+    module::{Module, ModuleMapper, Param},
+    store::{ModuleSnapshot, PyTorchToBurnAdapter, SafetensorsStore},
+    tensor::{DType, Device, DeviceKind, FloatDType, Tensor, TensorData},
+};
 use image::{DynamicImage, GenericImageView, GrayImage, RgbImage};
 use koharu_runtime::RuntimeManager;
 use tracing::instrument;
 
 use crate::{
-    device,
     inpainting::{
-        HdStrategyConfig, InpaintForward, apply_bubble_fill, binarize_mask, extract_alpha,
-        restore_alpha_channel, run_inpaint, run_inpaint_with_windows,
+        HdStrategy, HdStrategyConfig, InpaintForward, apply_bubble_fill, binarize_mask,
+        extract_alpha, restore_alpha_channel, run_inpaint, run_inpaint_with_windows,
     },
-    loading,
     types::TextRegion,
 };
 
 const HF_REPO: &str = "mayocream/lama-manga";
+const SAFETENSORS_FILENAME: &str = "lama-manga.safetensors";
 const BLOCK_WINDOW_RATIO: f64 = 1.7;
 const BLOCK_WINDOW_ASPECT_RATIO: f64 = 1.0;
 
 type Xyxy = [u32; 4];
 
-koharu_runtime::declare_hf_model_package!(
-    id: "model:lama:weights",
-    repo: "mayocream/lama-manga",
-    file: "lama-manga.safetensors",
-    bootstrap: false,
-    order: 130,
-);
-
+#[derive(Debug)]
 pub struct Lama {
     model: model::Lama,
     device: Device,
+    dtype: DType,
 }
 
 impl Lama {
     pub async fn load(runtime: &RuntimeManager, cpu: bool) -> Result<Self> {
-        let device = device(cpu)?;
-        let weights_path = runtime
-            .downloads()
-            .huggingface_model(HF_REPO, "lama-manga.safetensors")
-            .await?;
-        let model = loading::load_buffered_safetensors_path(&weights_path, &device, |vb| {
-            model::Lama::load(&vb)
-        })?;
+        let weights_path = resolve_model_path(runtime).await?;
+        Self::load_from_weights_path(weights_path, cpu)
+    }
 
-        Ok(Self { model, device })
+    pub fn load_from_weights_path(weights_path: impl AsRef<Path>, cpu: bool) -> Result<Self> {
+        let (device, dtype, module_dtype) = make_device(cpu);
+        let model = load_model(weights_path.as_ref(), &device, module_dtype)?;
+        Ok(Self {
+            model,
+            device,
+            dtype,
+        })
     }
 
     /// Run inpainting with the manga-tuned default strategy (Crop, 800/128/1280).
@@ -58,13 +61,12 @@ impl Lama {
         mask: &DynamicImage,
         bubble_mask: &DynamicImage,
     ) -> Result<DynamicImage> {
-        self.inference_with_config_and_blocks(
-            image,
-            mask,
-            bubble_mask,
-            None,
-            &HdStrategyConfig::lama_default(),
-        )
+        let cfg = HdStrategyConfig {
+            strategy: HdStrategy::Resize,
+            resize_limit: 800,
+            ..HdStrategyConfig::lama_default()
+        };
+        self.inference_with_config_and_blocks(image, mask, bubble_mask, None, &cfg)
     }
 
     /// Run inpainting with scene text regions as crop-planning hints. LaMa
@@ -77,13 +79,12 @@ impl Lama {
         bubble_mask: &DynamicImage,
         text_blocks: &[TextRegion],
     ) -> Result<DynamicImage> {
-        self.inference_with_config_and_blocks(
-            image,
-            mask,
-            bubble_mask,
-            Some(text_blocks),
-            &HdStrategyConfig::lama_default(),
-        )
+        let cfg = HdStrategyConfig {
+            strategy: HdStrategy::Resize,
+            resize_limit: 800,
+            ..HdStrategyConfig::lama_default()
+        };
+        self.inference_with_config_and_blocks(image, mask, bubble_mask, Some(text_blocks), &cfg)
     }
 
     /// Run inpainting with a caller-supplied [`HdStrategyConfig`]. Use this to
@@ -121,6 +122,7 @@ impl Lama {
             );
         }
 
+        let started = Instant::now();
         let binary_mask = binarize_mask(mask);
         let bubble_mask = bubble_mask.to_luma8();
         let image_rgb = image.to_rgb8();
@@ -147,9 +149,16 @@ impl Lama {
             run_inpaint(&forward, &image_rgb, &binary_mask, Some(&bubble_mask), cfg)?
         };
 
+        tracing::info!(
+            width = image.width(),
+            height = image.height(),
+            resize_limit = cfg.resize_limit,
+            total_ms = started.elapsed().as_millis(),
+            "lama inpainting timings"
+        );
+
         if image.color().has_alpha() {
-            let original_alpha = image.to_rgba8();
-            let alpha = extract_alpha(&original_alpha);
+            let alpha = extract_alpha(&image.to_rgba8());
             let output = restore_alpha_channel(&output_rgb, &alpha, &binary_mask);
             Ok(DynamicImage::ImageRgba8(output))
         } else {
@@ -158,48 +167,55 @@ impl Lama {
     }
 
     #[instrument(level = "debug", skip_all)]
-    fn forward(&self, image: &Tensor, mask: &Tensor) -> Result<Tensor> {
-        self.model.forward(image, mask)
+    fn forward_rgb(&self, image: &RgbImage, mask: &GrayImage) -> Result<RgbImage> {
+        let (image_tensor, mask_tensor) = self.preprocess(image, mask);
+        let output = self.device.memory_persistent_allocations(
+            (image_tensor, mask_tensor),
+            |(image_tensor, mask_tensor)| self.model.forward(image_tensor, mask_tensor),
+        );
+        self.postprocess(output)
     }
 
     #[instrument(level = "debug", skip_all)]
-    fn inference_model(&self, image: &RgbImage, mask: &GrayImage) -> Result<RgbImage> {
-        let (image_tensor, mask_tensor) = self.preprocess(image, mask)?;
-        let output = self.forward(&image_tensor, &mask_tensor)?;
-        self.postprocess(&output)
+    fn preprocess(&self, image: &RgbImage, mask: &GrayImage) -> (Tensor<4>, Tensor<4>) {
+        let (width, height) = (image.width() as usize, image.height() as usize);
+        let plane = width * height;
+        let rgb = image.as_raw();
+        let luma = mask.as_raw();
+        let mut image_data = vec![0.0_f32; 3 * plane];
+        let mut mask_data = vec![0.0_f32; plane];
+
+        for index in 0..plane {
+            mask_data[index] = if luma[index] > 1 { 1.0 } else { 0.0 };
+            for channel in 0..3 {
+                image_data[channel * plane + index] = rgb[index * 3 + channel] as f32 / 255.0;
+            }
+        }
+
+        let mut image_tensor_data = TensorData::new(image_data, [1, 3, height, width]);
+        let mut mask_tensor_data = TensorData::new(mask_data, [1, 1, height, width]);
+        self.device
+            .staging([&mut image_tensor_data, &mut mask_tensor_data].into_iter());
+        let image_tensor = Tensor::<4>::from_data(image_tensor_data, (&self.device, self.dtype));
+        let mask_tensor = Tensor::<4>::from_data(mask_tensor_data, (&self.device, self.dtype));
+        (image_tensor, mask_tensor)
     }
 
     #[instrument(level = "debug", skip_all)]
-    fn preprocess(&self, image: &RgbImage, mask: &GrayImage) -> Result<(Tensor, Tensor)> {
-        let (w, h) = (image.width() as usize, image.height() as usize);
-        let rgb = image.clone().into_raw();
-        let luma = mask.clone().into_raw();
-
-        let image_tensor = (Tensor::from_vec(rgb, (1, h, w, 3), &self.device)?
-            .permute((0, 3, 1, 2))?
-            .to_dtype(DType::F32)?
-            * (1. / 255.))?;
-
-        let mask_tensor = Tensor::from_vec(luma, (1, h, w, 1), &self.device)?
-            .permute((0, 3, 1, 2))?
-            .to_dtype(DType::F32)?
-            .gt(1.0f32)?;
-
-        Ok((image_tensor, mask_tensor))
-    }
-
-    #[instrument(level = "debug", skip_all)]
-    fn postprocess(&self, output: &Tensor) -> Result<RgbImage> {
-        let output = output.squeeze(0)?;
-        let (channels, height, width) = output.dims3()?;
+    fn postprocess(&self, output: Tensor<4>) -> Result<RgbImage> {
+        let output = output
+            .cast(FloatDType::F32)
+            .squeeze_dim::<3>(0)
+            .permute([1, 2, 0]);
+        let [height, width, channels] = output.dims();
         if channels != 3 {
             bail!("expected 3 channels in output, got {channels}");
         }
-        let output = (output * 255.)?
-            .clamp(0., 255.)?
-            .permute((1, 2, 0))?
-            .to_dtype(DType::U8)?;
-        let raw: Vec<u8> = output.flatten_all()?.to_vec1()?;
+
+        let raw = tensor_to_f32_vec((output * 255.0).clamp(0.0, 255.0))?
+            .into_iter()
+            .map(|value| value.round().clamp(0.0, 255.0) as u8)
+            .collect::<Vec<_>>();
         RgbImage::from_raw(width as u32, height as u32, raw)
             .ok_or_else(|| anyhow::anyhow!("failed to create image buffer from model output"))
     }
@@ -207,7 +223,7 @@ impl Lama {
 
 /// [`InpaintForward`] impl used by the HD-strategy dispatcher. Applies the
 /// balloon-fill fast path on a per-crop basis before falling back to the
-/// model forward — flat-background speech bubbles skip the model entirely.
+/// model forward; flat-background speech bubbles skip the model entirely.
 struct LamaForward<'a> {
     lama: &'a Lama,
 }
@@ -237,8 +253,125 @@ impl InpaintForward for LamaForward<'_> {
         if mask.pixels().all(|p| p.0[0] == 0) {
             return Ok(image);
         }
-        self.lama.inference_model(&image, &mask)
+        self.lama.forward_rgb(&image, &mask)
     }
+}
+
+pub async fn prefetch(runtime: &RuntimeManager) -> Result<()> {
+    let _ = resolve_model_path(runtime).await?;
+    Ok(())
+}
+
+async fn resolve_model_path(runtime: &RuntimeManager) -> Result<PathBuf> {
+    runtime
+        .downloads()
+        .huggingface_model(HF_REPO, SAFETENSORS_FILENAME)
+        .await
+        .with_context(|| format!("failed to download {SAFETENSORS_FILENAME} from {HF_REPO}"))
+}
+
+fn load_model(path: &Path, device: &Device, module_dtype: FloatDType) -> Result<model::Lama> {
+    let mut model = model::Lama::new(device);
+    let mut store = SafetensorsStore::from_file(path)
+        .with_from_adapter(PyTorchToBurnAdapter)
+        .with_key_remapping(r"^model\.1\.", "init.")
+        .with_key_remapping(r"^model\.2\.", "down1.")
+        .with_key_remapping(r"^model\.3\.", "down2.")
+        .with_key_remapping(r"^model\.4\.", "down3.")
+        .with_key_remapping(r"^model\.5\.", "blocks.0.")
+        .with_key_remapping(r"^model\.6\.", "blocks.1.")
+        .with_key_remapping(r"^model\.7\.", "blocks.2.")
+        .with_key_remapping(r"^model\.8\.", "blocks.3.")
+        .with_key_remapping(r"^model\.9\.", "blocks.4.")
+        .with_key_remapping(r"^model\.10\.", "blocks.5.")
+        .with_key_remapping(r"^model\.11\.", "blocks.6.")
+        .with_key_remapping(r"^model\.12\.", "blocks.7.")
+        .with_key_remapping(r"^model\.13\.", "blocks.8.")
+        .with_key_remapping(r"^model\.14\.", "blocks.9.")
+        .with_key_remapping(r"^model\.15\.", "blocks.10.")
+        .with_key_remapping(r"^model\.16\.", "blocks.11.")
+        .with_key_remapping(r"^model\.17\.", "blocks.12.")
+        .with_key_remapping(r"^model\.18\.", "blocks.13.")
+        .with_key_remapping(r"^model\.19\.", "blocks.14.")
+        .with_key_remapping(r"^model\.20\.", "blocks.15.")
+        .with_key_remapping(r"^model\.21\.", "blocks.16.")
+        .with_key_remapping(r"^model\.22\.", "blocks.17.")
+        .with_key_remapping(r"^model\.24\.", "up1.conv.")
+        .with_key_remapping(r"^model\.25\.", "up1.bn.")
+        .with_key_remapping(r"^model\.27\.", "up2.conv.")
+        .with_key_remapping(r"^model\.28\.", "up2.bn.")
+        .with_key_remapping(r"^model\.30\.", "up3.conv.")
+        .with_key_remapping(r"^model\.31\.", "up3.bn.")
+        .with_key_remapping(r"^model\.34\.", "final_conv.")
+        .with_key_remapping(r"\.ffc\.(convl2l|convl2g|convg2l)\.", ".ffc.$1.conv.")
+        .with_key_remapping(r"\.convg2g\.conv1\.0\.", ".convg2g.conv1.conv.")
+        .with_key_remapping(r"\.convg2g\.conv1\.1\.", ".convg2g.conv1.bn.")
+        .with_key_remapping(r"(^|\.)(bn_l|bn_g|bn)\.weight$", "$1$2.gamma")
+        .with_key_remapping(r"(^|\.)(bn_l|bn_g|bn)\.bias$", "$1$2.beta")
+        .skip_enum_variants(true)
+        .allow_partial(false);
+    let result = model
+        .load_from(&mut store)
+        .context("failed to mmap/load LaMa safetensors through Burn store")?;
+    if !result.errors.is_empty() {
+        bail!("failed to load LaMa tensors: {}", result);
+    }
+    if !result.missing.is_empty() {
+        bail!("LaMa checkpoint is missing tensors: {}", result);
+    }
+
+    let model = cast_module_float(model, module_dtype);
+    if std::env::var_os("KOHARU_LAMA_FOLD_BN").is_some() {
+        Ok(model.fuse_batch_norms())
+    } else {
+        Ok(model)
+    }
+}
+
+fn make_device(cpu: bool) -> (Device, DType, FloatDType) {
+    #[cfg(feature = "cuda")]
+    {
+        if !cpu {
+            let mut device = Device::cuda(0);
+            if let Err(error) = device.configure(FloatDType::F16) {
+                tracing::warn!(%error, "failed to configure Burn CUDA default dtype to F16");
+            }
+            return (device, DType::F16, FloatDType::F16);
+        }
+    }
+
+    let mut device = Device::wgpu(if cpu {
+        DeviceKind::Cpu
+    } else {
+        DeviceKind::DefaultDevice
+    });
+    if let Err(error) = device.configure(FloatDType::F32) {
+        tracing::warn!(%error, "failed to configure Burn WGPU default dtype to F32");
+    }
+    (device, DType::F32, FloatDType::F32)
+}
+
+fn cast_module_float<M: Module>(module: M, dtype: FloatDType) -> M {
+    struct CastMapper {
+        dtype: FloatDType,
+    }
+
+    impl ModuleMapper for CastMapper {
+        fn map_float<const D: usize>(&mut self, param: Param<Tensor<D>>) -> Param<Tensor<D>> {
+            let (id, tensor, mapper) = param.consume();
+            Param::from_mapped_value(id, tensor.cast(self.dtype), mapper)
+        }
+    }
+
+    module.map(&mut CastMapper { dtype })
+}
+
+fn tensor_to_f32_vec<const D: usize>(tensor: Tensor<D>) -> Result<Vec<f32>> {
+    tensor
+        .cast(FloatDType::F32)
+        .into_data()
+        .into_vec::<f32>()
+        .context("failed to extract burn tensor data as f32")
 }
 
 fn crop_windows_from_text_blocks(text_blocks: &[TextRegion], width: u32, height: u32) -> Vec<Xyxy> {

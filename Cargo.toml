@@ -104,20 +104,6 @@ once_cell = "1.21"
 libloading = "0.8.9"
 num_cpus = "1.17"
 rustfft = "6.4"
-cudarc = { version = "0.19.4", features = [
-    "cuda-version-from-build-system",
-    "cufft",
-    "std",
-    "cublas",
-    "cublaslt",
-    "curand",
-    "cudnn",
-    "driver",
-    "dynamic-loading",
-    "nvrtc",
-    "f16",
-    "f8",
-] }
 objc2 = "0.6"
 objc2-metal = "0.3"
 objc2-metal-performance-shaders = "0.3"

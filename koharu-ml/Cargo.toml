@@ -33,7 +33,6 @@ tracing-subscriber = { workspace = true }
 tokio = { workspace = true }
 rustfft = { workspace = true }
 rayon = { workspace = true }
-cudarc = { workspace = true, optional = true }
 objc2 = { workspace = true, optional = true }
 objc2-metal = { workspace = true, optional = true }
 objc2-metal-performance-shaders = { workspace = true, optional = true }
@@ -49,7 +48,6 @@ cuda = [
     "candle-nn/cudnn",
     "candle-transformers/cuda",
     "candle-transformers/cudnn",
-    "cudarc",
     "candle-flash-attn",
     "candle-flash-attn/cudnn",
 ]
