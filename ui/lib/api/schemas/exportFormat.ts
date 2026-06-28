@@ -11,4 +11,6 @@ export const ExportFormat = {
   psd: 'psd',
   rendered: 'rendered',
   inpainted: 'inpainted',
+  source_texts: 'source_texts',
+  translations: 'translations',
 } as const

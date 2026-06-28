@@ -7,15 +7,21 @@
 //! - `POST   /projects/import` — extract a `.khr` archive into a fresh dir + open
 //! - `PUT    /projects/current` — open a managed project by `id`
 //! - `DELETE /projects/current` — close current session
-//! - `POST   /projects/current/export` — export current; returns bytes
+//! - `POST /projects/current/export` — export current; returns bytes
+//! - `POST /projects/current/import-translations` — read a JSON document
+//!   of per-page texts and write them to the translation slot of the
+//!   matching text nodes. Defensive JSON parse.
 
+use anyhow::Context as _;
 use axum::Json;
 use axum::body::{Body, Bytes};
 use axum::extract::{Path, State};
 use axum::http::{HeaderValue, header};
 use axum::response::{IntoResponse, Response};
 use koharu_app::projects as project_dirs;
-use koharu_core::{ImageRole, PageId, ProjectSummary};
+use koharu_core::{
+    ImageRole, NodeDataPatch, NodeId, NodePatch, Op, PageId, ProjectSummary, TextDataPatch,
+};
 use serde::{Deserialize, Serialize};
 use utoipa_axum::{router::OpenApiRouter, routes};
 
@@ -31,6 +37,7 @@ pub fn router() -> OpenApiRouter<AppState> {
         .routes(routes!(delete_current_project))
         .routes(routes!(delete_project))
         .routes(routes!(export_current_project))
+        .routes(routes!(import_translations))
 }
 
 // ---------------------------------------------------------------------------
@@ -249,6 +256,10 @@ pub enum ExportFormat {
     Rendered,
     /// One `.png` per page (the Inpainted layer).
     Inpainted,
+    /// Single combined JSON with OCR'd source text for all pages.
+    SourceTexts,
+    /// Single combined JSON with the current translation text for all pages.
+    Translations,
 }
 
 #[utoipa::path(
@@ -337,7 +348,106 @@ async fn export_current_project(
             )
             .await
         }
+        ExportFormat::SourceTexts => {
+            export_texts(
+                &session,
+                req.pages.as_deref(),
+                &project_name,
+                "source-texts",
+                TextSlot::Source,
+            )
+            .await
+        }
+        ExportFormat::Translations => {
+            export_texts(
+                &session,
+                req.pages.as_deref(),
+                &project_name,
+                "translations",
+                TextSlot::Translation,
+            )
+            .await
+        }
     }
+}
+
+#[derive(Debug, Serialize, utoipa::ToSchema)]
+#[serde(rename_all = "camelCase")]
+struct TextsPage {
+    /// 1-indexed page number (matches array position in `pages`).
+    page: usize,
+    texts: Vec<String>,
+}
+
+#[derive(Debug, Serialize, utoipa::ToSchema)]
+#[serde(rename_all = "camelCase")]
+struct TextsExport {
+    pages: Vec<TextsPage>,
+}
+
+/// Which field of a Text node to read on export. Both exports share the
+/// same `{ pages: [{ page, texts: [...] }] }` shape; the only difference
+/// is which string lands in `texts[]`. Symmetric with `import-translations`.
+#[derive(Debug, Clone, Copy)]
+enum TextSlot {
+    Source,
+    Translation,
+}
+
+fn text_node_text(data: &koharu_core::scene::TextData, slot: TextSlot) -> Option<&str> {
+    let raw = match slot {
+        TextSlot::Source => data.text.as_deref(),
+        TextSlot::Translation => data.translation.as_deref(),
+    };
+    raw.map(str::trim).filter(|s| !s.is_empty())
+}
+
+async fn export_texts(
+    session: &std::sync::Arc<koharu_app::ProjectSession>,
+    pages: Option<&[PageId]>,
+    project_name: &str,
+    filename_suffix: &str,
+    slot: TextSlot,
+) -> ApiResult<Response> {
+    let page_ids = resolve_page_ids(session, pages)?;
+    if page_ids.is_empty() {
+        return Err(ApiError::bad_request("no pages in selection"));
+    }
+    let session_c = session.clone();
+    let page_ids_c = page_ids.clone();
+    let payload = tokio::task::spawn_blocking(move || -> anyhow::Result<Vec<u8>> {
+        let scene = session_c.scene.read();
+        let mut pages_out: Vec<TextsPage> = Vec::with_capacity(page_ids_c.len());
+        for (i, id) in page_ids_c.iter().enumerate() {
+            let page = scene
+                .pages
+                .get(id)
+                .context(format!("page {id} not found"))?;
+            let mut texts: Vec<String> = Vec::new();
+            for (_node_id, node) in page.nodes.iter() {
+                if let koharu_core::scene::NodeKind::Text(text_data) = &node.kind
+                    && let Some(s) = text_node_text(text_data, slot)
+                {
+                    texts.push(s.to_string());
+                }
+            }
+            pages_out.push(TextsPage { page: i + 1, texts });
+        }
+        let export = TextsExport { pages: pages_out };
+        let bytes = serde_json::to_vec_pretty(&export)?;
+        Ok(bytes)
+    })
+    .await
+    .map_err(|e| ApiError::internal(anyhow::Error::new(e)))?
+    .map_err(ApiError::internal)?;
+
+    let base = sanitize(project_name, "export");
+    let filename = format!("{base}-{filename_suffix}.json");
+    Ok(bytes_response_with_filename(
+        payload,
+        &filename,
+        "application/json",
+    ))
 }
 
 async fn export_image_role(
@@ -371,6 +481,221 @@ async fn export_image_role(
         ));
     }
     files_to_response(files, project_name, role_ext(role))
+}
+
+// ---------------------------------------------------------------------------
+// Import translations — write per-page texts into each text node's
+// translation slot. The payload is user-supplied JSON; we
+// defensively extract the JSON object from markdown fences or
+// surrounding prose so hand-edited or model-generated payloads
+// both work.
+// ---------------------------------------------------------------------------
+
+#[derive(Debug, Clone, Serialize, Deserialize, utoipa::ToSchema)]
+#[serde(rename_all = "camelCase")]
+pub struct ImportTranslationsRequest {
+    /// User-supplied JSON text. May be a raw object, wrapped in a
+    /// markdown ```json fence, or surrounded by prose. The server
+    /// extracts the first JSON object it can find.
+    pub payload: String,
+}
+
+#[derive(Debug, Clone, Serialize, utoipa::ToSchema)]
+#[serde(rename_all = "camelCase")]
+pub struct ImportTranslationsSkip {
+    pub page: usize,
+    pub reason: String,
+}
+
+#[derive(Debug, Clone, Serialize, utoipa::ToSchema)]
+#[serde(rename_all = "camelCase")]
+pub struct ImportTranslationsResponse {
+    /// Number of pages whose translations were applied.
+    pub applied: usize,
+    /// Per-page reasons for pages that were skipped (missing from response,
+    /// length mismatch, etc.). Not an error — partial success is normal.
+    pub skipped: Vec<ImportTranslationsSkip>,
+    /// Top-level parse errors (e.g. could not extract JSON). Empty on success.
+    pub errors: Vec<String>,
+}
+
+/// Schema for the import payload. Every field is `#[serde(default)]` so the
+/// parser tolerates partial/garbled input gracefully.
+#[derive(Debug, Clone, Default, Deserialize, utoipa::ToSchema)]
+#[serde(rename_all = "camelCase")]
+struct TranslationsResponse {
+    #[serde(default)]
+    pages: Vec<TranslatedPage>,
+}
+
+#[derive(Debug, Clone, Default, Deserialize, utoipa::ToSchema)]
+#[serde(rename_all = "camelCase")]
+struct TranslatedPage {
+    #[serde(default)]
+    page: usize,
+    #[serde(default)]
+    texts: Vec<String>,
+}
+
+#[utoipa::path(
+    post,
+    path = "/projects/current/import-translations",
+    request_body = ImportTranslationsRequest,
+    responses((status = 200, body = ImportTranslationsResponse))
+)]
+async fn import_translations(
+    State(app): State<AppState>,
+    Json(req): Json<ImportTranslationsRequest>,
+) -> ApiResult<Json<ImportTranslationsResponse>> {
+    let session = app
+        .current_session()
+        .ok_or_else(|| ApiError::bad_request("no project open"))?;
+
+    let json_text = match extract_json(&req.payload) {
+        Some(s) => s.to_string(),
+        None => {
+            return Ok(Json(ImportTranslationsResponse {
+                applied: 0,
+                skipped: Vec::new(),
+                errors: vec!["could not locate a JSON object in the payload".to_string()],
+            }));
+        }
+    };
+
+    let parsed: TranslationsResponse = match serde_json::from_str(&json_text) {
+        Ok(v) => v,
+        Err(e) => {
+            return Ok(Json(ImportTranslationsResponse {
+                applied: 0,
+                skipped: Vec::new(),
+                errors: vec![format!("failed to parse JSON: {e}")],
+            }));
+        }
+    };
+
+    // Build the batch of `UpdateNode` ops on a blocking thread (scene lock
+    // + scene iteration), then apply via the shared history pipeline so the
+    // changes land in one undoable entry.
+    let session_c = session.clone();
+    let build = tokio::task::spawn_blocking(
+        move || -> anyhow::Result<(Vec<Op>, ImportTranslationsResponse)> {
+            let scene = session_c.scene.read();
+            let mut ops: Vec<Op> = Vec::new();
+            let mut applied = 0usize;
+            let mut skipped: Vec<ImportTranslationsSkip> = Vec::new();
+
+            for (page_idx, (page_id, page)) in scene.pages.iter().enumerate() {
+                let page_num = page_idx + 1;
+
+                // Replicate the exporter's collection rule: iterate nodes in
+                // insertion order, keep only Text nodes with non-empty trimmed text.
+                let text_node_ids: Vec<NodeId> = page
+                    .nodes
+                    .iter()
+                    .filter_map(|(node_id, node)| match &node.kind {
+                        koharu_core::scene::NodeKind::Text(td) => {
+                            text_node_text(td, TextSlot::Source).map(|_| *node_id)
+                        }
+                        _ => None,
+                    })
+                    .collect();
+
+                if text_node_ids.is_empty() {
+                    continue;
+                }
+
+                let Some(entry) = parsed.pages.iter().find(|p| p.page == page_num) else {
+                    skipped.push(ImportTranslationsSkip {
+                        page: page_num,
+                        reason: "page missing from payload".to_string(),
+                    });
+                    continue;
+                };
+
+                if entry.texts.len() != text_node_ids.len() {
+                    skipped.push(ImportTranslationsSkip {
+                        page: page_num,
+                        reason: format!(
+                            "length mismatch: expected {}, got {}",
+                            text_node_ids.len(),
+                            entry.texts.len()
+                        ),
+                    });
+                    continue;
+                }
+
+                for (node_id, text) in text_node_ids.iter().zip(entry.texts.iter()) {
+                    ops.push(Op::UpdateNode {
+                        page: *page_id,
+                        id: *node_id,
+                        patch: NodePatch {
+                            data: Some(NodeDataPatch::Text(TextDataPatch {
+                                translation: Some(Some(text.clone())),
+                                ..Default::default()
+                            })),
+                            transform: None,
+                            visible: None,
+                        },
+                        prev: NodePatch::default(),
+                    });
+                }
+                applied += 1;
+            }
+
+            let summary = ImportTranslationsResponse {
+                applied,
+                skipped,
+                errors: Vec::new(),
+            };
+            Ok((ops, summary))
+        },
+    );
+
+    let (ops, mut summary) = build
+        .await
+        .map_err(|e| ApiError::internal(anyhow::Error::new(e)))?
+        .map_err(ApiError::internal)?;
+
+    if !ops.is_empty() {
+        let op = if ops.len() == 1 {
+            ops.into_iter().next().unwrap()
+        } else {
+            Op::Batch {
+                ops,
+                label: "Import translations".to_string(),
+            }
+        };
+        if let Err(e) = app.apply(op) {
+            summary.errors.push(format!("failed to apply: {e:#}"));
+        }
+    }
+
+    Ok(Json(summary))
+}
+
+/// Locate a JSON object in arbitrary text input. Tries:
+/// 1. a ```json ... ``` fenced block
+/// 2. a generic ``` ... ``` fenced block
+/// 3. the substring from the first `{` to the last `}`
+fn extract_json(input: &str) -> Option<&str> {
+    if let Some(start) = input.find("```json") {
+        let after = &input[start + 7..];
+        if let Some(end) = after.find("```") {
+            return Some(after[..end].trim());
+        }
+    }
+    if let Some(start) = input.find("```") {
+        let after = &input[start + 3..];
+        if let Some(end) = after.find("```") {
+            return Some(after[..end].trim());
+        }
+    }
+    if let (Some(open), Some(close)) = (input.find('{'), input.rfind('}'))
+        && close > open
+    {
+        return Some(input[open..=close].trim());
+    }
+    None
 }
 
 fn resolve_page_ids(
@@ -454,5 +779,36 @@ fn sanitize(name: &str, fallback: &str) -> String {
         fallback.to_string()
     } else {
         s
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::extract_json;
+
+    #[test]
+    fn extracts_from_json_fence() {
+        let input = "Here you go:\n```json\n{\"pages\":[]}\n```\nDone.";
+        assert_eq!(extract_json(input), Some("{\"pages\":[]}"));
+    }
+
+    #[test]
+    fn extracts_from_generic_fence() {
+        let input = "```\n{\"pages\":[]}\n```";
+        assert_eq!(extract_json(input), Some("{\"pages\":[]}"));
+    }
+
+    #[test]
+    fn extracts_first_brace_to_last_brace_as_fallback() {
+        let input = "Some prose. {\"pages\":[{\"page\":1,\"texts\":[]}]} trailing.";
+        assert_eq!(
+            extract_json(input),
+            Some("{\"pages\":[{\"page\":1,\"texts\":[]}]}")
+        );
+    }
+
+    #[test]
+    fn returns_none_when_no_braces() {
+        assert_eq!(extract_json("no json here"), None);
     }
 }

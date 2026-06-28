@@ -24,6 +24,7 @@ import type {
   AddImageLayerResponse,
   AppConfig,
   AppEvent,
+  ImportTranslationsResponse,
   CodexAuthStatus,
   CodexDeviceLogin,
   CodexDeviceLoginStatus,
@@ -751,6 +752,24 @@ export const getPutCurrentProjectResponseMock = (
 
 export const getExportCurrentProjectResponseMock = (): ArrayBuffer =>
   new ArrayBuffer(faker.number.int({ min: 1, max: 64 }))
+
+export const getImportTranslationsResponseMock = (
+  overrideResponse: Partial<Extract<ImportTranslationsResponse, object>> = {},
+): ImportTranslationsResponse => ({
+  applied: faker.number.int({ min: 0 }),
+  errors: Array.from(
+    { length: faker.number.int({ min: 1, max: 10 }) },
+    (_, i) => i + 1,
+  ).map(() => faker.string.alpha({ length: { min: 10, max: 20 } })),
+  skipped: Array.from(
+    { length: faker.number.int({ min: 1, max: 10 }) },
+    (_, i) => i + 1,
+  ).map(() => ({
+    page: faker.number.int({ min: 0 }),
+    reason: faker.string.alpha({ length: { min: 10, max: 20 } }),
+  })),
+  ...overrideResponse,
+})
 
 export const getImportProjectResponseMock = (
   overrideResponse: Partial<Extract<ProjectSummary, object>> = {},
@@ -1981,6 +2000,31 @@ export const getDeleteCurrentProjectMockHandler = (
   )
 }
 
+export const getImportTranslationsMockHandler = (
+  overrideResponse?:
+    | ImportTranslationsResponse
+    | ((
+        info: Parameters<Parameters<typeof http.post>[1]>[0],
+      ) => Promise<ImportTranslationsResponse> | ImportTranslationsResponse),
+  options?: RequestHandlerOptions,
+) => {
+  return http.post(
+    '*/projects/current/import-translations',
+    async (info: Parameters<Parameters<typeof http.post>[1]>[0]) => {
+      await delay(0)
+      return HttpResponse.json(
+        overrideResponse !== undefined
+          ? typeof overrideResponse === 'function'
+            ? await overrideResponse(info)
+            : overrideResponse
+          : getImportTranslationsResponseMock(),
+        { status: 200 },
+      )
+    },
+    options,
+  )
+}
+
 export const getExportCurrentProjectMockHandler = (
   overrideResponse?:
     | ArrayBuffer
@@ -2145,6 +2189,7 @@ export const getDefaultMock = () => [
   getCreateProjectMockHandler(),
   getPutCurrentProjectMockHandler(),
   getDeleteCurrentProjectMockHandler(),
+  getImportTranslationsMockHandler(),
   getExportCurrentProjectMockHandler(),
   getImportProjectMockHandler(),
   getDeleteProjectMockHandler(),

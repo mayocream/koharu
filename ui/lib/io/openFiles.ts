@@ -111,6 +111,32 @@ export async function openKhrFile(): Promise<File | null> {
   }
 }
 
+/** Pick a single JSON file. */
+export async function openJsonFile(): Promise<File | null> {
+  if (isTauri()) {
+    const { open } = await import('@tauri-apps/plugin-dialog')
+    const picked = await open({
+      multiple: false,
+      filters: [{ name: 'JSON', extensions: ['json'] }],
+    })
+    if (!picked || typeof picked !== 'string') return null
+    const [file] = await readTauriFiles([picked])
+    return file ?? null
+  }
+  const { fileOpen } = await import('browser-fs-access')
+  try {
+    const result = await fileOpen({
+      multiple: false,
+      extensions: ['.json'],
+      description: 'JSON',
+    })
+    return Array.isArray(result) ? (result[0] ?? null) : result
+  } catch (e) {
+    if (isAbort(e)) return null
+    throw e
+  }
+}
+
 // ---------------------------------------------------------------------------
 // Helpers
 // ---------------------------------------------------------------------------
