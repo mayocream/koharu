@@ -32,6 +32,7 @@ import { useJobsStore } from '@/lib/stores/jobsStore'
 import { usePreferencesStore } from '@/lib/stores/preferencesStore'
 import { useSelectionStore } from '@/lib/stores/selectionStore'
 import { cn } from '@/lib/utils'
+import { useHotkeys } from 'react-hotkeys-hook'
 
 export function TextBlocksPanel() {
   const { t } = useTranslation()

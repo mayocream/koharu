@@ -14,6 +14,7 @@ import { getGetPageThumbnailUrl } from '@/lib/api/default/default'
 import { applyOp } from '@/lib/io/scene'
 import { ops } from '@/lib/ops'
 import { useSelectionStore } from '@/lib/stores/selectionStore'
+import { useHotkeys } from 'react-hotkeys-hook'
 
 const THUMBNAIL_DPR =
   typeof window !== 'undefined' ? Math.min(Math.ceil(window.devicePixelRatio || 1), 3) : 2
@@ -125,13 +126,21 @@ export function Navigator() {
     (id: string) => {
       void handleDeletePages(new Set([id]))
     },
-    [handleDeletePages],
+    [handleDeletePages,],
   )
 
   const handleBatchDelete = useCallback(() => {
-    const { selectedPageIds } = useSelectionStore.getState()
     void handleDeletePages(selectedPageIds)
-  }, [handleDeletePages])
+  }, [handleDeletePages, selectedPageIds])
+
+  const delHotkeyRef = useHotkeys(
+    'delete',
+    () => {
+      handleBatchDelete()
+    },
+    { enabled: selectedPageIds.size !== 0 },
+    [handleDeletePages],
+  )
 
   const virtualizer = useVirtualizer({
     count: totalPages,
@@ -142,6 +151,8 @@ export function Navigator() {
 
   return (
     <div
+      tabIndex={-1}
+      ref={delHotkeyRef}
       data-testid='navigator-panel'
       data-total-pages={totalPages}
       className='flex h-full min-h-0 w-full flex-col bg-muted/50'
@@ -202,7 +213,6 @@ export function Navigator() {
                   onSelect={handleSelect}
                   canDelete={totalPages > 1}
                   onDelete={handleDeletePage}
-                  onBatchDelete={handleBatchDelete}
                 />
               </div>
             )
@@ -223,7 +233,6 @@ type PagePreviewProps = {
   onSelect: (id: string, e: React.MouseEvent | React.KeyboardEvent) => void
   canDelete: boolean
   onDelete: (id: string) => void
-  onBatchDelete: () => void
 }
 
 const PagePreview = memo(function PagePreview({
@@ -234,7 +243,6 @@ const PagePreview = memo(function PagePreview({
   onSelect,
   canDelete,
   onDelete,
-  onBatchDelete,
 }: PagePreviewProps) {
   const src = pageId ? `${getGetPageThumbnailUrl(pageId)}?size=${200 * THUMBNAIL_DPR}` : undefined
   const { t } = useTranslation()
@@ -248,9 +256,6 @@ const PagePreview = memo(function PagePreview({
         if (e.key === 'Enter' || e.key === ' ') {
           e.preventDefault()
           onSelect(pageId, e)
-        } else if (e.key === 'Delete') {
-          e.preventDefault()
-          onBatchDelete()
         }
       }}
       data-testid={`navigator-page-${index}`}
