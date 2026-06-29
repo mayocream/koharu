@@ -23,7 +23,7 @@ import {
 import { useScene } from '@/hooks/useScene'
 import { getConfig, startPipeline } from '@/lib/api/default/default'
 import { isTauri, openExternalUrl } from '@/lib/backend'
-import { exportCurrentProjectAs, importPages } from '@/lib/io/pagesIo'
+import { exportCurrentProjectAs, importPages, importTranslations } from '@/lib/io/pagesIo'
 import { closeProject, redoOp, selectAllTextNodesOnCurrentPage, undoOp } from '@/lib/io/scene'
 import { formatShortcutForDisplay, getPlatform } from '@/lib/shortcutUtils'
 import { useEditorUiStore } from '@/lib/stores/editorUiStore'
@@ -164,6 +164,41 @@ export function MenuBar() {
       onSelect: () => void exportCurrentProjectAs('rendered'),
       disabled: !hasScene,
       testId: 'menu-file-export-all-rendered',
+    },
+    {
+      label: t('menu.exportSourceTexts'),
+      onSelect: () => void exportCurrentProjectAs('source_texts'),
+      disabled: !hasScene,
+      testId: 'menu-file-export-source-texts',
+    },
+    {
+      label: t('menu.exportTranslations'),
+      onSelect: () => void exportCurrentProjectAs('translations'),
+      disabled: !hasScene,
+      testId: 'menu-file-export-translations',
+    },
+    {
+      label: t('menu.importTranslations'),
+      onSelect: async () => {
+        const result = await importTranslations()
+        if (!result) return
+        if (result.errors.length > 0) {
+          window.alert(t('menu.importTranslationsErrors', { errors: result.errors.join('\n') }))
+          return
+        }
+        const skipSummary = result.skipped
+          .map((s) => `Page ${s.page}: ${s.reason}`)
+          .join('\n')
+        window.alert(
+          t('menu.importTranslationsDone', {
+            applied: result.applied,
+            skipped: result.skipped.length,
+            details: skipSummary,
+          }),
+        )
+      },
+      disabled: !hasScene,
+      testId: 'menu-file-import-translations',
     },
   ]
 

@@ -1,8 +1,8 @@
 'use client'
 
-import { getGetSceneJsonQueryKey } from '@/lib/api/default/default'
-import type { SceneSnapshot } from '@/lib/api/schemas'
-import { openImageFiles, openImageFolder, openKhrFile } from '@/lib/io/openFiles'
+import { getGetSceneJsonQueryKey, importTranslations as importTranslationsApi } from '@/lib/api/default/default'
+import type { ImportTranslationsResponse, SceneSnapshot } from '@/lib/api/schemas'
+import { openImageFiles, openImageFolder, openJsonFile, openKhrFile } from '@/lib/io/openFiles'
 import { saveBlob } from '@/lib/io/saveBlob'
 import { exportProject, uploadKhrArchive, uploadPages, uploadPagesByPaths } from '@/lib/io/scene'
 import { queryClient } from '@/lib/queryClient'
@@ -43,11 +43,16 @@ export async function importKhrFile(): Promise<void> {
 // Export (server returns bytes; saveBlob dispatches Tauri-dialog / web-FS)
 // ---------------------------------------------------------------------------
 
-const exportExtension: Record<'khr' | 'psd' | 'rendered' | 'inpainted', string> = {
+const exportExtension: Record<
+  'khr' | 'psd' | 'rendered' | 'inpainted' | 'source_texts' | 'translations',
+  string
+> = {
   khr: 'khr',
   psd: 'zip',
   rendered: 'zip',
   inpainted: 'zip',
+  source_texts: 'json',
+  translations: 'json',
 }
 
 /** Sanitise an arbitrary project name for use as a filename stem. */
@@ -66,7 +71,7 @@ function currentProjectName(): string | undefined {
 }
 
 export async function exportCurrentProjectAs(
-  format: 'khr' | 'psd' | 'rendered' | 'inpainted',
+  format: 'khr' | 'psd' | 'rendered' | 'inpainted' | 'source_texts' | 'translations',
   pages?: string[],
 ): Promise<void> {
   try {
@@ -82,4 +87,22 @@ export async function exportCurrentProjectAs(
     console.error('Export failed:', err)
     throw err
   }
+}
+
+/**
+ * Import a translations document. The user picks a JSON file; the server
+ * applies the `texts[]` payload to each text node's translation slot in
+ * reading order, matching pages by their 1-indexed `page` number.
+ *
+ * Returns a summary describing how many pages were applied and which were
+ * skipped. The caller is responsible for surfacing the summary to the user
+ * (the menu bar uses `alert()` as a placeholder).
+ */
+export async function importTranslations(): Promise<ImportTranslationsResponse | null> {
+  const file = await openJsonFile()
+  if (!file) return null
+  const payload = await file.text()
+  const result = await importTranslationsApi({ payload })
+  await queryClient.invalidateQueries({ queryKey: getGetSceneJsonQueryKey() })
+  return result
 }

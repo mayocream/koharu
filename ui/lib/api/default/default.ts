@@ -24,6 +24,8 @@ import type {
   AddImageLayerResponse,
   AppConfig,
   AppEvent,
+  ImportTranslationsRequest,
+  ImportTranslationsResponse,
   CodexAuthStatus,
   CodexDeviceLogin,
   CodexImageGenerationOptions,
@@ -3309,6 +3311,83 @@ export const useImportProject = <TError = unknown, TContext = unknown>(
   queryClient?: QueryClient,
 ): UseMutationResult<Awaited<ReturnType<typeof importProject>>, TError, void, TContext> => {
   return useMutation(getImportProjectMutationOptions(options), queryClient)
+}
+export const getImportTranslationsUrl = () => {
+  return `/api/v1/projects/current/import-translations`
+}
+
+export const importTranslations = async (
+  importTranslationsRequest: ImportTranslationsRequest,
+  options?: RequestInit,
+): Promise<ImportTranslationsResponse> => {
+  return fetchApi<ImportTranslationsResponse>(getImportTranslationsUrl(), {
+    ...options,
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', ...options?.headers },
+    body: JSON.stringify(importTranslationsRequest),
+  })
+}
+
+export const getImportTranslationsMutationOptions = <
+  TError = unknown,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof importTranslations>>,
+    TError,
+    { data: ImportTranslationsRequest },
+    TContext
+  >
+  request?: SecondParameter<typeof fetchApi>
+}): UseMutationOptions<
+  Awaited<ReturnType<typeof importTranslations>>,
+  TError,
+  { data: ImportTranslationsRequest },
+  TContext
+> => {
+  const mutationKey = ['importTranslations']
+  const { mutation: mutationOptions, request: requestOptions } = options
+    ? options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey
+      ? options
+      : { ...options, mutation: { ...options.mutation, mutationKey } }
+    : { mutation: { mutationKey }, request: undefined }
+
+  const mutationFn: MutationFunction<
+    Awaited<ReturnType<typeof importTranslations>>,
+    { data: ImportTranslationsRequest }
+  > = (props) => {
+    const { data } = props ?? {}
+
+    return importTranslations(data, requestOptions)
+  }
+
+  return { mutationFn, ...mutationOptions }
+}
+
+export type ImportTranslationsMutationResult = NonNullable<
+  Awaited<ReturnType<typeof importTranslations>>
+>
+export type ImportTranslationsMutationBody = ImportTranslationsRequest
+export type ImportTranslationsMutationError = unknown
+
+export const useImportTranslations = <TError = unknown, TContext = unknown>(
+  options?: {
+    mutation?: UseMutationOptions<
+      Awaited<ReturnType<typeof importTranslations>>,
+      TError,
+      { data: ImportTranslationsRequest },
+      TContext
+    >
+    request?: SecondParameter<typeof fetchApi>
+  },
+  queryClient?: QueryClient,
+): UseMutationResult<
+  Awaited<ReturnType<typeof importTranslations>>,
+  TError,
+  { data: ImportTranslationsRequest },
+  TContext
+> => {
+  return useMutation(getImportTranslationsMutationOptions(options), queryClient)
 }
 export const getDeleteProjectUrl = (id: string) => {
   return `/api/v1/projects/${id}`
