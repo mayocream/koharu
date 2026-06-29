@@ -1,0 +1,7 @@
+{
+  "steps": ["llm"],
+  "targetLanguage": "zh-CN",
+  "translationContext": {
+    "enabled": false
+  }
+}

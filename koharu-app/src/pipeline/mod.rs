@@ -12,7 +12,7 @@ mod engines;
 pub use artifacts::Artifact;
 pub use engine::{
     BoxFuture, Engine, EngineCtx, EngineInfo, EngineLoadFn, PipelineRunOptions, Registry,
-    build_order,
+    TranslationContextConfig, build_order,
 };
 pub use engines::support;
 

@@ -29,6 +29,10 @@ struct MessagesRequest<'a> {
 }
 
 impl AnyProvider for ClaudeProvider {
+    fn supports_translation_context(&self) -> bool {
+        true
+    }
+
     fn translate<'a>(
         &'a self,
         source: &'a str,

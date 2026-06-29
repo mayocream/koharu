@@ -66,6 +66,10 @@ pub async fn list_models(
 }
 
 impl AnyProvider for OpenAiCompatibleProvider {
+    fn supports_translation_context(&self) -> bool {
+        true
+    }
+
     fn translate<'a>(
         &'a self,
         source: &'a str,
