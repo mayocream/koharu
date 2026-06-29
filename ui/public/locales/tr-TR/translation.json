@@ -240,7 +240,8 @@
     "readingOrder": "Okuma Sırası",
     "readingOrderRtl": "Sağdan Sola (RTL)",
     "readingOrderLtr": "Soldan Sağa (LTR)",
-    "readingOrderCustom": "Özel"
+    "readingOrderCustom": "Özel",
+    "ocrTooltip": "Bu blok için OCR çalıştır"
   },
   "workspace": {
     "importPrompt": "Düzenlemeye başlamak için bir sayfa içe aktarın.",
