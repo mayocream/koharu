@@ -21,7 +21,9 @@ import {
   MenubarSubTrigger,
 } from '@/components/ui/menubar'
 import { useScene } from '@/hooks/useScene'
-import { getConfig, startPipeline } from '@/lib/api/default/default'
+import { getConfig } from '@/lib/api/default/default'
+import { chapterTranslationPipelineOptions } from '@/lib/pipeline/chapterContextSettings'
+import { startPipelineRun } from '@/lib/pipeline/startPipelineRun'
 import { isTauri, openExternalUrl } from '@/lib/backend'
 import { exportCurrentProjectAs, importPages } from '@/lib/io/pagesIo'
 import { closeProject, redoOp, selectAllTextNodesOnCurrentPage, undoOp } from '@/lib/io/scene'
@@ -99,20 +101,21 @@ export function MenuBar() {
     ].filter((s): s is string => !!s)
     const editor = useEditorUiStore.getState()
     const prefs = usePreferencesStore.getState()
-    await startPipeline({
+    await startPipelineRun({
       steps,
       pages: opts.pageId ? [opts.pageId] : undefined,
       targetLanguage: editor.selectedLanguage,
       systemPrompt: prefs.customSystemPrompt,
       defaultFont: prefs.defaultFont,
       readingOrder: editor.readingOrder === 'custom' ? undefined : editor.readingOrder,
+      ...chapterTranslationPipelineOptions(prefs),
     })
   }
 
   const runInpaint = async (pageId: string) => {
     const cfg = await getConfig()
     if (!cfg.pipeline?.inpainter) return
-    await startPipeline({ steps: [cfg.pipeline.inpainter], pages: [pageId] })
+    await startPipelineRun({ steps: [cfg.pipeline.inpainter], pages: [pageId] })
   }
 
   const runCustomPipeline = async (opts: { pageId?: string }) => {
@@ -130,13 +133,17 @@ export function MenuBar() {
       prefs.customPipeline.renderer ? p.renderer : null,
     ].filter((s): s is string => !!s)
     const editor = useEditorUiStore.getState()
-    await startPipeline({
+    await startPipelineRun({
       steps,
       pages: opts.pageId ? [opts.pageId] : undefined,
       targetLanguage: editor.selectedLanguage,
       systemPrompt: prefs.customSystemPrompt,
       defaultFont: prefs.defaultFont,
       readingOrder: editor.readingOrder === 'custom' ? undefined : editor.readingOrder,
+      ...chapterTranslationPipelineOptions({
+        ...prefs,
+        customPipeline: prefs.customPipeline,
+      }),
     })
   }
 

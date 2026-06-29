@@ -11,6 +11,7 @@ use serde::{Deserialize, Serialize};
 use crate::Language;
 
 use super::AnyProvider;
+use super::translate_outcome_from_text;
 
 const CAIYUN_TRANSLATOR_URL: &str = "https://api.interpreter.caiyunai.com/v1/translator";
 const REQUEST_ID: &str = "koharu-caiyun";
@@ -156,6 +157,21 @@ impl AnyProvider for CaiyunMtProvider {
                 .and_then(CaiyunTarget::into_first)
                 .ok_or_else(|| anyhow::anyhow!("Caiyun returned no translations"))
         })
+    }
+
+    fn translate_with_outcome<'a>(
+        &'a self,
+        source: &'a str,
+        target_language: Language,
+        model: &'a str,
+        custom_system_prompt: Option<&'a str>,
+    ) -> Pin<Box<dyn Future<Output = anyhow::Result<super::TranslationOutcome>> + Send + 'a>> {
+        translate_outcome_from_text(self.translate(
+            source,
+            target_language,
+            model,
+            custom_system_prompt,
+        ))
     }
 }
 

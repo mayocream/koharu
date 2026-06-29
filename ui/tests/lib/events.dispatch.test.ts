@@ -29,6 +29,7 @@ vi.mock('@microsoft/fetch-event-source', () => ({
 }))
 
 import { connectEvents } from '@/lib/events'
+import { clearChapterContextPipelineHints, registerChapterContextPipeline } from '@/lib/pipeline/chapterContextHint'
 import { useDownloadsStore } from '@/lib/stores/downloadsStore'
 import { useEventsStore } from '@/lib/stores/eventsStore'
 import { useJobsStore } from '@/lib/stores/jobsStore'
@@ -48,6 +49,7 @@ async function simulateOpen(status = 200, contentType: string | null = 'text/eve
 
 beforeEach(() => {
   useJobsStore.getState().clear()
+  clearChapterContextPipelineHints()
   useDownloadsStore.getState().clear()
   useEventsStore.getState().reset()
   captured.onopen = undefined
@@ -64,6 +66,12 @@ describe('dispatch()', () => {
       kind: 'pipeline',
       status: 'running',
     })
+  })
+
+  it('jobStarted attaches pending chapter context hint', () => {
+    registerChapterContextPipeline('j-1')
+    send({ event: 'jobStarted', id: 'j-1', kind: 'pipeline' })
+    expect(useJobsStore.getState().jobs['j-1'].chapterContextTranslation).toBe(true)
   })
 
   it('jobProgress → jobsStore.progress', () => {

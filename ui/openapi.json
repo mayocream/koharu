@@ -3026,6 +3026,22 @@
               "$ref": "#/components/schemas/NodeId"
             },
             "description": "Optional text-node ids for engines that can operate on individual blocks."
+          },
+          "chapterContextTranslation": {
+            "type": "boolean",
+            "description": "When true, translate with chapter-level context across all pages in scope instead of page-by-page translation."
+          },
+          "chapterTranslationTokenBudget": {
+            "type": "integer",
+            "minimum": 256,
+            "maximum": 8192,
+            "description": "Token budget per chapter translation chunk (256–8192, default 4096)."
+          },
+          "chapterTranslationMaxBlocks": {
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 200,
+            "description": "Maximum blocks per chapter translation chunk (1–200, default 100)."
           }
         }
       },

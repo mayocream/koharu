@@ -11,6 +11,7 @@ use serde::{Deserialize, Serialize};
 use crate::Language;
 
 use super::AnyProvider;
+use super::translate_outcome_from_text;
 
 const GOOGLE_TRANSLATE_URL: &str = "https://translation.googleapis.com/language/translate/v2";
 
@@ -91,5 +92,20 @@ impl AnyProvider for GoogleTranslateMtProvider {
                 .translated_text;
             Ok(out)
         })
+    }
+
+    fn translate_with_outcome<'a>(
+        &'a self,
+        source: &'a str,
+        target_language: Language,
+        model: &'a str,
+        custom_system_prompt: Option<&'a str>,
+    ) -> Pin<Box<dyn Future<Output = anyhow::Result<super::TranslationOutcome>> + Send + 'a>> {
+        translate_outcome_from_text(self.translate(
+            source,
+            target_language,
+            model,
+            custom_system_prompt,
+        ))
     }
 }

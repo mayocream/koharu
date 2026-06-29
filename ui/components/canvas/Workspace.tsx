@@ -39,8 +39,10 @@ import { usePointerToDocument } from '@/hooks/usePointerToDocument'
 import { useRenderBrushDrawing } from '@/hooks/useRenderBrushDrawing'
 import type { Node, Transform } from '@/lib/api/schemas'
 import { applyOp } from '@/lib/io/scene'
+import { overlayBackgroundToCss } from '@/lib/ocrOverlayBackground'
 import { ops } from '@/lib/ops'
 import { useEditorUiStore } from '@/lib/stores/editorUiStore'
+import { usePreferencesStore } from '@/lib/stores/preferencesStore'
 import { useSelectionStore } from '@/lib/stores/selectionStore'
 
 const BRUSH_CURSOR = 'none'
@@ -65,6 +67,7 @@ export function Workspace() {
   const showTextBlocksOverlay = useEditorUiStore((s) => s.showTextBlocksOverlay)
   const mode = useEditorUiStore((s) => s.mode)
   const autoFitEnabled = useEditorUiStore((s) => s.autoFitEnabled)
+  const ocrOverlayBackground = usePreferencesStore((s) => s.ocrOverlayBackground)
 
   const page = useCurrentPage()
   const clearSelection = useSelectionStore((s) => s.clear)
@@ -388,12 +391,13 @@ export function Workspace() {
                       </div>
                       {draftBlock && (
                         <div
-                          className='pointer-events-none absolute rounded-md border-2 border-dashed border-primary bg-primary/10'
+                          className='pointer-events-none absolute rounded-md border-2 border-dashed border-primary'
                           style={{
                             left: draftBlock.x * scaleRatio,
                             top: draftBlock.y * scaleRatio,
                             width: Math.max(0, draftBlock.width * scaleRatio),
                             height: Math.max(0, draftBlock.height * scaleRatio),
+                            backgroundColor: overlayBackgroundToCss(ocrOverlayBackground),
                           }}
                         />
                       )}

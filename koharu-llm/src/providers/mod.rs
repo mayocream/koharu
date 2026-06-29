@@ -5,14 +5,19 @@ use std::sync::Arc;
 use anyhow::Context;
 use reqwest_middleware::ClientWithMiddleware;
 
-use crate::prompt::{BLOCK_TAG_INSTRUCTIONS, system_prompt};
+use crate::prompt::{BLOCK_TAG_INSTRUCTIONS, VERBATIM_SYSTEM_PREFIX, system_prompt};
+use crate::providers::chat_completions::ChatCompletionFinishReason;
 use crate::{Language, language::tags as language_tags, supported_locales};
 
 /// Resolve the effective system prompt: custom (with block instructions appended) or default.
 pub(crate) fn resolve_system_prompt(custom: Option<&str>, target_language: Language) -> String {
     match custom {
-        Some(p) if !p.trim().is_empty() => format!("{p} {BLOCK_TAG_INSTRUCTIONS}"),
-        _ => system_prompt(target_language),
+        Some(p) => match p.strip_prefix(VERBATIM_SYSTEM_PREFIX) {
+            Some(verbatim) => verbatim.to_string(),
+            None if !p.trim().is_empty() => format!("{p} {BLOCK_TAG_INSTRUCTIONS}"),
+            None => system_prompt(target_language),
+        },
+        None => system_prompt(target_language),
     }
 }
 
@@ -99,6 +104,58 @@ pub async fn ensure_provider_success(
     anyhow::bail!("{provider} API request failed ({status}): {body}");
 }
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum TranslationFinishReason {
+    Stop,
+    Length,
+    Unknown,
+}
+
+#[derive(Debug, Clone)]
+pub struct TranslationOutcome {
+    pub text: String,
+    pub finish_reason: TranslationFinishReason,
+}
+
+impl TranslationOutcome {
+    pub fn stop(text: String) -> Self {
+        Self {
+            text,
+            finish_reason: TranslationFinishReason::Stop,
+        }
+    }
+}
+
+pub fn translate_outcome_from_text<'a>(
+    translate: Pin<Box<dyn Future<Output = anyhow::Result<String>> + Send + 'a>>,
+) -> Pin<Box<dyn Future<Output = anyhow::Result<TranslationOutcome>> + Send + 'a>> {
+    Box::pin(async move { Ok(TranslationOutcome::stop(translate.await?)) })
+}
+
+pub fn chat_finish_reason(reason: ChatCompletionFinishReason) -> TranslationFinishReason {
+    match reason {
+        ChatCompletionFinishReason::Stop => TranslationFinishReason::Stop,
+        ChatCompletionFinishReason::Length => TranslationFinishReason::Length,
+        ChatCompletionFinishReason::Unknown => TranslationFinishReason::Unknown,
+    }
+}
+
+pub fn parse_gemini_finish_reason(resp: &serde_json::Value) -> TranslationFinishReason {
+    match resp["candidates"][0]["finishReason"].as_str() {
+        Some("MAX_TOKENS") => TranslationFinishReason::Length,
+        Some("STOP") => TranslationFinishReason::Stop,
+        _ => TranslationFinishReason::Unknown,
+    }
+}
+
+pub fn parse_claude_stop_reason(resp: &serde_json::Value) -> TranslationFinishReason {
+    match resp["stop_reason"].as_str() {
+        Some("max_tokens") => TranslationFinishReason::Length,
+        Some("end_turn") | Some("stop_sequence") => TranslationFinishReason::Stop,
+        _ => TranslationFinishReason::Unknown,
+    }
+}
+
 pub trait AnyProvider: Send + Sync {
     fn translate<'a>(
         &'a self,
@@ -107,6 +164,14 @@ pub trait AnyProvider: Send + Sync {
         model: &'a str,
         custom_system_prompt: Option<&'a str>,
     ) -> Pin<Box<dyn Future<Output = anyhow::Result<String>> + Send + 'a>>;
+
+    fn translate_with_outcome<'a>(
+        &'a self,
+        source: &'a str,
+        target_language: Language,
+        model: &'a str,
+        custom_system_prompt: Option<&'a str>,
+    ) -> Pin<Box<dyn Future<Output = anyhow::Result<TranslationOutcome>> + Send + 'a>>;
 }
 
 #[derive(Clone)]

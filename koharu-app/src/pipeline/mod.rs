@@ -6,6 +6,7 @@
 //! applies them transactionally (per-engine) against the active session.
 
 pub mod artifacts;
+pub mod chapter_translate;
 pub mod engine;
 mod engines;
 
@@ -16,6 +17,7 @@ pub use engine::{
 };
 pub use engines::support;
 
+use std::collections::HashSet;
 use std::sync::Arc;
 use std::sync::atomic::{AtomicBool, Ordering};
 
@@ -23,6 +25,11 @@ use anyhow::{Result, bail};
 use koharu_core::{Op, PageId, PipelineStep};
 use koharu_runtime::RuntimeManager;
 use tracing::Instrument;
+
+use crate::pipeline::chapter_translate::{
+    blocks_to_ops, collect_blocks, log_chapter_translation_plan, translate_blocks_chunked,
+    ChapterChunkConfig,
+};
 
 /// Observer for pipeline progress. `step_id` is the engine id of the step
 /// about to run (or just finished); step_index / page_index are 0-based.
@@ -104,6 +111,43 @@ pub enum Scope {
 }
 
 // ---------------------------------------------------------------------------
+// Chapter-mode step partitioning
+// ---------------------------------------------------------------------------
+
+#[derive(Debug, Default)]
+struct StepPlan {
+    detect: Vec<usize>,
+    ocr: Vec<usize>,
+    has_translate: bool,
+    inpaint: Vec<usize>,
+    render: Vec<usize>,
+}
+
+fn partition_steps(order: &[usize], infos: &[&EngineInfo]) -> StepPlan {
+    let mut plan = StepPlan::default();
+    for &idx in order {
+        let info = infos[idx];
+        if info.produces.contains(&Artifact::Translations) {
+            plan.has_translate = true;
+            continue;
+        }
+        match step_for(info) {
+            Some(PipelineStep::Detect) => plan.detect.push(idx),
+            Some(PipelineStep::Ocr) => plan.ocr.push(idx),
+            Some(PipelineStep::Inpaint) => plan.inpaint.push(idx),
+            Some(PipelineStep::Render) => plan.render.push(idx),
+            Some(PipelineStep::LlmGenerate) => plan.has_translate = true,
+            None => {}
+        }
+    }
+    plan
+}
+
+fn use_chapter_mode(options: &PipelineRunOptions) -> bool {
+    options.chapter_context_translation && options.text_node_ids.is_none()
+}
+
+// ---------------------------------------------------------------------------
 // Driver
 // ---------------------------------------------------------------------------
 
@@ -149,6 +193,66 @@ pub async fn run(
 
     let total_pages = pages.len().max(1);
     let total_steps = order.len().max(1);
+
+    if use_chapter_mode(&spec.options) {
+        return run_chapter_mode(
+            session,
+            registry,
+            runtime,
+            cpu,
+            llm,
+            renderer,
+            spec,
+            cancel,
+            progress,
+            warnings,
+            infos,
+            order,
+            pages,
+            total_pages,
+            total_steps,
+        )
+        .await;
+    }
+
+    run_sequential(
+        session,
+        registry,
+        runtime,
+        cpu,
+        llm,
+        renderer,
+        spec,
+        cancel,
+        progress,
+        warnings,
+        infos,
+        order,
+        pages,
+        total_pages,
+        total_steps,
+    )
+    .await
+}
+
+#[allow(clippy::too_many_arguments)]
+async fn run_sequential(
+    session: Arc<ProjectSession>,
+    registry: Arc<Registry>,
+    runtime: Arc<RuntimeManager>,
+    cpu: bool,
+    llm: Arc<llm::Model>,
+    renderer: Arc<renderer::Renderer>,
+    spec: PipelineSpec,
+    cancel: Arc<AtomicBool>,
+    progress: Option<ProgressSink>,
+    warnings: Option<WarningSink>,
+    infos: Vec<&EngineInfo>,
+    order: Vec<usize>,
+    pages: Vec<PageId>,
+    total_pages: usize,
+    total_steps: usize,
+) -> Result<RunOutcome> {
     let total_units = (total_pages * total_steps) as u64;
     let mut completed: u64 = 0;
     let mut warning_count: usize = 0;
@@ -259,7 +363,360 @@ pub async fn run(
         }
     }
 
-    if let Some(sink) = progress.as_ref() {
+    emit_final_progress(progress.as_ref(), total_steps, total_pages);
+    Ok(RunOutcome { warning_count })
+}
+
+#[allow(clippy::too_many_arguments)]
+async fn run_chapter_mode(
+    session: Arc<ProjectSession>,
+    registry: Arc<Registry>,
+    runtime: Arc<RuntimeManager>,
+    cpu: bool,
+    llm: Arc<llm::Model>,
+    renderer: Arc<renderer::Renderer>,
+    spec: PipelineSpec,
+    cancel: Arc<AtomicBool>,
+    progress: Option<ProgressSink>,
+    warnings: Option<WarningSink>,
+    infos: Vec<&EngineInfo>,
+    order: Vec<usize>,
+    pages: Vec<PageId>,
+    total_pages: usize,
+    total_steps: usize,
+) -> Result<RunOutcome> {
+    let plan = partition_steps(&order, &infos);
+    let total_units = (total_pages * total_steps) as u64;
+    let mut completed: u64 = 0;
+    let mut warning_count: usize = 0;
+    let mut failed_pages = HashSet::new();
+
+    for &engine_idx in &plan.detect {
+        run_step_for_all_pages(
+            &session,
+            &registry,
+            &runtime,
+            cpu,
+            &llm,
+            &renderer,
+            &spec,
+            &cancel,
+            progress.as_ref(),
+            warnings.as_ref(),
+            &infos,
+            &order,
+            &pages,
+            &mut failed_pages,
+            engine_idx,
+            total_pages,
+            total_steps,
+            total_units,
+            &mut completed,
+            &mut warning_count,
+        )
+        .await?;
+    }
+
+    for &engine_idx in &plan.ocr {
+        run_step_for_all_pages(
+            &session,
+            &registry,
+            &runtime,
+            cpu,
+            &llm,
+            &renderer,
+            &spec,
+            &cancel,
+            progress.as_ref(),
+            warnings.as_ref(),
+            &infos,
+            &order,
+            &pages,
+            &mut failed_pages,
+            engine_idx,
+            total_pages,
+            total_steps,
+            total_units,
+            &mut completed,
+            &mut warning_count,
+        )
+        .await?;
+    }
+
+    if plan.has_translate {
+        run_chapter_translation(
+            &session,
+            &llm,
+            &spec,
+            &cancel,
+            progress.as_ref(),
+            &pages,
+            &failed_pages,
+            total_pages,
+            total_steps,
+            total_units,
+            &mut completed,
+        )
+        .await?;
+    }
+
+    for &engine_idx in &plan.inpaint {
+        run_step_for_all_pages(
+            &session,
+            &registry,
+            &runtime,
+            cpu,
+            &llm,
+            &renderer,
+            &spec,
+            &cancel,
+            progress.as_ref(),
+            warnings.as_ref(),
+            &infos,
+            &order,
+            &pages,
+            &mut failed_pages,
+            engine_idx,
+            total_pages,
+            total_steps,
+            total_units,
+            &mut completed,
+            &mut warning_count,
+        )
+        .await?;
+    }
+
+    for &engine_idx in &plan.render {
+        run_step_for_all_pages(
+            &session,
+            &registry,
+            &runtime,
+            cpu,
+            &llm,
+            &renderer,
+            &spec,
+            &cancel,
+            progress.as_ref(),
+            warnings.as_ref(),
+            &infos,
+            &order,
+            &pages,
+            &mut failed_pages,
+            engine_idx,
+            total_pages,
+            total_steps,
+            total_units,
+            &mut completed,
+            &mut warning_count,
+        )
+        .await?;
+    }
+
+    emit_final_progress(progress.as_ref(), total_steps, total_pages);
+    Ok(RunOutcome { warning_count })
+}
+
+#[allow(clippy::too_many_arguments)]
+async fn run_step_for_all_pages(
+    session: &Arc<ProjectSession>,
+    registry: &Arc<Registry>,
+    runtime: &Arc<RuntimeManager>,
+    cpu: bool,
+    llm: &Arc<llm::Model>,
+    renderer: &Arc<renderer::Renderer>,
+    spec: &PipelineSpec,
+    cancel: &Arc<AtomicBool>,
+    progress: Option<&ProgressSink>,
+    warnings: Option<&WarningSink>,
+    infos: &[&EngineInfo],
+    order: &[usize],
+    pages: &[PageId],
+    failed_pages: &mut HashSet<PageId>,
+    engine_idx: usize,
+    total_pages: usize,
+    total_steps: usize,
+    total_units: u64,
+    completed: &mut u64,
+    warning_count: &mut usize,
+) -> Result<()> {
+    let info = infos[engine_idx];
+    let seq = order
+        .iter()
+        .position(|&idx| idx == engine_idx)
+        .unwrap_or(0);
+
+    for (page_index, page_id) in pages.iter().enumerate() {
+        if failed_pages.contains(page_id) {
+            continue;
+        }
+        if cancel.load(Ordering::Relaxed) {
+            bail!("cancelled");
+        }
+
+        if let Some(sink) = progress {
+            let percent = ((*completed * 100) / total_units).min(100) as u8;
+            sink(ProgressTick {
+                step: step_for(info),
+                step_id: info.id.to_string(),
+                step_index: seq,
+                total_steps,
+                page_index,
+                total_pages,
+                overall_percent: percent,
+            });
+        }
+
+        if !session.scene.read().pages.contains_key(page_id) {
+            failed_pages.insert(*page_id);
+            continue;
+        }
+
+        let engine = match registry.get(info.id, runtime, cpu).await {
+            Ok(e) => e,
+            Err(err) => {
+                report_step_failure(
+                    info.id,
+                    page_id,
+                    seq,
+                    page_index,
+                    total_pages,
+                    total_steps,
+                    &err,
+                    warning_count,
+                    warnings,
+                );
+                failed_pages.insert(*page_id);
+                continue;
+            }
+        };
+        let scene_snap = session.scene_snapshot();
+        let ctx = EngineCtx {
+            scene: &scene_snap,
+            page: *page_id,
+            blobs: &session.blobs,
+            runtime,
+            cancel,
+            options: &spec.options,
+            llm,
+            renderer,
+        };
+        let step_result = async { engine.run(ctx).await }
+            .instrument(tracing::info_span!("step", engine = info.id, page = %page_id))
+            .await;
+        let ops = match step_result {
+            Ok(ops) => ops,
+            Err(err) => {
+                report_step_failure(
+                    info.id,
+                    page_id,
+                    seq,
+                    page_index,
+                    total_pages,
+                    total_steps,
+                    &err,
+                    warning_count,
+                    warnings,
+                );
+                failed_pages.insert(*page_id);
+                continue;
+            }
+        };
+        *completed += 1;
+        if ops.is_empty() {
+            continue;
+        }
+        let batch = Op::Batch {
+            ops,
+            label: format!("{}: page {}", info.id, page_id),
+        };
+        if let Err(err) = session.apply(batch) {
+            report_step_failure(
+                info.id,
+                page_id,
+                seq,
+                page_index,
+                total_pages,
+                total_steps,
+                &err,
+                warning_count,
+                warnings,
+            );
+            failed_pages.insert(*page_id);
+        }
+    }
+    Ok(())
+}
+
+#[allow(clippy::too_many_arguments)]
+async fn run_chapter_translation(
+    session: &Arc<ProjectSession>,
+    llm: &Arc<llm::Model>,
+    spec: &PipelineSpec,
+    cancel: &Arc<AtomicBool>,
+    progress: Option<&ProgressSink>,
+    pages: &[PageId],
+    failed_pages: &HashSet<PageId>,
+    total_pages: usize,
+    total_steps: usize,
+    total_units: u64,
+    completed: &mut u64,
+) -> Result<()> {
+    if cancel.load(Ordering::Relaxed) {
+        bail!("cancelled");
+    }
+
+    if let Some(sink) = progress {
+        let percent = ((*completed * 100) / total_units).min(100) as u8;
+        sink(ProgressTick {
+            step: Some(PipelineStep::LlmGenerate),
+            step_id: "chapter-translate".to_string(),
+            step_index: 0,
+            total_steps,
+            page_index: 0,
+            total_pages,
+            overall_percent: percent,
+        });
+    }
+
+    let scene = session.scene_snapshot();
+    let blocks = collect_blocks(&scene, pages, failed_pages);
+    let chunk_config = ChapterChunkConfig::resolve(
+        spec.options.chapter_translation_token_budget,
+        spec.options.chapter_translation_max_blocks,
+    );
+    log_chapter_translation_plan(pages.len(), &blocks, chunk_config);
+    if blocks.is_empty() {
+        *completed += total_pages as u64;
+        return Ok(());
+    }
+
+    let translations = translate_blocks_chunked(
+        llm,
+        &blocks,
+        chunk_config,
+        spec.options.target_language.as_deref(),
+        spec.options.system_prompt.as_deref(),
+    )
+    .await?;
+
+    let ops = blocks_to_ops(&blocks, &translations);
+    if !ops.is_empty() {
+        session.apply(Op::Batch {
+            ops,
+            label: "chapter-translate".to_string(),
+        })?;
+    }
+
+    *completed += total_pages as u64;
+    Ok(())
+}
+
+fn emit_final_progress(
+    progress: Option<&ProgressSink>,
+    total_steps: usize,
+    total_pages: usize,
+) {
+    if let Some(sink) = progress {
         sink(ProgressTick {
             step: None,
             step_id: String::new(),
@@ -270,7 +727,6 @@ pub async fn run(
             overall_percent: 100,
         });
     }
-    Ok(RunOutcome { warning_count })
 }
 
 #[allow(clippy::too_many_arguments)]
@@ -355,6 +811,20 @@ pub fn catalog() -> EngineCatalog {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use koharu_core::NodeId;
+
+    fn chapter_mode_test_steps() -> Vec<String> {
+        vec![
+            "pp-doclayout-v3".to_string(),
+            "comic-text-detector-seg".to_string(),
+            "speech-bubble-segmentation".to_string(),
+            "yuzumarker-font-detection".to_string(),
+            "paddle-ocr-vl-1.6".to_string(),
+            "llm".to_string(),
+            "lama-manga".to_string(),
+            "koharu-renderer".to_string(),
+        ]
+    }
 
     #[test]
     fn catalog_includes_anime_text_detector() {
@@ -365,5 +835,44 @@ mod tests {
                 && engine.name == "Anime Text YOLO (N)"
                 && engine.produces.iter().map(String::as_str).eq(["TextBoxes"])
         }));
+    }
+
+    #[test]
+    fn use_chapter_mode_requires_flag_without_text_node_scope() {
+        assert!(!use_chapter_mode(&PipelineRunOptions {
+            chapter_context_translation: false,
+            ..Default::default()
+        }));
+        assert!(use_chapter_mode(&PipelineRunOptions {
+            chapter_context_translation: true,
+            ..Default::default()
+        }));
+        assert!(!use_chapter_mode(&PipelineRunOptions {
+            chapter_context_translation: true,
+            text_node_ids: Some(vec![NodeId::default()]),
+            ..Default::default()
+        }));
+    }
+
+    #[test]
+    fn partition_steps_separates_translator_from_other_phases() {
+        let steps = chapter_mode_test_steps();
+        let infos: Vec<&EngineInfo> = steps
+            .iter()
+            .map(|id| Registry::find(id))
+            .collect::<Result<_>>()
+            .unwrap();
+        let order = build_order(&infos).unwrap();
+        let plan = partition_steps(&order, &infos);
+
+        assert_eq!(plan.detect.len(), 4);
+        assert_eq!(plan.ocr.len(), 1);
+        assert!(plan.has_translate);
+        assert_eq!(plan.inpaint.len(), 1);
+        assert_eq!(plan.render.len(), 1);
+        assert!(plan
+            .detect
+            .iter()
+            .all(|idx| !infos[*idx].produces.contains(&Artifact::Translations)));
     }
 }

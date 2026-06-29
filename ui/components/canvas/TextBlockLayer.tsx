@@ -8,8 +8,10 @@ import { useBlobImage } from '@/hooks/useBlobData'
 import { useCurrentPage, useTextNodes, type TextNodeEntry } from '@/hooks/useCurrentPage'
 import type { NodeDataPatch, Transform } from '@/lib/api/schemas'
 import { applyOp, queueAutoRender } from '@/lib/io/scene'
+import { overlayBackgroundToCss } from '@/lib/ocrOverlayBackground'
 import { ops } from '@/lib/ops'
 import { useEditorUiStore } from '@/lib/stores/editorUiStore'
+import { usePreferencesStore } from '@/lib/stores/preferencesStore'
 import { useSelectionStore } from '@/lib/stores/selectionStore'
 
 type TextBlockLayerProps = {
@@ -29,6 +31,8 @@ export function TextBlockLayer({ showSprites, scale, style }: TextBlockLayerProp
   const selectedIds = useSelectionStore((s) => s.nodeIds)
   const select = useSelectionStore((s) => s.select)
   const mode = useEditorUiStore((s) => s.mode)
+  const ocrOverlayBackground = usePreferencesStore((s) => s.ocrOverlayBackground)
+  const overlayBackgroundColor = overlayBackgroundToCss(ocrOverlayBackground)
   const interactive = mode === 'select' || mode === 'block'
 
   const hasSelection = useMemo(() => {
@@ -97,6 +101,7 @@ export function TextBlockLayer({ showSprites, scale, style }: TextBlockLayerProp
           scale={scale}
           selected={selectedIds.has(n.id)}
           interactive={interactive}
+          overlayBackgroundColor={overlayBackgroundColor}
           onSelect={(id, additive) => select(id, additive)}
           onCommit={(t) => void updateTransform(n.id, t)}
         />
@@ -111,6 +116,7 @@ type TextBlockItemProps = {
   scale: number
   selected: boolean
   interactive: boolean
+  overlayBackgroundColor: string
   onSelect: (id: string, additive: boolean) => void
   onCommit: (transform: Transform) => void
 }
@@ -131,6 +137,7 @@ function TextBlockItem({
   scale,
   selected,
   interactive,
+  overlayBackgroundColor,
   onSelect,
   onCommit,
 }: TextBlockItemProps) {
@@ -251,10 +258,9 @@ function TextBlockItem({
     >
       <div
         className={`absolute inset-0 rounded-md ${
-          selected
-            ? 'border-[3px] border-primary bg-primary/15'
-            : 'border-2 border-rose-400/60 bg-rose-400/5'
+          selected ? 'border-[3px] border-primary' : 'border-2 border-rose-400/60'
         }`}
+        style={{ backgroundColor: overlayBackgroundColor }}
       />
       <div
         className={`pointer-events-none absolute -top-1.5 -left-1.5 flex h-4 w-4 items-center justify-center rounded-full text-[9px] font-semibold text-white shadow ${

@@ -29,4 +29,10 @@ export interface StartPipelineRequest {
    * @nullable
    */
   textNodeIds?: NodeId[] | null
+  /** When true, translate with chapter-level context across all pages in scope. */
+  chapterContextTranslation?: boolean
+  /** Token budget per chapter translation chunk (256–8192, default 4096). */
+  chapterTranslationTokenBudget?: number
+  /** Maximum blocks per chapter translation chunk (1–200, default 100). */
+  chapterTranslationMaxBlocks?: number
 }

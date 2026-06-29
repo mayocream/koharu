@@ -29,6 +29,18 @@ pub struct Llm {
     eos_token: LlamaToken,
 }
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum GenerateFinishReason {
+    Stop,
+    Length,
+}
+
+#[derive(Debug, Clone)]
+pub struct GenerateOutcome {
+    pub text: String,
+    pub finish_reason: GenerateFinishReason,
+}
+
 #[derive(Debug, Clone)]
 pub struct GenerateOptions {
     pub max_tokens: usize,
@@ -115,8 +127,25 @@ impl Llm {
         target_language: Language,
         system_prompt: Option<&str>,
     ) -> Result<String> {
+        Ok(self
+            .generate_with_outcome(prompt, opts, target_language, system_prompt)?
+            .text)
+    }
+
+    /// Like [`generate`], but also reports whether generation stopped due to
+    /// hitting `max_tokens` instead of an end-of-sequence token.
+    pub fn generate_with_outcome(
+        &mut self,
+        prompt: &str,
+        opts: &GenerateOptions,
+        target_language: Language,
+        system_prompt: Option<&str>,
+    ) -> Result<GenerateOutcome> {
         if opts.max_tokens == 0 {
-            return Ok(String::new());
+            return Ok(GenerateOutcome {
+                text: String::new(),
+                finish_reason: GenerateFinishReason::Stop,
+            });
         }
 
         let prompt = self.prompt_renderer.format_chat_prompt(
@@ -124,6 +153,44 @@ impl Llm {
             target_language,
             system_prompt,
         )?;
+        self.generate_formatted_prompt(prompt, opts)
+    }
+
+    /// Like [`generate`], but accepts a fully-resolved system prompt without
+    /// appending page-level `[1]` tag instructions.
+    pub fn generate_with_system(
+        &mut self,
+        prompt: &str,
+        opts: &GenerateOptions,
+        target_language: Language,
+        system: &str,
+    ) -> Result<String> {
+        Ok(self
+            .generate_with_system_outcome(prompt, opts, target_language, system)?
+            .text)
+    }
+
+    /// Like [`generate_with_system`], but also reports length truncation.
+    pub fn generate_with_system_outcome(
+        &mut self,
+        prompt: &str,
+        opts: &GenerateOptions,
+        target_language: Language,
+        system: &str,
+    ) -> Result<GenerateOutcome> {
+        self.generate_with_outcome(
+            prompt,
+            opts,
+            target_language,
+            Some(&crate::prompt::verbatim_system_prompt(system)),
+        )
+    }
+
+    fn generate_formatted_prompt(
+        &mut self,
+        prompt: String,
+        opts: &GenerateOptions,
+    ) -> Result<GenerateOutcome> {
         tracing::debug!("Generating with prompt:\n{}", prompt);
 
         let prompt_tokens = self
@@ -160,7 +227,10 @@ impl Llm {
 
         if self.should_stop(next_token) {
             tracing::warn!("Early stopping: EOS/EOG token generated at end of prompt");
-            return Ok(String::new());
+            return Ok(GenerateOutcome {
+                text: String::new(),
+                finish_reason: GenerateFinishReason::Stop,
+            });
         }
 
         let start_post_prompt = Instant::now();
@@ -168,6 +238,7 @@ impl Llm {
         let mut sampled = 0usize;
         let mut position = i32::try_from(prompt_tokens.len()).context("prompt is too long")?;
         let mut batch = LlamaBatch::new(1, 1);
+        let mut hit_max_tokens = false;
 
         while sampled < opts.max_tokens {
             sampler.accept(next_token);
@@ -175,6 +246,7 @@ impl Llm {
             sampled += 1;
 
             if sampled >= opts.max_tokens {
+                hit_max_tokens = true;
                 break;
             }
 
@@ -199,7 +271,14 @@ impl Llm {
             rate(sampled, gen_dt)
         );
 
-        Ok(generated)
+        Ok(GenerateOutcome {
+            text: generated,
+            finish_reason: if hit_max_tokens {
+                GenerateFinishReason::Length
+            } else {
+                GenerateFinishReason::Stop
+            },
+        })
     }
 
     fn process_prompt_batch(

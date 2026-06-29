@@ -63,6 +63,15 @@ pub struct PipelineRunOptions {
     /// and process just that one block. Other engines ignore it.
     pub region: Option<Region>,
     pub reading_order: Option<ReadingOrder>,
+    /// When true, translate with chapter-level context across all pages in
+    /// scope. Default off preserves the existing page-by-page pipeline.
+    pub chapter_context_translation: bool,
+    /// Optional token budget per chapter translation chunk. Clamped to 256–8192;
+    /// defaults to 4096 when unset or invalid.
+    pub chapter_translation_token_budget: Option<u32>,
+    /// Optional maximum blocks per chapter translation chunk. Clamped to 1–200;
+    /// defaults to 100 when unset or invalid.
+    pub chapter_translation_max_blocks: Option<u32>,
 }
 
 // ---------------------------------------------------------------------------

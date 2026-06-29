@@ -4,6 +4,7 @@ import { MousePointer, VectorSquare, Brush, Bandage, Eraser, PanelLeft } from 'l
 import type { ComponentType } from 'react'
 import { useTranslation } from 'react-i18next'
 
+import { OcrOverlayBackgroundTool } from '@/components/canvas/OcrOverlayBackgroundPanel'
 import { Button } from '@/components/ui/button'
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip'
 import { useEditorUiStore } from '@/lib/stores/editorUiStore'
@@ -86,7 +87,34 @@ export function ToolRail() {
       <div className='h-px w-full bg-border' />
 
       <div className='flex flex-1 flex-col items-center gap-1 py-2'>
-        {MODES.map((item) => {
+        {MODES.slice(0, 4).map((item) => {
+          const label = t(item.labelKey)
+
+          return (
+            <Tooltip key={item.value}>
+              <TooltipTrigger asChild>
+                <Button
+                  variant='ghost'
+                  size='icon-sm'
+                  data-testid={item.testId}
+                  data-active={item.value === mode}
+                  onClick={() => setMode(item.value)}
+                  className='border border-transparent text-muted-foreground data-[active=true]:border-primary data-[active=true]:bg-accent data-[active=true]:text-primary'
+                  aria-label={label}
+                >
+                  <item.icon className='h-4 w-4' />
+                </Button>
+              </TooltipTrigger>
+              <TooltipContent side='right' sideOffset={8}>
+                {shortcuts[item.value as keyof typeof shortcuts]
+                  ? `${label} (${shortcuts[item.value as keyof typeof shortcuts].toUpperCase()})`
+                  : label}
+              </TooltipContent>
+            </Tooltip>
+          )
+        })}
+        <OcrOverlayBackgroundTool />
+        {MODES.slice(4).map((item) => {
           const label = t(item.labelKey)
 
           return (

@@ -9,6 +9,7 @@ import { useDownloadsStore } from '@/lib/stores/downloadsStore'
 import { useEditorUiStore } from '@/lib/stores/editorUiStore'
 import { useEventsStore } from '@/lib/stores/eventsStore'
 import { useJobsStore } from '@/lib/stores/jobsStore'
+import { takeChapterContextPipeline } from '@/lib/pipeline/chapterContextHint'
 
 /**
  * Scoped, resilient SSE client.
@@ -133,7 +134,9 @@ function dispatch(event: AppEvent): void {
       return
 
     case 'jobStarted':
-      useJobsStore.getState().started(event.id, event.kind)
+      useJobsStore.getState().started(event.id, event.kind, {
+        chapterContextTranslation: takeChapterContextPipeline(event.id),
+      })
       lastPageByJob.set(event.id, -1)
       return
 

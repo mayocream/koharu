@@ -13,7 +13,7 @@ use koharu_runtime::RuntimeManager;
 use strum::{EnumProperty, IntoEnumIterator};
 
 pub use language::{Language, language_from_tag, supported_locales};
-pub use model::{GenerateOptions, Llm};
+pub use model::{GenerateFinishReason, GenerateOptions, GenerateOutcome, Llm};
 pub use prompt::{ChatMessage, ChatRole};
 
 /// Suppress all llama.cpp / ggml / mtmd / clip native log output.

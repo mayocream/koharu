@@ -12,6 +12,7 @@ use url::form_urlencoded::Serializer;
 use crate::Language;
 
 use super::AnyProvider;
+use super::translate_outcome_from_text;
 
 const DEFAULT_BASE_URL_PAID: &str = "https://api.deepl.com";
 const DEFAULT_BASE_URL_FREE: &str = "https://api-free.deepl.com";
@@ -141,5 +142,20 @@ impl AnyProvider for DeeplMtProvider {
                 .text;
             Ok(out)
         })
+    }
+
+    fn translate_with_outcome<'a>(
+        &'a self,
+        source: &'a str,
+        target_language: Language,
+        model: &'a str,
+        custom_system_prompt: Option<&'a str>,
+    ) -> Pin<Box<dyn Future<Output = anyhow::Result<super::TranslationOutcome>> + Send + 'a>> {
+        translate_outcome_from_text(self.translate(
+            source,
+            target_language,
+            model,
+            custom_system_prompt,
+        ))
     }
 }

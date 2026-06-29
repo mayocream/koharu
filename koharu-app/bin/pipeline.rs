@@ -229,6 +229,8 @@ async fn run() -> Result<()> {
             text_node_ids: None,
             reading_order: None,
             region: None,
+            chapter_context_translation: false,
+            ..Default::default()
         },
     };
 
