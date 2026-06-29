@@ -21,6 +21,10 @@ candle-core = { workspace = true }
 candle-transformers = { workspace = true }
 candle-nn = { workspace = true }
 candle-flash-attn = { workspace = true, optional = true }
+burn = { workspace = true }
+safetensors = { workspace = true }
+half = { workspace = true }
+memmap2 = { workspace = true }
 tokenizers = { workspace = true }
 serde = { workspace = true }
 serde_json = { workspace = true }
@@ -29,7 +33,6 @@ tracing-subscriber = { workspace = true }
 tokio = { workspace = true }
 rustfft = { workspace = true }
 rayon = { workspace = true }
-cudarc = { workspace = true, optional = true }
 objc2 = { workspace = true, optional = true }
 objc2-metal = { workspace = true, optional = true }
 objc2-metal-performance-shaders = { workspace = true, optional = true }
@@ -38,13 +41,13 @@ objc2-foundation = { workspace = true, optional = true }
 
 [features]
 cuda = [
+    "burn/cuda",
     "candle-core/cuda",
     "candle-core/cudnn",
     "candle-nn/cuda",
     "candle-nn/cudnn",
     "candle-transformers/cuda",
     "candle-transformers/cudnn",
-    "cudarc",
     "candle-flash-attn",
     "candle-flash-attn/cudnn",
 ]
@@ -79,14 +82,6 @@ name = "manga-ocr"
 path = "bin/manga-ocr.rs"
 
 [[bin]]
-name = "paddleocr-vl"
-path = "bin/paddleocr-vl.rs"
-
-[[bin]]
-name = "mit48px-ocr"
-path = "bin/mit48px-ocr.rs"
-
-[[bin]]
 name = "font-detect"
 path = "bin/font-detect.rs"
 
@@ -95,16 +90,8 @@ name = "pp-doclayout-v3"
 path = "bin/pp-doclayout-v3.rs"
 
 [[bin]]
-name = "manga-text-segmentation-2025"
-path = "bin/manga-text-segmentation-2025.rs"
-
-[[bin]]
 name = "speech-bubble-segmentation"
 path = "bin/speech-bubble-segmentation.rs"
-
-[[bin]]
-name = "anime-text"
-path = "bin/anime-text.rs"
 
 [[bin]]
 name = "aot-inpainting"

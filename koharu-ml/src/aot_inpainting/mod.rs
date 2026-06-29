@@ -6,34 +6,27 @@ use std::{
 };
 
 use anyhow::{Context, Result, bail};
-use candle_core::{DType, Device, Tensor};
+use burn::{
+    module::{Module, ModuleMapper, Param},
+    store::{ModuleSnapshot, PyTorchToBurnAdapter, SafetensorsStore},
+    tensor::{DType, Device, DeviceKind, FloatDType, Tensor, TensorData},
+};
 use image::{DynamicImage, GenericImageView, GrayImage, RgbImage};
 use koharu_runtime::RuntimeManager;
-use serde::Deserialize;
 use tracing::instrument;
 
-use crate::{
-    device,
-    inpainting::{
-        HdStrategyConfig, InpaintForward, apply_bubble_fill, binarize_mask, extract_alpha,
-        restore_alpha_channel, run_inpaint,
-    },
-    loading,
+use crate::inpainting::{
+    HdStrategyConfig, InpaintForward, apply_bubble_fill, binarize_mask, extract_alpha,
+    restore_alpha_channel, run_inpaint,
 };
 
-use self::model::{AotGenerator, AotModelSpec};
+use self::model::AotGenerator;
 
 const HF_REPO: &str = "mayocream/aot-inpainting";
-const CONFIG_FILENAME: &str = "config.json";
 const SAFETENSORS_FILENAME: &str = "model.safetensors";
+const PAD_MULTIPLE: u32 = 8;
+const DEFAULT_MAX_SIDE: u32 = 1024;
 
-koharu_runtime::declare_hf_model_package!(
-    id: "model:aot-inpainting:config",
-    repo: HF_REPO,
-    file: CONFIG_FILENAME,
-    bootstrap: false,
-    order: 131,
-);
 koharu_runtime::declare_hf_model_package!(
     id: "model:aot-inpainting:weights",
     repo: HF_REPO,
@@ -45,101 +38,37 @@ koharu_runtime::declare_hf_model_package!(
 #[derive(Debug)]
 pub struct AotInpainting {
     model: AotGenerator,
-    config: AotInpaintingConfig,
     device: Device,
     dtype: DType,
 }
 
-#[derive(Debug, Clone, Deserialize)]
-struct AotInpaintingConfig {
-    model_type: String,
-    input_channels: usize,
-    output_channels: usize,
-    base_channels: usize,
-    num_blocks: usize,
-    dilation_rates: Vec<usize>,
-    pad_multiple: usize,
-    default_max_side: u32,
-}
-
-impl AotInpaintingConfig {
-    fn validate(&self) -> Result<()> {
-        if self.model_type != "manga-image-translator-aot" {
-            bail!("unsupported AOT inpainting model type {}", self.model_type);
-        }
-        if self.input_channels != 4 {
-            bail!("expected input_channels=4, found {}", self.input_channels);
-        }
-        if self.output_channels != 3 {
-            bail!("expected output_channels=3, found {}", self.output_channels);
-        }
-        if self.base_channels == 0 {
-            bail!("base_channels must be positive");
-        }
-        if self.num_blocks == 0 {
-            bail!("num_blocks must be positive");
-        }
-        if self.dilation_rates.is_empty() {
-            bail!("dilation_rates must not be empty");
-        }
-        if self.pad_multiple == 0 {
-            bail!("pad_multiple must be positive");
-        }
-        if self.default_max_side == 0 {
-            bail!("default_max_side must be positive");
-        }
-        Ok(())
-    }
-
-    fn spec(&self) -> AotModelSpec {
-        AotModelSpec {
-            input_channels: self.input_channels,
-            output_channels: self.output_channels,
-            base_channels: self.base_channels,
-            num_blocks: self.num_blocks,
-            dilation_rates: self.dilation_rates.clone(),
-        }
-    }
-}
-
 impl AotInpainting {
     pub async fn load(runtime: &RuntimeManager, cpu: bool) -> Result<Self> {
-        let (config_path, weights_path) = resolve_model_paths(runtime).await?;
-        Self::load_from_paths(&config_path, &weights_path, cpu)
+        let weights_path = resolve_model_path(runtime).await?;
+        Self::load_from_weights_path(&weights_path, cpu)
     }
 
     pub fn load_from_paths(
-        config_path: impl AsRef<Path>,
+        _config_path: impl AsRef<Path>,
         weights_path: impl AsRef<Path>,
         cpu: bool,
     ) -> Result<Self> {
-        let device = device(cpu)?;
-        let dtype = loading::model_dtype(&device);
-        let config = loading::read_json::<AotInpaintingConfig>(config_path.as_ref())
-            .with_context(|| format!("failed to parse {}", config_path.as_ref().display()))?;
-        config.validate()?;
-        let model = loading::load_mmaped_safetensors_path_with_dtype(
-            weights_path.as_ref(),
-            &device,
-            dtype,
-            |vb| AotGenerator::load(&vb, &config.spec()),
-        )?;
+        Self::load_from_weights_path(weights_path, cpu)
+    }
+
+    pub fn load_from_weights_path(weights_path: impl AsRef<Path>, cpu: bool) -> Result<Self> {
+        let (device, dtype, module_dtype) = make_device(cpu);
+        let model = load_model(weights_path.as_ref(), &device, module_dtype)?;
 
         Ok(Self {
             model,
-            config,
             device,
             dtype,
         })
     }
 
-    /// Default strategy: Resize, using the model's shipped `default_max_side`
-    /// as the resize limit. Matches pre-refactor behaviour.
     pub fn default_config(&self) -> HdStrategyConfig {
-        HdStrategyConfig::aot_default(
-            self.config.default_max_side,
-            self.config.pad_multiple as u32,
-        )
+        HdStrategyConfig::aot_default(DEFAULT_MAX_SIDE, PAD_MULTIPLE)
     }
 
     #[instrument(level = "debug", skip_all)]
@@ -194,53 +123,50 @@ impl AotInpainting {
         }
     }
 
-    /// Raw model forward on a pre-padded RGB image + mask. Input spatial dims
-    /// must already be multiples of `pad_multiple` — the HD-strategy dispatcher
-    /// handles this.
     fn forward_rgb(&self, image: &RgbImage, mask: &GrayImage) -> Result<RgbImage> {
         let (w, h) = image.dimensions();
-        let image_tensor = (Tensor::from_vec(
-            image.clone().into_raw(),
-            (1, h as usize, w as usize, 3),
-            &self.device,
-        )?
-        .permute((0, 3, 1, 2))?
-        .to_dtype(self.dtype)?
-            / 127.5)?;
-        let image_tensor = (image_tensor - 1.0)?;
+        let (width, height) = (w as usize, h as usize);
+        let plane = width * height;
+        let rgb = image.as_raw();
+        let luma = mask.as_raw();
+        let mut image_data = vec![0.0_f32; 3 * plane];
+        let mut mask_data = vec![0.0_f32; plane];
 
-        let mask_tensor = Tensor::from_vec(
-            mask.clone().into_raw(),
-            (1, h as usize, w as usize, 1),
-            &self.device,
-        )?
-        .permute((0, 3, 1, 2))?
-        .to_dtype(self.dtype)?;
-        let mask_tensor = (mask_tensor / 255.0)?;
-        let mask_inv = (Tensor::ones_like(&mask_tensor)? - &mask_tensor)?;
-        let mask_inv_rgb = mask_inv.broadcast_as((1, 3, h as usize, w as usize))?;
-        let masked_image = (&image_tensor * &mask_inv_rgb)?;
+        for index in 0..plane {
+            let mask_value = luma[index] as f32 / 255.0;
+            mask_data[index] = mask_value;
+            let inv = 1.0 - mask_value;
+            for channel in 0..3 {
+                let value = rgb[index * 3 + channel] as f32 / 127.5 - 1.0;
+                image_data[channel * plane + index] = value * inv;
+            }
+        }
 
-        let output = self.model.forward(&masked_image, &mask_tensor)?;
-        self.postprocess(&output)
+        let mut image_tensor_data = TensorData::new(image_data, [1, 3, height, width]);
+        let mut mask_tensor_data = TensorData::new(mask_data, [1, 1, height, width]);
+        self.device
+            .staging([&mut image_tensor_data, &mut mask_tensor_data].into_iter());
+        let image_tensor = Tensor::<4>::from_data(image_tensor_data, (&self.device, self.dtype));
+        let mask_tensor = Tensor::<4>::from_data(mask_tensor_data, (&self.device, self.dtype));
+
+        let output = self.model.forward(image_tensor, mask_tensor);
+        self.postprocess(output)
     }
 
-    fn postprocess(&self, output: &Tensor) -> Result<RgbImage> {
+    fn postprocess(&self, output: Tensor<4>) -> Result<RgbImage> {
         let output = output
-            .to_dtype(DType::F32)?
-            .to_device(&Device::Cpu)?
-            .squeeze(0)?;
-        let (channels, height, width) = output.dims3()?;
+            .cast(FloatDType::F32)
+            .squeeze_dim::<3>(0)
+            .permute([1, 2, 0]);
+        let [height, width, channels] = output.dims();
         if channels != 3 {
             bail!("expected 3 output channels, got {channels}");
         }
 
-        let raw = ((output + 1.0)? * 127.5)?
-            .clamp(0.0, 255.0)?
-            .permute((1, 2, 0))?
-            .to_dtype(DType::U8)?
-            .flatten_all()?
-            .to_vec1::<u8>()?;
+        let raw = tensor_to_f32_vec(((output + 1.0) * 127.5).clamp(0.0, 255.0))?
+            .into_iter()
+            .map(|value| value.round().clamp(0.0, 255.0) as u8)
+            .collect::<Vec<_>>();
         RgbImage::from_raw(width as u32, height as u32, raw)
             .ok_or_else(|| anyhow::anyhow!("failed to create image buffer from model output"))
     }
@@ -280,19 +206,91 @@ impl InpaintForward for AotForward<'_> {
 }
 
 pub async fn prefetch(runtime: &RuntimeManager) -> Result<()> {
-    let _ = resolve_model_paths(runtime).await?;
+    let _ = resolve_model_path(runtime).await?;
     Ok(())
 }
 
-async fn resolve_model_paths(runtime: &RuntimeManager) -> Result<(PathBuf, PathBuf)> {
-    let downloads = runtime.downloads();
-    let config = downloads
-        .huggingface_model(HF_REPO, CONFIG_FILENAME)
-        .await
-        .with_context(|| format!("failed to download {CONFIG_FILENAME} from {HF_REPO}"))?;
-    let weights = downloads
+async fn resolve_model_path(runtime: &RuntimeManager) -> Result<PathBuf> {
+    runtime
+        .downloads()
         .huggingface_model(HF_REPO, SAFETENSORS_FILENAME)
         .await
-        .with_context(|| format!("failed to download {SAFETENSORS_FILENAME} from {HF_REPO}"))?;
-    Ok((config, weights))
+        .with_context(|| format!("failed to download {SAFETENSORS_FILENAME} from {HF_REPO}"))
+}
+
+fn load_model(path: &Path, device: &Device, module_dtype: FloatDType) -> Result<AotGenerator> {
+    let mut model = AotGenerator::new(device);
+    let mut store = SafetensorsStore::from_file(path)
+        .with_from_adapter(PyTorchToBurnAdapter)
+        .with_key_remapping(r"^head\.0\.", "head0.")
+        .with_key_remapping(r"^head\.2\.", "head1.")
+        .with_key_remapping(r"^head\.4\.", "head2.")
+        .with_key_remapping(r"^body_conv\.", "body.")
+        .with_key_remapping(r"\.block(0[0-3])\.1\.", ".block$1.conv.")
+        .with_key_remapping(r"\.fuse\.1\.", ".fuse.conv.")
+        .with_key_remapping(r"\.gate\.1\.", ".gate.conv.")
+        .with_key_remapping(r"^tail\.0\.", "tail0.")
+        .with_key_remapping(r"^tail\.2\.", "tail1.")
+        .with_key_remapping(r"^tail\.4\.", "up0.")
+        .with_key_remapping(r"^tail\.6\.", "up1.")
+        .with_key_remapping(r"^tail\.8\.", "output.")
+        .skip_enum_variants(true)
+        .allow_partial(false);
+    let result = model
+        .load_from(&mut store)
+        .context("failed to mmap/load AOT inpainting safetensors through Burn store")?;
+    if !result.errors.is_empty() {
+        bail!("failed to load AOT inpainting tensors: {}", result);
+    }
+    if !result.missing.is_empty() {
+        bail!("AOT inpainting checkpoint is missing tensors: {}", result);
+    }
+
+    Ok(cast_module_float(model.into_inference(), module_dtype))
+}
+
+fn make_device(cpu: bool) -> (Device, DType, FloatDType) {
+    #[cfg(feature = "cuda")]
+    {
+        if !cpu {
+            let mut device = Device::cuda(0);
+            if let Err(error) = device.configure(FloatDType::BF16) {
+                tracing::warn!(%error, "failed to configure Burn CUDA default dtype to BF16");
+            }
+            return (device, DType::BF16, FloatDType::BF16);
+        }
+    }
+
+    let mut device = Device::wgpu(if cpu {
+        DeviceKind::Cpu
+    } else {
+        DeviceKind::DefaultDevice
+    });
+    if let Err(error) = device.configure(FloatDType::F32) {
+        tracing::warn!(%error, "failed to configure Burn WGPU default dtype to F32");
+    }
+    (device, DType::F32, FloatDType::F32)
+}
+
+fn cast_module_float<M: Module>(module: M, dtype: FloatDType) -> M {
+    struct CastMapper {
+        dtype: FloatDType,
+    }
+
+    impl ModuleMapper for CastMapper {
+        fn map_float<const D: usize>(&mut self, param: Param<Tensor<D>>) -> Param<Tensor<D>> {
+            let (id, tensor, mapper) = param.consume();
+            Param::from_mapped_value(id, tensor.cast(self.dtype), mapper)
+        }
+    }
+
+    module.map(&mut CastMapper { dtype })
+}
+
+fn tensor_to_f32_vec<const D: usize>(tensor: Tensor<D>) -> Result<Vec<f32>> {
+    tensor
+        .cast(FloatDType::F32)
+        .into_data()
+        .into_vec::<f32>()
+        .context("failed to extract burn tensor data as f32")
 }

@@ -1,14 +1,19 @@
-use anyhow::{Result, anyhow};
-use candle_core::{DType, Device, Module, ModuleT, Tensor};
-use candle_nn::{
-    BatchNorm, Conv2d, Conv2dConfig, ConvTranspose2d, ConvTranspose2dConfig, VarBuilder, ops,
+use burn::{
+    module::Module,
+    nn::{
+        BatchNorm, BatchNormConfig, PaddingConfig2d,
+        conv::{Conv2d, Conv2dConfig, ConvTranspose2d, ConvTranspose2dConfig},
+    },
+    tensor::{
+        DType, Device, FloatDType, Tensor,
+        activation::{relu, sigmoid},
+        module::avg_pool2d,
+        ops::PadMode,
+        signal,
+    },
 };
 
-use crate::ops::conv2d_new;
-
-use super::fft::{irfft2, rfft2};
-
-#[derive(Clone, Copy)]
+#[derive(Clone, Copy, Debug)]
 struct FfcChannels {
     in_local: usize,
     in_global: usize,
@@ -16,174 +21,163 @@ struct FfcChannels {
     out_global: usize,
 }
 
-#[derive(Clone)]
+#[derive(Module, Debug)]
 struct Conv2dPad {
     conv: Conv2d,
+    #[module(skip)]
     pad: usize,
 }
 
 impl Conv2dPad {
-    fn load(
-        vb: &VarBuilder,
-        shape: (usize, usize, usize, usize),
-        pad: usize,
+    fn new(
+        device: &Device,
+        in_channels: usize,
+        out_channels: usize,
+        kernel_size: usize,
         stride: usize,
+        padding: usize,
         dilation: usize,
-        groups: usize,
-    ) -> Result<Self> {
-        let weight = vb.get(shape, "weight")?;
-        let bias = if vb.contains_tensor("bias") {
-            Some(vb.get(shape.0, "bias")?)
-        } else {
-            None
-        };
-        let conv = conv2d_new(
-            weight,
-            bias,
-            Conv2dConfig {
+    ) -> Self {
+        Self {
+            conv: conv2d(
+                device,
+                in_channels,
+                out_channels,
+                kernel_size,
                 stride,
-                padding: 0,
+                0,
                 dilation,
-                groups,
-                cudnn_fwd_algo: None,
-            },
-        )?;
-        Ok(Self { conv, pad })
+                false,
+            ),
+            pad: padding,
+        }
     }
 
-    fn forward(&self, xs: &Tensor) -> candle_core::Result<Tensor> {
-        let xs = reflect_pad2d(xs, self.pad)?;
-        self.conv.forward(&xs)
+    fn forward(&self, input: Tensor<4>) -> Tensor<4> {
+        self.conv.forward(reflect_pad2d(input, self.pad))
     }
 }
 
-fn load_batch_norm(vb: &VarBuilder, channels: usize) -> Result<BatchNorm> {
-    Ok(BatchNorm::new(
-        channels,
-        vb.get(channels, "running_mean")?,
-        vb.get(channels, "running_var")?,
-        vb.get(channels, "weight")?,
-        vb.get(channels, "bias")?,
-        1e-5,
-    )?)
-}
-
-#[derive(Clone)]
-struct FourierUnit {
+#[derive(Module, Debug)]
+struct ConvBnRelu {
     conv: Conv2d,
-    bn: BatchNorm,
+    bn: Option<BatchNorm>,
+}
+
+impl ConvBnRelu {
+    fn new(device: &Device, in_channels: usize, out_channels: usize) -> Self {
+        Self {
+            conv: conv2d(device, in_channels, out_channels, 1, 1, 0, 1, false),
+            bn: Some(batch_norm(device, out_channels)),
+        }
+    }
+
+    fn forward(&self, input: Tensor<4>) -> Tensor<4> {
+        let y = self.conv.forward(input);
+        let y = match &self.bn {
+            Some(bn) => bn.forward(y),
+            None => y,
+        };
+        relu(y)
+    }
+
+    fn fuse_batch_norm(&mut self) {
+        if let Some(bn) = self.bn.take() {
+            fold_batch_norm_into_conv2d(&mut self.conv, &bn, true);
+        }
+    }
+}
+
+#[derive(Module, Debug)]
+struct FourierUnit {
+    conv_layer: Conv2d,
+    bn: Option<BatchNorm>,
+    #[module(skip)]
     out_channels: usize,
 }
 
 impl FourierUnit {
-    fn load(vb: &VarBuilder, in_channels: usize, out_channels: usize) -> Result<Self> {
-        let conv = conv2d_new(
-            vb.get((out_channels, in_channels * 2, 1, 1), "conv_layer.weight")?,
-            None,
-            Conv2dConfig {
-                stride: 1,
-                padding: 0,
-                dilation: 1,
-                groups: 1,
-                cudnn_fwd_algo: None,
-            },
-        )?;
-        let bn = load_batch_norm(&vb.pp("bn"), out_channels)?;
-        Ok(Self {
-            conv,
-            bn,
+    fn new(device: &Device, in_channels: usize, out_channels: usize) -> Self {
+        Self {
+            conv_layer: conv2d(device, in_channels * 2, out_channels, 1, 1, 0, 1, false),
+            bn: Some(batch_norm(device, out_channels)),
             out_channels: out_channels / 2,
-        })
+        }
     }
 
-    fn forward(&self, xs: &Tensor) -> candle_core::Result<Tensor> {
-        let orig_width = xs.dim(3)?;
-        let spectrum = rfft2(xs)?;
-        let h_freq = spectrum.dim(2)?;
-        let w_half = spectrum.dim(3)?;
-        let stacked = spectrum.permute((0, 1, 4, 2, 3))?.contiguous()?.reshape((
-            spectrum.dim(0)?,
-            spectrum.dim(1)? * 2,
-            h_freq,
-            w_half,
-        ))?;
+    fn forward(&self, input: Tensor<4>) -> Tensor<4> {
+        let output_dtype = dtype_to_float(input.dtype());
+        let [batch, _channels, height, width] = input.dims();
+        let fft = rfft2_power2(input.cast(FloatDType::F32));
+        let spectrum_width = fft.spectrum.dims()[3];
 
-        let mut y = self.conv.forward(&stacked)?;
-        y = self.bn.forward_t(&y, false)?;
-        y = y.relu()?;
+        let conv_dtype = dtype_to_float(self.conv_layer.weight.val().dtype());
+        let mut y = self.conv_layer.forward(fft.spectrum.cast(conv_dtype));
+        if let Some(bn) = &self.bn {
+            y = bn.forward(y);
+        }
+        y = relu(y);
 
-        let y = y.reshape((spectrum.dim(0)?, self.out_channels, 2usize, h_freq, w_half))?;
-        let y = y.permute((0, 1, 3, 4, 2))?;
-        irfft2(&y, orig_width)
+        let y = y.cast(FloatDType::F32).reshape([
+            batch,
+            self.out_channels,
+            2,
+            fft.fft_height,
+            spectrum_width,
+        ]);
+
+        irfft2_power2(y, height, width, fft.fft_height, fft.fft_width).cast(output_dtype)
+    }
+
+    fn fuse_batch_norm(&mut self) {
+        if let Some(bn) = self.bn.take() {
+            fold_batch_norm_into_conv2d(&mut self.conv_layer, &bn, true);
+        }
     }
 }
 
-#[derive(Clone)]
+#[derive(Module, Debug)]
 struct SpectralTransform {
-    downsample: bool,
-    conv1: Conv2d,
-    bn1: BatchNorm,
+    conv1: ConvBnRelu,
     fu: FourierUnit,
     conv2: Conv2d,
+    #[module(skip)]
+    downsample: bool,
 }
 
 impl SpectralTransform {
-    fn load(
-        vb: &VarBuilder,
-        stride: usize,
-        in_channels: usize,
-        out_channels: usize,
-    ) -> Result<Self> {
+    fn new(device: &Device, stride: usize, in_channels: usize, out_channels: usize) -> Self {
         let conv1_out = out_channels / 2;
-        let conv1 = conv2d_new(
-            vb.get((conv1_out, in_channels, 1, 1), "conv1.0.weight")?,
-            None,
-            Conv2dConfig {
-                stride: 1,
-                padding: 0,
-                dilation: 1,
-                groups: 1,
-                cudnn_fwd_algo: None,
-            },
-        )?;
-        let bn1 = load_batch_norm(&vb.pp("conv1.1"), conv1_out)?;
-        let fu = FourierUnit::load(&vb.pp("fu"), conv1_out, out_channels)?;
-        let conv2 = conv2d_new(
-            vb.get((out_channels, conv1_out, 1, 1), "conv2.weight")?,
-            None,
-            Conv2dConfig {
-                stride: 1,
-                padding: 0,
-                dilation: 1,
-                groups: 1,
-                cudnn_fwd_algo: None,
-            },
-        )?;
-        Ok(Self {
+        Self {
+            conv1: ConvBnRelu::new(device, in_channels, conv1_out),
+            fu: FourierUnit::new(device, conv1_out, out_channels),
+            conv2: conv2d(device, conv1_out, out_channels, 1, 1, 0, 1, false),
             downsample: stride == 2,
-            conv1,
-            bn1,
-            fu,
-            conv2,
-        })
+        }
     }
 
-    fn forward(&self, xs: &Tensor) -> candle_core::Result<Tensor> {
-        let xs = if self.downsample {
-            xs.avg_pool2d_with_stride((2, 2), (2, 2))?
+    fn forward(&self, input: Tensor<4>) -> Tensor<4> {
+        let input = if self.downsample {
+            avg_pool2d(input, [2, 2], [2, 2], [0, 0], true, false)
         } else {
-            xs.clone()
+            input
         };
-        let mut y = self.conv1.forward(&xs)?;
-        y = self.bn1.forward_t(&y, false)?;
-        y = y.relu()?;
+        let y = self.conv1.forward(input);
+        let fu = self.fu.forward(y.clone());
+        self.conv2.forward(y + fu)
+    }
 
-        let fu = self.fu.forward(&y)?;
-        self.conv2.forward(&(y + fu)?)
+    fn fuse_batch_norms(&mut self) {
+        self.conv1.fuse_batch_norm();
+        self.fu.fuse_batch_norm();
+    }
+
+    fn fold_output_batch_norm(&mut self, bn: &BatchNorm, add_offset: bool) {
+        fold_batch_norm_into_conv2d(&mut self.conv2, bn, add_offset);
     }
 }
 
-#[derive(Clone)]
+#[derive(Module, Debug)]
 struct Ffc {
     convl2l: Option<Conv2dPad>,
     convl2g: Option<Conv2dPad>,
@@ -192,122 +186,111 @@ struct Ffc {
 }
 
 impl Ffc {
-    fn load(
-        vb: &VarBuilder,
+    fn new(
+        device: &Device,
         channels: FfcChannels,
         kernel_size: usize,
         stride: usize,
         padding: usize,
         dilation: usize,
-    ) -> Result<Self> {
-        let convl2l = if channels.out_local > 0 {
-            Some(Conv2dPad::load(
-                &vb.pp("ffc.convl2l"),
-                (
-                    channels.out_local,
-                    channels.in_local,
-                    kernel_size,
-                    kernel_size,
-                ),
+    ) -> Self {
+        let convl2l = (channels.out_local > 0).then(|| {
+            Conv2dPad::new(
+                device,
+                channels.in_local,
+                channels.out_local,
+                kernel_size,
+                stride,
                 padding,
-                stride,
                 dilation,
-                1,
-            )?)
-        } else {
-            None
-        };
-
-        let convl2g = if channels.out_global > 0 {
-            Some(Conv2dPad::load(
-                &vb.pp("ffc.convl2g"),
-                (
-                    channels.out_global,
-                    channels.in_local,
-                    kernel_size,
-                    kernel_size,
-                ),
-                padding,
-                stride,
-                dilation,
-                1,
-            )?)
-        } else {
-            None
-        };
-
-        let convg2l = if channels.in_global > 0
-            && channels.out_local > 0
-            && vb.contains_tensor("ffc.convg2l.weight")
-        {
-            Some(Conv2dPad::load(
-                &vb.pp("ffc.convg2l"),
-                (
-                    channels.out_local,
-                    channels.in_global,
-                    kernel_size,
-                    kernel_size,
-                ),
-                padding,
-                stride,
-                dilation,
-                1,
-            )?)
-        } else {
-            None
-        };
-
-        let convg2g = if channels.in_global > 0 && channels.out_global > 0 {
-            Some(SpectralTransform::load(
-                &vb.pp("ffc.convg2g"),
-                stride,
-                channels.in_global,
+            )
+        });
+        let convl2g = (channels.out_global > 0).then(|| {
+            Conv2dPad::new(
+                device,
+                channels.in_local,
                 channels.out_global,
-            )?)
-        } else {
-            None
-        };
+                kernel_size,
+                stride,
+                padding,
+                dilation,
+            )
+        });
+        let convg2l = (channels.in_global > 0 && channels.out_local > 0).then(|| {
+            Conv2dPad::new(
+                device,
+                channels.in_global,
+                channels.out_local,
+                kernel_size,
+                stride,
+                padding,
+                dilation,
+            )
+        });
+        let convg2g = (channels.in_global > 0 && channels.out_global > 0).then(|| {
+            SpectralTransform::new(device, stride, channels.in_global, channels.out_global)
+        });
 
-        Ok(Self {
+        Self {
             convl2l,
             convl2g,
             convg2l,
             convg2g,
-        })
+        }
     }
 
-    fn forward(
-        &self,
-        x_l: &Tensor,
-        x_g: Option<&Tensor>,
-    ) -> candle_core::Result<(Tensor, Option<Tensor>)> {
-        let mut out_l = if let Some(conv) = &self.convl2l {
-            conv.forward(x_l)?
-        } else {
-            Tensor::zeros_like(x_l)?
+    fn forward(&self, x_l: Tensor<4>, x_g: Option<Tensor<4>>) -> (Tensor<4>, Option<Tensor<4>>) {
+        let mut out_l = match &self.convl2l {
+            Some(conv) => conv.forward(x_l.clone()),
+            None => x_l.zeros_like(),
         };
 
-        if let (Some(conv), Some(g)) = (&self.convg2l, x_g) {
-            out_l = (out_l + conv.forward(g)?)?;
+        if let (Some(conv), Some(g)) = (&self.convg2l, x_g.as_ref()) {
+            out_l = out_l + conv.forward(g.clone());
         }
 
-        let mut out_g: Option<Tensor> = None;
-        if let Some(conv) = &self.convl2g {
-            let term = conv.forward(x_l)?;
-            out_g = Some(term);
-        }
+        let mut out_g = self.convl2g.as_ref().map(|conv| conv.forward(x_l));
         if let (Some(conv), Some(g)) = (&self.convg2g, x_g) {
-            let term = conv.forward(g)?;
-            out_g = match out_g {
-                Some(v) => Some((v + term)?),
-                None => Some(term),
-            };
+            let term = conv.forward(g);
+            out_g = Some(match out_g {
+                Some(value) => value + term,
+                None => term,
+            });
         }
-        Ok((out_l, out_g))
+
+        (out_l, out_g)
+    }
+
+    fn fuse_batch_norms(&mut self) {
+        if let Some(conv) = &mut self.convg2g {
+            conv.fuse_batch_norms();
+        }
+    }
+
+    fn fold_local_output_batch_norm(&mut self, bn: &BatchNorm) {
+        let mut offset_added = false;
+        if let Some(conv) = &mut self.convl2l {
+            fold_batch_norm_into_conv2d(&mut conv.conv, bn, !offset_added);
+            offset_added = true;
+        }
+        if let Some(conv) = &mut self.convg2l {
+            fold_batch_norm_into_conv2d(&mut conv.conv, bn, !offset_added);
+        }
+    }
+
+    fn fold_global_output_batch_norm(&mut self, bn: &BatchNorm) {
+        let mut offset_added = false;
+        if let Some(conv) = &mut self.convl2g {
+            fold_batch_norm_into_conv2d(&mut conv.conv, bn, !offset_added);
+            offset_added = true;
+        }
+        if let Some(conv) = &mut self.convg2g {
+            conv.fold_output_batch_norm(bn, !offset_added);
+        }
     }
 }
 
-#[derive(Clone)]
+#[derive(Module, Debug)]
 struct FFCBnAct {
     ffc: Ffc,
     bn_l: Option<BatchNorm>,
@@ -315,102 +298,127 @@ struct FFCBnAct {
 }
 
 impl FFCBnAct {
-    fn load(
-        vb: &VarBuilder,
+    fn new(
+        device: &Device,
         channels: FfcChannels,
         kernel_size: usize,
         stride: usize,
         padding: usize,
         dilation: usize,
-    ) -> Result<Self> {
-        let ffc = Ffc::load(vb, channels, kernel_size, stride, padding, dilation)?;
-        let bn_l = if channels.out_local > 0 && vb.contains_tensor("bn_l.weight") {
-            Some(load_batch_norm(&vb.pp("bn_l"), channels.out_local)?)
-        } else {
-            None
-        };
-        let bn_g = if channels.out_global > 0 && vb.contains_tensor("bn_g.weight") {
-            Some(load_batch_norm(&vb.pp("bn_g"), channels.out_global)?)
-        } else {
-            None
-        };
-        Ok(Self { ffc, bn_l, bn_g })
+    ) -> Self {
+        Self {
+            ffc: Ffc::new(device, channels, kernel_size, stride, padding, dilation),
+            bn_l: (channels.out_local > 0).then(|| batch_norm(device, channels.out_local)),
+            bn_g: (channels.out_global > 0).then(|| batch_norm(device, channels.out_global)),
+        }
     }
 
-    fn forward(
-        &self,
-        x_l: &Tensor,
-        x_g: Option<&Tensor>,
-    ) -> candle_core::Result<(Tensor, Option<Tensor>)> {
-        let (mut out_l, mut out_g) = self.ffc.forward(x_l, x_g)?;
+    fn forward(&self, x_l: Tensor<4>, x_g: Option<Tensor<4>>) -> (Tensor<4>, Option<Tensor<4>>) {
+        let (mut out_l, mut out_g) = self.ffc.forward(x_l, x_g);
         if let Some(bn) = &self.bn_l {
-            out_l = bn.forward_t(&out_l, false)?;
-            out_l = out_l.relu()?;
+            out_l = relu(bn.forward(out_l));
         }
-        if let Some(g) = out_g.take() {
-            let mut g = g;
-            if let Some(bn) = &self.bn_g {
-                g = bn.forward_t(&g, false)?;
-                g = g.relu()?;
+        if let Some(bn) = &self.bn_g {
+            if let Some(g) = out_g.take() {
+                out_g = Some(relu(bn.forward(g)));
             }
-            out_g = Some(g);
         }
-        Ok((out_l, out_g))
+        (out_l, out_g)
+    }
+
+    fn fuse_batch_norms(&mut self) {
+        self.ffc.fuse_batch_norms();
+        if let Some(bn) = self.bn_l.take() {
+            self.ffc.fold_local_output_batch_norm(&bn);
+        }
+        if let Some(bn) = self.bn_g.take() {
+            self.ffc.fold_global_output_batch_norm(&bn);
+        }
     }
 }
 
-#[derive(Clone)]
+#[derive(Module, Debug)]
 struct FFCResBlock {
     conv1: FFCBnAct,
     conv2: FFCBnAct,
 }
 
 impl FFCResBlock {
-    fn load(vb: &VarBuilder, channels: FfcChannels) -> Result<Self> {
-        let conv1 = FFCBnAct::load(&vb.pp("conv1"), channels, 3, 1, 1, 1)?;
-        let conv2 = FFCBnAct::load(&vb.pp("conv2"), channels, 3, 1, 1, 1)?;
-        Ok(Self { conv1, conv2 })
+    fn new(device: &Device, channels: FfcChannels) -> Self {
+        Self {
+            conv1: FFCBnAct::new(device, channels, 3, 1, 1, 1),
+            conv2: FFCBnAct::new(device, channels, 3, 1, 1, 1),
+        }
     }
 
-    fn forward(
-        &self,
-        x_l: &Tensor,
-        x_g: Option<&Tensor>,
-    ) -> candle_core::Result<(Tensor, Option<Tensor>)> {
-        let (y_l, y_g) = self.conv1.forward(x_l, x_g)?;
-        let (y_l, y_g) = self.conv2.forward(&y_l, y_g.as_ref())?;
-        let out_l = (y_l + x_l)?;
-        let out_g = match (y_g, x_g) {
-            (Some(y), Some(x)) => Some((y + x)?),
+    fn forward(&self, x_l: Tensor<4>, x_g: Option<Tensor<4>>) -> (Tensor<4>, Option<Tensor<4>>) {
+        let residual_l = x_l.clone();
+        let residual_g = x_g.clone();
+        let (y_l, y_g) = self.conv1.forward(x_l, x_g);
+        let (y_l, y_g) = self.conv2.forward(y_l, y_g);
+        let out_l = y_l + residual_l;
+        let out_g = match (y_g, residual_g) {
+            (Some(y), Some(x)) => Some(y + x),
             (Some(y), None) => Some(y),
-            (None, Some(x)) => Some(x.clone()),
+            (None, Some(x)) => Some(x),
             (None, None) => None,
         };
-        Ok((out_l, out_g))
+        (out_l, out_g)
+    }
+
+    fn fuse_batch_norms(&mut self) {
+        self.conv1.fuse_batch_norms();
+        self.conv2.fuse_batch_norms();
     }
 }
 
+#[derive(Module, Debug)]
+struct ConvTransposeBn {
+    conv: ConvTranspose2d,
+    bn: Option<BatchNorm>,
+}
+
+impl ConvTransposeBn {
+    fn new(device: &Device, in_channels: usize, out_channels: usize) -> Self {
+        Self {
+            conv: conv_transpose2d(device, in_channels, out_channels, 3, 2, 1, 1, true),
+            bn: Some(batch_norm(device, out_channels)),
+        }
+    }
+
+    fn forward(&self, input: Tensor<4>) -> Tensor<4> {
+        let y = self.conv.forward(input);
+        let y = match &self.bn {
+            Some(bn) => bn.forward(y),
+            None => y,
+        };
+        relu(y)
+    }
+
+    fn fuse_batch_norm(&mut self) {
+        if let Some(bn) = self.bn.take() {
+            fold_batch_norm_into_conv_transpose2d(&mut self.conv, &bn, true);
+        }
+    }
+}
+
+#[derive(Module, Debug)]
 pub struct Lama {
-    pad_input: usize,
     init: FFCBnAct,
     down1: FFCBnAct,
     down2: FFCBnAct,
     down3: FFCBnAct,
     blocks: Vec<FFCResBlock>,
-    up1: (ConvTranspose2d, BatchNorm),
-    up2: (ConvTranspose2d, BatchNorm),
-    up3: (ConvTranspose2d, BatchNorm),
+    up1: ConvTransposeBn,
+    up2: ConvTransposeBn,
+    up3: ConvTransposeBn,
     final_conv: Conv2d,
-    device: Device,
 }
 
 impl Lama {
-    pub fn load(vb: &VarBuilder) -> Result<Self> {
-        let device = vb.device().clone();
-        let pad_input = 3;
-
-        let init = FFCBnAct::load(
-            &vb.pp("model.1"),
+    pub fn new(device: &Device) -> Self {
+        let init = FFCBnAct::new(
+            device,
             FfcChannels {
                 in_local: 4,
                 in_global: 0,
@@ -421,9 +429,9 @@ impl Lama {
             1,
             0,
             1,
-        )?;
-        let down1 = FFCBnAct::load(
-            &vb.pp("model.2"),
+        );
+        let down1 = FFCBnAct::new(
+            device,
             FfcChannels {
                 in_local: 64,
                 in_global: 0,
@@ -434,9 +442,9 @@ impl Lama {
             2,
             1,
             1,
-        )?;
-        let down2 = FFCBnAct::load(
-            &vb.pp("model.3"),
+        );
+        let down2 = FFCBnAct::new(
+            device,
             FfcChannels {
                 in_local: 128,
                 in_global: 0,
@@ -447,9 +455,9 @@ impl Lama {
             2,
             1,
             1,
-        )?;
-        let down3 = FFCBnAct::load(
-            &vb.pp("model.4"),
+        );
+        let down3 = FFCBnAct::new(
+            device,
             FfcChannels {
                 in_local: 256,
                 in_global: 0,
@@ -460,146 +468,239 @@ impl Lama {
             2,
             1,
             1,
-        )?;
+        );
 
-        let mut blocks = Vec::new();
         let residual_channels = FfcChannels {
             in_local: 128,
             in_global: 384,
             out_local: 128,
             out_global: 384,
         };
-        for idx in 5..=22 {
-            blocks.push(FFCResBlock::load(
-                &vb.pp(format!("model.{idx}")),
-                residual_channels,
-            )?);
+        let mut blocks = Vec::with_capacity(18);
+        for _ in 0..18 {
+            blocks.push(FFCResBlock::new(device, residual_channels));
         }
 
-        let up1_w = vb.pp("model.24").get((512, 256, 3, 3), "weight")?;
-        let up1 = ConvTranspose2d::new(
-            up1_w,
-            Some(vb.pp("model.24").get(256, "bias")?),
-            ConvTranspose2dConfig {
-                stride: 2,
-                padding: 1,
-                output_padding: 1,
-                dilation: 1,
-            },
-        );
-        let up1_bn = load_batch_norm(&vb.pp("model.25"), up1.weight().dims4()?.1)?;
-
-        let up2_w = vb.pp("model.27").get((256, 128, 3, 3), "weight")?;
-        let up2 = ConvTranspose2d::new(
-            up2_w,
-            Some(vb.pp("model.27").get(128, "bias")?),
-            ConvTranspose2dConfig {
-                stride: 2,
-                padding: 1,
-                output_padding: 1,
-                dilation: 1,
-            },
-        );
-        let up2_bn = load_batch_norm(&vb.pp("model.28"), up2.weight().dims4()?.1)?;
-
-        let up3_w = vb.pp("model.30").get((128, 64, 3, 3), "weight")?;
-        let up3 = ConvTranspose2d::new(
-            up3_w,
-            Some(vb.pp("model.30").get(64, "bias")?),
-            ConvTranspose2dConfig {
-                stride: 2,
-                padding: 1,
-                output_padding: 1,
-                dilation: 1,
-            },
-        );
-        let up3_bn = load_batch_norm(&vb.pp("model.31"), up3.weight().dims4()?.1)?;
-
-        let final_conv = conv2d_new(
-            vb.pp("model.34").get((3, 64, 7, 7), "weight")?,
-            Some(vb.pp("model.34").get(3, "bias")?),
-            Conv2dConfig {
-                stride: 1,
-                padding: 0,
-                dilation: 1,
-                groups: 1,
-                cudnn_fwd_algo: None,
-            },
-        )?;
-
-        Ok(Self {
-            pad_input,
+        Self {
             init,
             down1,
             down2,
             down3,
             blocks,
-            up1: (up1, up1_bn),
-            up2: (up2, up2_bn),
-            up3: (up3, up3_bn),
-            final_conv,
-            device,
-        })
+            up1: ConvTransposeBn::new(device, 512, 256),
+            up2: ConvTransposeBn::new(device, 256, 128),
+            up3: ConvTransposeBn::new(device, 128, 64),
+            final_conv: conv2d(device, 64, 3, 7, 1, 0, 1, true),
+        }
     }
 
-    pub fn forward(&self, image: &Tensor, mask: &Tensor) -> Result<Tensor> {
-        let device = &self.device;
-        let dtype = DType::F32;
-        let img = image.to_device(device)?.to_dtype(dtype)?;
-        let mask = mask.to_device(device)?.to_dtype(dtype)?;
-        let (b, _c, h, w) = img.dims4()?;
-        let mask_inv = (Tensor::ones_like(&mask)? - &mask)?;
-        let mask3 = mask.broadcast_as((b, 3, h, w))?;
-        let mask_inv3 = mask_inv.broadcast_as((b, 3, h, w))?;
-        let img_masked = (&img * &mask_inv3)?;
-        let masked = Tensor::cat(&[&img_masked, &mask], 1)?;
+    pub fn forward(&self, image: Tensor<4>, mask: Tensor<4>) -> Tensor<4> {
+        let dtype = dtype_to_float(image.dtype());
+        let [batch, _channels, height, width] = image.dims();
+        let mask_inv = mask.ones_like() - mask.clone();
+        let mask3 = mask.clone().expand([batch, 3, height, width]);
+        let mask_inv3 = mask_inv.expand([batch, 3, height, width]);
+        let img_masked = image.clone() * mask_inv3.clone();
+        let input = Tensor::cat(vec![img_masked, mask], 1);
 
-        let xs = reflect_pad2d(&masked, self.pad_input)?;
-        let (mut l, mut g) = self.init.forward(&xs, None)?;
-        (l, g) = self.down1.forward(&l, g.as_ref())?;
-        (l, g) = self.down2.forward(&l, g.as_ref())?;
-        (l, g) = self.down3.forward(&l, g.as_ref())?;
+        let input = reflect_pad2d(input, 3);
+        let (mut local, mut global) = self.init.forward(input, None);
+        (local, global) = self.down1.forward(local, global);
+        (local, global) = self.down2.forward(local, global);
+        (local, global) = self.down3.forward(local, global);
 
-        for blk in &self.blocks {
-            (l, g) = blk.forward(&l, g.as_ref())?;
+        for block in &self.blocks {
+            (local, global) = block.forward(local, global);
         }
 
-        let g = g.ok_or_else(|| anyhow!("global branch missing after bottleneck"))?;
-        let mut xs = Tensor::cat(&[&l, &g], 1)?;
-        let (up1, bn1) = &self.up1;
-        xs = bn1.forward_t(&up1.forward(&xs)?, false)?;
-        xs = xs.relu()?;
+        let global = global.expect("global branch missing after LaMa bottleneck");
+        let mut output = Tensor::cat(vec![local, global], 1);
+        output = self.up1.forward(output);
+        output = self.up2.forward(output);
+        output = self.up3.forward(output);
+        output = reflect_pad2d(output, 3);
+        output = sigmoid(self.final_conv.forward(output));
+        output = output.narrow(2, 0, height).narrow(3, 0, width).cast(dtype);
 
-        let (up2, bn2) = &self.up2;
-        xs = bn2.forward_t(&up2.forward(&xs)?, false)?;
-        xs = xs.relu()?;
+        output * mask3 + image * mask_inv3
+    }
 
-        let (up3, bn3) = &self.up3;
-        xs = bn3.forward_t(&up3.forward(&xs)?, false)?;
-        xs = xs.relu()?;
-
-        xs = reflect_pad2d(&xs, self.pad_input)?;
-        let xs = self.final_conv.forward(&xs)?;
-        let xs = ops::sigmoid(&xs)?;
-        let xs = xs.narrow(2, 0, h)?.narrow(3, 0, w)?.contiguous()?;
-        let pred = (&xs * &mask3)?;
-        let base = (&img * &mask_inv3)?;
-        let output = (pred + base)?;
-        Ok(output)
+    pub fn fuse_batch_norms(mut self) -> Self {
+        self.init.fuse_batch_norms();
+        self.down1.fuse_batch_norms();
+        self.down2.fuse_batch_norms();
+        self.down3.fuse_batch_norms();
+        for block in &mut self.blocks {
+            block.fuse_batch_norms();
+        }
+        self.up1.fuse_batch_norm();
+        self.up2.fuse_batch_norm();
+        self.up3.fuse_batch_norm();
+        self
     }
 }
 
-fn reflect_pad2d(xs: &Tensor, pad: usize) -> candle_core::Result<Tensor> {
-    if pad == 0 {
-        return Ok(xs.clone());
-    }
-    let xs = xs.contiguous()?;
-    let (_b, _c, h, w) = xs.dims4()?;
-    let left = xs.narrow(3, 1, pad)?.contiguous()?.flip(&[3])?;
-    let right = xs.narrow(3, w - pad - 1, pad)?.contiguous()?.flip(&[3])?;
-    let xs = Tensor::cat(&[&left, &xs, &right], 3)?;
+struct Rfft2Power2 {
+    spectrum: Tensor<4>,
+    fft_height: usize,
+    fft_width: usize,
+}
 
-    let top = xs.narrow(2, 1, pad)?.contiguous()?.flip(&[2])?;
-    let bottom = xs.narrow(2, h - pad - 1, pad)?.contiguous()?.flip(&[2])?;
-    Tensor::cat(&[&top, &xs, &bottom], 2)
+fn rfft2_power2(input: Tensor<4>) -> Rfft2Power2 {
+    let [batch, channels, height, width] = input.dims();
+    let fft_height = height.next_power_of_two();
+    let fft_width = width.next_power_of_two();
+
+    let (width_re, width_im) = signal::rfft(input, 3, Some(fft_width));
+    let (spectrum_re, spectrum_im) = signal::cfft(width_re, width_im, 2, Some(fft_height));
+    let spectrum_width = spectrum_re.dims()[3];
+    let spectrum = Tensor::cat(
+        vec![
+            spectrum_re.unsqueeze_dim::<5>(2),
+            spectrum_im.unsqueeze_dim::<5>(2),
+        ],
+        2,
+    )
+    .reshape([batch, channels * 2, fft_height, spectrum_width]);
+    Rfft2Power2 {
+        spectrum,
+        fft_height,
+        fft_width,
+    }
+}
+
+fn irfft2_power2(
+    spectrum: Tensor<5>,
+    height: usize,
+    width: usize,
+    fft_height: usize,
+    fft_width: usize,
+) -> Tensor<4> {
+    let spectrum_re = spectrum.clone().slice_dim(2, 0..1).squeeze_dim::<4>(2);
+    let spectrum_im = spectrum.slice_dim(2, 1..2).squeeze_dim::<4>(2);
+    let (height_re, height_im) = ifft_complex_dim(spectrum_re, spectrum_im, 2, fft_height);
+    signal::irfft(height_re, height_im, 3, Some(fft_width))
+        .narrow(2, 0, height)
+        .narrow(3, 0, width)
+}
+
+fn ifft_complex_dim(
+    spectrum_re: Tensor<4>,
+    spectrum_im: Tensor<4>,
+    dim: usize,
+    n: usize,
+) -> (Tensor<4>, Tensor<4>) {
+    let (forward_re, forward_im) = signal::cfft(spectrum_re, spectrum_im.neg(), dim, Some(n));
+    let scale = n as f64;
+    (forward_re / scale, forward_im.neg() / scale)
+}
+
+fn conv2d(
+    device: &Device,
+    in_channels: usize,
+    out_channels: usize,
+    kernel_size: usize,
+    stride: usize,
+    padding: usize,
+    dilation: usize,
+    bias: bool,
+) -> Conv2d {
+    Conv2dConfig::new([in_channels, out_channels], [kernel_size, kernel_size])
+        .with_stride([stride, stride])
+        .with_padding(PaddingConfig2d::Explicit(
+            padding, padding, padding, padding,
+        ))
+        .with_dilation([dilation, dilation])
+        .with_bias(bias)
+        .init(device)
+}
+
+fn conv_transpose2d(
+    device: &Device,
+    in_channels: usize,
+    out_channels: usize,
+    kernel_size: usize,
+    stride: usize,
+    padding: usize,
+    output_padding: usize,
+    bias: bool,
+) -> ConvTranspose2d {
+    ConvTranspose2dConfig::new([in_channels, out_channels], [kernel_size, kernel_size])
+        .with_stride([stride, stride])
+        .with_padding([padding, padding])
+        .with_padding_out([output_padding, output_padding])
+        .with_bias(bias)
+        .init(device)
+}
+
+fn batch_norm(device: &Device, channels: usize) -> BatchNorm {
+    BatchNormConfig::new(channels)
+        .with_epsilon(1e-5)
+        .init(device)
+}
+
+fn fold_batch_norm_into_conv2d(conv: &mut Conv2d, bn: &BatchNorm, add_offset: bool) {
+    let (scale, offset) = batch_norm_scale_offset(bn);
+    let out_channels = scale.dims()[0];
+    let weight_scale = scale.clone().reshape([out_channels, 1, 1, 1]);
+    conv.weight = conv.weight.clone().map(|weight| weight * weight_scale);
+    conv.bias = fold_bias(conv.bias.take(), scale, offset, add_offset);
+}
+
+fn fold_batch_norm_into_conv_transpose2d(
+    conv: &mut ConvTranspose2d,
+    bn: &BatchNorm,
+    add_offset: bool,
+) {
+    let (scale, offset) = batch_norm_scale_offset(bn);
+    let out_channels = scale.dims()[0];
+    let weight_scale = scale.clone().reshape([1, out_channels, 1, 1]);
+    conv.weight = conv.weight.clone().map(|weight| weight * weight_scale);
+    conv.bias = fold_bias(conv.bias.take(), scale, offset, add_offset);
+}
+
+fn batch_norm_scale_offset(bn: &BatchNorm) -> (Tensor<1>, Tensor<1>) {
+    let gamma = bn.gamma.val();
+    let beta = bn.beta.val();
+    let device = gamma.device();
+    let mean = bn.running_mean.value().to_device(&device);
+    let var = bn.running_var.value().to_device(&device);
+    let scale = gamma / (var + bn.epsilon).sqrt();
+    let offset = beta - mean * scale.clone();
+    (scale, offset)
+}
+
+fn fold_bias(
+    bias: Option<burn::module::Param<Tensor<1>>>,
+    scale: Tensor<1>,
+    offset: Tensor<1>,
+    add_offset: bool,
+) -> Option<burn::module::Param<Tensor<1>>> {
+    match (bias, add_offset) {
+        (Some(bias), true) => Some(bias.map(|bias| bias * scale + offset)),
+        (Some(bias), false) => Some(bias.map(|bias| bias * scale)),
+        (None, true) => Some(burn::module::Param::from_tensor(offset)),
+        (None, false) => None,
+    }
+}
+
+fn reflect_pad2d(input: Tensor<4>, pad: usize) -> Tensor<4> {
+    if pad == 0 {
+        return input;
+    }
+    let [_, _, height, width] = input.dims();
+    assert!(
+        height > pad && width > pad,
+        "input too small for reflection padding of {pad}: got {width}x{height}"
+    );
+    input.pad((pad, pad, pad, pad), PadMode::Reflect)
+}
+
+fn dtype_to_float(dtype: DType) -> FloatDType {
+    match dtype {
+        DType::F16 => FloatDType::F16,
+        DType::BF16 => FloatDType::BF16,
+        DType::F64 => FloatDType::F64,
+        _ => FloatDType::F32,
+    }
 }

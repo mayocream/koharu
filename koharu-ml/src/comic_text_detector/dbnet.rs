@@ -1,83 +1,77 @@
-use candle_core::{ModuleT, Result, Tensor};
-use candle_nn::{
-    BatchNorm, Conv2d, Conv2dConfig, ConvTranspose2d, ConvTranspose2dConfig, Module, VarBuilder,
-    batch_norm, conv_transpose2d, conv_transpose2d_no_bias, ops,
+use burn::{
+    module::Module,
+    nn::{
+        BatchNorm, BatchNormConfig, PaddingConfig2d,
+        conv::{Conv2d, Conv2dConfig, ConvTranspose2d, ConvTranspose2dConfig},
+    },
+    tensor::{
+        Device, Tensor,
+        activation::{leaky_relu, sigmoid},
+    },
 };
 
-use crate::ops::{conv2d, conv2d_no_bias};
-
-#[derive(Clone, Copy)]
+#[derive(Clone, Copy, Debug)]
 enum Act {
     Leaky,
 }
 
-#[derive(Clone)]
+#[derive(Module, Debug)]
 struct ConvBnAct {
     conv: Conv2d,
     bn: BatchNorm,
+    #[module(skip)]
     act: Act,
 }
 
 impl ConvBnAct {
-    fn load(
-        vb: VarBuilder,
+    fn new(
+        device: &Device,
         c1: usize,
         c2: usize,
         k: usize,
         stride: usize,
         padding: usize,
         act: Act,
-    ) -> Result<Self> {
-        let cfg = Conv2dConfig {
-            padding,
-            stride,
-            dilation: 1,
-            groups: 1,
-            cudnn_fwd_algo: None,
-        };
-        let conv = conv2d_no_bias(c1, c2, k, cfg, vb.pp("conv"))?;
-        let bn = batch_norm(c2, 1e-5, vb.pp("bn"))?;
-        Ok(Self { conv, bn, act })
+    ) -> Self {
+        Self {
+            conv: conv2d(device, c1, c2, k, stride, padding, false),
+            bn: BatchNormConfig::new(c2).with_epsilon(1e-5).init(device),
+            act,
+        }
     }
-}
 
-impl Module for ConvBnAct {
-    fn forward(&self, xs: &Tensor) -> Result<Tensor> {
-        let xs = self.conv.forward(xs)?;
-        let xs = self.bn.forward_t(&xs, false)?;
+    fn forward(&self, input: Tensor<4>) -> Tensor<4> {
+        let input = self.bn.forward(self.conv.forward(input));
         match self.act {
-            Act::Leaky => ops::leaky_relu(&xs, 0.1),
+            Act::Leaky => leaky_relu(input, 0.1),
         }
     }
 }
 
-#[derive(Clone)]
+#[derive(Module, Debug)]
 struct Bottleneck {
     cv1: ConvBnAct,
     cv2: ConvBnAct,
+    #[module(skip)]
     add: bool,
 }
 
 impl Bottleneck {
-    fn load(vb: VarBuilder, c1: usize, c2: usize, shortcut: bool, act: Act) -> Result<Self> {
-        let cv1 = ConvBnAct::load(vb.pp("cv1"), c1, c2, 1, 1, 0, act)?;
-        let cv2 = ConvBnAct::load(vb.pp("cv2"), c2, c2, 3, 1, 1, act)?;
-        Ok(Self {
-            cv1,
-            cv2,
+    fn new(device: &Device, c1: usize, c2: usize, shortcut: bool, act: Act) -> Self {
+        Self {
+            cv1: ConvBnAct::new(device, c1, c2, 1, 1, 0, act),
+            cv2: ConvBnAct::new(device, c2, c2, 3, 1, 1, act),
             add: shortcut,
-        })
+        }
+    }
+
+    fn forward(&self, input: Tensor<4>) -> Tensor<4> {
+        let output = self.cv2.forward(self.cv1.forward(input.clone()));
+        if self.add { input + output } else { output }
     }
 }
 
-impl Module for Bottleneck {
-    fn forward(&self, xs: &Tensor) -> Result<Tensor> {
-        let y = self.cv2.forward(&self.cv1.forward(xs)?)?;
-        if self.add { xs + y } else { Ok(y) }
-    }
-}
-
-#[derive(Clone)]
+#[derive(Module, Debug)]
 struct C3 {
     cv1: ConvBnAct,
     cv2: ConvBnAct,
@@ -86,111 +80,86 @@ struct C3 {
 }
 
 impl C3 {
-    fn load(
-        vb: VarBuilder,
-        c1: usize,
-        c2: usize,
-        n: usize,
-        shortcut: bool,
-        act: Act,
-    ) -> Result<Self> {
+    fn new(device: &Device, c1: usize, c2: usize, n: usize, shortcut: bool, act: Act) -> Self {
         let hidden = c2 / 2;
-        let cv1 = ConvBnAct::load(vb.pp("cv1"), c1, hidden, 1, 1, 0, act)?;
-        let cv2 = ConvBnAct::load(vb.pp("cv2"), c1, hidden, 1, 1, 0, act)?;
-        let cv3 = ConvBnAct::load(vb.pp("cv3"), hidden * 2, c2, 1, 1, 0, act)?;
-        let mut m = Vec::with_capacity(n);
-        for i in 0..n {
-            m.push(Bottleneck::load(
-                vb.pp(format!("m.{i}")),
-                hidden,
-                hidden,
-                shortcut,
-                act,
-            )?);
+        Self {
+            cv1: ConvBnAct::new(device, c1, hidden, 1, 1, 0, act),
+            cv2: ConvBnAct::new(device, c1, hidden, 1, 1, 0, act),
+            cv3: ConvBnAct::new(device, hidden * 2, c2, 1, 1, 0, act),
+            m: (0..n)
+                .map(|_| Bottleneck::new(device, hidden, hidden, shortcut, act))
+                .collect(),
         }
-        Ok(Self { cv1, cv2, cv3, m })
+    }
+
+    fn forward(&self, input: Tensor<4>) -> Tensor<4> {
+        let mut y = self.cv1.forward(input.clone());
+        for bottleneck in &self.m {
+            y = bottleneck.forward(y);
+        }
+        let y2 = self.cv2.forward(input);
+        self.cv3.forward(Tensor::cat(vec![y, y2], 1))
     }
 }
 
-impl Module for C3 {
-    fn forward(&self, xs: &Tensor) -> Result<Tensor> {
-        let y1 = self.cv1.forward(xs)?;
-        let mut y = y1.clone();
-        for b in &self.m {
-            y = b.forward(&y)?;
-        }
-        let y2 = self.cv2.forward(xs)?;
-        let out = Tensor::cat(&[&y, &y2], 1)?;
-        self.cv3.forward(&out)
-    }
-}
-
-#[derive(Clone)]
+#[derive(Module, Debug)]
 struct DoubleConvUpC3 {
+    conv: DoubleConvUpC3Inner,
+}
+
+#[derive(Module, Debug)]
+struct DoubleConvUpC3Inner {
     c3: C3,
     deconv: ConvTranspose2d,
     bn: BatchNorm,
 }
 
 impl DoubleConvUpC3 {
-    fn load(vb: VarBuilder, c1: usize, c2: usize, act: Act) -> Result<Self> {
-        let c3 = C3::load(vb.pp("0"), c1, c2, 1, true, act)?;
-        let cfg = ConvTranspose2dConfig {
-            padding: 1,
-            output_padding: 0,
-            stride: 2,
-            dilation: 1,
-        };
-        let deconv = conv_transpose2d_no_bias(c2, c2 / 2, 4, cfg, vb.pp("1"))?;
-        let bn = batch_norm(c2 / 2, 1e-5, vb.pp("2"))?;
-        Ok(Self { c3, deconv, bn })
+    fn new(device: &Device, c1: usize, c2: usize, act: Act) -> Self {
+        Self {
+            conv: DoubleConvUpC3Inner {
+                c3: C3::new(device, c1, c2, 1, true, act),
+                deconv: conv_transpose2d(device, c2, c2 / 2, 4, 2, 1, 0, false),
+                bn: BatchNormConfig::new(c2 / 2).with_epsilon(1e-5).init(device),
+            },
+        }
+    }
+
+    fn forward(&self, input: Tensor<4>) -> Tensor<4> {
+        self.conv.forward(input)
     }
 }
 
-impl Module for DoubleConvUpC3 {
-    fn forward(&self, xs: &Tensor) -> Result<Tensor> {
-        let xs = self.c3.forward(xs)?;
-        let xs = self.deconv.forward(&xs)?;
-        let xs = self.bn.forward_t(&xs, false)?;
-        ops::leaky_relu(&xs, 0.0)
+impl DoubleConvUpC3Inner {
+    fn forward(&self, input: Tensor<4>) -> Tensor<4> {
+        leaky_relu(
+            self.bn.forward(self.deconv.forward(self.c3.forward(input))),
+            0.0,
+        )
     }
 }
 
-#[derive(Clone)]
+#[derive(Module, Debug)]
 struct ConvBnRelu {
     conv: Conv2d,
     bn: BatchNorm,
 }
 
 impl ConvBnRelu {
-    fn load(vb: VarBuilder, c1: usize, c2: usize, k: usize, use_bias: bool) -> Result<Self> {
+    fn new(device: &Device, c1: usize, c2: usize, k: usize, use_bias: bool) -> Self {
         let padding = k / 2;
-        let cfg = Conv2dConfig {
-            padding,
-            stride: 1,
-            dilation: 1,
-            groups: 1,
-            cudnn_fwd_algo: None,
-        };
-        let conv = if use_bias {
-            conv2d(c1, c2, k, cfg, vb.pp("0"))?
-        } else {
-            conv2d_no_bias(c1, c2, k, cfg, vb.pp("0"))?
-        };
-        let bn = batch_norm(c2, 1e-5, vb.pp("1"))?;
-        Ok(Self { conv, bn })
+        Self {
+            conv: conv2d(device, c1, c2, k, 1, padding, use_bias),
+            bn: BatchNormConfig::new(c2).with_epsilon(1e-5).init(device),
+        }
+    }
+
+    fn forward(&self, input: Tensor<4>) -> Tensor<4> {
+        leaky_relu(self.bn.forward(self.conv.forward(input)), 0.0)
     }
 }
 
-impl Module for ConvBnRelu {
-    fn forward(&self, xs: &Tensor) -> Result<Tensor> {
-        let xs = self.conv.forward(xs)?;
-        let xs = self.bn.forward_t(&xs, false)?;
-        ops::leaky_relu(&xs, 0.0)
-    }
-}
-
-#[derive(Clone)]
+#[derive(Module, Debug)]
 struct BinarizeHead {
     conv1: ConvBnRelu,
     deconv1: ConvTranspose2d,
@@ -199,34 +168,23 @@ struct BinarizeHead {
 }
 
 impl BinarizeHead {
-    fn load(vb: VarBuilder, c1: usize) -> Result<Self> {
-        let conv1 = ConvBnRelu::load(vb.clone(), c1, 16, 3, true)?;
-        let cfg = ConvTranspose2dConfig {
-            padding: 0,
-            output_padding: 0,
-            stride: 2,
-            dilation: 1,
-        };
-        let deconv1 = conv_transpose2d(16, 16, 2, cfg, vb.pp("3"))?;
-        let bn1 = batch_norm(16, 1e-5, vb.pp("4"))?;
-        let deconv2 = conv_transpose2d(16, 1, 2, cfg, vb.pp("6"))?;
-        Ok(Self {
-            conv1,
-            deconv1,
-            bn1,
-            deconv2,
-        })
+    fn new(device: &Device, c1: usize) -> Self {
+        Self {
+            conv1: ConvBnRelu::new(device, c1, 16, 3, true),
+            deconv1: conv_transpose2d(device, 16, 16, 2, 2, 0, 0, true),
+            bn1: BatchNormConfig::new(16).with_epsilon(1e-5).init(device),
+            deconv2: conv_transpose2d(device, 16, 1, 2, 2, 0, 0, true),
+        }
     }
 
-    fn forward(&self, xs: &Tensor) -> Result<Tensor> {
-        let x = self.conv1.forward(xs)?;
-        let x = ops::leaky_relu(&self.bn1.forward_t(&self.deconv1.forward(&x)?, false)?, 0.0)?;
-        let x = self.deconv2.forward(&x)?;
-        ops::sigmoid(&x)
+    fn forward(&self, input: Tensor<4>) -> Tensor<4> {
+        let input = self.conv1.forward(input);
+        let input = leaky_relu(self.bn1.forward(self.deconv1.forward(input)), 0.0);
+        sigmoid(self.deconv2.forward(input))
     }
 }
 
-#[derive(Clone)]
+#[derive(Module, Debug)]
 struct ThreshHead {
     conv1: ConvBnRelu,
     deconv1: ConvTranspose2d,
@@ -235,33 +193,23 @@ struct ThreshHead {
 }
 
 impl ThreshHead {
-    fn load(vb: VarBuilder, c1: usize) -> Result<Self> {
-        let conv1 = ConvBnRelu::load(vb.clone(), c1, 16, 3, false)?;
-        let cfg = ConvTranspose2dConfig {
-            padding: 0,
-            output_padding: 0,
-            stride: 2,
-            dilation: 1,
-        };
-        let deconv1 = conv_transpose2d(16, 16, 2, cfg, vb.pp("3"))?;
-        let bn1 = batch_norm(16, 1e-5, vb.pp("4"))?;
-        let deconv2 = conv_transpose2d(16, 1, 2, cfg, vb.pp("6"))?;
-        Ok(Self {
-            conv1,
-            deconv1,
-            bn1,
-            deconv2,
-        })
+    fn new(device: &Device, c1: usize) -> Self {
+        Self {
+            conv1: ConvBnRelu::new(device, c1, 16, 3, false),
+            deconv1: conv_transpose2d(device, 16, 16, 2, 2, 0, 0, true),
+            bn1: BatchNormConfig::new(16).with_epsilon(1e-5).init(device),
+            deconv2: conv_transpose2d(device, 16, 1, 2, 2, 0, 0, true),
+        }
     }
 
-    fn forward(&self, xs: &Tensor) -> Result<Tensor> {
-        let x = self.conv1.forward(xs)?;
-        let x = ops::leaky_relu(&self.bn1.forward_t(&self.deconv1.forward(&x)?, false)?, 0.0)?;
-        let x = self.deconv2.forward(&x)?;
-        ops::sigmoid(&x)
+    fn forward(&self, input: Tensor<4>) -> Tensor<4> {
+        let input = self.conv1.forward(input);
+        let input = leaky_relu(self.bn1.forward(self.deconv1.forward(input)), 0.0);
+        sigmoid(self.deconv2.forward(input))
     }
 }
 
+#[derive(Module, Debug)]
 pub struct DbNet {
     upconv3: DoubleConvUpC3,
     upconv4: DoubleConvUpC3,
@@ -271,23 +219,59 @@ pub struct DbNet {
 }
 
 impl DbNet {
-    pub fn load(vb: VarBuilder) -> Result<Self> {
+    pub fn new(device: &Device) -> Self {
         let act = Act::Leaky;
-        Ok(Self {
-            upconv3: DoubleConvUpC3::load(vb.pp("upconv3.conv"), 512, 512, act)?,
-            upconv4: DoubleConvUpC3::load(vb.pp("upconv4.conv"), 384, 256, act)?,
-            conv: ConvBnRelu::load(vb.pp("conv"), 128, 64, 1, true)?,
-            binarize: BinarizeHead::load(vb.pp("binarize"), 64)?,
-            thresh: ThreshHead::load(vb.pp("thresh"), 64)?,
-        })
+        Self {
+            upconv3: DoubleConvUpC3::new(device, 512, 512, act),
+            upconv4: DoubleConvUpC3::new(device, 384, 256, act),
+            conv: ConvBnRelu::new(device, 128, 64, 1, true),
+            binarize: BinarizeHead::new(device, 64),
+            thresh: ThreshHead::new(device, 64),
+        }
     }
 
-    pub fn forward(&self, f80: &Tensor, f40: &Tensor, u40: &Tensor) -> Result<Tensor> {
-        let u80 = self.upconv3.forward(&Tensor::cat(&[f40, u40], 1)?)?;
-        let x = self.upconv4.forward(&Tensor::cat(&[f80, &u80], 1)?)?;
-        let x = self.conv.forward(&x)?;
-        let thresh = self.thresh.forward(&x)?;
-        let shrink = self.binarize.forward(&x)?;
-        Tensor::cat(&[shrink, thresh], 1)
+    pub fn forward(&self, f80: Tensor<4>, f40: Tensor<4>, u40: Tensor<4>) -> Tensor<4> {
+        let u80 = self.upconv3.forward(Tensor::cat(vec![f40, u40], 1));
+        let x = self.upconv4.forward(Tensor::cat(vec![f80, u80], 1));
+        let x = self.conv.forward(x);
+        let thresh = self.thresh.forward(x.clone());
+        let shrink = self.binarize.forward(x);
+        Tensor::cat(vec![shrink, thresh], 1)
     }
+}
+
+fn conv2d(
+    device: &Device,
+    in_channels: usize,
+    out_channels: usize,
+    kernel: usize,
+    stride: usize,
+    padding: usize,
+    bias: bool,
+) -> Conv2d {
+    Conv2dConfig::new([in_channels, out_channels], [kernel, kernel])
+        .with_stride([stride, stride])
+        .with_padding(PaddingConfig2d::Explicit(
+            padding, padding, padding, padding,
+        ))
+        .with_bias(bias)
+        .init(device)
+}
+
+fn conv_transpose2d(
+    device: &Device,
+    in_channels: usize,
+    out_channels: usize,
+    kernel: usize,
+    stride: usize,
+    padding: usize,
+    output_padding: usize,
+    bias: bool,
+) -> ConvTranspose2d {
+    ConvTranspose2dConfig::new([in_channels, out_channels], [kernel, kernel])
+        .with_stride([stride, stride])
+        .with_padding([padding, padding])
+        .with_padding_out([output_padding, output_padding])
+        .with_bias(bias)
+        .init(device)
 }

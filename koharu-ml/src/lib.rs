@@ -1,6 +1,5 @@
 mod hf_hub;
 
-pub mod anime_text;
 pub mod aot_inpainting;
 pub mod comic_text_bubble_detector;
 pub mod comic_text_detector;
@@ -10,10 +9,7 @@ pub mod inpainting;
 pub mod lama;
 pub mod loading;
 pub mod manga_ocr;
-pub mod manga_text_segmentation_2025;
-pub mod mit48px_ocr;
 mod ops;
-pub mod paddleocr_vl;
 pub mod pp_doclayout_v3;
 pub mod probability_map;
 pub mod speech_bubble_segmentation;

@@ -11,7 +11,7 @@ use crate::loader::{add_runtime_search_path, preload_library};
 const CUDA_SUCCESS: i32 = 0;
 const CUDA_13_0_DRIVER_VERSION: i32 = 13000;
 const CUDA_13_1_DRIVER_VERSION: i32 = 13010;
-const CUDA_EXTRACT_REVISION: u32 = 2;
+const CUDA_EXTRACT_REVISION: u32 = 3;
 const CU_DEVICE_ATTRIBUTE_COMPUTE_CAPABILITY_MAJOR: i32 = 75;
 const CU_DEVICE_ATTRIBUTE_COMPUTE_CAPABILITY_MINOR: i32 = 76;
 const MIN_COMPUTE_CAPABILITY: (i32, i32) = (8, 0); // Ampere (RTX 30xx) and above
@@ -89,6 +89,11 @@ const WHEELS: &[WheelSpec] = &[
             "libcudnn_heuristic.so.9",
             "libcudnn_ops.so.9",
         ],
+    },
+    WheelSpec {
+        package: "nvidia-cuda-nvrtc/13.0.88",
+        windows_dylibs: &["nvrtc64_130_0.dll", "nvrtc-builtins64_130.dll"],
+        linux_dylibs: &["libnvrtc.so.13", "libnvrtc-builtins.so.13.0"],
     },
 ];
 

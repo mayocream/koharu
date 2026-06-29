@@ -2,30 +2,50 @@ mod bert;
 mod model;
 mod tokenizer;
 
-use anyhow::{Context, Result};
-use candle_core::{DType, Device, Tensor};
-use image::GenericImageView;
+use std::path::Path;
+
+use anyhow::{Context, Result, bail};
+use burn::{
+    module::{Module, ModuleMapper, Param},
+    store::{ModuleSnapshot, PyTorchToBurnAdapter, SafetensorsStore},
+    tensor::{DType, Device, DeviceKind, FloatDType, Tensor, TensorData},
+};
+use image::{
+    DynamicImage,
+    imageops::{self, FilterType},
+};
 use koharu_runtime::RuntimeManager;
 use tokenizers::Tokenizer;
 use tracing::instrument;
 
-use model::{PreprocessorConfig, VisionEncoderDecoder, VisionEncoderDecoderConfig};
+use model::VisionEncoderDecoder;
 use tokenizer::load_tokenizer;
 
-use crate::{device, loading};
-
 const HF_REPO: &str = "mayocream/manga-ocr";
+const SAFETENSORS_FILENAME: &str = "model.safetensors";
+const VOCAB_FILENAME: &str = "vocab.txt";
+const IMAGE_SIZE: u32 = 224;
+const IMAGE_MEAN: [f32; 3] = [0.5, 0.5, 0.5];
+const IMAGE_STD: [f32; 3] = [0.5, 0.5, 0.5];
 
-koharu_runtime::declare_hf_model_package!(id: "model:manga-ocr:config", repo: HF_REPO, file: "config.json", bootstrap: false, order: 200);
-koharu_runtime::declare_hf_model_package!(id: "model:manga-ocr:preprocessor", repo: HF_REPO, file: "preprocessor_config.json", bootstrap: false, order: 201);
-koharu_runtime::declare_hf_model_package!(id: "model:manga-ocr:vocab", repo: HF_REPO, file: "vocab.txt", bootstrap: false, order: 202);
-koharu_runtime::declare_hf_model_package!(id: "model:manga-ocr:special-tokens", repo: HF_REPO, file: "special_tokens_map.json", bootstrap: false, order: 203);
-koharu_runtime::declare_hf_model_package!(id: "model:manga-ocr:weights", repo: HF_REPO, file: "model.safetensors", bootstrap: false, order: 204);
+koharu_runtime::declare_hf_model_package!(
+    id: "model:manga-ocr:vocab",
+    repo: HF_REPO,
+    file: VOCAB_FILENAME,
+    bootstrap: false,
+    order: 202,
+);
+koharu_runtime::declare_hf_model_package!(
+    id: "model:manga-ocr:weights",
+    repo: HF_REPO,
+    file: SAFETENSORS_FILENAME,
+    bootstrap: false,
+    order: 204,
+);
 
 pub struct MangaOcr {
     model: VisionEncoderDecoder,
     tokenizer: Tokenizer,
-    preprocessor: PreprocessorConfig,
     device: Device,
     dtype: DType,
 }
@@ -42,36 +62,16 @@ struct ImagePreprocessOptions<'a> {
 
 impl MangaOcr {
     pub async fn load(runtime: &RuntimeManager, cpu: bool) -> Result<Self> {
-        let device = device(cpu)?;
-        let dtype = loading::model_dtype(&device);
+        let (device, dtype, module_dtype) = make_device(cpu);
         let hf = runtime.downloads();
-        let config_path = hf.huggingface_model(HF_REPO, "config.json").await?;
-        let preprocessor_path = hf
-            .huggingface_model(HF_REPO, "preprocessor_config.json")
-            .await?;
-        let vocab_path = hf.huggingface_model(HF_REPO, "vocab.txt").await?;
-        let special_tokens_path = hf
-            .huggingface_model(HF_REPO, "special_tokens_map.json")
-            .await?;
-
-        let config: VisionEncoderDecoderConfig =
-            loading::read_json(&config_path).context("failed to parse model config")?;
-        let preprocessor: PreprocessorConfig = loading::read_json(&preprocessor_path)
-            .context("failed to parse preprocessor config")?;
-        let tokenizer = load_tokenizer(None, &vocab_path, &special_tokens_path)?;
-        let model_device = device.clone();
-        let weights = hf.huggingface_model(HF_REPO, "model.safetensors").await?;
-        let model = loading::load_mmaped_safetensors_path_with_dtype(
-            &weights,
-            &device,
-            dtype,
-            move |vb| VisionEncoderDecoder::from_config(config, vb, model_device.clone()),
-        )?;
+        let vocab_path = hf.huggingface_model(HF_REPO, VOCAB_FILENAME).await?;
+        let tokenizer = load_tokenizer(None, &vocab_path)?;
+        let weights_path = hf.huggingface_model(HF_REPO, SAFETENSORS_FILENAME).await?;
+        let model = load_model(&weights_path, &device, module_dtype)?;
 
         Ok(Self {
             model,
             tokenizer,
-            preprocessor,
             device,
             dtype,
         })
@@ -84,16 +84,16 @@ impl MangaOcr {
         }
 
         let options = ImagePreprocessOptions {
-            image_size: self.preprocessor.size,
-            image_mean: &self.preprocessor.image_mean,
-            image_std: &self.preprocessor.image_std,
-            do_resize: self.preprocessor.do_resize,
-            do_normalize: self.preprocessor.do_normalize,
+            image_size: IMAGE_SIZE,
+            image_mean: &IMAGE_MEAN,
+            image_std: &IMAGE_STD,
+            do_resize: true,
+            do_normalize: true,
             device: &self.device,
             dtype: self.dtype,
         };
         let pixel_values = preprocess_images(images, &options)?;
-        let token_ids = self.forward(&pixel_values)?;
+        let token_ids = self.forward(pixel_values)?;
         let texts = token_ids
             .into_iter()
             .map(|ids| {
@@ -105,78 +105,131 @@ impl MangaOcr {
     }
 
     #[instrument(level = "debug", skip_all)]
-    fn forward(&self, pixel_values: &Tensor) -> Result<Vec<Vec<u32>>> {
+    fn forward(&self, pixel_values: Tensor<4>) -> Result<Vec<Vec<u32>>> {
         self.model.forward(pixel_values)
     }
 }
 
 #[instrument(level = "debug", skip_all)]
 fn preprocess_images(
-    images: &[image::DynamicImage],
+    images: &[DynamicImage],
     options: &ImagePreprocessOptions<'_>,
-) -> Result<Tensor> {
-    let mut batch = Vec::with_capacity(images.len());
+) -> Result<Tensor<4>> {
+    let image_size = options.image_size as usize;
+    let plane = image_size * image_size;
+    let mut data = Vec::with_capacity(images.len() * 3 * plane);
     for image in images {
-        let processed = preprocess_single_image(image, options)?;
-        batch.push(processed);
+        data.extend(preprocess_single_image(image, options)?);
     }
 
-    Ok(Tensor::cat(&batch, 0)?)
+    let mut tensor_data = TensorData::new(data, [images.len(), 3, image_size, image_size]);
+    options.device.staging(std::iter::once(&mut tensor_data));
+    Ok(Tensor::from_data(
+        tensor_data,
+        (options.device, options.dtype),
+    ))
 }
 
 #[instrument(level = "debug", skip_all)]
 fn preprocess_single_image(
-    image: &image::DynamicImage,
+    image: &DynamicImage,
     options: &ImagePreprocessOptions<'_>,
-) -> Result<Tensor> {
-    let (orig_w, orig_h) = image.dimensions();
-    let (width, height) = if options.do_resize {
-        (options.image_size as usize, options.image_size as usize)
+) -> Result<Vec<f32>> {
+    let rgb = image.grayscale().to_rgb8();
+    let (orig_w, orig_h) = rgb.dimensions();
+    let target = options.image_size;
+    let rgb = if options.do_resize && (orig_w != target || orig_h != target) {
+        imageops::resize(&rgb, target, target, FilterType::Triangle)
     } else {
-        (orig_w as usize, orig_h as usize)
+        rgb
     };
+    let (width, height) = rgb.dimensions();
+    let width = width as usize;
+    let height = height as usize;
+    let plane = width * height;
+    let raw = rgb.into_raw();
+    let mut data = vec![0.0_f32; 3 * plane];
+    let std = [
+        options.image_std[0].max(f32::EPSILON),
+        options.image_std[1].max(f32::EPSILON),
+        options.image_std[2].max(f32::EPSILON),
+    ];
+    for (index, pixel) in raw.chunks_exact(3).enumerate() {
+        for channel in 0..3 {
+            let mut value = pixel[channel] as f32 / 255.0;
+            if options.do_normalize {
+                value = (value - options.image_mean[channel]) / std[channel];
+            }
+            data[channel * plane + index] = value;
+        }
+    }
+    Ok(data)
+}
 
-    let tensor = Tensor::from_vec(
-        image.grayscale().to_rgb8().into_raw(),
-        (1, orig_h as usize, orig_w as usize, 3),
-        options.device,
-    )?
-    .permute((0, 3, 1, 2))?
-    .to_dtype(DType::F32)?;
+fn load_model(
+    path: &Path,
+    device: &Device,
+    module_dtype: FloatDType,
+) -> Result<VisionEncoderDecoder> {
+    let mut model = VisionEncoderDecoder::new(device);
+    let mut store = SafetensorsStore::from_file(path)
+        .with_from_adapter(PyTorchToBurnAdapter)
+        .with_key_remapping(r"\.LayerNorm\.", ".layer_norm.")
+        .with_key_remapping(r"\.attention\.self\.", ".attention.self_attention.")
+        .with_key_remapping(
+            r"\.crossattention\.self\.",
+            ".crossattention.self_attention.",
+        )
+        .skip_enum_variants(true)
+        .allow_partial(false);
+    let result = model
+        .load_from(&mut store)
+        .context("failed to mmap/load Manga OCR safetensors through Burn store")?;
+    if !result.errors.is_empty() {
+        bail!("failed to load Manga OCR tensors: {}", result);
+    }
+    if !result.missing.is_empty() {
+        bail!("Manga OCR checkpoint is missing tensors: {}", result);
+    }
+    Ok(cast_module_float(model, module_dtype))
+}
 
-    let tensor = if options.do_resize {
-        tensor.interpolate2d(height, width)?
+fn make_device(cpu: bool) -> (Device, DType, FloatDType) {
+    #[cfg(feature = "cuda")]
+    {
+        if !cpu {
+            let mut device = Device::cuda(0);
+            if let Err(error) = device.configure(FloatDType::BF16) {
+                tracing::warn!(%error, "failed to configure Burn CUDA default dtype to BF16");
+            }
+            return (device, DType::BF16, FloatDType::BF16);
+        }
+    }
+
+    let mut device = Device::wgpu(if cpu {
+        DeviceKind::Cpu
     } else {
-        tensor
-    };
+        DeviceKind::DefaultDevice
+    });
+    if let Err(error) = device.configure(FloatDType::F32) {
+        tracing::warn!(%error, "failed to configure Burn WGPU default dtype to F32");
+    }
+    (device, DType::F32, FloatDType::F32)
+}
 
-    let tensor = (tensor * (1.0 / 255.0))?;
-    let tensor = if options.do_normalize {
-        let std = [
-            if options.image_std[0] == 0.0 {
-                1.0
-            } else {
-                options.image_std[0]
-            },
-            if options.image_std[1] == 0.0 {
-                1.0
-            } else {
-                options.image_std[1]
-            },
-            if options.image_std[2] == 0.0 {
-                1.0
-            } else {
-                options.image_std[2]
-            },
-        ];
-        let mean_t = Tensor::from_slice(options.image_mean, (1, 3, 1, 1), options.device)?;
-        let std_t = Tensor::from_slice(&std, (1, 3, 1, 1), options.device)?;
-        tensor.broadcast_sub(&mean_t)?.broadcast_div(&std_t)?
-    } else {
-        tensor
-    };
+fn cast_module_float<M: Module>(module: M, dtype: FloatDType) -> M {
+    struct CastMapper {
+        dtype: FloatDType,
+    }
 
-    Ok(tensor.to_dtype(options.dtype)?)
+    impl ModuleMapper for CastMapper {
+        fn map_float<const D: usize>(&mut self, param: Param<Tensor<D>>) -> Param<Tensor<D>> {
+            let (id, tensor, mapper) = param.consume();
+            Param::from_mapped_value(id, tensor.cast(self.dtype), mapper)
+        }
+    }
+
+    module.map(&mut CastMapper { dtype })
 }
 
 #[instrument(level = "debug", skip_all)]

@@ -9,7 +9,7 @@ use koharu_runtime::{ComputePolicy, RuntimeManager, default_app_data_root};
 #[command(
     author,
     version,
-    about = "Run YuzuMarker.FontDetection (Candle) on an image"
+    about = "Run YuzuMarker.FontDetection (Burn) on an image"
 )]
 struct Args {
     /// Path to the input image.
