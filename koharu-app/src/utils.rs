@@ -14,6 +14,9 @@ impl RegionExt for Region {
         if width == 0 || height == 0 {
             return None;
         }
+        if self.x >= width || self.y >= height {
+            return None;
+        }
         let x0 = self.x.min(width.saturating_sub(1));
         let y0 = self.y.min(height.saturating_sub(1));
         let x1 = self.x.saturating_add(self.width).min(width).max(x0);
