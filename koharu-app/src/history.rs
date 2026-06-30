@@ -155,6 +155,63 @@ impl History {
     }
 
     fn push_undo(&mut self, op: Op) {
+        // Try to merge if the incoming op is a pipeline render operation
+        if let Op::Batch {
+            label: incoming_label,
+            ops: incoming_ops,
+        } = &op
+            && (incoming_label.contains("renderer: page ")
+                || incoming_label.contains("koharu-renderer: page "))
+            && let Some(prev) = self.undo_stack.back_mut()
+        {
+            let mut merged = false;
+            match prev {
+                Op::Batch {
+                    ops: prev_ops,
+                    label: prev_label,
+                } => {
+                    if !prev_label.starts_with("undo:") {
+                        prev_ops.extend(incoming_ops.clone());
+                        merged = true;
+                    }
+                }
+                single_op => {
+                    let prev_op = std::mem::replace(
+                        single_op,
+                        Op::Batch {
+                            ops: vec![],
+                            label: String::new(),
+                        },
+                    );
+                    if let Op::Batch { ops, label } = single_op {
+                        *ops = vec![
+                            prev_op,
+                            Op::Batch {
+                                ops: incoming_ops.clone(),
+                                label: incoming_label.clone(),
+                            },
+                        ];
+                        *label = match &ops[0] {
+                            Op::RemoveNode { .. } => "Delete block".to_string(),
+                            Op::UpdateNode { .. } => "Update block".to_string(),
+                            Op::AddNode { .. } => "Add block".to_string(),
+                            Op::RemovePage { .. } => "Delete page".to_string(),
+                            Op::AddPage { .. } => "Add page".to_string(),
+                            Op::UpdatePage { .. } => "Update page".to_string(),
+                            Op::ReorderPages { .. } => "Reorder pages".to_string(),
+                            Op::ReorderNodes { .. } => "Reorder blocks".to_string(),
+                            Op::UpdateProjectMeta { .. } => "Update project metadata".to_string(),
+                            Op::Batch { label: l, .. } => l.clone(),
+                        };
+                    }
+                    merged = true;
+                }
+            }
+            if merged {
+                return;
+            }
+        }
+
         self.undo_stack.push_back(op);
         while self.undo_stack.len() > self.limit {
             self.undo_stack.pop_front();
