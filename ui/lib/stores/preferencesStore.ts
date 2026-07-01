@@ -3,6 +3,7 @@
 import { create } from 'zustand'
 import { persist } from 'zustand/middleware'
 
+import { DEFAULT_BRUSH_SIZE } from '@/lib/brush'
 import { getPlatform } from '@/lib/shortcutUtils'
 
 type PreferencesState = {
@@ -47,7 +48,7 @@ type PreferencesState = {
 
 const initialPreferences = {
   brushConfig: {
-    size: 36,
+    size: DEFAULT_BRUSH_SIZE,
     color: '#ffffff',
   },
   favoriteFonts: [],

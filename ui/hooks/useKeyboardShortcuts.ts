@@ -2,6 +2,7 @@
 
 import { useEffect, useMemo } from 'react'
 
+import { clampBrushSize } from '@/lib/brush'
 import { redoOp, selectAllTextNodesOnCurrentPage, undoOp } from '@/lib/io/scene'
 import { getPlatform, formatShortcut, isModifierKey } from '@/lib/shortcutUtils'
 import { useEditorUiStore } from '@/lib/stores/editorUiStore'
@@ -83,10 +84,10 @@ export function useKeyboardShortcuts() {
       // Brush Size
       if (shortcut === shortcuts.increaseBrushSize) {
         const currentSize = usePreferencesStore.getState().brushConfig.size
-        setBrushConfig({ size: Math.min(128, currentSize + 4) })
+        setBrushConfig({ size: clampBrushSize(currentSize + 4) })
       } else if (shortcut === shortcuts.decreaseBrushSize) {
         const currentSize = usePreferencesStore.getState().brushConfig.size
-        setBrushConfig({ size: Math.max(8, currentSize - 4) })
+        setBrushConfig({ size: clampBrushSize(currentSize - 4) })
       }
     }
 

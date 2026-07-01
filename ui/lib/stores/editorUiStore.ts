@@ -108,8 +108,11 @@ export const useEditorUiStore = create<EditorUiState>((set) => ({
   setShowTextBlocksOverlay: (show) => set({ showTextBlocksOverlay: show }),
 
   setMode: (mode) => {
+    const isBrushTool = mode === 'repairBrush' || mode === 'brush' || mode === 'eraser'
+
     set({ mode })
-    if (mode === 'repairBrush' || mode === 'brush' || mode === 'eraser') {
+
+    if (isBrushTool) {
       set({ showRenderedImage: false, showInpaintedImage: true })
     }
     if (mode === 'repairBrush') {
