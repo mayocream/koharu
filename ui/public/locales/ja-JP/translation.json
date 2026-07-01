@@ -83,6 +83,8 @@
     "pages_other": "{{count}} ページ",
     "empty": "ドキュメントがありません",
     "prompt": "ページを選択または読み込んで開始してください",
+    "deleteConfirmTitle": "ページの削除",
+    "deleteConfirmDescription": "ページ {{index}} を削除してもよろしいですか？この操作は取り消せません。",
     "pageManager": {
       "title": "ページ管理",
       "description": "ドラッグ＆ドロップでページの順番を変更します。"

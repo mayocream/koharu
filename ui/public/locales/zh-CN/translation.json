@@ -83,6 +83,8 @@
     "pages_other": "{{count}} 页",
     "empty": "没有文档",
     "prompt": "选择或导入页面开始",
+    "deleteConfirmTitle": "删除页面",
+    "deleteConfirmDescription": "您确定要删除第 {{index}} 页吗？此操作无法撤销。",
     "pageManager": {
       "title": "页面管理",
       "description": "拖放页面以重新排列顺序。"

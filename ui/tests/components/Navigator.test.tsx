@@ -109,13 +109,39 @@ describe('Navigator', () => {
     const deleteBtn = await screen.findByTestId('navigator-page-delete-0')
     await userEvent.click(deleteBtn)
 
-    expect(lastOp).toEqual({
-      removePage: {
-        id: 'a',
-        prev_page: { id: 'a', name: 'a', width: 10, height: 10, nodes: {} },
-        prev_index: 0,
-      },
-    })
+    // Click confirm in the AlertDialog
+    const confirmBtn = await screen.findByRole('button', { name: 'common.delete' })
+    await userEvent.click(confirmBtn)
+
+    await waitFor(() =>
+      expect(lastOp).toEqual({
+        removePage: {
+          id: 'a',
+          prev_page: { id: 'a', name: 'a', width: 10, height: 10, nodes: {} },
+          prev_index: 0,
+        },
+      }),
+    )
+  })
+
+  it('cancelling the delete dialog does not trigger page deletion', async () => {
+    let applied = false
+    server.use(
+      http.get('/api/v1/scene.json', () => HttpResponse.json(sceneWithPages(['a', 'b']))),
+      http.post('/api/v1/history/apply', async () => {
+        applied = true
+        return HttpResponse.json({ epoch: 1 })
+      }),
+    )
+    renderWithQuery(<Navigator />)
+    const deleteBtn = await screen.findByTestId('navigator-page-delete-0')
+    await userEvent.click(deleteBtn)
+
+    const cancelBtn = await screen.findByRole('button', { name: 'common.cancel' })
+    await userEvent.click(cancelBtn)
+
+    await waitFor(() => expect(cancelBtn).not.toBeInTheDocument())
+    expect(applied).toBe(false)
   })
 
   it('Shift-click selects a contiguous range of page elements', async () => {
@@ -222,13 +248,19 @@ describe('Navigator', () => {
     const deleteBtn = await screen.findByTestId('navigator-page-delete-2')
     await userEvent.click(deleteBtn)
 
-    expect(lastOp).toEqual({
-      removePage: {
-        id: 'c',
-        prev_page: { id: 'c', name: 'c', width: 10, height: 10, nodes: {} },
-        prev_index: 2,
-      },
-    })
+    // Click confirm in the AlertDialog
+    const confirmBtn = await screen.findByRole('button', { name: 'common.delete' })
+    await userEvent.click(confirmBtn)
+
+    await waitFor(() =>
+      expect(lastOp).toEqual({
+        removePage: {
+          id: 'c',
+          prev_page: { id: 'c', name: 'c', width: 10, height: 10, nodes: {} },
+          prev_index: 2,
+        },
+      }),
+    )
   })
 
   it('enforces the 1-page minimum invariant and prevents deleting all pages', async () => {
