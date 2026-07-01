@@ -32,6 +32,7 @@ koharu-ml = { path = "crates/koharu-ml", default-features = false }
 koharu-psd = { path = "crates/koharu-psd", default-features = false }
 koharu-renderer = { path = "crates/koharu-renderer", default-features = false }
 koharu-rpc = { path = "crates/koharu-rpc", default-features = false }
+koharu-secrets = { path = "crates/koharu-secrets", default-features = false }
 
 # external dependencies
 candle-transformers = "=0.9.2"

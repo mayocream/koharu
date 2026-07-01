@@ -4198,6 +4198,7 @@ dependencies = [
  "eventsource-stream",
  "futures",
  "koharu-runtime",
+ "koharu-secrets",
  "reqwest 0.13.4",
  "reqwest-middleware",
  "serde",
@@ -4229,6 +4230,7 @@ dependencies = [
  "koharu-ml",
  "koharu-renderer",
  "koharu-runtime",
+ "koharu-secrets",
  "lru",
  "parking_lot",
  "petgraph",
@@ -4436,7 +4438,6 @@ name = "koharu-runtime"
 version = "0.61.2"
 dependencies = [
  "anyhow",
- "atomicwrites",
  "camino",
  "dirs",
  "flate2",
@@ -4445,7 +4446,6 @@ dependencies = [
  "indexmap 2.14.0",
  "indicatif",
  "inventory",
- "keyring",
  "koharu-core",
  "libloading 0.8.9",
  "num_cpus",
@@ -4459,6 +4459,16 @@ dependencies = [
  "tracing",
  "windows-sys 0.61.2",
  "zip 8.6.0",
+]
+
+[[package]]
+name = "koharu-secrets"
+version = "0.61.2"
+dependencies = [
+ "anyhow",
+ "atomicwrites",
+ "keyring",
+ "tempfile",
 ]
 
 [[package]]

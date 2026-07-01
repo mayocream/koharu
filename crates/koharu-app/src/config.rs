@@ -2,7 +2,8 @@ use std::fs;
 
 use anyhow::{Context, Result};
 use camino::Utf8PathBuf;
-use koharu_runtime::{SecretStore, default_app_data_root};
+use koharu_runtime::default_app_data_root;
+use koharu_secrets::SecretStore;
 use serde::{Deserialize, Deserializer, Serialize, Serializer};
 use utoipa::ToSchema;
 
