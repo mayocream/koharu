@@ -36,25 +36,6 @@ export function TextBlockLayer({ showSprites, scale, style }: TextBlockLayerProp
     return false
   }, [selectedIds])
 
-  const removeNode = async (id: string) => {
-    if (!page) return
-    const node = page.nodes[id]
-    if (!node) return
-    const idx = Object.keys(page.nodes).indexOf(id)
-    await applyOp(ops.removeNode(page.id, id, node, idx < 0 ? 0 : idx))
-    if ('text' in node.kind) queueAutoRender(page.id)
-  }
-
-  const removeSelected = async () => {
-    if (!page) return
-    // Snapshot selection now: each op invalidates the page state by removing a
-    // node, so we can't iterate against a stale closure mid-loop.
-    const ids = Array.from(selectedIds).filter((id): id is string => !!id)
-    for (const id of ids) {
-      await removeNode(id)
-    }
-  }
-
   const updateTransform = async (id: string, t: Transform) => {
     if (!page) return
     const data: NodeDataPatch = {
@@ -65,15 +46,6 @@ export function TextBlockLayer({ showSprites, scale, style }: TextBlockLayerProp
     await applyOp(ops.updateNode(page.id, id, { transform: t, data }))
     queueAutoRender(page.id)
   }
-
-  useHotkeys(
-    'delete',
-    () => {
-      if (hasSelection && interactive) void removeSelected()
-    },
-    { enabled: hasSelection && interactive },
-    [selectedIds, interactive],
-  )
 
   return (
     <div
@@ -250,16 +222,14 @@ function TextBlockItem({
       }}
     >
       <div
-        className={`absolute inset-0 rounded-md ${
-          selected
-            ? 'border-[3px] border-primary bg-primary/15'
-            : 'border-2 border-rose-400/60 bg-rose-400/5'
-        }`}
+        className={`absolute inset-0 rounded-md ${selected
+          ? 'border-[3px] border-primary bg-primary/15'
+          : 'border-2 border-rose-400/60 bg-rose-400/5'
+          }`}
       />
       <div
-        className={`pointer-events-none absolute -top-1.5 -left-1.5 flex h-4 w-4 items-center justify-center rounded-full text-[9px] font-semibold text-white shadow ${
-          selected ? 'bg-primary' : 'bg-rose-400'
-        }`}
+        className={`pointer-events-none absolute -top-1.5 -left-1.5 flex h-4 w-4 items-center justify-center rounded-full text-[9px] font-semibold text-white shadow ${selected ? 'bg-primary' : 'bg-rose-400'
+          }`}
       >
         {index + 1}
       </div>
