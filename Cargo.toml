@@ -1,15 +1,6 @@
 [workspace]
 members = [
-    "crates/koharu",
-    "crates/koharu-llm",
-    "crates/koharu-ml",
-    "crates/koharu-runtime",
-    "crates/koharu-ai",
-    "crates/koharu-psd",
-    "crates/koharu-renderer",
-    "crates/koharu-app",
-    "crates/koharu-rpc",
-    "crates/koharu-core",
+    "crates/*",
     "tests/integration-tests",
     "tests/integration-tests/client",
 ]
