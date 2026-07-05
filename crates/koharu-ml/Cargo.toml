@@ -35,6 +35,8 @@ objc2-metal = { workspace = true, optional = true }
 objc2-metal-performance-shaders = { workspace = true, optional = true }
 objc2-metal-performance-shaders-graph = { workspace = true, optional = true }
 objc2-foundation = { workspace = true, optional = true }
+wgpu = { workspace = true, optional = true }
+wgpu-core = { workspace = true, optional = true }
 
 [features]
 cuda = [
@@ -57,6 +59,10 @@ metal = [
     "objc2-foundation",
     "objc2-metal-performance-shaders",
     "objc2-metal-performance-shaders-graph",
+]
+vulkan = [
+    "wgpu",
+    "wgpu-core",
 ]
 
 [dev-dependencies]
