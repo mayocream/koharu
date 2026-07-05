@@ -163,6 +163,11 @@ tauri-plugin-process = "2.3"
 natord = "1.0.9"
 sentry = { version = "0.48", features = ["tracing"] }
 
+# Vulkan support for Intel Arc
+wgpu = { version = "0.20", optional = true }
+wgpu-core = { version = "0.20", optional = true }
+raw-window-handle = "0.6"
+
 [patch.crates-io]
 candle-transformers = { git = "https://github.com/mayocream/candle", branch = "flash-attn" }
 candle-core = { git = "https://github.com/mayocream/candle", branch = "flash-attn" }
