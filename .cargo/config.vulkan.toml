@@ -1,0 +1,30 @@
+# Cargo configuration for Vulkan builds
+# Use with: CARGO_CONFIG=.cargo/config.vulkan.toml cargo build
+
+[build]
+rustflags = [
+    "-C", "target-cpu=native",
+    "-C", "opt-level=3",
+    "-C", "lto=fat",
+]
+
+# Platform-specific configurations
+
+[target.x86_64-pc-windows-msvc]
+rustflags = [
+    "-C", "target-cpu=native",
+    "-C", "opt-level=3",
+]
+
+[target.x86_64-unknown-linux-gnu]
+rustflags = [
+    "-C", "target-cpu=native",
+    "-C", "opt-level=3",
+    "-C", "link-arg=-fuse-ld=lld",
+]
+
+[target.aarch64-unknown-linux-gnu]
+rustflags = [
+    "-C", "target-cpu=native",
+    "-C", "opt-level=3",
+]
