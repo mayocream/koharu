@@ -3,7 +3,7 @@
 use crate::{C_scalar, C_tensor};
 use libc::c_int;
 
-extern "C" {
+crate::torch_fn! {
     pub fn atg___and__(out__: *mut *mut C_tensor, self_: *mut C_tensor, other_: *mut C_scalar);
     pub fn atg___and__tensor_(
         out__: *mut *mut C_tensor,

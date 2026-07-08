@@ -27,6 +27,8 @@ koharu-app = { path = "crates/koharu-app", default-features = false }
 koharu-core = { path = "crates/koharu-core", default-features = false }
 koharu-llm = { path = "crates/koharu-llm" }
 koharu-runtime = { path = "crates/koharu-runtime", default-features = false }
+koharu-torch = { path = "crates/koharu-torch", default-features = false }
+koharu-torch-sys = { path = "crates/koharu-torch-sys", default-features = false }
 koharu-ai = { path = "crates/koharu-ai", default-features = false }
 koharu-ml = { path = "crates/koharu-ml", default-features = false }
 koharu-psd = { path = "crates/koharu-psd", default-features = false }
@@ -162,6 +164,7 @@ petname = "3"
 tauri-plugin-process = "2.3"
 natord = "1.0.9"
 sentry = { version = "0.48", features = ["tracing"] }
+cmake = "0.1"
 
 [patch.crates-io]
 candle-transformers = { git = "https://github.com/mayocream/candle", branch = "flash-attn" }

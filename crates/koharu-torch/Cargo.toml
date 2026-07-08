@@ -3,7 +3,6 @@ name = "koharu-torch"
 version.workspace = true
 authors = ["Laurent Mazare <lmazare@gmail.com>"]
 edition = "2021"
-build = "build.rs"
 
 description = "Rust wrappers for the PyTorch C++ api (libtorch)."
 repository = "https://github.com/LaurentMazare/tch-rs"
@@ -18,7 +17,7 @@ libc = "0.2.0"
 ndarray = "0.16.1"
 rand = "0.8"
 thiserror = "1"
-torch-sys = { package = "koharu-torch-sys", path = "../koharu-torch-sys" }
+koharu-torch-sys = { workspace = true }
 zip = "0.6"
 half = "2"
 safetensors = "0.3.0"
@@ -34,11 +33,6 @@ memmap2 = { version = "0.6.1", optional = true }
 anyhow = "^1.0.60"
 
 [features]
-download-libtorch = ["torch-sys/download-libtorch"]
-python-extension = ["torch-sys/python-extension"]
+python-extension = ["koharu-torch-sys/python-extension"]
 rl-python = ["cpython"]
-doc-only = ["torch-sys/doc-only"]
 cuda-tests = []
-
-[package.metadata.docs.rs]
-features = [ "doc-only" ]

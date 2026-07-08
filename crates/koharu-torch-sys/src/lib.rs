@@ -1,10 +1,11 @@
 pub mod cuda;
-pub mod io;
+pub mod loader;
 #[cfg(feature = "python-extension")]
 pub mod python;
 mod traits;
 
 use libc::{c_char, c_int, c_uchar, c_void, size_t};
+pub use loader::{library_name, load};
 pub use traits::{DoubleList, IntList, IntListOption};
 
 #[repr(C)]
@@ -12,7 +13,7 @@ pub struct C_scalar {
     _private: [u8; 0],
 }
 
-extern "C" {
+crate::torch_fn! {
     pub fn ats_int(v: i64) -> *mut C_scalar;
     pub fn ats_float(v: f64) -> *mut C_scalar;
     pub fn ats_to_int(arg: *mut C_scalar) -> i64;
@@ -26,7 +27,7 @@ pub struct C_tensor {
     _private: [u8; 0],
 }
 
-extern "C" {
+crate::torch_fn! {
     pub fn at_new_tensor() -> *mut C_tensor;
     pub fn at_shallow_clone(arg: *mut C_tensor) -> *mut C_tensor;
     pub fn at_copy_(dst: *mut C_tensor, src: *mut C_tensor);
@@ -96,20 +97,12 @@ extern "C" {
     ) -> *mut C_tensor;
     pub fn at_grad_set_enabled(b: c_int) -> c_int;
     pub fn at_save(arg: *mut C_tensor, filename: *const c_char);
-    pub fn at_save_to_stream(arg: *mut C_tensor, stream_ptr: *mut c_void);
     pub fn at_load(filename: *const c_char) -> *mut C_tensor;
-    pub fn at_load_from_stream(stream_ptr: *mut c_void) -> *mut C_tensor;
     pub fn at_save_multi(
         args: *const *mut C_tensor,
         names: *const *const c_char,
         n: c_int,
         filename: *const c_char,
-    );
-    pub fn at_save_multi_to_stream(
-        args: *const *mut C_tensor,
-        names: *const *const c_char,
-        n: c_int,
-        stream_ptr: *mut c_void,
     );
     pub fn at_loadz_callback(
         filename: *const c_char,
@@ -131,13 +124,6 @@ extern "C" {
         filename: *const c_char,
         data: *mut c_void,
         f: extern "C" fn(*mut c_void, name: *const c_char, t: *mut C_tensor),
-        device_id: c_int,
-    );
-    pub fn at_load_from_stream_callback(
-        stream_ptr: *mut c_void,
-        data: *mut c_void,
-        f: extern "C" fn(*mut c_void, name: *const c_char, t: *mut C_tensor),
-        enable_device_id: bool,
         device_id: c_int,
     );
 
@@ -162,7 +148,7 @@ extern "C" {
 
 pub mod c_generated;
 
-extern "C" {
+crate::torch_fn! {
     pub fn get_and_reset_last_err() -> *mut c_char;
 }
 
@@ -171,7 +157,7 @@ pub struct C_optimizer {
     _private: [u8; 0],
 }
 
-extern "C" {
+crate::torch_fn! {
     pub fn ato_adam(
         lr: f64,
         beta1: f64,
@@ -233,7 +219,7 @@ pub struct CModule_ {
     _private: [u8; 0],
 }
 
-extern "C" {
+crate::torch_fn! {
     // Constructors
     pub fn ati_none() -> *mut CIValue;
     pub fn ati_bool(b: c_int) -> *mut CIValue;

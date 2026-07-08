@@ -4,38 +4,38 @@ use crate::TchError;
 
 /// A single scalar value.
 pub struct Scalar {
-    pub(super) c_scalar: *mut torch_sys::C_scalar,
+    pub(super) c_scalar: *mut koharu_torch_sys::C_scalar,
 }
 
 impl Scalar {
     /// Creates an integer scalar.
     pub fn int(v: i64) -> Scalar {
-        let c_scalar = unsafe_torch!(torch_sys::ats_int(v));
+        let c_scalar = unsafe_torch!(koharu_torch_sys::ats_int(v));
         Scalar { c_scalar }
     }
 
     /// Creates a float scalar scalar.
     pub fn float(v: f64) -> Scalar {
-        let c_scalar = unsafe_torch!(torch_sys::ats_float(v));
+        let c_scalar = unsafe_torch!(koharu_torch_sys::ats_float(v));
         Scalar { c_scalar }
     }
 
     /// Returns an integer value.
     pub fn to_int(&self) -> Result<i64, TchError> {
-        let i = unsafe_torch_err!(torch_sys::ats_to_int(self.c_scalar));
+        let i = unsafe_torch_err!(koharu_torch_sys::ats_to_int(self.c_scalar));
         Ok(i)
     }
 
     /// Returns a float value.
     pub fn to_float(&self) -> Result<f64, TchError> {
-        let f = unsafe_torch_err!(torch_sys::ats_to_float(self.c_scalar));
+        let f = unsafe_torch_err!(koharu_torch_sys::ats_to_float(self.c_scalar));
         Ok(f)
     }
 
     /// Returns a string representation of the scalar.
     pub fn to_string(&self) -> Result<String, TchError> {
         let s = unsafe_torch_err!({
-            super::utils::ptr_to_string(torch_sys::ats_to_string(self.c_scalar))
+            super::utils::ptr_to_string(koharu_torch_sys::ats_to_string(self.c_scalar))
         });
         match s {
             None => Err(TchError::Kind("nullptr representation".to_string())),
@@ -55,7 +55,7 @@ impl std::fmt::Debug for Scalar {
 
 impl Drop for Scalar {
     fn drop(&mut self) {
-        unsafe_torch!(torch_sys::ats_free(self.c_scalar))
+        unsafe_torch!(koharu_torch_sys::ats_free(self.c_scalar))
     }
 }
 
