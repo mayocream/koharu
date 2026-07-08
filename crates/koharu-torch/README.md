@@ -18,78 +18,29 @@ The code generation part for the C api on top of libtorch comes from
 
 ## Getting Started
 
-This crate requires the C++ PyTorch library (libtorch) in version *v2.11.0* to be available on
-your system. You can either:
+This fork builds a dynamic `koharu_torch_shim` library against libtorch
+*v2.12.1* by default. The Rust crate does not link libtorch directly; callers
+load the shim at runtime before using tensor APIs:
 
-- Use the system-wide libtorch installation (default).
-- Install libtorch manually and let the build script know about it via the `LIBTORCH` environment variable.
-- Use a Python PyTorch install, to do this set `LIBTORCH_USE_PYTORCH=1`.
-- When a system-wide libtorch can't be found and `LIBTORCH` is not set, the
-  build script can download a pre-built binary version of libtorch by using
-  the `download-libtorch` feature. By default a CPU version is used. The
-  `TORCH_CUDA_VERSION` environment variable can be set to `cu117` in order to
-  get a pre-built binary using CUDA 11.7.
-
-### System-wide Libtorch
-
-On linux platforms, the build script will look for a system-wide libtorch
-library in `/usr/lib/libtorch.so`.
-
-### Python PyTorch Install
-
-If the `LIBTORCH_USE_PYTORCH` environment variable is set, the active python
-interpreter is called to retrieve information about the torch python package.
-This version is then linked against.
-
-### Libtorch Manual Install
-
-- Get `libtorch` from the
-[PyTorch website download section](https://pytorch.org/get-started/locally/) and extract
-the content of the zip file.
-- For Linux and macOS users, add the following to your `.bashrc` or equivalent, where `/path/to/libtorch`
-is the path to the directory that was created when unzipping the file.
-```bash
-export LIBTORCH=/path/to/libtorch
+```rust
+unsafe {
+    koharu_torch::load_shim("path/to/koharu_torch_shim.dll")?;
+}
 ```
-The header files location can also be specified separately from the shared library via
-the following:
-```bash
-# LIBTORCH_INCLUDE must contain `include` directory.
-export LIBTORCH_INCLUDE=/path/to/libtorch/
-# LIBTORCH_LIB must contain `lib` directory.
-export LIBTORCH_LIB=/path/to/libtorch/
-```
-- For Windows users, assuming that `X:\path\to\libtorch` is the unzipped libtorch directory.
-    - Navigate to Control Panel -> View advanced system settings -> Environment variables.
-    - Create the `LIBTORCH` variable and set it to `X:\path\to\libtorch`.
-    - Append `X:\path\to\libtorch\lib` to the `Path` variable.
 
-  If you prefer to temporarily set environment variables, in PowerShell you can run
-```powershell
-$Env:LIBTORCH = "X:\path\to\libtorch"
-$Env:Path += ";X:\path\to\libtorch\lib"
-```
-- You should now be able to run some examples, e.g. `cargo run --example basics`.
+The build script downloads libtorch into Cargo's target directory and copies the
+compiled shim to `target/debug` or `target/release`. If that shim already
+exists, the build script leaves it untouched and skips the C++ build.
+
+Use `koharu_torch::shim_library_name()` to get the platform-specific shim file
+name. The libtorch shared libraries must still be visible to the platform
+dynamic loader when the shim is loaded.
 
 ### Windows Specific Notes
 
 As per [the pytorch docs](https://pytorch.org/cppdocs/installing.html) the Windows debug and release builds are not ABI-compatible. This could lead to some segfaults if the incorrect version of libtorch is used.
 
 It is recommended to use the MSVC Rust toolchain (e.g. by installing `stable-x86_64-pc-windows-msvc` via rustup) rather than a MinGW based one as PyTorch has compatibilities issues with MinGW.
-
-### Static Linking
-
-When setting environment variable `LIBTORCH_STATIC=1`, `libtorch` is statically
-linked rather than using the dynamic libraries. The pre-compiled artifacts don't
-seem to include `libtorch.a` by default so this would have to be compiled
-manually, e.g. via the following:
-
-```bash
-git clone -b v2.11.0 --recurse-submodule https://github.com/pytorch/pytorch.git pytorch-static --depth 1
-cd pytorch-static
-USE_CUDA=OFF BUILD_SHARED_LIBS=OFF python setup.py build
-# export LIBTORCH to point at the build directory in pytorch-static.
-```
 
 ## Examples
 
@@ -340,7 +291,7 @@ See some details in [this thread](https://github.com/LaurentMazare/tch-rs/issues
 
 Check this [issue](https://github.com/LaurentMazare/tch-rs/issues/488).
 
-### Compilation is slow, torch-sys seems to be rebuilt every time cargo gets run.
+### Compilation is slow, koharu-torch-sys seems to be rebuilt every time cargo gets run.
 See this [issue](https://github.com/LaurentMazare/tch-rs/issues/596), this could
 be caused by rust-analyzer not knowing about the proper environment variables
 like `LIBTORCH` and `LD_LIBRARY_PATH`.

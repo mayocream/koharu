@@ -16,7 +16,7 @@ pub(super) unsafe fn ptr_to_string(ptr: *mut c_char) -> Option<String> {
 
 pub(super) fn read_and_clean_error() -> Result<(), TchError> {
     unsafe {
-        match ptr_to_string(torch_sys::get_and_reset_last_err()) {
+        match ptr_to_string(koharu_torch_sys::get_and_reset_last_err()) {
             None => Ok(()),
             Some(c_error) => Err(TchError::Torch(c_error)),
         }
@@ -56,74 +56,74 @@ pub(super) fn path_to_cstring<T: AsRef<std::path::Path>>(
 
 /// Sets the random seed used by torch.
 pub fn manual_seed(seed: i64) {
-    unsafe_torch!(torch_sys::at_manual_seed(seed))
+    unsafe_torch!(koharu_torch_sys::at_manual_seed(seed))
 }
 
 /// Get the number of threads used by torch for inter-op parallelism.
 pub fn get_num_interop_threads() -> i32 {
-    unsafe_torch!(torch_sys::at_get_num_interop_threads())
+    unsafe_torch!(koharu_torch_sys::at_get_num_interop_threads())
 }
 
 /// Get the number of threads used by torch in parallel regions.
 pub fn get_num_threads() -> i32 {
-    unsafe_torch!(torch_sys::at_get_num_threads())
+    unsafe_torch!(koharu_torch_sys::at_get_num_threads())
 }
 
 /// Set the number of threads used by torch for inter-op parallelism.
 pub fn set_num_interop_threads(n_threads: i32) {
-    unsafe_torch!(torch_sys::at_set_num_interop_threads(n_threads))
+    unsafe_torch!(koharu_torch_sys::at_set_num_interop_threads(n_threads))
 }
 
 /// Set the number of threads used by torch in parallel regions.
 pub fn set_num_threads(n_threads: i32) {
-    unsafe_torch!(torch_sys::at_set_num_threads(n_threads))
+    unsafe_torch!(koharu_torch_sys::at_set_num_threads(n_threads))
 }
 
 pub fn has_openmp() -> bool {
-    unsafe_torch!(torch_sys::at_context_has_openmp())
+    unsafe_torch!(koharu_torch_sys::at_context_has_openmp())
 }
 
 pub fn has_mkl() -> bool {
-    unsafe_torch!(torch_sys::at_context_has_mkl())
+    unsafe_torch!(koharu_torch_sys::at_context_has_mkl())
 }
 pub fn has_lapack() -> bool {
-    unsafe_torch!(torch_sys::at_context_has_lapack())
+    unsafe_torch!(koharu_torch_sys::at_context_has_lapack())
 }
 pub fn has_mkldnn() -> bool {
-    unsafe_torch!(torch_sys::at_context_has_mkldnn())
+    unsafe_torch!(koharu_torch_sys::at_context_has_mkldnn())
 }
 pub fn has_magma() -> bool {
-    unsafe_torch!(torch_sys::at_context_has_magma())
+    unsafe_torch!(koharu_torch_sys::at_context_has_magma())
 }
 pub fn has_cuda() -> bool {
-    unsafe_torch!(torch_sys::at_context_has_cuda())
+    unsafe_torch!(koharu_torch_sys::at_context_has_cuda())
 }
 pub fn has_cudart() -> bool {
-    unsafe_torch!(torch_sys::at_context_has_cudart())
+    unsafe_torch!(koharu_torch_sys::at_context_has_cudart())
 }
 pub fn has_cusolver() -> bool {
-    unsafe_torch!(torch_sys::at_context_has_cusolver())
+    unsafe_torch!(koharu_torch_sys::at_context_has_cusolver())
 }
 pub fn has_hip() -> bool {
-    unsafe_torch!(torch_sys::at_context_has_hip())
+    unsafe_torch!(koharu_torch_sys::at_context_has_hip())
 }
 pub fn has_ipu() -> bool {
-    unsafe_torch!(torch_sys::at_context_has_ipu())
+    unsafe_torch!(koharu_torch_sys::at_context_has_ipu())
 }
 pub fn has_xla() -> bool {
-    unsafe_torch!(torch_sys::at_context_has_xla())
+    unsafe_torch!(koharu_torch_sys::at_context_has_xla())
 }
 pub fn has_lazy() -> bool {
-    unsafe_torch!(torch_sys::at_context_has_lazy())
+    unsafe_torch!(koharu_torch_sys::at_context_has_lazy())
 }
 pub fn has_mps() -> bool {
-    unsafe_torch!(torch_sys::at_context_has_mps())
+    unsafe_torch!(koharu_torch_sys::at_context_has_mps())
 }
 pub fn version_cudnn() -> i64 {
-    unsafe_torch!(torch_sys::at_context_version_cudnn())
+    unsafe_torch!(koharu_torch_sys::at_context_version_cudnn())
 }
 pub fn version_cudart() -> i64 {
-    unsafe_torch!(torch_sys::at_context_version_cudart())
+    unsafe_torch!(koharu_torch_sys::at_context_version_cudart())
 }
 
 /// Check whether the vulkan backend is available. None that this
@@ -151,7 +151,7 @@ impl QEngine {
         }
     }
     pub fn set(self) -> Result<(), TchError> {
-        unsafe_torch_err!(torch_sys::at_set_qengine(self.to_cint()));
+        unsafe_torch_err!(koharu_torch_sys::at_set_qengine(self.to_cint()));
         Ok(())
     }
 }

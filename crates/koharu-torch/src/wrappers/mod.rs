@@ -15,7 +15,6 @@ pub(crate) mod optimizer;
 #[cfg(feature = "python-extension")]
 pub mod python;
 pub(crate) mod scalar;
-pub(crate) mod stream;
 pub(crate) mod tensor;
 pub(crate) mod tensor_fallible_generated;
 pub(crate) mod tensor_generated;

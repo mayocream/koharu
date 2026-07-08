@@ -73,16 +73,13 @@ void at_copy_(tensor dst, tensor src);
 void at_print(tensor);
 char *at_to_string(tensor, int line_size);
 void at_save(tensor, char *filename);
-void at_save_to_stream(tensor t, void *stream_ptr);
 tensor at_load(char *filename);
-tensor at_load_from_stream(void *stream_ptr);
 tensor at_load_image(char *filename);
 tensor at_load_image_from_memory(unsigned char *img_data, size_t img_size);
 int at_save_image(tensor, char *filename);
 tensor at_resize_image(tensor, int w, int h);
 
 void at_save_multi(tensor *tensors, char **tensor_names, int ntensors, char *filename);
-void at_save_multi_to_stream(tensor *tensors, char **tensor_names, int ntensors, void *stream_ptr);
 /* [at_load_multi] takes as input an array of nullptr for [tensors]. */
 void at_load_multi(tensor *tensors, char **tensor_names, int ntensors, char *filename);
 /* [at_load_multi_] takes as input an array of allocation [tensors]. */
@@ -92,7 +89,6 @@ void at_loadz_callback(char *filename, void *data, void (*f)(void *, char *, ten
 void at_loadz_callback_with_device(char *filename, void *data, void (*f)(void *, char *, tensor), int device_id);
 void at_load_callback(char *filename, void *data, void (*f)(void *, char *, tensor));
 void at_load_callback_with_device(char *filename, void *data, void (*f)(void *, char *, tensor), int device_id);
-void at_load_from_stream_callback(void *stream_ptr, void *data, void (*f)(void *, char *, tensor), bool enable_device_id, int device_id);
 
 int at_get_num_interop_threads();
 
@@ -275,15 +271,6 @@ void ati_free(ivalue);
 
 /// Enables or disables the graph executor optimizer for the current thread.
 void at_set_graph_executor_optimize(bool);
-
-// for internal use
-bool tch_write_stream_destructor(void *stream_ptr);
-bool tch_write_stream_write(void *stream_ptr, const uint8_t *buf, size_t size, size_t *out_size);
-bool tch_read_stream_destructor(void *stream_ptr);
-bool tch_read_stream_stream_position(void *stream_ptr, uint64_t *pos);
-bool tch_read_stream_seek_start(void *stream_ptr, uint64_t pos, uint64_t *new_pos);
-bool tch_read_stream_seek_end(void *stream_ptr, int64_t pos, uint64_t *new_pos);
-bool tch_read_stream_read(void *stream_ptr, uint8_t *buf, size_t size, size_t *new_pos);
 
 #ifdef __cplusplus
 };

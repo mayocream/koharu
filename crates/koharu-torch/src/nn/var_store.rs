@@ -1,11 +1,9 @@
 //! Variable stores.
 use super::Init;
 use crate::tensor::Tensor;
-use crate::wrappers::stream::ReadSeekAdapter;
 use crate::{Device, Kind, TchError};
 use std::collections::hash_map::Entry::{Occupied, Vacant};
 use std::collections::HashMap;
-use std::io::{Read, Seek};
 use std::ops::Div;
 use std::sync::{Arc, Mutex, MutexGuard};
 
@@ -171,16 +169,6 @@ impl VarStore {
         }
     }
 
-    /// Saves the var-store variable values to a stream.
-    ///
-    /// Weight values for all the tensors currently stored in the
-    /// var-store gets saved in the given stream.
-    pub fn save_to_stream<W: std::io::Write>(&self, stream: W) -> Result<(), TchError> {
-        let variables = self.variables_.lock().unwrap();
-        let named_tensors = variables.named_variables.iter().collect::<Vec<_>>();
-        Tensor::save_multi_to_stream(named_tensors.as_slice(), stream)
-    }
-
     fn named_tensors<T: AsRef<std::path::Path>>(
         &self,
         path: T,
@@ -246,34 +234,6 @@ impl VarStore {
             self.set_device(Device::Mps);
             or_error
         }
-    }
-
-    /// Loads the var-store variable values from a stream.
-    ///
-    /// Weight values for all the tensors currently stored in the
-    /// var-store gets loaded from the given stream. Note that the set of
-    /// variables stored in the var-store is not changed, only the values
-    /// for these tensors are modified.
-    pub fn load_from_stream<S: Read + Seek>(&mut self, stream: S) -> Result<(), TchError> {
-        let adapter = ReadSeekAdapter::new(stream);
-        let named_tensors = Tensor::load_multi_from_stream_with_device(adapter, self.device)?;
-        let named_tensors: HashMap<_, _> = named_tensors.into_iter().collect();
-        let mut variables = self.variables_.lock().unwrap();
-        for (name, var) in variables.named_variables.iter_mut() {
-            match named_tensors.get(name) {
-                Some(src) => crate::no_grad(|| {
-                    Self::copy_data_with_precision_update(src, var)
-                        .map_err(|e| e.path_context(name))
-                })?,
-                None => {
-                    return Err(TchError::TensorNameNotFound(
-                        name.to_string(),
-                        "source stream".to_string(),
-                    ));
-                }
-            }
-        }
-        Ok(())
     }
 
     /// Loads the var-store variable values from a file if it exists.

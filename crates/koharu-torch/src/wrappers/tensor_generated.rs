@@ -3,7 +3,7 @@
 use crate::{Device, Kind, Layout, Scalar, Tensor};
 use std::borrow::Borrow;
 use std::convert::Into;
-use torch_sys::*;
+use koharu_torch_sys::*;
 
 impl Tensor {
     pub fn internal_and_<S: Into<Scalar>>(&mut self, other: S) -> Tensor {

@@ -5,7 +5,7 @@ use crate::{nn::Path, TchError, Tensor};
 use libc::{c_int, c_void};
 use std::borrow::Borrow;
 use std::convert::TryFrom;
-use torch_sys::*;
+use koharu_torch_sys::*;
 
 /// Argument and output values for JIT models. These represent arbitrary values,
 /// e.g. tensors, atomic values, pairs of values, etc.
