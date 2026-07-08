@@ -1,46 +1,34 @@
-mod hf_hub;
+use koharu_runtime::package::{PreloadablePackage, libtorch::Libtorch};
+use koharu_torch::{Cuda, Device};
+use koharu_torch_sys::{library_name, load};
 
-pub mod anime_text;
-pub mod aot_inpainting;
-pub mod comic_text_bubble_detector;
-pub mod comic_text_detector;
-pub mod flux2_klein;
-pub mod font_detector;
-pub mod inpainting;
-pub mod lama;
-pub mod loading;
-pub mod manga_ocr;
-pub mod manga_text_segmentation_2025;
-pub mod mit48px_ocr;
-mod ops;
-pub mod paddleocr_vl;
 pub mod pp_doclayout_v3;
-pub mod probability_map;
-pub mod speech_bubble_segmentation;
-pub mod types;
 
-pub use types::{FontPrediction, NamedFontPrediction, Quad, TextDirection, TextRegion, TopFont};
-
-use anyhow::Result;
-use candle_core::utils::{cuda_is_available, metal_is_available};
-
-pub use candle_core::Device;
-
-static GPU_SUPPORTED: std::sync::OnceLock<bool> = std::sync::OnceLock::new();
-
-pub fn device(cpu: bool) -> Result<Device> {
-    if cpu {
-        Ok(Device::Cpu)
-    } else if cuda_is_available()
-        && *GPU_SUPPORTED.get_or_init(koharu_runtime::check_cuda_driver_support)
-    {
-        Ok(Device::new_cuda(0)?)
-    } else if metal_is_available() {
-        Ok(Device::new_metal(0)?)
+/// Initializes the uderlying torch library.
+/// This should be called before any other function in this crate.
+pub async fn init() -> anyhow::Result<()> {
+    let libtorch = if cfg!(target_os = "macos") {
+        Libtorch::Cpu
     } else {
-        tracing::warn!(
-            "No GPU support detected; falling back to CPU. For better performance, ensure you have a compatible NVIDIA GPU with the latest drivers, or a recent Apple device with Metal support."
-        );
-        Ok(Device::Cpu)
+        Libtorch::Cuda130
+    };
+
+    libtorch.preload().await?;
+
+    unsafe { load(library_name()) }
+        .map_err(|e| anyhow::anyhow!("failed to load koharu_torch_shim: {e}"))
+}
+
+/// Selects the device to use for torch.
+pub fn device(cpu: bool) -> Device {
+    if cpu {
+        Device::Cpu
+    } else if cfg!(target_os = "macos") {
+        Device::Mps
+    } else if Cuda::is_available() {
+        Device::Cuda(0)
+    } else {
+        tracing::warn!("GPU is not available, falling back to CPU");
+        Device::Cpu
     }
 }

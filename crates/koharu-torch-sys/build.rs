@@ -22,7 +22,7 @@ async fn main() -> Result<()> {
     let libtorch = if cfg!(target_os = "macos") {
         Libtorch::Cpu
     } else {
-        Libtorch::Cuda126
+        Libtorch::Cuda130
     };
     let libtorch_dir = libtorch.resolve().await?.join("libtorch");
     let cmake_dir = cmake::Config::new("libtch")
