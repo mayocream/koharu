@@ -343,7 +343,7 @@ impl Tensor {
         }
         unsafe_torch_err!(at_copy_data(
             self.c_tensor,
-            dst.as_mut_ptr() as *const c_void,
+            dst.as_mut_ptr() as *mut c_void,
             numel,
             elt_size_in_bytes,
         ));
@@ -407,7 +407,7 @@ impl Tensor {
         }
         unsafe_torch_err!(at_copy_data(
             self.c_tensor,
-            dst.as_mut_ptr() as *const c_void,
+            dst.as_mut_ptr() as *mut c_void,
             numel,
             T::KIND.elt_size_in_bytes(),
         ));

@@ -63,8 +63,8 @@ tensor at_new_tensor() {
   return nullptr;
 }
 
-tensor at_tensor_of_blob(void *data, int64_t *dims, size_t ndims,
-                         int64_t *strides, size_t nstrides, int type,
+tensor at_tensor_of_blob(const void *data, const int64_t *dims, size_t ndims,
+                         const int64_t *strides, size_t nstrides, int type,
                          int device) {
   PROTECT(
       at::TensorOptions blobOptions = at::TensorOptions()
@@ -72,19 +72,19 @@ tensor at_tensor_of_blob(void *data, int64_t *dims, size_t ndims,
                                           .dtype(torch::ScalarType(type));
       if (nstrides == 0) {
         return new torch::Tensor(
-            torch::for_blob(data, torch::IntArrayRef(dims, ndims))
+            torch::for_blob(const_cast<void *>(data), torch::IntArrayRef(dims, ndims))
                 .options(blobOptions)
                 .make_tensor());
       } else {
         return new torch::Tensor(torch::from_blob(
-            data, torch::IntArrayRef(dims, ndims),
+            const_cast<void *>(data), torch::IntArrayRef(dims, ndims),
             torch::IntArrayRef(strides, nstrides), blobOptions));
       })
 
   return nullptr;
 }
 
-tensor at_tensor_of_data(void *vs, int64_t *dims, size_t ndims,
+tensor at_tensor_of_data(const void *vs, const int64_t *dims, size_t ndims,
                          size_t element_size_in_bytes, int type) {
   PROTECT(
       torch::Tensor tensor = torch::zeros(torch::IntArrayRef(dims, ndims),
@@ -221,34 +221,34 @@ tensor at_get(tensor t, int index) {
 }
 
 template <typename T>
-T at_value_at_indexes(tensor t, int64_t *indexes, int indexes_len) {
+T at_value_at_indexes(tensor t, const int64_t *indexes, int indexes_len) {
   PROTECT(torch::Tensor tensor = *t; for (int i = 0; i < indexes_len; ++i) {
     tensor = tensor[indexes[i]];
   } return tensor.item<T>();)
   return T();
 }
 
-double at_double_value_at_indexes(tensor t, int64_t *indexes, int indexes_len) {
+double at_double_value_at_indexes(tensor t, const int64_t *indexes, int indexes_len) {
   return at_value_at_indexes<double>(t, indexes, indexes_len);
 }
 
-int64_t at_int64_value_at_indexes(tensor t, int64_t *indexes, int indexes_len) {
+int64_t at_int64_value_at_indexes(tensor t, const int64_t *indexes, int indexes_len) {
   return at_value_at_indexes<int64_t>(t, indexes, indexes_len);
 }
 
 template <typename T>
-void at_set_value_at_indexes(tensor t, int *indexes, int indexes_len, T v) {
+void at_set_value_at_indexes(tensor t, const int *indexes, int indexes_len, T v) {
   PROTECT(torch::Tensor tensor = *t; for (int i = 0; i < indexes_len; ++i) {
     tensor = tensor[indexes[i]];
   } tensor.fill_(v);)
 }
 
-void at_set_double_value_at_indexes(tensor t, int *indexes, int indexes_len,
+void at_set_double_value_at_indexes(tensor t, const int *indexes, int indexes_len,
                                     double v) {
   at_set_value_at_indexes<double>(t, indexes, indexes_len, v);
 }
 
-void at_set_int64_value_at_indexes(tensor t, int *indexes, int indexes_len,
+void at_set_int64_value_at_indexes(tensor t, const int *indexes, int indexes_len,
                                    int64_t v) {
   at_set_value_at_indexes<int64_t>(t, indexes, indexes_len, v);
 }
@@ -269,18 +269,18 @@ char *at_to_string(tensor t, int line_size) {
 
 void at_copy_(tensor dst, tensor src) { PROTECT(dst->copy_(*src);) }
 
-void at_save(tensor t, char *filename) { PROTECT(torch::save(*t, filename);) }
+void at_save(tensor t, const char *filename) { PROTECT(torch::save(*t, filename);) }
 
-void at_save_multi(tensor *tensors, char **tensor_names, int ntensors,
-                   char *filename) {
+void at_save_multi(const tensor *tensors, const char *const *tensor_names, int ntensors,
+                   const char *filename) {
   PROTECT(torch::serialize::OutputArchive archive;
           for (int i = 0; i < ntensors; ++i) archive.write(
               std::string(tensor_names[i]), *(tensors[i]), /* buffer=*/false);
           archive.save_to(filename);)
 }
 
-void at_load_multi(tensor *tensors, char **tensor_names, int ntensors,
-                   char *filename) {
+void at_load_multi(tensor *tensors, const char *const *tensor_names, int ntensors,
+                   const char *filename) {
   PROTECT(torch::serialize::InputArchive archive;
           archive.load_from(std::string(filename));
           vector<torch::Tensor> ts(ntensors);
@@ -292,45 +292,45 @@ void at_load_multi(tensor *tensors, char **tensor_names, int ntensors,
               new torch::Tensor(ts[i]);)
 }
 
-void at_loadz_callback(char *filename, void *data,
-                       void (*f)(void *, char *, tensor)) {
+void at_loadz_callback(const char *filename, void *data,
+                       void (*f)(void *, const char *, tensor)) {
   PROTECT(auto params = torch::jit::_load_parameters(filename);
           for (const auto &p : params) {
-            f(data, (char *)p.first.c_str(), new torch::Tensor(p.second));
+            f(data, p.first.c_str(), new torch::Tensor(p.second));
           })
 }
 
-void at_loadz_callback_with_device(char *filename, void *data,
-                                   void (*f)(void *, char *, tensor),
+void at_loadz_callback_with_device(const char *filename, void *data,
+                                   void (*f)(void *, const char *, tensor),
                                    int device_id) {
   PROTECT(auto params =
               torch::jit::_load_parameters(filename, device_of_int(device_id));
           for (const auto &p : params) {
-            f(data, (char *)p.first.c_str(), new torch::Tensor(p.second));
+            f(data, p.first.c_str(), new torch::Tensor(p.second));
           })
 }
 
-void at_load_callback(char *filename, void *data,
-                      void (*f)(void *, char *, tensor)) {
+void at_load_callback(const char *filename, void *data,
+                      void (*f)(void *, const char *, tensor)) {
   PROTECT(auto module = torch::jit::load(filename);
           for (const auto &p : module.named_parameters()) {
             auto v = p.value;
-            f(data, (char *)p.name.c_str(), new torch::Tensor(v));
+            f(data, p.name.c_str(), new torch::Tensor(v));
           })
 }
 
-void at_load_callback_with_device(char *filename, void *data,
-                                  void (*f)(void *, char *, tensor),
+void at_load_callback_with_device(const char *filename, void *data,
+                                  void (*f)(void *, const char *, tensor),
                                   int device_id) {
   PROTECT(auto module = torch::jit::load(filename, device_of_int(device_id));
           for (const auto &p : module.named_parameters()) {
             auto v = p.value;
-            f(data, (char *)p.name.c_str(), new torch::Tensor(v));
+            f(data, p.name.c_str(), new torch::Tensor(v));
           })
 }
 
-void at_load_multi_(tensor *tensors, char **tensor_names, int ntensors,
-                    char *filename) {
+void at_load_multi_(const tensor *tensors, const char *const *tensor_names, int ntensors,
+                    const char *filename) {
   PROTECT(torch::NoGradGuard no_grad; torch::serialize::InputArchive archive;
           archive.load_from(std::string(filename));
           for (int i = 0; i < ntensors; ++i) {
@@ -345,13 +345,13 @@ void at_load_multi_(tensor *tensors, char **tensor_names, int ntensors,
           })
 }
 
-tensor at_load(char *filename) {
+tensor at_load(const char *filename) {
   PROTECT(torch::Tensor tensor; torch::load(tensor, filename);
           return new torch::Tensor(tensor);)
   return nullptr;
 }
 
-tensor at_load_image(char *filename) {
+tensor at_load_image(const char *filename) {
   PROTECT(
       int w = -1; int h = -1; int c = -1;
       void *data = stbi_load(filename, &w, &h, &c, 3);
@@ -362,7 +362,7 @@ tensor at_load_image(char *filename) {
   return nullptr;
 }
 
-tensor at_load_image_from_memory(unsigned char *img_data, size_t img_size) {
+tensor at_load_image_from_memory(const unsigned char *img_data, size_t img_size) {
   PROTECT(
       int w = -1; int h = -1; int c = -1;
       void *data = stbi_load_from_memory(img_data, img_size, &w, &h, &c, 3);
@@ -384,7 +384,7 @@ bool ends_with(const char *str, const char *suffix) {
   return true;
 }
 
-int at_save_image(tensor tensor, char *filename) {
+int at_save_image(tensor tensor, const char *filename) {
   PROTECT(auto sizes = tensor->sizes();
           if (tensor->device().type() != at::kCPU) throw std::invalid_argument(
               "the input tensor has to be on cpu");
@@ -458,8 +458,9 @@ tensor at_resize_image(tensor tensor, int out_w, int out_h) {
 
 void at_free(tensor t) { delete (t); }
 
-void at_run_backward(tensor *tensors, int ntensors, tensor *inputs, int ninputs,
-                     tensor *outputs, int keep_graph, int create_graph) {
+void at_run_backward(const tensor *tensors, int ntensors, const tensor *inputs,
+                     int ninputs, tensor *outputs, int keep_graph,
+                     int create_graph) {
   PROTECT(
       vector<torch::autograd::Edge> roots;
       for (int i = 0; i < ntensors; ++i)
@@ -833,31 +834,31 @@ bool at_context_has_mps() {
   return 0;
 }
 
-module atm_load(char *filename) {
+module atm_load(const char *filename) {
   PROTECT(return new torch::jit::script::Module(torch::jit::load(filename));)
   return nullptr;
 }
 
-module atm_load_on_device(char *filename, int device) {
+module atm_load_on_device(const char *filename, int device) {
   PROTECT(return new torch::jit::script::Module(
                      torch::jit::load(filename, device_of_int(device)));)
   return nullptr;
 }
 
-module atm_load_str(char *data, size_t sz) {
+module atm_load_str(const char *data, size_t sz) {
   PROTECT(std::istringstream stream(std::string(data, sz));
           return new torch::jit::script::Module(torch::jit::load(stream));)
   return nullptr;
 }
 
-module atm_load_str_on_device(char *data, size_t sz, int device) {
+module atm_load_str_on_device(const char *data, size_t sz, int device) {
   PROTECT(std::istringstream stream(std::string(data, sz));
           return new torch::jit::script::Module(
               torch::jit::load(stream, device_of_int(device)));)
   return nullptr;
 }
 
-tensor atm_forward(module m, tensor *tensors, int ntensors) {
+tensor atm_forward(module m, const tensor *tensors, int ntensors) {
   PROTECT(std::vector<torch::jit::IValue> inputs;
           for (int i = 0; i < ntensors; ++i) inputs.push_back(*(tensors[i]));
           torch::jit::IValue output = m->forward(std::move(inputs));
@@ -867,7 +868,7 @@ tensor atm_forward(module m, tensor *tensors, int ntensors) {
   return nullptr;
 }
 
-ivalue atm_forward_(module m, ivalue *ivalues, int nivalues) {
+ivalue atm_forward_(module m, const ivalue *ivalues, int nivalues) {
   PROTECT(std::vector<torch::jit::IValue> inputs;
           for (int i = 0; i < nivalues; ++i) inputs.push_back(*(ivalues[i]));
           torch::jit::IValue output = m->forward(std::move(inputs));
@@ -875,7 +876,7 @@ ivalue atm_forward_(module m, ivalue *ivalues, int nivalues) {
   return nullptr;
 }
 
-tensor atm_method(module m, char *method_name, tensor *tensors, int ntensors) {
+tensor atm_method(module m, const char *method_name, const tensor *tensors, int ntensors) {
   PROTECT(std::vector<torch::jit::IValue> inputs;
           for (int i = 0; i < ntensors; ++i) inputs.push_back(*(tensors[i]));
           torch::jit::IValue output =
@@ -886,7 +887,7 @@ tensor atm_method(module m, char *method_name, tensor *tensors, int ntensors) {
   return nullptr;
 }
 
-ivalue atm_method_(module m, char *method_name, ivalue *ivalues, int nivalues) {
+ivalue atm_method_(module m, const char *method_name, const ivalue *ivalues, int nivalues) {
   PROTECT(std::vector<torch::jit::IValue> inputs;
           for (int i = 0; i < nivalues; ++i) inputs.push_back(*(ivalues[i]));
           torch::jit::IValue output =
@@ -895,7 +896,7 @@ ivalue atm_method_(module m, char *method_name, ivalue *ivalues, int nivalues) {
   return nullptr;
 }
 
-ivalue atm_create_class_(module m, char *clz_name, ivalue *ivalues,
+ivalue atm_create_class_(module m, const char *clz_name, const ivalue *ivalues,
                          int nivalues) {
   PROTECT(std::vector<torch::jit::IValue> inputs;
           for (int i = 0; i < nivalues; ++i) inputs.push_back(*(ivalues[i]));
@@ -913,7 +914,7 @@ void atm_train(module m) { PROTECT(m->train();) }
 
 void atm_free(module m) { delete (m); }
 
-void atm_save(module m, char *filename) { PROTECT(m->save(filename);) }
+void atm_save(module m, const char *filename) { PROTECT(m->save(filename);) }
 
 void atm_to(module m, int device, int dtype, bool non_blocking) {
   PROTECT(m->to(device_of_int(device), at::ScalarType(dtype), non_blocking);)
@@ -946,7 +947,7 @@ bool atm_fuser_cuda_is_enabled() {
   return false;
 }
 
-module atm_create_for_tracing(char *modl_name, tensor *inputs, int ninputs) {
+module atm_create_for_tracing(const char *modl_name, const tensor *inputs, int ninputs) {
   PROTECT(torch::jit::script::Module modl(modl_name);
           if (torch::jit::tracer::isTracing()) throw std::invalid_argument(
               "cannot nest tracing calls");
@@ -963,7 +964,7 @@ module atm_create_for_tracing(char *modl_name, tensor *inputs, int ninputs) {
   return nullptr;
 }
 
-void atm_end_tracing(module m, char *fn_name, tensor *outputs, int noutputs) {
+void atm_end_tracing(module m, const char *fn_name, const tensor *outputs, int noutputs) {
   PROTECT(
       auto state = torch::jit::tracer::getTracingState();
       if (state == nullptr) throw std::invalid_argument("not in tracing mode");
@@ -978,10 +979,10 @@ void atm_end_tracing(module m, char *fn_name, tensor *outputs, int noutputs) {
 }
 
 void atm_named_parameters(module m, void *data,
-                          void (*f)(void *, char *, tensor)) {
+                          void (*f)(void *, const char *, tensor)) {
   PROTECT(for (const auto &p : m->named_parameters()) {
     auto v = p.value;
-    f(data, (char *)p.name.c_str(), new torch::Tensor(v));
+    f(data, p.name.c_str(), new torch::Tensor(v));
   })
 }
 
@@ -1005,7 +1006,7 @@ ivalue ati_bool(int i) {
   return nullptr;
 }
 
-ivalue ati_string(char *s) {
+ivalue ati_string(const char *s) {
   PROTECT(string str(s); return new torch::jit::IValue(str);)
   return nullptr;
 }
@@ -1015,14 +1016,14 @@ ivalue ati_none() {
   return nullptr;
 }
 
-ivalue ati_tuple(ivalue *is, int nvalues) {
+ivalue ati_tuple(const ivalue *is, int nvalues) {
   PROTECT(vector<torch::jit::IValue> vec;
           for (int i = 0; i < nvalues; ++i) vec.push_back(*(is[i]));
           return new torch::jit::IValue(torch::ivalue::Tuple::create(vec));)
   return nullptr;
 }
 
-ivalue ati_generic_list(ivalue *is, int nvalues) {
+ivalue ati_generic_list(const ivalue *is, int nvalues) {
   PROTECT(c10::List<torch::jit::IValue> vec(c10::AnyType::get());
           for (int i = 0; i < nvalues; ++i) vec.push_back(*(is[i]));
           return new torch::jit::IValue(c10::List<torch::jit::IValue>(vec));)
@@ -1031,7 +1032,7 @@ ivalue ati_generic_list(ivalue *is, int nvalues) {
 
 using generic_dict = c10::Dict<torch::jit::IValue, torch::jit::IValue>;
 
-ivalue ati_generic_dict(ivalue *is, int nvalues) {
+ivalue ati_generic_dict(const ivalue *is, int nvalues) {
   PROTECT(
       bool all_keys_are_str = true; for (int i = 0; i < nvalues; ++i) {
         if (!is[2 * i]->isString())
@@ -1059,35 +1060,35 @@ ivalue ati_generic_dict(ivalue *is, int nvalues) {
   return nullptr;
 }
 
-ivalue ati_int_list(int64_t *is, int nvalues) {
+ivalue ati_int_list(const int64_t *is, int nvalues) {
   PROTECT(c10::List<int64_t> vec;
           for (int i = 0; i < nvalues; ++i) vec.push_back(is[i]);
           return new torch::jit::IValue(vec);)
   return nullptr;
 }
 
-ivalue ati_double_list(double *is, int nvalues) {
+ivalue ati_double_list(const double *is, int nvalues) {
   PROTECT(c10::List<double> vec;
           for (int i = 0; i < nvalues; ++i) vec.push_back(is[i]);
           return new torch::jit::IValue(vec);)
   return nullptr;
 }
 
-ivalue ati_bool_list(char *is, int nvalues) {
+ivalue ati_bool_list(const char *is, int nvalues) {
   PROTECT(c10::List<bool> vec;
           for (int i = 0; i < nvalues; ++i) vec.push_back(is[i] != 0);
           return new torch::jit::IValue(vec);)
   return nullptr;
 }
 
-ivalue ati_string_list(char **is, int nvalues) {
+ivalue ati_string_list(const char *const *is, int nvalues) {
   PROTECT(c10::List<string> vec;
           for (int i = 0; i < nvalues; ++i) vec.push_back(string(is[i]));
           return new torch::jit::IValue(vec);)
   return nullptr;
 }
 
-ivalue ati_tensor_list(tensor *is, int nvalues) {
+ivalue ati_tensor_list(const tensor *is, int nvalues) {
   PROTECT(c10::List<at::Tensor> vec;
           for (int i = 0; i < nvalues; ++i) vec.push_back(*(is[i]));
           return new torch::jit::IValue(vec);)
@@ -1207,7 +1208,7 @@ void ati_to_tensor_list(ivalue i, tensor *outputs, int noutputs) {
   } for (int i = 0; i < noutputs; ++i) outputs[i] = new torch::Tensor(vec[i]);)
 }
 
-ivalue ati_object_method_(ivalue i, char *method_name, ivalue *ivalues,
+ivalue ati_object_method_(ivalue i, const char *method_name, const ivalue *ivalues,
                           int nivalues) {
   PROTECT(std::vector<torch::jit::IValue> inputs;
           inputs.push_back(*i); // self parameter
@@ -1218,7 +1219,7 @@ ivalue ati_object_method_(ivalue i, char *method_name, ivalue *ivalues,
   return nullptr;
 }
 
-ivalue ati_object_getattr_(ivalue i, char *attr_name) {
+ivalue ati_object_getattr_(ivalue i, const char *attr_name) {
   PROTECT(torch::jit::IValue output = i->toObjectRef().getAttr(attr_name);
           return new torch::jit::IValue(output);)
   return nullptr;

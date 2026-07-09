@@ -1,6 +1,5 @@
 use koharu_runtime::package::{PreloadablePackage, libtorch::Libtorch};
 use koharu_torch::{Cuda, Device};
-use koharu_torch_sys::{library_name, load};
 
 pub mod comic_text_bubble_detector;
 pub mod comic_text_detector;
@@ -17,9 +16,7 @@ pub async fn init() -> anyhow::Result<()> {
     };
 
     libtorch.preload().await?;
-
-    unsafe { load(library_name()) }
-        .map_err(|e| anyhow::anyhow!("failed to load koharu_torch_shim: {e}"))
+    Ok(())
 }
 
 /// Selects the device to use for torch.

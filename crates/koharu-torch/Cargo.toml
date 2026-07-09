@@ -22,7 +22,6 @@ zip = "0.6"
 half = "2"
 safetensors = "0.3.0"
 
-cpython = { version = "0.7.1", optional = true }
 regex = { version = "1.6.0", optional = true }
 image = { version = "0.24.5", optional = true }
 clap = { version = "4.2.4", features = ["derive"], optional = true }
@@ -33,6 +32,4 @@ memmap2 = { version = "0.6.1", optional = true }
 anyhow = "^1.0.60"
 
 [features]
-python-extension = ["koharu-torch-sys/python-extension"]
-rl-python = ["cpython"]
 cuda-tests = []

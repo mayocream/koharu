@@ -24,6 +24,7 @@ publish = false
 
 [workspace.dependencies]
 koharu-app = { path = "crates/koharu-app", default-features = false }
+koharu-bindgen = { path = "crates/koharu-bindgen", default-features = false }
 koharu-core = { path = "crates/koharu-core", default-features = false }
 koharu-runtime = { path = "crates/koharu-runtime", default-features = false }
 koharu-torch = { path = "crates/koharu-torch", default-features = false }
@@ -162,6 +163,10 @@ tar = "0.4"
 bytes = "1.12"
 cmake = "0.1"
 bindgen = "0.72"
+prettyplease = "0.2"
+proc-macro2 = "1"
+quote = "1"
+syn = { version = "2", features = ["full"] }
 bytemuck = "1.25"
 half = { version = "2.7", features = ["bytemuck"] }
 libc = "0.2"

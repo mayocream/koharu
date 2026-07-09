@@ -12,8 +12,6 @@ pub mod jit;
 pub mod kind;
 pub(crate) mod layout;
 pub(crate) mod optimizer;
-#[cfg(feature = "python-extension")]
-pub mod python;
 pub(crate) mod scalar;
 pub(crate) mod tensor;
 pub(crate) mod tensor_fallible_generated;

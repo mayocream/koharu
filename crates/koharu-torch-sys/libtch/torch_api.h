@@ -1,6 +1,8 @@
 #ifndef __TORCH_API_H__
 #define __TORCH_API_H__
+#include<stddef.h>
 #include<stdint.h>
+#include<stdbool.h>
 
 #ifdef __cplusplus
 #include<torch/torch.h>
@@ -31,8 +33,8 @@ typedef void *ivalue;
 char *get_and_reset_last_err(); // thread-local
 void at_manual_seed(int64_t);
 tensor at_new_tensor();
-tensor at_tensor_of_blob(void *data, int64_t *dims, size_t ndims, int64_t *strides, size_t nstrides, int type, int device);
-tensor at_tensor_of_data(void *vs, int64_t *dims, size_t ndims, size_t element_size_in_bytes, int type);
+tensor at_tensor_of_blob(const void *data, const int64_t *dims, size_t ndims, const int64_t *strides, size_t nstrides, int type, int device);
+tensor at_tensor_of_data(const void *vs, const int64_t *dims, size_t ndims, size_t element_size_in_bytes, int type);
 void at_copy_data(tensor tensor, void *vs, size_t numel, size_t element_size_in_bytes);
 tensor at_shallow_clone(tensor);
 
@@ -63,32 +65,32 @@ tensor at_get(tensor, int index);
 void at_fill_double(tensor, double);
 void at_fill_int64(tensor, int64_t);
 
-double at_double_value_at_indexes(tensor, int64_t *indexes, int indexes_len);
-int64_t at_int64_value_at_indexes(tensor, int64_t *indexes, int indexes_len);
-void at_set_double_value_at_indexes(tensor, int *indexes, int indexes_len, double v);
-void at_set_int64_value_at_indexes(tensor, int *indexes, int indexes_len, int64_t v);
+double at_double_value_at_indexes(tensor, const int64_t *indexes, int indexes_len);
+int64_t at_int64_value_at_indexes(tensor, const int64_t *indexes, int indexes_len);
+void at_set_double_value_at_indexes(tensor, const int *indexes, int indexes_len, double v);
+void at_set_int64_value_at_indexes(tensor, const int *indexes, int indexes_len, int64_t v);
 
 void at_copy_(tensor dst, tensor src);
 
 void at_print(tensor);
 char *at_to_string(tensor, int line_size);
-void at_save(tensor, char *filename);
-tensor at_load(char *filename);
-tensor at_load_image(char *filename);
-tensor at_load_image_from_memory(unsigned char *img_data, size_t img_size);
-int at_save_image(tensor, char *filename);
+void at_save(tensor, const char *filename);
+tensor at_load(const char *filename);
+tensor at_load_image(const char *filename);
+tensor at_load_image_from_memory(const unsigned char *img_data, size_t img_size);
+int at_save_image(tensor, const char *filename);
 tensor at_resize_image(tensor, int w, int h);
 
-void at_save_multi(tensor *tensors, char **tensor_names, int ntensors, char *filename);
+void at_save_multi(const tensor *tensors, const char *const *tensor_names, int ntensors, const char *filename);
 /* [at_load_multi] takes as input an array of nullptr for [tensors]. */
-void at_load_multi(tensor *tensors, char **tensor_names, int ntensors, char *filename);
+void at_load_multi(tensor *tensors, const char *const *tensor_names, int ntensors, const char *filename);
 /* [at_load_multi_] takes as input an array of allocation [tensors]. */
-void at_load_multi_(tensor *tensors, char **tensor_names, int ntensors, char *filename);
+void at_load_multi_(const tensor *tensors, const char *const *tensor_names, int ntensors, const char *filename);
 
-void at_loadz_callback(char *filename, void *data, void (*f)(void *, char *, tensor));
-void at_loadz_callback_with_device(char *filename, void *data, void (*f)(void *, char *, tensor), int device_id);
-void at_load_callback(char *filename, void *data, void (*f)(void *, char *, tensor));
-void at_load_callback_with_device(char *filename, void *data, void (*f)(void *, char *, tensor), int device_id);
+void at_loadz_callback(const char *filename, void *data, void (*f)(void *, const char *, tensor));
+void at_loadz_callback_with_device(const char *filename, void *data, void (*f)(void *, const char *, tensor), int device_id);
+void at_load_callback(const char *filename, void *data, void (*f)(void *, const char *, tensor));
+void at_load_callback_with_device(const char *filename, void *data, void (*f)(void *, const char *, tensor), int device_id);
 
 int at_get_num_interop_threads();
 
@@ -102,9 +104,9 @@ void at_set_qengine(int qengine);
 
 void at_free(tensor);
 
-void at_run_backward(tensor *tensors,
+void at_run_backward(const tensor *tensors,
                       int ntensors,
-                      tensor *inputs,
+                      const tensor *inputs,
                       int ninputs,
                       tensor *outputs,
                       int keep_graph,
@@ -192,55 +194,55 @@ int atc_user_enabled_cudnn();
 void atc_set_user_enabled_cudnn(int b);
 void atc_set_benchmark_cudnn(int b);
 
-module atm_load(char *);
-module atm_load_on_device(char *, int device);
-module atm_load_str(char *, size_t sz);
-module atm_load_str_on_device(char *, size_t sz, int device);
-tensor atm_forward(module, tensor *tensors, int ntensors);
+module atm_load(const char *);
+module atm_load_on_device(const char *, int device);
+module atm_load_str(const char *, size_t sz);
+module atm_load_str_on_device(const char *, size_t sz, int device);
+tensor atm_forward(module, const tensor *tensors, int ntensors);
 ivalue atm_forward_(module,
-                    ivalue *ivalues,
+                    const ivalue *ivalues,
                     int nivalues);
 tensor atm_method(module,
-                  char *method_name,
-                  tensor *tensors,
+                  const char *method_name,
+                  const tensor *tensors,
                   int ntensors);
 ivalue atm_method_(module,
-                   char *method_name,
-                   ivalue *ivalues,
+                   const char *method_name,
+                   const ivalue *ivalues,
                    int nivalues);
 ivalue atm_create_class_(module,
-                   char *clz_name, 
-                   ivalue *ivalues, 
+                   const char *clz_name,
+                   const ivalue *ivalues,
                    int nivalues);
 void atm_eval(module);
 void atm_train(module);
 void atm_free(module);
 void atm_to(module m, int device, int dtype, bool non_blocking);
-void atm_save(module m, char*);
+void atm_save(module m, const char*);
 int atm_get_profiling_mode();
 void atm_set_profiling_mode(int);
 void atm_fuser_cuda_set_enabled(bool);
 bool atm_fuser_cuda_is_enabled();
-void atm_named_parameters(module, void *data, void (*f)(void *, char *, tensor));
+void atm_named_parameters(module, void *data, void (*f)(void *, const char *, tensor));
 
 // This function has to be followed by a call to atm_end_tracing.
-module atm_create_for_tracing(char *modl_name, tensor *inputs, int ninputs);
-void atm_end_tracing(module m, char *fn_name, tensor *outputs, int noutputs);
+module atm_create_for_tracing(const char *modl_name, const tensor *inputs, int ninputs);
+void atm_end_tracing(module m, const char *fn_name, const tensor *outputs, int noutputs);
 
 ivalue ati_none();
 ivalue ati_tensor(tensor);
 ivalue ati_int(int64_t);
 ivalue ati_double(double);
 ivalue ati_bool(int);
-ivalue ati_string(char *);
-ivalue ati_tuple(ivalue *, int);
-ivalue ati_generic_list(ivalue *, int);
-ivalue ati_generic_dict(ivalue *, int);
-ivalue ati_int_list(int64_t *, int);
-ivalue ati_double_list(double *, int);
-ivalue ati_bool_list(char *, int);
-ivalue ati_string_list(char **, int);
-ivalue ati_tensor_list(tensor *, int);
+ivalue ati_string(const char *);
+ivalue ati_tuple(const ivalue *, int);
+ivalue ati_generic_list(const ivalue *, int);
+ivalue ati_generic_dict(const ivalue *, int);
+ivalue ati_int_list(const int64_t *, int);
+ivalue ati_double_list(const double *, int);
+ivalue ati_bool_list(const char *, int);
+ivalue ati_string_list(const char *const *, int);
+ivalue ati_tensor_list(const tensor *, int);
 ivalue ati_device(int);
 
 tensor ati_to_tensor(ivalue);
@@ -263,8 +265,8 @@ bool atm_get_tensor_expr_fuser_enabled();
 
 int ati_tag(ivalue);
 
-ivalue ati_object_method_(ivalue i, char *method_name, ivalue *ivalues, int nivalues);
-ivalue ati_object_getattr_(ivalue i, char *attr_name);
+ivalue ati_object_method_(ivalue i, const char *method_name, const ivalue *ivalues, int nivalues);
+ivalue ati_object_getattr_(ivalue i, const char *attr_name);
 
 ivalue ati_clone(ivalue);
 void ati_free(ivalue);
