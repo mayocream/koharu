@@ -22,7 +22,6 @@ koharu-core = { workspace = true }
 koharu-ai = { workspace = true }
 koharu-ml = { workspace = true }
 koharu-renderer = { workspace = true }
-koharu-llm = { workspace = true }
 koharu-runtime = { workspace = true }
 koharu-secrets = { workspace = true }
 anyhow = { workspace = true }
@@ -54,7 +53,3 @@ utoipa = { workspace = true }
 uuid = { workspace = true }
 walkdir = { workspace = true }
 zip = { workspace = true }
-
-[features]
-cuda = ["koharu-ml/cuda"]
-metal = ["koharu-ml/metal"]

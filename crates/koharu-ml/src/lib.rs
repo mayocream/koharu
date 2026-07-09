@@ -4,6 +4,7 @@ use koharu_torch_sys::{library_name, load};
 
 pub mod comic_text_bubble_detector;
 pub mod comic_text_detector;
+pub mod lama_manga;
 pub mod pp_doclayout_v3;
 
 /// Initializes the uderlying torch library.

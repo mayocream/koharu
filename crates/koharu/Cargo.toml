@@ -25,7 +25,6 @@ include = [
 koharu-app = { workspace = true }
 koharu-rpc = { workspace = true }
 koharu-runtime = { workspace = true }
-koharu-llm = { workspace = true }
 anyhow = { workspace = true }
 clap = { workspace = true }
 git-version = { workspace = true }
@@ -47,10 +46,6 @@ sentry = { workspace = true }
 windows = { workspace = true }
 windows-sys = { workspace = true }
 winreg = { workspace = true }
-
-[features]
-cuda = ["koharu-app/cuda"]
-metal = ["koharu-app/metal"]
 
 [build-dependencies]
 tauri-build = { workspace = true }
