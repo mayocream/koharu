@@ -1,0 +1,23 @@
+[package]
+name = "koharu-llama-sys"
+version.workspace = true
+edition.workspace = true
+description = "Low-level dynamic bindings for llama.cpp."
+license = "MIT/Apache-2.0"
+authors.workspace = true
+homepage.workspace = true
+repository.workspace = true
+keywords = ["llama", "llama.cpp", "ffi", "machine-learning"]
+publish.workspace = true
+build = "build.rs"
+
+[dependencies]
+libloading = { workspace = true }
+
+[build-dependencies]
+anyhow = { workspace = true }
+cmake = { workspace = true }
+koharu-bindgen = { workspace = true }
+koharu-runtime = { workspace = true }
+tokio = { workspace = true }
+

@@ -16,6 +16,14 @@ struct Function {
 }
 
 pub fn rewrite_bindings(source: &str, library_name: &str) -> Result<String> {
+    rewrite_bindings_for_libraries(source, &[library_name.to_owned()])
+}
+
+pub fn rewrite_bindings_for_libraries(source: &str, library_names: &[String]) -> Result<String> {
+    if library_names.is_empty() {
+        bail!("at least one dynamic library name is required");
+    }
+
     let file = syn::parse_file(source).context("failed to parse bindgen Rust output")?;
     let mut items = Vec::new();
     let mut functions = Vec::new();
@@ -45,7 +53,7 @@ pub fn rewrite_bindings(source: &str, library_name: &str) -> Result<String> {
     }
 
     let file_attrs = file.attrs;
-    let helper = loader_tokens(library_name);
+    let helper = loader_tokens(library_names);
     let adapters = functions
         .iter()
         .map(adapter_tokens)
@@ -70,45 +78,82 @@ pub fn rewrite_bindings(source: &str, library_name: &str) -> Result<String> {
     Ok(source)
 }
 
-fn loader_tokens(library_name: &str) -> TokenStream {
-    let library_name = LitStr::new(library_name, Span::call_site());
+fn loader_tokens(library_names: &[String]) -> TokenStream {
+    let library_names = library_names
+        .iter()
+        .map(|library_name| LitStr::new(library_name, Span::call_site()))
+        .collect::<Vec<_>>();
 
     quote! {
-        const __KOHARU_BINDGEN_LIBRARY_NAME: &str = #library_name;
+        const __KOHARU_BINDGEN_LIBRARY_NAMES: &[&str] = &[#(#library_names),*];
 
-        static __KOHARU_BINDGEN_LIBRARY: ::std::sync::OnceLock<::libloading::Library> =
+        static __KOHARU_BINDGEN_LIBRARIES: ::std::sync::OnceLock<::std::vec::Vec<::libloading::Library>> =
             ::std::sync::OnceLock::new();
 
-        fn __koharu_bindgen_library_name() -> ::std::string::String {
+        fn __koharu_bindgen_library_file_name(library_name: &str) -> ::std::string::String {
             if cfg!(target_os = "windows") {
-                ::std::format!("{}.dll", __KOHARU_BINDGEN_LIBRARY_NAME)
+                ::std::format!("{library_name}.dll")
             } else if cfg!(target_os = "macos") {
-                ::std::format!("lib{}.dylib", __KOHARU_BINDGEN_LIBRARY_NAME)
+                ::std::format!("lib{library_name}.dylib")
             } else {
-                ::std::format!("lib{}.so", __KOHARU_BINDGEN_LIBRARY_NAME)
+                ::std::format!("lib{library_name}.so")
             }
         }
 
-        unsafe fn __koharu_bindgen_library() -> &'static ::libloading::Library {
-            __KOHARU_BINDGEN_LIBRARY.get_or_init(|| {
-                let library_name = __koharu_bindgen_library_name();
-                unsafe { ::libloading::Library::new(&library_name) }.unwrap_or_else(|error| {
-                    panic!("failed to load dynamic library `{library_name}`: {error}")
-                })
-            })
+        unsafe fn __koharu_bindgen_open_library(
+            library_file_name: &str,
+        ) -> ::std::result::Result<::libloading::Library, ::std::string::String> {
+            #[cfg(target_os = "windows")]
+            {
+                if let Ok(library) =
+                    ::libloading::os::windows::Library::open_already_loaded(library_file_name)
+                {
+                    return Ok(library.into());
+                }
+            }
+
+            unsafe { ::libloading::Library::new(library_file_name) }
+                .map_err(|error| error.to_string())
+        }
+
+        unsafe fn __koharu_bindgen_libraries() -> &'static [::libloading::Library] {
+            __KOHARU_BINDGEN_LIBRARIES.get_or_init(|| {
+                let mut libraries = ::std::vec::Vec::new();
+                let mut errors = ::std::vec::Vec::new();
+
+                for library_name in __KOHARU_BINDGEN_LIBRARY_NAMES {
+                    let library_file_name = __koharu_bindgen_library_file_name(library_name);
+                    match unsafe { __koharu_bindgen_open_library(&library_file_name) } {
+                        Ok(library) => libraries.push(library),
+                        Err(error) => errors.push(::std::format!("{library_file_name}: {error}")),
+                    }
+                }
+
+                if libraries.is_empty() {
+                    panic!(
+                        "failed to load any dynamic library from [{}]: {}",
+                        __KOHARU_BINDGEN_LIBRARY_NAMES.join(", "),
+                        errors.join("; ")
+                    );
+                }
+
+                libraries
+            }).as_slice()
         }
 
         unsafe fn __koharu_bindgen_load<F: Copy>(name: &[u8]) -> F {
-            let library = unsafe { __koharu_bindgen_library() };
-            unsafe {
-                *library.get::<F>(name).unwrap_or_else(|error| {
-                    panic!(
-                        "missing symbol {}: {error}",
-                        ::std::string::String::from_utf8_lossy(name)
-                            .trim_end_matches('\0')
-                    )
-                })
+            for library in unsafe { __koharu_bindgen_libraries() } {
+                if let Ok(symbol) = unsafe { library.get::<F>(name) } {
+                    return *symbol;
+                }
             }
+
+            panic!(
+                "missing symbol {} in dynamic libraries [{}]",
+                ::std::string::String::from_utf8_lossy(name)
+                    .trim_end_matches('\0'),
+                __KOHARU_BINDGEN_LIBRARY_NAMES.join(", ")
+            )
         }
 
     }

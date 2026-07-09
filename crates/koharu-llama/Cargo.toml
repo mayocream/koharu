@@ -1,0 +1,29 @@
+[package]
+name = "koharu-llama"
+version.workspace = true
+edition.workspace = true
+description = "Safe Rust wrappers for llama.cpp."
+license = "MIT/Apache-2.0"
+authors.workspace = true
+homepage.workspace = true
+repository.workspace = true
+keywords = ["llama", "llama.cpp", "machine-learning"]
+publish.workspace = true
+
+[dependencies]
+encoding_rs = { workspace = true }
+enumflags2 = { workspace = true }
+koharu-llama-sys = { workspace = true }
+thiserror = { workspace = true }
+tracing = { workspace = true }
+tracing-core = { workspace = true }
+llguidance = { workspace = true, optional = true }
+toktrie = { workspace = true, optional = true }
+
+[features]
+default = []
+sampler = []
+llguidance = ["dep:llguidance", "dep:toktrie"]
+
+[dev-dependencies]
+tracing-subscriber = { workspace = true }

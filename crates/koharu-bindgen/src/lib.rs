@@ -4,20 +4,20 @@ use std::{fs, io::Write, path::Path};
 
 use anyhow::{Context, Result};
 
-pub use rewrite::rewrite_bindings;
+pub use rewrite::{rewrite_bindings, rewrite_bindings_for_libraries};
 
 /// Bindgen-backed generator that post-processes C function bindings into
 /// top-level dynamic-loading adapters.
 pub struct Generator {
     builder: bindgen::Builder,
-    library_name: String,
+    library_names: Vec<String>,
 }
 
 impl Generator {
     pub fn new(builder: bindgen::Builder, library_name: impl Into<String>) -> Self {
         Self {
             builder,
-            library_name: library_name.into(),
+            library_names: vec![library_name.into()],
         }
     }
 
@@ -36,6 +36,17 @@ impl Generator {
         self
     }
 
+    pub fn with_libraries(
+        mut self,
+        library_names: impl IntoIterator<Item = impl AsRef<str>>,
+    ) -> Self {
+        self.library_names = library_names
+            .into_iter()
+            .map(|library_name| library_name.as_ref().to_owned())
+            .collect();
+        self
+    }
+
     pub fn generate(self) -> Result<String> {
         let bindings = self
             .builder
@@ -44,7 +55,7 @@ impl Generator {
             .context("failed to run bindgen")?;
         let source = bindings_to_string(&bindings).context("failed to render bindgen output")?;
 
-        let source = rewrite_bindings(&source, &self.library_name)
+        let source = rewrite_bindings_for_libraries(&source, &self.library_names)
             .context("failed to rewrite bindgen output")?;
         Ok(source)
     }
