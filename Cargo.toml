@@ -90,6 +90,7 @@ libloading = "0.8.9"
 num_cpus = "1.17"
 cudarc = { version = "0.19.8", default-features = false, features = [
     "cuda-version-from-build-system",
+    "fallback-latest",
     "runtime",
     "cufft",
     "std",

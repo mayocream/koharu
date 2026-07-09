@@ -32,6 +32,7 @@ pub fn compute_capability() -> anyhow::Result<(i32, i32)> {
 #[cfg(test)]
 mod tests {
 
+    #[allow(unused_imports)]
     use super::*;
 
     #[test]
