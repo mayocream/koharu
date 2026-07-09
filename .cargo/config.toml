@@ -4,6 +4,6 @@ CARGO_WORKSPACE_DIR = { value = "", relative = true }
 # llama.cpp release tag
 LLAMA_CPP_TAG = "b8935"
 # CUDA 13.0 requires C++17
-NVCC_PREPEND_FLAGS = "-std=c++17"
+NVCC_PREPEND_FLAGS = "-std=c++17 -Xcompiler /Zc:preprocessor"
 # override nvidia-smi compute capability
 CUDA_COMPUTE_CAP = "80"
