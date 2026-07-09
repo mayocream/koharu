@@ -19,8 +19,6 @@ libloading = { workspace = true }
 [build-dependencies]
 anyhow = { workspace = true }
 cmake = { workspace = true }
+koharu-bindgen = { workspace = true }
 koharu-runtime = { workspace = true }
 tokio = { workspace = true }
-
-[features]
-python-extension = []
