@@ -1,5 +1,10 @@
-use std::{fs::create_dir_all, path::PathBuf, sync::LazyLock};
+use std::{
+    fs::{self, create_dir_all},
+    path::{Path, PathBuf},
+    sync::LazyLock,
+};
 
+use anyhow::Context;
 use strum::EnumProperty;
 
 use crate::{
@@ -84,8 +89,12 @@ impl Cuda {
 impl Package for Cuda {
     async fn resolve(&self) -> anyhow::Result<PathBuf> {
         let path = CUDA_DIR.join(self.package().replace("/", "--"));
-        // if dylibs already exist, return the path
-        if self.dylibs().iter().all(|dylib| path.join(dylib).exists()) {
+        if path.exists()
+            && self
+                .dylibs()
+                .iter()
+                .all(|dylib| find_dylib(&path, dylib).is_ok())
+        {
             return Ok(path);
         }
 
@@ -110,10 +119,36 @@ impl PreloadablePackage for Cuda {
     async fn preload(&self) -> anyhow::Result<()> {
         let path = self.resolve().await?;
         for dylib in self.dylibs() {
-            let dylib_path = path.join(dylib);
+            let dylib_path = find_dylib(&path, dylib)?;
             preload(dylib_path)?;
         }
 
         Ok(())
     }
+}
+
+fn find_dylib(root: &Path, dylib: &str) -> anyhow::Result<PathBuf> {
+    let direct = root.join(dylib);
+    if direct.exists() {
+        return Ok(direct);
+    }
+
+    find_dylib_recursive(root, dylib)?
+        .ok_or_else(|| anyhow::anyhow!("Dynamic library not found: {}", root.join(dylib).display()))
+}
+
+fn find_dylib_recursive(dir: &Path, dylib: &str) -> anyhow::Result<Option<PathBuf>> {
+    for entry in fs::read_dir(dir).with_context(|| format!("failed to read {}", dir.display()))? {
+        let entry = entry?;
+        let path = entry.path();
+        if entry.file_type()?.is_dir() {
+            if let Some(path) = find_dylib_recursive(&path, dylib)? {
+                return Ok(Some(path));
+            }
+        } else if path.file_name().and_then(|name| name.to_str()) == Some(dylib) {
+            return Ok(Some(path));
+        }
+    }
+
+    Ok(None)
 }
