@@ -8,6 +8,7 @@ import {
   ItalicIcon,
   MinusIcon,
   PlusIcon,
+  SquareDashedIcon,
   SquareIcon,
 } from 'lucide-react'
 import { type ComponentType, useMemo, useRef, useEffect, useState } from 'react'
@@ -377,6 +378,14 @@ export function RenderControlsPanel() {
     ? 'border-primary/20 bg-primary/10 text-primary'
     : 'border-border/60 bg-muted text-muted-foreground'
 
+  const renderBorderIcon = () => {
+    if (currentStroke.enabled) {
+      return <SquareIcon className='size-3.5' strokeWidth={3} />
+    } else {
+      return <SquareDashedIcon className='size-3.5' />
+    }
+  }
+
   if (!page) {
     return (
       <div className='flex items-center justify-center py-6 text-xs text-muted-foreground'>
@@ -604,15 +613,11 @@ export function RenderControlsPanel() {
               <Tooltip key={item.key}>
                 <TooltipTrigger asChild>
                   <Button
-                    variant='outline'
+                    variant={active ? 'toggle_on' : 'toggle_off'}
                     size='icon-sm'
                     aria-label={item.label}
                     data-testid={`render-effect-toggle-${item.key}`}
-                    className={cn(
-                      'size-6 shrink-0',
-                      active &&
-                        'border-primary bg-primary text-primary-foreground hover:bg-primary/90',
-                    )}
+                    className={cn('size-6 shrink-0')}
                     onClick={() => {
                       const nextEffect: TextShaderEffect = {
                         ...currentEffect,
@@ -644,16 +649,12 @@ export function RenderControlsPanel() {
               <Tooltip key={item.value}>
                 <TooltipTrigger asChild>
                   <Button
-                    variant='outline'
+                    variant={active ? 'toggle_on' : 'toggle_off'}
                     size='icon-sm'
                     aria-label={item.label}
                     data-testid={`render-align-${item.value}`}
                     disabled={!hasNodes}
-                    className={cn(
-                      'size-6 shrink-0',
-                      active &&
-                        'border-primary bg-primary text-primary-foreground hover:bg-primary/90',
-                    )}
+                    className={cn('size-6 shrink-0')}
                     onClick={() => {
                       if (applyStyleToSelected({ textAlign: item.value })) return
                       applyStyleToAll({ textAlign: item.value })
@@ -680,19 +681,15 @@ export function RenderControlsPanel() {
           <Tooltip>
             <TooltipTrigger asChild>
               <Button
-                variant='outline'
+                variant={currentStroke.enabled ? 'toggle_on' : 'toggle_off'}
                 size='icon-sm'
                 data-testid='render-stroke-enable'
-                className={cn(
-                  'size-7 shrink-0',
-                  currentStroke.enabled &&
-                    'border-primary bg-primary text-primary-foreground hover:bg-primary/90',
-                )}
+                className={cn('size-7 shrink-0')}
                 onClick={() =>
                   applyStrokeSetting({ ...currentStroke, enabled: !currentStroke.enabled })
                 }
               >
-                <SquareIcon className='size-3.5' />
+                {renderBorderIcon()}
               </Button>
             </TooltipTrigger>
             <TooltipContent side='bottom' sideOffset={4}>
