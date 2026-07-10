@@ -1,8 +1,7 @@
 'use client'
 
 import { useDrag } from '@use-gesture/react'
-import { useMemo, useRef } from 'react'
-import { useHotkeys } from 'react-hotkeys-hook'
+import { useEffect, useRef } from 'react'
 
 import { useBlobImage } from '@/hooks/useBlobData'
 import { useCurrentPage, useTextNodes, type TextNodeEntry } from '@/hooks/useCurrentPage'
@@ -30,11 +29,6 @@ export function TextBlockLayer({ showSprites, scale, style }: TextBlockLayerProp
   const select = useSelectionStore((s) => s.select)
   const mode = useEditorUiStore((s) => s.mode)
   const interactive = mode === 'select' || mode === 'block'
-
-  const hasSelection = useMemo(() => {
-    for (const id of selectedIds) if (id) return true
-    return false
-  }, [selectedIds])
 
   const updateTransform = async (id: string, t: Transform) => {
     if (!page) return
@@ -111,6 +105,12 @@ function TextBlockItem({
   const edgeRef = useRef<ResizeEdge | null>(null)
   const isResizeRef = useRef(false)
 
+  useEffect(() => {
+    if (selected && boxRef.current) {
+      boxRef.current.focus()
+    }
+  }, [selected])
+
   const setBox = (x: number, y: number, w: number, h: number) => {
     const el = boxRef.current
     if (!el) return
@@ -128,6 +128,7 @@ function TextBlockItem({
       const additive = isAdditiveEvent(event)
       if (tap) {
         onSelect(node.id, additive)
+        boxRef.current?.focus()
         return
       }
       if (first) {
@@ -140,6 +141,7 @@ function TextBlockItem({
         // Keep multi-selection intact when dragging a node that's already selected;
         // otherwise this click is a single-select (unless the modifier is held).
         if (additive || !selected) onSelect(node.id, additive)
+        boxRef.current?.focus()
       }
       const { x: sx, y: sy, w: sw, h: sh } = dragStart.current
       const edge = edgeRef.current
@@ -208,6 +210,7 @@ function TextBlockItem({
     <div
       ref={boxRef}
       {...bind()}
+      tabIndex={-1}
       style={{
         position: 'absolute',
         top: 0,
@@ -219,17 +222,20 @@ function TextBlockItem({
         zIndex: selected ? 20 : 10,
         touchAction: 'none',
         cursor: interactive ? 'move' : 'default',
+        outline: 'none',
       }}
     >
       <div
-        className={`absolute inset-0 rounded-md ${selected
-          ? 'border-[3px] border-primary bg-primary/15'
-          : 'border-2 border-rose-400/60 bg-rose-400/5'
-          }`}
+        className={`absolute inset-0 rounded-md ${
+          selected
+            ? 'border-[3px] border-primary bg-primary/15'
+            : 'border-2 border-rose-400/60 bg-rose-400/5'
+        }`}
       />
       <div
-        className={`pointer-events-none absolute -top-1.5 -left-1.5 flex h-4 w-4 items-center justify-center rounded-full text-[9px] font-semibold text-white shadow ${selected ? 'bg-primary' : 'bg-rose-400'
-          }`}
+        className={`pointer-events-none absolute -top-1.5 -left-1.5 flex h-4 w-4 items-center justify-center rounded-full text-[9px] font-semibold text-white shadow ${
+          selected ? 'bg-primary' : 'bg-rose-400'
+        }`}
       >
         {index + 1}
       </div>

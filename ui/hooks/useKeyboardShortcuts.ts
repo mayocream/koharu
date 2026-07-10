@@ -1,15 +1,23 @@
 'use client'
 
 import { useEffect, useMemo } from 'react'
+import { useHotkeys } from 'react-hotkeys-hook'
 
-import { applyOp, deleteSelectedTextNodesOnCurrentPage, queueAutoRender, redoOp, selectAllTextNodesOnCurrentPage, undoOp } from '@/lib/io/scene'
+import {
+  applyOp,
+  deleteSelectedTextNodesOnCurrentPage,
+  queueAutoRender,
+  redoOp,
+  selectAllTextNodesOnCurrentPage,
+  undoOp,
+} from '@/lib/io/scene'
+import { ops } from '@/lib/ops'
 import { getPlatform, formatShortcut, isModifierKey } from '@/lib/shortcutUtils'
 import { useEditorUiStore } from '@/lib/stores/editorUiStore'
 import { usePreferencesStore } from '@/lib/stores/preferencesStore'
-import { useCurrentPage } from './useCurrentPage'
 import { useSelectionStore } from '@/lib/stores/selectionStore'
-import { ops } from '@/lib/ops'
-import { useHotkeys } from 'react-hotkeys-hook'
+
+import { useCurrentPage } from './useCurrentPage'
 
 export function useKeyboardShortcuts() {
   const setMode = useEditorUiStore((state) => state.setMode)
@@ -104,7 +112,7 @@ export function useKeyboardShortcuts() {
 
   const removeNodes = async (nodeIds: string[]) => {
     if (!page) {
-      return;
+      return
     }
 
     const batch = nodeIds.flatMap((nodeId) => {
@@ -113,7 +121,7 @@ export function useKeyboardShortcuts() {
       const idx = Object.keys(page.nodes).indexOf(nodeId)
       return [ops.removeNode(page.id, nodeId, node, idx < 0 ? 0 : idx)]
     })
-    await applyOp(ops.batch("removeNodes", batch))
+    await applyOp(ops.batch('removeNodes', batch))
     clearSelection()
     queueAutoRender(page.id)
   }
