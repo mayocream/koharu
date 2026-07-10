@@ -5,7 +5,6 @@ use std::{
 
 use anyhow::{Context, Result, ensure};
 use koharu_bindgen::Generator;
-use koharu_runtime::package::{Package, llama_cpp::LlamaCpp};
 
 const HEADER: &str = "wrapper.h";
 const PUBLIC_HEADERS: &[&str] = &[
@@ -29,18 +28,7 @@ const SHIM_SOURCES: &[&str] = &[
     "common/json-schema-to-grammar.cpp",
 ];
 
-#[tokio::main]
-async fn main() -> Result<()> {
-    emit_rerun_if_changed();
-
-    let manifest_dir = PathBuf::from(env::var("CARGO_MANIFEST_DIR")?);
-    let out_dir = PathBuf::from(env::var("OUT_DIR")?);
-
-    generate_bindings(&manifest_dir, &out_dir)?;
-    build_shim(&manifest_dir).await
-}
-
-fn emit_rerun_if_changed() {
+fn main() -> Result<()> {
     println!("cargo:rerun-if-changed=build.rs");
     for path in BINDGEN_EXTRA_HEADERS
         .iter()
@@ -49,6 +37,12 @@ fn emit_rerun_if_changed() {
     {
         println!("cargo:rerun-if-changed={path}");
     }
+
+    let manifest_dir = PathBuf::from(env::var("CARGO_MANIFEST_DIR")?);
+    let out_dir = PathBuf::from(env::var("OUT_DIR")?);
+
+    generate_bindings(&manifest_dir, &out_dir)?;
+    build_shim(&manifest_dir)
 }
 
 fn generate_bindings(manifest_dir: &Path, out_dir: &Path) -> Result<()> {
@@ -69,11 +63,9 @@ fn generate_bindings(manifest_dir: &Path, out_dir: &Path) -> Result<()> {
         .write_to_file(out_dir.join("bindings.rs"))
 }
 
-async fn build_shim(manifest_dir: &Path) -> Result<()> {
+fn build_shim(manifest_dir: &Path) -> Result<()> {
     let target_dir = output_dir()?;
     fs::create_dir_all(&target_dir)?;
-
-    LlamaCpp::for_current_target().resolve().await?;
 
     let cmake_dir = cmake::Config::new("shim")
         .define(

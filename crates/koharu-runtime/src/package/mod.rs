@@ -3,6 +3,7 @@ pub mod huggingface;
 pub mod libtorch;
 pub mod llama_cpp;
 pub mod loading;
+pub mod stable_diffusion_cpp;
 
 use std::{env::current_exe, path::PathBuf, sync::LazyLock};
 

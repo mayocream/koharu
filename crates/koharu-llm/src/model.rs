@@ -18,7 +18,7 @@ use koharu_llama::{
     sampling::LlamaSampler,
     token::LlamaToken,
 };
-use koharu_runtime::package::{Package, PreloadablePackage, cuda::Cuda, llama_cpp::LlamaCpp};
+use koharu_runtime::package::{Package, PreloadablePackage, llama_cpp::LlamaCpp};
 
 use crate::{BuiltinModel, ModelSource};
 
@@ -58,17 +58,6 @@ impl LlamaRuntime {
 }
 
 async fn preload_runtime(package: LlamaCpp) -> Result<PathBuf> {
-    if matches!(package, LlamaCpp::WindowsX64Cuda) {
-        Cuda::Runtime
-            .preload()
-            .await
-            .context("failed to preload CUDA runtime")?;
-        Cuda::Cublas
-            .preload()
-            .await
-            .context("failed to preload CUDA cuBLAS")?;
-    }
-
     let package_dir = package.resolve().await?;
     package.preload().await?;
     Ok(package_dir)
@@ -100,11 +89,7 @@ fn cpu_package() -> Result<LlamaCpp> {
 }
 
 fn cuda_package() -> Result<LlamaCpp> {
-    if cfg!(all(target_os = "windows", target_arch = "x86_64")) {
-        Ok(LlamaCpp::WindowsX64Cuda)
-    } else {
-        bail!("unsupported llama.cpp CUDA runtime for this target")
-    }
+    LlamaCpp::cuda_for_current_target()
 }
 
 fn vulkan_package() -> Result<LlamaCpp> {

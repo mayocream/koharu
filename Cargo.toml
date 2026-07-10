@@ -26,6 +26,7 @@ publish = false
 koharu-app = { path = "crates/koharu-app", default-features = false }
 koharu-bindgen = { path = "crates/koharu-bindgen", default-features = false }
 koharu-core = { path = "crates/koharu-core", default-features = false }
+koharu-diffusion-sys = { path = "crates/koharu-diffusion-sys", default-features = false }
 koharu-llama = { path = "crates/koharu-llama", default-features = false }
 koharu-llama-sys = { path = "crates/koharu-llama-sys", default-features = false }
 koharu-llm = { path = "crates/koharu-llm", default-features = false }
