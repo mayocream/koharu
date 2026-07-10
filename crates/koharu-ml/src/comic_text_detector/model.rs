@@ -52,14 +52,14 @@ impl Model {
     }
 
     pub fn load_safetensors(
-        &self,
+        &mut self,
         yolo_path: impl AsRef<Path>,
         unet_path: impl AsRef<Path>,
         dbnet_path: impl AsRef<Path>,
     ) -> Result<()> {
-        crate::weights::load_safetensors(&self.yolo_vs, yolo_path, "comic-text-detector YOLO")?;
-        crate::weights::load_safetensors(&self.unet_vs, unet_path, "comic-text-detector U-Net")?;
-        crate::weights::load_safetensors(&self.dbnet_vs, dbnet_path, "comic-text-detector DBNet")?;
+        self.yolo_vs.load(yolo_path)?;
+        self.unet_vs.load(unet_path)?;
+        self.dbnet_vs.load(dbnet_path)?;
         Ok(())
     }
 

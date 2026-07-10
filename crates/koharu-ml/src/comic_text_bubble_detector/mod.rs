@@ -53,7 +53,7 @@ impl ComicTextBubbleDetector {
         // fixed RT-DETR anchors instead of rebuilding and uploading them per slice.
         config.anchor_image_size = Some(vec![processor.size.height, processor.size.width]);
 
-        let model = Model::new(config, device);
+        let mut model = Model::new(config, device);
         model
             .load_safetensors(&weights_path)
             .context("failed to load comic text/bubble detector safetensors")?;

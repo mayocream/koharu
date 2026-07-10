@@ -29,7 +29,7 @@ impl LaMa {
         let weights_path = huggingface::resolve(WEIGHTS)
             .await
             .context("failed to resolve LaMa weights")?;
-        let model = Model::new(device);
+        let mut model = Model::new(device);
         model
             .load_safetensors(&weights_path)
             .context("failed to load LaMa safetensors")?;

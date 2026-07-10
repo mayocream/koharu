@@ -35,8 +35,9 @@ impl Model {
         Self { vs, model }
     }
 
-    pub fn load_safetensors(&self, path: impl AsRef<Path>) -> Result<()> {
-        crate::weights::load_safetensors(&self.vs, path, "PP-DocLayout-V3")
+    pub fn load_safetensors(&mut self, path: impl AsRef<Path>) -> Result<()> {
+        self.vs.load(path)?;
+        Ok(())
     }
 
     pub fn forward(&self, pixel_values: &Tensor) -> Output {

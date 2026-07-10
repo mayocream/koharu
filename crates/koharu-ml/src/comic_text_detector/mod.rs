@@ -38,7 +38,7 @@ impl ComicTextDetector {
             .await
             .context("failed to resolve comic-text-detector DBNet weights")?;
 
-        let model = Model::new(device);
+        let mut model = Model::new(device);
         model
             .load_safetensors(&yolo_path, &unet_path, &dbnet_path)
             .context("failed to load comic-text-detector safetensors")?;

@@ -25,8 +25,9 @@ impl Model {
         Self { vs, generator }
     }
 
-    pub fn load_safetensors(&self, path: impl AsRef<Path>) -> Result<()> {
-        crate::weights::load_safetensors(&self.vs, path, "LaMa")
+    pub fn load_safetensors(&mut self, path: impl AsRef<Path>) -> Result<()> {
+        self.vs.load(path)?;
+        Ok(())
     }
 
     pub fn forward(&self, image: &Tensor, mask: &Tensor) -> Tensor {

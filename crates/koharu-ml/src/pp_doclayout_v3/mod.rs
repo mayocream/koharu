@@ -55,7 +55,7 @@ impl PPDocLayoutV3 {
         // fixed RT-DETR anchors instead of rebuilding and uploading them per page.
         config.anchor_image_size = Some(vec![processor.size.height, processor.size.width]);
 
-        let model = Model::new(config, device);
+        let mut model = Model::new(config, device);
         model
             .load_safetensors(&weights_path)
             .with_context(|| format!("failed to load {}", weights_path.display()))?;
