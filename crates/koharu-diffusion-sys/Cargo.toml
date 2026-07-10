@@ -14,6 +14,9 @@ build = "build.rs"
 [dependencies]
 libloading = { workspace = true }
 
+[target.'cfg(target_os = "linux")'.dependencies]
+libc = { workspace = true }
+
 [build-dependencies]
 anyhow = { workspace = true }
 koharu-bindgen = { workspace = true }

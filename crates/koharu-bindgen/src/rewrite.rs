@@ -112,6 +112,18 @@ fn loader_tokens(library_names: &[String]) -> TokenStream {
                 }
             }
 
+            #[cfg(target_os = "linux")]
+            {
+                if let Ok(library) = unsafe {
+                    ::libloading::os::unix::Library::open(
+                        Some(library_file_name),
+                        ::libloading::os::unix::RTLD_LAZY | ::libc::RTLD_NOLOAD,
+                    )
+                } {
+                    return Ok(library.into());
+                }
+            }
+
             unsafe { ::libloading::Library::new(library_file_name) }
                 .map_err(|error| error.to_string())
         }

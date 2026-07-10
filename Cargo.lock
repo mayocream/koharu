@@ -3867,6 +3867,7 @@ version = "0.61.2"
 dependencies = [
  "anyhow",
  "koharu-bindgen",
+ "libc",
  "libloading 0.8.9",
 ]
 
@@ -3915,6 +3916,7 @@ dependencies = [
  "anyhow",
  "cmake",
  "koharu-bindgen",
+ "libc",
  "libloading 0.8.9",
 ]
 
