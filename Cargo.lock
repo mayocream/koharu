@@ -3862,6 +3862,15 @@ dependencies = [
 ]
 
 [[package]]
+name = "koharu-diffusion-sys"
+version = "0.61.2"
+dependencies = [
+ "anyhow",
+ "koharu-bindgen",
+ "libloading 0.8.9",
+]
+
+[[package]]
 name = "koharu-integration-tests"
 version = "0.0.0"
 dependencies = [
@@ -3906,9 +3915,7 @@ dependencies = [
  "anyhow",
  "cmake",
  "koharu-bindgen",
- "koharu-runtime",
  "libloading 0.8.9",
- "tokio",
 ]
 
 [[package]]

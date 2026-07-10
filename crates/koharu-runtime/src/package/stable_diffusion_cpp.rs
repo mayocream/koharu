@@ -12,88 +12,79 @@ use crate::{
     package::{Package, PreloadablePackage, STORE_DIR, loading::preload},
 };
 
-const REPO: &str = "ggml-org/llama.cpp";
-const TAG: &str = "b9938";
-const CUDA_13_3_DRIVER_VERSION: i32 = 13030;
-const WINDOWS_CUDA_12_4_RUNTIME_ASSET: &str = "cudart-llama-bin-win-cuda-12.4-x64.zip";
-const WINDOWS_CUDA_13_3_RUNTIME_ASSET: &str = "cudart-llama-bin-win-cuda-13.3-x64.zip";
+const REPO: &str = "leejet/stable-diffusion.cpp";
+const TAG: &str = "master-769-cc73429";
+const ASSET_REVISION: &str = "cc73429";
+const WINDOWS_CUDA_RUNTIME_ASSET: &str = "cudart-sd-bin-win-cu12-x64.zip";
 
-static LLAMA_CPP_ROOT: LazyLock<PathBuf> = LazyLock::new(|| STORE_DIR.join("llama.cpp").join(TAG));
+static STABLE_DIFFUSION_CPP_ROOT: LazyLock<PathBuf> =
+    LazyLock::new(|| STORE_DIR.join("stable-diffusion.cpp").join(TAG));
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, strum::Display)]
 #[strum(serialize_all = "kebab-case")]
-pub enum LlamaCpp {
+pub enum StableDiffusionCpp {
     WindowsX64Cpu,
-    WindowsArm64Cpu,
-    #[strum(serialize = "windows-x64-cuda-12.4")]
-    WindowsX64Cuda124,
-    #[strum(serialize = "windows-x64-cuda-13.3")]
-    WindowsX64Cuda133,
+    WindowsX64Cuda12,
     WindowsX64Vulkan,
+    WindowsX64Rocm711,
+    WindowsX64Rocm7130,
     LinuxX64Cpu,
-    LinuxArm64Cpu,
     LinuxX64Vulkan,
-    LinuxArm64Vulkan,
-    MacosX64,
+    LinuxX64Rocm721,
+    LinuxX64Rocm7130,
     MacosArm64,
 }
 
-impl LlamaCpp {
-    pub fn for_current_target() -> Self {
+impl StableDiffusionCpp {
+    pub fn for_current_target() -> anyhow::Result<Self> {
         if cfg!(all(target_os = "windows", target_arch = "x86_64")) {
-            windows_x64_package()
-        } else if cfg!(all(target_os = "windows", target_arch = "aarch64")) {
-            Self::WindowsArm64Cpu
+            Ok(windows_x64_package())
         } else if cfg!(all(target_os = "linux", target_arch = "x86_64")) {
-            Self::LinuxX64Cpu
-        } else if cfg!(all(target_os = "linux", target_arch = "aarch64")) {
-            Self::LinuxArm64Cpu
-        } else if cfg!(all(target_os = "macos", target_arch = "x86_64")) {
-            Self::MacosX64
+            Ok(Self::LinuxX64Cpu)
         } else if cfg!(all(target_os = "macos", target_arch = "aarch64")) {
-            Self::MacosArm64
+            Ok(Self::MacosArm64)
         } else {
-            Self::LinuxX64Cpu
+            bail!("unsupported stable-diffusion.cpp runtime for this target")
         }
     }
 
     pub fn cuda_for_current_target() -> anyhow::Result<Self> {
         if !cfg!(all(target_os = "windows", target_arch = "x86_64")) || !cuda::cuda_available() {
-            bail!("unsupported llama.cpp CUDA runtime for this target")
+            bail!("unsupported stable-diffusion.cpp CUDA runtime for this target")
         }
 
-        Ok(windows_cuda_package())
+        Ok(Self::WindowsX64Cuda12)
     }
 
     pub fn asset(&self) -> String {
+        let prefix = format!("sd-master-{ASSET_REVISION}");
         match self {
-            LlamaCpp::WindowsX64Cpu => format!("llama-{TAG}-bin-win-cpu-x64.zip"),
-            LlamaCpp::WindowsArm64Cpu => format!("llama-{TAG}-bin-win-cpu-arm64.zip"),
-            LlamaCpp::WindowsX64Cuda124 => format!("llama-{TAG}-bin-win-cuda-12.4-x64.zip"),
-            LlamaCpp::WindowsX64Cuda133 => format!("llama-{TAG}-bin-win-cuda-13.3-x64.zip"),
-            LlamaCpp::WindowsX64Vulkan => format!("llama-{TAG}-bin-win-vulkan-x64.zip"),
-            LlamaCpp::LinuxX64Cpu => format!("llama-{TAG}-bin-ubuntu-x64.tar.gz"),
-            LlamaCpp::LinuxArm64Cpu => format!("llama-{TAG}-bin-ubuntu-arm64.tar.gz"),
-            LlamaCpp::LinuxX64Vulkan => format!("llama-{TAG}-bin-ubuntu-vulkan-x64.tar.gz"),
-            LlamaCpp::LinuxArm64Vulkan => format!("llama-{TAG}-bin-ubuntu-vulkan-arm64.tar.gz"),
-            LlamaCpp::MacosX64 => format!("llama-{TAG}-bin-macos-x64.tar.gz"),
-            LlamaCpp::MacosArm64 => format!("llama-{TAG}-bin-macos-arm64.tar.gz"),
+            Self::WindowsX64Cpu => format!("{prefix}-bin-win-cpu-x64.zip"),
+            Self::WindowsX64Cuda12 => format!("{prefix}-bin-win-cuda12-x64.zip"),
+            Self::WindowsX64Vulkan => format!("{prefix}-bin-win-vulkan-x64.zip"),
+            Self::WindowsX64Rocm711 => format!("{prefix}-bin-win-rocm-7.1.1-x64.zip"),
+            Self::WindowsX64Rocm7130 => format!("{prefix}-bin-win-rocm-7.13.0-x64.zip"),
+            Self::LinuxX64Cpu => format!("{prefix}-bin-Linux-Ubuntu-24.04-x86_64.zip"),
+            Self::LinuxX64Vulkan => format!("{prefix}-bin-Linux-Ubuntu-24.04-x86_64-vulkan.zip"),
+            Self::LinuxX64Rocm721 => {
+                format!("{prefix}-bin-Linux-Ubuntu-24.04-x86_64-rocm-7.2.1.zip")
+            }
+            Self::LinuxX64Rocm7130 => {
+                format!("{prefix}-bin-Linux-Ubuntu-24.04-x86_64-rocm-7.13.0.zip")
+            }
+            Self::MacosArm64 => format!("{prefix}-bin-Darwin-macOS-26.4-arm64.zip"),
         }
     }
 
     fn path(&self) -> PathBuf {
-        LLAMA_CPP_ROOT.join(self.to_string())
+        STABLE_DIFFUSION_CPP_ROOT.join(self.to_string())
     }
 
     fn extra_assets(&self) -> &'static [ExtraAsset] {
         match self {
-            Self::WindowsX64Cuda124 => &[ExtraAsset {
-                asset: WINDOWS_CUDA_12_4_RUNTIME_ASSET,
-                directory: "windows-x64-cuda-12.4-runtime",
-            }],
-            Self::WindowsX64Cuda133 => &[ExtraAsset {
-                asset: WINDOWS_CUDA_13_3_RUNTIME_ASSET,
-                directory: "windows-x64-cuda-13.3-runtime",
+            Self::WindowsX64Cuda12 => &[ExtraAsset {
+                asset: WINDOWS_CUDA_RUNTIME_ASSET,
+                directory: "windows-x64-cuda12-runtime",
             }],
             _ => &[],
         }
@@ -101,17 +92,17 @@ impl LlamaCpp {
 }
 
 #[async_trait::async_trait]
-impl Package for LlamaCpp {
+impl Package for StableDiffusionCpp {
     async fn resolve(&self) -> anyhow::Result<PathBuf> {
         resolve_asset(&self.asset(), self.path()).await
     }
 }
 
 #[async_trait::async_trait]
-impl PreloadablePackage for LlamaCpp {
+impl PreloadablePackage for StableDiffusionCpp {
     async fn preload(&self) -> anyhow::Result<()> {
         let package_dirs = resolve_package_dirs(self).await?;
-        preload_dynamic_libraries("llama.cpp", &self.path(), &package_dirs)
+        preload_dynamic_libraries("stable-diffusion.cpp", &self.path(), &package_dirs)
     }
 }
 
@@ -121,25 +112,20 @@ struct ExtraAsset {
     directory: &'static str,
 }
 
-fn windows_x64_package() -> LlamaCpp {
+fn windows_x64_package() -> StableDiffusionCpp {
     if cuda::cuda_available() {
-        windows_cuda_package()
+        StableDiffusionCpp::WindowsX64Cuda12
     } else {
-        LlamaCpp::WindowsX64Cpu
+        StableDiffusionCpp::WindowsX64Cpu
     }
 }
 
-fn windows_cuda_package() -> LlamaCpp {
-    match cuda::driver_version() {
-        Ok(version) if version >= CUDA_13_3_DRIVER_VERSION => LlamaCpp::WindowsX64Cuda133,
-        _ => LlamaCpp::WindowsX64Cuda124,
-    }
-}
-
-async fn resolve_package_dirs(package: &LlamaCpp) -> anyhow::Result<Vec<PathBuf>> {
+async fn resolve_package_dirs(package: &StableDiffusionCpp) -> anyhow::Result<Vec<PathBuf>> {
     let mut package_dirs = Vec::new();
     for extra in package.extra_assets() {
-        package_dirs.push(resolve_asset(extra.asset, LLAMA_CPP_ROOT.join(extra.directory)).await?);
+        package_dirs.push(
+            resolve_asset(extra.asset, STABLE_DIFFUSION_CPP_ROOT.join(extra.directory)).await?,
+        );
     }
     package_dirs.push(package.resolve().await?);
     Ok(package_dirs)
@@ -227,6 +213,9 @@ fn dynamic_library_preload_key(path: &Path) -> (u8, String) {
         || library.starts_with("nvrtc")
         || library.starts_with("nvjpeg")
         || library.starts_with("npp")
+        || library.starts_with("hip")
+        || library.starts_with("roc")
+        || library.starts_with("amd")
     {
         0
     } else if library.starts_with("omp") || library.starts_with("gomp") {
@@ -237,21 +226,19 @@ fn dynamic_library_preload_key(path: &Path) -> (u8, String) {
         3
     } else if library.starts_with("ggml-cpu") {
         4
-    } else if library.starts_with("ggml-vulkan")
-        || library.starts_with("ggml-cuda")
+    } else if library.starts_with("ggml-cuda")
+        || library.starts_with("ggml-vulkan")
         || library.starts_with("ggml-metal")
+        || library.starts_with("ggml-hip")
+        || library.starts_with("ggml-rocm")
         || library.starts_with("ggml-blas")
         || library.starts_with("ggml-rpc")
     {
         5
-    } else if library.starts_with("llama-common") {
+    } else if library.starts_with("stable-diffusion") || library.starts_with("sd.") {
         6
-    } else if library.starts_with("llama.") {
-        7
-    } else if library.starts_with("mtmd") {
-        8
     } else {
-        9
+        7
     };
 
     (rank, name)
