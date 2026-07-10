@@ -84,11 +84,7 @@ async fn build_shim() -> Result<()> {
         return Ok(());
     }
 
-    let libtorch = if cfg!(target_os = "macos") {
-        Libtorch::Cpu
-    } else {
-        Libtorch::Cuda130
-    };
+    let libtorch = Libtorch::for_current_target()?;
     let libtorch_dir = libtorch.resolve().await?.join("libtorch");
     let cmake_dir = cmake::Config::new("libtch")
         .define("CMAKE_PREFIX_PATH", libtorch_dir)

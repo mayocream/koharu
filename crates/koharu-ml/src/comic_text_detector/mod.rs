@@ -37,7 +37,7 @@ impl ComicTextDetector {
     }
 
     pub async fn load_with_config(cpu: bool, config: ComicTextDetectorConfig) -> Result<Self> {
-        let device = device(cpu);
+        let device: Device = device(cpu).try_into()?;
         let yolo_path = huggingface::resolve(YOLO_WEIGHTS)
             .await
             .context("failed to resolve comic-text-detector YOLO weights")?;

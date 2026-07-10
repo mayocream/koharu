@@ -21,7 +21,7 @@ pub struct LamaManga {
 
 impl LamaManga {
     pub async fn load(cpu: bool) -> Result<Self> {
-        let device = device(cpu);
+        let device: Device = device(cpu).try_into()?;
         let weights_path = huggingface::resolve(WEIGHTS)
             .await
             .context("failed to resolve lama-manga weights")?;

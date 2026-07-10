@@ -38,7 +38,7 @@ impl ComicTextBubbleDetector {
     }
 
     pub async fn load_with_threshold(cpu: bool, confidence_threshold: f32) -> Result<Self> {
-        let device = device(cpu);
+        let device: Device = device(cpu).try_into()?;
         let config_path = huggingface::resolve(CONFIG)
             .await
             .context("failed to resolve comic text/bubble detector config")?;

@@ -1,53 +1,107 @@
-use std::{
-    fs::{self, create_dir_all},
-    path::{Path, PathBuf},
-    sync::LazyLock,
-};
+use std::{ffi::OsStr, fs::create_dir_all, path::PathBuf, sync::LazyLock};
 
-use anyhow::{Context, bail};
+use anyhow::Context;
+use strum::EnumProperty;
+use walkdir::WalkDir;
 
 use crate::{
-    device::cuda,
+    device::{
+        cuda::{cuda_available, driver_version},
+        vulkan::vulkan_available,
+    },
     download::{archive::extract, client::Client, github::github_release},
-    package::{Package, PreloadablePackage, STORE_DIR, loading::preload},
+    package::{Package, PreloadablePackage, STORE_DIR, cuda::Cuda, loading::preload},
 };
 
 const REPO: &str = "ggml-org/llama.cpp";
 const TAG: &str = "b9938";
-const CUDA_13_3_DRIVER_VERSION: i32 = 13030;
-const WINDOWS_CUDA_12_4_RUNTIME_ASSET: &str = "cudart-llama-bin-win-cuda-12.4-x64.zip";
-const WINDOWS_CUDA_13_3_RUNTIME_ASSET: &str = "cudart-llama-bin-win-cuda-13.3-x64.zip";
 
 static LLAMA_CPP_ROOT: LazyLock<PathBuf> = LazyLock::new(|| STORE_DIR.join("llama.cpp").join(TAG));
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq, strum::Display)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, strum::Display, strum::EnumProperty)]
 #[strum(serialize_all = "kebab-case")]
 pub enum LlamaCpp {
+    #[strum(props(
+        dylibs = "libomp140.x86_64.dll,ggml-base.dll,ggml.dll,ggml-cpu-x64.dll,llama.dll,llama-common.dll,mtmd.dll"
+    ))]
     WindowsX64Cpu,
+    #[strum(props(
+        dylibs = "libomp140.aarch64.dll,ggml-base.dll,ggml.dll,ggml-cpu.dll,llama.dll,llama-common.dll,mtmd.dll"
+    ))]
     WindowsArm64Cpu,
-    #[strum(serialize = "windows-x64-cuda-12.4")]
+    #[strum(
+        serialize = "windows-x64-cuda-12.4",
+        props(
+            dylibs = "libomp140.x86_64.dll,ggml-base.dll,ggml.dll,ggml-cpu-x64.dll,ggml-cuda.dll,llama.dll,llama-common.dll,mtmd.dll"
+        )
+    )]
     WindowsX64Cuda124,
-    #[strum(serialize = "windows-x64-cuda-13.3")]
+    #[strum(
+        serialize = "windows-x64-cuda-13.3",
+        props(
+            dylibs = "libomp140.x86_64.dll,ggml-base.dll,ggml.dll,ggml-cpu-x64.dll,ggml-cuda.dll,llama.dll,llama-common.dll,mtmd.dll"
+        )
+    )]
     WindowsX64Cuda133,
+    #[strum(props(
+        dylibs = "libomp140.x86_64.dll,ggml-base.dll,ggml.dll,ggml-cpu-x64.dll,ggml-vulkan.dll,llama.dll,llama-common.dll,mtmd.dll"
+    ))]
     WindowsX64Vulkan,
+    #[strum(props(
+        dylibs = "libggml-base.so,libggml.so,libggml-cpu-x64.so,libllama.so,libllama-common.so,libmtmd.so"
+    ))]
     LinuxX64Cpu,
+    #[strum(props(
+        dylibs = "libggml-base.so,libggml.so,libggml-cpu-armv8.0_1.so,libllama.so,libllama-common.so,libmtmd.so"
+    ))]
     LinuxArm64Cpu,
+    #[strum(props(
+        dylibs = "libggml-base.so,libggml.so,libggml-cpu-x64.so,libggml-vulkan.so,libllama.so,libllama-common.so,libmtmd.so"
+    ))]
     LinuxX64Vulkan,
+    #[strum(props(
+        dylibs = "libggml-base.so,libggml.so,libggml-cpu-armv8.0_1.so,libggml-vulkan.so,libllama.so,libllama-common.so,libmtmd.so"
+    ))]
     LinuxArm64Vulkan,
+    #[strum(props(
+        dylibs = "libggml-base.dylib,libggml.dylib,libggml-cpu.dylib,libggml-blas.dylib,libggml-metal.dylib,libllama.dylib,libllama-common.dylib,libmtmd.dylib"
+    ))]
     MacosX64,
+    #[strum(props(
+        dylibs = "libggml-base.dylib,libggml.dylib,libggml-cpu.dylib,libggml-blas.dylib,libggml-metal.dylib,libllama.dylib,libllama-common.dylib,libmtmd.dylib"
+    ))]
     MacosArm64,
 }
 
 impl LlamaCpp {
     pub fn for_current_target() -> Self {
         if cfg!(all(target_os = "windows", target_arch = "x86_64")) {
-            windows_x64_package()
+            if cuda_available() {
+                match driver_version() {
+                    Ok(version) if version >= 13030 => Self::WindowsX64Cuda133,
+                    Ok(version) if version >= 12040 => Self::WindowsX64Cuda124,
+                    _ if vulkan_available() => Self::WindowsX64Vulkan,
+                    _ => Self::WindowsX64Cpu,
+                }
+            } else if vulkan_available() {
+                Self::WindowsX64Vulkan
+            } else {
+                Self::WindowsX64Cpu
+            }
         } else if cfg!(all(target_os = "windows", target_arch = "aarch64")) {
             Self::WindowsArm64Cpu
         } else if cfg!(all(target_os = "linux", target_arch = "x86_64")) {
-            Self::LinuxX64Cpu
+            if vulkan_available() {
+                Self::LinuxX64Vulkan
+            } else {
+                Self::LinuxX64Cpu
+            }
         } else if cfg!(all(target_os = "linux", target_arch = "aarch64")) {
-            Self::LinuxArm64Cpu
+            if vulkan_available() {
+                Self::LinuxArm64Vulkan
+            } else {
+                Self::LinuxArm64Cpu
+            }
         } else if cfg!(all(target_os = "macos", target_arch = "x86_64")) {
             Self::MacosX64
         } else if cfg!(all(target_os = "macos", target_arch = "aarch64")) {
@@ -55,14 +109,6 @@ impl LlamaCpp {
         } else {
             Self::LinuxX64Cpu
         }
-    }
-
-    pub fn cuda_for_current_target() -> anyhow::Result<Self> {
-        if !cfg!(all(target_os = "windows", target_arch = "x86_64")) || !cuda::cuda_available() {
-            bail!("unsupported llama.cpp CUDA runtime for this target")
-        }
-
-        Ok(windows_cuda_package())
     }
 
     pub fn asset(&self) -> String {
@@ -74,185 +120,88 @@ impl LlamaCpp {
             LlamaCpp::WindowsX64Vulkan => format!("llama-{TAG}-bin-win-vulkan-x64.zip"),
             LlamaCpp::LinuxX64Cpu => format!("llama-{TAG}-bin-ubuntu-x64.tar.gz"),
             LlamaCpp::LinuxArm64Cpu => format!("llama-{TAG}-bin-ubuntu-arm64.tar.gz"),
-            LlamaCpp::LinuxX64Vulkan => format!("llama-{TAG}-bin-ubuntu-vulkan-x64.tar.gz"),
-            LlamaCpp::LinuxArm64Vulkan => format!("llama-{TAG}-bin-ubuntu-vulkan-arm64.tar.gz"),
+            LlamaCpp::LinuxX64Vulkan => {
+                format!("llama-{TAG}-bin-ubuntu-vulkan-x64.tar.gz")
+            }
+            LlamaCpp::LinuxArm64Vulkan => {
+                format!("llama-{TAG}-bin-ubuntu-vulkan-arm64.tar.gz")
+            }
             LlamaCpp::MacosX64 => format!("llama-{TAG}-bin-macos-x64.tar.gz"),
             LlamaCpp::MacosArm64 => format!("llama-{TAG}-bin-macos-arm64.tar.gz"),
         }
     }
 
-    fn path(&self) -> PathBuf {
-        LLAMA_CPP_ROOT.join(self.to_string())
-    }
-
-    fn extra_assets(&self) -> &'static [ExtraAsset] {
-        match self {
-            Self::WindowsX64Cuda124 => &[ExtraAsset {
-                asset: WINDOWS_CUDA_12_4_RUNTIME_ASSET,
-                directory: "windows-x64-cuda-12.4-runtime",
-            }],
-            Self::WindowsX64Cuda133 => &[ExtraAsset {
-                asset: WINDOWS_CUDA_13_3_RUNTIME_ASSET,
-                directory: "windows-x64-cuda-13.3-runtime",
-            }],
-            _ => &[],
-        }
+    #[inline]
+    fn dylibs(&self) -> impl Iterator<Item = &str> {
+        self.get_str("dylibs")
+            .expect("llama.cpp property 'dylibs' not found")
+            .split(',')
     }
 }
 
 #[async_trait::async_trait]
 impl Package for LlamaCpp {
     async fn resolve(&self) -> anyhow::Result<PathBuf> {
-        resolve_asset(&self.asset(), self.path()).await
+        let asset = self.asset();
+        let path = LLAMA_CPP_ROOT.join(self.to_string());
+        if !path.exists() {
+            let url = github_release(REPO, TAG, &asset);
+            let file = tempfile::Builder::new().suffix(&asset).tempfile()?;
+            let archive = Client::new()
+                .download(&url, file.path().to_path_buf())
+                .await?;
+
+            create_dir_all(&path)?;
+            extract(archive, path.clone(), &["**/*"])?;
+        }
+
+        let nested_path = path.join(format!("llama-{TAG}"));
+        Ok(if nested_path.is_dir() {
+            nested_path
+        } else {
+            path
+        })
     }
 }
 
 #[async_trait::async_trait]
 impl PreloadablePackage for LlamaCpp {
     async fn preload(&self) -> anyhow::Result<()> {
-        let package_dirs = resolve_package_dirs(self).await?;
-        preload_dynamic_libraries("llama.cpp", &self.path(), &package_dirs)
-    }
-}
-
-#[derive(Debug, Clone, Copy)]
-struct ExtraAsset {
-    asset: &'static str,
-    directory: &'static str,
-}
-
-fn windows_x64_package() -> LlamaCpp {
-    if cuda::cuda_available() {
-        windows_cuda_package()
-    } else {
-        LlamaCpp::WindowsX64Cpu
-    }
-}
-
-fn windows_cuda_package() -> LlamaCpp {
-    match cuda::driver_version() {
-        Ok(version) if version >= CUDA_13_3_DRIVER_VERSION => LlamaCpp::WindowsX64Cuda133,
-        _ => LlamaCpp::WindowsX64Cuda124,
-    }
-}
-
-async fn resolve_package_dirs(package: &LlamaCpp) -> anyhow::Result<Vec<PathBuf>> {
-    let mut package_dirs = Vec::new();
-    for extra in package.extra_assets() {
-        package_dirs.push(resolve_asset(extra.asset, LLAMA_CPP_ROOT.join(extra.directory)).await?);
-    }
-    package_dirs.push(package.resolve().await?);
-    Ok(package_dirs)
-}
-
-async fn resolve_asset(asset: &str, path: PathBuf) -> anyhow::Result<PathBuf> {
-    if path.exists() {
-        return Ok(path);
-    }
-
-    let url = github_release(REPO, TAG, asset);
-    let client = Client::new();
-    let file = tempfile::Builder::new().suffix(asset).tempfile()?;
-    let archive = client.download(&url, file.path().to_path_buf()).await?;
-
-    create_dir_all(&path)?;
-    extract(archive, path.clone(), &["**/*"])?;
-    Ok(path)
-}
-
-fn preload_dynamic_libraries(
-    package_name: &str,
-    package_path: &Path,
-    package_dirs: &[PathBuf],
-) -> anyhow::Result<()> {
-    let mut libraries = Vec::new();
-    for package_dir in package_dirs {
-        collect_dynamic_libraries(package_dir, &mut libraries)?;
-    }
-    if libraries.is_empty() {
-        bail!(
-            "{package_name} package contains no dynamic libraries: {}",
-            package_path.display()
-        );
-    }
-
-    libraries.sort_by_key(|path| dynamic_library_preload_key(path));
-    for library in libraries {
-        preload(&library)?;
-    }
-
-    Ok(())
-}
-
-fn collect_dynamic_libraries(dir: &Path, libraries: &mut Vec<PathBuf>) -> anyhow::Result<()> {
-    for entry in fs::read_dir(dir).with_context(|| format!("failed to read {}", dir.display()))? {
-        let entry = entry?;
-        let path = entry.path();
-        let file_type = entry.file_type()?;
-        if file_type.is_dir() {
-            collect_dynamic_libraries(&path, libraries)?;
-        } else if is_dynamic_library(&path) && fs::metadata(&path)?.is_file() {
-            libraries.push(path);
+        match self {
+            Self::WindowsX64Cuda124 => {
+                Cuda::Runtime12.preload().await?;
+                Cuda::Cublas12.preload().await?;
+            }
+            Self::WindowsX64Cuda133 => {
+                Cuda::Runtime.preload().await?;
+                Cuda::Cublas.preload().await?;
+            }
+            _ => {}
         }
+
+        let package_dir = self.resolve().await?;
+
+        for dylib in self.dylibs() {
+            let mut dylib_path = None;
+            for entry in WalkDir::new(&package_dir) {
+                let entry = entry.with_context(|| {
+                    format!("failed to walk llama.cpp package {}", package_dir.display())
+                })?;
+                if entry.file_name() == OsStr::new(dylib) && entry.path().is_file() {
+                    dylib_path = Some(entry.into_path());
+                    break;
+                }
+            }
+
+            let dylib_path = dylib_path.ok_or_else(|| {
+                anyhow::anyhow!(
+                    "llama.cpp dynamic library not found: {}",
+                    package_dir.join(dylib).display()
+                )
+            })?;
+            preload(dylib_path)?;
+        }
+
+        Ok(())
     }
-
-    Ok(())
-}
-
-fn is_dynamic_library(path: &Path) -> bool {
-    let Some(name) = path.file_name().and_then(|name| name.to_str()) else {
-        return false;
-    };
-
-    if cfg!(target_os = "windows") {
-        name.ends_with(".dll")
-    } else if cfg!(target_os = "macos") {
-        name.ends_with(".dylib")
-    } else {
-        name.ends_with(".so") || name.contains(".so.")
-    }
-}
-
-fn dynamic_library_preload_key(path: &Path) -> (u8, String) {
-    let name = path
-        .file_name()
-        .and_then(|name| name.to_str())
-        .unwrap_or_default()
-        .to_ascii_lowercase();
-    let library = name.strip_prefix("lib").unwrap_or(&name);
-    let rank = if library.starts_with("cudart")
-        || library.starts_with("cublas")
-        || library.starts_with("cufft")
-        || library.starts_with("curand")
-        || library.starts_with("nvrtc")
-        || library.starts_with("nvjpeg")
-        || library.starts_with("npp")
-    {
-        0
-    } else if library.starts_with("omp") || library.starts_with("gomp") {
-        1
-    } else if library.starts_with("ggml-base") {
-        2
-    } else if library.starts_with("ggml.") {
-        3
-    } else if library.starts_with("ggml-cpu") {
-        4
-    } else if library.starts_with("ggml-vulkan")
-        || library.starts_with("ggml-cuda")
-        || library.starts_with("ggml-metal")
-        || library.starts_with("ggml-blas")
-        || library.starts_with("ggml-rpc")
-    {
-        5
-    } else if library.starts_with("llama-common") {
-        6
-    } else if library.starts_with("llama.") {
-        7
-    } else if library.starts_with("mtmd") {
-        8
-    } else {
-        9
-    };
-
-    (rank, name)
 }

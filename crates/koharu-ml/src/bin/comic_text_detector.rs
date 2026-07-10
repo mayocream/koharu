@@ -49,6 +49,7 @@ struct Cli {
 
 #[tokio::main]
 async fn main() -> Result<()> {
+    tracing_subscriber::fmt::init();
     let cli = Cli::parse();
     let image = image::open(&cli.input)?;
 

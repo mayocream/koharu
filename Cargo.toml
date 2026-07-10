@@ -30,7 +30,6 @@ koharu-diffusion = { path = "crates/koharu-diffusion", default-features = false 
 koharu-diffusion-sys = { path = "crates/koharu-diffusion-sys", default-features = false }
 koharu-llama = { path = "crates/koharu-llama", default-features = false }
 koharu-llama-sys = { path = "crates/koharu-llama-sys", default-features = false }
-koharu-llm = { path = "crates/koharu-llm", default-features = false }
 koharu-runtime = { path = "crates/koharu-runtime", default-features = false }
 koharu-torch = { path = "crates/koharu-torch", default-features = false }
 koharu-torch-sys = { path = "crates/koharu-torch-sys", default-features = false }

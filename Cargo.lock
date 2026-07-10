@@ -3930,21 +3930,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "koharu-llm"
-version = "0.61.2"
-dependencies = [
- "anyhow",
- "clap",
- "encoding_rs",
- "koharu-llama",
- "koharu-runtime",
- "serde",
- "strum",
- "tokio",
- "tracing-subscriber",
-]
-
-[[package]]
 name = "koharu-ml"
 version = "0.61.2"
 dependencies = [
@@ -3955,12 +3940,14 @@ dependencies = [
  "fast_image_resize",
  "image 0.25.10",
  "imageproc",
+ "koharu-diffusion",
+ "koharu-llama",
  "koharu-runtime",
  "koharu-torch",
- "koharu-torch-sys",
  "serde",
  "serde_json",
  "strum",
+ "thiserror 2.0.18",
  "tokio",
  "tracing",
  "tracing-subscriber",
@@ -4059,6 +4046,7 @@ dependencies = [
  "tempfile",
  "tokio",
  "tracing",
+ "walkdir",
  "windows-sys 0.61.2",
  "zip 8.6.0",
 ]

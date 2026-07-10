@@ -27,6 +27,7 @@ serde = { workspace = true }
 zip = { workspace = true }
 tokio = { workspace = true }
 tracing = { workspace = true }
+walkdir = { workspace = true }
 libloading = { workspace = true }
 flate2 = { workspace = true }
 num_cpus = { workspace = true }
