@@ -3862,6 +3862,15 @@ dependencies = [
 ]
 
 [[package]]
+name = "koharu-diffusion"
+version = "0.61.2"
+dependencies = [
+ "image 0.25.10",
+ "koharu-diffusion-sys",
+ "thiserror 2.0.18",
+]
+
+[[package]]
 name = "koharu-diffusion-sys"
 version = "0.61.2"
 dependencies = [

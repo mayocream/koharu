@@ -1,0 +1,16 @@
+[package]
+name = "koharu-diffusion"
+version.workspace = true
+edition.workspace = true
+description = "Safe Rust wrappers for stable-diffusion.cpp."
+license = "MIT/Apache-2.0"
+authors.workspace = true
+homepage.workspace = true
+repository.workspace = true
+keywords = ["stable-diffusion", "diffusion", "machine-learning"]
+publish.workspace = true
+
+[dependencies]
+image = { workspace = true }
+koharu-diffusion-sys = { workspace = true }
+thiserror = { workspace = true }

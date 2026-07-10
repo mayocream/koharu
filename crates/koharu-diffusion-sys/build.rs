@@ -33,7 +33,7 @@ fn generate_bindings(manifest_dir: &Path, out_dir: &Path) -> Result<()> {
                 .layout_tests(false)
                 .derive_partialeq(true)
                 .allowlist_function(
-                    "^(sd_.*|new_sd_ctx|free_sd_ctx|free_sd_audio|free_sd_images|generate_image|generate_video|new_upscaler_ctx|free_upscaler_ctx|upscale|get_upscale_factor|convert|convert_with_components|preprocess_canny|load_imatrix|save_imatrix|enable_imatrix_collection|disable_imatrix_collection)$",
+                    "^(sd_.*|str_to_.*|new_sd_ctx|free_sd_ctx|free_sd_audio|free_sd_images|generate_image|generate_video|new_upscaler_ctx|free_upscaler_ctx|upscale|get_upscale_factor|convert|convert_with_components|preprocess_canny|load_imatrix|save_imatrix|enable_imatrix_collection|disable_imatrix_collection)$",
                 )
                 .allowlist_type(
                     "^(sd_.*|rng_type_t|sample_method_t|scheduler_t|prediction_t|preview_t|lora_apply_mode_t|upscaler_ctx_t|ggml_tensor)$",
