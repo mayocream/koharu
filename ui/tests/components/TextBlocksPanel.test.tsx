@@ -3,7 +3,9 @@ import userEvent from '@testing-library/user-event'
 import { http, HttpResponse } from 'msw'
 import { beforeEach, describe, expect, it } from 'vitest'
 
+import { MenuBar } from '@/components/MenuBar'
 import { TextBlocksPanel } from '@/components/panels/TextBlocksPanel'
+import { queryClient } from '@/lib/queryClient'
 import { useEditorUiStore } from '@/lib/stores/editorUiStore'
 import { useJobsStore } from '@/lib/stores/jobsStore'
 import { usePreferencesStore } from '@/lib/stores/preferencesStore'
@@ -11,8 +13,6 @@ import { useSelectionStore } from '@/lib/stores/selectionStore'
 
 import { renderWithQuery } from '../helpers'
 import { server } from '../msw/server'
-import { queryClient } from '@/lib/queryClient'
-import { MenuBar } from '@/components/MenuBar'
 
 function sceneWithTextNodes() {
   return {
@@ -128,12 +128,19 @@ describe('TextBlocksPanel', () => {
         return HttpResponse.json({ epoch: 2 })
       }),
     )
-    renderWithQuery(<div><MenuBar /><TextBlocksPanel /></div>)
+    renderWithQuery(
+      <div>
+        <MenuBar />
+        <TextBlocksPanel />
+      </div>,
+    )
 
     await userEvent.click(await screen.findByTestId('menu-edit-trigger'))
     await userEvent.click(await screen.findByTestId('menu-edit-select-all'))
     await userEvent.click(await screen.findByTestId('textblocks-delete-selected'))
 
-    expect(lastOp).toMatchObject({ batch: { ops: [{ removeNode: { id: 't1' } }, { removeNode: { id: 't2' } }] } })
+    expect(lastOp).toMatchObject({
+      batch: { ops: [{ removeNode: { id: 't1' } }, { removeNode: { id: 't2' } }] },
+    })
   })
 })

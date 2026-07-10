@@ -1,3 +1,4 @@
+import { QueryClientProvider } from '@tanstack/react-query'
 import { renderHook } from '@testing-library/react'
 import { fireEvent } from '@testing-library/react'
 import { beforeEach, describe, expect, it } from 'vitest'
@@ -7,7 +8,6 @@ import { getGetSceneJsonQueryKey } from '@/lib/api/default/default'
 import type { Node, Page, SceneSnapshot } from '@/lib/api/schemas'
 import { queryClient } from '@/lib/queryClient'
 import { useSelectionStore } from '@/lib/stores/selectionStore'
-import { QueryClientProvider } from '@tanstack/react-query'
 
 function textNode(id: string): Node {
   return {
@@ -43,9 +43,7 @@ describe('useKeyboardShortcuts — Ctrl+A', () => {
     useSelectionStore.getState().setPage('p-1')
     renderHook(() => useKeyboardShortcuts(), {
       wrapper: ({ children }) => (
-        <QueryClientProvider client={queryClient}>
-          {children}
-        </QueryClientProvider>
+        <QueryClientProvider client={queryClient}>{children}</QueryClientProvider>
       ),
     })
 
@@ -59,9 +57,7 @@ describe('useKeyboardShortcuts — Ctrl+A', () => {
     useSelectionStore.getState().setPage('p-1')
     renderHook(() => useKeyboardShortcuts(), {
       wrapper: ({ children }) => (
-        <QueryClientProvider client={queryClient}>
-          {children}
-        </QueryClientProvider>
+        <QueryClientProvider client={queryClient}>{children}</QueryClientProvider>
       ),
     })
 

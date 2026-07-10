@@ -34,6 +34,7 @@ import { filenameFromContentDisposition } from '@/lib/io/saveBlob'
 import { queryClient } from '@/lib/queryClient'
 import { usePreferencesStore } from '@/lib/stores/preferencesStore'
 import { useSelectionStore } from '@/lib/stores/selectionStore'
+
 import { ops } from '../ops'
 
 /**
@@ -155,13 +156,15 @@ export async function deleteSelectedTextNodesOnCurrentPage(): Promise<void> {
   const page = snap?.scene?.pages?.[pageId]
   if (!page) return
   const nodeIds = useSelectionStore.getState().nodeIds
-  const batch = [...nodeIds.keys().flatMap((nodeId) => {
-    const node = page.nodes[nodeId]
-    if (!node) return []
-    const idx = Object.keys(page.nodes).indexOf(nodeId)
-    return [ops.removeNode(page.id, nodeId, node, idx < 0 ? 0 : idx)]
-  })]
-  await applyOp(ops.batch("removeNodes", batch))
+  const batch = [
+    ...nodeIds.keys().flatMap((nodeId) => {
+      const node = page.nodes[nodeId]
+      if (!node) return []
+      const idx = Object.keys(page.nodes).indexOf(nodeId)
+      return [ops.removeNode(page.id, nodeId, node, idx < 0 ? 0 : idx)]
+    }),
+  ]
+  await applyOp(ops.batch('removeNodes', batch))
 }
 
 // Project lifecycle ----------------------------------------------------------

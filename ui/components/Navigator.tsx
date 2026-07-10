@@ -4,6 +4,7 @@ import { useVirtualizer } from '@tanstack/react-virtual'
 import { LayoutGridIcon, Trash2Icon } from 'lucide-react'
 import { memo, useCallback, useMemo, useRef, useState } from 'react'
 import type React from 'react'
+import { useHotkeys } from 'react-hotkeys-hook'
 import { useTranslation } from 'react-i18next'
 
 import { PageManagerDialog } from '@/components/PageManagerDialog'
@@ -14,7 +15,6 @@ import { getGetPageThumbnailUrl } from '@/lib/api/default/default'
 import { applyOp } from '@/lib/io/scene'
 import { ops } from '@/lib/ops'
 import { useSelectionStore } from '@/lib/stores/selectionStore'
-import { useHotkeys } from 'react-hotkeys-hook'
 
 const THUMBNAIL_DPR =
   typeof window !== 'undefined' ? Math.min(Math.ceil(window.devicePixelRatio || 1), 3) : 2
@@ -126,7 +126,7 @@ export function Navigator() {
     (id: string) => {
       void handleDeletePages(new Set([id]))
     },
-    [handleDeletePages,],
+    [handleDeletePages],
   )
 
   const handleBatchDelete = useCallback(() => {
