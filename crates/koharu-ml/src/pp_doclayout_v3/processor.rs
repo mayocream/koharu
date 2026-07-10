@@ -6,7 +6,8 @@
 use std::cmp::Ordering;
 
 use anyhow::{Context, Result, bail};
-use image::{DynamicImage, GenericImageView, GrayImage, Luma, imageops::FilterType};
+use fast_image_resize::{ResizeAlg, ResizeOptions, Resizer};
+use image::{DynamicImage, GenericImageView, GrayImage, Luma};
 use imageproc::{
     contours::{BorderType, find_contours_with_threshold},
     geometry::{approximate_polygon_dp, arc_length, contour_area},
@@ -355,12 +356,14 @@ fn polygon_from_mask(
         }
     }
 
-    let resized = image::imageops::resize(
-        &crop,
-        box_width as u32,
-        box_height as u32,
-        FilterType::Nearest,
-    );
+    let mut resized = GrayImage::new(box_width as u32, box_height as u32);
+    Resizer::new()
+        .resize(
+            &crop,
+            &mut resized,
+            &ResizeOptions::new().resize_alg(ResizeAlg::Nearest),
+        )
+        .expect("source and destination masks have the same pixel type");
     let Some(mut polygon) = mask_to_polygon(&resized) else {
         return rect;
     };

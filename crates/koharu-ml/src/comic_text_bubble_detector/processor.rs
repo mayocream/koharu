@@ -5,7 +5,8 @@
 //! - https://github.com/ogkalu2/comic-translate/blob/ca3261fd1a8d4805f6b9cc0669847d463ccb8a41/modules/detection/utils/slicer.py
 
 use anyhow::{Context, Result, bail};
-use image::{DynamicImage, GenericImageView, Rgba, RgbaImage, imageops::FilterType};
+use fast_image_resize::{FilterType, ResizeAlg, ResizeOptions, Resizer};
+use image::{DynamicImage, GenericImageView, Rgba, RgbaImage};
 use imageproc::{drawing::draw_hollow_rect_mut, rect::Rect};
 use koharu_torch::{Device, IndexOp, Kind, Tensor};
 use serde::{Deserialize, Serialize};
@@ -60,11 +61,20 @@ impl ComicTextBubbleProcessor {
     }
 
     pub fn preprocess(&self, image: &DynamicImage, device: Device) -> Tensor {
-        let resized = image.resize_exact(
+        let mut resized = DynamicImage::new(
             self.size.width as u32,
             self.size.height as u32,
-            FilterType::Triangle,
+            image.color(),
         );
+        Resizer::new()
+            .resize(
+                image,
+                &mut resized,
+                &ResizeOptions::new()
+                    .resize_alg(ResizeAlg::Convolution(FilterType::Bilinear))
+                    .use_alpha(false),
+            )
+            .expect("source and destination images have the same pixel type");
         let rgb = resized.to_rgb8();
         let (width, height) = rgb.dimensions();
 

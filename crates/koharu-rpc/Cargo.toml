@@ -22,6 +22,7 @@ axum = { workspace = true }
 camino = { workspace = true }
 dashmap = { workspace = true }
 futures = { workspace = true }
+fast_image_resize = { workspace = true }
 image = { workspace = true }
 natord = { workspace = true }
 postcard = { workspace = true }

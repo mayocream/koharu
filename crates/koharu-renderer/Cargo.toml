@@ -15,6 +15,7 @@ publish.workspace = true
 anyhow = { workspace = true }
 image = { workspace = true }
 imageproc = { workspace = true }
+fast_image_resize = { workspace = true }
 once_cell = { workspace = true }
 skrifa = { workspace = true }
 harfrust = { workspace = true }

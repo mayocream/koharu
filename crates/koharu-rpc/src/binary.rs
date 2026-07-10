@@ -9,7 +9,8 @@ use axum::body::Body;
 use axum::extract::{Path, State};
 use axum::http::{HeaderValue, StatusCode, header::CONTENT_TYPE};
 use axum::response::{IntoResponse, Response};
-use image::{DynamicImage, GenericImageView, imageops::FilterType};
+use fast_image_resize::{FilterType, ResizeAlg, ResizeOptions, Resizer};
+use image::{DynamicImage, GenericImageView};
 use koharu_core::{BlobRef, ImageRole, NodeKind, PageId, Scene};
 use serde::Serialize;
 use utoipa_axum::{router::OpenApiRouter, routes};
@@ -157,7 +158,17 @@ async fn get_page_thumbnail(
     let resized = if scale < 1.0 {
         let nw = (w as f32 * scale).round().max(1.0) as u32;
         let nh = (h as f32 * scale).round().max(1.0) as u32;
-        source.resize(nw, nh, FilterType::Triangle)
+        let mut resized = DynamicImage::new(nw, nh, source.color());
+        Resizer::new()
+            .resize(
+                &source,
+                &mut resized,
+                &ResizeOptions::new()
+                    .resize_alg(ResizeAlg::Convolution(FilterType::Bilinear))
+                    .use_alpha(false),
+            )
+            .map_err(|error| ApiError::internal(anyhow::Error::new(error)))?;
+        resized
     } else {
         source
     };

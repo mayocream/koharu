@@ -1,7 +1,8 @@
 use std::collections::HashMap;
 
 use anyhow::{Context, Result, bail};
-use image::{RgbaImage, imageops};
+use fast_image_resize::{FilterType, ResizeAlg, ResizeOptions, Resizer};
+use image::RgbaImage;
 use skrifa::{
     GlyphId, MetadataProvider, OutlineGlyph,
     instance::Size,
@@ -33,14 +34,14 @@ pub enum DownsampleFilter {
     Lanczos3,
 }
 
-impl From<DownsampleFilter> for imageops::FilterType {
+impl From<DownsampleFilter> for ResizeAlg {
     fn from(value: DownsampleFilter) -> Self {
         match value {
-            DownsampleFilter::Nearest => imageops::FilterType::Nearest,
-            DownsampleFilter::Triangle => imageops::FilterType::Triangle,
-            DownsampleFilter::CatmullRom => imageops::FilterType::CatmullRom,
-            DownsampleFilter::Gaussian => imageops::FilterType::Gaussian,
-            DownsampleFilter::Lanczos3 => imageops::FilterType::Lanczos3,
+            DownsampleFilter::Nearest => ResizeAlg::Nearest,
+            DownsampleFilter::Triangle => ResizeAlg::Convolution(FilterType::Bilinear),
+            DownsampleFilter::CatmullRom => ResizeAlg::Convolution(FilterType::CatmullRom),
+            DownsampleFilter::Gaussian => ResizeAlg::Convolution(FilterType::Gaussian),
+            DownsampleFilter::Lanczos3 => ResizeAlg::Convolution(FilterType::Lanczos3),
         }
     }
 }
@@ -518,7 +519,15 @@ fn surface_to_image(
 
     let raster_img = RgbaImage::from_raw(raster_width, raster_height, pixels)
         .context("failed to build supersampled RgbaImage")?;
-    let img = imageops::resize(&raster_img, width, height, downsample_filter.into());
+    let mut img = RgbaImage::new(width, height);
+    let resize_options = ResizeOptions::new()
+        .resize_alg(downsample_filter.into())
+        // TinySkia already stores premultiplied RGBA; multiplying alpha again
+        // would darken translucent edges before they are unpremultiplied below.
+        .use_alpha(false);
+    Resizer::new()
+        .resize(&raster_img, &mut img, &resize_options)
+        .context("failed to downsample supersampled image")?;
     let mut pixels = img.into_raw();
     unpremultiply_rgba(&mut pixels);
     RgbaImage::from_raw(width, height, pixels).context("failed to build downsampled RgbaImage")
