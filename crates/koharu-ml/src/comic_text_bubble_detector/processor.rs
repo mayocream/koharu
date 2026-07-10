@@ -150,24 +150,20 @@ impl ComicTextBubbleProcessor {
             let (target_height, target_width) = target_sizes[batch];
             for query in 0..scores.len() {
                 let score = scores[query];
-                if score < self.confidence_threshold {
+                if score <= self.confidence_threshold {
                     continue;
                 }
                 let offset = query * 4;
                 let label_id = labels[query].max(0) as usize;
-                let bbox = normalize_box(
-                    [
-                        boxes[offset],
-                        boxes[offset + 1],
-                        boxes[offset + 2],
-                        boxes[offset + 3],
-                    ],
-                    target_width,
-                    target_height,
-                );
-                if box_width(bbox) <= 0.0 || box_height(bbox) <= 0.0 {
+                if label_id > 2 {
                     continue;
                 }
+                let bbox = [
+                    boxes[offset] as i32 as f32,
+                    boxes[offset + 1] as i32 as f32,
+                    boxes[offset + 2] as i32 as f32,
+                    boxes[offset + 3] as i32 as f32,
+                ];
                 let label = self
                     .labels
                     .get(label_id)
@@ -201,18 +197,11 @@ impl ComicTextBubbleProcessor {
             return detect_one(image);
         }
 
-        let slice_height = (width as f32 * self.target_slice_ratio).round().max(1.0) as u32;
-        let effective_slice_height = (slice_height as f32 * (1.0 - self.overlap_height_ratio))
-            .round()
-            .max(1.0) as u32;
-        let mut num_slices = height.div_ceil(effective_slice_height);
-        let last_start = num_slices.saturating_sub(1) * effective_slice_height;
-        let last_height = height.saturating_sub(last_start);
-        if num_slices > 1
-            && (last_height as f32 / slice_height as f32) < self.min_slice_height_ratio
-        {
-            num_slices -= 1;
-        }
+        let slice_height = ((width as f32 * self.target_slice_ratio) as u32).max(1);
+        let effective_slice_height =
+            (slice_height as f32 * (1.0 - self.overlap_height_ratio)) as u32;
+        let effective_slice_height = effective_slice_height.max(1);
+        let num_slices = height.div_ceil(effective_slice_height);
 
         let mut regions = Vec::new();
         for slice in 0..num_slices {
@@ -247,7 +236,6 @@ impl ComicTextBubbleProcessor {
         let mut merged = Vec::with_capacity(bubbles.len() + texts.len());
         merged.extend(bubbles);
         merged.extend(texts);
-        merged.sort_by(|a, b| b.score.total_cmp(&a.score));
 
         let blocks = build_text_blocks(&merged, width, height);
         Ok(ComicTextBubbleDetection {
@@ -265,22 +253,33 @@ impl ComicTextBubbleProcessor {
         while index + 1 < regions.len() {
             let mut next = index + 1;
             while next < regions.len() {
-                if regions[index].label_id != regions[next].label_id {
-                    next += 1;
-                    continue;
-                }
-
                 let a = regions[index].bbox;
                 let b = regions[next].bbox;
                 let iou = calculate_iou(a, b);
                 let containment = containment_ratio(a, b);
-                let duplicate = iou >= self.duplicate_iou_threshold || containment >= 0.85;
+                let area_a = box_area(a);
+                let area_b = box_area(b);
+
+                if intersection_area(a, b) > 0.0 && containment >= self.containment_threshold {
+                    if area_b >= area_a {
+                        regions[index] = regions[next].clone();
+                    }
+                    regions.remove(next);
+                    continue;
+                }
+
+                if iou >= self.duplicate_iou_threshold {
+                    if area_b > area_a {
+                        regions[index] = regions[next].clone();
+                    }
+                    regions.remove(next);
+                    continue;
+                }
 
                 let y_dist = (a[1] - b[3]).abs().min((a[3] - b[1]).abs());
                 let x_overlap = (a[2].min(b[2]) - a[0].max(b[0])).max(0.0)
                     / box_width(a).min(box_width(b)).max(1.0);
-                let area_ratio =
-                    box_area(a).min(box_area(b)) / box_area(a).max(box_area(b)).max(1.0);
+                let area_ratio = area_a.min(area_b) / area_a.max(area_b).max(1.0);
                 let local_y_threshold = (self.merge_y_distance_threshold * image_height as f32)
                     .min(box_height(a).max(box_height(b)) * 0.1);
                 let same_object = y_dist < local_y_threshold
@@ -289,8 +288,12 @@ impl ComicTextBubbleProcessor {
                     && (a[0] - b[0]).abs() < 0.5 * box_width(a).max(box_width(b))
                     && (a[2] - b[2]).abs() < 0.5 * box_width(a).max(box_width(b));
 
-                if duplicate || same_object {
+                if same_object {
                     let merged = merge_region(&regions[index], &regions[next]);
+                    if box_area(merged.bbox) > 3.0 * area_a.max(area_b) {
+                        next += 1;
+                        continue;
+                    }
                     regions[index] = merged;
                     regions.remove(next);
                 } else {
@@ -395,57 +398,92 @@ fn build_text_blocks(
     let bubbles = regions
         .iter()
         .filter(|region| region.label_id == 0)
+        .filter_map(|region| {
+            filter_box(region.bbox, width, height).map(|bbox| (bbox, region.score))
+        })
         .collect::<Vec<_>>();
-    let mut blocks = Vec::new();
-
-    for text in regions
+    let texts = regions
         .iter()
         .filter(|region| region.label_id == 1 || region.label_id == 2)
-    {
-        let bbox = normalize_box(text.bbox, width, height);
-        if box_width(bbox) <= 5.0 || box_height(bbox) <= 5.0 {
-            continue;
-        }
-        let mut bubble_bbox = None;
-        for bubble in &bubbles {
-            if does_rectangle_fit(bubble.bbox, bbox) || calculate_iou(bubble.bbox, bbox) >= 0.2 {
-                bubble_bbox = Some(bubble.bbox);
-                break;
-            }
-        }
-        let text_class = if bubble_bbox.is_some() || text.label_id == 1 {
-            "text_bubble"
-        } else {
-            "text_free"
-        };
-        blocks.push(ComicTextBubbleBlock {
-            bbox,
-            score: text.score,
-            text_class: text_class.to_owned(),
-            bubble_bbox,
-        });
-    }
+        .filter_map(|region| {
+            filter_box(region.bbox, width, height).map(|bbox| (bbox, region.score))
+        })
+        .collect::<Vec<_>>();
+    let texts = merge_text_boxes(&texts);
 
-    blocks.sort_by(|a, b| {
-        a.bbox[1]
-            .total_cmp(&b.bbox[1])
-            .then_with(|| a.bbox[0].total_cmp(&b.bbox[0]))
-    });
-    blocks
+    texts
+        .into_iter()
+        .map(|(bbox, score)| {
+            let bubble_bbox = bubbles.iter().find_map(|(bubble_bbox, _)| {
+                (does_rectangle_fit(*bubble_bbox, bbox) || calculate_iou(*bubble_bbox, bbox) >= 0.2)
+                    .then_some(*bubble_bbox)
+            });
+            let text_class = if bubble_bbox.is_some() {
+                "text_bubble"
+            } else {
+                "text_free"
+            };
+            ComicTextBubbleBlock {
+                bbox,
+                score,
+                text_class: text_class.to_owned(),
+                bubble_bbox,
+            }
+        })
+        .collect()
 }
 
-fn normalize_box(mut bbox: [f32; 4], width: u32, height: u32) -> [f32; 4] {
-    if bbox[0] > bbox[2] {
-        bbox.swap(0, 2);
-    }
-    if bbox[1] > bbox[3] {
-        bbox.swap(1, 3);
-    }
+fn filter_box(mut bbox: [f32; 4], width: u32, height: u32) -> Option<[f32; 4]> {
     bbox[0] = bbox[0].clamp(0.0, width as f32);
     bbox[2] = bbox[2].clamp(0.0, width as f32);
     bbox[1] = bbox[1].clamp(0.0, height as f32);
     bbox[3] = bbox[3].clamp(0.0, height as f32);
-    bbox
+    (box_width(bbox) > 5.0 && box_height(bbox) > 5.0).then_some(bbox)
+}
+
+fn merge_text_boxes(regions: &[([f32; 4], f32)]) -> Vec<([f32; 4], f32)> {
+    let mut accepted = Vec::<([f32; 4], f32)>::new();
+    for (index, &(bbox, score)) in regions.iter().enumerate() {
+        let mut merged = bbox;
+        let mut merged_score = score;
+        for (other_index, &(other, other_score)) in regions.iter().enumerate() {
+            if index == other_index {
+                continue;
+            }
+            if is_mostly_contained(merged, other, 0.3) || is_mostly_contained(other, merged, 0.3) {
+                merged = merge_boxes(merged, other);
+                merged_score = merged_score.max(other_score);
+            }
+        }
+
+        if accepted
+            .iter()
+            .any(|(bbox, _)| *bbox == merged || calculate_iou(*bbox, merged) >= 0.5)
+        {
+            continue;
+        }
+        accepted.retain(|(bbox, _)| *bbox != merged && calculate_iou(*bbox, merged) < 0.5);
+        accepted.push((merged, merged_score));
+    }
+    accepted
+}
+
+fn is_mostly_contained(outer: [f32; 4], inner: [f32; 4], threshold: f32) -> bool {
+    let outer_area = box_area(outer);
+    let inner_area = box_area(inner);
+    if outer_area < inner_area || inner_area == 0.0 {
+        return false;
+    }
+    intersection_area(outer, inner) / inner_area >= threshold
+}
+
+fn merge_boxes(a: [f32; 4], b: [f32; 4]) -> [f32; 4] {
+    [
+        a[0].min(b[0]),
+        a[1].min(b[1]),
+        a[2].max(b[2]),
+        a[3].max(b[3]),
+    ]
 }
 
 fn merge_region(a: &ComicTextBubbleRegion, b: &ComicTextBubbleRegion) -> ComicTextBubbleRegion {
@@ -454,12 +492,7 @@ fn merge_region(a: &ComicTextBubbleRegion, b: &ComicTextBubbleRegion) -> ComicTe
         label_id: keep.label_id,
         label: keep.label.clone(),
         score: keep.score,
-        bbox: [
-            a.bbox[0].min(b.bbox[0]),
-            a.bbox[1].min(b.bbox[1]),
-            a.bbox[2].max(b.bbox[2]),
-            a.bbox[3].max(b.bbox[3]),
-        ],
+        bbox: merge_boxes(a.bbox, b.bbox),
     }
 }
 
@@ -475,12 +508,16 @@ fn box_area(bbox: [f32; 4]) -> f32 {
     box_width(bbox) * box_height(bbox)
 }
 
-fn calculate_iou(a: [f32; 4], b: [f32; 4]) -> f32 {
+fn intersection_area(a: [f32; 4], b: [f32; 4]) -> f32 {
     let x1 = a[0].max(b[0]);
     let y1 = a[1].max(b[1]);
     let x2 = a[2].min(b[2]);
     let y2 = a[3].min(b[3]);
-    let intersection = (x2 - x1).max(0.0) * (y2 - y1).max(0.0);
+    (x2 - x1).max(0.0) * (y2 - y1).max(0.0)
+}
+
+fn calculate_iou(a: [f32; 4], b: [f32; 4]) -> f32 {
+    let intersection = intersection_area(a, b);
     let union = box_area(a) + box_area(b) - intersection;
     if union <= 0.0 {
         0.0
@@ -490,11 +527,7 @@ fn calculate_iou(a: [f32; 4], b: [f32; 4]) -> f32 {
 }
 
 fn containment_ratio(a: [f32; 4], b: [f32; 4]) -> f32 {
-    let x1 = a[0].max(b[0]);
-    let y1 = a[1].max(b[1]);
-    let x2 = a[2].min(b[2]);
-    let y2 = a[3].min(b[3]);
-    let intersection = (x2 - x1).max(0.0) * (y2 - y1).max(0.0);
+    let intersection = intersection_area(a, b);
     let smaller = box_area(a).min(box_area(b));
     if smaller <= 0.0 {
         0.0
