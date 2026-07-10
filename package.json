@@ -3,9 +3,8 @@
     "ui/"
   ],
   "scripts": {
-    "dev": "bun run scripts/dev.ts tauri dev -- --profile=release-with-debug",
-    "build": "bun run scripts/dev.ts tauri build --no-bundle",
-    "cargo": "bun run scripts/dev.ts cargo",
+    "dev": "bun tauri dev -- --profile=release-with-debug",
+    "build": "bun tauri build --no-bundle",
     "lint:ui": "bun run --filter ui lint",
     "test:ui": "bun run --filter ui test",
     "format": "oxfmt ui package.json .oxfmtrc.json .vscode",
