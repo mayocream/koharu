@@ -1,10 +1,7 @@
 mod model;
 
 use anyhow::{Context, Result};
-use image::{
-    DynamicImage, GrayImage, RgbImage,
-    imageops::{crop_imm, replace},
-};
+use image::{DynamicImage, GrayImage, RgbImage};
 use imageproc::contours::{BorderType, find_contours_with_threshold};
 use koharu_runtime::package::huggingface;
 use koharu_torch::{Device, Kind, Tensor};
@@ -49,67 +46,111 @@ impl LaMa {
 
         koharu_torch::no_grad(|| {
             if image.width().max(image.height()) > 800 {
-                let mut result = image.clone();
-                for bounding_box in boxes_from_mask(mask) {
-                    let (crop_image, crop_mask, [left, top, _, _]) =
-                        crop_box(&image, mask, bounding_box, 128);
-                    let crop_result = self.pad_forward(&crop_image, &crop_mask)?;
-                    replace(&mut result, &crop_result, i64::from(left), i64::from(top));
+                let boxes = boxes_from_mask(mask);
+                if boxes.is_empty() {
+                    return Ok(image);
+                }
+
+                let image_tensor = Tensor::from_slice(image.as_raw())
+                    .view([i64::from(image.height()), i64::from(image.width()), 3])
+                    .to_device(self.device);
+                let mask_tensor = Tensor::from_slice(mask.as_raw())
+                    .view([i64::from(mask.height()), i64::from(mask.width())])
+                    .to_device(self.device);
+                let image_width = image.width();
+                let image_height = image.height();
+                let mut result = image;
+                for bounding_box in boxes {
+                    let [left, top, right, bottom] =
+                        crop_box(image_width, image_height, bounding_box);
+                    let crop_result = self.forward(
+                        image_tensor
+                            .narrow(0, i64::from(top), i64::from(bottom - top))
+                            .narrow(1, i64::from(left), i64::from(right - left)),
+                        mask_tensor
+                            .narrow(0, i64::from(top), i64::from(bottom - top))
+                            .narrow(1, i64::from(left), i64::from(right - left)),
+                    )?;
+                    let source_stride = crop_result.width() as usize * 3;
+                    let target_stride = image_width as usize * 3;
+                    for y in 0..crop_result.height() as usize {
+                        let source_start = y * source_stride;
+                        let target_start = (top as usize + y) * target_stride + left as usize * 3;
+                        result.as_mut()[target_start..target_start + source_stride]
+                            .copy_from_slice(
+                                &crop_result.as_raw()[source_start..source_start + source_stride],
+                            );
+                    }
                 }
                 Ok(result)
             } else {
-                self.pad_forward(&image, mask)
+                let image_tensor = Tensor::from_slice(image.as_raw())
+                    .view([i64::from(image.height()), i64::from(image.width()), 3])
+                    .to_device(self.device);
+                let mask_tensor = Tensor::from_slice(mask.as_raw())
+                    .view([i64::from(mask.height()), i64::from(mask.width())])
+                    .to_device(self.device);
+                self.forward(image_tensor, mask_tensor)
             }
         })
     }
 
-    fn pad_forward(&self, image: &RgbImage, mask: &GrayImage) -> Result<RgbImage> {
-        let width = image.width();
-        let height = image.height();
-        let padded_width = ceil_modulo(width, 8);
-        let padded_height = ceil_modulo(height, 8);
-
-        let padded_image = RgbImage::from_fn(padded_width, padded_height, |x, y| {
-            *image.get_pixel(symmetric_index(x, width), symmetric_index(y, height))
-        });
-        let padded_mask = GrayImage::from_fn(padded_width, padded_height, |x, y| {
-            *mask.get_pixel(symmetric_index(x, width), symmetric_index(y, height))
-        });
-
-        let result = self.forward(&padded_image, &padded_mask)?;
-        Ok(crop_imm(&result, 0, 0, width, height).to_image())
-    }
-
-    fn forward(&self, image: &RgbImage, mask: &GrayImage) -> Result<RgbImage> {
-        let width = i64::from(image.width());
-        let height = i64::from(image.height());
-        let image_tensor = (Tensor::from_slice(image.as_raw())
-            .view([1, height, width, 3])
-            .permute([0, 3, 1, 2])
-            .to_device(self.device)
-            .to_kind(Kind::Float))
+    fn forward(&self, image: Tensor, mask: Tensor) -> Result<RgbImage> {
+        let height = image.size()[0] as u32;
+        let width = image.size()[1] as u32;
+        let image = (image
+            .permute([2, 0, 1])
+            .unsqueeze(0)
+            .to_kind(Kind::Float)
+            .contiguous())
             / 255.0;
-        let mask_tensor = Tensor::from_slice(mask.as_raw())
-            .view([1, 1, height, width])
-            .to_device(self.device)
+        let mask = mask
             .gt(0.0)
-            .to_kind(Kind::Float);
-
-        let output = self.model.forward(&image_tensor, &mask_tensor);
-        tensor_to_rgb_image(&output, image.width(), image.height())
+            .unsqueeze(0)
+            .unsqueeze(0)
+            .to_kind(Kind::Float)
+            .contiguous();
+        let image = symmetric_pad(image, width, height);
+        let mask = symmetric_pad(mask, width, height);
+        let output = self.model.forward(&image, &mask);
+        tensor_to_rgb_image(&output, width, height)
     }
 }
 
 fn boxes_from_mask(mask: &GrayImage) -> Vec<[u32; 4]> {
-    let Some(padded_width) = mask.width().checked_add(2) else {
+    let width = mask.width();
+    let mut left = width;
+    let mut top = mask.height();
+    let mut right = 0;
+    let mut bottom = 0;
+    for y in 0..mask.height() {
+        let row = &mask.as_raw()[y as usize * width as usize..(y + 1) as usize * width as usize];
+        let Some(row_left) = row.iter().position(|value| *value > 127) else {
+            continue;
+        };
+        let row_right = row
+            .iter()
+            .rposition(|value| *value > 127)
+            .expect("masked row must have a right edge");
+        left = left.min(row_left as u32);
+        top = top.min(y);
+        right = right.max(row_right as u32 + 1);
+        bottom = y + 1;
+    }
+    if right <= left || bottom <= top {
         return Vec::new();
-    };
-    let Some(padded_height) = mask.height().checked_add(2) else {
-        return Vec::new();
-    };
+    }
 
-    let mut padded = GrayImage::new(padded_width, padded_height);
-    replace(&mut padded, mask, 1, 1);
+    let cropped_width = right - left;
+    let cropped_height = bottom - top;
+    let padded_width = cropped_width + 2;
+    let mut padded = GrayImage::new(padded_width, cropped_height + 2);
+    for y in 0..cropped_height as usize {
+        let source_start = (top as usize + y) * width as usize + left as usize;
+        let target_start = (y + 1) * padded_width as usize + 1;
+        padded.as_mut()[target_start..target_start + cropped_width as usize]
+            .copy_from_slice(&mask.as_raw()[source_start..source_start + cropped_width as usize]);
+    }
 
     find_contours_with_threshold::<u32>(&padded, 127)
         .into_iter()
@@ -117,39 +158,32 @@ fn boxes_from_mask(mask: &GrayImage) -> Vec<[u32; 4]> {
         .filter_map(|contour| {
             let mut points = contour.points.into_iter();
             let first = points.next()?;
-            let mut left = first.x;
-            let mut top = first.y;
-            let mut right = first.x;
-            let mut bottom = first.y;
-
+            let mut contour_left = first.x;
+            let mut contour_top = first.y;
+            let mut contour_right = first.x;
+            let mut contour_bottom = first.y;
             for point in points {
-                left = left.min(point.x);
-                top = top.min(point.y);
-                right = right.max(point.x);
-                bottom = bottom.max(point.y);
+                contour_left = contour_left.min(point.x);
+                contour_top = contour_top.min(point.y);
+                contour_right = contour_right.max(point.x);
+                contour_bottom = contour_bottom.max(point.y);
             }
-
             Some([
-                left.saturating_sub(1),
-                top.saturating_sub(1),
-                right.min(mask.width()),
-                bottom.min(mask.height()),
+                left + contour_left.saturating_sub(1),
+                top + contour_top.saturating_sub(1),
+                (left + contour_right).min(mask.width()),
+                (top + contour_bottom).min(mask.height()),
             ])
         })
         .filter(|[left, top, right, bottom]| right > left && bottom > top)
         .collect()
 }
 
-fn crop_box(
-    image: &RgbImage,
-    mask: &GrayImage,
-    [left, top, right, bottom]: [u32; 4],
-    margin: u32,
-) -> (RgbImage, GrayImage, [u32; 4]) {
-    let image_width = i64::from(image.width());
-    let image_height = i64::from(image.height());
-    let crop_width = i64::from(right - left) + i64::from(margin) * 2;
-    let crop_height = i64::from(bottom - top) + i64::from(margin) * 2;
+fn crop_box(image_width: u32, image_height: u32, [left, top, right, bottom]: [u32; 4]) -> [u32; 4] {
+    let image_width = i64::from(image_width);
+    let image_height = i64::from(image_height);
+    let crop_width = i64::from(right - left) + 256;
+    let crop_height = i64::from(bottom - top) + 256;
     let center_x = (i64::from(left) + i64::from(right)) / 2;
     let center_y = (i64::from(top) + i64::from(bottom)) / 2;
 
@@ -176,41 +210,49 @@ fn crop_box(
         top -= raw_bottom - image_height;
     }
 
-    let crop_box = [
+    [
         left.clamp(0, image_width) as u32,
         top.clamp(0, image_height) as u32,
         right.clamp(0, image_width) as u32,
         bottom.clamp(0, image_height) as u32,
-    ];
-    let [left, top, right, bottom] = crop_box;
-    let crop_image = crop_imm(image, left, top, right - left, bottom - top).to_image();
-    let crop_mask = crop_imm(mask, left, top, right - left, bottom - top).to_image();
-    (crop_image, crop_mask, crop_box)
+    ]
 }
 
 fn tensor_to_rgb_image(tensor: &Tensor, width: u32, height: u32) -> Result<RgbImage> {
     let tensor = tensor
+        .narrow(2, 0, i64::from(height))
+        .narrow(3, 0, i64::from(width))
         .squeeze_dim(0)
-        .slice(1, 0, i64::from(height), 1)
-        .slice(2, 0, i64::from(width), 1)
+        .permute([1, 2, 0])
         .clamp(0.0, 1.0)
         * 255.0;
     let tensor = tensor
-        .to_device(Device::Cpu)
         .to_kind(Kind::Uint8)
-        .contiguous();
-    let plane = width as usize * height as usize;
-    let mut chw = vec![0u8; plane * 3];
-    tensor.copy_data(&mut chw, plane * 3);
-
-    let mut rgb = vec![0u8; plane * 3];
-    for index in 0..plane {
-        rgb[index * 3] = chw[index];
-        rgb[index * 3 + 1] = chw[plane + index];
-        rgb[index * 3 + 2] = chw[plane * 2 + index];
-    }
+        .contiguous()
+        .to_device(Device::Cpu)
+        .view([-1]);
+    let rgb = Vec::<u8>::try_from(&tensor)?;
 
     RgbImage::from_raw(width, height, rgb).context("failed to convert LaMa tensor to RGB image")
+}
+
+fn symmetric_pad(tensor: Tensor, width: u32, height: u32) -> Tensor {
+    let mut tensor = tensor;
+    let padded_height = ceil_modulo(height, 8);
+    if padded_height != height {
+        let indices = (0..padded_height)
+            .map(|index| i64::from(symmetric_index(index, height)))
+            .collect::<Vec<_>>();
+        tensor = tensor.index_select(2, &Tensor::from_slice(&indices).to_device(tensor.device()));
+    }
+    let padded_width = ceil_modulo(width, 8);
+    if padded_width != width {
+        let indices = (0..padded_width)
+            .map(|index| i64::from(symmetric_index(index, width)))
+            .collect::<Vec<_>>();
+        tensor = tensor.index_select(3, &Tensor::from_slice(&indices).to_device(tensor.device()));
+    }
+    tensor
 }
 
 fn ceil_modulo(value: u32, modulo: u32) -> u32 {
