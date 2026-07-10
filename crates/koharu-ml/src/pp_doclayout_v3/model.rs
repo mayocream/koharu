@@ -9,18 +9,17 @@ use koharu_torch::{
 use super::config::{HGNetV2Config, PPDocLayoutV3Config};
 
 #[derive(Debug)]
-pub struct PPDocLayoutV3ForObjectDetection {
-    pub config: PPDocLayoutV3Config,
+pub struct Model {
     vs: nn::VarStore,
     model: PPDocLayoutV3Model,
 }
 
-impl PPDocLayoutV3ForObjectDetection {
+impl Model {
     pub fn new(config: PPDocLayoutV3Config, device: Device) -> Self {
         let mut vs = nn::VarStore::new(device);
         let model = PPDocLayoutV3Model::new(&(&vs.root() / "model"), &config);
         vs.freeze();
-        Self { config, vs, model }
+        Self { vs, model }
     }
 
     pub fn load_safetensors(&mut self, path: impl AsRef<Path>) -> Result<()> {
@@ -66,13 +65,13 @@ impl PPDocLayoutV3ForObjectDetection {
         Ok(())
     }
 
-    pub fn forward(&self, pixel_values: &Tensor) -> PPDocLayoutV3ForwardOutput {
+    pub fn forward(&self, pixel_values: &Tensor) -> Output {
         let outputs = self.model.forward(pixel_values);
         let pred_boxes = outputs.intermediate_reference_points.select(1, -1);
         let logits = outputs.intermediate_logits.select(1, -1);
         let order_logits = outputs.out_order_logits.select(1, -1);
         let out_masks = outputs.out_masks.select(1, -1);
-        PPDocLayoutV3ForwardOutput {
+        Output {
             logits,
             pred_boxes,
             order_logits,
@@ -82,7 +81,7 @@ impl PPDocLayoutV3ForObjectDetection {
 }
 
 #[derive(Debug)]
-pub struct PPDocLayoutV3ForwardOutput {
+pub struct Output {
     pub logits: Tensor,
     pub pred_boxes: Tensor,
     pub order_logits: Tensor,

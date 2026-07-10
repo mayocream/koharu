@@ -29,7 +29,7 @@ async fn main() -> Result<()> {
     koharu_ml::init().await?;
 
     let model = LaMa::load(koharu_ml::device(cli.cpu)).await?;
-    let inpainted = model.inpaint(&image, &mask)?;
+    let inpainted = model.inference(&image, &mask)?;
     inpainted.save(cli.output)?;
 
     Ok(())

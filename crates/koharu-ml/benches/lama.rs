@@ -26,12 +26,12 @@ async fn main() -> Result<()> {
         .measurement_time(Duration::from_secs(10))
         .configure_from_args();
 
-    criterion.bench_function("lama/inpaint/3840x2074", |bencher| {
+    criterion.bench_function("lama/inference/3840x2074", |bencher| {
         bencher.iter(|| {
             Cuda::synchronize(0);
             let output = model
-                .inpaint(black_box(&image), black_box(&mask))
-                .expect("LaMa inpainting failed");
+                .inference(black_box(&image), black_box(&mask))
+                .expect("LaMa inference failed");
             black_box(output);
             Cuda::synchronize(0);
         });

@@ -4,14 +4,13 @@ use imageproc::{drawing::draw_hollow_rect_mut, rect::Rect};
 use koharu_torch::{Device, IndexOp, Kind, Tensor};
 use serde::{Deserialize, Serialize};
 
-use super::model::ComicTextBubbleDetectorForwardOutput;
+use super::model::Output;
 
 #[derive(Debug, Clone, Deserialize)]
 #[serde(default)]
 pub struct ComicTextBubbleProcessor {
     pub size: ProcessorSize,
     pub labels: Vec<String>,
-    pub confidence_threshold: f32,
     pub slice_ratio_threshold: f32,
     pub target_slice_ratio: f32,
     pub overlap_height_ratio: f32,
@@ -30,7 +29,6 @@ impl Default for ComicTextBubbleProcessor {
                 width: 640,
             },
             labels: Vec::new(),
-            confidence_threshold: 0.3,
             slice_ratio_threshold: 3.5,
             target_slice_ratio: 3.0,
             overlap_height_ratio: 0.2,
@@ -52,11 +50,6 @@ impl ComicTextBubbleProcessor {
 
     pub fn with_labels(mut self, labels: Vec<String>) -> Self {
         self.labels = labels;
-        self
-    }
-
-    pub fn with_confidence_threshold(mut self, threshold: f32) -> Self {
-        self.confidence_threshold = threshold;
         self
     }
 
@@ -84,11 +77,13 @@ impl ComicTextBubbleProcessor {
 
     pub fn postprocess(
         &self,
-        outputs: &ComicTextBubbleDetectorForwardOutput,
+        outputs: &Output,
         image: &DynamicImage,
+        threshold: f32,
     ) -> Result<ComicTextBubbleDetection> {
         let (target_width, target_height) = image.dimensions();
-        let mut detections = self.postprocess_batch(outputs, &[(target_height, target_width)])?;
+        let mut detections =
+            self.postprocess_batch(outputs, &[(target_height, target_width)], threshold)?;
         detections
             .pop()
             .context("missing comic text/bubble detector result")
@@ -97,8 +92,9 @@ impl ComicTextBubbleProcessor {
     /// `target_sizes` follows Transformers and uses `(height, width)`.
     pub fn postprocess_batch(
         &self,
-        outputs: &ComicTextBubbleDetectorForwardOutput,
+        outputs: &Output,
         target_sizes: &[(u32, u32)],
+        threshold: f32,
     ) -> Result<Vec<ComicTextBubbleDetection>> {
         let logits = &outputs.logits;
         let batch_size = logits.size()[0] as usize;
@@ -150,7 +146,7 @@ impl ComicTextBubbleProcessor {
             let (target_height, target_width) = target_sizes[batch];
             for query in 0..scores.len() {
                 let score = scores[query];
-                if score <= self.confidence_threshold {
+                if score <= threshold {
                     continue;
                 }
                 let offset = query * 4;

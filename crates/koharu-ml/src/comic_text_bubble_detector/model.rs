@@ -9,12 +9,12 @@ use koharu_torch::{
 use super::config::{ComicTextBubbleDetectorConfig, RtDetrResNetConfig};
 
 #[derive(Debug)]
-pub struct ComicTextBubbleDetectorForObjectDetection {
+pub struct Model {
     vs: nn::VarStore,
     model: RtDetrV2Model,
 }
 
-impl ComicTextBubbleDetectorForObjectDetection {
+impl Model {
     pub fn new(config: ComicTextBubbleDetectorConfig, device: Device) -> Self {
         let mut vs = nn::VarStore::new(device);
         let model = RtDetrV2Model::new(&(&vs.root() / "model"), &config);
@@ -69,13 +69,13 @@ impl ComicTextBubbleDetectorForObjectDetection {
         Ok(())
     }
 
-    pub fn forward(&self, pixel_values: &Tensor) -> ComicTextBubbleDetectorForwardOutput {
+    pub fn forward(&self, pixel_values: &Tensor) -> Output {
         self.model.forward(pixel_values)
     }
 }
 
 #[derive(Debug)]
-pub struct ComicTextBubbleDetectorForwardOutput {
+pub struct Output {
     pub logits: Tensor,
     pub pred_boxes: Tensor,
 }
@@ -201,7 +201,7 @@ impl RtDetrV2Model {
         }
     }
 
-    fn forward(&self, pixel_values: &Tensor) -> ComicTextBubbleDetectorForwardOutput {
+    fn forward(&self, pixel_values: &Tensor) -> Output {
         let features = self.backbone.forward(pixel_values);
         let proj_feats = features
             .iter()
@@ -273,7 +273,7 @@ impl RtDetrV2Model {
             spatial_shapes_list: &spatial_shapes,
         });
 
-        ComicTextBubbleDetectorForwardOutput {
+        Output {
             logits: decoder_outputs.intermediate_logits.select(1, -1),
             pred_boxes: decoder_outputs.intermediate_reference_points.select(1, -1),
         }

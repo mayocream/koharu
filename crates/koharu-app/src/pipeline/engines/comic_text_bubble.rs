@@ -105,7 +105,7 @@ inventory::submit! {
 
                     // Listen continuously for pipeline requests
                     while let Some(msg) = rx.recv().await {
-                        let result = detector.inference(&msg.image);
+                        let result = detector.inference(&msg.image, 0.3);
                         let _ = msg.respond_to.send(result);
                     }
                 });

@@ -31,7 +31,7 @@ impl LaMa {
         Ok(Self { device, model })
     }
 
-    pub fn inpaint(&self, image: &DynamicImage, mask: &GrayImage) -> Result<RgbImage> {
+    pub fn inference(&self, image: &DynamicImage, mask: &GrayImage) -> Result<RgbImage> {
         let image = image.to_rgb8();
         anyhow::ensure!(
             image.dimensions() == mask.dimensions(),

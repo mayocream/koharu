@@ -9,7 +9,7 @@ use imageproc::{
 use koharu_torch::{Device, IndexOp, Kind, Tensor};
 use serde::{Deserialize, Serialize};
 
-use super::model::PPDocLayoutV3ForwardOutput;
+use super::model::Output;
 
 #[derive(Debug, Clone, Deserialize)]
 #[serde(default)]
@@ -61,7 +61,7 @@ impl PPDocLayoutV3Processor {
 
     pub fn postprocess(
         &self,
-        outputs: &PPDocLayoutV3ForwardOutput,
+        outputs: &Output,
         image: &DynamicImage,
         threshold: f32,
     ) -> Result<PPDocLayoutV3Detections> {
@@ -74,7 +74,7 @@ impl PPDocLayoutV3Processor {
     /// `target_sizes` follows Transformers and uses `(height, width)`.
     pub fn postprocess_batch(
         &self,
-        outputs: &PPDocLayoutV3ForwardOutput,
+        outputs: &Output,
         target_sizes: &[(u32, u32)],
         threshold: f32,
     ) -> Result<Vec<PPDocLayoutV3Detections>> {

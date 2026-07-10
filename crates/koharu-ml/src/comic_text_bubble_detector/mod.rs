@@ -15,7 +15,7 @@ pub use self::{
     },
 };
 
-use self::model::ComicTextBubbleDetectorForObjectDetection;
+use self::model::Model;
 
 koharu_runtime::huggingface! {
     CONFIG => "ogkalu/comic-text-and-bubble-detector" => "config.json",
@@ -27,18 +27,11 @@ koharu_runtime::huggingface! {
 pub struct ComicTextBubbleDetector {
     device: Device,
     processor: ComicTextBubbleProcessor,
-    model: ComicTextBubbleDetectorForObjectDetection,
+    model: Model,
 }
 
 impl ComicTextBubbleDetector {
     pub async fn load(device: crate::Device) -> Result<Self> {
-        Self::load_with_threshold(device, 0.3).await
-    }
-
-    pub async fn load_with_threshold(
-        device: crate::Device,
-        confidence_threshold: f32,
-    ) -> Result<Self> {
         let device: Device = device.try_into()?;
         let config_path = huggingface::resolve(CONFIG)
             .await
@@ -54,10 +47,9 @@ impl ComicTextBubbleDetector {
             .context("failed to parse comic text/bubble detector config")?;
         let processor = ComicTextBubbleProcessor::from_file(&processor_path)
             .context("failed to parse comic text/bubble detector preprocessor config")?
-            .with_labels(config.labels())
-            .with_confidence_threshold(confidence_threshold);
+            .with_labels(config.labels());
 
-        let mut model = ComicTextBubbleDetectorForObjectDetection::new(config, device);
+        let mut model = Model::new(config, device);
         model
             .load_safetensors(&weights_path)
             .context("failed to load comic text/bubble detector safetensors")?;
@@ -69,12 +61,17 @@ impl ComicTextBubbleDetector {
         })
     }
 
-    pub fn inference(&self, image: &DynamicImage) -> Result<ComicTextBubbleDetection> {
+    pub fn inference(
+        &self,
+        image: &DynamicImage,
+        confidence_threshold: f32,
+    ) -> Result<ComicTextBubbleDetection> {
         koharu_torch::no_grad(|| {
             self.processor.inference_slices(image, |slice| {
                 let input = self.processor.preprocess(slice, self.device);
                 let outputs = self.model.forward(&input);
-                self.processor.postprocess(&outputs, slice)
+                self.processor
+                    .postprocess(&outputs, slice, confidence_threshold)
             })
         })
     }

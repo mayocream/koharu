@@ -9,13 +9,12 @@ use koharu_torch::Device;
 
 pub use self::{
     config::{HGNetV2Config, PPDocLayoutV3Config},
-    model::{PPDocLayoutV3ForObjectDetection, PPDocLayoutV3ForwardOutput},
     processor::{
         PPDocLayoutV3Detections, PPDocLayoutV3Processor, PPDocLayoutV3Region, ProcessorSize,
     },
 };
 
-pub type PPDocLayoutV3Output = PPDocLayoutV3Detections;
+use self::model::Model;
 
 koharu_runtime::huggingface! {
     CONFIG => "PaddlePaddle/PP-DocLayoutV3_safetensors" => "config.json",
@@ -26,7 +25,7 @@ koharu_runtime::huggingface! {
 #[derive(Debug)]
 pub struct PPDocLayoutV3 {
     device: Device,
-    model: PPDocLayoutV3ForObjectDetection,
+    model: Model,
     processor: PPDocLayoutV3Processor,
 }
 
@@ -52,7 +51,7 @@ impl PPDocLayoutV3 {
             Err(_) => PPDocLayoutV3Processor::default().with_labels(labels),
         };
 
-        let mut model = PPDocLayoutV3ForObjectDetection::new(config, device);
+        let mut model = Model::new(config, device);
         model
             .load_safetensors(&weights_path)
             .with_context(|| format!("failed to load {}", weights_path.display()))?;
@@ -64,7 +63,11 @@ impl PPDocLayoutV3 {
         })
     }
 
-    pub fn inference(&self, image: &DynamicImage, threshold: f32) -> Result<PPDocLayoutV3Output> {
+    pub fn inference(
+        &self,
+        image: &DynamicImage,
+        threshold: f32,
+    ) -> Result<PPDocLayoutV3Detections> {
         koharu_torch::no_grad(|| {
             let pixel_values = self.processor.preprocess(image, self.device);
             let outputs = self.model.forward(&pixel_values);
