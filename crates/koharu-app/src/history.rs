@@ -156,58 +156,63 @@ impl History {
 
     fn push_undo(&mut self, op: Op) {
         // Try to merge if the incoming op is a pipeline render operation
-        if let Op::Batch {
-            label: incoming_label,
-            ops: incoming_ops,
-        } = &op
-            && (incoming_label.contains("renderer: page ")
-                || incoming_label.contains("koharu-renderer: page "))
-            && let Some(prev) = self.undo_stack.back_mut()
-        {
-            let mut merged = false;
-            match prev {
-                Op::Batch {
-                    ops: prev_ops,
-                    label: prev_label,
-                } => {
-                    if !prev_label.starts_with("undo:") {
-                        prev_ops.extend(incoming_ops.clone());
-                        merged = true;
-                    }
+        if let Some(prev) = self.undo_stack.back_mut() {
+            let should_merge = if let Op::Batch { label, .. } = &op
+                && (label.contains("renderer: page ") || label.contains("koharu-renderer: page "))
+            {
+                match prev {
+                    Op::Batch {
+                        label: prev_label, ..
+                    } => !prev_label.starts_with("undo:") && !prev_label.contains(": page "),
+                    _ => true,
                 }
-                single_op => {
-                    let prev_op = std::mem::replace(
-                        single_op,
-                        Op::Batch {
-                            ops: vec![],
-                            label: String::new(),
-                        },
-                    );
-                    if let Op::Batch { ops, label } = single_op {
-                        *ops = vec![
-                            prev_op,
+            } else {
+                false
+            };
+
+            if should_merge
+                && let Op::Batch {
+                    label: incoming_label,
+                    ops: incoming_ops,
+                } = op
+            {
+                match prev {
+                    Op::Batch { ops: prev_ops, .. } => {
+                        prev_ops.extend(incoming_ops);
+                    }
+                    single_op => {
+                        let prev_op = std::mem::replace(
+                            single_op,
                             Op::Batch {
-                                ops: incoming_ops.clone(),
-                                label: incoming_label.clone(),
+                                ops: vec![],
+                                label: String::new(),
                             },
-                        ];
-                        *label = match &ops[0] {
-                            Op::RemoveNode { .. } => "Delete block".to_string(),
-                            Op::UpdateNode { .. } => "Update block".to_string(),
-                            Op::AddNode { .. } => "Add block".to_string(),
-                            Op::RemovePage { .. } => "Delete page".to_string(),
-                            Op::AddPage { .. } => "Add page".to_string(),
-                            Op::UpdatePage { .. } => "Update page".to_string(),
-                            Op::ReorderPages { .. } => "Reorder pages".to_string(),
-                            Op::ReorderNodes { .. } => "Reorder blocks".to_string(),
-                            Op::UpdateProjectMeta { .. } => "Update project metadata".to_string(),
-                            Op::Batch { label: l, .. } => l.clone(),
-                        };
+                        );
+                        if let Op::Batch { ops, label } = single_op {
+                            *ops = vec![
+                                prev_op,
+                                Op::Batch {
+                                    ops: incoming_ops,
+                                    label: incoming_label,
+                                },
+                            ];
+                            *label = match &ops[0] {
+                                Op::RemoveNode { .. } => "Delete block".to_string(),
+                                Op::UpdateNode { .. } => "Update block".to_string(),
+                                Op::AddNode { .. } => "Add block".to_string(),
+                                Op::RemovePage { .. } => "Delete page".to_string(),
+                                Op::AddPage { .. } => "Add page".to_string(),
+                                Op::UpdatePage { .. } => "Update page".to_string(),
+                                Op::ReorderPages { .. } => "Reorder pages".to_string(),
+                                Op::ReorderNodes { .. } => "Reorder blocks".to_string(),
+                                Op::UpdateProjectMeta { .. } => {
+                                    "Update project metadata".to_string()
+                                }
+                                Op::Batch { label: l, .. } => l.clone(),
+                            };
+                        }
                     }
-                    merged = true;
                 }
-            }
-            if merged {
                 return;
             }
         }
@@ -275,4 +280,140 @@ pub fn replay(log_path: &Path, start_epoch: u64, scene: &mut Scene) -> Result<u6
     // Seek to end so subsequent appends go after the last valid frame.
     let _ = reader.seek(SeekFrom::End(0));
     Ok(epoch)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use std::time::{SystemTime, UNIX_EPOCH};
+
+    fn make_temp_history() -> (History, std::path::PathBuf) {
+        let mut temp_path = std::env::temp_dir();
+        let unique_id = SystemTime::now()
+            .duration_since(UNIX_EPOCH)
+            .unwrap()
+            .as_nanos();
+        temp_path.push(format!("test_history_{}.log", unique_id));
+        let history = History::open(&temp_path, 0).unwrap();
+        (history, temp_path)
+    }
+
+    #[test]
+    fn test_push_undo_merge_user_edit() {
+        let (mut history, path) = make_temp_history();
+
+        // 1. User action: "Update block"
+        let user_op = Op::Batch {
+            ops: vec![],
+            label: "Update block".to_string(),
+        };
+        history.push_undo(user_op);
+        assert_eq!(history.undo_stack.len(), 1);
+
+        // 2. Renderer operation
+        let render_op = Op::Batch {
+            ops: vec![],
+            label: "koharu-renderer: page 1".to_string(),
+        };
+        history.push_undo(render_op);
+
+        // Should merge: undo stack size remains 1
+        assert_eq!(history.undo_stack.len(), 1);
+        if let Some(Op::Batch { label, .. }) = history.undo_stack.back() {
+            assert_eq!(label, "Update block");
+        } else {
+            panic!("Expected Batch");
+        }
+
+        drop(history);
+        let _ = std::fs::remove_file(path);
+    }
+
+    #[test]
+    fn test_push_undo_no_merge_pipeline_step() {
+        let (mut history, path) = make_temp_history();
+
+        // 1. Pipeline step: "translation-gpt-4o: page 1"
+        let pipeline_op = Op::Batch {
+            ops: vec![],
+            label: "translation-gpt-4o: page 1".to_string(),
+        };
+        history.push_undo(pipeline_op);
+        assert_eq!(history.undo_stack.len(), 1);
+
+        // 2. Renderer operation
+        let render_op = Op::Batch {
+            ops: vec![],
+            label: "koharu-renderer: page 1".to_string(),
+        };
+        history.push_undo(render_op);
+
+        // Should NOT merge: undo stack size becomes 2
+        assert_eq!(history.undo_stack.len(), 2);
+
+        let first = &history.undo_stack[0];
+        let second = &history.undo_stack[1];
+
+        if let Op::Batch { label, .. } = first {
+            assert_eq!(label, "translation-gpt-4o: page 1");
+        } else {
+            panic!("Expected Batch");
+        }
+
+        if let Op::Batch { label, .. } = second {
+            assert_eq!(label, "koharu-renderer: page 1");
+        } else {
+            panic!("Expected Batch");
+        }
+
+        drop(history);
+        let _ = std::fs::remove_file(path);
+    }
+
+    #[test]
+    fn test_push_undo_merge_only_immediate_preceding_user_edit() {
+        let (mut history, path) = make_temp_history();
+
+        // 1. Pipeline step (first in history)
+        let pipeline_op = Op::Batch {
+            ops: vec![],
+            label: "translation-gpt-4o: page 1".to_string(),
+        };
+        history.push_undo(pipeline_op);
+
+        // 2. User edit (second in history, immediately preceding)
+        let user_op = Op::Batch {
+            ops: vec![],
+            label: "Update block".to_string(),
+        };
+        history.push_undo(user_op);
+
+        // 3. Renderer operation
+        let render_op = Op::Batch {
+            ops: vec![],
+            label: "koharu-renderer: page 1".to_string(),
+        };
+        history.push_undo(render_op);
+
+        // Undo stack should have 2 entries (pipeline step + merged user edit & render)
+        assert_eq!(history.undo_stack.len(), 2);
+
+        let first = &history.undo_stack[0];
+        let second = &history.undo_stack[1];
+
+        if let Op::Batch { label, .. } = first {
+            assert_eq!(label, "translation-gpt-4o: page 1");
+        } else {
+            panic!("Expected Batch");
+        }
+
+        if let Op::Batch { label, .. } = second {
+            assert_eq!(label, "Update block");
+        } else {
+            panic!("Expected Batch");
+        }
+
+        drop(history);
+        let _ = std::fs::remove_file(path);
+    }
 }
