@@ -30,8 +30,11 @@ async fn main() -> Result<()> {
 
     koharu_ml::init().await?;
 
-    let model =
-        ComicTextBubbleDetector::load_with_threshold(cli.cpu, cli.confidence_threshold).await?;
+    let model = ComicTextBubbleDetector::load_with_threshold(
+        koharu_ml::device(cli.cpu),
+        cli.confidence_threshold,
+    )
+    .await?;
     let detection = model.inference(&image)?;
 
     if let Some(path) = cli.annotated_output {

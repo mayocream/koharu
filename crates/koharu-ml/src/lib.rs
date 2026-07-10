@@ -13,7 +13,7 @@ mod device;
 
 pub mod comic_text_bubble_detector;
 pub mod comic_text_detector;
-pub mod lama_manga;
+pub mod lama;
 pub mod pp_doclayout_v3;
 
 pub use device::{Backend, Device, DeviceConversionError, DeviceType};

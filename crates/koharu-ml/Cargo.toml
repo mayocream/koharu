@@ -17,14 +17,11 @@ koharu-llama = { workspace = true }
 koharu-runtime = { workspace = true }
 koharu-torch = { workspace = true }
 anyhow = { workspace = true }
-ab_glyph = { workspace = true }
 clap = { workspace = true }
-fast_image_resize = { workspace = true }
 image = { workspace = true }
 imageproc = { workspace = true }
 serde = { workspace = true }
 serde_json = { workspace = true }
-strum = { workspace = true }
 tokio = { workspace = true }
 thiserror = { workspace = true }
 tracing = { workspace = true }
@@ -35,4 +32,8 @@ criterion = { workspace = true }
 
 [[bench]]
 name = "pp_doclayout_v3"
+harness = false
+
+[[bench]]
+name = "lama"
 harness = false

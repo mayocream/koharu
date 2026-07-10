@@ -2,7 +2,7 @@ use std::path::PathBuf;
 
 use anyhow::Result;
 use clap::Parser;
-use koharu_ml::lama_manga::LamaManga;
+use koharu_ml::lama::LaMa;
 
 #[derive(Debug, Parser)]
 struct Cli {
@@ -28,7 +28,7 @@ async fn main() -> Result<()> {
 
     koharu_ml::init().await?;
 
-    let model = LamaManga::load(cli.cpu).await?;
+    let model = LaMa::load(koharu_ml::device(cli.cpu)).await?;
     let inpainted = model.inpaint(&image, &mask)?;
     inpainted.save(cli.output)?;
 

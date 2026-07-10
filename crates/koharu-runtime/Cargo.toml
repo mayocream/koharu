@@ -13,20 +13,13 @@ publish.workspace = true
 
 [dependencies]
 anyhow = { workspace = true }
-camino = { workspace = true }
-koharu-core = { workspace = true }
-dirs = { workspace = true }
 futures = { workspace = true }
-indexmap = { workspace = true }
-indicatif = { workspace = true }
-inventory = { workspace = true }
 reqwest = { workspace = true }
 reqwest-middleware = { workspace = true }
 reqwest-retry = { workspace = true }
 serde = { workspace = true }
 zip = { workspace = true }
 tokio = { workspace = true }
-tracing = { workspace = true }
 walkdir = { workspace = true }
 libloading = { workspace = true }
 flate2 = { workspace = true }
@@ -34,9 +27,7 @@ num_cpus = { workspace = true }
 tar = { workspace = true }
 fast-glob = { workspace = true }
 cudarc = { workspace = true }
-once_cell = { workspace = true }
 tempfile = { workspace = true }
-bytes = { workspace = true }
 strum = { workspace = true }
 async-trait = { workspace = true }
 

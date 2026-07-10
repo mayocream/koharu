@@ -48,7 +48,7 @@ inventory::submit! {
         needs: &[],
         produces: &[Artifact::TextBoxes],
         load: |_runtime, cpu| Box::pin(async move {
-            let m = PPDocLayoutV3::load(cpu).await?;
+            let m = PPDocLayoutV3::load(koharu_ml::device(cpu)).await?;
             Ok(Box::new(Model(m)) as Box<dyn Engine>)
         }),
     }

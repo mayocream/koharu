@@ -20,3 +20,6 @@ libc = { workspace = true }
 [build-dependencies]
 anyhow = { workspace = true }
 koharu-bindgen = { workspace = true }
+
+[package.metadata.cargo-machete]
+ignored = ["libloading"]

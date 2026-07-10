@@ -36,7 +36,7 @@ async fn main() -> Result<()> {
     // Initialize the Koharu ML framework
     koharu_ml::init().await?;
 
-    let model = PPDocLayoutV3::load(cli.cpu).await?;
+    let model = PPDocLayoutV3::load(koharu_ml::device(cli.cpu)).await?;
     let result = model.inference(&image, cli.threshold)?;
 
     if let Some(path) = cli.annotated_output {

@@ -16,7 +16,7 @@ use async_trait::async_trait;
 use image::{DynamicImage, GrayImage, Luma};
 use koharu_core::{ImageRole, MaskRole, Op, Region};
 use koharu_ml::inpainting::expand_mask_for_inpainting;
-use koharu_ml::lama::Lama;
+use koharu_ml::lama::LaMa;
 
 use crate::pipeline::artifacts::Artifact;
 use crate::pipeline::engine::{Engine, EngineCtx, EngineInfo};
@@ -25,7 +25,7 @@ use crate::pipeline::engines::support::{
     text_nodes, upsert_image_blob,
 };
 
-pub struct Model(Lama);
+pub struct Model(LaMa);
 
 #[async_trait]
 impl Engine for Model {
@@ -108,8 +108,8 @@ inventory::submit! {
         name: "Lama Manga",
         needs: &[Artifact::SegmentMask, Artifact::BubbleMask],
         produces: &[Artifact::Inpainted],
-        load: |runtime, cpu| Box::pin(async move {
-            let m = Lama::load(runtime, cpu).await?;
+        load: |_runtime, cpu| Box::pin(async move {
+            let m = LaMa::load(koharu_ml::device(cpu)).await?;
             Ok(Box::new(Model(m)) as Box<dyn Engine>)
         }),
     }

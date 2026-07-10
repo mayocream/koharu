@@ -7,12 +7,12 @@ use koharu_torch::{
 };
 
 #[derive(Debug)]
-pub struct LamaMangaModel {
+pub struct Model {
     vs: nn::VarStore,
     generator: FfcResNetGenerator,
 }
 
-impl LamaMangaModel {
+impl Model {
     pub fn new(device: Device) -> Self {
         let mut vs = nn::VarStore::new(device);
         let generator = FfcResNetGenerator::new(&vs.root());
@@ -41,7 +41,7 @@ impl LamaMangaModel {
 
             if variable.size() != tensor.size() {
                 bail!(
-                    "lama-manga tensor {name} has shape {:?}, expected {:?}",
+                    "LaMa tensor {name} has shape {:?}, expected {:?}",
                     tensor.size(),
                     variable.size()
                 );
@@ -50,7 +50,7 @@ impl LamaMangaModel {
             let tensor = tensor.to_device(self.vs.device()).to_kind(variable.kind());
             variable
                 .f_copy_(&tensor)
-                .with_context(|| format!("failed to copy lama-manga tensor {name}"))?;
+                .with_context(|| format!("failed to copy LaMa tensor {name}"))?;
             loaded.insert(name);
         }
 
@@ -60,13 +60,13 @@ impl LamaMangaModel {
             .collect::<Vec<String>>();
         if !missing.is_empty() {
             bail!(
-                "lama-manga checkpoint is missing tensors: {}",
+                "LaMa checkpoint is missing tensors: {}",
                 missing.into_iter().take(20).collect::<Vec<_>>().join(", ")
             );
         }
         if !unexpected.is_empty() {
             bail!(
-                "lama-manga checkpoint has unexpected tensors: {}",
+                "LaMa checkpoint has unexpected tensors: {}",
                 unexpected
                     .into_iter()
                     .take(20)
@@ -79,7 +79,9 @@ impl LamaMangaModel {
     }
 
     pub fn forward(&self, image: &Tensor, mask: &Tensor) -> Tensor {
-        let predicted = self.generator.forward(image, mask);
+        let masked_image = image * (mask.ones_like() - mask);
+        let input = Tensor::cat(&[masked_image, mask.shallow_clone()], 1);
+        let predicted = self.generator.forward(&input);
         let inv_mask = mask.ones_like() - mask;
         predicted * mask + inv_mask * image
     }
@@ -148,10 +150,7 @@ impl FfcResNetGenerator {
         }
     }
 
-    fn forward(&self, image: &Tensor, mask: &Tensor) -> Tensor {
-        let masked_image = image * (mask.ones_like() - mask);
-        let input = Tensor::cat(&[masked_image, mask.shallow_clone()], 1);
-
+    fn forward(&self, input: &Tensor) -> Tensor {
         let input = input.reflection_pad2d([3, 3, 3, 3]);
         let mut pair = self.initial.forward(FfcPair::local(input));
         for layer in &self.downsample {

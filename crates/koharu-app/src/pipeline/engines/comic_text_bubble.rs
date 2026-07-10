@@ -85,9 +85,9 @@ inventory::submit! {
         name: "Comic Text & Bubble Detector",
         needs: &[],
         produces: &[Artifact::TextBoxes],
-        load: |runtime, cpu| Box::pin(async move {
+        load: |_runtime, cpu| Box::pin(async move {
             let (tx, mut rx) = mpsc::channel::<DetectMessage>(8);
-            let runtime_clone = runtime.clone(); // Clone Arc for the thread
+            let device = koharu_ml::device(cpu);
 
             thread::spawn(move || {
                 // Initialize an isolated single-threaded runtime strictly for this OS thread
@@ -95,7 +95,7 @@ inventory::submit! {
                 rt.block_on(async move {
 
                     // The CUDA context is now permanently tied to this specific thread
-                    let detector = match ComicTextBubbleDetector::load(&runtime_clone, cpu).await {
+                    let detector = match ComicTextBubbleDetector::load(device).await {
                         Ok(d) => d,
                         Err(e) => {
                             tracing::error!("Failed to load detector: {:?}", e);

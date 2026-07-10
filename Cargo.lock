@@ -1804,15 +1804,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "document-features"
-version = "0.2.12"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "d4b8a88685455ed29a21542a33abd9cb6510b6b129abadabdcef0f4c55bc8f61"
-dependencies = [
- "litrs",
-]
-
-[[package]]
 name = "dom_query"
 version = "0.27.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -2068,20 +2059,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "fast_image_resize"
-version = "6.0.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "12dd43e5011e8d8411a3215a0d57a2ec5c68282fb90eb5d7221fab0113442174"
-dependencies = [
- "bytemuck",
- "cfg-if",
- "document-features",
- "image 0.25.10",
- "num-traits",
- "thiserror 2.0.18",
-]
-
-[[package]]
 name = "fastrand"
 version = "2.4.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -2222,7 +2199,7 @@ checksum = "457e789b3d1202543297a350643cf459f836cade38934e7a4cf6a39e7cde2905"
 dependencies = [
  "fontconfig-parser",
  "log",
- "memmap2 0.9.11",
+ "memmap2",
  "slotmap",
  "tinyvec",
  "ttf-parser 0.25.1",
@@ -3410,19 +3387,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "indicatif"
-version = "0.18.4"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "25470f23803092da7d239834776d653104d551bc4d7eacaf31e6837854b8e9eb"
-dependencies = [
- "console",
- "portable-atomic",
- "unicode-width",
- "unit-prefix",
- "web-time",
-]
-
-[[package]]
 name = "infer"
 version = "0.19.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -3933,11 +3897,9 @@ dependencies = [
 name = "koharu-ml"
 version = "0.61.2"
 dependencies = [
- "ab_glyph",
  "anyhow",
  "clap",
  "criterion",
- "fast_image_resize",
  "image 0.25.10",
  "imageproc",
  "koharu-diffusion",
@@ -3946,7 +3908,6 @@ dependencies = [
  "koharu-torch",
  "serde",
  "serde_json",
- "strum",
  "thiserror 2.0.18",
  "tokio",
  "tracing",
@@ -4023,20 +3984,12 @@ version = "0.61.2"
 dependencies = [
  "anyhow",
  "async-trait",
- "bytes",
- "camino",
  "cudarc",
- "dirs",
  "fast-glob",
  "flate2",
  "futures",
- "indexmap 2.14.0",
- "indicatif",
- "inventory",
- "koharu-core",
  "libloading 0.8.9",
  "num_cpus",
- "once_cell",
  "reqwest",
  "reqwest-middleware",
  "reqwest-retry",
@@ -4045,7 +3998,6 @@ dependencies = [
  "tar",
  "tempfile",
  "tokio",
- "tracing",
  "walkdir",
  "windows-sys 0.61.2",
  "zip 8.6.0",
@@ -4066,18 +4018,14 @@ name = "koharu-torch"
 version = "0.61.2"
 dependencies = [
  "anyhow",
- "clap",
  "half",
  "image 0.24.9",
  "koharu-torch-sys",
  "lazy_static",
  "libc",
- "memmap2 0.6.2",
  "ndarray",
  "rand 0.8.6",
- "regex",
  "safetensors",
- "serde_json",
  "thiserror 1.0.69",
  "zip 0.6.6",
 ]
@@ -4263,12 +4211,6 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "92daf443525c4cce67b150400bc2316076100ce0b3686209eb8cf3c31612e6f0"
 
 [[package]]
-name = "litrs"
-version = "1.0.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "11d3d7f243d5c5a8b9bb5d6dd2b1602c0cb0b9db1621bafc7ed66e35ff9fe092"
-
-[[package]]
 name = "llguidance"
 version = "1.7.6"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -4381,15 +4323,6 @@ name = "memchr"
 version = "2.8.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "88904434abc2901f197fe8cc55f0445e7ded921dba5911dad2e2b39b48e663c4"
-
-[[package]]
-name = "memmap2"
-version = "0.6.2"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "6d28bba84adfe6646737845bc5ebbfa2c08424eb1c37e94a1fd2a82adb56a872"
-dependencies = [
- "libc",
-]
 
 [[package]]
 name = "memmap2"
@@ -8423,12 +8356,6 @@ name = "unicode-xid"
 version = "0.2.6"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "ebc1c04c71510c7f702b52b7c350734c9ff1295c464a03335b00bb84fc54f853"
-
-[[package]]
-name = "unit-prefix"
-version = "0.5.2"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "81e544489bf3d8ef66c953931f56617f423cd4b5494be343d9b9d3dda037b9a3"
 
 [[package]]
 name = "untrusted"

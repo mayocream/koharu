@@ -56,7 +56,7 @@ async fn main() -> Result<()> {
     koharu_ml::init().await?;
 
     let model = ComicTextDetector::load_with_config(
-        cli.cpu,
+        koharu_ml::device(cli.cpu),
         ComicTextDetectorConfig {
             detect_size: cli.detect_size,
             confidence_threshold: cli.confidence_threshold,

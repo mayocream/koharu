@@ -7,8 +7,6 @@ use image::DynamicImage;
 use koharu_runtime::package::huggingface;
 use koharu_torch::Device;
 
-use crate::device;
-
 pub use self::{
     config::{HGNetV2Config, PPDocLayoutV3Config},
     model::{PPDocLayoutV3ForObjectDetection, PPDocLayoutV3ForwardOutput},
@@ -33,8 +31,8 @@ pub struct PPDocLayoutV3 {
 }
 
 impl PPDocLayoutV3 {
-    pub async fn load(cpu: bool) -> Result<Self> {
-        let device: Device = device(cpu).try_into()?;
+    pub async fn load(device: crate::Device) -> Result<Self> {
+        let device: Device = device.try_into()?;
 
         let config_path = huggingface::resolve(CONFIG)
             .await
@@ -72,9 +70,5 @@ impl PPDocLayoutV3 {
             let outputs = self.model.forward(&pixel_values);
             self.processor.postprocess(&outputs, image, threshold)
         })
-    }
-
-    pub fn device(&self) -> Device {
-        self.device
     }
 }

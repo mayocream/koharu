@@ -6,8 +6,6 @@ use image::DynamicImage;
 use koharu_runtime::package::huggingface;
 use koharu_torch::Device;
 
-use crate::device;
-
 pub use self::processor::{
     ComicTextBlock, ComicTextDetection, ComicTextDetectionJson, ComicTextDetectorConfig, Quad,
     threshold_mask,
@@ -32,12 +30,15 @@ pub struct ComicTextDetector {
 }
 
 impl ComicTextDetector {
-    pub async fn load(cpu: bool) -> Result<Self> {
-        Self::load_with_config(cpu, ComicTextDetectorConfig::default()).await
+    pub async fn load(device: crate::Device) -> Result<Self> {
+        Self::load_with_config(device, ComicTextDetectorConfig::default()).await
     }
 
-    pub async fn load_with_config(cpu: bool, config: ComicTextDetectorConfig) -> Result<Self> {
-        let device: Device = device(cpu).try_into()?;
+    pub async fn load_with_config(
+        device: crate::Device,
+        config: ComicTextDetectorConfig,
+    ) -> Result<Self> {
+        let device: Device = device.try_into()?;
         let yolo_path = huggingface::resolve(YOLO_WEIGHTS)
             .await
             .context("failed to resolve comic-text-detector YOLO weights")?;
@@ -66,13 +67,5 @@ impl ComicTextDetector {
             let outputs = self.model.forward(&input.pixel_values);
             postprocess(outputs, &input, &self.config)
         })
-    }
-
-    pub fn device(&self) -> Device {
-        self.device
-    }
-
-    pub fn config(&self) -> &ComicTextDetectorConfig {
-        &self.config
     }
 }

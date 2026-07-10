@@ -7,8 +7,6 @@ use image::DynamicImage;
 use koharu_runtime::package::huggingface;
 use koharu_torch::Device;
 
-use crate::device;
-
 pub use self::{
     config::{ComicTextBubbleDetectorConfig, RtDetrResNetConfig},
     processor::{
@@ -33,12 +31,15 @@ pub struct ComicTextBubbleDetector {
 }
 
 impl ComicTextBubbleDetector {
-    pub async fn load(cpu: bool) -> Result<Self> {
-        Self::load_with_threshold(cpu, 0.3).await
+    pub async fn load(device: crate::Device) -> Result<Self> {
+        Self::load_with_threshold(device, 0.3).await
     }
 
-    pub async fn load_with_threshold(cpu: bool, confidence_threshold: f32) -> Result<Self> {
-        let device: Device = device(cpu).try_into()?;
+    pub async fn load_with_threshold(
+        device: crate::Device,
+        confidence_threshold: f32,
+    ) -> Result<Self> {
+        let device: Device = device.try_into()?;
         let config_path = huggingface::resolve(CONFIG)
             .await
             .context("failed to resolve comic text/bubble detector config")?;
@@ -76,13 +77,5 @@ impl ComicTextBubbleDetector {
                 self.processor.postprocess(&outputs, slice)
             })
         })
-    }
-
-    pub fn device(&self) -> Device {
-        self.device
-    }
-
-    pub fn processor(&self) -> &ComicTextBubbleProcessor {
-        &self.processor
     }
 }

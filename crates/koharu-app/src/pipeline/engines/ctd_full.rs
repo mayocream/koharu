@@ -68,8 +68,8 @@ inventory::submit! {
         name: "Comic Text Detector",
         needs: &[],
         produces: &[Artifact::TextBoxes, Artifact::SegmentMask],
-        load: |runtime, cpu| Box::pin(async move {
-            let m = ComicTextDetector::load(runtime, cpu).await?;
+        load: |_runtime, cpu| Box::pin(async move {
+            let m = ComicTextDetector::load(koharu_ml::device(cpu)).await?;
             Ok(Box::new(Model(m)) as Box<dyn Engine>)
         }),
     }
