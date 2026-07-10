@@ -171,6 +171,7 @@ pub async fn run(
                     total_pages,
                     overall_percent: percent,
                 });
+                tokio::task::yield_now().await;
             }
 
             // The page must still exist (user may have deleted it mid-run).
