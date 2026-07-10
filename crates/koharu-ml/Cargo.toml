@@ -41,3 +41,7 @@ harness = false
 [[bench]]
 name = "comic_text_detector"
 harness = false
+
+[[bench]]
+name = "comic_text_bubble_detector"
+harness = false
