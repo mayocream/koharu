@@ -6,7 +6,7 @@ use image::DynamicImage;
 use koharu_runtime::package::huggingface;
 use koharu_torch::Device;
 
-pub use self::processor::{ComicTextBlock, ComicTextDetection, ComicTextDetectionJson, Quad};
+pub use self::processor::{ComicTextBlock, ComicTextDetection, Quad};
 
 use self::{
     model::Model,

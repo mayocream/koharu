@@ -59,7 +59,7 @@ async fn main() -> Result<()> {
         detection.threshold_map.save(path)?;
     }
 
-    let json = serde_json::to_string_pretty(&detection.to_json())?;
+    let json = serde_json::to_string_pretty(&detection)?;
     if let Some(path) = cli.output {
         std::fs::write(path, json)?;
     } else {

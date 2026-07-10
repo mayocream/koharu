@@ -37,34 +37,18 @@ pub struct ComicTextBlock {
     pub detected_font_size: f32,
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Serialize)]
 pub struct ComicTextDetection {
     pub image_width: u32,
     pub image_height: u32,
     pub blocks: Vec<ComicTextBlock>,
     pub line_polygons: Vec<Quad>,
+    #[serde(skip_serializing)]
     pub mask: GrayImage,
+    #[serde(skip_serializing)]
     pub shrink_map: GrayImage,
+    #[serde(skip_serializing)]
     pub threshold_map: GrayImage,
-}
-
-#[derive(Debug, Clone, Serialize)]
-pub struct ComicTextDetectionJson {
-    pub image_width: u32,
-    pub image_height: u32,
-    pub blocks: Vec<ComicTextBlock>,
-    pub line_polygons: Vec<Quad>,
-}
-
-impl ComicTextDetection {
-    pub fn to_json(&self) -> ComicTextDetectionJson {
-        ComicTextDetectionJson {
-            image_width: self.image_width,
-            image_height: self.image_height,
-            blocks: self.blocks.clone(),
-            line_polygons: self.line_polygons.clone(),
-        }
-    }
 }
 
 pub fn preprocess(image: &DynamicImage, device: Device) -> Result<PreprocessedImage> {
