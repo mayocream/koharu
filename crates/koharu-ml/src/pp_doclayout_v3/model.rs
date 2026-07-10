@@ -1,12 +1,25 @@
-use std::{collections::HashSet, path::Path};
+//! Inference-only port of Transformers' PP-DocLayout-v3 detector.
+//!
+//! Original implementation:
+//! https://github.com/huggingface/transformers/blob/394b1a0eaa8e6199e372334da0aff3753a117fdb/src/transformers/models/pp_doclayout_v3/modeling_pp_doclayout_v3.py
 
-use anyhow::{Result, bail};
+use std::path::Path;
+
+use anyhow::Result;
 use koharu_torch::{
     Device, IndexOp, Kind, Tensor,
     nn::{self, Module},
 };
 
 use super::config::{HGNetV2Config, PPDocLayoutV3Config};
+
+#[derive(Debug)]
+pub struct Output {
+    pub logits: Tensor,
+    pub pred_boxes: Tensor,
+    pub order_logits: Tensor,
+    pub out_masks: Tensor,
+}
 
 #[derive(Debug)]
 pub struct Model {
@@ -22,47 +35,8 @@ impl Model {
         Self { vs, model }
     }
 
-    pub fn load_safetensors(&mut self, path: impl AsRef<Path>) -> Result<()> {
-        let mut variables = self.vs.variables();
-        let mut loaded = HashSet::new();
-        let mut unexpected = Vec::new();
-        for (name, tensor) in Tensor::read_safetensors(path)? {
-            if let Some(variable) = variables.get_mut(&name) {
-                variable.f_copy_(&tensor.to_device(self.vs.device()))?;
-                loaded.insert(name);
-            } else {
-                unexpected.push(name);
-            }
-        }
-
-        let missing = variables
-            .keys()
-            .filter(|name| !loaded.contains(*name))
-            .cloned()
-            .collect::<Vec<_>>();
-        if !missing.is_empty() {
-            bail!(
-                "missing PP-DocLayout-V3 weights: {}",
-                missing
-                    .iter()
-                    .take(20)
-                    .cloned()
-                    .collect::<Vec<_>>()
-                    .join(", ")
-            );
-        }
-        if !unexpected.is_empty() {
-            bail!(
-                "unexpected PP-DocLayout-V3 weights: {}",
-                unexpected
-                    .iter()
-                    .take(20)
-                    .cloned()
-                    .collect::<Vec<_>>()
-                    .join(", ")
-            );
-        }
-        Ok(())
+    pub fn load_safetensors(&self, path: impl AsRef<Path>) -> Result<()> {
+        crate::weights::load_safetensors(&self.vs, path, "PP-DocLayout-V3")
     }
 
     pub fn forward(&self, pixel_values: &Tensor) -> Output {
@@ -81,14 +55,6 @@ impl Model {
 }
 
 #[derive(Debug)]
-pub struct Output {
-    pub logits: Tensor,
-    pub pred_boxes: Tensor,
-    pub order_logits: Tensor,
-    pub out_masks: Tensor,
-}
-
-#[derive(Debug)]
 struct PPDocLayoutV3ModelOutput {
     intermediate_logits: Tensor,
     intermediate_reference_points: Tensor,
@@ -99,6 +65,7 @@ struct PPDocLayoutV3ModelOutput {
 #[derive(Debug)]
 struct PPDocLayoutV3Model {
     config: PPDocLayoutV3Config,
+    anchor_cache: Option<AnchorCache>,
     backbone: HGNetV2Backbone,
     encoder_input_proj: Vec<ConvBnSeq>,
     encoder: PPDocLayoutV3HybridEncoder,
@@ -107,17 +74,32 @@ struct PPDocLayoutV3Model {
     weight_embedding: Option<nn::Embedding>,
     enc_output: LinearNormSeq,
     enc_score_head: nn::Linear,
-    enc_bbox_head: PredictionMlp,
+    enc_bbox_head: PPDocLayoutV3MLPPredictionHead,
     decoder_input_proj: Vec<ConvBnSeq>,
     decoder: PPDocLayoutV3Decoder,
     decoder_order_head: Vec<nn::Linear>,
     decoder_global_pointer: PPDocLayoutV3GlobalPointer,
     decoder_norm: nn::LayerNorm,
-    mask_query_head: PredictionMlp,
+    mask_query_head: PPDocLayoutV3MLPPredictionHead,
 }
 
 impl PPDocLayoutV3Model {
     fn new(path: &nn::Path<'_>, config: &PPDocLayoutV3Config) -> Self {
+        let anchor_cache = config
+            .anchor_image_size
+            .as_deref()
+            .and_then(|image_size| {
+                fixed_spatial_shapes(image_size, &config.feat_strides, config.num_feature_levels)
+            })
+            .map(|spatial_shapes| {
+                let (anchors, valid_mask) =
+                    generate_anchors(&spatial_shapes, path.device(), path.kind());
+                AnchorCache {
+                    spatial_shapes,
+                    anchors,
+                    valid_mask,
+                }
+            });
         let backbone =
             HGNetV2Backbone::new(&(path / "backbone" / "model"), &config.backbone_config);
         let intermediate_channel_sizes = config.backbone_config.channels();
@@ -169,7 +151,7 @@ impl PPDocLayoutV3Model {
             config.num_labels(),
             Default::default(),
         );
-        let enc_bbox_head = PredictionMlp::new(
+        let enc_bbox_head = PPDocLayoutV3MLPPredictionHead::new(
             &(path / "enc_bbox_head"),
             config.d_model,
             config.d_model,
@@ -227,7 +209,7 @@ impl PPDocLayoutV3Model {
                 ..Default::default()
             },
         );
-        let mask_query_head = PredictionMlp::new(
+        let mask_query_head = PPDocLayoutV3MLPPredictionHead::new(
             &(path / "mask_query_head"),
             config.d_model,
             config.d_model,
@@ -237,6 +219,7 @@ impl PPDocLayoutV3Model {
 
         Self {
             config: config.clone(),
+            anchor_cache,
             backbone,
             encoder_input_proj,
             encoder,
@@ -265,7 +248,7 @@ impl PPDocLayoutV3Model {
             .collect::<Vec<_>>();
         let encoder_outputs = self.encoder.forward(proj_feats, &x4_feat);
 
-        let mut sources = Vec::new();
+        let mut sources = Vec::with_capacity(self.config.num_feature_levels);
         for (level, source) in encoder_outputs.last_hidden_state.iter().enumerate() {
             sources.push(self.decoder_input_proj[level].forward(source));
         }
@@ -291,8 +274,8 @@ impl PPDocLayoutV3Model {
             }
         }
 
-        let mut source_flatten = Vec::new();
-        let mut spatial_shapes = Vec::new();
+        let mut source_flatten = Vec::with_capacity(sources.len());
+        let mut spatial_shapes = Vec::with_capacity(sources.len());
         for source in &sources {
             let size = source.size();
             let height = size[2];
@@ -301,11 +284,25 @@ impl PPDocLayoutV3Model {
             source_flatten.push(source.flatten(2, -1).transpose(1, 2));
         }
         let source_flatten = Tensor::cat(&source_flatten, 1);
-        let (anchors, valid_mask) = generate_anchors(
-            &spatial_shapes,
-            source_flatten.device(),
-            source_flatten.kind(),
-        );
+        // Transformers caches these tensors when `anchor_image_size` is fixed.
+        // https://github.com/huggingface/transformers/blob/394b1a0eaa8e6199e372334da0aff3753a117fdb/src/transformers/models/pp_doclayout_v3/modeling_pp_doclayout_v3.py#L1611-L1640
+        let (anchors, valid_mask) = self
+            .anchor_cache
+            .as_ref()
+            .filter(|cache| cache.spatial_shapes == spatial_shapes)
+            .map(|cache| {
+                (
+                    cache.anchors.shallow_clone(),
+                    cache.valid_mask.shallow_clone(),
+                )
+            })
+            .unwrap_or_else(|| {
+                generate_anchors(
+                    &spatial_shapes,
+                    source_flatten.device(),
+                    source_flatten.kind(),
+                )
+            });
 
         let memory = valid_mask.to_kind(source_flatten.kind()) * &source_flatten;
         let output_memory = self.enc_output.forward(&memory);
@@ -331,17 +328,9 @@ impl PPDocLayoutV3Model {
                 .repeat([1, 1, output_memory.size()[2]]),
             false,
         );
-        let out_query = self.decoder_norm.forward(
-            &output_memory.gather(
-                1,
-                &topk_ind
-                    .unsqueeze(-1)
-                    .repeat([1, 1, output_memory.size()[2]]),
-                false,
-            ),
-        );
+        let out_query = self.decoder_norm.forward(&target);
         let mask_query_embed = self.mask_query_head.forward(&out_query);
-        let mut target = if let Some(weight_embedding) = &self.weight_embedding {
+        let target = if let Some(weight_embedding) = &self.weight_embedding {
             weight_embedding
                 .ws
                 .unsqueeze(0)
@@ -366,7 +355,7 @@ impl PPDocLayoutV3Model {
         let level_start_index = level_start_index_tensor(&spatial_shapes, source_flatten.device());
 
         let decoder_outputs = self.decoder.forward(DecoderForwardArgs {
-            inputs_embeds: &mut target,
+            inputs_embeds: &target,
             encoder_hidden_states: &source_flatten,
             reference_points: &init_reference_points,
             spatial_shapes: &spatial_shapes_tensor,
@@ -388,6 +377,13 @@ impl PPDocLayoutV3Model {
             out_masks: decoder_outputs.decoder_out_masks,
         }
     }
+}
+
+#[derive(Debug)]
+struct AnchorCache {
+    spatial_shapes: Vec<(i64, i64)>,
+    anchors: Tensor,
+    valid_mask: Tensor,
 }
 
 #[derive(Debug)]
@@ -616,15 +612,15 @@ impl HGNetV2BasicLayer {
                     middle_channels
                 };
                 if light_block {
-                    HGNetV2Block::Light(HGNetV2ConvLayerLight::new(
+                    HGNetV2Block::Light(Box::new(HGNetV2ConvLayerLight::new(
                         &(path / "layers" / idx),
                         in_c,
                         middle_channels,
                         kernel_size,
                         use_learnable_affine_block,
-                    ))
+                    )))
                 } else {
-                    HGNetV2Block::Conv(HGNetV2ConvLayer::new(
+                    HGNetV2Block::Conv(Box::new(HGNetV2ConvLayer::new(
                         &(path / "layers" / idx),
                         in_c,
                         middle_channels,
@@ -633,7 +629,7 @@ impl HGNetV2BasicLayer {
                         1,
                         Activation::Relu,
                         use_learnable_affine_block,
-                    ))
+                    )))
                 }
             })
             .collect::<Vec<_>>();
@@ -689,8 +685,8 @@ impl HGNetV2BasicLayer {
 
 #[derive(Debug)]
 enum HGNetV2Block {
-    Conv(HGNetV2ConvLayer),
-    Light(HGNetV2ConvLayerLight),
+    Conv(Box<HGNetV2ConvLayer>),
+    Light(Box<HGNetV2ConvLayerLight>),
 }
 
 impl HGNetV2Block {
@@ -922,6 +918,9 @@ impl PPDocLayoutV3HybridEncoder {
             }
         }
 
+        // PP-DocLayout extends RT-DETR's AIFI/FPN/PAN encoder with a mask head;
+        // keep the resolution traversal identical to Transformers.
+        // https://github.com/huggingface/transformers/blob/394b1a0eaa8e6199e372334da0aff3753a117fdb/src/transformers/models/pp_doclayout_v3/modeling_pp_doclayout_v3.py#L953-L995
         let mut fpn_feature_maps = vec![feature_maps.last().expect("feature map").shallow_clone()];
         for idx in 0..self.lateral_convs.len() {
             let backbone_feature_map =
@@ -952,7 +951,7 @@ impl PPDocLayoutV3HybridEncoder {
             None::<f64>,
             None::<f64>,
         );
-        mask_feat = mask_feat + self.encoder_mask_lateral.forward(&x4_feat[0]);
+        mask_feat += self.encoder_mask_lateral.forward(&x4_feat[0]);
         mask_feat = self.encoder_mask_output.forward(&mask_feat);
 
         PPDocLayoutV3HybridEncoderOutput {
@@ -1083,7 +1082,7 @@ struct PPDocLayoutV3DecoderOutput {
 #[derive(Debug)]
 struct PPDocLayoutV3Decoder {
     layers: Vec<PPDocLayoutV3DecoderLayer>,
-    query_pos_head: PredictionMlp,
+    query_pos_head: PPDocLayoutV3MLPPredictionHead,
     num_queries: i64,
 }
 
@@ -1093,7 +1092,7 @@ impl PPDocLayoutV3Decoder {
             layers: (0..config.decoder_layers)
                 .map(|idx| PPDocLayoutV3DecoderLayer::new(&(path / "layers" / idx), config))
                 .collect(),
-            query_pos_head: PredictionMlp::new(
+            query_pos_head: PPDocLayoutV3MLPPredictionHead::new(
                 &(path / "query_pos_head"),
                 4,
                 2 * config.d_model,
@@ -1107,10 +1106,10 @@ impl PPDocLayoutV3Decoder {
     fn forward(&self, args: DecoderForwardArgs<'_>) -> PPDocLayoutV3DecoderOutput {
         let mut hidden_states = args.inputs_embeds.shallow_clone();
         let mut reference_points = args.reference_points.sigmoid();
-        let mut intermediate_logits = Vec::new();
-        let mut intermediate_reference_points = Vec::new();
-        let mut decoder_out_order_logits = Vec::new();
-        let mut decoder_out_masks = Vec::new();
+        let mut intermediate_logits = Vec::with_capacity(self.layers.len());
+        let mut intermediate_reference_points = Vec::with_capacity(self.layers.len());
+        let mut decoder_out_order_logits = Vec::with_capacity(self.layers.len());
+        let mut decoder_out_masks = Vec::with_capacity(self.layers.len());
 
         for (idx, decoder_layer) in self.layers.iter().enumerate() {
             let reference_points_input = reference_points.unsqueeze(2);
@@ -1130,6 +1129,9 @@ impl PPDocLayoutV3Decoder {
                 (predicted_corners + inverse_sigmoid(&reference_points)).sigmoid();
             reference_points = new_reference_points.detach();
 
+            // Each decoder layer emits masks and reading-order logits. Only the
+            // configured detection queries participate in the order matrix.
+            // https://github.com/huggingface/transformers/blob/394b1a0eaa8e6199e372334da0aff3753a117fdb/src/transformers/models/pp_doclayout_v3/modeling_pp_doclayout_v3.py#L1190-L1229
             let out_query = args.norm.forward(&hidden_states);
             let mask_query_embed = args.mask_query_head.forward(&out_query);
             let size = args.mask_feat.size();
@@ -1157,17 +1159,17 @@ impl PPDocLayoutV3Decoder {
 }
 
 struct DecoderForwardArgs<'a> {
-    inputs_embeds: &'a mut Tensor,
+    inputs_embeds: &'a Tensor,
     encoder_hidden_states: &'a Tensor,
     reference_points: &'a Tensor,
     spatial_shapes: &'a Tensor,
     spatial_shapes_list: &'a [(i64, i64)],
     level_start_index: &'a Tensor,
     order_head: &'a [nn::Linear],
-    bbox_embed: &'a PredictionMlp,
+    bbox_embed: &'a PPDocLayoutV3MLPPredictionHead,
     class_embed: &'a nn::Linear,
     global_pointer: &'a PPDocLayoutV3GlobalPointer,
-    mask_query_head: &'a PredictionMlp,
+    mask_query_head: &'a PPDocLayoutV3MLPPredictionHead,
     norm: &'a nn::LayerNorm,
     mask_feat: &'a Tensor,
 }
@@ -1566,11 +1568,11 @@ impl PPDocLayoutV3MLP {
 }
 
 #[derive(Debug)]
-struct PredictionMlp {
+struct PPDocLayoutV3MLPPredictionHead {
     layers: Vec<nn::Linear>,
 }
 
-impl PredictionMlp {
+impl PPDocLayoutV3MLPPredictionHead {
     fn new(
         path: &nn::Path<'_>,
         input_dim: i64,
@@ -1612,7 +1614,6 @@ impl PredictionMlp {
 #[derive(Debug)]
 struct PPDocLayoutV3MaskFeatFPN {
     reorder_index: Vec<usize>,
-    fpn_strides: Vec<i64>,
     scale_heads: Vec<PPDocLayoutV3ScaleHead>,
     output_conv: PPDocLayoutV3ConvLayer,
 }
@@ -1642,7 +1643,6 @@ impl PPDocLayoutV3MaskFeatFPN {
             .collect();
         Self {
             reorder_index: order,
-            fpn_strides,
             scale_heads,
             output_conv: PPDocLayoutV3ConvLayer::new(
                 &(path / "output_conv"),
@@ -1657,14 +1657,9 @@ impl PPDocLayoutV3MaskFeatFPN {
     }
 
     fn forward(&self, inputs: &[Tensor]) -> Tensor {
-        let x = self
-            .reorder_index
-            .iter()
-            .map(|&idx| inputs[idx].shallow_clone())
-            .collect::<Vec<_>>();
-        let mut output = self.scale_heads[0].forward(&x[0]);
-        for idx in 1..self.fpn_strides.len() {
-            let scaled = self.scale_heads[idx].forward(&x[idx]);
+        let mut output = self.scale_heads[0].forward(&inputs[self.reorder_index[0]]);
+        for (scale_head, &input_index) in self.scale_heads.iter().zip(&self.reorder_index).skip(1) {
+            let scaled = scale_head.forward(&inputs[input_index]);
             let size = output.size();
             let scaled =
                 scaled.upsample_bilinear2d([size[2], size[3]], false, None::<f64>, None::<f64>);
@@ -1698,7 +1693,7 @@ impl PPDocLayoutV3ScaleHead {
             } else {
                 feature_channels
             };
-            layers.push(ScaleHeadLayer::Conv(PPDocLayoutV3ConvLayer::new(
+            layers.push(ScaleHeadLayer::Conv(Box::new(PPDocLayoutV3ConvLayer::new(
                 &(path / "layers" / module_idx),
                 in_c,
                 feature_channels,
@@ -1706,7 +1701,7 @@ impl PPDocLayoutV3ScaleHead {
                 1,
                 Activation::Silu,
                 eps,
-            )));
+            ))));
             module_idx += 1;
             if fpn_stride != base_stride {
                 layers.push(ScaleHeadLayer::Upsample2x);
@@ -1738,7 +1733,7 @@ impl PPDocLayoutV3ScaleHead {
 
 #[derive(Debug)]
 enum ScaleHeadLayer {
-    Conv(PPDocLayoutV3ConvLayer),
+    Conv(Box<PPDocLayoutV3ConvLayer>),
     Upsample2x,
 }
 
@@ -2188,6 +2183,27 @@ fn generate_anchors(spatial_shapes: &[(i64, i64)], device: Device, kind: Kind) -
     (anchors, valid_mask)
 }
 
+fn fixed_spatial_shapes(
+    image_size: &[i64],
+    feature_strides: &[i64],
+    num_feature_levels: usize,
+) -> Option<Vec<(i64, i64)>> {
+    let [height, width] = image_size else {
+        return None;
+    };
+    let mut stride = *feature_strides.last()?;
+    let mut spatial_shapes = Vec::with_capacity(num_feature_levels);
+    for level in 0..num_feature_levels {
+        if let Some(&configured_stride) = feature_strides.get(level) {
+            stride = configured_stride;
+        } else {
+            stride *= 2;
+        }
+        spatial_shapes.push((height / stride, width / stride));
+    }
+    Some(spatial_shapes)
+}
+
 fn mask_to_box_coordinate(mask: &Tensor, kind: Kind) -> Tensor {
     let mask = mask.to_kind(Kind::Bool);
     let size = mask.size();
@@ -2264,12 +2280,4 @@ fn level_start_index_tensor(spatial_shapes: &[(i64, i64)], device: Device) -> Te
         offset += height * width;
     }
     Tensor::from_slice(&starts).to_device(device)
-}
-
-#[allow(dead_code)]
-fn ensure_nonempty<T>(values: &[T], name: &str) -> Result<()> {
-    if values.is_empty() {
-        bail!("{name} cannot be empty");
-    }
-    Ok(())
 }

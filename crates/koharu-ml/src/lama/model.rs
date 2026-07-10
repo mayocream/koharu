@@ -1,6 +1,11 @@
-use std::{collections::HashSet, path::Path};
+//! Inference-only port of LaMa's FFC generator.
+//!
+//! Original implementation:
+//! https://github.com/advimman/lama/blob/786f5936b27fb3dacd2b1ad799e4de968ea697e7/saicinpainting/training/modules/ffc.py#L49-L369
 
-use anyhow::{Context, Result, bail};
+use std::path::Path;
+
+use anyhow::Result;
 use koharu_torch::{
     Device, Tensor,
     nn::{self, Module, ModuleT},
@@ -20,70 +25,16 @@ impl Model {
         Self { vs, generator }
     }
 
-    pub fn load_safetensors(&mut self, path: impl AsRef<Path>) -> Result<()> {
-        let path = path.as_ref();
-        let mut variables = self.vs.variables();
-        let expected = variables.keys().cloned().collect::<HashSet<_>>();
-        let mut loaded = HashSet::new();
-        let mut unexpected = Vec::new();
-
-        for (name, tensor) in Tensor::read_safetensors(path)
-            .with_context(|| format!("failed to read {}", path.display()))?
-        {
-            if name.ends_with(".num_batches_tracked") {
-                continue;
-            }
-
-            let Some(variable) = variables.get_mut(&name) else {
-                unexpected.push(name);
-                continue;
-            };
-
-            if variable.size() != tensor.size() {
-                bail!(
-                    "LaMa tensor {name} has shape {:?}, expected {:?}",
-                    tensor.size(),
-                    variable.size()
-                );
-            }
-
-            let tensor = tensor.to_device(self.vs.device()).to_kind(variable.kind());
-            variable
-                .f_copy_(&tensor)
-                .with_context(|| format!("failed to copy LaMa tensor {name}"))?;
-            loaded.insert(name);
-        }
-
-        let missing = expected
-            .difference(&loaded)
-            .cloned()
-            .collect::<Vec<String>>();
-        if !missing.is_empty() {
-            bail!(
-                "LaMa checkpoint is missing tensors: {}",
-                missing.into_iter().take(20).collect::<Vec<_>>().join(", ")
-            );
-        }
-        if !unexpected.is_empty() {
-            bail!(
-                "LaMa checkpoint has unexpected tensors: {}",
-                unexpected
-                    .into_iter()
-                    .take(20)
-                    .collect::<Vec<_>>()
-                    .join(", ")
-            );
-        }
-
-        Ok(())
+    pub fn load_safetensors(&self, path: impl AsRef<Path>) -> Result<()> {
+        crate::weights::load_safetensors(&self.vs, path, "LaMa")
     }
 
     pub fn forward(&self, image: &Tensor, mask: &Tensor) -> Tensor {
-        let masked_image = image * (mask.ones_like() - mask);
+        let inverse_mask = mask.ones_like() - mask;
+        let masked_image = image * &inverse_mask;
         let input = Tensor::cat(&[masked_image, mask.shallow_clone()], 1);
         let predicted = self.generator.forward(&input);
-        let inv_mask = mask.ones_like() - mask;
-        predicted * mask + inv_mask * image
+        predicted * mask + inverse_mask * image
     }
 }
 
@@ -490,6 +441,9 @@ impl FourierUnit {
         let height = size[2];
         let width = size[3];
 
+        // The FFC unit treats real and imaginary FFT components as channels for
+        // a learned 1x1 convolution, then reconstructs the complex spectrum.
+        // https://github.com/advimman/lama/blob/786f5936b27fb3dacd2b1ad799e4de968ea697e7/saicinpainting/training/modules/ffc.py#L76-L114
         let fft_dims = [-2, -1];
         let ffted = input.fft_rfftn(None::<&[i64]>, &fft_dims[..], "ortho");
         let ffted = Tensor::stack(&[ffted.real(), ffted.imag()], -1)
@@ -564,6 +518,7 @@ fn add_optional(left: Option<Tensor>, right: Option<Tensor>) -> Option<Tensor> {
     }
 }
 
+#[allow(clippy::too_many_arguments)]
 fn conv2d(
     path: &nn::Path<'_>,
     in_channels: i64,

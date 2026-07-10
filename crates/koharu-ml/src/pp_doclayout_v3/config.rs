@@ -1,3 +1,8 @@
+//! Rust representation of Transformers' PP-DocLayout-v3 configuration.
+//!
+//! Original implementation:
+//! https://github.com/huggingface/transformers/blob/394b1a0eaa8e6199e372334da0aff3753a117fdb/src/transformers/models/pp_doclayout_v3/configuration_pp_doclayout_v3.py
+
 use std::{collections::HashMap, fs, path::Path};
 
 use anyhow::Result;

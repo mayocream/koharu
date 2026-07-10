@@ -1,3 +1,8 @@
+//! Rust representation of Transformers' RT-DETR-v2 configuration.
+//!
+//! Original implementation:
+//! https://github.com/huggingface/transformers/blob/394b1a0eaa8e6199e372334da0aff3753a117fdb/src/transformers/models/rt_detr_v2/configuration_rt_detr_v2.py
+
 use std::{collections::HashMap, fs, path::Path};
 
 use anyhow::Result;

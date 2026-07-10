@@ -1,10 +1,21 @@
-use std::{collections::HashSet, path::Path};
+//! Inference-only port of BallonsTranslator's comic text detector.
+//!
+//! Original implementation:
+//! https://github.com/dmMaze/BallonsTranslator/blob/4bcc635c19f6c63a902872cf77b3d554e14ed1b7/ballontranslator/modules/textdetector/ctd/basemodel.py#L14-L237
 
-use anyhow::{Context, Result, bail};
+use std::path::Path;
+
+use anyhow::Result;
 use koharu_torch::{
-    Device, Kind, Tensor,
+    Device, Tensor,
     nn::{self, Module, ModuleT},
 };
+
+#[derive(Debug)]
+pub struct Output {
+    pub mask: Tensor,
+    pub line_maps: Tensor,
+}
 
 #[derive(Debug)]
 pub struct Model {
@@ -14,12 +25,6 @@ pub struct Model {
     yolo: YoloV5,
     unet: UnetHead,
     dbnet: DbHead,
-}
-
-#[derive(Debug)]
-pub struct Output {
-    pub mask: Tensor,
-    pub line_maps: Tensor,
 }
 
 impl Model {
@@ -52,14 +57,18 @@ impl Model {
         unet_path: impl AsRef<Path>,
         dbnet_path: impl AsRef<Path>,
     ) -> Result<()> {
-        load_safetensors_strict(&self.yolo_vs, yolo_path, "comic-text-detector YOLO")?;
-        load_safetensors_strict(&self.unet_vs, unet_path, "comic-text-detector U-Net")?;
-        load_safetensors_strict(&self.dbnet_vs, dbnet_path, "comic-text-detector DBNet")?;
+        crate::weights::load_safetensors(&self.yolo_vs, yolo_path, "comic-text-detector YOLO")?;
+        crate::weights::load_safetensors(&self.unet_vs, unet_path, "comic-text-detector U-Net")?;
+        crate::weights::load_safetensors(&self.dbnet_vs, dbnet_path, "comic-text-detector DBNet")?;
         Ok(())
     }
 
     pub fn forward(&self, input: &Tensor) -> Output {
-        let (_predictions, features) = self.yolo.forward(input);
+        // BallonsTranslator computes YOLO block predictions but discards them before
+        // grouping text lines. Keep their parameters checkpoint-compatible, while
+        // skipping the unused neck and detection head during inference.
+        // https://github.com/dmMaze/BallonsTranslator/blob/4bcc635c19f6c63a902872cf77b3d554e14ed1b7/ballontranslator/modules/textdetector/ctd/inference.py#L343-L348
+        let features = self.yolo.forward(input);
         let (mask, db_features) = self.unet.forward(
             &features[0],
             &features[1],
@@ -72,63 +81,6 @@ impl Model {
             .forward(&db_features[0], &db_features[1], &db_features[2]);
         Output { mask, line_maps }
     }
-}
-
-fn load_safetensors_strict(vs: &nn::VarStore, path: impl AsRef<Path>, label: &str) -> Result<()> {
-    let path = path.as_ref();
-    let mut variables = vs.variables();
-    let expected = variables.keys().cloned().collect::<HashSet<_>>();
-    let mut loaded = HashSet::new();
-    let mut unexpected = Vec::new();
-
-    for (name, tensor) in Tensor::read_safetensors(path)
-        .with_context(|| format!("failed to read {}", path.display()))?
-    {
-        if name.ends_with(".num_batches_tracked") {
-            continue;
-        }
-
-        let Some(variable) = variables.get_mut(&name) else {
-            unexpected.push(name);
-            continue;
-        };
-
-        if variable.size() != tensor.size() {
-            bail!(
-                "{label} tensor {name} has shape {:?}, expected {:?}",
-                tensor.size(),
-                variable.size()
-            );
-        }
-
-        let tensor = tensor.to_device(vs.device()).to_kind(variable.kind());
-        variable
-            .f_copy_(&tensor)
-            .with_context(|| format!("failed to copy {label} tensor {name}"))?;
-        loaded.insert(name);
-    }
-
-    let missing = expected
-        .difference(&loaded)
-        .cloned()
-        .collect::<Vec<String>>();
-    if !missing.is_empty() {
-        bail!(
-            "{label} checkpoint is missing tensors: {}",
-            missing.into_iter().take(20).collect::<Vec<_>>().join(", ")
-        );
-    }
-    if !unexpected.is_empty() {
-        bail!(
-            "{label} checkpoint has unexpected tensors: {}",
-            unexpected
-                .into_iter()
-                .take(20)
-                .collect::<Vec<_>>()
-                .join(", ")
-        );
-    }
-    Ok(())
 }
 
 #[derive(Debug, Clone, Copy)]
@@ -157,6 +109,7 @@ struct ConvBnAct {
 }
 
 impl ConvBnAct {
+    #[allow(clippy::too_many_arguments)]
     fn new(
         path: &nn::Path<'_>,
         in_channels: i64,
@@ -359,6 +312,7 @@ impl Sppf {
 }
 
 #[derive(Debug)]
+#[allow(dead_code)] // The unused detection tail is retained for strict checkpoint parity.
 struct YoloV5 {
     l0: ConvBnAct,
     l1: ConvBnAct,
@@ -543,7 +497,7 @@ impl YoloV5 {
         }
     }
 
-    fn forward(&self, input: &Tensor) -> (Tensor, [Tensor; 5]) {
+    fn forward(&self, input: &Tensor) -> [Tensor; 5] {
         let x0 = self.l0.forward(input);
         let x1 = self.l1.forward(&x0);
         let x2 = self.l2.forward(&x1);
@@ -554,36 +508,15 @@ impl YoloV5 {
         let x7 = self.l7.forward(&x6);
         let x8 = self.l8.forward(&x7);
         let x9 = self.l9.forward(&x8);
-
-        let x10 = self.l10.forward(&x9);
-        let x11 = upsample_nearest_like(&x10, &x6);
-        let x13 = self
-            .l13
-            .forward(&Tensor::cat(&[x11, x6.shallow_clone()], 1));
-        let x14 = self.l14.forward(&x13);
-        let x15 = upsample_nearest_like(&x14, &x4);
-        let x17 = self
-            .l17
-            .forward(&Tensor::cat(&[x15, x4.shallow_clone()], 1));
-        let x18 = self.l18.forward(&x17);
-        let x20 = self
-            .l20
-            .forward(&Tensor::cat(&[x18, x14.shallow_clone()], 1));
-        let x21 = self.l21.forward(&x20);
-        let x23 = self.l23.forward(&Tensor::cat(&[x21, x10], 1));
-
-        let predictions = self.head.forward([&x17, &x20, &x23]);
-        (predictions, [x1, x3, x5, x7, x9])
+        [x1, x3, x5, x7, x9]
     }
 }
 
 #[derive(Debug)]
+#[allow(dead_code)] // Parameters are loaded for exact YOLO checkpoint compatibility.
 struct YoloHead {
     convs: [nn::Conv2D; 3],
     anchors: Tensor,
-    strides: [f64; 3],
-    num_anchors: i64,
-    num_outputs: i64,
 }
 
 impl YoloHead {
@@ -598,64 +531,7 @@ impl YoloHead {
             nn::conv2d(path / "m" / 2, 512, 21, 1, conv_config),
         ];
         let anchors = path.zeros_no_train("anchors", &[3, 3, 2]);
-        Self {
-            convs,
-            anchors,
-            strides: [8.0, 16.0, 32.0],
-            num_anchors: 3,
-            num_outputs: 7,
-        }
-    }
-
-    fn forward(&self, inputs: [&Tensor; 3]) -> Tensor {
-        let mut outputs = Vec::with_capacity(3);
-        for (idx, (conv, input)) in self.convs.iter().zip(inputs).enumerate() {
-            let x = conv.forward(input);
-            let size = x.size();
-            let batch = size[0];
-            let height = size[2];
-            let width = size[3];
-            let x = x
-                .view([batch, self.num_anchors, self.num_outputs, height, width])
-                .permute([0, 1, 3, 4, 2])
-                .contiguous();
-            let y = x.sigmoid();
-            let (grid, anchor_grid) = self.make_grid(idx as i64, width, height, y.device());
-            let xy = ((y.slice(4, 0, 2, 1) * 2.0 - 0.5 + grid) * self.strides[idx]).contiguous();
-            let wh =
-                ((y.slice(4, 2, 4, 1) * 2.0).pow_tensor_scalar(2.0) * anchor_grid).contiguous();
-            let rest = y.slice(4, 4, self.num_outputs, 1);
-            outputs.push(Tensor::cat(&[xy, wh, rest], 4).view([
-                batch,
-                self.num_anchors * height * width,
-                self.num_outputs,
-            ]));
-        }
-        Tensor::cat(&outputs, 1)
-    }
-
-    fn make_grid(
-        &self,
-        layer_idx: i64,
-        width: i64,
-        height: i64,
-        device: Device,
-    ) -> (Tensor, Tensor) {
-        let x = Tensor::arange(width, (Kind::Float, device))
-            .view([1, 1, 1, width])
-            .repeat([1, 1, height, 1]);
-        let y = Tensor::arange(height, (Kind::Float, device))
-            .view([1, 1, height, 1])
-            .repeat([1, 1, 1, width]);
-        let grid = Tensor::stack(&[x, y], 4).expand([1, self.num_anchors, height, width, 2], true);
-        let anchor_grid = self
-            .anchors
-            .to_device(device)
-            .select(0, layer_idx)
-            .view([1, self.num_anchors, 1, 1, 2])
-            .expand([1, self.num_anchors, height, width, 2], true)
-            * self.strides[layer_idx as usize];
-        (grid, anchor_grid)
+        Self { convs, anchors }
     }
 }
 
@@ -936,6 +812,7 @@ fn conv2d(
     )
 }
 
+#[allow(clippy::too_many_arguments)]
 fn conv_transpose2d(
     path: &nn::Path<'_>,
     in_channels: i64,
@@ -970,9 +847,4 @@ fn batch_norm2d(path: &nn::Path<'_>, channels: i64, eps: f64) -> nn::BatchNorm {
             ..Default::default()
         },
     )
-}
-
-fn upsample_nearest_like(input: &Tensor, target: &Tensor) -> Tensor {
-    let size = target.size();
-    input.upsample_nearest2d([size[2], size[3]], None::<f64>, None::<f64>)
 }

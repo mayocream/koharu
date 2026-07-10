@@ -1,12 +1,24 @@
-use std::{collections::HashSet, path::Path};
+//! Inference-only port of Transformers' RT-DETR-v2 object detector.
+//!
+//! Original implementations:
+//! - https://github.com/huggingface/transformers/blob/394b1a0eaa8e6199e372334da0aff3753a117fdb/src/transformers/models/rt_detr_v2/modeling_rt_detr_v2.py
+//! - https://github.com/huggingface/transformers/blob/394b1a0eaa8e6199e372334da0aff3753a117fdb/src/transformers/models/rt_detr/modeling_rt_detr_resnet.py
 
-use anyhow::{Result, bail};
+use std::path::Path;
+
+use anyhow::Result;
 use koharu_torch::{
     Device, IndexOp, Kind, Tensor,
     nn::{self, Module},
 };
 
 use super::config::{ComicTextBubbleDetectorConfig, RtDetrResNetConfig};
+
+#[derive(Debug)]
+pub struct Output {
+    pub logits: Tensor,
+    pub pred_boxes: Tensor,
+}
 
 #[derive(Debug)]
 pub struct Model {
@@ -22,51 +34,8 @@ impl Model {
         Self { vs, model }
     }
 
-    pub fn load_safetensors(&mut self, path: impl AsRef<Path>) -> Result<()> {
-        let mut variables = self.vs.variables();
-        let mut loaded = HashSet::new();
-        let mut unexpected = Vec::new();
-
-        for (name, tensor) in Tensor::read_safetensors(path)? {
-            if name.ends_with(".num_batches_tracked") {
-                continue;
-            }
-            if let Some(variable) = variables.get_mut(&name) {
-                variable.f_copy_(&tensor.to_device(self.vs.device()))?;
-                loaded.insert(name);
-            } else {
-                unexpected.push(name);
-            }
-        }
-
-        let missing = variables
-            .keys()
-            .filter(|name| !loaded.contains(*name))
-            .cloned()
-            .collect::<Vec<_>>();
-        if !missing.is_empty() {
-            bail!(
-                "missing comic text/bubble detector weights: {}",
-                missing
-                    .iter()
-                    .take(20)
-                    .cloned()
-                    .collect::<Vec<_>>()
-                    .join(", ")
-            );
-        }
-        if !unexpected.is_empty() {
-            bail!(
-                "unexpected comic text/bubble detector weights: {}",
-                unexpected
-                    .iter()
-                    .take(20)
-                    .cloned()
-                    .collect::<Vec<_>>()
-                    .join(", ")
-            );
-        }
-        Ok(())
+    pub fn load_safetensors(&self, path: impl AsRef<Path>) -> Result<()> {
+        crate::weights::load_safetensors(&self.vs, path, "comic text/bubble detector")
     }
 
     pub fn forward(&self, pixel_values: &Tensor) -> Output {
@@ -75,14 +44,9 @@ impl Model {
 }
 
 #[derive(Debug)]
-pub struct Output {
-    pub logits: Tensor,
-    pub pred_boxes: Tensor,
-}
-
-#[derive(Debug)]
 struct RtDetrV2Model {
     config: ComicTextBubbleDetectorConfig,
+    anchor_cache: Option<AnchorCache>,
     backbone: RtDetrV2ConvEncoder,
     encoder_input_proj: Vec<ConvBnSeq>,
     encoder: RtDetrV2HybridEncoder,
@@ -91,13 +55,28 @@ struct RtDetrV2Model {
     weight_embedding: Option<nn::Embedding>,
     enc_output: LinearNormSeq,
     enc_score_head: nn::Linear,
-    enc_bbox_head: PredictionMlp,
+    enc_bbox_head: RtDetrV2MLPPredictionHead,
     decoder_input_proj: Vec<ConvBnSeq>,
     decoder: RtDetrV2Decoder,
 }
 
 impl RtDetrV2Model {
     fn new(path: &nn::Path<'_>, config: &ComicTextBubbleDetectorConfig) -> Self {
+        let anchor_cache = config
+            .anchor_image_size
+            .as_deref()
+            .and_then(|image_size| {
+                fixed_spatial_shapes(image_size, &config.feat_strides, config.num_feature_levels)
+            })
+            .map(|spatial_shapes| {
+                let (anchors, valid_mask) =
+                    generate_anchors(&spatial_shapes, path.device(), path.kind());
+                AnchorCache {
+                    spatial_shapes,
+                    anchors,
+                    valid_mask,
+                }
+            });
         let backbone = RtDetrV2ConvEncoder::new(&(path / "backbone"), config);
         let intermediate_channel_sizes = backbone.intermediate_channel_sizes();
 
@@ -147,7 +126,7 @@ impl RtDetrV2Model {
             config.num_labels(),
             Default::default(),
         );
-        let enc_bbox_head = PredictionMlp::new(
+        let enc_bbox_head = RtDetrV2MLPPredictionHead::new(
             &(path / "enc_bbox_head"),
             config.d_model,
             config.d_model,
@@ -188,6 +167,7 @@ impl RtDetrV2Model {
 
         Self {
             config: config.clone(),
+            anchor_cache,
             backbone,
             encoder_input_proj,
             encoder,
@@ -210,11 +190,17 @@ impl RtDetrV2Model {
             .collect::<Vec<_>>();
         let encoder_outputs = self.encoder.forward(proj_feats);
 
-        let sources = encoder_outputs
-            .iter()
-            .enumerate()
-            .map(|(level, source)| self.decoder_input_proj[level].forward(source))
-            .collect::<Vec<_>>();
+        let mut sources = Vec::with_capacity(self.config.num_feature_levels);
+        for (level, source) in encoder_outputs.iter().enumerate() {
+            sources.push(self.decoder_input_proj[level].forward(source));
+        }
+        if self.config.num_feature_levels > sources.len() {
+            let base_len = sources.len();
+            let last_encoder_output = encoder_outputs.last().expect("encoder output");
+            for level in base_len..self.config.num_feature_levels {
+                sources.push(self.decoder_input_proj[level].forward(last_encoder_output));
+            }
+        }
 
         let mut source_flatten = Vec::with_capacity(sources.len());
         let mut spatial_shapes = Vec::with_capacity(sources.len());
@@ -227,21 +213,35 @@ impl RtDetrV2Model {
         }
         let source_flatten = Tensor::cat(&source_flatten, 1);
 
-        let (anchors, valid_mask) = generate_anchors(
-            &spatial_shapes,
-            source_flatten.device(),
-            source_flatten.kind(),
-        );
+        // Transformers caches these tensors when `anchor_image_size` is fixed.
+        // https://github.com/huggingface/transformers/blob/394b1a0eaa8e6199e372334da0aff3753a117fdb/src/transformers/models/rt_detr_v2/modeling_rt_detr_v2.py#L1392-L1420
+        let (anchors, valid_mask) = self
+            .anchor_cache
+            .as_ref()
+            .filter(|cache| cache.spatial_shapes == spatial_shapes)
+            .map(|cache| {
+                (
+                    cache.anchors.shallow_clone(),
+                    cache.valid_mask.shallow_clone(),
+                )
+            })
+            .unwrap_or_else(|| {
+                generate_anchors(
+                    &spatial_shapes,
+                    source_flatten.device(),
+                    source_flatten.kind(),
+                )
+            });
         let memory = valid_mask.to_kind(source_flatten.kind()) * &source_flatten;
         let output_memory = self.enc_output.forward(&memory);
         let enc_outputs_class = self.enc_score_head.forward(&output_memory);
         let enc_outputs_coord_logits = self.enc_bbox_head.forward(&output_memory) + anchors;
 
-        let topk_ind = enc_outputs_class
-            .max_dim(-1, false)
-            .0
-            .topk(self.config.num_queries, 1, true, true)
-            .1;
+        let (_, topk_ind) =
+            enc_outputs_class
+                .max_dim(-1, false)
+                .0
+                .topk(self.config.num_queries, 1, true, true);
 
         let reference_points_unact = enc_outputs_coord_logits.gather(
             1,
@@ -278,6 +278,13 @@ impl RtDetrV2Model {
             pred_boxes: decoder_outputs.intermediate_reference_points.select(1, -1),
         }
     }
+}
+
+#[derive(Debug)]
+struct AnchorCache {
+    spatial_shapes: Vec<(i64, i64)>,
+    anchors: Tensor,
+    valid_mask: Tensor,
 }
 
 #[derive(Debug)]
@@ -328,13 +335,13 @@ impl RtDetrResNetBackbone {
         stage_names
             .iter()
             .enumerate()
-            .filter_map(|(idx, stage)| {
+            .filter(|(_, stage)| {
                 self.config
                     .out_features
                     .iter()
-                    .any(|feature| feature == stage)
-                    .then(|| hidden_states[idx].shallow_clone())
+                    .any(|feature| feature == *stage)
             })
+            .map(|(idx, _)| hidden_states[idx].shallow_clone())
             .collect()
     }
 }
@@ -708,6 +715,9 @@ impl RtDetrV2HybridEncoder {
             }
         }
 
+        // Preserve Transformers' AIFI -> top-down FPN -> bottom-up PAN ordering;
+        // changing the traversal changes which resolution is fused at each stage.
+        // https://github.com/huggingface/transformers/blob/394b1a0eaa8e6199e372334da0aff3753a117fdb/src/transformers/models/rt_detr_v2/modeling_rt_detr_v2.py#L1112-L1145
         let mut fpn_feature_maps = vec![feature_maps.last().expect("feature map").shallow_clone()];
         for idx in 0..self.lateral_convs.len() {
             let backbone_feature_map =
@@ -852,8 +862,8 @@ struct RtDetrV2DecoderOutput {
 #[derive(Debug)]
 struct RtDetrV2Decoder {
     layers: Vec<RtDetrV2DecoderLayer>,
-    query_pos_head: PredictionMlp,
-    bbox_embed: Vec<PredictionMlp>,
+    query_pos_head: RtDetrV2MLPPredictionHead,
+    bbox_embed: Vec<RtDetrV2MLPPredictionHead>,
     class_embed: Vec<nn::Linear>,
 }
 
@@ -863,7 +873,7 @@ impl RtDetrV2Decoder {
             layers: (0..config.decoder_layers)
                 .map(|idx| RtDetrV2DecoderLayer::new(&(path / "layers" / idx), config))
                 .collect(),
-            query_pos_head: PredictionMlp::new(
+            query_pos_head: RtDetrV2MLPPredictionHead::new(
                 &(path / "query_pos_head"),
                 4,
                 2 * config.d_model,
@@ -872,7 +882,7 @@ impl RtDetrV2Decoder {
             ),
             bbox_embed: (0..config.decoder_layers)
                 .map(|idx| {
-                    PredictionMlp::new(
+                    RtDetrV2MLPPredictionHead::new(
                         &(path / "bbox_embed" / idx),
                         config.d_model,
                         config.d_model,
@@ -897,8 +907,8 @@ impl RtDetrV2Decoder {
     fn forward(&self, args: DecoderForwardArgs<'_>) -> RtDetrV2DecoderOutput {
         let mut hidden_states = args.inputs_embeds.shallow_clone();
         let mut reference_points = args.reference_points.sigmoid();
-        let mut intermediate_logits = Vec::new();
-        let mut intermediate_reference_points = Vec::new();
+        let mut intermediate_logits = Vec::with_capacity(self.layers.len());
+        let mut intermediate_reference_points = Vec::with_capacity(self.layers.len());
 
         for (idx, decoder_layer) in self.layers.iter().enumerate() {
             let reference_points_input = reference_points.unsqueeze(2);
@@ -911,6 +921,9 @@ impl RtDetrV2Decoder {
                 encoder_hidden_states: args.encoder_hidden_states,
             });
 
+            // Iterative box refinement intentionally detaches only the reference
+            // used by the next decoder layer, matching Transformers inference.
+            // https://github.com/huggingface/transformers/blob/394b1a0eaa8e6199e372334da0aff3753a117fdb/src/transformers/models/rt_detr_v2/modeling_rt_detr_v2.py#L626-L636
             let predicted_corners = self.bbox_embed[idx].forward(&hidden_states);
             let new_reference_points =
                 (predicted_corners + inverse_sigmoid(&reference_points)).sigmoid();
@@ -1267,11 +1280,11 @@ impl RtDetrV2MLP {
 }
 
 #[derive(Debug)]
-struct PredictionMlp {
+struct RtDetrV2MLPPredictionHead {
     layers: Vec<nn::Linear>,
 }
 
-impl PredictionMlp {
+impl RtDetrV2MLPPredictionHead {
     fn new(
         path: &nn::Path<'_>,
         input_dim: i64,
@@ -1652,6 +1665,27 @@ fn generate_anchors(spatial_shapes: &[(i64, i64)], device: Device, kind: Kind) -
     let max = Tensor::full([1, total, 4], 1.0e20, (kind, device));
     let anchors = logit.where_self(&valid_mask.expand([1, total, 4], true), &max);
     (anchors, valid_mask)
+}
+
+fn fixed_spatial_shapes(
+    image_size: &[i64],
+    feature_strides: &[i64],
+    num_feature_levels: usize,
+) -> Option<Vec<(i64, i64)>> {
+    let [height, width] = image_size else {
+        return None;
+    };
+    let mut stride = *feature_strides.last()?;
+    let mut spatial_shapes = Vec::with_capacity(num_feature_levels);
+    for level in 0..num_feature_levels {
+        if let Some(&configured_stride) = feature_strides.get(level) {
+            stride = configured_stride;
+        } else {
+            stride *= 2;
+        }
+        spatial_shapes.push((height / stride, width / stride));
+    }
+    Some(spatial_shapes)
 }
 
 fn inverse_sigmoid(x: &Tensor) -> Tensor {

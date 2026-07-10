@@ -1,3 +1,9 @@
+//! Transformers RT-DETR processing plus comic-translate's tall-image slicing.
+//!
+//! Original implementations:
+//! - https://github.com/huggingface/transformers/blob/394b1a0eaa8e6199e372334da0aff3753a117fdb/src/transformers/models/rt_detr/image_processing_rt_detr.py
+//! - https://github.com/ogkalu2/comic-translate/blob/ca3261fd1a8d4805f6b9cc0669847d463ccb8a41/modules/detection/utils/slicer.py
+
 use anyhow::{Context, Result, bail};
 use image::{DynamicImage, GenericImageView, Rgba, RgbaImage, imageops::FilterType};
 use imageproc::{drawing::draw_hollow_rect_mut, rect::Rect};
@@ -137,13 +143,12 @@ impl ComicTextBubbleProcessor {
         );
 
         let mut results = Vec::with_capacity(batch_size);
-        for batch in 0..batch_size {
+        for (batch, &(target_height, target_width)) in target_sizes.iter().enumerate() {
             let scores = tensor_to_vec_f32(&scores.i(batch as i64))?;
             let labels = tensor_to_vec_i64(&labels.i(batch as i64))?;
             let boxes = tensor_to_vec_f32(&boxes.i(batch as i64).contiguous().view([-1]))?;
 
             let mut regions = Vec::new();
-            let (target_height, target_width) = target_sizes[batch];
             for query in 0..scores.len() {
                 let score = scores[query];
                 if score <= threshold {
@@ -188,6 +193,9 @@ impl ComicTextBubbleProcessor {
     where
         F: FnMut(&DynamicImage) -> Result<ComicTextBubbleDetection>,
     {
+        // comic-translate slices only extreme vertical pages, offsets detections
+        // back to page space, then merges overlap duplicates per class.
+        // https://github.com/ogkalu2/comic-translate/blob/ca3261fd1a8d4805f6b9cc0669847d463ccb8a41/modules/detection/utils/slicer.py#L296-L393
         let (width, height) = image.dimensions();
         if width == 0 || height == 0 || height as f32 / width as f32 <= self.slice_ratio_threshold {
             return detect_one(image);

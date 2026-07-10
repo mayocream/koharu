@@ -1,3 +1,9 @@
+//! BallonsTranslator-compatible preprocessing, rearranged inference, and DBNet decoding.
+//!
+//! Original implementations:
+//! - https://github.com/dmMaze/BallonsTranslator/blob/4bcc635c19f6c63a902872cf77b3d554e14ed1b7/ballontranslator/modules/textdetector/ctd/inference.py
+//! - https://github.com/dmMaze/BallonsTranslator/blob/4bcc635c19f6c63a902872cf77b3d554e14ed1b7/ballontranslator/modules/textdetector/db_utils.py
+
 use std::collections::VecDeque;
 
 use anyhow::{Context, Result, bail};
@@ -146,6 +152,9 @@ pub fn rearranged_inference<F>(
 where
     F: Fn(&Tensor) -> Output,
 {
+    // This is the GPU-native equivalent of `det_rearrange_forward`: extreme
+    // aspect ratios are packed into square composites and averaged on restore.
+    // https://github.com/dmMaze/BallonsTranslator/blob/4bcc635c19f6c63a902872cf77b3d554e14ed1b7/ballontranslator/modules/textdetector/ctd/inference.py#L23-L147
     let (source_width, source_height) = source.dimensions();
     if source_width == 0 || source_height == 0 {
         bail!("empty image");

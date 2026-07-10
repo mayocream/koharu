@@ -1,3 +1,8 @@
+//! Transformers-compatible PP-DocLayout-v3 image processing and output decoding.
+//!
+//! Original implementation:
+//! https://github.com/huggingface/transformers/blob/394b1a0eaa8e6199e372334da0aff3753a117fdb/src/transformers/models/pp_doclayout_v3/image_processing_pp_doclayout_v3.py
+
 use std::cmp::Ordering;
 
 use anyhow::{Context, Result, bail};
@@ -126,7 +131,7 @@ impl PPDocLayoutV3Processor {
 
         let mut results = Vec::with_capacity(batch_size);
         let mask_area = mask_height * mask_width;
-        for batch in 0..batch_size {
+        for (batch, &(target_height, target_width)) in target_sizes.iter().enumerate() {
             let scores = tensor_to_vec_f32(&scores.i(batch as i64))?;
             let labels = tensor_to_vec_i64(&labels.i(batch as i64))?;
             let boxes = tensor_to_vec_f32(&boxes.i(batch as i64).contiguous().view([-1]))?;
@@ -177,7 +182,6 @@ impl PPDocLayoutV3Processor {
                 )?
             };
 
-            let (target_height, target_width) = target_sizes[batch];
             let mut regions = Vec::with_capacity(candidates.len());
             for (idx, candidate) in candidates.into_iter().enumerate() {
                 let label = self

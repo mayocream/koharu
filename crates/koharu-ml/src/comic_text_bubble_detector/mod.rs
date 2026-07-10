@@ -43,13 +43,17 @@ impl ComicTextBubbleDetector {
             .await
             .context("failed to resolve comic text/bubble detector weights")?;
 
-        let config = ComicTextBubbleDetectorConfig::from_file(&config_path)
+        let mut config = ComicTextBubbleDetectorConfig::from_file(&config_path)
             .context("failed to parse comic text/bubble detector config")?;
         let processor = ComicTextBubbleProcessor::from_file(&processor_path)
             .context("failed to parse comic text/bubble detector preprocessor config")?
             .with_labels(config.labels());
 
-        let mut model = Model::new(config, device);
+        // The processor always produces this resolution, so the model can reuse the
+        // fixed RT-DETR anchors instead of rebuilding and uploading them per slice.
+        config.anchor_image_size = Some(vec![processor.size.height, processor.size.width]);
+
+        let model = Model::new(config, device);
         model
             .load_safetensors(&weights_path)
             .context("failed to load comic text/bubble detector safetensors")?;

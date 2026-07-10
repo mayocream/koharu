@@ -41,7 +41,7 @@ impl PPDocLayoutV3 {
             .context("failed to resolve PP-DocLayout-V3 weights")?;
         let processor_path = huggingface::resolve(PROCESSOR).await;
 
-        let config = PPDocLayoutV3Config::from_file(&config_path)
+        let mut config = PPDocLayoutV3Config::from_file(&config_path)
             .with_context(|| format!("failed to read {}", config_path.display()))?;
         let labels = config.labels();
         let processor = match processor_path {
@@ -51,7 +51,11 @@ impl PPDocLayoutV3 {
             Err(_) => PPDocLayoutV3Processor::default().with_labels(labels),
         };
 
-        let mut model = Model::new(config, device);
+        // The processor always produces this resolution, so the model can reuse the
+        // fixed RT-DETR anchors instead of rebuilding and uploading them per page.
+        config.anchor_image_size = Some(vec![processor.size.height, processor.size.width]);
+
+        let model = Model::new(config, device);
         model
             .load_safetensors(&weights_path)
             .with_context(|| format!("failed to load {}", weights_path.display()))?;

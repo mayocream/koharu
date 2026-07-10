@@ -1,3 +1,8 @@
+//! LaMa inference and IOPaint-compatible high-resolution crop orchestration.
+//!
+//! Original crop strategy:
+//! https://github.com/Sanster/IOPaint/blob/61a759fb3f332bacdce8b2813f4837495c9b86e0/iopaint/model/base.py#L57-L180
+
 mod model;
 
 use anyhow::{Context, Result};
@@ -24,7 +29,7 @@ impl LaMa {
         let weights_path = huggingface::resolve(WEIGHTS)
             .await
             .context("failed to resolve LaMa weights")?;
-        let mut model = Model::new(device);
+        let model = Model::new(device);
         model
             .load_safetensors(&weights_path)
             .context("failed to load LaMa safetensors")?;
@@ -256,7 +261,7 @@ fn symmetric_pad(tensor: Tensor, width: u32, height: u32) -> Tensor {
 }
 
 fn ceil_modulo(value: u32, modulo: u32) -> u32 {
-    if value % modulo == 0 {
+    if value.is_multiple_of(modulo) {
         value
     } else {
         (value / modulo + 1) * modulo

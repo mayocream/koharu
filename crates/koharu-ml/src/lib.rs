@@ -10,6 +10,7 @@ use koharu_runtime::{
 use tokio::sync::OnceCell;
 
 mod device;
+mod weights;
 
 pub mod comic_text_bubble_detector;
 pub mod comic_text_detector;
