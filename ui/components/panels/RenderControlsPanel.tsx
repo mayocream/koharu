@@ -288,7 +288,7 @@ export function RenderControlsPanel() {
     const current = n.data.style
     const nextStyle: TextStyle = {
       fontFamilies: updates.fontFamilies ?? current?.fontFamilies ?? [],
-      fontSize: updates.fontSize ?? current?.fontSize ?? null,
+      fontSize: updates.fontSize !== undefined ? updates.fontSize : (current?.fontSize ?? null),
       color: updates.color ?? effectiveColorOf(current, n.data.fontPrediction),
       effect: updates.effect ?? current?.effect ?? null,
       stroke: updates.stroke ?? current?.stroke ?? null,
@@ -585,6 +585,9 @@ export function RenderControlsPanel() {
             value={currentFontSize !== undefined ? Math.round(currentFontSize) : ''}
             placeholder='auto'
             onChange={(event) => {
+              if (event.target.value === '') {
+                applyStyleToSelected({ fontSize: null })
+              }
               const parsed = Number.parseInt(event.target.value, 10)
               if (!Number.isFinite(parsed) || parsed < 1) return
               applyStyleToSelected({ fontSize: Math.min(300, parsed) })
