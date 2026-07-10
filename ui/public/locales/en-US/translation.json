@@ -24,6 +24,7 @@
     "undo": "Undo",
     "redo": "Redo",
     "selectAll": "Select All",
+    "clearSelect": "Clear Selection",
     "exportGroup": "Export",
     "export": "Export...",
     "exportPsd": "Export PSD...",
@@ -277,7 +278,8 @@
   },
   "workspace": {
     "importPrompt": "Import a page to begin editing.",
-    "deleteBlock": "Delete block"
+    "deleteBlock": "Delete block",
+    "deleteSelected": "Delete selected"
   },
   "statusBar": {
     "zoom": "Zoom",

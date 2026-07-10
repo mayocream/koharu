@@ -6,7 +6,6 @@ mod llama;
 mod loader;
 pub mod packages;
 mod runtime;
-mod secrets;
 mod zluda;
 
 pub use cuda::{
@@ -21,5 +20,4 @@ pub use runtime::{
     ComputePolicy, Runtime, RuntimeHttpClient, RuntimeHttpConfig, RuntimeManager,
     default_app_data_root,
 };
-pub use secrets::{SecretStore, delete_secret, get_secret, set_secret};
 pub use zluda::zluda_active;

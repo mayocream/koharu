@@ -24,6 +24,7 @@ koharu-ml = { workspace = true }
 koharu-renderer = { workspace = true }
 koharu-llm = { workspace = true }
 koharu-runtime = { workspace = true }
+koharu-secrets = { workspace = true }
 anyhow = { workspace = true }
 arc-swap = { workspace = true }
 async-trait = { workspace = true }

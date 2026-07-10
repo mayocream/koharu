@@ -3,7 +3,7 @@
 <p align="center">ML-powered manga translator, written in <b>Rust</b>.</p>
 
 <p align="center">
-<img alt="GitHub Downloads (all assets, all releases)" src="https://img.shields.io/github/downloads/mayocream/koharu/total?style=for-the-badge&link=https%3A%2F%2Fgithub.com%2Fmayocream%2Fkoharu%2Freleases%2Flatest">
+<a href="https://github.com/mayocream/koharu/releases/latest" target="_blank"><img alt="GitHub Downloads (all assets, all releases)" src="https://img.shields.io/github/downloads/mayocream/koharu/total?style=for-the-badge&link=https%3A%2F%2Fgithub.com%2Fmayocream%2Fkoharu%2Freleases%2Flatest"></a>
 </p>
 
 <p align="center">
@@ -39,7 +39,6 @@ Under the hood, Koharu uses [candle](https://github.com/huggingface/candle) and 
 - Inpainting to remove source lettering from the page
 - Translation with local or remote LLM backends
 - Advanced text rendering with vertical CJK and RTL support
-- Codex image-to-image generation for end-to-end page redraws from a source image and prompt
 - Layered PSD export with editable text
 - Local HTTP API and MCP server for automation
 
@@ -117,7 +116,9 @@ Those values are loaded at startup, so changing them saves the config and restar
 
 Koharu includes built-in Google Fonts support for translated text rendering, so you can use web fonts without managing font files by hand.
 
-Google Fonts are fetched on demand from a bundled catalog. Koharu caches downloaded files under the app data directory and reuses them for later renders, so you usually only need an internet connection the first time a family is used on that machine. Once cached, a Google Font behaves like any other local render font.
+### BYO Fonts
+
+You can also bring your own fonts for translation rendering. Koharu supports OpenType and TrueType fonts, including variable fonts. To make a font available for rendering, install it on your system before starting Koharu. The app will scan the system font directories and make them available in the font selection dropdown.
 
 ### Text Rendering
 
@@ -129,7 +130,7 @@ It supports vertical CJK layout, right-to-left scripts, font fallback, vertical 
 
 Koharu supports CUDA, experimental ZLUDA, Metal, and Vulkan. CPU fallback is always available when the accelerated path is unavailable or not worth the setup cost on your system.
 
-### CUDA (NVIDIA GPUs on Windows and Linux)
+### CUDA
 
 On Windows and Linux, Koharu ships with CUDA support so it can use NVIDIA GPUs for the full local pipeline.
 
@@ -144,18 +145,18 @@ Koharu supports NVIDIA GPUs with compute capability 8.0 or higher.
 
 For GPU compatibility references, see [CUDA GPU Compute Capability](https://developer.nvidia.com/cuda-gpus).
 
-### ZLUDA (AMD GPUs on Windows, experimental)
+### ZLUDA (experimental)
 
 Koharu supports experimental ZLUDA acceleration on Windows for AMD GPUs.
 ZLUDA is a CUDA compatibility layer that lets some CUDA workloads run on AMD GPUs.
 
 To use it, install the [AMD HIP SDK](https://www.amd.com/en/developer/resources/rocm-hub/hip-sdk.html).
 
-### Metal (Apple Silicon on macOS)
+### Metal
 
 Koharu supports Metal on Apple Silicon Macs. No extra runtime setup is required beyond a normal app install.
 
-### Vulkan (Windows and Linux)
+### Vulkan
 
 Koharu also supports Vulkan on Windows and Linux. This backend is currently used primarily for OCR and local LLM inference.
 

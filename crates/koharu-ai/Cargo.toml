@@ -22,6 +22,7 @@ base64 = { workspace = true }
 clap = { workspace = true }
 eventsource-stream = { workspace = true }
 futures = { workspace = true }
+koharu-secrets = { workspace = true }
 koharu-runtime = { workspace = true }
 reqwest = { workspace = true }
 reqwest-middleware = { workspace = true, features = ["form", "json"] }

@@ -1,4 +1,4 @@
-use koharu_runtime::SecretStore;
+use koharu_secrets::SecretStore;
 
 use super::error::{CodexError, Result};
 use super::tokens::CodexTokens;

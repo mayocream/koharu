@@ -34,7 +34,7 @@ jobs:
             libssl-dev \
             libayatana-appindicator3-dev \
             librsvg2-dev
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@v7
       - uses: oven-sh/setup-bun@v2
       - uses: Swatinem/rust-cache@v2
       - uses: Jimver/cuda-toolkit@master
@@ -51,12 +51,12 @@ jobs:
           log-file-suffix: '${{ matrix.os }}.txt'
       - uses: ilammy/msvc-dev-cmd@v1
         if: startsWith(matrix.os, 'windows')
-      - uses: actions/cache@v5
+      - uses: actions/cache@v6
         with:
           path: ~/.bun/install/cache
           key: ${{ runner.os }}-bun-${{ hashFiles('**/bun.lock') }}
       - run: bun install
-      - uses: actions/cache@v5
+      - uses: actions/cache@v6
         with:
           path: ${{ github.workspace }}/ui/.next/cache
           key: ${{ runner.os }}-nextjs-${{ hashFiles('**/bun.lock') }}-${{ hashFiles('ui/**/*.js', 'ui/**/*.jsx', 'ui/**/*.ts', 'ui/**/*.tsx') }}
@@ -64,7 +64,7 @@ jobs:
             ${{ runner.os }}-nextjs-${{ hashFiles('**/bun.lock') }}-
       - run: bun tauri build --no-bundle
       - name: Upload Artifact
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: koharu-${{ matrix.os }}
           path: |

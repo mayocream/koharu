@@ -1,8 +1,7 @@
 'use client'
 
 import { useDrag } from '@use-gesture/react'
-import { useEffect, useMemo, useRef } from 'react'
-import { useHotkeys } from 'react-hotkeys-hook'
+import { useEffect, useRef } from 'react'
 
 import { useBlobImage } from '@/hooks/useBlobData'
 import { useCurrentPage, useTextNodes, type TextNodeEntry } from '@/hooks/useCurrentPage'
@@ -28,47 +27,8 @@ export function TextBlockLayer({ showSprites, scale, style }: TextBlockLayerProp
   const page = useCurrentPage()
   const selectedIds = useSelectionStore((s) => s.nodeIds)
   const select = useSelectionStore((s) => s.select)
-  const clearSelection = useSelectionStore((s) => s.clear)
   const mode = useEditorUiStore((s) => s.mode)
   const interactive = mode === 'select' || mode === 'block'
-
-  const hasSelection = useMemo(() => {
-    for (const id of selectedIds) if (id) return true
-    return false
-  }, [selectedIds])
-
-  const removeSelected = async () => {
-    if (!page) return
-    const ids = Array.from(selectedIds).filter((id): id is string => !!id)
-    if (ids.length === 0) return
-
-    const removeOps = ids
-      .map((id) => {
-        const node = page.nodes[id]
-        if (!node) return null
-        const idx = Object.keys(page.nodes).indexOf(id)
-        return ops.removeNode(page.id, id, node, idx < 0 ? 0 : idx)
-      })
-      .filter((op): op is import('@/lib/api/schemas').Op => op !== null)
-
-    if (removeOps.length === 0) return
-
-    if (removeOps.length === 1) {
-      await applyOp(removeOps[0])
-    } else {
-      await applyOp(ops.batch('Delete blocks', removeOps))
-    }
-
-    clearSelection()
-
-    const hasTextKind = ids.some((id) => {
-      const node = page.nodes[id]
-      return node && 'text' in node.kind
-    })
-    if (hasTextKind) {
-      queueAutoRender(page.id)
-    }
-  }
 
   const updateTransform = async (id: string, t: Transform) => {
     if (!page) return
@@ -80,15 +40,6 @@ export function TextBlockLayer({ showSprites, scale, style }: TextBlockLayerProp
     await applyOp(ops.updateNode(page.id, id, { transform: t, data }))
     queueAutoRender(page.id)
   }
-
-  useHotkeys(
-    'delete',
-    () => {
-      if (hasSelection && interactive) void removeSelected()
-    },
-    { enabled: hasSelection && interactive },
-    [selectedIds, interactive],
-  )
 
   return (
     <div
@@ -275,16 +226,14 @@ function TextBlockItem({
       }}
     >
       <div
-        className={`absolute inset-0 rounded-md ${
-          selected
-            ? 'border-[3px] border-primary bg-primary/15'
-            : 'border-2 border-rose-400/60 bg-rose-400/5'
-        }`}
+        className={`absolute inset-0 rounded-md ${selected
+          ? 'border-[3px] border-primary bg-primary/15'
+          : 'border-2 border-rose-400/60 bg-rose-400/5'
+          }`}
       />
       <div
-        className={`pointer-events-none absolute -top-1.5 -left-1.5 flex h-4 w-4 items-center justify-center rounded-full text-[9px] font-semibold text-white shadow ${
-          selected ? 'bg-primary' : 'bg-rose-400'
-        }`}
+        className={`pointer-events-none absolute -top-1.5 -left-1.5 flex h-4 w-4 items-center justify-center rounded-full text-[9px] font-semibold text-white shadow ${selected ? 'bg-primary' : 'bg-rose-400'
+          }`}
       >
         {index + 1}
       </div>

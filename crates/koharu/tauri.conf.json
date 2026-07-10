@@ -1,11 +1,11 @@
 {
-  "$schema": "../node_modules/@tauri-apps/cli/config.schema.json",
+  "$schema": "../../node_modules/@tauri-apps/cli/config.schema.json",
   "identifier": "Koharu",
   "build": {
     "beforeDevCommand": "bun --cwd ui dev",
     "beforeBuildCommand": "bun --cwd ui build",
     "devUrl": "http://localhost:3000",
-    "frontendDist": "../ui/out"
+    "frontendDist": "../../ui/out"
   },
   "app": {
     "security": {
