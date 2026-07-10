@@ -46,17 +46,11 @@ impl PPDocLayoutV3Processor {
         let rgb = image.to_rgb8();
         let (width, height) = rgb.dimensions();
 
-        let mut pixels = Vec::with_capacity((height * width * 3) as usize);
-        for pixel in rgb.pixels() {
-            pixels.push(pixel[0] as f32);
-            pixels.push(pixel[1] as f32);
-            pixels.push(pixel[2] as f32);
-        }
-
-        let pixel_values = Tensor::from_slice(&pixels)
+        let pixel_values = Tensor::from_slice(rgb.as_raw())
             .view([1, height as i64, width as i64, 3])
+            .to_device(device)
             .permute([0, 3, 1, 2])
-            .to_device(device);
+            .to_kind(Kind::Float);
 
         pixel_values
             .upsample_bicubic2d([self.size.height, self.size.width], false, None, None)
@@ -128,16 +122,6 @@ impl PPDocLayoutV3Processor {
         let mask_size = outputs.out_masks.size();
         let mask_height = mask_size[2] as usize;
         let mask_width = mask_size[3] as usize;
-        let masks = outputs.out_masks.gather(
-            1,
-            &query_index
-                .unsqueeze(-1)
-                .unsqueeze(-1)
-                .repeat([1, 1, mask_size[2], mask_size[3]]),
-            false,
-        );
-        let masks = masks.sigmoid().gt(threshold as f64);
-
         let order_seq = get_order_seq(&outputs.order_logits).gather(1, &query_index, false);
 
         let mut results = Vec::with_capacity(batch_size);
@@ -147,7 +131,7 @@ impl PPDocLayoutV3Processor {
             let labels = tensor_to_vec_i64(&labels.i(batch as i64))?;
             let boxes = tensor_to_vec_f32(&boxes.i(batch as i64).contiguous().view([-1]))?;
             let orders = tensor_to_vec_i64(&order_seq.i(batch as i64))?;
-            let masks = tensor_to_vec_i64(&masks.i(batch as i64).contiguous().view([-1]))?;
+            let query_indices = tensor_to_vec_i64(&query_index.i(batch as i64))?;
 
             let mut candidates = Vec::new();
             for query in 0..scores.len() {
@@ -163,7 +147,7 @@ impl PPDocLayoutV3Processor {
                     boxes[offset + 3],
                 ];
                 candidates.push(CandidateRegion {
-                    query,
+                    query: query_indices[query].max(0) as usize,
                     order: orders[query],
                     label_id: labels[query].max(0) as usize,
                     score,
@@ -172,6 +156,26 @@ impl PPDocLayoutV3Processor {
             }
 
             candidates.sort_by_key(|candidate| candidate.order);
+            let selected_queries = candidates
+                .iter()
+                .map(|candidate| candidate.query as i64)
+                .collect::<Vec<_>>();
+            let masks = if selected_queries.is_empty() {
+                Vec::new()
+            } else {
+                let selected_queries =
+                    Tensor::from_slice(&selected_queries).to_device(outputs.out_masks.device());
+                tensor_to_vec_u8(
+                    &outputs
+                        .out_masks
+                        .i(batch as i64)
+                        .index_select(0, &selected_queries)
+                        .sigmoid()
+                        .gt(threshold as f64)
+                        .contiguous()
+                        .view([-1]),
+                )?
+            };
 
             let (target_height, target_width) = target_sizes[batch];
             let mut regions = Vec::with_capacity(candidates.len());
@@ -181,7 +185,7 @@ impl PPDocLayoutV3Processor {
                     .get(candidate.label_id)
                     .cloned()
                     .unwrap_or_else(|| format!("LABEL_{}", candidate.label_id));
-                let mask_offset = candidate.query * mask_area;
+                let mask_offset = idx * mask_area;
                 let mask = &masks[mask_offset..mask_offset + mask_area];
                 regions.push(PPDocLayoutV3Region {
                     order: idx + 1,
@@ -277,9 +281,9 @@ fn get_order_seq(order_logits: &Tensor) -> Tensor {
 
 fn tensor_to_vec_f32(tensor: &Tensor) -> Result<Vec<f32>> {
     let tensor = tensor
-        .to_device(Device::Cpu)
         .to_kind(Kind::Float)
-        .contiguous();
+        .contiguous()
+        .to_device(Device::Cpu);
     let mut values = vec![0f32; tensor.numel()];
     let len = values.len();
     tensor.f_copy_data(&mut values, len)?;
@@ -288,10 +292,21 @@ fn tensor_to_vec_f32(tensor: &Tensor) -> Result<Vec<f32>> {
 
 fn tensor_to_vec_i64(tensor: &Tensor) -> Result<Vec<i64>> {
     let tensor = tensor
-        .to_device(Device::Cpu)
         .to_kind(Kind::Int64)
-        .contiguous();
+        .contiguous()
+        .to_device(Device::Cpu);
     let mut values = vec![0i64; tensor.numel()];
+    let len = values.len();
+    tensor.f_copy_data(&mut values, len)?;
+    Ok(values)
+}
+
+fn tensor_to_vec_u8(tensor: &Tensor) -> Result<Vec<u8>> {
+    let tensor = tensor
+        .to_kind(Kind::Uint8)
+        .contiguous()
+        .to_device(Device::Cpu);
+    let mut values = vec![0u8; tensor.numel()];
     let len = values.len();
     tensor.f_copy_data(&mut values, len)?;
     Ok(values)
@@ -299,7 +314,7 @@ fn tensor_to_vec_i64(tensor: &Tensor) -> Result<Vec<i64>> {
 
 fn polygon_from_mask(
     bbox: [f32; 4],
-    mask: &[i64],
+    mask: &[u8],
     mask_width: usize,
     mask_height: usize,
     target_width: u32,
