@@ -650,7 +650,10 @@
             "description": "Optional pipeline engine to run after the mask is updated.",
             "required": false,
             "schema": {
-              "type": ["string", "null"]
+              "type": [
+                "string",
+                "null"
+              ]
             }
           },
           {
@@ -659,7 +662,10 @@
             "description": "Bounding box for the pipeline run.",
             "required": false,
             "schema": {
-              "type": ["number", "null"],
+              "type": [
+                "number",
+                "null"
+              ],
               "format": "float"
             }
           },
@@ -668,7 +674,10 @@
             "in": "query",
             "required": false,
             "schema": {
-              "type": ["number", "null"],
+              "type": [
+                "number",
+                "null"
+              ],
               "format": "float"
             }
           },
@@ -677,7 +686,10 @@
             "in": "query",
             "required": false,
             "schema": {
-              "type": ["number", "null"],
+              "type": [
+                "number",
+                "null"
+              ],
               "format": "float"
             }
           },
@@ -686,7 +698,10 @@
             "in": "query",
             "required": false,
             "schema": {
-              "type": ["number", "null"],
+              "type": [
+                "number",
+                "null"
+              ],
               "format": "float"
             }
           }
@@ -979,7 +994,9 @@
     "schemas": {
       "AddImageLayerResponse": {
         "type": "object",
-        "required": ["node"],
+        "required": [
+          "node"
+        ],
         "properties": {
           "node": {
             "$ref": "#/components/schemas/NodeId"
@@ -996,7 +1013,7 @@
               }
             ],
             "default": {
-              "path": "C:\\Users\\Mayo\\AppData\\Local\\Koharu"
+              "path": "C:\\Users\\Josiah\\AppData\\Local\\Koharu"
             }
           },
           "http": {
@@ -1022,7 +1039,7 @@
               "detector": "pp-doclayout-v3",
               "font_detector": "yuzumarker-font-detection",
               "inpainter": "lama-manga",
-              "ocr": "paddle-ocr-vl-1.5",
+              "ocr": "paddle-ocr-vl-1.6",
               "renderer": "koharu-renderer",
               "segmenter": "comic-text-detector-seg",
               "translator": "llm"
@@ -1041,11 +1058,17 @@
         "oneOf": [
           {
             "type": "object",
-            "required": ["id", "kind", "event"],
+            "required": [
+              "id",
+              "kind",
+              "event"
+            ],
             "properties": {
               "event": {
                 "type": "string",
-                "enum": ["jobStarted"]
+                "enum": [
+                  "jobStarted"
+                ]
               },
               "id": {
                 "type": "string"
@@ -1062,11 +1085,15 @@
               },
               {
                 "type": "object",
-                "required": ["event"],
+                "required": [
+                  "event"
+                ],
                 "properties": {
                   "event": {
                     "type": "string",
-                    "enum": ["jobProgress"]
+                    "enum": [
+                      "jobProgress"
+                    ]
                   }
                 }
               }
@@ -1080,11 +1107,15 @@
               },
               {
                 "type": "object",
-                "required": ["event"],
+                "required": [
+                  "event"
+                ],
                 "properties": {
                   "event": {
                     "type": "string",
-                    "enum": ["jobWarning"]
+                    "enum": [
+                      "jobWarning"
+                    ]
                   }
                 }
               }
@@ -1098,11 +1129,15 @@
               },
               {
                 "type": "object",
-                "required": ["event"],
+                "required": [
+                  "event"
+                ],
                 "properties": {
                   "event": {
                     "type": "string",
-                    "enum": ["jobFinished"]
+                    "enum": [
+                      "jobFinished"
+                    ]
                   }
                 }
               }
@@ -1115,11 +1150,15 @@
               },
               {
                 "type": "object",
-                "required": ["event"],
+                "required": [
+                  "event"
+                ],
                 "properties": {
                   "event": {
                     "type": "string",
-                    "enum": ["downloadProgress"]
+                    "enum": [
+                      "downloadProgress"
+                    ]
                   }
                 }
               }
@@ -1127,11 +1166,16 @@
           },
           {
             "type": "object",
-            "required": ["target", "event"],
+            "required": [
+              "target",
+              "event"
+            ],
             "properties": {
               "event": {
                 "type": "string",
-                "enum": ["llmLoading"]
+                "enum": [
+                  "llmLoading"
+                ]
               },
               "target": {
                 "$ref": "#/components/schemas/LlmTarget"
@@ -1140,11 +1184,16 @@
           },
           {
             "type": "object",
-            "required": ["target", "event"],
+            "required": [
+              "target",
+              "event"
+            ],
             "properties": {
               "event": {
                 "type": "string",
-                "enum": ["llmLoaded"]
+                "enum": [
+                  "llmLoaded"
+                ]
               },
               "target": {
                 "$ref": "#/components/schemas/LlmTarget"
@@ -1153,11 +1202,15 @@
           },
           {
             "type": "object",
-            "required": ["event"],
+            "required": [
+              "event"
+            ],
             "properties": {
               "event": {
                 "type": "string",
-                "enum": ["llmFailed"]
+                "enum": [
+                  "llmFailed"
+                ]
               },
               "target": {
                 "oneOf": [
@@ -1173,11 +1226,15 @@
           },
           {
             "type": "object",
-            "required": ["event"],
+            "required": [
+              "event"
+            ],
             "properties": {
               "event": {
                 "type": "string",
-                "enum": ["llmUnloaded"]
+                "enum": [
+                  "llmUnloaded"
+                ]
               }
             }
           },
@@ -1188,11 +1245,15 @@
               },
               {
                 "type": "object",
-                "required": ["event"],
+                "required": [
+                  "event"
+                ],
                 "properties": {
                   "event": {
                     "type": "string",
-                    "enum": ["snapshot"]
+                    "enum": [
+                      "snapshot"
+                    ]
                   }
                 }
               }
@@ -1206,14 +1267,23 @@
       },
       "CodexAuthAttemptStatus": {
         "type": "string",
-        "enum": ["pending", "succeeded", "failed"]
+        "enum": [
+          "pending",
+          "succeeded",
+          "failed"
+        ]
       },
       "CodexAuthStatus": {
         "type": "object",
-        "required": ["signedIn"],
+        "required": [
+          "signedIn"
+        ],
         "properties": {
           "accountId": {
-            "type": ["string", "null"]
+            "type": [
+              "string",
+              "null"
+            ]
           },
           "login": {
             "oneOf": [
@@ -1232,7 +1302,13 @@
       },
       "CodexDeviceLogin": {
         "type": "object",
-        "required": ["loginId", "verificationUrl", "userCode", "intervalSeconds", "timeoutSeconds"],
+        "required": [
+          "loginId",
+          "verificationUrl",
+          "userCode",
+          "intervalSeconds",
+          "timeoutSeconds"
+        ],
         "properties": {
           "intervalSeconds": {
             "type": "integer",
@@ -1257,13 +1333,22 @@
       },
       "CodexDeviceLoginStatus": {
         "type": "object",
-        "required": ["loginId", "status"],
+        "required": [
+          "loginId",
+          "status"
+        ],
         "properties": {
           "accountId": {
-            "type": ["string", "null"]
+            "type": [
+              "string",
+              "null"
+            ]
           },
           "error": {
-            "type": ["string", "null"]
+            "type": [
+              "string",
+              "null"
+            ]
           },
           "loginId": {
             "type": "string"
@@ -1275,13 +1360,22 @@
       },
       "CodexImageGenerationOptions": {
         "type": "object",
-        "required": ["pageId", "prompt"],
+        "required": [
+          "pageId",
+          "prompt"
+        ],
         "properties": {
           "instructions": {
-            "type": ["string", "null"]
+            "type": [
+              "string",
+              "null"
+            ]
           },
           "model": {
-            "type": ["string", "null"]
+            "type": [
+              "string",
+              "null"
+            ]
           },
           "pageId": {
             "$ref": "#/components/schemas/PageId"
@@ -1290,16 +1384,24 @@
             "type": "string"
           },
           "quality": {
-            "type": ["string", "null"]
+            "type": [
+              "string",
+              "null"
+            ]
           },
           "size": {
-            "type": ["string", "null"]
+            "type": [
+              "string",
+              "null"
+            ]
           }
         }
       },
       "CodexImageGenerationResponse": {
         "type": "object",
-        "required": ["operationId"],
+        "required": [
+          "operationId"
+        ],
         "properties": {
           "operationId": {
             "type": "string"
@@ -1341,7 +1443,10 @@
             ]
           },
           "providers": {
-            "type": ["array", "null"],
+            "type": [
+              "array",
+              "null"
+            ],
             "items": {
               "$ref": "#/components/schemas/ProviderPatch"
             },
@@ -1351,7 +1456,9 @@
       },
       "CreatePagesFromPathsRequest": {
         "type": "object",
-        "required": ["paths"],
+        "required": [
+          "paths"
+        ],
         "properties": {
           "paths": {
             "type": "array",
@@ -1366,7 +1473,9 @@
       },
       "CreatePagesResponse": {
         "type": "object",
-        "required": ["pages"],
+        "required": [
+          "pages"
+        ],
         "properties": {
           "pages": {
             "type": "array",
@@ -1378,7 +1487,9 @@
       },
       "CreateProjectRequest": {
         "type": "object",
-        "required": ["name"],
+        "required": [
+          "name"
+        ],
         "properties": {
           "name": {
             "type": "string"
@@ -1387,7 +1498,9 @@
       },
       "DataConfig": {
         "type": "object",
-        "required": ["path"],
+        "required": [
+          "path"
+        ],
         "properties": {
           "path": {
             "type": "string"
@@ -1398,13 +1511,21 @@
         "type": "object",
         "properties": {
           "path": {
-            "type": ["string", "null"]
+            "type": [
+              "string",
+              "null"
+            ]
           }
         }
       },
       "DownloadProgress": {
         "type": "object",
-        "required": ["id", "filename", "downloaded", "status"],
+        "required": [
+          "id",
+          "filename",
+          "downloaded",
+          "status"
+        ],
         "properties": {
           "downloaded": {
             "type": "integer",
@@ -1421,7 +1542,10 @@
             "$ref": "#/components/schemas/DownloadStatus"
           },
           "total": {
-            "type": ["integer", "null"],
+            "type": [
+              "integer",
+              "null"
+            ],
             "format": "int64",
             "minimum": 0
           }
@@ -1431,44 +1555,61 @@
         "oneOf": [
           {
             "type": "object",
-            "required": ["status"],
+            "required": [
+              "status"
+            ],
             "properties": {
               "status": {
                 "type": "string",
-                "enum": ["started"]
+                "enum": [
+                  "started"
+                ]
               }
             }
           },
           {
             "type": "object",
-            "required": ["status"],
+            "required": [
+              "status"
+            ],
             "properties": {
               "status": {
                 "type": "string",
-                "enum": ["downloading"]
+                "enum": [
+                  "downloading"
+                ]
               }
             }
           },
           {
             "type": "object",
-            "required": ["status"],
+            "required": [
+              "status"
+            ],
             "properties": {
               "status": {
                 "type": "string",
-                "enum": ["completed"]
+                "enum": [
+                  "completed"
+                ]
               }
             }
           },
           {
             "type": "object",
-            "required": ["reason", "status"],
+            "required": [
+              "reason",
+              "status"
+            ],
             "properties": {
               "reason": {
                 "type": "string"
               },
               "status": {
                 "type": "string",
-                "enum": ["failed"]
+                "enum": [
+                  "failed"
+                ]
               }
             }
           }
@@ -1539,7 +1680,11 @@
       },
       "EngineCatalogEntry": {
         "type": "object",
-        "required": ["id", "name", "produces"],
+        "required": [
+          "id",
+          "name",
+          "produces"
+        ],
         "properties": {
           "id": {
             "type": "string"
@@ -1557,21 +1702,34 @@
       },
       "ExportFormat": {
         "type": "string",
-        "enum": ["khr", "psd", "rendered", "inpainted"]
+        "enum": [
+          "khr",
+          "psd",
+          "rendered",
+          "inpainted"
+        ]
       },
       "ExportProjectRequest": {
         "type": "object",
-        "required": ["format"],
+        "required": [
+          "format"
+        ],
         "properties": {
           "defaultFont": {
-            "type": ["string", "null"],
+            "type": [
+              "string",
+              "null"
+            ],
             "description": "Optional global font override (from UI preferences)."
           },
           "format": {
             "$ref": "#/components/schemas/ExportFormat"
           },
           "pages": {
-            "type": ["array", "null"],
+            "type": [
+              "array",
+              "null"
+            ],
             "items": {
               "$ref": "#/components/schemas/PageId"
             },
@@ -1581,13 +1739,21 @@
       },
       "FontFaceInfo": {
         "type": "object",
-        "required": ["familyName", "postScriptName", "source", "cached"],
+        "required": [
+          "familyName",
+          "postScriptName",
+          "source",
+          "cached"
+        ],
         "properties": {
           "cached": {
             "type": "boolean"
           },
           "category": {
-            "type": ["string", "null"]
+            "type": [
+              "string",
+              "null"
+            ]
           },
           "familyName": {
             "type": "string"
@@ -1665,11 +1831,16 @@
       },
       "FontSource": {
         "type": "string",
-        "enum": ["system", "google"]
+        "enum": [
+          "system",
+          "google"
+        ]
       },
       "GoogleFontCatalog": {
         "type": "object",
-        "required": ["fonts"],
+        "required": [
+          "fonts"
+        ],
         "properties": {
           "fonts": {
             "type": "array",
@@ -1681,7 +1852,12 @@
       },
       "GoogleFontEntry": {
         "type": "object",
-        "required": ["family", "category", "subsets", "variants"],
+        "required": [
+          "family",
+          "category",
+          "subsets",
+          "variants"
+        ],
         "properties": {
           "category": {
             "type": "string"
@@ -1705,7 +1881,11 @@
       },
       "GoogleFontVariant": {
         "type": "object",
-        "required": ["style", "weight", "filename"],
+        "required": [
+          "style",
+          "weight",
+          "filename"
+        ],
         "properties": {
           "filename": {
             "type": "string"
@@ -1724,7 +1904,10 @@
         "type": "object",
         "properties": {
           "epoch": {
-            "type": ["integer", "null"],
+            "type": [
+              "integer",
+              "null"
+            ],
             "format": "int64",
             "description": "New epoch. `None` only for a no-op undo/redo at the stack boundary.",
             "minimum": 0
@@ -1758,17 +1941,26 @@
         "type": "object",
         "properties": {
           "connectTimeout": {
-            "type": ["integer", "null"],
+            "type": [
+              "integer",
+              "null"
+            ],
             "format": "int64",
             "minimum": 0
           },
           "maxRetries": {
-            "type": ["integer", "null"],
+            "type": [
+              "integer",
+              "null"
+            ],
             "format": "int32",
             "minimum": 0
           },
           "readTimeout": {
-            "type": ["integer", "null"],
+            "type": [
+              "integer",
+              "null"
+            ],
             "format": "int64",
             "minimum": 0
           }
@@ -1776,13 +1968,21 @@
       },
       "ImageData": {
         "type": "object",
-        "required": ["role", "blob", "naturalWidth", "naturalHeight"],
+        "required": [
+          "role",
+          "blob",
+          "naturalWidth",
+          "naturalHeight"
+        ],
         "properties": {
           "blob": {
             "$ref": "#/components/schemas/BlobRef"
           },
           "name": {
-            "type": ["string", "null"]
+            "type": [
+              "string",
+              "null"
+            ]
           },
           "naturalHeight": {
             "type": "integer",
@@ -1818,34 +2018,57 @@
             ]
           },
           "name": {
-            "type": ["string", "null"]
+            "type": [
+              "string",
+              "null"
+            ]
           },
           "naturalHeight": {
-            "type": ["integer", "null"],
+            "type": [
+              "integer",
+              "null"
+            ],
             "format": "int32",
             "minimum": 0
           },
           "naturalWidth": {
-            "type": ["integer", "null"],
+            "type": [
+              "integer",
+              "null"
+            ],
             "format": "int32",
             "minimum": 0
           },
           "opacity": {
-            "type": ["number", "null"],
+            "type": [
+              "number",
+              "null"
+            ],
             "format": "float"
           }
         }
       },
       "ImageRole": {
         "type": "string",
-        "enum": ["source", "inpainted", "rendered", "custom"]
+        "enum": [
+          "source",
+          "inpainted",
+          "rendered",
+          "custom"
+        ]
       },
       "JobFinishedEvent": {
         "type": "object",
-        "required": ["id", "status"],
+        "required": [
+          "id",
+          "status"
+        ],
         "properties": {
           "error": {
-            "type": ["string", "null"]
+            "type": [
+              "string",
+              "null"
+            ]
           },
           "id": {
             "type": "string"
@@ -1857,14 +2080,27 @@
       },
       "JobStatus": {
         "type": "string",
-        "enum": ["running", "completed", "completed_with_errors", "cancelled", "failed"]
+        "enum": [
+          "running",
+          "completed",
+          "completed_with_errors",
+          "cancelled",
+          "failed"
+        ]
       },
       "JobSummary": {
         "type": "object",
-        "required": ["id", "kind", "status"],
+        "required": [
+          "id",
+          "kind",
+          "status"
+        ],
         "properties": {
           "error": {
-            "type": ["string", "null"]
+            "type": [
+              "string",
+              "null"
+            ]
           },
           "id": {
             "type": "string"
@@ -1880,7 +2116,13 @@
       "JobWarningEvent": {
         "type": "object",
         "description": "A non-fatal step failure during a pipeline run. The pipeline recovers by\nskipping the rest of the current page's steps and moving on to the next\npage; the UI accumulates these into a list during the job.",
-        "required": ["jobId", "pageIndex", "totalPages", "stepId", "message"],
+        "required": [
+          "jobId",
+          "pageIndex",
+          "totalPages",
+          "stepId",
+          "message"
+        ],
         "properties": {
           "jobId": {
             "type": "string"
@@ -1905,7 +2147,9 @@
       },
       "ListDownloadsResponse": {
         "type": "object",
-        "required": ["downloads"],
+        "required": [
+          "downloads"
+        ],
         "properties": {
           "downloads": {
             "type": "array",
@@ -1917,7 +2161,9 @@
       },
       "ListOperationsResponse": {
         "type": "object",
-        "required": ["operations"],
+        "required": [
+          "operations"
+        ],
         "properties": {
           "operations": {
             "type": "array",
@@ -1929,7 +2175,9 @@
       },
       "ListProjectsResponse": {
         "type": "object",
-        "required": ["projects"],
+        "required": [
+          "projects"
+        ],
         "properties": {
           "projects": {
             "type": "array",
@@ -1941,7 +2189,10 @@
       },
       "LlmCatalog": {
         "type": "object",
-        "required": ["localModels", "providers"],
+        "required": [
+          "localModels",
+          "providers"
+        ],
         "properties": {
           "localModels": {
             "type": "array",
@@ -1959,7 +2210,11 @@
       },
       "LlmCatalogModel": {
         "type": "object",
-        "required": ["target", "name", "languages"],
+        "required": [
+          "target",
+          "name",
+          "languages"
+        ],
         "properties": {
           "languages": {
             "type": "array",
@@ -1979,22 +2234,33 @@
         "type": "object",
         "properties": {
           "customSystemPrompt": {
-            "type": ["string", "null"]
+            "type": [
+              "string",
+              "null"
+            ]
           },
           "maxTokens": {
-            "type": ["integer", "null"],
+            "type": [
+              "integer",
+              "null"
+            ],
             "format": "int32",
             "minimum": 0
           },
           "temperature": {
-            "type": ["number", "null"],
+            "type": [
+              "number",
+              "null"
+            ],
             "format": "double"
           }
         }
       },
       "LlmLoadRequest": {
         "type": "object",
-        "required": ["target"],
+        "required": [
+          "target"
+        ],
         "properties": {
           "options": {
             "oneOf": [
@@ -2024,10 +2290,16 @@
         ],
         "properties": {
           "baseUrl": {
-            "type": ["string", "null"]
+            "type": [
+              "string",
+              "null"
+            ]
           },
           "error": {
-            "type": ["string", "null"]
+            "type": [
+              "string",
+              "null"
+            ]
           },
           "hasApiKey": {
             "type": "boolean"
@@ -2057,14 +2329,23 @@
       },
       "LlmProviderCatalogStatus": {
         "type": "string",
-        "enum": ["ready", "missing_configuration", "discovery_failed"]
+        "enum": [
+          "ready",
+          "missing_configuration",
+          "discovery_failed"
+        ]
       },
       "LlmState": {
         "type": "object",
-        "required": ["status"],
+        "required": [
+          "status"
+        ],
         "properties": {
           "error": {
-            "type": ["string", "null"]
+            "type": [
+              "string",
+              "null"
+            ]
           },
           "status": {
             "$ref": "#/components/schemas/LlmStateStatus"
@@ -2083,11 +2364,19 @@
       },
       "LlmStateStatus": {
         "type": "string",
-        "enum": ["empty", "loading", "ready", "failed"]
+        "enum": [
+          "empty",
+          "loading",
+          "ready",
+          "failed"
+        ]
       },
       "LlmTarget": {
         "type": "object",
-        "required": ["kind", "modelId"],
+        "required": [
+          "kind",
+          "modelId"
+        ],
         "properties": {
           "kind": {
             "$ref": "#/components/schemas/LlmTargetKind"
@@ -2096,17 +2385,26 @@
             "type": "string"
           },
           "providerId": {
-            "type": ["string", "null"]
+            "type": [
+              "string",
+              "null"
+            ]
           }
         }
       },
       "LlmTargetKind": {
         "type": "string",
-        "enum": ["local", "provider"]
+        "enum": [
+          "local",
+          "provider"
+        ]
       },
       "MaskData": {
         "type": "object",
-        "required": ["role", "blob"],
+        "required": [
+          "role",
+          "blob"
+        ],
         "properties": {
           "blob": {
             "$ref": "#/components/schemas/BlobRef"
@@ -2133,11 +2431,18 @@
       },
       "MaskRole": {
         "type": "string",
-        "enum": ["brushInpaint", "segment", "bubble"]
+        "enum": [
+          "brushInpaint",
+          "segment",
+          "bubble"
+        ]
       },
       "MetaInfo": {
         "type": "object",
-        "required": ["version", "mlDevice"],
+        "required": [
+          "version",
+          "mlDevice"
+        ],
         "properties": {
           "mlDevice": {
             "type": "string"
@@ -2149,14 +2454,22 @@
       },
       "NamedFontPrediction": {
         "type": "object",
-        "required": ["index", "name", "probability", "serif"],
+        "required": [
+          "index",
+          "name",
+          "probability",
+          "serif"
+        ],
         "properties": {
           "index": {
             "type": "integer",
             "minimum": 0
           },
           "language": {
-            "type": ["string", "null"]
+            "type": [
+              "string",
+              "null"
+            ]
           },
           "name": {
             "type": "string"
@@ -2172,7 +2485,11 @@
       },
       "Node": {
         "type": "object",
-        "required": ["id", "visible", "kind"],
+        "required": [
+          "id",
+          "visible",
+          "kind"
+        ],
         "properties": {
           "id": {
             "$ref": "#/components/schemas/NodeId"
@@ -2192,7 +2509,9 @@
         "oneOf": [
           {
             "type": "object",
-            "required": ["text"],
+            "required": [
+              "text"
+            ],
             "properties": {
               "text": {
                 "$ref": "#/components/schemas/TextDataPatch"
@@ -2201,7 +2520,9 @@
           },
           {
             "type": "object",
-            "required": ["image"],
+            "required": [
+              "image"
+            ],
             "properties": {
               "image": {
                 "$ref": "#/components/schemas/ImageDataPatch"
@@ -2210,7 +2531,9 @@
           },
           {
             "type": "object",
-            "required": ["mask"],
+            "required": [
+              "mask"
+            ],
             "properties": {
               "mask": {
                 "$ref": "#/components/schemas/MaskDataPatch"
@@ -2227,7 +2550,9 @@
         "oneOf": [
           {
             "type": "object",
-            "required": ["image"],
+            "required": [
+              "image"
+            ],
             "properties": {
               "image": {
                 "$ref": "#/components/schemas/ImageData"
@@ -2236,7 +2561,9 @@
           },
           {
             "type": "object",
-            "required": ["text"],
+            "required": [
+              "text"
+            ],
             "properties": {
               "text": {
                 "$ref": "#/components/schemas/TextData"
@@ -2245,7 +2572,9 @@
           },
           {
             "type": "object",
-            "required": ["mask"],
+            "required": [
+              "mask"
+            ],
             "properties": {
               "mask": {
                 "$ref": "#/components/schemas/MaskData"
@@ -2278,7 +2607,10 @@
             ]
           },
           "visible": {
-            "type": ["boolean", "null"]
+            "type": [
+              "boolean",
+              "null"
+            ]
           }
         }
       },
@@ -2286,11 +2618,15 @@
         "oneOf": [
           {
             "type": "object",
-            "required": ["updateProjectMeta"],
+            "required": [
+              "updateProjectMeta"
+            ],
             "properties": {
               "updateProjectMeta": {
                 "type": "object",
-                "required": ["patch"],
+                "required": [
+                  "patch"
+                ],
                 "properties": {
                   "patch": {
                     "$ref": "#/components/schemas/ProjectMetaPatch"
@@ -2304,11 +2640,16 @@
           },
           {
             "type": "object",
-            "required": ["addPage"],
+            "required": [
+              "addPage"
+            ],
             "properties": {
               "addPage": {
                 "type": "object",
-                "required": ["page", "at"],
+                "required": [
+                  "page",
+                  "at"
+                ],
                 "properties": {
                   "at": {
                     "type": "integer",
@@ -2323,11 +2664,17 @@
           },
           {
             "type": "object",
-            "required": ["removePage"],
+            "required": [
+              "removePage"
+            ],
             "properties": {
               "removePage": {
                 "type": "object",
-                "required": ["id", "prev_page", "prev_index"],
+                "required": [
+                  "id",
+                  "prev_page",
+                  "prev_index"
+                ],
                 "properties": {
                   "id": {
                     "$ref": "#/components/schemas/PageId"
@@ -2345,11 +2692,16 @@
           },
           {
             "type": "object",
-            "required": ["updatePage"],
+            "required": [
+              "updatePage"
+            ],
             "properties": {
               "updatePage": {
                 "type": "object",
-                "required": ["id", "patch"],
+                "required": [
+                  "id",
+                  "patch"
+                ],
                 "properties": {
                   "id": {
                     "$ref": "#/components/schemas/PageId"
@@ -2366,11 +2718,16 @@
           },
           {
             "type": "object",
-            "required": ["reorderPages"],
+            "required": [
+              "reorderPages"
+            ],
             "properties": {
               "reorderPages": {
                 "type": "object",
-                "required": ["order", "prev_order"],
+                "required": [
+                  "order",
+                  "prev_order"
+                ],
                 "properties": {
                   "order": {
                     "type": "array",
@@ -2390,11 +2747,17 @@
           },
           {
             "type": "object",
-            "required": ["addNode"],
+            "required": [
+              "addNode"
+            ],
             "properties": {
               "addNode": {
                 "type": "object",
-                "required": ["page", "node", "at"],
+                "required": [
+                  "page",
+                  "node",
+                  "at"
+                ],
                 "properties": {
                   "at": {
                     "type": "integer",
@@ -2412,11 +2775,18 @@
           },
           {
             "type": "object",
-            "required": ["removeNode"],
+            "required": [
+              "removeNode"
+            ],
             "properties": {
               "removeNode": {
                 "type": "object",
-                "required": ["page", "id", "prev_node", "prev_index"],
+                "required": [
+                  "page",
+                  "id",
+                  "prev_node",
+                  "prev_index"
+                ],
                 "properties": {
                   "id": {
                     "$ref": "#/components/schemas/NodeId"
@@ -2437,11 +2807,17 @@
           },
           {
             "type": "object",
-            "required": ["updateNode"],
+            "required": [
+              "updateNode"
+            ],
             "properties": {
               "updateNode": {
                 "type": "object",
-                "required": ["page", "id", "patch"],
+                "required": [
+                  "page",
+                  "id",
+                  "patch"
+                ],
                 "properties": {
                   "id": {
                     "$ref": "#/components/schemas/NodeId"
@@ -2461,11 +2837,17 @@
           },
           {
             "type": "object",
-            "required": ["reorderNodes"],
+            "required": [
+              "reorderNodes"
+            ],
             "properties": {
               "reorderNodes": {
                 "type": "object",
-                "required": ["page", "order", "prev_order"],
+                "required": [
+                  "page",
+                  "order",
+                  "prev_order"
+                ],
                 "properties": {
                   "order": {
                     "type": "array",
@@ -2488,11 +2870,16 @@
           },
           {
             "type": "object",
-            "required": ["batch"],
+            "required": [
+              "batch"
+            ],
             "properties": {
               "batch": {
                 "type": "object",
-                "required": ["ops", "label"],
+                "required": [
+                  "ops",
+                  "label"
+                ],
                 "properties": {
                   "label": {
                     "type": "string"
@@ -2511,7 +2898,9 @@
       },
       "OpenProjectRequest": {
         "type": "object",
-        "required": ["id"],
+        "required": [
+          "id"
+        ],
         "properties": {
           "id": {
             "type": "string",
@@ -2521,7 +2910,13 @@
       },
       "Page": {
         "type": "object",
-        "required": ["id", "name", "width", "height", "nodes"],
+        "required": [
+          "id",
+          "name",
+          "width",
+          "height",
+          "nodes"
+        ],
         "properties": {
           "height": {
             "type": "integer",
@@ -2560,15 +2955,24 @@
         "type": "object",
         "properties": {
           "height": {
-            "type": ["integer", "null"],
+            "type": [
+              "integer",
+              "null"
+            ],
             "format": "int32",
             "minimum": 0
           },
           "name": {
-            "type": ["string", "null"]
+            "type": [
+              "string",
+              "null"
+            ]
           },
           "width": {
-            "type": ["integer", "null"],
+            "type": [
+              "integer",
+              "null"
+            ],
             "format": "int32",
             "minimum": 0
           }
@@ -2596,7 +3000,7 @@
           },
           "ocr": {
             "type": "string",
-            "default": "paddle-ocr-vl-1.5"
+            "default": "paddle-ocr-vl-1.6"
           },
           "renderer": {
             "type": "string",
@@ -2616,28 +3020,52 @@
         "type": "object",
         "properties": {
           "bubbleSegmenter": {
-            "type": ["string", "null"]
+            "type": [
+              "string",
+              "null"
+            ]
           },
           "detector": {
-            "type": ["string", "null"]
+            "type": [
+              "string",
+              "null"
+            ]
           },
           "fontDetector": {
-            "type": ["string", "null"]
+            "type": [
+              "string",
+              "null"
+            ]
           },
           "inpainter": {
-            "type": ["string", "null"]
+            "type": [
+              "string",
+              "null"
+            ]
           },
           "ocr": {
-            "type": ["string", "null"]
+            "type": [
+              "string",
+              "null"
+            ]
           },
           "renderer": {
-            "type": ["string", "null"]
+            "type": [
+              "string",
+              "null"
+            ]
           },
           "segmenter": {
-            "type": ["string", "null"]
+            "type": [
+              "string",
+              "null"
+            ]
           },
           "translator": {
-            "type": ["string", "null"]
+            "type": [
+              "string",
+              "null"
+            ]
           }
         }
       },
@@ -2696,44 +3124,61 @@
         "oneOf": [
           {
             "type": "object",
-            "required": ["status"],
+            "required": [
+              "status"
+            ],
             "properties": {
               "status": {
                 "type": "string",
-                "enum": ["running"]
+                "enum": [
+                  "running"
+                ]
               }
             }
           },
           {
             "type": "object",
-            "required": ["status"],
+            "required": [
+              "status"
+            ],
             "properties": {
               "status": {
                 "type": "string",
-                "enum": ["completed"]
+                "enum": [
+                  "completed"
+                ]
               }
             }
           },
           {
             "type": "object",
-            "required": ["status"],
+            "required": [
+              "status"
+            ],
             "properties": {
               "status": {
                 "type": "string",
-                "enum": ["cancelled"]
+                "enum": [
+                  "cancelled"
+                ]
               }
             }
           },
           {
             "type": "object",
-            "required": ["reason", "status"],
+            "required": [
+              "reason",
+              "status"
+            ],
             "properties": {
               "reason": {
                 "type": "string"
               },
               "status": {
                 "type": "string",
-                "enum": ["failed"]
+                "enum": [
+                  "failed"
+                ]
               }
             }
           }
@@ -2741,11 +3186,21 @@
       },
       "PipelineStep": {
         "type": "string",
-        "enum": ["detect", "ocr", "inpaint", "llmGenerate", "render"]
+        "enum": [
+          "detect",
+          "ocr",
+          "inpaint",
+          "llmGenerate",
+          "render"
+        ]
       },
       "ProjectMeta": {
         "type": "object",
-        "required": ["name", "createdAt", "updatedAt"],
+        "required": [
+          "name",
+          "createdAt",
+          "updatedAt"
+        ],
         "properties": {
           "createdAt": {
             "type": "string",
@@ -2767,7 +3222,10 @@
         "type": "object",
         "properties": {
           "name": {
-            "type": ["string", "null"]
+            "type": [
+              "string",
+              "null"
+            ]
           },
           "style": {
             "oneOf": [
@@ -2780,7 +3238,10 @@
             ]
           },
           "updatedAt": {
-            "type": ["string", "null"],
+            "type": [
+              "string",
+              "null"
+            ],
             "format": "date-time"
           }
         }
@@ -2789,13 +3250,20 @@
         "type": "object",
         "properties": {
           "defaultFont": {
-            "type": ["string", "null"]
+            "type": [
+              "string",
+              "null"
+            ]
           }
         }
       },
       "ProjectSummary": {
         "type": "object",
-        "required": ["id", "name", "path"],
+        "required": [
+          "id",
+          "name",
+          "path"
+        ],
         "properties": {
           "id": {
             "type": "string",
@@ -2818,14 +3286,22 @@
       },
       "ProviderConfig": {
         "type": "object",
-        "required": ["id"],
+        "required": [
+          "id"
+        ],
         "properties": {
           "api_key": {
-            "type": ["string", "null"],
+            "type": [
+              "string",
+              "null"
+            ],
             "description": "Populated from credential storage on `load()`, never written to config.toml.\nSerializes as `\"[REDACTED]\"` in API responses."
           },
           "base_url": {
-            "type": ["string", "null"]
+            "type": [
+              "string",
+              "null"
+            ]
           },
           "id": {
             "type": "string"
@@ -2834,14 +3310,22 @@
       },
       "ProviderPatch": {
         "type": "object",
-        "required": ["id"],
+        "required": [
+          "id"
+        ],
         "properties": {
           "apiKey": {
-            "type": ["string", "null"],
+            "type": [
+              "string",
+              "null"
+            ],
             "description": "`\"[REDACTED]\"` → keep existing keyring secret; empty → clear; otherwise save."
           },
           "baseUrl": {
-            "type": ["string", "null"]
+            "type": [
+              "string",
+              "null"
+            ]
           },
           "id": {
             "type": "string"
@@ -2850,7 +3334,9 @@
       },
       "ProviderSecretRequest": {
         "type": "object",
-        "required": ["secret"],
+        "required": [
+          "secret"
+        ],
         "properties": {
           "secret": {
             "type": "string"
@@ -2859,7 +3345,10 @@
       },
       "PutMaskResponse": {
         "type": "object",
-        "required": ["node", "blob"],
+        "required": [
+          "node",
+          "blob"
+        ],
         "properties": {
           "blob": {
             "$ref": "#/components/schemas/BlobRef"
@@ -2871,11 +3360,20 @@
       },
       "ReadingOrder": {
         "type": "string",
-        "enum": ["rtl", "ltr", "custom"]
+        "enum": [
+          "rtl",
+          "ltr",
+          "custom"
+        ]
       },
       "Region": {
         "type": "object",
-        "required": ["x", "y", "width", "height"],
+        "required": [
+          "x",
+          "y",
+          "width",
+          "height"
+        ],
         "properties": {
           "height": {
             "type": "integer",
@@ -2901,7 +3399,10 @@
       },
       "Scene": {
         "type": "object",
-        "required": ["project", "pages"],
+        "required": [
+          "project",
+          "pages"
+        ],
         "properties": {
           "pages": {
             "type": "object",
@@ -2922,7 +3423,10 @@
       "SceneSnapshot": {
         "type": "object",
         "description": "JSON-shaped scene snapshot for the UI (no postcard decoder in JS).",
-        "required": ["epoch", "scene"],
+        "required": [
+          "epoch",
+          "scene"
+        ],
         "properties": {
           "epoch": {
             "type": "integer",
@@ -2936,7 +3440,10 @@
       },
       "SnapshotEvent": {
         "type": "object",
-        "required": ["jobs", "downloads"],
+        "required": [
+          "jobs",
+          "downloads"
+        ],
         "properties": {
           "downloads": {
             "type": "array",
@@ -2954,7 +3461,9 @@
       },
       "StartDownloadRequest": {
         "type": "object",
-        "required": ["modelId"],
+        "required": [
+          "modelId"
+        ],
         "properties": {
           "modelId": {
             "type": "string",
@@ -2964,7 +3473,9 @@
       },
       "StartDownloadResponse": {
         "type": "object",
-        "required": ["operationId"],
+        "required": [
+          "operationId"
+        ],
         "properties": {
           "operationId": {
             "type": "string",
@@ -2974,13 +3485,25 @@
       },
       "StartPipelineRequest": {
         "type": "object",
-        "required": ["steps"],
+        "required": [
+          "steps"
+        ],
         "properties": {
           "defaultFont": {
-            "type": ["string", "null"]
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "mergeWithPreviousOp": {
+            "type": "boolean",
+            "description": "If enabled, merge any ops generated by this with the entry above it, ensuring that they undo as a batch.\nUsed for implementing auto-render so that the render doesn't get a separate undo entry."
           },
           "pages": {
-            "type": ["array", "null"],
+            "type": [
+              "array",
+              "null"
+            ],
             "items": {
               "$ref": "#/components/schemas/PageId"
             },
@@ -3015,13 +3538,22 @@
             "description": "Engine ids (`inventory::submit!` ids) to run in order."
           },
           "systemPrompt": {
-            "type": ["string", "null"]
+            "type": [
+              "string",
+              "null"
+            ]
           },
           "targetLanguage": {
-            "type": ["string", "null"]
+            "type": [
+              "string",
+              "null"
+            ]
           },
           "textNodeIds": {
-            "type": ["array", "null"],
+            "type": [
+              "array",
+              "null"
+            ],
             "items": {
               "$ref": "#/components/schemas/NodeId"
             },
@@ -3031,7 +3563,9 @@
       },
       "StartPipelineResponse": {
         "type": "object",
-        "required": ["operationId"],
+        "required": [
+          "operationId"
+        ],
         "properties": {
           "operationId": {
             "type": "string"
@@ -3040,7 +3574,11 @@
       },
       "TextAlign": {
         "type": "string",
-        "enum": ["left", "center", "right"]
+        "enum": [
+          "left",
+          "center",
+          "right"
+        ]
       },
       "TextData": {
         "type": "object",
@@ -3050,11 +3588,17 @@
             "format": "float"
           },
           "detectedFontSizePx": {
-            "type": ["number", "null"],
+            "type": [
+              "number",
+              "null"
+            ],
             "format": "float"
           },
           "detector": {
-            "type": ["string", "null"]
+            "type": [
+              "string",
+              "null"
+            ]
           },
           "fontPrediction": {
             "oneOf": [
@@ -3067,7 +3611,10 @@
             ]
           },
           "linePolygons": {
-            "type": ["array", "null"],
+            "type": [
+              "array",
+              "null"
+            ],
             "items": {
               "type": "array",
               "items": {
@@ -3093,7 +3640,10 @@
             ]
           },
           "rotationDeg": {
-            "type": ["number", "null"],
+            "type": [
+              "number",
+              "null"
+            ],
             "format": "float"
           },
           "sourceDirection": {
@@ -3107,7 +3657,10 @@
             ]
           },
           "sourceLang": {
-            "type": ["string", "null"]
+            "type": [
+              "string",
+              "null"
+            ]
           },
           "sprite": {
             "oneOf": [
@@ -3142,10 +3695,16 @@
             ]
           },
           "text": {
-            "type": ["string", "null"]
+            "type": [
+              "string",
+              "null"
+            ]
           },
           "translation": {
-            "type": ["string", "null"]
+            "type": [
+              "string",
+              "null"
+            ]
           }
         }
       },
@@ -3154,15 +3713,24 @@
         "description": "For fields where \"set to None\" is meaningful (e.g. clearing a translation),\nthe outer `Option` is \"patch present\", the inner is \"value present\".",
         "properties": {
           "confidence": {
-            "type": ["number", "null"],
+            "type": [
+              "number",
+              "null"
+            ],
             "format": "float"
           },
           "detectedFontSizePx": {
-            "type": ["number", "null"],
+            "type": [
+              "number",
+              "null"
+            ],
             "format": "float"
           },
           "detector": {
-            "type": ["string", "null"]
+            "type": [
+              "string",
+              "null"
+            ]
           },
           "fontPrediction": {
             "oneOf": [
@@ -3175,7 +3743,10 @@
             ]
           },
           "linePolygons": {
-            "type": ["array", "null"],
+            "type": [
+              "array",
+              "null"
+            ],
             "items": {
               "type": "array",
               "items": {
@@ -3188,7 +3759,10 @@
             }
           },
           "lockLayoutBox": {
-            "type": ["boolean", "null"]
+            "type": [
+              "boolean",
+              "null"
+            ]
           },
           "renderedDirection": {
             "oneOf": [
@@ -3201,7 +3775,10 @@
             ]
           },
           "rotationDeg": {
-            "type": ["number", "null"],
+            "type": [
+              "number",
+              "null"
+            ],
             "format": "float"
           },
           "sourceDirection": {
@@ -3215,7 +3792,10 @@
             ]
           },
           "sourceLang": {
-            "type": ["string", "null"]
+            "type": [
+              "string",
+              "null"
+            ]
           },
           "sprite": {
             "oneOf": [
@@ -3248,17 +3828,26 @@
             ]
           },
           "text": {
-            "type": ["string", "null"]
+            "type": [
+              "string",
+              "null"
+            ]
           },
           "translation": {
-            "type": ["string", "null"]
+            "type": [
+              "string",
+              "null"
+            ]
           }
         }
       },
       "TextDirection": {
         "type": "string",
         "description": "Reading axis of a text block.",
-        "enum": ["horizontal", "vertical"]
+        "enum": [
+          "horizontal",
+          "vertical"
+        ]
       },
       "TextShaderEffect": {
         "type": "object",
@@ -3286,14 +3875,20 @@
             "type": "boolean"
           },
           "widthPx": {
-            "type": ["number", "null"],
+            "type": [
+              "number",
+              "null"
+            ],
             "format": "float"
           }
         }
       },
       "TextStyle": {
         "type": "object",
-        "required": ["fontFamilies", "color"],
+        "required": [
+          "fontFamilies",
+          "color"
+        ],
         "properties": {
           "color": {
             "type": "array",
@@ -3320,7 +3915,10 @@
             }
           },
           "fontSize": {
-            "type": ["number", "null"],
+            "type": [
+              "number",
+              "null"
+            ],
             "format": "float"
           },
           "stroke": {
@@ -3347,7 +3945,10 @@
       },
       "TopFont": {
         "type": "object",
-        "required": ["index", "score"],
+        "required": [
+          "index",
+          "score"
+        ],
         "properties": {
           "index": {
             "type": "integer",
@@ -3361,7 +3962,12 @@
       },
       "Transform": {
         "type": "object",
-        "required": ["x", "y", "width", "height"],
+        "required": [
+          "x",
+          "y",
+          "width",
+          "height"
+        ],
         "properties": {
           "height": {
             "type": "number",

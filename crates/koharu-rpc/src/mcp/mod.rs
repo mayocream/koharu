@@ -98,6 +98,7 @@ pub struct StartPipelineInput {
     pub system_prompt: Option<String>,
     pub default_font: Option<String>,
     pub reading_order: Option<ReadingOrder>,
+    pub merge_with_previous_op: bool,
 }
 
 #[derive(Debug, Clone, Serialize, schemars::JsonSchema)]
@@ -192,6 +193,7 @@ impl KoharuServer {
                 text_node_ids: input.text_node_ids,
                 reading_order: input.reading_order,
                 region: None,
+                merge_with_previous_op: input.merge_with_previous_op,
             },
         };
         let job_id = Uuid::new_v4().to_string();

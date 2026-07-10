@@ -130,6 +130,13 @@ impl ProjectSession {
         history.apply(&mut scene, op)
     }
 
+    /// Apply an op, merges with the op immediately before if possible.
+    pub fn apply_merge_up(&self, op: Op) -> Result<u64> {
+        let mut history = self.history.lock();
+        let mut scene = self.scene.write();
+        history.apply_merge_up(&mut scene, op)
+    }
+
     pub fn undo(&self) -> Result<Option<(u64, Op)>> {
         let mut history = self.history.lock();
         let mut scene = self.scene.write();

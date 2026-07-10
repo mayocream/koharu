@@ -86,6 +86,25 @@ impl History {
         Ok(self.epoch)
     }
 
+    /// Does the same as apply, but merges the op with the previous undo entry so they undo together.
+    pub fn apply_merge_up(&mut self, scene: &mut Scene, mut op: Op) -> Result<u64> {
+        op.apply(scene).context("apply op to scene")?;
+        self.epoch += 1;
+        self.write_frame(&op)?;
+
+        if let Some(back) = self.undo_stack.pop_back() {
+            self.push_undo(Op::Batch {
+                ops: vec![back, op],
+                label: "Merged undo entry".into(),
+            });
+        } else {
+            self.push_undo(op);
+        }
+
+        self.redo_stack.clear();
+        Ok(self.epoch)
+    }
+
     /// Undo the most recent op. Applies its inverse, records the inverse in
     /// the log, and moves the original onto the redo stack. Returns the new
     /// epoch + the inverse op that was just applied (so the RPC layer can
@@ -94,6 +113,7 @@ impl History {
         let Some(original) = self.undo_stack.pop_back() else {
             return Ok(None);
         };
+
         let mut inverse = original.inverse();
         inverse.apply(scene).context("apply inverse op")?;
         self.epoch += 1;
