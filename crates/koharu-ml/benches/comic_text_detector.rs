@@ -2,10 +2,7 @@ use std::{hint::black_box, path::PathBuf, time::Duration};
 
 use anyhow::Result;
 use criterion::Criterion;
-use koharu_ml::pp_doclayout_v3::PPDocLayoutV3;
-use koharu_torch::Cuda;
-
-const THRESHOLD: f32 = 0.5;
+use koharu_ml::{comic_text_detector::ComicTextDetector, torch::Cuda};
 
 #[tokio::main]
 async fn main() -> Result<()> {
@@ -16,8 +13,9 @@ async fn main() -> Result<()> {
         .join("1.jpg");
 
     koharu_ml::init().await?;
+
     let image = image::open(&input)?;
-    let model = PPDocLayoutV3::load(koharu_ml::Device::cuda(0)).await?;
+    let model = ComicTextDetector::load(koharu_ml::Device::cuda(0)).await?;
 
     let mut criterion = Criterion::default()
         .sample_size(10)
@@ -25,14 +23,14 @@ async fn main() -> Result<()> {
         .measurement_time(Duration::from_secs(10))
         .configure_from_args();
 
-    criterion.bench_function("pp_doclayout_v3/inference", |bencher| {
+    criterion.bench_function("comic_text_detector/inference/770x1080", |bencher| {
         bencher.iter(|| {
             Cuda::synchronize(0);
-            let detections = model
-                .inference(black_box(&image), black_box(THRESHOLD))
-                .expect("PP-DocLayout-V3 inference failed");
-            black_box(detections);
+            let detection = model
+                .inference(black_box(&image))
+                .expect("Comic Text Detector inference failed");
             Cuda::synchronize(0);
+            black_box(detection);
         });
     });
     criterion.final_summary();

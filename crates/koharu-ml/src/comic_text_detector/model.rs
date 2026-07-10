@@ -7,7 +7,7 @@ use koharu_torch::{
 };
 
 #[derive(Debug)]
-pub struct ComicTextDetectorModel {
+pub struct Model {
     yolo_vs: nn::VarStore,
     unet_vs: nn::VarStore,
     dbnet_vs: nn::VarStore,
@@ -17,13 +17,12 @@ pub struct ComicTextDetectorModel {
 }
 
 #[derive(Debug)]
-pub struct ComicTextDetectorForwardOutput {
-    pub predictions: Tensor,
+pub struct Output {
     pub mask: Tensor,
     pub line_maps: Tensor,
 }
 
-impl ComicTextDetectorModel {
+impl Model {
     pub fn new(device: Device) -> Self {
         let mut yolo_vs = nn::VarStore::new(device);
         let yolo = YoloV5::new(&yolo_vs.root());
@@ -59,8 +58,8 @@ impl ComicTextDetectorModel {
         Ok(())
     }
 
-    pub fn forward(&self, input: &Tensor) -> ComicTextDetectorForwardOutput {
-        let (predictions, features) = self.yolo.forward(input);
+    pub fn forward(&self, input: &Tensor) -> Output {
+        let (_predictions, features) = self.yolo.forward(input);
         let (mask, db_features) = self.unet.forward(
             &features[0],
             &features[1],
@@ -71,11 +70,7 @@ impl ComicTextDetectorModel {
         let line_maps = self
             .dbnet
             .forward(&db_features[0], &db_features[1], &db_features[2]);
-        ComicTextDetectorForwardOutput {
-            predictions,
-            mask,
-            line_maps,
-        }
+        Output { mask, line_maps }
     }
 }
 

@@ -37,3 +37,7 @@ harness = false
 [[bench]]
 name = "lama"
 harness = false
+
+[[bench]]
+name = "comic_text_detector"
+harness = false

@@ -7,9 +7,7 @@ use imageproc::{
     drawing::{draw_hollow_rect_mut, draw_line_segment_mut},
     rect::Rect,
 };
-use koharu_ml::comic_text_detector::{
-    ComicTextDetection, ComicTextDetector, ComicTextDetectorConfig, Quad, threshold_mask,
-};
+use koharu_ml::comic_text_detector::{ComicTextDetection, ComicTextDetector, Quad};
 
 #[derive(Debug, Parser)]
 struct Cli {
@@ -31,18 +29,6 @@ struct Cli {
     #[arg(long, value_name = "FILE")]
     threshold_output: Option<PathBuf>,
 
-    #[arg(long, default_value_t = 1024)]
-    detect_size: u32,
-
-    #[arg(long, default_value_t = 0.4)]
-    confidence_threshold: f32,
-
-    #[arg(long, default_value_t = 0.35)]
-    nms_threshold: f32,
-
-    #[arg(long, default_value_t = 60)]
-    mask_threshold: u8,
-
     #[arg(long, default_value_t = false)]
     cpu: bool,
 }
@@ -55,25 +41,16 @@ async fn main() -> Result<()> {
 
     koharu_ml::init().await?;
 
-    let model = ComicTextDetector::load_with_config(
-        koharu_ml::device(cli.cpu),
-        ComicTextDetectorConfig {
-            detect_size: cli.detect_size,
-            confidence_threshold: cli.confidence_threshold,
-            nms_threshold: cli.nms_threshold,
-            mask_threshold: cli.mask_threshold,
-        },
-    )
-    .await?;
+    let model = ComicTextDetector::load(koharu_ml::device(cli.cpu)).await?;
     let detection = model.inference(&image)?;
 
     if let Some(path) = cli.annotated_output {
         let mut annotated = image.to_rgba8();
-        draw_detection(&mut annotated, &detection, cli.mask_threshold);
+        draw_detection(&mut annotated, &detection);
         annotated.save(path)?;
     }
     if let Some(path) = cli.mask_output {
-        threshold_mask(&detection.mask, cli.mask_threshold).save(path)?;
+        detection.mask.save(path)?;
     }
     if let Some(path) = cli.shrink_output {
         detection.shrink_map.save(path)?;
@@ -92,8 +69,8 @@ async fn main() -> Result<()> {
     Ok(())
 }
 
-fn draw_detection(image: &mut RgbaImage, detection: &ComicTextDetection, mask_threshold: u8) {
-    overlay_mask(image, &detection.mask, mask_threshold);
+fn draw_detection(image: &mut RgbaImage, detection: &ComicTextDetection) {
+    overlay_mask(image, &detection.mask);
 
     for line in &detection.line_polygons {
         draw_quad(image, line, Rgba([20, 220, 80, 255]));
@@ -117,13 +94,13 @@ fn draw_detection(image: &mut RgbaImage, detection: &ComicTextDetection, mask_th
     }
 }
 
-fn overlay_mask(image: &mut RgbaImage, mask: &GrayImage, threshold: u8) {
+fn overlay_mask(image: &mut RgbaImage, mask: &GrayImage) {
     let width = image.width().min(mask.width());
     let height = image.height().min(mask.height());
     for y in 0..height {
         for x in 0..width {
             let value = mask.get_pixel(x, y)[0];
-            if value < threshold {
+            if value == 0 {
                 continue;
             }
             let pixel = image.get_pixel_mut(x, y);

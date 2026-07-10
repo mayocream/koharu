@@ -6,14 +6,11 @@ use image::DynamicImage;
 use koharu_runtime::package::huggingface;
 use koharu_torch::Device;
 
-pub use self::processor::{
-    ComicTextBlock, ComicTextDetection, ComicTextDetectionJson, ComicTextDetectorConfig, Quad,
-    threshold_mask,
-};
+pub use self::processor::{ComicTextBlock, ComicTextDetection, ComicTextDetectionJson, Quad};
 
 use self::{
-    model::ComicTextDetectorModel,
-    processor::{postprocess, preprocess},
+    model::Model,
+    processor::{postprocess, preprocess, rearranged_inference},
 };
 
 koharu_runtime::huggingface! {
@@ -25,19 +22,11 @@ koharu_runtime::huggingface! {
 #[derive(Debug)]
 pub struct ComicTextDetector {
     device: Device,
-    config: ComicTextDetectorConfig,
-    model: ComicTextDetectorModel,
+    model: Model,
 }
 
 impl ComicTextDetector {
     pub async fn load(device: crate::Device) -> Result<Self> {
-        Self::load_with_config(device, ComicTextDetectorConfig::default()).await
-    }
-
-    pub async fn load_with_config(
-        device: crate::Device,
-        config: ComicTextDetectorConfig,
-    ) -> Result<Self> {
         let device: Device = device.try_into()?;
         let yolo_path = huggingface::resolve(YOLO_WEIGHTS)
             .await
@@ -49,23 +38,24 @@ impl ComicTextDetector {
             .await
             .context("failed to resolve comic-text-detector DBNet weights")?;
 
-        let model = ComicTextDetectorModel::new(device);
+        let model = Model::new(device);
         model
             .load_safetensors(&yolo_path, &unet_path, &dbnet_path)
             .context("failed to load comic-text-detector safetensors")?;
 
-        Ok(Self {
-            device,
-            config,
-            model,
-        })
+        Ok(Self { device, model })
     }
 
     pub fn inference(&self, image: &DynamicImage) -> Result<ComicTextDetection> {
         koharu_torch::no_grad(|| {
-            let input = preprocess(image, self.device, &self.config)?;
+            if let Some(detection) =
+                rearranged_inference(image, self.device, |input| self.model.forward(input))?
+            {
+                return Ok(detection);
+            }
+            let input = preprocess(image, self.device)?;
             let outputs = self.model.forward(&input.pixel_values);
-            postprocess(outputs, &input, &self.config)
+            postprocess(outputs, &input, image)
         })
     }
 }
