@@ -6,10 +6,18 @@ pub mod llama_cpp;
 pub mod loading;
 pub mod stable_diffusion_cpp;
 
-use std::{env::current_exe, path::PathBuf, sync::LazyLock};
+use std::{
+    env::{current_exe, var_os},
+    path::PathBuf,
+    sync::LazyLock,
+};
 
 /// The path where the packages will be downloaded and installed.
 pub static STORE_DIR: LazyLock<PathBuf> = LazyLock::new(|| {
+    if let Some(path) = var_os("CARGO_WORKSPACE_DIR") {
+        return PathBuf::from(path).join("target").join("store");
+    }
+
     current_exe()
         .expect("Failed to get current executable path")
         .parent()
