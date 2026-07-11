@@ -83,6 +83,8 @@
     "pages_other": "{{count}} sayfa",
     "empty": "Belge yok",
     "prompt": "Başlamak için bir sayfa seçin veya içe aktarın",
+    "deleteConfirmTitle": "Sayfayı Sil",
+    "deleteConfirmDescription": "Sayfa {{index}}'yi silmek istediğinizden emin misiniz? Bu işlem geri alınamaz.",
     "pageManager": {
       "title": "Sayfa Yöneticisi",
       "description": "Sayfaları yeniden sıralamak için sürükleyip bırakın."

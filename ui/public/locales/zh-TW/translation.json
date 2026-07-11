@@ -83,6 +83,8 @@
     "pages_other": "{{count}} 頁",
     "empty": "沒有文件",
     "prompt": "選擇或匯入頁面以開始",
+    "deleteConfirmTitle": "刪除頁面",
+    "deleteConfirmDescription": "您確定要刪除第 {{index}} 頁嗎？此動作無法復原。",
     "pageManager": {
       "title": "頁面管理",
       "description": "拖放頁面以重新排列順序。"

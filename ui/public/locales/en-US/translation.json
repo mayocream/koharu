@@ -100,6 +100,8 @@
     "pages_other": "{{count}} pages",
     "empty": "No documents",
     "prompt": "Select or import a page to begin",
+    "deleteConfirmTitle": "Delete Page",
+    "deleteConfirmDescription": "Are you sure you want to delete page {{index}}? This action cannot be undone.",
     "pageManager": {
       "title": "Page Manager",
       "description": "Drag and drop pages to reorder them."
