@@ -24,10 +24,13 @@ impl Package for HuggingFace {
 
         let client = Client::new();
         let url = huggingface_url(&self.repo, &self.filename);
-        if let Some(parent) = path.parent() {
-            tokio::fs::create_dir_all(parent).await?;
-        }
-        client.download(&url, path.clone()).await?;
+        let parent = path
+            .parent()
+            .ok_or_else(|| anyhow::anyhow!("invalid Hugging Face package path"))?;
+        tokio::fs::create_dir_all(parent).await?;
+        let temporary = tempfile::NamedTempFile::new_in(parent)?.into_temp_path();
+        client.download(&url, temporary.to_path_buf()).await?;
+        temporary.persist(&path)?;
 
         Ok(path)
     }

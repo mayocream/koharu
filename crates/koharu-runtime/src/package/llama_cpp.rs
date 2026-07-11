@@ -1,4 +1,9 @@
-use std::{ffi::OsStr, fs::create_dir_all, path::PathBuf, sync::LazyLock};
+use std::{
+    ffi::OsStr,
+    fs::{create_dir_all, rename},
+    path::PathBuf,
+    sync::LazyLock,
+};
 
 use anyhow::Context;
 use strum::EnumProperty;
@@ -151,8 +156,13 @@ impl Package for LlamaCpp {
                 .download(&url, file.path().to_path_buf())
                 .await?;
 
-            create_dir_all(&path)?;
-            extract(archive, path.clone(), &["**/*"])?;
+            let parent = path
+                .parent()
+                .ok_or_else(|| anyhow::anyhow!("invalid llama.cpp package path"))?;
+            create_dir_all(parent)?;
+            let temporary = tempfile::tempdir_in(parent)?;
+            extract(archive, temporary.path().to_path_buf(), &["**/*"])?;
+            rename(temporary.path(), &path)?;
         }
 
         let nested_path = path.join(format!("llama-{TAG}"));

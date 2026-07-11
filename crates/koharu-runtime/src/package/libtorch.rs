@@ -1,4 +1,8 @@
-use std::{fs::create_dir_all, path::PathBuf, sync::LazyLock};
+use std::{
+    fs::{create_dir_all, remove_dir_all, rename},
+    path::PathBuf,
+    sync::LazyLock,
+};
 
 use anyhow::{Result, bail};
 use strum::EnumProperty;
@@ -139,10 +143,16 @@ impl Package for Libtorch {
         let file = tempfile::Builder::new().suffix(".zip").tempfile()?;
         let archive = client.download(&url, file.path().to_path_buf()).await?;
 
-        create_dir_all(&path)?;
-
-        // extract the entire archive, including headers and libraries
-        extract(archive, path.clone(), &["**/*"])?;
+        let parent = path
+            .parent()
+            .ok_or_else(|| anyhow::anyhow!("invalid LibTorch package path"))?;
+        create_dir_all(parent)?;
+        let temporary = tempfile::tempdir_in(parent)?;
+        extract(archive, temporary.path().to_path_buf(), &["**/*"])?;
+        if path.exists() {
+            remove_dir_all(&path)?;
+        }
+        rename(temporary.path(), &path)?;
         Ok(path)
     }
 }

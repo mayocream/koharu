@@ -1,4 +1,8 @@
-use std::{fs::create_dir_all, path::PathBuf, sync::LazyLock};
+use std::{
+    fs::{create_dir_all, remove_dir_all, rename},
+    path::PathBuf,
+    sync::LazyLock,
+};
 
 use anyhow::Context;
 use strum::EnumProperty;
@@ -323,9 +327,20 @@ impl Package for Cuda {
         let client = Client::new();
         let archive = client.download(&wheel, file.path().to_path_buf()).await?;
 
-        create_dir_all(&path)?;
-        // extract only the dynamic libraries
-        extract(archive, path.clone(), &["**/*.dll", "**/*.so", "**/*.so.*"])?;
+        let parent = path
+            .parent()
+            .ok_or_else(|| anyhow::anyhow!("invalid CUDA package path"))?;
+        create_dir_all(parent)?;
+        let temporary = tempfile::tempdir_in(parent)?;
+        extract(
+            archive,
+            temporary.path().to_path_buf(),
+            &["**/*.dll", "**/*.so", "**/*.so.*"],
+        )?;
+        if path.exists() {
+            remove_dir_all(&path)?;
+        }
+        rename(temporary.path(), &path)?;
 
         Ok(path)
     }
