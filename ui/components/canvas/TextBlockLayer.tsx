@@ -251,6 +251,8 @@ function BlockSprite({ node, scale }: { node: TextNodeEntry; scale: number }) {
   const spriteT = node.data.spriteTransform
   const x = (spriteT?.x ?? node.transform.x) * scale
   const y = (spriteT?.y ?? node.transform.y) * scale
+  const w = (spriteT?.width ?? node.transform.width) * scale
+  const h = (spriteT?.height ?? node.transform.height) * scale
   return (
     <img
       alt=''
@@ -260,8 +262,10 @@ function BlockSprite({ node, scale }: { node: TextNodeEntry; scale: number }) {
       style={{
         top: 0,
         left: 0,
+        width: w,
+        height: h,
         transformOrigin: 'top left',
-        transform: `translate(${x}px, ${y}px) scale(${scale})`,
+        transform: `translate(${x}px, ${y}px)`,
       }}
     />
   )
