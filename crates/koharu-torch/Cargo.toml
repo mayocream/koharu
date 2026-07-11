@@ -1,15 +1,16 @@
 [package]
 name = "koharu-torch"
 version.workspace = true
-authors = ["Laurent Mazare <lmazare@gmail.com>"]
 edition = "2021"
-
-description = "Rust wrappers for the PyTorch C++ api (libtorch)."
-repository = "https://github.com/LaurentMazare/tch-rs"
-keywords = ["pytorch", "deep-learning", "machine-learning"]
-categories = ["science"]
-license = "MIT/Apache-2.0"
-readme = "README.md"
+description = "Rust bindings for LibTorch with a dynamically loaded C++ shim."
+license = "MIT OR Apache-2.0"
+authors.workspace = true
+readme.workspace = true
+homepage.workspace = true
+repository.workspace = true
+keywords = ["pytorch", "libtorch", "tensor", "deep-learning", "machine-learning"]
+categories = ["api-bindings", "science"]
+publish = true
 
 [dependencies]
 lazy_static = "1.3.0"

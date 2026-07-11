@@ -2,13 +2,15 @@
 name = "koharu-llama"
 version.workspace = true
 edition.workspace = true
-description = "Safe Rust wrappers for llama.cpp."
-license = "MIT/Apache-2.0"
+description = "Safe Rust bindings for llama.cpp with runtime dynamic loading."
+license = "MIT OR Apache-2.0"
 authors.workspace = true
+readme.workspace = true
 homepage.workspace = true
 repository.workspace = true
-keywords = ["llama", "llama.cpp", "machine-learning"]
-publish.workspace = true
+keywords = ["llama", "llm", "inference", "machine-learning", "bindings"]
+categories = ["api-bindings", "science"]
+publish = true
 
 [dependencies]
 encoding_rs = { workspace = true }

@@ -2,13 +2,15 @@
 name = "koharu-llama-sys"
 version.workspace = true
 edition.workspace = true
-description = "Low-level dynamic bindings for llama.cpp."
-license = "MIT/Apache-2.0"
+description = "Low-level dynamically loaded FFI bindings for llama.cpp."
+license = "MIT OR Apache-2.0"
 authors.workspace = true
+readme.workspace = true
 homepage.workspace = true
 repository.workspace = true
-keywords = ["llama", "llama.cpp", "ffi", "machine-learning"]
-publish.workspace = true
+keywords = ["llama", "llm", "ffi", "bindings", "machine-learning"]
+categories = ["external-ffi-bindings", "science"]
+publish = true
 build = "build.rs"
 
 [dependencies]

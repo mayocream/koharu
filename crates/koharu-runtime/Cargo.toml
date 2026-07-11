@@ -2,14 +2,15 @@
 name = "koharu-runtime"
 version.workspace = true
 edition.workspace = true
-description.workspace = true
-license.workspace = true
+description = "Runtime package discovery, downloading, and dynamic library loading for Koharu."
+license = "MIT OR Apache-2.0"
 authors.workspace = true
 readme.workspace = true
 homepage.workspace = true
 repository.workspace = true
-keywords.workspace = true
-publish.workspace = true
+keywords = ["koharu", "runtime", "cuda", "libtorch", "machine-learning"]
+categories = ["development-tools", "science"]
+publish = true
 
 [dependencies]
 anyhow = { workspace = true }

@@ -2,13 +2,15 @@
 name = "koharu-diffusion"
 version.workspace = true
 edition.workspace = true
-description = "Safe Rust wrappers for stable-diffusion.cpp."
-license = "MIT/Apache-2.0"
+description = "Safe Rust bindings for stable-diffusion.cpp with runtime dynamic loading."
+license = "MIT OR Apache-2.0"
 authors.workspace = true
+readme.workspace = true
 homepage.workspace = true
 repository.workspace = true
-keywords = ["stable-diffusion", "diffusion", "machine-learning"]
-publish.workspace = true
+keywords = ["stable-diffusion", "diffusion", "image-generation", "machine-learning", "bindings"]
+categories = ["api-bindings", "multimedia::images", "science"]
+publish = true
 
 [dependencies]
 image = { workspace = true }

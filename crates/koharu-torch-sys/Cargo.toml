@@ -1,16 +1,18 @@
 [package]
 name = "koharu-torch-sys"
 version.workspace = true
-authors = ["Laurent Mazare <lmazare@gmail.com>"]
-edition = "2021"
+edition.workspace = true
+description = "Low-level FFI bindings for the LibTorch C++ API."
+license = "MIT OR Apache-2.0"
+authors.workspace = true
+readme.workspace = true
+homepage.workspace = true
+repository.workspace = true
+keywords = ["pytorch", "libtorch", "ffi", "deep-learning", "machine-learning"]
+publish = true
 build = "build.rs"
-links = "tch"
 
-description = "Low-level FFI bindings for the PyTorch C++ api (libtorch)."
-repository = "https://github.com/LaurentMazare/tch-rs"
-keywords = ["pytorch", "ffi", "deep-learning", "machine-learning"]
 categories = ["external-ffi-bindings", "science"]
-license = "MIT/Apache-2.0"
 
 [dependencies]
 libloading = { workspace = true }
