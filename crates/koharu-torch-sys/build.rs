@@ -7,7 +7,7 @@ use anyhow::{Context, Result};
 use koharu_bindgen::Generator;
 use koharu_runtime::package::{libtorch::Libtorch, Package};
 
-const SHIM_LIBRARY_NAME: &str = "koharu_torch_shim";
+const SHIM_LIBRARY_NAME: &str = "koharu-torch";
 const OPAQUE_TYPES: &str = "^(tensor|scalar|optimizer|module|ivalue)$";
 const TORCH_API_HEADER: &str = "libtch/torch_api.h";
 const TORCH_API_GENERATED_HEADER: &str = "libtch/torch_api_generated.h";
@@ -103,10 +103,10 @@ fn output_dir() -> Result<PathBuf> {
 
 fn shim_file_name() -> &'static str {
     if cfg!(windows) {
-        "koharu_torch_shim.dll"
+        "koharu-torch.dll"
     } else if cfg!(target_os = "macos") {
-        "libkoharu_torch_shim.dylib"
+        "libkoharu-torch.dylib"
     } else {
-        "libkoharu_torch_shim.so"
+        "libkoharu-torch.so"
     }
 }

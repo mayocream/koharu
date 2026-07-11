@@ -1,8 +1,7 @@
-use std::{ffi::OsStr, fs::create_dir_all, path::PathBuf, sync::LazyLock};
+use std::{fs::create_dir_all, path::PathBuf, sync::LazyLock};
 
 use anyhow::bail;
 use strum::EnumProperty;
-use walkdir::WalkDir;
 
 use crate::{
     device::{
@@ -10,7 +9,7 @@ use crate::{
         vulkan::vulkan_available,
     },
     download::{archive::extract, client::Client, github::github_release},
-    package::{Package, PreloadablePackage, STORE_DIR, cuda::Cuda, loading::preload},
+    package::{Package, PreloadablePackage, STORE_DIR, cuda::Cuda, dependency, loading::preload},
 };
 
 const REPO: &str = "leejet/stable-diffusion.cpp";
@@ -116,29 +115,28 @@ impl StableDiffusionCpp {
 impl Package for StableDiffusionCpp {
     async fn resolve(&self) -> anyhow::Result<PathBuf> {
         let path = STABLE_DIFFUSION_CPP_ROOT.join(self.to_string());
-        if path.exists()
-            && self.dylibs().all(|dylib| {
-                WalkDir::new(&path)
-                    .into_iter()
-                    .filter_map(Result::ok)
-                    .any(|entry| {
-                        entry.file_type().is_file() && entry.file_name() == OsStr::new(dylib)
-                    })
-            })
-        {
-            return Ok(path);
+        if !self.dylibs().all(|dylib| path.join(dylib).is_file()) {
+            let asset = self.asset();
+            let url = github_release(REPO, TAG, &asset);
+            let file = tempfile::Builder::new().suffix(&asset).tempfile()?;
+            let archive = Client::new()
+                .download(&url, file.path().to_path_buf())
+                .await?;
+
+            create_dir_all(&path)?;
+            extract(
+                archive,
+                path.clone(),
+                &["**/*.dll", "**/*.dylib", "**/*.so", "**/*.so.*"],
+            )?;
         }
 
-        let asset = self.asset();
-        let url = github_release(REPO, TAG, &asset);
-        let file = tempfile::Builder::new().suffix(&asset).tempfile()?;
-        let archive = Client::new()
-            .download(&url, file.path().to_path_buf())
-            .await?;
-
-        create_dir_all(&path)?;
-        extract(archive, path.clone(), &["**/*"])?;
-        Ok(path)
+        dependency::isolate(
+            &self
+                .dylibs()
+                .map(|name| path.join(name))
+                .collect::<Vec<_>>(),
+        )
     }
 }
 
@@ -150,26 +148,17 @@ impl PreloadablePackage for StableDiffusionCpp {
             Cuda::Cublas12.preload().await?;
         }
 
-        let package_dir = self.resolve().await?;
-        for dylib in self.dylibs() {
-            let mut dylib_path = None;
-            for entry in WalkDir::new(&package_dir) {
-                let entry = entry?;
-                if entry.file_type().is_file() && entry.file_name() == OsStr::new(dylib) {
-                    dylib_path = Some(entry.into_path());
-                    break;
-                }
-            }
-
-            let dylib_path = dylib_path.ok_or_else(|| {
-                anyhow::anyhow!(
-                    "stable-diffusion.cpp dynamic library not found: {}",
-                    package_dir.join(dylib).display()
-                )
+        let directory = self.resolve().await?;
+        for name in self.dylibs() {
+            let path = directory.join(name);
+            // Imported libraries are aliased; entry libraries and dynamically discovered
+            // backend plugins keep their original filenames.
+            preload(if path.exists() {
+                path
+            } else {
+                directory.join(dependency::alias(name))
             })?;
-            preload(dylib_path)?;
         }
-
         Ok(())
     }
 }

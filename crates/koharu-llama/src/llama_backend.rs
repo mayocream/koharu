@@ -51,13 +51,14 @@ impl LlamaBackend {
     }
 
     /// Initialize the llama backend (with numa).
-    /// ```
+    /// ```no_run
     ///# use koharu_llama::llama_backend::LlamaBackend;
     ///# use std::error::Error;
     ///# use koharu_llama::llama_backend::NumaStrategy;
     ///
     ///# fn main() -> Result<(), Box<dyn Error>> {
     ///
+    /// LlamaBackend::load_all_backends_from_path("path/to/llama/backends")?;
     /// let llama_backend = LlamaBackend::init_numa(NumaStrategy::MIRROR)?;
     ///
     ///# Ok(())

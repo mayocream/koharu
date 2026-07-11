@@ -43,16 +43,6 @@ pub type optimizer = *mut C_optimizer;
 pub type ivalue = *mut CIValue;
 pub type module = *mut CModule_;
 
-pub fn library_name() -> &'static str {
-    if cfg!(windows) {
-        "koharu_torch_shim.dll"
-    } else if cfg!(target_os = "macos") {
-        "libkoharu_torch_shim.dylib"
-    } else {
-        "libkoharu_torch_shim.so"
-    }
-}
-
 include!(concat!(env!("OUT_DIR"), "/torch_api.rs"));
 
 pub unsafe fn at_autocast_is_enabled() -> ::std::os::raw::c_int {

@@ -13,6 +13,7 @@ mod device;
 
 pub mod comic_text_bubble_detector;
 pub mod comic_text_detector;
+pub mod flux2_klein;
 pub mod lama;
 pub mod pp_doclayout_v3;
 
@@ -44,10 +45,19 @@ pub async fn init() -> anyhow::Result<()> {
                 .context("failed to load llama.cpp backends")?;
             let backend = LlamaBackend::init().context("failed to initialize llama.cpp backend")?;
 
-            StableDiffusionCpp::for_current_target()?
+            let sd_cpp = StableDiffusionCpp::for_current_target()?;
+            sd_cpp
                 .preload()
                 .await
                 .context("failed to initialize stable-diffusion.cpp runtime")?;
+            koharu_diffusion::send_logs_to_tracing()
+                .context("failed to redirect stable-diffusion.cpp logs")?;
+            let package_dir = sd_cpp
+                .resolve()
+                .await
+                .context("failed to resolve stable-diffusion.cpp runtime")?;
+            koharu_diffusion::load_all_backends_from_path(package_dir)
+                .context("failed to load stable-diffusion.cpp backends")?;
             Libtorch::for_current_target()?
                 .preload()
                 .await

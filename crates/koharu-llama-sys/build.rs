@@ -19,6 +19,18 @@ const PUBLIC_HEADERS: &[&str] = &[
     "include/mtmd-helper.h",
 ];
 const BINDGEN_EXTRA_HEADERS: &[&str] = &[HEADER, "wrapper_common.h", "wrapper_utils.h"];
+const DYNAMIC_LIBRARIES: &[&str] = &[
+    "koharu-llama",
+    "llama",
+    "ggml",
+    "ggml-base",
+    "ggml-cpu",
+    "ggml-cpu-x64",
+    "mtmd",
+];
+const FUNCTION_ALLOWLIST: &str = "^(ggml|gguf|llama|llama_rs|mtmd)_.*";
+const TYPE_ALLOWLIST: &str = "^(ggml|gguf|llama|llama_rs|mtmd)_.*";
+const VARIABLE_ALLOWLIST: &str = "^(GGML|GGUF|LLAMA|LLAMA_RS|MTMD)_.*";
 const SHIM_SOURCES: &[&str] = &[
     "shim/CMakeLists.txt",
     "shim/common.cpp",
@@ -47,17 +59,17 @@ fn main() -> Result<()> {
 
 fn generate_bindings(manifest_dir: &Path, out_dir: &Path) -> Result<()> {
     let include_dir = manifest_dir.join("include");
-    Generator::from_header(manifest_dir.join(HEADER), "koharu_llama_shim")
-        .with_libraries(library_candidates())
+    Generator::from_header(manifest_dir.join(HEADER), "koharu-llama")
+        .with_libraries(DYNAMIC_LIBRARIES)
         .with_bindgen(|builder| {
             builder
                 .clang_arg(format!("-I{}", manifest_dir.display()))
                 .clang_arg(format!("-I{}", include_dir.display()))
                 .layout_tests(false)
                 .derive_partialeq(true)
-                .allowlist_function("^(ggml|gguf|llama|llama_rs|mtmd)_.*")
-                .allowlist_type("^(ggml|gguf|llama|llama_rs|mtmd)_.*")
-                .allowlist_var("^(GGML|GGUF|LLAMA|LLAMA_RS|MTMD)_.*")
+                .allowlist_function(FUNCTION_ALLOWLIST)
+                .allowlist_type(TYPE_ALLOWLIST)
+                .allowlist_var(VARIABLE_ALLOWLIST)
                 .prepend_enum_name(false)
         })
         .write_to_file(out_dir.join("bindings.rs"))
@@ -115,67 +127,10 @@ fn output_dir() -> Result<PathBuf> {
 
 fn shim_file_name() -> &'static str {
     if cfg!(windows) {
-        "koharu_llama_shim.dll"
+        "koharu-llama.dll"
     } else if cfg!(target_os = "macos") {
-        "libkoharu_llama_shim.dylib"
+        "libkoharu-llama.dylib"
     } else {
-        "libkoharu_llama_shim.so"
-    }
-}
-
-fn library_candidates() -> &'static [&'static str] {
-    if cfg!(target_os = "windows") {
-        &[
-            "koharu_llama_shim",
-            "llama",
-            "ggml",
-            "ggml-base",
-            "ggml-cpu",
-            "ggml-cpu-x64",
-            "ggml-cpu-sse42",
-            "ggml-cpu-sandybridge",
-            "ggml-cpu-ivybridge",
-            "ggml-cpu-haswell",
-            "ggml-cpu-piledriver",
-            "ggml-cpu-alderlake",
-            "ggml-cpu-cannonlake",
-            "ggml-cpu-cascadelake",
-            "ggml-cpu-cooperlake",
-            "ggml-cpu-icelake",
-            "ggml-cpu-skylakex",
-            "ggml-cpu-sapphirerapids",
-            "ggml-cpu-zen4",
-            "ggml-cuda",
-            "ggml-vulkan",
-            "ggml-rpc",
-            "llama-common",
-            "mtmd",
-        ]
-    } else if cfg!(target_os = "macos") {
-        &[
-            "koharu_llama_shim",
-            "llama",
-            "ggml",
-            "ggml-base",
-            "ggml-cpu",
-            "ggml-metal",
-            "ggml-blas",
-            "ggml-rpc",
-            "llama-common",
-            "mtmd",
-        ]
-    } else {
-        &[
-            "koharu_llama_shim",
-            "llama",
-            "ggml",
-            "ggml-base",
-            "ggml-cpu",
-            "ggml-cuda",
-            "ggml-vulkan",
-            "ggml-rpc",
-            "llama-common",
-            "mtmd",
-        ]
+        "libkoharu-llama.so"
     }
 }

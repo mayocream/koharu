@@ -8,14 +8,4 @@
     unpredictable_function_pointer_comparisons
 )]
 
-pub fn library_name() -> &'static str {
-    if cfg!(target_os = "windows") {
-        "stable-diffusion.dll"
-    } else if cfg!(target_os = "macos") {
-        "libstable-diffusion.dylib"
-    } else {
-        "libstable-diffusion.so"
-    }
-}
-
 include!(concat!(env!("OUT_DIR"), "/bindings.rs"));

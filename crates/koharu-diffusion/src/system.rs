@@ -1,6 +1,6 @@
-use std::{ffi::CStr, ptr};
+use std::{ffi::CStr, path::Path, ptr};
 
-use crate::{ffi::NativeCall, sys};
+use crate::{Result, ffi::NativeCall, ffi::path_cstring, sys};
 
 /// A ggml backend device accepted by backend assignment specifications.
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -45,6 +45,14 @@ pub fn version() -> String {
 pub fn commit() -> String {
     let _call = NativeCall::enter();
     copy_native_string(unsafe { sys::sd_commit() })
+}
+
+/// Asks ggml to discover and register every dynamic backend in `path`.
+pub fn load_all_backends_from_path(path: impl AsRef<Path>) -> Result<()> {
+    let path = path_cstring(path.as_ref(), "backend path")?;
+    let _call = NativeCall::enter();
+    unsafe { sys::ggml_backend_load_all_from_path(path.as_ptr()) };
+    Ok(())
 }
 
 /// Lists backend devices as name/description pairs.

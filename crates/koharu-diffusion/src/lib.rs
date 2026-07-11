@@ -46,8 +46,8 @@ pub use ::image::{GrayImage, RgbImage};
 pub use callbacks::{
     GraphEvaluation, LogMessage, Preview, PreviewOptions, Progress,
     clear_graph_evaluation_callback, clear_log_callback, clear_preview_callback,
-    clear_progress_callback, set_graph_evaluation_callback, set_log_callback, set_preview_callback,
-    set_progress_callback,
+    clear_progress_callback, send_logs_to_tracing, set_graph_evaluation_callback, set_log_callback,
+    set_preview_callback, set_progress_callback,
 };
 pub use context::{CancelHandle, Context};
 pub use convert::{
@@ -58,7 +58,10 @@ pub use enums::*;
 pub use error::{Error, Result};
 pub use image::{Audio, RgbImageView, Video};
 pub use params::*;
-pub use system::{Device, commit, list_devices, physical_core_count, system_info, version};
+pub use system::{
+    Device, commit, list_devices, load_all_backends_from_path, physical_core_count, system_info,
+    version,
+};
 pub use upscaler::{Upscaler, UpscalerParams};
 
 /// Low-level bindings for functionality not yet represented by the safe API.

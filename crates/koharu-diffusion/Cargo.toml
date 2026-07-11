@@ -14,3 +14,4 @@ publish.workspace = true
 image = { workspace = true }
 koharu-diffusion-sys = { workspace = true }
 thiserror = { workspace = true }
+tracing = { workspace = true }

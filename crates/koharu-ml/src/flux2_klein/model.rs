@@ -1,0 +1,74 @@
+//! Native FLUX.2 Klein model assembly.
+//!
+//! Component mapping follows stable-diffusion.cpp at:
+//! https://github.com/leejet/stable-diffusion.cpp/blob/cc734292286f85f9c48305d94d7fd22f42838522/docs/flux2.md
+//! Qwen3 chat templating and hidden-state layers 9, 18, and 27 are mapped by:
+//! https://github.com/leejet/stable-diffusion.cpp/blob/cc734292286f85f9c48305d94d7fd22f42838522/src/conditioning/conditioner.hpp#L2287-L2301
+//! The decoder width is inferred from the small-decoder checkpoint by:
+//! https://github.com/leejet/stable-diffusion.cpp/blob/cc734292286f85f9c48305d94d7fd22f42838522/src/model/vae/auto_encoder_kl.hpp#L518-L569
+
+use std::{path::PathBuf, sync::Mutex};
+
+use anyhow::{Context as _, Result, anyhow, ensure};
+use koharu_diffusion::{Context, ContextParams, ImageGenerationParams, RgbImage, VaeFormat};
+
+use crate::Backend;
+
+#[derive(Debug)]
+pub(super) struct ModelPaths {
+    pub transformer: PathBuf,
+    pub text_encoder: PathBuf,
+    pub vae: PathBuf,
+}
+
+#[derive(Debug)]
+pub(super) struct Model {
+    context: Mutex<Context>,
+}
+
+impl Model {
+    pub fn new(device: &crate::Device, paths: ModelPaths) -> Result<Self> {
+        let context = Context::new(&context_params(device, paths))
+            .context("failed to load FLUX.2 Klein components")?;
+        ensure!(
+            context.supports_image_generation(),
+            "the loaded FLUX.2 Klein context does not support image generation"
+        );
+        Ok(Self {
+            context: Mutex::new(context),
+        })
+    }
+
+    pub fn forward(&self, params: &ImageGenerationParams) -> Result<Vec<RgbImage>> {
+        let mut context = self
+            .context
+            .lock()
+            .map_err(|_| anyhow!("FLUX.2 Klein context lock was poisoned"))?;
+        context
+            .generate_image(params)
+            .context("FLUX.2 Klein inference failed")
+    }
+}
+
+fn context_params(device: &crate::Device, paths: ModelPaths) -> ContextParams {
+    let use_accelerator = device.backend != Backend::Cpu;
+    ContextParams {
+        diffusion_model_path: Some(paths.transformer),
+        llm_path: Some(paths.text_encoder),
+        vae_path: Some(paths.vae),
+        enable_mmap: true,
+        flash_attention: use_accelerator,
+        diffusion_flash_attention: use_accelerator,
+        vae_format: VaeFormat::Flux2,
+        backend: Some(if use_accelerator {
+            device.name.to_ascii_lowercase()
+        } else {
+            "cpu".to_owned()
+        }),
+        // The text encoder and denoiser run in separate phases. Keeping their
+        // source parameters in RAM lets the native runners release staged GPU
+        // copies between phases instead of requiring both GGUFs in VRAM.
+        params_backend: use_accelerator.then(|| "*=cpu".to_owned()),
+        ..ContextParams::default()
+    }
+}

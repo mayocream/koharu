@@ -46,3 +46,7 @@ harness = false
 [[bench]]
 name = "comic_text_bubble_detector"
 harness = false
+
+[[bench]]
+name = "flux2_klein"
+harness = false

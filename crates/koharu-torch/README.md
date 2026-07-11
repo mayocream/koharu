@@ -18,13 +18,13 @@ The code generation part for the C api on top of libtorch comes from
 
 ## Getting Started
 
-This fork builds a dynamic `koharu_torch_shim` library against libtorch
+This fork builds a dynamic `koharu-torch` library against libtorch
 *v2.12.1* by default. The Rust crate does not link libtorch directly; callers
 load the shim at runtime before using tensor APIs:
 
 ```rust
 unsafe {
-    koharu_torch::load_shim("path/to/koharu_torch_shim.dll")?;
+    koharu_torch::load_shim("path/to/koharu-torch.dll")?;
 }
 ```
 
