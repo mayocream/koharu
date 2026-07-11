@@ -1985,7 +1985,7 @@ version = "0.5.3"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "ab8ecd87370524b461f8557c119c405552c396ed91fc0a8eec68679eab26f94a"
 dependencies = [
- "libloading 0.8.9",
+ "libloading 0.7.4",
 ]
 
 [[package]]
@@ -4318,7 +4318,7 @@ dependencies = [
  "futures",
  "image",
  "koharu-runtime",
- "libloading 0.8.9",
+ "libloading 0.9.0",
  "minijinja",
  "minijinja-contrib",
  "num_cpus",
@@ -4447,7 +4447,7 @@ dependencies = [
  "indicatif",
  "inventory",
  "koharu-core",
- "libloading 0.8.9",
+ "libloading 0.9.0",
  "num_cpus",
  "reqwest 0.13.4",
  "reqwest-middleware",
