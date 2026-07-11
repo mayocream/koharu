@@ -229,6 +229,7 @@ async fn run() -> Result<()> {
             text_node_ids: None,
             reading_order: None,
             region: None,
+            merge_with_previous_op: false,
         },
     };
 

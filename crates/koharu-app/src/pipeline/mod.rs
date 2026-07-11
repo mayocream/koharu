@@ -243,7 +243,14 @@ pub async fn run(
                 ops,
                 label: format!("{}: page {}", info.id, page_id),
             };
-            if let Err(err) = session.apply(batch) {
+
+            let apply_res = if spec.options.merge_with_previous_op {
+                session.apply_merge_up(batch)
+            } else {
+                session.apply(batch)
+            };
+
+            if let Err(err) = apply_res {
                 report_step_failure(
                     info.id,
                     page_id,
