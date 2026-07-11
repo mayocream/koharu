@@ -133,7 +133,7 @@ axum = { version = "0.8", features = ["multipart", "ws"] }
 async-stream = "0.3"
 rmp-serde = "1"
 rmpv = { version = "1", features = ["with-serde"] }
-rmcp = { version = "1.6", features = [
+rmcp = { version = "2.1", features = [
     "server",
     "transport-streamable-http-server",
 ] }
