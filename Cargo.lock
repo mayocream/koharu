@@ -2078,6 +2078,7 @@ dependencies = [
  "document-features",
  "image 0.25.10",
  "num-traits",
+ "rayon",
  "thiserror 2.0.18",
 ]
 

@@ -5,7 +5,7 @@ use anyhow::{Result, anyhow};
 use async_trait::async_trait;
 use image::{DynamicImage, GrayImage, Luma};
 use koharu_core::{ImageRole, MaskRole, Op, Region};
-use koharu_ml::flux2_klein::{Flux2InpaintOptions, Flux2Klein};
+use koharu_ml::flux2_klein::{Flux2KleinInpaint, Flux2KleinInpaintOptions};
 use koharu_ml::inpainting::mask::expand_mask_to_bubble_region_for_inpainting;
 
 use crate::pipeline::artifacts::Artifact;
@@ -15,7 +15,7 @@ use crate::pipeline::engines::support::{
     text_nodes, upsert_image_blob,
 };
 
-pub struct Model(Flux2Klein);
+pub struct Model(Flux2KleinInpaint);
 
 #[async_trait]
 impl Engine for Model {
@@ -53,9 +53,13 @@ impl Engine for Model {
             Some(r) => DynamicImage::ImageLuma8(clip_gray_mask_to_region(&expanded, &r)),
             None => DynamicImage::ImageLuma8(expanded),
         };
-        let result =
-            self.0
-                .inpaint_with_reference(&image, &mask, None, &Flux2InpaintOptions::default())?;
+        let result = self.0.inference(
+            "",
+            &image,
+            None,
+            &mask,
+            &Flux2KleinInpaintOptions::default(),
+        )?;
         let (w, h) = image_dimensions(&result);
         let blob = ctx.blobs.put_webp(&result)?;
         Ok(vec![upsert_image_blob(
@@ -96,7 +100,7 @@ inventory::submit! {
         needs: &[Artifact::SegmentMask, Artifact::BubbleMask],
         produces: &[Artifact::Inpainted],
         load: |runtime, _cpu| Box::pin(async move {
-            let m = Flux2Klein::load(runtime).await?;
+            let m = Flux2KleinInpaint::load(runtime).await?;
             Ok(Box::new(Model(m)) as Box<dyn Engine>)
         }),
     }

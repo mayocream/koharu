@@ -1,34 +1,31 @@
-//! FLUX.2 Klein 4B generation and editing on top of `koharu-diffusion`.
+//! FLUX.2 Klein 4B generation and inpainting.
 //!
-//! Upstream pipeline:
 //! https://github.com/huggingface/diffusers/blob/a37f6f8394ac2a7ee8360c3abea811efe54512b1/src/diffusers/pipelines/flux2/pipeline_flux2_klein.py
+//! https://github.com/huggingface/diffusers/blob/a37f6f8394ac2a7ee8360c3abea811efe54512b1/src/diffusers/pipelines/flux2/pipeline_flux2_klein_inpaint.py
 
 mod model;
 mod processor;
 
 use anyhow::{Context, Result, ensure};
+use fast_image_resize::{FilterType, ResizeAlg, ResizeOptions, Resizer};
 use image::{DynamicImage, RgbImage};
+use koharu_diffusion::{
+    GuidanceParams, ImageGenerationParams, SampleMethod, SampleParams, Scheduler,
+};
 use koharu_runtime::package::huggingface;
 
 use self::{
     model::{Model, ModelPaths},
-    processor::{
-        composite_crop, generation_params, inpaint_crop_bounds, prepare_image, prepare_mask,
-        resize_to_original, restore_alpha,
-    },
+    processor::Flux2ImageProcessor,
 };
 
-pub use self::processor::{Flux2ImageToImageOptions, Flux2InferenceOptions, Flux2InpaintOptions};
+pub use self::processor::{Flux2KleinInpaintOptions, Flux2KleinOptions};
 
 koharu_runtime::huggingface! {
     TRANSFORMER_WEIGHTS => "unsloth/FLUX.2-klein-4B-GGUF" => "flux-2-klein-4b-Q4_K_M.gguf",
     VAE_WEIGHTS => "black-forest-labs/FLUX.2-small-decoder" => "full_encoder_small_decoder.safetensors",
     TEXT_ENCODER_WEIGHTS => "unsloth/Qwen3-4B-GGUF" => "Qwen3-4B-Q4_K_M.gguf",
 }
-
-const DEFAULT_EDIT_PROMPT: &str =
-    "Reconstruct the image while preserving its composition and visual style.";
-const DEFAULT_INPAINT_PROMPT: &str = "Fill the masked area with the surrounding background, removing text and matching the original image.";
 
 #[derive(Debug)]
 pub struct Flux2Klein {
@@ -54,143 +51,241 @@ impl Flux2Klein {
         Ok(Self { model })
     }
 
-    /// Runs the Diffusers-aligned text-to-image or reference-image pipeline.
-    ///
-    /// Reference images use FLUX.2's editing tokens; pass an empty slice for
-    /// text-to-image generation.
+    pub fn inference(
+        &self,
+        image: &[DynamicImage],
+        prompt: &str,
+        options: &Flux2KleinOptions,
+    ) -> Result<Vec<RgbImage>> {
+        ensure!(
+            !prompt.contains('\0'),
+            "prompt contains an interior NUL byte"
+        );
+        ensure!(
+            options.num_inference_steps > 0,
+            "num_inference_steps must be greater than zero"
+        );
+        ensure!(
+            options.num_images_per_prompt > 0,
+            "num_images_per_prompt must be greater than zero"
+        );
+
+        let mut condition_images = Vec::with_capacity(image.len());
+        for image in image {
+            Flux2ImageProcessor::check_image_input(image)?;
+            let mut image = image.clone();
+            if u64::from(image.width()) * u64::from(image.height()) > 1024 * 1024 {
+                image = Flux2ImageProcessor::_resize_to_target_area(&image, 1024 * 1024);
+            }
+            let width = (image.width() / 16) * 16;
+            let height = (image.height() / 16) * 16;
+            ensure!(width > 0 && height > 0);
+            condition_images
+                .push(Flux2ImageProcessor::_resize_and_crop(&image, width, height)?.to_rgb8());
+        }
+
+        let height = options
+            .height
+            .or_else(|| condition_images.first().map(RgbImage::height))
+            .unwrap_or(1024);
+        let width = options
+            .width
+            .or_else(|| condition_images.first().map(RgbImage::width))
+            .unwrap_or(1024);
+        let height = (height / 16) * 16;
+        let width = (width / 16) * 16;
+        ensure!(width > 0 && height > 0);
+
+        self.model.forward(&ImageGenerationParams {
+            prompt: prompt.to_owned(),
+            width: i32::try_from(width)?,
+            height: i32::try_from(height)?,
+            reference_images: condition_images,
+            auto_resize_reference_images: false,
+            sample: SampleParams {
+                guidance: GuidanceParams {
+                    text_cfg: 1.0,
+                    ..GuidanceParams::default()
+                },
+                scheduler: Scheduler::Flux2,
+                sample_method: SampleMethod::Euler,
+                sample_steps: options.num_inference_steps,
+                ..SampleParams::default()
+            },
+            seed: options.seed,
+            batch_count: options.num_images_per_prompt,
+            ..ImageGenerationParams::default()
+        })
+    }
+}
+
+#[derive(Debug)]
+pub struct Flux2KleinInpaint {
+    model: Model,
+}
+
+impl Flux2KleinInpaint {
+    pub async fn load(device: crate::Device) -> Result<Self> {
+        let (transformer, text_encoder, vae) = tokio::try_join!(
+            huggingface::resolve(TRANSFORMER_WEIGHTS),
+            huggingface::resolve(TEXT_ENCODER_WEIGHTS),
+            huggingface::resolve(VAE_WEIGHTS),
+        )
+        .context("failed to resolve FLUX.2 Klein model assets")?;
+        let model = Model::new(
+            &device,
+            ModelPaths {
+                transformer,
+                text_encoder,
+                vae,
+            },
+        )?;
+        Ok(Self { model })
+    }
+
     pub fn inference(
         &self,
         prompt: &str,
-        reference_images: &[DynamicImage],
-        options: &Flux2InferenceOptions,
-    ) -> Result<Vec<RgbImage>> {
-        let mut params = generation_params(
-            prompt,
-            options.width,
-            options.height,
-            options.num_inference_steps,
-            options.seed,
-            options.batch_count,
-        )?;
-        params.reference_images = reference_images.iter().map(DynamicImage::to_rgb8).collect();
-        self.model.forward(&params)
-    }
-
-    pub fn image_to_image(
-        &self,
         image: &DynamicImage,
-        options: &Flux2ImageToImageOptions,
-    ) -> Result<DynamicImage> {
-        self.image_to_image_with_reference(image, None, options)
-    }
-
-    pub fn image_to_image_with_reference(
-        &self,
-        image: &DynamicImage,
-        reference_image: Option<&DynamicImage>,
-        options: &Flux2ImageToImageOptions,
-    ) -> Result<DynamicImage> {
-        if options.strength <= 0.0 {
-            return Ok(image.clone());
-        }
-        ensure!(
-            options.strength <= 1.0,
-            "FLUX.2 image-to-image strength must be in 0..=1"
-        );
-        let steps = i32::try_from(options.num_inference_steps)?;
-        let (input, original_size) = prepare_image(image, options.max_pixels)?;
-        let mut params = generation_params(
-            DEFAULT_EDIT_PROMPT,
-            input.width(),
-            input.height(),
-            steps,
-            -1,
-            1,
-        )?;
-        params.init_image = Some(input.clone());
-        params.reference_images.push(input);
-        if let Some(reference) = reference_image {
-            params.reference_images.push(reference.to_rgb8());
-        }
-        params.strength = options.strength as f32;
-        let output = self
-            .model
-            .forward(&params)?
-            .into_iter()
-            .next()
-            .context("FLUX.2 Klein returned no image")?;
-        let output = resize_to_original(output, original_size);
-        Ok(restore_alpha(output, image))
-    }
-
-    pub fn inpaint(
-        &self,
-        image: &DynamicImage,
-        mask: &DynamicImage,
-        options: &Flux2InpaintOptions,
-    ) -> Result<DynamicImage> {
-        self.inpaint_with_reference(image, mask, None, options)
-    }
-
-    pub fn inpaint_with_reference(
-        &self,
-        image: &DynamicImage,
-        mask: &DynamicImage,
-        reference_image: Option<&DynamicImage>,
-        options: &Flux2InpaintOptions,
+        image_reference: Option<&DynamicImage>,
+        mask_image: &DynamicImage,
+        options: &Flux2KleinInpaintOptions,
     ) -> Result<DynamicImage> {
         ensure!(
-            image.width() == mask.width() && image.height() == mask.height(),
+            image.width() == mask_image.width() && image.height() == mask_image.height(),
             "image/mask dimensions differ: image={}x{}, mask={}x{}",
             image.width(),
             image.height(),
-            mask.width(),
-            mask.height()
+            mask_image.width(),
+            mask_image.height()
         );
-        if options.strength <= 0.0 {
-            return Ok(image.clone());
-        }
         ensure!(
-            options.strength <= 1.0,
-            "FLUX.2 inpaint strength must be in 0..=1"
+            !prompt.contains('\0'),
+            "prompt contains an interior NUL byte"
         );
-        let Some(bounds) = inpaint_crop_bounds(image, mask, options.mask_padding)? else {
-            return Ok(image.clone());
-        };
+        ensure!(
+            options.strength > 0.0 && options.strength <= 1.0,
+            "FLUX.2 inpaint strength must be greater than zero and at most one"
+        );
+        ensure!(
+            options.num_inference_steps > 0,
+            "num_inference_steps must be greater than zero"
+        );
 
-        let image_crop = image.crop_imm(bounds.x, bounds.y, bounds.width, bounds.height);
-        let mask_crop = mask.crop_imm(bounds.x, bounds.y, bounds.width, bounds.height);
-        let (input, crop_size) = prepare_image(&image_crop, options.max_pixels)?;
-        let native_mask = prepare_mask(
-            &mask_crop,
-            input.width(),
-            input.height(),
-            options.mask_padding,
-        );
-        let steps = i32::try_from(options.num_inference_steps)?;
-        let mut params = generation_params(
-            DEFAULT_INPAINT_PROMPT,
-            input.width(),
-            input.height(),
-            steps,
-            -1,
-            1,
-        )?;
-        params.init_image = Some(input.clone());
-        params.reference_images.push(input);
-        if let Some(reference) = reference_image {
-            params.reference_images.push(reference.to_rgb8());
+        let mut image = image.clone();
+        if u64::from(image.width()) * u64::from(image.height()) > 1024 * 1024 {
+            image = Flux2ImageProcessor::_resize_to_target_area(&image, 1024 * 1024);
         }
-        params.mask_image = Some(native_mask);
-        params.strength = options.strength as f32;
+        let width = (image.width() / 16) * 16;
+        let height = (image.height() / 16) * 16;
+        ensure!(width > 0 && height > 0);
+        let source = image.to_rgb8();
+        let mut image = RgbImage::new(width, height);
+        Resizer::new()
+            .resize(
+                &source,
+                &mut image,
+                &ResizeOptions::new()
+                    .resize_alg(ResizeAlg::Convolution(FilterType::Lanczos3))
+                    .use_alpha(false),
+            )
+            .expect("source and destination images have the same pixel type");
+        let source_mask = mask_image.to_luma8();
+        let mut mask_image = image::GrayImage::new(width, height);
+        Resizer::new()
+            .resize(
+                &source_mask,
+                &mut mask_image,
+                &ResizeOptions::new()
+                    .resize_alg(ResizeAlg::Convolution(FilterType::Lanczos3))
+                    .use_alpha(false),
+            )
+            .expect("source and destination masks have the same pixel type");
+
+        let crop_coords = options.padding_mask_crop.and_then(|padding| {
+            Flux2ImageProcessor::get_crop_region(&mask_image, width, height, padding)
+        });
+        let (init_image, mut native_mask) = if let Some((x1, y1, x2, y2)) = crop_coords {
+            let image_crop = DynamicImage::ImageRgb8(
+                image::imageops::crop_imm(&image, x1, y1, x2 - x1, y2 - y1).to_image(),
+            );
+            let mask_crop = DynamicImage::ImageLuma8(
+                image::imageops::crop_imm(&mask_image, x1, y1, x2 - x1, y2 - y1).to_image(),
+            );
+            (
+                Flux2ImageProcessor::_resize_and_fill(&image_crop, width, height).to_rgb8(),
+                Flux2ImageProcessor::_resize_and_fill(&mask_crop, width, height).to_luma8(),
+            )
+        } else {
+            (image.clone(), mask_image.clone())
+        };
+        Flux2ImageProcessor::binarize(&mut native_mask);
+
+        let mut reference_images = vec![init_image.clone()];
+        if let Some(image_reference) = image_reference {
+            let mut image_reference = image_reference.clone();
+            if u64::from(image_reference.width()) * u64::from(image_reference.height())
+                > 1024 * 1024
+            {
+                image_reference =
+                    Flux2ImageProcessor::_resize_to_target_area(&image_reference, 1024 * 1024);
+            }
+            let reference_width = (image_reference.width() / 16) * 16;
+            let reference_height = (image_reference.height() / 16) * 16;
+            ensure!(reference_width > 0 && reference_height > 0);
+            reference_images.push(
+                Flux2ImageProcessor::_resize_and_crop(
+                    &image_reference,
+                    reference_width,
+                    reference_height,
+                )?
+                .to_rgb8(),
+            );
+        }
+
+        let strength = if options.strength >= 1.0 {
+            1.0
+        } else {
+            let effective_steps = options.num_inference_steps
+                - (options.num_inference_steps as f64 * (1.0 - options.strength)).floor() as usize;
+            let boundary = effective_steps as f32 / options.num_inference_steps as f32;
+            f32::from_bits(boundary.to_bits() - 1)
+        };
 
         let generated = self
             .model
-            .forward(&params)?
+            .forward(&ImageGenerationParams {
+                prompt: prompt.to_owned(),
+                width: i32::try_from(width)?,
+                height: i32::try_from(height)?,
+                init_image: Some(init_image),
+                reference_images,
+                auto_resize_reference_images: false,
+                mask_image: Some(native_mask),
+                sample: SampleParams {
+                    guidance: GuidanceParams {
+                        text_cfg: 1.0,
+                        ..GuidanceParams::default()
+                    },
+                    scheduler: Scheduler::Flux2,
+                    sample_method: SampleMethod::Euler,
+                    sample_steps: i32::try_from(options.num_inference_steps)?,
+                    ..SampleParams::default()
+                },
+                seed: options.seed,
+                batch_count: 1,
+                strength,
+                ..ImageGenerationParams::default()
+            })?
             .into_iter()
             .next()
             .context("FLUX.2 Klein returned no inpainted image")?;
-        let generated = resize_to_original(generated, crop_size);
-        composite_crop(image, generated, &mask_crop, bounds)
+
+        let generated = if crop_coords.is_some() {
+            Flux2ImageProcessor::apply_overlay(&mask_image, &image, generated, crop_coords)?
+        } else {
+            generated
+        };
+        Ok(DynamicImage::ImageRgb8(generated))
     }
 }

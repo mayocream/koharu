@@ -43,7 +43,7 @@ koharu-secrets = { path = "crates/koharu-secrets", version = "0.62.0-alpha.1", d
 # external dependencies
 hf-hub = "0.5"
 image = "0.25"
-fast_image_resize = { version = "6.0", features = ["image"] }
+fast_image_resize = { version = "6.0", features = ["image", "rayon"] }
 anyhow = "1.0"
 async-trait = "0.1"
 imageproc = "0.27"

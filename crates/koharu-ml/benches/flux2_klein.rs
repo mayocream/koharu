@@ -2,7 +2,7 @@ use std::{hint::black_box, path::PathBuf, time::Duration};
 
 use anyhow::Result;
 use criterion::Criterion;
-use koharu_ml::flux2_klein::{Flux2InpaintOptions, Flux2Klein};
+use koharu_ml::flux2_klein::{Flux2KleinInpaint, Flux2KleinInpaintOptions};
 use koharu_torch::Cuda;
 
 #[tokio::main]
@@ -13,13 +13,13 @@ async fn main() -> Result<()> {
         .join("inpaint");
     let image = image::open(fixtures.join("image_4k.jpg"))?;
     let mask = image::open(fixtures.join("mask_4k.png"))?;
-    let options = Flux2InpaintOptions::default();
+    let options = Flux2KleinInpaintOptions::default();
 
     koharu_ml::init().await?;
-    let model = Flux2Klein::load(koharu_ml::Device::cuda(0)).await?;
+    let model = Flux2KleinInpaint::load(koharu_ml::Device::cuda(0)).await?;
 
     Cuda::synchronize(0);
-    let output = model.inpaint(&image, &mask, &options)?;
+    let output = model.inference("Remove the masked content.", &image, None, &mask, &options)?;
     assert_eq!(output.width(), image.width());
     assert_eq!(output.height(), image.height());
     black_box(output);
@@ -37,7 +37,13 @@ async fn main() -> Result<()> {
             bencher.iter(|| {
                 Cuda::synchronize(0);
                 let output = model
-                    .inpaint(black_box(&image), black_box(&mask), black_box(&options))
+                    .inference(
+                        black_box("Remove the masked content."),
+                        black_box(&image),
+                        None,
+                        black_box(&mask),
+                        black_box(&options),
+                    )
                     .expect("FLUX.2 Klein inference failed");
                 black_box(output);
                 Cuda::synchronize(0);
