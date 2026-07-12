@@ -123,8 +123,13 @@ impl InpaintModel {
             .unsqueeze(0)
             .unsqueeze(0)
             .contiguous();
-        let model_image = pad_img_to_modulo(image_tensor.to_kind(Kind::Float) / 255.0, 8);
-        let model_mask = pad_img_to_modulo(mask_tensor.gt(0.0).to_kind(Kind::Float), 8);
+        let model_kind = if self.device.is_cuda() {
+            Kind::BFloat16
+        } else {
+            Kind::Float
+        };
+        let model_image = pad_img_to_modulo(image_tensor.to_kind(model_kind) / 255.0, 8);
+        let model_mask = pad_img_to_modulo(mask_tensor.gt(0.0).to_kind(model_kind), 8);
         let output = model
             .forward(&model_image, &model_mask)
             .narrow(2, 0, i64::from(height))

@@ -7,7 +7,7 @@ use std::path::Path;
 
 use anyhow::Result;
 use koharu_torch::{
-    Device, Tensor,
+    Device, Kind, Tensor,
     nn::{self, Module, ModuleT},
 };
 
@@ -22,6 +22,9 @@ pub struct Model {
 impl Model {
     pub fn new(config: &FFCResNetGeneratorConfig, device: Device) -> Self {
         let mut vs = nn::VarStore::new(device);
+        if device.is_cuda() {
+            vs.set_kind(Kind::BFloat16);
+        }
         let generator = FFCResNetGenerator::new(&vs.root(), config);
         vs.freeze();
         Self { vs, generator }
@@ -29,6 +32,9 @@ impl Model {
 
     pub fn load_safetensors(&mut self, path: impl AsRef<Path>) -> Result<()> {
         self.vs.load(path)?;
+        if self.vs.device().is_cuda() {
+            self.vs.set_kind(Kind::BFloat16);
+        }
         Ok(())
     }
 
@@ -462,15 +468,21 @@ impl FourierUnit {
         let batch = size[0];
         let height = size[2];
         let width = size[3];
+        let model_kind = input.kind();
 
         // The FFC unit treats real and imaginary FFT components as channels for
         // a learned 1x1 convolution, then reconstructs the complex spectrum.
         // https://github.com/advimman/lama/blob/786f5936b27fb3dacd2b1ad799e4de968ea697e7/saicinpainting/training/modules/ffc.py#L76-L114
         let fft_dims = [-2, -1];
-        let ffted = input.fft_rfftn(None::<&[i64]>, &fft_dims[..], "ortho");
+        // torch.fft does not support BF16. Keep only the FFT boundary in FP32;
+        // the learned convolution and batch normalization remain in the model dtype.
+        let ffted = input
+            .to_kind(Kind::Float)
+            .fft_rfftn(None::<&[i64]>, &fft_dims[..], "ortho");
         let ffted = Tensor::stack(&[ffted.real(), ffted.imag()], -1)
             .permute([0, 1, 4, 2, 3])
-            .contiguous();
+            .contiguous()
+            .to_kind(model_kind);
         let ffted_size = ffted.size();
         let ffted = ffted.view([batch, -1, ffted_size[3], ffted_size[4]]);
 
@@ -483,9 +495,12 @@ impl FourierUnit {
             .view([batch, -1, 2, ffted_size[2], ffted_size[3]])
             .permute([0, 1, 3, 4, 2])
             .contiguous();
+        let ffted = ffted.to_kind(Kind::Float);
         let ffted = Tensor::complex(&ffted.select(-1, 0), &ffted.select(-1, 1));
         let output_size = [height, width];
-        ffted.fft_irfftn(&output_size[..], &fft_dims[..], "ortho")
+        ffted
+            .fft_irfftn(&output_size[..], &fft_dims[..], "ortho")
+            .to_kind(model_kind)
     }
 }
 
