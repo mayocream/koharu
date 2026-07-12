@@ -7,13 +7,12 @@
 //! - https://github.com/dmMaze/BallonsTranslator/blob/4bcc635c19f6c63a902872cf77b3d554e14ed1b7/ballontranslator/utils/textblock.py
 //! - https://github.com/dmMaze/BallonsTranslator/blob/4bcc635c19f6c63a902872cf77b3d554e14ed1b7/ballontranslator/utils/imgproc_utils.py
 
-use std::collections::VecDeque;
-
 use anyhow::{Context, Result, anyhow, bail};
 use fast_image_resize::{FilterType, ResizeAlg, ResizeOptions, Resizer};
 use image::{DynamicImage, GenericImageView, GrayImage, Luma, RgbImage, imageops::crop_imm};
 use imageproc::{contours::find_contours_with_threshold, contrast::otsu_level, point::Point};
 use koharu_torch::{Device, Kind, Tensor};
+use rayon::prelude::*;
 use serde::Serialize;
 
 use super::model::Output;
@@ -918,20 +917,25 @@ fn mean_mask(mask: &GrayImage, bbox: [f32; 4]) -> f32 {
 fn refine_mask(source: &DynamicImage, predicted: &GrayImage, blocks: &[TextBlock]) -> GrayImage {
     let source = source.to_rgb8();
     let mut refined = GrayImage::new(predicted.width(), predicted.height());
-    for block in blocks {
-        let [x1, y1, x2, y2] = enlarge_window(
-            block.xyxy.map(|coordinate| coordinate as f32),
-            predicted.width(),
-            predicted.height(),
-            2.5,
-        );
-        if x2 <= x1 || y2 <= y1 {
-            continue;
-        }
-        let image_crop = crop_imm(&source, x1, y1, x2 - x1, y2 - y1).to_image();
-        let mask_crop = crop_imm(predicted, x1, y1, x2 - x1, y2 - y1).to_image();
-        let candidates = mask_candidates(&image_crop, &mask_crop);
-        let merged = merge_mask_candidates(candidates, &mask_crop);
+    let block_masks = blocks
+        .par_iter()
+        .filter_map(|block| {
+            let [x1, y1, x2, y2] = enlarge_window(
+                block.xyxy.map(|coordinate| coordinate as f32),
+                predicted.width(),
+                predicted.height(),
+                2.5,
+            );
+            if x2 <= x1 || y2 <= y1 {
+                return None;
+            }
+            let image_crop = crop_imm(&source, x1, y1, x2 - x1, y2 - y1).to_image();
+            let mask_crop = crop_imm(predicted, x1, y1, x2 - x1, y2 - y1).to_image();
+            let candidates = mask_candidates(&image_crop, &mask_crop);
+            Some((x1, y1, merge_mask_candidates(candidates, &mask_crop)))
+        })
+        .collect::<Vec<_>>();
+    for (x1, y1, merged) in block_masks {
         for (x, y, pixel) in merged.enumerate_pixels() {
             if pixel[0] != 0 {
                 refined.put_pixel(x1 + x, y1 + y, Luma([255]));
@@ -1128,34 +1132,47 @@ fn connected_components(
 ) -> Vec<Component> {
     let width = image.width();
     let height = image.height();
+    let image_pixels = image.as_raw();
     let mut visited = vec![false; width as usize * height as usize];
     let mut components = Vec::new();
     for y in 0..height {
         for x in 0..width {
             let index = y as usize * width as usize + x as usize;
-            let foreground = image.get_pixel(x, y)[0] != 0;
+            let foreground = image_pixels[index] != 0;
             if visited[index] || foreground != foreground_white {
                 continue;
             }
             visited[index] = true;
-            let mut queue = VecDeque::from([(x, y)]);
+            let mut pending = vec![(x, y)];
             let mut pixels = Vec::new();
             let mut min_x = x;
             let mut min_y = y;
             let mut max_x = x;
             let mut max_y = y;
-            while let Some((cx, cy)) = queue.pop_front() {
+            while let Some((cx, cy)) = pending.pop() {
                 pixels.push((cx, cy));
                 min_x = min_x.min(cx);
                 min_y = min_y.min(cy);
                 max_x = max_x.max(cx);
                 max_y = max_y.max(cy);
-                for (nx, ny) in neighbors(width, height, cx, cy, diagonal) {
-                    let next_index = ny as usize * width as usize + nx as usize;
-                    let next_foreground = image.get_pixel(nx, ny)[0] != 0;
-                    if !visited[next_index] && next_foreground == foreground_white {
-                        visited[next_index] = true;
-                        queue.push_back((nx, ny));
+                for dy in -1i32..=1 {
+                    for dx in -1i32..=1 {
+                        if (dx == 0 && dy == 0) || (!diagonal && dx != 0 && dy != 0) {
+                            continue;
+                        }
+                        let nx = cx as i32 + dx;
+                        let ny = cy as i32 + dy;
+                        if nx < 0 || ny < 0 || nx >= width as i32 || ny >= height as i32 {
+                            continue;
+                        }
+                        let nx = nx as u32;
+                        let ny = ny as u32;
+                        let next_index = ny as usize * width as usize + nx as usize;
+                        let next_foreground = image_pixels[next_index] != 0;
+                        if !visited[next_index] && next_foreground == foreground_white {
+                            visited[next_index] = true;
+                            pending.push((nx, ny));
+                        }
                     }
                 }
             }
@@ -1169,31 +1186,6 @@ fn connected_components(
         }
     }
     components
-}
-
-fn neighbors(
-    width: u32,
-    height: u32,
-    x: u32,
-    y: u32,
-    diagonal: bool,
-) -> impl Iterator<Item = (u32, u32)> {
-    let mut output = [(0u32, 0u32); 8];
-    let mut count = 0usize;
-    for dy in -1i32..=1 {
-        for dx in -1i32..=1 {
-            if (dx == 0 && dy == 0) || (!diagonal && dx != 0 && dy != 0) {
-                continue;
-            }
-            let nx = x as i32 + dx;
-            let ny = y as i32 + dy;
-            if nx >= 0 && ny >= 0 && nx < width as i32 && ny < height as i32 {
-                output[count] = (nx as u32, ny as u32);
-                count += 1;
-            }
-        }
-    }
-    output.into_iter().take(count)
 }
 
 fn accept_component(merged: &mut GrayImage, predicted: &GrayImage, component: &Component) {
@@ -1236,13 +1228,16 @@ fn erode_gray(image: &GrayImage, radius: u32, shape: MorphShape) -> GrayImage {
         return image.clone();
     }
     let offsets = kernel_offsets(radius, shape);
+    let width = image.width();
+    let height = image.height();
+    let pixels = image.as_raw();
     GrayImage::from_fn(image.width(), image.height(), |x, y| {
         let mut value = u8::MAX;
         for &(dx, dy) in &offsets {
             let nx = x as i32 + dx;
             let ny = y as i32 + dy;
-            if nx >= 0 && ny >= 0 && nx < image.width() as i32 && ny < image.height() as i32 {
-                value = value.min(image.get_pixel(nx as u32, ny as u32)[0]);
+            if nx >= 0 && ny >= 0 && nx < width as i32 && ny < height as i32 {
+                value = value.min(pixels[ny as usize * width as usize + nx as usize]);
             }
         }
         Luma([value])
@@ -1254,15 +1249,18 @@ fn dilate_binary(image: &GrayImage, radius: u32, shape: MorphShape) -> GrayImage
         return image.clone();
     }
     let offsets = kernel_offsets(radius, shape);
+    let width = image.width();
+    let height = image.height();
+    let pixels = image.as_raw();
     GrayImage::from_fn(image.width(), image.height(), |x, y| {
         let on = offsets.iter().any(|&(dx, dy)| {
             let nx = x as i32 + dx;
             let ny = y as i32 + dy;
             nx >= 0
                 && ny >= 0
-                && nx < image.width() as i32
-                && ny < image.height() as i32
-                && image.get_pixel(nx as u32, ny as u32)[0] != 0
+                && nx < width as i32
+                && ny < height as i32
+                && pixels[ny as usize * width as usize + nx as usize] != 0
         });
         Luma([if on { 255 } else { 0 }])
     })
@@ -1296,9 +1294,10 @@ fn kernel_offsets(radius: u32, shape: MorphShape) -> Vec<(i32, i32)> {
 }
 
 fn xor_sum(a: &GrayImage, b: &GrayImage) -> u64 {
-    a.pixels()
-        .zip(b.pixels())
-        .map(|(a, b)| (a[0] ^ b[0]) as u64)
+    a.as_raw()
+        .iter()
+        .zip(b.as_raw())
+        .map(|(a, b)| (a ^ b) as u64)
         .sum()
 }
 

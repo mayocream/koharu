@@ -383,14 +383,10 @@ impl ImageSlicer {
         }
 
         let (_, slice_height, effective_slice_height, _) = self.calculate_slice_params(image);
-        // comic-translate probes the first slice to determine the detector return type.
-        let (first_slice, _, _) = self.get_slice(image, 0, effective_slice_height, slice_height);
-        let _ = detect(&first_slice)?;
-
         let num_slices = image.height().div_ceil(effective_slice_height);
-        let mut bubble_boxes = Vec::new();
-        let mut text_boxes = Vec::new();
-        for slice_number in 0..num_slices {
+        let (first_slice, _, _) = self.get_slice(image, 0, effective_slice_height, slice_height);
+        let (mut bubble_boxes, mut text_boxes) = detect(&first_slice)?;
+        for slice_number in 1..num_slices {
             let (slice, start_y, _) =
                 self.get_slice(image, slice_number, effective_slice_height, slice_height);
             let (mut slice_bubbles, mut slice_texts) = detect(&slice)?;

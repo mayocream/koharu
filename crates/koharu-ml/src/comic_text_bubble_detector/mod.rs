@@ -50,7 +50,7 @@ impl RTDetrV2Detection {
             .await
             .context("failed to resolve comic text/bubble detector weights")?;
 
-        let config: RTDetrV2Config = serde_json::from_str(
+        let mut config: RTDetrV2Config = serde_json::from_str(
             &std::fs::read_to_string(&config_path)
                 .with_context(|| format!("failed to read {}", config_path.display()))?,
         )
@@ -60,6 +60,10 @@ impl RTDetrV2Detection {
                 .with_context(|| format!("failed to read {}", processor_path.display()))?,
         )
         .with_context(|| format!("failed to parse {}", processor_path.display()))?;
+
+        // The processor always produces this resolution, so RT-DETR can reuse
+        // its fixed anchors rather than rebuilding and uploading them per slice.
+        config.anchor_image_size = Some(vec![processor.size.height, processor.size.width]);
 
         let mut model = Model::new(config.clone(), device);
         model

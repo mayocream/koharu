@@ -20,8 +20,11 @@ async fn main() -> Result<()> {
 
     Cuda::synchronize(0);
     let output = model.inference("Remove the masked content.", &image, None, &mask, &options)?;
-    assert_eq!(output.width(), image.width());
-    assert_eq!(output.height(), image.height());
+    let scale = (1_048_576.0 / (f64::from(image.width()) * f64::from(image.height()))).sqrt();
+    let expected_width = ((f64::from(image.width()) * scale).floor() as u32 / 16) * 16;
+    let expected_height = ((f64::from(image.height()) * scale).floor() as u32 / 16) * 16;
+    assert_eq!(output.width(), expected_width);
+    assert_eq!(output.height(), expected_height);
     black_box(output);
     Cuda::synchronize(0);
 

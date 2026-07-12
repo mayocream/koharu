@@ -116,34 +116,31 @@ impl InpaintModel {
             .to_device(self.device)
             .permute([2, 0, 1])
             .unsqueeze(0)
-            .to_kind(Kind::Float)
-            .contiguous()
-            / 255.0;
+            .contiguous();
         let mask_tensor = Tensor::from_slice(mask.as_raw())
             .view([i64::from(height), i64::from(width)])
             .to_device(self.device)
-            .gt(0.0)
             .unsqueeze(0)
             .unsqueeze(0)
-            .to_kind(Kind::Float)
             .contiguous();
-        let image_tensor = pad_img_to_modulo(image_tensor, 8);
-        let mask_tensor = pad_img_to_modulo(mask_tensor, 8);
-        let output = model.forward(&image_tensor, &mask_tensor);
-        let mut result = post_process(&output, width, height)?;
-        if config.sd_keep_unmasked_area {
-            for (index, mask) in mask.as_raw().iter().copied().enumerate() {
-                let alpha = mask as f32 / 255.0;
-                let offset = index * 3;
-                for channel in 0..3 {
-                    result.as_mut()[offset + channel] = (result.as_raw()[offset + channel] as f32
-                        * alpha
-                        + image.as_raw()[offset + channel] as f32 * (1.0 - alpha))
-                        as u8;
-                }
-            }
-        }
-        Ok(result)
+        let model_image = pad_img_to_modulo(image_tensor.to_kind(Kind::Float) / 255.0, 8);
+        let model_mask = pad_img_to_modulo(mask_tensor.gt(0.0).to_kind(Kind::Float), 8);
+        let output = model
+            .forward(&model_image, &model_mask)
+            .narrow(2, 0, i64::from(height))
+            .narrow(3, 0, i64::from(width))
+            .clamp(0.0, 1.0)
+            * 255.0;
+        let output = output.to_kind(Kind::Uint8);
+        let output = if config.sd_keep_unmasked_area {
+            let alpha = mask_tensor.to_kind(Kind::Float) / 255.0;
+            (output.to_kind(Kind::Float) * &alpha
+                + image_tensor.to_kind(Kind::Float) * (alpha.ones_like() - alpha))
+                .to_kind(Kind::Uint8)
+        } else {
+            output
+        };
+        post_process(&output, width, height)
     }
 }
 
@@ -287,14 +284,8 @@ fn crop_box(
 
 fn post_process(tensor: &Tensor, width: u32, height: u32) -> Result<RgbImage> {
     let tensor = tensor
-        .narrow(2, 0, i64::from(height))
-        .narrow(3, 0, i64::from(width))
         .squeeze_dim(0)
         .permute([1, 2, 0])
-        .clamp(0.0, 1.0)
-        * 255.0;
-    let tensor = tensor
-        .to_kind(Kind::Uint8)
         .contiguous()
         .to_device(Device::Cpu)
         .view([-1]);

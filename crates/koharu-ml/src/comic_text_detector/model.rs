@@ -72,7 +72,9 @@ impl Model {
 
     pub fn forward(&self, input: &Tensor) -> Output {
         // BallonsTranslator computes YOLO block predictions, then intentionally
-        // passes an empty block list into `group_output`.
+        // passes an empty block list into `group_output`. Keep the complete neck
+        // and head registered for checkpoint compatibility, but do not execute
+        // that dead branch during inference.
         // https://github.com/dmMaze/BallonsTranslator/blob/4bcc635c19f6c63a902872cf77b3d554e14ed1b7/ballontranslator/modules/textdetector/ctd/inference.py#L343-L348
         let features = self.blk_det.forward(input);
         let (mask, db_features) = self.text_seg.forward(
@@ -329,14 +331,23 @@ struct YoloV5 {
     l7: ConvBnAct,
     l8: C3,
     l9: Sppf,
+    #[allow(dead_code)]
     l10: ConvBnAct,
+    #[allow(dead_code)]
     l13: C3,
+    #[allow(dead_code)]
     l14: ConvBnAct,
+    #[allow(dead_code)]
     l17: C3,
+    #[allow(dead_code)]
     l18: ConvBnAct,
+    #[allow(dead_code)]
     l20: C3,
+    #[allow(dead_code)]
     l21: ConvBnAct,
+    #[allow(dead_code)]
     l23: C3,
+    #[allow(dead_code)]
     head: YoloHead,
 }
 
@@ -513,33 +524,6 @@ impl YoloV5 {
         let x7 = self.l7.forward(&x6);
         let x8 = self.l8.forward(&x7);
         let x9 = self.l9.forward(&x8);
-        let x10 = self.l10.forward(&x9);
-        let x11 = x10.upsample_nearest2d(
-            [x10.size()[2] * 2, x10.size()[3] * 2],
-            None::<f64>,
-            None::<f64>,
-        );
-        let x13 = self
-            .l13
-            .forward(&Tensor::cat(&[x11, x6.shallow_clone()], 1));
-        let x14 = self.l14.forward(&x13);
-        let x15 = x14.upsample_nearest2d(
-            [x14.size()[2] * 2, x14.size()[3] * 2],
-            None::<f64>,
-            None::<f64>,
-        );
-        let x17 = self
-            .l17
-            .forward(&Tensor::cat(&[x15, x4.shallow_clone()], 1));
-        let x18 = self.l18.forward(&x17);
-        let x20 = self
-            .l20
-            .forward(&Tensor::cat(&[x18, x14.shallow_clone()], 1));
-        let x21 = self.l21.forward(&x20);
-        let x23 = self
-            .l23
-            .forward(&Tensor::cat(&[x21, x10.shallow_clone()], 1));
-        let _blocks = self.head.forward([&x17, &x20, &x23]);
         [x1, x3, x5, x7, x9]
     }
 }
@@ -565,6 +549,7 @@ impl YoloHead {
         Self { convs, anchors }
     }
 
+    #[allow(dead_code)]
     fn forward(&self, inputs: [&Tensor; 3]) -> Tensor {
         let mut outputs = Vec::with_capacity(3);
         for (index, input) in inputs.into_iter().enumerate() {
