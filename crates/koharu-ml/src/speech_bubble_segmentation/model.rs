@@ -594,7 +594,7 @@ impl Proto {
 
 // Ultralytics' Segment head supplies the prototype and mask-coefficient branches
 // missing from Candle Transformers' detection-only YOLOv8 example.
-// https://github.com/ultralytics/ultralytics/blob/f3cf67f53d2f3f9e26674a3c85e43b60a7b424ed/ultralytics/nn/modules/head.py
+// https://github.com/ultralytics/ultralytics/blob/2b7fac4db483aa89542c361ad4384e9119f0573d/ultralytics/nn/modules/head.py
 #[derive(Debug)]
 struct SegmentHead {
     dfl: Dfl,

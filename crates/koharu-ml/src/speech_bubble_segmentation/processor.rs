@@ -1,8 +1,8 @@
 //! Ultralytics-compatible YOLOv8 segmentation preprocessing and decoding.
 //!
 //! Original implementations:
-//! - https://github.com/ultralytics/ultralytics/blob/f3cf67f53d2f3f9e26674a3c85e43b60a7b424ed/ultralytics/data/augment.py
-//! - https://github.com/ultralytics/ultralytics/blob/f3cf67f53d2f3f9e26674a3c85e43b60a7b424ed/ultralytics/utils/ops.py
+//! - https://github.com/ultralytics/ultralytics/blob/2b7fac4db483aa89542c361ad4384e9119f0573d/ultralytics/data/augment.py
+//! - https://github.com/ultralytics/ultralytics/blob/2b7fac4db483aa89542c361ad4384e9119f0573d/ultralytics/utils/ops.py
 
 use anyhow::{Result, bail};
 use fast_image_resize::{FilterType, ResizeAlg, ResizeOptions, Resizer};
@@ -60,7 +60,9 @@ impl YoloV8SegImageProcessor {
                 &image,
                 &mut resized,
                 &ResizeOptions::new()
-                    .resize_alg(ResizeAlg::Convolution(FilterType::Bilinear))
+                    // Fixed-kernel interpolation preserves OpenCV's sampling behavior;
+                    // convolution mode widens the kernel while downscaling.
+                    .resize_alg(ResizeAlg::Interpolation(FilterType::Bilinear))
                     .use_alpha(false),
             )?;
             resized
@@ -154,8 +156,8 @@ impl YoloV8SegImageProcessor {
         let mut regions = Vec::with_capacity(candidates.len());
         for (index, candidate) in candidates.into_iter().enumerate() {
             let bbox = scale_boxes(candidate.bbox, letterbox);
-            let x1 = bbox[0].floor().clamp(0.0, letterbox.original_width as f32) as i64;
-            let y1 = bbox[1].floor().clamp(0.0, letterbox.original_height as f32) as i64;
+            let x1 = bbox[0].ceil().clamp(0.0, letterbox.original_width as f32) as i64;
+            let y1 = bbox[1].ceil().clamp(0.0, letterbox.original_height as f32) as i64;
             let x2 = bbox[2].ceil().clamp(0.0, letterbox.original_width as f32) as i64;
             let y2 = bbox[3].ceil().clamp(0.0, letterbox.original_height as f32) as i64;
             if x2 <= x1 || y2 <= y1 {
@@ -398,12 +400,14 @@ fn scale_masks(masks: &Tensor, shape: (u32, u32)) -> Tensor {
         input_height as f64 / output_height as f64,
         input_width as f64 / output_width as f64,
     );
-    let pad_width = (input_width - python_round(output_width as f32 * gain as f32)) as f32 / 2.0;
-    let pad_height = (input_height - python_round(output_height as f32 * gain as f32)) as f32 / 2.0;
-    let top = python_round(pad_height - 0.1).clamp(0, input_height);
-    let left = python_round(pad_width - 0.1).clamp(0, input_width);
-    let bottom = (input_height - python_round(pad_height + 0.1)).clamp(top + 1, input_height);
-    let right = (input_width - python_round(pad_width + 0.1)).clamp(left + 1, input_width);
+    // Ultralytics 8.2.81 computes fractional prototype padding and removes it
+    // with Python's truncating `int`, rather than reusing LetterBox rounding.
+    let pad_width = (input_width as f64 - output_width as f64 * gain) / 2.0;
+    let pad_height = (input_height as f64 - output_height as f64 * gain) / 2.0;
+    let top = (pad_height as i64).clamp(0, input_height);
+    let left = (pad_width as i64).clamp(0, input_width);
+    let bottom = ((input_height as f64 - pad_height) as i64).clamp(top + 1, input_height);
+    let right = ((input_width as f64 - pad_width) as i64).clamp(left + 1, input_width);
     masks
         .slice(2, top, bottom, 1)
         .slice(3, left, right, 1)
@@ -493,4 +497,5 @@ mod tests {
             (box_iou([0.0, 0.0, 10.0, 10.0], [5.0, 5.0, 15.0, 15.0]) - 25.0 / 175.0).abs() < 1e-6
         );
     }
+
 }
