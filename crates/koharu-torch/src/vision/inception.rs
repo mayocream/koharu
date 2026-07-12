@@ -2,8 +2,16 @@
 use crate::{nn, nn::ModuleT, Tensor};
 
 fn conv_bn(p: nn::Path, c_in: i64, c_out: i64, ksize: i64, pad: i64, stride: i64) -> impl ModuleT {
-    let conv2d_cfg = nn::ConvConfig { stride, padding: pad, bias: false, ..Default::default() };
-    let bn_cfg = nn::BatchNormConfig { eps: 0.001, ..Default::default() };
+    let conv2d_cfg = nn::ConvConfig {
+        stride,
+        padding: pad,
+        bias: false,
+        ..Default::default()
+    };
+    let bn_cfg = nn::BatchNormConfig {
+        eps: 0.001,
+        ..Default::default()
+    };
     nn::seq_t()
         .add(nn::conv2d(&p / "conv", c_in, c_out, ksize, conv2d_cfg))
         .add(nn::batch_norm2d(&p / "bn", c_out, bn_cfg))
@@ -11,9 +19,15 @@ fn conv_bn(p: nn::Path, c_in: i64, c_out: i64, ksize: i64, pad: i64, stride: i64
 }
 
 fn conv_bn2(p: nn::Path, c_in: i64, c_out: i64, ksize: [i64; 2], pad: [i64; 2]) -> impl ModuleT {
-    let conv2d_cfg =
-        nn::ConvConfigND::<[i64; 2]> { padding: pad, bias: false, ..Default::default() };
-    let bn_cfg = nn::BatchNormConfig { eps: 0.001, ..Default::default() };
+    let conv2d_cfg = nn::ConvConfigND::<[i64; 2]> {
+        padding: pad,
+        bias: false,
+        ..Default::default()
+    };
+    let bn_cfg = nn::BatchNormConfig {
+        eps: 0.001,
+        ..Default::default()
+    };
     nn::seq_t()
         .add(nn::conv(&p / "conv", c_in, c_out, ksize, conv2d_cfg))
         .add(nn::batch_norm2d(&p / "bn", c_out, bn_cfg))
@@ -36,7 +50,9 @@ fn inception_a(p: nn::Path, c_in: i64, c_pool: i64) -> impl ModuleT {
         let b1 = xs.apply_t(&b1, tr);
         let b2 = xs.apply_t(&b2_1, tr).apply_t(&b2_2, tr);
         let b3 = xs.apply_t(&b3_1, tr).apply_t(&b3_2, tr).apply_t(&b3_3, tr);
-        let bpool = xs.avg_pool2d([3, 3], [1, 1], [1, 1], false, true, 9).apply_t(&bpool, tr);
+        let bpool = xs
+            .avg_pool2d([3, 3], [1, 1], [1, 1], false, true, 9)
+            .apply_t(&bpool, tr);
         Tensor::cat(&[b1, b2, b3, bpool], 1)
     })
 }
@@ -78,7 +94,9 @@ fn inception_c(p: nn::Path, c_in: i64, c7: i64) -> impl ModuleT {
             .apply_t(&b3_3, tr)
             .apply_t(&b3_4, tr)
             .apply_t(&b3_5, tr);
-        let bpool = xs.avg_pool2d([3, 3], [1, 1], [1, 1], false, true, 9).apply_t(&bpool, tr);
+        let bpool = xs
+            .avg_pool2d([3, 3], [1, 1], [1, 1], false, true, 9)
+            .apply_t(&bpool, tr);
         Tensor::cat(&[b1, b2, b3, bpool], 1)
     })
 }
@@ -94,7 +112,11 @@ fn inception_d(p: nn::Path, c_in: i64) -> impl ModuleT {
 
     nn::func_t(move |xs, tr| {
         let b1 = xs.apply_t(&b1_1, tr).apply_t(&b1_2, tr);
-        let b2 = xs.apply_t(&b2_1, tr).apply_t(&b2_2, tr).apply_t(&b2_3, tr).apply_t(&b2_4, tr);
+        let b2 = xs
+            .apply_t(&b2_1, tr)
+            .apply_t(&b2_2, tr)
+            .apply_t(&b2_3, tr)
+            .apply_t(&b2_4, tr);
         let bpool = max_pool2d(xs, 3, 2);
         Tensor::cat(&[b1, b2, bpool], 1)
     })
@@ -123,7 +145,9 @@ fn inception_e(p: nn::Path, c_in: i64) -> impl ModuleT {
         let b3 = xs.apply_t(&b3_1, tr).apply_t(&b3_2, tr);
         let b3 = Tensor::cat(&[b3.apply_t(&b3_3a, tr), b3.apply_t(&b3_3b, tr)], 1);
 
-        let bpool = xs.avg_pool2d([3, 3], [1, 1], [1, 1], false, true, 9).apply_t(&bpool, tr);
+        let bpool = xs
+            .avg_pool2d([3, 3], [1, 1], [1, 1], false, true, 9)
+            .apply_t(&bpool, tr);
 
         Tensor::cat(&[b1, b2, b3, bpool], 1)
     })
@@ -149,6 +173,10 @@ pub fn v3(p: &nn::Path, nclasses: i64) -> impl ModuleT {
         .add(inception_d(p / "Mixed_7a", 768))
         .add(inception_e(p / "Mixed_7b", 1280))
         .add(inception_e(p / "Mixed_7c", 2048))
-        .add_fn_t(|xs, train| xs.adaptive_avg_pool2d([1, 1]).dropout(0.5, train).flat_view())
+        .add_fn_t(|xs, train| {
+            xs.adaptive_avg_pool2d([1, 1])
+                .dropout(0.5, train)
+                .flat_view()
+        })
         .add(nn::linear(p / "fc", 2048, nclasses, Default::default()))
 }

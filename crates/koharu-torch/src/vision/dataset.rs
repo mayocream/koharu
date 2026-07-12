@@ -34,7 +34,11 @@ pub fn random_flip(t: &Tensor) -> Tensor {
     for batch_index in 0..size[0] {
         let mut output_view = output.i(batch_index);
         let t_view = t.i(batch_index);
-        let src = if rand::random() { t_view } else { t_view.flip([2]) };
+        let src = if rand::random() {
+            t_view
+        } else {
+            t_view.flip([2])
+        };
         output_view.copy_(&src)
     }
     output
@@ -74,8 +78,9 @@ pub fn random_cutout(t: &Tensor, sz: i64) -> Tensor {
     for bindex in 0..size[0] {
         let start_h = rand::thread_rng().gen_range(0..size[2] - sz + 1);
         let start_w = rand::thread_rng().gen_range(0..size[3] - sz + 1);
-        let _output =
-            output.i((bindex, .., start_h..start_h + sz, start_w..start_w + sz)).fill_(0.0);
+        let _output = output
+            .i((bindex, .., start_h..start_h + sz, start_w..start_w + sz))
+            .fill_(0.0);
     }
     output
 }

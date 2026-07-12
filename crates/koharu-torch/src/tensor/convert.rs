@@ -30,8 +30,12 @@ impl<T: Element + Copy> TryFrom<&Tensor> for Vec<Vec<T>> {
         let num_elem = s1 * s2;
         // TODO: Try to remove this intermediary copy.
         let mut all_elems = vec![T::ZERO; num_elem];
-        tensor.f_to_kind(T::KIND)?.f_copy_data(&mut all_elems, num_elem)?;
-        let out = (0..s1).map(|i1| (0..s2).map(|i2| all_elems[i1 * s2 + i2]).collect()).collect();
+        tensor
+            .f_to_kind(T::KIND)?
+            .f_copy_data(&mut all_elems, num_elem)?;
+        let out = (0..s1)
+            .map(|i1| (0..s2).map(|i2| all_elems[i1 * s2 + i2]).collect())
+            .collect();
         Ok(out)
     }
 }
@@ -46,11 +50,17 @@ impl<T: Element + Copy> TryFrom<&Tensor> for Vec<Vec<Vec<T>>> {
         let num_elem = s1 * s2 * s3;
         // TODO: Try to remove this intermediary copy.
         let mut all_elems = vec![T::ZERO; num_elem];
-        tensor.f_to_kind(T::KIND)?.f_copy_data(&mut all_elems, num_elem)?;
+        tensor
+            .f_to_kind(T::KIND)?
+            .f_copy_data(&mut all_elems, num_elem)?;
         let out = (0..s1)
             .map(|i1| {
                 (0..s2)
-                    .map(|i2| (0..s3).map(|i3| all_elems[i1 * s2 * s3 + i2 * s3 + i3]).collect())
+                    .map(|i2| {
+                        (0..s3)
+                            .map(|i3| all_elems[i1 * s2 * s3 + i2 * s3 + i3])
+                            .collect()
+                    })
                     .collect()
             })
             .collect();
@@ -130,7 +140,10 @@ impl<T: Element + Copy> TryInto<ndarray::ArrayD<T>> for &Tensor {
         let mut vec = vec![T::ZERO; num_elem];
         self.f_to_kind(T::KIND)?.f_copy_data(&mut vec, num_elem)?;
         let shape: Vec<usize> = self.size().iter().map(|s| *s as usize).collect();
-        Ok(ndarray::ArrayD::from_shape_vec(ndarray::IxDyn(&shape), vec)?)
+        Ok(ndarray::ArrayD::from_shape_vec(
+            ndarray::IxDyn(&shape),
+            vec,
+        )?)
     }
 }
 

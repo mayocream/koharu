@@ -3,10 +3,14 @@
 //! Original implementations:
 //! - https://github.com/dmMaze/BallonsTranslator/blob/4bcc635c19f6c63a902872cf77b3d554e14ed1b7/ballontranslator/modules/textdetector/ctd/inference.py
 //! - https://github.com/dmMaze/BallonsTranslator/blob/4bcc635c19f6c63a902872cf77b3d554e14ed1b7/ballontranslator/modules/textdetector/db_utils.py
+//! - https://github.com/dmMaze/BallonsTranslator/blob/4bcc635c19f6c63a902872cf77b3d554e14ed1b7/ballontranslator/modules/textdetector/ctd/textmask.py
+//! - https://github.com/dmMaze/BallonsTranslator/blob/4bcc635c19f6c63a902872cf77b3d554e14ed1b7/ballontranslator/utils/textblock.py
+//! - https://github.com/dmMaze/BallonsTranslator/blob/4bcc635c19f6c63a902872cf77b3d554e14ed1b7/ballontranslator/utils/imgproc_utils.py
 
 use std::collections::VecDeque;
 
-use anyhow::{Context, Result, bail};
+use anyhow::{Context, Result, anyhow, bail};
+use fast_image_resize::{FilterType, ResizeAlg, ResizeOptions, Resizer};
 use image::{DynamicImage, GenericImageView, GrayImage, Luma, RgbImage, imageops::crop_imm};
 use imageproc::{contours::find_contours_with_threshold, contrast::otsu_level, point::Point};
 use koharu_torch::{Device, Kind, Tensor};
@@ -14,159 +18,115 @@ use serde::Serialize;
 
 use super::model::Output;
 
-const DBNET_BINARY_THRESHOLD: u8 = 76;
+const DBNET_BINARY_THRESHOLD: f32 = 0.3;
 const LINE_SCORE_THRESHOLD: f32 = 0.6;
 const MAX_LINE_CANDIDATES: usize = 1000;
 const LINE_UNCLIP_RATIO: f32 = 1.5;
 const MASK_SCORE_THRESHOLD: f32 = 0.1;
 
-pub type Quad = [[f32; 2]; 4];
-
-#[derive(Debug)]
-pub struct PreprocessedImage {
-    pub pixel_values: Tensor,
-    original_width: u32,
-    original_height: u32,
-    resized_width: u32,
-    resized_height: u32,
-}
+pub type Quad = [[i32; 2]; 4];
+type ModelQuad = [[f32; 2]; 4];
 
 #[derive(Debug, Clone, Serialize)]
-pub struct ComicTextBlock {
-    pub bbox: [f32; 4],
-    pub score: f32,
-    pub class_id: usize,
-    pub label: String,
-    pub line_polygons: Vec<Quad>,
+pub struct TextBlock {
+    pub xyxy: [i32; 4],
+    pub lines: Vec<Quad>,
+    pub language: String,
     pub vertical: bool,
-    pub rotation_deg: f32,
+    pub angle: i32,
     pub detected_font_size: f32,
 }
 
-#[derive(Debug, Clone, Serialize)]
-pub struct ComicTextDetection {
-    pub image_width: u32,
-    pub image_height: u32,
-    pub blocks: Vec<ComicTextBlock>,
-    pub line_polygons: Vec<Quad>,
-    #[serde(skip_serializing)]
-    pub mask: GrayImage,
-    #[serde(skip_serializing)]
-    pub shrink_map: GrayImage,
-    #[serde(skip_serializing)]
-    pub threshold_map: GrayImage,
-}
-
-pub fn preprocess(image: &DynamicImage, device: Device) -> Result<PreprocessedImage> {
+pub fn preprocess(image: &DynamicImage, device: Device) -> Result<(Tensor, [u32; 4])> {
     let (original_width, original_height) = image.dimensions();
     if original_width == 0 || original_height == 0 {
         bail!("empty image");
     }
 
-    let scale = (1280.0 / original_width as f32).min(1280.0 / original_height as f32);
-    let resized_width = ((original_width as f32 * scale).round() as u32).max(1);
-    let resized_height = ((original_height as f32 * scale).round() as u32).max(1);
-    let pixel_values = image_to_tensor(image, device)?
-        .upsample_bilinear2d(
-            [resized_height as i64, resized_width as i64],
-            false,
-            None::<f64>,
-            None::<f64>,
+    let scale = (1280.0 / original_width as f64).min(1280.0 / original_height as f64);
+    let resized_width = ((original_width as f64 * scale).round_ties_even() as u32).max(1);
+    let resized_height = ((original_height as f64 * scale).round_ties_even() as u32).max(1);
+    // `preprocess_img` letterboxes uint8 pixels with linear interpolation,
+    // pads only the bottom/right edges, then converts RGB HWC to float CHW.
+    // https://github.com/dmMaze/BallonsTranslator/blob/4bcc635c19f6c63a902872cf77b3d554e14ed1b7/ballontranslator/modules/textdetector/ctd/inference.py#L206-L220
+    let source = image.to_rgb8();
+    let mut resized = RgbImage::new(resized_width, resized_height);
+    Resizer::new()
+        .resize(
+            &source,
+            &mut resized,
+            &ResizeOptions::new().resize_alg(ResizeAlg::Interpolation(FilterType::Bilinear)),
         )
-        .constant_pad_nd([
-            0,
-            1280 - resized_width as i64,
-            0,
-            1280 - resized_height as i64,
-        ]);
+        .map_err(|error| anyhow!("failed to resize comic text detector input: {error}"))?;
+    let mut letterboxed = RgbImage::new(1280, 1280);
+    image::imageops::replace(&mut letterboxed, &resized, 0, 0);
+    let pixel_values = image_to_tensor(&DynamicImage::ImageRgb8(letterboxed), device)?;
 
-    Ok(PreprocessedImage {
+    Ok((
         pixel_values,
-        original_width,
-        original_height,
-        resized_width,
-        resized_height,
-    })
+        [
+            original_width,
+            original_height,
+            resized_width,
+            resized_height,
+        ],
+    ))
 }
 
 pub fn postprocess(
     outputs: Output,
-    input: &PreprocessedImage,
+    dimensions: [u32; 4],
     source: &DynamicImage,
-) -> Result<ComicTextDetection> {
+) -> Result<(GrayImage, Vec<TextBlock>)> {
+    let [
+        original_width,
+        original_height,
+        resized_width,
+        resized_height,
+    ] = dimensions;
     let maps = Tensor::cat(&[outputs.mask, outputs.line_maps], 1)
-        .narrow(2, 0, input.resized_height as i64)
-        .narrow(3, 0, input.resized_width as i64);
-    let original_maps = maps.upsample_bilinear2d(
-        [input.original_height as i64, input.original_width as i64],
-        false,
-        None::<f64>,
-        None::<f64>,
-    );
-    let packed = Tensor::cat(
-        &[
-            original_maps.view([-1]),
-            maps.narrow(1, 1, 1).contiguous().view([-1]),
-        ],
-        0,
-    );
-    let values = tensor_to_u8_vec(packed)?;
-    let original_plane = input.original_width as usize * input.original_height as usize;
-    let resized_plane = input.resized_width as usize * input.resized_height as usize;
-    let raw_mask = gray_from_slice(
-        input.original_width,
-        input.original_height,
-        &values[..original_plane],
-    )?;
-    let shrink_map = gray_from_slice(
-        input.original_width,
-        input.original_height,
-        &values[original_plane..2 * original_plane],
-    )?;
-    let threshold_map = gray_from_slice(
-        input.original_width,
-        input.original_height,
-        &values[2 * original_plane..3 * original_plane],
-    )?;
-    let shrink = gray_from_slice(
-        input.resized_width,
-        input.resized_height,
-        &values[3 * original_plane..3 * original_plane + resized_plane],
-    )?;
+        .narrow(2, 0, resized_height as i64)
+        .narrow(3, 0, resized_width as i64);
+    // Upstream converts the cropped maps to uint8 before resizing the mask
+    // back to the caller's dimensions.
+    let values = tensor_to_u8_vec(maps.narrow(1, 0, 1).contiguous().view([-1]))?;
+    let resized_plane = resized_width as usize * resized_height as usize;
+    let map = gray_from_slice(resized_width, resized_height, &values[..resized_plane])?;
+    let mut raw_mask = GrayImage::new(original_width, original_height);
+    Resizer::new()
+        .resize(
+            &map,
+            &mut raw_mask,
+            &ResizeOptions::new().resize_alg(ResizeAlg::Interpolation(FilterType::Bilinear)),
+        )
+        .map_err(|error| anyhow!("failed to resize comic text detector map: {error}"))?;
+    let shrink = tensor_to_f32_vec(maps.narrow(1, 1, 1).contiguous().view([-1]))?;
 
     let lines = extract_line_polygons(
         &shrink,
-        input.original_width as f32 / input.resized_width as f32,
-        input.original_height as f32 / input.resized_height as f32,
-        input.original_width,
-        input.original_height,
+        resized_width,
+        resized_height,
+        original_width,
+        original_height,
     );
-    finalize_detection(source, raw_mask, shrink_map, threshold_map, lines)
+    Ok(finalize_detection(source, raw_mask, lines))
 }
 
 pub fn rearranged_inference<F>(
     source: &DynamicImage,
     device: Device,
     forward: F,
-) -> Result<Option<ComicTextDetection>>
+) -> Result<Option<(GrayImage, Vec<TextBlock>)>>
 where
     F: Fn(&Tensor) -> Output,
 {
-    // This is the GPU-native equivalent of `det_rearrange_forward`: extreme
-    // aspect ratios are packed into square composites and averaged on restore.
-    // https://github.com/dmMaze/BallonsTranslator/blob/4bcc635c19f6c63a902872cf77b3d554e14ed1b7/ballontranslator/modules/textdetector/ctd/inference.py#L23-L147
+    // https://github.com/dmMaze/BallonsTranslator/blob/4bcc635c19f6c63a902872cf77b3d554e14ed1b7/ballontranslator/modules/textdetector/ctd/inference.py#L23-L150
     let (source_width, source_height) = source.dimensions();
     if source_width == 0 || source_height == 0 {
         bail!("empty image");
     }
 
     let transposed = source_height < source_width;
-    let source_tensor = image_to_tensor(source, device)?;
-    let oriented = if transposed {
-        source_tensor.transpose(2, 3).contiguous()
-    } else {
-        source_tensor
-    };
     let (width, height) = if transposed {
         (source_height, source_width)
     } else {
@@ -178,106 +138,196 @@ where
         return Ok(None);
     }
 
-    let strips_per_composite = ((2 * 1280) / width).clamp(2, 1280) as usize;
+    let oriented = if transposed {
+        let source = source.to_rgb8();
+        RgbImage::from_fn(width, height, |x, y| *source.get_pixel(y, x))
+    } else {
+        source.to_rgb8()
+    };
+    let strips_per_composite = ((2 * 1280) / width).max(2) as usize;
     let patch_height = width
         .checked_mul(strips_per_composite as u32)
         .context("comic text detector rearranged patch is too large")?;
     let patch_count = height.div_ceil(patch_height) as usize;
+    let patch_step = if patch_count > 1 {
+        (height - patch_height) / (patch_count as u32 - 1)
+    } else {
+        0
+    };
     let patch_starts = (0..patch_count)
-        .map(|index| {
-            if patch_count == 1 {
-                0
-            } else {
-                (((height - patch_height) as f64 * index as f64) / (patch_count - 1) as f64).round()
-                    as u32
-            }
-        })
+        .map(|index| index as u32 * patch_step)
         .collect::<Vec<_>>();
     let composite_count = patch_count.div_ceil(strips_per_composite);
-    let map_sum = Tensor::zeros([1, 3, height as i64, width as i64], (Kind::Float, device));
-    let sample_count = Tensor::zeros([1, 1, height as i64, width as i64], (Kind::Float, device));
+    let pad_count = composite_count * strips_per_composite - patch_count;
+    let mut composite_maps = Vec::with_capacity(composite_count);
+    let mut map_size = 0u32;
 
     for first_composite in (0..composite_count).step_by(4) {
         let batch_len = 4.min(composite_count - first_composite);
-        let tensors = (0..batch_len)
-            .map(|offset| {
-                let composite_index = first_composite + offset;
-                make_rearranged_composite(
-                    &oriented,
-                    &patch_starts,
-                    composite_index,
-                    strips_per_composite,
-                    patch_height,
-                    1280,
-                )
-            })
-            .collect::<Vec<_>>();
-        let batch = Tensor::cat(&tensors, 0);
-        let outputs = forward(&batch);
-        let maps = Tensor::cat(&[outputs.mask, outputs.line_maps], 1);
-        let map_width = maps.size()[3] as u32;
-        let strip_width = map_width / strips_per_composite as u32;
-
-        for local_index in 0..batch_len {
-            let composite_index = first_composite + local_index;
+        let mut tensors = Vec::with_capacity(batch_len);
+        let mut padding = Vec::with_capacity(batch_len);
+        for offset in 0..batch_len {
+            let composite_index = first_composite + offset;
+            let square_size = patch_height.max(1280);
+            let mut composite = RgbImage::new(square_size, square_size);
             for strip_index in 0..strips_per_composite {
                 let patch_index = composite_index * strips_per_composite + strip_index;
                 if patch_index >= patch_count {
                     break;
                 }
-                let left = strip_index as u32 * strip_width;
-                let patch = maps
-                    .narrow(0, local_index as i64, 1)
-                    .narrow(3, left as i64, strip_width as i64)
-                    .upsample_bilinear2d(
-                        [patch_height as i64, width as i64],
-                        false,
-                        None::<f64>,
-                        None::<f64>,
+                let top = patch_starts[patch_index];
+                if transposed {
+                    for y in 0..patch_height {
+                        for x in 0..width {
+                            composite.put_pixel(
+                                y,
+                                strip_index as u32 * width + x,
+                                *oriented.get_pixel(x, top + y),
+                            );
+                        }
+                    }
+                } else {
+                    let patch = crop_imm(&oriented, 0, top, width, patch_height).to_image();
+                    image::imageops::replace(
+                        &mut composite,
+                        &patch,
+                        strip_index as i64 * width as i64,
+                        0,
                     );
-                let top = patch_starts[patch_index] as i64;
-                let mut sum_view = map_sum.narrow(2, top, patch_height as i64);
-                let _ = sum_view.g_add_(&patch);
-                let mut count_view = sample_count.narrow(2, top, patch_height as i64);
-                let _ = count_view.g_add_scalar_(1.0);
+                }
+            }
+            let mut resized = RgbImage::new(1280, 1280);
+            if square_size == 1280 {
+                resized = composite;
+            } else {
+                Resizer::new()
+                    .resize(
+                        &composite,
+                        &mut resized,
+                        &ResizeOptions::new().resize_alg(ResizeAlg::Convolution(FilterType::Box)),
+                    )
+                    .map_err(|error| {
+                        anyhow!("failed to resize rearranged comic text batch: {error}")
+                    })?;
+            }
+            tensors.push(image_to_tensor(&DynamicImage::ImageRgb8(resized), device)?);
+            padding.push(1280u32.saturating_sub(patch_height));
+        }
+        let batch = Tensor::cat(&tensors, 0);
+        let outputs = forward(&batch);
+        let maps = Tensor::cat(&[outputs.mask, outputs.line_maps], 1);
+        for (local_index, &pad) in padding.iter().enumerate() {
+            let mut map = maps.narrow(0, local_index as i64, 1);
+            if pad > 0 {
+                let output_pad = map.size()[3] as u32 * pad / 1280;
+                let keep = map.size()[3] - output_pad as i64;
+                map = map.narrow(2, 0, keep).narrow(3, 0, keep);
+            }
+            map_size = map.size()[3] as u32;
+            composite_maps.push(tensor_to_f32_vec(map.contiguous().view([-1]))?);
+        }
+    }
+
+    let output_step = patch_step * map_size / patch_height;
+    let strip_width = map_size / strips_per_composite as u32;
+    let output_height = strip_width * height / width;
+    let mut restored = vec![0.0f32; 3 * output_height as usize * strip_width as usize];
+    let restored_plane = output_height as usize * strip_width as usize;
+    let composite_plane = map_size as usize * map_size as usize;
+    let patch_total = composite_maps.len() * strips_per_composite - pad_count;
+    for (composite_index, map) in composite_maps.iter().enumerate() {
+        for strip_index in 0..strips_per_composite {
+            let patch_index = composite_index * strips_per_composite + strip_index;
+            if patch_index >= patch_total {
+                break;
+            }
+            let relative_top = patch_starts[patch_index] as f64 / height as f64;
+            let top = (relative_top * output_height as f64).round_ties_even() as u32;
+            let bottom = (top + map_size).min(output_height);
+            let left = strip_index as u32 * strip_width;
+            for channel in 0..3usize {
+                for y in 0..bottom - top {
+                    for x in 0..strip_width {
+                        let source_index = if transposed {
+                            channel * composite_plane
+                                + (left + x) as usize * map_size as usize
+                                + y as usize
+                        } else {
+                            channel * composite_plane
+                                + y as usize * map_size as usize
+                                + (left + x) as usize
+                        };
+                        let target_index = channel * restored_plane
+                            + (top + y) as usize * strip_width as usize
+                            + x as usize;
+                        restored[target_index] += map[source_index];
+                    }
+                }
+            }
+            if patch_index > 0 {
+                let overlap = map_size - output_step;
+                for channel in 0..3usize {
+                    for y in top..(top + overlap).min(output_height) {
+                        for x in 0..strip_width {
+                            let index = channel * restored_plane
+                                + y as usize * strip_width as usize
+                                + x as usize;
+                            restored[index] /= 2.0;
+                        }
+                    }
+                }
             }
         }
     }
 
-    let maps = map_sum / sample_count.clamp_min(1.0);
-    let maps = if transposed {
-        maps.transpose(2, 3).contiguous()
+    let (map_width, map_height, maps) = if transposed {
+        let mut maps = vec![0.0f32; restored.len()];
+        for channel in 0..3usize {
+            for y in 0..output_height {
+                for x in 0..strip_width {
+                    maps[channel * restored_plane
+                        + x as usize * output_height as usize
+                        + y as usize] = restored
+                        [channel * restored_plane + y as usize * strip_width as usize + x as usize];
+                }
+            }
+        }
+        (output_height, strip_width, maps)
     } else {
-        maps
+        (strip_width, output_height, restored)
     };
-    let values = tensor_to_u8_vec(maps.view([-1]))?;
-    let plane = source_width as usize * source_height as usize;
-    let mask = gray_from_slice(source_width, source_height, &values[..plane])?;
-    let shrink = gray_from_slice(source_width, source_height, &values[plane..2 * plane])?;
-    let threshold = gray_from_slice(source_width, source_height, &values[2 * plane..3 * plane])?;
-    let lines = extract_line_polygons(&shrink, 1.0, 1.0, source_width, source_height);
-    finalize_detection(source, mask, shrink, threshold, lines).map(Some)
+    let map_plane = map_width as usize * map_height as usize;
+    let map = GrayImage::from_fn(map_width, map_height, |x, y| {
+        let value = maps[y as usize * map_width as usize + x as usize];
+        Luma([(value.clamp(0.0, 1.0) * 255.0) as u8])
+    });
+    let mut mask = GrayImage::new(source_width, source_height);
+    Resizer::new()
+        .resize(
+            &map,
+            &mut mask,
+            &ResizeOptions::new().resize_alg(ResizeAlg::Interpolation(FilterType::Bilinear)),
+        )
+        .map_err(|error| anyhow!("failed to restore rearranged comic text map: {error}"))?;
+    let lines = extract_line_polygons(
+        &maps[map_plane..2 * map_plane],
+        map_width,
+        map_height,
+        source_width,
+        source_height,
+    );
+    Ok(Some(finalize_detection(source, mask, lines)))
 }
 
 fn finalize_detection(
     source: &DynamicImage,
     raw_mask: GrayImage,
-    shrink_map: GrayImage,
-    threshold_map: GrayImage,
-    lines: Vec<ScoredQuad>,
-) -> Result<ComicTextDetection> {
+    lines: Vec<ModelQuad>,
+) -> (GrayImage, Vec<TextBlock>) {
     let blocks = group_text_lines(&lines, &raw_mask);
     let refined = refine_mask(source, &raw_mask, &blocks);
     let mask = dilate_binary(&refined, 2, MorphShape::Ellipse);
-    Ok(ComicTextDetection {
-        image_width: source.width(),
-        image_height: source.height(),
-        line_polygons: lines.iter().map(|line| line.quad).collect(),
-        blocks,
-        mask,
-        shrink_map,
-        threshold_map,
-    })
+    (mask, blocks)
 }
 
 fn image_to_tensor(image: &DynamicImage, device: Device) -> Result<Tensor> {
@@ -295,7 +345,6 @@ fn image_to_tensor(image: &DynamicImage, device: Device) -> Result<Tensor> {
 fn tensor_to_u8_vec(tensor: Tensor) -> Result<Vec<u8>> {
     let tensor = tensor.clamp(0.0, 1.0) * 255.0;
     let tensor = tensor
-        .round()
         .to_kind(Kind::Uint8)
         .to_device(Device::Cpu)
         .contiguous()
@@ -303,53 +352,18 @@ fn tensor_to_u8_vec(tensor: Tensor) -> Result<Vec<u8>> {
     Ok(Vec::<u8>::try_from(&tensor)?)
 }
 
+fn tensor_to_f32_vec(tensor: Tensor) -> Result<Vec<f32>> {
+    let tensor = tensor
+        .to_kind(Kind::Float)
+        .to_device(Device::Cpu)
+        .contiguous()
+        .view([-1]);
+    Ok(Vec::<f32>::try_from(&tensor)?)
+}
+
 fn gray_from_slice(width: u32, height: u32, pixels: &[u8]) -> Result<GrayImage> {
     GrayImage::from_raw(width, height, pixels.to_vec())
         .context("failed to create gray image from comic text detector tensor")
-}
-
-fn make_rearranged_composite(
-    image: &Tensor,
-    patch_starts: &[u32],
-    composite_index: usize,
-    strips_per_composite: usize,
-    patch_height: u32,
-    detect_size: u32,
-) -> Tensor {
-    let target_width = detect_size / strips_per_composite as u32;
-    let mut strips = Vec::with_capacity(strips_per_composite);
-    for strip_index in 0..strips_per_composite {
-        let patch_index = composite_index * strips_per_composite + strip_index;
-        let strip = if patch_index < patch_starts.len() {
-            image
-                .narrow(2, patch_starts[patch_index] as i64, patch_height as i64)
-                .upsample_bilinear2d(
-                    [detect_size as i64, target_width as i64],
-                    false,
-                    None::<f64>,
-                    None::<f64>,
-                )
-        } else {
-            Tensor::zeros(
-                [1, 3, detect_size as i64, target_width as i64],
-                (Kind::Float, image.device()),
-            )
-        };
-        strips.push(strip);
-    }
-    let composite = Tensor::cat(&strips, 3);
-    let padding = detect_size as i64 - composite.size()[3];
-    if padding > 0 {
-        composite.constant_pad_nd([0, padding, 0, 0])
-    } else {
-        composite
-    }
-}
-
-#[derive(Clone, Copy)]
-struct ScoredQuad {
-    quad: Quad,
-    score: f32,
 }
 
 #[derive(Clone, Copy)]
@@ -371,7 +385,7 @@ impl RotatedRect {
         self.max_y - self.min_y
     }
 
-    fn corners(self, expand: f32) -> Quad {
+    fn corners(self, expand: f32) -> ModelQuad {
         let points = [
             [self.min_x - expand, self.min_y - expand],
             [self.max_x + expand, self.min_y - expand],
@@ -383,13 +397,22 @@ impl RotatedRect {
 }
 
 fn extract_line_polygons(
-    map: &GrayImage,
-    scale_x: f32,
-    scale_y: f32,
+    map: &[f32],
+    map_width: u32,
+    map_height: u32,
     dest_width: u32,
     dest_height: u32,
-) -> Vec<ScoredQuad> {
-    find_contours_with_threshold::<i32>(map, DBNET_BINARY_THRESHOLD)
+) -> Vec<ModelQuad> {
+    let bitmap = GrayImage::from_fn(map_width, map_height, |x, y| {
+        Luma([
+            if map[y as usize * map_width as usize + x as usize] > DBNET_BINARY_THRESHOLD {
+                255
+            } else {
+                0
+            },
+        ])
+    });
+    find_contours_with_threshold::<i32>(&bitmap, 0)
         .into_iter()
         .take(MAX_LINE_CANDIDATES)
         .filter_map(|contour| {
@@ -401,7 +424,7 @@ fn extract_line_polygons(
             if rect.width().min(rect.height()) < 2.0 {
                 return None;
             }
-            let score = polygon_score(map, &points);
+            let score = polygon_score(map, map_width, map_height, &points);
             if score <= LINE_SCORE_THRESHOLD {
                 return None;
             }
@@ -413,10 +436,14 @@ fn extract_line_polygons(
             };
             let mut quad = rect.corners(expand);
             for point in &mut quad {
-                point[0] = (point[0] * scale_x).round().clamp(0.0, dest_width as f32);
-                point[1] = (point[1] * scale_y).round().clamp(0.0, dest_height as f32);
+                point[0] = (point[0] / map_width as f32 * dest_width as f32)
+                    .round()
+                    .clamp(0.0, dest_width as f32);
+                point[1] = (point[1] / map_height as f32 * dest_height as f32)
+                    .round()
+                    .clamp(0.0, dest_height as f32);
             }
-            Some(ScoredQuad { quad, score })
+            Some(quad)
         })
         .collect()
 }
@@ -506,7 +533,7 @@ fn cross(origin: [f32; 2], a: [f32; 2], b: [f32; 2]) -> f32 {
     (a[0] - origin[0]) * (b[1] - origin[1]) - (a[1] - origin[1]) * (b[0] - origin[0])
 }
 
-fn polygon_score(map: &GrayImage, polygon: &[Point<i32>]) -> f32 {
+fn polygon_score(map: &[f32], map_width: u32, map_height: u32, polygon: &[Point<i32>]) -> f32 {
     let min_x = polygon
         .iter()
         .map(|point| point.x)
@@ -524,23 +551,23 @@ fn polygon_score(map: &GrayImage, polygon: &[Point<i32>]) -> f32 {
         .map(|point| point.x)
         .max()
         .unwrap_or(0)
-        .clamp(0, map.width().saturating_sub(1) as i32) as u32;
+        .clamp(0, map_width.saturating_sub(1) as i32) as u32;
     let max_y = polygon
         .iter()
         .map(|point| point.y)
         .max()
         .unwrap_or(0)
-        .clamp(0, map.height().saturating_sub(1) as i32) as u32;
+        .clamp(0, map_height.saturating_sub(1) as i32) as u32;
     let polygon = polygon
         .iter()
         .map(|point| [point.x as f32, point.y as f32])
         .collect::<Vec<_>>();
-    let mut sum = 0u64;
+    let mut sum = 0.0f64;
     let mut count = 0u64;
     for y in min_y..=max_y {
         for x in min_x..=max_x {
-            if point_in_polygon([x as f32 + 0.5, y as f32 + 0.5], &polygon) {
-                sum += map.get_pixel(x, y)[0] as u64;
+            if point_in_polygon([x as f32, y as f32], &polygon) {
+                sum += map[y as usize * map_width as usize + x as usize] as f64;
                 count += 1;
             }
         }
@@ -548,7 +575,7 @@ fn polygon_score(map: &GrayImage, polygon: &[Point<i32>]) -> f32 {
     if count == 0 {
         0.0
     } else {
-        sum as f32 / count as f32 / 255.0
+        (sum / count as f64) as f32
     }
 }
 
@@ -582,8 +609,7 @@ fn point_on_segment(point: [f32; 2], a: [f32; 2], b: [f32; 2]) -> bool {
 #[derive(Clone)]
 struct WorkingBlock {
     bbox: [f32; 4],
-    score: f32,
-    lines: Vec<Quad>,
+    lines: Vec<ModelQuad>,
     vertical: bool,
     angle: f32,
     font_size: f32,
@@ -593,11 +619,10 @@ struct WorkingBlock {
 }
 
 impl WorkingBlock {
-    fn from_line(line: ScoredQuad) -> Self {
-        let (quad, vertical) = sort_line_quad(line.quad);
+    fn from_line(quad: ModelQuad) -> Self {
+        let (quad, vertical) = sort_line_quad(quad);
         let mut block = Self {
             bbox: quad_bbox(&quad),
-            score: line.score,
             lines: vec![quad],
             vertical,
             angle: 0.0,
@@ -636,40 +661,47 @@ impl WorkingBlock {
         if self.vertical {
             self.vector = vertical_vector;
             self.norm = vertical_norm;
-            self.font_size = horizontal_norm / self.lines.len() as f32;
-            self.angle = vertical_vector[1].atan2(vertical_vector[0]).to_degrees() - 90.0;
+            self.font_size = (horizontal_norm / self.lines.len() as f32).round();
+            self.angle = vertical_vector[1]
+                .atan2(vertical_vector[0])
+                .to_degrees()
+                .trunc()
+                - 90.0;
         } else {
             self.vector = horizontal_vector;
             self.norm = horizontal_norm;
-            self.font_size = vertical_norm / self.lines.len() as f32;
+            self.font_size = (vertical_norm / self.lines.len() as f32).round();
             self.angle = horizontal_vector[1]
                 .atan2(horizontal_vector[0])
-                .to_degrees();
+                .to_degrees()
+                .trunc();
         }
         if self.angle.abs() < 3.0 {
             self.angle = 0.0;
         }
     }
 
-    fn into_public(self) -> ComicTextBlock {
-        ComicTextBlock {
-            bbox: self.bbox,
-            score: self.score,
-            class_id: 2,
-            label: "unknown".to_string(),
-            line_polygons: self.lines,
+    fn into_public(self) -> TextBlock {
+        TextBlock {
+            xyxy: self.bbox.map(|coordinate| coordinate as i32),
+            lines: self
+                .lines
+                .into_iter()
+                .map(|line| line.map(|point| point.map(|coordinate| coordinate as i32)))
+                .collect(),
+            language: "unknown".to_string(),
             vertical: self.vertical,
-            rotation_deg: self.angle,
+            angle: self.angle as i32,
             detected_font_size: self.font_size,
         }
     }
 }
 
-fn group_text_lines(lines: &[ScoredQuad], mask: &GrayImage) -> Vec<ComicTextBlock> {
+fn group_text_lines(lines: &[ModelQuad], mask: &GrayImage) -> Vec<TextBlock> {
     let mut horizontal = Vec::new();
     let mut vertical = Vec::new();
     for &line in lines {
-        let bbox = quad_bbox(&line.quad);
+        let bbox = quad_bbox(&line);
         if mean_mask(mask, bbox) < MASK_SCORE_THRESHOLD {
             continue;
         }
@@ -712,7 +744,7 @@ fn merge_text_lines(mut blocks: Vec<WorkingBlock>, font_size_tolerance: f32) -> 
             let (left, right) = blocks.split_at_mut(other);
             try_merge_text_line(&mut left[index], &mut right[0], font_size_tolerance);
         }
-        blocks[index].recalculate();
+        blocks[index].bbox = lines_bbox(&blocks[index].lines);
         merged.push(blocks[index].clone());
     }
     merged
@@ -732,6 +764,10 @@ fn try_merge_text_line(
         + other.font_size * other_count as f32)
         / (first_count + other_count) as f32;
     let cosine = dot(block.vector, other.vector) / (block.norm * other.norm).max(f32::EPSILON);
+    let vector_sum = [
+        block.vector[0] + other.vector[0],
+        block.vector[1] + other.vector[1],
+    ];
     let first_bbox = quad_bbox(block.lines.last().expect("block contains a line"));
     let other_bbox = quad_bbox(&other.lines[0]);
     let distance_x = first_bbox[0].max(other_bbox[0]) - first_bbox[2].min(other_bbox[2]);
@@ -768,9 +804,14 @@ fn try_merge_text_line(
     }
 
     block.lines.extend(other.lines.iter().copied());
-    block.score = (block.score * first_count as f32 + other.score * other_count as f32)
-        / (first_count + other_count) as f32;
-    block.recalculate();
+    block.vector = vector_sum;
+    block.norm = vector_norm(vector_sum);
+    block.font_size = average_font_size;
+    block.angle = vector_sum[1].atan2(vector_sum[0]).to_degrees().round();
+    if block.vertical {
+        block.angle -= 90.0;
+    }
+    block.bbox = lines_bbox(&block.lines);
     other.merged = true;
     true
 }
@@ -806,7 +847,7 @@ fn sort_regions(regions: Vec<WorkingBlock>) -> Vec<WorkingBlock> {
     output
 }
 
-fn sort_line_quad(quad: Quad) -> (Quad, bool) {
+fn sort_line_quad(quad: ModelQuad) -> (ModelQuad, bool) {
     let edge_a = distance(quad[0], quad[1]);
     let edge_b = distance(quad[1], quad[2]);
     let square = (edge_a - edge_b).abs() < 1e-3;
@@ -834,7 +875,7 @@ fn sort_line_quad(quad: Quad) -> (Quad, bool) {
     }
 }
 
-fn quads_intersect(a: &Quad, b: &Quad) -> bool {
+fn quads_intersect(a: &ModelQuad, b: &ModelQuad) -> bool {
     [a, b].into_iter().all(|polygon| {
         (0..4).all(|index| {
             let edge = [
@@ -849,7 +890,7 @@ fn quads_intersect(a: &Quad, b: &Quad) -> bool {
     })
 }
 
-fn project_quad(quad: &Quad, axis: [f32; 2]) -> (f32, f32) {
+fn project_quad(quad: &ModelQuad, axis: [f32; 2]) -> (f32, f32) {
     quad.iter()
         .map(|point| point[0] * axis[0] + point[1] * axis[1])
         .fold((f32::INFINITY, f32::NEG_INFINITY), |(min, max), value| {
@@ -874,16 +915,16 @@ fn mean_mask(mask: &GrayImage, bbox: [f32; 4]) -> f32 {
     sum as f32 / ((x2 - x1) * (y2 - y1)) as f32 / 255.0
 }
 
-fn refine_mask(
-    source: &DynamicImage,
-    predicted: &GrayImage,
-    blocks: &[ComicTextBlock],
-) -> GrayImage {
+fn refine_mask(source: &DynamicImage, predicted: &GrayImage, blocks: &[TextBlock]) -> GrayImage {
     let source = source.to_rgb8();
     let mut refined = GrayImage::new(predicted.width(), predicted.height());
     for block in blocks {
-        let [x1, y1, x2, y2] =
-            enlarge_window(block.bbox, predicted.width(), predicted.height(), 2.5);
+        let [x1, y1, x2, y2] = enlarge_window(
+            block.xyxy.map(|coordinate| coordinate as f32),
+            predicted.width(),
+            predicted.height(),
+            2.5,
+        );
         if x2 <= x1 || y2 <= y1 {
             continue;
         }
@@ -957,38 +998,50 @@ fn mask_candidates(image: &RgbImage, predicted: &GrayImage) -> Vec<MaskCandidate
 fn top_color_masks(image: &RgbImage, predicted: &GrayImage) -> Vec<MaskCandidate> {
     let gray = DynamicImage::ImageRgb8(image.clone()).to_luma8();
     let eroded = erode_gray(predicted, 1, MorphShape::Square);
-    let mut histogram = [0u32; 256];
+    let mut candidate_pixels = Vec::new();
     for (gray_pixel, mask_pixel) in gray.pixels().zip(eroded.pixels()) {
         if mask_pixel[0] > 127 {
-            histogram[gray_pixel[0] as usize] += 1;
+            candidate_pixels.push(gray_pixel[0]);
         }
     }
-    let total = histogram.iter().copied().sum::<u32>();
-    if total == 0 {
+    if candidate_pixels.is_empty() {
         return Vec::new();
     }
-    let mut colors = (0..256usize).collect::<Vec<_>>();
+    let mut minimum = *candidate_pixels.iter().min().unwrap() as f32;
+    let mut maximum = *candidate_pixels.iter().max().unwrap() as f32;
+    if minimum == maximum {
+        minimum -= 0.5;
+        maximum += 0.5;
+    }
+    let bin_width = (maximum - minimum) / 255.0;
+    let mut histogram = [0u32; 255];
+    for pixel in candidate_pixels {
+        let index = (((pixel as f32 - minimum) / bin_width).floor() as usize).min(254);
+        histogram[index] += 1;
+    }
+    let mut colors = (0..255usize).collect::<Vec<_>>();
     colors.sort_unstable_by(|a, b| histogram[*b].cmp(&histogram[*a]).then_with(|| a.cmp(b)));
-    let tolerance = total as f32 * 0.001;
+    let tolerance = histogram.iter().sum::<u32>() as f32 * 0.001;
     let mut selected = Vec::new();
-    for color in colors {
+    for index in colors {
+        let color = minimum + index as f32 * bin_width;
         if selected
             .iter()
-            .all(|selected: &usize| selected.abs_diff(color) > 10)
+            .all(|selected: &f32| (*selected - color).abs() > 10.0)
         {
             selected.push(color);
         }
-        if selected.len() >= 3 || (histogram[color] as f32) < tolerance {
+        if selected.len() >= 3 || (histogram[index] as f32) < tolerance {
             break;
         }
     }
     selected
         .into_iter()
         .map(|color| {
-            let top = (color + 30).min(255) as u8;
-            let bottom = top.saturating_sub(60);
+            let top = (color + 30.0).min(255.0);
+            let bottom = top - 60.0;
             let thresholded = GrayImage::from_fn(gray.width(), gray.height(), |x, y| {
-                let value = gray.get_pixel(x, y)[0];
+                let value = gray.get_pixel(x, y)[0] as f32;
                 Luma([if value >= bottom && value <= top {
                     255
                 } else {
@@ -1035,7 +1088,7 @@ fn merge_mask_candidates(mut candidates: Vec<MaskCandidate>, predicted: &GrayIma
             let bbox_area =
                 (component.max_x - component.min_x + 1) * (component.max_y - component.min_y + 1);
             if bbox_area >= 3 {
-                accept_component(&mut merged, &predicted, &component.pixels);
+                accept_component(&mut merged, &predicted, &component);
             }
         }
     }
@@ -1054,7 +1107,7 @@ fn merge_mask_candidates(mut candidates: Vec<MaskCandidate>, predicted: &GrayIma
     };
     for component in holes {
         if component.pixels.len() < area_threshold {
-            accept_component(&mut merged, &predicted, &component.pixels);
+            accept_component(&mut merged, &predicted, &component);
         }
     }
     merged
@@ -1143,18 +1196,30 @@ fn neighbors(
     output.into_iter().take(count)
 }
 
-fn accept_component(merged: &mut GrayImage, predicted: &GrayImage, pixels: &[(u32, u32)]) {
+fn accept_component(merged: &mut GrayImage, predicted: &GrayImage, component: &Component) {
+    let width = component.max_x - component.min_x + 1;
+    let height = component.max_y - component.min_y + 1;
+    let mut component_mask = vec![false; width as usize * height as usize];
+    for &(x, y) in &component.pixels {
+        component_mask
+            [(y - component.min_y) as usize * width as usize + (x - component.min_x) as usize] =
+            true;
+    }
     let mut before = 0u64;
     let mut after = 0u64;
-    for &(x, y) in pixels {
-        if merged.get_pixel(x, y)[0] == 0 {
-            let predicted = predicted.get_pixel(x, y)[0] as u64;
-            before += predicted;
-            after += 255 - predicted;
+    for y in component.min_y..=component.max_y {
+        for x in component.min_x..=component.max_x {
+            let current = merged.get_pixel(x, y)[0];
+            let in_component = component_mask
+                [(y - component.min_y) as usize * width as usize + (x - component.min_x) as usize];
+            let candidate = if current != 0 || in_component { 255 } else { 0 };
+            let predicted = predicted.get_pixel(x, y)[0];
+            before += (current ^ predicted) as u64;
+            after += (candidate ^ predicted) as u64;
         }
     }
     if after < before {
-        for &(x, y) in pixels {
+        for &(x, y) in &component.pixels {
             merged.put_pixel(x, y, Luma([255]));
         }
     }
@@ -1210,7 +1275,17 @@ fn kernel_offsets(radius: u32, shape: MorphShape) -> Vec<(i32, i32)> {
         for dx in -radius..=radius {
             let inside = match shape {
                 MorphShape::Square => true,
-                MorphShape::Ellipse => dx * dx + dy * dy <= radius * radius + radius / 2,
+                MorphShape::Ellipse => {
+                    let radius_f = radius as f64;
+                    let dy_f = dy as f64;
+                    let horizontal = if radius == 0 {
+                        0
+                    } else {
+                        (radius_f * (1.0 - dy_f * dy_f / (radius_f * radius_f)).max(0.0).sqrt())
+                            .round() as i32
+                    };
+                    dx.abs() <= horizontal
+                }
             };
             if inside {
                 output.push((dx, dy));
@@ -1243,7 +1318,7 @@ fn vector_norm(vector: [f32; 2]) -> f32 {
     vector[0].hypot(vector[1])
 }
 
-fn quad_bbox(quad: &Quad) -> [f32; 4] {
+fn quad_bbox(quad: &ModelQuad) -> [f32; 4] {
     quad.iter().fold(
         [
             f32::INFINITY,
@@ -1262,7 +1337,7 @@ fn quad_bbox(quad: &Quad) -> [f32; 4] {
     )
 }
 
-fn lines_bbox(lines: &[Quad]) -> [f32; 4] {
+fn lines_bbox(lines: &[ModelQuad]) -> [f32; 4] {
     lines.iter().fold(
         [
             f32::INFINITY,

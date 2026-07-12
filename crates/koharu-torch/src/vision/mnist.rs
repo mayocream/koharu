@@ -10,8 +10,9 @@ use std::io::{self, BufReader, Read, Result};
 fn read_u32<T: Read>(reader: &mut T) -> Result<u32> {
     let mut b = vec![0u8; 4];
     reader.read_exact(&mut b)?;
-    let (result, _) =
-        b.iter().rev().fold((0u64, 1u64), |(s, basis), &x| (s + basis * u64::from(x), basis * 256));
+    let (result, _) = b.iter().rev().fold((0u64, 1u64), |(s, basis), &x| {
+        (s + basis * u64::from(x), basis * 256)
+    });
     Ok(result as u32)
 }
 
@@ -65,5 +66,11 @@ pub fn load_dir<T: AsRef<std::path::Path>>(dir: T) -> Result<Dataset> {
     let train_labels = read_labels(&dir.join("train-labels-idx1-ubyte"))?;
     let test_images = read_images(&dir.join("t10k-images-idx3-ubyte"))?;
     let test_labels = read_labels(&dir.join("t10k-labels-idx1-ubyte"))?;
-    Ok(Dataset { train_images, train_labels, test_images, test_labels, labels: 10 })
+    Ok(Dataset {
+        train_images,
+        train_labels,
+        test_images,
+        test_labels,
+        labels: 10,
+    })
 }

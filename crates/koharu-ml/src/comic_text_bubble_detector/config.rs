@@ -3,20 +3,19 @@
 //! Original implementation:
 //! https://github.com/huggingface/transformers/blob/394b1a0eaa8e6199e372334da0aff3753a117fdb/src/transformers/models/rt_detr_v2/configuration_rt_detr_v2.py
 
-use std::{collections::HashMap, fs, path::Path};
+use std::collections::HashMap;
 
-use anyhow::Result;
 use serde::Deserialize;
 
 #[derive(Debug, Clone, Deserialize)]
 #[serde(default)]
-pub struct ComicTextBubbleDetectorConfig {
+pub struct RTDetrV2Config {
     pub id2label: HashMap<String, String>,
     pub num_labels: Option<i64>,
     pub initializer_range: f64,
     pub layer_norm_eps: f64,
     pub batch_norm_eps: f64,
-    pub backbone_config: RtDetrResNetConfig,
+    pub backbone_config: RTDetrResNetConfig,
     pub freeze_backbone_batch_norms: bool,
     pub encoder_hidden_dim: i64,
     pub encoder_in_channels: Vec<i64>,
@@ -45,15 +44,32 @@ pub struct ComicTextBubbleDetectorConfig {
     pub decoder_activation_function: String,
     pub attention_dropout: f64,
     pub num_denoising: i64,
+    pub label_noise_ratio: f64,
+    pub box_noise_scale: f64,
     pub learn_initial_query: bool,
     pub anchor_image_size: Option<Vec<i64>>,
+    pub with_box_refine: bool,
+    pub is_encoder_decoder: bool,
+    pub matcher_alpha: f64,
+    pub matcher_gamma: f64,
+    pub matcher_class_cost: f64,
+    pub matcher_bbox_cost: f64,
+    pub matcher_giou_cost: f64,
     pub use_focal_loss: bool,
+    pub auxiliary_loss: bool,
+    pub focal_loss_alpha: f64,
+    pub focal_loss_gamma: f64,
+    pub weight_loss_vfl: f64,
+    pub weight_loss_bbox: f64,
+    pub weight_loss_giou: f64,
+    pub eos_coefficient: f64,
     pub decoder_n_levels: i64,
     pub decoder_offset_scale: f64,
     pub decoder_method: String,
+    pub tie_word_embeddings: bool,
 }
 
-impl Default for ComicTextBubbleDetectorConfig {
+impl Default for RTDetrV2Config {
     fn default() -> Self {
         Self {
             id2label: HashMap::new(),
@@ -61,7 +77,11 @@ impl Default for ComicTextBubbleDetectorConfig {
             initializer_range: 0.01,
             layer_norm_eps: 1e-5,
             batch_norm_eps: 1e-5,
-            backbone_config: RtDetrResNetConfig::default_for_rt_detr(),
+            backbone_config: RTDetrResNetConfig {
+                out_features: vec!["stage2".into(), "stage3".into(), "stage4".into()],
+                out_indices: vec![2, 3, 4],
+                ..Default::default()
+            },
             freeze_backbone_batch_norms: true,
             encoder_hidden_dim: 256,
             encoder_in_channels: vec![512, 1024, 2048],
@@ -89,51 +109,48 @@ impl Default for ComicTextBubbleDetectorConfig {
             decoder_activation_function: "relu".to_owned(),
             attention_dropout: 0.0,
             num_denoising: 100,
+            label_noise_ratio: 0.5,
+            box_noise_scale: 1.0,
             learn_initial_query: false,
             anchor_image_size: None,
+            with_box_refine: true,
+            is_encoder_decoder: true,
+            matcher_alpha: 0.25,
+            matcher_gamma: 2.0,
+            matcher_class_cost: 2.0,
+            matcher_bbox_cost: 5.0,
+            matcher_giou_cost: 2.0,
             use_focal_loss: true,
+            auxiliary_loss: true,
+            focal_loss_alpha: 0.75,
+            focal_loss_gamma: 2.0,
+            weight_loss_vfl: 1.0,
+            weight_loss_bbox: 5.0,
+            weight_loss_giou: 2.0,
+            eos_coefficient: 1e-4,
             decoder_n_levels: 3,
             decoder_offset_scale: 0.5,
             decoder_method: "default".to_owned(),
+            tie_word_embeddings: true,
         }
     }
 }
 
-impl ComicTextBubbleDetectorConfig {
-    pub fn from_file(path: impl AsRef<Path>) -> Result<Self> {
-        let json = fs::read_to_string(path)?;
-        let mut config: Self = serde_json::from_str(&json)?;
-        if config.backbone_config.out_features.is_empty() {
-            config.backbone_config.out_features =
-                vec!["stage2".into(), "stage3".into(), "stage4".into()];
-        }
-        Ok(config)
-    }
-
+impl RTDetrV2Config {
     pub fn num_labels(&self) -> i64 {
-        self.num_labels
-            .unwrap_or_else(|| self.id2label.len().max(3) as i64)
-    }
-
-    pub fn labels(&self) -> Vec<String> {
-        if self.id2label.is_empty() {
-            return (0..self.num_labels())
-                .map(|idx| format!("LABEL_{idx}"))
-                .collect();
-        }
-        let mut labels = self
-            .id2label
-            .iter()
-            .filter_map(|(id, label)| id.parse::<usize>().ok().map(|id| (id, label.clone())))
-            .collect::<Vec<_>>();
-        labels.sort_by_key(|(id, _)| *id);
-        labels.into_iter().map(|(_, label)| label).collect()
+        self.num_labels.unwrap_or({
+            if self.id2label.is_empty() {
+                2
+            } else {
+                self.id2label.len() as i64
+            }
+        })
     }
 }
 
 #[derive(Debug, Clone, Deserialize)]
 #[serde(default)]
-pub struct RtDetrResNetConfig {
+pub struct RTDetrResNetConfig {
     pub num_channels: i64,
     pub embedding_size: i64,
     pub hidden_sizes: Vec<i64>,
@@ -146,7 +163,7 @@ pub struct RtDetrResNetConfig {
     pub out_indices: Vec<usize>,
 }
 
-impl Default for RtDetrResNetConfig {
+impl Default for RTDetrResNetConfig {
     fn default() -> Self {
         Self {
             num_channels: 3,
@@ -163,15 +180,7 @@ impl Default for RtDetrResNetConfig {
     }
 }
 
-impl RtDetrResNetConfig {
-    fn default_for_rt_detr() -> Self {
-        Self {
-            out_features: vec!["stage2".into(), "stage3".into(), "stage4".into()],
-            out_indices: vec![2, 3, 4],
-            ..Self::default()
-        }
-    }
-
+impl RTDetrResNetConfig {
     pub fn channels(&self) -> Vec<i64> {
         let mut channels = Vec::with_capacity(self.out_features.len());
         for feature in &self.out_features {

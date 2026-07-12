@@ -20,7 +20,9 @@ impl<'i> TryFrom<&'i DynamicImage> for Tensor {
             DynamicImage::ImageRgba8(rgba) => Tensor::try_from(rgba),
             DynamicImage::ImageRgb32F(rgb) => Tensor::try_from(rgb),
             DynamicImage::ImageRgba32F(rgba) => Tensor::try_from(rgba),
-            _ => Err(TchError::Convert("unsupported DynamicImage variant".to_string())),
+            _ => Err(TchError::Convert(
+                "unsupported DynamicImage variant".to_string(),
+            )),
         }
     }
 }

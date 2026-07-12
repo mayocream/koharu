@@ -49,7 +49,13 @@ pub fn group_norm<'a, T: Borrow<super::Path<'a>>>(
     } else {
         (None, None)
     };
-    GroupNorm { config, ws, bs, num_groups, num_channels }
+    GroupNorm {
+        config,
+        ws,
+        bs,
+        num_groups,
+        num_channels,
+    }
 }
 
 impl super::module::Module for GroupNorm {

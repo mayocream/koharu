@@ -5,7 +5,7 @@ use std::{
 
 use anyhow::{Context, Result};
 use koharu_bindgen::Generator;
-use koharu_runtime::package::{libtorch::Libtorch, Package};
+use koharu_runtime::package::{Package, libtorch::Libtorch};
 
 const SHIM_LIBRARY_NAME: &str = "koharu-torch";
 const OPAQUE_TYPES: &str = "^(tensor|scalar|optimizer|module|ivalue)$";

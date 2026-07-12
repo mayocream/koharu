@@ -10,7 +10,7 @@ use koharu_torch::Device;
 pub use self::{
     config::{HGNetV2Config, PPDocLayoutV3Config},
     processor::{
-        PPDocLayoutV3Detections, PPDocLayoutV3Processor, PPDocLayoutV3Region, ProcessorSize,
+        PPDocLayoutV3Detections, PPDocLayoutV3ImageProcessor, PPDocLayoutV3Region, SizeDict,
     },
 };
 
@@ -26,7 +26,7 @@ koharu_runtime::huggingface! {
 pub struct PPDocLayoutV3 {
     device: Device,
     model: Model,
-    processor: PPDocLayoutV3Processor,
+    processor: PPDocLayoutV3ImageProcessor,
 }
 
 impl PPDocLayoutV3 {
@@ -39,17 +39,16 @@ impl PPDocLayoutV3 {
         let weights_path = huggingface::resolve(WEIGHTS)
             .await
             .context("failed to resolve PP-DocLayout-V3 weights")?;
-        let processor_path = huggingface::resolve(PROCESSOR).await;
+        let processor_path = huggingface::resolve(PROCESSOR)
+            .await
+            .context("failed to resolve PP-DocLayout-V3 image processor")?;
 
         let mut config = PPDocLayoutV3Config::from_file(&config_path)
             .with_context(|| format!("failed to read {}", config_path.display()))?;
         let labels = config.labels();
-        let processor = match processor_path {
-            Ok(path) => PPDocLayoutV3Processor::from_file(&path)
-                .with_context(|| format!("failed to read {}", path.display()))?
-                .with_labels(labels),
-            Err(_) => PPDocLayoutV3Processor::default().with_labels(labels),
-        };
+        let processor = PPDocLayoutV3ImageProcessor::from_file(&processor_path)
+            .with_context(|| format!("failed to read {}", processor_path.display()))?
+            .with_labels(labels);
 
         // The processor always produces this resolution, so the model can reuse the
         // fixed RT-DETR anchors instead of rebuilding and uploading them per page.
@@ -73,7 +72,7 @@ impl PPDocLayoutV3 {
         threshold: f32,
     ) -> Result<PPDocLayoutV3Detections> {
         koharu_torch::no_grad(|| {
-            let pixel_values = self.processor.preprocess(image, self.device);
+            let pixel_values = self.processor.preprocess(image, self.device)?;
             let outputs = self.model.forward(&pixel_values);
             self.processor.postprocess(&outputs, image, threshold)
         })

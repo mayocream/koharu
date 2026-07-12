@@ -6,13 +6,13 @@
 use anyhow::Result;
 use async_trait::async_trait;
 use koharu_core::{Op, TextData};
-use koharu_ml::comic_text_bubble_detector::{ComicTextBubbleDetection, ComicTextBubbleDetector};
+use koharu_ml::comic_text_bubble_detector::{RTDetrV2Detection, TextBlock};
 
 use crate::pipeline::artifacts::Artifact;
 use crate::pipeline::engine::{Engine, EngineCtx, EngineInfo};
 use crate::pipeline::engines::support::{
     clear_text_nodes_ops, load_source_image, new_text_node, page_node_count,
-    sort_manga_reading_order, text_region_to_pair,
+    sort_manga_reading_order,
 };
 
 use std::thread;
@@ -24,7 +24,7 @@ const DETECTOR_NAME: &str = "comic-text-bubble-detector";
 // 1. Define the communication protocol
 struct DetectMessage {
     image: image::DynamicImage,
-    respond_to: oneshot::Sender<Result<ComicTextBubbleDetection>>,
+    respond_to: oneshot::Sender<Result<Vec<TextBlock>>>,
 }
 
 // 2. The Engine now acts as an Async Client to the dedicated thread
@@ -56,9 +56,17 @@ impl Engine for Model {
             .map_err(|_| anyhow::anyhow!("[SYS] Detector thread crashed"))??;
 
         let mut pairs: Vec<([f32; 4], TextData)> = det
-            .text_blocks
             .into_iter()
-            .map(|r| text_region_to_pair(r, DETECTOR_NAME))
+            .map(|block| {
+                let [x1, y1, x2, y2] = block.xyxy;
+                (
+                    [x1 as f32, y1 as f32, x2 as f32, y2 as f32],
+                    TextData {
+                        detector: Some(DETECTOR_NAME.to_owned()),
+                        ..Default::default()
+                    },
+                )
+            })
             .collect();
         sort_manga_reading_order(&mut pairs, ctx.options.reading_order.unwrap_or_default());
 
@@ -95,7 +103,7 @@ inventory::submit! {
                 rt.block_on(async move {
 
                     // The CUDA context is now permanently tied to this specific thread
-                    let detector = match ComicTextBubbleDetector::load(device).await {
+                    let detector = match RTDetrV2Detection::load(device).await {
                         Ok(d) => d,
                         Err(e) => {
                             tracing::error!("Failed to load detector: {:?}", e);

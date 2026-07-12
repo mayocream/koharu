@@ -2,10 +2,10 @@
 use super::utils::{path_to_cstring, ptr_to_string};
 use super::{device::Device, kind::Kind};
 use crate::{nn::Path, TchError, Tensor};
+use koharu_torch_sys::*;
 use libc::{c_int, c_void};
 use std::borrow::Borrow;
 use std::convert::TryFrom;
-use koharu_torch_sys::*;
 
 /// Argument and output values for JIT models. These represent arbitrary values,
 /// e.g. tensors, atomic values, pairs of values, etc.
@@ -253,7 +253,10 @@ impl IValue {
             IValue::Double(f) => ati_double(*f),
             IValue::Bool(b) => ati_bool(i32::from(*b)),
             IValue::Tuple(v) => {
-                let v = v.iter().map(Self::to_c).collect::<Result<Vec<_>, TchError>>()?;
+                let v = v
+                    .iter()
+                    .map(Self::to_c)
+                    .collect::<Result<Vec<_>, TchError>>()?;
                 let tuple = ati_tuple(v.as_ptr(), v.len() as c_int);
                 for x in v {
                     ati_free(x);
@@ -262,7 +265,10 @@ impl IValue {
                 tuple
             }
             IValue::GenericList(v) => {
-                let v = v.iter().map(Self::to_c).collect::<Result<Vec<_>, TchError>>()?;
+                let v = v
+                    .iter()
+                    .map(Self::to_c)
+                    .collect::<Result<Vec<_>, TchError>>()?;
                 let list = ati_generic_list(v.as_ptr(), v.len() as c_int);
                 for x in v {
                     ati_free(x);
@@ -337,8 +343,10 @@ impl IValue {
                 let mut c_ivalues: Vec<_> =
                     (0..len).map(|_| std::ptr::null_mut::<CIValue>()).collect();
                 unsafe_torch_err!(ati_to_tuple(c_ivalue, c_ivalues.as_mut_ptr(), len));
-                let vec: Result<Vec<_>, _> =
-                    c_ivalues.iter().map(|&c_ivalue| Self::from_c(c_ivalue)).collect();
+                let vec: Result<Vec<_>, _> = c_ivalues
+                    .iter()
+                    .map(|&c_ivalue| Self::from_c(c_ivalue))
+                    .collect();
                 IValue::Tuple(vec?)
             }
             6 => {
@@ -373,7 +381,10 @@ impl IValue {
                 let mut c_tensors: Vec<_> =
                     (0..len).map(|_| std::ptr::null_mut::<C_tensor>()).collect();
                 unsafe_torch_err!(ati_to_tensor_list(c_ivalue, c_tensors.as_mut_ptr(), len));
-                let vec: Vec<_> = c_tensors.iter().map(|&c_tensor| Tensor { c_tensor }).collect();
+                let vec: Vec<_> = c_tensors
+                    .iter()
+                    .map(|&c_tensor| Tensor { c_tensor })
+                    .collect();
                 IValue::TensorList(vec)
             }
             12 => {
@@ -381,14 +392,17 @@ impl IValue {
                 let mut c_ivalues: Vec<_> =
                     (0..len).map(|_| std::ptr::null_mut::<CIValue>()).collect();
                 unsafe_torch_err!(ati_to_generic_list(c_ivalue, c_ivalues.as_mut_ptr(), len));
-                let vec: Result<Vec<_>, _> =
-                    c_ivalues.iter().map(|&c_ivalue| Self::from_c(c_ivalue)).collect();
+                let vec: Result<Vec<_>, _> = c_ivalues
+                    .iter()
+                    .map(|&c_ivalue| Self::from_c(c_ivalue))
+                    .collect();
                 IValue::GenericList(vec?)
             }
             13 => {
                 let len = unsafe_torch_err!(ati_length(c_ivalue));
-                let mut c_ivalues: Vec<_> =
-                    (0..2 * len).map(|_| std::ptr::null_mut::<CIValue>()).collect();
+                let mut c_ivalues: Vec<_> = (0..2 * len)
+                    .map(|_| std::ptr::null_mut::<CIValue>())
+                    .collect();
                 unsafe_torch_err!(ati_to_generic_dict(c_ivalue, c_ivalues.as_mut_ptr(), len));
                 let mut res: Vec<(IValue, IValue)> = vec![];
                 for i in 0..(len as usize) {
@@ -471,8 +485,11 @@ impl CModule {
         let mut buffer = Vec::new();
         f.read_to_end(&mut buffer)?;
         let buffer_ptr = buffer.as_ptr() as *const libc::c_char;
-        let c_module =
-            unsafe_torch_err!(atm_load_str_on_device(buffer_ptr, buffer.len(), device.c_int()));
+        let c_module = unsafe_torch_err!(atm_load_str_on_device(
+            buffer_ptr,
+            buffer.len(),
+            device.c_int()
+        ));
         Ok(CModule { c_module })
     }
 
@@ -488,7 +505,10 @@ impl CModule {
     /// Performs the forward pass for a model on some specified ivalue inputs. This is equivalent
     /// to calling method_is with the 'forward' method name, and returns an arbitrary ivalue.
     pub fn forward_is<T: Borrow<IValue>>(&self, ts: &[T]) -> Result<IValue, TchError> {
-        let ts = ts.iter().map(|x| x.borrow().to_c()).collect::<Result<Vec<_>, TchError>>()?;
+        let ts = ts
+            .iter()
+            .map(|x| x.borrow().to_c())
+            .collect::<Result<Vec<_>, TchError>>()?;
         let c_ivalue =
             unsafe_torch_err!(atm_forward_(self.c_module, ts.as_ptr(), ts.len() as c_int));
         for x in ts {
@@ -520,7 +540,10 @@ impl CModule {
         method_name: &str,
         ts: &[T],
     ) -> Result<IValue, TchError> {
-        let ts = ts.iter().map(|x| x.borrow().to_c()).collect::<Result<Vec<_>, TchError>>()?;
+        let ts = ts
+            .iter()
+            .map(|x| x.borrow().to_c())
+            .collect::<Result<Vec<_>, TchError>>()?;
         let method_name = std::ffi::CString::new(method_name)?;
         let c_ivalue = unsafe_torch_err!(atm_method_(
             self.c_module,
@@ -540,7 +563,10 @@ impl CModule {
         clz_name: &str,
         ts: &[T],
     ) -> Result<IValue, TchError> {
-        let ts = ts.iter().map(|x| x.borrow().to_c()).collect::<Result<Vec<_>, TchError>>()?;
+        let ts = ts
+            .iter()
+            .map(|x| x.borrow().to_c())
+            .collect::<Result<Vec<_>, TchError>>()?;
         let clz_name = std::ffi::CString::new(clz_name)?;
         let c_ivalue = unsafe_torch_err!(atm_create_class_(
             self.c_module,
@@ -578,7 +604,12 @@ impl CModule {
 
     /// Moves the module to a different device and converts the kind.
     pub fn to(&mut self, device: Device, kind: Kind, non_blocking: bool) {
-        unsafe_torch!(atm_to(self.c_module, device.c_int(), kind.c_int(), non_blocking));
+        unsafe_torch!(atm_to(
+            self.c_module,
+            device.c_int(),
+            kind.c_int(),
+            non_blocking
+        ));
     }
 
     /// Saves a module to a given path.
@@ -612,14 +643,20 @@ impl CModule {
     {
         let modl_name = std::ffi::CString::new(modl_name)?;
         let fn_name = std::ffi::CString::new(fn_name)?;
-        let c_inputs = inputs.iter().map(|tensor| tensor.c_tensor).collect::<Vec<_>>();
+        let c_inputs = inputs
+            .iter()
+            .map(|tensor| tensor.c_tensor)
+            .collect::<Vec<_>>();
         let c_module = unsafe_torch_err!(atm_create_for_tracing(
             modl_name.as_ptr(),
             c_inputs.as_ptr(),
             c_inputs.len() as c_int
         ));
         let outputs = closure(inputs);
-        let c_outputs = outputs.iter().map(|tensor| tensor.c_tensor).collect::<Vec<_>>();
+        let c_outputs = outputs
+            .iter()
+            .map(|tensor| tensor.c_tensor)
+            .collect::<Vec<_>>();
         unsafe_torch_err!(atm_end_tracing(
             c_module,
             fn_name.as_ptr(),
@@ -812,7 +849,10 @@ impl Object {
         method_name: &str,
         ts: &[T],
     ) -> Result<IValue, TchError> {
-        let ts = ts.iter().map(|x| x.borrow().to_c()).collect::<Result<Vec<_>, TchError>>()?;
+        let ts = ts
+            .iter()
+            .map(|x| x.borrow().to_c())
+            .collect::<Result<Vec<_>, TchError>>()?;
         let method_name = std::ffi::CString::new(method_name)?;
         let c_ivalue = unsafe_torch_err!(ati_object_method_(
             self.c_ivalue,
@@ -869,7 +909,10 @@ mod tests {
         round_trip((42, consts::PI));
         round_trip(vec![42, 1337]);
         round_trip(vec![consts::E, consts::PI, 299792458.00001]);
-        round_trip((vec![true, false, true, true], vec![consts::E, consts::PI, 299792458.00001]));
+        round_trip((
+            vec![true, false, true, true],
+            vec![consts::E, consts::PI, 299792458.00001],
+        ));
         round_trip(vec![IValue::from(42), IValue::from("foobar")]);
         round_trip(vec![
             (IValue::from(42), IValue::from("foobar")),

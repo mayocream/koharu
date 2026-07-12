@@ -295,7 +295,10 @@ impl Tensor {
         use TensorIndexer::*;
 
         // Make sure n. non-newaxis does not exceed n. of dimensions
-        let n_newaxis = index_spec.iter().filter(|spec| *spec == &InsertNewAxis).count();
+        let n_newaxis = index_spec
+            .iter()
+            .filter(|spec| *spec == &InsertNewAxis)
+            .count();
 
         if index_spec.len() > self.size().len() + n_newaxis {
             return Err(TchError::Shape(format!(
@@ -354,14 +357,20 @@ impl Tensor {
                         (Excluded(start), Included(end)) => Some((*start + 1, *end - *start)),
                         (Excluded(start), Excluded(end)) => Some((*start + 1, *end - *start - 1)),
                     } {
-                        (curr_tensor.f_narrow(curr_idx, start, length.max(0))?, curr_idx + 1)
+                        (
+                            curr_tensor.f_narrow(curr_idx, start, length.max(0))?,
+                            curr_idx + 1,
+                        )
                     } else {
                         (curr_tensor, curr_idx + 1)
                     }
                 }
                 IndexSelect(index_tensor) => {
                     let index_tensor = index_tensor.to_device(curr_tensor.device());
-                    (curr_tensor.index_select(curr_idx, &index_tensor), curr_idx + 1)
+                    (
+                        curr_tensor.index_select(curr_idx, &index_tensor),
+                        curr_idx + 1,
+                    )
                 }
             };
             curr_tensor = next_tensor;

@@ -131,7 +131,13 @@ pub fn set_print_options_full() {
 
 impl Default for PrinterOptions {
     fn default() -> Self {
-        Self { precision: 4, threshold: 1000, edge_items: 3, line_width: 80, sci_mode: None }
+        Self {
+            precision: 4,
+            threshold: 1000,
+            edge_items: 3,
+            line_width: 80,
+            sci_mode: None,
+        }
     }
 }
 
@@ -297,7 +303,11 @@ impl FloatFormatter {
             None => {}
             Some(v) => sci_mode = v,
         }
-        Self { int_mode, sci_mode, precision: po.precision }
+        Self {
+            int_mode,
+            sci_mode,
+            precision: po.precision,
+        }
     }
 }
 
@@ -306,7 +316,13 @@ impl TensorFormatter for FloatFormatter {
 
     fn fmt<T: std::fmt::Write>(&self, v: Self::Elem, max_w: usize, f: &mut T) -> std::fmt::Result {
         if self.sci_mode {
-            write!(f, "{v:width$.prec$e}", v = v, width = max_w, prec = self.precision)
+            write!(
+                f,
+                "{v:width$.prec$e}",
+                v = v,
+                width = max_w,
+                prec = self.precision
+            )
         } else if self.int_mode {
             if v.is_finite() {
                 write!(f, "{v:width$.0}.", v = v, width = max_w - 1)
@@ -314,7 +330,13 @@ impl TensorFormatter for FloatFormatter {
                 write!(f, "{v:max_w$.0}")
             }
         } else {
-            write!(f, "{v:width$.prec$}", v = v, width = max_w, prec = self.precision)
+            write!(
+                f,
+                "{v:width$.prec$}",
+                v = v,
+                width = max_w,
+                prec = self.precision
+            )
         }
     }
 
@@ -371,21 +393,27 @@ fn get_summarized_data(t: &Tensor, edge_items: i64) -> Tensor {
     } else if size.len() == 1 {
         if size[0] > 2 * edge_items {
             Tensor::cat(
-                &[t.slice(0, None, Some(edge_items), 1), t.slice(0, Some(-edge_items), None, 1)],
+                &[
+                    t.slice(0, None, Some(edge_items), 1),
+                    t.slice(0, Some(-edge_items), None, 1),
+                ],
                 0,
             )
         } else {
             t.shallow_clone()
         }
     } else if size[0] > 2 * edge_items {
-        let mut vs: Vec<_> =
-            (0..edge_items).map(|i| get_summarized_data(&t.get(i), edge_items)).collect();
+        let mut vs: Vec<_> = (0..edge_items)
+            .map(|i| get_summarized_data(&t.get(i), edge_items))
+            .collect();
         for i in (size[0] - edge_items)..size[0] {
             vs.push(get_summarized_data(&t.get(i), edge_items))
         }
         Tensor::stack(&vs, 0)
     } else {
-        let vs: Vec<_> = (0..size[0]).map(|i| get_summarized_data(&t.get(i), edge_items)).collect();
+        let vs: Vec<_> = (0..size[0])
+            .map(|i| get_summarized_data(&t.get(i), edge_items))
+            .collect();
         Tensor::stack(&vs, 0)
     }
 }

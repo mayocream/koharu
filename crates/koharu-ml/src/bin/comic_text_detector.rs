@@ -7,7 +7,7 @@ use imageproc::{
     drawing::{draw_hollow_rect_mut, draw_line_segment_mut},
     rect::Rect,
 };
-use koharu_ml::comic_text_detector::{ComicTextDetection, ComicTextDetector, Quad};
+use koharu_ml::comic_text_detector::{ComicTextDetector, Quad, TextBlock};
 
 #[derive(Debug, Parser)]
 struct Cli {
@@ -23,12 +23,6 @@ struct Cli {
     #[arg(long, value_name = "FILE")]
     mask_output: Option<PathBuf>,
 
-    #[arg(long, value_name = "FILE")]
-    shrink_output: Option<PathBuf>,
-
-    #[arg(long, value_name = "FILE")]
-    threshold_output: Option<PathBuf>,
-
     #[arg(long, default_value_t = false)]
     cpu: bool,
 }
@@ -42,24 +36,17 @@ async fn main() -> Result<()> {
     koharu_ml::init().await?;
 
     let model = ComicTextDetector::load(koharu_ml::device(cli.cpu)).await?;
-    let detection = model.inference(&image)?;
+    let (mask, text_blocks) = model.inference(&image)?;
 
     if let Some(path) = cli.annotated_output {
         let mut annotated = image.to_rgba8();
-        draw_detection(&mut annotated, &detection);
+        draw_detection(&mut annotated, &mask, &text_blocks);
         annotated.save(path)?;
     }
     if let Some(path) = cli.mask_output {
-        detection.mask.save(path)?;
+        mask.save(path)?;
     }
-    if let Some(path) = cli.shrink_output {
-        detection.shrink_map.save(path)?;
-    }
-    if let Some(path) = cli.threshold_output {
-        detection.threshold_map.save(path)?;
-    }
-
-    let json = serde_json::to_string_pretty(&detection)?;
+    let json = serde_json::to_string_pretty(&text_blocks)?;
     if let Some(path) = cli.output {
         std::fs::write(path, json)?;
     } else {
@@ -69,18 +56,14 @@ async fn main() -> Result<()> {
     Ok(())
 }
 
-fn draw_detection(image: &mut RgbaImage, detection: &ComicTextDetection) {
-    overlay_mask(image, &detection.mask);
+fn draw_detection(image: &mut RgbaImage, mask: &GrayImage, text_blocks: &[TextBlock]) {
+    overlay_mask(image, mask);
 
-    for line in &detection.line_polygons {
-        draw_quad(image, line, Rgba([20, 220, 80, 255]));
-    }
-
-    for block in &detection.blocks {
-        let x1 = block.bbox[0].min(block.bbox[2]).max(0.0);
-        let y1 = block.bbox[1].min(block.bbox[3]).max(0.0);
-        let x2 = block.bbox[0].max(block.bbox[2]).min(image.width() as f32);
-        let y2 = block.bbox[1].max(block.bbox[3]).min(image.height() as f32);
+    for block in text_blocks {
+        let x1 = block.xyxy[0].min(block.xyxy[2]).max(0) as f32;
+        let y1 = block.xyxy[1].min(block.xyxy[3]).max(0) as f32;
+        let x2 = block.xyxy[0].max(block.xyxy[2]).min(image.width() as i32) as f32;
+        let y2 = block.xyxy[1].max(block.xyxy[3]).min(image.height() as i32) as f32;
         let width = (x2 - x1).max(1.0) as u32;
         let height = (y2 - y1).max(1.0) as u32;
         draw_hollow_rect_mut(
@@ -88,7 +71,7 @@ fn draw_detection(image: &mut RgbaImage, detection: &ComicTextDetection) {
             Rect::at(x1 as i32, y1 as i32).of_size(width, height),
             Rgba([255, 40, 40, 255]),
         );
-        for line in &block.line_polygons {
+        for line in &block.lines {
             draw_quad(image, line, Rgba([255, 220, 40, 255]));
         }
     }
@@ -117,6 +100,11 @@ fn draw_quad(image: &mut RgbaImage, quad: &Quad, color: Rgba<u8>) {
     for index in 0..4 {
         let a = quad[index];
         let b = quad[(index + 1) % 4];
-        draw_line_segment_mut(image, (a[0], a[1]), (b[0], b[1]), color);
+        draw_line_segment_mut(
+            image,
+            (a[0] as f32, a[1] as f32),
+            (b[0] as f32, b[1] as f32),
+            color,
+        );
     }
 }

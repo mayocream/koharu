@@ -19,24 +19,38 @@ use super::model::Output;
 
 #[derive(Debug, Clone, Deserialize)]
 #[serde(default)]
-pub struct PPDocLayoutV3Processor {
-    pub size: ProcessorSize,
+pub struct PPDocLayoutV3ImageProcessor {
+    pub size: SizeDict,
+    pub do_resize: bool,
+    pub resample: i64,
+    pub do_rescale: bool,
+    pub rescale_factor: f64,
+    pub do_normalize: bool,
+    pub image_mean: Vec<f32>,
+    pub image_std: Vec<f32>,
     pub labels: Vec<String>,
 }
 
-impl Default for PPDocLayoutV3Processor {
+impl Default for PPDocLayoutV3ImageProcessor {
     fn default() -> Self {
         Self {
-            size: ProcessorSize {
+            size: SizeDict {
                 height: 800,
                 width: 800,
             },
+            do_resize: true,
+            resample: 3,
+            do_rescale: true,
+            rescale_factor: 1.0 / 255.0,
+            do_normalize: true,
+            image_mean: vec![0.0, 0.0, 0.0],
+            image_std: vec![1.0, 1.0, 1.0],
             labels: Vec::new(),
         }
     }
 }
 
-impl PPDocLayoutV3Processor {
+impl PPDocLayoutV3ImageProcessor {
     pub fn with_labels(mut self, labels: Vec<String>) -> Self {
         self.labels = labels;
         self
@@ -48,21 +62,54 @@ impl PPDocLayoutV3Processor {
         serde_json::from_str(&json).with_context(|| format!("failed to parse {}", path.display()))
     }
 
-    pub fn preprocess(&self, image: &DynamicImage, device: Device) -> Tensor {
+    pub fn preprocess(&self, image: &DynamicImage, device: Device) -> Result<Tensor> {
         let rgb = image.to_rgb8();
         let (width, height) = rgb.dimensions();
 
-        let pixel_values = Tensor::from_slice(rgb.as_raw())
+        let mut pixel_values = Tensor::from_slice(rgb.as_raw())
             .view([1, height as i64, width as i64, 3])
-            .to_device(device)
             .permute([0, 3, 1, 2])
             .to_kind(Kind::Float);
 
-        pixel_values
-            .upsample_bicubic2d([self.size.height, self.size.width], false, None, None)
+        if self.do_resize {
+            pixel_values = match self.resample {
+                0 => pixel_values.upsample_nearest2d(
+                    [self.size.height, self.size.width],
+                    None::<f64>,
+                    None::<f64>,
+                ),
+                2 => pixel_values.upsample_bilinear2d(
+                    [self.size.height, self.size.width],
+                    false,
+                    None::<f64>,
+                    None::<f64>,
+                ),
+                // Torchvision falls back from Lanczos to bicubic for tensor inputs.
+                1 | 3 => pixel_values.upsample_bicubic2d(
+                    [self.size.height, self.size.width],
+                    false,
+                    None::<f64>,
+                    None::<f64>,
+                ),
+                resample => bail!("unsupported PP-DocLayout-V3 resampling mode {resample}"),
+            }
             .clamp(0.0, 255.0)
-            .round()
-            / 255.0
+            .round();
+        }
+
+        if self.do_rescale {
+            pixel_values *= self.rescale_factor;
+        }
+        if self.do_normalize {
+            if self.image_mean.len() != 3 || self.image_std.len() != 3 {
+                bail!("PP-DocLayout-V3 image_mean and image_std must contain three values");
+            }
+            let mean = Tensor::from_slice(&self.image_mean).view([1, 3, 1, 1]);
+            let std = Tensor::from_slice(&self.image_std).view([1, 3, 1, 1]);
+            pixel_values = (pixel_values - mean) / std;
+        }
+
+        Ok(pixel_values.to_device(device))
     }
 
     pub fn postprocess(
@@ -142,26 +189,25 @@ impl PPDocLayoutV3Processor {
             let mut candidates = Vec::new();
             for query in 0..scores.len() {
                 let score = scores[query];
-                if score < threshold {
-                    continue;
+                if score >= threshold {
+                    let offset = query * 4;
+                    let bbox = [
+                        boxes[offset],
+                        boxes[offset + 1],
+                        boxes[offset + 2],
+                        boxes[offset + 3],
+                    ];
+                    candidates.push(CandidateRegion {
+                        query: query_indices[query].max(0) as usize,
+                        order_seq: orders[query],
+                        label_id: labels[query].max(0) as usize,
+                        score,
+                        bbox,
+                    });
                 }
-                let offset = query * 4;
-                let bbox = [
-                    boxes[offset],
-                    boxes[offset + 1],
-                    boxes[offset + 2],
-                    boxes[offset + 3],
-                ];
-                candidates.push(CandidateRegion {
-                    query: query_indices[query].max(0) as usize,
-                    order: orders[query],
-                    label_id: labels[query].max(0) as usize,
-                    score,
-                    bbox,
-                });
             }
 
-            candidates.sort_by_key(|candidate| candidate.order);
+            candidates.sort_by_key(|candidate| candidate.order_seq);
             let selected_queries = candidates
                 .iter()
                 .map(|candidate| candidate.query as i64)
@@ -193,7 +239,7 @@ impl PPDocLayoutV3Processor {
                 let mask_offset = idx * mask_area;
                 let mask = &masks[mask_offset..mask_offset + mask_area];
                 regions.push(PPDocLayoutV3Region {
-                    order: idx + 1,
+                    order_seq: candidate.order_seq,
                     label_id: candidate.label_id,
                     label,
                     score: candidate.score,
@@ -203,8 +249,8 @@ impl PPDocLayoutV3Processor {
                         mask,
                         mask_width,
                         mask_height,
-                        target_width,
-                        target_height,
+                        self.size.width as f32 / target_width as f32 / 4.0,
+                        self.size.height as f32 / target_height as f32 / 4.0,
                     ),
                 });
             }
@@ -218,12 +264,12 @@ impl PPDocLayoutV3Processor {
 
 #[derive(Debug, Clone, Deserialize)]
 #[serde(default)]
-pub struct ProcessorSize {
+pub struct SizeDict {
     pub height: i64,
     pub width: i64,
 }
 
-impl Default for ProcessorSize {
+impl Default for SizeDict {
     fn default() -> Self {
         Self {
             height: 800,
@@ -239,17 +285,17 @@ pub struct PPDocLayoutV3Detections {
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct PPDocLayoutV3Region {
-    pub order: usize,
+    pub order_seq: i64,
     pub label_id: usize,
     pub label: String,
     pub score: f32,
     pub bbox: [f32; 4],
-    pub polygon_points: Vec<[f32; 2]>,
+    pub polygon_points: Option<Vec<[f32; 2]>>,
 }
 
 struct CandidateRegion {
     query: usize,
-    order: i64,
+    order_seq: i64,
     label_id: usize,
     score: f32,
     bbox: [f32; 4],
@@ -263,6 +309,7 @@ fn center_to_corners(boxes: &Tensor) -> Tensor {
     Tensor::cat(&[top_left, bottom_right], -1)
 }
 
+// https://github.com/huggingface/transformers/blob/394b1a0eaa8e6199e372334da0aff3753a117fdb/src/transformers/models/pp_doclayout_v3/image_processing_pp_doclayout_v3.py#L98-L127
 fn get_order_seq(order_logits: &Tensor) -> Tensor {
     let order_scores = order_logits.sigmoid();
     let size = order_scores.size();
@@ -317,14 +364,15 @@ fn tensor_to_vec_u8(tensor: &Tensor) -> Result<Vec<u8>> {
     Ok(values)
 }
 
+// https://github.com/huggingface/transformers/blob/394b1a0eaa8e6199e372334da0aff3753a117fdb/src/transformers/models/pp_doclayout_v3/image_processing_pp_doclayout_v3.py#L129-L220
 fn polygon_from_mask(
     bbox: [f32; 4],
     mask: &[u8],
     mask_width: usize,
     mask_height: usize,
-    target_width: u32,
-    target_height: u32,
-) -> Vec<[f32; 2]> {
+    scale_width: f32,
+    scale_height: f32,
+) -> Option<Vec<[f32; 2]>> {
     let x_min = bbox[0] as i32;
     let y_min = bbox[1] as i32;
     let x_max = bbox[2] as i32;
@@ -333,17 +381,15 @@ fn polygon_from_mask(
     let box_width = x_max - x_min;
     let box_height = y_max - y_min;
     if box_width <= 0 || box_height <= 0 {
-        return rect;
+        return Some(rect);
     }
 
-    let scale_width = mask_width as f32 / target_width as f32;
-    let scale_height = mask_height as f32 / target_height as f32;
     let x_start = scaled_bound(x_min, scale_width, mask_width);
     let x_end = scaled_bound(x_max, scale_width, mask_width);
     let y_start = scaled_bound(y_min, scale_height, mask_height);
     let y_end = scaled_bound(y_max, scale_height, mask_height);
     if x_start >= x_end || y_start >= y_end {
-        return rect;
+        return Some(rect);
     }
 
     let crop_width = x_end - x_start;
@@ -364,22 +410,25 @@ fn polygon_from_mask(
             &ResizeOptions::new().resize_alg(ResizeAlg::Nearest),
         )
         .expect("source and destination masks have the same pixel type");
-    let Some(mut polygon) = mask_to_polygon(&resized) else {
-        return rect;
-    };
+    let mut polygon = mask_to_polygon(&resized)?;
     if polygon.len() < 4 {
-        return rect;
+        return Some(rect);
     }
 
     for point in &mut polygon {
         point[0] += x_min as f32;
         point[1] += y_min as f32;
     }
-    polygon
+    Some(polygon)
 }
 
 fn mask_to_polygon(mask: &GrayImage) -> Option<Vec<[f32; 2]>> {
-    let contours = find_contours_with_threshold::<i32>(mask, 0);
+    // OpenCV treats pixels outside the image as background when tracing an external contour.
+    // imageproc only starts an outer contour after observing an in-image background pixel, so
+    // pad the mask to preserve upstream behavior when foreground reaches the crop boundary.
+    let mut padded = GrayImage::new(mask.width() + 2, mask.height() + 2);
+    image::imageops::replace(&mut padded, mask, 1, 1);
+    let contours = find_contours_with_threshold::<i32>(&padded, 0);
     let contour = contours
         .iter()
         .filter(|contour| contour.border_type == BorderType::Outer)
@@ -401,7 +450,7 @@ fn mask_to_polygon(mask: &GrayImage) -> Option<Vec<[f32; 2]>> {
 
     let points = approximated
         .into_iter()
-        .map(|point| [point.x as f32, point.y as f32])
+        .map(|point| [point.x as f32 - 1.0, point.y as f32 - 1.0])
         .collect::<Vec<_>>();
     Some(extract_custom_vertices(&points))
 }
@@ -454,11 +503,7 @@ fn extract_custom_vertices(points: &[[f32; 2]]) -> Vec<[f32; 2]> {
         }
     }
 
-    if vertices.is_empty() {
-        points.to_vec()
-    } else {
-        vertices
-    }
+    vertices
 }
 
 fn vector_norm(vector: [f32; 2]) -> f32 {

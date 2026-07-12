@@ -88,7 +88,10 @@ impl Default for ConvConfigND<[i64; 2]> {
 
 /// The default convolution config without bias.
 pub fn no_bias() -> ConvConfig {
-    ConvConfig { bias: false, ..Default::default() }
+    ConvConfig {
+        bias: false,
+        ..Default::default()
+    }
 }
 
 // Use const generics when they have landed in stable rust.
@@ -119,7 +122,11 @@ pub fn conv<'a, ND: std::convert::AsRef<[i64]>, T: Borrow<super::Path<'a>>>(
     config: ConvConfigND<ND>,
 ) -> Conv<ND> {
     let vs = vs.borrow();
-    let bs = if config.bias { Some(vs.var("bias", &[out_dim], config.bs_init)) } else { None };
+    let bs = if config.bias {
+        Some(vs.var("bias", &[out_dim], config.bs_init))
+    } else {
+        None
+    };
     let mut weight_size = vec![out_dim, in_dim / config.groups];
     weight_size.extend(ksizes.as_ref().iter());
     let ws = vs.var("weight", weight_size.as_slice(), config.ws_init);
@@ -130,7 +137,12 @@ pub fn conv<'a, ND: std::convert::AsRef<[i64]>, T: Borrow<super::Path<'a>>>(
     for &v in config.padding.as_ref().iter().rev() {
         reversed_padding_repeated_twice.push(v)
     }
-    Conv { ws, bs, config, reversed_padding_repeated_twice }
+    Conv {
+        ws,
+        bs,
+        config,
+        reversed_padding_repeated_twice,
+    }
 }
 
 trait Create: std::convert::AsRef<[i64]> + std::marker::Sized {

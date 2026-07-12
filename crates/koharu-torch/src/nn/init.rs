@@ -82,7 +82,11 @@ pub enum Init {
     /// Kaiming uniform initialization.
     /// See "Delving deep into rectifiers: Surpassing human-level performance on ImageNet classification"
     /// He, K. et al. (2015). This uses a uniform distribution.
-    Kaiming { dist: NormalOrUniform, fan: FanInOut, non_linearity: NonLinearity },
+    Kaiming {
+        dist: NormalOrUniform,
+        fan: FanInOut,
+        non_linearity: NonLinearity,
+    },
 
     /// Orthogonal initialization
     Orthogonal { gain: f64 },
@@ -121,7 +125,11 @@ pub fn f_init(i: Init, dims: &[i64], device: Device, kind: Kind) -> Result<Tenso
                 Tensor::f_randn(dims, (kind, device)).map(|t| t * stdev + mean)
             }
         }
-        Init::Kaiming { dist, fan, non_linearity } => {
+        Init::Kaiming {
+            dist,
+            fan,
+            non_linearity,
+        } => {
             let fan = fan.for_weight_dims(dims);
             let gain = non_linearity.gain();
             let std = gain / (fan as f64).sqrt();
@@ -147,7 +155,11 @@ pub fn f_init(i: Init, dims: &[i64], device: Device, kind: Kind) -> Result<Tenso
 
             let mut flattened =
                 Tensor::f_empty([rows, cols], (kind, device))?.f_normal_(0.0, 1.0)?;
-            let flattened = if rows < cols { flattened.f_t_()? } else { flattened };
+            let flattened = if rows < cols {
+                flattened.f_t_()?
+            } else {
+                flattened
+            };
 
             let (mut q, r) = Tensor::f_linalg_qr(&flattened, "reduced")?;
             let d = r.f_diag(0)?;
@@ -177,7 +189,11 @@ impl Init {
             Init::Uniform { lo, up } => {
                 let _ = tensor.uniform_(lo, up);
             }
-            Init::Kaiming { dist, fan, non_linearity } => {
+            Init::Kaiming {
+                dist,
+                fan,
+                non_linearity,
+            } => {
                 let fan = fan.for_weight_dims(&tensor.size());
                 let gain = non_linearity.gain();
                 let std = gain / (fan as f64).sqrt();
@@ -195,9 +211,13 @@ impl Init {
                 tensor.copy_(&(tensor.randn_like() * stdev + mean));
             }
             Init::Orthogonal { gain } => {
-                let q =
-                    f_init(Init::Orthogonal { gain }, &tensor.size(), tensor.device(), Kind::Float)
-                        .unwrap();
+                let q = f_init(
+                    Init::Orthogonal { gain },
+                    &tensor.size(),
+                    tensor.device(),
+                    Kind::Float,
+                )
+                .unwrap();
                 crate::no_grad(|| tensor.view_as(&q).copy_(&q));
             }
         }

@@ -2,7 +2,7 @@ use std::{hint::black_box, path::PathBuf, time::Duration};
 
 use anyhow::Result;
 use criterion::Criterion;
-use koharu_ml::{comic_text_bubble_detector::ComicTextBubbleDetector, torch::Cuda};
+use koharu_ml::{comic_text_bubble_detector::RTDetrV2Detection, torch::Cuda};
 
 #[tokio::main]
 async fn main() -> Result<()> {
@@ -15,7 +15,7 @@ async fn main() -> Result<()> {
     koharu_ml::init().await?;
 
     let image = image::open(&input)?;
-    let model = ComicTextBubbleDetector::load(koharu_ml::Device::cuda(0)).await?;
+    let model = RTDetrV2Detection::load(koharu_ml::Device::cuda(0)).await?;
 
     let mut criterion = Criterion::default()
         .sample_size(10)

@@ -5,17 +5,20 @@
 use crate::{nn, nn::Conv2D, nn::FuncT, nn::ModuleT};
 
 fn conv2d(p: nn::Path, c_in: i64, c_out: i64, ksize: i64, padding: i64, stride: i64) -> Conv2D {
-    let conv2d_cfg = nn::ConvConfig { stride, padding, bias: false, ..Default::default() };
+    let conv2d_cfg = nn::ConvConfig {
+        stride,
+        padding,
+        bias: false,
+        ..Default::default()
+    };
     nn::conv2d(p, c_in, c_out, ksize, conv2d_cfg)
 }
 
 fn downsample(p: nn::Path, c_in: i64, c_out: i64, stride: i64) -> impl ModuleT {
     if stride != 1 || c_in != c_out {
-        nn::seq_t().add(conv2d(&p / "0", c_in, c_out, 1, 0, stride)).add(nn::batch_norm2d(
-            &p / "1",
-            c_out,
-            Default::default(),
-        ))
+        nn::seq_t()
+            .add(conv2d(&p / "0", c_in, c_out, 1, 0, stride))
+            .add(nn::batch_norm2d(&p / "1", c_out, Default::default()))
     } else {
         nn::seq_t()
     }
@@ -28,7 +31,12 @@ fn basic_block(p: nn::Path, c_in: i64, c_out: i64, stride: i64) -> impl ModuleT 
     let bn2 = nn::batch_norm2d(&p / "bn2", c_out, Default::default());
     let downsample = downsample(&p / "downsample", c_in, c_out, stride);
     nn::func_t(move |xs, train| {
-        let ys = xs.apply(&conv1).apply_t(&bn1, train).relu().apply(&conv2).apply_t(&bn2, train);
+        let ys = xs
+            .apply(&conv1)
+            .apply_t(&bn1, train)
+            .relu()
+            .apply(&conv2)
+            .apply_t(&bn2, train);
         (xs.apply_t(&downsample, train) + ys).relu()
     })
 }
@@ -123,7 +131,13 @@ fn bottleneck_block(p: nn::Path, c_in: i64, c_out: i64, stride: i64, e: i64) -> 
 fn bottleneck_layer(p: nn::Path, c_in: i64, c_out: i64, stride: i64, cnt: i64) -> impl ModuleT {
     let mut layer = nn::seq_t().add(bottleneck_block(&p / "0", c_in, c_out, stride, 4));
     for block_index in 1..cnt {
-        layer = layer.add(bottleneck_block(&p / &block_index.to_string(), 4 * c_out, c_out, 1, 4))
+        layer = layer.add(bottleneck_block(
+            &p / &block_index.to_string(),
+            4 * c_out,
+            c_out,
+            1,
+            4,
+        ))
     }
     layer
 }

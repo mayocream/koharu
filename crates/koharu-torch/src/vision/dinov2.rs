@@ -19,12 +19,23 @@ struct Attention {
 
 impl Attention {
     fn new(vs: nn::Path, dim: i64, num_heads: i64, qkv_bias: bool, proj_bias: bool) -> Self {
-        let qkv_config = nn::LinearConfig { bias: qkv_bias, ..Default::default() };
-        let proj_config = nn::LinearConfig { bias: proj_bias, ..Default::default() };
+        let qkv_config = nn::LinearConfig {
+            bias: qkv_bias,
+            ..Default::default()
+        };
+        let proj_config = nn::LinearConfig {
+            bias: proj_bias,
+            ..Default::default()
+        };
         let qkv = nn::linear(&vs / "qkv", dim, dim * 3, qkv_config);
         let proj = nn::linear(&vs / "proj", dim, dim, proj_config);
         let scale = 1. / ((dim / num_heads) as f64).sqrt();
-        Self { qkv, proj, num_heads, scale }
+        Self {
+            qkv,
+            proj,
+            num_heads,
+            scale,
+        }
     }
 }
 
@@ -40,7 +51,10 @@ impl nn::Module for Attention {
         let k = qkv.get(1);
         let v = qkv.get(2);
         let attn = q.matmul(&k.transpose(-2, -1)).softmax(-1, Kind::Float);
-        attn.matmul(&v).transpose(1, 2).reshape([b, n, c]).apply(&self.proj)
+        attn.matmul(&v)
+            .transpose(1, 2)
+            .reshape([b, n, c])
+            .apply(&self.proj)
     }
 }
 
@@ -71,7 +85,10 @@ struct Mlp {
 impl Mlp {
     fn new(vs: nn::Path, in_features: i64, hidden_features: i64, bias: bool) -> Self {
         let out_features = in_features;
-        let config = nn::LinearConfig { bias, ..Default::default() };
+        let config = nn::LinearConfig {
+            bias,
+            ..Default::default()
+        };
         let fc1 = nn::linear(&vs / "fc1", in_features, hidden_features, config);
         let fc2 = nn::linear(&vs / "fc2", hidden_features, out_features, config);
         Self { fc1, fc2 }
@@ -102,7 +119,14 @@ impl Block {
         let norm2 = nn::layer_norm(&vs / "norm2", vec![dim], Default::default());
         let mlp = Mlp::new(&vs / "mlp", dim, dim * 4, true);
         let ls2 = LayerScale::new(&vs / "ls2", dim);
-        Self { norm1, attn, ls1, norm2, mlp, ls2 }
+        Self {
+            norm1,
+            attn,
+            ls1,
+            norm2,
+            mlp,
+            ls2,
+        }
     }
 }
 
@@ -122,10 +146,17 @@ struct PatchEmbed {
 
 impl PatchEmbed {
     fn new(vs: nn::Path, img_size: i64, patch_size: i64, in_chans: i64, embed_dim: i64) -> Self {
-        let config = nn::ConvConfig { stride: patch_size, ..Default::default() };
+        let config = nn::ConvConfig {
+            stride: patch_size,
+            ..Default::default()
+        };
         let proj = nn::conv2d(vs / "proj", in_chans, embed_dim, patch_size, config);
         let num_patches = (img_size / patch_size) * (img_size / patch_size);
-        Self { proj, patch_size: (patch_size, patch_size), num_patches }
+        Self {
+            proj,
+            patch_size: (patch_size, patch_size),
+            num_patches,
+        }
     }
 }
 
@@ -168,9 +199,17 @@ impl DinoVisionTransformer {
         );
         let head = nn::linear(vs / "head", 2 * embed_dim, NUM_CLASSES, Default::default());
         let norm = nn::layer_norm(vs / "norm", vec![embed_dim], Default::default());
-        let blocks =
-            (0..depth).map(|i| Block::new(vs / "blocks" / i, embed_dim, num_heads)).collect();
-        Self { patch_embed, cls_token, pos_embed, blocks, norm, head }
+        let blocks = (0..depth)
+            .map(|i| Block::new(vs / "blocks" / i, embed_dim, num_heads))
+            .collect();
+        Self {
+            patch_embed,
+            cls_token,
+            pos_embed,
+            blocks,
+            norm,
+            head,
+        }
     }
 
     pub fn interpolate_pos_encoding(&self, xs: &Tensor, w: i64, h: i64) -> Tensor {

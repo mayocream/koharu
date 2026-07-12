@@ -15,13 +15,17 @@ lazy_static! {
 pub fn normalize(tensor: &Tensor) -> Result<Tensor, TchError> {
     let mean = IMAGENET_MEAN.lock().unwrap();
     let std = IMAGENET_STD.lock().unwrap();
-    (tensor.to_kind(Kind::Float) / 255.0).f_sub(&mean)?.f_div(&std)
+    (tensor.to_kind(Kind::Float) / 255.0)
+        .f_sub(&mean)?
+        .f_div(&std)
 }
 
 pub fn unnormalize(tensor: &Tensor) -> Result<Tensor, TchError> {
     let mean = IMAGENET_MEAN.lock().unwrap();
     let std = IMAGENET_STD.lock().unwrap();
-    let tensor = (tensor.f_mul(&std)?.f_add(&mean)? * 255.0).clamp(0., 255.0).to_kind(Kind::Uint8);
+    let tensor = (tensor.f_mul(&std)?.f_add(&mean)? * 255.0)
+        .clamp(0., 255.0)
+        .to_kind(Kind::Uint8);
     Ok(tensor)
 }
 
@@ -50,7 +54,9 @@ pub fn load_image_and_resize224<T: AsRef<Path>>(path: T) -> Result<Tensor, TchEr
 /// Loads an image from memory and resize it to 224x224.
 /// This applies the ImageNet normalization.
 pub fn load_image_and_resize224_from_memory(img_data: &[u8]) -> Result<Tensor, TchError> {
-    normalize(&super::image::load_and_resize_from_memory(img_data, 224, 224)?)
+    normalize(&super::image::load_and_resize_from_memory(
+        img_data, 224, 224,
+    )?)
 }
 
 /// Loads an image from a file and resize it to the specified width and height.

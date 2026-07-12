@@ -48,7 +48,12 @@ pub fn layer_norm<'a, T: Borrow<super::Path<'a>>>(
         (None, None)
     };
 
-    LayerNorm { config, ws, bs, normalized_shape }
+    LayerNorm {
+        config,
+        ws,
+        bs,
+        normalized_shape,
+    }
 }
 
 impl super::module::Module for LayerNorm {

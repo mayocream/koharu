@@ -123,12 +123,12 @@ mod tests {
 
     fn region(label: &str, bbox: [f32; 4]) -> PPDocLayoutV3Region {
         PPDocLayoutV3Region {
-            order: 0,
+            order_seq: 0,
             label_id: 0,
             label: label.to_string(),
             score: 0.9,
             bbox,
-            polygon_points: vec![],
+            polygon_points: Some(vec![]),
         }
     }
 

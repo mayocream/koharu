@@ -1,3 +1,8 @@
+//! Comic Text & Bubble Detector RT-DETR-v2 implementation.
+//!
+//! Original implementation:
+//! https://github.com/ogkalu2/comic-translate/blob/ca3261fd1a8d4805f6b9cc0669847d463ccb8a41/modules/detection/rtdetr_v2.py
+
 mod config;
 mod model;
 mod processor;
@@ -8,14 +13,14 @@ use koharu_runtime::package::huggingface;
 use koharu_torch::Device;
 
 pub use self::{
-    config::{ComicTextBubbleDetectorConfig, RtDetrResNetConfig},
-    processor::{
-        ComicTextBubbleBlock, ComicTextBubbleDetection, ComicTextBubbleProcessor,
-        ComicTextBubbleRegion, ProcessorSize,
-    },
+    config::{RTDetrResNetConfig, RTDetrV2Config},
+    processor::{RTDetrImageProcessor, SizeDict, TextBlock},
 };
 
-use self::model::Model;
+use self::{
+    model::Model,
+    processor::{ImageSlicer, create_text_blocks},
+};
 
 koharu_runtime::huggingface! {
     CONFIG => "ogkalu/comic-text-and-bubble-detector" => "config.json",
@@ -24,13 +29,15 @@ koharu_runtime::huggingface! {
 }
 
 #[derive(Debug)]
-pub struct ComicTextBubbleDetector {
+pub struct RTDetrV2Detection {
     device: Device,
-    processor: ComicTextBubbleProcessor,
+    config: RTDetrV2Config,
+    processor: RTDetrImageProcessor,
+    image_slicer: ImageSlicer,
     model: Model,
 }
 
-impl ComicTextBubbleDetector {
+impl RTDetrV2Detection {
     pub async fn load(device: crate::Device) -> Result<Self> {
         let device: Device = device.try_into()?;
         let config_path = huggingface::resolve(CONFIG)
@@ -43,24 +50,27 @@ impl ComicTextBubbleDetector {
             .await
             .context("failed to resolve comic text/bubble detector weights")?;
 
-        let mut config = ComicTextBubbleDetectorConfig::from_file(&config_path)
-            .context("failed to parse comic text/bubble detector config")?;
-        let processor = ComicTextBubbleProcessor::from_file(&processor_path)
-            .context("failed to parse comic text/bubble detector preprocessor config")?
-            .with_labels(config.labels());
+        let config: RTDetrV2Config = serde_json::from_str(
+            &std::fs::read_to_string(&config_path)
+                .with_context(|| format!("failed to read {}", config_path.display()))?,
+        )
+        .with_context(|| format!("failed to parse {}", config_path.display()))?;
+        let processor: RTDetrImageProcessor = serde_json::from_str(
+            &std::fs::read_to_string(&processor_path)
+                .with_context(|| format!("failed to read {}", processor_path.display()))?,
+        )
+        .with_context(|| format!("failed to parse {}", processor_path.display()))?;
 
-        // The processor always produces this resolution, so the model can reuse the
-        // fixed RT-DETR anchors instead of rebuilding and uploading them per slice.
-        config.anchor_image_size = Some(vec![processor.size.height, processor.size.width]);
-
-        let mut model = Model::new(config, device);
+        let mut model = Model::new(config.clone(), device);
         model
             .load_safetensors(&weights_path)
             .context("failed to load comic text/bubble detector safetensors")?;
 
         Ok(Self {
             device,
+            config,
             processor,
+            image_slicer: ImageSlicer::default(),
             model,
         })
     }
@@ -69,14 +79,51 @@ impl ComicTextBubbleDetector {
         &self,
         image: &DynamicImage,
         confidence_threshold: f32,
-    ) -> Result<ComicTextBubbleDetection> {
+    ) -> Result<Vec<TextBlock>> {
         koharu_torch::no_grad(|| {
-            self.processor.inference_slices(image, |slice| {
-                let input = self.processor.preprocess(slice, self.device);
-                let outputs = self.model.forward(&input);
-                self.processor
-                    .postprocess(&outputs, slice, confidence_threshold)
-            })
+            let (bubble_boxes, text_boxes) = self
+                .image_slicer
+                .process_slices_for_detection(image, |slice| {
+                    self.detect_single_image(slice, confidence_threshold)
+                })?;
+            Ok(create_text_blocks(image, text_boxes, bubble_boxes))
         })
+    }
+
+    #[allow(clippy::type_complexity)]
+    fn detect_single_image(
+        &self,
+        image: &DynamicImage,
+        confidence_threshold: f32,
+    ) -> Result<(Vec<[f32; 4]>, Vec<[f32; 4]>)> {
+        let pixel_values = self.processor.preprocess(image, self.device)?;
+        let outputs = self.model.forward(&pixel_values);
+        let results = self.processor.post_process_object_detection(
+            &outputs,
+            confidence_threshold,
+            &[(image.height(), image.width())],
+            self.config.use_focal_loss,
+        )?;
+        let result = results
+            .into_iter()
+            .next()
+            .context("missing comic text/bubble detector result")?;
+
+        let mut bubble_boxes = Vec::new();
+        let mut text_boxes = Vec::new();
+        for ((bbox, _score), label) in result
+            .boxes
+            .into_iter()
+            .zip(result.scores)
+            .zip(result.labels)
+        {
+            let bbox = bbox.map(|value| value as i32 as f32);
+            match label {
+                0 => bubble_boxes.push(bbox),
+                1 | 2 => text_boxes.push(bbox),
+                _ => {}
+            }
+        }
+        Ok((bubble_boxes, text_boxes))
     }
 }

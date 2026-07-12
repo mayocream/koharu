@@ -40,7 +40,9 @@ pub fn save<T: AsRef<Path>>(t: &Tensor, path: T) -> Result<(), TchError> {
     match t.size().as_slice() {
         [1, _, _, _] => save_hwc(&chw_to_hwc(&t.squeeze_dim(0)).to_device(Device::Cpu), path),
         [_, _, _] => save_hwc(&chw_to_hwc(&t).to_device(Device::Cpu), path),
-        sz => Err(TchError::FileFormat(format!("unexpected size for image tensor {sz:?}"))),
+        sz => Err(TchError::FileFormat(format!(
+            "unexpected size for image tensor {sz:?}"
+        ))),
     }
 }
 
@@ -71,8 +73,16 @@ pub fn resize_preserve_aspect_ratio_hwc(
         let resize_w = i64::max(resize_w, out_w);
         let resize_h = i64::max(resize_h, out_h);
         let t = hwc_to_chw(&resize_hwc(t, resize_w, resize_h)?);
-        let t = if resize_w == out_w { t } else { t.f_narrow(2, (resize_w - out_w) / 2, out_w)? };
-        let t = if resize_h == out_h { t } else { t.f_narrow(1, (resize_h - out_h) / 2, out_h)? };
+        let t = if resize_w == out_w {
+            t
+        } else {
+            t.f_narrow(2, (resize_w - out_w) / 2, out_w)?
+        };
+        let t = if resize_h == out_h {
+            t
+        } else {
+            t.f_narrow(1, (resize_h - out_h) / 2, out_h)?
+        };
         Ok(t)
     }
 }

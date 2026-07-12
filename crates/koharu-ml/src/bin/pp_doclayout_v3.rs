@@ -75,11 +75,13 @@ fn draw_regions(image: &mut RgbaImage, detections: &PPDocLayoutV3Detections) {
             rect_color,
         );
 
-        draw_polygon(image, &region.polygon_points, polygon_color);
+        if let Some(polygon_points) = &region.polygon_points {
+            draw_polygon(image, polygon_points, polygon_color);
+        }
 
         let label = format!(
             "{} {} {:.2}",
-            region.order,
+            region.order_seq,
             region.label.to_ascii_uppercase(),
             region.score
         );

@@ -61,7 +61,10 @@ pub enum TchError {
 
     /// Errors returned by the safetensors library.
     #[error("safetensors error {path}: {err}")]
-    SafeTensorError { path: String, err: safetensors::SafeTensorError },
+    SafeTensorError {
+        path: String,
+        err: safetensors::SafeTensorError,
+    },
 }
 
 impl TchError {

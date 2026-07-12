@@ -19,7 +19,10 @@ pub struct MBConvConfig {
 
 fn make_divisible(v: f64, divisor: i64) -> i64 {
     let min_value = divisor;
-    let new_v = i64::max(min_value, (v + divisor as f64 * 0.5) as i64 / divisor * divisor);
+    let new_v = i64::max(
+        min_value,
+        (v + divisor as f64 * 0.5) as i64 / divisor * divisor,
+    );
     if (new_v as f64) < 0.9 * v {
         new_v + divisor
     } else {
@@ -89,9 +92,18 @@ struct Conv2DSame {
 
 impl Conv2DSame {
     fn new(vs: nn::Path, i: i64, o: i64, k: i64, stride: i64, groups: i64, b: bool) -> Self {
-        let conv_config = nn::ConvConfig { stride, groups, bias: b, ..Default::default() };
+        let conv_config = nn::ConvConfig {
+            stride,
+            groups,
+            bias: b,
+            ..Default::default()
+        };
         let conv2d = nn::conv2d(vs, i, o, k, conv_config);
-        Self { conv2d, s: stride, k }
+        Self {
+            conv2d,
+            s: stride,
+            k,
+        }
     }
 }
 
@@ -131,11 +143,18 @@ impl ConvNormActivation {
             ..Default::default()
         };
         let bn2d = nn::batch_norm2d(&vs / 1, o, bn_config);
-        Self { conv2d, bn2d, activation: true }
+        Self {
+            conv2d,
+            bn2d,
+            activation: true,
+        }
     }
 
     fn no_activation(self) -> Self {
-        Self { activation: false, ..self }
+        Self {
+            activation: false,
+            ..self
+        }
     }
 }
 
@@ -190,7 +209,14 @@ impl MBConv {
         let vs = &vs / "block";
         let exp = make_divisible(c.input_channels as f64 * c.expand_ratio, 8);
         let expand_cna = if exp != c.input_channels {
-            Some(ConvNormActivation::new(&vs / 0, c.input_channels, exp, 1, 1, 1))
+            Some(ConvNormActivation::new(
+                &vs / 0,
+                c.input_channels,
+                exp,
+                1,
+                1,
+                1,
+            ))
         } else {
             None
         };
@@ -203,7 +229,13 @@ impl MBConv {
         let project_cna =
             ConvNormActivation::new(&vs / (start_index + 2), exp, c.out_channels, 1, 1, 1)
                 .no_activation();
-        Self { expand_cna, depthwise_cna, squeeze_excitation, project_cna, config: c }
+        Self {
+            expand_cna,
+            depthwise_cna,
+            squeeze_excitation,
+            project_cna,
+            config: c,
+        }
     }
 }
 
@@ -256,16 +288,29 @@ impl EfficientNet {
                 let cnf = if r_index == 0 {
                     cnf
                 } else {
-                    MBConvConfig { input_channels: cnf.out_channels, stride: 1, ..cnf }
+                    MBConvConfig {
+                        input_channels: cnf.out_channels,
+                        stride: 1,
+                        ..cnf
+                    }
                 };
                 blocks.push(MBConv::new(&f_p / r_index, cnf))
             }
         }
         let final_cna =
             ConvNormActivation::new(&f_p / (nconfigs + 1), last_out_c, final_out_c, 1, 1, 1);
-        let classifier =
-            nn::linear(p / "classifier" / 1, final_out_c, nclasses, Default::default());
-        Self { init_cna, blocks, final_cna, classifier }
+        let classifier = nn::linear(
+            p / "classifier" / 1,
+            final_out_c,
+            nclasses,
+            Default::default(),
+        );
+        Self {
+            init_cna,
+            blocks,
+            final_cna,
+            classifier,
+        }
     }
 }
 
@@ -321,7 +366,8 @@ pub fn conv2d_same(vs: nn::Path, i: i64, o: i64, k: i64, c: ConvConfig) -> impl 
         let pad_h = i64::max((oh - 1) * s + k - ih, 0);
         let pad_w = i64::max((ow - 1) * s + k - iw, 0);
         if pad_h > 0 || pad_w > 0 {
-            xs.zero_pad2d(pad_w / 2, pad_w - pad_w / 2, pad_h / 2, pad_h - pad_h / 2).apply(&conv2d)
+            xs.zero_pad2d(pad_w / 2, pad_w - pad_w / 2, pad_h / 2, pad_h - pad_h / 2)
+                .apply(&conv2d)
         } else {
             xs.apply(&conv2d)
         }

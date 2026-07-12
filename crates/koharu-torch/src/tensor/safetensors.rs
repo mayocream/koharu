@@ -74,12 +74,18 @@ impl<'a> TryFrom<&'a Tensor> for SafeView<'a> {
         }
 
         if !tensor.is_contiguous() {
-            return Err(TchError::Convert("Cannot save non contiguous tensors".to_string()));
+            return Err(TchError::Convert(
+                "Cannot save non contiguous tensors".to_string(),
+            ));
         }
 
         let dtype = tensor.kind().try_into()?;
         let shape = tensor.size().iter().map(|&x| x as usize).collect();
-        Ok(Self { tensor, shape, dtype })
+        Ok(Self {
+            tensor,
+            shape,
+            dtype,
+        })
     }
 }
 
@@ -104,7 +110,10 @@ impl View for SafeView<'_> {
 }
 
 fn wrap_err<P: AsRef<Path>>(path: P, err: safetensors::SafeTensorError) -> TchError {
-    TchError::SafeTensorError { path: path.as_ref().to_string_lossy().to_string(), err }
+    TchError::SafeTensorError {
+        path: path.as_ref().to_string_lossy().to_string(),
+        err,
+    }
 }
 
 impl crate::Tensor {
@@ -112,7 +121,11 @@ impl crate::Tensor {
     pub fn read_safetensors<T: AsRef<Path>>(path: T) -> Result<Vec<(String, Tensor)>, TchError> {
         let file = std::fs::read(&path).map_err(|e| wrap_err(&path, e.into()))?;
         let safetensors = SafeTensors::deserialize(&file).map_err(|e| wrap_err(&path, e))?;
-        safetensors.tensors().into_iter().map(|(name, view)| Ok((name, view.try_into()?))).collect()
+        safetensors
+            .tensors()
+            .into_iter()
+            .map(|(name, view)| Ok((name, view.try_into()?)))
+            .collect()
     }
 
     /// Writes a tensor in the safetensors format.
@@ -147,7 +160,13 @@ impl VarStore {
 
     pub fn fill_safetensors<P: AsRef<Path>>(&self, path: P) -> Result<(), TchError> {
         for (name, tensor) in Tensor::read_safetensors(path)? {
-            if let Some(s) = self.variables_.lock().unwrap().named_variables.get_mut(&name) {
+            if let Some(s) = self
+                .variables_
+                .lock()
+                .unwrap()
+                .named_variables
+                .get_mut(&name)
+            {
                 s.f_copy_(&tensor)?
             }
         }
@@ -165,7 +184,10 @@ mod tests {
     #[test]
     fn parse() {
         // From Kind to Dtype
-        assert_eq!(TryInto::<Dtype>::try_into(Kind::Double).unwrap(), Dtype::F64);
+        assert_eq!(
+            TryInto::<Dtype>::try_into(Kind::Double).unwrap(),
+            Dtype::F64
+        );
         assert_eq!(TryInto::<Dtype>::try_into(Kind::Float).unwrap(), Dtype::F32);
         assert_eq!(TryInto::<Dtype>::try_into(Kind::Half).unwrap(), Dtype::F16);
 

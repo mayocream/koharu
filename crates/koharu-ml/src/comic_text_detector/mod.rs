@@ -6,7 +6,7 @@ use image::DynamicImage;
 use koharu_runtime::package::huggingface;
 use koharu_torch::Device;
 
-pub use self::processor::{ComicTextBlock, ComicTextDetection, Quad};
+pub use self::processor::{Quad, TextBlock};
 
 use self::{
     model::Model,
@@ -46,16 +46,16 @@ impl ComicTextDetector {
         Ok(Self { device, model })
     }
 
-    pub fn inference(&self, image: &DynamicImage) -> Result<ComicTextDetection> {
+    pub fn inference(&self, image: &DynamicImage) -> Result<(image::GrayImage, Vec<TextBlock>)> {
         koharu_torch::no_grad(|| {
             if let Some(detection) =
                 rearranged_inference(image, self.device, |input| self.model.forward(input))?
             {
                 return Ok(detection);
             }
-            let input = preprocess(image, self.device)?;
-            let outputs = self.model.forward(&input.pixel_values);
-            postprocess(outputs, &input, image)
+            let (pixel_values, dimensions) = preprocess(image, self.device)?;
+            let outputs = self.model.forward(&pixel_values);
+            postprocess(outputs, dimensions, image)
         })
     }
 }

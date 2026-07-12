@@ -387,6 +387,7 @@ struct AnchorCache {
     valid_mask: Tensor,
 }
 
+// https://github.com/huggingface/transformers/blob/394b1a0eaa8e6199e372334da0aff3753a117fdb/src/transformers/models/hgnet_v2/modeling_hgnet_v2.py#L57-L418
 #[derive(Debug)]
 struct HGNetV2Backbone {
     config: HGNetV2Config,
@@ -748,7 +749,7 @@ struct HGNetV2ConvLayer {
     convolution: nn::Conv2D,
     normalization: nn::BatchNorm,
     activation: Activation,
-    lab: Option<LearnableAffineBlock>,
+    lab: Option<HGNetV2LearnableAffineBlock>,
 }
 
 impl HGNetV2ConvLayer {
@@ -779,7 +780,7 @@ impl HGNetV2ConvLayer {
         let normalization =
             nn::batch_norm2d(path / "normalization", out_channels, Default::default());
         let lab = (activation != Activation::None && use_learnable_affine_block)
-            .then(|| LearnableAffineBlock::new(&(path / "lab")));
+            .then(|| HGNetV2LearnableAffineBlock::new(&(path / "lab")));
         Self {
             convolution,
             normalization,
@@ -801,12 +802,12 @@ impl HGNetV2ConvLayer {
 }
 
 #[derive(Debug)]
-struct LearnableAffineBlock {
+struct HGNetV2LearnableAffineBlock {
     scale: Tensor,
     bias: Tensor,
 }
 
-impl LearnableAffineBlock {
+impl HGNetV2LearnableAffineBlock {
     fn new(path: &nn::Path<'_>) -> Self {
         Self {
             scale: path.var("scale", &[1], nn::Init::Const(1.0)),

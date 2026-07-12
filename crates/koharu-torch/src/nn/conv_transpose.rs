@@ -61,7 +61,11 @@ fn conv_transpose<'a, ND: std::convert::AsRef<[i64]>, T: Borrow<super::Path<'a>>
     config: ConvTransposeConfigND<ND>,
 ) -> ConvTransposeND<ND> {
     let vs = vs.borrow();
-    let bs = if config.bias { Some(vs.var("bias", &[out_dim], config.bs_init)) } else { None };
+    let bs = if config.bias {
+        Some(vs.var("bias", &[out_dim], config.bs_init))
+    } else {
+        None
+    };
     let mut weight_size = vec![in_dim, out_dim / config.groups];
     weight_size.extend(ksizes.as_ref().iter());
     let ws = vs.var("weight", weight_size.as_slice(), config.ws_init);

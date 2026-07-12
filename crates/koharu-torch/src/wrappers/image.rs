@@ -13,8 +13,10 @@ pub fn load_hwc<T: AsRef<Path>>(path: T) -> Result<Tensor, TchError> {
 
 /// On success returns a tensor of shape [width, height, channels].
 pub fn load_hwc_from_mem(data: &[u8]) -> Result<Tensor, TchError> {
-    let c_tensor =
-        unsafe_torch_err!(koharu_torch_sys::at_load_image_from_memory(data.as_ptr(), data.len()));
+    let c_tensor = unsafe_torch_err!(koharu_torch_sys::at_load_image_from_memory(
+        data.as_ptr(),
+        data.len()
+    ));
     Ok(Tensor { c_tensor })
 }
 

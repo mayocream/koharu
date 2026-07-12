@@ -169,7 +169,10 @@ impl Tensor {
     /// Returns the average accuracy for some given logits assuming that
     /// targets represent ground-truth.
     pub fn accuracy_for_logits(&self, targets: &Tensor) -> Tensor {
-        self.argmax(-1, false).eq_tensor(targets).to_kind(Kind::Float).mean(Kind::Float)
+        self.argmax(-1, false)
+            .eq_tensor(targets)
+            .to_kind(Kind::Float)
+            .mean(Kind::Float)
     }
 
     pub fn random_batch(&self, batch_size: i64) -> Tensor {
@@ -182,7 +185,11 @@ impl Tensor {
         let len1: i64 = t1.size()[0];
         let len2: i64 = t2.size()[0];
         if len1 != len2 {
-            panic!("random_batch2: shape mismatch {:?} {:?}", t1.size(), t2.size())
+            panic!(
+                "random_batch2: shape mismatch {:?} {:?}",
+                t1.size(),
+                t2.size()
+            )
         }
         let device1 = t1.device();
         let device2 = t2.device();
@@ -226,8 +233,11 @@ impl Tensor {
     /// [N1, ..., Nk, labels]. The returned tensor uses float values.
     /// Elements of the input vector are expected to be between 0 and labels-1.
     pub fn onehot(&self, labels: i64) -> Tensor {
-        Tensor::zeros([self.size(), vec![labels]].concat(), (Kind::Float, self.device()))
-            .scatter_value_(-1, &self.unsqueeze(-1).to_kind(Kind::Int64), 1.0)
+        Tensor::zeros(
+            [self.size(), vec![labels]].concat(),
+            (Kind::Float, self.device()),
+        )
+        .scatter_value_(-1, &self.unsqueeze(-1).to_kind(Kind::Int64), 1.0)
     }
 
     /// Copies a tensor to a newly allocated tensor using the same shape and device.

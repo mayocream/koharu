@@ -2,12 +2,13 @@
 //!
 //! Original implementation:
 //! https://github.com/dmMaze/BallonsTranslator/blob/4bcc635c19f6c63a902872cf77b3d554e14ed1b7/ballontranslator/modules/textdetector/ctd/basemodel.py#L14-L237
+//! https://github.com/dmMaze/BallonsTranslator/blob/4bcc635c19f6c63a902872cf77b3d554e14ed1b7/ballontranslator/modules/textdetector/yolov5/yolo.py#L13-L134
 
 use std::path::Path;
 
 use anyhow::Result;
 use koharu_torch::{
-    Device, Tensor,
+    Device, Kind, Tensor,
     nn::{self, Module, ModuleT},
 };
 
@@ -19,35 +20,35 @@ pub struct Output {
 
 #[derive(Debug)]
 pub struct Model {
-    yolo_vs: nn::VarStore,
-    unet_vs: nn::VarStore,
-    dbnet_vs: nn::VarStore,
-    yolo: YoloV5,
-    unet: UnetHead,
-    dbnet: DbHead,
+    blk_det_vs: nn::VarStore,
+    text_seg_vs: nn::VarStore,
+    text_det_vs: nn::VarStore,
+    blk_det: YoloV5,
+    text_seg: UnetHead,
+    text_det: DBHead,
 }
 
 impl Model {
     pub fn new(device: Device) -> Self {
-        let mut yolo_vs = nn::VarStore::new(device);
-        let yolo = YoloV5::new(&yolo_vs.root());
-        yolo_vs.freeze();
+        let mut blk_det_vs = nn::VarStore::new(device);
+        let blk_det = YoloV5::new(&blk_det_vs.root());
+        blk_det_vs.freeze();
 
-        let mut unet_vs = nn::VarStore::new(device);
-        let unet = UnetHead::new(&unet_vs.root());
-        unet_vs.freeze();
+        let mut text_seg_vs = nn::VarStore::new(device);
+        let text_seg = UnetHead::new(&text_seg_vs.root());
+        text_seg_vs.freeze();
 
-        let mut dbnet_vs = nn::VarStore::new(device);
-        let dbnet = DbHead::new(&dbnet_vs.root());
-        dbnet_vs.freeze();
+        let mut text_det_vs = nn::VarStore::new(device);
+        let text_det = DBHead::new(&text_det_vs.root());
+        text_det_vs.freeze();
 
         Self {
-            yolo_vs,
-            unet_vs,
-            dbnet_vs,
-            yolo,
-            unet,
-            dbnet,
+            blk_det_vs,
+            text_seg_vs,
+            text_det_vs,
+            blk_det,
+            text_seg,
+            text_det,
         }
     }
 
@@ -57,19 +58,24 @@ impl Model {
         unet_path: impl AsRef<Path>,
         dbnet_path: impl AsRef<Path>,
     ) -> Result<()> {
-        self.yolo_vs.load(yolo_path)?;
-        self.unet_vs.load(unet_path)?;
-        self.dbnet_vs.load(dbnet_path)?;
+        self.blk_det_vs.load(yolo_path)?;
+        self.text_seg_vs.load(unet_path)?;
+        self.text_det_vs.load(dbnet_path)?;
+        // BallonsTranslator's default Torch path runs in float32 (`half=False`).
+        // The split safetensors are stored as float16, so restore the upstream
+        // runtime dtype after loading them.
+        self.blk_det_vs.set_kind(Kind::Float);
+        self.text_seg_vs.set_kind(Kind::Float);
+        self.text_det_vs.set_kind(Kind::Float);
         Ok(())
     }
 
     pub fn forward(&self, input: &Tensor) -> Output {
-        // BallonsTranslator computes YOLO block predictions but discards them before
-        // grouping text lines. Keep their parameters checkpoint-compatible, while
-        // skipping the unused neck and detection head during inference.
+        // BallonsTranslator computes YOLO block predictions, then intentionally
+        // passes an empty block list into `group_output`.
         // https://github.com/dmMaze/BallonsTranslator/blob/4bcc635c19f6c63a902872cf77b3d554e14ed1b7/ballontranslator/modules/textdetector/ctd/inference.py#L343-L348
-        let features = self.yolo.forward(input);
-        let (mask, db_features) = self.unet.forward(
+        let features = self.blk_det.forward(input);
+        let (mask, db_features) = self.text_seg.forward(
             &features[0],
             &features[1],
             &features[2],
@@ -77,7 +83,7 @@ impl Model {
             &features[4],
         );
         let line_maps = self
-            .dbnet
+            .text_det
             .forward(&db_features[0], &db_features[1], &db_features[2]);
         Output { mask, line_maps }
     }
@@ -312,7 +318,6 @@ impl Sppf {
 }
 
 #[derive(Debug)]
-#[allow(dead_code)] // The unused detection tail is retained for strict checkpoint parity.
 struct YoloV5 {
     l0: ConvBnAct,
     l1: ConvBnAct,
@@ -508,12 +513,38 @@ impl YoloV5 {
         let x7 = self.l7.forward(&x6);
         let x8 = self.l8.forward(&x7);
         let x9 = self.l9.forward(&x8);
+        let x10 = self.l10.forward(&x9);
+        let x11 = x10.upsample_nearest2d(
+            [x10.size()[2] * 2, x10.size()[3] * 2],
+            None::<f64>,
+            None::<f64>,
+        );
+        let x13 = self
+            .l13
+            .forward(&Tensor::cat(&[x11, x6.shallow_clone()], 1));
+        let x14 = self.l14.forward(&x13);
+        let x15 = x14.upsample_nearest2d(
+            [x14.size()[2] * 2, x14.size()[3] * 2],
+            None::<f64>,
+            None::<f64>,
+        );
+        let x17 = self
+            .l17
+            .forward(&Tensor::cat(&[x15, x4.shallow_clone()], 1));
+        let x18 = self.l18.forward(&x17);
+        let x20 = self
+            .l20
+            .forward(&Tensor::cat(&[x18, x14.shallow_clone()], 1));
+        let x21 = self.l21.forward(&x20);
+        let x23 = self
+            .l23
+            .forward(&Tensor::cat(&[x21, x10.shallow_clone()], 1));
+        let _blocks = self.head.forward([&x17, &x20, &x23]);
         [x1, x3, x5, x7, x9]
     }
 }
 
 #[derive(Debug)]
-#[allow(dead_code)] // Parameters are loaded for exact YOLO checkpoint compatibility.
 struct YoloHead {
     convs: [nn::Conv2D; 3],
     anchors: Tensor,
@@ -532,6 +563,37 @@ impl YoloHead {
         ];
         let anchors = path.zeros_no_train("anchors", &[3, 3, 2]);
         Self { convs, anchors }
+    }
+
+    fn forward(&self, inputs: [&Tensor; 3]) -> Tensor {
+        let mut outputs = Vec::with_capacity(3);
+        for (index, input) in inputs.into_iter().enumerate() {
+            let prediction = self.convs[index].forward(input);
+            let batch = prediction.size()[0];
+            let height = prediction.size()[2];
+            let width = prediction.size()[3];
+            let prediction = prediction
+                .view([batch, 3, 7, height, width])
+                .permute([0, 1, 3, 4, 2])
+                .contiguous()
+                .sigmoid();
+            let grid_x = Tensor::arange(width, (prediction.kind(), prediction.device()));
+            let grid_y = Tensor::arange(height, (prediction.kind(), prediction.device()));
+            let grid = Tensor::meshgrid_indexing(&[grid_x, grid_y], "xy");
+            let grid = Tensor::stack(&[grid[0].shallow_clone(), grid[1].shallow_clone()], 2)
+                .view([1, 1, height, width, 2]);
+            let stride = [8.0, 16.0, 32.0][index];
+            let anchor_grid = self
+                .anchors
+                .narrow(0, index as i64, 1)
+                .view([1, 3, 1, 1, 2])
+                * stride;
+            let xy = (prediction.narrow(4, 0, 2) * 2.0 - 0.5 + grid) * stride;
+            let wh = (prediction.narrow(4, 2, 2) * 2.0).square() * anchor_grid;
+            outputs
+                .push(Tensor::cat(&[xy, wh, prediction.narrow(4, 4, 3)], 4).view([batch, -1, 7]));
+        }
+        Tensor::cat(&outputs, 1)
     }
 }
 
@@ -756,7 +818,7 @@ impl ThreshHead {
 }
 
 #[derive(Debug)]
-struct DbHead {
+struct DBHead {
     upconv3: DoubleConvUpC3,
     upconv4: DoubleConvUpC3,
     conv: ConvBnReluSeq,
@@ -764,7 +826,7 @@ struct DbHead {
     thresh: ThreshHead,
 }
 
-impl DbHead {
+impl DBHead {
     fn new(path: &nn::Path<'_>) -> Self {
         Self {
             upconv3: DoubleConvUpC3::new(&(path / "upconv3"), 512, 512, 256),

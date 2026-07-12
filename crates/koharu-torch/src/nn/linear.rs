@@ -12,7 +12,11 @@ pub struct LinearConfig {
 
 impl Default for LinearConfig {
     fn default() -> Self {
-        LinearConfig { ws_init: super::init::DEFAULT_KAIMING_UNIFORM, bs_init: None, bias: true }
+        LinearConfig {
+            ws_init: super::init::DEFAULT_KAIMING_UNIFORM,
+            bs_init: None,
+            bias: true,
+        }
     }
 }
 
@@ -34,14 +38,20 @@ pub fn linear<'a, T: Borrow<super::Path<'a>>>(
     let bs = if c.bias {
         let bs_init = c.bs_init.unwrap_or_else(|| {
             let bound = 1.0 / (in_dim as f64).sqrt();
-            super::Init::Uniform { lo: -bound, up: bound }
+            super::Init::Uniform {
+                lo: -bound,
+                up: bound,
+            }
         });
         Some(vs.var("bias", &[out_dim], bs_init))
     } else {
         None
     };
 
-    Linear { ws: vs.var("weight", &[out_dim, in_dim], c.ws_init), bs }
+    Linear {
+        ws: vs.var("weight", &[out_dim, in_dim], c.ws_init),
+        bs,
+    }
 }
 
 impl super::module::Module for Linear {
@@ -59,14 +69,20 @@ fn matches_pytorch() {
     let ws = Tensor::read_npy("tests/linear/ws.npy").unwrap();
     let bs = Some(Tensor::read_npy("tests/linear/bs.npy").unwrap());
 
-    let original_output =
-        if let Some(bias) = &bs { input.matmul(&ws.tr()) + bias } else { input.matmul(&ws.tr()) };
+    let original_output = if let Some(bias) = &bs {
+        input.matmul(&ws.tr()) + bias
+    } else {
+        input.matmul(&ws.tr())
+    };
 
     let linear = Linear { ws, bs };
     let output = linear.forward(&input);
 
     let delta_output: f32 = (&output - &expected_output).norm().try_into().unwrap();
-    let delta_original: f32 = (&original_output - &expected_output).norm().try_into().unwrap();
+    let delta_original: f32 = (&original_output - &expected_output)
+        .norm()
+        .try_into()
+        .unwrap();
 
     // The `matmul()` implementation is close, but `linear()` is at least as close or closer.
     assert!(output.allclose(&expected_output, 1e-5, 1e-8, false));

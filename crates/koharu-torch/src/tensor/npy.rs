@@ -23,11 +23,18 @@ fn read_header<R: Read>(reader: &mut R) -> Result<String, TchError> {
     let header_len_len = match version[0] {
         1 => 2,
         2 => 4,
-        otherwise => return Err(TchError::FileFormat(format!("unsupported version {otherwise}"))),
+        otherwise => {
+            return Err(TchError::FileFormat(format!(
+                "unsupported version {otherwise}"
+            )))
+        }
     };
     let mut header_len = vec![0u8; header_len_len];
     reader.read_exact(&mut header_len)?;
-    let header_len = header_len.iter().rev().fold(0_usize, |acc, &v| 256 * acc + v as usize);
+    let header_len = header_len
+        .iter()
+        .rev()
+        .fold(0_usize, |acc, &v| 256 * acc + v as usize);
     let mut header = vec![0u8; header_len];
     reader.read_exact(&mut header)?;
     Ok(String::from_utf8_lossy(&header).to_string())
@@ -43,7 +50,12 @@ struct Header {
 impl Header {
     fn to_string(&self) -> Result<String, TchError> {
         let fortran_order = if self.fortran_order { "True" } else { "False" };
-        let mut shape = self.shape.iter().map(|x| x.to_string()).collect::<Vec<_>>().join(",");
+        let mut shape = self
+            .shape
+            .iter()
+            .map(|x| x.to_string())
+            .collect::<Vec<_>>()
+            .join(",");
         let descr = match self.descr {
             Kind::Half => "f2",
             Kind::Float => "f4",
@@ -160,7 +172,11 @@ impl Header {
                 }
             }
         };
-        Ok(Header { descr, fortran_order, shape })
+        Ok(Header {
+            descr,
+            fortran_order,
+            shape,
+        })
     }
 }
 
@@ -171,7 +187,9 @@ impl crate::Tensor {
         let header = read_header(&mut reader)?;
         let header = Header::parse(&header)?;
         if header.fortran_order {
-            return Err(TchError::FileFormat("fortran order not supported".to_string()));
+            return Err(TchError::FileFormat(
+                "fortran order not supported".to_string(),
+            ));
         }
         let mut data: Vec<u8> = vec![];
         reader.read_to_end(&mut data)?;
@@ -192,7 +210,9 @@ impl crate::Tensor {
             let header = read_header(&mut reader)?;
             let header = Header::parse(&header)?;
             if header.fortran_order {
-                return Err(TchError::FileFormat("fortran order not supported".to_string()));
+                return Err(TchError::FileFormat(
+                    "fortran order not supported".to_string(),
+                ));
             }
             let mut data: Vec<u8> = vec![];
             reader.read_to_end(&mut data)?;
@@ -206,7 +226,11 @@ impl crate::Tensor {
         f.write_all(NPY_MAGIC_STRING)?;
         f.write_all(&[1u8, 0u8])?;
         let kind = self.f_kind()?;
-        let header = Header { descr: kind, fortran_order: false, shape: self.size() };
+        let header = Header {
+            descr: kind,
+            fortran_order: false,
+            shape: self.size(),
+        };
         let mut header = header.to_string()?;
         let pad = 16 - (NPY_MAGIC_STRING.len() + 5 + header.len()) % 16;
         for _ in 0..pad % 16 {
@@ -253,20 +277,32 @@ mod tests {
         let h = "{'descr': '<f8', 'fortran_order': False, 'shape': (128,), }";
         assert_eq!(
             Header::parse(h).unwrap(),
-            Header { descr: crate::Kind::Double, fortran_order: false, shape: vec![128] }
+            Header {
+                descr: crate::Kind::Double,
+                fortran_order: false,
+                shape: vec![128]
+            }
         );
         let h = "{'descr': '<f4', 'fortran_order': True, 'shape': (256,1,128), }";
         let h = Header::parse(h).unwrap();
         assert_eq!(
             h,
-            Header { descr: crate::Kind::Float, fortran_order: true, shape: vec![256, 1, 128] }
+            Header {
+                descr: crate::Kind::Float,
+                fortran_order: true,
+                shape: vec![256, 1, 128]
+            }
         );
         assert_eq!(
             h.to_string().unwrap(),
             "{'descr': '<f4', 'fortran_order': True, 'shape': (256,1,128,), }"
         );
 
-        let h = Header { descr: crate::Kind::Int64, fortran_order: false, shape: vec![] };
+        let h = Header {
+            descr: crate::Kind::Int64,
+            fortran_order: false,
+            shape: vec![],
+        };
         assert_eq!(
             h.to_string().unwrap(),
             "{'descr': '<i8', 'fortran_order': False, 'shape': (), }"

@@ -16,7 +16,10 @@ impl Default for EmbeddingConfig {
         EmbeddingConfig {
             sparse: false,
             scale_grad_by_freq: false,
-            ws_init: super::Init::Randn { mean: 0., stdev: 1. },
+            ws_init: super::Init::Randn {
+                mean: 0.,
+                stdev: 1.,
+            },
             padding_idx: -1,
         }
     }
@@ -39,7 +42,10 @@ pub fn embedding<'a, T: Borrow<super::Path<'a>>>(
     config: EmbeddingConfig,
 ) -> Embedding {
     let vs = vs.borrow();
-    Embedding { ws: vs.var("weight", &[num_embeddings, embedding_dim], config.ws_init), config }
+    Embedding {
+        ws: vs.var("weight", &[num_embeddings, embedding_dim], config.ws_init),
+        config,
+    }
 }
 
 impl super::module::Module for Embedding {

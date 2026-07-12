@@ -9,13 +9,13 @@ use std::path::Path;
 use anyhow::Result;
 use koharu_torch::{
     Device, IndexOp, Kind, Tensor,
-    nn::{self, Module},
+    nn::{self, Module, ModuleT},
 };
 
-use super::config::{ComicTextBubbleDetectorConfig, RtDetrResNetConfig};
+use super::config::{RTDetrResNetConfig, RTDetrV2Config};
 
 #[derive(Debug)]
-pub struct Output {
+pub(super) struct RTDetrV2ObjectDetectionOutput {
     pub logits: Tensor,
     pub pred_boxes: Tensor,
 }
@@ -23,13 +23,13 @@ pub struct Output {
 #[derive(Debug)]
 pub struct Model {
     vs: nn::VarStore,
-    model: RtDetrV2Model,
+    model: RTDetrV2ForObjectDetection,
 }
 
 impl Model {
-    pub fn new(config: ComicTextBubbleDetectorConfig, device: Device) -> Self {
+    pub fn new(config: RTDetrV2Config, device: Device) -> Self {
         let mut vs = nn::VarStore::new(device);
-        let model = RtDetrV2Model::new(&(&vs.root() / "model"), &config);
+        let model = RTDetrV2ForObjectDetection::new(&vs.root(), &config);
         vs.freeze();
         Self { vs, model }
     }
@@ -39,72 +39,123 @@ impl Model {
         Ok(())
     }
 
-    pub fn forward(&self, pixel_values: &Tensor) -> Output {
+    pub fn forward(&self, pixel_values: &Tensor) -> RTDetrV2ObjectDetectionOutput {
         self.model.forward(pixel_values)
     }
 }
 
 #[derive(Debug)]
-struct RtDetrV2Model {
-    config: ComicTextBubbleDetectorConfig,
-    anchor_cache: Option<AnchorCache>,
-    backbone: RtDetrV2ConvEncoder,
-    encoder_input_proj: Vec<ConvBnSeq>,
-    encoder: RtDetrV2HybridEncoder,
-    #[allow(dead_code)]
-    denoising_class_embed: nn::Embedding,
-    weight_embedding: Option<nn::Embedding>,
-    enc_output: LinearNormSeq,
-    enc_score_head: nn::Linear,
-    enc_bbox_head: RtDetrV2MLPPredictionHead,
-    decoder_input_proj: Vec<ConvBnSeq>,
-    decoder: RtDetrV2Decoder,
+struct RTDetrV2ForObjectDetection {
+    model: RTDetrV2Model,
+    class_embed: Vec<nn::Linear>,
+    bbox_embed: Vec<RTDetrV2MLPPredictionHead>,
 }
 
-impl RtDetrV2Model {
-    fn new(path: &nn::Path<'_>, config: &ComicTextBubbleDetectorConfig) -> Self {
-        let anchor_cache = config
+impl RTDetrV2ForObjectDetection {
+    fn new(path: &nn::Path<'_>, config: &RTDetrV2Config) -> Self {
+        Self {
+            model: RTDetrV2Model::new(&(path / "model"), config),
+            // The checkpoint serializes Transformers' tied top-level detection
+            // heads under their canonical `model.decoder` paths.
+            class_embed: (0..config.decoder_layers)
+                .map(|index| {
+                    nn::linear(
+                        path / "model" / "decoder" / "class_embed" / index,
+                        config.d_model,
+                        config.num_labels(),
+                        Default::default(),
+                    )
+                })
+                .collect(),
+            bbox_embed: (0..config.decoder_layers)
+                .map(|index| {
+                    RTDetrV2MLPPredictionHead::new(
+                        &(path / "model" / "decoder" / "bbox_embed" / index),
+                        config.d_model,
+                        config.d_model,
+                        4,
+                        3,
+                    )
+                })
+                .collect(),
+        }
+    }
+
+    fn forward(&self, pixel_values: &Tensor) -> RTDetrV2ObjectDetectionOutput {
+        self.model
+            .forward(pixel_values, &self.bbox_embed, &self.class_embed)
+    }
+}
+
+#[derive(Debug)]
+struct RTDetrV2Model {
+    config: RTDetrV2Config,
+    anchors: Option<Tensor>,
+    valid_mask: Option<Tensor>,
+    backbone: RTDetrV2ConvEncoder,
+    encoder_input_proj: Vec<nn::SequentialT>,
+    encoder: RTDetrV2HybridEncoder,
+    #[allow(dead_code)]
+    denoising_class_embed: Option<nn::Embedding>,
+    weight_embedding: Option<nn::Embedding>,
+    enc_output: nn::Sequential,
+    enc_score_head: nn::Linear,
+    enc_bbox_head: RTDetrV2MLPPredictionHead,
+    decoder_input_proj: Vec<nn::SequentialT>,
+    decoder: RTDetrV2Decoder,
+}
+
+impl RTDetrV2Model {
+    fn new(path: &nn::Path<'_>, config: &RTDetrV2Config) -> Self {
+        let (anchors, valid_mask) = config
             .anchor_image_size
             .as_deref()
             .and_then(|image_size| {
                 fixed_spatial_shapes(image_size, &config.feat_strides, config.num_feature_levels)
             })
-            .map(|spatial_shapes| {
-                let (anchors, valid_mask) =
-                    generate_anchors(&spatial_shapes, path.device(), path.kind());
-                AnchorCache {
-                    spatial_shapes,
-                    anchors,
-                    valid_mask,
-                }
+            .map(|spatial_shapes| generate_anchors(&spatial_shapes, path.device(), path.kind()))
+            .map_or((None, None), |(anchors, valid_mask)| {
+                (Some(anchors), Some(valid_mask))
             });
-        let backbone = RtDetrV2ConvEncoder::new(&(path / "backbone"), config);
+        let backbone = RTDetrV2ConvEncoder::new(&(path / "backbone"), config);
         let intermediate_channel_sizes = backbone.intermediate_channel_sizes();
 
         let encoder_input_proj = intermediate_channel_sizes
             .iter()
             .enumerate()
             .map(|(idx, &in_channels)| {
-                ConvBnSeq::new(
-                    &(path / "encoder_input_proj" / idx),
-                    in_channels,
-                    config.encoder_hidden_dim,
-                    1,
-                    1,
-                    0,
-                    1,
-                    config.batch_norm_eps,
-                )
+                let path = path / "encoder_input_proj" / idx;
+                nn::seq_t()
+                    .add(nn::conv2d(
+                        &path / 0,
+                        in_channels,
+                        config.encoder_hidden_dim,
+                        1,
+                        nn::ConvConfig {
+                            bias: false,
+                            ..Default::default()
+                        },
+                    ))
+                    .add(nn::batch_norm2d(
+                        &path / 1,
+                        config.encoder_hidden_dim,
+                        Default::default(),
+                    ))
             })
             .collect();
 
-        let encoder = RtDetrV2HybridEncoder::new(&(path / "encoder"), config);
-        let denoising_class_embed = nn::embedding(
-            path / "denoising_class_embed",
-            config.num_labels() + 1,
-            config.d_model,
-            Default::default(),
-        );
+        let encoder = RTDetrV2HybridEncoder::new(&(path / "encoder"), config);
+        let denoising_class_embed = (config.num_denoising > 0).then(|| {
+            nn::embedding(
+                path / "denoising_class_embed",
+                config.num_labels() + 1,
+                config.d_model,
+                nn::EmbeddingConfig {
+                    padding_idx: config.num_labels(),
+                    ..Default::default()
+                },
+            )
+        });
         let weight_embedding = if config.learn_initial_query {
             Some(nn::embedding(
                 path / "weight_embedding",
@@ -116,18 +167,25 @@ impl RtDetrV2Model {
             None
         };
 
-        let enc_output = LinearNormSeq::new(
-            &(path / "enc_output"),
-            config.d_model,
-            config.layer_norm_eps,
-        );
+        let enc_output = nn::seq()
+            .add(nn::linear(
+                path / "enc_output" / 0,
+                config.d_model,
+                config.d_model,
+                Default::default(),
+            ))
+            .add(layer_norm(
+                &(path / "enc_output" / 1),
+                config.d_model,
+                config.layer_norm_eps,
+            ));
         let enc_score_head = nn::linear(
             path / "enc_score_head",
             config.d_model,
             config.num_labels(),
             Default::default(),
         );
-        let enc_bbox_head = RtDetrV2MLPPredictionHead::new(
+        let enc_bbox_head = RTDetrV2MLPPredictionHead::new(
             &(path / "enc_bbox_head"),
             config.d_model,
             config.d_model,
@@ -139,36 +197,63 @@ impl RtDetrV2Model {
         let mut in_channels = 0;
         for (idx, &channels) in config.decoder_in_channels.iter().enumerate() {
             in_channels = channels;
-            decoder_input_proj.push(ConvBnSeq::new(
-                &(path / "decoder_input_proj" / idx),
-                channels,
-                config.d_model,
-                1,
-                1,
-                0,
-                1,
-                config.batch_norm_eps,
-            ));
+            let path = path / "decoder_input_proj" / idx;
+            decoder_input_proj.push(
+                nn::seq_t()
+                    .add(nn::conv2d(
+                        &path / 0,
+                        channels,
+                        config.d_model,
+                        1,
+                        nn::ConvConfig {
+                            bias: false,
+                            ..Default::default()
+                        },
+                    ))
+                    .add(nn::batch_norm2d(
+                        &path / 1,
+                        config.d_model,
+                        nn::BatchNormConfig {
+                            eps: config.batch_norm_eps,
+                            ..Default::default()
+                        },
+                    )),
+            );
         }
         for idx in decoder_input_proj.len()..config.num_feature_levels {
-            decoder_input_proj.push(ConvBnSeq::new(
-                &(path / "decoder_input_proj" / idx),
-                in_channels,
-                config.d_model,
-                3,
-                2,
-                1,
-                1,
-                config.batch_norm_eps,
-            ));
+            let path = path / "decoder_input_proj" / idx;
+            decoder_input_proj.push(
+                nn::seq_t()
+                    .add(nn::conv2d(
+                        &path / 0,
+                        in_channels,
+                        config.d_model,
+                        3,
+                        nn::ConvConfig {
+                            stride: 2,
+                            padding: 1,
+                            bias: false,
+                            ..Default::default()
+                        },
+                    ))
+                    .add(nn::batch_norm2d(
+                        &path / 1,
+                        config.d_model,
+                        nn::BatchNormConfig {
+                            eps: config.batch_norm_eps,
+                            ..Default::default()
+                        },
+                    )),
+            );
             in_channels = config.d_model;
         }
 
-        let decoder = RtDetrV2Decoder::new(&(path / "decoder"), config);
+        let decoder = RTDetrV2Decoder::new(&(path / "decoder"), config);
 
         Self {
             config: config.clone(),
-            anchor_cache,
+            anchors,
+            valid_mask,
             backbone,
             encoder_input_proj,
             encoder,
@@ -182,24 +267,29 @@ impl RtDetrV2Model {
         }
     }
 
-    fn forward(&self, pixel_values: &Tensor) -> Output {
+    fn forward(
+        &self,
+        pixel_values: &Tensor,
+        bbox_embed: &[RTDetrV2MLPPredictionHead],
+        class_embed: &[nn::Linear],
+    ) -> RTDetrV2ObjectDetectionOutput {
         let features = self.backbone.forward(pixel_values);
         let proj_feats = features
             .iter()
             .enumerate()
-            .map(|(level, source)| self.encoder_input_proj[level].forward(source))
+            .map(|(level, source)| self.encoder_input_proj[level].forward_t(source, false))
             .collect::<Vec<_>>();
         let encoder_outputs = self.encoder.forward(proj_feats);
 
         let mut sources = Vec::with_capacity(self.config.num_feature_levels);
         for (level, source) in encoder_outputs.iter().enumerate() {
-            sources.push(self.decoder_input_proj[level].forward(source));
+            sources.push(self.decoder_input_proj[level].forward_t(source, false));
         }
         if self.config.num_feature_levels > sources.len() {
             let base_len = sources.len();
             let last_encoder_output = encoder_outputs.last().expect("encoder output");
             for level in base_len..self.config.num_feature_levels {
-                sources.push(self.decoder_input_proj[level].forward(last_encoder_output));
+                sources.push(self.decoder_input_proj[level].forward_t(last_encoder_output, false));
             }
         }
 
@@ -216,23 +306,16 @@ impl RtDetrV2Model {
 
         // Transformers caches these tensors when `anchor_image_size` is fixed.
         // https://github.com/huggingface/transformers/blob/394b1a0eaa8e6199e372334da0aff3753a117fdb/src/transformers/models/rt_detr_v2/modeling_rt_detr_v2.py#L1392-L1420
-        let (anchors, valid_mask) = self
-            .anchor_cache
-            .as_ref()
-            .filter(|cache| cache.spatial_shapes == spatial_shapes)
-            .map(|cache| {
-                (
-                    cache.anchors.shallow_clone(),
-                    cache.valid_mask.shallow_clone(),
-                )
-            })
-            .unwrap_or_else(|| {
-                generate_anchors(
-                    &spatial_shapes,
-                    source_flatten.device(),
-                    source_flatten.kind(),
-                )
-            });
+        let (anchors, valid_mask) = match (&self.anchors, &self.valid_mask) {
+            (Some(anchors), Some(valid_mask)) => {
+                (anchors.shallow_clone(), valid_mask.shallow_clone())
+            }
+            _ => generate_anchors(
+                &spatial_shapes,
+                source_flatten.device(),
+                source_flatten.kind(),
+            ),
+        };
         let memory = valid_mask.to_kind(source_flatten.kind()) * &source_flatten;
         let output_memory = self.enc_output.forward(&memory);
         let enc_outputs_class = self.enc_score_head.forward(&output_memory);
@@ -267,14 +350,16 @@ impl RtDetrV2Model {
         };
         let init_reference_points = reference_points_unact.detach();
 
-        let decoder_outputs = self.decoder.forward(DecoderForwardArgs {
-            inputs_embeds: &target,
-            encoder_hidden_states: &source_flatten,
-            reference_points: &init_reference_points,
-            spatial_shapes_list: &spatial_shapes,
-        });
+        let decoder_outputs = self.decoder.forward(
+            &target,
+            &source_flatten,
+            &init_reference_points,
+            &spatial_shapes,
+            bbox_embed,
+            class_embed,
+        );
 
-        Output {
+        RTDetrV2ObjectDetectionOutput {
             logits: decoder_outputs.intermediate_logits.select(1, -1),
             pred_boxes: decoder_outputs.intermediate_reference_points.select(1, -1),
         }
@@ -282,21 +367,14 @@ impl RtDetrV2Model {
 }
 
 #[derive(Debug)]
-struct AnchorCache {
-    spatial_shapes: Vec<(i64, i64)>,
-    anchors: Tensor,
-    valid_mask: Tensor,
+struct RTDetrV2ConvEncoder {
+    model: RTDetrResNetBackbone,
 }
 
-#[derive(Debug)]
-struct RtDetrV2ConvEncoder {
-    model: RtDetrResNetBackbone,
-}
-
-impl RtDetrV2ConvEncoder {
-    fn new(path: &nn::Path<'_>, config: &ComicTextBubbleDetectorConfig) -> Self {
+impl RTDetrV2ConvEncoder {
+    fn new(path: &nn::Path<'_>, config: &RTDetrV2Config) -> Self {
         Self {
-            model: RtDetrResNetBackbone::new(&(path / "model"), &config.backbone_config),
+            model: RTDetrResNetBackbone::new(&(path / "model"), &config.backbone_config),
         }
     }
 
@@ -310,18 +388,46 @@ impl RtDetrV2ConvEncoder {
 }
 
 #[derive(Debug)]
-struct RtDetrResNetBackbone {
-    config: RtDetrResNetConfig,
-    embedder: RtDetrResNetEmbeddings,
-    encoder: RtDetrResNetEncoder,
+struct RTDetrV2FrozenBatchNorm2d {
+    weight: Tensor,
+    bias: Tensor,
+    running_mean: Tensor,
+    running_var: Tensor,
 }
 
-impl RtDetrResNetBackbone {
-    fn new(path: &nn::Path<'_>, config: &RtDetrResNetConfig) -> Self {
+impl RTDetrV2FrozenBatchNorm2d {
+    fn new(path: &nn::Path<'_>, channels: i64) -> Self {
+        Self {
+            weight: path.ones_no_train("weight", &[channels]),
+            bias: path.zeros_no_train("bias", &[channels]),
+            running_mean: path.zeros_no_train("running_mean", &[channels]),
+            running_var: path.ones_no_train("running_var", &[channels]),
+        }
+    }
+
+    fn forward(&self, input: &Tensor) -> Tensor {
+        let weight = self.weight.reshape([1, -1, 1, 1]);
+        let bias = self.bias.reshape([1, -1, 1, 1]);
+        let running_mean = self.running_mean.reshape([1, -1, 1, 1]);
+        let running_var = self.running_var.reshape([1, -1, 1, 1]);
+        let scale = weight * (running_var + 1e-5).rsqrt();
+        input * &scale + bias - running_mean * scale
+    }
+}
+
+#[derive(Debug)]
+struct RTDetrResNetBackbone {
+    config: RTDetrResNetConfig,
+    embedder: RTDetrResNetEmbeddings,
+    encoder: RTDetrResNetEncoder,
+}
+
+impl RTDetrResNetBackbone {
+    fn new(path: &nn::Path<'_>, config: &RTDetrResNetConfig) -> Self {
         Self {
             config: config.clone(),
-            embedder: RtDetrResNetEmbeddings::new(&(path / "embedder"), config),
-            encoder: RtDetrResNetEncoder::new(&(path / "encoder"), config),
+            embedder: RTDetrResNetEmbeddings::new(&(path / "embedder"), config),
+            encoder: RTDetrResNetEncoder::new(&(path / "encoder"), config),
         }
     }
 
@@ -348,15 +454,15 @@ impl RtDetrResNetBackbone {
 }
 
 #[derive(Debug)]
-struct RtDetrResNetEmbeddings {
-    embedder: Vec<RtDetrResNetConvLayer>,
+struct RTDetrResNetEmbeddings {
+    embedder: Vec<RTDetrResNetConvLayer>,
 }
 
-impl RtDetrResNetEmbeddings {
-    fn new(path: &nn::Path<'_>, config: &RtDetrResNetConfig) -> Self {
+impl RTDetrResNetEmbeddings {
+    fn new(path: &nn::Path<'_>, config: &RTDetrResNetConfig) -> Self {
         Self {
             embedder: vec![
-                RtDetrResNetConvLayer::new(
+                RTDetrResNetConvLayer::new(
                     &(path / "embedder" / 0),
                     config.num_channels,
                     config.embedding_size / 2,
@@ -364,7 +470,7 @@ impl RtDetrResNetEmbeddings {
                     2,
                     Activation::from_name(&config.hidden_act),
                 ),
-                RtDetrResNetConvLayer::new(
+                RTDetrResNetConvLayer::new(
                     &(path / "embedder" / 1),
                     config.embedding_size / 2,
                     config.embedding_size / 2,
@@ -372,7 +478,7 @@ impl RtDetrResNetEmbeddings {
                     1,
                     Activation::from_name(&config.hidden_act),
                 ),
-                RtDetrResNetConvLayer::new(
+                RTDetrResNetConvLayer::new(
                     &(path / "embedder" / 2),
                     config.embedding_size / 2,
                     config.embedding_size,
@@ -394,14 +500,14 @@ impl RtDetrResNetEmbeddings {
 }
 
 #[derive(Debug)]
-struct RtDetrResNetEncoder {
-    stages: Vec<RtDetrResNetStage>,
+struct RTDetrResNetEncoder {
+    stages: Vec<RTDetrResNetStage>,
 }
 
-impl RtDetrResNetEncoder {
-    fn new(path: &nn::Path<'_>, config: &RtDetrResNetConfig) -> Self {
+impl RTDetrResNetEncoder {
+    fn new(path: &nn::Path<'_>, config: &RTDetrResNetConfig) -> Self {
         let mut stages = Vec::new();
-        stages.push(RtDetrResNetStage::new(
+        stages.push(RTDetrResNetStage::new(
             &(path / "stages" / 0),
             config,
             config.embedding_size,
@@ -414,7 +520,7 @@ impl RtDetrResNetEncoder {
             config.depths[0],
         ));
         for idx in 1..config.depths.len() {
-            stages.push(RtDetrResNetStage::new(
+            stages.push(RTDetrResNetStage::new(
                 &(path / "stages" / idx),
                 config,
                 config.hidden_sizes[idx - 1],
@@ -439,21 +545,21 @@ impl RtDetrResNetEncoder {
 }
 
 #[derive(Debug)]
-struct RtDetrResNetStage {
-    layers: Vec<RtDetrResNetBottleNeckLayer>,
+struct RTDetrResNetStage {
+    layers: Vec<RTDetrResNetBottleNeckLayer>,
 }
 
-impl RtDetrResNetStage {
+impl RTDetrResNetStage {
     fn new(
         path: &nn::Path<'_>,
-        config: &RtDetrResNetConfig,
+        config: &RTDetrResNetConfig,
         in_channels: i64,
         out_channels: i64,
         stride: i64,
         depth: usize,
     ) -> Self {
         let mut layers = Vec::with_capacity(depth);
-        layers.push(RtDetrResNetBottleNeckLayer::new(
+        layers.push(RTDetrResNetBottleNeckLayer::new(
             &(path / "layers" / 0),
             config,
             in_channels,
@@ -461,7 +567,7 @@ impl RtDetrResNetStage {
             stride,
         ));
         for idx in 1..depth {
-            layers.push(RtDetrResNetBottleNeckLayer::new(
+            layers.push(RTDetrResNetBottleNeckLayer::new(
                 &(path / "layers" / idx),
                 config,
                 out_channels,
@@ -482,17 +588,17 @@ impl RtDetrResNetStage {
 }
 
 #[derive(Debug)]
-struct RtDetrResNetBottleNeckLayer {
-    layer: Vec<RtDetrResNetConvLayer>,
-    shortcut: Option<RtDetrResNetShortcut>,
+struct RTDetrResNetBottleNeckLayer {
+    layer: Vec<RTDetrResNetConvLayer>,
+    shortcut: Option<RTDetrResNetShortCut>,
     shortcut_avg_pool: bool,
     activation: Activation,
 }
 
-impl RtDetrResNetBottleNeckLayer {
+impl RTDetrResNetBottleNeckLayer {
     fn new(
         path: &nn::Path<'_>,
-        config: &RtDetrResNetConfig,
+        config: &RTDetrResNetConfig,
         in_channels: i64,
         out_channels: i64,
         stride: i64,
@@ -512,7 +618,7 @@ impl RtDetrResNetBottleNeckLayer {
         };
         Self {
             layer: vec![
-                RtDetrResNetConvLayer::new(
+                RTDetrResNetConvLayer::new(
                     &(path / "layer" / 0),
                     in_channels,
                     reduces_channels,
@@ -520,7 +626,7 @@ impl RtDetrResNetBottleNeckLayer {
                     conv1_stride,
                     Activation::from_name(&config.hidden_act),
                 ),
-                RtDetrResNetConvLayer::new(
+                RTDetrResNetConvLayer::new(
                     &(path / "layer" / 1),
                     reduces_channels,
                     reduces_channels,
@@ -528,7 +634,7 @@ impl RtDetrResNetBottleNeckLayer {
                     conv2_stride,
                     Activation::from_name(&config.hidden_act),
                 ),
-                RtDetrResNetConvLayer::new(
+                RTDetrResNetConvLayer::new(
                     &(path / "layer" / 2),
                     reduces_channels,
                     out_channels,
@@ -543,7 +649,7 @@ impl RtDetrResNetBottleNeckLayer {
                 } else {
                     path / "shortcut"
                 };
-                RtDetrResNetShortcut::new(&shortcut_path, in_channels, out_channels)
+                RTDetrResNetShortCut::new(&shortcut_path, in_channels, out_channels)
             }),
             shortcut_avg_pool: stride == 2,
             activation: Activation::from_name(&config.hidden_act),
@@ -571,12 +677,12 @@ impl RtDetrResNetBottleNeckLayer {
 }
 
 #[derive(Debug)]
-struct RtDetrResNetShortcut {
+struct RTDetrResNetShortCut {
     convolution: nn::Conv2D,
-    normalization: nn::BatchNorm,
+    normalization: RTDetrV2FrozenBatchNorm2d,
 }
 
-impl RtDetrResNetShortcut {
+impl RTDetrResNetShortCut {
     fn new(path: &nn::Path<'_>, in_channels: i64, out_channels: i64) -> Self {
         Self {
             convolution: nn::conv2d(
@@ -589,29 +695,23 @@ impl RtDetrResNetShortcut {
                     ..Default::default()
                 },
             ),
-            normalization: nn::batch_norm2d(
-                path / "normalization",
-                out_channels,
-                Default::default(),
-            ),
+            normalization: RTDetrV2FrozenBatchNorm2d::new(&(path / "normalization"), out_channels),
         }
     }
 
     fn forward(&self, input: &Tensor) -> Tensor {
-        input
-            .apply(&self.convolution)
-            .apply_t(&self.normalization, false)
+        self.normalization.forward(&input.apply(&self.convolution))
     }
 }
 
 #[derive(Debug)]
-struct RtDetrResNetConvLayer {
+struct RTDetrResNetConvLayer {
     convolution: nn::Conv2D,
-    normalization: nn::BatchNorm,
+    normalization: RTDetrV2FrozenBatchNorm2d,
     activation: Activation,
 }
 
-impl RtDetrResNetConvLayer {
+impl RTDetrResNetConvLayer {
     fn new(
         path: &nn::Path<'_>,
         in_channels: i64,
@@ -633,36 +733,29 @@ impl RtDetrResNetConvLayer {
                     ..Default::default()
                 },
             ),
-            normalization: nn::batch_norm2d(
-                path / "normalization",
-                out_channels,
-                Default::default(),
-            ),
+            normalization: RTDetrV2FrozenBatchNorm2d::new(&(path / "normalization"), out_channels),
             activation,
         }
     }
 
     fn forward(&self, input: &Tensor) -> Tensor {
-        self.activation.apply(
-            input
-                .apply(&self.convolution)
-                .apply_t(&self.normalization, false),
-        )
+        self.activation
+            .apply(self.normalization.forward(&input.apply(&self.convolution)))
     }
 }
 
 #[derive(Debug)]
-struct RtDetrV2HybridEncoder {
-    config: ComicTextBubbleDetectorConfig,
-    encoder: Vec<RtDetrV2AIFILayer>,
-    lateral_convs: Vec<RtDetrV2ConvNormLayer>,
-    fpn_blocks: Vec<RtDetrV2CSPRepLayer>,
-    downsample_convs: Vec<RtDetrV2ConvNormLayer>,
-    pan_blocks: Vec<RtDetrV2CSPRepLayer>,
+struct RTDetrV2HybridEncoder {
+    config: RTDetrV2Config,
+    encoder: Vec<RTDetrV2AIFILayer>,
+    lateral_convs: Vec<RTDetrV2ConvNormLayer>,
+    fpn_blocks: Vec<RTDetrV2CSPRepLayer>,
+    downsample_convs: Vec<RTDetrV2ConvNormLayer>,
+    pan_blocks: Vec<RTDetrV2CSPRepLayer>,
 }
 
-impl RtDetrV2HybridEncoder {
-    fn new(path: &nn::Path<'_>, config: &ComicTextBubbleDetectorConfig) -> Self {
+impl RTDetrV2HybridEncoder {
+    fn new(path: &nn::Path<'_>, config: &RTDetrV2Config) -> Self {
         let stages = config.encoder_in_channels.len() - 1;
         Self {
             config: config.clone(),
@@ -670,11 +763,11 @@ impl RtDetrV2HybridEncoder {
                 .encode_proj_layers
                 .iter()
                 .enumerate()
-                .map(|(idx, _)| RtDetrV2AIFILayer::new(&(path / "encoder" / idx), config))
+                .map(|(idx, _)| RTDetrV2AIFILayer::new(&(path / "encoder" / idx), config))
                 .collect(),
             lateral_convs: (0..stages)
                 .map(|idx| {
-                    RtDetrV2ConvNormLayer::new(
+                    RTDetrV2ConvNormLayer::new(
                         &(path / "lateral_convs" / idx),
                         config.encoder_hidden_dim,
                         config.encoder_hidden_dim,
@@ -687,11 +780,11 @@ impl RtDetrV2HybridEncoder {
                 })
                 .collect(),
             fpn_blocks: (0..stages)
-                .map(|idx| RtDetrV2CSPRepLayer::new(&(path / "fpn_blocks" / idx), config))
+                .map(|idx| RTDetrV2CSPRepLayer::new(&(path / "fpn_blocks" / idx), config))
                 .collect(),
             downsample_convs: (0..stages)
                 .map(|idx| {
-                    RtDetrV2ConvNormLayer::new(
+                    RTDetrV2ConvNormLayer::new(
                         &(path / "downsample_convs" / idx),
                         config.encoder_hidden_dim,
                         config.encoder_hidden_dim,
@@ -704,7 +797,7 @@ impl RtDetrV2HybridEncoder {
                 })
                 .collect(),
             pan_blocks: (0..stages)
-                .map(|idx| RtDetrV2CSPRepLayer::new(&(path / "pan_blocks" / idx), config))
+                .map(|idx| RTDetrV2CSPRepLayer::new(&(path / "pan_blocks" / idx), config))
                 .collect(),
         }
     }
@@ -746,22 +839,22 @@ impl RtDetrV2HybridEncoder {
 }
 
 #[derive(Debug)]
-struct RtDetrV2AIFILayer {
+struct RTDetrV2AIFILayer {
     encoder_hidden_dim: i64,
-    position_embedding: RtDetrV2SinePositionEmbedding,
-    layers: Vec<RtDetrV2EncoderLayer>,
+    position_embedding: RTDetrV2SinePositionEmbedding,
+    layers: Vec<RTDetrV2EncoderLayer>,
 }
 
-impl RtDetrV2AIFILayer {
-    fn new(path: &nn::Path<'_>, config: &ComicTextBubbleDetectorConfig) -> Self {
+impl RTDetrV2AIFILayer {
+    fn new(path: &nn::Path<'_>, config: &RTDetrV2Config) -> Self {
         Self {
             encoder_hidden_dim: config.encoder_hidden_dim,
-            position_embedding: RtDetrV2SinePositionEmbedding {
+            position_embedding: RTDetrV2SinePositionEmbedding {
                 embed_dim: config.encoder_hidden_dim,
                 temperature: config.positional_encoding_temperature,
             },
             layers: (0..config.encoder_layers)
-                .map(|idx| RtDetrV2EncoderLayer::new(&(path / "layers" / idx), config))
+                .map(|idx| RTDetrV2EncoderLayer::new(&(path / "layers" / idx), config))
                 .collect(),
         }
     }
@@ -789,19 +882,19 @@ impl RtDetrV2AIFILayer {
 }
 
 #[derive(Debug)]
-struct RtDetrV2EncoderLayer {
+struct RTDetrV2EncoderLayer {
     normalize_before: bool,
-    self_attn: RtDetrV2SelfAttention,
+    self_attn: RTDetrV2SelfAttention,
     self_attn_layer_norm: nn::LayerNorm,
-    mlp: RtDetrV2MLP,
+    mlp: RTDetrV2MLP,
     final_layer_norm: nn::LayerNorm,
 }
 
-impl RtDetrV2EncoderLayer {
-    fn new(path: &nn::Path<'_>, config: &ComicTextBubbleDetectorConfig) -> Self {
+impl RTDetrV2EncoderLayer {
+    fn new(path: &nn::Path<'_>, config: &RTDetrV2Config) -> Self {
         Self {
             normalize_before: config.normalize_before,
-            self_attn: RtDetrV2SelfAttention::new(
+            self_attn: RTDetrV2SelfAttention::new(
                 &(path / "self_attn"),
                 config.encoder_hidden_dim,
                 config.encoder_attention_heads,
@@ -811,7 +904,7 @@ impl RtDetrV2EncoderLayer {
                 config.encoder_hidden_dim,
                 config.layer_norm_eps,
             ),
-            mlp: RtDetrV2MLP::new(
+            mlp: RTDetrV2MLP::new(
                 path,
                 config.encoder_hidden_dim,
                 config.encoder_ffn_dim,
@@ -855,112 +948,90 @@ impl RtDetrV2EncoderLayer {
 }
 
 #[derive(Debug)]
-struct RtDetrV2DecoderOutput {
+struct RTDetrV2DecoderOutput {
     intermediate_logits: Tensor,
     intermediate_reference_points: Tensor,
 }
 
 #[derive(Debug)]
-struct RtDetrV2Decoder {
-    layers: Vec<RtDetrV2DecoderLayer>,
-    query_pos_head: RtDetrV2MLPPredictionHead,
-    bbox_embed: Vec<RtDetrV2MLPPredictionHead>,
-    class_embed: Vec<nn::Linear>,
+struct RTDetrV2Decoder {
+    layers: Vec<RTDetrV2DecoderLayer>,
+    query_pos_head: RTDetrV2MLPPredictionHead,
 }
 
-impl RtDetrV2Decoder {
-    fn new(path: &nn::Path<'_>, config: &ComicTextBubbleDetectorConfig) -> Self {
+impl RTDetrV2Decoder {
+    fn new(path: &nn::Path<'_>, config: &RTDetrV2Config) -> Self {
         Self {
             layers: (0..config.decoder_layers)
-                .map(|idx| RtDetrV2DecoderLayer::new(&(path / "layers" / idx), config))
+                .map(|idx| RTDetrV2DecoderLayer::new(&(path / "layers" / idx), config))
                 .collect(),
-            query_pos_head: RtDetrV2MLPPredictionHead::new(
+            query_pos_head: RTDetrV2MLPPredictionHead::new(
                 &(path / "query_pos_head"),
                 4,
                 2 * config.d_model,
                 config.d_model,
                 2,
             ),
-            bbox_embed: (0..config.decoder_layers)
-                .map(|idx| {
-                    RtDetrV2MLPPredictionHead::new(
-                        &(path / "bbox_embed" / idx),
-                        config.d_model,
-                        config.d_model,
-                        4,
-                        3,
-                    )
-                })
-                .collect(),
-            class_embed: (0..config.decoder_layers)
-                .map(|idx| {
-                    nn::linear(
-                        path / "class_embed" / idx,
-                        config.d_model,
-                        config.num_labels(),
-                        Default::default(),
-                    )
-                })
-                .collect(),
         }
     }
 
-    fn forward(&self, args: DecoderForwardArgs<'_>) -> RtDetrV2DecoderOutput {
-        let mut hidden_states = args.inputs_embeds.shallow_clone();
-        let mut reference_points = args.reference_points.sigmoid();
+    fn forward(
+        &self,
+        inputs_embeds: &Tensor,
+        encoder_hidden_states: &Tensor,
+        reference_points: &Tensor,
+        spatial_shapes_list: &[(i64, i64)],
+        bbox_embed: &[RTDetrV2MLPPredictionHead],
+        class_embed: &[nn::Linear],
+    ) -> RTDetrV2DecoderOutput {
+        let mut hidden_states = inputs_embeds.shallow_clone();
+        let mut reference_points = reference_points.sigmoid();
         let mut intermediate_logits = Vec::with_capacity(self.layers.len());
         let mut intermediate_reference_points = Vec::with_capacity(self.layers.len());
 
         for (idx, decoder_layer) in self.layers.iter().enumerate() {
             let reference_points_input = reference_points.unsqueeze(2);
             let object_queries_position_embeddings = self.query_pos_head.forward(&reference_points);
-            hidden_states = decoder_layer.forward(DecoderLayerArgs {
-                hidden_states: &hidden_states,
-                object_queries_position_embeddings: &object_queries_position_embeddings,
-                reference_points: &reference_points_input,
-                spatial_shapes_list: args.spatial_shapes_list,
-                encoder_hidden_states: args.encoder_hidden_states,
-            });
+            hidden_states = decoder_layer.forward(
+                &hidden_states,
+                &object_queries_position_embeddings,
+                &reference_points_input,
+                spatial_shapes_list,
+                encoder_hidden_states,
+            );
 
             // Iterative box refinement intentionally detaches only the reference
             // used by the next decoder layer, matching Transformers inference.
             // https://github.com/huggingface/transformers/blob/394b1a0eaa8e6199e372334da0aff3753a117fdb/src/transformers/models/rt_detr_v2/modeling_rt_detr_v2.py#L626-L636
-            let predicted_corners = self.bbox_embed[idx].forward(&hidden_states);
+            let predicted_corners = bbox_embed[idx].forward(&hidden_states);
             let new_reference_points =
                 (predicted_corners + inverse_sigmoid(&reference_points)).sigmoid();
             reference_points = new_reference_points.detach();
             intermediate_reference_points.push(new_reference_points);
-            intermediate_logits.push(self.class_embed[idx].forward(&hidden_states));
+            intermediate_logits.push(class_embed[idx].forward(&hidden_states));
         }
 
-        RtDetrV2DecoderOutput {
+        RTDetrV2DecoderOutput {
             intermediate_logits: Tensor::stack(&intermediate_logits, 1),
             intermediate_reference_points: Tensor::stack(&intermediate_reference_points, 1),
         }
     }
 }
 
-struct DecoderForwardArgs<'a> {
-    inputs_embeds: &'a Tensor,
-    encoder_hidden_states: &'a Tensor,
-    reference_points: &'a Tensor,
-    spatial_shapes_list: &'a [(i64, i64)],
-}
-
 #[derive(Debug)]
-struct RtDetrV2DecoderLayer {
-    self_attn: RtDetrV2SelfAttention,
+struct RTDetrV2DecoderLayer {
+    self_attn: RTDetrV2SelfAttention,
     self_attn_layer_norm: nn::LayerNorm,
-    encoder_attn: RtDetrV2MultiscaleDeformableAttention,
+    encoder_attn: RTDetrV2MultiscaleDeformableAttention,
     encoder_attn_layer_norm: nn::LayerNorm,
-    mlp: RtDetrV2MLP,
+    mlp: RTDetrV2MLP,
     final_layer_norm: nn::LayerNorm,
 }
 
-impl RtDetrV2DecoderLayer {
-    fn new(path: &nn::Path<'_>, config: &ComicTextBubbleDetectorConfig) -> Self {
+impl RTDetrV2DecoderLayer {
+    fn new(path: &nn::Path<'_>, config: &RTDetrV2Config) -> Self {
         Self {
-            self_attn: RtDetrV2SelfAttention::new(
+            self_attn: RTDetrV2SelfAttention::new(
                 &(path / "self_attn"),
                 config.d_model,
                 config.decoder_attention_heads,
@@ -970,7 +1041,7 @@ impl RtDetrV2DecoderLayer {
                 config.d_model,
                 config.layer_norm_eps,
             ),
-            encoder_attn: RtDetrV2MultiscaleDeformableAttention::new(
+            encoder_attn: RTDetrV2MultiscaleDeformableAttention::new(
                 &(path / "encoder_attn"),
                 config,
             ),
@@ -979,7 +1050,7 @@ impl RtDetrV2DecoderLayer {
                 config.d_model,
                 config.layer_norm_eps,
             ),
-            mlp: RtDetrV2MLP::new(
+            mlp: RTDetrV2MLP::new(
                 path,
                 config.d_model,
                 config.decoder_ffn_dim,
@@ -993,24 +1064,30 @@ impl RtDetrV2DecoderLayer {
         }
     }
 
-    fn forward(&self, args: DecoderLayerArgs<'_>) -> Tensor {
-        let residual = args.hidden_states.shallow_clone();
-        let hidden_states = self.self_attn.forward(
-            args.hidden_states,
-            Some(args.object_queries_position_embeddings),
-        );
+    fn forward(
+        &self,
+        hidden_states: &Tensor,
+        object_queries_position_embeddings: &Tensor,
+        reference_points: &Tensor,
+        spatial_shapes_list: &[(i64, i64)],
+        encoder_hidden_states: &Tensor,
+    ) -> Tensor {
+        let residual = hidden_states.shallow_clone();
+        let hidden_states = self
+            .self_attn
+            .forward(hidden_states, Some(object_queries_position_embeddings));
         let hidden_states = self
             .self_attn_layer_norm
             .forward(&(residual + hidden_states));
 
         let residual = hidden_states.shallow_clone();
-        let hidden_states = self.encoder_attn.forward(MultiscaleAttentionArgs {
-            hidden_states: &hidden_states,
-            encoder_hidden_states: args.encoder_hidden_states,
-            position_embeddings: args.object_queries_position_embeddings,
-            reference_points: args.reference_points,
-            spatial_shapes_list: args.spatial_shapes_list,
-        });
+        let hidden_states = self.encoder_attn.forward(
+            &hidden_states,
+            encoder_hidden_states,
+            object_queries_position_embeddings,
+            reference_points,
+            spatial_shapes_list,
+        );
         let hidden_states = self
             .encoder_attn_layer_norm
             .forward(&(residual + hidden_states));
@@ -1020,26 +1097,18 @@ impl RtDetrV2DecoderLayer {
     }
 }
 
-struct DecoderLayerArgs<'a> {
-    hidden_states: &'a Tensor,
-    object_queries_position_embeddings: &'a Tensor,
-    reference_points: &'a Tensor,
-    spatial_shapes_list: &'a [(i64, i64)],
-    encoder_hidden_states: &'a Tensor,
-}
-
 #[derive(Debug)]
-struct RtDetrV2SelfAttention {
+struct RTDetrV2SelfAttention {
     head_dim: i64,
     num_heads: i64,
     scaling: f64,
     k_proj: nn::Linear,
     v_proj: nn::Linear,
     q_proj: nn::Linear,
-    out_proj: nn::Linear,
+    o_proj: nn::Linear,
 }
 
-impl RtDetrV2SelfAttention {
+impl RTDetrV2SelfAttention {
     fn new(path: &nn::Path<'_>, hidden_size: i64, num_heads: i64) -> Self {
         let head_dim = hidden_size / num_heads;
         Self {
@@ -1064,7 +1133,9 @@ impl RtDetrV2SelfAttention {
                 hidden_size,
                 Default::default(),
             ),
-            out_proj: nn::linear(
+            // The model was exported by Transformers 4.49, before this field was
+            // renamed from `out_proj` to `o_proj`; retain its checkpoint path.
+            o_proj: nn::linear(
                 path / "out_proj",
                 hidden_size,
                 hidden_size,
@@ -1101,7 +1172,7 @@ impl RtDetrV2SelfAttention {
             .matmul(&value_states)
             .transpose(1, 2)
             .contiguous();
-        self.out_proj.forward(&attn_output.reshape([
+        self.o_proj.forward(&attn_output.reshape([
             batch_size,
             sequence_length,
             self.num_heads * self.head_dim,
@@ -1110,12 +1181,13 @@ impl RtDetrV2SelfAttention {
 }
 
 #[derive(Debug)]
-struct RtDetrV2MultiscaleDeformableAttention {
+struct RTDetrV2MultiscaleDeformableAttention {
     d_model: i64,
     n_levels: i64,
     n_heads: i64,
     n_points: i64,
     offset_scale: f64,
+    method: String,
     n_points_scale: Tensor,
     sampling_offsets: nn::Linear,
     attention_weights: nn::Linear,
@@ -1123,23 +1195,22 @@ struct RtDetrV2MultiscaleDeformableAttention {
     output_proj: nn::Linear,
 }
 
-impl RtDetrV2MultiscaleDeformableAttention {
-    fn new(path: &nn::Path<'_>, config: &ComicTextBubbleDetectorConfig) -> Self {
+impl RTDetrV2MultiscaleDeformableAttention {
+    fn new(path: &nn::Path<'_>, config: &RTDetrV2Config) -> Self {
         let n_levels = config.decoder_n_levels;
         let n_points = config.decoder_n_points;
         let n_points_scale_values = (0..n_levels)
             .flat_map(|_| (0..n_points).map(move |_| 1.0f32 / n_points as f32))
             .collect::<Vec<_>>();
-        let n_points_scale = path.var_copy(
-            "n_points_scale",
-            &Tensor::from_slice(&n_points_scale_values),
-        );
+        let mut n_points_scale = path.zeros_no_train("n_points_scale", &[n_levels * n_points]);
+        n_points_scale.copy_(&Tensor::from_slice(&n_points_scale_values));
         Self {
             d_model: config.d_model,
             n_levels,
             n_heads: config.decoder_attention_heads,
             n_points,
             offset_scale: config.decoder_offset_scale,
+            method: config.decoder_method.clone(),
             n_points_scale,
             sampling_offsets: nn::linear(
                 path / "sampling_offsets",
@@ -1168,14 +1239,21 @@ impl RtDetrV2MultiscaleDeformableAttention {
         }
     }
 
-    fn forward(&self, args: MultiscaleAttentionArgs<'_>) -> Tensor {
-        let hidden_states = args.hidden_states + args.position_embeddings;
+    fn forward(
+        &self,
+        hidden_states: &Tensor,
+        encoder_hidden_states: &Tensor,
+        position_embeddings: &Tensor,
+        reference_points: &Tensor,
+        spatial_shapes_list: &[(i64, i64)],
+    ) -> Tensor {
+        let hidden_states = hidden_states + position_embeddings;
         let batch_size = hidden_states.size()[0];
         let num_queries = hidden_states.size()[1];
-        let sequence_length = args.encoder_hidden_states.size()[1];
+        let sequence_length = encoder_hidden_states.size()[1];
         let dim_per_head = self.d_model / self.n_heads;
 
-        let value = self.value_proj.forward(args.encoder_hidden_states).view([
+        let value = self.value_proj.forward(encoder_hidden_states).view([
             batch_size,
             sequence_length,
             self.n_heads,
@@ -1199,7 +1277,7 @@ impl RtDetrV2MultiscaleDeformableAttention {
             ])
             .softmax(-1, None::<Kind>);
 
-        let sampling_locations = if args.reference_points.size().last().copied() == Some(4) {
+        let sampling_locations = if reference_points.size().last().copied() == Some(4) {
             let scale = self.n_points_scale.to_kind(hidden_states.kind()).view([
                 1,
                 1,
@@ -1207,15 +1285,15 @@ impl RtDetrV2MultiscaleDeformableAttention {
                 self.n_levels * self.n_points,
                 1,
             ]);
-            let ref_xy = args.reference_points.slice(-1, 0, 2, 1).unsqueeze(2);
-            let ref_wh = args.reference_points.slice(-1, 2, 4, 1).unsqueeze(2);
+            let ref_xy = reference_points.slice(-1, 0, 2, 1).unsqueeze(2);
+            let ref_wh = reference_points.slice(-1, 2, 4, 1).unsqueeze(2);
             ref_xy + sampling_offsets * scale * ref_wh * self.offset_scale
         } else {
-            let spatial_shapes = spatial_shapes_tensor(args.spatial_shapes_list, value.device())
+            let spatial_shapes = spatial_shapes_tensor(spatial_shapes_list, value.device())
                 .to_kind(hidden_states.kind());
             let normalizer =
                 Tensor::stack(&[spatial_shapes.i((.., 1)), spatial_shapes.i((.., 0))], -1);
-            args.reference_points.unsqueeze(2).unsqueeze(4)
+            reference_points.unsqueeze(2).unsqueeze(4)
                 + sampling_offsets
                     / normalizer
                         .unsqueeze(0)
@@ -1226,31 +1304,24 @@ impl RtDetrV2MultiscaleDeformableAttention {
 
         let output = multiscale_deformable_attention_v2(
             &value,
-            args.spatial_shapes_list,
+            spatial_shapes_list,
             &sampling_locations,
             &attention_weights,
             self.n_points as usize,
+            &self.method,
         );
         self.output_proj.forward(&output)
     }
 }
 
-struct MultiscaleAttentionArgs<'a> {
-    hidden_states: &'a Tensor,
-    encoder_hidden_states: &'a Tensor,
-    position_embeddings: &'a Tensor,
-    reference_points: &'a Tensor,
-    spatial_shapes_list: &'a [(i64, i64)],
-}
-
 #[derive(Debug)]
-struct RtDetrV2MLP {
+struct RTDetrV2MLP {
     fc1: nn::Linear,
     fc2: nn::Linear,
     activation: Activation,
 }
 
-impl RtDetrV2MLP {
+impl RTDetrV2MLP {
     fn new(
         path: &nn::Path<'_>,
         hidden_size: i64,
@@ -1281,11 +1352,11 @@ impl RtDetrV2MLP {
 }
 
 #[derive(Debug)]
-struct RtDetrV2MLPPredictionHead {
+struct RTDetrV2MLPPredictionHead {
     layers: Vec<nn::Linear>,
 }
 
-impl RtDetrV2MLPPredictionHead {
+impl RTDetrV2MLPPredictionHead {
     fn new(
         path: &nn::Path<'_>,
         input_dim: i64,
@@ -1325,19 +1396,19 @@ impl RtDetrV2MLPPredictionHead {
 }
 
 #[derive(Debug)]
-struct RtDetrV2CSPRepLayer {
-    conv1: RtDetrV2ConvNormLayer,
-    conv2: RtDetrV2ConvNormLayer,
-    bottlenecks: Vec<RtDetrV2RepVggBlock>,
+struct RTDetrV2CSPRepLayer {
+    conv1: RTDetrV2ConvNormLayer,
+    conv2: RTDetrV2ConvNormLayer,
+    bottlenecks: Vec<RTDetrV2RepVggBlock>,
 }
 
-impl RtDetrV2CSPRepLayer {
-    fn new(path: &nn::Path<'_>, config: &ComicTextBubbleDetectorConfig) -> Self {
+impl RTDetrV2CSPRepLayer {
+    fn new(path: &nn::Path<'_>, config: &RTDetrV2Config) -> Self {
         let in_channels = config.encoder_hidden_dim * 2;
         let out_channels = config.encoder_hidden_dim;
         let hidden_channels = (out_channels as f64 * config.hidden_expansion) as i64;
         Self {
-            conv1: RtDetrV2ConvNormLayer::new(
+            conv1: RTDetrV2ConvNormLayer::new(
                 &(path / "conv1"),
                 in_channels,
                 hidden_channels,
@@ -1347,7 +1418,7 @@ impl RtDetrV2CSPRepLayer {
                 Activation::from_name(&config.activation_function),
                 config.batch_norm_eps,
             ),
-            conv2: RtDetrV2ConvNormLayer::new(
+            conv2: RTDetrV2ConvNormLayer::new(
                 &(path / "conv2"),
                 in_channels,
                 hidden_channels,
@@ -1358,7 +1429,7 @@ impl RtDetrV2CSPRepLayer {
                 config.batch_norm_eps,
             ),
             bottlenecks: (0..3)
-                .map(|idx| RtDetrV2RepVggBlock::new(&(path / "bottlenecks" / idx), config))
+                .map(|idx| RTDetrV2RepVggBlock::new(&(path / "bottlenecks" / idx), config))
                 .collect(),
         }
     }
@@ -1373,17 +1444,17 @@ impl RtDetrV2CSPRepLayer {
 }
 
 #[derive(Debug)]
-struct RtDetrV2RepVggBlock {
-    conv1: RtDetrV2ConvNormLayer,
-    conv2: RtDetrV2ConvNormLayer,
+struct RTDetrV2RepVggBlock {
+    conv1: RTDetrV2ConvNormLayer,
+    conv2: RTDetrV2ConvNormLayer,
     activation: Activation,
 }
 
-impl RtDetrV2RepVggBlock {
-    fn new(path: &nn::Path<'_>, config: &ComicTextBubbleDetectorConfig) -> Self {
+impl RTDetrV2RepVggBlock {
+    fn new(path: &nn::Path<'_>, config: &RTDetrV2Config) -> Self {
         let hidden_channels = (config.encoder_hidden_dim as f64 * config.hidden_expansion) as i64;
         Self {
-            conv1: RtDetrV2ConvNormLayer::new(
+            conv1: RTDetrV2ConvNormLayer::new(
                 &(path / "conv1"),
                 hidden_channels,
                 hidden_channels,
@@ -1393,7 +1464,7 @@ impl RtDetrV2RepVggBlock {
                 Activation::None,
                 config.batch_norm_eps,
             ),
-            conv2: RtDetrV2ConvNormLayer::new(
+            conv2: RTDetrV2ConvNormLayer::new(
                 &(path / "conv2"),
                 hidden_channels,
                 hidden_channels,
@@ -1414,13 +1485,13 @@ impl RtDetrV2RepVggBlock {
 }
 
 #[derive(Debug)]
-struct RtDetrV2ConvNormLayer {
+struct RTDetrV2ConvNormLayer {
     conv: nn::Conv2D,
     norm: nn::BatchNorm,
     activation: Activation,
 }
 
-impl RtDetrV2ConvNormLayer {
+impl RTDetrV2ConvNormLayer {
     #[allow(clippy::too_many_arguments)]
     fn new(
         path: &nn::Path<'_>,
@@ -1464,79 +1535,12 @@ impl RtDetrV2ConvNormLayer {
 }
 
 #[derive(Debug)]
-struct ConvBnSeq {
-    conv: nn::Conv2D,
-    bn: nn::BatchNorm,
-}
-
-impl ConvBnSeq {
-    #[allow(clippy::too_many_arguments)]
-    fn new(
-        path: &nn::Path<'_>,
-        in_channels: i64,
-        out_channels: i64,
-        kernel_size: i64,
-        stride: i64,
-        padding: i64,
-        groups: i64,
-        eps: f64,
-    ) -> Self {
-        Self {
-            conv: nn::conv2d(
-                path / 0,
-                in_channels,
-                out_channels,
-                kernel_size,
-                nn::ConvConfig {
-                    stride,
-                    padding,
-                    groups,
-                    bias: false,
-                    ..Default::default()
-                },
-            ),
-            bn: nn::batch_norm2d(
-                path / 1,
-                out_channels,
-                nn::BatchNormConfig {
-                    eps,
-                    ..Default::default()
-                },
-            ),
-        }
-    }
-
-    fn forward(&self, xs: &Tensor) -> Tensor {
-        xs.apply(&self.conv).apply_t(&self.bn, false)
-    }
-}
-
-#[derive(Debug)]
-struct LinearNormSeq {
-    linear: nn::Linear,
-    norm: nn::LayerNorm,
-}
-
-impl LinearNormSeq {
-    fn new(path: &nn::Path<'_>, hidden_dim: i64, eps: f64) -> Self {
-        Self {
-            linear: nn::linear(path / 0, hidden_dim, hidden_dim, Default::default()),
-            norm: layer_norm(&(path / 1), hidden_dim, eps),
-        }
-    }
-
-    fn forward(&self, xs: &Tensor) -> Tensor {
-        self.norm.forward(&self.linear.forward(xs))
-    }
-}
-
-#[derive(Debug)]
-struct RtDetrV2SinePositionEmbedding {
+struct RTDetrV2SinePositionEmbedding {
     embed_dim: i64,
     temperature: f64,
 }
 
-impl RtDetrV2SinePositionEmbedding {
+impl RTDetrV2SinePositionEmbedding {
     fn forward(&self, width: i64, height: i64, device: Device, kind: Kind) -> Tensor {
         let grid_w = Tensor::arange(width, (kind, device));
         let grid_h = Tensor::arange(height, (kind, device));
@@ -1597,6 +1601,7 @@ fn multiscale_deformable_attention_v2(
     sampling_locations: &Tensor,
     attention_weights: &Tensor,
     n_points: usize,
+    method: &str,
 ) -> Tensor {
     let size = value.size();
     let batch_size = size[0];
@@ -1608,7 +1613,11 @@ fn multiscale_deformable_attention_v2(
         .map(|(height, width)| height * width)
         .collect::<Vec<_>>();
     let value_list = value.split_with_sizes(split_sizes, 1);
-    let sampling_grids = sampling_locations * 2.0 - 1.0;
+    let sampling_grids = match method {
+        "default" => sampling_locations * 2.0 - 1.0,
+        "discrete" => sampling_locations.shallow_clone(),
+        _ => panic!("unsupported RT-DETR-v2 decoder method: {method}"),
+    };
     let sampling_grids = sampling_grids.permute([0, 2, 1, 3, 4]).flatten(0, 1);
     let point_splits = vec![n_points as i64; spatial_shapes_list.len()];
     let sampling_grid_list = sampling_grids.split_with_sizes(point_splits, -2);
@@ -1621,7 +1630,28 @@ fn multiscale_deformable_attention_v2(
             height,
             width,
         ]);
-        sampling_values.push(value_l.grid_sampler_2d(&sampling_grid_list[level], 0, 0, false));
+        let sampling_grid = &sampling_grid_list[level];
+        let sampling_value = if method == "default" {
+            value_l.grid_sampler_2d(sampling_grid, 0, 0, false)
+        } else {
+            let scale = Tensor::from_slice(&[width, height])
+                .to_device(value.device())
+                .view([1, 1, 1, 2]);
+            let sampling_coord = (sampling_grid * scale + 0.5).to_kind(Kind::Int64);
+            let x = sampling_coord.i((.., .., .., 0)).clamp(0, width - 1);
+            let y = sampling_coord.i((.., .., .., 1)).clamp(0, height - 1);
+            let index = (y * width + x).flatten(1, -1);
+            value_l
+                .flatten(2, -1)
+                .gather(2, &index.unsqueeze(1).repeat([1, hidden_dim, 1]), false)
+                .view([
+                    batch_size * num_heads,
+                    hidden_dim,
+                    num_queries,
+                    n_points as i64,
+                ])
+        };
+        sampling_values.push(sampling_value);
     }
 
     let attention_weights = attention_weights.permute([0, 2, 1, 3]).reshape([
@@ -1663,7 +1693,13 @@ fn generate_anchors(spatial_shapes: &[(i64, i64)], device: Device, kind: Kind) -
         .to_device(device);
     let one_minus_anchors = anchors.ones_like() - &anchors;
     let logit = (&anchors / one_minus_anchors).log();
-    let max = Tensor::full([1, total, 4], 1.0e20, (kind, device));
+    let finfo_max = match kind {
+        Kind::Half => 65_504.0,
+        Kind::Double => f64::MAX,
+        Kind::BFloat16 => 3.389_531_39e38,
+        _ => f32::MAX as f64,
+    };
+    let max = Tensor::full([1, total, 4], finfo_max, (kind, device));
     let anchors = logit.where_self(&valid_mask.expand([1, total, 4], true), &max);
     (anchors, valid_mask)
 }

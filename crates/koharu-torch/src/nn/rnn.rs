@@ -94,7 +94,11 @@ fn rnn_weights<'a, T: Borrow<super::Path<'a>>>(
     let mut flat_weights = vec![];
     for layer_idx in 0..c.num_layers {
         for direction_idx in 0..num_directions {
-            let in_dim = if layer_idx == 0 { in_dim } else { hidden_dim * num_directions };
+            let in_dim = if layer_idx == 0 {
+                in_dim
+            } else {
+                hidden_dim * num_directions
+            };
             let suffix = if direction_idx == 1 { "_reverse" } else { "" };
             let w_ih = vs.var(
                 &format!("weight_ih_l{layer_idx}{suffix}"),
@@ -164,7 +168,12 @@ pub fn lstm<'a, T: Borrow<super::Path<'a>>>(
             c.bidirectional,
         );
     }
-    LSTM { flat_weights, hidden_dim, config: c, device: vs.device() }
+    LSTM {
+        flat_weights,
+        hidden_dim,
+        config: c,
+        device: vs.device(),
+    }
 }
 
 impl RNN for LSTM {
@@ -249,7 +258,12 @@ pub fn gru<'a, T: Borrow<super::Path<'a>>>(
             c.bidirectional,
         );
     }
-    GRU { flat_weights, hidden_dim, config: c, device: vs.device() }
+    GRU {
+        flat_weights,
+        hidden_dim,
+        config: c,
+        device: vs.device(),
+    }
 }
 
 impl RNN for GRU {
@@ -259,7 +273,10 @@ impl RNN for GRU {
         let num_directions = if self.config.bidirectional { 2 } else { 1 };
         let layer_dim = self.config.num_layers * num_directions;
         let shape = [layer_dim, batch_dim, self.hidden_dim];
-        GRUState(Tensor::zeros(shape, (self.flat_weights[0].kind(), self.device)))
+        GRUState(Tensor::zeros(
+            shape,
+            (self.flat_weights[0].kind(), self.device),
+        ))
     }
 
     fn step(&self, input: &Tensor, in_state: &GRUState) -> GRUState {
