@@ -49,5 +49,9 @@ name = "comic_text_bubble_detector"
 harness = false
 
 [[bench]]
+name = "speech_bubble_segmentation"
+harness = false
+
+[[bench]]
 name = "flux2_klein"
 harness = false

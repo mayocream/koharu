@@ -16,6 +16,7 @@ pub mod comic_text_detector;
 pub mod flux2_klein;
 pub mod lama;
 pub mod pp_doclayout_v3;
+pub mod speech_bubble_segmentation;
 
 pub use device::{Backend, Device, DeviceConversionError, DeviceType};
 pub use koharu_diffusion as diffusion;

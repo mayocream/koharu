@@ -70,8 +70,8 @@ inventory::submit! {
         name: "Speech Bubble Segmentation",
         needs: &[],
         produces: &[Artifact::BubbleMask],
-        load: |runtime, cpu| Box::pin(async move {
-            let m = SpeechBubbleSegmentation::load(runtime, cpu).await?;
+        load: |_runtime, cpu| Box::pin(async move {
+            let m = SpeechBubbleSegmentation::load(koharu_ml::device(cpu)).await?;
             Ok(Box::new(Model(m)) as Box<dyn Engine>)
         }),
     }
