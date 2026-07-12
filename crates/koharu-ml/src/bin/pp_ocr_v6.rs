@@ -4,7 +4,7 @@ use anyhow::Result;
 use clap::{Args, Parser, Subcommand};
 use image::{Rgba, RgbaImage};
 use imageproc::drawing::draw_line_segment_mut;
-use koharu_ml::pp_ocrv6::{
+use koharu_ml::pp_ocr_v6::{
     det::{PPOCRV6MediumDet, TextDetections},
     rec::PPOCRV6MediumRec,
 };

@@ -37,6 +37,14 @@ name = "pp_doclayout_v3"
 harness = false
 
 [[bench]]
+name = "pp_ocr_v6_det"
+harness = false
+
+[[bench]]
+name = "pp_ocr_v6_rec"
+harness = false
+
+[[bench]]
 name = "lama"
 harness = false
 
