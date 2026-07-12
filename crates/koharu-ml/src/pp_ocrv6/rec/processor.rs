@@ -20,6 +20,10 @@ pub struct PPOCRV6MediumRecImageProcessor {
     pub do_convert_rgb: bool,
     pub do_normalize: bool,
     pub do_pad: bool,
+    pub image_mean: Vec<f32>,
+    pub image_std: Vec<f32>,
+    pub rescale_factor: f64,
+    pub resample: i64,
     pub max_image_width: i64,
     pub character_list: Vec<String>,
 }
@@ -46,6 +50,10 @@ impl Default for PPOCRV6MediumRecImageProcessor {
             do_convert_rgb: true,
             do_normalize: true,
             do_pad: true,
+            image_mean: vec![0.485, 0.456, 0.406],
+            image_std: vec![0.229, 0.224, 0.225],
+            rescale_factor: 1.0 / 255.0,
+            resample: 2,
             max_image_width: 3200,
             character_list: Vec::new(),
         }
@@ -66,6 +74,9 @@ impl PPOCRV6MediumRecImageProcessor {
     }
 
     pub fn preprocess(&self, image: &DynamicImage, device: Device) -> Result<Tensor> {
+        if !self.do_convert_rgb && image.color().channel_count() < 3 {
+            bail!("PP-OCRv6 recognition requires at least three input channels");
+        }
         let rgb = image.to_rgb8();
         let (width, height) = rgb.dimensions();
         let mut pixel_values = Tensor::from_slice(rgb.as_raw())
@@ -77,23 +88,40 @@ impl PPOCRV6MediumRecImageProcessor {
         let target_width = self.target_width(height as i64, width as i64);
         if self.do_resize {
             // Transformers explicitly disables antialiasing here to match cv2.resize.
-            pixel_values = pixel_values.upsample_bilinear2d(
-                [self.size.height, target_width],
-                false,
-                None::<f64>,
-                None::<f64>,
-            );
+            pixel_values = match self.resample {
+                0 => pixel_values.upsample_nearest2d(
+                    [self.size.height, target_width],
+                    None::<f64>,
+                    None::<f64>,
+                ),
+                2 => pixel_values.upsample_bilinear2d(
+                    [self.size.height, target_width],
+                    false,
+                    None::<f64>,
+                    None::<f64>,
+                ),
+                3 => pixel_values.upsample_bicubic2d(
+                    [self.size.height, target_width],
+                    false,
+                    None::<f64>,
+                    None::<f64>,
+                ),
+                resample => bail!("unsupported PP-OCRv6 recognition resampling mode {resample}"),
+            };
         }
         // Transformers converts RGB input to BGR before normalization.
         pixel_values = pixel_values.flip([1]);
         if self.do_rescale {
-            pixel_values *= 1.0 / 255.0;
+            pixel_values *= self.rescale_factor;
         }
         if self.do_normalize {
-            let mean = Tensor::from_slice(&[0.485f32, 0.456, 0.406])
+            if self.image_mean.len() != 3 || self.image_std.len() != 3 {
+                bail!("PP-OCRv6 recognition image_mean and image_std must contain three values");
+            }
+            let mean = Tensor::from_slice(&self.image_mean)
                 .view([1, 3, 1, 1])
                 .to_device(device);
-            let std = Tensor::from_slice(&[0.229f32, 0.224, 0.225])
+            let std = Tensor::from_slice(&self.image_std)
                 .view([1, 3, 1, 1])
                 .to_device(device);
             pixel_values = (pixel_values - mean) / std;

@@ -51,8 +51,7 @@ impl<'de> Deserialize<'de> for BlockConfig {
     }
 }
 
-#[derive(Debug, Clone, Deserialize)]
-#[serde(default)]
+#[derive(Debug, Clone)]
 pub(crate) struct PPLCNetV4Config {
     pub scale: f64,
     pub block_configs: Vec<Vec<BlockConfig>>,
@@ -65,6 +64,114 @@ pub(crate) struct PPLCNetV4Config {
     pub stem_strides: Vec<Spatial>,
     pub stem_type: String,
     pub use_learnable_affine_block: bool,
+}
+
+#[derive(Deserialize, Default)]
+#[serde(default)]
+struct PPLCNetV4ConfigFields {
+    scale: Option<f64>,
+    block_configs: Option<Vec<Vec<BlockConfig>>>,
+    stem_channels: Option<Vec<i64>>,
+    reduction: Option<i64>,
+    hidden_act: Option<String>,
+    #[serde(alias = "_out_features")]
+    out_features: Option<Vec<String>>,
+    #[serde(alias = "_out_indices")]
+    out_indices: Option<Vec<usize>>,
+    num_channels: Option<i64>,
+    stem_strides: Option<Vec<Spatial>>,
+    stem_type: Option<String>,
+    use_learnable_affine_block: Option<bool>,
+}
+
+impl<'de> Deserialize<'de> for PPLCNetV4Config {
+    fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
+    where
+        D: Deserializer<'de>,
+    {
+        let fields = PPLCNetV4ConfigFields::deserialize(deserializer)?;
+        let mut config = Self::default();
+        if let Some(value) = fields.scale {
+            config.scale = value;
+        }
+        if let Some(value) = fields.block_configs {
+            config.block_configs = value;
+        }
+        if let Some(value) = fields.stem_channels {
+            config.stem_channels = value;
+        }
+        if let Some(value) = fields.reduction {
+            config.reduction = value;
+        }
+        if let Some(value) = fields.hidden_act {
+            config.hidden_act = value;
+        }
+        if let Some(value) = fields.num_channels {
+            config.num_channels = value;
+        }
+        if let Some(value) = fields.stem_strides {
+            config.stem_strides = value;
+        }
+        if let Some(value) = fields.stem_type {
+            config.stem_type = value;
+        }
+        if let Some(value) = fields.use_learnable_affine_block {
+            config.use_learnable_affine_block = value;
+        }
+
+        let stage_count = config.block_configs.len();
+        match (fields.out_features, fields.out_indices) {
+            (Some(features), Some(indices)) => {
+                let derived = indices
+                    .iter()
+                    .map(|&index| stage_name(index, stage_count))
+                    .collect::<Option<Vec<_>>>()
+                    .ok_or_else(|| serde::de::Error::custom("invalid PP-LCNetV4 out_indices"))?;
+                if features != derived {
+                    return Err(serde::de::Error::custom(
+                        "PP-LCNetV4 out_features and out_indices do not select the same stages",
+                    ));
+                }
+                config.out_features = features;
+                config.out_indices = indices;
+            }
+            (Some(features), None) => {
+                config.out_indices = features
+                    .iter()
+                    .map(|feature| stage_index(feature, stage_count))
+                    .collect::<Option<Vec<_>>>()
+                    .ok_or_else(|| serde::de::Error::custom("invalid PP-LCNetV4 out_features"))?;
+                config.out_features = features;
+            }
+            (None, Some(indices)) => {
+                config.out_features = indices
+                    .iter()
+                    .map(|&index| stage_name(index, stage_count))
+                    .collect::<Option<Vec<_>>>()
+                    .ok_or_else(|| serde::de::Error::custom("invalid PP-LCNetV4 out_indices"))?;
+                config.out_indices = indices;
+            }
+            (None, None) => {}
+        }
+        Ok(config)
+    }
+}
+
+fn stage_name(index: usize, stage_count: usize) -> Option<String> {
+    match index {
+        0 => Some("stem".into()),
+        index if index <= stage_count => Some(format!("stage{index}")),
+        _ => None,
+    }
+}
+
+fn stage_index(name: &str, stage_count: usize) -> Option<usize> {
+    if name == "stem" {
+        return Some(0);
+    }
+    name.strip_prefix("stage")
+        .and_then(|index| index.parse().ok())
+        .filter(|&index| index > 0 && index <= stage_count)
 }
 
 impl Default for PPLCNetV4Config {
@@ -135,7 +242,7 @@ impl PPLCNetV4Config {
         self.block_configs
             .iter()
             .filter_map(|blocks| blocks.last())
-            .map(|block| (block.out_channels as f64 * self.scale) as i64)
+            .map(|block| block.out_channels)
             .collect()
     }
 }
@@ -155,9 +262,30 @@ struct ConvLayer {
     convolution: nn::Conv2D,
     normalization: nn::BatchNorm,
     activation: Option<String>,
+    learnable_affine: Option<LearnableAffineBlock>,
+}
+
+#[derive(Debug)]
+struct LearnableAffineBlock {
+    scale: Tensor,
+    bias: Tensor,
+}
+
+impl LearnableAffineBlock {
+    fn new(path: &nn::Path<'_>) -> Self {
+        Self {
+            scale: path.var("scale", &[1], nn::Init::Const(1.0)),
+            bias: path.var("bias", &[1], nn::Init::Const(0.0)),
+        }
+    }
+
+    fn forward(&self, hidden_states: Tensor) -> Tensor {
+        &self.scale * hidden_states + &self.bias
+    }
 }
 
 impl ConvLayer {
+    #[allow(clippy::too_many_arguments)]
     fn new(
         path: &nn::Path<'_>,
         in_channels: i64,
@@ -166,6 +294,7 @@ impl ConvLayer {
         stride: [i64; 2],
         groups: i64,
         activation: Option<&str>,
+        use_learnable_affine_block: bool,
     ) -> Self {
         Self {
             convolution: nn::conv(
@@ -187,13 +316,19 @@ impl ConvLayer {
                 Default::default(),
             ),
             activation: activation.map(str::to_owned),
+            learnable_affine: (activation.is_some() && use_learnable_affine_block)
+                .then(|| LearnableAffineBlock::new(&(path / "lab"))),
         }
     }
 
     fn forward(&self, input: &Tensor) -> Tensor {
         let hidden_states = self.convolution.forward(input);
         let hidden_states = self.normalization.forward_t(&hidden_states, false);
-        activate(hidden_states, self.activation.as_deref())
+        let hidden_states = activate(hidden_states, self.activation.as_deref());
+        match &self.learnable_affine {
+            Some(learnable_affine) => learnable_affine.forward(hidden_states),
+            None => hidden_states,
+        }
     }
 }
 
@@ -258,8 +393,8 @@ struct DepthwiseSeparableConvLayer {
 impl DepthwiseSeparableConvLayer {
     fn new(path: &nn::Path<'_>, block: &BlockConfig, config: &PPLCNetV4Config) -> Self {
         let stride = block.stride.pair();
-        let in_channels = (block.in_channels as f64 * config.scale) as i64;
-        let out_channels = (block.out_channels as f64 * config.scale) as i64;
+        let in_channels = block.in_channels;
+        let out_channels = block.out_channels;
         let use_rep_dw = stride == [1, 1] && in_channels == out_channels;
         let token_conv = if use_rep_dw {
             TokenConv::Reparameterized(nn::conv(
@@ -283,6 +418,7 @@ impl DepthwiseSeparableConvLayer {
                 stride,
                 in_channels,
                 None,
+                false,
             ))
         };
         Self {
@@ -302,6 +438,7 @@ impl DepthwiseSeparableConvLayer {
                 [1, 1],
                 1,
                 None,
+                false,
             ),
             channel_conv2: ConvLayer::new(
                 &(path / "channel_conv2"),
@@ -311,6 +448,7 @@ impl DepthwiseSeparableConvLayer {
                 [1, 1],
                 1,
                 None,
+                false,
             ),
             has_residual: in_channels == out_channels && stride == [1, 1],
         }
@@ -354,6 +492,7 @@ impl LargeStem {
                 strides[0].pair(),
                 1,
                 Some(&config.hidden_act),
+                config.use_learnable_affine_block,
             ),
             stem2a: ConvLayer::new(
                 &(path / "stem2a"),
@@ -363,6 +502,7 @@ impl LargeStem {
                 strides[1].pair(),
                 1,
                 Some(&config.hidden_act),
+                config.use_learnable_affine_block,
             ),
             stem2b: ConvLayer::new(
                 &(path / "stem2b"),
@@ -372,6 +512,7 @@ impl LargeStem {
                 strides[2].pair(),
                 1,
                 Some(&config.hidden_act),
+                config.use_learnable_affine_block,
             ),
             stem3: ConvLayer::new(
                 &(path / "stem3"),
@@ -381,6 +522,7 @@ impl LargeStem {
                 strides[3].pair(),
                 1,
                 Some(&config.hidden_act),
+                config.use_learnable_affine_block,
             ),
             stem4: ConvLayer::new(
                 &(path / "stem4"),
@@ -390,6 +532,7 @@ impl LargeStem {
                 strides[4].pair(),
                 1,
                 Some(&config.hidden_act),
+                config.use_learnable_affine_block,
             ),
         }
     }
@@ -406,19 +549,75 @@ impl LargeStem {
 }
 
 #[derive(Debug)]
+struct SmallStem {
+    conv1: ConvLayer,
+    conv2: ConvLayer,
+}
+
+impl SmallStem {
+    fn new(path: &nn::Path<'_>, config: &PPLCNetV4Config) -> Self {
+        let channels = &config.stem_channels;
+        Self {
+            conv1: ConvLayer::new(
+                &(path / "conv1"),
+                channels[0],
+                channels[1],
+                [3, 3],
+                [2, 2],
+                1,
+                None,
+                false,
+            ),
+            conv2: ConvLayer::new(
+                &(path / "conv2"),
+                channels[1],
+                channels[2],
+                [3, 3],
+                [2, 2],
+                1,
+                None,
+                false,
+            ),
+        }
+    }
+
+    fn forward(&self, pixel_values: &Tensor) -> Tensor {
+        self.conv2
+            .forward(&self.conv1.forward(pixel_values).gelu("none"))
+    }
+}
+
+#[derive(Debug)]
+enum Stem {
+    Large(Box<LargeStem>),
+    Small(Box<SmallStem>),
+}
+
+impl Stem {
+    fn forward(&self, pixel_values: &Tensor) -> Tensor {
+        match self {
+            Self::Large(stem) => stem.forward(pixel_values),
+            Self::Small(stem) => stem.forward(pixel_values),
+        }
+    }
+}
+
+#[derive(Debug)]
 pub(crate) struct PPLCNetV4Backbone {
-    stem: LargeStem,
+    stem: Stem,
     blocks: Vec<Vec<DepthwiseSeparableConvLayer>>,
     out_features: Vec<String>,
+    num_channels: i64,
 }
 
 impl PPLCNetV4Backbone {
     pub(crate) fn new(path: &nn::Path<'_>, config: &PPLCNetV4Config) -> Self {
-        assert_eq!(
-            config.stem_type, "large",
-            "only the checkpoint's large PP-LCNetV4 stem is supported"
-        );
-        let stem = LargeStem::new(&(path / "encoder" / "convolution"), config);
+        let stem_path = path / "encoder" / "convolution";
+        let stem = match config.stem_type.as_str() {
+            "large" => Stem::Large(Box::new(LargeStem::new(&stem_path, config))),
+            "small" => Stem::Small(Box::new(SmallStem::new(&stem_path, config))),
+            stem_type => panic!("unsupported PP-LCNetV4 stem type {stem_type}"),
+        };
         let blocks = config
             .block_configs
             .iter()
@@ -441,10 +640,16 @@ impl PPLCNetV4Backbone {
             stem,
             blocks,
             out_features: config.out_features.clone(),
+            num_channels: config.num_channels,
         }
     }
 
     pub(crate) fn forward(&self, pixel_values: &Tensor) -> Vec<Tensor> {
+        assert_eq!(
+            pixel_values.size().get(1).copied(),
+            Some(self.num_channels),
+            "PP-LCNetV4 input channel count does not match the configuration"
+        );
         let mut hidden_states = self.stem.forward(pixel_values);
         let mut feature_maps = Vec::new();
         if self.out_features.iter().any(|feature| feature == "stem") {
@@ -460,5 +665,25 @@ impl PPLCNetV4Backbone {
             }
         }
         feature_maps
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn derives_output_features_from_output_indices() {
+        let config: PPLCNetV4Config = serde_json::from_str(r#"{"out_indices":[1,3]}"#).unwrap();
+        assert_eq!(config.out_features, ["stage1", "stage3"]);
+        assert_eq!(config.out_indices, [1, 3]);
+    }
+
+    #[test]
+    fn rejects_inconsistent_output_features_and_indices() {
+        let config = serde_json::from_str::<PPLCNetV4Config>(
+            r#"{"out_features":["stage1"],"out_indices":[2]}"#,
+        );
+        assert!(config.is_err());
     }
 }
