@@ -1,7 +1,8 @@
 ﻿use std::num::NonZeroU32;
 
 use super::{
-    KvCacheType, LlamaAttentionType, LlamaContextParams, LlamaPoolingType, RopeScalingType,
+    KvCacheType, LlamaAttentionType, LlamaContextParams, LlamaContextType, LlamaPoolingType,
+    RopeScalingType,
 };
 
 impl LlamaContextParams {
@@ -126,6 +127,32 @@ impl LlamaContextParams {
     #[must_use]
     pub fn n_seq_max(&self) -> u32 {
         self.context_params.n_seq_max
+    }
+
+    /// Set the number of recurrent-state rollback snapshots per sequence.
+    #[must_use]
+    pub fn with_n_rs_seq(mut self, n_rs_seq: u32) -> Self {
+        self.context_params.n_rs_seq = n_rs_seq;
+        self
+    }
+
+    /// Get the number of recurrent-state rollback snapshots per sequence.
+    #[must_use]
+    pub fn n_rs_seq(&self) -> u32 {
+        self.context_params.n_rs_seq
+    }
+
+    /// Set the llama.cpp context type.
+    #[must_use]
+    pub fn with_context_type(mut self, context_type: LlamaContextType) -> Self {
+        self.context_params.ctx_type = context_type.into();
+        self
+    }
+
+    /// Get the llama.cpp context type.
+    #[must_use]
+    pub fn context_type(&self) -> LlamaContextType {
+        self.context_params.ctx_type.into()
     }
 
     /// Set the number of threads

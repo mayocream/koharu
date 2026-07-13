@@ -14,7 +14,7 @@
 //!
 //! - `cuda` enables CUDA gpu support.
 //! - `sampler` adds the [`context::sample::sampler`] struct for a more rusty way of sampling.
-use std::ffi::{CStr, CString, NulError, c_char};
+use std::ffi::{NulError, c_char};
 use std::fmt::Debug;
 use std::num::NonZeroI32;
 
@@ -33,16 +33,11 @@ mod log;
 pub mod model;
 pub mod mtmd;
 pub mod sampling;
-pub mod speculative;
 pub mod timing;
 pub mod token;
 pub mod token_type;
 
 pub use crate::context::session::LlamaStateSeqFlags;
-
-pub(crate) fn status_is_ok(status: koharu_llama_sys::llama_rs_status) -> bool {
-    status == koharu_llama_sys::LLAMA_RS_STATUS_OK
-}
 
 /// A failable result from a llama.cpp function.
 pub type Result<T> = std::result::Result<T, LlamaCppError>;
@@ -88,12 +83,6 @@ pub enum LlamaCppError {
     /// Max devices exceeded
     #[error("Max devices exceeded. Max devices is {0}")]
     MaxDevicesExceeded(usize),
-    /// Failed to convert JSON schema to grammar.
-    #[error("JsonSchemaToGrammarError: {0}")]
-    JsonSchemaToGrammarError(String),
-    /// There was an error fitting model parameters to available memory.
-    #[error("{0}")]
-    FitError(#[from] crate::model::params::FitError),
 }
 
 /// There was an error while getting the chat template from a model.
@@ -311,54 +300,6 @@ pub fn mlock_supported() -> bool {
     unsafe { koharu_llama_sys::llama_supports_mlock() }
 }
 
-/// Convert a JSON schema string into a llama.cpp grammar string.
-pub fn json_schema_to_grammar(schema_json: &str) -> Result<String> {
-    let schema_cstr = CString::new(schema_json)
-        .map_err(|err| LlamaCppError::JsonSchemaToGrammarError(err.to_string()))?;
-    let mut out = std::ptr::null_mut();
-    let rc = unsafe {
-        koharu_llama_sys::llama_rs_json_schema_to_grammar(schema_cstr.as_ptr(), false, &raw mut out)
-    };
-
-    let result = {
-        if !status_is_ok(rc) || out.is_null() {
-            return Err(LlamaCppError::JsonSchemaToGrammarError(format!(
-                "ffi error {}",
-                rc
-            )));
-        }
-        let grammar_bytes = unsafe { CStr::from_ptr(out) }.to_bytes().to_vec();
-        let grammar = String::from_utf8(grammar_bytes)
-            .map_err(|err| LlamaCppError::JsonSchemaToGrammarError(err.to_string()))?;
-        Ok(grammar)
-    };
-
-    unsafe { koharu_llama_sys::llama_rs_string_free(out) };
-    result
-}
-
-#[cfg(test)]
-mod tests {
-    use super::json_schema_to_grammar;
-
-    #[test]
-    fn json_schema_string_api_returns_grammar() {
-        let schema = r#"{
-            "type": "object",
-            "properties": {
-                "city": { "type": "string" },
-                "unit": { "enum": ["c", "f"] }
-            },
-            "required": ["city"]
-        }"#;
-
-        let grammar =
-            json_schema_to_grammar(schema).expect("string-based schema conversion should succeed");
-
-        assert!(grammar.contains("root ::="));
-    }
-}
-
 /// An error that can occur when converting a token to a string.
 #[derive(Debug, thiserror::Error, Clone)]
 #[non_exhaustive]
@@ -405,14 +346,6 @@ pub enum ApplyChatTemplateError {
     /// llama.cpp returned a null pointer for the template result.
     #[error("null result from llama.cpp")]
     NullResult,
-    /// llama.cpp returned an error code.
-    #[error("ffi error {0}")]
-    FfiError(i32),
-}
-
-/// Failed to accept a token in a sampler.
-#[derive(Debug, thiserror::Error)]
-pub enum SamplerAcceptError {
     /// llama.cpp returned an error code.
     #[error("ffi error {0}")]
     FfiError(i32),
@@ -613,12 +546,13 @@ pub fn send_logs_to_tracing(options: LogOptions) {
             .get_or_init(|| Box::new(log::State::new(log::Module::LlamaCpp, options.clone()))),
     ) as *const _;
     let ggml_heap_state = Box::as_ref(
-        log::GGML_STATE.get_or_init(|| Box::new(log::State::new(log::Module::GGML, options))),
+        log::GGML_STATE.get_or_init(|| Box::new(log::State::new(log::Module::Ggml, options))),
     ) as *const _;
 
     unsafe {
-        // GGML has to be set after llama since setting llama sets ggml as well.
+        // GGML has to be set last since both llama and the MTMD helper configure it as well.
         koharu_llama_sys::llama_log_set(Some(logs_to_trace), llama_heap_state as *mut _);
+        koharu_llama_sys::mtmd_helper_log_set(Some(logs_to_trace), llama_heap_state as *mut _);
         koharu_llama_sys::ggml_log_set(Some(logs_to_trace), ggml_heap_state as *mut _);
     }
 }

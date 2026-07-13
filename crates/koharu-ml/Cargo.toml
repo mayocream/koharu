@@ -20,7 +20,9 @@ anyhow = { workspace = true }
 clap = { workspace = true }
 image = { workspace = true }
 imageproc = { workspace = true }
+encoding_rs = { workspace = true }
 fast_image_resize = { workspace = true }
+minijinja = { workspace = true }
 rayon = { workspace = true }
 serde = { workspace = true }
 serde_json = { workspace = true }
@@ -63,4 +65,8 @@ harness = false
 
 [[bench]]
 name = "flux2_klein"
+harness = false
+
+[[bench]]
+name = "paddle_ocr_vl"
 harness = false

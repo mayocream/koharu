@@ -207,7 +207,9 @@ impl MtmdContext {
     /// Check whether non-causal attention mask is needed before `llama_decode`.
     #[must_use]
     pub fn decode_use_non_causal(&self) -> bool {
-        unsafe { koharu_llama_sys::mtmd_decode_use_non_causal(self.context.as_ptr()) }
+        unsafe {
+            koharu_llama_sys::mtmd_decode_use_non_causal(self.context.as_ptr(), std::ptr::null())
+        }
     }
 
     /// Check whether the current model uses M-RoPE for `llama_decode`.
@@ -235,7 +237,7 @@ impl MtmdContext {
     /// Returns None if audio is not supported.
     #[must_use]
     pub fn get_audio_sample_rate(&self) -> Option<u32> {
-        let rate = unsafe { koharu_llama_sys::mtmd_get_audio_bitrate(self.context.as_ptr()) };
+        let rate = unsafe { koharu_llama_sys::mtmd_get_audio_sample_rate(self.context.as_ptr()) };
         (rate > 0).then_some(rate.unsigned_abs())
     }
 
@@ -289,6 +291,7 @@ impl MtmdContext {
         let text_cstring = CString::new(text.text)?;
         let input_text = koharu_llama_sys::mtmd_input_text {
             text: text_cstring.as_ptr(),
+            text_len: text_cstring.as_bytes().len(),
             add_special: text.add_special,
             parse_special: text.parse_special,
         };
@@ -472,17 +475,27 @@ impl MtmdBitmap {
     pub fn from_file(
         ctx: &MtmdContext,
         path: &str,
-        _placeholder: bool,
+        placeholder: bool,
     ) -> Result<Self, MtmdBitmapError> {
         let path_cstr = CString::new(path)?;
-        let bitmap = unsafe {
+        let wrapper = unsafe {
             koharu_llama_sys::mtmd_helper_bitmap_init_from_file(
                 ctx.context.as_ptr(),
                 path_cstr.as_ptr(),
+                placeholder,
             )
         };
 
-        let bitmap = NonNull::new(bitmap).ok_or(MtmdBitmapError::NullResult)?;
+        if !wrapper.video_ctx.is_null() {
+            unsafe {
+                if !wrapper.bitmap.is_null() {
+                    koharu_llama_sys::mtmd_bitmap_free(wrapper.bitmap);
+                }
+                koharu_llama_sys::mtmd_helper_video_free(wrapper.video_ctx);
+            }
+            return Err(MtmdBitmapError::NullResult);
+        }
+        let bitmap = NonNull::new(wrapper.bitmap).ok_or(MtmdBitmapError::NullResult)?;
         Ok(Self { bitmap })
     }
 
@@ -514,17 +527,27 @@ impl MtmdBitmap {
     pub fn from_buffer(
         ctx: &MtmdContext,
         data: &[u8],
-        _placeholder: bool,
+        placeholder: bool,
     ) -> Result<Self, MtmdBitmapError> {
-        let bitmap = unsafe {
+        let wrapper = unsafe {
             koharu_llama_sys::mtmd_helper_bitmap_init_from_buf(
                 ctx.context.as_ptr(),
                 data.as_ptr(),
                 data.len(),
+                placeholder,
             )
         };
 
-        let bitmap = NonNull::new(bitmap).ok_or(MtmdBitmapError::NullResult)?;
+        if !wrapper.video_ctx.is_null() {
+            unsafe {
+                if !wrapper.bitmap.is_null() {
+                    koharu_llama_sys::mtmd_bitmap_free(wrapper.bitmap);
+                }
+                koharu_llama_sys::mtmd_helper_video_free(wrapper.video_ctx);
+            }
+            return Err(MtmdBitmapError::NullResult);
+        }
+        let bitmap = NonNull::new(wrapper.bitmap).ok_or(MtmdBitmapError::NullResult)?;
         Ok(Self { bitmap })
     }
 

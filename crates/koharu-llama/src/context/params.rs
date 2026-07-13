@@ -122,6 +122,37 @@ impl From<LlamaAttentionType> for i32 {
     }
 }
 
+/// A rusty wrapper around `llama_context_type`.
+#[derive(Copy, Clone, Debug, PartialEq, Eq)]
+pub enum LlamaContextType {
+    /// Default decoder context.
+    Default,
+    /// Multi-token-prediction draft context.
+    Mtp,
+    /// Unknown context type from a newer llama.cpp.
+    Unknown(koharu_llama_sys::llama_context_type),
+}
+
+impl From<koharu_llama_sys::llama_context_type> for LlamaContextType {
+    fn from(value: koharu_llama_sys::llama_context_type) -> Self {
+        match value {
+            x if x == koharu_llama_sys::LLAMA_CONTEXT_TYPE_DEFAULT => Self::Default,
+            x if x == koharu_llama_sys::LLAMA_CONTEXT_TYPE_MTP => Self::Mtp,
+            x => Self::Unknown(x),
+        }
+    }
+}
+
+impl From<LlamaContextType> for koharu_llama_sys::llama_context_type {
+    fn from(value: LlamaContextType) -> Self {
+        match value {
+            LlamaContextType::Default => koharu_llama_sys::LLAMA_CONTEXT_TYPE_DEFAULT,
+            LlamaContextType::Mtp => koharu_llama_sys::LLAMA_CONTEXT_TYPE_MTP,
+            LlamaContextType::Unknown(raw) => raw,
+        }
+    }
+}
+
 /// A rusty wrapper around `ggml_type` for KV cache types.
 #[allow(non_camel_case_types, missing_docs)]
 #[derive(Copy, Clone, Debug, PartialEq, Eq)]

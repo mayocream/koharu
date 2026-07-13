@@ -196,6 +196,18 @@ impl LlamaModel {
         LlamaToken(token)
     }
 
+    /// Returns whether this model has an encoder graph.
+    #[must_use]
+    pub fn has_encoder(&self) -> bool {
+        unsafe { koharu_llama_sys::llama_model_has_encoder(self.model.as_ptr()) }
+    }
+
+    /// Returns whether this model has a decoder graph.
+    #[must_use]
+    pub fn has_decoder(&self) -> bool {
+        unsafe { koharu_llama_sys::llama_model_has_decoder(self.model.as_ptr()) }
+    }
+
     /// Get the separator token (SEP).
     #[must_use]
     pub fn token_sep(&self) -> LlamaToken {
@@ -813,6 +825,29 @@ impl LlamaModel {
         };
         let context = NonNull::new(context).ok_or(LlamaContextLoadError::NullReturn)?;
 
+        Ok(LlamaContext::new(self, context, params.embeddings()))
+    }
+
+    /// Create a new context bound to another context via llama.cpp's `ctx_other` field.
+    ///
+    /// This is required for MTP speculative decoding when the draft context shares target state.
+    ///
+    /// # Errors
+    ///
+    /// See [`LlamaContextLoadError`].
+    #[allow(clippy::needless_pass_by_value)]
+    pub fn new_context_with_ctx_other<'a>(
+        &'a self,
+        _: &LlamaBackend,
+        params: LlamaContextParams,
+        ctx_other: &LlamaContext<'_>,
+    ) -> Result<LlamaContext<'a>, LlamaContextLoadError> {
+        let mut context_params = params.context_params;
+        context_params.ctx_other = ctx_other.context.as_ptr();
+        let context = unsafe {
+            koharu_llama_sys::llama_new_context_with_model(self.model.as_ptr(), context_params)
+        };
+        let context = NonNull::new(context).ok_or(LlamaContextLoadError::NullReturn)?;
         Ok(LlamaContext::new(self, context, params.embeddings()))
     }
 

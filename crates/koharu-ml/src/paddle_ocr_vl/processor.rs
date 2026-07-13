@@ -1,18 +1,20 @@
-//! Transformers-compatible PaddleOCR-VL image and text processing.
+//! PaddleOCR-VL 1.6 prompt and image processing.
 //!
-//! Original implementations:
-//! https://github.com/huggingface/transformers/blob/63f32a8782cb70da3365acab16f2b67947737985/src/transformers/models/paddleocr_vl/image_processing_paddleocr_vl.py
-//! https://github.com/huggingface/transformers/blob/63f32a8782cb70da3365acab16f2b67947737985/src/transformers/models/paddleocr_vl/processing_paddleocr_vl.py
+//! Official llama.cpp usage:
+//! https://huggingface.co/PaddlePaddle/PaddleOCR-VL-1.6-GGUF/blob/511b09642bb324401f15f97cc23bc67e8f0a291d/README.md
 
-use std::path::Path;
-
-use anyhow::{Context, Result, bail, ensure};
+use anyhow::{Context, Result, ensure};
 use image::DynamicImage;
-use koharu_torch::{Device, Kind, Tensor};
+use koharu_llama::{model::LlamaModel, mtmd::MtmdBitmap};
+use minijinja::{Environment, context};
 use serde::{Deserialize, Serialize};
-use tokenizers::Tokenizer;
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+const CHAT_TEMPLATE_NAME: &str = "paddle_ocr_vl";
+const REPEAT_MAX_UNIT_CHARS: usize = 12;
+const REPEAT_MIN_REPETITIONS: usize = 4;
+const REPEAT_MIN_TOTAL_CHARS: usize = 12;
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 pub enum PaddleOCRVLTask {
     Ocr,
     Table,
@@ -35,231 +37,121 @@ impl PaddleOCRVLTask {
     }
 }
 
-#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct PaddleOCRVLResult {
     pub text: String,
 }
 
-#[derive(Debug, Clone, Deserialize)]
-#[serde(default)]
-pub struct PaddleOCRVLImageProcessor {
-    pub do_convert_rgb: bool,
-    pub do_normalize: bool,
-    pub do_rescale: bool,
-    pub do_resize: bool,
-    pub image_mean: Vec<f32>,
-    pub image_std: Vec<f32>,
-    pub max_pixels: i64,
-    pub min_pixels: i64,
-    pub merge_size: i64,
-    pub patch_size: i64,
-    pub rescale_factor: f64,
-    pub resample: i64,
-    pub temporal_patch_size: i64,
-}
-
-impl Default for PaddleOCRVLImageProcessor {
-    fn default() -> Self {
-        Self {
-            do_convert_rgb: true,
-            do_normalize: true,
-            do_rescale: true,
-            do_resize: true,
-            image_mean: vec![0.5, 0.5, 0.5],
-            image_std: vec![0.5, 0.5, 0.5],
-            max_pixels: 1_003_520,
-            min_pixels: 112_896,
-            merge_size: 2,
-            patch_size: 14,
-            rescale_factor: 1.0 / 255.0,
-            resample: 3,
-            temporal_patch_size: 1,
-        }
-    }
-}
-
 #[derive(Debug)]
-pub(crate) struct Processor {
-    image_processor: PaddleOCRVLImageProcessor,
-    tokenizer: Tokenizer,
-    image_token_id: i64,
+pub(super) struct Processor {
+    environment: Environment<'static>,
+    bos_token: String,
+    eos_token: String,
+}
+
+#[derive(Debug, Serialize)]
+struct PromptMessage {
+    role: &'static str,
+    content: [PromptContent; 2],
+}
+
+#[derive(Debug, Serialize)]
+#[serde(tag = "type", rename_all = "snake_case")]
+enum PromptContent {
+    Image,
+    Text { text: &'static str },
 }
 
 impl Processor {
-    pub(crate) fn from_files(
-        processor_path: impl AsRef<Path>,
-        tokenizer_path: impl AsRef<Path>,
-        image_token_id: i64,
-    ) -> Result<Self> {
-        let processor_path = processor_path.as_ref();
-        let tokenizer_path = tokenizer_path.as_ref();
-        let image_processor = serde_json::from_str(&std::fs::read_to_string(processor_path)?)
-            .with_context(|| format!("failed to parse {}", processor_path.display()))?;
-        let tokenizer = Tokenizer::from_file(tokenizer_path)
-            .map_err(|error| anyhow::anyhow!(error.to_string()))
-            .with_context(|| format!("failed to parse {}", tokenizer_path.display()))?;
+    pub(super) fn new(model: &LlamaModel, chat_template: String) -> Result<Self> {
+        let mut environment = Environment::new();
+        environment
+            .add_template_owned(CHAT_TEMPLATE_NAME, chat_template)
+            .map_err(anyhow::Error::msg)
+            .context("failed to parse PaddleOCR-VL chat template")?;
         Ok(Self {
-            image_processor,
-            tokenizer,
-            image_token_id,
+            environment,
+            bos_token: token_text(model, model.token_bos())
+                .context("failed to decode PaddleOCR-VL BOS token")?,
+            eos_token: token_text(model, model.token_eos())
+                .context("failed to decode PaddleOCR-VL EOS token")?,
         })
     }
 
-    pub(crate) fn preprocess(
-        &self,
-        image: &DynamicImage,
-        task: PaddleOCRVLTask,
-        device: Device,
-    ) -> Result<(Tensor, [i64; 3])> {
+    pub(super) fn bitmap(&self, image: &DynamicImage) -> Result<MtmdBitmap> {
         ensure!(
             image.width() > 0 && image.height() > 0,
             "image dimensions must be non-zero"
         );
-        let image =
-            if task == PaddleOCRVLTask::Spotting && image.width() < 1500 && image.height() < 1500 {
-                image.resize_exact(
-                    image.width() * 2,
-                    image.height() * 2,
-                    image::imageops::FilterType::Lanczos3,
-                )
-            } else {
-                image.clone()
-            };
         let rgb = image.to_rgb8();
-        let max_pixels = if task == PaddleOCRVLTask::Spotting {
-            2048 * 28 * 28
-        } else {
-            self.image_processor.max_pixels
-        };
-        let (height, width) = smart_resize(
-            i64::from(rgb.height()),
-            i64::from(rgb.width()),
-            self.image_processor.patch_size * self.image_processor.merge_size,
-            self.image_processor.min_pixels,
-            max_pixels,
-        )?;
-
-        let mut pixels = Tensor::from_slice(rgb.as_raw())
-            .view([1, i64::from(rgb.height()), i64::from(rgb.width()), 3])
-            .permute([0, 3, 1, 2])
-            .to_device(device);
-        if self.image_processor.do_resize {
-            if self.image_processor.resample != 3 {
-                bail!("PaddleOCR-VL only supports Transformers' bicubic resampling mode");
-            }
-            // Transformers' compile-friendly uint8 resize uses this float
-            // round-trip; the native Torch CUDA operator does not accept byte
-            // tensors directly.
-            pixels = (pixels.to_kind(Kind::Float) / 256.0).internal_upsample_bicubic2d_aa(
-                [height, width],
-                false,
-                None::<f64>,
-                None::<f64>,
-            ) * 256.0;
-            pixels = pixels.clamp(0.0, 255.0).round();
-        }
-        pixels = pixels.to_kind(Kind::Float);
-        if self.image_processor.do_rescale {
-            pixels *= self.image_processor.rescale_factor;
-        }
-        if self.image_processor.do_normalize {
-            ensure!(
-                self.image_processor.image_mean.len() == 3
-                    && self.image_processor.image_std.len() == 3,
-                "PaddleOCR-VL image_mean and image_std must contain three values"
-            );
-            let mean = Tensor::from_slice(&self.image_processor.image_mean)
-                .view([1, 3, 1, 1])
-                .to_device(device);
-            let std = Tensor::from_slice(&self.image_processor.image_std)
-                .view([1, 3, 1, 1])
-                .to_device(device);
-            pixels = (pixels - mean) / std;
-        }
-
-        let grid_t = 1;
-        let grid_h = height / self.image_processor.patch_size;
-        let grid_w = width / self.image_processor.patch_size;
-        let patch = self.image_processor.patch_size;
-        let pixel_values = pixels
-            .view(&[1, grid_t, 3, grid_h, patch, grid_w, patch][..])
-            .permute([0, 1, 3, 5, 2, 4, 6])
-            .reshape([grid_t * grid_h * grid_w, 3, patch, patch]);
-
-        Ok((pixel_values, [grid_t, grid_h, grid_w]))
+        let (width, height) = rgb.dimensions();
+        MtmdBitmap::from_image_data(width, height, &rgb.into_raw())
+            .context("failed to create MTMD bitmap from image")
     }
 
-    pub(crate) fn encode_prompt(
-        &self,
-        task: PaddleOCRVLTask,
-        grid: [i64; 3],
-    ) -> Result<(Vec<i64>, Vec<i64>)> {
-        let image_tokens = grid.into_iter().product::<i64>()
-            / (self.image_processor.merge_size * self.image_processor.merge_size);
-        let prompt = format!(
-            "<|begin_of_sentence|>User: <|IMAGE_START|>{}<|IMAGE_END|>{}\nAssistant:\n",
-            "<|IMAGE_PLACEHOLDER|>".repeat(image_tokens as usize),
-            task.prompt(),
-        );
-        let encoding = self
-            .tokenizer
-            .encode(prompt, false)
-            .map_err(|error| anyhow::anyhow!(error.to_string()))?;
-        let input_ids = encoding
-            .get_ids()
-            .iter()
-            .map(|&id| i64::from(id))
-            .collect::<Vec<_>>();
-        let mm_token_type_ids = input_ids
-            .iter()
-            .map(|&id| i64::from(id == self.image_token_id))
-            .collect();
-        Ok((input_ids, mm_token_type_ids))
-    }
-
-    pub(crate) fn decode(&self, token_ids: &[i64]) -> Result<PaddleOCRVLResult> {
-        let token_ids = token_ids
-            .iter()
-            .map(|&id| u32::try_from(id))
-            .collect::<std::result::Result<Vec<_>, _>>()?;
-        let text = self
-            .tokenizer
-            .decode(&token_ids, false)
-            .map_err(|error| anyhow::anyhow!(error.to_string()))?;
-        Ok(PaddleOCRVLResult { text })
+    pub(super) fn render_prompt(&self, task: PaddleOCRVLTask) -> Result<String> {
+        let template = self
+            .environment
+            .get_template(CHAT_TEMPLATE_NAME)
+            .map_err(anyhow::Error::msg)
+            .context("PaddleOCR-VL chat template is unavailable")?;
+        template
+            .render(context! {
+                messages => [PromptMessage {
+                    role: "user",
+                    content: [
+                        PromptContent::Image,
+                        PromptContent::Text { text: task.prompt() },
+                    ],
+                }],
+                bos_token => self.bos_token.as_str(),
+                cls_token => self.bos_token.as_str(),
+                eos_token => self.eos_token.as_str(),
+                add_generation_prompt => true,
+            })
+            .map_err(anyhow::Error::msg)
+            .context("failed to render PaddleOCR-VL chat template")
     }
 }
 
-fn smart_resize(
-    mut height: i64,
-    mut width: i64,
-    factor: i64,
-    min_pixels: i64,
-    max_pixels: i64,
-) -> Result<(i64, i64)> {
-    if height < factor {
-        width = (width as f64 * factor as f64 / height as f64).round_ties_even() as i64;
-        height = factor;
+pub(super) fn repeated_suffix_start(text: &str) -> Option<usize> {
+    let chars = text
+        .char_indices()
+        .filter(|(_, character)| !character.is_whitespace())
+        .collect::<Vec<_>>();
+    let length = chars.len();
+    if length < REPEAT_MIN_TOTAL_CHARS {
+        return None;
     }
-    if width < factor {
-        height = (height as f64 * factor as f64 / width as f64).round_ties_even() as i64;
-        width = factor;
+
+    let max_unit = REPEAT_MAX_UNIT_CHARS.min(length / REPEAT_MIN_REPETITIONS);
+    for unit_length in 1..=max_unit {
+        let unit = &chars[length - unit_length..];
+        let mut repetitions = 1;
+        while length >= unit_length * (repetitions + 1) {
+            let start = length - unit_length * (repetitions + 1);
+            if chars[start..start + unit_length]
+                .iter()
+                .map(|(_, character)| *character)
+                .eq(unit.iter().map(|(_, character)| *character))
+            {
+                repetitions += 1;
+            } else {
+                break;
+            }
+        }
+        if repetitions >= REPEAT_MIN_REPETITIONS
+            && repetitions * unit_length >= REPEAT_MIN_TOTAL_CHARS
+        {
+            return Some(chars[length - repetitions * unit_length].0);
+        }
     }
-    ensure!(
-        height.max(width) as f64 / height.min(width) as f64 <= 200.0,
-        "absolute aspect ratio must be smaller than 200"
-    );
-    let mut resized_height = ((height as f64 / factor as f64).round_ties_even() as i64) * factor;
-    let mut resized_width = ((width as f64 / factor as f64).round_ties_even() as i64) * factor;
-    if resized_height * resized_width > max_pixels {
-        let beta = ((height * width) as f64 / max_pixels as f64).sqrt();
-        resized_height =
-            factor.max(((height as f64 / beta / factor as f64).floor() as i64) * factor);
-        resized_width = factor.max(((width as f64 / beta / factor as f64).floor() as i64) * factor);
-    } else if resized_height * resized_width < min_pixels {
-        let beta = (min_pixels as f64 / (height * width) as f64).sqrt();
-        resized_height = ((height as f64 * beta / factor as f64).ceil() as i64) * factor;
-        resized_width = ((width as f64 * beta / factor as f64).ceil() as i64) * factor;
-    }
-    Ok((resized_height, resized_width))
+    None
+}
+
+fn token_text(model: &LlamaModel, token: koharu_llama::token::LlamaToken) -> Result<String> {
+    let mut decoder = encoding_rs::UTF_8.new_decoder();
+    model
+        .token_to_piece(token, &mut decoder, true, None)
+        .map_err(Into::into)
 }

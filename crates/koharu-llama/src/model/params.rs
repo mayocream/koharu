@@ -1,7 +1,6 @@
 //! A safe wrapper around `llama_model_params`.
 
 use crate::LlamaCppError;
-use crate::context::params::LlamaContextParams;
 use crate::model::params::kv_overrides::KvOverrides;
 use std::ffi::{CStr, c_char, c_void};
 use std::fmt::{Debug, Formatter};
@@ -9,24 +8,6 @@ use std::pin::Pin;
 use std::ptr::null;
 
 pub mod kv_overrides;
-
-/// Result of [`LlamaModelParams::fit_params`], containing the fitted context size.
-#[derive(Debug, Clone)]
-pub struct FitResult {
-    /// The context size after fitting (may have been reduced from the requested value).
-    pub n_ctx: u32,
-}
-
-/// Error returned by [`LlamaModelParams::fit_params`].
-#[derive(Debug, Clone, Copy, PartialEq, Eq, thiserror::Error)]
-pub enum FitError {
-    /// Could not find allocations that are projected to fit available memory.
-    #[error("could not find allocations that fit available memory")]
-    Failure,
-    /// A hard error occurred during fitting (e.g. model not found at the specified path).
-    #[error("hard error during parameter fitting")]
-    Error,
-}
 
 #[allow(clippy::cast_possible_wrap)]
 #[allow(clippy::cast_possible_truncation)]
@@ -39,6 +20,8 @@ const LLAMA_SPLIT_MODE_LAYER: i8 = koharu_llama_sys::LLAMA_SPLIT_MODE_LAYER as i
 const LLAMA_SPLIT_MODE_ROW: i8 = koharu_llama_sys::LLAMA_SPLIT_MODE_ROW as i8;
 #[allow(clippy::cast_possible_wrap)]
 #[allow(clippy::cast_possible_truncation)]
+const LLAMA_SPLIT_MODE_TENSOR: i8 = koharu_llama_sys::LLAMA_SPLIT_MODE_TENSOR as i8;
+
 /// A rusty wrapper around `llama_split_mode`.
 #[repr(i8)]
 #[derive(Copy, Clone, Debug, PartialEq, Eq)]
@@ -49,6 +32,8 @@ pub enum LlamaSplitMode {
     Layer = LLAMA_SPLIT_MODE_LAYER,
     /// Split layers and KV across GPUs, use tensor parallelism if supported
     Row = LLAMA_SPLIT_MODE_ROW,
+    /// Experimental tensor parallelism across GPUs
+    Tensor = LLAMA_SPLIT_MODE_TENSOR,
 }
 
 /// An error that occurs when unknown split mode is encountered.
@@ -70,6 +55,7 @@ impl TryFrom<i32> for LlamaSplitMode {
             LLAMA_SPLIT_MODE_NONE => Ok(Self::None),
             LLAMA_SPLIT_MODE_LAYER => Ok(Self::Layer),
             LLAMA_SPLIT_MODE_ROW => Ok(Self::Row),
+            LLAMA_SPLIT_MODE_TENSOR => Ok(Self::Tensor),
             _ => Err(LlamaSplitModeParseError(value)),
         }
     }
@@ -90,6 +76,7 @@ impl TryFrom<u32> for LlamaSplitMode {
             LLAMA_SPLIT_MODE_NONE => Ok(Self::None),
             LLAMA_SPLIT_MODE_LAYER => Ok(Self::Layer),
             LLAMA_SPLIT_MODE_ROW => Ok(Self::Row),
+            LLAMA_SPLIT_MODE_TENSOR => Ok(Self::Tensor),
             _ => Err(LlamaSplitModeParseError(
                 value.try_into().unwrap_or(i32::MAX),
             )),
@@ -104,6 +91,7 @@ impl From<LlamaSplitMode> for i32 {
             LlamaSplitMode::None => LLAMA_SPLIT_MODE_NONE.into(),
             LlamaSplitMode::Layer => LLAMA_SPLIT_MODE_LAYER.into(),
             LlamaSplitMode::Row => LLAMA_SPLIT_MODE_ROW.into(),
+            LlamaSplitMode::Tensor => LLAMA_SPLIT_MODE_TENSOR.into(),
         }
     }
 }
@@ -115,6 +103,7 @@ impl From<LlamaSplitMode> for u32 {
             LlamaSplitMode::None => LLAMA_SPLIT_MODE_NONE as u32,
             LlamaSplitMode::Layer => LLAMA_SPLIT_MODE_LAYER as u32,
             LlamaSplitMode::Row => LLAMA_SPLIT_MODE_ROW as u32,
+            LlamaSplitMode::Tensor => LLAMA_SPLIT_MODE_TENSOR as u32,
         }
     }
 }
@@ -139,7 +128,6 @@ pub struct LlamaModelParams {
     kv_overrides: Vec<koharu_llama_sys::llama_model_kv_override>,
     buft_overrides: Vec<koharu_llama_sys::llama_model_tensor_buft_override>,
     devices: Pin<Box<[koharu_llama_sys::ggml_backend_dev_t; LLAMA_CPP_MAX_DEVICES]>>,
-    tensor_split: Vec<f32>,
     progress_callback: Option<Box<dyn FnMut(f32) -> bool>>,
 }
 
@@ -155,66 +143,6 @@ impl Debug for LlamaModelParams {
             .field("devices", &self.devices)
             .field("kv_overrides", &"vec of kv_overrides")
             .finish()
-    }
-}
-
-impl LlamaModelParams {
-    /// Automatically fit model parameters to available device memory.
-    ///
-    /// Wraps llama.cpp's `llama_params_fit`, which determines optimal `n_gpu_layers`,
-    /// `tensor_split`, and `tensor_buft_overrides` based on available memory. On success
-    /// the model and context params are updated in place.
-    pub fn fit_params(
-        mut self: Pin<&mut Self>,
-        model_path: &CStr,
-        cparams: &mut LlamaContextParams,
-        margins: &mut [usize],
-        n_ctx_min: u32,
-        log_level: koharu_llama_sys::ggml_log_level,
-    ) -> Result<FitResult, FitError> {
-        let max_devices = unsafe { koharu_llama_sys::llama_max_devices() };
-        let max_buft = unsafe { koharu_llama_sys::llama_max_tensor_buft_overrides() };
-
-        self.tensor_split.clear();
-        self.tensor_split.resize(max_devices, 0.0);
-
-        self.buft_overrides.clear();
-        self.buft_overrides.resize(
-            max_buft + 1,
-            koharu_llama_sys::llama_model_tensor_buft_override {
-                pattern: std::ptr::null(),
-                buft: std::ptr::null_mut(),
-            },
-        );
-
-        self.params.tensor_split = null::<f32>();
-        self.params.tensor_buft_overrides = null();
-
-        let status = unsafe {
-            koharu_llama_sys::llama_params_fit(
-                model_path.as_ptr(),
-                &raw mut self.params,
-                &raw mut cparams.context_params,
-                self.tensor_split.as_mut_ptr(),
-                self.buft_overrides.as_mut_ptr(),
-                margins.as_mut_ptr(),
-                n_ctx_min,
-                log_level,
-            )
-        };
-
-        match status {
-            koharu_llama_sys::LLAMA_PARAMS_FIT_STATUS_SUCCESS => {}
-            koharu_llama_sys::LLAMA_PARAMS_FIT_STATUS_FAILURE => return Err(FitError::Failure),
-            _ => return Err(FitError::Error),
-        }
-
-        self.params.tensor_split = self.tensor_split.as_ptr();
-        self.params.tensor_buft_overrides = self.buft_overrides.as_ptr();
-
-        Ok(FitResult {
-            n_ctx: cparams.context_params.n_ctx,
-        })
     }
 }
 
@@ -342,25 +270,18 @@ impl LlamaModelParams {
     /// parameters, in order.
     ///
     /// This is the read-only counterpart to [`add_cpu_buft_override`](Self::add_cpu_buft_override)
-    /// and [`add_cpu_moe_override`](Self::add_cpu_moe_override). After
-    /// [`fit_params`](Self::fit_params) it reflects the overrides the auto-fit chose â€” for example
-    /// the routed-expert tensors (`blk.<N>.ffn_(up|down|gate_up|gate)_(ch|)exps`) a
-    /// mixture-of-experts fit assigns to the CPU buffer type to make the model fit. Returns an empty
-    /// vector when no overrides are set. The trailing null-terminator entry the override list
-    /// carries is skipped; only entries with a non-null pattern are returned.
+    /// and [`add_cpu_moe_override`](Self::add_cpu_moe_override). Returns an empty vector when no
+    /// overrides are set. The trailing null-terminator entry the override list carries is skipped;
+    /// only entries with a non-null pattern are returned.
     #[must_use]
     pub fn tensor_buft_override_patterns(&self) -> Vec<String> {
         self.buft_overrides
             .iter()
             .filter(|o| !o.pattern.is_null())
             .map(|o| {
-                // SAFETY: a non-null `pattern` is a NUL-terminated C string. For fit-produced
-                // overrides it points into process-lifetime function-local `static` storage in
-                // llama.cpp's `common/fit.cpp`, so it is always valid to read here. For overrides set
-                // via `add_cpu_buft_override` the pointer is borrowed from the caller's `&CStr` with
-                // no lifetime tie recorded on the params, so that setter's callers are responsible
-                // for keeping the string alive at least as long as the params; every in-tree caller
-                // passes a `'static` literal. In both cases the string outlives this `&self` borrow.
+                // SAFETY: the setter accepts a NUL-terminated `CStr`. Its callers must keep that
+                // string alive for at least as long as these params; every in-tree caller passes a
+                // static literal.
                 unsafe { CStr::from_ptr(o.pattern) }
                     .to_string_lossy()
                     .into_owned()
@@ -594,7 +515,6 @@ impl Default for LlamaModelParams {
                 buft: std::ptr::null_mut(),
             }],
             devices: Box::pin([std::ptr::null_mut(); 16]),
-            tensor_split: Vec::new(),
             progress_callback: None,
         }
     }
@@ -618,9 +538,7 @@ mod tests {
     #[test]
     fn tensor_buft_override_patterns_reads_back_added_override() {
         // The getter is the read-only counterpart to the setter: the override added is reported and
-        // the trailing null terminator is skipped. This mirrors how `fit_params` populates the same
-        // buffer for the auto-fit's MoE expert offload (`add_cpu_moe_override` uses the same expert
-        // tensor pattern shape the fit emits).
+        // the trailing null terminator is skipped.
         let mut params = pin!(LlamaModelParams::default());
         params.as_mut().add_cpu_moe_override();
         assert_eq!(

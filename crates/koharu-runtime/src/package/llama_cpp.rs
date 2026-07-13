@@ -19,7 +19,7 @@ use crate::{
 };
 
 const REPO: &str = "ggml-org/llama.cpp";
-const TAG: &str = "b9938";
+const TAG: &str = "b9982";
 
 static LLAMA_CPP_ROOT: LazyLock<PathBuf> = LazyLock::new(|| STORE_DIR.join("llama.cpp").join(TAG));
 
@@ -27,53 +27,53 @@ static LLAMA_CPP_ROOT: LazyLock<PathBuf> = LazyLock::new(|| STORE_DIR.join("llam
 #[strum(serialize_all = "kebab-case")]
 pub enum LlamaCpp {
     #[strum(props(
-        dylibs = "libomp140.x86_64.dll,ggml-base.dll,ggml.dll,ggml-cpu-x64.dll,llama.dll,llama-common.dll,mtmd.dll"
+        dylibs = "libomp140.x86_64.dll,ggml-base.dll,ggml.dll,ggml-cpu-x64.dll,llama.dll,mtmd.dll"
     ))]
     WindowsX64Cpu,
     #[strum(props(
-        dylibs = "libomp140.aarch64.dll,ggml-base.dll,ggml.dll,ggml-cpu.dll,llama.dll,llama-common.dll,mtmd.dll"
+        dylibs = "libomp140.aarch64.dll,ggml-base.dll,ggml.dll,ggml-cpu.dll,llama.dll,mtmd.dll"
     ))]
     WindowsArm64Cpu,
     #[strum(
         serialize = "windows-x64-cuda-12.4",
         props(
-            dylibs = "libomp140.x86_64.dll,ggml-base.dll,ggml.dll,ggml-cpu-x64.dll,ggml-cuda.dll,llama.dll,llama-common.dll,mtmd.dll"
+            dylibs = "libomp140.x86_64.dll,ggml-base.dll,ggml.dll,ggml-cpu-x64.dll,ggml-cuda.dll,llama.dll,mtmd.dll"
         )
     )]
     WindowsX64Cuda124,
     #[strum(
         serialize = "windows-x64-cuda-13.3",
         props(
-            dylibs = "libomp140.x86_64.dll,ggml-base.dll,ggml.dll,ggml-cpu-x64.dll,ggml-cuda.dll,llama.dll,llama-common.dll,mtmd.dll"
+            dylibs = "libomp140.x86_64.dll,ggml-base.dll,ggml.dll,ggml-cpu-x64.dll,ggml-cuda.dll,llama.dll,mtmd.dll"
         )
     )]
     WindowsX64Cuda133,
     #[strum(props(
-        dylibs = "libomp140.x86_64.dll,ggml-base.dll,ggml.dll,ggml-cpu-x64.dll,ggml-vulkan.dll,llama.dll,llama-common.dll,mtmd.dll"
+        dylibs = "libomp140.x86_64.dll,ggml-base.dll,ggml.dll,ggml-cpu-x64.dll,ggml-vulkan.dll,llama.dll,mtmd.dll"
     ))]
     WindowsX64Vulkan,
     #[strum(props(
-        dylibs = "libggml-base.so,libggml.so,libggml-cpu-x64.so,libllama.so,libllama-common.so,libmtmd.so"
+        dylibs = "libggml-base.so,libggml.so,libggml-cpu-x64.so,libllama.so,libmtmd.so"
     ))]
     LinuxX64Cpu,
     #[strum(props(
-        dylibs = "libggml-base.so,libggml.so,libggml-cpu-armv8.0_1.so,libllama.so,libllama-common.so,libmtmd.so"
+        dylibs = "libggml-base.so,libggml.so,libggml-cpu-armv8.0_1.so,libllama.so,libmtmd.so"
     ))]
     LinuxArm64Cpu,
     #[strum(props(
-        dylibs = "libggml-base.so,libggml.so,libggml-cpu-x64.so,libggml-vulkan.so,libllama.so,libllama-common.so,libmtmd.so"
+        dylibs = "libggml-base.so,libggml.so,libggml-cpu-x64.so,libggml-vulkan.so,libllama.so,libmtmd.so"
     ))]
     LinuxX64Vulkan,
     #[strum(props(
-        dylibs = "libggml-base.so,libggml.so,libggml-cpu-armv8.0_1.so,libggml-vulkan.so,libllama.so,libllama-common.so,libmtmd.so"
+        dylibs = "libggml-base.so,libggml.so,libggml-cpu-armv8.0_1.so,libggml-vulkan.so,libllama.so,libmtmd.so"
     ))]
     LinuxArm64Vulkan,
     #[strum(props(
-        dylibs = "libggml-base.dylib,libggml.dylib,libggml-cpu.dylib,libggml-blas.dylib,libggml-metal.dylib,libllama.dylib,libllama-common.dylib,libmtmd.dylib"
+        dylibs = "libggml-base.dylib,libggml.dylib,libggml-cpu.dylib,libggml-blas.dylib,libggml-metal.dylib,libllama.dylib,libmtmd.dylib"
     ))]
     MacosX64,
     #[strum(props(
-        dylibs = "libggml-base.dylib,libggml.dylib,libggml-cpu.dylib,libggml-blas.dylib,libggml-metal.dylib,libllama.dylib,libllama-common.dylib,libmtmd.dylib"
+        dylibs = "libggml-base.dylib,libggml.dylib,libggml-cpu.dylib,libggml-blas.dylib,libggml-metal.dylib,libllama.dylib,libmtmd.dylib"
     ))]
     MacosArm64,
 }
