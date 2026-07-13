@@ -11,6 +11,7 @@ use tokio::sync::OnceCell;
 
 mod device;
 
+pub mod aot_inpainting;
 pub mod comic_text_bubble_detector;
 pub mod comic_text_detector;
 pub mod flux2_klein;

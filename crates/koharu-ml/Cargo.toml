@@ -48,6 +48,10 @@ name = "pp_ocr_v6_rec"
 harness = false
 
 [[bench]]
+name = "aot_inpainting"
+harness = false
+
+[[bench]]
 name = "lama"
 harness = false
 
