@@ -70,3 +70,7 @@ harness = false
 [[bench]]
 name = "paddle_ocr_vl"
 harness = false
+
+[[bench]]
+name = "manga_ocr"
+harness = false
