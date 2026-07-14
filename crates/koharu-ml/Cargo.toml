@@ -13,7 +13,7 @@ publish.workspace = true
 
 [dependencies]
 koharu-diffusion = { workspace = true }
-koharu-llama = { workspace = true }
+koharu-llama = { workspace = true, features = ["llguidance"] }
 koharu-runtime = { workspace = true }
 koharu-torch = { workspace = true }
 anyhow = { workspace = true }
@@ -25,6 +25,7 @@ encoding_rs = { workspace = true }
 fast_image_resize = { workspace = true }
 minijinja = { workspace = true }
 rayon = { workspace = true }
+schemars = { workspace = true }
 serde = { workspace = true }
 serde_json = { workspace = true }
 tokio = { workspace = true }

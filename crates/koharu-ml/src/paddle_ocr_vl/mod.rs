@@ -1,15 +1,17 @@
 //! PaddleOCR-VL 1.6 element recognition through llama.cpp and MTMD.
 
-mod model;
 mod processor;
 
-use anyhow::{Context, Result};
+use crate::llm::{GenerationControl, GenerationOptions, Input, Llm, LoadOptions, MtmdOptions};
+use anyhow::{Context, Result, ensure};
 use image::DynamicImage;
 use koharu_runtime::package::huggingface;
 
 pub use self::processor::{PaddleOCRVLResult, PaddleOCRVLTask};
 
-use self::{model::Model, processor::Processor};
+use self::processor::{Processor, repeated_suffix_start};
+
+const PADDLEOCR_IMAGE_MARKER: &str = "<|IMAGE_START|><|IMAGE_PLACEHOLDER|><|IMAGE_END|>";
 
 koharu_runtime::huggingface! {
     WEIGHTS => "PaddlePaddle/PaddleOCR-VL-1.6-GGUF" => "PaddleOCR-VL-1.6-GGUF.gguf",
@@ -19,7 +21,7 @@ koharu_runtime::huggingface! {
 
 #[derive(Debug)]
 pub struct PaddleOCRVL {
-    model: Model,
+    llm: Llm,
     processor: Processor,
 }
 
@@ -31,12 +33,22 @@ impl PaddleOCRVL {
             huggingface::resolve(CHAT_TEMPLATE),
         )?;
         let chat_template = tokio::fs::read_to_string(chat_template).await?;
-        let (model, processor) = tokio::task::spawn_blocking(move || {
-            Model::new(&device, weights, mmproj, chat_template)
-        })
+        let llm = Llm::load_with_options(
+            device,
+            weights,
+            LoadOptions {
+                mtmd: Some(MtmdOptions::new(mmproj).with_media_marker(PADDLEOCR_IMAGE_MARKER)),
+                ..LoadOptions::default()
+            },
+        )
         .await
-        .context("PaddleOCR-VL llama.cpp loading task panicked")??;
-        Ok(Self { model, processor })
+        .context("failed to load PaddleOCR-VL language model")?;
+        ensure!(
+            llm.capabilities().vision,
+            "PaddleOCR-VL projector does not advertise vision support"
+        );
+        let processor = Processor::new(&llm, chat_template)?;
+        Ok(Self { llm, processor })
     }
 
     pub fn inference(
@@ -44,9 +56,29 @@ impl PaddleOCRVL {
         image: &DynamicImage,
         task: PaddleOCRVLTask,
     ) -> Result<PaddleOCRVLResult> {
-        let bitmap = self.processor.bitmap(image)?;
         let prompt = self.processor.render_prompt(task)?;
-        let text = self.model.forward(&bitmap, prompt, 512)?;
+        let input = Input::new(&prompt).with_image(image);
+        let options = GenerationOptions {
+            max_tokens: 512,
+            temperature: 0.0,
+            repeat_penalty: 1.2,
+            repeat_last_n: -1,
+            ..GenerationOptions::default()
+        };
+        let generation = self
+            .llm
+            .inference_with_callback(&input, &options, |chunk| {
+                Ok(if repeated_suffix_start(chunk.text).is_some() {
+                    GenerationControl::Stop
+                } else {
+                    GenerationControl::Continue
+                })
+            })?;
+        let mut text = generation.text;
+        if let Some(trim_at) = repeated_suffix_start(&text) {
+            text.truncate(trim_at);
+        }
+        let text = text.trim().to_owned();
         Ok(PaddleOCRVLResult { text })
     }
 }

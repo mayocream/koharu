@@ -18,6 +18,7 @@ pub mod comic_text_detector;
 pub mod flux2_klein;
 pub mod font_detector;
 pub mod lama;
+pub mod llm;
 pub mod manga_ocr;
 pub mod manga_text_segmentation;
 pub mod paddle_ocr_vl;
