@@ -14,6 +14,7 @@ publish = true
 
 [dependencies]
 anyhow = { workspace = true }
+console = { workspace = true }
 futures = { workspace = true }
 reqwest = { workspace = true }
 reqwest-middleware = { workspace = true }
@@ -32,6 +33,7 @@ tempfile = { workspace = true }
 strum = { workspace = true }
 async-trait = { workspace = true }
 goblin = { workspace = true }
+indicatif = { workspace = true }
 
 [target.'cfg(target_os = "windows")'.dependencies]
 windows-sys = { workspace = true }

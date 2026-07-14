@@ -3,6 +3,8 @@ use std::{io::SeekFrom, path::PathBuf};
 use futures::stream::{self, StreamExt, TryStreamExt};
 use tokio::io::{AsyncSeekExt, AsyncWriteExt};
 
+use super::progress;
+
 static USER_AGENT: &str = concat!(env!("CARGO_PKG_NAME"), "/", env!("CARGO_PKG_VERSION"));
 const CHUNK_SIZE: u64 = 10 * 1024 * 1024;
 
@@ -35,31 +37,41 @@ impl Client {
 
     /// Downloads a file from the given URL to the specified destination path.
     pub async fn download(&self, url: &str, path: PathBuf) -> anyhow::Result<PathBuf> {
-        let content_length = self.content_length(url).await?;
+        let progress = progress::new(url);
+        let result: anyhow::Result<()> = async {
+            let content_length = self.content_length(url).await?;
+            progress.set_length(content_length);
 
-        tokio::fs::File::create(&path)
-            .await?
-            .set_len(content_length)
-            .await?;
+            tokio::fs::File::create(&path)
+                .await?
+                .set_len(content_length)
+                .await?;
 
-        let chunks = (0..content_length)
-            .step_by(CHUNK_SIZE as usize)
-            .map(|start| {
-                let end = start.saturating_add(CHUNK_SIZE).min(content_length) - 1;
-                (start, end)
-            });
+            let chunks = (0..content_length)
+                .step_by(CHUNK_SIZE as usize)
+                .map(|start| {
+                    let end = start.saturating_add(CHUNK_SIZE).min(content_length) - 1;
+                    (start, end)
+                });
 
-        let result: anyhow::Result<Vec<()>> = stream::iter(chunks)
-            .map(|(start, end)| self.chunk(url, path.clone(), start, end))
-            .buffer_unordered(num_cpus::get())
-            .try_collect()
-            .await;
+            stream::iter(chunks)
+                .map(|(start, end)| self.chunk(url, path.clone(), start, end, progress.clone()))
+                .buffer_unordered(num_cpus::get())
+                .try_collect::<Vec<()>>()
+                .await?;
+            Ok(())
+        }
+        .await;
 
         if let Err(error) = result {
+            let message = format!("{} failed", progress.message());
+            progress.abandon_with_message(message);
             tokio::fs::remove_file(&path).await.ok();
             return Err(error);
         }
 
+        let message = format!("{} downloaded", progress.message());
+        progress.finish_with_message(message);
         Ok(path)
     }
 
@@ -76,7 +88,14 @@ impl Client {
         Ok(content_length.trim().parse::<u64>()?)
     }
 
-    async fn chunk(&self, url: &str, path: PathBuf, start: u64, end: u64) -> anyhow::Result<()> {
+    async fn chunk(
+        &self,
+        url: &str,
+        path: PathBuf,
+        start: u64,
+        end: u64,
+        progress: indicatif::ProgressBar,
+    ) -> anyhow::Result<()> {
         let response = self
             .inner
             .get(url)
@@ -98,6 +117,8 @@ impl Client {
             .open(&path)
             .await?;
         file.seek(SeekFrom::Start(start)).await?;
-        Ok(file.write_all(&bytes).await?)
+        file.write_all(&bytes).await?;
+        progress.inc(bytes.len() as u64);
+        Ok(())
     }
 }
