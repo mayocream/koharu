@@ -78,3 +78,7 @@ harness = false
 [[bench]]
 name = "manga_ocr"
 harness = false
+
+[[bench]]
+name = "manga_text_segmentation"
+harness = false
