@@ -126,29 +126,15 @@ It supports vertical CJK layout, right-to-left scripts, font fallback, vertical 
 
 ## GPU Acceleration
 
-Koharu supports CUDA, experimental ZLUDA, Metal, and Vulkan. CPU fallback is always available when the accelerated path is unavailable or not worth the setup cost on your system.
+Koharu supports CUDA, experimental ROCm / HIP, Metal, and Vulkan. CPU fallback is always available when the accelerated path is unavailable or not worth the setup cost on your system.
 
 ### CUDA
 
-On Windows and Linux, Koharu ships with CUDA support so it can use NVIDIA GPUs for the full local pipeline.
+Koharu supports NVIDIA GPUs on Windows and Linux through CUDA. This is the primary accelerated path and is recommended for most users.
 
-Koharu bundles CUDA Toolkit 13.0. The required DLLs are extracted to the application data directory on first run.
+### ROCm / HIP
 
-> [!NOTE]
-> Make sure you have current NVIDIA drivers installed. You can update them through [NVIDIA App](https://www.nvidia.com/en-us/software/nvidia-app/).
-
-#### Supported NVIDIA GPUs
-
-Koharu supports NVIDIA GPUs with compute capability 8.0 or higher.
-
-For GPU compatibility references, see [CUDA GPU Compute Capability](https://developer.nvidia.com/cuda-gpus).
-
-### ZLUDA (experimental)
-
-Koharu supports experimental ZLUDA acceleration on Windows for AMD GPUs.
-ZLUDA is a CUDA compatibility layer that lets some CUDA workloads run on AMD GPUs.
-
-To use it, install the [AMD HIP SDK](https://www.amd.com/en/developer/resources/rocm-hub/hip-sdk.html).
+Koharu supports AMD GPUs on both Windows and Linux through ROCm and HIP. This path is currently experimental and may require additional setup.
 
 ### Metal
 
@@ -158,7 +144,7 @@ Koharu supports Metal on Apple Silicon Macs. No extra runtime setup is required 
 
 Koharu also supports Vulkan on Windows and Linux. This backend is currently used primarily for OCR and local LLM inference.
 
-Detection and inpainting still depend on CUDA, ZLUDA, or Metal, so Vulkan is useful but not a full replacement for the main accelerated path. AMD and Intel GPUs can still benefit from it.
+Detection and inpainting still depend on CUDA, ROCm / HIP, or Metal, so Vulkan is useful but not a full replacement for the main accelerated path. AMD and Intel GPUs can still benefit from it.
 
 ### CPU Fallback
 
