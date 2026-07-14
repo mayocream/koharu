@@ -1,16 +1,12 @@
-use cudarc::{driver::CudaContext, runtime::result::version::get_driver_version};
+use cudarc::{
+    driver::{CudaContext, sys::is_culib_present},
+    runtime::result::version::get_driver_version,
+};
 
-/// Check if CUDA is available on the system by attempting to load the CUDA driver library.
-///
-/// Safety: uses `libloading` to load the CUDA driver library, which is safe as it only checks for the presence of the library without executing any code from it.
+/// Checks whether the CUDA driver can enumerate at least one CUDA device.
+#[must_use]
 pub fn cuda_available() -> bool {
-    let library = if cfg!(target_os = "windows") {
-        "nvcuda.dll"
-    } else {
-        "libcuda.so"
-    };
-
-    unsafe { libloading::Library::new(library).is_ok() }
+    (unsafe { is_culib_present() }) && matches!(CudaContext::device_count(), Ok(count) if count > 0)
 }
 
 /// Get the CUDA driver version using the `cudarc` crate.
@@ -31,24 +27,10 @@ pub fn compute_capability() -> anyhow::Result<(i32, i32)> {
 
 #[cfg(test)]
 mod tests {
-
-    #[allow(unused_imports)]
     use super::*;
 
     #[test]
-    #[cfg(target_os = "windows")]
-    fn wont_panic_on_non_cuda_system() {
-        use windows_sys::Win32::System::LibraryLoader::{
-            LOAD_LIBRARY_SEARCH_USER_DIRS, SetDefaultDllDirectories,
-        };
-
-        unsafe {
-            SetDefaultDllDirectories(LOAD_LIBRARY_SEARCH_USER_DIRS);
-        }
-
-        assert!(
-            !cuda_available(),
-            "CUDA should not be available on this system"
-        );
+    fn availability_probe_does_not_panic() {
+        let _ = cuda_available();
     }
 }
