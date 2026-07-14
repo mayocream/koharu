@@ -201,14 +201,15 @@ impl Package for Libtorch {
         let client = Client::new();
 
         let globs = if rocm.is_some() {
+            &["torch/.kpack/**/*", "torch/lib/**/*"][..]
+        } else if *self == Self::Cpu {
             &[
-                "torch/.kpack/**/*",
-                "torch/include/**/*",
-                "torch/lib/**/*",
-                "torch/share/**/*",
+                "libtorch/include/**/*",
+                "libtorch/lib/**/*",
+                "libtorch/share/cmake/**/*",
             ][..]
         } else {
-            &["**/*"][..]
+            &["libtorch/lib/**/*"][..]
         };
         for url in self.url(rocm)? {
             let file = tempfile::Builder::new().suffix(".zip").tempfile()?;

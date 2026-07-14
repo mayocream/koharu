@@ -169,7 +169,11 @@ impl Package for LlamaCpp {
                 .ok_or_else(|| anyhow::anyhow!("invalid llama.cpp package path"))?;
             create_dir_all(parent)?;
             let temporary = tempfile::tempdir_in(parent)?;
-            extract(archive, temporary.path().to_path_buf(), &["**/*"])?;
+            extract(
+                archive,
+                temporary.path().to_path_buf(),
+                &["**/*.dll", "**/*.dylib", "**/*.so", "**/*.so.*"],
+            )?;
             rename(temporary.path(), &path)?;
         }
 
