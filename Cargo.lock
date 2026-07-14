@@ -4201,6 +4201,26 @@ dependencies = [
 ]
 
 [[package]]
+name = "koharu-translator"
+version = "0.62.0-alpha.1"
+dependencies = [
+ "anyhow",
+ "async-trait",
+ "clap",
+ "koharu-ml",
+ "koharu-runtime",
+ "reqwest",
+ "schemars 1.2.1",
+ "secrecy",
+ "serde",
+ "serde_json",
+ "strum",
+ "thiserror 2.0.18",
+ "tokio",
+ "url",
+]
+
+[[package]]
 name = "language-tags"
 version = "0.3.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"

@@ -35,6 +35,7 @@ koharu-torch = { path = "crates/koharu-torch", version = "0.62.0-alpha.1", defau
 koharu-torch-sys = { path = "crates/koharu-torch-sys", version = "0.62.0-alpha.1", default-features = false }
 koharu-ai = { path = "crates/koharu-ai", version = "0.62.0-alpha.1", default-features = false }
 koharu-ml = { path = "crates/koharu-ml", version = "0.62.0-alpha.1", default-features = false }
+koharu-translator = { path = "crates/koharu-translator", version = "0.62.0-alpha.1", default-features = false }
 koharu-psd = { path = "crates/koharu-psd", version = "0.62.0-alpha.1", default-features = false }
 koharu-renderer = { path = "crates/koharu-renderer", version = "0.62.0-alpha.1", default-features = false }
 koharu-rpc = { path = "crates/koharu-rpc", version = "0.62.0-alpha.1", default-features = false }

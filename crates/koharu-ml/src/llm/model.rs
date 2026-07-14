@@ -60,6 +60,9 @@ impl Model {
             "GGUF model does not advertise a decoder graph"
         );
 
+        let eos_token = options
+            .eos_token_id
+            .map_or_else(|| model.token_eos(), LlamaToken::new);
         let (mtmd, capabilities) = match options.mtmd {
             Some(options) => {
                 ensure_file(&options.projector_path, "MTMD projector")?;
@@ -98,7 +101,6 @@ impl Model {
             None => (None, Capabilities::default()),
         };
 
-        let eos_token = model.token_eos();
         tracing::info!(
             path = %model_path.display(),
             has_encoder = model.has_encoder(),
@@ -125,10 +127,14 @@ impl Model {
     }
 
     pub(super) fn eos_token(&self) -> Result<String> {
-        token_text(&self.model, self.model.token_eos()).context("failed to decode model EOS token")
+        token_text(&self.model, self.eos_token).context("failed to decode model EOS token")
     }
 
-    pub(super) fn render_chat_prompt(&self, messages: &[ChatMessage]) -> Result<String> {
+    pub(super) fn render_chat_prompt(
+        &self,
+        messages: &[ChatMessage],
+        add_generation_prompt: bool,
+    ) -> Result<String> {
         let llama_messages = messages
             .iter()
             .map(|message| {
@@ -140,9 +146,9 @@ impl Model {
         match self.model.chat_template(None) {
             Ok(template) => self
                 .model
-                .apply_chat_template(&template, &llama_messages, true)
+                .apply_chat_template(&template, &llama_messages, add_generation_prompt)
                 .context("failed to apply GGUF chat template"),
-            Err(_) => Ok(render_fallback_chat_prompt(messages)),
+            Err(_) => Ok(render_fallback_chat_prompt(messages, add_generation_prompt)),
         }
     }
 
@@ -662,7 +668,7 @@ fn token_text(model: &LlamaModel, token: LlamaToken) -> Result<String> {
         .map_err(Into::into)
 }
 
-fn render_fallback_chat_prompt(messages: &[ChatMessage]) -> String {
+fn render_fallback_chat_prompt(messages: &[ChatMessage], add_generation_prompt: bool) -> String {
     let mut prompt = String::new();
     for message in messages {
         prompt.push_str(message.role.as_str());
@@ -670,7 +676,9 @@ fn render_fallback_chat_prompt(messages: &[ChatMessage]) -> String {
         prompt.push_str(&message.content);
         prompt.push('\n');
     }
-    prompt.push_str("assistant: ");
+    if add_generation_prompt {
+        prompt.push_str("assistant: ");
+    }
     prompt
 }
 
@@ -756,5 +764,18 @@ mod tests {
         )
         .unwrap();
         assert_eq!(config.n_ubatch, 1024);
+    }
+
+    #[test]
+    fn fallback_chat_prompt_respects_generation_prompt_option() {
+        let messages = [ChatMessage::user("hello")];
+        assert_eq!(
+            render_fallback_chat_prompt(&messages, true),
+            "user: hello\nassistant: "
+        );
+        assert_eq!(
+            render_fallback_chat_prompt(&messages, false),
+            "user: hello\n"
+        );
     }
 }

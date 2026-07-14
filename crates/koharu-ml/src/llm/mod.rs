@@ -59,7 +59,17 @@ impl Llm {
 
     /// Applies the GGUF chat template, falling back to a simple role-prefixed format.
     pub fn render_chat_prompt(&self, messages: &[ChatMessage]) -> Result<String> {
-        self.model.render_chat_prompt(messages)
+        self.render_chat_prompt_with_options(messages, ChatTemplateOptions::default())
+    }
+
+    /// Applies the GGUF chat template with explicit generation-prompt behavior.
+    pub fn render_chat_prompt_with_options(
+        &self,
+        messages: &[ChatMessage],
+        options: ChatTemplateOptions,
+    ) -> Result<String> {
+        self.model
+            .render_chat_prompt(messages, options.add_generation_prompt)
     }
 
     /// Generates unconstrained text for an input.
@@ -117,6 +127,8 @@ pub struct LoadOptions {
     pub gpu_layers: u32,
     pub use_mmap: bool,
     pub use_mlock: bool,
+    /// Overrides an incorrect end-of-sequence token advertised by a GGUF file.
+    pub eos_token_id: Option<i32>,
     /// Optional multimodal projector configuration.
     pub mtmd: Option<MtmdOptions>,
 }
@@ -127,6 +139,7 @@ impl Default for LoadOptions {
             gpu_layers: DEFAULT_GPU_LAYERS,
             use_mmap: true,
             use_mlock: false,
+            eos_token_id: None,
             mtmd: None,
         }
     }
@@ -373,22 +386,39 @@ impl ChatMessage {
     }
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub enum ChatRole {
     System,
     User,
     Assistant,
     Tool,
+    /// A model-specific role name used by specialized translation templates.
+    Named(String),
 }
 
 impl ChatRole {
     #[must_use]
-    pub fn as_str(self) -> &'static str {
+    pub fn as_str(&self) -> &str {
         match self {
             Self::System => "system",
             Self::User => "user",
             Self::Assistant => "assistant",
             Self::Tool => "tool",
+            Self::Named(name) => name,
+        }
+    }
+}
+
+/// Options controlling GGUF chat-template application.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct ChatTemplateOptions {
+    pub add_generation_prompt: bool,
+}
+
+impl Default for ChatTemplateOptions {
+    fn default() -> Self {
+        Self {
+            add_generation_prompt: true,
         }
     }
 }
@@ -424,5 +454,16 @@ mod tests {
         assert_eq!(options.media_marker, DEFAULT_MEDIA_MARKER);
         assert_eq!(options.image_min_tokens, -1);
         assert_eq!(options.image_max_tokens, -1);
+    }
+
+    #[test]
+    fn load_options_do_not_override_eos_by_default() {
+        assert_eq!(LoadOptions::default().eos_token_id, None);
+    }
+
+    #[test]
+    fn named_chat_roles_preserve_model_specific_names() {
+        let role = ChatRole::Named("Japanese".to_owned());
+        assert_eq!(role.as_str(), "Japanese");
     }
 }
