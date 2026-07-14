@@ -210,7 +210,11 @@ impl From<koharu_diffusion::Device> for Device {
 impl From<&Device> for koharu_diffusion::Device {
     fn from(value: &Device) -> Self {
         Self {
-            name: value.name.clone(),
+            name: if value.backend == Backend::Rocm {
+                format!("ROCm{}", value.index)
+            } else {
+                value.name.clone()
+            },
             description: value.description.clone(),
         }
     }
@@ -240,9 +244,17 @@ impl From<&Device> for LlamaBackendDevice {
     fn from(value: &Device) -> Self {
         Self {
             index: value.index,
-            name: value.name.clone(),
+            name: if value.backend == Backend::Rocm {
+                format!("HIP{}", value.index)
+            } else {
+                value.name.clone()
+            },
             description: value.description.clone(),
-            backend: value.backend.to_string(),
+            backend: if value.backend == Backend::Rocm {
+                "HIP".to_owned()
+            } else {
+                value.backend.to_string()
+            },
             memory_total: value.memory_total,
             memory_free: value.memory_free,
             device_type: value.device_type.into(),
@@ -303,6 +315,10 @@ mod tests {
             let universal = Device::from(device);
             assert_eq!(koharu_torch::Device::try_from(universal), Ok(device));
         }
+        assert_eq!(
+            koharu_torch::Device::try_from(Device::rocm(2)),
+            Ok(koharu_torch::Device::Cuda(2))
+        );
     }
 
     #[test]
@@ -352,5 +368,16 @@ mod tests {
         assert_eq!(converted.memory_total, device.memory_total);
         assert_eq!(converted.memory_free, device.memory_free);
         assert_eq!(converted.device_type, device.device_type);
+    }
+
+    #[test]
+    fn rocm_uses_backend_specific_device_names() {
+        let device = Device::rocm(2);
+        let diffusion = koharu_diffusion::Device::from(&device);
+        let llama = LlamaBackendDevice::from(&device);
+
+        assert_eq!(diffusion.name, "ROCm2");
+        assert_eq!(llama.name, "HIP2");
+        assert_eq!(llama.backend, "HIP");
     }
 }

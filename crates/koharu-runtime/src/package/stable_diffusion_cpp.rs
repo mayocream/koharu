@@ -10,10 +10,14 @@ use strum::EnumProperty;
 use crate::{
     device::{
         cuda::{cuda_available, driver_version},
+        rocm::rocm_available,
         vulkan::vulkan_available,
     },
     download::{archive::extract, client::Client, github::github_release},
-    package::{Package, PreloadablePackage, STORE_DIR, cuda::Cuda, dependency, loading::preload},
+    package::{
+        Package, PreloadablePackage, STORE_DIR, cuda::Cuda, dependency, loading::preload,
+        rocm::Rocm,
+    },
 };
 
 const REPO: &str = "leejet/stable-diffusion.cpp";
@@ -42,12 +46,12 @@ pub enum StableDiffusionCpp {
     WindowsX64Vulkan,
     #[strum(props(
         asset = "sd-master-cc73429-bin-win-rocm-7.1.1-x64.zip",
-        dylibs = "rocblas.dll,stable-diffusion.dll"
+        dylibs = "libhipblas.dll,stable-diffusion.dll"
     ))]
     WindowsX64Rocm711,
     #[strum(props(
         asset = "sd-master-cc73429-bin-win-rocm-7.13.0-x64.zip",
-        dylibs = "rocblas.dll,libhipblaslt.dll,hipblas.dll,stable-diffusion.dll"
+        dylibs = "stable-diffusion.dll"
     ))]
     WindowsX64Rocm7130,
     #[strum(props(
@@ -82,6 +86,8 @@ impl StableDiffusionCpp {
         if cfg!(all(target_os = "windows", target_arch = "x86_64")) {
             if cuda_available() && matches!(driver_version(), Ok(version) if version >= 12000) {
                 Ok(Self::WindowsX64Cuda12)
+            } else if rocm_available() {
+                Ok(Self::WindowsX64Rocm7130)
             } else if vulkan_available() {
                 Ok(Self::WindowsX64Vulkan)
             } else {
@@ -158,6 +164,8 @@ impl PreloadablePackage for StableDiffusionCpp {
         if matches!(self, Self::WindowsX64Cuda12) {
             Cuda::Runtime12.preload().await?;
             Cuda::Cublas12.preload().await?;
+        } else if matches!(self, Self::WindowsX64Rocm711 | Self::WindowsX64Rocm7130) {
+            Rocm::for_current_target()?.preload().await?;
         }
 
         let directory = self.resolve().await?;

@@ -12,10 +12,11 @@ use walkdir::WalkDir;
 use crate::{
     device::{
         cuda::{cuda_available, driver_version},
+        rocm::rocm_available,
         vulkan::vulkan_available,
     },
     download::{archive::extract, client::Client, github::github_release},
-    package::{Package, PreloadablePackage, STORE_DIR, cuda::Cuda, loading::preload},
+    package::{Package, PreloadablePackage, STORE_DIR, cuda::Cuda, loading::preload, rocm::Rocm},
 };
 
 const REPO: &str = "ggml-org/llama.cpp";
@@ -48,6 +49,10 @@ pub enum LlamaCpp {
         )
     )]
     WindowsX64Cuda133,
+    #[strum(props(
+        dylibs = "libomp140.x86_64.dll,libhipblas.dll,ggml-base.dll,ggml.dll,ggml-cpu-x64.dll,ggml-hip.dll,llama.dll,mtmd.dll"
+    ))]
+    WindowsX64Hip,
     #[strum(props(
         dylibs = "libomp140.x86_64.dll,ggml-base.dll,ggml.dll,ggml-cpu-x64.dll,ggml-vulkan.dll,llama.dll,mtmd.dll"
     ))]
@@ -88,6 +93,8 @@ impl LlamaCpp {
                     _ if vulkan_available() => Self::WindowsX64Vulkan,
                     _ => Self::WindowsX64Cpu,
                 }
+            } else if rocm_available() {
+                Self::WindowsX64Hip
             } else if vulkan_available() {
                 Self::WindowsX64Vulkan
             } else {
@@ -122,6 +129,7 @@ impl LlamaCpp {
             LlamaCpp::WindowsArm64Cpu => format!("llama-{TAG}-bin-win-cpu-arm64.zip"),
             LlamaCpp::WindowsX64Cuda124 => format!("llama-{TAG}-bin-win-cuda-12.4-x64.zip"),
             LlamaCpp::WindowsX64Cuda133 => format!("llama-{TAG}-bin-win-cuda-13.3-x64.zip"),
+            LlamaCpp::WindowsX64Hip => format!("llama-{TAG}-bin-win-hip-radeon-x64.zip"),
             LlamaCpp::WindowsX64Vulkan => format!("llama-{TAG}-bin-win-vulkan-x64.zip"),
             LlamaCpp::LinuxX64Cpu => format!("llama-{TAG}-bin-ubuntu-x64.tar.gz"),
             LlamaCpp::LinuxArm64Cpu => format!("llama-{TAG}-bin-ubuntu-arm64.tar.gz"),
@@ -186,6 +194,7 @@ impl PreloadablePackage for LlamaCpp {
                 Cuda::Runtime.preload().await?;
                 Cuda::Cublas.preload().await?;
             }
+            Self::WindowsX64Hip => Rocm::for_current_target()?.preload().await?,
             _ => {}
         }
 

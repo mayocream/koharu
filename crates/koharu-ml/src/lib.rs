@@ -1,7 +1,7 @@
 use anyhow::Context;
 use koharu_llama::llama_backend::LlamaBackend;
 use koharu_runtime::{
-    device::{cuda::cuda_available, vulkan::vulkan_available},
+    device::{cuda::cuda_available, rocm::rocm_available, vulkan::vulkan_available},
     package::{
         Package, PreloadablePackage, libtorch::Libtorch, llama_cpp::LlamaCpp,
         stable_diffusion_cpp::StableDiffusionCpp,
@@ -88,6 +88,8 @@ pub fn device(cpu: bool) -> Device {
         Device::metal(0)
     } else if cuda_available() {
         Device::cuda(0)
+    } else if rocm_available() {
+        Device::rocm(0)
     } else if vulkan_available() {
         Device::vulkan(0)
     } else {

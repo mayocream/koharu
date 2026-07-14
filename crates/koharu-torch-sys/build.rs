@@ -25,7 +25,6 @@ async fn main() -> Result<()> {
     for path in RERUN_IF_CHANGED {
         println!("cargo:rerun-if-changed={path}");
     }
-
     let out_dir = PathBuf::from(env::var("OUT_DIR")?);
     generate_bindings(&out_dir)?;
     build_shim().await
@@ -80,15 +79,20 @@ async fn build_shim() -> Result<()> {
     fs::create_dir_all(&target_dir)?;
 
     let target_shim = target_dir.join(shim_file_name());
-    if target_shim.exists() {
-        return Ok(());
+    let libtorch_dir = Libtorch::Cpu.resolve().await?.join("libtorch");
+    let mut config = cmake::Config::new("libtch");
+    config.define("CMAKE_PREFIX_PATH", libtorch_dir);
+    if cfg!(windows) {
+        // CUDA's common DLLs are built with MSVC while Windows ROCm's are built with clang-cl.
+        // Compiling the shim with clang-cl keeps its inherited-constructor ABI compatible with both.
+        config
+            .profile("Release")
+            .generator("Ninja")
+            .define("CMAKE_MAKE_PROGRAM", "ninja")
+            .define("CMAKE_C_COMPILER", "clang-cl")
+            .define("CMAKE_CXX_COMPILER", "clang-cl");
     }
-
-    let libtorch = Libtorch::for_current_target()?;
-    let libtorch_dir = libtorch.resolve().await?.join("libtorch");
-    let cmake_dir = cmake::Config::new("libtch")
-        .define("CMAKE_PREFIX_PATH", libtorch_dir)
-        .build();
+    let cmake_dir = config.build();
 
     fs::copy(cmake_dir.join(shim_file_name()), target_shim)?;
 

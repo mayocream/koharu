@@ -350,8 +350,8 @@ To build Koharu from source, follow the steps below.
 Optional dependencies for GPU acceleration builds:
 
 - [LLVM](https://llvm.org/) 15 or later (for GPU acceleration builds)
-- [CUDA Toolkit](https://developer.nvidia.com/cuda-13-0-0-download-archive) 13.0 (for CUDA and ZLUDA support on Windows)
-- [AMD HIP SDK](https://www.amd.com/en/developer/resources/rocm-hub/hip-sdk.html) (for ZLUDA support on Windows)
+- [CUDA Toolkit](https://developer.nvidia.com/cuda-13-0-0-download-archive) 13.0 (for CUDA support)
+- [ninja](https://ninja-build.org/) 1.11 or later (for CUDA support)
 
 ### Install dependencies
 

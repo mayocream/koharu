@@ -4,13 +4,21 @@ use std::{
     sync::LazyLock,
 };
 
-use anyhow::{Result, bail};
+use anyhow::{Context, Result, bail};
 use strum::EnumProperty;
 
 use crate::{
-    device::cuda::{cuda_available, driver_version},
+    device::{
+        cuda::{cuda_available, driver_version},
+        rocm::rocm_available,
+    },
     download::{archive::extract, client::Client},
-    package::{Package, PreloadablePackage, STORE_DIR, cuda::Cuda, loading::preload},
+    package::{
+        Package, PreloadablePackage, STORE_DIR,
+        cuda::Cuda,
+        loading::preload,
+        rocm::{ROCM_VERSION, Rocm},
+    },
 };
 
 const VERSION: &str = "2.12.1";
@@ -57,6 +65,13 @@ pub enum Libtorch {
         )
     )]
     Rocm72,
+    #[strum(
+        serialize = "rocm-nightly",
+        props(
+            windows_dylibs = "libomp140.x86_64.dll,uv.dll,dl.dll,liblzma.dll,c10.dll,c10_hip.dll,aotriton_v2.dll,caffe2_nvrtc.dll,torch_global_deps.dll,torch_cpu.dll,torch_hip.dll,shm.dll,torch.dll"
+        )
+    )]
+    RocmNightly,
 }
 
 impl Libtorch {
@@ -68,6 +83,8 @@ impl Libtorch {
                     Ok(version) if version >= 12060 => Ok(Self::Cuda126),
                     _ => Ok(Self::Cpu),
                 }
+            } else if rocm_available() {
+                Ok(Self::RocmNightly)
             } else {
                 Ok(Self::Cpu)
             }
@@ -106,23 +123,41 @@ impl Libtorch {
             .split(','))
     }
 
-    fn url(self) -> Result<String> {
+    fn url(self, rocm: Option<Rocm>) -> Result<Vec<String>> {
         let device = self.to_string();
 
-        if cfg!(all(target_os = "windows", target_arch = "x86_64"))
+        if cfg!(all(target_os = "windows", target_arch = "x86_64")) && self == Self::RocmNightly {
+            let rocm = rocm.context("ROCm LibTorch requires a ROCm target")?;
+            // AMD's 2.12 Windows ROCm nightly is published as 2.12.0, not 2.12.1.
+            // https://github.com/ROCm/TheRock/blob/296cc8b3d037c1be1fdb9e5e6d4776822c7e050c/RELEASES.md#installing-multi-arch-pytorch-python-packages
+            let mut urls = vec![
+                format!(
+                    "https://rocm.nightlies.amd.com/whl-multi-arch/torch-2.12.0%2Brocm{ROCM_VERSION}-cp312-cp312-win_amd64.whl"
+                ),
+                format!(
+                    "https://rocm.nightlies.amd.com/whl-multi-arch/amd_torch_device_{rocm}-2.12.0%2Brocm{ROCM_VERSION}-cp312-cp312-win_amd64.whl"
+                ),
+            ];
+            if let Some(family) = rocm.torch_family() {
+                urls.push(format!(
+                    "https://rocm.nightlies.amd.com/whl-multi-arch/amd_torch_device_{family}-2.12.0%2Brocm{ROCM_VERSION}-cp312-cp312-win_amd64.whl"
+                ));
+            }
+            Ok(urls)
+        } else if cfg!(all(target_os = "windows", target_arch = "x86_64"))
             && matches!(self, Self::Cpu | Self::Cuda126 | Self::Cuda130)
         {
-            Ok(format!(
+            Ok(vec![format!(
                 "https://download.pytorch.org/libtorch/{device}/libtorch-win-shared-with-deps-{VERSION}%2B{device}.zip"
-            ))
+            )])
         } else if cfg!(all(target_os = "linux", target_arch = "x86_64")) {
-            Ok(format!(
+            Ok(vec![format!(
                 "https://download.pytorch.org/libtorch/{device}/libtorch-shared-with-deps-{VERSION}%2B{device}.zip"
-            ))
+            )])
         } else if cfg!(all(target_os = "macos", target_arch = "aarch64")) && self == Self::Cpu {
-            Ok(format!(
+            Ok(vec![format!(
                 "https://download.pytorch.org/libtorch/cpu/libtorch-macos-arm64-{VERSION}.zip"
-            ))
+            )])
         } else {
             bail!("unsupported target for libtorch archive")
         }
@@ -132,23 +167,62 @@ impl Libtorch {
 #[async_trait::async_trait]
 impl Package for Libtorch {
     async fn resolve(&self) -> Result<PathBuf> {
-        let path = LIBTORCH_DIR.join(self.to_string());
-        let lib_dir = path.join("libtorch").join("lib");
-        if self.dylibs()?.all(|dylib| lib_dir.join(dylib).exists()) {
+        let (path, rocm) = match *self {
+            Self::RocmNightly => {
+                let rocm = Rocm::for_current_target()?;
+                rocm.resolve().await?;
+                (
+                    STORE_DIR
+                        .join("libtorch")
+                        .join(format!("2.12.0+rocm{ROCM_VERSION}"))
+                        .join(format!("rocm-{rocm}")),
+                    Some(rocm),
+                )
+            }
+            _ => (LIBTORCH_DIR.join(self.to_string()), None),
+        };
+        let libtorch = path.join("libtorch");
+        if self
+            .dylibs()?
+            .all(|dylib| libtorch.join("lib").join(dylib).exists())
+            && rocm.is_none_or(|rocm| {
+                libtorch
+                    .join(".kpack")
+                    .join(format!("torch_{rocm}.kpack"))
+                    .exists()
+            })
+        {
             return Ok(path);
         }
 
-        let url = self.url()?;
-        let client = Client::new();
-        let file = tempfile::Builder::new().suffix(".zip").tempfile()?;
-        let archive = client.download(&url, file.path().to_path_buf()).await?;
-
-        let parent = path
-            .parent()
-            .ok_or_else(|| anyhow::anyhow!("invalid LibTorch package path"))?;
+        let parent = path.parent().context("invalid LibTorch package path")?;
         create_dir_all(parent)?;
         let temporary = tempfile::tempdir_in(parent)?;
-        extract(archive, temporary.path().to_path_buf(), &["**/*"])?;
+        let client = Client::new();
+
+        let globs = if rocm.is_some() {
+            &[
+                "torch/.kpack/**/*",
+                "torch/include/**/*",
+                "torch/lib/**/*",
+                "torch/share/**/*",
+            ][..]
+        } else {
+            &["**/*"][..]
+        };
+        for url in self.url(rocm)? {
+            let file = tempfile::Builder::new().suffix(".zip").tempfile()?;
+            let archive = client.download(&url, file.path().to_path_buf()).await?;
+            extract(archive, temporary.path().to_path_buf(), globs)?;
+        }
+
+        if rocm.is_some() {
+            rename(
+                temporary.path().join("torch"),
+                temporary.path().join("libtorch"),
+            )?;
+        }
+
         if path.exists() {
             remove_dir_all(&path)?;
         }
@@ -217,6 +291,10 @@ impl PreloadablePackage for Libtorch {
         #[cfg(target_os = "linux")]
         for cuda in cuda {
             cuda.preload().await?;
+        }
+
+        if *self == Self::RocmNightly {
+            Rocm::for_current_target()?.preload().await?;
         }
 
         let lib_dir = self.resolve().await?.join("libtorch").join("lib");
