@@ -79,6 +79,10 @@ async fn build_shim() -> Result<()> {
     fs::create_dir_all(&target_dir)?;
 
     let target_shim = target_dir.join(shim_file_name());
+    if target_shim.exists() {
+        return Ok(());
+    }
+
     let libtorch_dir = Libtorch::Cpu.resolve().await?.join("libtorch");
     let mut config = cmake::Config::new("libtch");
     config.define("CMAKE_PREFIX_PATH", libtorch_dir);
