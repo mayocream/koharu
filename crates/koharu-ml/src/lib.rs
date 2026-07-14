@@ -16,6 +16,7 @@ pub mod baberu_ocr;
 pub mod comic_text_bubble_detector;
 pub mod comic_text_detector;
 pub mod flux2_klein;
+pub mod font_detector;
 pub mod lama;
 pub mod manga_ocr;
 pub mod manga_text_segmentation;

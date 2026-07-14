@@ -88,3 +88,7 @@ harness = false
 [[bench]]
 name = "manga_text_segmentation"
 harness = false
+
+[[bench]]
+name = "font_detector"
+harness = false
