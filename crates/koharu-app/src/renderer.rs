@@ -18,6 +18,7 @@ use koharu_core::{
     FontFaceInfo, FontPrediction, FontSource, NodeId, TextDirection, TextShaderEffect,
     TextStrokeStyle, TextStyle, Transform,
 };
+use koharu_fonts::{GoogleFonts, parse_variant_query};
 
 use koharu_renderer::{
     TextAlign as RendererTextAlign, TextShaderEffect as RendererEffect,
@@ -30,8 +31,6 @@ use koharu_renderer::{
     },
     types::{RenderBlock, TextDirection as RendererTextDirection},
 };
-
-use crate::google_fonts::GoogleFontService;
 
 // ---------------------------------------------------------------------------
 // Inputs / outputs
@@ -83,18 +82,15 @@ pub struct Renderer {
     fontbook: Arc<Mutex<FontBook>>,
     renderer: TinySkiaRenderer,
     symbol_fallbacks: Vec<Font>,
-    pub google_fonts: Arc<GoogleFontService>,
+    pub google_fonts: Arc<GoogleFonts>,
 }
 
 impl Renderer {
     pub fn new() -> Result<Self> {
         let mut fontbook = FontBook::new();
         let symbol_fallbacks = load_symbol_fallbacks(&mut fontbook);
-        let app_data_root = koharu_runtime::default_app_data_root();
-        let google_fonts = Arc::new(
-            GoogleFontService::new(&app_data_root)
-                .context("failed to initialize Google Fonts service")?,
-        );
+        let google_fonts =
+            Arc::new(GoogleFonts::new().context("failed to initialize Google Fonts service")?);
         Ok(Self {
             fontbook: Arc::new(Mutex::new(fontbook)),
             renderer: TinySkiaRenderer::new()?,
@@ -377,7 +373,7 @@ impl Renderer {
             }
 
             // 2. Google Font variant
-            let (family, weight, style_str) = crate::google_fonts::parse_variant_query(candidate);
+            let (family, weight, style_str) = parse_variant_query(candidate);
             if candidate.contains(':')
                 && self
                     .google_fonts
@@ -425,7 +421,7 @@ impl Renderer {
             }
 
             // 2. Check if it's a Google Font variant (Family:WeightStyle)
-            let (family, weight, style_str) = crate::google_fonts::parse_variant_query(candidate);
+            let (family, weight, style_str) = parse_variant_query(candidate);
             if candidate.contains(':')
                 && let Some(data) = self
                     .google_fonts

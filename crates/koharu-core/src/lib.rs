@@ -22,7 +22,7 @@ pub use events::{
     JobWarningEvent, PipelineProgress, PipelineStatus, PipelineStep, ProjectSummary, SnapshotEvent,
 };
 pub use font::{FontPrediction, NamedFontPrediction, TextDirection, TopFont};
-pub use google_fonts::{FontSource, GoogleFontCatalog, GoogleFontEntry, GoogleFontVariant};
+pub use google_fonts::FontSource;
 pub use op::{
     ImageDataPatch, MaskDataPatch, NodeDataPatch, NodePatch, Op, OpError, OpResult, PagePatch,
     ProjectMetaPatch, TextDataPatch,

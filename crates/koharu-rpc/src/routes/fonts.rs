@@ -9,7 +9,8 @@ use axum::body::Body;
 use axum::extract::{Path, State};
 use axum::http::{HeaderValue, StatusCode, header::CONTENT_TYPE};
 use axum::response::{Json, Response};
-use koharu_core::{FontFaceInfo, GoogleFontCatalog};
+use koharu_core::FontFaceInfo;
+use koharu_fonts::GoogleFontCatalog;
 use utoipa_axum::{router::OpenApiRouter, routes};
 
 use crate::AppState;
@@ -50,12 +51,11 @@ async fn fetch_google_font(
     State(app): State<AppState>,
     Path(family_query): Path<String>,
 ) -> ApiResult<StatusCode> {
-    let http = app.runtime.http_client();
-    let (family, weight, style) = koharu_app::google_fonts::parse_variant_query(&family_query);
+    let (family, weight, style) = koharu_fonts::parse_variant_query(&family_query);
 
     app.renderer
         .google_fonts
-        .fetch_variant(family, weight, style, &http)
+        .fetch_variant(family, weight, style)
         .await
         .map_err(ApiError::internal)?;
 
@@ -75,7 +75,7 @@ async fn get_google_font_file(
     State(app): State<AppState>,
     Path((family_query, _file)): Path<(String, String)>,
 ) -> ApiResult<Response> {
-    let (family, weight, style) = koharu_app::google_fonts::parse_variant_query(&family_query);
+    let (family, weight, style) = koharu_fonts::parse_variant_query(&family_query);
     let bytes = app
         .renderer
         .google_fonts

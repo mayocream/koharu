@@ -1,43 +1,59 @@
-use std::collections::HashMap;
+use std::{collections::HashMap, path::PathBuf};
 
 use anyhow::{Context, Result};
-use camino::{Utf8Path, Utf8PathBuf};
-use koharu_core::{GoogleFontCatalog, GoogleFontEntry, GoogleFontVariant};
+use koharu_runtime::{download::client::Client, package::STORE_DIR};
+use serde::{Deserialize, Serialize};
 use tokio::sync::Mutex;
 use tracing::debug;
+use utoipa::ToSchema;
 
 const CATALOG_JSON: &str = include_str!("../data/google-fonts-catalog.json");
 
-const RECOMMENDED_FAMILIES: &[&str] = &[
-    "Comic Neue",
-    "Bangers",
-    "Patrick Hand",
-    "Caveat",
-    "Pangolin",
-];
-
-/// On-demand Google Fonts service with persistent disk caching.
-pub struct GoogleFontService {
-    catalog: GoogleFontCatalog,
-    cache_dir: Utf8PathBuf,
-    /// Tracks which families have been downloaded to disk.
-    cached_families: Mutex<HashMap<String, Vec<Utf8PathBuf>>>,
+#[derive(Debug, Clone, Serialize, Deserialize, ToSchema)]
+#[serde(rename_all = "camelCase")]
+pub struct GoogleFontVariant {
+    pub style: String,
+    pub weight: u16,
+    pub filename: String,
 }
 
-impl GoogleFontService {
-    pub fn new(app_data_root: &Utf8Path) -> Result<Self> {
+#[derive(Debug, Clone, Serialize, Deserialize, ToSchema)]
+#[serde(rename_all = "camelCase")]
+pub struct GoogleFontEntry {
+    pub family: String,
+    pub category: String,
+    pub subsets: Vec<String>,
+    pub variants: Vec<GoogleFontVariant>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, ToSchema)]
+pub struct GoogleFontCatalog {
+    pub fonts: Vec<GoogleFontEntry>,
+}
+
+/// On-demand Google Fonts service with persistent disk caching.
+pub struct GoogleFonts {
+    catalog: GoogleFontCatalog,
+    cache_dir: PathBuf,
+    http: Client,
+    /// Tracks which families have been downloaded to disk.
+    cached_families: Mutex<HashMap<String, Vec<PathBuf>>>,
+}
+
+impl GoogleFonts {
+    pub fn new() -> Result<Self> {
         let catalog: GoogleFontCatalog =
             serde_json::from_str(CATALOG_JSON).context("failed to parse Google Fonts catalog")?;
-        let cache_dir = app_data_root.join("fonts").join("google");
-        std::fs::create_dir_all(cache_dir.as_std_path())
-            .context("failed to create Google Fonts cache dir")?;
+        let cache_dir = STORE_DIR.join("fonts").join("google");
+        std::fs::create_dir_all(&cache_dir).context("failed to create Google Fonts cache dir")?;
+        let http = Client::new().context("failed to create Google Fonts HTTP client")?;
 
         // Scan existing cache to populate known cached families
         let mut cached_families = HashMap::new();
         for entry in &catalog.fonts {
             let family_dir = cache_dir.join(normalize_family_dir(&entry.family));
             if family_dir.exists() {
-                let paths: Vec<Utf8PathBuf> = entry
+                let paths: Vec<PathBuf> = entry
                     .variants
                     .iter()
                     .map(|v| family_dir.join(&v.filename))
@@ -52,6 +68,7 @@ impl GoogleFontService {
         Ok(Self {
             catalog,
             cache_dir,
+            http,
             cached_families: Mutex::new(cached_families),
         })
     }
@@ -59,11 +76,6 @@ impl GoogleFontService {
     /// Returns the full catalog for browsing.
     pub fn catalog(&self) -> &GoogleFontCatalog {
         &self.catalog
-    }
-
-    /// Returns the list of recommended font family names.
-    pub fn recommended_families(&self) -> &[&str] {
-        RECOMMENDED_FAMILIES
     }
 
     /// Checks if a family has been cached to disk.
@@ -80,22 +92,12 @@ impl GoogleFontService {
     /// Downloads a font family's regular variant to disk cache.
     /// Returns the path to the cached .ttf file.
     /// No-op if already cached.
-    pub async fn fetch_family(
-        &self,
-        family: &str,
-        http: &reqwest_middleware::ClientWithMiddleware,
-    ) -> Result<Utf8PathBuf> {
-        self.fetch_variant(family, 400, "normal", http).await
+    pub async fn fetch_family(&self, family: &str) -> Result<PathBuf> {
+        self.fetch_variant(family, 400, "normal").await
     }
 
     /// Downloads a specific variant to disk cache.
-    pub async fn fetch_variant(
-        &self,
-        family: &str,
-        weight: u16,
-        style: &str,
-        http: &reqwest_middleware::ClientWithMiddleware,
-    ) -> Result<Utf8PathBuf> {
+    pub async fn fetch_variant(&self, family: &str, weight: u16, style: &str) -> Result<PathBuf> {
         let entry = self
             .catalog
             .fonts
@@ -139,7 +141,7 @@ impl GoogleFontService {
             );
 
             debug!(%family, %url, "trying to download Google Font");
-            match http.get(&url).send().await {
+            match self.http.get(&url).send().await {
                 Ok(resp) if resp.status().is_success() => {
                     let bytes = resp.bytes().await.context("failed to read font bytes")?;
                     std::fs::create_dir_all(file_path.parent().unwrap())?;
@@ -208,7 +210,7 @@ impl GoogleFontService {
         if !file_path.exists() {
             return Ok(None);
         }
-        let data = std::fs::read(file_path.as_std_path()).context("failed to read cached font")?;
+        let data = std::fs::read(file_path).context("failed to read cached font")?;
         Ok(Some(data))
     }
 
@@ -241,5 +243,46 @@ pub fn parse_variant_query(query: &str) -> (&str, u16, &str) {
         (family, weight, style)
     } else {
         (query, 400, "normal")
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn embedded_catalog_is_not_empty() {
+        let catalog: GoogleFontCatalog = serde_json::from_str(CATALOG_JSON).unwrap();
+
+        assert!(!catalog.fonts.is_empty());
+    }
+
+    #[test]
+    fn family_names_map_to_google_fonts_directories() {
+        assert_eq!(normalize_family_dir("Comic Neue"), "comicneue");
+        assert_eq!(normalize_family_dir("Noto Sans JP"), "notosansjp");
+    }
+
+    #[test]
+    fn cache_uses_runtime_store() {
+        let fonts = GoogleFonts::new().unwrap();
+
+        assert_eq!(fonts.cache_dir, STORE_DIR.join("fonts").join("google"));
+    }
+
+    #[test]
+    fn variant_queries_parse_weight_and_style() {
+        assert_eq!(
+            parse_variant_query("Comic Neue:700i"),
+            ("Comic Neue", 700, "italic")
+        );
+        assert_eq!(
+            parse_variant_query("Comic Neue"),
+            ("Comic Neue", 400, "normal")
+        );
+        assert_eq!(
+            parse_variant_query("Comic Neue:bad"),
+            ("Comic Neue", 400, "normal")
+        );
     }
 }

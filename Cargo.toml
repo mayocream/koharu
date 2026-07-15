@@ -29,6 +29,7 @@ koharu-config = { path = "crates/koharu-config", version = "0.62.0-alpha.1", def
 koharu-core = { path = "crates/koharu-core", version = "0.62.0-alpha.1", default-features = false }
 koharu-diffusion = { path = "crates/koharu-diffusion", version = "0.62.0-alpha.1", default-features = false }
 koharu-diffusion-sys = { path = "crates/koharu-diffusion-sys", version = "0.62.0-alpha.1", default-features = false }
+koharu-fonts = { path = "crates/koharu-fonts", version = "0.62.0-alpha.1", default-features = false }
 koharu-llama = { path = "crates/koharu-llama", version = "0.62.0-alpha.1", default-features = false }
 koharu-llama-sys = { path = "crates/koharu-llama-sys", version = "0.62.0-alpha.1", default-features = false }
 koharu-runtime = { path = "crates/koharu-runtime", version = "0.62.0-alpha.1", default-features = false }

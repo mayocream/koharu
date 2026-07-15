@@ -10,7 +10,6 @@ pub mod autosave;
 pub mod blobs;
 pub mod bus;
 pub mod config;
-pub mod google_fonts;
 pub mod history;
 pub mod llm;
 pub mod pipeline;

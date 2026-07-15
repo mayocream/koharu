@@ -3929,6 +3929,7 @@ dependencies = [
  "koharu-ai",
  "koharu-config",
  "koharu-core",
+ "koharu-fonts",
  "koharu-ml",
  "koharu-renderer",
  "koharu-runtime",
@@ -3936,7 +3937,6 @@ dependencies = [
  "parking_lot",
  "petgraph",
  "postcard",
- "reqwest-middleware",
  "secrecy",
  "serde",
  "serde_json",
@@ -4027,6 +4027,19 @@ dependencies = [
  "koharu-bindgen",
  "libc",
  "libloading 0.8.9",
+]
+
+[[package]]
+name = "koharu-fonts"
+version = "0.62.0-alpha.1"
+dependencies = [
+ "anyhow",
+ "koharu-runtime",
+ "serde",
+ "serde_json",
+ "tokio",
+ "tracing",
+ "utoipa",
 ]
 
 [[package]]
@@ -4154,6 +4167,7 @@ dependencies = [
  "insta",
  "koharu-app",
  "koharu-core",
+ "koharu-fonts",
  "koharu-psd",
  "koharu-runtime",
  "natord",

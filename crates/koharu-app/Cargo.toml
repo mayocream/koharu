@@ -20,6 +20,7 @@ clap = { workspace = true }
 tracing-subscriber = { workspace = true }
 koharu-config = { workspace = true }
 koharu-core = { workspace = true }
+koharu-fonts = { workspace = true }
 koharu-ai = { workspace = true }
 koharu-ml = { workspace = true }
 koharu-renderer = { workspace = true }
@@ -40,7 +41,6 @@ lru = { workspace = true }
 parking_lot = { workspace = true }
 petgraph = { workspace = true }
 postcard = { workspace = true }
-reqwest-middleware = { workspace = true }
 secrecy = { workspace = true }
 serde = { workspace = true }
 serde_json = { workspace = true }
