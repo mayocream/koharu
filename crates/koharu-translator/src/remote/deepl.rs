@@ -35,12 +35,6 @@ pub(super) async fn translate(
     config: &DeepLConfig,
     request: &TranslationRequest,
 ) -> Result<Vec<String>> {
-    if request.instructions.is_some() {
-        return Err(Error::UnsupportedOption {
-            provider: "deepl",
-            option: "instructions",
-        });
-    }
     let target = target(request.target_language).ok_or(Error::UnsupportedLanguage {
         provider: "deepl",
         language: request.target_language,

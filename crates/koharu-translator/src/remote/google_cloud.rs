@@ -6,7 +6,7 @@ use serde::{Deserialize, Serialize};
 use url::Url;
 
 use super::{ApiKey, send_json};
-use crate::{Error, Result, TranslationRequest};
+use crate::{Result, TranslationRequest};
 
 const URL: &str = "https://translation.googleapis.com/language/translate/v2";
 
@@ -29,12 +29,6 @@ pub(super) async fn translate(
     config: &GoogleCloudConfig,
     request: &TranslationRequest,
 ) -> Result<Vec<String>> {
-    if request.instructions.is_some() {
-        return Err(Error::UnsupportedOption {
-            provider: "google-cloud-translation",
-            option: "instructions",
-        });
-    }
     let mut url = Url::parse(URL).expect("Google API URL is valid");
     url.query_pairs_mut()
         .append_pair("key", config.api_key.expose());

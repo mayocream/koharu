@@ -12,6 +12,7 @@ keywords.workspace = true
 publish.workspace = true
 
 [dependencies]
+koharu-config = { workspace = true }
 koharu-ml = { workspace = true }
 koharu-runtime = { workspace = true }
 anyhow = { workspace = true }

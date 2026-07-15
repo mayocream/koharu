@@ -33,6 +33,29 @@ impl ApiKey {
         Self(SecretString::from(value.into()))
     }
 
+    /// Loads a provider API key from Koharu's platform credential store.
+    pub fn load(provider: RemoteProviderKind) -> Result<Option<Self>> {
+        Ok(koharu_config::secrets()
+            .get(provider.id())?
+            .filter(|value| !value.trim().is_empty())
+            .map(Self::new))
+    }
+
+    /// Stores this API key for a provider. An empty key clears the credential.
+    pub fn store(&self, provider: RemoteProviderKind) -> Result<()> {
+        if self.expose().trim().is_empty() {
+            return Self::delete(provider);
+        }
+        koharu_config::secrets().set(provider.id(), self.expose())?;
+        Ok(())
+    }
+
+    /// Clears a provider API key. A missing credential is treated as success.
+    pub fn delete(provider: RemoteProviderKind) -> Result<()> {
+        koharu_config::secrets().delete(provider.id())?;
+        Ok(())
+    }
+
     pub(super) fn expose(&self) -> &str {
         self.0.expose_secret()
     }
@@ -223,6 +246,15 @@ mod tests {
         assert_eq!(
             format!("{:?}", ApiKey::new("top-secret")),
             "ApiKey([REDACTED])"
+        );
+    }
+
+    #[test]
+    fn provider_ids_are_credential_keys() {
+        assert_eq!(RemoteProviderKind::OpenAi.id(), "openai");
+        assert_eq!(
+            RemoteProviderKind::GoogleCloudTranslation.id(),
+            "google-cloud-translation"
         );
     }
 }

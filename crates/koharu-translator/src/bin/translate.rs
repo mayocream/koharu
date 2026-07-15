@@ -5,7 +5,8 @@ use clap::{Parser, ValueEnum};
 use koharu_translator::{
     ApiKey, CaiyunConfig, ClaudeConfig, DeepLConfig, DeepSeekConfig, GeminiConfig,
     GoogleCloudConfig, Language, LocalModel, LocalTranslator, OpenAiCompatibleConfig, OpenAiConfig,
-    RemoteProvider, RemoteTranslator, TranslationContext, TranslationRequest, Translator,
+    RemoteProvider, RemoteProviderKind, RemoteTranslator, TranslationContext, TranslationRequest,
+    Translator,
 };
 use url::Url;
 
@@ -20,7 +21,8 @@ struct Args {
     #[arg(long)]
     model: Option<String>,
 
-    /// API key. When omitted, the provider-specific environment variable is used.
+    /// API key. Stored in Koharu's credential store; when omitted, the
+    /// provider-specific environment variable or stored key is used.
     #[arg(long)]
     api_key: Option<String>,
 
@@ -123,19 +125,19 @@ async fn main() -> Result<()> {
 fn remote_provider(provider: Provider, args: &Args) -> Result<RemoteProvider> {
     Ok(match provider {
         Provider::OpenAi => RemoteProvider::OpenAi(OpenAiConfig::new(
-            api_key(args, "OPENAI_API_KEY")?,
+            api_key(args, RemoteProviderKind::OpenAi, "OPENAI_API_KEY")?,
             required_model(args)?,
         )),
         Provider::Gemini => RemoteProvider::Gemini(GeminiConfig::new(
-            api_key(args, "GEMINI_API_KEY")?,
+            api_key(args, RemoteProviderKind::Gemini, "GEMINI_API_KEY")?,
             required_model(args)?,
         )),
         Provider::Claude => RemoteProvider::Claude(ClaudeConfig::new(
-            api_key(args, "ANTHROPIC_API_KEY")?,
+            api_key(args, RemoteProviderKind::Claude, "ANTHROPIC_API_KEY")?,
             required_model(args)?,
         )),
         Provider::DeepSeek => RemoteProvider::DeepSeek(DeepSeekConfig::new(
-            api_key(args, "DEEPSEEK_API_KEY")?,
+            api_key(args, RemoteProviderKind::DeepSeek, "DEEPSEEK_API_KEY")?,
             required_model(args)?,
         )),
         Provider::OpenAiCompatible => {
@@ -144,24 +146,35 @@ fn remote_provider(provider: Provider, args: &Args) -> Result<RemoteProvider> {
                 .clone()
                 .context("--base-url is required for open-ai-compatible")?;
             let mut config = OpenAiCompatibleConfig::new(base_url, required_model(args)?);
-            if let Some(api_key) = optional_api_key(args, "OPENAI_COMPATIBLE_API_KEY") {
+            if let Some(api_key) = optional_api_key(
+                args,
+                RemoteProviderKind::OpenAiCompatible,
+                "OPENAI_COMPATIBLE_API_KEY",
+            )? {
                 config = config.with_api_key(api_key);
             }
             RemoteProvider::OpenAiCompatible(config)
         }
         Provider::DeepL => {
-            let mut config = DeepLConfig::new(api_key(args, "DEEPL_API_KEY")?);
+            let mut config =
+                DeepLConfig::new(api_key(args, RemoteProviderKind::DeepL, "DEEPL_API_KEY")?);
             if let Some(base_url) = args.base_url.clone() {
                 config = config.with_base_url(base_url);
             }
             RemoteProvider::DeepL(config)
         }
-        Provider::GoogleCloudTranslation => RemoteProvider::GoogleCloudTranslation(
-            GoogleCloudConfig::new(api_key(args, "GOOGLE_CLOUD_API_KEY")?),
-        ),
-        Provider::Caiyun => {
-            RemoteProvider::Caiyun(CaiyunConfig::new(api_key(args, "CAIYUN_API_KEY")?))
+        Provider::GoogleCloudTranslation => {
+            RemoteProvider::GoogleCloudTranslation(GoogleCloudConfig::new(api_key(
+                args,
+                RemoteProviderKind::GoogleCloudTranslation,
+                "GOOGLE_CLOUD_API_KEY",
+            )?))
         }
+        Provider::Caiyun => RemoteProvider::Caiyun(CaiyunConfig::new(api_key(
+            args,
+            RemoteProviderKind::Caiyun,
+            "CAIYUN_API_KEY",
+        )?)),
         Provider::Local => bail!("local provider must be constructed through the local path"),
     })
 }
@@ -173,14 +186,25 @@ fn required_model(args: &Args) -> Result<&str> {
         .context("--model is required for this provider")
 }
 
-fn api_key(args: &Args, variable: &str) -> Result<ApiKey> {
-    optional_api_key(args, variable).with_context(|| format!("--api-key or {variable} is required"))
+fn api_key(args: &Args, provider: RemoteProviderKind, variable: &str) -> Result<ApiKey> {
+    optional_api_key(args, provider, variable)?
+        .with_context(|| format!("--api-key, {variable}, or a stored API key is required"))
 }
 
-fn optional_api_key(args: &Args, variable: &str) -> Option<ApiKey> {
-    args.api_key
-        .clone()
-        .or_else(|| env::var(variable).ok())
-        .filter(|key| !key.trim().is_empty())
-        .map(ApiKey::new)
+fn optional_api_key(
+    args: &Args,
+    provider: RemoteProviderKind,
+    variable: &str,
+) -> Result<Option<ApiKey>> {
+    if let Some(value) = args.api_key.clone().filter(|key| !key.trim().is_empty()) {
+        let api_key = ApiKey::new(value);
+        api_key.store(provider)?;
+        return Ok(Some(api_key));
+    }
+
+    if let Some(value) = env::var(variable).ok().filter(|key| !key.trim().is_empty()) {
+        return Ok(Some(ApiKey::new(value)));
+    }
+
+    ApiKey::load(provider).map_err(Into::into)
 }

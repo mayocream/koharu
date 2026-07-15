@@ -29,12 +29,6 @@ pub(super) async fn translate(
     config: &CaiyunConfig,
     request: &TranslationRequest,
 ) -> Result<Vec<String>> {
-    if request.instructions.is_some() {
-        return Err(Error::UnsupportedOption {
-            provider: "caiyun",
-            option: "instructions",
-        });
-    }
     let target = target(request.target_language).ok_or(Error::UnsupportedLanguage {
         provider: "caiyun",
         language: request.target_language,

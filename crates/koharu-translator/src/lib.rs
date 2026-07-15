@@ -135,11 +135,6 @@ pub enum Error {
         provider: &'static str,
         language: Language,
     },
-    #[error("{provider} does not support the `{option}` option")]
-    UnsupportedOption {
-        provider: &'static str,
-        option: &'static str,
-    },
     #[error("{provider} returned {actual} segments; expected {expected}")]
     SegmentCount {
         provider: &'static str,
