@@ -198,7 +198,7 @@ impl Package for Libtorch {
         let parent = path.parent().context("invalid LibTorch package path")?;
         create_dir_all(parent)?;
         let temporary = tempfile::tempdir_in(parent)?;
-        let client = Client::new();
+        let client = Client::new()?;
 
         let globs = if rocm.is_some() {
             &["torch/.kpack/**/*", "torch/lib/**/*"][..]

@@ -12,7 +12,8 @@ use koharu_core::{
     BlobRef, ImageData, ImageDataPatch, ImageRole, Node, NodeDataPatch, NodeId, NodeKind,
     NodePatch, Op, PageId, Scene, Transform,
 };
-use koharu_runtime::{RuntimeHttpClient, RuntimeManager};
+use koharu_runtime::RuntimeManager;
+use koharu_runtime::download::client::HttpClient;
 use parking_lot::RwLock;
 use serde::{Deserialize, Serialize};
 use tracing::Instrument as _;
@@ -88,7 +89,7 @@ struct LoginAttempt {
 
 pub struct AiManager {
     codex: CodexClient,
-    http_client: RuntimeHttpClient,
+    http_client: HttpClient,
     codex_device_timeout: Duration,
     codex_logins: Arc<DashMap<String, LoginAttempt>>,
     latest_codex_login: RwLock<Option<String>>,

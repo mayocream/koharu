@@ -45,7 +45,7 @@ struct File {
 }
 
 pub async fn wheel(package: &str, platform: Platform) -> anyhow::Result<String> {
-    let client = Client::new();
+    let client = Client::new()?;
     let metadata_url = format!("https://pypi.org/pypi/{package}/json");
     let release: Release = client
         .get(&metadata_url)

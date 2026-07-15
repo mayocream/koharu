@@ -16,6 +16,7 @@ publish = true
 anyhow = { workspace = true }
 console = { workspace = true }
 futures = { workspace = true }
+koharu-config = { workspace = true }
 reqwest = { workspace = true }
 reqwest-middleware = { workspace = true }
 reqwest-retry = { workspace = true }
@@ -37,3 +38,6 @@ indicatif = { workspace = true }
 
 [target.'cfg(target_os = "windows")'.dependencies]
 windows-sys = { workspace = true }
+
+[dev-dependencies]
+toml = { workspace = true }

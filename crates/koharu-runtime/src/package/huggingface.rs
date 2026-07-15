@@ -22,7 +22,7 @@ impl Package for HuggingFace {
             return Ok(path);
         }
 
-        let client = Client::new();
+        let client = Client::new()?;
         let url = huggingface_url(&self.repo, &self.filename);
         let parent = path
             .parent()

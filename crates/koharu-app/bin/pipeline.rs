@@ -41,7 +41,8 @@ use koharu_app::{App, AppConfig};
 use koharu_core::{
     ImageData, ImageRole, MaskRole, Node, NodeId, NodeKind, Op, Page, PageId, Transform,
 };
-use koharu_runtime::{ComputePolicy, RuntimeHttpConfig, RuntimeManager};
+use koharu_runtime::config::HttpConfig;
+use koharu_runtime::{ComputePolicy, RuntimeManager};
 use tracing_subscriber::layer::SubscriberExt;
 use tracing_subscriber::util::SubscriberInitExt;
 
@@ -140,7 +141,7 @@ async fn run() -> Result<()> {
     cfg.data.path = temp_root.join("data");
     std::fs::create_dir_all(cfg.data.path.as_std_path()).context("create data dir")?;
 
-    let http = RuntimeHttpConfig {
+    let http = HttpConfig {
         connect_timeout_secs: cfg.http.connect_timeout.max(1),
         read_timeout_secs: cfg.http.read_timeout.max(1),
         max_retries: cfg.http.max_retries,

@@ -324,7 +324,7 @@ impl Package for Cuda {
         let wheel = wheel(self.package(), platform).await?;
 
         let file = tempfile::Builder::new().suffix(".zip").tempfile()?;
-        let client = Client::new();
+        let client = Client::new()?;
         let archive = client.download(&wheel, file.path().to_path_buf()).await?;
 
         let parent = path

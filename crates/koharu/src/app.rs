@@ -7,7 +7,8 @@ use anyhow::{Context, Result};
 use clap::Parser;
 use koharu_app::{App, AppConfig, config as app_config};
 use koharu_rpc::{BootstrapManager, server};
-use koharu_runtime::{ComputePolicy, RuntimeHttpConfig, RuntimeManager};
+use koharu_runtime::config::HttpConfig;
+use koharu_runtime::{ComputePolicy, RuntimeManager};
 use tokio::net::TcpListener;
 use tracing_subscriber::layer::SubscriberExt;
 use tracing_subscriber::util::SubscriberInitExt;
@@ -63,7 +64,7 @@ pub async fn run() -> Result<()> {
         .init();
 
     let config: AppConfig = app_config::load()?;
-    let http = RuntimeHttpConfig {
+    let http = HttpConfig {
         connect_timeout_secs: config.http.connect_timeout.max(1),
         read_timeout_secs: config.http.read_timeout.max(1),
         max_retries: config.http.max_retries,

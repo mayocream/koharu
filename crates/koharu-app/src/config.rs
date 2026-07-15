@@ -1,17 +1,12 @@
-use std::fs;
-
-use anyhow::{Context, Result};
+use anyhow::{Result, anyhow};
 use camino::Utf8PathBuf;
 use koharu_runtime::default_app_data_root;
-use koharu_secrets::SecretStore;
 use serde::{Deserialize, Deserializer, Serialize, Serializer};
 use utoipa::ToSchema;
 
 use crate::pipeline::{Artifact, Registry};
 
-const CONFIG_FILE: &str = "config.toml";
 const REDACTED: &str = "[REDACTED]";
-const SECRET_SERVICE: &str = "koharu";
 const PROVIDER_API_KEY_SECRET_PREFIX: &str = "llm_provider_api_key_";
 
 // ---------------------------------------------------------------------------
@@ -145,27 +140,24 @@ impl Default for HttpConfig {
 // ---------------------------------------------------------------------------
 
 pub fn config_path() -> Result<Utf8PathBuf> {
-    Ok(default_app_data_root().join(CONFIG_FILE))
+    Utf8PathBuf::from_path_buf(koharu_config::path()?)
+        .map_err(|path| anyhow!("configuration path is not valid UTF-8: {}", path.display()))
 }
 
 pub fn load() -> Result<AppConfig> {
     let path = config_path()?;
-    let mut config: AppConfig = if path.exists() {
-        let content =
-            fs::read_to_string(&path).with_context(|| format!("failed to read `{path}`"))?;
-        toml::from_str(&content).with_context(|| format!("failed to parse `{path}`"))?
-    } else {
-        let config = AppConfig::default();
+    let exists = path.exists();
+    let mut config: AppConfig = koharu_config::load()?;
+    if !exists {
         save(&config)?;
-        config
-    };
+    }
 
     if validate_pipeline_config(&mut config) {
         save(&config)?;
     }
 
     // Populate api_key from credential storage for every known provider.
-    let secrets = SecretStore::new(SECRET_SERVICE);
+    let secrets = koharu_config::secrets();
     for provider in &mut config.providers {
         if let Ok(Some(key)) = secrets.get(&provider_api_key_secret_key(&provider.id))
             && !key.trim().is_empty()
@@ -178,14 +170,7 @@ pub fn load() -> Result<AppConfig> {
 }
 
 pub fn save(config: &AppConfig) -> Result<()> {
-    let path = config_path()?;
-    if let Some(parent) = path.parent() {
-        fs::create_dir_all(parent)
-            .with_context(|| format!("failed to create config dir `{parent}`"))?;
-    }
-    // `api_key` is `#[serde(skip)]`, so it is never written to the TOML file.
-    let content = toml::to_string_pretty(config).context("failed to serialize config")?;
-    fs::write(&path, content).with_context(|| format!("failed to write config to `{path}`"))
+    koharu_config::save(config)
 }
 
 // ---------------------------------------------------------------------------
@@ -358,7 +343,7 @@ fn validate_engine_name(
 /// - `None` → clear from credential storage
 /// - `Some(RedactedSecret)` with value == "[REDACTED]" → unchanged
 pub fn sync_secrets(config: &AppConfig) -> Result<()> {
-    let secrets = SecretStore::new(SECRET_SERVICE);
+    let secrets = koharu_config::secrets();
     for provider in &config.providers {
         match &provider.api_key {
             Some(secret) if secret.expose() != REDACTED => {
@@ -420,10 +405,13 @@ mod tests {
     }
 
     #[test]
-    fn config_path_uses_appdata_layout() {
+    fn config_path_uses_home_dot_koharu_layout() {
         let path = config_path().unwrap();
         assert_eq!(path.file_name(), Some("config.toml"));
-        assert!(path.as_str().contains("Koharu"));
+        assert_eq!(
+            path.parent().and_then(|path| path.file_name()),
+            Some(".koharu")
+        );
     }
 
     #[test]

@@ -1328,6 +1328,18 @@ dependencies = [
 ]
 
 [[package]]
+name = "config"
+version = "0.15.25"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "b85f248a4de22d204ceabc6299d89d2c70fbd7f09fea53c06c852369652d8139"
+dependencies = [
+ "pathdiff",
+ "serde_core",
+ "toml 1.1.2+spec-1.1.0",
+ "winnow 1.0.3",
+]
+
+[[package]]
 name = "console"
 version = "0.16.3"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -3915,11 +3927,11 @@ dependencies = [
  "image 0.25.10",
  "inventory",
  "koharu-ai",
+ "koharu-config",
  "koharu-core",
  "koharu-ml",
  "koharu-renderer",
  "koharu-runtime",
- "koharu-secrets",
  "lru",
  "parking_lot",
  "petgraph",
@@ -3964,6 +3976,19 @@ dependencies = [
  "serde_with",
  "url",
  "uuid",
+]
+
+[[package]]
+name = "koharu-config"
+version = "0.62.0-alpha.1"
+dependencies = [
+ "anyhow",
+ "config",
+ "dirs",
+ "koharu-secrets",
+ "serde",
+ "tempfile",
+ "toml 1.1.2+spec-1.1.0",
 ]
 
 [[package]]
@@ -4160,6 +4185,7 @@ dependencies = [
  "futures",
  "goblin",
  "indicatif",
+ "koharu-config",
  "libloading 0.8.9",
  "num_cpus",
  "reqwest",
@@ -4170,6 +4196,7 @@ dependencies = [
  "tar",
  "tempfile",
  "tokio",
+ "toml 1.1.2+spec-1.1.0",
  "walkdir",
  "windows-sys 0.61.2",
  "zip 8.6.0",

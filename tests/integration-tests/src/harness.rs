@@ -18,7 +18,8 @@ use camino::Utf8PathBuf;
 use koharu_app::{App, AppConfig};
 use koharu_client::apis::configuration::Configuration;
 use koharu_rpc::{BootstrapManager, server};
-use koharu_runtime::{ComputePolicy, RuntimeHttpConfig, RuntimeManager};
+use koharu_runtime::config::HttpConfig;
+use koharu_runtime::{ComputePolicy, RuntimeManager};
 use tokio::net::TcpListener;
 use tokio::sync::OnceCell;
 
@@ -40,7 +41,7 @@ async fn shared_runtime() -> Result<Arc<RuntimeManager>> {
         .get_or_try_init(|| async {
             let root = cache_root();
             std::fs::create_dir_all(root.as_std_path()).context("create runtime cache root")?;
-            let http = RuntimeHttpConfig {
+            let http = HttpConfig {
                 connect_timeout_secs: 30,
                 read_timeout_secs: 600,
                 max_retries: 2,

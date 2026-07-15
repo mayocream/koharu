@@ -120,7 +120,7 @@ impl Package for Rocm {
         create_dir_all(parent)?;
         let temporary = tempfile::tempdir_in(parent)?;
 
-        let client = Client::new();
+        let client = Client::new()?;
         for (url, glob) in [
             (
                 format!("{ROCM_WHEEL_INDEX}/rocm_sdk_core-{ROCM_VERSION}-py3-none-win_amd64.whl"),

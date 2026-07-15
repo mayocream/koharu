@@ -18,12 +18,12 @@ path = "bin/pipeline.rs"
 [dependencies]
 clap = { workspace = true }
 tracing-subscriber = { workspace = true }
+koharu-config = { workspace = true }
 koharu-core = { workspace = true }
 koharu-ai = { workspace = true }
 koharu-ml = { workspace = true }
 koharu-renderer = { workspace = true }
 koharu-runtime = { workspace = true }
-koharu-secrets = { workspace = true }
 anyhow = { workspace = true }
 arc-swap = { workspace = true }
 async-trait = { workspace = true }

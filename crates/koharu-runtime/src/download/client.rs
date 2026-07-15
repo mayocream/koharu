@@ -1,34 +1,46 @@
-use std::{io::SeekFrom, path::PathBuf};
+use std::{io::SeekFrom, path::PathBuf, sync::Arc, time::Duration};
 
 use futures::stream::{self, StreamExt, TryStreamExt};
 use tokio::io::{AsyncSeekExt, AsyncWriteExt};
 
 use super::progress;
+use crate::config::HttpConfig;
 
-static USER_AGENT: &str = concat!(env!("CARGO_PKG_NAME"), "/", env!("CARGO_PKG_VERSION"));
+const USER_AGENT: &str = concat!(env!("CARGO_PKG_NAME"), "/", env!("CARGO_PKG_VERSION"));
 const CHUNK_SIZE: u64 = 10 * 1024 * 1024;
 
+pub type HttpClient = Arc<reqwest_middleware::ClientWithMiddleware>;
+
+pub fn build(config: &HttpConfig) -> anyhow::Result<HttpClient> {
+    let client = reqwest::Client::builder()
+        .user_agent(USER_AGENT)
+        .connect_timeout(Duration::from_secs(config.connect_timeout_secs.max(1)))
+        .read_timeout(Duration::from_secs(config.read_timeout_secs.max(1)))
+        .build()?;
+
+    Ok(Arc::new(
+        reqwest_middleware::ClientBuilder::new(client)
+            .with(reqwest_retry::RetryTransientMiddleware::new_with_policy(
+                reqwest_retry::policies::ExponentialBackoff::builder()
+                    .build_with_max_retries(config.max_retries),
+            ))
+            .build(),
+    ))
+}
+
 pub struct Client {
-    inner: reqwest_middleware::ClientWithMiddleware,
+    inner: HttpClient,
 }
 
 impl Client {
-    // TODO: config
-    pub fn new() -> Self {
-        let client = reqwest::Client::builder()
-            .user_agent(USER_AGENT)
-            .connect_timeout(std::time::Duration::from_secs(60))
-            .read_timeout(std::time::Duration::from_secs(300))
-            .build()
-            .expect("failed to build reqwest client");
+    pub fn new() -> anyhow::Result<Self> {
+        Self::with_config(HttpConfig::load()?)
+    }
 
-        let middleware = reqwest_middleware::ClientBuilder::new(client)
-            .with(reqwest_retry::RetryTransientMiddleware::new_with_policy(
-                reqwest_retry::policies::ExponentialBackoff::builder().build_with_max_retries(3),
-            ))
-            .build();
-
-        Self { inner: middleware }
+    pub fn with_config(config: HttpConfig) -> anyhow::Result<Self> {
+        Ok(Self {
+            inner: build(&config)?,
+        })
     }
 
     pub fn get(&self, url: &str) -> reqwest_middleware::RequestBuilder {

@@ -129,7 +129,7 @@ impl Package for StableDiffusionCpp {
             let asset = self.asset();
             let url = github_release(REPO, TAG, &asset);
             let file = tempfile::Builder::new().suffix(&asset).tempfile()?;
-            let archive = Client::new()
+            let archive = Client::new()?
                 .download(&url, file.path().to_path_buf())
                 .await?;
 

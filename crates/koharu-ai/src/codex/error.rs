@@ -14,7 +14,7 @@ pub enum CodexError {
     Middleware(#[from] reqwest_middleware::Error),
 
     #[error("failed to build runtime http client: {0}")]
-    RuntimeHttpClient(#[source] anyhow::Error),
+    HttpClient(#[source] anyhow::Error),
 
     #[error("failed to serialize or parse json: {0}")]
     Json(#[from] serde_json::Error),

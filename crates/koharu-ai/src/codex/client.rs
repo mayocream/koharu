@@ -1,7 +1,8 @@
 use std::fmt;
 use std::time::Instant;
 
-use koharu_runtime::{RuntimeHttpClient, RuntimeHttpConfig};
+use koharu_runtime::config::HttpConfig;
+use koharu_runtime::download::client::{self, HttpClient};
 use reqwest::StatusCode;
 use serde::Serialize;
 use serde_json::Value;
@@ -18,11 +19,9 @@ use super::token_store::TokenStore;
 use super::tokens::CodexTokens;
 use crate::provider::{AiImageProvider, AiImageRequest, AiImageResult};
 
-const USER_AGENT: &str = concat!("koharu-ai/", env!("CARGO_PKG_VERSION"));
-
 #[derive(Clone)]
 pub struct CodexClient {
-    http_client: RuntimeHttpClient,
+    http_client: HttpClient,
     config: CodexConfig,
     token_store: TokenStore,
 }
@@ -48,15 +47,15 @@ impl CodexClient {
     }
 
     pub fn try_new(config: CodexConfig) -> Result<Self> {
-        Self::with_runtime_http_config(config, RuntimeHttpConfig::default())
+        Self::with_http_config(config, HttpConfig::default())
     }
 
-    pub fn with_runtime_http_config(config: CodexConfig, http: RuntimeHttpConfig) -> Result<Self> {
-        let http_client = http.build_client().map_err(CodexError::RuntimeHttpClient)?;
+    pub fn with_http_config(config: CodexConfig, http: HttpConfig) -> Result<Self> {
+        let http_client = client::build(&http).map_err(CodexError::HttpClient)?;
         Ok(Self::with_http_client(config, http_client))
     }
 
-    pub fn with_http_client(config: CodexConfig, http_client: RuntimeHttpClient) -> Self {
+    pub fn with_http_client(config: CodexConfig, http_client: HttpClient) -> Self {
         Self {
             http_client,
             config,
@@ -284,7 +283,6 @@ impl CodexClient {
             .http_client
             .post(&self.config.responses_url)
             .bearer_auth(&tokens.access_token)
-            .header(reqwest::header::USER_AGENT, USER_AGENT)
             .json(request);
 
         if let Some(account_id) = tokens.chatgpt_account_id() {

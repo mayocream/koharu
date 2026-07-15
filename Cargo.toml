@@ -25,6 +25,7 @@ publish = false
 [workspace.dependencies]
 koharu-app = { path = "crates/koharu-app", version = "0.62.0-alpha.1", default-features = false }
 koharu-bindgen = { path = "crates/koharu-bindgen", version = "0.62.0-alpha.1", default-features = false }
+koharu-config = { path = "crates/koharu-config", version = "0.62.0-alpha.1", default-features = false }
 koharu-core = { path = "crates/koharu-core", version = "0.62.0-alpha.1", default-features = false }
 koharu-diffusion = { path = "crates/koharu-diffusion", version = "0.62.0-alpha.1", default-features = false }
 koharu-diffusion-sys = { path = "crates/koharu-diffusion-sys", version = "0.62.0-alpha.1", default-features = false }
@@ -50,6 +51,7 @@ async-trait = "0.1"
 imageproc = "0.27"
 ab_glyph = "0.2"
 clap = { version = "4.5", features = ["derive"] }
+config = { version = "0.15", default-features = false, features = ["toml"] }
 serde = { version = "1", features = ["derive"] }
 serde_bytes = "0.11"
 serde_json = "1.0"
