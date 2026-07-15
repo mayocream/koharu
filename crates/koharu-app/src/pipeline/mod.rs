@@ -20,9 +20,11 @@ use std::sync::Arc;
 use std::sync::atomic::{AtomicBool, Ordering};
 
 use anyhow::{Result, bail};
-use koharu_core::{Op, PageId, PipelineStep};
 use koharu_runtime::RuntimeManager;
+use koharu_scene::{Op, PageId, ProjectSession};
 use tracing::Instrument;
+
+use crate::{EngineCatalog, EngineCatalogEntry, PipelineStep};
 
 /// Observer for pipeline progress. `step_id` is the engine id of the step
 /// about to run (or just finished); step_index / page_index are 0-based.
@@ -84,8 +86,6 @@ fn step_for(info: &EngineInfo) -> Option<PipelineStep> {
 
 use crate::llm;
 use crate::renderer;
-use crate::session::ProjectSession;
-
 // ---------------------------------------------------------------------------
 // Spec + scope
 // ---------------------------------------------------------------------------
@@ -307,8 +307,6 @@ fn report_step_failure(
 // ---------------------------------------------------------------------------
 // Engine catalog building (API surface)
 // ---------------------------------------------------------------------------
-
-use koharu_core::{EngineCatalog, EngineCatalogEntry};
 
 /// Build the engine catalog DTO for the API.
 pub fn catalog() -> EngineCatalog {

@@ -14,8 +14,8 @@ use std::fs::{File, OpenOptions};
 use std::io::{BufReader, BufWriter, Read, Seek, SeekFrom, Write};
 use std::path::{Path, PathBuf};
 
+use crate::{Op, Scene};
 use anyhow::{Context, Result};
-use koharu_core::{Op, Scene};
 use serde::{Deserialize, Serialize};
 
 /// Default cap for the in-memory undo stack. The log on disk is not capped —

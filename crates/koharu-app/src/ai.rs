@@ -8,19 +8,17 @@ use dashmap::DashMap;
 use image::DynamicImage;
 use koharu_ai::codex::{CodexClient, CodexConfig};
 use koharu_ai::{AiImageProvider, AiImageRequest};
-use koharu_core::{
-    BlobRef, ImageData, ImageDataPatch, ImageRole, Node, NodeDataPatch, NodeId, NodeKind,
-    NodePatch, Op, PageId, Scene, Transform,
-};
 use koharu_runtime::RuntimeManager;
 use koharu_runtime::download::client::HttpClient;
+use koharu_scene::{
+    BlobRef, ImageData, ImageDataPatch, ImageRole, Node, NodeDataPatch, NodeId, NodeKind,
+    NodePatch, Op, PageId, ProjectSession, Scene, Transform,
+};
 use parking_lot::RwLock;
 use serde::{Deserialize, Serialize};
 use tracing::Instrument as _;
 use utoipa::ToSchema;
 use uuid::Uuid;
-
-use crate::session::ProjectSession;
 
 const DEFAULT_CODEX_IMAGE_MODEL: &str = "gpt-5.5";
 const DEFAULT_CODEX_IMAGE_INSTRUCTIONS: &str = "Generate or edit the requested image.";

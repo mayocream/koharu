@@ -8,15 +8,14 @@ use std::sync::Arc;
 
 use anyhow::{Context, Result};
 use image::DynamicImage;
-use koharu_app::ProjectSession;
-use koharu_core::{
-    BlobRef, FontPrediction, ImageRole, MaskRole, NodeKind, PageId, Scene, TextAlign, TextData,
-    TextDirection, TextStyle,
-};
 use koharu_psd::{
     PsdBlobRef, PsdDocument, PsdExportOptions, PsdFontPrediction, PsdNamedFontPrediction,
     PsdShaderEffect, PsdTextAlign, PsdTextBlock, PsdTextDirection, PsdTextStyle, ResolvedDocument,
     write_document,
+};
+use koharu_scene::{
+    BlobRef, FontPrediction, ImageRole, MaskRole, NodeKind, PageId, ProjectSession, Scene,
+    TextAlign, TextData, TextDirection, TextStyle,
 };
 
 /// Resolved page artifacts ready to hand to `koharu-psd`.
@@ -79,7 +78,7 @@ fn resolve_page_blobs(
     renderer: &koharu_app::renderer::Renderer,
     default_font_override: Option<String>,
     project_default_font: Option<String>,
-    page: &koharu_core::Page,
+    page: &koharu_scene::Page,
 ) -> Result<ResolvedPage> {
     let mut source: Option<DynamicImage> = None;
     let mut segment: Option<DynamicImage> = None;
@@ -239,8 +238,8 @@ fn resolve_export_font_style(
 }
 
 fn text_to_psd(
-    node_id: &koharu_core::NodeId,
-    transform: &koharu_core::Transform,
+    node_id: &koharu_scene::NodeId,
+    transform: &koharu_scene::Transform,
     text: &TextData,
     font_index: Option<usize>,
 ) -> PsdTextBlock {
@@ -316,7 +315,7 @@ fn blob_ref_to_psd(r: &BlobRef) -> PsdBlobRef {
 
 #[cfg(test)]
 mod tests {
-    use koharu_core::{BlobRef, NodeId, TextData, Transform};
+    use koharu_scene::{BlobRef, NodeId, TextData, Transform};
 
     use super::text_to_psd;
 

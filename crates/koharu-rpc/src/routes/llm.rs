@@ -8,7 +8,7 @@
 
 use axum::Json;
 use axum::extract::State;
-use koharu_core::{LlmCatalog, LlmLoadRequest, LlmState, LlmTargetKind};
+use koharu_app::{LlmCatalog, LlmLoadRequest, LlmState, LlmTargetKind};
 use utoipa_axum::{router::OpenApiRouter, routes};
 
 use crate::AppState;

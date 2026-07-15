@@ -11,9 +11,9 @@
 use std::fs;
 use std::time::{SystemTime, UNIX_EPOCH};
 
+use crate::ProjectSummary;
 use anyhow::{Context, Result};
 use camino::{Utf8Path, Utf8PathBuf};
-use koharu_core::ProjectSummary;
 
 use crate::AppConfig;
 

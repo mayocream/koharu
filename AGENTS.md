@@ -6,7 +6,7 @@ Document only repository-specific constraints here. Normal Rust, TypeScript, tes
 
 - `temp/` contains read-only upstream checkouts used to port and compare implementations. Never modify or commit it.
 - `data/`, `models/`, and `runs/` are local inputs, weights, and outputs. Never commit them.
-- `crates/koharu-core` owns shared scene/protocol types; `koharu-app` owns workflows and state; `koharu-rpc` owns transport and the OpenAPI definition. Do not move transport or UI concerns into `koharu-core`.
+- `crates/koharu-scene` owns the scene graph, operations, history, WebP blob storage, persisted project sessions, and saved project archives; `koharu-app` owns workflows, application state, and shared application DTOs; `koharu-rpc` owns transport and the OpenAPI definition. Do not move application, transport, or UI concerns into `koharu-scene`.
 - Public safe wrappers belong in `koharu-llama`, `koharu-diffusion`, and `koharu-torch`. Raw handles, dynamic loading, build logic, and `unsafe` FFI belong in the matching `*-sys` crate.
 
 ## Generated Code

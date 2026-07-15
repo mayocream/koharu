@@ -26,7 +26,7 @@ publish = false
 koharu-app = { path = "crates/koharu-app", version = "0.62.0-alpha.1", default-features = false }
 koharu-bindgen = { path = "crates/koharu-bindgen", version = "0.62.0-alpha.1", default-features = false }
 koharu-config = { path = "crates/koharu-config", version = "0.62.0-alpha.1", default-features = false }
-koharu-core = { path = "crates/koharu-core", version = "0.62.0-alpha.1", default-features = false }
+koharu-scene = { path = "crates/koharu-scene", version = "0.62.0-alpha.1", default-features = false }
 koharu-diffusion = { path = "crates/koharu-diffusion", version = "0.62.0-alpha.1", default-features = false }
 koharu-diffusion-sys = { path = "crates/koharu-diffusion-sys", version = "0.62.0-alpha.1", default-features = false }
 koharu-fonts = { path = "crates/koharu-fonts", version = "0.62.0-alpha.1", default-features = false }
@@ -46,6 +46,7 @@ koharu-secrets = { path = "crates/koharu-secrets", version = "0.62.0-alpha.1", d
 # external dependencies
 hf-hub = "0.5"
 image = "0.25"
+webp = { version = "0.3.1", default-features = false }
 fast_image_resize = { version = "6.0", features = ["image", "rayon"] }
 anyhow = "1.0"
 async-trait = "0.1"

@@ -12,10 +12,11 @@ use axum::extract::State;
 use koharu_app::pipeline::{
     self, PipelineRunOptions, PipelineSpec, ProgressTick, Scope, WarningTick,
 };
-use koharu_core::{
-    AppEvent, JobFinishedEvent, JobStatus, JobSummary, JobWarningEvent, NodeId, PageId,
-    PipelineProgress, PipelineStatus, ReadingOrder, Region,
+use koharu_app::{
+    AppEvent, JobFinishedEvent, JobStatus, JobSummary, JobWarningEvent, PipelineProgress,
+    PipelineStatus, ReadingOrder, Region,
 };
+use koharu_scene::{NodeId, PageId};
 use serde::{Deserialize, Serialize};
 use utoipa_axum::{router::OpenApiRouter, routes};
 use uuid::Uuid;

@@ -4,8 +4,8 @@
 use anyhow::Result;
 use async_trait::async_trait;
 use image::DynamicImage;
-use koharu_core::{FontPrediction, NodeDataPatch, NodePatch, Op, TextDataPatch};
 use koharu_ml::font_detector::FontDetector;
+use koharu_scene::{FontPrediction, NodeDataPatch, NodePatch, Op, TextDataPatch};
 
 use crate::pipeline::artifacts::Artifact;
 use crate::pipeline::engine::{Engine, EngineCtx, EngineInfo};
@@ -45,7 +45,7 @@ impl Engine for Model {
                 id: *node_id,
                 patch: NodePatch {
                     data: Some(NodeDataPatch::Text(TextDataPatch {
-                        font_prediction: Some(Some(ml_prediction_to_core(pred))),
+                        font_prediction: Some(Some(ml_prediction_to_scene(pred))),
                         // Clear any previous style so the renderer re-derives.
                         style: Some(None),
                         ..Default::default()
@@ -77,12 +77,12 @@ inventory::submit! {
 // Translate ml FontPrediction → scene FontPrediction
 // ---------------------------------------------------------------------------
 
-fn ml_prediction_to_core(p: koharu_ml::types::FontPrediction) -> FontPrediction {
+fn ml_prediction_to_scene(p: koharu_ml::types::FontPrediction) -> FontPrediction {
     FontPrediction {
         top_fonts: p
             .top_fonts
             .into_iter()
-            .map(|tf| koharu_core::TopFont {
+            .map(|tf| koharu_scene::TopFont {
                 index: tf.index,
                 score: tf.score,
             })
@@ -90,7 +90,7 @@ fn ml_prediction_to_core(p: koharu_ml::types::FontPrediction) -> FontPrediction 
         named_fonts: p
             .named_fonts
             .into_iter()
-            .map(|nf| koharu_core::NamedFontPrediction {
+            .map(|nf| koharu_scene::NamedFontPrediction {
                 index: nf.index,
                 name: nf.name,
                 language: nf.language,
@@ -99,8 +99,8 @@ fn ml_prediction_to_core(p: koharu_ml::types::FontPrediction) -> FontPrediction 
             })
             .collect(),
         direction: match p.direction {
-            koharu_ml::types::TextDirection::Horizontal => koharu_core::TextDirection::Horizontal,
-            koharu_ml::types::TextDirection::Vertical => koharu_core::TextDirection::Vertical,
+            koharu_ml::types::TextDirection::Horizontal => koharu_scene::TextDirection::Horizontal,
+            koharu_ml::types::TextDirection::Vertical => koharu_scene::TextDirection::Vertical,
         },
         text_color: p.text_color,
         stroke_color: p.stroke_color,

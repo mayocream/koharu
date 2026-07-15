@@ -3,9 +3,9 @@
 
 use anyhow::Result;
 use async_trait::async_trait;
-use koharu_core::{NodeDataPatch, NodePatch, Op, TextDataPatch};
 use koharu_ml::mit48px_ocr::Mit48pxOcr;
 use koharu_ml::types::TextRegion;
+use koharu_scene::{NodeDataPatch, NodePatch, Op, TextDataPatch};
 
 use crate::pipeline::artifacts::Artifact;
 use crate::pipeline::engine::{Engine, EngineCtx, EngineInfo};

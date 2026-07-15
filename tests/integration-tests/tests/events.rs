@@ -16,7 +16,7 @@ use std::time::Duration;
 
 use anyhow::{Result, anyhow};
 use futures::StreamExt;
-use koharu_core::{AppEvent, JobFinishedEvent, JobStatus};
+use koharu_app::{AppEvent, JobFinishedEvent, JobStatus};
 use koharu_integration_tests::TestApp;
 use reqwest::multipart::{Form, Part};
 use serde_json::Value;

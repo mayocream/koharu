@@ -4,9 +4,9 @@
 use anyhow::Result;
 use async_trait::async_trait;
 use image::DynamicImage;
-use koharu_core::{NodeDataPatch, NodePatch, Op, TextDataPatch};
 use koharu_ml::comic_text_detector::crop_text_block_bbox;
 use koharu_ml::manga_ocr::MangaOcr;
+use koharu_scene::{NodeDataPatch, NodePatch, Op, TextDataPatch};
 
 use crate::pipeline::artifacts::Artifact;
 use crate::pipeline::engine::{Engine, EngineCtx, EngineInfo};

@@ -14,10 +14,11 @@
 use anyhow::{Result, anyhow};
 use async_trait::async_trait;
 use image::{DynamicImage, GrayImage, Luma};
-use koharu_core::{ImageRole, MaskRole, Op, Region};
 use koharu_ml::inpainting::expand_mask_for_inpainting;
 use koharu_ml::lama::LaMa;
+use koharu_scene::{ImageRole, MaskRole, Op};
 
+use crate::Region;
 use crate::pipeline::artifacts::Artifact;
 use crate::pipeline::engine::{Engine, EngineCtx, EngineInfo};
 use crate::pipeline::engines::support::{

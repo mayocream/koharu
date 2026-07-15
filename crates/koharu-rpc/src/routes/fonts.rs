@@ -9,7 +9,7 @@ use axum::body::Body;
 use axum::extract::{Path, State};
 use axum::http::{HeaderValue, StatusCode, header::CONTENT_TYPE};
 use axum::response::{Json, Response};
-use koharu_core::FontFaceInfo;
+use koharu_app::FontFaceInfo;
 use koharu_fonts::GoogleFontCatalog;
 use utoipa_axum::{router::OpenApiRouter, routes};
 

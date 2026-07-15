@@ -4,7 +4,7 @@
 //! resolver derives execution order from these. Artifacts are satisfied when
 //! the corresponding scene node / field is present on the target page.
 
-use koharu_core::{ImageRole, MaskRole, NodeKind, Page};
+use koharu_scene::{ImageRole, MaskRole, NodeKind, Page};
 
 /// Every named "thing" a pipeline step depends on or writes.
 ///
@@ -84,7 +84,7 @@ fn has_mask_role(page: &Page, role: MaskRole) -> bool {
     })
 }
 
-fn every_text(page: &Page, predicate: impl Fn(&koharu_core::TextData) -> bool) -> bool {
+fn every_text(page: &Page, predicate: impl Fn(&koharu_scene::TextData) -> bool) -> bool {
     let texts: Vec<_> = page
         .nodes
         .values()

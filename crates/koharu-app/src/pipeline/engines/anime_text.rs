@@ -2,8 +2,8 @@
 
 use anyhow::Result;
 use async_trait::async_trait;
-use koharu_core::{Op, TextData};
 use koharu_ml::anime_text::AnimeTextDetector;
+use koharu_scene::{Op, TextData};
 
 use crate::pipeline::artifacts::Artifact;
 use crate::pipeline::engine::{Engine, EngineCtx, EngineInfo};

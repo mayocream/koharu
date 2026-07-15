@@ -8,9 +8,9 @@ use std::sync::Mutex;
 
 use anyhow::Result;
 use async_trait::async_trait;
-use koharu_core::{NodeDataPatch, NodePatch, Op, TextDataPatch};
 use koharu_llm::paddleocr_vl::{PaddleOcrVl, PaddleOcrVlTask};
 use koharu_ml::comic_text_detector::crop_text_block_bbox;
+use koharu_scene::{NodeDataPatch, NodePatch, Op, TextDataPatch};
 
 use crate::app::shared_llama_backend;
 use crate::pipeline::artifacts::Artifact;

@@ -2,8 +2,8 @@
 
 use std::io::Cursor;
 
+use crate::Region;
 use image::{DynamicImage, ImageFormat, RgbaImage};
-use koharu_core::Region;
 
 pub trait RegionExt {
     fn clamp(&self, width: u32, height: u32) -> Option<(u32, u32, u32, u32)>;

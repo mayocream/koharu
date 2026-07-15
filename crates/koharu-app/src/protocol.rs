@@ -1,17 +1,25 @@
 //! Non-scene protocol types: metadata, LLM lifecycle, engine catalog, config.
 //!
-//! Scene ops live in `op.rs`; push events in `events.rs`. Per-route request
-//! DTOs (multipart import, pipeline start) live in `koharu-rpc/src/routes/`.
+//! Scene operations live in `koharu-scene`; push events live in `events.rs`.
+//! Per-route request DTOs (multipart import, pipeline start) live in
+//! `koharu-rpc/src/routes/`.
 
 use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
 use utoipa::ToSchema;
 
-use crate::google_fonts::FontSource;
-
 // ---------------------------------------------------------------------------
 // Meta / fonts
 // ---------------------------------------------------------------------------
+
+#[derive(
+    Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Eq, PartialOrd, Ord, JsonSchema, ToSchema,
+)]
+#[serde(rename_all = "snake_case")]
+pub enum FontSource {
+    System,
+    Google,
+}
 
 #[derive(
     Debug, Clone, Serialize, Deserialize, PartialEq, Eq, PartialOrd, Ord, JsonSchema, ToSchema,

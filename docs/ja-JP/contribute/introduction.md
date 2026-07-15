@@ -52,7 +52,7 @@ Koharu は Rust ワークスペースに Tauri シェルと Next.js UI を組み
 
 - **`koharu/`** — Tauri のデスクトップシェル
 - **`koharu-app/`** — アプリ側バックエンドとパイプラインのオーケストレーション
-- **`koharu-core/`** — 共有型、イベント、ユーティリティ
+- **`koharu-scene/`** — シーングラフ、操作履歴、プロジェクト永続化
 - **`koharu-ml/`** — 検出、OCR、インペイント、フォント解析
 - **`koharu-llm/`** — llama.cpp バインディングと LLM プロバイダ
 - **`koharu-renderer/`** — テキストシェーピングとレンダリング

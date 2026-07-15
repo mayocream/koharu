@@ -4,9 +4,9 @@
 use anyhow::Result;
 use async_trait::async_trait;
 use image::DynamicImage;
-use koharu_core::{MaskRole, Op};
 use koharu_ml::comic_text_detector::{ComicTextDetector, refine_segmentation_mask};
 use koharu_ml::types::TextRegion;
+use koharu_scene::{MaskRole, Op};
 
 use crate::pipeline::artifacts::Artifact;
 use crate::pipeline::engine::{Engine, EngineCtx, EngineInfo};

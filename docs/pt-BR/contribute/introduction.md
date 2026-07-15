@@ -52,7 +52,7 @@ O Koharu é um workspace Rust com shell Tauri e UI em Next.js:
 
 - **`koharu/`** — shell desktop Tauri
 - **`koharu-app/`** — backend da aplicação e orquestração da pipeline
-- **`koharu-core/`** — tipos, eventos e utilitários compartilhados
+- **`koharu-scene/`** — grafo de cena, operações, histórico e persistência de projetos
 - **`koharu-ml/`** — detecção, OCR, inpainting e análise de fontes
 - **`koharu-llm/`** — bindings para llama.cpp e provedores de LLM
 - **`koharu-renderer/`** — shaping e renderização de texto

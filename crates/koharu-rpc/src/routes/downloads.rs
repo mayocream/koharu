@@ -11,7 +11,7 @@
 use axum::Json;
 use axum::extract::State;
 use axum::http::StatusCode;
-use koharu_core::DownloadProgress;
+use koharu_app::DownloadProgress;
 use koharu_runtime::packages::PackageCatalog;
 use serde::{Deserialize, Serialize};
 use utoipa_axum::{router::OpenApiRouter, routes};

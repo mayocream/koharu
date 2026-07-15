@@ -1,12 +1,12 @@
 //! Scene mutation: multipart page import, /history/apply + undo/redo, batch.
 //!
 //! The generated client doesn't wire multipart bodies or typed `Op` unions
-//! well, so scene mutations go through reqwest directly with `koharu_core::Op`
+//! well, so scene mutations go through reqwest directly with `koharu_scene::Op`
 //! serialized as JSON — end-to-end round trip through axum's JSON extractor
 //! exercises exactly the wire format the frontend will use.
 
-use koharu_core::{ImageRole, NodeKind, Op, PagePatch};
 use koharu_integration_tests::TestApp;
+use koharu_scene::{ImageRole, NodeKind, Op, PagePatch};
 use reqwest::multipart::{Form, Part};
 use serde_json::Value;
 
@@ -107,7 +107,7 @@ async fn update_page_then_undo_round_trips() -> anyhow::Result<()> {
 
     let png = TestApp::tiny_png(10, 10, [0, 128, 0, 255]);
     let ids = import_pages(&app, vec![("pg.png", png)]).await?;
-    let page_id: koharu_core::PageId = ids[0].parse::<uuid::Uuid>().map(koharu_core::PageId)?;
+    let page_id: koharu_scene::PageId = ids[0].parse::<uuid::Uuid>().map(koharu_scene::PageId)?;
 
     let epoch_before = app.app.current_session().unwrap().epoch();
 
@@ -153,8 +153,8 @@ async fn batch_op_is_one_undo_step() -> anyhow::Result<()> {
 
     let png = TestApp::tiny_png(8, 8, [0, 0, 255, 255]);
     let ids = import_pages(&app, vec![("x.png", png.clone()), ("y.png", png)]).await?;
-    let p1 = ids[0].parse::<uuid::Uuid>().map(koharu_core::PageId)?;
-    let p2 = ids[1].parse::<uuid::Uuid>().map(koharu_core::PageId)?;
+    let p1 = ids[0].parse::<uuid::Uuid>().map(koharu_scene::PageId)?;
+    let p2 = ids[1].parse::<uuid::Uuid>().map(koharu_scene::PageId)?;
 
     let batch = Op::Batch {
         ops: vec![
@@ -261,7 +261,7 @@ async fn image_layer_adds_custom_node() -> anyhow::Result<()> {
 
     let session = app.app.current_session().unwrap();
     let scene = session.scene.read();
-    let page_uuid = page_id.parse::<uuid::Uuid>().map(koharu_core::PageId)?;
+    let page_uuid = page_id.parse::<uuid::Uuid>().map(koharu_scene::PageId)?;
     let page = scene.page(page_uuid).unwrap();
     // Source + Custom.
     assert_eq!(page.nodes.len(), 2);

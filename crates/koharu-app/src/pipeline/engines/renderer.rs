@@ -9,10 +9,10 @@
 
 use anyhow::Result;
 use async_trait::async_trait;
-use koharu_core::{
+use koharu_llm::Language;
+use koharu_scene::{
     ImageRole, MaskRole, NodeDataPatch, NodePatch, Op, TextDataPatch, TextStyle, Transform,
 };
-use koharu_llm::Language;
 
 use crate::pipeline::artifacts::Artifact;
 use crate::pipeline::engine::{Engine, EngineCtx, EngineInfo};
@@ -97,7 +97,7 @@ impl Engine for Model {
         // Upload sprites + compose ops.
         let mut ops = Vec::with_capacity(output.blocks.len() + 1);
         for block_out in output.blocks {
-            let sprite_ref = ctx.blobs.put_raw(&block_out.sprite)?;
+            let sprite_ref = ctx.blobs.put_webp(&block_out.sprite)?;
             let existing_style = inputs
                 .iter()
                 .find(|i| i.node_id == block_out.node_id)
@@ -179,7 +179,7 @@ fn render_target_language_tag(value: &str) -> String {
 #[cfg(test)]
 mod tests {
     use super::{preserve_existing_style, render_target_language_tag};
-    use koharu_core::TextStyle;
+    use koharu_scene::TextStyle;
 
     #[test]
     fn omits_style_patch_when_block_has_no_explicit_style() {

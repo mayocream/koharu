@@ -2,7 +2,7 @@
 //!
 //! - `GET /scene.bin` — postcard-encoded `Snapshot { epoch, scene }` (native clients).
 //! - `GET /scene.json` — JSON-encoded `{ epoch, scene }` (web/UI clients).
-//! - `GET /blobs/:hash` — raw blob bytes.
+//! - `GET /blobs/:hash` — lossless WebP image bytes.
 
 use axum::Json;
 use axum::body::Body;
@@ -11,7 +11,7 @@ use axum::http::{HeaderValue, StatusCode, header::CONTENT_TYPE};
 use axum::response::{IntoResponse, Response};
 use fast_image_resize::{FilterType, ResizeAlg, ResizeOptions, Resizer};
 use image::{DynamicImage, GenericImageView};
-use koharu_core::{BlobRef, ImageRole, NodeKind, PageId, Scene};
+use koharu_scene::{BlobRef, ImageRole, NodeKind, PageId, Scene};
 use serde::Serialize;
 use utoipa_axum::{router::OpenApiRouter, routes};
 
@@ -50,7 +50,7 @@ async fn get_scene_json(State(app): State<AppState>) -> ApiResult<Json<SceneSnap
 #[derive(Serialize)]
 struct WireSnapshot<'a> {
     epoch: u64,
-    scene: &'a koharu_core::Scene,
+    scene: &'a koharu_scene::Scene,
 }
 
 #[utoipa::path(
@@ -89,7 +89,7 @@ async fn get_scene_bin(State(app): State<AppState>) -> ApiResult<Response> {
     get,
     path = "/blobs/{hash}",
     params(("hash" = String, Path, description = "Blake3 hash of the blob")),
-    responses((status = 200, content_type = "application/octet-stream"))
+    responses((status = 200, content_type = "image/webp"))
 )]
 async fn get_blob(State(app): State<AppState>, Path(hash): Path<String>) -> ApiResult<Response> {
     let session = app
@@ -101,10 +101,8 @@ async fn get_blob(State(app): State<AppState>, Path(hash): Path<String>) -> ApiR
         .get_bytes(&blob_ref)
         .map_err(|_| ApiError::new(StatusCode::NOT_FOUND, "blob not found"))?;
     let mut resp = Response::new(Body::from(bytes));
-    resp.headers_mut().insert(
-        CONTENT_TYPE,
-        HeaderValue::from_static("application/octet-stream"),
-    );
+    resp.headers_mut()
+        .insert(CONTENT_TYPE, HeaderValue::from_static("image/webp"));
     Ok(resp.into_response())
 }
 

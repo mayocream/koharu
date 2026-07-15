@@ -6,8 +6,8 @@
 use anyhow::Result;
 use async_trait::async_trait;
 use image::{DynamicImage, GrayImage, Luma};
-use koharu_core::{MaskRole, Op};
 use koharu_ml::speech_bubble_segmentation::{SpeechBubbleRegion, SpeechBubbleSegmentation};
+use koharu_scene::{MaskRole, Op};
 
 use crate::pipeline::artifacts::Artifact;
 use crate::pipeline::engine::{Engine, EngineCtx, EngineInfo};

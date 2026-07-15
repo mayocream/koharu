@@ -5,8 +5,8 @@
 //! - `PUT  /pages/{id}/masks/{role}`         — raw PNG body: upsert a mask node
 //!   (role ∈ `segment`, `brushInpaint`)
 //!
-//! All three do the same server-side dance: read bytes → `blobs.put_bytes`
-//! → emit an `Op` on the session history.
+//! All three decode incoming image bytes into canonical lossless WebP via
+//! `blobs.put_image_bytes`, then emit an `Op` on the session history.
 
 use std::sync::Arc;
 use std::sync::atomic::AtomicBool;
@@ -16,9 +16,10 @@ use axum::body::Bytes;
 use axum::extract::{Multipart, Path, Query, State};
 use image::GenericImageView;
 use koharu_app::pipeline::{self, EngineCtx, PipelineRunOptions};
-use koharu_core::{
+use koharu_app::{ReadingOrder, Region};
+use koharu_scene::{
     BlobRef, ImageData, ImageRole, MaskRole, Node, NodeDataPatch, NodeId, NodeKind, Op, Page,
-    PageId, ReadingOrder, Region, Scene, Transform,
+    PageId, Scene, Transform,
 };
 use rayon::prelude::*;
 use serde::{Deserialize, Serialize};
@@ -148,7 +149,7 @@ async fn create_pages(
                     let img = image::load_from_memory(&bytes)
                         .map_err(|e| ApiError::bad_request(format!("decode `{filename}`: {e}")))?;
                     let (w, h) = img.dimensions();
-                    let blob = blobs.put_bytes(&bytes).map_err(ApiError::internal)?;
+                    let blob = blobs.put_image_bytes(&bytes).map_err(ApiError::internal)?;
                     Ok((filename, w, h, blob))
                 },
             )
@@ -283,7 +284,7 @@ async fn create_pages_from_paths(
                 let img = image::load_from_memory(&bytes)
                     .map_err(|e| ApiError::bad_request(format!("decode `{filename}`: {e}")))?;
                 let (w, h) = img.dimensions();
-                let blob = blobs.put_bytes(&bytes).map_err(ApiError::internal)?;
+                let blob = blobs.put_image_bytes(&bytes).map_err(ApiError::internal)?;
                 Ok((filename, w, h, blob))
             })
             .collect::<ApiResult<Vec<_>>>()
@@ -385,7 +386,7 @@ async fn add_image_layer(
     let (w, h) = decoded.dimensions();
     let blob = session
         .blobs
-        .put_bytes(&bytes)
+        .put_image_bytes(&bytes)
         .map_err(ApiError::internal)?;
 
     // Center-place on the page.
@@ -420,7 +421,7 @@ async fn add_image_layer(
     Ok(Json(AddImageLayerResponse { node: node_id }))
 }
 
-fn center_on_page(page: Option<&koharu_core::Page>, iw: u32, ih: u32) -> (f32, f32) {
+fn center_on_page(page: Option<&koharu_scene::Page>, iw: u32, ih: u32) -> (f32, f32) {
     let Some(p) = page else { return (0.0, 0.0) };
     let x = ((p.width as f32) - iw as f32) / 2.0;
     let y = ((p.height as f32) - ih as f32) / 2.0;
@@ -474,7 +475,10 @@ async fn put_mask(
     image::load_from_memory(&body)
         .map_err(|e| ApiError::bad_request(format!("decode mask: {e}")))?;
 
-    let blob = session.blobs.put_bytes(&body).map_err(ApiError::internal)?;
+    let blob = session
+        .blobs
+        .put_image_bytes(&body)
+        .map_err(ApiError::internal)?;
 
     // Find existing mask node of this role, or plan an AddNode.
     let (mut mask_op, node_id) = {
@@ -493,14 +497,14 @@ async fn put_mask(
                 let op = Op::UpdateNode {
                     page: page_id,
                     id,
-                    patch: koharu_core::NodePatch {
-                        data: Some(NodeDataPatch::Mask(koharu_core::MaskDataPatch {
+                    patch: koharu_scene::NodePatch {
+                        data: Some(NodeDataPatch::Mask(koharu_scene::MaskDataPatch {
                             blob: Some(blob.clone()),
                         })),
                         transform: None,
                         visible: None,
                     },
-                    prev: koharu_core::NodePatch::default(),
+                    prev: koharu_scene::NodePatch::default(),
                 };
                 (op, id)
             }
@@ -511,7 +515,7 @@ async fn put_mask(
                     id: node_id,
                     transform: Transform::default(),
                     visible: matches!(role, MaskRole::BrushInpaint),
-                    kind: NodeKind::Mask(koharu_core::MaskData {
+                    kind: NodeKind::Mask(koharu_scene::MaskData {
                         role,
                         blob: blob.clone(),
                     }),

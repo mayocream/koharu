@@ -15,11 +15,12 @@
 use std::sync::Arc;
 
 use camino::Utf8PathBuf;
+use koharu_app::ReadingOrder;
 use koharu_app::{
     App,
     pipeline::{PipelineRunOptions, PipelineSpec, Scope},
 };
-use koharu_core::{NodeId, Op, PageId, ReadingOrder};
+use koharu_scene::{NodeId, Op, PageId};
 use rmcp::handler::server::wrapper::{Json as JsonOutput, Parameters};
 use rmcp::model::{ServerCapabilities, ServerInfo};
 use rmcp::transport::streamable_http_server::{

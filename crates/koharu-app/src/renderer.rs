@@ -14,11 +14,10 @@ use std::{
 
 use anyhow::{Context, Result};
 use image::{DynamicImage, GrayImage, RgbaImage, imageops};
-use koharu_core::{
-    FontFaceInfo, FontPrediction, FontSource, NodeId, TextDirection, TextShaderEffect,
-    TextStrokeStyle, TextStyle, Transform,
-};
 use koharu_fonts::{GoogleFonts, parse_variant_query};
+use koharu_scene::{
+    FontPrediction, NodeId, TextDirection, TextShaderEffect, TextStrokeStyle, TextStyle, Transform,
+};
 
 use koharu_renderer::{
     TextAlign as RendererTextAlign, TextShaderEffect as RendererEffect,
@@ -31,6 +30,8 @@ use koharu_renderer::{
     },
     types::{RenderBlock, TextDirection as RendererTextDirection},
 };
+
+use crate::{FontFaceInfo, FontSource};
 
 // ---------------------------------------------------------------------------
 // Inputs / outputs
@@ -253,7 +254,7 @@ impl Renderer {
         // typesetting convention. Explicit `style.text_align` wins if set.
         let align = style
             .text_align
-            .map(core_align_to_renderer)
+            .map(scene_align_to_renderer)
             .unwrap_or(RendererTextAlign::Center);
         let layout_box = resolved_box.layout_box;
 
@@ -280,7 +281,7 @@ impl Renderer {
                 &RenderOptions {
                     font_size: layout.font_size,
                     color,
-                    effect: shader_core_to_renderer(block_effect),
+                    effect: shader_scene_to_renderer(block_effect),
                     stroke: resolved_stroke,
                     raster,
                     ..Default::default()
@@ -841,7 +842,7 @@ fn layout_source_from_input(block: &RenderBlockInput, translation: &str) -> Rend
         width: block.transform.width.max(1.0),
         height: block.transform.height.max(1.0),
         text: translation.to_string(),
-        source_direction: block.source_direction.map(core_direction_to_renderer),
+        source_direction: block.source_direction.map(scene_direction_to_renderer),
     }
 }
 
@@ -939,22 +940,22 @@ fn resolve_text_color(
 // Helpers: type conversions
 // ---------------------------------------------------------------------------
 
-fn shader_core_to_renderer(e: TextShaderEffect) -> RendererEffect {
+fn shader_scene_to_renderer(e: TextShaderEffect) -> RendererEffect {
     RendererEffect {
         italic: e.italic,
         bold: e.bold,
     }
 }
 
-fn core_align_to_renderer(a: koharu_core::TextAlign) -> RendererTextAlign {
+fn scene_align_to_renderer(a: koharu_scene::TextAlign) -> RendererTextAlign {
     match a {
-        koharu_core::TextAlign::Left => RendererTextAlign::Left,
-        koharu_core::TextAlign::Center => RendererTextAlign::Center,
-        koharu_core::TextAlign::Right => RendererTextAlign::Right,
+        koharu_scene::TextAlign::Left => RendererTextAlign::Left,
+        koharu_scene::TextAlign::Center => RendererTextAlign::Center,
+        koharu_scene::TextAlign::Right => RendererTextAlign::Right,
     }
 }
 
-fn core_direction_to_renderer(d: TextDirection) -> RendererTextDirection {
+fn scene_direction_to_renderer(d: TextDirection) -> RendererTextDirection {
     match d {
         TextDirection::Horizontal => RendererTextDirection::Horizontal,
         TextDirection::Vertical => RendererTextDirection::Vertical,
@@ -1014,7 +1015,7 @@ fn placement_origin(input: &RenderBlockInput, expanded: &Option<Transform>) -> (
 mod tests {
     use super::*;
     use image::{GrayImage, Luma, Rgba, RgbaImage};
-    use koharu_core::NodeId;
+    use koharu_scene::NodeId;
 
     #[test]
     fn default_font_families_should_fill_empty_list() {

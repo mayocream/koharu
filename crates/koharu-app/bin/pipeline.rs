@@ -37,12 +37,13 @@ use anyhow::{Context, Result, anyhow};
 use camino::Utf8PathBuf;
 use clap::Parser;
 use image::{DynamicImage, GenericImageView};
-use koharu_app::{App, AppConfig};
-use koharu_core::{
-    ImageData, ImageRole, MaskRole, Node, NodeId, NodeKind, Op, Page, PageId, Transform,
-};
+use koharu_app::{App, AppConfig, LlmLoadRequest, LlmStateStatus, LlmTarget, LlmTargetKind};
 use koharu_runtime::config::HttpConfig;
 use koharu_runtime::{ComputePolicy, RuntimeManager};
+use koharu_scene::{
+    ImageData, ImageRole, MaskRole, Node, NodeId, NodeKind, Op, Page, PageId, ProjectSession,
+    Transform,
+};
 use tracing_subscriber::layer::SubscriberExt;
 use tracing_subscriber::util::SubscriberInitExt;
 
@@ -166,9 +167,9 @@ async fn run() -> Result<()> {
         eprintln!("=> loading LLM `{model_id}`");
         app.llm
             .load_from_request(
-                koharu_core::LlmLoadRequest {
-                    target: koharu_core::LlmTarget {
-                        kind: koharu_core::LlmTargetKind::Local,
+                LlmLoadRequest {
+                    target: LlmTarget {
+                        kind: LlmTargetKind::Local,
                         model_id: model_id.to_string(),
                         provider_id: None,
                     },
@@ -301,8 +302,8 @@ async fn wait_for_llm_ready(app: &App) -> Result<()> {
     loop {
         let snap = app.llm.snapshot().await;
         match snap.status {
-            koharu_core::LlmStateStatus::Ready => return Ok(()),
-            koharu_core::LlmStateStatus::Failed => {
+            LlmStateStatus::Ready => return Ok(()),
+            LlmStateStatus::Failed => {
                 anyhow::bail!("llm load failed");
             }
             _ => tokio::time::sleep(std::time::Duration::from_millis(200)).await,
@@ -327,7 +328,7 @@ fn import_page(app: &App, input: &std::path::Path) -> Result<PageId> {
     let session = app
         .current_session()
         .ok_or_else(|| anyhow!("no session open"))?;
-    let blob = session.blobs.put_bytes(&bytes)?;
+    let blob = session.blobs.put_image_bytes(&bytes)?;
     let mut page = Page::new(&filename, w, h);
     let page_id = page.id;
     let source_node_id = NodeId::new();
@@ -398,19 +399,19 @@ async fn synthesize_translations(app: &App, page: PageId) -> Result<()> {
                 && t.translation.is_none()
                 && let Some(raw) = t.text.as_ref().filter(|s| !s.is_empty())
             {
-                let patch = koharu_core::NodeDataPatch::Text(koharu_core::TextDataPatch {
+                let patch = koharu_scene::NodeDataPatch::Text(koharu_scene::TextDataPatch {
                     translation: Some(Some(raw.clone())),
                     ..Default::default()
                 });
                 ops.push(Op::UpdateNode {
                     page,
                     id: *id,
-                    patch: koharu_core::NodePatch {
+                    patch: koharu_scene::NodePatch {
                         data: Some(patch),
                         transform: None,
                         visible: None,
                     },
-                    prev: koharu_core::NodePatch::default(),
+                    prev: koharu_scene::NodePatch::default(),
                 });
             }
         }
@@ -426,11 +427,7 @@ async fn synthesize_translations(app: &App, page: PageId) -> Result<()> {
 }
 
 /// Walk the final scene and dump every role-keyed image/mask to disk.
-fn dump_artifacts(
-    session: &koharu_app::ProjectSession,
-    page: PageId,
-    out_dir: &std::path::Path,
-) -> Result<()> {
+fn dump_artifacts(session: &ProjectSession, page: PageId, out_dir: &std::path::Path) -> Result<()> {
     let scene = session.scene.read();
     let page_data = scene
         .pages
@@ -469,8 +466,8 @@ fn dump_artifacts(
 }
 
 fn save_blob_image(
-    session: &koharu_app::ProjectSession,
-    blob: &koharu_core::BlobRef,
+    session: &ProjectSession,
+    blob: &koharu_scene::BlobRef,
     path: &std::path::Path,
 ) -> Result<()> {
     let img: DynamicImage = session.blobs.load_image(blob)?;

@@ -13,11 +13,11 @@
 
 use std::sync::Arc;
 
-use anyhow::Result;
-use koharu_core::{
+use crate::{
     LlmCatalog, LlmCatalogModel, LlmLoadRequest, LlmProviderCatalog, LlmProviderCatalogStatus,
     LlmState, LlmStateStatus, LlmTarget, LlmTargetKind,
 };
+use anyhow::Result;
 use koharu_llm::providers::{
     AnyProvider, ProviderCatalogModels, ProviderConfig, ProviderDescriptor,
     all_provider_descriptors, build_provider, discover_models,

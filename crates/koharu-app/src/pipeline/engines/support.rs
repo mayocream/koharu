@@ -5,12 +5,12 @@
 
 use anyhow::{Context, Result};
 use image::{DynamicImage, GenericImageView};
-use koharu_core::{
-    BlobRef, ImageData, ImageRole, MaskData, MaskRole, Node, NodeDataPatch, NodeId, NodeKind, Op,
-    PageId, ReadingOrder, Scene, TextData, Transform,
+use koharu_scene::{
+    BlobRef, BlobStore, ImageData, ImageRole, MaskData, MaskRole, Node, NodeDataPatch, NodeId,
+    NodeKind, Op, PageId, Scene, TextData, Transform,
 };
 
-use crate::blobs::BlobStore;
+use crate::ReadingOrder;
 
 // ---------------------------------------------------------------------------
 // Read helpers
@@ -82,18 +82,20 @@ pub fn text_node_to_region(transform: &Transform, text: &TextData) -> koharu_ml:
         height: transform.height,
         confidence: text.confidence,
         line_polygons: text.line_polygons.clone(),
-        source_direction: text.source_direction.map(core_text_direction_to_ml),
+        source_direction: text.source_direction.map(scene_text_direction_to_ml),
         rotation_deg: text.rotation_deg,
         detected_font_size_px: text.detected_font_size_px,
         detector: text.detector.clone(),
     }
 }
 
-/// Inverse of `ml_text_direction_to_core`.
-pub fn core_text_direction_to_ml(d: koharu_core::TextDirection) -> koharu_ml::types::TextDirection {
+/// Inverse of `ml_text_direction_to_scene`.
+pub fn scene_text_direction_to_ml(
+    d: koharu_scene::TextDirection,
+) -> koharu_ml::types::TextDirection {
     match d {
-        koharu_core::TextDirection::Horizontal => koharu_ml::types::TextDirection::Horizontal,
-        koharu_core::TextDirection::Vertical => koharu_ml::types::TextDirection::Vertical,
+        koharu_scene::TextDirection::Horizontal => koharu_ml::types::TextDirection::Horizontal,
+        koharu_scene::TextDirection::Vertical => koharu_ml::types::TextDirection::Vertical,
     }
 }
 
@@ -163,8 +165,8 @@ pub fn upsert_image_blob(
         Op::UpdateNode {
             page,
             id: node_id,
-            patch: koharu_core::NodePatch {
-                data: Some(NodeDataPatch::Image(koharu_core::ImageDataPatch {
+            patch: koharu_scene::NodePatch {
+                data: Some(NodeDataPatch::Image(koharu_scene::ImageDataPatch {
                     blob: Some(blob),
                     opacity: None,
                     name: None,
@@ -174,7 +176,7 @@ pub fn upsert_image_blob(
                 transform: None,
                 visible: None,
             },
-            prev: koharu_core::NodePatch::default(),
+            prev: koharu_scene::NodePatch::default(),
         }
     } else {
         let at = {
@@ -208,14 +210,14 @@ pub fn upsert_mask_blob(scene: &Scene, page: PageId, role: MaskRole, blob: BlobR
         Op::UpdateNode {
             page,
             id: node_id,
-            patch: koharu_core::NodePatch {
-                data: Some(NodeDataPatch::Mask(koharu_core::MaskDataPatch {
+            patch: koharu_scene::NodePatch {
+                data: Some(NodeDataPatch::Mask(koharu_scene::MaskDataPatch {
                     blob: Some(blob),
                 })),
                 transform: None,
                 visible: None,
             },
-            prev: koharu_core::NodePatch::default(),
+            prev: koharu_scene::NodePatch::default(),
         }
     } else {
         let at = scene.page(page).map(|p| p.nodes.len()).unwrap_or(0);
@@ -246,10 +248,12 @@ pub fn image_dimensions(image: &DynamicImage) -> (u32, u32) {
 }
 
 /// Translate the `koharu-ml` `TextDirection` primitive into the scene-layer one.
-pub fn ml_text_direction_to_core(d: koharu_ml::types::TextDirection) -> koharu_core::TextDirection {
+pub fn ml_text_direction_to_scene(
+    d: koharu_ml::types::TextDirection,
+) -> koharu_scene::TextDirection {
     match d {
-        koharu_ml::types::TextDirection::Horizontal => koharu_core::TextDirection::Horizontal,
-        koharu_ml::types::TextDirection::Vertical => koharu_core::TextDirection::Vertical,
+        koharu_ml::types::TextDirection::Horizontal => koharu_scene::TextDirection::Horizontal,
+        koharu_ml::types::TextDirection::Vertical => koharu_scene::TextDirection::Vertical,
     }
 }
 
@@ -262,7 +266,7 @@ pub fn text_region_to_pair(
     let bbox = [r.x, r.y, r.x + r.width, r.y + r.height];
     let data = TextData {
         confidence: r.confidence,
-        source_direction: r.source_direction.map(ml_text_direction_to_core),
+        source_direction: r.source_direction.map(ml_text_direction_to_scene),
         line_polygons: r.line_polygons,
         rotation_deg: r.rotation_deg,
         detected_font_size_px: r.detected_font_size_px,
@@ -462,7 +466,6 @@ pub fn sort_manga_reading_order<T>(blocks: &mut [([f32; 4], T)], order: ReadingO
 #[cfg(test)]
 mod tests {
     use super::*;
-    use koharu_core::ReadingOrder;
 
     #[test]
     fn test_reading_order_sort() {

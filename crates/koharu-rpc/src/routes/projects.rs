@@ -14,8 +14,9 @@ use axum::body::{Body, Bytes};
 use axum::extract::{Path, State};
 use axum::http::{HeaderValue, header};
 use axum::response::{IntoResponse, Response};
+use koharu_app::ProjectSummary;
 use koharu_app::projects as project_dirs;
-use koharu_core::{ImageRole, PageId, ProjectSummary};
+use koharu_scene::{ImageRole, PageId, ProjectSession};
 use serde::{Deserialize, Serialize};
 use utoipa_axum::{router::OpenApiRouter, routes};
 
@@ -210,10 +211,12 @@ async fn import_project(
 
     let body_vec = body.to_vec();
     let dest_c = dest.clone();
-    tokio::task::spawn_blocking(move || koharu_app::archive::import_khr_bytes(&body_vec, &dest_c))
-        .await
-        .map_err(|e| ApiError::internal(anyhow::Error::new(e)))?
-        .map_err(ApiError::internal)?;
+    tokio::task::spawn_blocking(move || {
+        koharu_scene::archive::import_khr_bytes(&body_vec, &dest_c)
+    })
+    .await
+    .map_err(|e| ApiError::internal(anyhow::Error::new(e)))?
+    .map_err(ApiError::internal)?;
 
     let session = app
         .open_project(dest, None)
@@ -269,22 +272,15 @@ async fn export_current_project(
         .current_session()
         .ok_or_else(|| ApiError::bad_request("no project open"))?;
 
-    let s_for_compact = session.clone();
-    tokio::task::spawn_blocking(move || s_for_compact.compact())
-        .await
-        .map_err(|e| ApiError::internal(anyhow::Error::new(e)))?
-        .map_err(ApiError::internal)?;
-
     let project_name = session.scene.read().project.name.clone();
 
     match req.format {
         ExportFormat::Khr => {
-            let src = session.dir.clone();
-            let bytes =
-                tokio::task::spawn_blocking(move || koharu_app::archive::export_khr_bytes(&src))
-                    .await
-                    .map_err(|e| ApiError::internal(anyhow::Error::new(e)))?
-                    .map_err(ApiError::internal)?;
+            let session = session.clone();
+            let bytes = tokio::task::spawn_blocking(move || session.save_archive_bytes())
+                .await
+                .map_err(|e| ApiError::internal(anyhow::Error::new(e)))?
+                .map_err(ApiError::internal)?;
             Ok(bytes_response(
                 bytes,
                 &sanitize(&project_name, "project"),
@@ -341,7 +337,7 @@ async fn export_current_project(
 }
 
 async fn export_image_role(
-    session: &std::sync::Arc<koharu_app::ProjectSession>,
+    session: &std::sync::Arc<ProjectSession>,
     pages: Option<&[PageId]>,
     role: ImageRole,
     project_name: &str,
@@ -374,7 +370,7 @@ async fn export_image_role(
 }
 
 fn resolve_page_ids(
-    session: &koharu_app::ProjectSession,
+    session: &ProjectSession,
     requested: Option<&[PageId]>,
 ) -> ApiResult<Vec<PageId>> {
     let scene = session.scene.read();

@@ -23,7 +23,7 @@ use axum::http::HeaderMap;
 use axum::response::sse::{Event, KeepAlive, Sse};
 use futures::Stream;
 use koharu_app::bus::SequencedEvent;
-use koharu_core::{AppEvent, DownloadProgress, JobSummary, SnapshotEvent};
+use koharu_app::{AppEvent, DownloadProgress, JobSummary, SnapshotEvent};
 use tokio_stream::StreamExt;
 use tokio_stream::wrappers::BroadcastStream;
 use utoipa_axum::{router::OpenApiRouter, routes};

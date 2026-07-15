@@ -4,7 +4,7 @@
 
 use anyhow::Result;
 use async_trait::async_trait;
-use koharu_core::{NodeDataPatch, NodeId, NodePatch, Op, PageId, Scene, TextData, TextDataPatch};
+use koharu_scene::{NodeDataPatch, NodeId, NodePatch, Op, PageId, Scene, TextData, TextDataPatch};
 
 use crate::pipeline::artifacts::Artifact;
 use crate::pipeline::engine::{Engine, EngineCtx, EngineInfo};
@@ -92,7 +92,7 @@ inventory::submit! {
 
 #[cfg(test)]
 mod tests {
-    use koharu_core::{Node, NodeKind, Page, PageId, Scene, TextData, Transform};
+    use koharu_scene::{Node, NodeKind, Page, PageId, Scene, TextData, Transform};
     use uuid::Uuid;
 
     use super::*;

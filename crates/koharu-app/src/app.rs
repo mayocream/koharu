@@ -19,8 +19,8 @@ use anyhow::Result;
 use arc_swap::{ArcSwap, ArcSwapOption};
 use camino::Utf8PathBuf;
 use dashmap::DashMap;
-use koharu_core::{AppEvent, DownloadProgress, JobSummary, LlmStateStatus};
 use koharu_runtime::{ComputePolicy, RuntimeManager};
+use koharu_scene::{Op, ProjectSession};
 use tokio::sync::Mutex;
 
 use crate::ai::AiManager;
@@ -30,7 +30,7 @@ use crate::config::AppConfig;
 use crate::llm;
 use crate::pipeline::Registry;
 use crate::renderer;
-use crate::session::ProjectSession;
+use crate::{AppEvent, DownloadProgress, JobSummary, LlmStateStatus, ProjectSummary};
 
 /// Ring-buffer capacity for the event bus. Reconnecting clients can replay
 /// up to this many trailing events via `Last-Event-ID`. Sized to comfortably
@@ -209,7 +209,7 @@ impl App {
 
     /// Apply an `Op` to the current session's scene. The HTTP caller re-reads
     /// `/scene.json` after a successful mutation — no SSE broadcast here.
-    pub fn apply(&self, op: koharu_core::Op) -> Result<u64> {
+    pub fn apply(&self, op: Op) -> Result<u64> {
         let session = self
             .current_session()
             .ok_or_else(|| anyhow::anyhow!("no project open"))?;
@@ -244,7 +244,7 @@ impl App {
 
 /// Build a `ProjectSummary` from an open session. Derives the `id` from the
 /// session's directory basename (the managed `<id>.khrproj` form).
-pub fn project_summary(session: &ProjectSession) -> koharu_core::ProjectSummary {
+pub fn project_summary(session: &ProjectSession) -> ProjectSummary {
     use std::time::UNIX_EPOCH;
     let id = crate::projects::id_from_dir(&session.dir).unwrap_or_default();
     let updated_at_ms = std::fs::metadata(session.dir.as_std_path())
@@ -253,7 +253,7 @@ pub fn project_summary(session: &ProjectSession) -> koharu_core::ProjectSummary 
         .and_then(|m| m.duration_since(UNIX_EPOCH).ok())
         .map(|d| d.as_millis() as u64)
         .unwrap_or(0);
-    koharu_core::ProjectSummary {
+    ProjectSummary {
         id,
         name: session.scene.read().project.name.clone(),
         path: session.dir.to_string(),

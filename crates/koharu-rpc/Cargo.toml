@@ -13,7 +13,7 @@ publish.workspace = true
 
 [dependencies]
 koharu-app = { workspace = true }
-koharu-core = { workspace = true }
+koharu-scene = { workspace = true }
 koharu-fonts = { workspace = true }
 koharu-psd = { workspace = true }
 koharu-runtime = { workspace = true }

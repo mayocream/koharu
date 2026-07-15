@@ -4,7 +4,7 @@ use std::sync::{Arc, OnceLock};
 use dashmap::DashMap;
 use koharu_app::bus::EventBus;
 use koharu_app::{App, AppSharedState};
-use koharu_core::{AppEvent, DownloadProgress, JobSummary};
+use koharu_app::{AppEvent, DownloadProgress, JobSummary};
 use koharu_runtime::RuntimeManager;
 
 pub struct BootstrapManager {

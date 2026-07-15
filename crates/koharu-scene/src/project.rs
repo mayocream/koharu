@@ -17,17 +17,14 @@ use std::fs::File;
 use std::io::Write;
 use std::sync::Arc;
 
+use crate::{BlobStore, History, Op, Scene, history};
 use anyhow::{Context, Result};
 use atomicwrites::{AtomicFile, OverwriteBehavior};
 use camino::{Utf8Path, Utf8PathBuf};
 use chrono::Utc;
 use fs4::FileExt;
-use koharu_core::{Scene, op::Op};
 use parking_lot::{Mutex, RwLock};
 use serde::{Deserialize, Serialize};
-
-use crate::blobs::BlobStore;
-use crate::history::{self, History};
 
 const SCENE_FILE: &str = "scene.bin";
 const LOG_FILE: &str = "history.log";
@@ -151,6 +148,19 @@ impl ProjectSession {
         self.scene.read().clone()
     }
 
+    /// Compact the working state and save the complete project as a
+    /// maximum-compression ZIP archive.
+    pub fn save_archive(&self, path: &Utf8Path) -> Result<()> {
+        self.compact()?;
+        crate::archive::export_khr(&self.dir, path)
+    }
+
+    /// Compact the working state and return a maximum-compression ZIP archive.
+    pub fn save_archive_bytes(&self) -> Result<Vec<u8>> {
+        self.compact()?;
+        crate::archive::export_khr_bytes(&self.dir)
+    }
+
     // --- compaction --------------------------------------------------------
 
     /// Write a new snapshot (scene.bin) and truncate the log. Safe to call
@@ -227,10 +237,10 @@ struct ProjectTomlFile {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use camino::Utf8PathBuf;
-    use koharu_core::{
+    use crate::{
         Node, NodeId, NodeKind, Op, Page, PageId, TextData, TextShaderEffect, TextStyle, Transform,
     };
+    use camino::Utf8PathBuf;
     use tempfile::tempdir;
 
     fn tmp_dir() -> (tempfile::TempDir, Utf8PathBuf) {
@@ -331,5 +341,18 @@ mod tests {
             .expect("second open must fail");
         assert!(err.to_string().contains("already open"));
         drop(a);
+    }
+
+    #[test]
+    fn save_archive_bytes_returns_complete_zip() {
+        let (_tmp, path) = tmp_dir();
+        let session = ProjectSession::create(&path, "saved").unwrap();
+        let bytes = session.save_archive_bytes().unwrap();
+        assert_eq!(&bytes[..4], b"PK\x03\x04");
+
+        let mut archive = zip::ZipArchive::new(std::io::Cursor::new(bytes)).unwrap();
+        assert!(archive.by_name(PROJECT_TOML).is_ok());
+        assert!(archive.by_name(SCENE_FILE).is_ok());
+        assert!(archive.by_name(LOG_FILE).is_ok());
     }
 }

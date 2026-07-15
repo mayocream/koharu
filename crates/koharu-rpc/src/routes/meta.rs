@@ -2,7 +2,7 @@
 
 use axum::Json;
 use axum::extract::State;
-use koharu_core::{EngineCatalog, MetaInfo};
+use koharu_app::{EngineCatalog, MetaInfo};
 use utoipa_axum::{router::OpenApiRouter, routes};
 
 use crate::AppState;

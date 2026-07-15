@@ -48,7 +48,7 @@ async fn scene_bin_deserializes_with_postcard() -> anyhow::Result<()> {
     #[derive(serde::Deserialize)]
     struct WireSnapshot {
         epoch: u64,
-        scene: koharu_core::Scene,
+        scene: koharu_scene::Scene,
     }
     let snap: WireSnapshot = postcard::from_bytes(&bytes)?;
     assert!(snap.epoch > 0);
@@ -57,7 +57,7 @@ async fn scene_bin_deserializes_with_postcard() -> anyhow::Result<()> {
 }
 
 #[tokio::test]
-async fn blob_fetch_returns_stored_bytes() -> anyhow::Result<()> {
+async fn blob_fetch_returns_lossless_webp() -> anyhow::Result<()> {
     let app = TestApp::spawn().await?;
     app.open_fresh_project("bl").await?;
     let original = TestApp::tiny_png(16, 16, [99, 99, 99, 255]);
@@ -71,7 +71,7 @@ async fn blob_fetch_returns_stored_bytes() -> anyhow::Result<()> {
         page.nodes
             .values()
             .find_map(|n| match &n.kind {
-                koharu_core::NodeKind::Image(i) if i.role == koharu_core::ImageRole::Source => {
+                koharu_scene::NodeKind::Image(i) if i.role == koharu_scene::ImageRole::Source => {
                     Some(i.blob.clone())
                 }
                 _ => None,
@@ -87,7 +87,11 @@ async fn blob_fetch_returns_stored_bytes() -> anyhow::Result<()> {
         .await?
         .error_for_status()?;
     let body = resp.bytes().await?;
-    assert_eq!(body.as_ref(), original.as_slice());
+    assert_eq!(&body[..4], b"RIFF");
+    assert_eq!(&body[8..12], b"WEBP");
+    let stored = image::load_from_memory(&body)?.to_rgba8();
+    let expected = image::load_from_memory(&original)?.to_rgba8();
+    assert_eq!(stored, expected);
     Ok(())
 }
 

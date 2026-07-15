@@ -4,10 +4,11 @@
 use anyhow::{Result, anyhow};
 use async_trait::async_trait;
 use image::{DynamicImage, GrayImage, Luma};
-use koharu_core::{ImageRole, MaskRole, Op, Region};
 use koharu_ml::flux2_klein::{Flux2KleinInpaint, Flux2KleinInpaintOptions};
 use koharu_ml::inpainting::mask::expand_mask_to_bubble_region_for_inpainting;
+use koharu_scene::{ImageRole, MaskRole, Op};
 
+use crate::Region;
 use crate::pipeline::artifacts::Artifact;
 use crate::pipeline::engine::{Engine, EngineCtx, EngineInfo};
 use crate::pipeline::engines::support::{

@@ -179,7 +179,7 @@ pub fn save(config: &AppConfig) -> Result<()> {
 
 /// Apply a `ConfigPatch` in-place. Missing fields leave the existing value
 /// alone. Providers are replaced wholesale (the list, not field-by-field).
-pub fn apply_patch(config: &mut AppConfig, patch: koharu_core::ConfigPatch) {
+pub fn apply_patch(config: &mut AppConfig, patch: crate::ConfigPatch) {
     if let Some(data) = patch.data
         && let Some(path) = data.path
     {
@@ -370,7 +370,7 @@ fn provider_api_key_secret_key(provider_id: &str) -> String {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use koharu_core::{ConfigPatch, PipelineConfigPatch};
+    use crate::{ConfigPatch, PipelineConfigPatch};
 
     #[test]
     fn old_config_without_providers_still_loads() {

@@ -27,7 +27,7 @@ use std::sync::Arc;
 use std::sync::Mutex;
 use std::sync::atomic::{AtomicU64, Ordering};
 
-use koharu_core::AppEvent;
+use crate::AppEvent;
 use tokio::sync::broadcast;
 
 /// Server-assigned sequence + payload. `seq` is the wire-level SSE `id:`
@@ -120,7 +120,7 @@ impl EventBus {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use koharu_core::{JobStatus, JobSummary};
+    use crate::{JobStatus, JobSummary};
 
     fn sample_event(id: &str) -> AppEvent {
         AppEvent::JobStarted {
@@ -130,7 +130,7 @@ mod tests {
     }
 
     fn finished(id: &str) -> AppEvent {
-        AppEvent::JobFinished(koharu_core::JobFinishedEvent {
+        AppEvent::JobFinished(crate::JobFinishedEvent {
             id: id.to_string(),
             status: JobStatus::Completed,
             error: None,

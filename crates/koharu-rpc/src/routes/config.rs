@@ -8,8 +8,8 @@ use axum::Json;
 use axum::extract::{Path, State};
 use axum::http::StatusCode;
 use koharu_app::AppConfig;
+use koharu_app::ConfigPatch;
 use koharu_app::config;
-use koharu_core::ConfigPatch;
 use serde::{Deserialize, Serialize};
 use utoipa_axum::{router::OpenApiRouter, routes};
 

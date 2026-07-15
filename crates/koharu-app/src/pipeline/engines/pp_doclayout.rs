@@ -3,8 +3,8 @@
 
 use anyhow::Result;
 use async_trait::async_trait;
-use koharu_core::{Op, TextData, TextDirection};
 use koharu_ml::pp_doclayout_v3::{PPDocLayoutV3, PPDocLayoutV3Region};
+use koharu_scene::{Op, TextData, TextDirection};
 
 use crate::pipeline::artifacts::Artifact;
 use crate::pipeline::engine::{Engine, EngineCtx, EngineInfo};

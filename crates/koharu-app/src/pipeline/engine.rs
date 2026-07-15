@@ -21,17 +21,17 @@ use std::sync::atomic::AtomicBool;
 
 use anyhow::{Result, bail};
 use async_trait::async_trait;
-use koharu_core::{NodeId, Op, PageId, ReadingOrder, Region, Scene};
 use koharu_runtime::RuntimeManager;
+use koharu_scene::{BlobStore, NodeId, Op, PageId, Scene};
 use parking_lot::RwLock;
 use petgraph::algo::toposort;
 use petgraph::graph::DiGraph;
 use tracing::Instrument;
 
-use crate::blobs::BlobStore;
 use crate::llm;
 use crate::pipeline::artifacts::Artifact;
 use crate::renderer;
+use crate::{ReadingOrder, Region};
 
 // ---------------------------------------------------------------------------
 // EngineCtx — everything an engine needs to produce ops

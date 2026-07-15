@@ -5,8 +5,8 @@
 use anyhow::Result;
 use async_trait::async_trait;
 use image::DynamicImage;
-use koharu_core::{Op, TextData};
 use koharu_ml::comic_text_detector::ComicTextDetector;
+use koharu_scene::{Op, TextData};
 
 use crate::pipeline::artifacts::Artifact;
 use crate::pipeline::engine::{Engine, EngineCtx, EngineInfo};
@@ -35,7 +35,7 @@ impl Engine for Model {
         let mask_op = upsert_mask_blob(
             ctx.scene,
             ctx.page,
-            koharu_core::MaskRole::Segment,
+            koharu_scene::MaskRole::Segment,
             mask_blob,
         );
         if matches!(mask_op, Op::AddNode { .. }) {

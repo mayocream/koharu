@@ -9,7 +9,7 @@ use std::time::Duration;
 
 use tokio::sync::mpsc;
 
-use crate::session::ProjectSession;
+use koharu_scene::ProjectSession;
 
 /// How long to wait after the last signal before flushing.
 const DEBOUNCE: Duration = Duration::from_millis(500);

@@ -8,7 +8,7 @@ use axum::Json;
 use axum::extract::State;
 use axum::http::StatusCode;
 use koharu_app::ai::{CodexAuthStatus, CodexDeviceLogin, CodexImageGenerationOptions};
-use koharu_core::{AppEvent, JobFinishedEvent, JobStatus, JobSummary};
+use koharu_app::{AppEvent, JobFinishedEvent, JobStatus, JobSummary};
 use serde::{Deserialize, Serialize};
 use utoipa_axum::{router::OpenApiRouter, routes};
 use uuid::Uuid;
