@@ -1089,7 +1089,8 @@ fn rotate_sprite_expand_top_left(src: &RgbaImage, angle_rad: f32) -> (RgbaImage,
     let remainder = deg % 90.0;
     if remainder.abs() < 0.001 || (90.0 - remainder.abs()).abs() < 0.001 {
         let normalized = ((deg % 360.0) + 360.0) % 360.0;
-        return match normalized.round() as i32 {
+        let quadrant = ((normalized / 90.0).round() as i32).rem_euclid(4) * 90;
+        return match quadrant {
             0 => (src.clone(), 0.0, 0.0),
             90 => {
                 let mut dst = RgbaImage::new(src_h, src_w);
