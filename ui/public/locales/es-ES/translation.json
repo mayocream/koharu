@@ -210,6 +210,7 @@
     "effectItalic": "Cursiva",
     "effectBold": "Negrita",
     "effectBorder": "Borde",
+    "rotationLabel": "Rotación",
     "strokeColorLabel": "Color del borde",
     "strokeWidthLabel": "Grosor del borde",
     "fontWeights": {

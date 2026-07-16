@@ -199,4 +199,18 @@ describe('RenderControlsPanel Font Assignment', () => {
     expect(op.updateNode.id).toBe('t1')
     expect(op.updateNode.patch.data.text.style.color).toEqual([0, 0, 0, 255])
   })
+
+  it('changing rotation via the + button dispatches updateNode with rotationDeg updated', async () => {
+    renderWithQuery(<RenderControlsPanel />)
+    useSelectionStore.getState().select('t1', false)
+
+    const plusBtn = await screen.findByTestId('render-rotation-plus')
+    await userEvent.click(plusBtn)
+
+    await waitFor(() => expect(sceneActions.applyOp).toHaveBeenCalled())
+    const op = (sceneActions.applyOp as any).mock.calls[0][0]
+    expect(op.updateNode.id).toBe('t1')
+    expect(op.updateNode.patch.transform.rotationDeg).toBe(1)
+    expect(sceneActions.queueAutoRender).toHaveBeenCalled()
+  })
 })

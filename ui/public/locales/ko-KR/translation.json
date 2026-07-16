@@ -223,6 +223,7 @@
     "effectItalic": "기울임꼴",
     "effectBold": "굵게",
     "effectBorder": "테두리",
+    "rotationLabel": "회전",
     "strokeColorLabel": "테두리 색상",
     "strokeWidthLabel": "테두리 두께",
     "fontLabel": "글꼴",

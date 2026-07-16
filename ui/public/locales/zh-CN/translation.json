@@ -210,6 +210,7 @@
     "effectItalic": "斜体",
     "effectBold": "粗体",
     "effectBorder": "描边",
+    "rotationLabel": "旋转",
     "strokeColorLabel": "描边颜色",
     "strokeWidthLabel": "描边宽度",
     "fontWeights": {

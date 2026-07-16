@@ -13,7 +13,7 @@ use std::{
 };
 
 use anyhow::{Context, Result};
-use image::{DynamicImage, GrayImage, RgbaImage, imageops};
+use image::{DynamicImage, GrayImage, Rgba, RgbaImage, imageops};
 use koharu_core::{
     FontFaceInfo, FontPrediction, FontSource, NodeId, TextDirection, TextShaderEffect,
     TextStrokeStyle, TextStyle, Transform,
@@ -202,8 +202,15 @@ impl Renderer {
             imageops::overlay(&mut canvas, &brush.to_rgba8(), 0, 0);
         }
         for out in &rendered_blocks {
-            let (x, y) = placement_origin(find_input(blocks, out.node_id), &out.expanded_transform);
-            imageops::overlay(&mut canvas, &out.sprite.to_rgba8(), x as i64, y as i64);
+            let input = find_input(blocks, out.node_id);
+            let is_expanded = out.expanded_transform.is_some();
+            let sprite_transform = out.expanded_transform.as_ref().unwrap_or(&input.transform);
+            overlay_sprite_with_rotation(
+                &mut canvas,
+                &out.sprite.to_rgba8(),
+                sprite_transform,
+                is_expanded,
+            );
         }
         Ok(RenderOutput {
             final_render: DynamicImage::ImageRgba8(canvas),
@@ -700,12 +707,45 @@ fn sprite_collides_with_bubble_mask(
     mask: &GrayImage,
     bubble_id: u8,
 ) -> bool {
-    let origin_x = transform.x.round() as i32;
-    let origin_y = transform.y.round() as i32;
     let mask_w = mask.width() as i32;
     let mask_h = mask.height() as i32;
 
-    for (x, y, pixel) in sprite.enumerate_pixels() {
+    let mut rotation_deg = transform.rotation_deg % 360.0;
+    if rotation_deg < 0.0 {
+        rotation_deg += 360.0;
+    }
+
+    // Fast path: no rotation — check source pixels directly, no allocation.
+    if rotation_deg.abs() < 0.0001 || (360.0 - rotation_deg).abs() < 0.0001 {
+        let origin_x = transform.x.round() as i32;
+        let origin_y = transform.y.round() as i32;
+        for (x, y, pixel) in sprite.enumerate_pixels() {
+            if pixel.0[3] <= MASK_COLLISION_ALPHA_THRESHOLD {
+                continue;
+            }
+            let mask_x = origin_x + x as i32;
+            let mask_y = origin_y + y as i32;
+            if mask_x < 0 || mask_y < 0 || mask_x >= mask_w || mask_y >= mask_h {
+                return true;
+            }
+            if mask.get_pixel(mask_x as u32, mask_y as u32).0[0] != bubble_id {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    // Rotate the sprite first so the collision check uses the same
+    // bilinear-resampled pixels as the actual render overlay path.
+    let (rotated, _, _) = rotate_sprite_expand_top_left(sprite, rotation_deg.to_radians());
+
+    // Match the overlay origin computed by overlay_sprite_with_rotation.
+    let origin_x =
+        (transform.x + transform.width * 0.5 - rotated.width() as f32 * 0.5).round() as i32;
+    let origin_y =
+        (transform.y + transform.height * 0.5 - rotated.height() as f32 * 0.5).round() as i32;
+
+    for (x, y, pixel) in rotated.enumerate_pixels() {
         if pixel.0[3] <= MASK_COLLISION_ALPHA_THRESHOLD {
             continue;
         }
@@ -1002,12 +1042,199 @@ fn find_input(blocks: &[RenderBlockInput], id: NodeId) -> &RenderBlockInput {
         .expect("rendered_block must have matching input")
 }
 
-fn placement_origin(input: &RenderBlockInput, expanded: &Option<Transform>) -> (f32, f32) {
-    if let Some(t) = expanded {
-        (t.x.round(), t.y.round())
-    } else {
-        (input.transform.x, input.transform.y)
+fn overlay_sprite_with_rotation(
+    canvas: &mut RgbaImage,
+    sprite: &RgbaImage,
+    transform: &Transform,
+    is_expanded: bool,
+) {
+    let mut rotation_deg = transform.rotation_deg % 360.0;
+    if rotation_deg < 0.0 {
+        rotation_deg += 360.0;
     }
+
+    if rotation_deg.abs() < 0.0001 || (360.0 - rotation_deg).abs() < 0.0001 {
+        // Preserve legacy placement: expanded transforms were rounded,
+        // non-expanded (original) transforms were truncated (cast to i64).
+        let (ox, oy) = if is_expanded {
+            (transform.x.round() as i64, transform.y.round() as i64)
+        } else {
+            (transform.x as i64, transform.y as i64)
+        };
+        imageops::overlay(canvas, sprite, ox, oy);
+        return;
+    }
+
+    let (rotated, _, _) = rotate_sprite_expand_top_left(sprite, rotation_deg.to_radians());
+    // The unrotated sprite is centered at (transform.x + w/2, transform.y + h/2).
+    // Align the rotated sprite's center to the same point so rotated text
+    // stays visually centered within its layout box.
+    let origin_x =
+        (transform.x + transform.width * 0.5 - rotated.width() as f32 * 0.5).round() as i64;
+    let origin_y =
+        (transform.y + transform.height * 0.5 - rotated.height() as f32 * 0.5).round() as i64;
+    imageops::overlay(canvas, &rotated, origin_x, origin_y);
+}
+
+fn rotate_sprite_expand_top_left(src: &RgbaImage, angle_rad: f32) -> (RgbaImage, f32, f32) {
+    let src_w = src.width();
+    let src_h = src.height();
+    if src_w == 0 || src_h == 0 {
+        return (RgbaImage::new(0, 0), 0.0, 0.0);
+    }
+
+    // Fast path: exact 90° multiples — direct integer pixel rearrangement,
+    // no resampling. The layout matches the bilinear path exactly.
+    let deg = angle_rad.to_degrees();
+    let remainder = deg % 90.0;
+    if remainder.abs() < 0.001 || (90.0 - remainder.abs()).abs() < 0.001 {
+        let normalized = ((deg % 360.0) + 360.0) % 360.0;
+        return match normalized.round() as i32 {
+            0 => (src.clone(), 0.0, 0.0),
+            90 => {
+                let mut dst = RgbaImage::new(src_h, src_w);
+                for y in 0..src_h {
+                    for x in 0..src_w {
+                        dst.put_pixel(src_h - 1 - y, x, *src.get_pixel(x, y));
+                    }
+                }
+                (dst, -(src_h as f32), 0.0)
+            }
+            180 => {
+                let mut dst = RgbaImage::new(src_w, src_h);
+                for y in 0..src_h {
+                    for x in 0..src_w {
+                        dst.put_pixel(src_w - 1 - x, src_h - 1 - y, *src.get_pixel(x, y));
+                    }
+                }
+                (dst, -(src_w as f32), -(src_h as f32))
+            }
+            270 => {
+                let mut dst = RgbaImage::new(src_h, src_w);
+                for y in 0..src_h {
+                    for x in 0..src_w {
+                        dst.put_pixel(y, src_w - 1 - x, *src.get_pixel(x, y));
+                    }
+                }
+                (dst, 0.0, -(src_w as f32))
+            }
+            _ => unreachable!(),
+        };
+    }
+
+    let cos = angle_rad.cos();
+    let sin = angle_rad.sin();
+    let corners = [
+        rotate_point_top_left(0.0, 0.0, cos, sin),
+        rotate_point_top_left(src_w as f32, 0.0, cos, sin),
+        rotate_point_top_left(0.0, src_h as f32, cos, sin),
+        rotate_point_top_left(src_w as f32, src_h as f32, cos, sin),
+    ];
+
+    let min_x = corners
+        .iter()
+        .map(|(x, _)| *x)
+        .fold(f32::INFINITY, f32::min);
+    let max_x = corners
+        .iter()
+        .map(|(x, _)| *x)
+        .fold(f32::NEG_INFINITY, f32::max);
+    let min_y = corners
+        .iter()
+        .map(|(_, y)| *y)
+        .fold(f32::INFINITY, f32::min);
+    let max_y = corners
+        .iter()
+        .map(|(_, y)| *y)
+        .fold(f32::NEG_INFINITY, f32::max);
+
+    let dst_w = (max_x - min_x).ceil().max(1.0) as u32;
+    let dst_h = (max_y - min_y).ceil().max(1.0) as u32;
+
+    let mut dst = RgbaImage::new(dst_w, dst_h);
+    for y in 0..dst_h {
+        for x in 0..dst_w {
+            let world_x = x as f32 + min_x;
+            let world_y = y as f32 + min_y;
+            // Inverse rotation R(-θ): map destination pixel back to source.
+            //   Forward R(θ):  x' =  cos·x - sin·y,  y' =  sin·x + cos·y
+            //   Inverse R(-θ): x  =  cos·x' + sin·y', y  = -sin·x' + cos·y'
+            let src_x = cos * world_x + sin * world_y;
+            let src_y = -sin * world_x + cos * world_y;
+            dst.put_pixel(x, y, sample_bilinear_rgba(src, src_x, src_y));
+        }
+    }
+    (dst, min_x, min_y)
+}
+
+fn rotate_point_top_left(x: f32, y: f32, cos: f32, sin: f32) -> (f32, f32) {
+    // Matches CSS rotate(theta) matrix.
+    (cos * x - sin * y, sin * x + cos * y)
+}
+
+/// Bilinear sample of an RGBA sprite.
+///
+/// Interpolates RGB in premultiplied-alpha space and alpha in straight-alpha
+/// space, then un-premultiplies once at the end. This is mathematically
+/// equivalent to the standard "premultiply all four channels, interpolate,
+/// un-premultiply" approach but avoids premultiplying alpha (which is
+/// invariant under premultiplication) through the interpolation step.
+fn sample_bilinear_rgba(src: &RgbaImage, x: f32, y: f32) -> Rgba<u8> {
+    let max_x = src.width() as f32 - 1.0;
+    let max_y = src.height() as f32 - 1.0;
+    if x < 0.0 || y < 0.0 || x > max_x || y > max_y {
+        return Rgba([0, 0, 0, 0]);
+    }
+
+    let x0 = x.floor();
+    let y0 = y.floor();
+    let x1 = (x0 + 1.0).min(max_x);
+    let y1 = (y0 + 1.0).min(max_y);
+
+    let wx = x - x0;
+    let wy = y - y0;
+
+    let get_premul = |px: &image::Rgba<u8>| -> [f32; 4] {
+        let a = px.0[3] as f32 / 255.0;
+        [
+            px.0[0] as f32 * a,
+            px.0[1] as f32 * a,
+            px.0[2] as f32 * a,
+            px.0[3] as f32,
+        ]
+    };
+
+    let p00 = get_premul(src.get_pixel(x0 as u32, y0 as u32));
+    let p10 = get_premul(src.get_pixel(x1 as u32, y0 as u32));
+    let p01 = get_premul(src.get_pixel(x0 as u32, y1 as u32));
+    let p11 = get_premul(src.get_pixel(x1 as u32, y1 as u32));
+
+    let lerp = |a: f32, b: f32, t: f32| a + (b - a) * t;
+
+    // Interpolate premultiplied RGB in float space (don't round yet).
+    let mut rgb_premul = [0.0f32; 3];
+    for i in 0..3 {
+        let top = lerp(p00[i], p10[i], wx);
+        let bottom = lerp(p01[i], p11[i], wx);
+        rgb_premul[i] = lerp(top, bottom, wy);
+    }
+
+    // Alpha is interpolated in straight-alpha space.
+    let top_a = lerp(p00[3], p10[3], wx);
+    let bottom_a = lerp(p01[3], p11[3], wx);
+    let alpha = lerp(top_a, bottom_a, wy).clamp(0.0, 255.0);
+
+    let mut out = [0u8; 4];
+    let alpha_u8 = alpha.round() as u8;
+    out[3] = alpha_u8;
+
+    // Un-premultiply once, then round — preserves sub-pixel precision.
+    if alpha_u8 != 0 {
+        for i in 0..3 {
+            out[i] = (rgb_premul[i] * 255.0 / alpha).round().clamp(0.0, 255.0) as u8;
+        }
+    }
+    Rgba(out)
 }
 
 // ---------------------------------------------------------------------------
@@ -1334,5 +1561,86 @@ mod tests {
         // Sprite (100x50) centered on (200, 150) starts at (150, 125).
         assert_eq!(transform.x, 150.0);
         assert_eq!(transform.y, 125.0);
+    }
+
+    // ------------------------------------------------------------------
+    // Rotation helpers
+    // ------------------------------------------------------------------
+
+    fn make_test_sprite(w: u32, h: u32) -> RgbaImage {
+        let mut img = RgbaImage::new(w, h);
+        // Paint a solid red pixel so we can verify the output is not empty.
+        img.put_pixel(0, 0, Rgba([255, 0, 0, 255]));
+        img
+    }
+
+    fn make_transform(x: f32, y: f32, rotation_deg: f32) -> Transform {
+        Transform {
+            x,
+            y,
+            width: 100.0,
+            height: 50.0,
+            rotation_deg,
+        }
+    }
+
+    #[test]
+    fn overlay_sprite_no_rotation_is_identity() {
+        let mut canvas = RgbaImage::new(300, 300);
+        let sprite = make_test_sprite(20, 20);
+        let transform = make_transform(50.0, 50.0, 0.0);
+        overlay_sprite_with_rotation(&mut canvas, &sprite, &transform, false);
+        // An unrotated sprite at (50, 50) should leave a red pixel there.
+        assert_eq!(canvas.get_pixel(50, 50), &Rgba([255, 0, 0, 255]));
+    }
+
+    #[test]
+    fn overlay_sprite_90deg_rotates() {
+        let mut canvas = RgbaImage::new(600, 600);
+        let sprite = make_test_sprite(100, 100);
+        let transform = make_transform(250.0, 250.0, 90.0);
+        overlay_sprite_with_rotation(&mut canvas, &sprite, &transform, false);
+        assert!(canvas.pixels().any(|p| p.0[3] != 0));
+    }
+
+    #[test]
+    fn overlay_sprite_180deg_rotates() {
+        let mut canvas = RgbaImage::new(600, 600);
+        let sprite = make_test_sprite(100, 100);
+        let transform = make_transform(250.0, 250.0, 180.0);
+        overlay_sprite_with_rotation(&mut canvas, &sprite, &transform, false);
+        assert!(canvas.pixels().any(|p| p.0[3] != 0));
+    }
+
+    #[test]
+    fn rotate_sprite_expand_zero_angle_is_identity() {
+        let src = make_test_sprite(20, 10);
+        let (rotated, min_x, min_y) = rotate_sprite_expand_top_left(&src, 0.0);
+        assert_eq!(rotated.width(), src.width());
+        assert_eq!(rotated.height(), src.height());
+        assert_eq!(min_x, 0.0);
+        assert_eq!(min_y, 0.0);
+        // The red pixel at (0,0) should be preserved.
+        assert_eq!(rotated.get_pixel(0, 0), &Rgba([255, 0, 0, 255]));
+    }
+
+    #[test]
+    fn rotate_sprite_expand_90deg_swaps_dimensions() {
+        let src = make_test_sprite(40, 20);
+        let (rotated, _min_x, _min_y) =
+            rotate_sprite_expand_top_left(&src, std::f32::consts::FRAC_PI_2);
+        // 90° rotation swaps width and height exactly (fast path, no resampling).
+        assert_eq!(
+            rotated.width(),
+            20,
+            "expected 20 wide, got {}",
+            rotated.width()
+        );
+        assert_eq!(
+            rotated.height(),
+            40,
+            "expected 40 tall, got {}",
+            rotated.height()
+        );
     }
 }
