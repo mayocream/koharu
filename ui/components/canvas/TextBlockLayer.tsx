@@ -316,10 +316,6 @@ function BlockSprite({ node, scale }: { node: TextNodeEntry; scale: number }) {
   const rotation = spriteT?.rotationDeg ?? node.transform.rotationDeg ?? 0
   // Renderer centers the rotated sprite; match that model by rotating
   // around the sprite's center rather than top-left.
-  const sw = (spriteT?.width ?? node.transform.width) * scale
-  const sh = (spriteT?.height ?? node.transform.height) * scale
-  const cx = x + sw * 0.5
-  const cy = y + sh * 0.5
   return (
     <img
       alt=''
@@ -329,7 +325,8 @@ function BlockSprite({ node, scale }: { node: TextNodeEntry; scale: number }) {
       style={{
         top: 0,
         left: 0,
-        transform: `translate(${cx}px, ${cy}px) rotate(${rotation}deg) scale(${scale}) translate(-50%, -50%)`,
+        transformOrigin: 'top left',
+        transform: `translate(${x}px, ${y}px) rotate(${rotation}deg) scale(${scale})`,
       }}
     />
   )
