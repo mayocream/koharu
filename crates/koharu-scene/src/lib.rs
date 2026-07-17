@@ -1,7 +1,8 @@
-//! Native, SQLite-backed 2D scene graph.
+//! Koharu's compact, SQLite-backed manga document model.
 //!
-//! [`Scene`] is immutable to callers. All mutations are expressed as a
-//! [`CommandBatch`] and committed atomically through [`Session`].
+//! Reads borrow the committed [`Project`]. Writes are [`Commands`] committed
+//! atomically through [`Session`]; [`Edit`] is only fluent syntax over those
+//! commands.
 
 mod blob;
 mod command;
@@ -9,22 +10,26 @@ mod edit;
 mod error;
 mod geometry;
 mod id;
-pub mod node;
-mod scene;
+mod model;
 mod session;
 mod storage;
 mod style;
 
-pub use command::{CommandBatch, PagePosition, Parent, Position};
-pub use edit::{ContainerEdit, Edit, NodeEdit, PageEdit, TextEdit};
+pub use command::{Command, Commands, ElementChange};
+pub use edit::{Edit, ImageEdit, PageEdit, TextEdit};
 pub use error::{Error, Result};
-pub use geometry::{CanvasSize, PixelSize, Transform};
-pub use id::{BlobId, CommandId, NodeId, PageId, Revision};
-pub use node::{ImageNode, MaskNode, Node, NodeBuilder, NodeKind, TextNode};
-pub use scene::{Children, Page, PageRef, Scene, Visit, WalkEvent};
-pub use session::{Applied, ChangeSet, GcReport, NodeChangeFlags, Session, SessionConfig};
+pub use geometry::{Frame, Quad, Size};
+pub use id::{BlobId, ElementId, PageId, ProjectId, Revision};
+pub use model::{
+    Element, ElementKind, ImageElement, Page, PageAsset, PageAssets, Project, SourceText,
+    TextBlock, TextDirection,
+};
+pub use session::{ChangeSet, GcReport, Options, Session};
 pub use style::{
-    BevelStyle, BevelTechnique, BlendMode, Color, FontSlant, GradientStop, StrokePosition,
-    TextAlign, TextDecoration, TextEffect, TextEffectKind, TextLayout, TextOverflow, TextStyle,
+    BevelStyle, BlendMode, Color, FontSlant, GradientStop, StrokePosition, TextAlign,
+    TextDecoration, TextEffect, TextEffectKind, TextFit, TextLayout, TextOverflow, TextStyle,
     VerticalAlign, WritingMode,
 };
+
+#[cfg(test)]
+mod tests;

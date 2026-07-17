@@ -1,226 +1,265 @@
 use std::sync::Arc;
 
 use crate::{
-    Applied, CanvasSize, CommandBatch, Error, NodeBuilder, NodeId, Page, PageId, PagePosition,
-    Parent, Position, Result, Scene, Session, TextLayout, TextStyle, Transform,
+    ChangeSet, Command, Commands, ElementChange, ElementId, ElementKind, Error, Frame, PageAsset,
+    PageId, Result, Session, SourceText, TextLayout, TextStyle,
 };
 
-pub struct Edit<'a> {
-    session: &'a mut Session,
-    batch: CommandBatch,
+pub struct Edit<'session> {
+    session: &'session mut Session,
+    commands: Commands,
 }
 
-impl<'a> Edit<'a> {
-    pub(crate) fn new(session: &'a mut Session) -> Self {
-        let batch = CommandBatch::new(session.revision());
-        Self { session, batch }
-    }
-
-    pub fn create_page(&mut self, page: Page) -> Result<PageId> {
-        self.batch.create_page(page)
-    }
-
-    pub fn move_page(&mut self, page: PageId, position: PagePosition) -> Result<()> {
-        self.batch.move_page(page, position)
-    }
-
-    pub fn remove_page(&mut self, page: PageId) -> Result<()> {
-        self.batch.remove_page(page)
-    }
-
-    pub fn page(&mut self, page: PageId) -> Result<PageEdit<'_>> {
-        if !self.session.scene().contains_page(page) && !self.batch.creates_page(page) {
-            return Err(Error::PageNotFound(page));
-        }
-        Ok(PageEdit {
-            scene: self.session.scene(),
-            batch: &mut self.batch,
-            page,
-        })
-    }
-
-    pub fn commit(self) -> Result<Applied> {
-        self.session.apply(self.batch)
-    }
-}
-
-pub struct PageEdit<'a> {
-    scene: &'a Scene,
-    batch: &'a mut CommandBatch,
+pub struct PageEdit<'edit, 'session> {
+    edit: &'edit mut Edit<'session>,
     page: PageId,
 }
 
-impl<'a> PageEdit<'a> {
-    pub fn create(&mut self, builder: NodeBuilder) -> Result<NodeId> {
-        self.create_at(Position::Top, builder)
+pub struct TextEdit<'edit, 'session> {
+    edit: &'edit mut Edit<'session>,
+    page: PageId,
+    element: ElementId,
+}
+
+pub struct ImageEdit<'edit, 'session> {
+    edit: &'edit mut Edit<'session>,
+    page: PageId,
+    element: ElementId,
+}
+
+impl Session {
+    pub fn edit(&mut self) -> Edit<'_> {
+        let commands = self.commands();
+        Edit {
+            session: self,
+            commands,
+        }
+    }
+}
+
+impl<'session> Edit<'session> {
+    pub fn add_page(
+        &mut self,
+        name: impl Into<String>,
+        source: impl Into<Arc<[u8]>>,
+    ) -> Result<PageId> {
+        self.commands.add_page(name, source)
     }
 
-    pub fn create_at(&mut self, position: Position, builder: NodeBuilder) -> Result<NodeId> {
-        self.batch
-            .create(Parent::Page(self.page), position, builder)
+    pub fn page(&mut self, page: PageId) -> Result<PageEdit<'_, 'session>> {
+        if !self.page_exists(page) {
+            return Err(Error::PageNotFound(page));
+        }
+        Ok(PageEdit { edit: self, page })
     }
 
-    pub fn rename(&mut self, name: impl Into<String>) -> Result<()> {
-        self.batch.rename_page(self.page, name)
+    pub fn rename_project(&mut self, name: impl Into<String>) {
+        self.commands.rename_project(name);
     }
 
-    pub fn resize(&mut self, size: CanvasSize) -> Result<()> {
-        self.batch.resize_page(self.page, size)
+    pub fn commit(self) -> Result<ChangeSet> {
+        self.session.apply(self.commands)
     }
 
-    pub fn move_to(&mut self, position: PagePosition) -> Result<()> {
-        self.batch.move_page(self.page, position)
+    fn page_exists(&self, page: PageId) -> bool {
+        let mut exists = self.session.project().page(page).is_some();
+        for command in self.commands.as_slice() {
+            match command {
+                Command::InsertPage { page: inserted, .. } if inserted.id == page => exists = true,
+                Command::DeletePage(deleted) if *deleted == page => exists = false,
+                _ => {}
+            }
+        }
+        exists
     }
 
-    pub fn remove(self) -> Result<()> {
-        self.batch.remove_page(self.page)
+    fn element_kind(&self, page: PageId, element: ElementId) -> Option<bool> {
+        let mut is_text = self
+            .session
+            .project()
+            .page(page)
+            .and_then(|page| page.element(element))
+            .map(|element| matches!(element.kind, ElementKind::Text(_)));
+        for command in self.commands.as_slice() {
+            match command {
+                Command::InsertElement {
+                    page: target,
+                    element: inserted,
+                    ..
+                } if *target == page && inserted.id == element => {
+                    is_text = Some(matches!(inserted.kind, ElementKind::Text(_)));
+                }
+                Command::DeleteElement {
+                    page: target,
+                    element: deleted,
+                } if *target == page && *deleted == element => {
+                    is_text = None;
+                }
+                _ => {}
+            }
+        }
+        is_text
+    }
+}
+
+impl<'edit, 'session> PageEdit<'edit, 'session> {
+    pub fn rename(&mut self, name: impl Into<String>) -> &mut Self {
+        self.edit.commands.push(Command::RenamePage {
+            page: self.page,
+            name: name.into(),
+        });
+        self
     }
 
-    pub fn node(self, node: NodeId) -> Result<NodeEdit<'a>> {
-        self.ensure_node(node)?;
-        Ok(NodeEdit {
-            batch: self.batch,
-            node,
-        })
+    pub fn remove(&mut self) -> &mut Self {
+        self.edit.commands.push(Command::DeletePage(self.page));
+        self
     }
 
-    pub fn text(self, node: NodeId) -> Result<TextEdit<'a>> {
-        self.ensure_node(node)?;
-        if let Ok(committed) = self.scene.node(node)
-            && !matches!(committed.kind(), crate::NodeKind::Text(_))
-        {
-            return Err(Error::WrongNodeKind {
-                node,
-                expected: "text",
-                actual: committed.kind().name(),
+    pub fn move_to(&mut self, index: usize) -> &mut Self {
+        self.edit.commands.push(Command::MovePage {
+            page: self.page,
+            index,
+        });
+        self
+    }
+
+    pub fn replace_source(&mut self, bytes: impl Into<Arc<[u8]>>) -> Result<&mut Self> {
+        self.edit.commands.replace_source(self.page, bytes)?;
+        Ok(self)
+    }
+
+    pub fn set_asset(
+        &mut self,
+        asset: PageAsset,
+        bytes: impl Into<Arc<[u8]>>,
+    ) -> Result<&mut Self> {
+        self.edit
+            .commands
+            .set_asset(self.page, asset, Some(bytes))?;
+        Ok(self)
+    }
+
+    pub fn clear_asset(&mut self, asset: PageAsset) -> &mut Self {
+        self.edit.commands.push(Command::SetPageAsset {
+            page: self.page,
+            asset,
+            blob: None,
+        });
+        self
+    }
+
+    pub fn add_text(&mut self, frame: Frame) -> ElementId {
+        self.edit.commands.add_text(self.page, frame)
+    }
+
+    pub fn add_image(
+        &mut self,
+        frame: Frame,
+        name: impl Into<String>,
+        bytes: impl Into<Arc<[u8]>>,
+    ) -> Result<ElementId> {
+        self.edit.commands.add_image(self.page, frame, name, bytes)
+    }
+
+    pub fn text(self, element: ElementId) -> Result<TextEdit<'edit, 'session>> {
+        match self.edit.element_kind(self.page, element) {
+            Some(true) => Ok(TextEdit {
+                edit: self.edit,
+                page: self.page,
+                element,
+            }),
+            Some(false) => Err(Error::ElementKind(element)),
+            None => Err(Error::ElementNotFound(element)),
+        }
+    }
+
+    pub fn image(self, element: ElementId) -> Result<ImageEdit<'edit, 'session>> {
+        match self.edit.element_kind(self.page, element) {
+            Some(false) => Ok(ImageEdit {
+                edit: self.edit,
+                page: self.page,
+                element,
+            }),
+            Some(true) => Err(Error::ElementKind(element)),
+            None => Err(Error::ElementNotFound(element)),
+        }
+    }
+}
+
+macro_rules! common_element_methods {
+    () => {
+        pub fn set_frame(&mut self, frame: Frame) -> &mut Self {
+            self.change(ElementChange::Frame(frame))
+        }
+
+        pub fn set_visible(&mut self, visible: bool) -> &mut Self {
+            self.change(ElementChange::Visible(visible))
+        }
+
+        pub fn set_opacity(&mut self, opacity: f32) -> &mut Self {
+            self.change(ElementChange::Opacity(opacity))
+        }
+
+        pub fn move_to(&mut self, index: usize) -> &mut Self {
+            self.edit.commands.push(Command::MoveElement {
+                page: self.page,
+                element: self.element,
+                index,
             });
+            self
         }
-        Ok(TextEdit {
-            batch: self.batch,
-            node,
-        })
-    }
 
-    pub fn container(self, node: NodeId) -> Result<ContainerEdit<'a>> {
-        self.ensure_node(node)?;
-        if let Ok(committed) = self.scene.node(node)
-            && !committed.is_container()
-        {
-            return Err(Error::WrongNodeKind {
-                node,
-                expected: "group or mask container",
-                actual: committed.kind().name(),
+        pub fn remove(&mut self) -> &mut Self {
+            self.edit.commands.push(Command::DeleteElement {
+                page: self.page,
+                element: self.element,
             });
+            self
         }
-        Ok(ContainerEdit {
-            scene: self.scene,
-            batch: self.batch,
-            node,
-        })
-    }
 
-    fn ensure_node(&self, node: NodeId) -> Result<()> {
-        if self.scene.contains_node(node) || self.batch.creates_node(node) {
-            Ok(())
-        } else {
-            Err(Error::NodeNotFound(node))
+        fn change(&mut self, change: ElementChange) -> &mut Self {
+            self.edit.commands.push(Command::EditElement {
+                page: self.page,
+                element: self.element,
+                edit: change,
+            });
+            self
         }
+    };
+}
+
+impl TextEdit<'_, '_> {
+    common_element_methods!();
+
+    pub fn set_source(&mut self, source: Option<SourceText>) -> &mut Self {
+        self.change(ElementChange::Source(source))
+    }
+
+    pub fn set_translation(&mut self, translation: Option<impl Into<String>>) -> &mut Self {
+        self.change(ElementChange::Translation(translation.map(Into::into)))
+    }
+
+    pub fn set_style(&mut self, style: TextStyle) -> &mut Self {
+        self.change(ElementChange::Style(style))
+    }
+
+    pub fn set_layout(&mut self, layout: TextLayout) -> &mut Self {
+        self.change(ElementChange::Layout(layout))
     }
 }
 
-pub struct ContainerEdit<'a> {
-    scene: &'a Scene,
-    batch: &'a mut CommandBatch,
-    node: NodeId,
-}
+impl ImageEdit<'_, '_> {
+    common_element_methods!();
 
-impl ContainerEdit<'_> {
-    pub fn create(&mut self, builder: NodeBuilder) -> Result<NodeId> {
-        self.create_at(Position::Top, builder)
+    pub fn replace(&mut self, bytes: impl Into<Arc<[u8]>>) -> Result<&mut Self> {
+        self.edit
+            .commands
+            .replace_image(self.page, self.element, bytes)?;
+        Ok(self)
     }
 
-    pub fn create_at(&mut self, position: Position, builder: NodeBuilder) -> Result<NodeId> {
-        self.batch
-            .create(Parent::Node(self.node), position, builder)
-    }
-
-    pub fn node(&mut self, node: NodeId) -> Result<NodeEdit<'_>> {
-        if !self.scene.contains_node(node) && !self.batch.creates_node(node) {
-            return Err(Error::NodeNotFound(node));
-        }
-        Ok(NodeEdit {
-            batch: self.batch,
-            node,
-        })
-    }
-}
-
-pub struct NodeEdit<'a> {
-    batch: &'a mut CommandBatch,
-    node: NodeId,
-}
-
-impl NodeEdit<'_> {
-    pub fn set_name(&mut self, name: impl Into<String>) -> Result<()> {
-        self.batch.set_name(self.node, Some(name.into()))
-    }
-
-    pub fn clear_name(&mut self) -> Result<()> {
-        self.batch.set_name(self.node, None)
-    }
-
-    pub fn set_visible(&mut self, visible: bool) -> Result<()> {
-        self.batch.set_visible(self.node, visible)
-    }
-
-    pub fn set_opacity(&mut self, opacity: f32) -> Result<()> {
-        self.batch.set_opacity(self.node, opacity)
-    }
-
-    pub fn set_transform(&mut self, transform: Transform) -> Result<()> {
-        self.batch.set_transform(self.node, transform)
-    }
-
-    pub fn set_image(&mut self, bytes: impl Into<Arc<[u8]>>) -> Result<()> {
-        self.batch.set_image(self.node, bytes)
-    }
-
-    pub fn set_mask(&mut self, bytes: impl Into<Arc<[u8]>>) -> Result<()> {
-        self.batch.set_mask(self.node, bytes)
-    }
-
-    pub fn place_above(&mut self, anchor: NodeId) -> Result<()> {
-        self.batch.place_above(self.node, anchor)
-    }
-
-    pub fn place_below(&mut self, anchor: NodeId) -> Result<()> {
-        self.batch.place_below(self.node, anchor)
-    }
-
-    pub fn move_to(&mut self, parent: Parent, position: Position) -> Result<()> {
-        self.batch.move_node(self.node, parent, position)
-    }
-
-    pub fn remove(&mut self) -> Result<()> {
-        self.batch.remove_node(self.node)
-    }
-}
-
-pub struct TextEdit<'a> {
-    batch: &'a mut CommandBatch,
-    node: NodeId,
-}
-
-impl TextEdit<'_> {
-    pub fn set_text(&mut self, text: impl Into<String>) -> Result<()> {
-        self.batch.set_text(self.node, text)
-    }
-
-    pub fn set_style(&mut self, style: TextStyle) -> Result<()> {
-        self.batch.set_text_style(self.node, style)
-    }
-
-    pub fn set_layout(&mut self, layout: TextLayout) -> Result<()> {
-        self.batch.set_text_layout(self.node, layout)
+    pub fn rename(&mut self, name: impl Into<String>) -> &mut Self {
+        self.change(ElementChange::ImageName(name.into()))
     }
 }

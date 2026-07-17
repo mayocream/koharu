@@ -1,33 +1,41 @@
-use std::io::Cursor;
+use std::{io::Cursor, sync::Arc};
 
 use image::{ImageDecoder, ImageReader};
 
-use crate::{Error, PixelSize, Result};
+use crate::{BlobId, Error, Result, Size};
 
-pub(crate) fn inspect(
-    bytes: &[u8],
-    require_single_channel: bool,
-    max_width: u32,
-    max_height: u32,
-    max_pixels: u64,
-) -> Result<PixelSize> {
+#[derive(Clone)]
+pub(crate) struct Attachment {
+    pub id: BlobId,
+    pub bytes: Arc<[u8]>,
+    pub size: Size,
+    pub single_channel: bool,
+}
+
+pub(crate) fn attach(bytes: impl Into<Arc<[u8]>>, mask: bool) -> Result<Attachment> {
+    let bytes = bytes.into();
     if bytes.is_empty() {
         return Err(Error::invalid("image attachment is empty"));
     }
-    let reader = ImageReader::new(Cursor::new(bytes)).with_guessed_format()?;
-    let decoder = reader.into_decoder()?;
-    let (width, height) = decoder.dimensions();
-    let size = PixelSize::new(width, height);
-    if width == 0 || height == 0 {
+    let (size, single_channel) = {
+        let reader = ImageReader::new(Cursor::new(bytes.as_ref())).with_guessed_format()?;
+        let decoder = reader.into_decoder()?;
+        let (width, height) = decoder.dimensions();
+        (
+            Size::new(width, height),
+            decoder.color_type().channel_count() == 1,
+        )
+    };
+    if !size.is_valid() {
         return Err(Error::invalid("image dimensions must be non-zero"));
     }
-    if width > max_width || height > max_height || size.pixels() > max_pixels {
-        return Err(Error::invalid(format!(
-            "image dimensions {width}x{height} exceed configured limits"
-        )));
-    }
-    if require_single_channel && decoder.color_type().channel_count() != 1 {
+    if mask && !single_channel {
         return Err(Error::invalid("mask image must have exactly one channel"));
     }
-    Ok(size)
+    Ok(Attachment {
+        id: BlobId::for_bytes(&bytes),
+        bytes,
+        size,
+        single_channel,
+    })
 }

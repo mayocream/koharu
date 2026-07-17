@@ -99,6 +99,7 @@ rusqlite = { version = "0.40.1", default-features = false, features = [
     "bundled",
     "cache",
 ] }
+revision = { version = "0.30.0", features = ["uuid"] }
 flate2 = { version = "1.0", default-features = false, features = [
     "zlib-ng-compat",
 ] }
