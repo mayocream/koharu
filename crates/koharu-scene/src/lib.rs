@@ -1,31 +1,30 @@
-//! Koharu's persisted scene-graph engine.
+//! Native, SQLite-backed 2D scene graph.
 //!
-//! The crate owns the graph model, reversible operations, durable history,
-//! content-addressed lossless WebP blobs, on-disk project sessions, and
-//! maximum-compression ZIP archives. Application workflows and transport DTOs
-//! live in `koharu-app` and `koharu-rpc`.
+//! [`Scene`] is immutable to callers. All mutations are expressed as a
+//! [`CommandBatch`] and committed atomically through [`Session`].
 
-pub mod archive;
-pub mod blob;
-pub mod font;
-pub mod history;
-pub mod operation;
-pub mod project;
-pub mod scene;
-pub mod style;
+mod blob;
+mod command;
+mod edit;
+mod error;
+mod geometry;
+mod id;
+pub mod node;
+mod scene;
+mod session;
+mod storage;
+mod style;
 
-pub use archive::{export_khr, export_khr_bytes, import_khr, import_khr_bytes};
-
-pub use blob::{BlobRef, BlobStore};
-pub use font::{FontPrediction, NamedFontPrediction, TextDirection, TopFont};
-pub use history::History;
-pub use operation::{
-    ImageDataPatch, MaskDataPatch, NodeDataPatch, NodePatch, Op, OpError, OpResult, PagePatch,
-    ProjectMetaPatch, TextDataPatch,
+pub use command::{CommandBatch, PagePosition, Parent, Position};
+pub use edit::{ContainerEdit, Edit, NodeEdit, PageEdit, TextEdit};
+pub use error::{Error, Result};
+pub use geometry::{CanvasSize, PixelSize, Transform};
+pub use id::{BlobId, CommandId, NodeId, PageId, Revision};
+pub use node::{ImageNode, MaskNode, Node, NodeBuilder, NodeKind, TextNode};
+pub use scene::{Children, Page, PageRef, Scene, Visit, WalkEvent};
+pub use session::{Applied, ChangeSet, GcReport, NodeChangeFlags, Session, SessionConfig};
+pub use style::{
+    BevelStyle, BevelTechnique, BlendMode, Color, FontSlant, GradientStop, StrokePosition,
+    TextAlign, TextDecoration, TextEffect, TextEffectKind, TextLayout, TextOverflow, TextStyle,
+    VerticalAlign, WritingMode,
 };
-pub use project::ProjectSession;
-pub use scene::{
-    ImageData, ImageRole, MaskData, MaskRole, Node, NodeId, NodeKind, NodeKindTag, Page, PageId,
-    ProjectMeta, ProjectStyle, Scene, TextData, Transform,
-};
-pub use style::{TextAlign, TextShaderEffect, TextStrokeStyle, TextStyle};

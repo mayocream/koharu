@@ -93,6 +93,12 @@ url = { version = "2.5", features = ["serde"] }
 arc-swap = "1.7"
 camino = { version = "1.1", features = ["serde1"] }
 indexmap = { version = "2.13", features = ["serde"] }
+indextree = "4.8.1"
+rusqlite = { version = "0.40.1", default-features = false, features = [
+    "backup",
+    "bundled",
+    "cache",
+] }
 flate2 = { version = "1.0", default-features = false, features = [
     "zlib-ng-compat",
 ] }
