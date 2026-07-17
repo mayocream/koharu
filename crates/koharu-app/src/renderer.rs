@@ -710,10 +710,7 @@ fn sprite_collides_with_bubble_mask(
     let mask_w = mask.width() as i32;
     let mask_h = mask.height() as i32;
 
-    let mut rotation_deg = transform.rotation_deg % 360.0;
-    if rotation_deg < 0.0 {
-        rotation_deg += 360.0;
-    }
+    let rotation_deg = normalize_rotation(transform.rotation_deg);
 
     // Fast path: no rotation — check source pixels directly, no allocation.
     if rotation_deg.abs() < 0.0001 || (360.0 - rotation_deg).abs() < 0.0001 {
@@ -1042,16 +1039,22 @@ fn find_input(blocks: &[RenderBlockInput], id: NodeId) -> &RenderBlockInput {
         .expect("rendered_block must have matching input")
 }
 
+/// Normalize a rotation angle to [0, 360).
+fn normalize_rotation(deg: f32) -> f32 {
+    let mut r = deg % 360.0;
+    if r < 0.0 {
+        r += 360.0;
+    }
+    r
+}
+
 fn overlay_sprite_with_rotation(
     canvas: &mut RgbaImage,
     sprite: &RgbaImage,
     transform: &Transform,
     is_expanded: bool,
 ) {
-    let mut rotation_deg = transform.rotation_deg % 360.0;
-    if rotation_deg < 0.0 {
-        rotation_deg += 360.0;
-    }
+    let rotation_deg = normalize_rotation(transform.rotation_deg);
 
     if rotation_deg.abs() < 0.0001 || (360.0 - rotation_deg).abs() < 0.0001 {
         // Preserve legacy placement: expanded transforms were rounded,

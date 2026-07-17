@@ -357,7 +357,7 @@ export function RenderControlsPanel() {
     const buildOp = (n: TextNodeEntry) =>
       ops.updateNode(page.id, n.id, {
         transform: { ...n.transform, rotationDeg: deg },
-        data: { text: { lockLayoutBox: true } } as never,
+        data: { text: { lockLayoutBox: true } },
       })
     const op =
       selectedNodes.length === 1
